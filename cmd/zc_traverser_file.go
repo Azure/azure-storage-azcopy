@@ -51,6 +51,7 @@ type fileTraverser struct {
 	incrementEnumerationCounter enumerationCounterFunc
 	trailingDot                 common.TrailingDotOption
 	destination                 *common.Location
+	hardlinkHandling            common.PreserveHardlinksOption
 }
 
 func createShareClientFromServiceClient(fileURLParts file.URLParts, client *service.Client) (*share.Client, error) {
@@ -219,7 +220,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		var metadata common.Metadata
 
 		// Only get the properties if we're told to
-		if t.getProperties {
+		if t.getProperties || t.hardlinkHandling == common.DefaultPreserveHardlinksOption {
 			var fullProperties filePropsProvider
 			fullProperties, err = f.propertyGetter(t.ctx)
 			if err != nil {
@@ -243,7 +244,6 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 					azcopyScanningLogger.Log(common.LogInfo, fmt.Sprintf("Found a hardlink to '%s'. It will be copied as a regular file at the destination.", f.name))
 				}
 			}
-
 		}
 		obj := newStoredObject(
 			preprocessor,
@@ -400,7 +400,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	return
 }
 
-func newFileTraverser(rawURL string, serviceClient *service.Client, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc, trailingDot common.TrailingDotOption, destination *common.Location) (t *fileTraverser) {
+func newFileTraverser(rawURL string, serviceClient *service.Client, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc, trailingDot common.TrailingDotOption, destination *common.Location, hardlinkHandling common.PreserveHardlinksOption) (t *fileTraverser) {
 	t = &fileTraverser{
 		rawURL:                      rawURL,
 		serviceClient:               serviceClient,
@@ -410,6 +410,7 @@ func newFileTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		incrementEnumerationCounter: incrementEnumerationCounter,
 		trailingDot:                 trailingDot,
 		destination:                 destination,
+		hardlinkHandling:            hardlinkHandling,
 	}
 	return
 }

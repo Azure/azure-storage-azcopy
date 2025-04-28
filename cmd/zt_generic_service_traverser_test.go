@@ -115,7 +115,7 @@ func TestServiceTraverserWithManyObjects(t *testing.T) {
 
 	// construct a file account traverser
 	rawFSU := scenarioHelper{}.getFileServiceClientWithSAS(a)
-	fileAccountTraverser := newFileAccountTraverser(rawFSU, "", ctx, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil)
+	fileAccountTraverser := newFileAccountTraverser(rawFSU, "", ctx, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil, common.EPreserveHardlinksOption.Follow())
 
 	// invoke the file account traversal with a dummy processor
 	fileDummyProcessor := dummyProcessor{}
@@ -284,7 +284,7 @@ func TestServiceTraverserWithWildcards(t *testing.T) {
 	// construct a file account traverser
 	rawFSU := scenarioHelper{}.getFileServiceClientWithSAS(a)
 	share := "objectmatch*" // set the container name to contain a wildcard
-	fileAccountTraverser := newFileAccountTraverser(rawFSU, share, ctx, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil)
+	fileAccountTraverser := newFileAccountTraverser(rawFSU, share, ctx, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil, common.EPreserveHardlinksOption.Follow())
 
 	// invoke the file account traversal with a dummy processor
 	fileDummyProcessor := dummyProcessor{}
