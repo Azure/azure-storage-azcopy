@@ -28,16 +28,10 @@ require (
 require github.com/stretchr/testify v1.10.0
 
 require (
-<<<<<<< HEAD
-	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.17.0
-	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.8.2
-	github.com/Azure/azure-sdk-for-go/sdk/azidentity/cache v0.3.2
-=======
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.16.0
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.8.0
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity/cache v0.3.1
 	github.com/Azure/azure-sdk-for-go/sdk/data/aztables v1.3.0
->>>>>>> c5e0e71eb391dca15ce47aef49987428f2649883
 	github.com/Azure/go-autorest/autorest/date v0.3.0
 	github.com/keybase/go-keychain v0.0.0-20231219164618-57a3676c3af6
 	github.com/spf13/pflag v1.0.5
@@ -55,11 +49,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.10.0 // indirect
 	github.com/Azure/go-autorest v14.2.0+incompatible // indirect
 	github.com/AzureAD/microsoft-authentication-extensions-for-go/cache v0.1.1 // indirect
-<<<<<<< HEAD
-	github.com/AzureAD/microsoft-authentication-library-for-go v1.4.0 // indirect
-=======
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.4.1 // indirect
->>>>>>> c5e0e71eb391dca15ce47aef49987428f2649883
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.24.1 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.48.1 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.48.1 // indirect
