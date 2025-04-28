@@ -101,49 +101,54 @@ func areBothLocationsSMBAware(fromTo common.FromTo) bool {
 	}
 }
 
-// validateProtocolCompatibility checks if the destination share protocol (SMB or NFS) is compatible with the --nfs flag
-// with the type of copy operation (NFS or SMB) requested. It returns an error if there is a protocol mismatch with the --nfs flag.
+// validateProtocolCompatibility checks whether the target Azure Files share
+// supports the correct protocol (NFS or SMB) based on the transfer direction
+// and the presence of the --nfs flag. It attempts to fetch the share's properties,
+// and falls back to an assumption (with an info message) if the check fails.
 func validateProtocolCompatibility(ctx context.Context,
 	fromTo common.FromTo,
-	destination common.ResourceString,
-	dstServiceClient *common.ServiceClient,
+	resource common.ResourceString,
+	serviceClient *common.ServiceClient,
 	isNFSCopy bool) error {
 
-	if fromTo.To() != common.ELocation.File() {
-		return nil
-	}
-
-	fileURLParts, err := file.ParseURL(destination.Value)
+	fileURLParts, err := file.ParseURL(resource.Value)
 	if err != nil {
 		return err
 	}
 	shareName := fileURLParts.ShareName
-	fileServiceClient, err := dstServiceClient.FileServiceClient()
+
+	fileServiceClient, err := serviceClient.FileServiceClient()
 	if err != nil {
 		return err
+	}
+
+	direction := "to"
+	if fromTo.IsDownload() {
+		direction = "from"
 	}
 
 	shareClient := fileServiceClient.NewShareClient(shareName)
 	properties, err := shareClient.GetProperties(ctx, nil)
 	if err != nil {
 		if isNFSCopy {
-			glcm.Info("Failed to fetch share properties. Assuming the transfer to Azure Files NFS share")
+			glcm.Info(fmt.Sprintf("Failed to fetch share properties. Assuming the transfer %s Azure Files NFS", direction))
 		} else {
-			glcm.Info("Failed to fetch share properties. Assuming the transfer to Azure Files SMB share")
+			glcm.Info(fmt.Sprintf("Failed to fetch share properties. Assuming the transfer %s Azure Files SMB", direction))
 		}
 		return nil
 	}
 
-	// for older account the EnablesProtocols will be nil
+	// For older accounts, EnabledProtocols may be nil
 	if properties.EnabledProtocols == nil || *properties.EnabledProtocols == "SMB" {
 		if isNFSCopy {
-			return errors.New("the destination share has SMB protocol enabled. If you want to perform copy for SMB share do not use --nfs flag")
+			return fmt.Errorf("The %s share has SMB protocol enabled. If you want to perform a copy %s an SMB share, do not use the --nfs flag", shareName, direction)
 		}
 	} else {
 		if !isNFSCopy {
-			return errors.New("the destination share has NFS protocol enabled. If you want to perform copy for NFS share please provide --nfs flag")
+			return fmt.Errorf("The %s share has NFS protocol enabled. If you want to perform a copy %s an NFS share, please provide the --nfs flag", shareName, direction)
 		}
 	}
+
 	return nil
 }
 

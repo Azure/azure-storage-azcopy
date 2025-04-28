@@ -1557,11 +1557,20 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 	}
 
-	if err := validateProtocolCompatibility(ctx, cca.FromTo,
-		cca.Destination,
-		jobPartOrder.DstServiceClient,
-		cca.isNFSCopy); err != nil {
-		return err
+	if (cca.FromTo.IsUpload() || cca.FromTo.IsS2S()) && cca.FromTo.To() == common.ELocation.File() {
+		if err := validateProtocolCompatibility(ctx, cca.FromTo,
+			cca.Destination,
+			jobPartOrder.DstServiceClient,
+			cca.isNFSCopy); err != nil {
+			return err
+		}
+	} else if cca.FromTo.IsDownload() && cca.FromTo.From() == common.ELocation.File() {
+		if err := validateProtocolCompatibility(ctx, cca.FromTo,
+			cca.Source,
+			jobPartOrder.SrcServiceClient,
+			cca.isNFSCopy); err != nil {
+			return err
+		}
 	}
 
 	switch {
