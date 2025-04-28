@@ -1,6 +1,7 @@
 package e2etest
 
 import (
+	"github.com/google/uuid"
 	"reflect"
 	"runtime/debug"
 	"strings"
@@ -40,13 +41,14 @@ func NewScenarioManager(t *testing.T, targetFunc reflect.Value) *ScenarioManager
 
 func (sm *ScenarioManager) NewVariation(origin *ScenarioVariationManager, id string, setting []any) {
 	if origin.isInvalid {
-		return // isInvalid variations shouldn't spawn new variations
+		return // IsInvalid variations shouldn't spawn new variations
 	}
 
 	for i := len(setting) - 1; i >= 0; i-- { // Because the stack is FIFO, insert the first terms last to match expected variation ordering.
 		v := setting[i]
 		clone := &ScenarioVariationManager{
 			VariationData: origin.VariationData.Insert(id, v),
+			VariationUUID: uuid.New(),
 			Parent:        sm,
 			callcounts:    make(map[string]uint),
 		}
@@ -64,7 +66,7 @@ func (sm *ScenarioManager) RunScenario() {
 		Thus, we can retain good (read: brain happy) test ordering by doing FIFO. Engineering at its finest.
 	*/
 	sm.varStack = []*ScenarioVariationManager{
-		{Parent: sm, callcounts: make(map[string]uint)}, // Root svm, no variations, no nothing.
+		{Parent: sm, callcounts: make(map[string]uint), VariationUUID: uuid.New()}, // Root svm, no variations, no nothing.
 	}
 
 	for len(sm.varStack) > 0 {
@@ -89,6 +91,14 @@ func (sm *ScenarioManager) RunScenario() {
 		if !svm.isInvalid { // If we made a real test
 			svm.runNow = sm.runNow
 			sm.testingT.Run(svm.VariationName(), func(t *testing.T) {
+				defer func() {
+					if err := recover(); err != nil {
+						stack := debug.Stack()
+						t.Logf("scenario variation panicked: %v\n\n%s", err, string(stack))
+						t.FailNow()
+					}
+				}()
+
 				svm.t = t
 				svm.callcounts = make(map[string]uint)
 
@@ -102,10 +112,11 @@ func (sm *ScenarioManager) RunScenario() {
 				}
 
 				t.Cleanup(func() {
-					// cleanup steps FIFO
 					c := ScenarioVariationManagerCleanupAsserter{svm: svm}
-					for _, v := range svm.CleanupFuncs {
-						c.WrapCleanup(v)
+
+					// Reverted to LIFO
+					for i := len(svm.CleanupFuncs) - 1; i >= 0; i-- {
+						c.WrapCleanup(svm.CleanupFuncs[i])
 					}
 
 					svm.DeleteCreatedResources()

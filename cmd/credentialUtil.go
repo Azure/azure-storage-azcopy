@@ -66,11 +66,13 @@ func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
 		if common.AzcopyJobPlanFolder == "" {
 			panic("invalid state, AzcopyJobPlanFolder should not be an empty string")
 		}
+		cacheName := common.GetEnvironmentVariable(common.EEnvironmentVariable.LoginCacheName())
+
 		currentUserOAuthTokenManager = common.NewUserOAuthTokenManagerInstance(common.CredCacheOptions{
 			DPAPIFilePath: common.AzcopyJobPlanFolder,
-			KeyName:       oauthLoginSessionCacheKeyName,
+			KeyName:       common.Iff(cacheName != "", cacheName, oauthLoginSessionCacheKeyName),
 			ServiceName:   oauthLoginSessionCacheServiceName,
-			AccountName:   oauthLoginSessionCacheAccountName,
+			AccountName:   common.Iff(cacheName != "", cacheName, oauthLoginSessionCacheAccountName),
 		})
 	})
 
