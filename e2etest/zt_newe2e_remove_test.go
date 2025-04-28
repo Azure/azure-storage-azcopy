@@ -107,3 +107,101 @@ func (s *RemoveSuite) Scenario_RemoveVirtualDirectory(svm *ScenarioVariationMana
 		Objects: srcObjs,
 	}, true)
 }
+
+// Scenario_RemoveFileWithOnlyDotsTrailingDotDisabled tests removing a file with only dots. i.e "...."
+// remove with trailing dot flag disabled does not delete any files until trailing dot is enabled
+func (s *RemoveSuite) Scenario_RemoveFileWithOnlyDotsTrailingDotDisabled(svm *ScenarioVariationManager) {
+	// File Share
+	fileShare := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()),
+		ResourceDefinitionContainer{})
+
+	// File to remove with multiple dots
+	srcObject := fileShare.GetObject(svm, "...", common.EEntityType.File())
+	srcObject.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
+
+	// Fill the file share with other files
+	for i := range 3 {
+		name := "test" + strconv.Itoa(i) + ".txt"
+		fileObject := fileShare.GetObject(svm, name, common.EEntityType.File())
+		fileObject.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
+	}
+	stdOut, _ := RunAzCopy(svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbRemove,
+			Targets: []ResourceManager{
+				srcObject,
+			},
+			Flags: RemoveFlags{
+				TrailingDot: pointerTo(common.ETrailingDotOption.Disable()),
+				Recursive:   pointerTo(true),
+				FromTo:      pointerTo(common.EFromTo.FileTrash()),
+				GlobalFlags: GlobalFlags{
+					OutputType: pointerTo(common.EOutputFormat.Text()),
+				},
+			},
+			ShouldFail: true, // AzCopy should not continue operation
+		})
+	ValidateMessageOutput(svm, stdOut, "Retry remove command with default --trailing-dot=Enable", true)
+
+	// Validate that no files are deleted in File share
+	fileMap := fileShare.ListObjects(svm, "", true)
+	svm.Assert("No files should be removed", Equal{}, len(fileMap), 4)
+
+}
+
+// Scenario_RemoveFileWithOnlyDots tests removing a file with only dots. i.e "...."
+// with trailing dot flag enabled correctly deletes only that file
+func (s *RemoveSuite) Scenario_RemoveFileWithOnlyDotsEnabled(svm *ScenarioVariationManager) {
+	// File Share
+	fileShare := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()),
+		ResourceDefinitionContainer{})
+
+	// Create parent directory to replicate scenario
+	dirName := "dir"
+	srcObjs := make(ObjectResourceMappingFlat)
+	srcObjs[dirName] = ResourceDefinitionObject{
+		ObjectName:       pointerTo(dirName),
+		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}}
+
+	// File to remove with multiple dots
+	srcObject := CreateResource[ObjectResourceManager](svm, fileShare, ResourceDefinitionObject{
+		ObjectName: pointerTo("..."),
+		Body:       NewZeroObjectContentContainer(0),
+		ObjectProperties: ObjectProperties{
+			EntityType: common.EEntityType.File(),
+		},
+	})
+
+	// Fill the file share with other files
+	for i := range 3 {
+		name := dirName + "/test" + strconv.Itoa(i) + ".txt"
+		fileObject := fileShare.GetObject(svm, name, common.EEntityType.File())
+		fileObject.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{
+			EntityType: common.EEntityType.File(),
+		})
+	}
+
+	RunAzCopy(svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbRemove,
+			Targets: []ResourceManager{
+				srcObject,
+			},
+			Flags: RemoveFlags{
+				TrailingDot: pointerTo(common.ETrailingDotOption.Enable()),
+				Recursive:   pointerTo(true),
+				FromTo:      pointerTo(common.EFromTo.FileTrash()),
+			},
+		})
+
+	// Validate that relevant file is deleted in File share - does not exist
+	ValidateResource[ObjectResourceManager](svm, srcObject, ResourceDefinitionObject{
+		ObjectShouldExist: pointerTo(false),
+	}, false)
+
+	fileMap := make(map[string]ObjectProperties)
+	fileMap = fileShare.ListObjects(svm, "", true)
+	// Folders are objects, fileMap contains test1, test2, test3 and dir
+	svm.Assert("One file should be removed", Equal{}, len(fileMap), 4)
+
+}

@@ -36,8 +36,11 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-const trailingDotErrMsg = "File share contains file/directory %s with a trailing dot but the trailing dot parameter was set to Disable, meaning these files could be potentially treated in an unsafe manner."
+const trailingDotErrMsg = "File share contains file/directory: %s with a trailing dot. But the trailing dot parameter was set to Disable, meaning these files could be potentially treated in an unsafe manner." +
+	"To avoid this, use --trailing-dot=Enable"
 const invalidNameErrorMsg = "Skipping File share path %s, as it is not a valid Blob or Windows name. Rename the object and retry the transfer"
+const allDotsErrorMsg = "File/ Directory name: %s consists of only dots. Using --trailing-dot=Disable is dangerous here. " +
+	"Retry remove command with default --trailing-dot=Enable"
 
 // allow us to iterate through a path pointing to the file endpoint
 type fileTraverser struct {
@@ -115,16 +118,17 @@ func (t *fileTraverser) IsDirectory(bool) (bool, error) {
 func (t *fileTraverser) getPropertiesIfSingleFile() (*file.GetPropertiesResponse, bool, error) {
 	fileURLParts, err := file.ParseURL(t.rawURL)
 	if err != nil {
-		return nil, false, err
+		return nil, false, fmt.Errorf("error parsing URL %w", err)
 	}
+
 	fileClient, err := createFileClientFromServiceClient(fileURLParts, t.serviceClient)
 	if err != nil {
-		return nil, false, err
+		return nil, false, fmt.Errorf("error creating file client %w", err)
 	}
-	fileProps, filePropertiesErr := fileClient.GetProperties(t.ctx, nil)
 
-	// if there was no problem getting the properties, it means that we are looking at a single file
+	fileProps, filePropertiesErr := fileClient.GetProperties(t.ctx, nil)
 	if filePropertiesErr == nil {
+		// if there was no problem getting the properties, it means that we are looking at a single file
 		return &fileProps, true, nil
 	}
 
@@ -154,6 +158,10 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		return err
 	}
 
+	// We stop remove operations if file/dir name is only dots
+	checkAllDots := func(path string) bool {
+		return strings.Trim(path, ".") == ""
+	}
 	// if not pointing to a share, check if we are pointing to a single file
 	if targetURLParts.DirectoryOrFilePath != "" {
 		if invalidBlobOrWindowsName(targetURLParts.DirectoryOrFilePath) {
@@ -163,6 +171,15 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		if !t.trailingDot.IsEnabled() && strings.HasSuffix(targetURLParts.DirectoryOrFilePath, ".") {
 			azcopyScanningLogger.Log(common.LogWarning, fmt.Sprintf(trailingDotErrMsg, getObjectNameOnly(targetURLParts.DirectoryOrFilePath)))
 		}
+
+		// Abort remove operation for files with only dots. i.e  a file named "dir/..." with trailing dot flag Disabled.
+		// The dot is stripped and the file is seen as a directory; incorrectly removing all other files within the parent dir/
+		// with Disable, "..." is seen as "dir/..." folder and other child files of dir would be wrongly deleted.
+		if !t.trailingDot.IsEnabled() && checkAllDots(getObjectNameOnly(targetURLParts.DirectoryOrFilePath)) {
+			glcm.Error(fmt.Sprintf(allDotsErrorMsg, getObjectNameOnly(targetURLParts.DirectoryOrFilePath)))
+
+		}
+
 		// check if the url points to a single file
 		fileProperties, isFile, err := t.getPropertiesIfSingleFile()
 		if err != nil {
@@ -312,6 +329,9 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 					if !t.trailingDot.IsEnabled() && strings.HasSuffix(*fileInfo.Name, ".") {
 						azcopyScanningLogger.Log(common.LogWarning, fmt.Sprintf(trailingDotErrMsg, *fileInfo.Name))
 					}
+					if !t.trailingDot.IsEnabled() && checkAllDots(*fileInfo.Name) {
+						glcm.Error(fmt.Sprintf(allDotsErrorMsg, *fileInfo.Name))
+					}
 				}
 				enqueueOutput(newAzFileFileEntity(currentDirectoryClient, fileInfo), nil)
 
@@ -383,7 +403,11 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			if item != nil {
 				relativePath = item.(StoredObject).relativePath
 			}
-			glcm.Info("Failed to scan directory/file " + relativePath + ". Logging errors in scanning logs.")
+			if !t.trailingDot.IsEnabled() && checkAllDots(relativePath) {
+				glcm.Error(fmt.Sprintf(allDotsErrorMsg, relativePath))
+			}
+			glcm.Info("Failed to scan Directory/File " + relativePath + ". Logging errors in scanning logs.")
+
 			if azcopyScanningLogger != nil {
 				azcopyScanningLogger.Log(common.LogWarning, workerError.Error())
 			}

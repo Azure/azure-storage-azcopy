@@ -59,8 +59,7 @@ func (s *WorkloadIdentitySuite) Scenario_SingleFileUploadDownloadWorkloadIdentit
 				},
 			},
 			Environment: &AzCopyEnvironment{
-				AutoLoginMode:      pointerTo(common.EAutoLoginType.Workload().String()),
-				InheritEnvironment: true,
+				AutoLoginMode: pointerTo(common.EAutoLoginType.Workload().String()),
 			},
 		})
 
