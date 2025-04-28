@@ -58,7 +58,7 @@ type localTraverser struct {
 	hashAdapter    common.HashDataAdapter
 	// receives fullPath entries and manages hashing of files lacking metadata.
 	hashTargetChannel chan string
-	hardlinkHandling  common.HardlinkHandlingType
+	hardlinkHandling  common.PreserveHardlinksOption
 }
 
 func (t *localTraverser) IsDirectory(bool) (bool, error) {
@@ -204,7 +204,7 @@ func writeToErrorChannel(errorChannel chan ErrorFileInfo, err ErrorFileInfo) {
 // Separate this from the traverser for two purposes:
 // 1) Cleaner code
 // 2) Easier to test individually than to test the entire traverser.
-func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath.WalkFunc, symlinkHandling common.SymlinkHandlingType, errorChannel chan ErrorFileInfo) (err error) {
+func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath.WalkFunc, symlinkHandling common.SymlinkHandlingType, errorChannel chan ErrorFileInfo, hardlinkHandling common.PreserveHardlinksOption) (err error) {
 
 	// We want to re-queue symlinks up in their evaluated form because filepath.Walk doesn't evaluate them for us.
 	// So, what is the plan of attack?
@@ -352,10 +352,14 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 					return err
 				}
 				return nil
-			} else if fileStat.Nlink > 1 {
-				// We will skip the hardlinks, because we don't want to process it.
-				return nil
 			} else {
+
+				if fileStat.Nlink > 1 && hardlinkHandling == common.DefaultPreserveHardlinksOption && !fileInfo.IsDir() {
+					if azcopyScanningLogger != nil {
+						azcopyScanningLogger.Log(common.LogInfo, fmt.Sprintf("Found a hardlink to '%s'. It will be copied as a regular file at the destination.", filePath))
+					}
+				}
+
 				// not a symlink
 				result, err := filepath.Abs(filePath)
 
@@ -733,7 +737,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 			}
 
 			// note: Walk includes root, so no need here to separately create StoredObject for root (as we do for other folder-aware sources)
-			return finalizer(WalkWithSymlinks(t.appCtx, t.fullPath, processFile, t.symlinkHandling, t.errorChannel))
+			return finalizer(WalkWithSymlinks(t.appCtx, t.fullPath, processFile, t.symlinkHandling, t.errorChannel, t.hardlinkHandling))
 		} else {
 			// if recursive is off, we only need to scan the files immediately under the fullPath
 			// We don't transfer any directory properties here, not even the root. (Because the root's
@@ -817,7 +821,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	return finalizer(err)
 }
 
-func newLocalTraverser(ctx context.Context, fullPath string, recursive bool, stripTopDir bool, symlinkHandling common.SymlinkHandlingType, syncHashType common.SyncHashType, incrementEnumerationCounter enumerationCounterFunc, errorChannel chan ErrorFileInfo) (*localTraverser, error) {
+func newLocalTraverser(ctx context.Context, fullPath string, recursive bool, stripTopDir bool, symlinkHandling common.SymlinkHandlingType, syncHashType common.SyncHashType, incrementEnumerationCounter enumerationCounterFunc, errorChannel chan ErrorFileInfo, hardlinkHandling common.PreserveHardlinksOption) (*localTraverser, error) {
 	var hashAdapter common.HashDataAdapter
 	if syncHashType != common.ESyncHashType.None() { // Only initialize the hash adapter should we need it.
 		var err error
@@ -837,6 +841,7 @@ func newLocalTraverser(ctx context.Context, fullPath string, recursive bool, str
 		targetHashType:              syncHashType,
 		hashAdapter:                 hashAdapter,
 		stripTopDir:                 stripTopDir,
+		hardlinkHandling:            hardlinkHandling,
 	}
 	return &traverser, nil
 }

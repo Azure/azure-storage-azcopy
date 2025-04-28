@@ -104,7 +104,7 @@ type rawSyncCmdArgs struct {
 	isNFSCopy bool
 	// Opt-in flag to persist additional properties to Azure Files
 	preserveInfo      bool
-	preserveHardlinks bool
+	preserveHardlinks string
 }
 
 // it is assume that the given url has the SAS stripped, and safe to print
@@ -282,7 +282,12 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		// }
 	}
 
-	cooked.preserveHardlinks = preserveHardlinkOption(raw.preserveHardlinks, cooked.isNFSCopy)
+	if err = cooked.preserveHardlinks.Parse(raw.preserveHardlinks); err != nil {
+		return cooked, err
+	}
+	if err = validatePreserveHardlinks(cooked.preserveHardlinks, cooked.fromTo, cooked.isNFSCopy); err != nil {
+		return cooked, err
+	}
 
 	if err = cooked.compareHash.Parse(raw.compareHash); err != nil {
 		return cooked, err
@@ -465,7 +470,7 @@ type cookedSyncCmdArgs struct {
 
 	deleteDestinationFileIfNecessary bool
 	isNFSCopy                        bool
-	preserveHardlinks                common.HardlinkHandlingType
+	preserveHardlinks                common.PreserveHardlinksOption
 }
 
 func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
@@ -901,5 +906,5 @@ func init() {
 	syncCmd.PersistentFlags().BoolVar(&raw.deleteDestinationFileIfNecessary, "delete-destination-file", false, "False by default. Deletes destination blobs, specifically blobs with uncommitted blocks when staging block.")
 	_ = syncCmd.PersistentFlags().MarkHidden("delete-destination-file")
 
-	syncCmd.PersistentFlags().BoolVar(&raw.preserveHardlinks, PreserveHardlinksFlag, false, "False by default. Preserve hardlinks for NFS resources. This flag is only applicable when the source is NFS file share or the destination is NFS file share. The default value is false for all other scenarios.")
+	syncCmd.PersistentFlags().StringVar(&raw.preserveHardlinks, PreserveHardlinksFlag, "follow", "Follow by default. Preserve hardlinks for NFS resources. This flag is only applicable when the source is NFS file share or the destination is NFS file share. Available options: skip, preserve, follow (default 'follow').")
 }

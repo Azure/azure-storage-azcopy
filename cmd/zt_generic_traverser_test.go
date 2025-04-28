@@ -22,9 +22,6 @@ package cmd
 
 import (
 	"context"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
-	"github.com/stretchr/testify/assert"
 	"io"
 	"os"
 	"path/filepath"
@@ -32,6 +29,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/stretchr/testify/assert"
 
 	gcpUtils "cloud.google.com/go/storage"
 
@@ -105,6 +106,7 @@ func TestLocalWildcardOverlap(t *testing.T) {
 		nil,
 		nil,
 		false,
+		common.EPreserveHardlinksOption.Follow(),
 	)
 	a.Nil(err)
 
@@ -561,7 +563,7 @@ func TestTraverserWithSingleObject(t *testing.T) {
 		scenarioHelper{}.generateLocalFilesFromList(a, dstDirName, blobList)
 
 		// construct a local traverser
-		localTraverser, _ := newLocalTraverser(context.TODO(), filepath.Join(dstDirName, dstFileName), false, false, common.ESymlinkHandlingType.Follow(), common.ESyncHashType.None(), func(common.EntityType) {}, nil)
+		localTraverser, _ := newLocalTraverser(context.TODO(), filepath.Join(dstDirName, dstFileName), false, false, common.ESymlinkHandlingType.Follow(), common.ESyncHashType.None(), func(common.EntityType) {}, nil, common.EPreserveHardlinksOption.Follow())
 
 		// invoke the local traversal with a dummy processor
 		localDummyProcessor := dummyProcessor{}
@@ -703,7 +705,7 @@ func TestTraverserContainerAndLocalDirectory(t *testing.T) {
 	// test two scenarios, either recursive or not
 	for _, isRecursiveOn := range []bool{true, false} {
 		// construct a local traverser
-		localTraverser, _ := newLocalTraverser(context.TODO(), dstDirName, isRecursiveOn, false, common.ESymlinkHandlingType.Follow(), common.ESyncHashType.None(), func(common.EntityType) {}, nil)
+		localTraverser, _ := newLocalTraverser(context.TODO(), dstDirName, isRecursiveOn, false, common.ESymlinkHandlingType.Follow(), common.ESyncHashType.None(), func(common.EntityType) {}, nil, common.EPreserveHardlinksOption.Follow())
 
 		// invoke the local traversal with an indexer
 		// so that the results are indexed for easy validation
@@ -852,7 +854,7 @@ func TestTraverserWithVirtualAndLocalDirectory(t *testing.T) {
 	// test two scenarios, either recursive or not
 	for _, isRecursiveOn := range []bool{true, false} {
 		// construct a local traverser
-		localTraverser, _ := newLocalTraverser(context.TODO(), filepath.Join(dstDirName, virDirName), isRecursiveOn, false, common.ESymlinkHandlingType.Follow(), common.ESyncHashType.None(), func(common.EntityType) {}, nil)
+		localTraverser, _ := newLocalTraverser(context.TODO(), filepath.Join(dstDirName, virDirName), isRecursiveOn, false, common.ESymlinkHandlingType.Follow(), common.ESyncHashType.None(), func(common.EntityType) {}, nil, common.EPreserveHardlinksOption.Follow())
 
 		// invoke the local traversal with an indexer
 		// so that the results are indexed for easy validation

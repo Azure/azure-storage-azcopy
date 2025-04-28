@@ -1494,6 +1494,47 @@ func (pc *PerfConstraint) Parse(s string) error {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+var EPreserveHardlinksOption = PreserveHardlinksOption(0)
+
+var DefaultPreserveHardlinksOption = EPreserveHardlinksOption.Follow()
+
+type PreserveHardlinksOption uint8
+
+// Skip means do not copy the files whose link count is greater than 1
+func (PreserveHardlinksOption) Skip() PreserveHardlinksOption { return PreserveHardlinksOption(0) }
+
+// Copy means copy the files to the destination as regular files
+func (PreserveHardlinksOption) Follow() PreserveHardlinksOption { return PreserveHardlinksOption(1) }
+
+// Preserve means copy the files to the destination as hardlinks
+func (PreserveHardlinksOption) Preserve() PreserveHardlinksOption { return PreserveHardlinksOption(2) }
+
+func (pho PreserveHardlinksOption) String() string {
+	return enum.StringInt(pho, reflect.TypeOf(pho))
+}
+
+func (pho *PreserveHardlinksOption) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(pho), s, true, true)
+	if err == nil {
+		*pho = val.(PreserveHardlinksOption)
+	}
+	return err
+}
+
+func (pho PreserveHardlinksOption) MarshalJSON() ([]byte, error) {
+	return json.Marshal(pho.String())
+}
+
+func (pho *PreserveHardlinksOption) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	return pho.Parse(s)
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 type PerformanceAdvice struct {
 
 	// Code representing the type of the advice
@@ -1792,24 +1833,4 @@ func (sht *SymlinkHandlingType) Determine(Follow, Preserve bool) error {
 	}
 
 	return nil
-}
-
-// //////////////////////////////////////////////////////////////////////////////
-type HardlinkHandlingType uint8
-
-var EHardlinkHandlingType = HardlinkHandlingType(0)
-
-func (HardlinkHandlingType) Skip() HardlinkHandlingType     { return HardlinkHandlingType(0) } // skip the hardlink file from copying
-func (HardlinkHandlingType) Preserve() HardlinkHandlingType { return HardlinkHandlingType(1) } // Copy the hard link
-func (HardlinkHandlingType) Copy() HardlinkHandlingType     { return HardlinkHandlingType(2) } // Copy the file as normal file
-
-func preserveHardlinkOption(preserveHardlinks bool, isNFSCopy bool) HardlinkHandlingType {
-	if isNFSCopy {
-		if preserveHardlinks {
-			return EHardlinkHandlingType.Preserve()
-		}
-		return EHardlinkHandlingType.Skip()
-	} else {
-		return EHardlinkHandlingType.Copy()
-	}
 }

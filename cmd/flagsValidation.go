@@ -261,13 +261,24 @@ func performSMBSpecificValidation(fromTo common.FromTo,
 	return
 }
 
-func preserveHardlinkOption(preserveHardlinks bool, isNFSCopy bool) common.HardlinkHandlingType {
-	if isNFSCopy {
-		if preserveHardlinks {
-			return common.HardlinkHandlingType(common.EHardlinkHandlingType.Preserve())
-		}
-		return common.HardlinkHandlingTypeNone
-	} else {
-		return common.HardlinkHandlingTypeNone
+func validatePreserveHardlinks(option common.PreserveHardlinksOption, fromTo common.FromTo, isNFSCopy bool) error {
+	// Validate for Download: Only allowed when downloading from a local file system
+	if fromTo.IsDownload() && fromTo.From() != common.ELocation.File() {
+		return fmt.Errorf("the --preserve-hardlinks option is only supported when downloading from a file system")
 	}
+
+	// Validate for Upload or S2S: Only allowed when uploading *to* a local file system
+	if (fromTo.IsUpload() || fromTo.IsS2S()) && fromTo.To() != common.ELocation.File() {
+		return fmt.Errorf("the --preserve-hardlinks option is only supported when uploading to a file system")
+	}
+
+	// Validate NFS context
+	if !isNFSCopy {
+		return fmt.Errorf("the --preserve-hardlinks option is only supported for NFS copy operations")
+	}
+	if option == common.DefaultPreserveHardlinksOption {
+		glcm.Info("The --preserve-hardlinks option is set to 'follow'. Hardlinked files will be copied as a regular file at the destination.")
+
+	}
+	return nil
 }

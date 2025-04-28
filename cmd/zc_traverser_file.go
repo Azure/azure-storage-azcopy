@@ -237,6 +237,13 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			// so it's fair to assume that the size will stay equal to that returned at by the listing operation)
 			size = fullProperties.ContentLength()
 			metadata = fullProperties.Metadata()
+
+			if fullProperties.LinkCount() > 1 {
+				if azcopyScanningLogger != nil {
+					azcopyScanningLogger.Log(common.LogInfo, fmt.Sprintf("Found a hardlink to '%s'. It will be copied as a regular file at the destination.", f.name))
+				}
+			}
+
 		}
 		obj := newStoredObject(
 			preprocessor,

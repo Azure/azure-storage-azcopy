@@ -175,7 +175,7 @@ type rawCopyCmdArgs struct {
 	isNFSCopy bool
 	// Opt-in flag to persist additional properties to Azure Files
 	preserveInfo      bool
-	preserveHardlinks bool
+	preserveHardlinks string
 }
 
 // blocSizeInBytes converts a FLOATING POINT number of MiB, to a number of bytes
@@ -615,7 +615,12 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		}
 	}
 
-	cooked.preserveHardlinks = preserveHardlinkOption(raw.preserveHardlinks, cooked.isNFSCopy)
+	if err = cooked.preserveHardlinks.Parse(raw.preserveHardlinks); err != nil {
+		return cooked, err
+	}
+	if err = validatePreserveHardlinks(cooked.preserveHardlinks, cooked.FromTo, cooked.isNFSCopy); err != nil {
+		return cooked, err
+	}
 
 	// --as-subdir is OK on all sources and destinations, but additional verification has to be done down the line. (e.g. https://account.blob.core.windows.net is not a valid root)
 	cooked.asSubdir = raw.asSubdir
@@ -842,6 +847,7 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaults() {
 	raw.s2sInvalidMetadataHandleOption = common.DefaultInvalidMetadataHandleOption.String()
 	raw.forceWrite = common.EOverwriteOption.True().String()
 	raw.preserveOwner = common.PreserveOwnerDefault
+	raw.preserveHardlinks = common.DefaultPreserveHardlinksOption.String()
 }
 
 func validateForceIfReadOnly(toForce bool, fromTo common.FromTo) error {
@@ -1135,7 +1141,7 @@ type CookedCopyCmdArgs struct {
 	preserveInfo bool
 	// Specifies whether the copy operation is an NFS copy
 	isNFSCopy         bool
-	preserveHardlinks common.HardlinkHandlingType
+	preserveHardlinks common.PreserveHardlinksOption
 }
 
 func (cca *CookedCopyCmdArgs) isRedirection() bool {
@@ -2121,5 +2127,5 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.deleteDestinationFileIfNecessary, "delete-destination-file", false, "False by default. Deletes destination blobs, specifically blobs with uncommitted blocks when staging block.")
 	_ = cpCmd.PersistentFlags().MarkHidden("delete-destination-file")
 
-	cpCmd.PersistentFlags().BoolVar(&raw.preserveHardlinks, PreserveHardlinksFlag, false, "False by default. Preserve hardlinks for NFS resources. This flag is only applicable when the source is NFS file share or the destination is NFS file share. The default value is false for all other scenarios.")
+	cpCmd.PersistentFlags().StringVar(&raw.preserveHardlinks, PreserveHardlinksFlag, "follow", "Follow by default. Preserve hardlinks for NFS resources. This flag is only applicable when the source is NFS file share or the destination is NFS file share. Available options: skip, preserve, follow (default 'follow').")
 }
