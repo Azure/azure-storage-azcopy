@@ -448,7 +448,7 @@ var megaSize = []string{
 	"EB",
 }
 
-func byteSizeToString(size int64) string {
+func ByteSizeToString(size int64) string {
 	units := []string{
 		"B",
 		"KiB",
@@ -489,5 +489,5 @@ func getPath(containerName, relativePath string, level LocationLevel, entityType
 }
 
 func sizeToString(size int64, machineReadable bool) string {
-	return common.Iff(machineReadable, strconv.Itoa(int(size)), byteSizeToString(size))
+	return common.Iff(machineReadable, strconv.Itoa(int(size)), ByteSizeToString(size))
 }
