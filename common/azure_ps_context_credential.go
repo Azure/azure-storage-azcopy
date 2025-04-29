@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,7 +25,8 @@ import (
 
 const credNamePSContext = "PSContextCredential"
 
-type PSTokenProvider func(ctx context.Context, resource string, tenant string) ([]byte, error)
+type PSTokenProvider func(ctx context.Context, options policy.TokenRequestOptions) ([]byte, error)
+
 func validTenantID(tenantID string) bool {
 	match, err := regexp.MatchString("^[0-9a-zA-Z-.]+$", tenantID)
 	if err != nil {
@@ -50,6 +52,7 @@ func resolveTenant(defaultTenant, specified, credName string, additionalTenants 
 	}
 	return "", fmt.Errorf(`%s isn't configured to acquire tokens for tenant %q. To enable acquiring tokens for this tenant add it to the AdditionallyAllowedTenants on the credential options, or add "*" to allow acquiring tokens for any tenant`, credName, specified)
 }
+
 // PowershellContextCredentialOptions contains optional parameters for AzureDeveloperCLICredential.
 type PowershellContextCredentialOptions struct {
 	// TenantID identifies the tenant the credential should authenticate in. Defaults to the azd environment,
@@ -96,7 +99,10 @@ func (c *PowershellContextCredential) GetToken(ctx context.Context, opts policy.
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	b, err := c.opts.tokenProvider(ctx, opts.Scopes[0], tenant)
+
+	opts.TenantID = tenant
+
+	b, err := c.opts.tokenProvider(ctx, opts)
 	if err == nil {
 		at, err = c.createAccessToken(b)
 	}
@@ -109,21 +115,30 @@ func (c *PowershellContextCredential) GetToken(ctx context.Context, opts policy.
 
 // We ignore resource because PS does not support all Resources. Disk scope is not supported
 // and we are here only with Storage scope
-var defaultAzdTokenProvider PSTokenProvider = func(ctx context.Context, _ string, tenantID string) ([]byte, error) {
+var defaultAzdTokenProvider PSTokenProvider = func(ctx context.Context, opts policy.TokenRequestOptions) ([]byte, error) {
 	// set a default timeout for this authentication iff the application hasn't done so already
 	var cancel context.CancelFunc
 	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
-		ctx, cancel = context.WithTimeout(ctx, 10 * time.Minute)
+		ctx, cancel = context.WithTimeout(ctx, 10*time.Minute)
 		defer cancel()
 	}
 
 	r := regexp.MustCompile("(?s){.*Token.*ExpiresOn.*}")
 
-	if tenantID != "" {
-		tenantID += " -TenantId" + tenantID
+	cmd := "Get-AzAccessToken"
+	// set options
+	if len(opts.Scopes) != 1 {
+		return nil, errors.New("exactly one scope must be specified")
+	} else {
+		cmd += fmt.Sprintf(" -ResourceUrl \"%s\"", strings.TrimSuffix(opts.Scopes[0], "/.default"))
 	}
-	cmd := "Get-AzAccessToken -ResourceUrl https://storage.azure.com" + tenantID + " | ConvertTo-Json"
-	
+
+	if opts.TenantID != "" {
+		cmd += fmt.Sprintf(" -TenantId \"%s\"", opts.TenantID)
+	}
+
+	// We're going to get broken on this in Az 14.0 and Az.Accounts 5.0, so we may as well fix it now.
+	cmd += " -AsSecureString | Foreach-Object {[PSCustomObject]@{Token= $($_.Token | ConvertFrom-SecureString -AsPlainText); ExpiresOn = $_.ExpiresOn}} | ConvertTo-Json"
 
 	cliCmd := exec.CommandContext(ctx, "pwsh", "-Command", cmd)
 	cliCmd.Env = os.Environ()
@@ -142,7 +157,7 @@ var defaultAzdTokenProvider PSTokenProvider = func(ctx context.Context, _ string
 	output = []byte(r.FindString(string(output)))
 	if string(output) == "" {
 		invalidTokenMsg := " Invalid output received while retrieving token with Powershell. Run command \"" + cmd + "\"" +
-		" on powershell and verify that the output is indeed a valid token."
+			" on powershell and verify that the output is indeed a valid token."
 		return nil, errors.New(credNamePSContext + invalidTokenMsg)
 	}
 	return output, nil
@@ -158,7 +173,7 @@ func (c *PowershellContextCredential) createAccessToken(tk []byte) (azcore.Acces
 	if err != nil {
 		return azcore.AccessToken{}, errors.New(err.Error())
 	}
-	
+
 	parseErr := "error parsing token expiration time %q: %v"
 	exp, err := time.Parse(time.RFC3339, t.ExpiresOn)
 	if err != nil {
