@@ -43,7 +43,7 @@ func newAzureFilesDownloader(jptm IJobPartTransferMgr) (downloader, error) {
 	}
 
 	source := fsc.NewShareClient(jptm.Info().SrcContainer)
-	
+
 	if jptm.Info().SnapshotID != "" {
 		source, err = source.WithSnapshot(jptm.Info().SnapshotID)
 		if err != nil {
@@ -73,43 +73,26 @@ func (bd *azureFilesDownloader) isInitialized() bool {
 }
 
 var errorNoSddlFound = errors.New("no SDDL found")
+var errorNoNFSPermissionsFound = errors.New("no NFS permissions found")
 
 func (bd *azureFilesDownloader) preserveAttributes() (stage string, err error) {
 	info := bd.jptm.Info()
 
-	if info.PreserveSMBPermissions.IsTruthy() {
-		// We're about to call into Windows-specific code.
-		// Some functions here can't be called on other OSes, to the extent that they just aren't present in the library due to compile flags.
-		// In order to work around this, we'll do some trickery with interfaces.
-		// There is a windows-specific file (downloader-azureFiles_windows.go) that makes azureFilesDownloader satisfy the smbPropertyAwareDownloader interface.
-		// This function isn't present on other OSes due to compile flags,
-		// so in that way, we can cordon off these sections that would otherwise require filler functions.
-		// To do that, we'll do some type wrangling:
-		// bd can't directly be wrangled from a struct, so we wrangle it to an interface, then do so.
-		if spdl, ok := interface{}(bd).(smbACLAwareDownloader); ok {
-			// We don't need to worry about the sip not being a ISMBPropertyBearingSourceInfoProvider as Azure Files always is.
-			err = spdl.PutSDDL(bd.sip.(ISMBPropertyBearingSourceInfoProvider), bd.txInfo)
-			if err == errorNoSddlFound {
-				bd.jptm.LogAtLevelForCurrentTransfer(common.LogDebug, "No SMB permissions were downloaded because none were found at the source")
-			} else if err != nil {
-				return "Setting destination file SDDLs", err
-			}
+	if info.PreservePermissions.IsTruthy() {
+		stage, err = bd.preservePermissions(info)
+		if err != nil {
+			return
 		}
 	}
 
-	if info.PreserveSMBInfo {
-		// must be done AFTER we preserve the permissions (else some of the flags/dates set here may be lost)
-		if spdl, ok := interface{}(bd).(smbPropertyAwareDownloader); ok {
-			// We don't need to worry about the sip not being a ISMBPropertyBearingSourceInfoProvider as Azure Files always is.
-			err := spdl.PutSMBProperties(bd.sip.(ISMBPropertyBearingSourceInfoProvider), bd.txInfo)
-
-			if err != nil {
-				return "Setting destination file SMB properties", err
-			}
+	if info.PreserveInfo {
+		stage, err = bd.preserveProperties(info)
+		if err != nil {
+			return
 		}
 	}
 
-	return "", nil
+	return
 }
 
 func (bd *azureFilesDownloader) Prologue(jptm IJobPartTransferMgr) {
@@ -171,4 +154,69 @@ func (bd *azureFilesDownloader) SetFolderProperties(jptm IJobPartTransferMgr) er
 	bd.init(jptm) // since Prologue doesn't get called for folders
 	_, err := bd.preserveAttributes()
 	return err
+}
+
+// preservePermissions checks and sets the appropriate permissions (NFS or SMB)
+// for the file transfer,depending on the transfer type.
+// Return - It returns a string message and an error if an issue occurs.
+func (bd *azureFilesDownloader) preservePermissions(info *TransferInfo) (string, error) {
+
+	if info.IsNFSCopy {
+		if spdl, ok := interface{}(bd).(nfsPermissionsAwareDownloader); ok {
+			// We don't need to worry about the sip not being a INFSPropertyBearingSourceInfoProvider as Azure Files always is.
+			err := spdl.PutNFSPermissions(bd.sip.(INFSPropertyBearingSourceInfoProvider), bd.txInfo)
+			if err == errorNoNFSPermissionsFound {
+				bd.jptm.LogAtLevelForCurrentTransfer(common.LogDebug, "No NFS permissions were downloaded because none were found at the source")
+			} else if err != nil {
+				return "Setting destination file nfs permissions", err
+			}
+		}
+	} else {
+		// We're about to call into Windows-specific code.
+		// Some functions here can't be called on other OSes, to the extent that they just aren't present in the library due to compile flags.
+		// In order to work around this, we'll do some trickery with interfaces.
+		// There is a windows-specific file (downloader-azureFiles_windows.go) that makes azureFilesDownloader satisfy the smbPropertyAwareDownloader interface.
+		// This function isn't present on other OSes due to compile flags,
+		// so in that way, we can cordon off these sections that would otherwise require filler functions.
+		// To do that, we'll do some type wrangling:
+		// bd can't directly be wrangled from a struct, so we wrangle it to an interface, then do so.
+		if spdl, ok := interface{}(bd).(smbACLAwareDownloader); ok {
+			// We don't need to worry about the sip not being a ISMBPropertyBearingSourceInfoProvider as Azure Files always is.
+			err := spdl.PutSDDL(bd.sip.(ISMBPropertyBearingSourceInfoProvider), bd.txInfo)
+			if err == errorNoSddlFound {
+				bd.jptm.LogAtLevelForCurrentTransfer(common.LogDebug, "No SMB permissions were downloaded because none were found at the source")
+			} else if err != nil {
+				return "Setting destination file SDDLs", err
+			}
+		}
+	}
+	return "", nil
+}
+
+// preserveProperties checks and sets the appropriate properties (NFS or SMB) for the file transfer,
+// depending on the transfer type.
+// It ensures the properties are preserved after the permissions have been set.
+// Return - It returns a string message and an error if an issue occurs.
+func (bd *azureFilesDownloader) preserveProperties(info *TransferInfo) (string, error) {
+	if info.IsNFSCopy {
+		// must be done AFTER we preserve the permissions (else some of the flags/dates set here may be lost)
+		if spdl, ok := interface{}(bd).(nfsPropertyAwareDownloader); ok {
+			// We don't need to worry about the sip not being a ISMBPropertyBearingSourceInfoProvider as Azure Files always is.
+			err := spdl.PutNFSProperties(bd.sip.(INFSPropertyBearingSourceInfoProvider), bd.txInfo)
+			if err != nil {
+				return "Setting destination file NFS properties", err
+			}
+		}
+	} else {
+		// must be done AFTER we preserve the permissions (else some of the flags/dates set here may be lost)
+		if spdl, ok := interface{}(bd).(smbPropertyAwareDownloader); ok {
+			// We don't need to worry about the sip not being a ISMBPropertyBearingSourceInfoProvider as Azure Files always is.
+			err := spdl.PutSMBProperties(bd.sip.(ISMBPropertyBearingSourceInfoProvider), bd.txInfo)
+
+			if err != nil {
+				return "Setting destination file SMB properties", err
+			}
+		}
+	}
+	return "", nil
 }
