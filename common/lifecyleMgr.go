@@ -427,7 +427,16 @@ func (lcm *lifecycleMgr) SurrenderControl() {
 }
 
 func (lcm *lifecycleMgr) RegisterCloseFunc(closeFunc func()) {
-	lcm.closeFunc = closeFunc
+	if lcm.closeFunc != nil {
+		// "dereference" the function for later calling
+		orig := lcm.closeFunc
+		lcm.closeFunc = func() {
+			orig()
+			closeFunc()
+		}
+	} else {
+		lcm.closeFunc = closeFunc
+	}
 }
 
 func (lcm *lifecycleMgr) processOutputMessage() {

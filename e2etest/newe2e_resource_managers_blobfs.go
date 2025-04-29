@@ -44,8 +44,8 @@ func dfsStripSAS(uri string) string {
 }
 
 type BlobFSServiceResourceManager struct {
-	internalAccount *AzureAccountResourceManager
-	internalClient  *service.Client
+	InternalAccount *AzureAccountResourceManager
+	InternalClient  *service.Client
 }
 
 func (b *BlobFSServiceResourceManager) DefaultAuthType() ExplicitCredentialTypes {
@@ -70,7 +70,7 @@ func (b *BlobFSServiceResourceManager) Parent() ResourceManager {
 }
 
 func (b *BlobFSServiceResourceManager) Account() AccountResourceManager {
-	return b.internalAccount
+	return b.InternalAccount
 }
 
 func (b *BlobFSServiceResourceManager) Location() common.Location {
@@ -82,20 +82,20 @@ func (b *BlobFSServiceResourceManager) Level() cmd.LocationLevel {
 }
 
 func (b *BlobFSServiceResourceManager) URI(opts ...GetURIOptions) string {
-	base := dfsStripSAS(b.internalClient.DFSURL())
-	base = b.internalAccount.ApplySAS(base, b.Location(), opts...)
+	base := dfsStripSAS(b.InternalClient.DFSURL())
+	base = b.InternalAccount.ApplySAS(base, b.Location(), opts...)
 	base = addWildCard(base, opts...)
 
 	return base
 }
 
 func (b *BlobFSServiceResourceManager) ResourceClient() any {
-	return b.internalClient
+	return b.InternalClient
 }
 
 func (b *BlobFSServiceResourceManager) ListContainers(a Asserter) []string {
 	a.HelperMarker().Helper()
-	pager := b.internalClient.NewListFileSystemsPager(nil)
+	pager := b.InternalClient.NewListFileSystemsPager(nil)
 
 	out := make([]string, 0)
 
@@ -116,10 +116,10 @@ func (b *BlobFSServiceResourceManager) ListContainers(a Asserter) []string {
 
 func (b *BlobFSServiceResourceManager) GetContainer(containerName string) ContainerResourceManager {
 	return &BlobFSFileSystemResourceManager{
-		internalAccount: b.internalAccount,
+		internalAccount: b.InternalAccount,
 		Service:         b,
 		containerName:   containerName,
-		internalClient:  b.internalClient.NewFileSystemClient(containerName),
+		internalClient:  b.InternalClient.NewFileSystemClient(containerName),
 	}
 }
 
@@ -554,7 +554,7 @@ func (b *BlobFSPathResourceProvider) getFileClient() *file.Client {
 func (b *BlobFSPathResourceProvider) getBlobClient(a Asserter) *blob.Client {
 	a.HelperMarker().Helper()
 	blobService := b.internalAccount.GetService(a, common.ELocation.Blob()).(*BlobServiceResourceManager) // Blob and BlobFS are synonymous, so simply getting the same path is fine.
-	container := blobService.internalClient.NewContainerClient(b.Container.containerName)
+	container := blobService.InternalClient.NewContainerClient(b.Container.containerName)
 	return container.NewBlobClient(b.objectPath) // Generic blob client for now, we can specialize if we want in the future.
 }
 
