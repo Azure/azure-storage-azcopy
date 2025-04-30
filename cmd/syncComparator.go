@@ -173,12 +173,13 @@ type syncSourceComparator struct {
 
 	comparisonHashType common.SyncHashType
 
-	preferSMBTime     bool
-	disableComparison bool
+	preferSMBTime           bool
+	disableComparison       bool
+	incrementNotTransferred func(common.EntityType)
 }
 
-func newSyncSourceComparator(i *objectIndexer, copyScheduler objectProcessor, comparisonHashType common.SyncHashType, preferSMBTime, disableComparison bool) *syncSourceComparator {
-	return &syncSourceComparator{destinationIndex: i, copyTransferScheduler: copyScheduler, preferSMBTime: preferSMBTime, disableComparison: disableComparison, comparisonHashType: comparisonHashType}
+func newSyncSourceComparator(i *objectIndexer, copyScheduler objectProcessor, comparisonHashType common.SyncHashType, preferSMBTime, disableComparison bool, incrementNotTransferred func(common.EntityType)) *syncSourceComparator {
+	return &syncSourceComparator{destinationIndex: i, copyTransferScheduler: copyScheduler, preferSMBTime: preferSMBTime, disableComparison: disableComparison, comparisonHashType: comparisonHashType, incrementNotTransferred: incrementNotTransferred}
 }
 
 // it will only transfer source items that are:
@@ -233,8 +234,12 @@ func (f *syncSourceComparator) processIfNecessary(sourceObject StoredObject) err
 			// if destination is stale, schedule source
 			syncComparatorLog(sourceObject.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMT, false)
 			return f.copyTransferScheduler(sourceObject)
+		} else {
+			// Neither data nor metadata for the file has changed, hence file is not transferred.
+			if f.incrementNotTransferred != nil {
+				f.incrementNotTransferred(sourceObject.entityType)
+			}
 		}
-
 		// skip if dest is more recent
 		syncComparatorLog(sourceObject.relativePath, syncStatusSkipped, syncSkipReasonTime, false)
 		return nil
