@@ -36,7 +36,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
@@ -253,7 +252,6 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				WarnStdoutAndScanningLog(err.Error())
 				return nil
 			}
-			fileStat := fileInfo.Sys().(*syscall.Stat_t)
 			if fileInfo.Mode()&os.ModeSymlink != 0 {
 				if symlinkHandling.Preserve() {
 					// Handle it like it's not a symlink
@@ -353,12 +351,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				}
 				return nil
 			} else {
-
-				if fileStat.Nlink > 1 && hardlinkHandling == common.DefaultPreserveHardlinksOption && !fileInfo.IsDir() {
-					if azcopyScanningLogger != nil {
-						azcopyScanningLogger.Log(common.LogInfo, fmt.Sprintf("Found a hardlink to '%s'. It will be copied as a regular file at the destination.", filePath))
-					}
-				}
+				CheckHardLink(fileInfo, hardlinkHandling, filePath)
 
 				// not a symlink
 				result, err := filepath.Abs(filePath)
