@@ -270,6 +270,12 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		if err != nil {
 			return cooked, err
 		}
+		if err = cooked.preserveHardlinks.Parse(raw.preserveHardlinks); err != nil {
+			return cooked, err
+		}
+		if err = validatePreserveHardlinks(cooked.preserveHardlinks, cooked.fromTo, cooked.isNFSCopy); err != nil {
+			return cooked, err
+		}
 	} else {
 		cooked.isNFSCopy, cooked.preserveInfo, cooked.preservePOSIXProperties, cooked.preservePermissions, err = performSMBSpecificValidation(cooked.fromTo,
 			raw.isNFSCopy, raw.preserveInfo, raw.preservePOSIXProperties, raw.preservePermissions, raw.preserveOwner, raw.preserveSMBPermissions)
@@ -280,13 +286,6 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		// if err = validatePreserveOwner(raw.preserveOwner, cooked.fromTo); raw.preservePermissions && err != nil {
 		//	return cooked, err
 		// }
-	}
-
-	if err = cooked.preserveHardlinks.Parse(raw.preserveHardlinks); err != nil {
-		return cooked, err
-	}
-	if err = validatePreserveHardlinks(cooked.preserveHardlinks, cooked.fromTo, cooked.isNFSCopy); err != nil {
-		return cooked, err
 	}
 
 	if err = cooked.compareHash.Parse(raw.compareHash); err != nil {
