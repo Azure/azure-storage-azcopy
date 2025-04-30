@@ -63,10 +63,17 @@ const DefaultActiveDirectoryEndpoint = "https://login.microsoftonline.com"
 
 const TokenCache = "AzCopyTokenCache"
 
+type CredCacheImplementation interface {
+	HasCachedToken() (bool, error)
+	LoadToken() (*OAuthTokenInfo, error)
+	SaveToken(OAuthTokenInfo) error
+	RemoveCachedToken() error
+}
+
 // UserOAuthTokenManager for token management.
 type UserOAuthTokenManager struct {
 	oauthClient *http.Client
-	credCache   *CredCache
+	credCache   CredCacheImplementation
 
 	// Stash the credential info as we delete the environment variable after reading it, and we need to get it multiple times.
 	stashedInfo *OAuthTokenInfo
@@ -479,7 +486,7 @@ func (credInfo *OAuthTokenInfo) Refresh(ctx context.Context) (*Token, error) {
 }
 
 // Single instance token store credential cache shared by entire azcopy process.
-var tokenStoreCredCache = NewCredCacheInternalIntegration(CredCacheOptions{
+var tokenStoreCredCache CredCacheImplementation = NewCredCacheInternalIntegration(CredCacheOptions{
 	KeyName:     "azcopy/aadtoken/" + strconv.Itoa(os.Getpid()),
 	ServiceName: "azcopy",
 	AccountName: "aadtoken/" + strconv.Itoa(os.Getpid()),
@@ -510,8 +517,9 @@ func getAuthorityURL(activeDirectoryEndpoint string) (*url.URL, error) {
 const minimumTokenValidDuration = time.Minute * 5
 
 type TokenStoreCredential struct {
-	token *azcore.AccessToken
-	lock  sync.RWMutex
+	token     *azcore.AccessToken
+	lock      sync.RWMutex
+	credCache CredCacheImplementation
 }
 
 // globalTokenStoreCredential is created to make sure that all
@@ -531,22 +539,26 @@ var globalTokenStoreCredential *TokenStoreCredential
 var globalTsc sync.Once
 
 func (tsc *TokenStoreCredential) GetToken(_ context.Context, _ policy.TokenRequestOptions) (azcore.AccessToken, error) {
-	// if the token we've has not expired, return the same.
+	// if the token we have has not expired, return the same.
 	tsc.lock.RLock()
-	if time.Until(tsc.token.ExpiresOn) > minimumTokenValidDuration {
+	if rem := time.Until(tsc.token.ExpiresOn); rem > minimumTokenValidDuration {
+		tsc.lock.RUnlock() // return path, so we must release the read lock here as well.
 		return *tsc.token, nil
 	}
 	tsc.lock.RUnlock()
 
 	tsc.lock.Lock()
 	defer tsc.lock.Unlock()
-	hasToken, err := tokenStoreCredCache.HasCachedToken()
+
+	hasToken, err := tsc.credCache.HasCachedToken()
 	if err != nil || !hasToken {
+		AzcopyCurrentJobLogger.Log(LogDebug, fmt.Sprintf("no token found %v", err))
 		return azcore.AccessToken{}, fmt.Errorf("no cached token found in Token Store Mode(SE), %w", err)
 	}
 
-	tokenInfo, err := tokenStoreCredCache.LoadToken()
+	tokenInfo, err := tsc.credCache.LoadToken()
 	if err != nil {
+		AzcopyCurrentJobLogger.Log(LogDebug, fmt.Sprintf("get token failed %s", err.Error()))
 		return azcore.AccessToken{}, fmt.Errorf("get cached token failed in Token Store Mode(SE), %w", err)
 	}
 
@@ -568,6 +580,7 @@ func GetTokenStoreCredential(accessToken string, expiresOn time.Time) azcore.Tok
 				Token:     accessToken,
 				ExpiresOn: expiresOn,
 			},
+			credCache: tokenStoreCredCache,
 		}
 	})
 	return globalTokenStoreCredential
