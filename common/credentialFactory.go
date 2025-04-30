@@ -25,6 +25,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"strings"
 	"sync"
 
 	"github.com/minio/minio-go"
@@ -83,9 +84,67 @@ func CreateS3Credential(ctx context.Context, credInfo CredentialInfo, options Cr
 // S3 credential related factory methods
 // ==============================================================================================
 func CreateS3Client(ctx context.Context, credInfo CredentialInfo, option CredentialOpOptions, logger ILogger) (*minio.Client, error) {
+	glcm := GetLifecycleMgr()
+	glcm.Info("Creating S3 client...")
+
+	endpoint := credInfo.S3CredentialInfo.Endpoint
+	// Check if endpoint is an IP address
+	isIPEndpoint := isIPAddress(endpoint)
+	glcm.Info(fmt.Sprintf("endpoint: %s", endpoint))
+	glcm.Info(fmt.Sprintf("Is IP address check result: %v", isIPEndpoint))
+
+	// Handle MinIO with IP address localhost endpoint specially
+	if strings.Contains(credInfo.S3CredentialInfo.Endpoint, "psconfig.com") ||
+		strings.Contains(credInfo.S3CredentialInfo.Endpoint, "schoagminio.psconfig.com") ||
+		isIPEndpoint ||
+		strings.HasPrefix(endpoint, "localhost") ||
+		endpoint == "127.0.0.1" {
+
+		glcm.Info(fmt.Sprintf("Attempting to connect to endpoint: %s\n", endpoint))
+		//glcm.Info(fmt.Sprintf("Using SSL: %v\n", false))
+		//glcm.Info(fmt.Sprintf("Region (if provided): %s\n", credInfo.S3CredentialInfo.Region))
+
+		// Ensure we have a port for IP address, default to 9000 if not specified
+		if !strings.Contains(endpoint, ":") {
+			endpoint = endpoint + ":9000"
+		}
+
+		// For IP and localhost, we typically use HTTP instead of HTTPS
+		useSSL := false
+
+		// TODO: change to S3Access CredentialType?
+		if credInfo.CredentialType == ECredentialType.S3PublicBucket() {
+			cred := credentials.NewStatic("", "", "", credentials.SignatureAnonymous)
+			return minio.NewWithOptions(endpoint, &minio.Options{
+				Creds:  cred,
+				Secure: useSSL,
+				Region: credInfo.S3CredentialInfo.Region,
+			})
+		}
+
+		// Support access key
+		credential, err := CreateS3Credential(ctx, credInfo, option)
+		if err != nil {
+			return nil, err
+		}
+
+		s3Client, err := minio.NewWithCredentials(endpoint, credential, useSSL, credInfo.S3CredentialInfo.Region)
+		if logger != nil {
+			s3Client.TraceOn(NewS3HTTPTraceLogger(logger, LogDebug))
+		}
+		if err != nil {
+			glcm.Info("Error creating S3 client.")
+		}
+		return s3Client, err
+	}
+
 	if credInfo.CredentialType == ECredentialType.S3PublicBucket() {
 		cred := credentials.NewStatic("", "", "", credentials.SignatureAnonymous)
-		return minio.NewWithOptions(credInfo.S3CredentialInfo.Endpoint, &minio.Options{Creds: cred, Secure: true, Region: credInfo.S3CredentialInfo.Region})
+		return minio.NewWithOptions(credInfo.S3CredentialInfo.Endpoint,
+			&minio.Options{
+				Creds:  cred,
+				Secure: true,
+				Region: credInfo.S3CredentialInfo.Region})
 	}
 	// Support access key
 	credential, err := CreateS3Credential(ctx, credInfo, option)

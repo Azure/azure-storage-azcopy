@@ -21,7 +21,7 @@
 package common
 
 import (
-	"errors"
+	"fmt"
 	"net/url"
 	"regexp"
 	"strings"
@@ -73,12 +73,15 @@ var ES3ServiceType = S3ServiceType(0)
 
 type S3ServiceType uint8
 
-func (S3ServiceType) Unknown() S3ServiceType      { return S3ServiceType(0) }
-func (S3ServiceType) AWS() S3ServiceType          { return S3ServiceType(1) }
-func (S3ServiceType) Wasabi() S3ServiceType       { return S3ServiceType(2) }
-func (S3ServiceType) Backblaze() S3ServiceType    { return S3ServiceType(3) }
-func (S3ServiceType) DigitalOcean() S3ServiceType { return S3ServiceType(4) }
-func (S3ServiceType) MinIO() S3ServiceType        { return S3ServiceType(5) }
+func (S3ServiceType) Unknown() S3ServiceType         { return S3ServiceType(0) }
+func (S3ServiceType) AWS() S3ServiceType             { return S3ServiceType(1) }
+func (S3ServiceType) Wasabi() S3ServiceType          { return S3ServiceType(2) }
+func (S3ServiceType) Backblaze() S3ServiceType       { return S3ServiceType(3) }
+func (S3ServiceType) DigitalOcean() S3ServiceType    { return S3ServiceType(4) }
+func (S3ServiceType) MinIO() S3ServiceType           { return S3ServiceType(5) }
+func (S3ServiceType) ImpossibleCould() S3ServiceType { return S3ServiceType(6) }
+func (S3ServiceType) IBM() S3ServiceType             { return S3ServiceType(7) }
+func (S3ServiceType) Huawei() S3ServiceType          { return S3ServiceType(8) }
 
 // Known S3-compatible service domains
 const (
@@ -100,7 +103,9 @@ func detectS3ServiceType(host string) S3ServiceType {
 		return ES3ServiceType.Backblaze()
 	} else if strings.Contains(host, digitalOceanDomain) {
 		return ES3ServiceType.DigitalOcean()
-	} else if strings.Contains(host, "minio") {
+	} else if strings.Contains(host, "minio") ||
+		strings.Contains(host, "schoagminio.psconfig.com") ||
+		strings.Contains(host, "psconfig.com") {
 		return ES3ServiceType.MinIO()
 	}
 	return ES3ServiceType.Unknown()
@@ -138,20 +143,49 @@ func IsS3URL(u url.URL) bool {
 	if _, isS3URL := findS3URLMatches(hostParsed); isS3URL {
 		return true
 	}
-	if isMinIOHost(hostParsed) || u.Scheme == "s3" {
+	if isMinIOHost(hostParsed) || u.Scheme == "s3" || u.Scheme == "localhost" || isIPAddress(hostParsed) {
 		return true
 	}
 
 	if strings.Contains(hostParsed, "digitaloceanspaces.com") {
 		return true
 	}
+
+	if strings.Contains(hostParsed, "psconfig.com") ||
+		strings.Contains(hostParsed, "schoagminio.psconfig.com") {
+		return true
+	}
+	return false
+}
+
+func isIPAddress(host string) bool {
+	// Remove port if present
+	if colonIndex := strings.LastIndex(host, ":"); colonIndex != -1 {
+		host = host[:colonIndex]
+	}
+
+	// Check if its an IPv4
+	// Ex IPv4 is "192.168.1.1", "10.0.0.4"
+	ipv4Pattern := regexp.MustCompile(`^(\d{1,3}\.){3}\d{1,3}$`)
+	if ipv4Pattern.MatchString(host) {
+		return true
+	}
+
+	// Check if it's an IPv6 address (simplified check)
+	// Ex IPv6 is "2001:0db8:85a3:0000:0000:8a2e:0370:7334"
+	if strings.Count(host, ":") >= 2 {
+		return true
+	}
+
 	return false
 }
 
 // Checks if the host is MinIO.
 // Ex "http://localhost:9000" "http://minio.company.internal:9000" "s3://<bucket-name>/<object-key>"
 func isMinIOHost(host string) bool {
-	return strings.Contains(host, "minio") || strings.HasPrefix(host, "localhost")
+	return strings.Contains(host, "minio") || strings.HasPrefix(host, "localhost") ||
+		host == "127.0.0.1" || isIPAddress(host) || strings.Contains(host, "schoagminio.psconfig.com") ||
+		strings.Contains(host, "psconfig.com")
 }
 
 func findS3URLMatches(host string) (matches []string, isS3Host bool) {
@@ -170,9 +204,120 @@ func NewS3URLParts(u url.URL) (S3URLParts, error) {
 	// S3's bucket name should be in lower case
 	host := strings.ToLower(u.Host)
 
+	glcm := GetLifecycleMgr()
+	//glcm.Info(fmt.Sprintf("Parsing URL with host: %s", host))
+
+	// Special handling for custom domain
+	if strings.Contains(host, "psconfig.com") || strings.Contains(host, "schoagminio.psconfig.com") {
+		path := u.Path
+		// Remove the initial '/' if exists
+		if path != "" && path[0] == '/' {
+			path = path[1:]
+		}
+		glcm.Info("Using custom domain as endpoint")
+		up := S3URLParts{
+			Scheme:      u.Scheme,
+			Host:        host,
+			ServiceType: ES3ServiceType.MinIO(),
+			isPathStyle: true,
+			Endpoint:    host,
+		}
+		if bucketEndIndex := strings.Index(path, "/"); bucketEndIndex != -1 {
+			up.BucketName = path[:bucketEndIndex]
+			up.ObjectKey = path[bucketEndIndex+1:]
+		} else {
+			up.BucketName = path
+		}
+
+		up.UnparsedParams = u.Query().Encode()
+		return up, nil
+	}
+	// Special handling for IP address endpoints
+	if isIPAddress(host) {
+		path := u.Path
+		// Remove the initial '/' if exists
+		if path != "" && path[0] == '/' {
+			path = path[1:]
+		}
+
+		up := S3URLParts{
+			Scheme:      u.Scheme,
+			Host:        host,
+			ServiceType: ES3ServiceType.MinIO(), // Assume it is MinIO for IP-addresses
+			isPathStyle: true,
+			Endpoint:    host,
+		}
+
+		if bucketEndIndex := strings.Index(path, "/"); bucketEndIndex != -1 {
+			up.BucketName = path[:bucketEndIndex]
+			up.ObjectKey = path[bucketEndIndex+1:]
+		} else {
+			up.BucketName = path
+		}
+		up.UnparsedParams = u.Query().Encode()
+		glcm.Info(fmt.Sprintf("S3URLPart created with endpoint: %s", host))
+		return up, nil
+
+	}
+
+	// Special handling for localhost scheme
+	if u.Scheme == "localhost" {
+		path := u.Path
+		// Remove the initial '/' if exists
+		if path != "" && path[0] == '/' {
+			path = path[1:]
+		}
+
+		up := S3URLParts{
+			Scheme:      "http",           // Default to HTTP for localhost
+			Host:        "localhost:9000", // Default MinIO port
+			ServiceType: ES3ServiceType.MinIO(),
+			isPathStyle: true,
+			Endpoint:    "localhost:9000",
+		}
+
+		if bucketEndIndex := strings.Index(path, "/"); bucketEndIndex != -1 {
+			up.BucketName = path[:bucketEndIndex]
+			up.ObjectKey = path[bucketEndIndex+1:]
+		} else {
+			up.BucketName = path
+		}
+
+		up.UnparsedParams = u.Query().Encode()
+		return up, nil
+	}
+
+	// Handle standard MinIO URLs
+	if isMinIOHost(host) && !strings.Contains(host, ".") {
+		// Either localhost, IP-based MinIO URL or custom domain URL
+		path := u.Path
+		// Remove the initial '/' if exists
+		if path != "" && path[0] == '/' {
+			path = path[1:]
+		}
+
+		up := S3URLParts{
+			Scheme:      u.Scheme,
+			Host:        host,
+			ServiceType: ES3ServiceType.MinIO(),
+			isPathStyle: true,
+			Endpoint:    host,
+		}
+
+		if bucketEndIndex := strings.Index(path, "/"); bucketEndIndex != -1 {
+			up.BucketName = path[:bucketEndIndex]
+			up.ObjectKey = path[bucketEndIndex+1:]
+		} else {
+			up.BucketName = path
+		}
+
+		up.UnparsedParams = u.Query().Encode()
+		return up, nil
+	}
+
 	matchSlices, isS3URL := findS3URLMatches(host)
 	if !isS3URL {
-		return S3URLParts{}, errors.New(invalidS3URLErrorMessage)
+		return S3URLParts{}, nil
 	}
 
 	path := u.Path
@@ -212,7 +357,7 @@ func NewS3URLParts(u url.URL) (S3URLParts, error) {
 
 		up.Endpoint = host
 	}
-	// Extract region informatoin
+	// Extract region information
 	// Check if dualstack is contained in host name
 	if matchSlices[2] != "" {
 		if matchSlices[2] == s3KeywordDualStack {
