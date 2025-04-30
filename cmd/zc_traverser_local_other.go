@@ -15,7 +15,7 @@ func WrapFolder(fullpath string, stat os.FileInfo) (os.FileInfo, error) {
 	return stat, nil
 }
 
-func CheckHardlink(fileInfo os.FileInfo, hardlinkHandling common.PreserveHardlinksOption, filePath string) {
+func CheckHardLink(fileInfo os.FileInfo, hardlinkHandling common.PreserveHardlinksOption, filePath string) {
 	stat := fileInfo.Sys().(*syscall.Stat_t)
 	if stat.Nlink > 1 && hardlinkHandling == common.DefaultPreserveHardlinksOption && !fileInfo.IsDir() {
 		if azcopyScanningLogger != nil {
