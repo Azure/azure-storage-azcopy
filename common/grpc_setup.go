@@ -4,11 +4,14 @@
 package common
 
 import (
+	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/grpcctl"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 	"golang.stackrox.io/grpc-http1/server"
 	"net/http"
+	"sync"
+	"time"
 )
 
 func (grpcCtlImpl) SetupGrpc(addr string, logger ILoggerResetable) error {
@@ -36,10 +39,24 @@ func (grpcCtlImpl) SetupGrpc(addr string, logger ILoggerResetable) error {
 					server.PreferGRPCWeb(true)), // If grpc-web is requested, grpc-web we'll give.
 				&h2srv)
 
-			// Start listening.
-			err := srv.ListenAndServe()
-			if err != nil {
-				panic("grpcfailed: " + err.Error())
+			failOnce := &sync.Once{}
+
+			for {
+				// Start listening.
+				err := srv.ListenAndServe()
+				if err != nil {
+					if AzcopyCurrentJobLogger != nil {
+						AzcopyCurrentJobLogger.Log(LogWarning, fmt.Sprintf("grpc server errored; restarting: %v", err))
+					} else {
+						lcm.Warn(fmt.Sprintf("grpc server errored; restarting: %v", err))
+					}
+				}
+
+				failOnce.Do(func() {
+					close(GrpcServerFailed)
+				})
+
+				time.Sleep(time.Millisecond * 100)
 			}
 		}()
 	}

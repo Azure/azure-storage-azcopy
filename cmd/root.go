@@ -26,7 +26,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -63,7 +62,7 @@ var azcopySkipVersionCheck bool
 var isPipeDownload bool
 var retryStatusCodes string
 var debugMemoryProfile string
-var grpcServerPort uint16
+var grpcServerPort string
 
 type jobLoggerInfo struct {
 	jobID         common.JobID

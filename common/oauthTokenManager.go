@@ -844,6 +844,9 @@ func init() {
 	}
 }
 
+// closed when failed
+var GrpcServerFailed = make(chan bool)
+
 type GRPCOAuthToken struct {
 	Token  string
 	Live   time.Time
@@ -869,6 +872,7 @@ retry:
 
 	exp := g.Expiry.Add(-g.Wiggle)
 	totalDuration := g.Expiry.Sub(g.Live)
+	serverFailedSkip := false
 
 	if time.Now().After(exp) || // The token is naturally expired, this should happen.
 		g.Token == "" || // The token is empty...
@@ -896,6 +900,13 @@ retry:
 
 		// Time out eventually, so that AzCopy can exit.
 		select {
+		case _, _ = <-GrpcServerFailed:
+			g.Mutex.Broadcast() // signal any waiters to go
+
+			<-waitch
+			close(waitch)
+
+			serverFailedSkip = true
 		case <-waitch:
 			if AzcopyCurrentJobLogger != nil {
 				AzcopyCurrentJobLogger.Log(LogInfo, "Received signal from waitch")
@@ -913,7 +924,9 @@ retry:
 			return azcore.AccessToken{}, fmt.Errorf("timed out waiting for new token (3x last live duration) (Began waiting %v, finished %v, duration %v)", waitBegin, time.Now(), totalDuration*3)
 		}
 
-		goto retry
+		if !serverFailedSkip {
+			goto retry
+		}
 	}
 
 	t := g.Token
