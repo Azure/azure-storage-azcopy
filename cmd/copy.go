@@ -604,6 +604,12 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		if err != nil {
 			return cooked, err
 		}
+		if err = cooked.preserveHardlinks.Parse(raw.preserveHardlinks); err != nil {
+			return cooked, err
+		}
+		if err = validatePreserveHardlinks(cooked.preserveHardlinks, cooked.FromTo, cooked.isNFSCopy); err != nil {
+			return cooked, err
+		}
 	} else {
 		cooked.isNFSCopy, cooked.preserveInfo, cooked.preservePOSIXProperties, cooked.preservePermissions, err = performSMBSpecificValidation(cooked.FromTo,
 			raw.isNFSCopy, raw.preserveInfo, raw.preservePOSIXProperties, raw.preservePermissions, raw.preserveOwner, raw.preserveSMBPermissions)
@@ -613,13 +619,6 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		if err = validatePreserveOwner(raw.preserveOwner, cooked.FromTo); err != nil {
 			return cooked, err
 		}
-	}
-
-	if err = cooked.preserveHardlinks.Parse(raw.preserveHardlinks); err != nil {
-		return cooked, err
-	}
-	if err = validatePreserveHardlinks(cooked.preserveHardlinks, cooked.FromTo, cooked.isNFSCopy); err != nil {
-		return cooked, err
 	}
 
 	// --as-subdir is OK on all sources and destinations, but additional verification has to be done down the line. (e.g. https://account.blob.core.windows.net is not a valid root)

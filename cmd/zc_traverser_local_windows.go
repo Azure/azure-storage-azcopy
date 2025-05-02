@@ -9,6 +9,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/hillu/go-ntdll"
 	"golang.org/x/sys/windows"
 )
@@ -64,4 +65,8 @@ func WrapFolder(fullpath string, stat os.FileInfo) (os.FileInfo, error) {
 	} else {
 		return nil, st.Error()
 	}
+}
+
+func CheckHardLink(fileInfo os.FileInfo, hardlinkHandling common.PreserveHardlinksOption, filePath string) {
+	return
 }
