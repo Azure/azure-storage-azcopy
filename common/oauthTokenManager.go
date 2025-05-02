@@ -25,7 +25,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azidentity/cache"
 	"net"
 	"net/http"
 	"net/url"
@@ -35,6 +34,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity/cache"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
@@ -175,21 +176,21 @@ func (uotm *UserOAuthTokenManager) WorkloadIdentityLogin(persist bool) error {
 	return uotm.validateAndPersistLogin(oAuthTokenInfo)
 }
 
-func (uotm *UserOAuthTokenManager) AzCliLogin(tenantID string) error {
+func (uotm *UserOAuthTokenManager) AzCliLogin(tenantID string, persist bool) error {
 	oAuthTokenInfo := &OAuthTokenInfo{
 		LoginType: EAutoLoginType.AzCLI(),
 		Tenant:    tenantID,
-		Persist:   false, // AzCLI creds do not need to be persisted, AzCLI handles persistence.
+		Persist:   persist, // AzCLI creds do not need to be persisted, AzCLI handles persistence.
 	}
 
 	return uotm.validateAndPersistLogin(oAuthTokenInfo)
 }
 
-func (uotm *UserOAuthTokenManager) PSContextToken(tenantID string) error {
+func (uotm *UserOAuthTokenManager) PSContextToken(tenantID string, persist bool) error {
 	oAuthTokenInfo := &OAuthTokenInfo{
 		LoginType: EAutoLoginType.PsCred(),
 		Tenant:    tenantID,
-		Persist:   false, // Powershell creds do not need to be persisted, Powershell handles persistence.
+		Persist:   persist, // Powershell creds do not need to be persisted, Powershell handles persistence.
 	}
 
 	return uotm.validateAndPersistLogin(oAuthTokenInfo)
@@ -498,12 +499,12 @@ func (credInfo OAuthTokenInfo) toJSON() ([]byte, error) {
 	return json.Marshal(credInfo)
 }
 
-func getAuthorityURL(tenantID, activeDirectoryEndpoint string) (*url.URL, error) {
+func getAuthorityURL(activeDirectoryEndpoint string) (*url.URL, error) {
 	u, err := url.Parse(activeDirectoryEndpoint)
 	if err != nil {
 		return nil, err
 	}
-	return u.Parse(tenantID)
+	return u, nil
 }
 
 const minimumTokenValidDuration = time.Minute * 5
@@ -601,7 +602,7 @@ func (credInfo *OAuthTokenInfo) GetManagedIdentityCredential() (azcore.TokenCred
 }
 
 func (credInfo *OAuthTokenInfo) GetClientCertificateCredential() (azcore.TokenCredential, error) {
-	authorityHost, err := getAuthorityURL(credInfo.Tenant, credInfo.ActiveDirectoryEndpoint)
+	authorityHost, err := getAuthorityURL(credInfo.ActiveDirectoryEndpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -627,7 +628,7 @@ func (credInfo *OAuthTokenInfo) GetClientCertificateCredential() (azcore.TokenCr
 }
 
 func (credInfo *OAuthTokenInfo) GetClientSecretCredential() (azcore.TokenCredential, error) {
-	authorityHost, err := getAuthorityURL(credInfo.Tenant, credInfo.ActiveDirectoryEndpoint)
+	authorityHost, err := getAuthorityURL(credInfo.ActiveDirectoryEndpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -645,6 +646,10 @@ func (credInfo *OAuthTokenInfo) GetClientSecretCredential() (azcore.TokenCredent
 }
 
 func (credInfo *OAuthTokenInfo) GetAzCliCredential() (azcore.TokenCredential, error) {
+	if credInfo.Tenant == DefaultTenantID {
+		credInfo.Tenant = ""
+	}
+
 	tc, err := azidentity.NewAzureCLICredential(&azidentity.AzureCLICredentialOptions{TenantID: credInfo.Tenant})
 	if err != nil {
 		return nil, err
@@ -654,7 +659,11 @@ func (credInfo *OAuthTokenInfo) GetAzCliCredential() (azcore.TokenCredential, er
 }
 
 func (credInfo *OAuthTokenInfo) GetPSContextCredential() (azcore.TokenCredential, error) {
-	tc, err := NewPowershellContextCredential(nil)
+	if credInfo.Tenant == DefaultTenantID {
+		credInfo.Tenant = ""
+	}
+
+	tc, err := NewPowershellContextCredential(&PowershellContextCredentialOptions{TenantID: credInfo.Tenant})
 	if err != nil {
 		return nil, err
 	}
@@ -676,7 +685,7 @@ func (credInfo *OAuthTokenInfo) GetWorkloadIdentityCredential() (azcore.TokenCre
 }
 
 func (credInfo *OAuthTokenInfo) GetDeviceCodeCredential() (azcore.TokenCredential, error) {
-	authorityHost, err := getAuthorityURL(credInfo.Tenant, credInfo.ActiveDirectoryEndpoint)
+	authorityHost, err := getAuthorityURL(credInfo.ActiveDirectoryEndpoint)
 	if err != nil {
 		return nil, err
 	}

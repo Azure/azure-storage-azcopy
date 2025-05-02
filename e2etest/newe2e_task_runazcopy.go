@@ -2,19 +2,16 @@ package e2etest
 
 import (
 	"bytes"
-	"errors"
+	"context"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
-	"runtime/debug"
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/google/uuid"
 )
 
 // AzCopyJobPlan todo probably load the job plan directly? WI#26418256
@@ -25,6 +22,23 @@ type AzCopyStdout interface {
 
 	io.Writer
 	fmt.Stringer
+}
+
+type AzCopyDiscardStdout struct{}
+
+func (a *AzCopyDiscardStdout) RawStdout() []string {
+	return []string{}
+}
+
+func (a *AzCopyDiscardStdout) Write(p []byte) (n int, err error) {
+	fmt.Print(string(p))
+
+	// no-op
+	return len(p), nil
+}
+
+func (a *AzCopyDiscardStdout) String() string {
+	return ""
 }
 
 // AzCopyRawStdout shouldn't be used or relied upon right now! This will be fleshed out eventually. todo WI#26418258
@@ -54,13 +68,16 @@ var _ AzCopyStdout = &AzCopyRawStdout{}
 type AzCopyVerb string
 
 const ( // initially supporting a limited set of verbs
-	AzCopyVerbCopy   AzCopyVerb = "copy"
-	AzCopyVerbSync   AzCopyVerb = "sync"
-	AzCopyVerbRemove AzCopyVerb = "remove"
-	AzCopyVerbList   AzCopyVerb = "list"
-	AzCopyVerbLogin  AzCopyVerb = "login"
-	AzCopyVerbLogout AzCopyVerb = "logout"
-	AzCopyVerbJobs   AzCopyVerb = "jobs"
+	AzCopyVerbCopy        AzCopyVerb = "copy"
+	AzCopyVerbSync        AzCopyVerb = "sync"
+	AzCopyVerbRemove      AzCopyVerb = "remove"
+	AzCopyVerbList        AzCopyVerb = "list"
+	AzCopyVerbLogin       AzCopyVerb = "login"
+	AzCopyVerbLoginStatus AzCopyVerb = "login status"
+	AzCopyVerbLogout      AzCopyVerb = "logout"
+	AzCopyVerbJobsList    AzCopyVerb = "jobs list"
+	AzCopyVerbJobsResume  AzCopyVerb = "jobs resume"
+	AzCopyVerbJobsClean   AzCopyVerb = "jobs clean"
 )
 
 type AzCopyTarget struct {
@@ -126,16 +143,19 @@ type AzCopyEnvironment struct {
 	AzureTenantId           *string `env:"AZURE_TENANT_ID"`
 	AzureClientId           *string `env:"AZURE_CLIENT_ID"`
 
+	LoginCacheName *string `env:"AZCOPY_LOGIN_CACHE_NAME"`
+
 	// InheritEnvironment is a lowercase list of environment variables to always inherit.
 	// Specifying "*" as an entry with the value "true" will act as a wildcard, and inherit all env vars.
 	InheritEnvironment map[string]bool `env:",defaultfunc:DefaultInheritEnvironment"`
-	ManualLogin        bool
 
-	// If this is set, the logs have already been persisted.
-	// These should never be set by a test writer.
-	SessionId    *string
-	LogUploadDir *string
-	RunCount     *uint
+	ManualLogin bool
+
+	// These fields should almost never be intentionally set by a test writer unless the author really knows what they're doing,
+	// as the fields are automatically controlled.
+	ParentContext *AzCopyEnvironmentContext
+	EnvironmentId *uint
+	RunCount      *uint
 }
 
 func (env *AzCopyEnvironment) InheritEnvVar(name string) {
@@ -145,44 +165,50 @@ func (env *AzCopyEnvironment) InheritEnvVar(name string) {
 
 func (env *AzCopyEnvironment) EnsureInheritEnvironment() {
 	if env.InheritEnvironment == nil {
-		env.DefaultInheritEnvironment(nil)
+		env.DefaultInheritEnvironment(nil, context.TODO()) // context isn't important in this default yet
 	}
 }
 
-func (env *AzCopyEnvironment) DefaultInheritEnvironment(a ScenarioAsserter) map[string]bool {
-	env.InheritEnvironment = map[string]bool{
-		"path": true,
-	}
+var RunAzCopyDefaultInheritEnvironment = map[string]bool{
+	"path":             true,
+	"home":             true,
+	"userprofile":      true,
+	"homepath":         true,
+	"homedrive":        true,
+	"azure_config_dir": true,
+}
+
+func (env *AzCopyEnvironment) DefaultInheritEnvironment(a ScenarioAsserter, ctx context.Context) map[string]bool {
+	env.InheritEnvironment = RunAzCopyDefaultInheritEnvironment
 
 	return env.InheritEnvironment
 }
 
-func (env *AzCopyEnvironment) generateAzcopyDir(a ScenarioAsserter) {
-	dir, err := os.MkdirTemp("", "azcopytests*")
-	a.NoError("create tempdir", err)
-	env.LogLocation = &dir
-	env.JobPlanLocation = &dir
-	a.Cleanup(func(a Asserter) {
-		err := os.RemoveAll(dir)
-		a.NoError("remove tempdir", err)
-	})
+func (env *AzCopyEnvironment) generateAzcopyDir(a ScenarioAsserter, ctx context.Context) {
+	envCtx := ctx.Value(AzCopyEnvironmentManagerKey{}).(*AzCopyEnvironmentContext)
+	envTmpPath := envCtx.GetEnvTempPath(env)
+
+	err := os.MkdirAll(envTmpPath, 0777)
+	a.NoError("failed to create env dir ("+envTmpPath+")", err, true)
+	env.LogLocation = pointerTo(filepath.Join(envTmpPath, LogSubdir))
+	env.JobPlanLocation = pointerTo(filepath.Join(envTmpPath, PlanSubdir))
 }
 
-func (env *AzCopyEnvironment) DefaultLogLoc(a ScenarioAsserter) string {
+func (env *AzCopyEnvironment) DefaultLogLoc(a ScenarioAsserter, ctx context.Context) string {
 	if env.JobPlanLocation != nil {
 		env.LogLocation = env.JobPlanLocation
 	} else if env.LogLocation == nil {
-		env.generateAzcopyDir(a)
+		env.generateAzcopyDir(a, ctx)
 	}
 
 	return *env.LogLocation
 }
 
-func (env *AzCopyEnvironment) DefaultPlanLoc(a ScenarioAsserter) string {
+func (env *AzCopyEnvironment) DefaultPlanLoc(a ScenarioAsserter, ctx context.Context) string {
 	if env.LogLocation != nil {
 		env.JobPlanLocation = env.LogLocation
 	} else if env.JobPlanLocation == nil {
-		env.generateAzcopyDir(a)
+		env.generateAzcopyDir(a, ctx)
 	}
 
 	return *env.JobPlanLocation
@@ -221,23 +247,27 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 
 			if c.Environment.AutoLoginMode == nil && c.Environment.ServicePrincipalAppID == nil && c.Environment.ServicePrincipalClientSecret == nil && c.Environment.AutoLoginTenantID == nil {
 				if GlobalConfig.StaticResources() {
-					c.Environment.AutoLoginMode = pointerTo("SPN")
-					oAuthInfo := GlobalConfig.E2EAuthConfig.StaticStgAcctInfo.StaticOAuth
-					a.AssertNow("At least NEW_E2E_STATIC_APPLICATION_ID and NEW_E2E_STATIC_CLIENT_SECRET must be specified to use OAuth.", Empty{true}, oAuthInfo.ApplicationID, oAuthInfo.ClientSecret)
+					staticOauth := GlobalConfig.E2EAuthConfig.StaticStgAcctInfo.StaticOAuth
+					tenant := staticOauth.TenantID
+					if useSPN, _, appId, secret := GlobalConfig.GetSPNOptions(); useSPN {
+						c.Environment.AutoLoginMode = pointerTo("SPN")
+						a.AssertNow("At least NEW_E2E_STATIC_APPLICATION_ID and NEW_E2E_STATIC_CLIENT_SECRET must be specified to use OAuth.", Empty{true}, appId, secret)
 
-					c.Environment.ServicePrincipalAppID = &oAuthInfo.ApplicationID
-					c.Environment.ServicePrincipalClientSecret = &oAuthInfo.ClientSecret
-					c.Environment.AutoLoginTenantID = common.Iff(oAuthInfo.TenantID != "", &oAuthInfo.TenantID, nil)
+						c.Environment.ServicePrincipalAppID = &appId
+						c.Environment.ServicePrincipalClientSecret = &secret
+						c.Environment.AutoLoginTenantID = common.Iff(tenant != "", &tenant, nil)
+					} else if staticOauth.OAuthSource.PSInherit {
+						c.Environment.AutoLoginMode = pointerTo("pscred")
+						c.Environment.AutoLoginTenantID = common.Iff(tenant != "", &tenant, nil)
+					} else if staticOauth.OAuthSource.CLIInherit {
+						c.Environment.AutoLoginMode = pointerTo("azcli")
+						c.Environment.AutoLoginTenantID = common.Iff(tenant != "", &tenant, nil)
+					}
 				} else {
 					// oauth should reliably work
 					oAuthInfo := GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo
 					if oAuthInfo.Environment == AzurePipeline {
 						// No need to force keep path, we already inherit that.
-						c.Environment.InheritEnvVar("home")
-						c.Environment.InheritEnvVar("USERPROFILE")
-						c.Environment.InheritEnvVar("HOMEPATH")
-						c.Environment.InheritEnvVar("HOMEDRIVE")
-						c.Environment.InheritEnvVar("AZURE_CONFIG_DIR")
 						c.Environment.InheritEnvVar(WorkloadIdentityToken)
 						c.Environment.InheritEnvVar(WorkloadIdentityServicePrincipalID)
 						c.Environment.InheritEnvVar(WorkloadIdentityTenantID)
@@ -253,8 +283,9 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 				}
 			} else if c.Environment.AutoLoginMode != nil {
 				oAuthInfo := GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo
-				if strings.ToLower(*c.Environment.AutoLoginMode) == common.EAutoLoginType.Workload().String() {
-
+				var mode common.AutoLoginType
+				a.NoError("failed to parse auto login mode `"+*c.Environment.AutoLoginMode+"`", mode.Parse(*c.Environment.AutoLoginMode))
+				if mode == common.EAutoLoginType.Workload() {
 					// Get the value of the AZURE_FEDERATED_TOKEN environment variable
 					token := oAuthInfo.DynamicOAuth.Workload.FederatedToken
 					a.AssertNow("idToken must be specified to authenticate with workload identity", Empty{Invert: true}, token)
@@ -273,6 +304,7 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 					c.Environment.AzureTenantId = pointerTo(oAuthInfo.DynamicOAuth.Workload.TenantId)
 					c.Environment.AzureClientId = pointerTo(oAuthInfo.DynamicOAuth.Workload.ClientId)
 				}
+
 			}
 		}
 		return target.URI(opts) // Generate like public
@@ -291,13 +323,30 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	var flagMap map[string]string
 	var envMap map[string]string
 
+	// we have no need to update our context manager, Fetch should do it for us.
+	envCtx := FetchAzCopyEnvironmentContext(a)
+	envCtx.SetupCleanup(a) // Make sure we add the cleanup hook; the sync.Once ensures idempotency.
+
+	// register our environment, or create a new one if needed.
+	var runNum uint
+	if env := commandSpec.Environment; env == nil {
+		commandSpec.Environment = envCtx.CreateEnvironment()
+	} else {
+		runNum = envCtx.RegisterEnvironment(env)
+	}
+
+	ctx := context.WithValue(envCtx, AzCopyRunNumKey{}, runNum)
+	ctx = context.WithValue(ctx, AzCopyEnvironmentKey{}, commandSpec.Environment)
+
 	// separate these from the struct so their execution order is fixed
+	// Setup the positional args
 	args := func() []string {
 		if commandSpec.Environment == nil {
 			commandSpec.Environment = &AzCopyEnvironment{}
 		}
 
-		out := []string{GlobalConfig.AzCopyExecutableConfig.ExecutablePath, string(commandSpec.Verb)}
+		out := []string{GlobalConfig.AzCopyExecutableConfig.ExecutablePath}
+		out = append(out, strings.Split(string(commandSpec.Verb), " ")...)
 
 		for _, v := range commandSpec.PositionalArgs {
 			out = append(out, v)
@@ -307,27 +356,42 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 			out = append(out, commandSpec.applyTargetAuth(a, v))
 		}
 
-		if commandSpec.Flags != nil {
-			flagMap = MapFromTags(reflect.ValueOf(commandSpec.Flags), "flag", a)
-			for k, v := range flagMap {
-				out = append(out, fmt.Sprintf("--%s=%s", k, v))
+		if commandSpec.Flags == nil {
+			switch commandSpec.Verb {
+			case AzCopyVerbCopy:
+				commandSpec.Flags = CopyFlags{}
+			case AzCopyVerbSync:
+				commandSpec.Flags = SyncFlags{}
+			case AzCopyVerbList:
+				commandSpec.Flags = ListFlags{}
+			case AzCopyVerbLogin:
+				commandSpec.Flags = LoginFlags{}
+			case AzCopyVerbLoginStatus:
+				commandSpec.Flags = LoginStatusFlags{}
+			case AzCopyVerbRemove:
+				commandSpec.Flags = RemoveFlags{}
+			default:
+				commandSpec.Flags = GlobalFlags{}
 			}
+		}
+
+		flagMap = MapFromTags(reflect.ValueOf(commandSpec.Flags), "flag", a, ctx)
+		for k, v := range flagMap {
+			out = append(out, fmt.Sprintf("--%s=%s", k, v))
 		}
 
 		return out
 	}()
+	// Setup the env vars
 	env := func() []string {
 		out := make([]string, 0)
 
-		envMap = MapFromTags(reflect.ValueOf(commandSpec.Environment), "env", a)
+		envMap = MapFromTags(reflect.ValueOf(commandSpec.Environment), "env", a, ctx)
 
 		for k, v := range envMap {
 			out = append(out, fmt.Sprintf("%s=%s", k, v))
 		}
 
-		//if commandSpec.Environment.InheritEnvironment {
-		//	out = append(out, os.Environ()...)
-		//}
 		if commandSpec.Environment.InheritEnvironment != nil {
 			ieMap := commandSpec.Environment.InheritEnvironment
 			if ieMap["*"] {
@@ -347,8 +411,9 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	}()
 
 	var out = commandSpec.Stdout
-	if out == nil {
+	if out == nil { // Select the correct stdoutput parser
 		switch {
+		// Dry-run parser
 		case strings.EqualFold(flagMap["dry-run"], "true") && (strings.EqualFold(flagMap["output-type"], "json") || strings.EqualFold(flagMap["output-type"], "text") || flagMap["output-type"] == ""): //  Dryrun has its own special sort of output, that supports non-json output.
 			jsonMode := strings.EqualFold(flagMap["output-type"], "json")
 			var fromTo common.FromTo
@@ -360,23 +425,50 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 				fromTo:   fromTo,
 				Raw:      make(map[string]bool),
 			}
-		case !strings.EqualFold(flagMap["output-type"], "json"): // Won't parse non-computer-readable outputs
-			out = &AzCopyRawStdout{}
-		case commandSpec.Verb == AzCopyVerbCopy || commandSpec.Verb == AzCopyVerbSync || commandSpec.Verb == AzCopyVerbRemove:
 
+		// Text formats don't get parsed usually
+		case !strings.EqualFold(flagMap["output-type"], "json"):
+			out = &AzCopyRawStdout{}
+
+		// Copy/sync/remove share the same output format
+		case commandSpec.Verb == AzCopyVerbCopy || commandSpec.Verb == AzCopyVerbSync || commandSpec.Verb == AzCopyVerbRemove:
 			out = &AzCopyParsedCopySyncRemoveStdout{
 				JobPlanFolder: *commandSpec.Environment.JobPlanLocation,
 				LogFolder:     *commandSpec.Environment.LogLocation,
 			}
+
+		// List
 		case commandSpec.Verb == AzCopyVerbList:
 			out = &AzCopyParsedListStdout{}
-		case commandSpec.Verb == AzCopyVerbJobs && len(commandSpec.PositionalArgs) != 0 && commandSpec.PositionalArgs[0] == "list":
+
+		// Jobs list
+		case commandSpec.Verb == AzCopyVerbJobsList:
 			out = &AzCopyParsedJobsListStdout{}
-		case commandSpec.Verb == AzCopyVerbJobs && len(commandSpec.PositionalArgs) != 0 && commandSpec.PositionalArgs[0] == "resume":
+
+		// Jobs resume
+		case commandSpec.Verb == AzCopyVerbJobsResume:
 			out = &AzCopyParsedCopySyncRemoveStdout{ // Resume command treated the same as copy/sync/remove
 				JobPlanFolder: *commandSpec.Environment.JobPlanLocation,
 				LogFolder:     *commandSpec.Environment.LogLocation,
 			}
+
+		// Login status
+		case commandSpec.Verb == AzCopyVerbLoginStatus:
+			out = &AzCopyParsedLoginStatusStdout{}
+
+		// Login (interactive)
+		case commandSpec.Verb == AzCopyVerbLogin:
+			var lType common.AutoLoginType
+			if ltStr := flagMap["login-type"]; ltStr != "" {
+				_ = lType.Parse(ltStr)
+			}
+
+			if lType.IsInteractive() {
+				out = NewAzCopyInteractiveStdout(a)
+				break
+			}
+
+			fallthrough
 
 		default: // We don't know how to parse this.
 			out = &AzCopyRawStdout{}
@@ -410,107 +502,18 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 		0, command.ProcessState.ExitCode())
 
 	// validate log file retention for jobs clean command before the job logs are cleaned up and uploaded
-	if !a.Failed() && len(commandSpec.PositionalArgs) != 0 && commandSpec.PositionalArgs[0] == "clean" {
+	if !a.Failed() && commandSpec.Verb == AzCopyVerbJobsClean {
 		ValidateLogFileRetention(a, *commandSpec.Environment.LogLocation, 1)
 	}
 
-	//a.Cleanup(func(a Asserter) {
-	//	UploadLogs(a, out, stderr, commandSpec.Environment)
-	//	_ = os.RemoveAll(DerefOrZero(commandSpec.Environment.LogLocation))
-	//})
+	// The environment manager will handle cleanup for us-- All we need to do at this point is register our stdout.
+	envCtx.RegisterLogUpload(LogUpload{
+		EnvironmentID: *commandSpec.Environment.EnvironmentId,
+		RunID:         runNum,
+
+		Stdout: out.String(),
+		Stderr: stderr.String(),
+	})
 
 	return out, &AzCopyJobPlan{}
-}
-
-func UploadLogs(a Asserter, stdout AzCopyStdout, stderr *bytes.Buffer, env *AzCopyEnvironment) {
-	defer func() {
-		if err := recover(); err != nil {
-			fmt.Println("Log cleanup failed", err, "\n", string(debug.Stack()))
-		}
-	}()
-
-	logDropPath := GlobalConfig.AzCopyExecutableConfig.LogDropPath
-	if logDropPath == "" || !a.Failed() {
-		return
-	}
-
-	if env.LogUploadDir == nil {
-		logDir := DerefOrZero(env.LogLocation)
-
-		var err error
-		// Previously, we searched for a job ID to upload. Instead, we now treat shared environments as "sessions", and upload the logs all together.
-		sessionId := uuid.NewString()
-		env.SessionId = &sessionId
-
-		// Create the destination log directory
-		destLogDir := filepath.Join(logDropPath, sessionId)
-		err = os.MkdirAll(destLogDir, os.ModePerm|os.ModeDir)
-		a.NoError("Failed to create log dir", err)
-
-		// Copy the files by hand
-		err = filepath.WalkDir(logDir, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			relPath := strings.TrimPrefix(path, logDir)
-			if d.IsDir() {
-				err = os.MkdirAll(filepath.Join(destLogDir, relPath), os.ModePerm|os.ModeDir)
-				return err
-			}
-
-			// copy the file
-			srcFile, err := os.Open(path)
-			if err != nil {
-				return err
-			}
-
-			destFile, err := os.Create(filepath.Join(destLogDir, relPath))
-			if err != nil {
-				return err
-			}
-
-			defer srcFile.Close()
-			defer destFile.Close()
-
-			_, err = io.Copy(destFile, srcFile)
-			if err != nil {
-				return err
-			}
-
-			return err
-		})
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			a.NoError("Failed to copy log files", err)
-		}
-
-		env.LogUploadDir = &destLogDir
-	}
-
-	sessionId := *env.SessionId
-	destLogDir := *env.LogUploadDir
-	runCount := DerefOrZero(env.RunCount)
-	runCount++
-	env.RunCount = &runCount
-
-	// Write stdout to the folder instead of the job log
-	f, err := os.OpenFile(filepath.Join(destLogDir, fmt.Sprintf("stdout-%03d.txt", runCount)), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0744)
-	a.NoError("Failed to create stdout file", err)
-	_, err = f.WriteString(stdout.String())
-	a.NoError("Failed to write stdout file", err)
-	err = f.Close()
-	a.NoError("Failed to close stdout file", err)
-
-	// If stderr is non-zero, output that too!
-	if stderr != nil && stderr.Len() > 0 {
-		f, err := os.OpenFile(filepath.Join(destLogDir, fmt.Sprintf("stderr-%03d.txt", runCount)), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0744)
-		a.NoError("Failed to create stdout file", err)
-		_, err = stderr.WriteTo(f)
-		a.NoError("Failed to write stdout file", err)
-		err = f.Close()
-		a.NoError("Failed to close stdout file", err)
-	}
-
-	if runCount == 1 {
-		a.Log("Uploaded failed run logs for session %s", sessionId)
-	}
 }
