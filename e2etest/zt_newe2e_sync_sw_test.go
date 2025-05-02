@@ -253,7 +253,7 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResourceObject(a *ScenarioVaria
 	}, false)
 }
 
-/*func (s *SWSyncTestSuite) Scenario_SingleFile(svm *ScenarioVariationManager) {
+func (s *SWSyncTestSuite) Scenario_SingleFile(svm *ScenarioVariationManager) {
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbSync})
 	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{}).GetObject(svm, "test", common.EEntityType.File())
 	// The object must exist already if we're syncing.
@@ -380,7 +380,7 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUploadDownload(svm *ScenarioVariatio
 		Objects: srcDef.Objects,
 	}, true)
 }
-
+/*
 func (s *SWSyncTestSuite) Scenario_EntireDirectory_UploadContainer(svm *ScenarioVariationManager) {
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbSync}) // Calculate verb early to create the destination object early
 
