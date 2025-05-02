@@ -154,10 +154,12 @@ func AccountRegistryInitHook(a Asserter) {
 				InternalAccountType: EAccountType.PremiumPageBlobs(),
 			}
 		}
-		AccountRegistry[PremiumFileShareAcct] = &AzureAccountResourceManager{
-			accountName: acctInfo.PremiumFileShare.AccountName,
-			accountKey:  acctInfo.PremiumFileShare.AccountKey,
-			accountType: EAccountType.PremiumFileShares(),
+		if acctInfo.PremiumFileShare.AccountName != "" {
+			AccountRegistry[PremiumFileShareAcct] = &AzureAccountResourceManager{
+				InternalAccountName: acctInfo.PremiumFileShare.AccountName,
+				InternalAccountKey:  acctInfo.PremiumFileShare.AccountKey,
+				InternalAccountType: EAccountType.PremiumFileShares(),
+			}
 		}
 	} else {
 		// Create standard accounts

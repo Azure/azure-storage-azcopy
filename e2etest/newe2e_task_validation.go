@@ -151,7 +151,6 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 					ValidatePropertyPtr(a, "Owner", vProps.FileNFSPermissions.Owner, oProps.FileNFSPermissions.Owner)
 					ValidatePropertyPtr(a, "Group", vProps.FileNFSPermissions.Group, oProps.FileNFSPermissions.Group)
 					ValidatePropertyPtr(a, "FileMode", vProps.FileNFSPermissions.FileMode, oProps.FileNFSPermissions.FileMode)
-
 				}
 			case common.ELocation.BlobFS():
 				ValidatePropertyPtr(a, "Permissions", vProps.BlobFSProperties.Permissions, oProps.BlobFSProperties.Permissions)
