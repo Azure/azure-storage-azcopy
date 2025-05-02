@@ -1,10 +1,9 @@
-//go:build smslidingwindow
-// +build smslidingwindow
-
 package e2etest
 
 import (
+	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/google/uuid"
 )
 
 type SWSyncTestSuite struct{}
@@ -15,7 +14,7 @@ func init() {
 
 func (s *SWSyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariationManager) {
 	srcLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local()})
-	dstLoc := ResolveVariation(svm, []common.Location{common.ELocation.File()})
+	dstLoc := ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})
 
 	if srcLoc == common.ELocation.Local() && srcLoc == dstLoc {
 		svm.InvalidateScenario()
@@ -57,7 +56,7 @@ func (s *SWSyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariat
 	}, false)
 }
 
-/*func (s *SWSyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationManager) {
+func (s *SWSyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationManager) {
 	// Set up the scenario
 	a.InsertVariationSeparator("Local->")
 	srcLoc := common.ELocation.Local()
@@ -254,7 +253,7 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResourceObject(a *ScenarioVaria
 	}, false)
 }
 
-func (s *SWSyncTestSuite) Scenario_SingleFile(svm *ScenarioVariationManager) {
+/*func (s *SWSyncTestSuite) Scenario_SingleFile(svm *ScenarioVariationManager) {
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbSync})
 	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{}).GetObject(svm, "test", common.EEntityType.File())
 	// The object must exist already if we're syncing.
