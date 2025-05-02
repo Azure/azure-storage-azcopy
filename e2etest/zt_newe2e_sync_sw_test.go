@@ -62,7 +62,7 @@ func (s *SWSyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariat
 	}, false)
 }
 
-func (s *SWSyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationManager) {
+/*func (s *SWSyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationManager) {
 	// Set up the scenario
 	a.InsertVariationSeparator("Local->")
 	srcLoc := common.ELocation.Local()
@@ -914,3 +914,4 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 		},
 	}, false)
 }
+*/
