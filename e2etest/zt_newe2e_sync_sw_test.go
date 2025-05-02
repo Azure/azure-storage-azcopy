@@ -381,7 +381,7 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUploadDownload(svm *ScenarioVariatio
 		Objects: srcDef.Objects,
 	}, true)
 }
-/*
+
 func (s *SWSyncTestSuite) Scenario_EntireDirectory_UploadContainer(svm *ScenarioVariationManager) {
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbSync}) // Calculate verb early to create the destination object early
 
@@ -672,6 +672,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFolderAtSource(svm *ScenarioVariation
 	}, false)
 }
 
+/*
 // this scenario is not working for Azurefiles and blobfs
 func (s *SWSyncTestSuite) Scenario_DeleteFileAndCreateFolderWithSameName(svm *ScenarioVariationManager) {
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbSync}) // Calculate verb early to create the destination object early
