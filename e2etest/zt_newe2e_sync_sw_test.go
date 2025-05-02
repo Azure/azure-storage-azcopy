@@ -1,12 +1,8 @@
-//go:build smslidingwindow
-// +build smslidingwindow
-
 package e2etest
 
 import (
-	"strconv"
 	"time"
-
+	"strconv"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/google/uuid"
@@ -914,3 +910,4 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 		},
 	}, false)
 }
+
