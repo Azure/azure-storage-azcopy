@@ -4,12 +4,7 @@
 package e2etest
 
 import (
-	"strconv"
-	"time"
-
-	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/google/uuid"
 )
 
 type SWSyncTestSuite struct{}
