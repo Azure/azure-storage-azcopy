@@ -3,15 +3,16 @@ package e2etest
 import (
 	"bytes"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"github.com/google/uuid"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"github.com/google/uuid"
 )
 
 // enforce interface compliance at compile time
@@ -301,7 +302,7 @@ func (l *LocalObjectResourceManager) Create(a Asserter, body ObjectContentContai
 
 func (l *LocalObjectResourceManager) Delete(a Asserter) {
 	a.HelperMarker().Helper()
-	err := os.Remove(l.getWorkingPath())
+	err := os.RemoveAll(l.getWorkingPath())
 	if !os.IsNotExist(err) {
 		a.NoError("Could not remove local object "+l.getWorkingPath(), err)
 	}
