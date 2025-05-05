@@ -114,6 +114,7 @@ type rawCopyCmdArgs struct {
 	noGuessMimeType          bool
 	preserveLastModifiedTime bool
 	putMd5                   bool
+	tamperProof              string
 	md5ValidationOption      string
 	CheckLength              bool
 	deleteSnapshotsOption    string
@@ -593,6 +594,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	}
 
 	cooked.putMd5 = raw.putMd5
+	cooked.tamperProof = raw.tamperProof
 	err = cooked.md5ValidationOption.Parse(raw.md5ValidationOption)
 	if err != nil {
 		return cooked, err
@@ -785,6 +787,9 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	if err = validateMd5Option(cooked.md5ValidationOption, cooked.FromTo); err != nil {
 		return cooked, err
 	}
+	if err = validateTamperProofOption(cooked.tamperProof, cooked.putMd5, cooked.FromTo); err != nil {
+		return cooked, err
+	}
 
 	// Because of some of our defaults, these must live down here and can't be properly checked.
 	// TODO: Remove the above checks where they can't be done.
@@ -973,6 +978,14 @@ func validateMd5Option(option common.HashValidationOption, fromTo common.FromTo)
 	return nil
 }
 
+func validateTamperProofOption(tamperProof string, putMd5 bool, fromTo common.FromTo) error {
+	// Check to ensure put-md5 flag is present, check-md5 is set by default.
+	if len(tamperProof) > 0 && !putMd5 && fromTo.IsUpload() {
+		return fmt.Errorf("put-md5 is false but tamper-proof is set")
+	}
+	return nil
+}
+
 // Valid tag key and value characters include:
 // 1. Lowercase and uppercase letters (a-z, A-Z)
 // 2. Digits (0-9)
@@ -1094,6 +1107,7 @@ type CookedCopyCmdArgs struct {
 	preserveLastModifiedTime bool
 	deleteSnapshotsOption    common.DeleteSnapshotsOption
 	putMd5                   bool
+	tamperProof              string
 	md5ValidationOption      common.HashValidationOption
 	CheckLength              bool
 	// commandString hold the user given command which is logged to the Job log file
@@ -1499,6 +1513,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			NoGuessMimeType:          cca.noGuessMimeType,
 			PreserveLastModifiedTime: cca.preserveLastModifiedTime,
 			PutMd5:                   cca.putMd5,
+			TamperProof:              cca.tamperProof,
 			MD5ValidationOption:      cca.md5ValidationOption,
 			DeleteSnapshotsOption:    cca.deleteSnapshotsOption,
 			// Setting tags when tags explicitly provided by the user through blob-tags flag
@@ -2081,6 +2096,7 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "False by default. When overwriting an existing file on Windows or Azure Files, force the overwrite to work even if the existing file has its read-only attribute set")
 	cpCmd.PersistentFlags().BoolVar(&raw.backupMode, common.BackupModeFlagName, false, "False by default. Activates Windows' SeBackupPrivilege for uploads, or SeRestorePrivilege for downloads, to allow AzCopy to see read all files, regardless of their file system permissions, and to restore all permissions. Requires that the account running AzCopy already has these permissions (e.g. has Administrator rights or is a member of the 'Backup Operators' group). All this flag does is activate privileges that the account already has.")
 	cpCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "Create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob or file. By default the hash is NOT created. Only available when uploading.")
+	cpCmd.PersistentFlags().StringVar(&raw.tamperProof, "tamper-proof", "", "Uploads/ downloads the MD5 hash of each file to a specified tamper-proof storage.")
 	cpCmd.PersistentFlags().StringVar(&raw.md5ValidationOption, "check-md5", common.DefaultHashValidationOption.String(), "Specifies how strictly MD5 hashes should be validated when downloading. Only available when downloading. Available options: NoCheck, LogOnly, FailIfDifferent, FailIfDifferentOrMissing (default 'FailIfDifferent').")
 	cpCmd.PersistentFlags().StringVar(&raw.includeFileAttributes, "include-attributes", "", "(Windows only) Include files whose attributes match the attribute list. For example: A;S;R")
 	cpCmd.PersistentFlags().StringVar(&raw.excludeFileAttributes, "exclude-attributes", "", "(Windows only) Exclude files whose attributes match the attribute list. For example: A;S;R")

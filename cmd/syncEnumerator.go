@@ -200,6 +200,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		BlobAttributes: common.BlobTransferAttributes{
 			PreserveLastModifiedTime:         cca.preserveSMBInfo, // true by default for sync so that future syncs have this information available
 			PutMd5:                           cca.putMd5,
+			TamperProof:                      cca.tamperProof,
 			MD5ValidationOption:              cca.md5ValidationOption,
 			BlockSizeInBytes:                 cca.blockSize,
 			PutBlobSizeInBytes:               cca.putBlobSize,

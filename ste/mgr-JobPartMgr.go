@@ -38,6 +38,7 @@ type IJobPartMgr interface {
 	BlobTypeOverride() common.BlobType
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
 	ShouldPutMd5() bool
+	TamperProofLocation() string
 	DeleteDestinationFileIfNecessary() bool
 	SAS() (string, string)
 	// CancelJob()
@@ -174,6 +175,9 @@ type jobPartMgr struct {
 	// Additional data shared by all of this Job Part's transfers; initialized when this jobPartMgr is created
 	putMd5 bool
 
+	// Additional data shared by all of this Job Part's transfers; initialized when this jobPartMgr is created
+	tamperProof string
+
 	deleteDestinationFileIfNecessary bool
 
 	metadata common.Metadata
@@ -261,6 +265,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	}
 
 	jpm.putMd5 = dstData.PutMd5
+	jpm.tamperProof = dstData.TamperProof
 	jpm.blockBlobTier = dstData.BlockBlobTier
 	jpm.pageBlobTier = dstData.PageBlobTier
 	jpm.deleteDestinationFileIfNecessary = dstData.DeleteDestinationFileIfNecessary
@@ -545,6 +550,10 @@ func (jpm *jobPartMgr) PropertiesToTransfer() common.SetPropertiesFlags {
 }
 func (jpm *jobPartMgr) ShouldPutMd5() bool {
 	return jpm.putMd5
+}
+
+func (jpm *jobPartMgr) TamperProofLocation() string {
+	return jpm.tamperProof
 }
 
 func (jpm *jobPartMgr) DeleteDestinationFileIfNecessary() bool {

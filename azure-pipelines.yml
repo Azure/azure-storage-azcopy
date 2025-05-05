@@ -230,6 +230,7 @@ jobs:
           S2S_SRC_S3_SERVICE_URL: $(S2S_SRC_S3_SERVICE_URL)
           S2S_SRC_GCP_SERVICE_URL: $(S2S_SRC_GCP_SERVICE_URL)
           SHARE_SAS_URL: $(SHARE_SAS_URL)
+          TAMPER_PROOF_ENDPOINT: "https://testazcopy.confidential-ledger.azure.com"
           GOCOVERDIR: '$(System.DefaultWorkingDirectory)/coverage'
         condition: succeededOrFailed()
       # Smoke Tests Publishing
