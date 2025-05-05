@@ -301,7 +301,7 @@ func (l *LocalObjectResourceManager) Create(a Asserter, body ObjectContentContai
 
 func (l *LocalObjectResourceManager) Delete(a Asserter) {
 	a.HelperMarker().Helper()
-	err := os.RemoveAll(l.getWorkingPath())
+	err := os.Remove(l.getWorkingPath())
 	if !os.IsNotExist(err) {
 		a.NoError("Could not remove local object "+l.getWorkingPath(), err)
 	}

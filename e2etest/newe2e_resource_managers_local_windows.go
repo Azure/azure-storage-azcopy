@@ -4,19 +4,20 @@ package e2etest
 
 import (
 	"fmt"
+	"strings"
+	"sync"
+	"syscall"
+	"unsafe"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/hillu/go-ntdll"
 	"golang.org/x/sys/windows"
-	"strings"
-	"sync"
-	"syscall"
-	"unsafe"
 )
 
 // getHandle obtains a windows file handle with generic read permissions & backup semantics
-func (l *LocalObjectResourceManager) getHandle(path string, a Asserter) ntdll.Handle {
+func (l LocalObjectResourceManager) getHandle(path string, a Asserter) ntdll.Handle {
 	srcPtr, err := syscall.UTF16PtrFromString(path)
 	a.NoError("Get UTF16 pointer", err)
 
@@ -29,9 +30,15 @@ func (l *LocalObjectResourceManager) getHandle(path string, a Asserter) ntdll.Ha
 	return ntdll.Handle(fd)
 }
 
-func (l *LocalObjectResourceManager) GetSDDL(a Asserter) string {
+func (l LocalObjectResourceManager) closeHandle(handle ntdll.Handle, a Asserter) {
+	err := windows.CloseHandle(windows.Handle(handle))
+	a.NoError("Close handle", err)
+}
+
+func (l LocalObjectResourceManager) GetSDDL(a Asserter) string {
 	filePath := l.getWorkingPath()
 	fd := l.getHandle(filePath, a)
+	defer l.closeHandle(fd, a)
 
 	buf := make([]byte, 512)
 	bufLen := uint32(len(buf))
@@ -69,7 +76,6 @@ func (l *LocalObjectResourceManager) GetSDDL(a Asserter) string {
 	}
 
 	a.AssertNow("SDDL sanity check", Equal{}, fSDDL.String(), sd.String())
-
 	return fSDDL.PortableString()
 }
 
@@ -80,7 +86,7 @@ func (l LocalObjectResourceManager) GetSMBProperties(a Asserter) ste.TypedSMBPro
 	return ste.HandleInfo{ByHandleFileInformation: info}
 }
 
-func (l *LocalObjectResourceManager) PutSMBProperties(a Asserter, properties FileProperties) {
+func (l LocalObjectResourceManager) PutSMBProperties(a Asserter, properties FileProperties) {
 	filePath := l.getWorkingPath()
 	pathPtr, err := syscall.UTF16PtrFromString(filePath)
 	a.NoError("get UTF16 pointer for path", err)
@@ -126,7 +132,7 @@ func (l *LocalObjectResourceManager) PutSMBProperties(a Asserter, properties Fil
 var globalSetAclMu = &sync.Mutex{}
 
 // PutSDDL sets SDDLs like AzCopy does for downloads
-func (l *LocalObjectResourceManager) PutSDDL(sddlstr string, a Asserter) {
+func (l LocalObjectResourceManager) PutSDDL(sddlstr string, a Asserter) {
 	filePath := l.getWorkingPath()
 
 	sd, err := windows.SecurityDescriptorFromString(sddlstr)

@@ -118,7 +118,6 @@ func (svm *ScenarioVariationManager) DeleteCreatedResources() {
 			if !isDeletable || del.EntityType() == common.EEntityType.Folder() {
 				return TraversalOperationContinue
 			}
-			//fmt.Println("Deleted:", data.res.path)
 			del.Delete(svm)
 		}
 
