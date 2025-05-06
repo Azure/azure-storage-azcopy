@@ -74,7 +74,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
 	dest := cca.fromTo.To()
-	var getProperties = false
+	var getProperties = true
 	if ctx.Value(customCreds) != nil {
 		//if c2c sync we want to disable this to increase perf
 		getProperties = false
