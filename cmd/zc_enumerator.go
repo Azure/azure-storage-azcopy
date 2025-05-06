@@ -96,6 +96,28 @@ type StoredObject struct {
 	leaseDuration lease.DurationType
 }
 
+// This map stores the fileID(in context of NFS) or INode(in context of local file system) of the file
+// as key and the first enumerated filepath of the file as value for hardlink handling.
+var (
+	hardlinkMap = make(map[string]string)
+	hlMux       sync.RWMutex
+)
+
+// Write to the map (with lock)
+func Set(key, value string) {
+	hlMux.Lock()
+	defer hlMux.Unlock()
+	hardlinkMap[key] = value
+}
+
+// Read from the map (with read lock)
+func Get(key string) (string, bool) {
+	hlMux.RLock()
+	defer hlMux.RUnlock()
+	val, ok := hardlinkMap[key]
+	return val, ok
+}
+
 func (s *StoredObject) isMoreRecentThan(storedObject2 StoredObject, preferSMBTime bool) bool {
 	lmtA := s.lastModifiedTime
 	if preferSMBTime && !s.smbLastModifiedTime.IsZero() {
@@ -249,6 +271,7 @@ type filePropsProvider interface {
 	FileLastWriteTime() time.Time
 	ContentLength() int64
 	LinkCount() int64
+	FileID() string
 }
 
 // a constructor is used so that in case the StoredObject has to change, the callers would get a compilation error

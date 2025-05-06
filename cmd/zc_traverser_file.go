@@ -257,8 +257,11 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			metadata = fullProperties.Metadata()
 
 			if fullProperties.LinkCount() > 1 {
-				if azcopyScanningLogger != nil {
-					azcopyScanningLogger.Log(common.LogInfo, fmt.Sprintf("Found a hardlink to '%s'. It will be copied as a regular file at the destination.", f.name))
+				if existingPath, found := Get(fullProperties.FileID()); found {
+					logHardlinkWarning(f.name, existingPath)
+				} else {
+					Set(fullProperties.FileID(), f.name)
+					logHardlinkWarning(f.name, "")
 				}
 			}
 		}

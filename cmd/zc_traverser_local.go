@@ -351,7 +351,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				}
 				return nil
 			} else {
-				CheckHardLink(fileInfo, hardlinkHandling, filePath)
+				CheckHardLink(fileInfo, hardlinkHandling)
 
 				// not a symlink
 				result, err := filepath.Abs(filePath)

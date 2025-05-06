@@ -272,6 +272,10 @@ func (a shareFilePropertiesAdapter) LinkCount() int64 {
 	return common.IffNotNil(a.GetPropertiesResponse.LinkCount, 0)
 }
 
+func (a shareFilePropertiesAdapter) FileID() string {
+	return common.IffNotNil(a.GetPropertiesResponse.ID, "")
+}
+
 type shareDirectoryPropertiesAdapter struct {
 	*sharedirectory.GetPropertiesResponse
 }
@@ -318,4 +322,8 @@ func (a shareDirectoryPropertiesAdapter) ContentLength() int64 {
 
 func (a shareDirectoryPropertiesAdapter) LinkCount() int64 {
 	return 0
+}
+
+func (a shareDirectoryPropertiesAdapter) FileID() string {
+	return common.IffNotNil(a.GetPropertiesResponse.ID, "")
 }
