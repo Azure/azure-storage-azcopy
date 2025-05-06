@@ -74,14 +74,18 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
 	dest := cca.fromTo.To()
-
+	var getProperties = false
+	if ctx.Value(customCreds) != nil {
+		//if c2c sync we want to disable this to increase perf
+		getProperties = false
+	}
 	srcTraverserTemplate := ResourceTraverserTemplate{
 		location:                    cca.fromTo.From(),
 		credential:                  &srcCredInfo,
 		symlinkHandling:             common.ESymlinkHandlingType.Skip(),
 		listOfFilesChannel:          nil,
 		recursive:                   cca.recursive,
-		getProperties:               true,
+		getProperties:               getProperties,
 		includeDirectoryStubs:       includeDirStubs,
 		permanentDeleteOption:       common.EPermanentDeleteOption.None(),
 		incrementEnumerationCounter: func(entityType common.EntityType) {},
@@ -99,7 +103,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 		includeVersionsList:         false,
 	}
 
-	sourceTraverser, err := InitResourceTraverser(cca.Source, cca.fromTo.From(), &ctx, &srcCredInfo, common.ESymlinkHandlingType.Skip(), nil, cca.recursive, true, includeDirStubs, common.EPermanentDeleteOption.None(), func(entityType common.EntityType) {
+	sourceTraverser, err := InitResourceTraverser(cca.Source, cca.fromTo.From(), &ctx, &srcCredInfo, common.ESymlinkHandlingType.Skip(), nil, cca.recursive, getProperties, includeDirStubs, common.EPermanentDeleteOption.None(), func(entityType common.EntityType) {
 		if entityType == common.EEntityType.File() {
 			atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 		} else if entityType == common.EEntityType.Folder() {
