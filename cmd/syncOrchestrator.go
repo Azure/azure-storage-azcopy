@@ -98,6 +98,7 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 }
 
 func (st *SyncTraverser) my_comparator(so StoredObject) error {
+
 	var child_path string
 
 	if so.relativePath == "" {
@@ -110,7 +111,6 @@ func (st *SyncTraverser) my_comparator(so StoredObject) error {
 			child_path = so.relativePath
 		}
 	}
-
 	so.relativePath = child_path
 
 	syncMutex.Lock()
@@ -296,6 +296,10 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 		pt_src.Value = strings.Join(sync_src, common.AZCOPY_PATH_SEPARATOR_STRING)
 		st_src.Value = strings.Join(sync_dst, common.AZCOPY_PATH_SEPARATOR_STRING)
+		if runtime.GOOS == "windows" {
+			pt_src.Value = strings.ReplaceAll(pt_src.Value, "/", "\\")
+			st_src.Value = strings.ReplaceAll(st_src.Value, "\\", "/")
+		}
 
 		ptt := enumerator.primaryTraverserTemplate
 		stt := enumerator.secondaryTraverserTemplate

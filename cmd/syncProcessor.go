@@ -30,6 +30,8 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	azFilesService "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
@@ -361,7 +363,6 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 		if b.folderOption == common.EFolderPropertiesOption.NoFolders() {
 			return nil
 		}
-
 		var deleteFunc func(ctx context.Context, logger common.ILogger) bool
 		var objURL *url.URL
 		var err error
@@ -379,6 +380,10 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 				_, err = blobClient.Delete(b.ctx, nil)
 				return (err == nil)
 			}
+			if UseSyncOrchestrator {
+				cc := bsc.NewContainerClient(b.containerName)
+				IterateThroughFolder(cc, objectPath)
+			}
 		case common.ELocation.File():
 			fsc, _ := sc.FileServiceClient()
 			dirClient := fsc.NewShareClient(b.containerName).NewDirectoryClient(objectPath)
@@ -392,6 +397,10 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 					return dirClient.Delete(b.ctx, nil)
 				}, dirClient, b.forceIfReadOnly)
 				return (err == nil)
+			}
+			if UseSyncOrchestrator {
+				serviceClient, _ := sc.FileServiceClient()
+				IterateThroughFolderForFiles(serviceClient, objectPath, b.containerName)
 			}
 		case common.ELocation.BlobFS():
 			dsc, _ := sc.DatalakeServiceClient()
@@ -415,4 +424,63 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 
 		return nil
 	}
+}
+func IterateThroughFolder(containerClient *container.Client, folderPrefix string) error {
+	// Use "/" as the delimiter to get a hierarchical listing
+	pager := containerClient.NewListBlobsHierarchyPager("/", &container.ListBlobsHierarchyOptions{Prefix: &folderPrefix})
+
+	ctx := context.Background()
+	for pager.More() {
+		page, err := pager.NextPage(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to get next page: %v", err)
+		}
+
+		// Print directories
+		for _, blobPrefix := range page.Segment.BlobPrefixes {
+			if err := IterateThroughFolder(containerClient, *blobPrefix.Name); err != nil {
+				return err
+			}
+		}
+
+		// Print blobs
+		for _, blob := range page.Segment.BlobItems {
+			glcm.Info(fmt.Sprintf("Deleting extra blob object : %s\n", *blob.Name))
+			blobClient := containerClient.NewBlobClient(*blob.Name)
+			_, err := blobClient.Delete(ctx, nil)
+			if err != nil {
+				return fmt.Errorf("failed to delete blob: %v", err)
+			}
+		}
+	}
+
+	return nil
+}
+
+func IterateThroughFolderForFiles(serviceClient *azFilesService.Client, folderPrefix string, containerName string) error {
+	shareClient := serviceClient.NewShareClient(containerName)
+	pager := shareClient.NewDirectoryClient(folderPrefix).NewListFilesAndDirectoriesPager(nil)
+	ctx := context.Background()
+	for pager.More() {
+		lResp, err := pager.NextPage(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to get next page: %v", err)
+		}
+		for _, fileInfo := range lResp.Segment.Files {
+			//delete the file
+			glcm.Info(fmt.Sprintf("Deleting Extra file object : %s\n", *fileInfo.Name))
+			fileClient := shareClient.NewDirectoryClient(folderPrefix).NewFileClient(*fileInfo.Name)
+			_, err := fileClient.Delete(ctx, nil)
+			if err != nil {
+				return fmt.Errorf("failed to delete file: %v", err)
+			}
+		}
+		for _, dirInfo := range lResp.Segment.Directories {
+			if err := IterateThroughFolderForFiles(serviceClient, path.Join(folderPrefix, *dirInfo.Name), containerName); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
