@@ -41,7 +41,7 @@ func newBlobFolderSender(jptm IJobPartTransferMgr, destination string, sip ISour
 		jptm:              jptm,
 		sip:               sip,
 		destinationClient: destinationClient,
-		metadataToApply:   props.SrcMetadata.Clone(), // We're going to modify it, so we should clone it.
+		metadataToApply:   FixBustedMetadata(props.SrcMetadata), // FixBustedMetadata inherently clones
 		headersToApply:    props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
 		blobTagsToApply:   props.SrcBlobTags,
 	}

@@ -1,0 +1,27 @@
+//protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative grpcctl.proto
+
+/*
+This protocol definition is subject to change, and will definitely break at some point.
+
+Do not, under any circumstances, rely upon this protocol file. No reliability is guaranteed. Here be dragons.
+ */
+
+option go_package = "github.com/Azure/azure-storage-azcopy/grpcctl/internal";
+
+// todo: Support e2e testing magicks and otherwise.
+
+service AzCopyControl {
+  rpc InjectToken(Token) returns (EmptyReply) {}
+}
+
+message EmptyReply {
+  // Usually "OK"
+  required string Status = 1;
+}
+
+message Token {
+  required string BearerToken = 1;
+  required int64 UnixExpiry = 2;
+  required int64 UnixLive = 3;
+  required int64 Wiggle = 4;
+}
