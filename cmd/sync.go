@@ -662,7 +662,7 @@ func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm common.LifecycleMgr, th
 		if cca.FirstPartOrdered() {
 			throughputString = fmt.Sprintf(", 2-sec Throughput (Mb/s): %v", jobsAdmin.ToFixed(throughput, 4))
 		}
-		return fmt.Sprintf("%v Files Scanned at Source, %v Files Scanned at Destination%s",
+		return fmt.Sprintf("%v Files Scanned at Source, %v Files Scanned at Destination%s\n",
 			srcScanned, dstScanned, throughputString)
 	})
 }
@@ -852,11 +852,12 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		return err
 	}
 
+	enumerator, err := cca.InitEnumerator(ctx, nil)
+	if err != nil {
+		return err
+	}
+
 	if !UseSyncOrchestrator {
-		enumerator, err := cca.InitEnumerator(ctx, nil)
-		if err != nil {
-			return err
-		}
 
 		// trigger the progress reporting
 		if !cca.dryrunMode {
@@ -869,7 +870,11 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 			return err
 		}
 	} else {
-		err = customSyncHandler(cca, ctx)
+
+		err = CustomSyncHandler(cca, enumerator, ctx)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

@@ -44,9 +44,9 @@ import (
 
 var UseSyncOrchestrator = true
 
-type CustomSyncHandler func(cca *cookedSyncCmdArgs, ctx context.Context) error
+type CustomSyncHandlerFunc func(cca *cookedSyncCmdArgs, enumerator *syncEnumerator, ctx context.Context) error
 
-var customSyncHandler CustomSyncHandler = syncOrchestratorHandler
+var CustomSyncHandler CustomSyncHandlerFunc = syncOrchestratorHandler
 
 type CustomCounterIncrementer func(entry fs.DirEntry, t *localTraverser) error
 
@@ -69,10 +69,8 @@ type SyncTraverser struct {
 	enumerator *syncEnumerator
 	comparator objectProcessor
 	dir        string
-	// sub_dirs []string
-	// children []string
-	sub_dirs []StoredObject
-	children []StoredObject
+	sub_dirs   []StoredObject
+	children   []StoredObject
 }
 
 func (st *SyncTraverser) processor(so StoredObject) error {
@@ -87,11 +85,9 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 	so.relativePath = child_path
 
 	if so.entityType == common.EEntityType.Folder() {
-		// st.sub_dirs = append(st.sub_dirs, child_path)
 		st.sub_dirs = append(st.sub_dirs, so)
 	}
 
-	// st.children = append(st.children, so.relativePath)
 	st.children = append(st.children, so)
 
 	syncMutex.Lock()
@@ -258,28 +254,26 @@ func syncMonitor() {
 	atomic.AddInt32(&syncMonitorExited, 1)
 }
 
-func syncOrchestratorHandler(cca *cookedSyncCmdArgs, ctx context.Context) error {
+func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator, ctx context.Context) error {
 	// Start the profiling
 	go func() {
 		WarnStdoutAndScanningLog("Listening to port 6060..\n")
 		http.ListenAndServe("localhost:6060", nil)
 	}()
 
-	return cca.runSyncOrchestrator(ctx)
+	return cca.runSyncOrchestrator(enumerator, ctx)
 }
 
-func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err error) {
+func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ctx context.Context) (err error) {
 	go syncMonitor()
 	go monitorGoroutines()
 
-	enumerator, err := cca.InitEnumerator(ctx, nil)
-	if err != nil {
-		return err
-	}
-
 	goroutineThreshold = 30000
 
-	syncOneDir := func(dir parallel.Directory, enqueueDir func(parallel.Directory), enqueueOutput func(parallel.DirectoryEntry, error)) error {
+	syncOneDir := func(
+		dir parallel.Directory,
+		enqueueDir func(parallel.Directory),
+		enqueueOutput func(parallel.DirectoryEntry, error)) error {
 
 		var waits int64
 		waits = 0
@@ -315,7 +309,8 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 			return err
 		}
 
-		pt, err := InitResourceTraverser(pt_src,
+		pt, err := InitResourceTraverser(
+			pt_src,
 			ptt.location,
 			&ctx,
 			ptt.credential,
@@ -344,7 +339,8 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 			return err
 		}
 
-		st, err := InitResourceTraverser(st_src,
+		st, err := InitResourceTraverser(
+			st_src,
 			stt.location,
 			&ctx,
 			stt.credential,
@@ -414,7 +410,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 		fi.ModTime(), fi.Size(), noContentProps, noBlobProps, noMetadata, "")
 
 	parallelism := 4
-		atomic.AddInt64(&syncQDepth, 1)
+	atomic.AddInt64(&syncQDepth, 1)
 	var _ = parallel.Crawl(ctx, root, syncOneDir, parallelism)
 
 	cca.waitUntilJobCompletion(false)
