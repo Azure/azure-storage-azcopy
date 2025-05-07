@@ -269,12 +269,12 @@ func performSMBSpecificValidation(fromTo common.FromTo,
 func validatePreserveHardlinks(option common.PreserveHardlinksOption, fromTo common.FromTo, isNFSCopy bool) error {
 
 	// Validate for Download: Only allowed when downloading from a local file system
-	if runtime.GOOS != "linux" && fromTo.IsDownload() && fromTo.From() != common.ELocation.File() {
+	if runtime.GOOS == "linux" && fromTo.IsDownload() && fromTo.From() != common.ELocation.File() {
 		return fmt.Errorf("the --preserve-hardlinks option is only supported when downloading from a linux file system")
 	}
 
 	// Validate for Upload or S2S: Only allowed when uploading *to* a local file system
-	if runtime.GOOS != "linux" && (fromTo.IsUpload() || fromTo.IsS2S()) && fromTo.To() != common.ELocation.File() {
+	if runtime.GOOS == "linux" && (fromTo.IsUpload() || fromTo.IsS2S()) && fromTo.To() != common.ELocation.File() {
 		return fmt.Errorf("the --preserve-hardlinks option is only supported when uploading to a linux file system")
 	}
 
