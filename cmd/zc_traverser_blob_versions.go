@@ -35,7 +35,7 @@ type blobVersionsTraverser struct {
 	ctx                         context.Context
 	includeDirectoryStubs       bool
 	incrementEnumerationCounter enumerationCounterFunc
-	listOfVersionIds            chan string
+	listOfVersionIds            <-chan string
 	cpkOptions                  common.CpkOptions
 }
 
@@ -116,17 +116,14 @@ func (t *blobVersionsTraverser) Traverse(preprocessor objectMorpher, processor o
 	return nil
 }
 
-func newBlobVersionsTraverser(rawURL string, serviceClient *service.Client, ctx context.Context,
-	includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc,
-	listOfVersionIds chan string, cpkOptions common.CpkOptions) (t *blobVersionsTraverser) {
-
+func newBlobVersionsTraverser(rawURL string, serviceClient *service.Client, opts InitResourceTraverserOptions) (t *blobVersionsTraverser) {
 	return &blobVersionsTraverser{
 		rawURL:                      rawURL,
 		serviceClient:               serviceClient,
-		ctx:                         ctx,
-		includeDirectoryStubs:       includeDirectoryStubs,
-		incrementEnumerationCounter: incrementEnumerationCounter,
-		listOfVersionIds:            listOfVersionIds,
-		cpkOptions:                  cpkOptions,
+		ctx:                         opts.Context,
+		includeDirectoryStubs:       opts.IncludeDirectoryStubs,
+		incrementEnumerationCounter: opts.IncrementEnumeration,
+		listOfVersionIds:            opts.ListOfVersionIDs,
+		cpkOptions:                  opts.CpkOptions,
 	}
 }

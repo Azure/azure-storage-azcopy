@@ -21,7 +21,6 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"net/url"
 
@@ -31,7 +30,7 @@ import (
 // a meta traverser that goes through a list of paths (potentially directory entities) and scans them one by one
 // behaves like a single traverser (basically a "traverser of traverser")
 type listTraverser struct {
-	listReader              chan string
+	listReader              <-chan string
 	recursive               bool
 	childTraverserGenerator childTraverserGenerator
 }
@@ -89,25 +88,25 @@ func (l *listTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	return nil
 }
 
-func newListTraverser(parent common.ResourceString, parentType common.Location, credential *common.CredentialInfo,
-	ctx *context.Context, recursive bool, handleSymlinks common.SymlinkHandlingType, getProperties bool, listChan chan string,
-	includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveBlobTags bool,
-	logLevel common.LogLevel, cpkOptions common.CpkOptions, syncHashType common.SyncHashType, preservePermissions common.PreservePermissionsOption, trailingDot common.TrailingDotOption, destination *common.Location) ResourceTraverser {
+func newListTraverser(resource common.ResourceString, resourceLocation common.Location, options InitResourceTraverserOptions) ResourceTraverser {
+	listChan := options.ListOfFiles
+	options.ListOfFiles = nil // Hide it from children
+	recursive := options.Recursive
 
 	traverserGenerator := func(relativeChildPath string) (ResourceTraverser, error) {
-		source := parent.Clone()
-		if parentType != common.ELocation.Local() {
+		source := resource.Clone()
+		if resourceLocation != common.ELocation.Local() {
 			// assume child path is not URL-encoded yet, this is consistent with the behavior of previous implementation
-			childURL, _ := url.Parse(parent.Value)
+			childURL, _ := url.Parse(resource.Value)
 			childURL.Path = common.GenerateFullPath(childURL.Path, relativeChildPath)
 			source.Value = childURL.String()
 		} else {
 			// is local, only generate the full path
-			source.Value = common.GenerateFullPath(parent.ValueLocal(), relativeChildPath)
+			source.Value = common.GenerateFullPath(resource.ValueLocal(), relativeChildPath)
 		}
 
 		// Construct a traverser that goes through the child
-		traverser, err := InitResourceTraverser(source, parentType, ctx, credential, handleSymlinks, nil, recursive, getProperties, includeDirectoryStubs, common.EPermanentDeleteOption.None(), incrementEnumerationCounter, nil, s2sPreserveBlobTags, syncHashType, preservePermissions, logLevel, cpkOptions, nil, false, trailingDot, destination, nil, false)
+		traverser, err := InitResourceTraverser(source, resourceLocation, options)
 		if err != nil {
 			return nil, err
 		}

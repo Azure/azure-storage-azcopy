@@ -191,16 +191,81 @@ func ValidTrailingDotOptions() []string {
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-var EPermanentDeleteOption = PermanentDeleteOption(3) // Default to "None"
+var EBlobTraverserIncludeOption eBlobTraverserIncludeOption
+
+type eBlobTraverserIncludeOption bool
+
+type BlobTraverserIncludeOption uint8
+
+func (eBlobTraverserIncludeOption) Snapshots() BlobTraverserIncludeOption { return 1 }
+func (eBlobTraverserIncludeOption) Versions() BlobTraverserIncludeOption  { return 1 << 1 }
+func (eBlobTraverserIncludeOption) Deleted() BlobTraverserIncludeOption   { return 1 << 2 }
+func (eBlobTraverserIncludeOption) DirStubs() BlobTraverserIncludeOption  { return 1 << 3 } // whether to include blobs that have metadata 'hdi_isfolder = true'
+func (eBlobTraverserIncludeOption) None() BlobTraverserIncludeOption      { return 0 }
+
+func (e eBlobTraverserIncludeOption) FromInputs(pdo PermanentDeleteOption, listVersions, includeDirectoryStubs bool) BlobTraverserIncludeOption {
+	out := e.None()
+
+	if includeDirectoryStubs {
+		out = out.Add(e.DirStubs())
+	}
+
+	if pdo != 0 {
+		out = out.Add(e.Deleted())
+
+		if pdo.Includes(EPermanentDeleteOption.Snapshots()) {
+			out = out.Add(e.Snapshots())
+		}
+
+		if pdo.Includes(EPermanentDeleteOption.Versions()) || listVersions {
+			out = out.Add(e.Versions())
+		}
+
+		return out
+	}
+
+	if listVersions {
+		out = out.Add(e.Versions())
+	}
+
+	return out
+}
+
+func (o BlobTraverserIncludeOption) Add(other BlobTraverserIncludeOption) BlobTraverserIncludeOption {
+	return o | other
+}
+func (o BlobTraverserIncludeOption) Includes(other BlobTraverserIncludeOption) bool {
+	return (o & other) == other
+}
+
+func (o BlobTraverserIncludeOption) Snapshots() bool {
+	return o.Includes(EBlobTraverserIncludeOption.Snapshots())
+}
+func (o BlobTraverserIncludeOption) Versions() bool {
+	return o.Includes(EBlobTraverserIncludeOption.Versions())
+}
+func (o BlobTraverserIncludeOption) Deleted() bool {
+	return o.Includes(EBlobTraverserIncludeOption.Deleted())
+}
+func (o BlobTraverserIncludeOption) DirStubs() bool {
+	return o.Includes(EBlobTraverserIncludeOption.DirStubs())
+}
+
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+var EPermanentDeleteOption = PermanentDeleteOption(0) // Default to "None"
 
 type PermanentDeleteOption uint8
 
-func (PermanentDeleteOption) Snapshots() PermanentDeleteOption { return PermanentDeleteOption(0) }
-func (PermanentDeleteOption) Versions() PermanentDeleteOption  { return PermanentDeleteOption(1) }
-func (PermanentDeleteOption) SnapshotsAndVersions() PermanentDeleteOption {
-	return PermanentDeleteOption(2)
+func (PermanentDeleteOption) Snapshots() PermanentDeleteOption { return PermanentDeleteOption(1) }
+func (PermanentDeleteOption) Versions() PermanentDeleteOption  { return PermanentDeleteOption(1 << 1) }
+func (p PermanentDeleteOption) SnapshotsAndVersions() PermanentDeleteOption {
+	return p.Snapshots() | p.Versions()
 }
-func (PermanentDeleteOption) None() PermanentDeleteOption { return PermanentDeleteOption(3) }
+func (PermanentDeleteOption) None() PermanentDeleteOption { return PermanentDeleteOption(0) }
+
+func (p PermanentDeleteOption) Includes(other PermanentDeleteOption) bool {
+	return (p & other) == other
+}
 
 func (p *PermanentDeleteOption) Parse(s string) error {
 	// allow empty to mean "None"
