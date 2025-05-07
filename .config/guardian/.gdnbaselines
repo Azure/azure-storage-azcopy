@@ -1,0 +1,30 @@
+{
+  "properties": {
+    "helpUri": "https://eng.ms/docs/microsoft-security/security/azure-security/cloudai-security-fundamentals-engineering/security-integration/guardian-wiki/microsoft-guardian/general/baselines"
+  },
+  "version": "1.0.0",
+  "baselines": {
+    "default": {
+      "name": "default",
+      "createdDate": "2025-04-24 18:58:31Z",
+      "lastUpdatedDate": "2025-04-24 18:58:31Z"
+    }
+  },
+  "results": {
+    "08a18b3a9f9861251c718eb613b9b2d4ef1acef8ba910275e39ea3390e1313ef": {
+      "signature": "08a18b3a9f9861251c718eb613b9b2d4ef1acef8ba910275e39ea3390e1313ef",
+      "alternativeSignatures": [
+        "2c48aa1a65bfc34fc22e420d430fa1549f0eba6db2c2aee69de2abd0f7fcd25d"
+      ],
+      "target": "binaries/azcopy_windows_386.exe",
+      "memberOf": [
+        "default"
+      ],
+      "tool": "binskim",
+      "ruleId": "BA2018",
+      "createdDate": "2025-04-24 18:58:31Z",
+      "expirationDate": "2025-10-11 19:47:23Z",
+      "justification": "This error is baselined with an expiration date of 180 days from 2025-04-24 19:47:23Z"
+    }
+  }
+}
