@@ -697,6 +697,8 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 					}
 
 					entityType = common.EEntityType.Folder()
+				} else if IsHardlink(fileInfo) {
+					entityType = common.EEntityType.Hardlink()
 				} else {
 					entityType = common.EEntityType.File()
 				}
@@ -777,6 +779,8 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 							return err
 						}
 					}
+				} else if IsHardlink(fileInfo) {
+					entityType = common.EEntityType.Hardlink()
 				}
 
 				if entry.IsDir() {

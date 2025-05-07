@@ -257,12 +257,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			metadata = fullProperties.Metadata()
 
 			if fullProperties.LinkCount() > 1 {
-				if existingPath, found := Get(fullProperties.FileID()); found {
-					logHardlinkWarning(f.name, existingPath)
-				} else {
-					Set(fullProperties.FileID(), f.name)
-					logHardlinkWarning(f.name, "")
-				}
+				logHardlinkWarning(f.name, fullProperties.FileID())
 			}
 		}
 		obj := newStoredObject(

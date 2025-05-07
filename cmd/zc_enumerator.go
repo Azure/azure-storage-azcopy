@@ -96,28 +96,6 @@ type StoredObject struct {
 	leaseDuration lease.DurationType
 }
 
-// This map stores the fileID(in context of NFS) or INode(in context of local file system) of the file
-// as key and the first enumerated filepath of the file as value for hardlink handling.
-var (
-	hardlinkMap = make(map[string]string)
-	hlMux       sync.RWMutex
-)
-
-// Write to the map (with lock)
-func Set(key, value string) {
-	hlMux.Lock()
-	defer hlMux.Unlock()
-	hardlinkMap[key] = value
-}
-
-// Read from the map (with read lock)
-func Get(key string) (string, bool) {
-	hlMux.RLock()
-	defer hlMux.RUnlock()
-	val, ok := hardlinkMap[key]
-	return val, ok
-}
-
 func (s *StoredObject) isMoreRecentThan(storedObject2 StoredObject, preferSMBTime bool) bool {
 	lmtA := s.lastModifiedTime
 	if preferSMBTime && !s.smbLastModifiedTime.IsZero() {
@@ -145,7 +123,7 @@ func (s *StoredObject) isSourceRootFolder() bool {
 // We can't just implement this filtering in ToNewCopyTransfer, because delete transfers (from sync)
 // do not pass through that routine.  So we need to make the filtering available in a separate function
 // so that the sync deletion code path(s) can access it.
-func (s *StoredObject) isCompatibleWithEntitySettings(fpo common.FolderPropertyOption, sht common.SymlinkHandlingType) bool {
+func (s *StoredObject) isCompatibleWithEntitySettings(fpo common.FolderPropertyOption, sht common.SymlinkHandlingType, pho common.PreserveHardlinksOption) bool {
 	if s.entityType == common.EEntityType.File() {
 		return true
 	} else if s.entityType == common.EEntityType.Folder() {
@@ -161,6 +139,8 @@ func (s *StoredObject) isCompatibleWithEntitySettings(fpo common.FolderPropertyO
 		}
 	} else if s.entityType == common.EEntityType.Symlink() {
 		return sht == common.ESymlinkHandlingType.Preserve()
+	} else if s.entityType == common.EEntityType.Hardlink() {
+		return pho == common.EPreserveHardlinksOption.Follow()
 	} else {
 		panic("undefined entity type")
 	}
@@ -182,7 +162,7 @@ var ErrorHashAsyncCalculation = errors.New("hash is calculating asynchronously")
 // We use this, so that we can easily test for compatibility in the sync deletion code (which expects an objectProcessor)
 func newFpoAwareProcessor(fpo common.FolderPropertyOption, inner objectProcessor) objectProcessor {
 	return func(s StoredObject) error {
-		if s.isCompatibleWithEntitySettings(fpo, common.ESymlinkHandlingType.Skip()) {
+		if s.isCompatibleWithEntitySettings(fpo, common.ESymlinkHandlingType.Skip(), common.EPreserveHardlinksOption.Follow()) {
 			return inner(s)
 		} else {
 			return nil // nothing went wrong, because we didn't do anything
@@ -190,9 +170,9 @@ func newFpoAwareProcessor(fpo common.FolderPropertyOption, inner objectProcessor
 	}
 }
 
-func (s *StoredObject) ToNewCopyTransfer(steWillAutoDecompress bool, Source string, Destination string, preserveBlobTier bool, folderPropertiesOption common.FolderPropertyOption, symlinkHandlingType common.SymlinkHandlingType) (transfer common.CopyTransfer, shouldSendToSte bool) {
+func (s *StoredObject) ToNewCopyTransfer(steWillAutoDecompress bool, Source string, Destination string, preserveBlobTier bool, folderPropertiesOption common.FolderPropertyOption, symlinkHandlingType common.SymlinkHandlingType, hardlinkHandlingType common.PreserveHardlinksOption) (transfer common.CopyTransfer, shouldSendToSte bool) {
 
-	if !s.isCompatibleWithEntitySettings(folderPropertiesOption, symlinkHandlingType) {
+	if !s.isCompatibleWithEntitySettings(folderPropertiesOption, symlinkHandlingType, hardlinkHandlingType) {
 		return common.CopyTransfer{}, false
 	}
 
