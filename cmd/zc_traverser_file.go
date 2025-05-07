@@ -416,16 +416,16 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	return
 }
 
-func newFileTraverser(rawURL string, serviceClient *service.Client, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc, trailingDot common.TrailingDotOption, destination *common.Location) (t *fileTraverser) {
+func newFileTraverser(rawURL string, serviceClient *service.Client, opts InitResourceTraverserOptions) (t *fileTraverser) {
 	t = &fileTraverser{
 		rawURL:                      rawURL,
 		serviceClient:               serviceClient,
-		ctx:                         ctx,
-		recursive:                   recursive,
-		getProperties:               getProperties,
-		incrementEnumerationCounter: incrementEnumerationCounter,
-		trailingDot:                 trailingDot,
-		destination:                 destination,
+		ctx:                         opts.Context,
+		recursive:                   opts.Recursive,
+		getProperties:               opts.GetPropertiesInFrontend,
+		incrementEnumerationCounter: opts.IncrementEnumeration,
+		trailingDot:                 opts.TrailingDotOption,
+		destination:                 opts.DestResourceType,
 	}
 	return
 }

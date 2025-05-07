@@ -36,16 +36,14 @@ import (
 
 // Enumerates an entire S3 account, looking into each matching bucket as it goes
 type s3ServiceTraverser struct {
+	opts InitResourceTraverserOptions
+
 	ctx           context.Context
 	bucketPattern string
 	cachedBuckets []string
-	getProperties bool
 
 	s3URL    s3URLPartsExtension
 	s3Client *minio.Client
-
-	// a generic function to notify that a new stored object has been enumerated
-	incrementEnumerationCounter enumerationCounterFunc
 }
 
 func (t *s3ServiceTraverser) IsDirectory(isSource bool) (bool, error) {
@@ -94,7 +92,10 @@ func (t *s3ServiceTraverser) Traverse(preprocessor objectMorpher, processor obje
 		tmpS3URL.BucketName = v
 		urlResult := tmpS3URL.URL()
 		credentialInfo := common.CredentialInfo{CredentialType: common.ECredentialType.S3AccessKey()}
-		bucketTraverser, err := newS3Traverser(credentialInfo.CredentialType, &urlResult, t.ctx, true, t.getProperties, t.incrementEnumerationCounter)
+
+		opt := t.opts
+		opt.Credential = &credentialInfo
+		bucketTraverser, err := newS3Traverser(&urlResult, opt)
 
 		if err != nil {
 			return err
@@ -124,8 +125,8 @@ func (t *s3ServiceTraverser) Traverse(preprocessor objectMorpher, processor obje
 	return nil
 }
 
-func newS3ServiceTraverser(rawURL *url.URL, ctx context.Context, getProperties bool, incrementEnumerationCounter enumerationCounterFunc) (t *s3ServiceTraverser, err error) {
-	t = &s3ServiceTraverser{ctx: ctx, incrementEnumerationCounter: incrementEnumerationCounter, getProperties: getProperties}
+func newS3ServiceTraverser(rawURL *url.URL, opts InitResourceTraverserOptions) (t *s3ServiceTraverser, err error) {
+	t = &s3ServiceTraverser{opts: opts, ctx: opts.Context}
 
 	var s3URLParts common.S3URLParts
 	s3URLParts, err = common.NewS3URLParts(*rawURL)

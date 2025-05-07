@@ -178,7 +178,9 @@ func TestDownloadAccount(t *testing.T) {
 
 	// Traverse the account ahead of time and determine the relative paths for testing.
 	relPaths := make([]string, 0) // Use a map for easy lookup
-	blobTraverser := newBlobAccountTraverser(rawBSC, "", ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None(), false, nil)
+	blobTraverser := newBlobAccountTraverser(rawBSC, "", InitResourceTraverserOptions{
+		Context: ctx,
+	})
 	processor := func(object StoredObject) error {
 		// Skip non-file types
 		_, ok := object.Metadata[common.POSIXSymlinkMeta]
@@ -233,7 +235,9 @@ func TestDownloadAccountWildcard(t *testing.T) {
 
 	// Traverse the account ahead of time and determine the relative paths for testing.
 	relPaths := make([]string, 0) // Use a map for easy lookup
-	blobTraverser := newBlobAccountTraverser(rawBSC, container, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None(), false, nil)
+	blobTraverser := newBlobAccountTraverser(rawBSC, container, InitResourceTraverserOptions{
+		Context: ctx,
+	})
 	processor := func(object StoredObject) error {
 		// Skip non-file types
 		_, ok := object.Metadata[common.POSIXSymlinkMeta]

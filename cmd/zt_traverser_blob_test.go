@@ -54,7 +54,11 @@ func TestIsSourceDirWithStub(t *testing.T) {
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, dirName).URL()
 	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
-	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false)
+	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, InitResourceTraverserOptions{
+		Context:               ctx,
+		Recursive:             true,
+		IncludeDirectoryStubs: true,
+	})
 
 	isDir, err := blobTraverser.IsDirectory(true)
 	a.True(isDir)
@@ -76,7 +80,11 @@ func TestIsSourceDirWithNoStub(t *testing.T) {
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, dirName).URL()
 	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
-	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false)
+	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, InitResourceTraverserOptions{
+		Context:               ctx,
+		Recursive:             true,
+		IncludeDirectoryStubs: true,
+	})
 
 	isDir, err := blobTraverser.IsDirectory(true)
 	a.True(isDir)
@@ -98,7 +106,11 @@ func TestIsDestDirWithBlobEP(t *testing.T) {
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, dirName).URL()
 	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
-	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false)
+	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, InitResourceTraverserOptions{
+		Context:               ctx,
+		Recursive:             true,
+		IncludeDirectoryStubs: true,
+	})
 
 	isDir, err := blobTraverser.IsDirectory(false)
 	a.True(isDir)
@@ -108,7 +120,11 @@ func TestIsDestDirWithBlobEP(t *testing.T) {
 	dirName = "dest_file"
 	// List
 	rawBlobURLWithSAS = scenarioHelper{}.getBlobClientWithSAS(a, containerName, dirName).URL()
-	blobTraverser = newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false)
+	blobTraverser = newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, InitResourceTraverserOptions{
+		Context:               ctx,
+		Recursive:             true,
+		IncludeDirectoryStubs: true,
+	})
 
 	isDir, err = blobTraverser.IsDirectory(false)
 	a.False(isDir)
@@ -134,7 +150,11 @@ func TestIsDestDirWithDFSEP(t *testing.T) {
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, fileSystemName, parentDirName).URL()
 	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
-	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), true)
+	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, InitResourceTraverserOptions{
+		Context:               ctx,
+		Recursive:             true,
+		IncludeDirectoryStubs: true,
+	}, BlobTraverserOptions{isDFS: to.Ptr(true)})
 
 	// a directory with name parentDirName exists on target. So irrespective of
 	// isSource, IsDirectory()  should return true.
@@ -151,7 +171,11 @@ func TestIsDestDirWithDFSEP(t *testing.T) {
 	// With a directory that does not exist, without path separator.
 	parentDirName = "dirDoesNotExist"
 	rawBlobURLWithSAS = scenarioHelper{}.getBlobClientWithSAS(a, fileSystemName, parentDirName).URL()
-	blobTraverser = newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), true)
+	blobTraverser = newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, InitResourceTraverserOptions{
+		Context:               ctx,
+		Recursive:             true,
+		IncludeDirectoryStubs: true,
+	}, BlobTraverserOptions{isDFS: to.Ptr(true)})
 
 	// The directory does not exist, so IsDirectory()
 	// should return false, in all cases
@@ -168,7 +192,11 @@ func TestIsDestDirWithDFSEP(t *testing.T) {
 	// With a directory that does not exist, with path separator
 	parentDirNameWithSeparator := "dirDoesNotExist" + common.OS_PATH_SEPARATOR
 	rawBlobURLWithSAS = scenarioHelper{}.getBlobClientWithSAS(a, fileSystemName, parentDirNameWithSeparator).URL()
-	blobTraverser = newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), true)
+	blobTraverser = newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, InitResourceTraverserOptions{
+		Context:               ctx,
+		Recursive:             true,
+		IncludeDirectoryStubs: true,
+	}, BlobTraverserOptions{isDFS: to.Ptr(true)})
 
 	// The directory does not exist, but with a path separator
 	// we should identify it as a directory.
@@ -199,7 +227,11 @@ func TestIsSourceFileExists(t *testing.T) {
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, fileName).URL()
 	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
-	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false)
+	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, InitResourceTraverserOptions{
+		Context:               ctx,
+		Recursive:             true,
+		IncludeDirectoryStubs: true,
+	})
 
 	isDir, err := blobTraverser.IsDirectory(true)
 	a.False(isDir)
@@ -221,7 +253,11 @@ func TestIsSourceFileDoesNotExist(t *testing.T) {
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, fileName).URL()
 	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
-	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false)
+	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, InitResourceTraverserOptions{
+		Context:               ctx,
+		Recursive:             true,
+		IncludeDirectoryStubs: true,
+	})
 
 	isDir, err := blobTraverser.IsDirectory(true)
 	a.False(isDir)
