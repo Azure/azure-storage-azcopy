@@ -270,21 +270,16 @@ func validatePreserveHardlinks(option common.PreserveHardlinksOption, fromTo com
 
 	// Validate for Download: Only allowed when downloading from a local file system
 	if runtime.GOOS == "linux" && fromTo.IsDownload() && fromTo.From() != common.ELocation.File() {
-		return fmt.Errorf("the --preserve-hardlinks option is only supported when downloading from a linux file system")
+		return fmt.Errorf("The --preserve-hardlinks option, when downloading, is only supported from a NFS file share to a Linux filesystem.")
 	}
 
 	// Validate for Upload or S2S: Only allowed when uploading *to* a local file system
 	if runtime.GOOS == "linux" && (fromTo.IsUpload() || fromTo.IsS2S()) && fromTo.To() != common.ELocation.File() {
-		return fmt.Errorf("the --preserve-hardlinks option is only supported when uploading to a linux file system")
+		return fmt.Errorf("The --preserve-hardlinks option, when uploading, is only supported from a NFS file share to a Linux filesystem or between NFS file shares.")
 	}
 
-	// Validate NFS context
-	if !isNFSCopy {
-		return fmt.Errorf("the --preserve-hardlinks option is only supported for NFS copy operations")
-	}
 	if option == common.DefaultPreserveHardlinksOption {
 		glcm.Info("The --preserve-hardlinks option is set to 'follow'. Hardlinked files will be copied as a regular file at the destination.")
-
 	}
 	return nil
 }

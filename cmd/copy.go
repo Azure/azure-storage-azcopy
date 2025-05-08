@@ -2136,6 +2136,7 @@ func init() {
 	// Deletes destination blobs with uncommitted blocks when staging block, hidden because we want to preserve default behavior
 	cpCmd.PersistentFlags().BoolVar(&raw.deleteDestinationFileIfNecessary, "delete-destination-file", false, "False by default. Deletes destination blobs, specifically blobs with uncommitted blocks when staging block.")
 	_ = cpCmd.PersistentFlags().MarkHidden("delete-destination-file")
-
-	cpCmd.PersistentFlags().StringVar(&raw.preserveHardlinks, PreserveHardlinksFlag, "follow", "Follow by default. Preserve hardlinks for NFS resources. This flag is only applicable when the source is NFS file share or the destination is NFS file share. Available options: skip, preserve, follow (default 'follow').")
+	cpCmd.PersistentFlags().StringVar(&raw.preserveHardlinks, PreserveHardlinksFlag, "follow",
+		"Specifies how hardlinks should be handled. This flag is only applicable when downloading from an NFS file share, uploading to an NFS share, or performing service-to-service copies involving NFS. "+
+			"The only supported option is 'follow' (default), which copies hardlinks as regular, independent files at the destination.")
 }

@@ -1500,14 +1500,8 @@ var DefaultPreserveHardlinksOption = EPreserveHardlinksOption.Follow()
 
 type PreserveHardlinksOption uint8
 
-// Skip means do not copy the files whose link count is greater than 1
-func (PreserveHardlinksOption) Skip() PreserveHardlinksOption { return PreserveHardlinksOption(0) }
-
 // Copy means copy the files to the destination as regular files
-func (PreserveHardlinksOption) Follow() PreserveHardlinksOption { return PreserveHardlinksOption(1) }
-
-// Preserve means copy the files to the destination as hardlinks
-func (PreserveHardlinksOption) Preserve() PreserveHardlinksOption { return PreserveHardlinksOption(2) }
+func (PreserveHardlinksOption) Follow() PreserveHardlinksOption { return PreserveHardlinksOption(0) }
 
 func (pho PreserveHardlinksOption) String() string {
 	return enum.StringInt(pho, reflect.TypeOf(pho))
