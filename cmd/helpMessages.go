@@ -538,7 +538,8 @@ present in the target container.)
   
 `
 
-const benchCmdExample = `Run an upload benchmark with default parameters (suitable for benchmarking networks up to 1 Gbps):'
+const benchCmdExample = `
+Run an upload benchmark with default parameters (suitable for benchmarking networks up to 1 Gbps):
 
    - azcopy bench "https://[account].blob.core.windows.net/[container]?[SAS]"
 
@@ -548,21 +549,26 @@ Run an upload benchmark with a specified block size of 2 MiB and check the lengt
 
 Run a benchmark test that uploads 500 files, each 500 MiB in size, with a log level set to only display errors:
 
-   - azcopy bench "https://[account].blob.core.windows.net/[container]?<SAS>" --file-count 500 --size-per-file 500M --log-level ERROR
+   - azcopy bench "https://[account].blob.core.windows.net/[container]?<SAS>" 
+     --file-count 500 --size-per-file 500M --log-level ERROR
 
-Run a benchmark test that uploads 100 files, each 2 GiB in size: (suitable for benchmarking on a fast network, e.g. 10 Gbps):'
+Run a benchmark test that uploads 100 files, each 2 GiB in size: 
+(suitable for benchmarking on a fast network, e.g. 10 Gbps):'
 
    - azcopy bench "https://[account].blob.core.windows.net/[container]?[SAS]" --file-count 100 --size-per-file 2G
 
-Same as above, but use 50,000 files, each 8 MiB in size and compute their MD5 hashes (in the same way that the --put-md5 flag does this
-in the copy command). The purpose of --put-md5 when benchmarking is to test whether MD5 computation affects throughput for the 
+Same as above, but use 50,000 files, each 8 MiB in size and compute their MD5 hashes 
+(in the same way that the --put-md5 flag does this in the copy command). 
+The purpose of --put-md5 when benchmarking is to test whether MD5 computation affects throughput for the 
 selected file count and size:
 
-   - azcopy bench --mode='Upload' "https://[account].blob.core.windows.net/[container]?[SAS]" --file-count 50000 --size-per-file 8M --put-md5
+   - azcopy bench --mode='Upload' "https://[account].blob.core.windows.net/[container]?[SAS]" 
+     --file-count 50000 --size-per-file 8M --put-md5
 
 Run a benchmark test that uploads 1000 files, each 100 KiB in size, and creates folders to divide up the data:
 
-   - azcopy bench "https://[account].blob.core.windows.net/[container]?<SAS>" --file-count 1000 --size-per-file 100K --number-of-folders 5
+   - azcopy bench "https://[account].blob.core.windows.net/[container]?<SAS>" 
+     --file-count 1000 --size-per-file 100K --number-of-folders 5
  
 Run a benchmark test that downloads existing files from a target
 
@@ -572,7 +578,8 @@ Run a download benchmark with the default parameters and cap the transfer rate a
 
    - azcopy bench --mode=Download "https://[account].blob.core.windows.net/[container]?<SAS>" --cap-mbps 500
 
-Run an upload that does not delete the transferred files. (These files can then serve as the payload for a download test)
+Run an upload that does not delete the transferred files. 
+(These files can then serve as the payload for a download test)
 
    - azcopy bench "https://[account].blob.core.windows.net/[container]?[SAS]" --file-count 100 --delete-test-data=false
 `
