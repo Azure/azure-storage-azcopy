@@ -24,9 +24,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -34,6 +31,10 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
@@ -122,7 +123,7 @@ func (s *StoredObject) isSourceRootFolder() bool {
 // We can't just implement this filtering in ToNewCopyTransfer, because delete transfers (from sync)
 // do not pass through that routine.  So we need to make the filtering available in a separate function
 // so that the sync deletion code path(s) can access it.
-func (s *StoredObject) isCompatibleWithEntitySettings(fpo common.FolderPropertyOption, sht common.SymlinkHandlingType) bool {
+func (s *StoredObject) isCompatibleWithEntitySettings(fpo common.FolderPropertyOption, sht common.SymlinkHandlingType, pho common.PreserveHardlinksOption) bool {
 	if s.entityType == common.EEntityType.File() {
 		return true
 	} else if s.entityType == common.EEntityType.Folder() {
@@ -138,6 +139,8 @@ func (s *StoredObject) isCompatibleWithEntitySettings(fpo common.FolderPropertyO
 		}
 	} else if s.entityType == common.EEntityType.Symlink() {
 		return sht == common.ESymlinkHandlingType.Preserve()
+	} else if s.entityType == common.EEntityType.Hardlink() {
+		return pho == common.EPreserveHardlinksOption.Follow()
 	} else {
 		panic("undefined entity type")
 	}
@@ -159,7 +162,7 @@ var ErrorHashAsyncCalculation = errors.New("hash is calculating asynchronously")
 // We use this, so that we can easily test for compatibility in the sync deletion code (which expects an objectProcessor)
 func newFpoAwareProcessor(fpo common.FolderPropertyOption, inner objectProcessor) objectProcessor {
 	return func(s StoredObject) error {
-		if s.isCompatibleWithEntitySettings(fpo, common.ESymlinkHandlingType.Skip()) {
+		if s.isCompatibleWithEntitySettings(fpo, common.ESymlinkHandlingType.Skip(), common.EPreserveHardlinksOption.Follow()) {
 			return inner(s)
 		} else {
 			return nil // nothing went wrong, because we didn't do anything
@@ -167,9 +170,9 @@ func newFpoAwareProcessor(fpo common.FolderPropertyOption, inner objectProcessor
 	}
 }
 
-func (s *StoredObject) ToNewCopyTransfer(steWillAutoDecompress bool, Source string, Destination string, preserveBlobTier bool, folderPropertiesOption common.FolderPropertyOption, symlinkHandlingType common.SymlinkHandlingType) (transfer common.CopyTransfer, shouldSendToSte bool) {
+func (s *StoredObject) ToNewCopyTransfer(steWillAutoDecompress bool, Source string, Destination string, preserveBlobTier bool, folderPropertiesOption common.FolderPropertyOption, symlinkHandlingType common.SymlinkHandlingType, hardlinkHandlingType common.PreserveHardlinksOption) (transfer common.CopyTransfer, shouldSendToSte bool) {
 
-	if !s.isCompatibleWithEntitySettings(folderPropertiesOption, symlinkHandlingType) {
+	if !s.isCompatibleWithEntitySettings(folderPropertiesOption, symlinkHandlingType, hardlinkHandlingType) {
 		return common.CopyTransfer{}, false
 	}
 
@@ -247,6 +250,8 @@ type filePropsProvider interface {
 	LastModified() time.Time
 	FileLastWriteTime() time.Time
 	ContentLength() int64
+	LinkCount() int64
+	FileID() string
 }
 
 // a constructor is used so that in case the StoredObject has to change, the callers would get a compilation error
@@ -340,7 +345,7 @@ type enumerationCounterFunc func(entityType common.EntityType)
 // errorOnDirWOutRecursive is used by copy.
 // If errorChannel is non-nil, all errors encountered during enumeration will be conveyed through this channel.
 // To avoid slowdowns, use a buffered channel of enough capacity.
-func InitResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context, credential *common.CredentialInfo, symlinkHandling common.SymlinkHandlingType, listOfFilesChannel chan string, recursive, getProperties, includeDirectoryStubs bool, permanentDeleteOption common.PermanentDeleteOption, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string, s2sPreserveBlobTags bool, syncHashType common.SyncHashType, preservePermissions common.PreservePermissionsOption, logLevel common.LogLevel, cpkOptions common.CpkOptions, errorChannel chan ErrorFileInfo, stripTopDir bool, trailingDot common.TrailingDotOption, destination *common.Location, excludeContainerNames []string, includeVersionsList bool) (ResourceTraverser, error) {
+func InitResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context, credential *common.CredentialInfo, symlinkHandling common.SymlinkHandlingType, listOfFilesChannel chan string, recursive, getProperties, includeDirectoryStubs bool, permanentDeleteOption common.PermanentDeleteOption, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string, s2sPreserveBlobTags bool, syncHashType common.SyncHashType, preservePermissions common.PreservePermissionsOption, logLevel common.LogLevel, cpkOptions common.CpkOptions, errorChannel chan ErrorFileInfo, stripTopDir bool, trailingDot common.TrailingDotOption, destination *common.Location, excludeContainerNames []string, includeVersionsList bool, hardlinkHandling common.PreserveHardlinksOption) (ResourceTraverser, error) {
 	var output ResourceTraverser
 
 	var includeDeleted bool
@@ -381,7 +386,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		}
 
 		output = newListTraverser(resource, location, credential, ctx, recursive, symlinkHandling, getProperties,
-			listOfFilesChannel, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions, syncHashType, preservePermissions, trailingDot, destination)
+			listOfFilesChannel, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions, syncHashType, preservePermissions, trailingDot, destination, hardlinkHandling)
 		return output, nil
 	}
 
@@ -419,12 +424,12 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 
 			baseResource := resource.CloneWithValue(cleanLocalPath(basePath))
 			output = newListTraverser(baseResource, location, nil, nil, recursive, symlinkHandling, getProperties,
-				globChan, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions, syncHashType, preservePermissions, trailingDot, destination)
+				globChan, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions, syncHashType, preservePermissions, trailingDot, destination, hardlinkHandling)
 		} else {
 			if ctx != nil {
-				output, _ = newLocalTraverser(*ctx, resource.ValueLocal(), recursive, stripTopDir, symlinkHandling, syncHashType, incrementEnumerationCounter, errorChannel)
+				output, _ = newLocalTraverser(*ctx, resource.ValueLocal(), recursive, stripTopDir, symlinkHandling, syncHashType, incrementEnumerationCounter, errorChannel, hardlinkHandling)
 			} else {
-				output, _ = newLocalTraverser(context.TODO(), resource.ValueLocal(), recursive, stripTopDir, symlinkHandling, syncHashType, incrementEnumerationCounter, errorChannel)
+				output, _ = newLocalTraverser(context.TODO(), resource.ValueLocal(), recursive, stripTopDir, symlinkHandling, syncHashType, incrementEnumerationCounter, errorChannel, hardlinkHandling)
 			}
 		}
 	case common.ELocation.Benchmark():
@@ -528,9 +533,9 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 			if !recursive {
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
-			output = newFileAccountTraverser(fsc, shareName, *ctx, getProperties, incrementEnumerationCounter, trailingDot, destination)
+			output = newFileAccountTraverser(fsc, shareName, *ctx, getProperties, incrementEnumerationCounter, trailingDot, destination, hardlinkHandling)
 		} else {
-			output = newFileTraverser(r, fsc, *ctx, recursive, getProperties, incrementEnumerationCounter, trailingDot, destination)
+			output = newFileTraverser(r, fsc, *ctx, recursive, getProperties, incrementEnumerationCounter, trailingDot, destination, hardlinkHandling)
 		}
 	case common.ELocation.BlobFS():
 		resourceURL, err := resource.FullURL()

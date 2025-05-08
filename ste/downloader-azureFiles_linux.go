@@ -261,8 +261,6 @@ func (*azureFilesDownloader) PutNFSProperties(sip INFSPropertyBearingSourceInfoP
 	if err != nil {
 		return fmt.Errorf("Failed to set lastModifiedTime for %s. Error: %w", txInfo.Destination, err)
 	}
-	// TODO: Remove this debug statement
-	fmt.Printf("Successfully updated file timestamps for %s\n", txInfo.Destination)
 	return nil
 }
 

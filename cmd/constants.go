@@ -34,6 +34,7 @@ const (
 	PreservePermissionsFlag = "preserve-permissions"
 	PreserveInfoFlag        = "preserve-info"
 	IsNFSProtocolFlag       = "nfs"
+	PreserveHardlinksFlag   = "preserve-hardlinks"
 )
 
 const (
