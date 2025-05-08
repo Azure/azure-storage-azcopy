@@ -93,6 +93,10 @@ func newListTraverser(resource common.ResourceString, resourceLocation common.Lo
 	options.ListOfFiles = nil // Hide it from children
 	recursive := options.Recursive
 
+	if listChan == nil {
+		panic("list of files channel must not be nil")
+	}
+
 	traverserGenerator := func(relativeChildPath string) (ResourceTraverser, error) {
 		source := resource.Clone()
 		if resourceLocation != common.ELocation.Local() {

@@ -441,6 +441,8 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 				}
 			}()
 
+			opts.ListOfFiles = globChan
+
 			baseResource := resource.CloneWithValue(cleanLocalPath(basePath))
 			output = newListTraverser(baseResource, resourceLocation, opts)
 		} else {
