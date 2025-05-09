@@ -91,7 +91,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 		preservePermissions:         cca.preservePermissions,
 		logLevel:                    AzcopyLogVerbosity,
 		cpkOptions:                  cca.cpkOptions,
-		errorChannel:                nil,
+		errorChannel:                errorChannel,
 		stripTopDir:                 false,
 		trailingDot:                 cca.trailingDot,
 		destination:                 &dest,
@@ -105,7 +105,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 		} else if entityType == common.EEntityType.Folder() {
 			atomic.AddUint64(&cca.atomicSourceFoldersScanned, 1)
 		}
-	}, nil, cca.s2sPreserveBlobTags, cca.compareHash, cca.preservePermissions, AzcopyLogVerbosity, cca.cpkOptions, nil, false, cca.trailingDot, &dest, nil, false, *syncSrcTraverserOptions)
+	}, nil, cca.s2sPreserveBlobTags, cca.compareHash, cca.preservePermissions, AzcopyLogVerbosity, cca.cpkOptions, errorChannel, false, cca.trailingDot, &dest, nil, false, *syncSrcTraverserOptions)
 
 	if err != nil {
 		return nil, err
@@ -469,7 +469,13 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 		indexer.isDestinationCaseInsensitive = IsDestinationCaseInsensitive(cca.fromTo)
 		// in all other cases (download and S2S), the destination is scanned/indexed first
 		// then the source is scanned and filtered based on what the destination contains
-		comparator = newSyncSourceComparator(indexer, transferScheduler.scheduleCopyTransfer, cca.compareHash, cca.preserveSMBInfo, cca.mirrorMode).processIfNecessary
+		comparator = newSyncSourceComparator(indexer, transferScheduler.scheduleCopyTransfer, cca.compareHash, cca.preserveSMBInfo, cca.mirrorMode, func(entityType common.EntityType) {
+			if entityType == common.EEntityType.File() {
+				atomic.AddUint64(&cca.atomicSourceFilesTransferNotRequired, 1)
+			} else if entityType == common.EEntityType.Folder() {
+				atomic.AddUint64(&cca.atomicSourceFoldersTransferNotRequired, 1)
+			}
+		}).processIfNecessary
 
 		finalize = func() error {
 			// remove the extra files at the destination that were not present at the source
