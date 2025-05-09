@@ -828,6 +828,7 @@ func (e *syncEnumerator) Enumerate() (err error) {
 		return err
 	}
 
+	glcm.Info(fmt.Sprintf("Object indexer map size: %d", e.objectIndexer.counter))
 	// enumerate the secondary resource and as the objects pass the filters
 	// they will be passed to the object comparator
 	// which can process given objects based on what's already indexed
