@@ -276,9 +276,11 @@ type ObjectProperties struct {
 	Metadata         common.Metadata
 	LastModifiedTime *time.Time
 
-	BlobProperties   BlobProperties
-	BlobFSProperties BlobFSProperties
-	FileProperties   FileProperties
+	BlobProperties     BlobProperties
+	BlobFSProperties   BlobFSProperties
+	FileProperties     FileProperties
+	FileNFSProperties  *FileNFSProperties
+	FileNFSPermissions *FileNFSPermissions
 }
 
 type BlobProperties struct {
@@ -309,6 +311,17 @@ type FileProperties struct {
 	FileLastWriteTime *time.Time
 	FilePermissions   *string
 	LastModifiedTime  *time.Time
+}
+
+type FileNFSProperties struct {
+	FileCreationTime  *time.Time
+	FileLastWriteTime *time.Time
+}
+
+type FileNFSPermissions struct {
+	Owner    *string
+	Group    *string
+	FileMode *string
 }
 
 func (f FileProperties) hasCustomTimes() bool {
