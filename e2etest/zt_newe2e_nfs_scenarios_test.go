@@ -264,8 +264,24 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 		return
 	}
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
-	dstContainer := GetAccount(svm, PremiumFileShareAcct).GetService(svm, common.ELocation.File()).GetContainer("aznfs2")
-	srcContainer := GetAccount(svm, PremiumFileShareAcct).GetService(svm, common.ELocation.File()).GetContainer("aznfs3")
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File()}), GetResourceOptions{
+		PreferredAccount: pointerTo(PremiumFileShareAcct),
+	}), ResourceDefinitionContainer{
+		Properties: ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				EnabledProtocols: pointerTo("NFS"),
+			},
+		},
+	})
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File()}), GetResourceOptions{
+		PreferredAccount: pointerTo(PremiumFileShareAcct),
+	}), ResourceDefinitionContainer{
+		Properties: ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				EnabledProtocols: pointerTo("NFS"),
+			},
+		},
+	})
 
 	preserveProperties := ResolveVariation(svm, []bool{true, false})
 	preservePermissions := ResolveVariation(svm, []bool{true, false})
@@ -281,10 +297,6 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 			FileNFSProperties:  fileProperties,
 		})
 		dstObj = dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
-		dstObj.SetObjectProperties(svm, ObjectProperties{
-			FileNFSPermissions: fileOrFolderPermissions,
-			FileNFSProperties:  folderProperties,
-		})
 		dst = dstObj
 		if !svm.Dryrun() {
 			// Make sure the LMT is in the past
@@ -346,7 +358,10 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 				},
 			},
 		})
-
+	// Dont validate the root directory in case of sync
+	if azCopyVerb == AzCopyVerbSync {
+		delete(srcObjs, rootDir)
+	}
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcObjs,
 	}, false)
