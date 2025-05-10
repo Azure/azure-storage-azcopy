@@ -25,7 +25,28 @@ func GetCurrentUIDAndGID(a Asserter) (uid, gid string) {
 	gid = currentUser.Gid
 	return
 }
-
+func getPropertiesAndPermissions(svm *ScenarioVariationManager, preserveProperties, preservePermissions bool) (*FileNFSProperties, *FileNFSProperties, *FileNFSPermissions) {
+	uid, gid := GetCurrentUIDAndGID(svm)
+	var folderProperties, fileProperties *FileNFSProperties
+	if preserveProperties {
+		folderProperties = &FileNFSProperties{
+			FileCreationTime: pointerTo(time.Now()),
+		}
+		fileProperties = &FileNFSProperties{
+			FileCreationTime:  pointerTo(time.Now()),
+			FileLastWriteTime: pointerTo(time.Now()),
+		}
+	}
+	var fileOrFolderPermissions *FileNFSPermissions
+	if preservePermissions {
+		fileOrFolderPermissions = &FileNFSPermissions{
+			Owner:    pointerTo(uid),
+			Group:    pointerTo(gid),
+			FileMode: pointerTo("0755"),
+		}
+	}
+	return folderProperties, fileProperties, fileOrFolderPermissions
+}
 func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariationManager) {
 
 	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
@@ -35,7 +56,6 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
 	preserveProperties := ResolveVariation(svm, []bool{true, false})
 	preservePermissions := ResolveVariation(svm, []bool{true, false})
-	uid, gid := GetCurrentUIDAndGID(svm)
 
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File()}), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
@@ -64,28 +84,10 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 		dst = dstContainer
 	}
 
-	// Create destination directories
+	folderProperties, fileProperties, fileOrFolderPermissions := getPropertiesAndPermissions(svm, preserveProperties, preservePermissions)
+
 	srcObjs := make(ObjectResourceMappingFlat)
 	srcObjRes := make(map[string]ObjectResourceManager)
-
-	var folderProperties, fileProperties *FileNFSProperties
-	if preserveProperties {
-		folderProperties = &FileNFSProperties{
-			FileCreationTime: pointerTo(time.Now()),
-		}
-		fileProperties = &FileNFSProperties{
-			FileCreationTime:  pointerTo(time.Now()),
-			FileLastWriteTime: pointerTo(time.Now()),
-		}
-	}
-	var fileOrFolderPermissions *FileNFSPermissions
-	if preservePermissions {
-		fileOrFolderPermissions = &FileNFSPermissions{
-			Owner:    pointerTo(uid),
-			Group:    pointerTo(gid),
-			FileMode: pointerTo("0755"),
-		}
-	}
 
 	obj := ResourceDefinitionObject{
 		ObjectName: pointerTo(rootDir),
@@ -165,7 +167,6 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
 	preserveProperties := ResolveVariation(svm, []bool{true, false})
 	preservePermissions := ResolveVariation(svm, []bool{true, false})
-	uid, gid := GetCurrentUIDAndGID(svm)
 
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
 
@@ -178,26 +179,9 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 			},
 		},
 	})
-	rootDir := "dir_file_copy_test_" + uuid.NewString()
 
-	var folderProperties, fileProperties *FileNFSProperties
-	if preserveProperties {
-		folderProperties = &FileNFSProperties{
-			FileCreationTime: pointerTo(time.Now()),
-		}
-		fileProperties = &FileNFSProperties{
-			FileCreationTime:  pointerTo(time.Now()),
-			FileLastWriteTime: pointerTo(time.Now()),
-		}
-	}
-	var fileOrFolderPermissions *FileNFSPermissions
-	if preservePermissions {
-		fileOrFolderPermissions = &FileNFSPermissions{
-			Owner:    pointerTo(uid),
-			Group:    pointerTo(gid),
-			FileMode: pointerTo("0755"),
-		}
-	}
+	folderProperties, fileProperties, fileOrFolderPermissions := getPropertiesAndPermissions(svm, preserveProperties, preservePermissions)
+	rootDir := "dir_file_copy_test_" + uuid.NewString()
 
 	var dst ResourceManager
 	if azCopyVerb == AzCopyVerbSync {
@@ -275,7 +259,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 
 func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationManager) {
 
-	if runtime.GOOS == "windows" || runtime.GOOS == "macos" {
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
 		svm.InvalidateScenario()
 		return
 	}
@@ -286,27 +270,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 	preserveProperties := ResolveVariation(svm, []bool{true, false})
 	preservePermissions := ResolveVariation(svm, []bool{true, false})
 
-	uid, gid := GetCurrentUIDAndGID(svm)
-
-	var folderProperties, fileProperties *FileNFSProperties
-	if preserveProperties {
-		folderProperties = &FileNFSProperties{
-			FileCreationTime: pointerTo(time.Now()),
-		}
-		fileProperties = &FileNFSProperties{
-			FileCreationTime:  pointerTo(time.Now()),
-			FileLastWriteTime: pointerTo(time.Now()),
-		}
-	}
-	var fileOrFolderPermissions *FileNFSPermissions
-	if preservePermissions {
-		fileOrFolderPermissions = &FileNFSPermissions{
-			Owner:    pointerTo(uid),
-			Group:    pointerTo(gid),
-			FileMode: pointerTo("0755"),
-		}
-	}
-
+	folderProperties, fileProperties, fileOrFolderPermissions := getPropertiesAndPermissions(svm, preserveProperties, preservePermissions)
 	rootDir := "dir_file_copy_test_" + uuid.NewString()
 
 	var dst, src ResourceManager
