@@ -1039,7 +1039,7 @@ extends:
                       title: "AzCopy v$(azcopy_version)"
                       tag: "v$(azcopy_version)"
                       changeLogCompareToRelease: 'lastFullRelease'
-                      changeLogType: 'commitBased'
+                      changeLogType: 'issueBased'
                       isDraft: ${{ parameters.draft }}
                       isPreRelease: ${{ parameters.prerelease }}
                       assets: |
