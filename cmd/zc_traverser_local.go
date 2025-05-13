@@ -41,10 +41,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 )
 
-const MAX_SYMLINKS_TO_FOLLOW = 40
-
-var skippedSymlinkCount int64
-
 type localTraverser struct {
 	fullPath        string
 	recursive       bool

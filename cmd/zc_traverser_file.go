@@ -36,14 +36,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-type NFSFileType string
-
-const (
-	NFSFileTypeDirectory string = "Directory"
-	NFSFileTypeRegular   string = "Regular"
-	NFSFileTypeSymLink   string = "SymLink"
-)
-
 const trailingDotErrMsg = "File share contains file/directory: %s with a trailing dot. But the trailing dot parameter was set to Disable, meaning these files could be potentially treated in an unsafe manner." +
 	"To avoid this, use --trailing-dot=Enable"
 const invalidNameErrorMsg = "Skipping File share path %s, as it is not a valid Blob or Windows name. Rename the object and retry the transfer"
