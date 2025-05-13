@@ -394,3 +394,7 @@ func (p *fileSourceInfoProvider) GetNFSProperties() (TypedNFSPropertyHolder, err
 func (p *fileSourceInfoProvider) GetNFSPermissions() (TypedNFSPermissionsHolder, error) {
 	return p.getCachedProperties()
 }
+
+func (p *fileSourceInfoProvider) GetNFSDefaultPerms() (fileMode, owner, group *string, err error) {
+	return nil, nil, nil, nil
+}
