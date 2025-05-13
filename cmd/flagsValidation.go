@@ -265,3 +265,15 @@ func performSMBSpecificValidation(fromTo common.FromTo,
 		fromTo)
 	return
 }
+
+func validateSymlinkFlag(followSymlinks, preserveSymlinks bool) error {
+
+	if followSymlinks == true {
+		return fmt.Errorf("The '--follow-symlink' flag is not supported for NFS copy. Symlink files will be skipped by default.")
+
+	}
+	if preserveSymlinks == true {
+		return fmt.Errorf("the --preserve-symlink flag is not support for NFS copy. Symlink files will be skipped by default.")
+	}
+	return nil
+}

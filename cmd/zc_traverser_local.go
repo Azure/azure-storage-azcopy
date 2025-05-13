@@ -26,8 +26,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 	"hash"
 	"io"
 	"io/fs"
@@ -38,9 +36,14 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 )
 
 const MAX_SYMLINKS_TO_FOLLOW = 40
+
+var skippedSymlinkCount int64
 
 type localTraverser struct {
 	fullPath        string
@@ -274,6 +277,11 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				}
 
 				if symlinkHandling.None() {
+					skippedSymlinkCount++
+					common.AzcopyCurrentJobLogger.Log(
+						common.LogWarning,
+						fmt.Sprintf("File '%s' at the source is a symbolic link, and will be skipped and not be copied", fileInfo.Name()),
+					)
 					return nil // skip it
 				}
 
