@@ -2036,39 +2036,86 @@ func init() {
 	rootCmd.AddCommand(cpCmd)
 
 	// filters change which files get transferred
-	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "False by default. Follow symbolic links when uploading from local file system.")
-	cpCmd.PersistentFlags().StringVar(&raw.includeBefore, common.IncludeBeforeFlagName, "", "Include only those files were modified before or on the given date/time. The value should be in ISO8601 format. If no timezone is specified, the value is assumed to be in the local timezone of the machine running AzCopy. E.g. '2020-08-19T15:04:00Z' for a UTC time, or '2020-08-19' for midnight (00:00) in the local timezone. As of AzCopy 10.7, this flag applies only to files, not folders, so folder properties won't be copied when using this flag with --preserve-smb-info or --preserve-smb-permissions.")
-	cpCmd.PersistentFlags().StringVar(&raw.includeAfter, common.IncludeAfterFlagName, "", "Include only those files modified on or after the given date/time. The value should be in ISO8601 format. If no timezone is specified, the value is assumed to be in the local timezone of the machine running AzCopy. E.g. '2020-08-19T15:04:00Z' for a UTC time, or '2020-08-19' for midnight (00:00) in the local timezone. As of AzCopy 10.5, this flag applies only to files, not folders, so folder properties won't be copied when using this flag with --preserve-smb-info or --preserve-smb-permissions.")
-	cpCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "Include only these files when copying. "+
-		"This option supports wildcard characters (*). Separate files by using a ';' (For example: *.jpg;*.pdf;exactName).")
-	cpCmd.PersistentFlags().StringVar(&raw.includePath, "include-path", "", "Include only these paths when copying. "+
-		"This option does not support wildcard characters (*). Checks the relative path prefix (For example: myFolder;myFolder/subDirName/file.pdf).")
-	cpCmd.PersistentFlags().StringVar(&raw.excludePath, "exclude-path", "", "Exclude these paths when copying. "+ // Currently, only exclude-path is supported alongside account traversal.
-		"This option does not support wildcard characters (*). Checks relative path prefix (For example: myFolder;myFolder/subDirName/file.pdf). When used in combination with account traversal, paths do not include the container name.")
-	cpCmd.PersistentFlags().StringVar(&raw.includeRegex, "include-regex", "", "Include only the relative path of the files that align with regular expressions. Separate regular expressions with ';'.")
-	cpCmd.PersistentFlags().StringVar(&raw.excludeRegex, "exclude-regex", "", "Exclude all the relative path of the files that align with regular expressions. Separate regular expressions with ';'.")
+	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false,
+		"False by default. Follow symbolic links when uploading from local file system.")
+	cpCmd.PersistentFlags().StringVar(&raw.includeBefore, common.IncludeBeforeFlagName, "",
+		"Include only those files were modified before or on the given date/time. \n "+
+			"The value should be in ISO8601 format. If no timezone is specified, the value is assumed to be in the local timezone of the machine running AzCopy. "+
+			"\n E.g. '2020-08-19T15:04:00Z' for a UTC time, or '2020-08-19' for midnight (00:00) in the local timezone. "+
+			"\n As of AzCopy 10.7, this flag applies only to files, not folders, so folder properties won't be copied when using this flag with --preserve-smb-info or --preserve-smb-permissions.")
+	cpCmd.PersistentFlags().StringVar(&raw.includeAfter, common.IncludeAfterFlagName, "",
+		"Include only those files modified on or after the given date/time. \n "+
+			"The value should be in ISO8601 format. If no timezone is specified, the value is assumed to be in the local timezone of the machine running AzCopy. "+
+			"\n E.g. '2020-08-19T15:04:00Z' for a UTC time, or '2020-08-19' for midnight (00:00) in the local timezone. "+
+			"\n As of AzCopy 10.5, this flag applies only to files, not folders, so folder properties won't be copied when using this flag with --preserve-smb-info or --preserve-smb-permissions.")
+	cpCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "",
+		"Include only these files when copying. "+
+			"\n This option supports wildcard characters (*). Separate files by using a ';' (For example: *.jpg;*.pdf;exactName).")
+	cpCmd.PersistentFlags().StringVar(&raw.includePath, "include-path", "",
+		"Include only these paths when copying. "+
+			"This option does not support wildcard characters (*). \n Checks the relative path prefix (For example: myFolder;myFolder/subDirName/file.pdf).")
+	cpCmd.PersistentFlags().StringVar(&raw.excludePath, "exclude-path", "",
+		"Exclude these paths when copying. "+ // Currently, only exclude-path is supported alongside account traversal.
+			"This option does not support wildcard characters (*). \n Checks relative path prefix (For example: myFolder;myFolder/subDirName/file.pdf). "+
+			"\n When used in combination with account traversal, paths do not include the container name.")
+	cpCmd.PersistentFlags().StringVar(&raw.includeRegex, "include-regex", "",
+		"Include only the relative path of the files that align with regular expressions. "+
+			"\n Separate regular expressions with ';'.")
+	cpCmd.PersistentFlags().StringVar(&raw.excludeRegex, "exclude-regex", "",
+		"Exclude all the relative path of the files that align with regular expressions. Separate regular expressions with ';'.")
 	// This flag is implemented only for Storage Explorer.
-	cpCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "Defines the location of text file which has the list of files to be copied. The text file should contain paths from root for each file name or directory written on a separate line.")
-	cpCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "", "Exclude these files when copying. This option supports wildcard characters (*). Separate files by using a ';' (For example: *.jpg;*.pdf;exactName).")
-	cpCmd.PersistentFlags().StringVar(&raw.forceWrite, "overwrite", "true", "Overwrite the conflicting files and blobs at the destination if this flag is set to true (default 'true'). Possible values include 'true', 'false', 'prompt', and 'ifSourceNewer'. For destinations that support folders, conflicting folder-level properties will be overwritten this flag is 'true' or if a positive response is provided to the prompt.")
-	cpCmd.PersistentFlags().BoolVar(&raw.autoDecompress, "decompress", false, "False by default. Automatically decompress files when downloading, if their content-encoding indicates that they are compressed. The supported content-encoding values are 'gzip' and 'deflate'. File extensions of '.gz'/'.gzip' or '.zz' aren't necessary, but will be removed if present.")
-	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "False by default. Look into sub-directories recursively when uploading from local file system.")
+	cpCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "",
+		"Defines the location of text file which has the list of files to be copied. "+
+			"\n The text file should contain paths from root for each file name or directory written on a separate line.")
+	cpCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "",
+		"Exclude these files when copying. This option supports wildcard characters (*). "+
+			"\n Separate files by using a ';' (For example: *.jpg;*.pdf;exactName).")
+	cpCmd.PersistentFlags().StringVar(&raw.forceWrite, "overwrite", "true",
+		"Overwrite the conflicting files and blobs at the destination if this flag is set to true (default 'true'). "+
+			"\n Possible values include 'true', 'false', 'prompt', and 'ifSourceNewer'."+
+			"\n  For destinations that support folders, conflicting folder-level properties will be overwritten this flag is 'true' or if a positive response is provided to the prompt.")
+	cpCmd.PersistentFlags().BoolVar(&raw.autoDecompress, "decompress", false,
+		"False by default. Automatically decompress files when downloading, if their content-encoding indicates that they are compressed."+
+			"\n  The supported content-encoding values are 'gzip' and 'deflate'. "+
+			"\n File extensions of '.gz'/'.gzip' or '.zz' aren't necessary, but will be removed if present.")
+	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false,
+		"False by default. Look into sub-directories recursively when uploading from local file system.")
 	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", fromToHelp)
-	cpCmd.PersistentFlags().StringVar(&raw.excludeBlobType, "exclude-blob-type", "", "Optionally specifies the type of blob (BlockBlob/ PageBlob/ AppendBlob) to exclude when copying blobs from the container "+
-		"or the account. Use of this flag is not applicable for copying data from non azure-service to service. More than one blob should be separated by ';'. ")
+	cpCmd.PersistentFlags().StringVar(&raw.excludeBlobType, "exclude-blob-type", "",
+		"Optionally specifies the type of blob (BlockBlob/ PageBlob/ AppendBlob) to exclude when copying blobs from the container "+
+			"or the account. \n Use of this flag is not applicable for copying data from non azure-service to service. "+
+			"\n More than one blob should be separated by ';'. ")
 	// options change how the transfers are performed
-	cpCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "Use this block size (specified in MiB) when uploading to Azure Storage, and downloading from Azure Storage. The default value is automatically calculated based on file size. Decimal fractions are allowed (For example: 0.25)."+
-		" When uploading or downloading, maximum allowed block size is 0.75 * AZCOPY_BUFFER_GB. Please refer https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-optimize#optimize-memory-use.")
-	cpCmd.PersistentFlags().Float64Var(&raw.putBlobSizeMB, "put-blob-size-mb", 0, "Use this size (specified in MiB) as a threshold to determine whether to upload a blob as a single PUT request when uploading to Azure Storage. The default value is automatically calculated based on file size. Decimal fractions are allowed (For example: 0.25).")
-	cpCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "Detect", "Defines the type of blob at the destination. This is used for uploading blobs and when copying between accounts (default 'Detect'). Valid values include 'Detect', 'BlockBlob', 'PageBlob', and 'AppendBlob'. "+
-		"When copying between accounts, a value of 'Detect' causes AzCopy to use the type of source blob to determine the type of the destination blob. When uploading a file, 'Detect' determines if the file is a VHD or a VHDX file based on the file extension. If the file is either a VHD or VHDX file, AzCopy treats the file as a page blob.")
-	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "Upload block blob to Azure Storage using this blob tier. (default 'None'). Valid options are Hot, Cold, Cool, Archive")
-	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "Upload page blob to Azure Storage using this blob tier. (default 'None'). Valid options are P10, P15, P20, P30, P4, P40, P50, P6")
-	cpCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "Upload to Azure Storage with these key-value pairs as metadata. Multiple key-value pairs should be separated by ';', i.e. 'foo=bar;some=thing'")
-	cpCmd.PersistentFlags().StringVar(&raw.contentType, "content-type", "", "Specifies the content type of the file. Implies no-guess-mime-type flag is set to true. Returned on download.")
-	cpCmd.PersistentFlags().StringVar(&raw.contentEncoding, "content-encoding", "", "Set the content-encoding header. Returned on download.")
-	cpCmd.PersistentFlags().StringVar(&raw.contentDisposition, "content-disposition", "", "Set the content-disposition header. Returned on download.")
-	cpCmd.PersistentFlags().StringVar(&raw.contentLanguage, "content-language", "", "Set the content-language header. Returned on download.")
+	cpCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0,
+		"Use this block size (specified in MiB) when uploading to Azure Storage, and downloading from Azure Storage. "+
+			"\n The default value is automatically calculated based on file size. Decimal fractions are allowed (For example: 0.25)."+
+			"\n When uploading or downloading, maximum allowed block size is 0.75 * AZCOPY_BUFFER_GB. "+
+			"\n Please refer https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-optimize#optimize-memory-use.")
+	cpCmd.PersistentFlags().Float64Var(&raw.putBlobSizeMB, "put-blob-size-mb", 0,
+		"Use this size (specified in MiB) as a threshold to determine whether to upload a blob as a single PUT request when uploading to Azure Storage. "+
+			"\n The default value is automatically calculated based on file size. "+
+			"\n Decimal fractions are allowed (For example: 0.25).")
+	cpCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "Detect",
+		"Defines the type of blob at the destination. \n This is used for uploading blobs and when copying between accounts (default 'Detect')."+
+			"\n  Valid values include 'Detect', 'BlockBlob', 'PageBlob', and 'AppendBlob'. "+
+			"\n When copying between accounts, a value of 'Detect' causes AzCopy to use the type of source blob to determine the type of the destination blob. When uploading a file, 'Detect' determines if the file is a VHD or a VHDX file based on the file extension. If the file is either a VHD or VHDX file, AzCopy treats the file as a page blob.")
+	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None",
+		"Upload block blob to Azure Storage using this blob tier. (default 'None'). "+
+			"\n Valid options are Hot, Cold, Cool, Archive")
+	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None",
+		"Upload page blob to Azure Storage using this blob tier. (default 'None'). "+
+			"\n Valid options are P10, P15, P20, P30, P4, P40, P50, P6")
+	cpCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "",
+		"Upload to Azure Storage with these key-value pairs as metadata. "+
+			"\n Multiple key-value pairs should be separated by ';', i.e. 'foo=bar;some=thing'")
+	cpCmd.PersistentFlags().StringVar(&raw.contentType, "content-type", "",
+		"Specifies the content type of the file. \n Implies no-guess-mime-type flag is set to true. Returned on download.")
+	cpCmd.PersistentFlags().StringVar(&raw.contentEncoding, "content-encoding", "",
+		"Set the content-encoding header. Returned on download.")
+	cpCmd.PersistentFlags().StringVar(&raw.contentDisposition, "content-disposition", "",
+		"Set the content-disposition header. Returned on download.")
+	cpCmd.PersistentFlags().StringVar(&raw.contentLanguage, "content-language", "",
+		"Set the content-language header. Returned on download.")
 	cpCmd.PersistentFlags().StringVar(&raw.cacheControl, "cache-control", "", "Set the cache-control header. Returned on download.")
 	cpCmd.PersistentFlags().BoolVar(&raw.noGuessMimeType, "no-guess-mime-type", false, "False by default. Prevents AzCopy from detecting the content-type based on the extension or content of the file.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false, "False by default. Preserves Last Modified Time. Only available when destination is file system.")

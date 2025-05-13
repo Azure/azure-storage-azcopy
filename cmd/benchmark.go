@@ -334,28 +334,32 @@ func init() {
 	rootCmd.AddCommand(benchCmd)
 
 	benchCmd.PersistentFlags().StringVar(&raw.sizePerFile, common.SizePerFileParam,
-		"250M", "Size of each auto-generated data file. Must be "+sizeStringDescription)
+		"250M", "Size of each auto-generated data file. \n"+
+			"Must be "+sizeStringDescription)
 	benchCmd.PersistentFlags().UintVar(&raw.fileCount, common.FileCountParam, common.FileCountDefault,
 		"Number of auto-generated data files to use")
 	benchCmd.PersistentFlags().UintVar(&raw.numOfFolders, "number-of-folders", 0,
 		"If larger than 0, create folders to divide up the data.")
 	benchCmd.PersistentFlags().BoolVar(&raw.deleteTestData, "delete-test-data", true,
-		"If true, then the benchmark data will be deleted at the end of the benchmark run.  "+
-			"Set it to false if you want to keep the data at the destination - e.g. to use it for manual tests outside benchmark mode")
+		"If true, then the benchmark data will be deleted at the end of the benchmark run.  \n"+
+			"Set it to false if you want to keep the data at the destination - \n e.g. to use it for manual tests outside benchmark mode")
 	benchCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0,
-		"Use this block size (specified in MiB). The default is automatically calculated based on file size."+
-			" Decimal fractions are allowed - e.g. 0.25. Identical to the same-named parameter in the copy command")
+		"Use this block size (specified in MiB). The default is automatically calculated based on file size.\n"+
+			" Decimal fractions are allowed - e.g. 0.25. \nIdentical to the same-named parameter in the copy command")
 	benchCmd.PersistentFlags().Float64Var(&raw.putBlobSizeMB, "put-blob-size-mb", 0,
-		"Use this size (specified in MiB) as a threshold to determine whether to upload a blob as"+
-			" a single PUT request when uploading to Azure Storage. "+
-			"The default value is automatically calculated based on file size. "+
+		"Use this size (specified in MiB) as a threshold to determine whether to upload a blob as\n"+
+			" a single PUT request when uploading to Azure Storage. \n"+
+			"The default value is automatically calculated based on file size. \n"+
 			"Decimal fractions are allowed (For example: 0.25).")
 	benchCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "Detect",
 		"Defines the type of blob at the destination. "+
-			"Used to allow benchmarking different blob types. Identical to the same-named parameter in the copy command")
-	benchCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "Create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob/file. (By default the hash is NOT created.) Identical to the same-named parameter in the copy command")
+			"\n Used to allow benchmarking different blob types. \nIdentical to the same-named parameter in the copy command")
+	benchCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "Create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob/file. "+
+		"\n (By default the hash is NOT created.) \n Identical to the same-named parameter in the copy command")
 	benchCmd.PersistentFlags().BoolVar(&raw.checkLength, "check-length", true,
-		"Check the length of a file on the destination after the transfer. If there is a mismatch between source and destination, the transfer is marked as failed.")
+		"Check the length of a file on the destination after the transfer. "+
+			"\n If there is a mismatch between source and destination, the transfer is marked as failed.")
 	benchCmd.PersistentFlags().StringVar(&raw.mode, "mode", "upload",
-		"Defines if AzCopy should test uploads or downloads from this target. Valid values are 'upload' and 'download'. Defaulted option is 'upload'.")
+		"Defines if AzCopy should test uploads or downloads from this target. "+
+			"\n Valid values are 'upload' and 'download'. Defaulted option is 'upload'.")
 }
