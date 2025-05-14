@@ -477,6 +477,19 @@ func (f *FileObjectResourceManager) CreateParents(a Asserter) {
 
 func (f *FileObjectResourceManager) Create(a Asserter, body ObjectContentContainer, props ObjectProperties) {
 	a.HelperMarker().Helper()
+
+	nfsProperties := &file.NFSProperties{}
+
+	if props.FileNFSProperties != nil {
+		nfsProperties.CreationTime = props.FileNFSProperties.FileCreationTime
+		nfsProperties.LastWriteTime = props.FileNFSProperties.FileLastWriteTime
+	}
+	if props.FileNFSPermissions != nil {
+		nfsProperties.Owner = props.FileNFSPermissions.Owner
+		nfsProperties.Group = props.FileNFSPermissions.Group
+		nfsProperties.FileMode = props.FileNFSPermissions.FileMode
+	}
+
 	var attr *file.NTFSFileAttributes
 	if DerefOrZero(props.FileProperties.FileAttributes) != "" {
 		var err error
@@ -491,15 +504,15 @@ func (f *FileObjectResourceManager) Create(a Asserter, body ObjectContentContain
 	switch f.entityType {
 	case common.EEntityType.File():
 		client := f.getFileClient()
+
 		_, err := client.Create(ctx, body.Size(), &file.CreateOptions{
 			SMBProperties: &file.SMBProperties{
 				Attributes:    attr,
 				CreationTime:  props.FileProperties.FileCreationTime,
 				LastWriteTime: props.FileProperties.FileLastWriteTime,
 			},
-			Permissions: perms,
-			HTTPHeaders: props.HTTPHeaders.ToFile(),
-			Metadata:    props.Metadata,
+			Permissions:   perms,
+			NFSProperties: nfsProperties,
 		})
 		a.NoError("Create file", err)
 		err = client.UploadStream(ctx, body.Reader(), &file.UploadStreamOptions{
@@ -514,8 +527,9 @@ func (f *FileObjectResourceManager) Create(a Asserter, body ObjectContentContain
 				CreationTime:  props.FileProperties.FileCreationTime,
 				LastWriteTime: props.FileProperties.FileLastWriteTime,
 			},
-			FilePermissions: perms,
-			Metadata:        props.Metadata,
+			FilePermissions:   perms,
+			Metadata:          props.Metadata,
+			FileNFSProperties: nfsProperties,
 		})
 		// This is fine. Instead let's set properties.
 		if fileerror.HasCode(err, fileerror.ResourceAlreadyExists) {
@@ -528,7 +542,8 @@ func (f *FileObjectResourceManager) Create(a Asserter, body ObjectContentContain
 	default:
 		a.Error("File Objects only support Files and Folders")
 	}
-
+	// Reapply the properties after the resource is created, as the Last Write Time of the file will be reset when data is written.
+	f.SetObjectProperties(a, props)
 	TrackResourceCreation(a, f)
 }
 
@@ -584,6 +599,15 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 				FilePermissions:   permissions,
 				LastModifiedTime:  resp.LastModified,
 			},
+			FileNFSProperties: &FileNFSProperties{
+				FileCreationTime:  resp.FileCreationTime,
+				FileLastWriteTime: resp.FileLastWriteTime,
+			},
+			FileNFSPermissions: &FileNFSPermissions{
+				Owner:    resp.Owner,
+				Group:    resp.Group,
+				FileMode: resp.FileMode,
+			},
 		}
 	case common.EEntityType.File():
 		resp, err := f.getFileClient().GetProperties(ctx, &file.GetPropertiesOptions{})
@@ -616,11 +640,19 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 				FilePermissions:   permissions,
 				LastModifiedTime:  resp.LastModified,
 			},
+			FileNFSProperties: &FileNFSProperties{
+				FileCreationTime:  resp.FileCreationTime,
+				FileLastWriteTime: resp.FileLastWriteTime,
+			},
+			FileNFSPermissions: &FileNFSPermissions{
+				Owner:    resp.Owner,
+				Group:    resp.Group,
+				FileMode: resp.FileMode,
+			},
 		}
 	default:
 		a.Error("EntityType must be Folder or File. Currently: " + f.entityType.String())
 	}
-
 	return
 }
 
@@ -658,6 +690,19 @@ func (f *FileObjectResourceManager) SetMetadata(a Asserter, metadata common.Meta
 
 func (f *FileObjectResourceManager) SetObjectProperties(a Asserter, props ObjectProperties) {
 	a.HelperMarker().Helper()
+
+	nfsProperties := &file.NFSProperties{}
+
+	if props.FileNFSProperties != nil {
+		nfsProperties.CreationTime = props.FileNFSProperties.FileCreationTime
+		nfsProperties.LastWriteTime = props.FileNFSProperties.FileLastWriteTime
+	}
+	if props.FileNFSPermissions != nil {
+		nfsProperties.Owner = props.FileNFSPermissions.Owner
+		nfsProperties.Group = props.FileNFSPermissions.Group
+		nfsProperties.FileMode = props.FileNFSPermissions.FileMode
+	}
+
 	var attr *file.NTFSFileAttributes
 	if DerefOrZero(props.FileProperties.FileAttributes) != "" {
 		var err error
@@ -676,8 +721,9 @@ func (f *FileObjectResourceManager) SetObjectProperties(a Asserter, props Object
 				CreationTime:  props.FileProperties.FileCreationTime,
 				LastWriteTime: props.FileProperties.FileLastWriteTime,
 			},
-			Permissions: perms,
-			HTTPHeaders: props.HTTPHeaders.ToFile(),
+			Permissions:   perms,
+			HTTPHeaders:   props.HTTPHeaders.ToFile(),
+			NFSProperties: nfsProperties,
 		})
 		a.NoError("Set file HTTP headers", err)
 
@@ -691,7 +737,8 @@ func (f *FileObjectResourceManager) SetObjectProperties(a Asserter, props Object
 				CreationTime:  props.FileProperties.FileCreationTime,
 				LastWriteTime: props.FileProperties.FileLastWriteTime,
 			},
-			FilePermissions: perms,
+			FilePermissions:   perms,
+			FileNFSProperties: nfsProperties,
 		})
 		a.NoError("Set folder properties", err)
 
