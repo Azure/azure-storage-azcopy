@@ -90,7 +90,6 @@ func (l *listTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 func newListTraverser(resource common.ResourceString, resourceLocation common.Location, options InitResourceTraverserOptions) ResourceTraverser {
 	listChan := options.ListOfFiles
-	options.ListOfFiles = nil // Hide it from children
 	recursive := options.Recursive
 
 	if listChan == nil {
@@ -110,7 +109,28 @@ func newListTraverser(resource common.ResourceString, resourceLocation common.Lo
 		}
 
 		// Construct a traverser that goes through the child
-		traverser, err := InitResourceTraverser(source, resourceLocation, options)
+		traverser, err := InitResourceTraverser(source, resourceLocation, InitResourceTraverserOptions{
+			DestResourceType: nil,
+
+			Context:              options.Context,
+			Credential:           options.Credential,
+			IncrementEnumeration: options.IncrementEnumeration,
+
+			ListOfVersionIDs: nil,
+			ErrorChannel:     nil,
+
+			CpkOptions: options.CpkOptions,
+
+			PreservePermissions: options.PreservePermissions,
+			SymlinkHandling:     options.SymlinkHandling,
+			SyncHashType:        options.SyncHashType,
+			TrailingDotOption:   options.TrailingDotOption,
+
+			Recursive:               options.Recursive,
+			GetPropertiesInFrontend: options.GetPropertiesInFrontend,
+			IncludeDirectoryStubs:   options.IncludeDirectoryStubs,
+			PreserveBlobTags:        options.PreserveBlobTags,
+		})
 		if err != nil {
 			return nil, err
 		}

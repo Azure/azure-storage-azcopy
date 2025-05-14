@@ -105,7 +105,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
 	destinationTraverser, err := InitResourceTraverser(cca.destination, cca.fromTo.To(), InitResourceTraverserOptions{
 		Context:    ctx,
-		Credential: &srcCredInfo,
+		Credential: &dstCredInfo,
 		IncrementEnumeration: func(entityType common.EntityType) {
 			if entityType == common.EEntityType.File() {
 				atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
