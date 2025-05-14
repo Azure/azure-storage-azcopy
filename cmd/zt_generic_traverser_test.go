@@ -564,7 +564,7 @@ func TestTraverserWithSingleObject(t *testing.T) {
 
 		// construct a local traverser
 		localTraverser, _ := newLocalTraverser(filepath.Join(dstDirName, dstFileName), InitResourceTraverserOptions{
-			Context:         ctx,
+			Context:         context.Background(),
 			SymlinkHandling: common.ESymlinkHandlingType.Follow(),
 		})
 
@@ -718,7 +718,7 @@ func TestTraverserContainerAndLocalDirectory(t *testing.T) {
 	for _, isRecursiveOn := range []bool{true, false} {
 		// construct a local traverser
 		localTraverser, _ := newLocalTraverser(dstDirName, InitResourceTraverserOptions{
-			Context:   ctx,
+			Context:   context.Background(),
 			Recursive: isRecursiveOn,
 		})
 
@@ -883,7 +883,7 @@ func TestTraverserWithVirtualAndLocalDirectory(t *testing.T) {
 	for _, isRecursiveOn := range []bool{true, false} {
 		// construct a local traverser
 		localTraverser, _ := newLocalTraverser(filepath.Join(dstDirName, virDirName), InitResourceTraverserOptions{
-			Context:   ctx,
+			Context:   context.Background(),
 			Recursive: isRecursiveOn,
 		})
 

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"github.com/stretchr/testify/assert"
 	"testing"
 
@@ -98,6 +99,7 @@ func TestServiceTraverserWithManyObjects(t *testing.T) {
 	localTraverser, _ := newLocalTraverser(dstDirName, InitResourceTraverserOptions{
 		Recursive:       true,
 		SymlinkHandling: common.ESymlinkHandlingType.Follow(),
+		Context:         context.Background(),
 	})
 
 	// Invoke the traversal with an indexer so the results are indexed for easy validation
@@ -276,6 +278,7 @@ func TestServiceTraverserWithWildcards(t *testing.T) {
 	localTraverser, _ := newLocalTraverser(dstDirName, InitResourceTraverserOptions{
 		Recursive:       true,
 		SymlinkHandling: common.ESymlinkHandlingType.Follow(),
+		Context:         context.Background(),
 	})
 
 	// Invoke the traversal with an indexer so the results are indexed for easy validation
