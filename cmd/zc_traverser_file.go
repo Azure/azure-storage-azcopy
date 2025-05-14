@@ -235,6 +235,11 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		var contentProps contentPropsProvider = noContentProps
 		var metadata common.Metadata
 
+		// Check if the file is a symlink and should be skipped in case of NFS
+		if isSymlink, err := shouldSkipNFSSymlink(t.ctx, f); err == nil && isSymlink {
+			return nil, nil
+		}
+
 		// Only get the properties if we're told to
 		if t.getProperties {
 			var fullProperties filePropsProvider
@@ -415,6 +420,27 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 	cancelWorkers()
 	return
+}
+
+// shouldSkipNFSSymlink checks if the given file is a symbolic link in an NFS share.
+// If it is, it logs a warning, increments the skipped symlink count, and returns true
+// to indicate it should be skipped.
+// Returns false if the file is not a symlink.
+// Returns an error if unable to retrieve file properties.
+func shouldSkipNFSSymlink(ctx context.Context, f azfileEntity) (bool, error) {
+	fullProperties, err := f.propertyGetter(ctx)
+	if err != nil {
+		return false, err
+	}
+	if fullProperties.NFSFileType() == NFSFileTypeSymLink {
+		skippedSymlinkCount++
+		common.AzcopyCurrentJobLogger.Log(
+			common.LogWarning,
+			fmt.Sprintf("File '%s' at the source is a symbolic link, and will be skipped and not be copied", f.name),
+		)
+		return true, nil
+	}
+	return false, nil
 }
 
 func newFileTraverser(rawURL string, serviceClient *service.Client, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc, trailingDot common.TrailingDotOption, destination *common.Location) (t *fileTraverser) {
