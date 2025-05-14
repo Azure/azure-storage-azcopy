@@ -22,9 +22,6 @@ package cmd
 
 import (
 	"context"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
-	"github.com/stretchr/testify/assert"
 	"io"
 	"os"
 	"path/filepath"
@@ -32,6 +29,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/stretchr/testify/assert"
 
 	gcpUtils "cloud.google.com/go/storage"
 
@@ -105,6 +106,7 @@ func TestLocalWildcardOverlap(t *testing.T) {
 		nil,
 		nil,
 		false,
+		common.EPreserveHardlinksOption.Follow(),
 	)
 	a.Nil(err)
 
@@ -146,7 +148,7 @@ func TestFilesGetProperties(t *testing.T) {
 
 	serviceClientWithSAS := scenarioHelper{}.getFileServiceClientWithSASFromURL(a, shareURL)
 	// first test reading from the share itself
-	traverser := newFileTraverser(shareURL, serviceClientWithSAS, ctx, false, true, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil)
+	traverser := newFileTraverser(shareURL, serviceClientWithSAS, ctx, false, true, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil, common.EPreserveHardlinksOption.Follow())
 
 	// embed the check into the processor for ease of use
 	seenContentType := false
@@ -171,7 +173,7 @@ func TestFilesGetProperties(t *testing.T) {
 	seenContentType = false
 	fileURL := scenarioHelper{}.getRawFileURLWithSAS(a, shareName, fileName).String()
 	serviceClientWithSAS = scenarioHelper{}.getFileServiceClientWithSASFromURL(a, shareURL)
-	traverser = newFileTraverser(fileURL, serviceClientWithSAS, ctx, false, true, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil)
+	traverser = newFileTraverser(fileURL, serviceClientWithSAS, ctx, false, true, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil, common.EPreserveHardlinksOption.Follow())
 
 	err = traverser.Traverse(noPreProccessor, processor, nil)
 	a.Nil(err)
@@ -347,7 +349,7 @@ func TestWalkWithSymlinks_ToFolder(t *testing.T) {
 		fileCount++
 		return nil
 	},
-		common.ESymlinkHandlingType.Follow(), nil))
+		common.ESymlinkHandlingType.Follow(), nil, common.EPreserveHardlinksOption.Follow()))
 
 	// 3 files live in base, 3 files live in symlink
 	a.Equal(6, fileCount)
@@ -414,7 +416,7 @@ func TestWalkWithSymlinksBreakLoop(t *testing.T) {
 		fileCount++
 		return nil
 	},
-		common.ESymlinkHandlingType.Follow(), nil))
+		common.ESymlinkHandlingType.Follow(), nil, common.EPreserveHardlinksOption.Follow()))
 
 	a.Equal(3, fileCount)
 }
@@ -445,7 +447,7 @@ func TestWalkWithSymlinksDedupe(t *testing.T) {
 		fileCount++
 		return nil
 	},
-		common.ESymlinkHandlingType.Follow(), nil))
+		common.ESymlinkHandlingType.Follow(), nil, common.EPreserveHardlinksOption.Follow()))
 
 	a.Equal(6, fileCount)
 }
@@ -477,7 +479,7 @@ func TestWalkWithSymlinksMultitarget(t *testing.T) {
 		fileCount++
 		return nil
 	},
-		common.ESymlinkHandlingType.Follow(), nil))
+		common.ESymlinkHandlingType.Follow(), nil, common.EPreserveHardlinksOption.Follow()))
 
 	// 3 files live in base, 3 files live in first symlink, second & third symlink is ignored.
 	a.Equal(6, fileCount)
@@ -511,7 +513,7 @@ func TestWalkWithSymlinksToParentAndChild(t *testing.T) {
 		fileCount++
 		return nil
 	},
-		common.ESymlinkHandlingType.Follow(), nil))
+		common.ESymlinkHandlingType.Follow(), nil, common.EPreserveHardlinksOption.Follow()))
 
 	// 6 files total live under toroot. tochild should be ignored (or if tochild was traversed first, child will be ignored on toroot).
 	a.Equal(6, fileCount)
@@ -561,7 +563,7 @@ func TestTraverserWithSingleObject(t *testing.T) {
 		scenarioHelper{}.generateLocalFilesFromList(a, dstDirName, blobList)
 
 		// construct a local traverser
-		localTraverser, _ := newLocalTraverser(context.TODO(), filepath.Join(dstDirName, dstFileName), false, false, common.ESymlinkHandlingType.Follow(), common.ESyncHashType.None(), func(common.EntityType) {}, nil)
+		localTraverser, _ := newLocalTraverser(context.TODO(), filepath.Join(dstDirName, dstFileName), false, false, common.ESymlinkHandlingType.Follow(), common.ESyncHashType.None(), func(common.EntityType) {}, nil, common.EPreserveHardlinksOption.Follow())
 
 		// invoke the local traversal with a dummy processor
 		localDummyProcessor := dummyProcessor{}
@@ -597,7 +599,7 @@ func TestTraverserWithSingleObject(t *testing.T) {
 			// construct an Azure file traverser
 			rawFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(a, shareName, fileList[0]).String()
 			fileServiceClientWithSAS := scenarioHelper{}.getFileServiceClientWithSASFromURL(a, rawFileURLWithSAS)
-			azureFileTraverser := newFileTraverser(rawFileURLWithSAS, fileServiceClientWithSAS, ctx, false, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil)
+			azureFileTraverser := newFileTraverser(rawFileURLWithSAS, fileServiceClientWithSAS, ctx, false, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil, common.EPreserveHardlinksOption.Follow())
 
 			// invoke the file traversal with a dummy processor
 			fileDummyProcessor := dummyProcessor{}
@@ -703,7 +705,7 @@ func TestTraverserContainerAndLocalDirectory(t *testing.T) {
 	// test two scenarios, either recursive or not
 	for _, isRecursiveOn := range []bool{true, false} {
 		// construct a local traverser
-		localTraverser, _ := newLocalTraverser(context.TODO(), dstDirName, isRecursiveOn, false, common.ESymlinkHandlingType.Follow(), common.ESyncHashType.None(), func(common.EntityType) {}, nil)
+		localTraverser, _ := newLocalTraverser(context.TODO(), dstDirName, isRecursiveOn, false, common.ESymlinkHandlingType.Follow(), common.ESyncHashType.None(), func(common.EntityType) {}, nil, common.EPreserveHardlinksOption.Follow())
 
 		// invoke the local traversal with an indexer
 		// so that the results are indexed for easy validation
@@ -725,7 +727,7 @@ func TestTraverserContainerAndLocalDirectory(t *testing.T) {
 		// construct an Azure File traverser
 		rawShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(a, shareName).String()
 		fileServiceClientWithSAS := scenarioHelper{}.getFileServiceClientWithSASFromURL(a, rawShareURLWithSAS)
-		azureFileTraverser := newFileTraverser(rawShareURLWithSAS, fileServiceClientWithSAS, ctx, isRecursiveOn, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil)
+		azureFileTraverser := newFileTraverser(rawShareURLWithSAS, fileServiceClientWithSAS, ctx, isRecursiveOn, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil, common.EPreserveHardlinksOption.Follow())
 
 		// invoke the file traversal with a dummy processor
 		fileDummyProcessor := dummyProcessor{}
@@ -852,7 +854,7 @@ func TestTraverserWithVirtualAndLocalDirectory(t *testing.T) {
 	// test two scenarios, either recursive or not
 	for _, isRecursiveOn := range []bool{true, false} {
 		// construct a local traverser
-		localTraverser, _ := newLocalTraverser(context.TODO(), filepath.Join(dstDirName, virDirName), isRecursiveOn, false, common.ESymlinkHandlingType.Follow(), common.ESyncHashType.None(), func(common.EntityType) {}, nil)
+		localTraverser, _ := newLocalTraverser(context.TODO(), filepath.Join(dstDirName, virDirName), isRecursiveOn, false, common.ESymlinkHandlingType.Follow(), common.ESyncHashType.None(), func(common.EntityType) {}, nil, common.EPreserveHardlinksOption.Follow())
 
 		// invoke the local traversal with an indexer
 		// so that the results are indexed for easy validation
@@ -874,7 +876,7 @@ func TestTraverserWithVirtualAndLocalDirectory(t *testing.T) {
 		// construct an Azure File traverser
 		rawFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(a, shareName, virDirName).String()
 		fileServiceClientWithSAS := scenarioHelper{}.getFileServiceClientWithSASFromURL(a, rawFileURLWithSAS)
-		azureFileTraverser := newFileTraverser(rawFileURLWithSAS, fileServiceClientWithSAS, ctx, isRecursiveOn, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil)
+		azureFileTraverser := newFileTraverser(rawFileURLWithSAS, fileServiceClientWithSAS, ctx, isRecursiveOn, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil, common.EPreserveHardlinksOption.Follow())
 
 		// invoke the file traversal with a dummy processor
 		fileDummyProcessor := dummyProcessor{}

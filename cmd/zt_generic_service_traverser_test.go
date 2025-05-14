@@ -2,8 +2,9 @@ package cmd
 
 import (
 	"context"
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -96,7 +97,7 @@ func TestServiceTraverserWithManyObjects(t *testing.T) {
 	scenarioHelper{}.generateLocalFilesFromList(a, dstDirName, objectList)
 
 	// Create a local traversal
-	localTraverser, _ := newLocalTraverser(context.TODO(), dstDirName, true, false, common.ESymlinkHandlingType.Follow(), common.ESyncHashType.None(), func(common.EntityType) {}, nil)
+	localTraverser, _ := newLocalTraverser(context.TODO(), dstDirName, true, false, common.ESymlinkHandlingType.Follow(), common.ESyncHashType.None(), func(common.EntityType) {}, nil, common.EPreserveHardlinksOption.Follow())
 
 	// Invoke the traversal with an indexer so the results are indexed for easy validation
 	localIndexer := newObjectIndexer()
@@ -114,7 +115,7 @@ func TestServiceTraverserWithManyObjects(t *testing.T) {
 
 	// construct a file account traverser
 	rawFSU := scenarioHelper{}.getFileServiceClientWithSAS(a)
-	fileAccountTraverser := newFileAccountTraverser(rawFSU, "", ctx, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil)
+	fileAccountTraverser := newFileAccountTraverser(rawFSU, "", ctx, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil, common.EPreserveHardlinksOption.Follow())
 
 	// invoke the file account traversal with a dummy processor
 	fileDummyProcessor := dummyProcessor{}
@@ -263,7 +264,7 @@ func TestServiceTraverserWithWildcards(t *testing.T) {
 	scenarioHelper{}.generateLocalFilesFromList(a, dstDirName, objectList)
 
 	// Create a local traversal
-	localTraverser, _ := newLocalTraverser(context.TODO(), dstDirName, true, false, common.ESymlinkHandlingType.Follow(), common.ESyncHashType.None(), func(common.EntityType) {}, nil)
+	localTraverser, _ := newLocalTraverser(context.TODO(), dstDirName, true, false, common.ESymlinkHandlingType.Follow(), common.ESyncHashType.None(), func(common.EntityType) {}, nil, common.EPreserveHardlinksOption.Follow())
 
 	// Invoke the traversal with an indexer so the results are indexed for easy validation
 	localIndexer := newObjectIndexer()
@@ -283,7 +284,7 @@ func TestServiceTraverserWithWildcards(t *testing.T) {
 	// construct a file account traverser
 	rawFSU := scenarioHelper{}.getFileServiceClientWithSAS(a)
 	share := "objectmatch*" // set the container name to contain a wildcard
-	fileAccountTraverser := newFileAccountTraverser(rawFSU, share, ctx, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil)
+	fileAccountTraverser := newFileAccountTraverser(rawFSU, share, ctx, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil, common.EPreserveHardlinksOption.Follow())
 
 	// invoke the file account traversal with a dummy processor
 	fileDummyProcessor := dummyProcessor{}
