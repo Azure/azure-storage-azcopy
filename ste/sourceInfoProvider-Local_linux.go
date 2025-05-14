@@ -5,8 +5,11 @@ package ste
 
 import (
 	"fmt"
+	"os/user"
 	"strconv"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -265,4 +268,46 @@ func (h HandleNFSPermissions) GetGroup() *string {
 func (h HandleNFSPermissions) GetFileMode() *string {
 	fileMode := h.FileMode() &^ unix.S_IFMT // Remove file type bits
 	return to.Ptr(fmt.Sprintf("%#o", fileMode))
+}
+
+var (
+	umask     int
+	umaskOnce sync.Once
+)
+
+// getUmask retrieves the current process's umask without permanently modifying it.
+func getUmask() int {
+	umaskOnce.Do(func() {
+		// Set umask to 0, capture the old value
+		current := syscall.Umask(0)
+		// Restore it immediately
+		syscall.Umask(current)
+		umask = current
+	})
+	return umask
+}
+
+// GetNFSDefaultPerms retrieves the default file permissions, owner UID, and group GID
+// for the current user, with permissions adjusted based on the user's umask.
+// This is typically used to infer default NFS permissions when creating new files or directories.
+// Returns pointers to strings representing the file mode (in octal), UID, and GID.
+func (f localFileSourceInfoProvider) GetNFSDefaultPerms() (fileMode, owner, group *string, err error) {
+	defaultStats, err := f.GetUNIXProperties()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	// Get the default file mode
+	currFileMode := defaultStats.FileMode() &^ unix.S_IFMT
+	defaultMode := int(currFileMode) &^ getUmask()
+	fileMode = to.Ptr(fmt.Sprintf("%#o", defaultMode))
+
+	currentUser, err := user.Current()
+	owner = to.Ptr(currentUser.Uid)
+
+	// Lookup the primary group using the user's GID
+	group = to.Ptr(currentUser.Gid)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return
 }

@@ -109,6 +109,7 @@ type INFSPropertyBearingSourceInfoProvider interface {
 
 	GetNFSProperties() (TypedNFSPropertyHolder, error)
 	GetNFSPermissions() (TypedNFSPermissionsHolder, error)
+	GetNFSDefaultPerms() (*string, *string, *string, error)
 }
 
 type IUNIXPropertyBearingSourceInfoProvider interface {

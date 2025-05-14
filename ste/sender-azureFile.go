@@ -310,6 +310,15 @@ func (u *azureFileSenderBase) addNFSPropertiesToHeaders(info *TransferInfo) (sta
 
 func (u *azureFileSenderBase) addNFSPermissionsToHeaders(info *TransferInfo, destURL string) (stage string, err error) {
 	if !info.PreservePermissions.IsTruthy() {
+		if nfsSIP, ok := u.sip.(INFSPropertyBearingSourceInfoProvider); ok {
+			fileMode, owner, group, err := nfsSIP.GetNFSDefaultPerms()
+			if err != nil {
+				return "Obtaining NFS default permissions", err
+			}
+			u.nfsPropertiesToApply.Owner = owner
+			u.nfsPropertiesToApply.Group = group
+			u.nfsPropertiesToApply.FileMode = fileMode
+		}
 		return "", nil
 	}
 
