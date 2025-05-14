@@ -176,10 +176,7 @@ func (s3Resolver *S3BucketNameToAzureResourcesResolver) hasCollision(name string
 }
 
 func validateResolvedName(name string) bool {
-	if len(name) > s3BucketNameMaxLength {
-		return false
-	}
-	return true
+	return len(name) <= s3BucketNameMaxLength
 }
 
 // addSuffix adds suffix in order to avoid naming collision
