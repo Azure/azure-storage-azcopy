@@ -3,15 +3,16 @@ package e2etest
 import (
 	"bytes"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"github.com/google/uuid"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"github.com/google/uuid"
 )
 
 // enforce interface compliance at compile time
@@ -166,11 +167,15 @@ func (l *LocalObjectResourceManager) ObjectName() string {
 	}
 }
 
-type localSMBPropertiesManager interface {
+type localPropertiesManager interface {
 	GetSDDL(Asserter) string
 	PutSDDL(sddlstr string, a Asserter)
 	GetSMBProperties(Asserter) ste.TypedSMBPropertyHolder
-	PutSMBProperties(Asserter, ste.TypedSMBPropertyHolder)
+	PutSMBProperties(Asserter, FileProperties)
+	PutNFSPermissions(Asserter, FileNFSPermissions)
+	PutNFSProperties(Asserter, FileNFSProperties)
+	GetNFSPermissions(Asserter) ste.TypedNFSPermissionsHolder
+	GetNFSProperties(Asserter) ste.TypedNFSPropertyHolder
 }
 
 func (l *LocalObjectResourceManager) getChildObject(relPath string, entityType common.EntityType) *LocalObjectResourceManager {
@@ -336,20 +341,36 @@ func (l *LocalObjectResourceManager) GetProperties(a Asserter) ObjectProperties 
 	}
 
 	// OS-triggered code, implemented in newe2e_resource_managers_local_windows.go
-	if smb, ok := any(l).(localSMBPropertiesManager); ok {
-		props := smb.GetSMBProperties(a)
+	if localProp, ok := any(l).(localPropertiesManager); ok {
+		props := localProp.GetSMBProperties(a)
 
-		attr, err := props.FileAttributes()
-		a.NoError("get attributes", err)
+		perms := localProp.GetSDDL(a)
 
-		perms := smb.GetSDDL(a)
+		nfsProps := localProp.GetNFSProperties(a)
+		nfsPerms := localProp.GetNFSPermissions(a)
 
-		out.FileProperties.FileAttributes = PtrOf(attr.String())
-		out.FileProperties.FileCreationTime = PtrOf(props.FileCreationTime())
-		out.FileProperties.FileLastWriteTime = PtrOf(props.FileLastWriteTime())
+		if props != nil {
+			attr, err := props.FileAttributes()
+			a.NoError("get attributes", err)
+			out.FileProperties.FileAttributes = PtrOf(attr.String())
+			out.FileProperties.FileCreationTime = PtrOf(props.FileCreationTime())
+			out.FileProperties.FileLastWriteTime = PtrOf(props.FileLastWriteTime())
+		}
 		out.FileProperties.FilePermissions = common.Iff(perms == "", nil, &perms)
+		if nfsProps != nil {
+			out.FileNFSProperties = &FileNFSProperties{
+				FileCreationTime:  PtrOf(nfsProps.FileCreationTime()),
+				FileLastWriteTime: PtrOf(nfsProps.FileLastWriteTime()),
+			}
+		}
+		if nfsPerms != nil {
+			out.FileNFSPermissions = &FileNFSPermissions{
+				Owner:    nfsPerms.GetOwner(),
+				Group:    nfsPerms.GetGroup(),
+				FileMode: nfsPerms.GetFileMode(),
+			}
+		}
 	}
-
 	return out
 }
 
@@ -366,10 +387,17 @@ func (l *LocalObjectResourceManager) SetObjectProperties(a Asserter, props Objec
 	a.HelperMarker().Helper()
 
 	// todo: set SMB properties
-	if smb, ok := any(l).(localSMBPropertiesManager); ok {
+	if localProps, ok := any(l).(localPropertiesManager); ok {
 		if props.FileProperties.FilePermissions != nil {
-			smb.PutSDDL(*props.FileProperties.FilePermissions, a)
+			localProps.PutSDDL(*props.FileProperties.FilePermissions, a)
 		}
+		if props.FileNFSProperties != nil {
+			localProps.PutNFSProperties(a, *props.FileNFSProperties)
+		}
+		if props.FileNFSPermissions != nil {
+			localProps.PutNFSPermissions(a, *props.FileNFSPermissions)
+		}
+
 	}
 }
 
