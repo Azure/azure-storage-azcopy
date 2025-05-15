@@ -1591,9 +1591,9 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	}
 
 	// TODO: Remove this check when FileBlob w/ File OAuth works.
-	if cca.FromTo.IsS2S() && cca.FromTo.From() == common.ELocation.File() && srcCredInfo.CredentialType.IsAzureOAuth() && cca.FromTo.To() != common.ELocation.File() {
-		return fmt.Errorf("S2S copy from Azure File authenticated with Azure AD to Blob/BlobFS is not supported")
-	}
+	//if cca.FromTo.IsS2S() && cca.FromTo.From() == common.ELocation.File() && srcCredInfo.CredentialType.IsAzureOAuth() && cca.FromTo.To() != common.ELocation.File() {
+	//	return fmt.Errorf("S2S copy from Azure File authenticated with Azure AD to Blob/BlobFS is not supported")
+	//}
 
 	// Check if destination is system container
 	if cca.FromTo.IsS2S() || cca.FromTo.IsUpload() {
