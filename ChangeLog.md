@@ -1,6 +1,14 @@
 
 # Change Log
 
+## Version 10.29.1 
+
+### Bug Fixes 
+1. Fix the TokenStore getting stuck in a read lock ([#3035](https://github.com/Azure/azure-storage-azcopy/pull/3035))
+
+### Dependency Updates 
+1. Golang.org/x/net 0.36.0 ->  0.38.0 ([#3023](https://github.com/Azure/azure-storage-azcopy/pull/3023))
+
 ## Version 10.29.0
 
 ### Breaking changes
