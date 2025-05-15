@@ -1958,7 +1958,28 @@ stages:
             - script: |
                 echo ${{ parameters.tag }}
               displayName: 'Tag Name'
-              
+
+            - task: DownloadPipelineArtifacts@2
+              displayName: 'Download Linux, Windows, Mac Build Artifacts'
+              inputs:
+                artifactName: 'azcopy-*-signed'
+                downloadPath: $(Build.ArtifactStagingDirectory)
+
+            - script: |
+                sudo ls -lRt $(Build.ArtifactStagingDirectory)
+              displayName: 'List Artifacts'
+
+            - script: |
+                sudo apt-get clean 
+                sudo apt-get update 
+                sudo apt-get upgrade -y 
+                sudo apt-get install -f --fix-missing 
+                wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
+                sudo dpkg -i packages-microsoft-prod.deb
+                sudo apt install apt-transport-https -y 
+                sudo apt install dotnet-sdk-6.0 -y
+              displayName: 'Update Dependencies'
+
             - task: GithubRelease@1
               inputs:
                 githubConnection: 'azcopy-github-connection'
@@ -1972,10 +1993,17 @@ stages:
                 tag: ${{ parameters.tag }}
                 
                 changeLogCompareToRelease: 'lastFullRelease'
-                changeLogType: 'commitBased'
+                changeLogType: 'issueBased'
                 isDraft: ${{ parameters.draft }}
                 isPreRelease: ${{ parameters.prerelease }}
+                assets: |
+                  $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.deb
+                  $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.rpm
+                  $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.tar.gz
+                  $(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*.zip
+                  $(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*.zip
                 assetUploadMode: replace
+                addChangeLog: true
 
   - ${{ if eq(parameters.publish_artifacts, true) }}:
     - stage: PublishArtifacts
