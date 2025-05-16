@@ -24,15 +24,18 @@ import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"sync/atomic"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
+// urlToBlockBlobCopier extends blockBlobSenderBase parent to include URL-specific functionality
 type urlToBlockBlobCopier struct {
 	blockBlobSenderBase
 
-	srcURL string
+	srcURL               string
+	addFileRequestIntent bool // Necessary for FileBlob Oauth copies
 }
 
 func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
@@ -55,9 +58,16 @@ func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, pacer pacer, srcInfoProvi
 		return nil, err
 	}
 
+	// Check if source is Files
+	addFileRequestIntent := false
+	if _, ok := srcInfoProvider.(*fileSourceInfoProvider); ok {
+		sUrl, _ := file.ParseURL(srcURL)
+		addFileRequestIntent = (sUrl.SAS.Signature() == "") // Using OAuth
+	}
 	return &urlToBlockBlobCopier{
-		blockBlobSenderBase: *senderBase,
-		srcURL:              srcURL}, nil
+		blockBlobSenderBase:  *senderBase,
+		srcURL:               srcURL,
+		addFileRequestIntent: addFileRequestIntent}, nil
 }
 
 // Returns a chunk-func for blob copies
@@ -111,13 +121,21 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 			c.jptm.FailActiveS2SCopy("Getting source token credential", err)
 			return
 		}
-		_, err = c.destBlockBlobClient.StageBlockFromURL(c.jptm.Context(), encodedBlockID, c.srcURL,
-			&blockblob.StageBlockFromURLOptions{
-				Range:                   blob.HTTPRange{Offset: id.OffsetInFile(), Count: adjustedChunkSize},
-				CPKInfo:                 c.jptm.CpkInfo(),
-				CPKScopeInfo:            c.jptm.CpkScopeInfo(),
-				CopySourceAuthorization: token,
-			})
+		options := &blockblob.StageBlockFromURLOptions{
+			Range:                   blob.HTTPRange{Offset: id.OffsetInFile(), Count: adjustedChunkSize},
+			CPKInfo:                 c.jptm.CpkInfo(),
+			CPKScopeInfo:            c.jptm.CpkScopeInfo(),
+			CopySourceAuthorization: token,
+		}
+
+		// Informs SDK to add xms-file-request-intent header
+		if c.addFileRequestIntent {
+			fileIntent := blob.FileRequestIntentTypeBackup
+			options.FileRequestIntent = &fileIntent
+		}
+
+		_, err = c.destBlockBlobClient.StageBlockFromURL(c.jptm.Context(), encodedBlockID, c.srcURL, options)
+
 		if err != nil {
 			c.jptm.FailActiveSend("Staging block from URL", err)
 			return
@@ -158,16 +176,21 @@ func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, bl
 			return
 		}
 
-		_, err = c.destBlockBlobClient.UploadBlobFromURL(c.jptm.Context(), c.srcURL,
-			&blockblob.UploadBlobFromURLOptions{
-				HTTPHeaders:             &c.headersToApply,
-				Metadata:                c.metadataToApply,
-				Tier:                    destBlobTier,
-				Tags:                    blobTags,
-				CPKInfo:                 c.jptm.CpkInfo(),
-				CPKScopeInfo:            c.jptm.CpkScopeInfo(),
-				CopySourceAuthorization: token,
-			})
+		options := &blockblob.UploadBlobFromURLOptions{
+			HTTPHeaders:             &c.headersToApply,
+			Metadata:                c.metadataToApply,
+			Tier:                    destBlobTier,
+			Tags:                    blobTags,
+			CPKInfo:                 c.jptm.CpkInfo(),
+			CPKScopeInfo:            c.jptm.CpkScopeInfo(),
+			CopySourceAuthorization: token,
+		}
+		// Informs SDK to add xms-file-request-intent header
+		if c.addFileRequestIntent {
+			fileRequestIntent := blob.FileRequestIntentTypeBackup
+			options.FileRequestIntent = &fileRequestIntent
+		}
+		_, err = c.destBlockBlobClient.UploadBlobFromURL(c.jptm.Context(), c.srcURL, options)
 
 		if err != nil {
 			c.jptm.FailActiveSend(common.Iff(len(blobTags) > 0, "Committing block list (with tags)", "Committing block list"), err)
