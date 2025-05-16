@@ -93,9 +93,14 @@ func (t *s3ServiceTraverser) Traverse(preprocessor objectMorpher, processor obje
 		urlResult := tmpS3URL.URL()
 		credentialInfo := common.CredentialInfo{CredentialType: common.ECredentialType.S3AccessKey()}
 
-		opt := t.opts
-		opt.Credential = &credentialInfo
-		bucketTraverser, err := newS3Traverser(&urlResult, t.ctx, opt)
+		bucketTraverser, err := newS3Traverser(&urlResult, t.ctx, InitResourceTraverserOptions{
+			Credential: &credentialInfo,
+
+			Recursive: true,
+
+			GetPropertiesInFrontend: t.opts.GetPropertiesInFrontend,
+			IncrementEnumeration:    t.opts.IncrementEnumeration,
+		})
 
 		if err != nil {
 			return err
