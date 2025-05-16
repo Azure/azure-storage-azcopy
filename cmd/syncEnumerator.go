@@ -66,10 +66,9 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
 	dest := cca.fromTo.To()
-	sourceTraverser, err := InitResourceTraverser(cca.source, cca.fromTo.From(), InitResourceTraverserOptions{
+	sourceTraverser, err := InitResourceTraverser(cca.source, cca.fromTo.From(), ctx, InitResourceTraverserOptions{
 		DestResourceType: &dest,
 
-		Context:    ctx,
 		Credential: &srcCredInfo,
 		IncrementEnumeration: func(entityType common.EntityType) {
 			if entityType == common.EEntityType.File() {
@@ -103,8 +102,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	// TODO: enable symlink support in a future release after evaluating the implications
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
-	destinationTraverser, err := InitResourceTraverser(cca.destination, cca.fromTo.To(), InitResourceTraverserOptions{
-		Context:    ctx,
+	destinationTraverser, err := InitResourceTraverser(cca.destination, cca.fromTo.To(), ctx, InitResourceTraverserOptions{
 		Credential: &dstCredInfo,
 		IncrementEnumeration: func(entityType common.EntityType) {
 			if entityType == common.EEntityType.File() {

@@ -70,7 +70,7 @@ func (t *gcpServiceTraverser) Traverse(preprocessor objectMorpher, processor obj
 		tmpGCPURL := t.gcpURL
 		tmpGCPURL.BucketName = v
 		urlResult := tmpGCPURL.URL()
-		bucketTraverser, err := newGCPTraverser(&urlResult, t.opts)
+		bucketTraverser, err := newGCPTraverser(&urlResult, t.ctx, t.opts)
 
 		if err != nil {
 			return err
@@ -91,11 +91,11 @@ func (t *gcpServiceTraverser) Traverse(preprocessor objectMorpher, processor obj
 	return nil
 }
 
-func newGCPServiceTraverser(rawURL *url.URL, opts InitResourceTraverserOptions) (*gcpServiceTraverser, error) {
+func newGCPServiceTraverser(rawURL *url.URL, ctx context.Context, opts InitResourceTraverserOptions) (*gcpServiceTraverser, error) {
 	projectID = common.GetEnvironmentVariable(common.EEnvironmentVariable.GoogleCloudProject())
 	t := &gcpServiceTraverser{
 		opts: opts,
-		ctx:  opts.Context,
+		ctx:  ctx,
 	}
 	gcpURLParts, err := common.NewGCPURLParts(*rawURL)
 

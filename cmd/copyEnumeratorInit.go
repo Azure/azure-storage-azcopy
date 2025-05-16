@@ -72,10 +72,9 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	jobPartOrder.S2SPreserveBlobTags = cca.S2sPreserveBlobTags
 
 	dest := cca.FromTo.To()
-	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), InitResourceTraverserOptions{
+	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), ctx, InitResourceTraverserOptions{
 		DestResourceType: &dest,
 
-		Context:    ctx,
 		Credential: &srcCredInfo,
 
 		ListOfFiles:      cca.ListOfFilesChannel,
@@ -366,8 +365,7 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx con
 		return false
 	}
 
-	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), InitResourceTraverserOptions{
-		Context:    ctx,
+	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, InitResourceTraverserOptions{
 		Credential: &dstCredInfo,
 
 		ListOfVersionIDs: cca.ListOfVersionIDs,

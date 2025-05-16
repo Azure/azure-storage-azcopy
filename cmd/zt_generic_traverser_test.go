@@ -81,7 +81,7 @@ func TestLocalWildcardOverlap(t *testing.T) {
 	resource, err := SplitResourceString(filepath.Join(tmpDir, "tes*t.txt"), common.ELocation.Local())
 	a.Nil(err)
 
-	traverser, err := InitResourceTraverser(resource, common.ELocation.Local(), InitResourceTraverserOptions{
+	traverser, err := InitResourceTraverser(resource, common.ELocation.Local(), ctx, InitResourceTraverserOptions{
 		SymlinkHandling: common.ESymlinkHandlingType.Follow(),
 
 		TrailingDotOption: common.ETrailingDotOption.Enable(),
@@ -129,8 +129,7 @@ func TestFilesGetProperties(t *testing.T) {
 
 	serviceClientWithSAS := scenarioHelper{}.getFileServiceClientWithSASFromURL(a, shareURL)
 	// first test reading from the share itself
-	traverser := newFileTraverser(shareURL, serviceClientWithSAS, InitResourceTraverserOptions{
-		Context:                 ctx,
+	traverser := newFileTraverser(shareURL, serviceClientWithSAS, ctx, InitResourceTraverserOptions{
 		GetPropertiesInFrontend: true,
 		TrailingDotOption:       common.ETrailingDotOption.Enable(),
 	})
@@ -158,8 +157,7 @@ func TestFilesGetProperties(t *testing.T) {
 	seenContentType = false
 	fileURL := scenarioHelper{}.getRawFileURLWithSAS(a, shareName, fileName).String()
 	serviceClientWithSAS = scenarioHelper{}.getFileServiceClientWithSASFromURL(a, shareURL)
-	traverser = newFileTraverser(fileURL, serviceClientWithSAS, InitResourceTraverserOptions{
-		Context:                 ctx,
+	traverser = newFileTraverser(fileURL, serviceClientWithSAS, ctx, InitResourceTraverserOptions{
 		GetPropertiesInFrontend: true,
 		TrailingDotOption:       common.ETrailingDotOption.Enable(),
 	})
@@ -203,7 +201,7 @@ func TestS3GetProperties(t *testing.T) {
 	s3BucketURL := scenarioHelper{}.getRawS3BucketURL(a, "", bucketName)
 
 	credentialInfo := common.CredentialInfo{CredentialType: common.ECredentialType.S3AccessKey()}
-	traverser, err := newS3Traverser(&s3BucketURL, InitResourceTraverserOptions{
+	traverser, err := newS3Traverser(&s3BucketURL, ctx, InitResourceTraverserOptions{
 		Credential:              &credentialInfo,
 		GetPropertiesInFrontend: true,
 	})
@@ -231,7 +229,7 @@ func TestS3GetProperties(t *testing.T) {
 	s3ObjectURL := scenarioHelper{}.getRawS3ObjectURL(a, "", bucketName, objectName)
 	credentialInfo = common.CredentialInfo{CredentialType: common.ECredentialType.S3AccessKey()}
 
-	traverser, err = newS3Traverser(&s3ObjectURL, InitResourceTraverserOptions{
+	traverser, err = newS3Traverser(&s3ObjectURL, ctx, InitResourceTraverserOptions{
 		Credential:              &credentialInfo,
 		GetPropertiesInFrontend: true,
 	})
@@ -280,7 +278,7 @@ func TestGCPGetProperties(t *testing.T) {
 
 	// First test against the bucket
 	gcpBucketURL := scenarioHelper{}.getRawGCPBucketURL(a, bucketName)
-	traverser, err := newGCPTraverser(&gcpBucketURL, InitResourceTraverserOptions{
+	traverser, err := newGCPTraverser(&gcpBucketURL, ctx, InitResourceTraverserOptions{
 		GetPropertiesInFrontend: true,
 	})
 	a.Nil(err)
@@ -306,7 +304,7 @@ func TestGCPGetProperties(t *testing.T) {
 	seenContentType = false
 	gcpObjectURL := scenarioHelper{}.getRawGCPObjectURL(a, bucketName, objectName)
 
-	traverser, err = newGCPTraverser(&gcpObjectURL, InitResourceTraverserOptions{
+	traverser, err = newGCPTraverser(&gcpObjectURL, ctx, InitResourceTraverserOptions{
 		GetPropertiesInFrontend: true,
 	})
 	a.Nil(err)
@@ -563,8 +561,7 @@ func TestTraverserWithSingleObject(t *testing.T) {
 		scenarioHelper{}.generateLocalFilesFromList(a, dstDirName, blobList)
 
 		// construct a local traverser
-		localTraverser, _ := newLocalTraverser(filepath.Join(dstDirName, dstFileName), InitResourceTraverserOptions{
-			Context:         context.Background(),
+		localTraverser, _ := newLocalTraverser(filepath.Join(dstDirName, dstFileName), ctx, InitResourceTraverserOptions{
 			SymlinkHandling: common.ESymlinkHandlingType.Follow(),
 		})
 
@@ -578,9 +575,7 @@ func TestTraverserWithSingleObject(t *testing.T) {
 		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 		rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, blobList[0]).URL()
 		blobServiceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
-		blobTraverser := newBlobTraverser(rawBlobURLWithSAS, blobServiceClientWithSAS, InitResourceTraverserOptions{
-			Context: ctx,
-		})
+		blobTraverser := newBlobTraverser(rawBlobURLWithSAS, blobServiceClientWithSAS, ctx, InitResourceTraverserOptions{})
 
 		// invoke the blob traversal with a dummy processor
 		blobDummyProcessor := dummyProcessor{}
@@ -604,9 +599,7 @@ func TestTraverserWithSingleObject(t *testing.T) {
 			// construct an Azure file traverser
 			rawFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(a, shareName, fileList[0]).String()
 			fileServiceClientWithSAS := scenarioHelper{}.getFileServiceClientWithSASFromURL(a, rawFileURLWithSAS)
-			azureFileTraverser := newFileTraverser(rawFileURLWithSAS, fileServiceClientWithSAS, InitResourceTraverserOptions{
-				Context: ctx,
-			})
+			azureFileTraverser := newFileTraverser(rawFileURLWithSAS, fileServiceClientWithSAS, ctx, InitResourceTraverserOptions{})
 
 			// invoke the file traversal with a dummy processor
 			fileDummyProcessor := dummyProcessor{}
@@ -627,8 +620,7 @@ func TestTraverserWithSingleObject(t *testing.T) {
 			s3DummyProcessor := dummyProcessor{}
 			url := scenarioHelper{}.getRawS3ObjectURL(a, "", bucketName, storedObjectName)
 			credentialInfo := common.CredentialInfo{CredentialType: common.ECredentialType.S3AccessKey()}
-			S3Traverser, err := newS3Traverser(&url, InitResourceTraverserOptions{
-				Context:    ctx,
+			S3Traverser, err := newS3Traverser(&url, ctx, InitResourceTraverserOptions{
 				Credential: &credentialInfo,
 			})
 			a.Nil(err)
@@ -646,9 +638,7 @@ func TestTraverserWithSingleObject(t *testing.T) {
 
 			gcpDummyProcessor := dummyProcessor{}
 			gcpURL := scenarioHelper{}.getRawGCPObjectURL(a, bucketNameGCP, storedObjectName)
-			GCPTraverser, err := newGCPTraverser(&gcpURL, InitResourceTraverserOptions{
-				Context: ctx,
-			})
+			GCPTraverser, err := newGCPTraverser(&gcpURL, ctx, InitResourceTraverserOptions{})
 			a.Nil(err)
 
 			err = GCPTraverser.Traverse(noPreProccessor, gcpDummyProcessor.process, nil)
@@ -717,8 +707,7 @@ func TestTraverserContainerAndLocalDirectory(t *testing.T) {
 	// test two scenarios, either recursive or not
 	for _, isRecursiveOn := range []bool{true, false} {
 		// construct a local traverser
-		localTraverser, _ := newLocalTraverser(dstDirName, InitResourceTraverserOptions{
-			Context:   context.Background(),
+		localTraverser, _ := newLocalTraverser(dstDirName, ctx, InitResourceTraverserOptions{
 			Recursive: isRecursiveOn,
 		})
 
@@ -732,8 +721,7 @@ func TestTraverserContainerAndLocalDirectory(t *testing.T) {
 		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 		rawContainerURLWithSAS := scenarioHelper{}.getContainerClientWithSAS(a, containerName).URL()
 		blobServiceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawContainerURLWithSAS)
-		blobTraverser := newBlobTraverser(rawContainerURLWithSAS, blobServiceClientWithSAS, InitResourceTraverserOptions{
-			Context:   ctx,
+		blobTraverser := newBlobTraverser(rawContainerURLWithSAS, blobServiceClientWithSAS, ctx, InitResourceTraverserOptions{
 			Recursive: isRecursiveOn,
 		})
 
@@ -745,8 +733,7 @@ func TestTraverserContainerAndLocalDirectory(t *testing.T) {
 		// construct an Azure File traverser
 		rawShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(a, shareName).String()
 		fileServiceClientWithSAS := scenarioHelper{}.getFileServiceClientWithSASFromURL(a, rawShareURLWithSAS)
-		azureFileTraverser := newFileTraverser(rawShareURLWithSAS, fileServiceClientWithSAS, InitResourceTraverserOptions{
-			Context:   ctx,
+		azureFileTraverser := newFileTraverser(rawShareURLWithSAS, fileServiceClientWithSAS, ctx, InitResourceTraverserOptions{
 			Recursive: isRecursiveOn,
 		})
 
@@ -761,9 +748,8 @@ func TestTraverserContainerAndLocalDirectory(t *testing.T) {
 			// construct and run a S3 traverser
 			rawS3URL := scenarioHelper{}.getRawS3BucketURL(a, "", bucketName)
 			credentialInfo := common.CredentialInfo{CredentialType: common.ECredentialType.S3AccessKey()}
-			S3Traverser, err := newS3Traverser(&rawS3URL, InitResourceTraverserOptions{
+			S3Traverser, err := newS3Traverser(&rawS3URL, ctx, InitResourceTraverserOptions{
 				Credential: &credentialInfo,
-				Context:    ctx,
 				Recursive:  isRecursiveOn,
 			})
 			a.Nil(err)
@@ -772,8 +758,7 @@ func TestTraverserContainerAndLocalDirectory(t *testing.T) {
 		}
 		if gcpEnabled {
 			rawGCPURL := scenarioHelper{}.getRawGCPBucketURL(a, bucketNameGCP)
-			GCPTraverser, err := newGCPTraverser(&rawGCPURL, InitResourceTraverserOptions{
-				Context:   ctx,
+			GCPTraverser, err := newGCPTraverser(&rawGCPURL, ctx, InitResourceTraverserOptions{
 				Recursive: isRecursiveOn,
 			})
 			a.Nil(err)
@@ -882,8 +867,7 @@ func TestTraverserWithVirtualAndLocalDirectory(t *testing.T) {
 	// test two scenarios, either recursive or not
 	for _, isRecursiveOn := range []bool{true, false} {
 		// construct a local traverser
-		localTraverser, _ := newLocalTraverser(filepath.Join(dstDirName, virDirName), InitResourceTraverserOptions{
-			Context:   context.Background(),
+		localTraverser, _ := newLocalTraverser(filepath.Join(dstDirName, virDirName), ctx, InitResourceTraverserOptions{
 			Recursive: isRecursiveOn,
 		})
 
@@ -897,8 +881,7 @@ func TestTraverserWithVirtualAndLocalDirectory(t *testing.T) {
 		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 		rawVirDirURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, virDirName).URL()
 		serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawVirDirURLWithSAS)
-		blobTraverser := newBlobTraverser(rawVirDirURLWithSAS, serviceClientWithSAS, InitResourceTraverserOptions{
-			Context:   ctx,
+		blobTraverser := newBlobTraverser(rawVirDirURLWithSAS, serviceClientWithSAS, ctx, InitResourceTraverserOptions{
 			Recursive: isRecursiveOn,
 		})
 
@@ -910,8 +893,7 @@ func TestTraverserWithVirtualAndLocalDirectory(t *testing.T) {
 		// construct an Azure File traverser
 		rawFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(a, shareName, virDirName).String()
 		fileServiceClientWithSAS := scenarioHelper{}.getFileServiceClientWithSASFromURL(a, rawFileURLWithSAS)
-		azureFileTraverser := newFileTraverser(rawFileURLWithSAS, fileServiceClientWithSAS, InitResourceTraverserOptions{
-			Context:   ctx,
+		azureFileTraverser := newFileTraverser(rawFileURLWithSAS, fileServiceClientWithSAS, ctx, InitResourceTraverserOptions{
 			Recursive: isRecursiveOn,
 		})
 
@@ -935,8 +917,7 @@ func TestTraverserWithVirtualAndLocalDirectory(t *testing.T) {
 			// directory object keys always end with / in S3
 			rawS3URL := scenarioHelper{}.getRawS3ObjectURL(a, "", bucketName, virDirName+"/")
 			credentialInfo := common.CredentialInfo{CredentialType: common.ECredentialType.S3AccessKey()}
-			S3Traverser, err := newS3Traverser(&rawS3URL, InitResourceTraverserOptions{
-				Context:    ctx,
+			S3Traverser, err := newS3Traverser(&rawS3URL, ctx, InitResourceTraverserOptions{
 				Credential: &credentialInfo,
 				Recursive:  isRecursiveOn,
 			})
@@ -949,8 +930,7 @@ func TestTraverserWithVirtualAndLocalDirectory(t *testing.T) {
 		}
 		if gcpEnabled {
 			rawGCPURL := scenarioHelper{}.getRawGCPObjectURL(a, bucketNameGCP, virDirName+"/")
-			GCPTraverser, err := newGCPTraverser(&rawGCPURL, InitResourceTraverserOptions{
-				Context:   ctx,
+			GCPTraverser, err := newGCPTraverser(&rawGCPURL, ctx, InitResourceTraverserOptions{
 				Recursive: isRecursiveOn,
 			})
 			a.Nil(err)
@@ -1007,14 +987,12 @@ func TestSerialAndParallelBlobTraverser(t *testing.T) {
 		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 		rawVirDirURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, virDirName).URL()
 		serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawVirDirURLWithSAS)
-		parallelBlobTraverser := newBlobTraverser(rawVirDirURLWithSAS, serviceClientWithSAS, InitResourceTraverserOptions{
-			Context:   ctx,
+		parallelBlobTraverser := newBlobTraverser(rawVirDirURLWithSAS, serviceClientWithSAS, ctx, InitResourceTraverserOptions{
 			Recursive: isRecursiveOn,
 		})
 
 		// construct a serial blob traverser
-		serialBlobTraverser := newBlobTraverser(rawVirDirURLWithSAS, serviceClientWithSAS, InitResourceTraverserOptions{
-			Context:   ctx,
+		serialBlobTraverser := newBlobTraverser(rawVirDirURLWithSAS, serviceClientWithSAS, ctx, InitResourceTraverserOptions{
 			Recursive: isRecursiveOn,
 		})
 		serialBlobTraverser.parallelListing = false

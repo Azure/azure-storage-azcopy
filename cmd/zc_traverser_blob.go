@@ -597,11 +597,11 @@ type BlobTraverserOptions struct {
 	isDFS *bool
 }
 
-func newBlobTraverser(rawURL string, serviceClient *service.Client, opts InitResourceTraverserOptions, blobOpts ...BlobTraverserOptions) (t *blobTraverser) {
+func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.Context, opts InitResourceTraverserOptions, blobOpts ...BlobTraverserOptions) (t *blobTraverser) {
 	t = &blobTraverser{
 		rawURL:                      rawURL,
 		serviceClient:               serviceClient,
-		ctx:                         opts.Context,
+		ctx:                         ctx,
 		recursive:                   opts.Recursive,
 		include:                     common.EBlobTraverserIncludeOption.FromInputs(opts.PermanentDelete, opts.ListVersions, opts.IncludeDirectoryStubs),
 		incrementEnumerationCounter: opts.IncrementEnumeration,

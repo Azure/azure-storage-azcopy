@@ -416,11 +416,11 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	return
 }
 
-func newFileTraverser(rawURL string, serviceClient *service.Client, opts InitResourceTraverserOptions) (t *fileTraverser) {
+func newFileTraverser(rawURL string, serviceClient *service.Client, ctx context.Context, opts InitResourceTraverserOptions) (t *fileTraverser) {
 	t = &fileTraverser{
 		rawURL:                      rawURL,
 		serviceClient:               serviceClient,
-		ctx:                         opts.Context,
+		ctx:                         ctx,
 		recursive:                   opts.Recursive,
 		getProperties:               opts.GetPropertiesInFrontend,
 		incrementEnumerationCounter: opts.IncrementEnumeration,

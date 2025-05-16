@@ -95,7 +95,7 @@ func (t *s3ServiceTraverser) Traverse(preprocessor objectMorpher, processor obje
 
 		opt := t.opts
 		opt.Credential = &credentialInfo
-		bucketTraverser, err := newS3Traverser(&urlResult, opt)
+		bucketTraverser, err := newS3Traverser(&urlResult, t.ctx, opt)
 
 		if err != nil {
 			return err
@@ -125,8 +125,8 @@ func (t *s3ServiceTraverser) Traverse(preprocessor objectMorpher, processor obje
 	return nil
 }
 
-func newS3ServiceTraverser(rawURL *url.URL, opts InitResourceTraverserOptions) (t *s3ServiceTraverser, err error) {
-	t = &s3ServiceTraverser{opts: opts, ctx: opts.Context}
+func newS3ServiceTraverser(rawURL *url.URL, ctx context.Context, opts InitResourceTraverserOptions) (t *s3ServiceTraverser, err error) {
+	t = &s3ServiceTraverser{opts: opts, ctx: ctx}
 
 	var s3URLParts common.S3URLParts
 	s3URLParts, err = common.NewS3URLParts(*rawURL)

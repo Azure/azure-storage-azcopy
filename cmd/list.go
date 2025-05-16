@@ -248,8 +248,7 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 	// check if user wants to get version id
 	getVersionId := containsProperty(cooked.properties, VersionId)
 
-	traverser, err := InitResourceTraverser(source, cooked.location, InitResourceTraverserOptions{
-		Context:    ctx,
+	traverser, err := InitResourceTraverser(source, cooked.location, ctx, InitResourceTraverserOptions{
 		Credential: &credentialInfo,
 
 		TrailingDotOption: cooked.trailingDot,

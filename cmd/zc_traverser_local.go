@@ -811,7 +811,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	return finalizer(err)
 }
 
-func newLocalTraverser(fullPath string, opts InitResourceTraverserOptions) (*localTraverser, error) {
+func newLocalTraverser(fullPath string, ctx context.Context, opts InitResourceTraverserOptions) (*localTraverser, error) {
 	var hashAdapter common.HashDataAdapter
 	if opts.SyncHashType != common.ESyncHashType.None() { // Only initialize the hash adapter should we need it.
 		var err error
@@ -825,7 +825,7 @@ func newLocalTraverser(fullPath string, opts InitResourceTraverserOptions) (*loc
 		fullPath:                    cleanLocalPath(fullPath),
 		recursive:                   opts.Recursive,
 		symlinkHandling:             opts.SymlinkHandling,
-		appCtx:                      opts.Context,
+		appCtx:                      ctx,
 		incrementEnumerationCounter: opts.IncrementEnumeration,
 		errorChannel:                opts.ErrorChannel,
 		targetHashType:              opts.SyncHashType,

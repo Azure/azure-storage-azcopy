@@ -340,7 +340,6 @@ var enumerationCounterFuncNoop enumerationCounterFunc = func(entityType common.E
 type InitResourceTraverserOptions struct {
 	DestResourceType *common.Location // Used by Azure Files
 
-	Context              context.Context        // Required
 	Credential           *common.CredentialInfo // Required for most remote traversers
 	IncrementEnumeration enumerationCounterFunc
 
@@ -367,10 +366,6 @@ type InitResourceTraverserOptions struct {
 }
 
 func (o *InitResourceTraverserOptions) PerformChecks() error {
-	if o.Context == nil {
-		return errors.New("a valid context must be supplied to create a traverser")
-	}
-
 	if o.IncrementEnumeration == nil {
 		o.IncrementEnumeration = enumerationCounterFuncNoop
 	}
@@ -378,7 +373,11 @@ func (o *InitResourceTraverserOptions) PerformChecks() error {
 	return nil
 }
 
-func InitResourceTraverser(resource common.ResourceString, resourceLocation common.Location, opts InitResourceTraverserOptions) (ResourceTraverser, error) {
+func InitResourceTraverser(resource common.ResourceString, resourceLocation common.Location, ctx context.Context, opts InitResourceTraverserOptions) (ResourceTraverser, error) {
+	if ctx == nil {
+		return nil, errors.New("a valid context must be supplied to create a traverser")
+	}
+
 	err := opts.PerformChecks()
 	if err != nil {
 		return nil, err
@@ -405,7 +404,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 			}
 		}
 
-		output = newListTraverser(resource, resourceLocation, opts)
+		output = newListTraverser(resource, resourceLocation, ctx, opts)
 		return output, nil
 	}
 
@@ -444,9 +443,9 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 			opts.ListOfFiles = globChan
 
 			baseResource := resource.CloneWithValue(cleanLocalPath(basePath))
-			output = newListTraverser(baseResource, resourceLocation, opts)
+			output = newListTraverser(baseResource, resourceLocation, ctx, opts)
 		} else {
-			output, _ = newLocalTraverser(resource.ValueLocal(), opts)
+			output, _ = newLocalTraverser(resource.ValueLocal(), ctx, opts)
 		}
 	case common.ELocation.Benchmark():
 		ben, err := newBenchmarkTraverser(resource.Value, opts.IncrementEnumeration)
@@ -464,9 +463,6 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 
 		recommendHttpsIfNecessary(*resourceURL)
 
-		if opts.Context == nil {
-			return nil, errors.New("a valid context must be supplied to create a blob traverser")
-		}
 		r := resourceURL.String()
 
 		blobURLParts, err := blob.ParseURL(r)
@@ -498,11 +494,11 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 			if !opts.Recursive {
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
-			output = newBlobAccountTraverser(bsc, containerName, opts)
+			output = newBlobAccountTraverser(bsc, containerName, ctx, opts)
 		} else if opts.ListOfVersionIDs != nil {
-			output = newBlobVersionsTraverser(r, bsc, opts)
+			output = newBlobVersionsTraverser(r, bsc, ctx, opts)
 		} else {
-			output = newBlobTraverser(r, bsc, opts)
+			output = newBlobTraverser(r, bsc, ctx, opts)
 		}
 	case common.ELocation.File():
 		// TODO (last service migration) : Remove dependency on URLs.
@@ -546,9 +542,9 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 			if !opts.Recursive {
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
-			output = newFileAccountTraverser(fsc, shareName, opts)
+			output = newFileAccountTraverser(fsc, shareName, ctx, opts)
 		} else {
-			output = newFileTraverser(r, fsc, opts)
+			output = newFileTraverser(r, fsc, ctx, opts)
 		}
 	case common.ELocation.BlobFS():
 		resourceURL, err := resource.FullURL()
@@ -590,11 +586,11 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 			if !opts.Recursive {
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
-			output = newBlobAccountTraverser(bsc, containerName, opts, BlobTraverserOptions{isDFS: to.Ptr(true)})
+			output = newBlobAccountTraverser(bsc, containerName, ctx, opts, BlobTraverserOptions{isDFS: to.Ptr(true)})
 		} else if opts.ListOfVersionIDs != nil {
-			output = newBlobVersionsTraverser(r, bsc, opts)
+			output = newBlobVersionsTraverser(r, bsc, ctx, opts)
 		} else {
-			output = newBlobTraverser(r, bsc, opts, BlobTraverserOptions{isDFS: to.Ptr(true)})
+			output = newBlobTraverser(r, bsc, ctx, opts, BlobTraverserOptions{isDFS: to.Ptr(true)})
 		}
 	case common.ELocation.S3():
 		resourceURL, err := resource.FullURL()
@@ -616,13 +612,13 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
 
-			output, err = newS3ServiceTraverser(resourceURL, opts)
+			output, err = newS3ServiceTraverser(resourceURL, ctx, opts)
 
 			if err != nil {
 				return nil, err
 			}
 		} else {
-			output, err = newS3Traverser(resourceURL, opts)
+			output, err = newS3Traverser(resourceURL, ctx, opts)
 
 			if err != nil {
 				return nil, err
@@ -646,12 +642,12 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
 
-			output, err = newGCPServiceTraverser(resourceURL, opts)
+			output, err = newGCPServiceTraverser(resourceURL, ctx, opts)
 			if err != nil {
 				return nil, err
 			}
 		} else {
-			output, err = newGCPTraverser(resourceURL, opts)
+			output, err = newGCPTraverser(resourceURL, ctx, opts)
 			if err != nil {
 				return nil, err
 			}

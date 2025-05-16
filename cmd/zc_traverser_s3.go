@@ -192,8 +192,8 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 	return
 }
 
-func newS3Traverser(rawURL *url.URL, opts InitResourceTraverserOptions) (t *s3Traverser, err error) {
-	t = &s3Traverser{rawURL: rawURL, ctx: opts.Context, recursive: opts.Recursive, getProperties: opts.GetPropertiesInFrontend,
+func newS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTraverserOptions) (t *s3Traverser, err error) {
+	t = &s3Traverser{rawURL: rawURL, ctx: ctx, recursive: opts.Recursive, getProperties: opts.GetPropertiesInFrontend,
 		incrementEnumerationCounter: opts.IncrementEnumeration}
 
 	// initialize S3 client and URL parts

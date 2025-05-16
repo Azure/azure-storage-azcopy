@@ -21,6 +21,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 
@@ -88,7 +89,7 @@ func (l *listTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	return nil
 }
 
-func newListTraverser(resource common.ResourceString, resourceLocation common.Location, options InitResourceTraverserOptions) ResourceTraverser {
+func newListTraverser(resource common.ResourceString, resourceLocation common.Location, ctx context.Context, options InitResourceTraverserOptions) ResourceTraverser {
 	listChan := options.ListOfFiles
 	recursive := options.Recursive
 
@@ -109,10 +110,9 @@ func newListTraverser(resource common.ResourceString, resourceLocation common.Lo
 		}
 
 		// Construct a traverser that goes through the child
-		traverser, err := InitResourceTraverser(source, resourceLocation, InitResourceTraverserOptions{
+		traverser, err := InitResourceTraverser(source, resourceLocation, ctx, InitResourceTraverserOptions{
 			DestResourceType: nil,
 
-			Context:              options.Context,
 			Credential:           options.Credential,
 			IncrementEnumeration: options.IncrementEnumeration,
 

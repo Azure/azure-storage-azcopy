@@ -46,8 +46,7 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 	}
 
 	// Include-path is handled by ListOfFilesChannel.
-	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), InitResourceTraverserOptions{
-		Context:    ctx,
+	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), ctx, InitResourceTraverserOptions{
 		Credential: &cca.credentialInfo,
 
 		ListOfFiles:      cca.ListOfFilesChannel,

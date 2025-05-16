@@ -141,10 +141,10 @@ func (t *gcpTraverser) Traverse(preprocessor objectMorpher, processor objectProc
 	}
 }
 
-func newGCPTraverser(rawURL *url.URL, opts InitResourceTraverserOptions) (*gcpTraverser, error) {
+func newGCPTraverser(rawURL *url.URL, ctx context.Context, opts InitResourceTraverserOptions) (*gcpTraverser, error) {
 	t := &gcpTraverser{
 		rawURL:                      rawURL,
-		ctx:                         opts.Context,
+		ctx:                         ctx,
 		recursive:                   opts.Recursive,
 		getProperties:               opts.GetPropertiesInFrontend,
 		incrementEnumerationCounter: opts.IncrementEnumeration,

@@ -116,11 +116,11 @@ func (t *blobVersionsTraverser) Traverse(preprocessor objectMorpher, processor o
 	return nil
 }
 
-func newBlobVersionsTraverser(rawURL string, serviceClient *service.Client, opts InitResourceTraverserOptions) (t *blobVersionsTraverser) {
+func newBlobVersionsTraverser(rawURL string, serviceClient *service.Client, ctx context.Context, opts InitResourceTraverserOptions) (t *blobVersionsTraverser) {
 	return &blobVersionsTraverser{
 		rawURL:                      rawURL,
 		serviceClient:               serviceClient,
-		ctx:                         opts.Context,
+		ctx:                         ctx,
 		includeDirectoryStubs:       opts.IncludeDirectoryStubs,
 		incrementEnumerationCounter: opts.IncrementEnumeration,
 		listOfVersionIds:            opts.ListOfVersionIDs,

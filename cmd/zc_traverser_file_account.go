@@ -85,7 +85,7 @@ func (t *fileAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 
 	for _, v := range shareList {
 		shareURL := t.serviceClient.NewShareClient(v).URL()
-		shareTraverser := newFileTraverser(shareURL, t.serviceClient, t.opts)
+		shareTraverser := newFileTraverser(shareURL, t.serviceClient, t.ctx, t.opts)
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
@@ -100,11 +100,11 @@ func (t *fileAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 	return nil
 }
 
-func newFileAccountTraverser(serviceClient *service.Client, shareName string, opts InitResourceTraverserOptions) (t *fileAccountTraverser) {
+func newFileAccountTraverser(serviceClient *service.Client, shareName string, ctx context.Context, opts InitResourceTraverserOptions) (t *fileAccountTraverser) {
 	t = &fileAccountTraverser{
 		opts: opts,
 
-		ctx:           opts.Context,
+		ctx:           ctx,
 		serviceClient: serviceClient,
 		sharePattern:  shareName,
 	}

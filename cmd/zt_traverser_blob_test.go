@@ -54,8 +54,7 @@ func TestIsSourceDirWithStub(t *testing.T) {
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, dirName).URL()
 	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
-	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, InitResourceTraverserOptions{
-		Context:               ctx,
+	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, InitResourceTraverserOptions{
 		Recursive:             true,
 		IncludeDirectoryStubs: true,
 	})
@@ -80,8 +79,7 @@ func TestIsSourceDirWithNoStub(t *testing.T) {
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, dirName).URL()
 	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
-	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, InitResourceTraverserOptions{
-		Context:               ctx,
+	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, InitResourceTraverserOptions{
 		Recursive:             true,
 		IncludeDirectoryStubs: true,
 	})
@@ -106,8 +104,7 @@ func TestIsDestDirWithBlobEP(t *testing.T) {
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, dirName).URL()
 	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
-	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, InitResourceTraverserOptions{
-		Context:               ctx,
+	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, InitResourceTraverserOptions{
 		Recursive:             true,
 		IncludeDirectoryStubs: true,
 	})
@@ -120,8 +117,7 @@ func TestIsDestDirWithBlobEP(t *testing.T) {
 	dirName = "dest_file"
 	// List
 	rawBlobURLWithSAS = scenarioHelper{}.getBlobClientWithSAS(a, containerName, dirName).URL()
-	blobTraverser = newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, InitResourceTraverserOptions{
-		Context:               ctx,
+	blobTraverser = newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, InitResourceTraverserOptions{
 		Recursive:             true,
 		IncludeDirectoryStubs: true,
 	})
@@ -150,8 +146,7 @@ func TestIsDestDirWithDFSEP(t *testing.T) {
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, fileSystemName, parentDirName).URL()
 	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
-	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, InitResourceTraverserOptions{
-		Context:               ctx,
+	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, InitResourceTraverserOptions{
 		Recursive:             true,
 		IncludeDirectoryStubs: true,
 	}, BlobTraverserOptions{isDFS: to.Ptr(true)})
@@ -171,8 +166,7 @@ func TestIsDestDirWithDFSEP(t *testing.T) {
 	// With a directory that does not exist, without path separator.
 	parentDirName = "dirDoesNotExist"
 	rawBlobURLWithSAS = scenarioHelper{}.getBlobClientWithSAS(a, fileSystemName, parentDirName).URL()
-	blobTraverser = newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, InitResourceTraverserOptions{
-		Context:               ctx,
+	blobTraverser = newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, InitResourceTraverserOptions{
 		Recursive:             true,
 		IncludeDirectoryStubs: true,
 	}, BlobTraverserOptions{isDFS: to.Ptr(true)})
@@ -192,8 +186,7 @@ func TestIsDestDirWithDFSEP(t *testing.T) {
 	// With a directory that does not exist, with path separator
 	parentDirNameWithSeparator := "dirDoesNotExist" + common.OS_PATH_SEPARATOR
 	rawBlobURLWithSAS = scenarioHelper{}.getBlobClientWithSAS(a, fileSystemName, parentDirNameWithSeparator).URL()
-	blobTraverser = newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, InitResourceTraverserOptions{
-		Context:               ctx,
+	blobTraverser = newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, InitResourceTraverserOptions{
 		Recursive:             true,
 		IncludeDirectoryStubs: true,
 	}, BlobTraverserOptions{isDFS: to.Ptr(true)})
@@ -227,8 +220,7 @@ func TestIsSourceFileExists(t *testing.T) {
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, fileName).URL()
 	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
-	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, InitResourceTraverserOptions{
-		Context:               ctx,
+	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, InitResourceTraverserOptions{
 		Recursive:             true,
 		IncludeDirectoryStubs: true,
 	})
@@ -253,8 +245,7 @@ func TestIsSourceFileDoesNotExist(t *testing.T) {
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, fileName).URL()
 	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
-	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, InitResourceTraverserOptions{
-		Context:               ctx,
+	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, InitResourceTraverserOptions{
 		Recursive:             true,
 		IncludeDirectoryStubs: true,
 	})

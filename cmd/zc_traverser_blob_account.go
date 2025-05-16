@@ -112,7 +112,16 @@ func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 
 	for _, v := range cList {
 		containerURL := t.serviceClient.NewContainerClient(v).URL()
-		containerTraverser := newBlobTraverser(containerURL, t.serviceClient, t.opts, t.blobOpts...)
+		containerTraverser := newBlobTraverser(containerURL, t.serviceClient, t.ctx, InitResourceTraverserOptions{
+			IncrementEnumeration: t.opts.IncrementEnumeration,
+
+			CpkOptions: t.opts.CpkOptions,
+
+			Recursive:             true,
+			IncludeDirectoryStubs: t.opts.IncludeDirectoryStubs,
+			PreserveBlobTags:      t.opts.PreserveBlobTags,
+			PreservePermissions:   t.opts.PreservePermissions,
+		}, t.blobOpts...)
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
@@ -127,11 +136,11 @@ func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 	return nil
 }
 
-func newBlobAccountTraverser(serviceClient *blobservice.Client, container string, opts InitResourceTraverserOptions, blobOpts ...BlobTraverserOptions) (t *blobAccountTraverser) {
+func newBlobAccountTraverser(serviceClient *blobservice.Client, container string, ctx context.Context, opts InitResourceTraverserOptions, blobOpts ...BlobTraverserOptions) (t *blobAccountTraverser) {
 	t = &blobAccountTraverser{
 		opts: opts,
 
-		ctx:                  opts.Context,
+		ctx:                  ctx,
 		serviceClient:        serviceClient,
 		containerPattern:     container,
 		excludeContainerName: buildExcludeContainerFilter(opts.ExcludeContainers),
