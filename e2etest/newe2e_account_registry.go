@@ -87,9 +87,9 @@ func CreateAccount(a Asserter, accountType AccountType, options *CreateAccountOp
 	}
 
 	_, err := accountARMClient.Create(accountARMDefinition)
-	a.NoError("ARM create account call", err)
+	a.NoError("ARM create account call", err, true)
 	keys, err := accountARMClient.GetKeys()
-	a.NoError("ARM get keys call", err)
+	a.NoError("ARM get keys call", err, true)
 
 	acct := &AzureAccountResourceManager{
 		InternalAccountName: accountARMClient.AccountName,

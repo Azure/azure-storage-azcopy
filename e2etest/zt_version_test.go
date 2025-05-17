@@ -21,16 +21,16 @@ package e2etest
 
 import (
 	"os/exec"
+	"regexp"
 	"strings"
 	"testing"
-	"regexp"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func TestVersionCommand(t *testing.T) {
 	azcopyVersionString := "azcopy version " + common.AzcopyVersion
-	newVersionInfo := regexp.MustCompile("INFO: azcopy* *: A newer version * is available to download")
+	newVersionInfo := regexp.MustCompile("INFO: azcopy.* .*: A newer version .* is available to download")
 	cmd := exec.Command(GlobalInputManager{}.GetExecutablePath(), "--version")
 	o, err := cmd.Output()
 	if err != nil {
@@ -39,7 +39,7 @@ func TestVersionCommand(t *testing.T) {
 	}
 
 	output := string(o)
-	
+
 	//fail if no output
 	if output == "" {
 		t.Log("Version command returned empty string.")
@@ -47,24 +47,24 @@ func TestVersionCommand(t *testing.T) {
 	}
 
 	output = strings.TrimSpace(output)
-	
+
 	lines := strings.Split(string(output), "\n")
 
 	//there should be max of 2 lines, with first describing version
 	// and second stating if a newer version is available.
-	if (len(lines) > 2) {
+	if len(lines) > 2 {
 		t.Log("Invalid output " + string(output))
 		t.FailNow()
 	}
 
 	//first line should contain the version similar to "azcopy version 10.22.0"
-	if (lines[0] != azcopyVersionString) {
+	if lines[0] != azcopyVersionString {
 		t.Log("Invalid version string: " + lines[0])
 		t.FailNow()
 	}
 
 	//second line, if present, should be a "new version available" message
-	if (len(lines) == 2 && !newVersionInfo.Match([]byte(lines[1])) ) {
+	if len(lines) == 2 && !newVersionInfo.Match([]byte(lines[1])) {
 		t.Log("Second Line does not contain new version info " + lines[1])
 		t.FailNow()
 	}

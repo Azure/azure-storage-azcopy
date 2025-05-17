@@ -41,6 +41,15 @@ func (t *gcpTraverser) IsDirectory(isSource bool) (bool, error) {
 }
 
 func (t *gcpTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
+	p := processor
+	processor = func(storedObject StoredObject) error {
+		if t.incrementEnumerationCounter != nil {
+			t.incrementEnumerationCounter(storedObject.entityType)
+		}
+
+		return p(storedObject)
+	}
+
 	//Syntactically ensure whether single object or not
 	if t.gcpURLParts.IsObjectSyntactically() && !t.gcpURLParts.IsDirectorySyntactically() && !t.gcpURLParts.IsBucketSyntactically() {
 		objectPath := strings.Split(t.gcpURLParts.ObjectKey, "/")
@@ -132,13 +141,13 @@ func (t *gcpTraverser) Traverse(preprocessor objectMorpher, processor objectProc
 	}
 }
 
-func newGCPTraverser(rawURL *url.URL, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc) (*gcpTraverser, error) {
+func newGCPTraverser(rawURL *url.URL, ctx context.Context, opts InitResourceTraverserOptions) (*gcpTraverser, error) {
 	t := &gcpTraverser{
 		rawURL:                      rawURL,
 		ctx:                         ctx,
-		recursive:                   recursive,
-		getProperties:               getProperties,
-		incrementEnumerationCounter: incrementEnumerationCounter,
+		recursive:                   opts.Recursive,
+		getProperties:               opts.GetPropertiesInFrontend,
+		incrementEnumerationCounter: opts.IncrementEnumeration,
 	}
 	gcpURLParts, err := common.NewGCPURLParts(*rawURL)
 	if err != nil {

@@ -50,9 +50,6 @@ type blobTraverser struct {
 	// cx should have the option to disable this optimization in the name of saving costs
 	parallelListing bool
 
-	// whether to include blobs that have metadata 'hdi_isfolder = true'
-	includeDirectoryStubs bool
-
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
 
@@ -62,11 +59,7 @@ type blobTraverser struct {
 
 	preservePermissions common.PreservePermissionsOption
 
-	includeDeleted bool
-
-	includeSnapshot bool
-
-	includeVersion bool
+	include common.BlobTraverserIncludeOption
 
 	isDFS bool
 }
@@ -233,7 +226,7 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	//	2. either we are scanning recursively with includeDirectoryStubs set to true,
 	//	   then we add the stub blob that represents the directory
 	if (isBlob && !strings.HasSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)) ||
-		(t.includeDirectoryStubs && isDirStub && t.recursive) {
+		(t.include.DirStubs() && isDirStub && t.recursive) {
 		// sanity checking so highlighting doesn't highlight things we're not worried about.
 		if blobProperties == nil {
 			panic("isBlob should never be set if getting properties is an error")
@@ -280,7 +273,7 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		_, err = getProcessingError(err)
 
 		// short-circuit if we don't have anything else to scan and permanent delete is not on
-		if !t.includeDeleted && (isBlob || err != nil) {
+		if !t.include.Deleted() && (isBlob || err != nil) {
 			return err
 		}
 	} else if blobURLParts.BlobName == "" && (t.preservePermissions.IsTruthy() || t.isDFS) {
@@ -324,7 +317,7 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 	// append a slash if it is not already present
 	// example: foo/bar/bla becomes foo/bar/bla/ so that we only list children of the virtual directory
-	if searchPrefix != "" && !strings.HasSuffix(searchPrefix, common.AZCOPY_PATH_SEPARATOR_STRING) && !t.includeSnapshot && !t.includeDeleted {
+	if searchPrefix != "" && !strings.HasSuffix(searchPrefix, common.AZCOPY_PATH_SEPARATOR_STRING) && !t.include.Snapshots() && !t.include.Deleted() {
 		searchPrefix += common.AZCOPY_PATH_SEPARATOR_STRING
 	}
 
@@ -347,7 +340,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 
 		pager := containerClient.NewListBlobsHierarchyPager("/", &container.ListBlobsHierarchyOptions{
 			Prefix:  &currentDirPath,
-			Include: container.ListBlobsInclude{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.includeDeleted, Snapshots: t.includeSnapshot, Versions: t.includeVersion},
+			Include: container.ListBlobsInclude{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.include.Deleted(), Snapshots: t.include.Snapshots(), Versions: t.include.Versions()},
 		})
 		var marker *string
 		for pager.More() {
@@ -363,7 +356,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 						azcopyScanningLogger.Log(common.LogDebug, fmt.Sprintf("Enqueuing sub-directory %s for enumeration.", *virtualDir.Name))
 					}
 
-					if t.includeDirectoryStubs {
+					if t.include.DirStubs() {
 						// try to get properties on the directory itself, since it's not listed in BlobItems
 						dName := strings.TrimSuffix(*virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)
 						blobClient := containerClient.NewBlobClient(dName)
@@ -528,9 +521,9 @@ func (t *blobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, bl
 	)
 
 	object.blobDeleted = common.IffNotNil(blobInfo.Deleted, false)
-	if t.includeDeleted && t.includeSnapshot {
+	if t.include.Deleted() && t.include.Snapshots() {
 		object.blobSnapshotID = common.IffNotNil(blobInfo.Snapshot, "")
-	} else if t.includeVersion && blobInfo.VersionID != nil {
+	} else if t.include.Versions() && blobInfo.VersionID != nil {
 		object.blobVersionID = common.IffNotNil(blobInfo.VersionID, "")
 	}
 	return object
@@ -549,7 +542,7 @@ func (t *blobTraverser) serialList(containerClient *container.Client, containerN
 	prefix := searchPrefix + extraSearchPrefix
 	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
 		Prefix:  &prefix,
-		Include: container.ListBlobsInclude{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.includeDeleted, Snapshots: t.includeSnapshot, Versions: t.includeVersion},
+		Include: container.ListBlobsInclude{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.include.Deleted(), Snapshots: t.include.Snapshots(), Versions: t.include.Versions()},
 	})
 	for pager.More() {
 		resp, err := pager.NextPage(t.ctx)
@@ -600,28 +593,29 @@ func (t *blobTraverser) serialList(containerClient *container.Client, containerN
 	return nil
 }
 
-func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, includeDeleted, includeSnapshot, includeVersion bool, preservePermissions common.PreservePermissionsOption, isDFS bool) (t *blobTraverser) {
+type BlobTraverserOptions struct {
+	isDFS *bool
+}
+
+func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.Context, opts InitResourceTraverserOptions, blobOpts ...BlobTraverserOptions) (t *blobTraverser) {
 	t = &blobTraverser{
 		rawURL:                      rawURL,
 		serviceClient:               serviceClient,
 		ctx:                         ctx,
-		recursive:                   recursive,
-		includeDirectoryStubs:       includeDirectoryStubs,
-		incrementEnumerationCounter: incrementEnumerationCounter,
+		recursive:                   opts.Recursive,
+		include:                     common.EBlobTraverserIncludeOption.FromInputs(opts.PermanentDelete, opts.ListVersions, opts.IncludeDirectoryStubs),
+		incrementEnumerationCounter: opts.IncrementEnumeration,
 		parallelListing:             true,
-		s2sPreserveSourceTags:       s2sPreserveSourceTags,
-		cpkOptions:                  cpkOptions,
-		includeDeleted:              includeDeleted,
-		includeSnapshot:             includeSnapshot,
-		includeVersion:              includeVersion,
-		preservePermissions:         preservePermissions,
-		isDFS:                       isDFS,
+		s2sPreserveSourceTags:       opts.PreserveBlobTags,
+		cpkOptions:                  opts.CpkOptions,
+		preservePermissions:         opts.PreservePermissions,
+		isDFS:                       common.DerefOrZero(common.FirstOrZero(blobOpts).isDFS),
 	}
 
 	disableHierarchicalScanning := strings.ToLower(common.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning()))
 
 	// disableHierarchicalScanning should be true for permanent delete
-	if (disableHierarchicalScanning == "false" || disableHierarchicalScanning == "") && includeDeleted && (includeSnapshot || includeVersion) {
+	if (disableHierarchicalScanning == "false" || disableHierarchicalScanning == "") && t.include.Deleted() && (t.include.Snapshots() || t.include.Versions()) {
 		t.parallelListing = false
 		fmt.Println("AZCOPY_DISABLE_HIERARCHICAL_SCAN has been set to true to permanently delete soft-deleted snapshots/versions.")
 	}

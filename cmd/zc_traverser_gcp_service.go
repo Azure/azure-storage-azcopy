@@ -11,15 +11,14 @@ import (
 )
 
 type gcpServiceTraverser struct {
+	opts InitResourceTraverserOptions
+
 	ctx           context.Context
 	bucketPattern string
 	cachedBuckets []string
-	getProperties bool
 
 	gcpURL    common.GCPURLParts
 	gcpClient *gcpUtils.Client
-
-	incrementEnumerationCounter enumerationCounterFunc
 }
 
 var projectID = ""
@@ -71,7 +70,12 @@ func (t *gcpServiceTraverser) Traverse(preprocessor objectMorpher, processor obj
 		tmpGCPURL := t.gcpURL
 		tmpGCPURL.BucketName = v
 		urlResult := tmpGCPURL.URL()
-		bucketTraverser, err := newGCPTraverser(&urlResult, t.ctx, true, t.getProperties, t.incrementEnumerationCounter)
+		bucketTraverser, err := newGCPTraverser(&urlResult, t.ctx, InitResourceTraverserOptions{
+			Recursive:               true,
+			Credential:              t.opts.Credential,
+			GetPropertiesInFrontend: t.opts.GetPropertiesInFrontend,
+			IncrementEnumeration:    t.opts.IncrementEnumeration,
+		})
 
 		if err != nil {
 			return err
@@ -92,12 +96,11 @@ func (t *gcpServiceTraverser) Traverse(preprocessor objectMorpher, processor obj
 	return nil
 }
 
-func newGCPServiceTraverser(rawURL *url.URL, ctx context.Context, getProperties bool, incrementEnumerationCounter enumerationCounterFunc) (*gcpServiceTraverser, error) {
+func newGCPServiceTraverser(rawURL *url.URL, ctx context.Context, opts InitResourceTraverserOptions) (*gcpServiceTraverser, error) {
 	projectID = common.GetEnvironmentVariable(common.EEnvironmentVariable.GoogleCloudProject())
 	t := &gcpServiceTraverser{
-		ctx:                         ctx,
-		incrementEnumerationCounter: incrementEnumerationCounter,
-		getProperties:               getProperties,
+		opts: opts,
+		ctx:  ctx,
 	}
 	gcpURLParts, err := common.NewGCPURLParts(*rawURL)
 
