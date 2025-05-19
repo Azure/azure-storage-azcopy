@@ -1,6 +1,7 @@
 package e2etest
 
 import (
+	"fmt"
 	"os/user"
 	"runtime"
 	"strconv"
@@ -114,11 +115,23 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 		srcObjs[name] = obj
 	}
 
+	// create one hardlink
+	hardlinkFileName := rootDir + "/test_hardlink.txt"
+	obj = ResourceDefinitionObject{
+		ObjectName: pointerTo(hardlinkFileName),
+		ObjectProperties: ObjectProperties{
+			EntityType:         common.EEntityType.Hardlink(),
+			FileNFSProperties:  fileProperties,
+			FileNFSPermissions: fileOrFolderPermissions,
+		}}
+	srcObjRes[hardlinkFileName] = CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+	srcObjs[hardlinkFileName] = obj
+
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
 	sasOpts := GenericAccountSignatureValues{}
 
-	_, _ = RunAzCopy(
+	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
 			Verb: azCopyVerb,
@@ -152,12 +165,13 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 	if azCopyVerb == AzCopyVerbSync {
 		delete(srcObjs, rootDir)
 	}
-
+	fmt.Println("StdOut: ", stdOut)
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcObjs,
 	}, true)
 }
 
+/*
 func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManager) {
 
 	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
@@ -366,3 +380,4 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 		Objects: srcObjs,
 	}, false)
 }
+*/

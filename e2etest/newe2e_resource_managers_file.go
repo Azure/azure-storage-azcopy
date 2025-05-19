@@ -3,6 +3,11 @@ package e2etest
 import (
 	"bytes"
 	"fmt"
+	"io"
+	"path"
+	"runtime"
+	"strings"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
@@ -13,10 +18,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"io"
-	"path"
-	"runtime"
-	"strings"
 )
 
 // check that everything complies with interfaces
@@ -373,8 +374,9 @@ type FileObjectResourceManager struct {
 	Service         *FileServiceResourceManager
 	Share           *FileShareResourceManager
 
-	path       string
-	entityType common.EntityType
+	path                     string
+	entityType               common.EntityType
+	hardlinkOriginalFilePath string
 }
 
 func (f *FileObjectResourceManager) DefaultAuthType() ExplicitCredentialTypes {
@@ -436,6 +438,10 @@ func (f *FileObjectResourceManager) ContainerName() string {
 
 func (f *FileObjectResourceManager) ObjectName() string {
 	return f.path
+}
+
+func (f *FileObjectResourceManager) HardlinkedFileName() string {
+	return f.hardlinkOriginalFilePath
 }
 
 func (f *FileObjectResourceManager) PreparePermissions(a Asserter, p *string) *file.Permissions {

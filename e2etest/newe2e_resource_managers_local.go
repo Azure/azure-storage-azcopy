@@ -147,8 +147,9 @@ type LocalObjectResourceManager struct {
 	entityType common.EntityType
 
 	// objectPath and rawPath are mutually exclusive fields.
-	objectPath string
-	rawPath    string
+	objectPath               string
+	rawPath                  string
+	hardlinkOriginalFilePath string
 }
 
 func (l *LocalObjectResourceManager) ContainerName() string {
@@ -165,6 +166,10 @@ func (l *LocalObjectResourceManager) ObjectName() string {
 	} else {
 		return filepath.Base(l.rawPath)
 	}
+}
+
+func (l *LocalObjectResourceManager) HardlinkedFileName() string {
+	return l.hardlinkOriginalFilePath
 }
 
 type localPropertiesManager interface {
@@ -212,6 +217,14 @@ func (l *LocalObjectResourceManager) getWorkingPath() string {
 
 	// l.objectPath can be "", indicating it is the folder at the root of the container.
 	return filepath.Join(l.container.RootPath, l.objectPath)
+}
+
+func (l *LocalObjectResourceManager) getHardlinkedFilePath() string {
+
+	if l.container == nil {
+		panic("objectPath (relative) must have a container as a parent.")
+	}
+	return filepath.Join(l.container.RootPath, l.hardlinkOriginalFilePath)
 }
 
 func (l *LocalObjectResourceManager) getRelPath(fullPath string) (string, error) {
@@ -293,6 +306,9 @@ func (l *LocalObjectResourceManager) Create(a Asserter, body ObjectContentContai
 	} else if l.entityType == common.EEntityType.Folder() {
 		err := os.Mkdir(l.getWorkingPath(), 0775)
 		a.NoError("Mkdir", err)
+	} else if l.entityType == common.EEntityType.Hardlink() {
+		err := os.Link(l.getHardlinkedFilePath(), l.getWorkingPath())
+		a.NoError("Create hardlink", err)
 	}
 
 	l.SetObjectProperties(a, properties)
