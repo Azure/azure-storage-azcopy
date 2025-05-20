@@ -291,11 +291,11 @@ func (s *blockBlobSenderBase) Epilogue() {
 				} else {
 					blockSet := map[string]bool{}
 					extraBlocks := map[string]bool{} // any blocks the service has but we don't
-					for _, v := range s.blockIDs {
+					for _, v := range blockIDs {
 						blockSet[v] = true
 					}
 
-					recordBlock := func(blockId string) {
+					recordBlock := func(blockId string) { // Subtract blocks we know of, but keep track of the ones we don't
 						if blockSet[blockId] {
 							delete(blockSet, blockId)
 						} else {
@@ -303,14 +303,14 @@ func (s *blockBlobSenderBase) Epilogue() {
 						}
 					}
 
-					for _, v := range blockList.UncommittedBlocks {
+					for _, v := range blockList.UncommittedBlocks { // Uncommitted is primarily what we're looking for, BUT:
 						recordBlock(*v.Name)
 					}
 					for _, v := range blockList.CommittedBlocks { // For the sake of thoroughness, we'll include blocks that already were present.
 						recordBlock(*v.Name)
 					}
 
-					formatBlocklist := func(dict map[string]bool) string {
+					formatBlocklist := func(dict map[string]bool) string { // Format things pretty
 						out := ""
 
 						out += fmt.Sprintf("%d blocks: ", len(dict))
@@ -323,6 +323,8 @@ func (s *blockBlobSenderBase) Epilogue() {
 						return out
 					}
 
+					// And do our due diligence in the logs.
+					jptm.Log(common.LogError, fmt.Sprintf("Total blocks: %d blocks: %v", len(blockIDs), blockIDs))
 					jptm.Log(common.LogError, fmt.Sprintf("Missing blocks: %s", formatBlocklist(blockSet)))
 					jptm.Log(common.LogError, fmt.Sprintf("Unrecognized blocks: %s", formatBlocklist(extraBlocks)))
 				}
