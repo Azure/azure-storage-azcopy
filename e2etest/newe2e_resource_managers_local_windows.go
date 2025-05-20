@@ -4,15 +4,16 @@ package e2etest
 
 import (
 	"fmt"
+	"strings"
+	"sync"
+	"syscall"
+	"unsafe"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/hillu/go-ntdll"
 	"golang.org/x/sys/windows"
-	"strings"
-	"sync"
-	"syscall"
-	"unsafe"
 )
 
 // getHandle obtains a windows file handle with generic read permissions & backup semantics
@@ -29,9 +30,15 @@ func (l LocalObjectResourceManager) getHandle(path string, a Asserter) ntdll.Han
 	return ntdll.Handle(fd)
 }
 
+func (l LocalObjectResourceManager) closeHandle(handle ntdll.Handle, a Asserter) {
+	err := windows.CloseHandle(windows.Handle(handle))
+	a.NoError("Close handle", err)
+}
+
 func (l LocalObjectResourceManager) GetSDDL(a Asserter) string {
 	filePath := l.getWorkingPath()
 	fd := l.getHandle(filePath, a)
+	defer l.closeHandle(fd, a)
 
 	buf := make([]byte, 512)
 	bufLen := uint32(len(buf))
@@ -69,7 +76,6 @@ func (l LocalObjectResourceManager) GetSDDL(a Asserter) string {
 	}
 
 	a.AssertNow("SDDL sanity check", Equal{}, fSDDL.String(), sd.String())
-
 	return fSDDL.PortableString()
 }
 
@@ -196,4 +202,24 @@ func (l LocalObjectResourceManager) PutSDDL(sddlstr string, a Asserter) {
 		(*ntdll.SecurityDescriptor)(unsafe.Pointer(sd)),
 	)
 	a.Assert("Set ACLs status must be successful", Equal{}, status, ntdll.STATUS_SUCCESS)
+}
+
+// TODO: Add NFS handling for windows later
+func (l LocalObjectResourceManager) GetNFSProperties(a Asserter) ste.TypedNFSPropertyHolder {
+	return nil
+}
+
+// TODO: Add NFS handling for windows later
+func (l LocalObjectResourceManager) GetNFSPermissions(a Asserter) ste.TypedNFSPermissionsHolder {
+	return nil
+}
+
+// TODO: Add NFS handling for windows later
+func (l LocalObjectResourceManager) PutNFSProperties(a Asserter, properties FileNFSProperties) {
+	return
+}
+
+// TODO: Add NFS handling for windows later
+func (l LocalObjectResourceManager) PutNFSPermissions(a Asserter, permissions FileNFSPermissions) {
+	return
 }

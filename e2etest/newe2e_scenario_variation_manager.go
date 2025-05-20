@@ -4,10 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/google/uuid"
+
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"testing"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/google/uuid"
 )
 
 // ScenarioVariationManager manages one specific variation of a scenario.
@@ -103,6 +107,7 @@ func (svm *ScenarioVariationManager) DeleteCreatedResources() {
 
 	type deletable interface {
 		Delete(a Asserter)
+		EntityType() common.EntityType
 	}
 
 	svm.CreatedResources.Traverse(func(data *createdResource) TraversalOperation {
@@ -111,10 +116,9 @@ func (svm *ScenarioVariationManager) DeleteCreatedResources() {
 		} else if data.res != nil {
 			del, isDeletable := data.res.(deletable)
 
-			if !isDeletable {
+			if !isDeletable || del.EntityType() == common.EEntityType.Folder() {
 				return TraversalOperationContinue
 			}
-
 			del.Delete(svm)
 		}
 
@@ -402,7 +406,9 @@ func (s *ScenarioVariationManagerCleanupAsserter) WrapCleanup(cf CleanupFunc) {
 				return
 			}
 
-			s.Log("Cleanup step panicked: %v", err)
+			stackTrace := debug.Stack()
+
+			s.Log("Cleanup step panicked: %v\n%s", err, string(stackTrace))
 		}
 	}()
 
