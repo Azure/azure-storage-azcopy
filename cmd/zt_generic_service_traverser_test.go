@@ -1,12 +1,10 @@
 package cmd
 
 import (
-	"context"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestServiceTraverserWithManyObjects(t *testing.T) {
@@ -97,7 +95,10 @@ func TestServiceTraverserWithManyObjects(t *testing.T) {
 	scenarioHelper{}.generateLocalFilesFromList(a, dstDirName, objectList)
 
 	// Create a local traversal
-	localTraverser, _ := newLocalTraverser(context.TODO(), dstDirName, true, false, common.ESymlinkHandlingType.Follow(), common.ESyncHashType.None(), func(common.EntityType) {}, nil, common.EPreserveHardlinksOption.Follow())
+	localTraverser, _ := newLocalTraverser(dstDirName, ctx, InitResourceTraverserOptions{
+		Recursive:       true,
+		SymlinkHandling: common.ESymlinkHandlingType.Follow(),
+	})
 
 	// Invoke the traversal with an indexer so the results are indexed for easy validation
 	localIndexer := newObjectIndexer()
@@ -106,7 +107,7 @@ func TestServiceTraverserWithManyObjects(t *testing.T) {
 
 	// construct a blob account traverser
 	rawBSU := scenarioHelper{}.getBlobServiceClientWithSAS(a)
-	blobAccountTraverser := newBlobAccountTraverser(rawBSU, "", ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None(), false, nil)
+	blobAccountTraverser := newBlobAccountTraverser(rawBSU, "", ctx, InitResourceTraverserOptions{})
 
 	// invoke the blob account traversal with a dummy processor
 	blobDummyProcessor := dummyProcessor{}
@@ -115,7 +116,9 @@ func TestServiceTraverserWithManyObjects(t *testing.T) {
 
 	// construct a file account traverser
 	rawFSU := scenarioHelper{}.getFileServiceClientWithSAS(a)
-	fileAccountTraverser := newFileAccountTraverser(rawFSU, "", ctx, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil, common.EPreserveHardlinksOption.Follow())
+	fileAccountTraverser := newFileAccountTraverser(rawFSU, "", ctx, InitResourceTraverserOptions{
+		TrailingDotOption: common.ETrailingDotOption.Enable(),
+	})
 
 	// invoke the file account traversal with a dummy processor
 	fileDummyProcessor := dummyProcessor{}
@@ -127,7 +130,7 @@ func TestServiceTraverserWithManyObjects(t *testing.T) {
 	if testS3 {
 		// construct a s3 service traverser
 		accountURL := scenarioHelper{}.getRawS3AccountURL(a, "")
-		s3ServiceTraverser, err := newS3ServiceTraverser(&accountURL, ctx, false, func(common.EntityType) {})
+		s3ServiceTraverser, err := newS3ServiceTraverser(&accountURL, ctx, InitResourceTraverserOptions{})
 		a.Nil(err)
 
 		// invoke the s3 service traversal with a dummy processor
@@ -137,9 +140,8 @@ func TestServiceTraverserWithManyObjects(t *testing.T) {
 	}
 
 	if testGCP {
-
 		gcpAccountURL := scenarioHelper{}.getRawGCPAccountURL(a)
-		gcpServiceTraverser, err := newGCPServiceTraverser(&gcpAccountURL, ctx, false, func(entityType common.EntityType) {})
+		gcpServiceTraverser, err := newS3ServiceTraverser(&gcpAccountURL, ctx, InitResourceTraverserOptions{})
 		a.Nil(err)
 
 		gcpDummyProcessor = dummyProcessor{}
@@ -264,7 +266,10 @@ func TestServiceTraverserWithWildcards(t *testing.T) {
 	scenarioHelper{}.generateLocalFilesFromList(a, dstDirName, objectList)
 
 	// Create a local traversal
-	localTraverser, _ := newLocalTraverser(context.TODO(), dstDirName, true, false, common.ESymlinkHandlingType.Follow(), common.ESyncHashType.None(), func(common.EntityType) {}, nil, common.EPreserveHardlinksOption.Follow())
+	localTraverser, _ := newLocalTraverser(dstDirName, ctx, InitResourceTraverserOptions{
+		Recursive:       true,
+		SymlinkHandling: common.ESymlinkHandlingType.Follow(),
+	})
 
 	// Invoke the traversal with an indexer so the results are indexed for easy validation
 	localIndexer := newObjectIndexer()
@@ -274,7 +279,7 @@ func TestServiceTraverserWithWildcards(t *testing.T) {
 	// construct a blob account traverser
 	rawBSU := scenarioHelper{}.getBlobServiceClientWithSAS(a)
 	container := "objectmatch*" // set the container name to contain a wildcard
-	blobAccountTraverser := newBlobAccountTraverser(rawBSU, container, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None(), false, nil)
+	blobAccountTraverser := newBlobAccountTraverser(rawBSU, container, ctx, InitResourceTraverserOptions{})
 
 	// invoke the blob account traversal with a dummy processor
 	blobDummyProcessor := dummyProcessor{}
@@ -284,7 +289,9 @@ func TestServiceTraverserWithWildcards(t *testing.T) {
 	// construct a file account traverser
 	rawFSU := scenarioHelper{}.getFileServiceClientWithSAS(a)
 	share := "objectmatch*" // set the container name to contain a wildcard
-	fileAccountTraverser := newFileAccountTraverser(rawFSU, share, ctx, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil, common.EPreserveHardlinksOption.Follow())
+	fileAccountTraverser := newFileAccountTraverser(rawFSU, share, ctx, InitResourceTraverserOptions{
+		TrailingDotOption: common.ETrailingDotOption.Enable(),
+	})
 
 	// invoke the file account traversal with a dummy processor
 	fileDummyProcessor := dummyProcessor{}
@@ -300,8 +307,7 @@ func TestServiceTraverserWithWildcards(t *testing.T) {
 		accountURL.BucketName = "objectmatch*" // set the container name to contain a wildcard
 
 		urlOut := accountURL.URL()
-		s3ServiceTraverser, err := newS3ServiceTraverser(&urlOut, ctx, false, func(common.EntityType) {})
-		a.Nil(err)
+		s3ServiceTraverser, err := newS3ServiceTraverser(&urlOut, ctx, InitResourceTraverserOptions{})
 
 		// invoke the s3 service traversal with a dummy processor
 		s3DummyProcessor = dummyProcessor{}
@@ -313,7 +319,8 @@ func TestServiceTraverserWithWildcards(t *testing.T) {
 		a.Nil(err)
 		gcpAccountURL.BucketName = "objectmatch*"
 		urlStr := gcpAccountURL.URL()
-		gcpServiceTraverser, err := newGCPServiceTraverser(&urlStr, ctx, false, func(entityType common.EntityType) {})
+
+		gcpServiceTraverser, err := newGCPServiceTraverser(&urlStr, ctx, InitResourceTraverserOptions{})
 		a.Nil(err)
 
 		gcpDummyProcessor = dummyProcessor{}

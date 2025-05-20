@@ -249,7 +249,17 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 	// check if user wants to get version id
 	getVersionId := containsProperty(cooked.properties, VersionId)
 
-	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, common.ESymlinkHandlingType.Skip(), nil, true, true, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, nil, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), common.LogNone, common.CpkOptions{}, nil, false, cooked.trailingDot, nil, nil, getVersionId, common.EPreserveHardlinksOption.Follow())
+	traverser, err := InitResourceTraverser(source, cooked.location, ctx, InitResourceTraverserOptions{
+		Credential: &credentialInfo,
+
+		TrailingDotOption: cooked.trailingDot,
+
+		Recursive:               true,
+		GetPropertiesInFrontend: true,
+
+		ListVersions:     getVersionId,
+		HardlinkHandling: common.EPreserveHardlinksOption.Follow(),
+	})
 	if err != nil {
 		return fmt.Errorf("failed to initialize traverser: %s", err.Error())
 	}

@@ -25,22 +25,16 @@ import (
 	"fmt"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // Enumerates an entire files account, looking into each matching share as it goes
 type fileAccountTraverser struct {
+	opts InitResourceTraverserOptions
+
 	serviceClient *service.Client
 	ctx           context.Context
 	sharePattern  string
 	cachedShares  []string
-	getProperties bool
-
-	// a generic function to notify that a new stored object has been enumerated
-	incrementEnumerationCounter enumerationCounterFunc
-	trailingDot                 common.TrailingDotOption
-	destination                 *common.Location
-	hardlinkHandling            common.PreserveHardlinksOption
 }
 
 func (t *fileAccountTraverser) IsDirectory(isSource bool) (bool, error) {
@@ -92,7 +86,14 @@ func (t *fileAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 
 	for _, v := range shareList {
 		shareURL := t.serviceClient.NewShareClient(v).URL()
-		shareTraverser := newFileTraverser(shareURL, t.serviceClient, t.ctx, true, t.getProperties, t.incrementEnumerationCounter, t.trailingDot, t.destination, t.hardlinkHandling)
+		shareTraverser := newFileTraverser(shareURL, t.serviceClient, t.ctx, InitResourceTraverserOptions{
+			DestResourceType:        t.opts.DestResourceType,
+			Recursive:               true,
+			GetPropertiesInFrontend: t.opts.GetPropertiesInFrontend,
+			IncrementEnumeration:    t.opts.IncrementEnumeration,
+			TrailingDotOption:       t.opts.TrailingDotOption,
+			HardlinkHandling:        t.opts.HardlinkHandling,
+		})
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
@@ -107,16 +108,13 @@ func (t *fileAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 	return nil
 }
 
-func newFileAccountTraverser(serviceClient *service.Client, shareName string, ctx context.Context, getProperties bool, incrementEnumerationCounter enumerationCounterFunc, trailingDot common.TrailingDotOption, destination *common.Location, hardlinkHandling common.PreserveHardlinksOption) (t *fileAccountTraverser) {
+func newFileAccountTraverser(serviceClient *service.Client, shareName string, ctx context.Context, opts InitResourceTraverserOptions) (t *fileAccountTraverser) {
 	t = &fileAccountTraverser{
-		ctx:                         ctx,
-		incrementEnumerationCounter: incrementEnumerationCounter,
-		serviceClient:               serviceClient,
-		sharePattern:                shareName,
-		getProperties:               getProperties,
-		trailingDot:                 trailingDot,
-		destination:                 destination,
-		hardlinkHandling:            hardlinkHandling,
+		opts: opts,
+
+		ctx:           ctx,
+		serviceClient: serviceClient,
+		sharePattern:  shareName,
 	}
 	return
 }
