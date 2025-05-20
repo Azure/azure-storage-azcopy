@@ -107,7 +107,7 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 			oProps := objMan.GetProperties(a)
 			vProps := objDef.ObjectProperties
 
-			if validateObjectContent && objMan.EntityType() == common.EEntityType.File() && objDef.Body != nil {
+			if validateObjectContent && (objMan.EntityType() == common.EEntityType.File() || objMan.EntityType() == common.EEntityType.Hardlink()) && objDef.Body != nil {
 				objBody := objMan.Download(a)
 				validationBody := objDef.Body.Reader()
 
@@ -182,6 +182,19 @@ func ValidateListOutput(a Asserter, stdout AzCopyStdout, expectedObjects map[AzC
 	a.Assert("map of objects must be equivalent in size", Equal{}, len(expectedObjects), len(listStdout.Items))
 	a.Assert("map of objects must match", MapContains[AzCopyOutputKey, cmd.AzCopyListObject]{TargetMap: expectedObjects}, listStdout.Items)
 	a.Assert("summary must match", Equal{}, listStdout.Summary, DerefOrZero(expectedSummary))
+}
+
+func ValidateHardlinkedCount(a Asserter, stdOut AzCopyStdout, expected uint32) {
+	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
+		return
+	}
+
+	parsedStdout := GetTypeOrAssert[*AzCopyParsedCopySyncRemoveStdout](a, stdOut)
+	hardlikedConvertedCount := parsedStdout.FinalStatus.HardlinksConvertedCount
+	if hardlikedConvertedCount != expected {
+		a.Error(fmt.Sprintf("expected hardlink converted count (%d) received count (%d)", expected, hardlikedConvertedCount))
+	}
+	return
 }
 
 func ValidateMessageOutput(a Asserter, stdout AzCopyStdout, message string, shouldContain bool) {

@@ -48,6 +48,7 @@ func getPropertiesAndPermissions(svm *ScenarioVariationManager, preserveProperti
 	}
 	return folderProperties, fileProperties, fileOrFolderPermissions
 }
+
 func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariationManager) {
 
 	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
@@ -116,16 +117,29 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 	}
 
 	// create one hardlink
-	hardlinkFileName := rootDir + "/test_hardlink.txt"
+	normalFileName := rootDir + "/original.txt"
 	obj = ResourceDefinitionObject{
-		ObjectName: pointerTo(hardlinkFileName),
+		ObjectName: pointerTo(normalFileName),
+		ObjectProperties: ObjectProperties{
+			EntityType:         common.EEntityType.File(),
+			FileNFSProperties:  fileProperties,
+			FileNFSPermissions: fileOrFolderPermissions,
+		}}
+	srcObjRes[normalFileName] = CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+	srcObjs[normalFileName] = obj
+
+	// create one hardlink
+	hardLinkedFileName := rootDir + "/hardlinked.txt"
+	obj = ResourceDefinitionObject{
+		ObjectName: pointerTo(hardLinkedFileName),
 		ObjectProperties: ObjectProperties{
 			EntityType:         common.EEntityType.Hardlink(),
 			FileNFSProperties:  fileProperties,
 			FileNFSPermissions: fileOrFolderPermissions,
+			HardLinkedFileName: normalFileName,
 		}}
-	srcObjRes[hardlinkFileName] = CreateResource[ObjectResourceManager](svm, srcContainer, obj)
-	srcObjs[hardlinkFileName] = obj
+	srcObjRes[hardLinkedFileName] = CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+	srcObjs[hardLinkedFileName] = obj
 
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
@@ -169,6 +183,8 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcObjs,
 	}, true)
+
+	ValidateHardlinkedCount(svm, stdOut, 2)
 }
 
 /*
@@ -183,16 +199,17 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 	preservePermissions := ResolveVariation(svm, []bool{true, false})
 
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
+	srcContainer := GetAccount(svm, PremiumFileShareAcct).GetService(svm, common.ELocation.File()).GetContainer("aznfs3")
 
-	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File()}), GetResourceOptions{
-		PreferredAccount: pointerTo(PremiumFileShareAcct),
-	}), ResourceDefinitionContainer{
-		Properties: ContainerProperties{
-			FileContainerProperties: FileContainerProperties{
-				EnabledProtocols: pointerTo("NFS"),
-			},
-		},
-	})
+	// srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File()}), GetResourceOptions{
+	// 	PreferredAccount: pointerTo(PremiumFileShareAcct),
+	// }), ResourceDefinitionContainer{
+	// 	Properties: ContainerProperties{
+	// 		FileContainerProperties: FileContainerProperties{
+	// 			EnabledProtocols: pointerTo("NFS"),
+	// 		},
+	// 	},
+	// })
 
 	folderProperties, fileProperties, fileOrFolderPermissions := getPropertiesAndPermissions(svm, preserveProperties, preservePermissions)
 	rootDir := "dir_file_copy_test_" + uuid.NewString()
@@ -209,8 +226,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 	} else {
 		dst = dstContainer
 	}
-
-	// Create destination directories
+	// Create source dataset
 	srcObjs := make(ObjectResourceMappingFlat)
 
 	obj := ResourceDefinitionObject{
@@ -238,10 +254,35 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 		srcObjs[name] = obj
 	}
 
+	// create one hardlink
+	normalFileName := rootDir + "/original.txt"
+	obj = ResourceDefinitionObject{
+		ObjectName: pointerTo(normalFileName),
+		ObjectProperties: ObjectProperties{
+			EntityType:         common.EEntityType.File(),
+			FileNFSProperties:  fileProperties,
+			FileNFSPermissions: fileOrFolderPermissions,
+		}}
+	CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+	srcObjs[normalFileName] = obj
+
+	// create one hardlink
+	hardLinkedFileName := rootDir + "/hardlinked.txt"
+	obj = ResourceDefinitionObject{
+		ObjectName: pointerTo(hardLinkedFileName),
+		ObjectProperties: ObjectProperties{
+			EntityType:         common.EEntityType.Hardlink(),
+			FileNFSProperties:  fileProperties,
+			FileNFSPermissions: fileOrFolderPermissions,
+			HardLinkedFileName: normalFileName,
+		}}
+	CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+	srcObjs[hardLinkedFileName] = obj
+
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
 	sasOpts := GenericAccountSignatureValues{}
-	_, _ = RunAzCopy(
+	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
 			Verb: azCopyVerb,
@@ -269,8 +310,10 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcObjs,
 	}, true)
+	ValidateHardlinkedCount(svm, stdOut, 2)
 }
 
+/*
 func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationManager) {
 
 	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {

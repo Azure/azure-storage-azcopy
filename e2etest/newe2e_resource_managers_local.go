@@ -131,9 +131,10 @@ func (l *LocalContainerResourceManager) ListObjects(a Asserter, prefixOrDirector
 
 func (l *LocalContainerResourceManager) GetObject(a Asserter, path string, eType common.EntityType) ObjectResourceManager {
 	return &LocalObjectResourceManager{
-		container:  l,
-		entityType: eType,
-		objectPath: path,
+		container:                l,
+		entityType:               eType,
+		objectPath:               path,
+		hardlinkOriginalFilePath: path,
 	}
 }
 
@@ -224,7 +225,8 @@ func (l *LocalObjectResourceManager) getHardlinkedFilePath() string {
 	if l.container == nil {
 		panic("objectPath (relative) must have a container as a parent.")
 	}
-	return filepath.Join(l.container.RootPath, l.hardlinkOriginalFilePath)
+	fmt.Println("RootPath:", l.container.RootPath, "hardlinked.txt")
+	return filepath.Join(l.container.RootPath, "hardlinked.txt")
 }
 
 func (l *LocalObjectResourceManager) getRelPath(fullPath string) (string, error) {
@@ -307,7 +309,7 @@ func (l *LocalObjectResourceManager) Create(a Asserter, body ObjectContentContai
 		err := os.Mkdir(l.getWorkingPath(), 0775)
 		a.NoError("Mkdir", err)
 	} else if l.entityType == common.EEntityType.Hardlink() {
-		err := os.Link(l.getHardlinkedFilePath(), l.getWorkingPath())
+		err := os.Link(filepath.Join(l.container.RootPath, properties.HardLinkedFileName), l.getWorkingPath())
 		a.NoError("Create hardlink", err)
 	}
 
