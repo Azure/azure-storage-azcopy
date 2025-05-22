@@ -23,13 +23,15 @@ package ste
 import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 type urlToAppendBlobCopier struct {
 	appendBlobSenderBase
 
-	srcURL string
+	srcURL               string
+	addFileRequestIntent bool
 }
 
 func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, destination string, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
@@ -43,9 +45,16 @@ func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, destination string, pace
 		return nil, err
 	}
 
+	// Check if source is a File using OAuth (empty SAS)
+	intentBool := false
+	if _, ok := srcInfoProvider.(*fileSourceInfoProvider); ok {
+		sUrl, _ := file.ParseURL(srcURL)
+		intentBool = sUrl.SAS.Signature() == "" //
+	}
 	return &urlToAppendBlobCopier{
 		appendBlobSenderBase: *senderBase,
-		srcURL:               srcURL}, nil
+		srcURL:               srcURL,
+		addFileRequestIntent: intentBool}, nil
 }
 
 // Returns a chunk-func for blob copies
@@ -64,14 +73,21 @@ func (c *urlToAppendBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex i
 		}
 		var timeoutFromCtx bool
 		ctx := withTimeoutNotification(c.jptm.Context(), &timeoutFromCtx)
-		_, err = c.destAppendBlobClient.AppendBlockFromURL(ctx, c.srcURL,
-			&appendblob.AppendBlockFromURLOptions{
-				Range:                          blob.HTTPRange{Offset: offset, Count: adjustedChunkSize},
-				AppendPositionAccessConditions: &appendblob.AppendPositionAccessConditions{AppendPosition: &offset},
-				CPKInfo:                        c.jptm.CpkInfo(),
-				CPKScopeInfo:                   c.jptm.CpkScopeInfo(),
-				CopySourceAuthorization:        token,
-			})
+
+		options := &appendblob.AppendBlockFromURLOptions{
+			Range:                          blob.HTTPRange{Offset: offset, Count: adjustedChunkSize},
+			AppendPositionAccessConditions: &appendblob.AppendPositionAccessConditions{AppendPosition: &offset},
+			CPKInfo:                        c.jptm.CpkInfo(),
+			CPKScopeInfo:                   c.jptm.CpkScopeInfo(),
+			CopySourceAuthorization:        token,
+		}
+
+		// Informs SDK to add xms-file-request-intent header
+		if c.addFileRequestIntent {
+			intentBackup := blob.FileRequestIntentTypeBackup
+			options.FileRequestIntent = &intentBackup
+		}
+		_, err = c.destAppendBlobClient.AppendBlockFromURL(ctx, c.srcURL, options)
 		errString, err := c.transformAppendConditionMismatchError(timeoutFromCtx, offset, adjustedChunkSize, err)
 		if err != nil {
 			errString = "Appending block from URL" + errString
