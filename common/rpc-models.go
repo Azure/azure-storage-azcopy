@@ -326,8 +326,9 @@ type ListJobSummaryResponse struct {
 	PerfConstraint   PerfConstraint
 	PerfStrings      []string `json:"-"`
 
-	PerformanceAdvice []PerformanceAdvice
-	IsCleanupJob      bool
+	PerformanceAdvice   []PerformanceAdvice
+	IsCleanupJob        bool
+	SkippedSymlinkCount uint32 `json:",string"`
 }
 
 // wraps the standard ListJobSummaryResponse with sync-specific stats

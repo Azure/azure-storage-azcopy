@@ -1716,6 +1716,7 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 	glcmSwapOnce.Do(func() {
 		Rpc(common.ERpcCmd.GetJobLCMWrapper(), &cca.jobID, &glcm)
 	})
+	summary.SkippedSymlinkCount = uint32(skippedSymlinkCount)
 	summary.IsCleanupJob = cca.isCleanupJob // only FE knows this, so we can only set it here
 	cleanupStatusString := fmt.Sprintf("Cleanup %v/%v", summary.TransfersCompleted, summary.TotalTransfers)
 
@@ -1818,7 +1819,7 @@ Final Job Status: %v%s%s
 					summary.FoldersFailed,
 					summary.TransfersSkipped-summary.FoldersSkipped,
 					summary.FoldersSkipped,
-					skippedSymlinkCount,
+					summary.SkippedSymlinkCount,
 					summary.TotalBytesTransferred,
 					summary.JobStatus,
 					screenStats,

@@ -592,7 +592,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 	var summary common.ListJobSummaryResponse
 	var throughput float64
 	var jobDone bool
-
+	summary.SkippedSymlinkCount = uint32(skippedSymlinkCount)
 	// fetch a job status and compute throughput if the first part was dispatched
 	if cca.firstPartOrdered() {
 		Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
@@ -672,7 +672,7 @@ Final Job Status: %v%s%s
 				summary.TransfersCompleted,
 				summary.TransfersFailed,
 				cca.atomicDeletionCount,
-				skippedSymlinkCount,
+				summary.SkippedSymlinkCount,
 				summary.TotalBytesTransferred,
 				summary.TotalBytesEnumerated,
 				summary.JobStatus,
