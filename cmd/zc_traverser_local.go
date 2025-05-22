@@ -26,8 +26,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 	"hash"
 	"io"
 	"io/fs"
@@ -38,6 +36,9 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 )
 
 const MAX_SYMLINKS_TO_FOLLOW = 40
@@ -56,6 +57,7 @@ type localTraverser struct {
 	hashAdapter    common.HashDataAdapter
 	// receives fullPath entries and manages hashing of files lacking metadata.
 	hashTargetChannel chan string
+	hardlinkHandling  common.PreserveHardlinksOption
 }
 
 func (t *localTraverser) IsDirectory(bool) (bool, error) {
@@ -201,7 +203,7 @@ func writeToErrorChannel(errorChannel chan<- ErrorFileInfo, err ErrorFileInfo) {
 // Separate this from the traverser for two purposes:
 // 1) Cleaner code
 // 2) Easier to test individually than to test the entire traverser.
-func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath.WalkFunc, symlinkHandling common.SymlinkHandlingType, errorChannel chan<- ErrorFileInfo) (err error) {
+func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath.WalkFunc, symlinkHandling common.SymlinkHandlingType, errorChannel chan<- ErrorFileInfo, hardlinkHandling common.PreserveHardlinksOption) (err error) {
 
 	// We want to re-queue symlinks up in their evaluated form because filepath.Walk doesn't evaluate them for us.
 	// So, what is the plan of attack?
@@ -250,7 +252,6 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				WarnStdoutAndScanningLog(err.Error())
 				return nil
 			}
-
 			if fileInfo.Mode()&os.ModeSymlink != 0 {
 				if symlinkHandling.Preserve() {
 					// Handle it like it's not a symlink
@@ -350,6 +351,8 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				}
 				return nil
 			} else {
+				CheckHardLink(fileInfo, hardlinkHandling)
+
 				// not a symlink
 				result, err := filepath.Abs(filePath)
 
@@ -694,6 +697,8 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 					}
 
 					entityType = common.EEntityType.Folder()
+				} else if IsHardlink(fileInfo) {
+					entityType = common.EEntityType.Hardlink()
 				} else {
 					entityType = common.EEntityType.File()
 				}
@@ -727,7 +732,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 			}
 
 			// note: Walk includes root, so no need here to separately create StoredObject for root (as we do for other folder-aware sources)
-			return finalizer(WalkWithSymlinks(t.appCtx, t.fullPath, processFile, t.symlinkHandling, t.errorChannel))
+			return finalizer(WalkWithSymlinks(t.appCtx, t.fullPath, processFile, t.symlinkHandling, t.errorChannel, t.hardlinkHandling))
 		} else {
 			// if recursive is off, we only need to scan the files immediately under the fullPath
 			// We don't transfer any directory properties here, not even the root. (Because the root's
@@ -774,6 +779,8 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 							return err
 						}
 					}
+				} else if IsHardlink(fileInfo) {
+					entityType = common.EEntityType.Hardlink()
 				}
 
 				if entry.IsDir() {
@@ -831,6 +838,7 @@ func newLocalTraverser(fullPath string, ctx context.Context, opts InitResourceTr
 		targetHashType:              opts.SyncHashType,
 		hashAdapter:                 hashAdapter,
 		stripTopDir:                 opts.StripTopDir,
+		hardlinkHandling:            opts.HardlinkHandling,
 	}
 	return &traverser, nil
 }

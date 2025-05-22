@@ -174,7 +174,8 @@ type rawCopyCmdArgs struct {
 	// Opt-in flag to state if the copy is nfs copy
 	isNFSCopy bool
 	// Opt-in flag to persist additional properties to Azure Files
-	preserveInfo bool
+	preserveInfo      bool
+	preserveHardlinks string
 }
 
 // blocSizeInBytes converts a FLOATING POINT number of MiB, to a number of bytes
@@ -603,6 +604,12 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		if err != nil {
 			return cooked, err
 		}
+		if err = cooked.preserveHardlinks.Parse(raw.preserveHardlinks); err != nil {
+			return cooked, err
+		}
+		if err = validatePreserveHardlinks(cooked.preserveHardlinks, cooked.FromTo, cooked.isNFSCopy); err != nil {
+			return cooked, err
+		}
 	} else {
 		cooked.isNFSCopy, cooked.preserveInfo, cooked.preservePOSIXProperties, cooked.preservePermissions, err = performSMBSpecificValidation(cooked.FromTo,
 			raw.isNFSCopy, raw.preserveInfo, raw.preservePOSIXProperties, raw.preservePermissions, raw.preserveOwner, raw.preserveSMBPermissions)
@@ -839,6 +846,7 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaults() {
 	raw.s2sInvalidMetadataHandleOption = common.DefaultInvalidMetadataHandleOption.String()
 	raw.forceWrite = common.EOverwriteOption.True().String()
 	raw.preserveOwner = common.PreserveOwnerDefault
+	raw.preserveHardlinks = common.DefaultPreserveHardlinksOption.String()
 }
 
 func validateForceIfReadOnly(toForce bool, fromTo common.FromTo) error {
@@ -1131,7 +1139,8 @@ type CookedCopyCmdArgs struct {
 	// Whether the user wants to preserve the properties of a file...
 	preserveInfo bool
 	// Specifies whether the copy operation is an NFS copy
-	isNFSCopy bool
+	isNFSCopy         bool
+	preserveHardlinks common.PreserveHardlinksOption
 }
 
 func (cca *CookedCopyCmdArgs) isRedirection() bool {
@@ -1800,6 +1809,7 @@ Number of Folder Transfers Failed: %v
 Number of File Transfers Skipped: %v
 Number of Folder Transfers Skipped: %v
 Total Number of Bytes Transferred: %v
+Number of Hardlinks Converted: %v
 Final Job Status: %v%s%s
 `,
 					summary.JobID.String(),
@@ -1815,6 +1825,7 @@ Final Job Status: %v%s%s
 					summary.TransfersSkipped-summary.FoldersSkipped,
 					summary.FoldersSkipped,
 					summary.TotalBytesTransferred,
+					summary.HardlinksConvertedCount,
 					summary.JobStatus,
 					screenStats,
 					formatPerfAdvice(summary.PerformanceAdvice))
@@ -2125,4 +2136,7 @@ func init() {
 	// Deletes destination blobs with uncommitted blocks when staging block, hidden because we want to preserve default behavior
 	cpCmd.PersistentFlags().BoolVar(&raw.deleteDestinationFileIfNecessary, "delete-destination-file", false, "False by default. Deletes destination blobs, specifically blobs with uncommitted blocks when staging block.")
 	_ = cpCmd.PersistentFlags().MarkHidden("delete-destination-file")
+	cpCmd.PersistentFlags().StringVar(&raw.preserveHardlinks, PreserveHardlinksFlag, "follow",
+		"Specifies how hardlinks should be handled. This flag is only applicable when downloading from an NFS file share, uploading to an NFS share, or performing service-to-service copies involving NFS. "+
+			"The only supported option is 'follow' (default), which copies hardlinks as regular, independent files at the destination.")
 }

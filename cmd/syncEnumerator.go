@@ -87,6 +87,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		GetPropertiesInFrontend: true,
 		IncludeDirectoryStubs:   includeDirStubs,
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
+		HardlinkHandling:        cca.preserveHardlinks,
 	})
 
 	if err != nil {
@@ -121,6 +122,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		GetPropertiesInFrontend: true,
 		IncludeDirectoryStubs:   includeDirStubs,
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
+		HardlinkHandling:        common.EPreserveHardlinksOption.Follow(),
 	})
 	if err != nil {
 		return nil, err

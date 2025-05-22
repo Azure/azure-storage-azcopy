@@ -1,6 +1,9 @@
 package e2etest
 
 import (
+	"io"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
@@ -8,8 +11,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"io"
-	"time"
 )
 
 type GetURIOptions struct {
@@ -268,6 +269,7 @@ type ObjectResourceManager interface {
 
 	// Exists determines if the object in question exists
 	Exists() bool
+	HardlinkedFileName() string
 }
 
 type ObjectProperties struct {
@@ -281,6 +283,7 @@ type ObjectProperties struct {
 	FileProperties     FileProperties
 	FileNFSProperties  *FileNFSProperties
 	FileNFSPermissions *FileNFSPermissions
+	HardLinkedFileName string
 }
 
 type BlobProperties struct {
