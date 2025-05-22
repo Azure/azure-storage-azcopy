@@ -83,6 +83,23 @@ func (bd *azureFilesDownloader) preserveAttributes() (stage string, err error) {
 		if err != nil {
 			return
 		}
+	} else {
+		// If PreservePermissions is false and the source is an NFS share,
+		// apply default NFS permissions (mode, owner, group) to the destination file.
+		// This ensures the destination has valid permissions when none are preserved.
+		if info.IsNFSCopy {
+			if spdl, ok := interface{}(bd).(nfsPermissionsAwareDownloader); ok {
+				// Azure Files sources always implement INFSPropertyBearingSourceInfoProvider,
+				// so the type assertion below is guaranteed to succeed.
+				err := spdl.PutNFSDefaultPermissions(
+					bd.sip.(INFSPropertyBearingSourceInfoProvider),
+					bd.txInfo,
+				)
+				if err != nil {
+					return "Setting destination file NFS permissions", err
+				}
+			}
+		}
 	}
 
 	if info.PreserveInfo {
