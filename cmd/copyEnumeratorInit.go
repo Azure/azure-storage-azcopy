@@ -505,7 +505,7 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 		err = os.MkdirAll(common.GenerateFullPath(cca.Destination.ValueLocal(), containerName), os.ModeDir|os.ModePerm)
 	case common.ELocation.Blob():
 		bsc, _ := sc.BlobServiceClient()
-		bcc := bsc.NewContainerClient(containerName)
+		bcc := bsc.NewContainerClient(containerName + "/")
 
 		_, err = bcc.GetProperties(ctx, nil)
 

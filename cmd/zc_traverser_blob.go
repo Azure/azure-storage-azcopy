@@ -80,7 +80,7 @@ func (t *blobTraverser) IsDirectory(isSource bool) (isDirectory bool, err error)
 	if isDirDirect { // a container or a path ending in '/' is always directory
 		if blobURLParts.ContainerName != "" && blobURLParts.BlobName == "" {
 			// If it's a container, let's ensure that container exists. Listing is a safe assumption to be valid, because how else would we enumerate?
-			containerClient := t.serviceClient.NewContainerClient(blobURLParts.ContainerName)
+			containerClient := t.serviceClient.NewContainerClient(blobURLParts.ContainerName + "/")
 			p := containerClient.NewListBlobsFlatPager(nil)
 			_, err = p.NextPage(t.ctx)
 
@@ -111,7 +111,7 @@ func (t *blobTraverser) IsDirectory(isSource bool) (isDirectory bool, err error)
 		return isDirStub, nil
 	}
 
-	containerClient := t.serviceClient.NewContainerClient(blobURLParts.ContainerName)
+	containerClient := t.serviceClient.NewContainerClient(blobURLParts.ContainerName + "/")
 	searchPrefix := strings.TrimSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING) + common.AZCOPY_PATH_SEPARATOR_STRING
 	maxResults := int32(1)
 	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{Prefix: &searchPrefix, MaxResults: &maxResults})
@@ -308,7 +308,7 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	}
 
 	// get the container URL so that we can list the blobs
-	containerClient := t.serviceClient.NewContainerClient(blobURLParts.ContainerName)
+	containerClient := t.serviceClient.NewContainerClient(blobURLParts.ContainerName + "/")
 
 	// get the search prefix to aid in the listing
 	// example: for a url like https://test.blob.core.windows.net/test/foo/bar/bla
@@ -628,7 +628,7 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 }
 
 func createBlobClientFromServiceClient(blobURLParts blob.URLParts, client *service.Client) (*blob.Client, error) {
-	containerClient := client.NewContainerClient(blobURLParts.ContainerName)
+	containerClient := client.NewContainerClient(blobURLParts.ContainerName + "/")
 	blobClient := containerClient.NewBlobClient(blobURLParts.BlobName)
 	if blobURLParts.Snapshot != "" {
 		return blobClient.WithSnapshot(blobURLParts.Snapshot)
