@@ -269,6 +269,7 @@ type ObjectResourceManager interface {
 
 	// Exists determines if the object in question exists
 	Exists() bool
+	HardlinkedFileName() string
 }
 
 type ObjectProperties struct {
@@ -283,6 +284,7 @@ type ObjectProperties struct {
 	FileNFSProperties  *FileNFSProperties
 	FileNFSPermissions *FileNFSPermissions
 	SymlinkedFileName  string
+	HardLinkedFileName string
 }
 
 type BlobProperties struct {

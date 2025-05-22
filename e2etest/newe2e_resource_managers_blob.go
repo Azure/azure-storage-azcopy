@@ -3,6 +3,12 @@ package e2etest
 import (
 	"bytes"
 	"fmt"
+	"io"
+	"regexp"
+	"runtime"
+	"strings"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
@@ -15,11 +21,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"io"
-	"regexp"
-	"runtime"
-	"strings"
-	"time"
 )
 
 /*
@@ -401,7 +402,8 @@ type BlobObjectResourceManager struct {
 	Path            string
 	entityType      common.EntityType
 
-	internalClient *blob.Client
+	internalClient     *blob.Client
+	hardlinkedFilePath string
 }
 
 func (b *BlobObjectResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
@@ -443,6 +445,10 @@ func (b *BlobObjectResourceManager) ContainerName() string {
 
 func (b *BlobObjectResourceManager) ObjectName() string {
 	return b.Path
+}
+
+func (b *BlobObjectResourceManager) HardlinkedFileName() string {
+	return b.hardlinkedFilePath
 }
 
 // Create defaults to Block Blob. For implementation-specific options, GetTypeOrZero[T] / GetTypeOrAssert[T] to BlobObjectResourceManager and call CreateWithOptions

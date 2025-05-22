@@ -172,8 +172,9 @@ Number of Folder Transfers Completed: %v
 Number of File Transfers Failed: %v
 Number of Folder Transfers Failed: %v
 Number of File Transfers Skipped: %v
-Number of Symlink Skipped: %v
 Number of Folder Transfers Skipped: %v
+Number of Symlink Skipped: %v
+Number of Hardlinks Converted: %v
 Total Number of Bytes Transferred: %v
 Final Job Status: %v
 `,
@@ -190,6 +191,7 @@ Final Job Status: %v
 					summary.TransfersSkipped-summary.FoldersSkipped,
 					summary.FoldersSkipped,
 					summary.SkippedSymlinkCount,
+					summary.HardlinksConvertedCount,
 					summary.TotalBytesTransferred,
 					summary.JobStatus)
 			}

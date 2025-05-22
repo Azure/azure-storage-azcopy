@@ -103,7 +103,8 @@ type rawSyncCmdArgs struct {
 	// Opt-in flag to state if the copy is nfs copy
 	isNFSCopy bool
 	// Opt-in flag to persist additional properties to Azure Files
-	preserveInfo bool
+	preserveInfo      bool
+	preserveHardlinks string
 }
 
 // it is assume that the given url has the SAS stripped, and safe to print
@@ -270,6 +271,12 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 			return cooked, err
 		}
 		if err = validateSymlinkFlag(raw.followSymlinks, raw.preserveSymlinks); err != nil {
+			return cooked, err
+		}
+		if err = cooked.preserveHardlinks.Parse(raw.preserveHardlinks); err != nil {
+			return cooked, err
+		}
+		if err = validatePreserveHardlinks(cooked.preserveHardlinks, cooked.fromTo, cooked.isNFSCopy); err != nil {
 			return cooked, err
 		}
 	} else {
@@ -465,6 +472,7 @@ type cookedSyncCmdArgs struct {
 
 	deleteDestinationFileIfNecessary bool
 	isNFSCopy                        bool
+	preserveHardlinks                common.PreserveHardlinksOption
 }
 
 func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
@@ -901,4 +909,6 @@ func init() {
 	// Deletes destination blobs with uncommitted blocks when staging block, hidden because we want to preserve default behavior
 	syncCmd.PersistentFlags().BoolVar(&raw.deleteDestinationFileIfNecessary, "delete-destination-file", false, "False by default. Deletes destination blobs, specifically blobs with uncommitted blocks when staging block.")
 	_ = syncCmd.PersistentFlags().MarkHidden("delete-destination-file")
+
+	syncCmd.PersistentFlags().StringVar(&raw.preserveHardlinks, PreserveHardlinksFlag, "follow", "Follow by default. Preserve hardlinks for NFS resources. This flag is only applicable when the source is NFS file share or the destination is NFS file share. Available options: skip, preserve, follow (default 'follow').")
 }

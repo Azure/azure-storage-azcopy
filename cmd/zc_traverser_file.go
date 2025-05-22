@@ -54,6 +54,7 @@ type fileTraverser struct {
 	incrementEnumerationCounter enumerationCounterFunc
 	trailingDot                 common.TrailingDotOption
 	destination                 *common.Location
+	hardlinkHandling            common.PreserveHardlinksOption
 }
 
 func createShareClientFromServiceClient(fileURLParts file.URLParts, client *service.Client) (*share.Client, error) {
@@ -241,7 +242,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		}
 
 		// Only get the properties if we're told to
-		if t.getProperties {
+		if t.getProperties || t.hardlinkHandling == common.DefaultPreserveHardlinksOption {
 			var fullProperties filePropsProvider
 			fullProperties, err = f.propertyGetter(t.ctx)
 			if err != nil {
@@ -259,6 +260,10 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			// so it's fair to assume that the size will stay equal to that returned at by the listing operation)
 			size = fullProperties.ContentLength()
 			metadata = fullProperties.Metadata()
+
+			if fullProperties.LinkCount() > 1 {
+				logHardlinkWarning(f.name, fullProperties.FileID())
+			}
 		}
 		obj := newStoredObject(
 			preprocessor,
@@ -453,6 +458,7 @@ func newFileTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		incrementEnumerationCounter: opts.IncrementEnumeration,
 		trailingDot:                 opts.TrailingDotOption,
 		destination:                 opts.DestResourceType,
+		hardlinkHandling:            opts.HardlinkHandling,
 	}
 	return
 }

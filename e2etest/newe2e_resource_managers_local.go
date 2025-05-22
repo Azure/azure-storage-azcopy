@@ -131,9 +131,10 @@ func (l *LocalContainerResourceManager) ListObjects(a Asserter, prefixOrDirector
 
 func (l *LocalContainerResourceManager) GetObject(a Asserter, path string, eType common.EntityType) ObjectResourceManager {
 	return &LocalObjectResourceManager{
-		container:  l,
-		entityType: eType,
-		objectPath: path,
+		container:                l,
+		entityType:               eType,
+		objectPath:               path,
+		hardlinkOriginalFilePath: path,
 	}
 }
 
@@ -147,8 +148,9 @@ type LocalObjectResourceManager struct {
 	entityType common.EntityType
 
 	// objectPath and rawPath are mutually exclusive fields.
-	objectPath string
-	rawPath    string
+	objectPath               string
+	rawPath                  string
+	hardlinkOriginalFilePath string
 }
 
 func (l *LocalObjectResourceManager) ContainerName() string {
@@ -165,6 +167,10 @@ func (l *LocalObjectResourceManager) ObjectName() string {
 	} else {
 		return filepath.Base(l.rawPath)
 	}
+}
+
+func (l *LocalObjectResourceManager) HardlinkedFileName() string {
+	return l.hardlinkOriginalFilePath
 }
 
 type localPropertiesManager interface {
@@ -212,6 +218,15 @@ func (l *LocalObjectResourceManager) getWorkingPath() string {
 
 	// l.objectPath can be "", indicating it is the folder at the root of the container.
 	return filepath.Join(l.container.RootPath, l.objectPath)
+}
+
+func (l *LocalObjectResourceManager) getHardlinkedFilePath() string {
+
+	if l.container == nil {
+		panic("objectPath (relative) must have a container as a parent.")
+	}
+	fmt.Println("RootPath:", l.container.RootPath, "hardlinked.txt")
+	return filepath.Join(l.container.RootPath, "hardlinked.txt")
 }
 
 func (l *LocalObjectResourceManager) getRelPath(fullPath string) (string, error) {
@@ -296,6 +311,9 @@ func (l *LocalObjectResourceManager) Create(a Asserter, body ObjectContentContai
 	} else if l.entityType == common.EEntityType.Symlink() {
 		err := os.Symlink(filepath.Join(l.container.RootPath, properties.SymlinkedFileName), l.getWorkingPath())
 		a.NoError("Create Symlink", err)
+	} else if l.entityType == common.EEntityType.Hardlink() {
+		err := os.Link(filepath.Join(l.container.RootPath, properties.HardLinkedFileName), l.getWorkingPath())
+		a.NoError("Create hardlink", err)
 	}
 
 	l.SetObjectProperties(a, properties)

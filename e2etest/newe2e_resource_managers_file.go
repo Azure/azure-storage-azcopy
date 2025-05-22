@@ -374,8 +374,9 @@ type FileObjectResourceManager struct {
 	Service         *FileServiceResourceManager
 	Share           *FileShareResourceManager
 
-	path       string
-	entityType common.EntityType
+	path                     string
+	entityType               common.EntityType
+	hardlinkOriginalFilePath string
 }
 
 func (f *FileObjectResourceManager) DefaultAuthType() ExplicitCredentialTypes {
@@ -437,6 +438,10 @@ func (f *FileObjectResourceManager) ContainerName() string {
 
 func (f *FileObjectResourceManager) ObjectName() string {
 	return f.path
+}
+
+func (f *FileObjectResourceManager) HardlinkedFileName() string {
+	return f.hardlinkOriginalFilePath
 }
 
 func (f *FileObjectResourceManager) PreparePermissions(a Asserter, p *string) *file.Permissions {
@@ -540,8 +545,19 @@ func (f *FileObjectResourceManager) Create(a Asserter, body ObjectContentContain
 		}
 
 		a.NoError("Create directory", err)
+	case common.EEntityType.Hardlink():
+		client := f.getFileClient()
+
+		resp, err := client.CreateHardLink(ctx, props.HardLinkedFileName, &file.CreateHardLinkOptions{})
+		a.NoError("Create file", err)
+		fmt.Println("Resp.LinkCount", *resp.LinkCount)
+		fmt.Println("Resp.NFSFileType", *resp.NFSFileType)
+		// err = client.UploadStream(ctx, body.Reader(), &file.UploadStreamOptions{
+		// 	Concurrency: runtime.NumCPU(),
+		// })
+		// a.NoError("Upload Stream", err)
 	default:
-		a.Error("File Objects only support Files and Folders")
+		a.Error("File Objects only support Files,Folders and Hardlinks")
 	}
 	// Reapply the properties after the resource is created, as the Last Write Time of the file will be reset when data is written.
 	f.SetObjectProperties(a, props)
@@ -556,6 +572,8 @@ func (f *FileObjectResourceManager) Delete(a Asserter) {
 		_, err = f.getFileClient().Delete(ctx, nil)
 	case common.EEntityType.Folder():
 		_, err = f.getDirClient().Delete(ctx, nil)
+	case common.EEntityType.Hardlink():
+		_, err = f.getFileClient().Delete(ctx, nil)
 	default:
 		a.Error(fmt.Sprintf("entity type %s is not currently supported", f.entityType))
 	}
@@ -655,6 +673,18 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 		resp, err := f.getFileClient().GetProperties(ctx, &file.GetPropertiesOptions{})
 		a.NoError("Get file properties", err)
 
+	case common.EEntityType.Hardlink():
+		resp, err := f.getFileClient().GetProperties(ctx, &file.GetPropertiesOptions{})
+		a.NoError("Get file properties", err)
+
+		// var permissions *string
+		// if pkey := DerefOrZero(resp.FilePermissionKey); pkey != "" {
+		// 	permResp, err := f.Share.InternalClient.GetPermission(ctx, pkey, nil)
+		// 	a.NoError("Get file permissions", err)
+
+		// 	permissions = permResp.Permission
+		// }
+
 		out = ObjectProperties{
 			EntityType: f.entityType,
 			HTTPHeaders: contentHeaders{
@@ -667,6 +697,13 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 			},
 			Metadata:         resp.Metadata,
 			LastModifiedTime: resp.LastModified,
+			FileProperties: FileProperties{
+				FileAttributes:    resp.FileAttributes,
+				FileCreationTime:  resp.FileCreationTime,
+				FileLastWriteTime: resp.FileLastWriteTime,
+				//FilePermissions:   permissions,
+				LastModifiedTime: resp.LastModified,
+			},
 			FileNFSProperties: &FileNFSProperties{
 				FileCreationTime:  resp.FileCreationTime,
 				FileLastWriteTime: resp.FileLastWriteTime,
@@ -678,7 +715,7 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 			},
 		}
 	default:
-		a.Error("EntityType must be Folder or File. Currently: " + f.entityType.String())
+		a.Error("EntityType must be Folder,File or Hardlink. Currently: " + f.entityType.String())
 	}
 	return
 }

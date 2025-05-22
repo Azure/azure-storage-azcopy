@@ -124,7 +124,7 @@ func (s *StoredObject) isSourceRootFolder() bool {
 // We can't just implement this filtering in ToNewCopyTransfer, because delete transfers (from sync)
 // do not pass through that routine.  So we need to make the filtering available in a separate function
 // so that the sync deletion code path(s) can access it.
-func (s *StoredObject) isCompatibleWithEntitySettings(fpo common.FolderPropertyOption, sht common.SymlinkHandlingType) bool {
+func (s *StoredObject) isCompatibleWithEntitySettings(fpo common.FolderPropertyOption, sht common.SymlinkHandlingType, pho common.PreserveHardlinksOption) bool {
 	if s.entityType == common.EEntityType.File() {
 		return true
 	} else if s.entityType == common.EEntityType.Folder() {
@@ -140,6 +140,8 @@ func (s *StoredObject) isCompatibleWithEntitySettings(fpo common.FolderPropertyO
 		}
 	} else if s.entityType == common.EEntityType.Symlink() {
 		return sht == common.ESymlinkHandlingType.Preserve()
+	} else if s.entityType == common.EEntityType.Hardlink() {
+		return pho == common.EPreserveHardlinksOption.Follow()
 	} else {
 		panic("undefined entity type")
 	}
@@ -161,7 +163,7 @@ var ErrorHashAsyncCalculation = errors.New("hash is calculating asynchronously")
 // We use this, so that we can easily test for compatibility in the sync deletion code (which expects an objectProcessor)
 func newFpoAwareProcessor(fpo common.FolderPropertyOption, inner objectProcessor) objectProcessor {
 	return func(s StoredObject) error {
-		if s.isCompatibleWithEntitySettings(fpo, common.ESymlinkHandlingType.Skip()) {
+		if s.isCompatibleWithEntitySettings(fpo, common.ESymlinkHandlingType.Skip(), common.EPreserveHardlinksOption.Follow()) {
 			return inner(s)
 		} else {
 			return nil // nothing went wrong, because we didn't do anything
@@ -169,9 +171,9 @@ func newFpoAwareProcessor(fpo common.FolderPropertyOption, inner objectProcessor
 	}
 }
 
-func (s *StoredObject) ToNewCopyTransfer(steWillAutoDecompress bool, Source string, Destination string, preserveBlobTier bool, folderPropertiesOption common.FolderPropertyOption, symlinkHandlingType common.SymlinkHandlingType) (transfer common.CopyTransfer, shouldSendToSte bool) {
+func (s *StoredObject) ToNewCopyTransfer(steWillAutoDecompress bool, Source string, Destination string, preserveBlobTier bool, folderPropertiesOption common.FolderPropertyOption, symlinkHandlingType common.SymlinkHandlingType, hardlinkHandlingType common.PreserveHardlinksOption) (transfer common.CopyTransfer, shouldSendToSte bool) {
 
-	if !s.isCompatibleWithEntitySettings(folderPropertiesOption, symlinkHandlingType) {
+	if !s.isCompatibleWithEntitySettings(folderPropertiesOption, symlinkHandlingType, hardlinkHandlingType) {
 		return common.CopyTransfer{}, false
 	}
 
@@ -250,6 +252,8 @@ type filePropsProvider interface {
 	FileLastWriteTime() time.Time
 	ContentLength() int64
 	NFSFileType() string
+	LinkCount() int64
+	FileID() string
 }
 
 // a constructor is used so that in case the StoredObject has to change, the callers would get a compilation error
@@ -365,6 +369,7 @@ type InitResourceTraverserOptions struct {
 
 	ExcludeContainers []string // Blob account
 	ListVersions      bool     // Blob
+	HardlinkHandling  common.PreserveHardlinksOption
 }
 
 func (o *InitResourceTraverserOptions) PerformChecks() error {
