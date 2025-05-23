@@ -237,12 +237,14 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		var metadata common.Metadata
 
 		// Check if the file is a symlink and should be skipped in case of NFS
-		if isSymlink, err := shouldSkipNFSSymlink(t.ctx, f); err == nil && isSymlink {
+		// We don't want to skip the file if we are not using NFS
+		// Check if the file is a hard link and should be logged with proper message in case of NFS
+		if skip, err := checkAndLogNFSLinkType(t.ctx, f); err == nil && skip {
 			return nil, nil
 		}
 
 		// Only get the properties if we're told to
-		if t.getProperties || t.hardlinkHandling == common.DefaultPreserveHardlinksOption {
+		if t.getProperties {
 			var fullProperties filePropsProvider
 			fullProperties, err = f.propertyGetter(t.ctx)
 			if err != nil {
@@ -260,10 +262,6 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			// so it's fair to assume that the size will stay equal to that returned at by the listing operation)
 			size = fullProperties.ContentLength()
 			metadata = fullProperties.Metadata()
-
-			if fullProperties.LinkCount() > 1 {
-				logHardlinkWarning(f.name, fullProperties.FileID())
-			}
 		}
 		obj := newStoredObject(
 			preprocessor,
@@ -427,27 +425,6 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	return
 }
 
-// shouldSkipNFSSymlink checks if the given file is a symbolic link in an NFS share.
-// If it is, it logs a warning, increments the skipped symlink count, and returns true
-// to indicate it should be skipped.
-// Returns false if the file is not a symlink.
-// Returns an error if unable to retrieve file properties.
-func shouldSkipNFSSymlink(ctx context.Context, f azfileEntity) (bool, error) {
-	fullProperties, err := f.propertyGetter(ctx)
-	if err != nil {
-		return false, err
-	}
-	if fullProperties.NFSFileType() == NFSFileTypeSymLink {
-		skippedSymlinkCount++
-		common.AzcopyCurrentJobLogger.Log(
-			common.LogWarning,
-			fmt.Sprintf("File '%s' at the source is a symbolic link, and will be skipped and not be copied", f.name),
-		)
-		return true, nil
-	}
-	return false, nil
-}
-
 func newFileTraverser(rawURL string, serviceClient *service.Client, ctx context.Context, opts InitResourceTraverserOptions) (t *fileTraverser) {
 	t = &fileTraverser{
 		rawURL:                      rawURL,
@@ -508,4 +485,36 @@ func newAzFileRootDirectoryEntity(directoryClient *directory.Client, name string
 		},
 		common.EEntityType.Folder(),
 	}
+}
+
+// checkAndLogNFSLinkType checks if the given file is either a symbolic link or a hard link in an NFS share.
+// - If it's a symlink, it logs a warning, increments the skipped symlink count, and returns (true, nil) to indicate it should be skipped.
+// - If it's a hard link (i.e., a regular file with a link count > 1), it logs a hard link warning and returns (false, nil) to allow processing to continue.
+// - If it's neither, it returns (false, nil).
+// Returns an error if unable to retrieve file properties.
+func checkAndLogNFSLinkType(ctx context.Context, f azfileEntity) (skip bool, err error) {
+	fullProperties, err := f.propertyGetter(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	switch fullProperties.NFSFileType() {
+	case NFSFileTypeSymLink:
+		skippedSymlinkCount++
+		logNFSLinkWarning(f.name, fullProperties.FileID(), true)
+		return true, nil
+
+	case NFSFileTypeRegular:
+		if fullProperties.LinkCount() > 1 {
+			logNFSLinkWarning(f.name, fullProperties.FileID(), false)
+		}
+	case NFSFileTypeDirectory:
+		// Do nothing, we want to process directories
+	default:
+		// If the file is not a regular,hardlink,symlink file, we consider it as special file and will skip it.
+		skippedSpecialFileCount++
+		common.AzcopyCurrentJobLogger.Log(common.LogWarning, fmt.Sprintf("File '%s' at the source is a special file and will be skipped and not copied", f.name))
+		return true, nil
+	}
+	return false, nil
 }

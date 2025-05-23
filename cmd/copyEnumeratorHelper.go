@@ -10,7 +10,7 @@ import (
 
 var EnumerationParallelism = 1
 var EnumerationParallelStatFiles = false
-var skippedSymlinkCount int64
+var skippedSymlinkCount, skippedSpecialFileCount int64
 
 // addTransfer accepts a new transfer, if the threshold is reached, dispatch a job part order.
 func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer, cca *CookedCopyCmdArgs) error {

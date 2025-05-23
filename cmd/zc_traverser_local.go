@@ -274,10 +274,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 
 				if symlinkHandling.None() {
 					skippedSymlinkCount++
-					common.AzcopyCurrentJobLogger.Log(
-						common.LogWarning,
-						fmt.Sprintf("File '%s' at the source is a symbolic link, and will be skipped and not be copied", fileInfo.Name()),
-					)
+					logNFSLinkWarning(fileInfo.Name(), "", true)
 					return nil // skip it
 				}
 
@@ -355,6 +352,13 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				return nil
 			} else {
 				CheckHardLink(fileInfo, hardlinkHandling)
+				if !IsRegularFile(fileInfo) && !fileInfo.IsDir() {
+					// We don't want to process other non-regular files here.
+					skippedSpecialFileCount++
+					message := fmt.Sprintf("File '%s' at the source is a special file and will be skipped and not copied", fileInfo.Name())
+					common.AzcopyCurrentJobLogger.Log(common.LogWarning, message)
+					return nil
+				}
 
 				// not a symlink
 				result, err := filepath.Abs(filePath)
@@ -702,8 +706,10 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 					entityType = common.EEntityType.Folder()
 				} else if IsHardlink(fileInfo) {
 					entityType = common.EEntityType.Hardlink()
-				} else {
+				} else if IsRegularFile(fileInfo) {
 					entityType = common.EEntityType.File()
+				} else {
+					entityType = common.EEntityType.Other()
 				}
 
 				relPath := strings.TrimPrefix(strings.TrimPrefix(cleanLocalPath(filePath), cleanLocalPath(t.fullPath)), common.DeterminePathSeparator(t.fullPath))
@@ -784,6 +790,8 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 					}
 				} else if IsHardlink(fileInfo) {
 					entityType = common.EEntityType.Hardlink()
+				} else if !IsRegularFile(fileInfo) {
+					entityType = common.EEntityType.Other()
 				}
 
 				if entry.IsDir() {

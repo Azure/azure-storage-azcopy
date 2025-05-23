@@ -99,6 +99,7 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 	jobDone := summary.JobStatus.IsJobDone()
 	totalKnownCount = summary.TotalTransfers
 	summary.SkippedSymlinkCount = uint32(skippedSymlinkCount)
+	summary.SkippedSpecialFileCount = uint32(skippedSpecialFileCount)
 	// if json is not desired, and job is done, then we generate a special end message to conclude the job
 	duration := time.Since(cca.jobStartTime) // report the total run time of the job
 
@@ -175,6 +176,7 @@ Number of File Transfers Skipped: %v
 Number of Folder Transfers Skipped: %v
 Number of Symlink Skipped: %v
 Number of Hardlinks Converted: %v
+Number of Special Files Skipped: %v
 Total Number of Bytes Transferred: %v
 Final Job Status: %v
 `,
@@ -192,6 +194,7 @@ Final Job Status: %v
 					summary.FoldersSkipped,
 					summary.SkippedSymlinkCount,
 					summary.HardlinksConvertedCount,
+					summary.SkippedSpecialFileCount,
 					summary.TotalBytesTransferred,
 					summary.JobStatus)
 			}
