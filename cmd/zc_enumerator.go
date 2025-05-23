@@ -251,6 +251,7 @@ type filePropsProvider interface {
 	LastModified() time.Time
 	FileLastWriteTime() time.Time
 	ContentLength() int64
+	NFSFileType() string
 	LinkCount() int64
 	FileID() string
 }

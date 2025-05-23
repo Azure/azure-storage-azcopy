@@ -604,6 +604,9 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		if err != nil {
 			return cooked, err
 		}
+		if err = validateSymlinkFlag(raw.followSymlinks, raw.preserveSymlinks); err != nil {
+			return cooked, err
+		}
 		if err = cooked.preserveHardlinks.Parse(raw.preserveHardlinks); err != nil {
 			return cooked, err
 		}
@@ -1722,6 +1725,8 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 	glcmSwapOnce.Do(func() {
 		Rpc(common.ERpcCmd.GetJobLCMWrapper(), &cca.jobID, &glcm)
 	})
+	summary.SkippedSymlinkCount = uint32(skippedSymlinkCount)
+	summary.SkippedSpecialFileCount = uint32(skippedSpecialFileCount)
 	summary.IsCleanupJob = cca.isCleanupJob // only FE knows this, so we can only set it here
 	cleanupStatusString := fmt.Sprintf("Cleanup %v/%v", summary.TransfersCompleted, summary.TotalTransfers)
 
@@ -1808,8 +1813,10 @@ Number of File Transfers Failed: %v
 Number of Folder Transfers Failed: %v
 Number of File Transfers Skipped: %v
 Number of Folder Transfers Skipped: %v
-Total Number of Bytes Transferred: %v
+Number of Symlink Skipped: %v
 Number of Hardlinks Converted: %v
+Number of Special Files Skipped: %v
+Total Number of Bytes Transferred: %v
 Final Job Status: %v%s%s
 `,
 					summary.JobID.String(),
@@ -1824,8 +1831,10 @@ Final Job Status: %v%s%s
 					summary.FoldersFailed,
 					summary.TransfersSkipped-summary.FoldersSkipped,
 					summary.FoldersSkipped,
-					summary.TotalBytesTransferred,
+					summary.SkippedSymlinkCount,
 					summary.HardlinksConvertedCount,
+					summary.SkippedSpecialFileCount,
+					summary.TotalBytesTransferred,
 					summary.JobStatus,
 					screenStats,
 					formatPerfAdvice(summary.PerformanceAdvice))

@@ -27,6 +27,12 @@ func IsHardlink(fileInfo os.FileInfo) bool {
 	return stat.Nlink > 1 && !fileInfo.IsDir()
 }
 
+// IsRegularFile checks if the given os.FileInfo represents a regular file.
+// Returns true if the file is regular (not a directory, symlink, or special file).
+func IsRegularFile(info os.FileInfo) bool {
+	return info.Mode().IsRegular()
+}
+
 // CheckHardLink logs a warning if the given file is a hard link and the specified
 // hardlink handling policy is set to default hard links behaviour(follow).
 func CheckHardLink(fileInfo os.FileInfo, hardlinkHandling common.PreserveHardlinksOption) {
@@ -36,15 +42,23 @@ func CheckHardLink(fileInfo os.FileInfo, hardlinkHandling common.PreserveHardlin
 
 	stat := fileInfo.Sys().(*syscall.Stat_t) // safe to cast again since IsHardlink succeeded
 	inodeStr := strconv.FormatUint(stat.Ino, 10)
-	logHardlinkWarning(fileInfo.Name(), inodeStr)
+	logNFSLinkWarning(fileInfo.Name(), inodeStr, false)
 }
 
-func logHardlinkWarning(currentFile, inodeNo string) {
+// logNFSLinkWarning logs a warning for either a symbolic link or a hard link in an NFS share.
+// - For symlinks: inodeNo should be empty.
+// - For hard links: inodeNo should be the file's inode number.
+func logNFSLinkWarning(fileName, inodeNo string, isSymlink bool) {
 	if common.AzcopyCurrentJobLogger == nil {
 		return
 	}
-	common.AzcopyCurrentJobLogger.Log(
-		common.LogWarning,
-		fmt.Sprintf("File '%s' with inode '%s' at the source is a hard link, but is copied as a full file", currentFile, inodeNo),
-	)
+
+	var message string
+	if isSymlink {
+		message = fmt.Sprintf("File '%s' at the source is a symbolic link and will be skipped and not copied", fileName)
+	} else {
+		message = fmt.Sprintf("File '%s' with inode '%s' at the source is a hard link, but is copied as a full file", fileName, inodeNo)
+	}
+
+	common.AzcopyCurrentJobLogger.Log(common.LogWarning, message)
 }

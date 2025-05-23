@@ -283,6 +283,7 @@ type ObjectProperties struct {
 	FileProperties     FileProperties
 	FileNFSProperties  *FileNFSProperties
 	FileNFSPermissions *FileNFSPermissions
+	SymlinkedFileName  string
 	HardLinkedFileName string
 }
 

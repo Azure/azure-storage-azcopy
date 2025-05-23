@@ -270,6 +270,9 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		if err != nil {
 			return cooked, err
 		}
+		if err = validateSymlinkFlag(raw.followSymlinks, raw.preserveSymlinks); err != nil {
+			return cooked, err
+		}
 		if err = cooked.preserveHardlinks.Parse(raw.preserveHardlinks); err != nil {
 			return cooked, err
 		}
@@ -597,7 +600,8 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 	var summary common.ListJobSummaryResponse
 	var throughput float64
 	var jobDone bool
-
+	summary.SkippedSymlinkCount = uint32(skippedSymlinkCount)
+	summary.SkippedSpecialFileCount = uint32(skippedSpecialFileCount)
 	// fetch a job status and compute throughput if the first part was dispatched
 	if cca.firstPartOrdered() {
 		Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
@@ -662,6 +666,8 @@ Total Number of Copy Transfers: %v
 Number of Copy Transfers Completed: %v
 Number of Copy Transfers Failed: %v
 Number of Deletions at Destination: %v
+Number of Symbolic Links Skipped: %v
+Number of Special Files Skipped: %v
 Total Number of Bytes Transferred: %v
 Total Number of Bytes Enumerated: %v
 Final Job Status: %v%s%s
@@ -676,6 +682,8 @@ Final Job Status: %v%s%s
 				summary.TransfersCompleted,
 				summary.TransfersFailed,
 				cca.atomicDeletionCount,
+				summary.SkippedSymlinkCount,
+				summary.SkippedSpecialFileCount,
 				summary.TotalBytesTransferred,
 				summary.TotalBytesEnumerated,
 				summary.JobStatus,

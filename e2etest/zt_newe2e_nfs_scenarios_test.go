@@ -116,6 +116,15 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 		srcObjs[name] = obj
 	}
 
+	// create one symlink
+	targetFileName := rootDir + "/starget.txt"
+	obj = ResourceDefinitionObject{
+		ObjectName: pointerTo(targetFileName),
+		ObjectProperties: ObjectProperties{
+			EntityType:         common.EEntityType.File(),
+			FileNFSProperties:  fileProperties,
+			FileNFSPermissions: fileOrFolderPermissions,
+		}}
 	// create one hardlink
 	normalFileName := rootDir + "/original.txt"
 	obj = ResourceDefinitionObject{
@@ -125,6 +134,20 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 			FileNFSProperties:  fileProperties,
 			FileNFSPermissions: fileOrFolderPermissions,
 		}}
+	srcObjRes[targetFileName] = CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+	srcObjs[targetFileName] = obj
+
+	symLinkedFileName := rootDir + "/symlinked.txt"
+	obj = ResourceDefinitionObject{
+		ObjectName: pointerTo(symLinkedFileName),
+		ObjectProperties: ObjectProperties{
+			EntityType:         common.EEntityType.Symlink(),
+			FileNFSProperties:  fileProperties,
+			FileNFSPermissions: fileOrFolderPermissions,
+			SymlinkedFileName:  targetFileName,
+		}}
+	srcObjRes[symLinkedFileName] = CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+	srcObjs[symLinkedFileName] = obj
 	srcObjRes[normalFileName] = CreateResource[ObjectResourceManager](svm, srcContainer, obj)
 	srcObjs[normalFileName] = obj
 
@@ -183,6 +206,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcObjs,
 	}, true)
+	ValidateSkippedSymLinkedCount(svm, stdOut, 2)
 
 	ValidateHardlinkedCount(svm, stdOut, 2)
 }
