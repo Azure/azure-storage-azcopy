@@ -23,6 +23,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 )
 
@@ -91,6 +92,7 @@ func (t *fileAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 			GetPropertiesInFrontend: t.opts.GetPropertiesInFrontend,
 			IncrementEnumeration:    t.opts.IncrementEnumeration,
 			TrailingDotOption:       t.opts.TrailingDotOption,
+			HardlinkHandling:        t.opts.HardlinkHandling,
 		})
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))

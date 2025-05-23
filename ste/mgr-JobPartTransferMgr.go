@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	"net/http"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -113,8 +114,8 @@ type TransferInfo struct {
 	SourceSize              int64
 	Destination             string
 	EntityType              common.EntityType
-	PreserveSMBPermissions  common.PreservePermissionsOption
-	PreserveSMBInfo         bool
+	PreservePermissions     common.PreservePermissionsOption
+	PreserveInfo            bool
 	PreservePOSIXProperties bool
 	BlobFSRecursiveDelete   bool
 
@@ -142,6 +143,7 @@ type TransferInfo struct {
 
 	VersionID  string
 	SnapshotID string
+	IsNFSCopy  bool
 }
 
 func (i *TransferInfo) IsFilePropertiesTransfer() bool {
@@ -419,8 +421,8 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 		DstContainer:                   dstContainer,
 		DstFilePath:                    dstPath,
 		EntityType:                     entityType,
-		PreserveSMBPermissions:         plan.PreservePermissions,
-		PreserveSMBInfo:                plan.PreserveSMBInfo,
+		PreservePermissions:            plan.PreservePermissions,
+		PreserveInfo:                   plan.PreserveInfo,
 		PreservePOSIXProperties:        plan.PreservePOSIXProperties,
 		S2SGetPropertiesInBackend:      s2sGetPropertiesInBackend,
 		S2SSourceChangeValidation:      s2sSourceChangeValidation,
@@ -437,6 +439,7 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 		RehydratePriority: plan.RehydratePriority.ToRehydratePriorityType(),
 		VersionID:         versionID,
 		SnapshotID:        snapshotID,
+		IsNFSCopy:         plan.IsNFSCopy,
 	}
 }
 
