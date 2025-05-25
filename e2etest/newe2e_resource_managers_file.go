@@ -669,9 +669,9 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 				FileMode: resp.FileMode,
 			},
 		}
-	case common.EEntityType.Symlink():
-		resp, err := f.getFileClient().GetProperties(ctx, &file.GetPropertiesOptions{})
-		a.NoError("Get file properties", err)
+	// case common.EEntityType.Symlink():
+	// 	resp, err := f.getFileClient().GetProperties(ctx, &file.GetPropertiesOptions{})
+	// 	a.NoError("Get file properties", err)
 
 	case common.EEntityType.Hardlink():
 		resp, err := f.getFileClient().GetProperties(ctx, &file.GetPropertiesOptions{})
