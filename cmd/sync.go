@@ -473,6 +473,8 @@ type cookedSyncCmdArgs struct {
 	deleteDestinationFileIfNecessary bool
 	isNFSCopy                        bool
 	preserveHardlinks                common.PreserveHardlinksOption
+	atomicSkippedSymlinkCount        uint32
+	atomicSkippedSpecialFileCount    uint32
 }
 
 func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
@@ -600,8 +602,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 	var summary common.ListJobSummaryResponse
 	var throughput float64
 	var jobDone bool
-	summary.SkippedSymlinkCount = uint32(skippedSymlinkCount)
-	summary.SkippedSpecialFileCount = uint32(skippedSpecialFileCount)
+
 	// fetch a job status and compute throughput if the first part was dispatched
 	if cca.firstPartOrdered() {
 		Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
@@ -648,6 +649,9 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 			exitCode = common.EExitCode.Error()
 		}
 
+		summary.SkippedSymlinkCount = atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)
+		summary.SkippedSpecialFileCount = atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount)
+
 		lcm.Exit(func(format common.OutputFormat) string {
 			if format == common.EOutputFormat.Json() {
 				return cca.getJsonOfSyncJobSummary(summary)
@@ -668,6 +672,7 @@ Number of Copy Transfers Failed: %v
 Number of Deletions at Destination: %v
 Number of Symbolic Links Skipped: %v
 Number of Special Files Skipped: %v
+Number of Hardlinks Converted: %v
 Total Number of Bytes Transferred: %v
 Total Number of Bytes Enumerated: %v
 Final Job Status: %v%s%s
@@ -684,6 +689,7 @@ Final Job Status: %v%s%s
 				cca.atomicDeletionCount,
 				summary.SkippedSymlinkCount,
 				summary.SkippedSpecialFileCount,
+				summary.HardlinksConvertedCount,
 				summary.TotalBytesTransferred,
 				summary.TotalBytesEnumerated,
 				summary.JobStatus,

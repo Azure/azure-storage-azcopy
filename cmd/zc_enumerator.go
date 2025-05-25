@@ -111,7 +111,7 @@ func (s *StoredObject) isMoreRecentThan(storedObject2 StoredObject, preferSMBTim
 }
 
 func (s *StoredObject) isSingleSourceFile() bool {
-	return s.relativePath == "" && s.entityType == common.EEntityType.File()
+	return s.relativePath == "" && (s.entityType == common.EEntityType.File() || s.entityType == common.EEntityType.Hardlink())
 }
 
 func (s *StoredObject) isSourceRootFolder() bool {
@@ -142,6 +142,8 @@ func (s *StoredObject) isCompatibleWithEntitySettings(fpo common.FolderPropertyO
 		return sht == common.ESymlinkHandlingType.Preserve()
 	} else if s.entityType == common.EEntityType.Hardlink() {
 		return pho == common.EPreserveHardlinksOption.Follow()
+	} else if s.entityType == common.EEntityType.Other() {
+		return false
 	} else {
 		panic("undefined entity type")
 	}
@@ -842,7 +844,7 @@ func passedFilters(filters []ObjectFilter, storedObject StoredObject) bool {
 				glcm.Error(msg)
 			}
 
-			if filter.AppliesOnlyToFiles() && storedObject.entityType != common.EEntityType.File() {
+			if filter.AppliesOnlyToFiles() && (storedObject.entityType != common.EEntityType.File() || storedObject.entityType != common.EEntityType.Hardlink()) {
 				// don't pass folders to filters that only know how to deal with files
 				// As at Feb 2020, we have separate logic to weed out folder properties (and not even send them)
 				// if any filter applies only to files... but that logic runs after this point, so we need this

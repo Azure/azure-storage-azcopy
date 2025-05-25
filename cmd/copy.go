@@ -34,6 +34,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -1142,8 +1143,10 @@ type CookedCopyCmdArgs struct {
 	// Whether the user wants to preserve the properties of a file...
 	preserveInfo bool
 	// Specifies whether the copy operation is an NFS copy
-	isNFSCopy         bool
-	preserveHardlinks common.PreserveHardlinksOption
+	isNFSCopy                     bool
+	preserveHardlinks             common.PreserveHardlinksOption
+	atomicSkippedSymlinkCount     uint32
+	atomicSkippedSpecialFileCount uint32
 }
 
 func (cca *CookedCopyCmdArgs) isRedirection() bool {
@@ -1725,8 +1728,7 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 	glcmSwapOnce.Do(func() {
 		Rpc(common.ERpcCmd.GetJobLCMWrapper(), &cca.jobID, &glcm)
 	})
-	summary.SkippedSymlinkCount = uint32(skippedSymlinkCount)
-	summary.SkippedSpecialFileCount = uint32(skippedSpecialFileCount)
+
 	summary.IsCleanupJob = cca.isCleanupJob // only FE knows this, so we can only set it here
 	cleanupStatusString := fmt.Sprintf("Cleanup %v/%v", summary.TransfersCompleted, summary.TotalTransfers)
 
@@ -1785,6 +1787,9 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 	})
 
 	if jobDone {
+		summary.SkippedSymlinkCount = atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)
+		summary.SkippedSpecialFileCount = atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount)
+
 		exitCode := cca.getSuccessExitCode()
 		if summary.TransfersFailed > 0 || summary.JobStatus == common.EJobStatus.Cancelled() || summary.JobStatus == common.EJobStatus.Cancelling() {
 			exitCode = common.EExitCode.Error()

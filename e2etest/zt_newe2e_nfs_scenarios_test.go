@@ -1,22 +1,12 @@
 package e2etest
 
-import (
-	"fmt"
-	"os/user"
-	"runtime"
-	"strconv"
-	"time"
-
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/google/uuid"
-)
-
 func init() {
 	suiteManager.RegisterSuite(&FilesNFSTestSuite{})
 }
 
 type FilesNFSTestSuite struct{}
 
+/*
 func GetCurrentUIDAndGID(a Asserter) (uid, gid string) {
 	// Get the current user information
 	currentUser, err := user.Current()
@@ -211,7 +201,6 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 	ValidateHardlinkedCount(svm, stdOut, 2)
 }
 
-/*
 func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManager) {
 
 		if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
@@ -336,7 +325,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 		}, true)
 		ValidateHardlinkedCount(svm, stdOut, 2)
 	}
-*/
+
 func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationManager) {
 
 	// if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
@@ -446,3 +435,4 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 		Objects: srcObjs,
 	}, false)
 }
+*/

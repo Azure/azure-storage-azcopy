@@ -245,7 +245,7 @@ func (p *fileSourceInfoProvider) getFreshProperties() (shareFilePropertyProvider
 	}
 	share := fsc.NewShareClient(p.transferInfo.SrcContainer)
 	switch p.EntityType() {
-	case common.EEntityType.File():
+	case common.EEntityType.File(), common.EEntityType.Hardlink():
 		fileClient := share.NewRootDirectoryClient().NewFileClient(p.transferInfo.SrcFilePath)
 		props, err := fileClient.GetProperties(p.ctx, nil)
 		return &fileGetPropertiesAdapter{props}, err
@@ -309,7 +309,7 @@ func (p *fileSourceInfoProvider) Properties() (*SrcProperties, error) {
 		p.cachedPermissionKey = properties.FilePermissionKey() // We cache this as getting the SDDL is a separate operation.
 
 		switch p.EntityType() {
-		case common.EEntityType.File():
+		case common.EEntityType.File(), common.EEntityType.Hardlink():
 			srcProperties = &SrcProperties{
 				SrcHTTPHeaders: common.ResourceHTTPHeaders{
 					ContentType:        properties.ContentType(),
@@ -335,7 +335,7 @@ func (p *fileSourceInfoProvider) Properties() (*SrcProperties, error) {
 }
 
 func (p *fileSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, error) {
-	if p.EntityType() != common.EEntityType.File() {
+	if p.EntityType() != common.EEntityType.File() && p.EntityType() != common.EEntityType.Hardlink() {
 		panic("unsupported. Cannot get modification time on non-file object") // nothing should ever call this for a non-file
 	}
 

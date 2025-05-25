@@ -201,7 +201,7 @@ func writeToErrorChannel(errorChannel chan<- ErrorFileInfo, err ErrorFileInfo) {
 // Separate this from the traverser for two purposes:
 // 1) Cleaner code
 // 2) Easier to test individually than to test the entire traverser.
-func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath.WalkFunc, symlinkHandling common.SymlinkHandlingType, errorChannel chan<- ErrorFileInfo, hardlinkHandling common.PreserveHardlinksOption) (err error) {
+func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath.WalkFunc, symlinkHandling common.SymlinkHandlingType, errorChannel chan<- ErrorFileInfo, hardlinkHandling common.PreserveHardlinksOption, incrementEnumerationCounter enumerationCounterFunc) (err error) {
 
 	// We want to re-queue symlinks up in their evaluated form because filepath.Walk doesn't evaluate them for us.
 	// So, what is the plan of attack?
@@ -273,7 +273,9 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				}
 
 				if symlinkHandling.None() {
-					skippedSymlinkCount++
+					if incrementEnumerationCounter != nil {
+						incrementEnumerationCounter(common.EEntityType.Symlink())
+					}
 					logNFSLinkWarning(fileInfo.Name(), "", true)
 					return nil // skip it
 				}
@@ -351,10 +353,12 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				}
 				return nil
 			} else {
-				CheckHardLink(fileInfo, hardlinkHandling)
+				LogHardLinkIfDefaultPolicy(fileInfo, hardlinkHandling)
 				if !IsRegularFile(fileInfo) && !fileInfo.IsDir() {
 					// We don't want to process other non-regular files here.
-					skippedSpecialFileCount++
+					if incrementEnumerationCounter != nil {
+						incrementEnumerationCounter(common.EEntityType.Other())
+					}
 					message := fmt.Sprintf("File '%s' at the source is a special file and will be skipped and not copied", fileInfo.Name())
 					common.AzcopyCurrentJobLogger.Log(common.LogWarning, message)
 					return nil
@@ -661,8 +665,33 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 
 	// if the path is a single file, then pass it through the filters and send to processor
 	if isSingleFile {
+
+		var entityType common.EntityType
+		if singleFileInfo.Mode()&os.ModeSymlink != 0 {
+			entityType = common.EEntityType.Symlink()
+			if t.incrementEnumerationCounter != nil {
+				t.incrementEnumerationCounter(entityType)
+			}
+			return nil
+		} else if IsHardlink(singleFileInfo) {
+			LogHardLinkIfDefaultPolicy(singleFileInfo, t.hardlinkHandling)
+			entityType = common.EEntityType.Hardlink()
+		} else if IsRegularFile(singleFileInfo) {
+			entityType = common.EEntityType.File()
+		} else {
+			entityType = common.EEntityType.Other()
+			if t.incrementEnumerationCounter != nil {
+				t.incrementEnumerationCounter(entityType)
+			}
+			common.AzcopyCurrentJobLogger.Log(
+				common.LogWarning,
+				fmt.Sprintf("File '%s' at the source is a special file and will be skipped and not copied", singleFileInfo.Name()),
+			)
+			return nil
+		}
+
 		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter(common.EEntityType.File())
+			t.incrementEnumerationCounter(entityType)
 		}
 
 		err := processIfPassedFilters(filters,
@@ -670,7 +699,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				preprocessor,
 				singleFileInfo.Name(),
 				"",
-				common.EEntityType.File(),
+				entityType,
 				singleFileInfo.ModTime(),
 				singleFileInfo.Size(),
 				noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
@@ -741,7 +770,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 			}
 
 			// note: Walk includes root, so no need here to separately create StoredObject for root (as we do for other folder-aware sources)
-			return finalizer(WalkWithSymlinks(t.appCtx, t.fullPath, processFile, t.symlinkHandling, t.errorChannel, t.hardlinkHandling))
+			return finalizer(WalkWithSymlinks(t.appCtx, t.fullPath, processFile, t.symlinkHandling, t.errorChannel, t.hardlinkHandling, t.incrementEnumerationCounter))
 		} else {
 			// if recursive is off, we only need to scan the files immediately under the fullPath
 			// We don't transfer any directory properties here, not even the root. (Because the root's
@@ -761,6 +790,9 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				fileInfo, _ := entry.Info()
 				if fileInfo.Mode()&os.ModeSymlink != 0 {
 					if t.symlinkHandling.None() {
+						if t.incrementEnumerationCounter != nil {
+							t.incrementEnumerationCounter(common.EEntityType.Symlink())
+						}
 						continue
 					} else if t.symlinkHandling.Preserve() { // Mark the entity type as a symlink.
 						entityType = common.EEntityType.Symlink()
@@ -800,7 +832,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				}
 
 				if t.incrementEnumerationCounter != nil {
-					t.incrementEnumerationCounter(common.EEntityType.File())
+					t.incrementEnumerationCounter(entityType)
 				}
 
 				err := processIfPassedFilters(filters,

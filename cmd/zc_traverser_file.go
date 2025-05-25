@@ -203,10 +203,23 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				targetURLParts.ShareName,
 			)
 
+			if skip, err := evaluateAndLogNFSFileType(t.ctx, NFSFileMeta{
+				Name:        storedObject.name,
+				NFSFileType: *fileProperties.NFSFileType,
+				LinkCount:   *fileProperties.LinkCount,
+				FileID:      *fileProperties.ID}, t.incrementEnumerationCounter); err == nil && skip {
+
+				return nil
+			}
+
+			//set entity tile to hardlink
+			if *fileProperties.LinkCount > int64(1) {
+				storedObject.entityType = common.EEntityType.Hardlink()
+			}
 			storedObject.smbLastModifiedTime = *fileProperties.FileLastWriteTime
 
 			if t.incrementEnumerationCounter != nil {
-				t.incrementEnumerationCounter(common.EEntityType.File())
+				t.incrementEnumerationCounter(storedObject.entityType)
 			}
 			err := processIfPassedFilters(filters, storedObject, processor)
 			_, err = getProcessingError(err)
@@ -239,19 +252,27 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		// Check if the file is a symlink and should be skipped in case of NFS
 		// We don't want to skip the file if we are not using NFS
 		// Check if the file is a hard link and should be logged with proper message in case of NFS
-		if skip, err := checkAndLogNFSLinkType(t.ctx, f); err == nil && skip {
+		fullProperties, err := f.propertyGetter(t.ctx)
+		if err != nil {
+			return StoredObject{
+				relativePath: relativePath,
+			}, err
+		}
+		// NFS handling
+		if skip, err := evaluateAndLogNFSFileType(t.ctx, NFSFileMeta{
+			Name:        f.name,
+			NFSFileType: file.NFSFileType(fullProperties.NFSFileType()),
+			LinkCount:   fullProperties.LinkCount(),
+			FileID:      fullProperties.FileID()}, t.incrementEnumerationCounter); err == nil && skip {
 			return nil, nil
+		}
+		//set entity tile to hardlink
+		if file.NFSFileType(fullProperties.NFSFileType()) == file.NFSFileTypeRegular && fullProperties.LinkCount() > int64(1) {
+			f.entityType = common.EEntityType.Hardlink()
 		}
 
 		// Only get the properties if we're told to
 		if t.getProperties {
-			var fullProperties filePropsProvider
-			fullProperties, err = f.propertyGetter(t.ctx)
-			if err != nil {
-				return StoredObject{
-					relativePath: relativePath,
-				}, err
-			}
 			lmt = fullProperties.LastModified()
 			smbLMT = fullProperties.FileLastWriteTime()
 			contentProps = fullProperties
@@ -487,33 +508,68 @@ func newAzFileRootDirectoryEntity(directoryClient *directory.Client, name string
 	}
 }
 
-// checkAndLogNFSLinkType checks if the given file is either a symbolic link or a hard link in an NFS share.
-// - If it's a symlink, it logs a warning, increments the skipped symlink count, and returns (true, nil) to indicate it should be skipped.
-// - If it's a hard link (i.e., a regular file with a link count > 1), it logs a hard link warning and returns (false, nil) to allow processing to continue.
-// - If it's neither, it returns (false, nil).
-// Returns an error if unable to retrieve file properties.
-func checkAndLogNFSLinkType(ctx context.Context, f azfileEntity) (skip bool, err error) {
-	fullProperties, err := f.propertyGetter(ctx)
-	if err != nil {
-		return false, err
-	}
+type NFSFileMeta struct {
+	Name        string
+	NFSFileType file.NFSFileType
+	LinkCount   int64
+	FileID      string
+}
 
-	switch fullProperties.NFSFileType() {
-	case NFSFileTypeSymLink:
-		skippedSymlinkCount++
-		logNFSLinkWarning(f.name, fullProperties.FileID(), true)
+// EvaluateAndLogNFSFileType determines whether an NFS file should be skipped based on its type,
+// and logs relevant warnings or metrics.
+//
+// Behavior:
+//
+//   - If the file is a symbolic link:
+//
+//   - Logs a symlink warning
+//
+//   - Increments the skipped symlink counter (if provided)
+//
+//   - Returns (true, nil) to indicate skipping
+//
+//   - If the file is a regular file with multiple hard links:
+//
+//   - Logs a hard link warning
+//
+//   - Returns (false, nil) to allow processing
+//
+//   - If the file is of an unsupported or special type (not regular, symlink, or directory):
+//
+//   - Logs a warning
+//
+//   - Increments the special file counter (if provided)
+//
+//   - Returns (true, nil) to indicate skipping
+//
+//   - Otherwise (for regular files or directories), it returns (false, nil).
+func evaluateAndLogNFSFileType(ctx context.Context, meta NFSFileMeta, incrementEnumerationCounter enumerationCounterFunc) (skip bool, err error) {
+
+	switch meta.NFSFileType {
+	case file.NFSFileTypeSymlink:
+		logNFSLinkWarning(meta.Name, "", true)
+		if incrementEnumerationCounter != nil {
+			incrementEnumerationCounter(common.EEntityType.Symlink())
+		}
 		return true, nil
 
-	case NFSFileTypeRegular:
-		if fullProperties.LinkCount() > 1 {
-			logNFSLinkWarning(f.name, fullProperties.FileID(), false)
+	case file.NFSFileTypeRegular:
+		if meta.LinkCount > 1 {
+			logNFSLinkWarning(meta.Name, meta.FileID, false)
 		}
-	case NFSFileTypeDirectory:
-		// Do nothing, we want to process directories
+
+	case file.NFSFileTypeDirectory:
+		// Process normally
+
 	default:
-		// If the file is not a regular,hardlink,symlink file, we consider it as special file and will skip it.
-		skippedSpecialFileCount++
-		common.AzcopyCurrentJobLogger.Log(common.LogWarning, fmt.Sprintf("File '%s' at the source is a special file and will be skipped and not copied", f.name))
+		// Special file
+		common.AzcopyCurrentJobLogger.Log(
+			common.LogWarning,
+			fmt.Sprintf("File '%s' at the source is a special file and will be skipped and not copied", meta.Name),
+		)
+		if incrementEnumerationCounter != nil {
+			incrementEnumerationCounter(common.EEntityType.Other())
+		}
 		return true, nil
 	}
 	return false, nil
