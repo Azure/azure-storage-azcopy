@@ -25,14 +25,15 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"hash"
 	"net/http"
 	"net/url"
 	"runtime"
 	"strings"
 	"sync"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -197,7 +198,7 @@ func anyToRemote(jptm IJobPartTransferMgr, pacer pacer, senderFactory senderFact
 		anyToRemote_folder(jptm, info, pacer, senderFactory, sipf)
 	case common.EEntityType.FileProperties():
 		anyToRemote_fileProperties(jptm, info, pacer, senderFactory, sipf)
-	case common.EEntityType.File():
+	case common.EEntityType.File(), common.EEntityType.Hardlink():
 		if jptm.GetOverwriteOption() == common.EOverwriteOption.PosixProperties() {
 			anyToRemote_fileProperties(jptm, info, pacer, senderFactory, sipf)
 		} else {
@@ -233,7 +234,17 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 		jptm.ReportTransferDone()
 		return
 	}
-	if srcInfoProvider.EntityType() != common.EEntityType.File() {
+
+	// TODO: Phase I - NFS Hardlink Handling
+	// For Phase I of NFS support, hardlinks are treated as regular files.
+	// This check ensures that the source entity is either a File or a Hardlink,
+	// since other types (e.g., folders or symlinks) are not expected here.
+	//
+	// The condition prevents a panic that would occur if an unsupported entity type
+	// is passed to this code path.
+	//
+	// NOTE: In future phases, when hardlinks are handled differently, this logic may need to be updated.
+	if srcInfoProvider.EntityType() != common.EEntityType.File() && srcInfoProvider.EntityType() != common.EEntityType.Hardlink() {
 		panic("configuration error. Source Info Provider does not have File entity type")
 	}
 

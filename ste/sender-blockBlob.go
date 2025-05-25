@@ -342,7 +342,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 
 	// Upload ADLS Gen 2 ACLs
 	fromTo := jptm.FromTo()
-	if fromTo.From().SupportsHnsACLs() && fromTo.To().SupportsHnsACLs() && jptm.Info().PreserveSMBPermissions.IsTruthy() {
+	if fromTo.From().SupportsHnsACLs() && fromTo.To().SupportsHnsACLs() && jptm.Info().PreservePermissions.IsTruthy() {
 		// We know for a fact our source is a "blob".
 		acl, err := s.sip.(*blobSourceInfoProvider).AccessControl()
 		if err != nil {

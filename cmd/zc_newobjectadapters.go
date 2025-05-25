@@ -21,13 +21,14 @@
 package cmd
 
 import (
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
 	sharedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"time"
 )
 
 var noContentProps = emptyPropertiesAdapter{}
@@ -267,6 +268,14 @@ func (a shareFilePropertiesAdapter) ContentLength() int64 {
 	return common.IffNotNil(a.GetPropertiesResponse.ContentLength, 0)
 }
 
+func (a shareFilePropertiesAdapter) LinkCount() int64 {
+	return common.IffNotNil(a.GetPropertiesResponse.LinkCount, 0)
+}
+
+func (a shareFilePropertiesAdapter) FileID() string {
+	return common.IffNotNil(a.GetPropertiesResponse.ID, "")
+}
+
 type shareDirectoryPropertiesAdapter struct {
 	*sharedirectory.GetPropertiesResponse
 }
@@ -309,4 +318,12 @@ func (a shareDirectoryPropertiesAdapter) ContentMD5() []byte {
 
 func (a shareDirectoryPropertiesAdapter) ContentLength() int64 {
 	return 0
+}
+
+func (a shareDirectoryPropertiesAdapter) LinkCount() int64 {
+	return 0
+}
+
+func (a shareDirectoryPropertiesAdapter) FileID() string {
+	return common.IffNotNil(a.GetPropertiesResponse.ID, "")
 }
