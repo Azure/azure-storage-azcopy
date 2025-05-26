@@ -202,20 +202,23 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				fileProperties.Metadata,
 				targetURLParts.ShareName,
 			)
+			// NFS hardling for different file types
+			if fileProperties.NFSFileType != nil {
 
-			if skip, err := evaluateAndLogNFSFileType(t.ctx, NFSFileMeta{
-				Name:        storedObject.name,
-				NFSFileType: *fileProperties.NFSFileType,
-				LinkCount:   *fileProperties.LinkCount,
-				FileID:      *fileProperties.ID}, t.incrementEnumerationCounter); err == nil && skip {
+				if skip, err := evaluateAndLogNFSFileType(t.ctx, NFSFileMeta{
+					Name:        storedObject.name,
+					NFSFileType: *fileProperties.NFSFileType,
+					LinkCount:   *fileProperties.LinkCount,
+					FileID:      *fileProperties.ID}, t.incrementEnumerationCounter); err == nil && skip {
 
-				return nil
+					return nil
+				}
+				//set entity tile to hardlink
+				if *fileProperties.LinkCount > int64(1) {
+					storedObject.entityType = common.EEntityType.Hardlink()
+				}
 			}
 
-			//set entity tile to hardlink
-			if *fileProperties.LinkCount > int64(1) {
-				storedObject.entityType = common.EEntityType.Hardlink()
-			}
 			storedObject.smbLastModifiedTime = *fileProperties.FileLastWriteTime
 
 			if t.incrementEnumerationCounter != nil {
