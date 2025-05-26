@@ -684,13 +684,13 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				entityType = common.EEntityType.File()
 			} else {
 				entityType = common.EEntityType.Other()
-				if t.incrementEnumerationCounter != nil {
-					t.incrementEnumerationCounter(entityType)
-				}
 				common.AzcopyCurrentJobLogger.Log(
 					common.LogWarning,
 					fmt.Sprintf("File '%s' at the source is a special file and will be skipped and not copied", singleFileInfo.Name()),
 				)
+				if t.incrementEnumerationCounter != nil {
+					t.incrementEnumerationCounter(entityType)
+				}
 				return nil
 			}
 		}
@@ -743,14 +743,17 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				}
 
 				// NFS Handling
+				// Symlink and folder check is covered above so we can skip it here
 				if isNFSCopy {
 					if IsHardlink(fileInfo) {
 						entityType = common.EEntityType.Hardlink()
-					} else if IsRegularFile(fileInfo) {
-						entityType = common.EEntityType.File()
-					} else {
-						entityType = common.EEntityType.Other()
 					}
+					// Not required here as we are skipping special files and symlinks for NFS
+					// } else if IsRegularFile(fileInfo) {
+					// 	entityType = common.EEntityType.File()
+					// } else if !IsSymbolicLink(fileInfo) && !fileInfo.IsDir() {
+					// 	entityType = common.EEntityType.Other()
+					// }
 				}
 
 				relPath := strings.TrimPrefix(strings.TrimPrefix(cleanLocalPath(filePath), cleanLocalPath(t.fullPath)), common.DeterminePathSeparator(t.fullPath))
@@ -839,9 +842,10 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 						entityType = common.EEntityType.Hardlink()
 					} else if !IsRegularFile(fileInfo) {
 						entityType = common.EEntityType.Other()
-					}
-					if t.incrementEnumerationCounter != nil {
-						t.incrementEnumerationCounter(entityType)
+						if t.incrementEnumerationCounter != nil {
+							t.incrementEnumerationCounter(entityType)
+						}
+						continue
 					}
 				}
 

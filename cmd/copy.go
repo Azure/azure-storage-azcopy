@@ -613,7 +613,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	}
 
 	if raw.isNFSCopy {
-		SetNFSFlag(isNFSCopy)
+		SetNFSFlag(raw.isNFSCopy)
 		// check for unsupported NFS behavior
 		if isUnsupported, err := isUnsupportedPlatformForNFS(cooked.FromTo); isUnsupported {
 			return cooked, err

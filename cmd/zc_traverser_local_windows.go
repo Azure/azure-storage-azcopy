@@ -83,3 +83,7 @@ func IsHardlink(fileInfo os.FileInfo) bool {
 func IsRegularFile(info os.FileInfo) bool {
 	return info.Mode().IsRegular()
 }
+
+func IsSymbolicLink(fileInfo os.FileInfo) bool {
+	return fileInfo.Mode()&os.ModeSymlink == os.ModeSymlink
+}

@@ -33,6 +33,10 @@ func IsRegularFile(info os.FileInfo) bool {
 	return info.Mode().IsRegular()
 }
 
+func IsSymbolicLink(fileInfo os.FileInfo) bool {
+	return fileInfo.Mode()&os.ModeSymlink == os.ModeSymlink
+}
+
 // LogHardLinkIfDefaultPolicy logs a warning if the given file is a hard link and the specified
 // hardlink handling policy is set to default hard links behaviour(follow).
 func LogHardLinkIfDefaultPolicy(fileInfo os.FileInfo, hardlinkHandling common.PreserveHardlinksOption) {

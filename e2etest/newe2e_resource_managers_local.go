@@ -314,6 +314,9 @@ func (l *LocalObjectResourceManager) Create(a Asserter, body ObjectContentContai
 	} else if l.entityType == common.EEntityType.Hardlink() {
 		err := os.Link(filepath.Join(l.container.RootPath, properties.HardLinkedFileName), l.getWorkingPath())
 		a.NoError("Create hardlink", err)
+	} else if l.entityType == common.EEntityType.Other() {
+		err := l.CreateSpecialFile(a)
+		a.NoError("Create special file", err)
 	}
 
 	l.SetObjectProperties(a, properties)

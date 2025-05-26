@@ -223,3 +223,8 @@ func (l LocalObjectResourceManager) PutNFSProperties(a Asserter, properties File
 func (l LocalObjectResourceManager) PutNFSPermissions(a Asserter, permissions FileNFSPermissions) {
 	return
 }
+
+// TODO Add support for windows later
+func (l LocalObjectResourceManager) CreateSpecialFile(a Asserter) error {
+	return nil
+}

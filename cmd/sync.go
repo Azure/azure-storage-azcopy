@@ -265,7 +265,7 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked.excludeFileAttributes = parsePatterns(raw.excludeFileAttributes)
 
 	if raw.isNFSCopy {
-		SetNFSFlag(isNFSCopy)
+		SetNFSFlag(raw.isNFSCopy)
 		// check for unsupported NFS behavior
 		if isUnsupported, err := isUnsupportedPlatformForNFS(cooked.fromTo); isUnsupported {
 			return cooked, err

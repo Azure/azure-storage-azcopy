@@ -5,12 +5,13 @@ package e2etest
 import (
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"golang.org/x/sys/unix"
 	"os"
 	"strconv"
 	"syscall"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"golang.org/x/sys/unix"
 )
 
 func (l LocalObjectResourceManager) PutNFSProperties(a Asserter, properties FileNFSProperties) {
@@ -146,3 +147,11 @@ func (l LocalObjectResourceManager) PutSMBProperties(a Asserter, properties File
 
 // TODO: Add SMB handling for linux later
 func (l LocalObjectResourceManager) PutSDDL(sddlstr string, a Asserter) {}
+
+func (l LocalObjectResourceManager) CreateSpecialFile(a Asserter) error {
+	err := unix.Mkfifo(l.getWorkingPath(), 0666)
+	if err != nil {
+		return err
+	}
+	return nil
+}
