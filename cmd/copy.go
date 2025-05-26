@@ -182,6 +182,16 @@ type rawCopyCmdArgs struct {
 // this is a global variable so that we can use it in traversal phase
 var isNFSCopy bool
 
+func SetNFSFlag(isNFS bool) {
+	// SetNFSFlag sets the global isNFSCopy variable to the given value
+	isNFSCopy = isNFS
+}
+
+func GetNFSFlag() bool {
+	// GetNFSFlag returns the value of the global isNFSCopy variable
+	return isNFSCopy
+}
+
 // blockSizeInBytes converts a FLOATING POINT number of MiB, to a number of bytes
 // A non-nil error is returned if the conversion is not possible to do accurately (e.g. it comes out of a fractional number of bytes)
 // The purpose of using floating point is to allow specialist users (e.g. those who want small block sizes to tune their read IOPS)
@@ -603,9 +613,9 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	}
 
 	if raw.isNFSCopy {
-		isNFSCopy = true
+		SetNFSFlag(isNFSCopy)
 		// check for unsupported NFS behavior
-		if isUnsupported, err := isUnsupportedBehaviorForNFS(cooked.FromTo); isUnsupported {
+		if isUnsupported, err := isUnsupportedPlatformForNFS(cooked.FromTo); isUnsupported {
 			return cooked, err
 		}
 
@@ -1581,6 +1591,18 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 	}
 
+	// NFS handling.
+	// S2S are supported only for NFS->NFS.Upload for linux->NFS,Download for NFS->linux
+	// Unsupported scenarios for source
+	if cca.isNFSCopy {
+		if isUnsupported, err := isUnsupportedScenarioForNFS(ctx,
+			cca.FromTo, cca.Source, jobPartOrder.SrcServiceClient); isUnsupported {
+			return err
+		}
+	}
+
+	// Handling for both SMB and NFS
+	// Unsupported scenarios for destination
 	if (cca.FromTo.IsUpload() || cca.FromTo.IsS2S()) && cca.FromTo.To() == common.ELocation.File() {
 		if err := validateProtocolCompatibility(ctx, cca.FromTo,
 			cca.Destination,
