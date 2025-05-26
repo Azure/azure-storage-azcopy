@@ -319,11 +319,6 @@ func isUnsupportedPlatformForNFS(fromTo common.FromTo) (bool, error) {
 }
 
 func isUnsupportedScenarioForNFS(ctx context.Context, fromTo common.FromTo, source common.ResourceString, serviceClient *common.ServiceClient) (bool, error) {
-	// Check platform compatibility
-	if (fromTo.IsUpload() || fromTo.IsDownload()) && runtime.GOOS != "linux" {
-		return true, fmt.Errorf("NFS %s is not supported on %s. This functionality is only available on Linux.",
-			fromTo.String(), runtime.GOOS)
-	}
 
 	// Check S2S: only valid if both ends are NFS shares
 	if fromTo.IsS2S() {
