@@ -203,8 +203,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				targetURLParts.ShareName,
 			)
 			// NFS hardling for different file types
-			if fileProperties.NFSFileType != nil {
-
+			if isNFSCopy {
 				if skip, err := evaluateAndLogNFSFileType(t.ctx, NFSFileMeta{
 					Name:        storedObject.name,
 					NFSFileType: *fileProperties.NFSFileType,
@@ -263,7 +262,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		// Check if the file is a symlink and should be skipped in case of NFS
 		// We don't want to skip the file if we are not using NFS
 		// Check if the file is a hard link and should be logged with proper message in case of NFS
-		if fullProperties.NFSFileType() != "" {
+		if isNFSCopy {
 			if skip, err := evaluateAndLogNFSFileType(t.ctx, NFSFileMeta{
 				Name:        f.name,
 				NFSFileType: file.NFSFileType(fullProperties.NFSFileType()),
@@ -272,7 +271,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				return nil, nil
 			}
 			//set entity tile to hardlink
-			if file.NFSFileType(fullProperties.NFSFileType()) == file.NFSFileTypeRegular && fullProperties.LinkCount() > int64(1) {
+			if fullProperties.LinkCount() > int64(1) {
 				f.entityType = common.EEntityType.Hardlink()
 			}
 		}

@@ -844,7 +844,7 @@ func passedFilters(filters []ObjectFilter, storedObject StoredObject) bool {
 				glcm.Error(msg)
 			}
 
-			if filter.AppliesOnlyToFiles() && (storedObject.entityType != common.EEntityType.File() || storedObject.entityType != common.EEntityType.Hardlink()) {
+			if filter.AppliesOnlyToFiles() && (storedObject.entityType != common.EEntityType.File() && storedObject.entityType != common.EEntityType.Hardlink()) {
 				// don't pass folders to filters that only know how to deal with files
 				// As at Feb 2020, we have separate logic to weed out folder properties (and not even send them)
 				// if any filter applies only to files... but that logic runs after this point, so we need this

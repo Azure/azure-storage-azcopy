@@ -179,7 +179,10 @@ type rawCopyCmdArgs struct {
 	preserveHardlinks string
 }
 
-// blocSizeInBytes converts a FLOATING POINT number of MiB, to a number of bytes
+// this is a global variable so that we can use it in traversal phase
+var isNFSCopy bool
+
+// blockSizeInBytes converts a FLOATING POINT number of MiB, to a number of bytes
 // A non-nil error is returned if the conversion is not possible to do accurately (e.g. it comes out of a fractional number of bytes)
 // The purpose of using floating point is to allow specialist users (e.g. those who want small block sizes to tune their read IOPS)
 // to use fractions of a MiB. E.g.
@@ -600,6 +603,12 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	}
 
 	if raw.isNFSCopy {
+		isNFSCopy = true
+		// check for unsupported NFS behavior
+		if isUnsupported, err := isUnsupportedBehaviorForNFS(cooked.FromTo); isUnsupported {
+			return cooked, err
+		}
+
 		cooked.isNFSCopy, cooked.preserveInfo, cooked.preservePermissions, err = performNFSSpecificValidation(cooked.FromTo,
 			raw.isNFSCopy, raw.preserveInfo, raw.preservePermissions, raw.preserveSMBInfo, raw.preserveSMBPermissions)
 		if err != nil {

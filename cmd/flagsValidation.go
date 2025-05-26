@@ -299,3 +299,21 @@ func validatePreserveHardlinks(option common.PreserveHardlinksOption, fromTo com
 	}
 	return nil
 }
+
+func isUnsupportedBehaviorForNFS(fromTo common.FromTo) (bool, error) {
+	// uplaod and download is not supported for NFS on non-linux systems
+	if (fromTo.IsUpload() || fromTo.IsDownload()) && runtime.GOOS != "linux" {
+		op := "operation"
+		if fromTo.IsUpload() {
+			op = "upload"
+		} else if fromTo.IsDownload() {
+			op = "download"
+		}
+		return true, fmt.Errorf(
+			"NFS %s is not supported on %s. This functionality is only available on Linux.",
+			op,
+			runtime.GOOS,
+		)
+	}
+	return false, nil
+}

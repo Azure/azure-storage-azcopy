@@ -273,10 +273,12 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				}
 
 				if symlinkHandling.None() {
-					if incrementEnumerationCounter != nil {
-						incrementEnumerationCounter(common.EEntityType.Symlink())
+					if isNFSCopy {
+						if incrementEnumerationCounter != nil {
+							incrementEnumerationCounter(common.EEntityType.Symlink())
+						}
+						logNFSLinkWarning(fileInfo.Name(), "", true)
 					}
-					logNFSLinkWarning(fileInfo.Name(), "", true)
 					return nil // skip it
 				}
 
@@ -353,17 +355,18 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				}
 				return nil
 			} else {
-				LogHardLinkIfDefaultPolicy(fileInfo, hardlinkHandling)
-				if !IsRegularFile(fileInfo) && !fileInfo.IsDir() {
-					// We don't want to process other non-regular files here.
-					if incrementEnumerationCounter != nil {
-						incrementEnumerationCounter(common.EEntityType.Other())
+				if isNFSCopy {
+					LogHardLinkIfDefaultPolicy(fileInfo, hardlinkHandling)
+					if !IsRegularFile(fileInfo) && !fileInfo.IsDir() {
+						// We don't want to process other non-regular files here.
+						if incrementEnumerationCounter != nil {
+							incrementEnumerationCounter(common.EEntityType.Other())
+						}
+						message := fmt.Sprintf("File '%s' at the source is a special file and will be skipped and not copied", fileInfo.Name())
+						common.AzcopyCurrentJobLogger.Log(common.LogWarning, message)
+						return nil
 					}
-					message := fmt.Sprintf("File '%s' at the source is a special file and will be skipped and not copied", fileInfo.Name())
-					common.AzcopyCurrentJobLogger.Log(common.LogWarning, message)
-					return nil
 				}
-
 				// not a symlink
 				result, err := filepath.Abs(filePath)
 
@@ -666,28 +669,30 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	// if the path is a single file, then pass it through the filters and send to processor
 	if isSingleFile {
 
-		var entityType common.EntityType
-		if singleFileInfo.Mode()&os.ModeSymlink != 0 {
-			entityType = common.EEntityType.Symlink()
-			if t.incrementEnumerationCounter != nil {
-				t.incrementEnumerationCounter(entityType)
+		entityType := common.EEntityType.File()
+		if isNFSCopy {
+			if singleFileInfo.Mode()&os.ModeSymlink != 0 {
+				entityType = common.EEntityType.Symlink()
+				if t.incrementEnumerationCounter != nil {
+					t.incrementEnumerationCounter(entityType)
+				}
+				return nil
+			} else if IsHardlink(singleFileInfo) {
+				LogHardLinkIfDefaultPolicy(singleFileInfo, t.hardlinkHandling)
+				entityType = common.EEntityType.Hardlink()
+			} else if IsRegularFile(singleFileInfo) {
+				entityType = common.EEntityType.File()
+			} else {
+				entityType = common.EEntityType.Other()
+				if t.incrementEnumerationCounter != nil {
+					t.incrementEnumerationCounter(entityType)
+				}
+				common.AzcopyCurrentJobLogger.Log(
+					common.LogWarning,
+					fmt.Sprintf("File '%s' at the source is a special file and will be skipped and not copied", singleFileInfo.Name()),
+				)
+				return nil
 			}
-			return nil
-		} else if IsHardlink(singleFileInfo) {
-			LogHardLinkIfDefaultPolicy(singleFileInfo, t.hardlinkHandling)
-			entityType = common.EEntityType.Hardlink()
-		} else if IsRegularFile(singleFileInfo) {
-			entityType = common.EEntityType.File()
-		} else {
-			entityType = common.EEntityType.Other()
-			if t.incrementEnumerationCounter != nil {
-				t.incrementEnumerationCounter(entityType)
-			}
-			common.AzcopyCurrentJobLogger.Log(
-				common.LogWarning,
-				fmt.Sprintf("File '%s' at the source is a special file and will be skipped and not copied", singleFileInfo.Name()),
-			)
-			return nil
 		}
 
 		if t.incrementEnumerationCounter != nil {
@@ -733,12 +738,19 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 					}
 
 					entityType = common.EEntityType.Folder()
-				} else if IsHardlink(fileInfo) {
-					entityType = common.EEntityType.Hardlink()
-				} else if IsRegularFile(fileInfo) {
-					entityType = common.EEntityType.File()
 				} else {
-					entityType = common.EEntityType.Other()
+					entityType = common.EEntityType.File()
+				}
+
+				// NFS Handling
+				if isNFSCopy {
+					if IsHardlink(fileInfo) {
+						entityType = common.EEntityType.Hardlink()
+					} else if IsRegularFile(fileInfo) {
+						entityType = common.EEntityType.File()
+					} else {
+						entityType = common.EEntityType.Other()
+					}
 				}
 
 				relPath := strings.TrimPrefix(strings.TrimPrefix(cleanLocalPath(filePath), cleanLocalPath(t.fullPath)), common.DeterminePathSeparator(t.fullPath))
@@ -790,7 +802,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				fileInfo, _ := entry.Info()
 				if fileInfo.Mode()&os.ModeSymlink != 0 {
 					if t.symlinkHandling.None() {
-						if t.incrementEnumerationCounter != nil {
+						if isNFSCopy && t.incrementEnumerationCounter != nil {
 							t.incrementEnumerationCounter(common.EEntityType.Symlink())
 						}
 						continue
@@ -820,10 +832,17 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 							return err
 						}
 					}
-				} else if IsHardlink(fileInfo) {
-					entityType = common.EEntityType.Hardlink()
-				} else if !IsRegularFile(fileInfo) {
-					entityType = common.EEntityType.Other()
+				}
+				// NFS handling
+				if isNFSCopy {
+					if IsHardlink(fileInfo) {
+						entityType = common.EEntityType.Hardlink()
+					} else if !IsRegularFile(fileInfo) {
+						entityType = common.EEntityType.Other()
+					}
+					if t.incrementEnumerationCounter != nil {
+						t.incrementEnumerationCounter(entityType)
+					}
 				}
 
 				if entry.IsDir() {
@@ -832,7 +851,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				}
 
 				if t.incrementEnumerationCounter != nil {
-					t.incrementEnumerationCounter(entityType)
+					t.incrementEnumerationCounter(common.EEntityType.File())
 				}
 
 				err := processIfPassedFilters(filters,
