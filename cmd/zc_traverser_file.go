@@ -252,26 +252,29 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		var contentProps contentPropsProvider = noContentProps
 		var metadata common.Metadata
 
-		// Check if the file is a symlink and should be skipped in case of NFS
-		// We don't want to skip the file if we are not using NFS
-		// Check if the file is a hard link and should be logged with proper message in case of NFS
 		fullProperties, err := f.propertyGetter(t.ctx)
 		if err != nil {
 			return StoredObject{
 				relativePath: relativePath,
 			}, err
 		}
+
 		// NFS handling
-		if skip, err := evaluateAndLogNFSFileType(t.ctx, NFSFileMeta{
-			Name:        f.name,
-			NFSFileType: file.NFSFileType(fullProperties.NFSFileType()),
-			LinkCount:   fullProperties.LinkCount(),
-			FileID:      fullProperties.FileID()}, t.incrementEnumerationCounter); err == nil && skip {
-			return nil, nil
-		}
-		//set entity tile to hardlink
-		if file.NFSFileType(fullProperties.NFSFileType()) == file.NFSFileTypeRegular && fullProperties.LinkCount() > int64(1) {
-			f.entityType = common.EEntityType.Hardlink()
+		// Check if the file is a symlink and should be skipped in case of NFS
+		// We don't want to skip the file if we are not using NFS
+		// Check if the file is a hard link and should be logged with proper message in case of NFS
+		if fullProperties.NFSFileType() != "" {
+			if skip, err := evaluateAndLogNFSFileType(t.ctx, NFSFileMeta{
+				Name:        f.name,
+				NFSFileType: file.NFSFileType(fullProperties.NFSFileType()),
+				LinkCount:   fullProperties.LinkCount(),
+				FileID:      fullProperties.FileID()}, t.incrementEnumerationCounter); err == nil && skip {
+				return nil, nil
+			}
+			//set entity tile to hardlink
+			if file.NFSFileType(fullProperties.NFSFileType()) == file.NFSFileTypeRegular && fullProperties.LinkCount() > int64(1) {
+				f.entityType = common.EEntityType.Hardlink()
+			}
 		}
 
 		// Only get the properties if we're told to
