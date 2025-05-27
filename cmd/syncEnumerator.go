@@ -324,7 +324,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 
 	//Protocol compatibility for SMB and NFS
 	// Handles source validation
-	if cca.fromTo.IsS2S() {
+	if cca.fromTo.IsS2S() && (cca.fromTo.To() == common.ELocation.File() && cca.fromTo.From() == common.ELocation.File()) {
 		if err := validateShareProtocolCompatibility(ctx,
 			cca.fromTo, cca.source, copyJobTemplate.SrcServiceClient, cca.isNFSCopy, true); err != nil {
 			return nil, err

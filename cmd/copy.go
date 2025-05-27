@@ -1593,7 +1593,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	//Protocol compatibility for SMB and NFS
 	// Handles source validation
-	if cca.FromTo.IsS2S() {
+	if cca.FromTo.IsS2S() && (cca.FromTo.To() == common.ELocation.File() && cca.FromTo.From() == common.ELocation.File()) {
 		if err := validateShareProtocolCompatibility(ctx,
 			cca.FromTo, cca.Source, jobPartOrder.SrcServiceClient, cca.isNFSCopy, true); err != nil {
 			return err
