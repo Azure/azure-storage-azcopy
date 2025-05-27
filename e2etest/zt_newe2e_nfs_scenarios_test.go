@@ -51,6 +51,14 @@ func getPropertiesAndPermissions(svm *ScenarioVariationManager, preserveProperti
 
 func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariationManager) {
 
+	// 	Test Scenario:
+	// 	1. Create a NFS enabled file share container in Azure
+	// 	2. Create a folder with some files in it. Create a regular,special file,symlink and hardlink files in the folder.
+	// 	3. Run azcopy copy/sync command to copy the folder from Azure NFS enabled file share to local.
+	// 	4. Hardlinked files should be downloaded as regular files. Hardlinks will not be preserved.
+	// 	5. Number of hardlinks converted count will be displayed in job's summary
+	//  6. Symlinked and special files should be skipped and number of skipped files will be displayed in job's summary
+
 	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
 		svm.InvalidateScenario()
 		return
@@ -221,11 +229,22 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 		Objects: srcObjs,
 	}, true)
 	ValidateSkippedSymLinkedCount(svm, stdOut, 1)
-	ValidateHardlinkedCount(svm, stdOut, 2)
+	ValidateHardlinkedSkippedCount(svm, stdOut, 2)
 	ValidateSkippedSpecialFileCount(svm, stdOut, 1)
 }
 
 func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManager) {
+
+	//
+	// 	Test Scenario:
+	// 	1. Create a NFS enabled file share container in Azure
+	// 	2. Create a folder with some files in it. Create a regular and hardlink files in the folder.
+	// 	3. We cannot create symlink files in NFS enabled file share as of now.
+	// 	4. Creating special file via NFS REST API is not allowed.
+	// 	5. Run azcopy copy/sync command to copy the folder from Azure NFS enabled file share to local.
+	// 	6. Hardlinked files should be downloaded as regular files. Hardlinks will not be preserved.
+	// 	7. Number of hardlinks converted count will be displayed in job's summary
+	//
 
 	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
 		svm.InvalidateScenario()
@@ -235,7 +254,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 	preserveProperties := ResolveVariation(svm, []bool{true, false})
 	//TODO: Not checking for this flag as false as azcopy needs to run by root user
 	// in order to set the owner and group to 0(root)
-	preservePermissions := ResolveVariation(svm, []bool{true /*, false*/})
+	preservePermissions := ResolveVariation(svm, []bool{true})
 
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
 	//srcContainer := GetAccount(svm, PremiumFileShareAcct).GetService(svm, common.ELocation.File()).GetContainer("aznfs3")
@@ -296,29 +315,29 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 	// create original file for linking symlink
 	// Symlink creation in NFS is currently not supported in go-sdk.
 	// TODO: Add this once the support is added
-	/*sOriginalFileName := rootDir + "/soriginal.txt"
-	obj = ResourceDefinitionObject{
-		ObjectName: pointerTo(sOriginalFileName),
-		ObjectProperties: ObjectProperties{
-			EntityType:         common.EEntityType.File(),
-			FileNFSProperties:  fileProperties,
-			FileNFSPermissions: fileOrFolderPermissions,
-		}}
-	CreateResource[ObjectResourceManager](svm, srcContainer, obj)
-	srcObjs[sOriginalFileName] = obj
+	// sOriginalFileName := rootDir + "/soriginal.txt"
+	// obj = ResourceDefinitionObject{
+	// 	ObjectName: pointerTo(sOriginalFileName),
+	// 	ObjectProperties: ObjectProperties{
+	// 		EntityType:         common.EEntityType.File(),
+	// 		FileNFSProperties:  fileProperties,
+	// 		FileNFSPermissions: fileOrFolderPermissions,
+	// 	}}
+	// CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+	// srcObjs[sOriginalFileName] = obj
 
-	// create symlink file
-	symLinkedFileName := rootDir + "/symlinked.txt"
-	obj = ResourceDefinitionObject{
-		ObjectName: pointerTo(symLinkedFileName),
-		ObjectProperties: ObjectProperties{
-			EntityType:         common.EEntityType.Symlink(),
-			FileNFSProperties:  fileProperties,
-			FileNFSPermissions: fileOrFolderPermissions,
-			SymlinkedFileName:  sOriginalFileName,
-		}}
-	// Symlink file should not be copied
-	CreateResource[ObjectResourceManager](svm, srcContainer, obj)*/
+	// // create symlink file
+	// symLinkedFileName := rootDir + "/symlinked.txt"
+	// obj = ResourceDefinitionObject{
+	// 	ObjectName: pointerTo(symLinkedFileName),
+	// 	ObjectProperties: ObjectProperties{
+	// 		EntityType:         common.EEntityType.Symlink(),
+	// 		FileNFSProperties:  fileProperties,
+	// 		FileNFSPermissions: fileOrFolderPermissions,
+	// 		SymlinkedFileName:  sOriginalFileName,
+	// 	}}
+	// // Symlink file should not be copied
+	// CreateResource[ObjectResourceManager](svm, srcContainer, obj)
 
 	// create original file for creating hardlinked file
 	hOriginalFileName := rootDir + "/horiginal.txt"
@@ -344,19 +363,6 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 		}}
 	CreateResource[ObjectResourceManager](svm, srcContainer, obj)
 	srcObjs[hardLinkedFileName] = obj
-
-	// create special file
-	// Special file should not be copied
-	// TODO: check how we can create special file via NFS REST API
-	//specialFileFileName := rootDir + "/mypipe"
-	//obj = ResourceDefinitionObject{
-	//	ObjectName: pointerTo(specialFileFileName),
-	//	ObjectProperties: ObjectProperties{
-	//		EntityType:         common.EEntityType.Other(),
-	//		FileNFSProperties:  fileProperties,
-	//		FileNFSPermissions: fileOrFolderPermissions,
-	//	}}
-	//CreateResource[ObjectResourceManager](svm, srcContainer, obj)
 
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
@@ -389,19 +395,30 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcObjs,
 	}, true)
-	ValidateHardlinkedCount(svm, stdOut, 2)
+	ValidateHardlinkedSkippedCount(svm, stdOut, 2)
 	// TODO: add this validation later when symlink is supported for NFS in go-sdk
 	//ValidateSkippedSymLinkedCount(svm, stdOut, 1)
-	//ValidateSkippedSpecialFileCount(svm, stdOut, 1)
+
 }
 
-/*
 func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationManager) {
+
+	//
+	// 	Test Scenario:
+	// 	1. Create a NFS enabled file share container in Azure
+	// 	2. Create a folder with some files in it. Create a regular and hardlink files in the folder.
+	// 	3. We cannot create symlink files in NFS enabled file share as of now.
+	// 	4. Creating special file via NFS REST API is not allowed.
+	// 	5. Run azcopy copy/sync command to copy the folder from Azure NFS enabled file share to local.
+	// 	6. Hardlinked files should be downloaded as regular files. Hardlinks will not be preserved.
+	// 	7. Number of hardlinks converted count will be displayed in job's summary
+	//
 
 	// if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
 	// 	svm.InvalidateScenario()
 	// 	return
 	// }
+
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File()}), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
@@ -412,6 +429,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 			},
 		},
 	})
+
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File()}), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
 	}), ResourceDefinitionContainer{
@@ -474,9 +492,34 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 		srcObjs[name] = obj
 	}
 
+	// create original file for creating hardlinked file
+	hOriginalFileName := rootDir + "/horiginal.txt"
+	obj = ResourceDefinitionObject{
+		ObjectName: pointerTo(hOriginalFileName),
+		ObjectProperties: ObjectProperties{
+			EntityType:         common.EEntityType.File(),
+			FileNFSProperties:  fileProperties,
+			FileNFSPermissions: fileOrFolderPermissions,
+		}}
+	CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+	srcObjs[hOriginalFileName] = obj
+
+	// create hardlinked file
+	hardLinkedFileName := rootDir + "/hardlinked.txt"
+	obj = ResourceDefinitionObject{
+		ObjectName: pointerTo(hardLinkedFileName),
+		ObjectProperties: ObjectProperties{
+			EntityType:         common.EEntityType.Hardlink(),
+			FileNFSProperties:  fileProperties,
+			FileNFSPermissions: fileOrFolderPermissions,
+			HardLinkedFileName: hOriginalFileName,
+		}}
+	CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+	srcObjs[hardLinkedFileName] = obj
+
 	sasOpts := GenericAccountSignatureValues{}
 
-	_, _ = RunAzCopy(
+	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
 			Verb: azCopyVerb,
@@ -504,5 +547,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcObjs,
 	}, false)
+
+	fmt.Println("StdOut: ", stdOut)
+	ValidateHardlinkedSkippedCount(svm, stdOut, 2)
 }
-*/

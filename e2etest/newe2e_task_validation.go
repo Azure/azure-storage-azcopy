@@ -210,7 +210,7 @@ func ValidateListOutput(a Asserter, stdout AzCopyStdout, expectedObjects map[AzC
 	a.Assert("summary must match", Equal{}, listStdout.Summary, DerefOrZero(expectedSummary))
 }
 
-func ValidateHardlinkedCount(a Asserter, stdOut AzCopyStdout, expected uint32) {
+func ValidateHardlinkedSkippedCount(a Asserter, stdOut AzCopyStdout, expected uint32) {
 	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
 		return
 	}
