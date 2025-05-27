@@ -82,6 +82,26 @@ var rootCmd = &cobra.Command{
 	Short:   rootCmdShortDescription,
 	Long:    rootCmdLongDescription,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		glcm.RegisterCloseFunc(func() {
+			if debugMemoryProfile != "" {
+				memProfDir := filepath.Dir(debugMemoryProfile)
+				err := os.MkdirAll(memProfDir, 0777)
+				if err != nil {
+					panic(fmt.Sprintf("Failed to create memory profile parent dir: %v", err))
+				}
+
+				f, err := os.OpenFile(debugMemoryProfile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+				if err != nil {
+					panic(fmt.Sprintf("Failed to open memory profile: %v", err))
+				}
+				defer f.Close()
+				runtime.GC()
+				if err := pprof.WriteHeapProfile(f); err != nil {
+					log.Fatal("could not write memory profile: ", err)
+				}
+			}
+		})
+
 		// referencing https://github.com/Azure/azure-sdk-for-go/blob/main/sdk/azcore/policy/policy.go#L114
 		rscList := "408;429;500;502;503;504"
 		if retryStatusCodes != "" {
@@ -172,7 +192,6 @@ var rootCmd = &cobra.Command{
 }
 
 func Initialize(resumeJobID common.JobID, isBench bool) error {
-
 	azcopyLogPathFolder, common.AzcopyJobPlanFolder = initializeFolders()
 
 	configureGoMaxProcs()
@@ -186,25 +205,6 @@ func Initialize(resumeJobID common.JobID, isBench bool) error {
 	azcopyCurrentJobID = jobID
 	loggerInfo := jobLoggerInfo{jobID, azcopyLogPathFolder}
 
-	glcm.RegisterCloseFunc(func() {
-		if debugMemoryProfile != "" {
-			memProfDir := filepath.Dir(debugMemoryProfile)
-			err := os.MkdirAll(memProfDir, 0777)
-			if err != nil {
-				panic(fmt.Sprintf("Failed to create memory profile parent dir: %v", err))
-			}
-
-			f, err := os.OpenFile(debugMemoryProfile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
-			if err != nil {
-				panic(fmt.Sprintf("Failed to open memory profile: %v", err))
-			}
-			defer f.Close()
-			runtime.GC()
-			if err := pprof.WriteHeapProfile(f); err != nil {
-				log.Fatal("could not write memory profile: ", err)
-			}
-		}
-	})
 	timeAtPrestart := time.Now()
 	glcm.SetOutputFormat(azcopyOutputFormat)
 	glcm.SetOutputVerbosity(azcopyOutputVerbosity)
