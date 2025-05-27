@@ -147,6 +147,8 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
+		// Check if we are downloading to Pipe so we can bypass version check and not write it to stdout, customer is
+		// only expecting blob data in stdout
 		var fromToFlagValue string
 		if cmd.Flags().Changed("from-to") {
 			// Access the value of the "from-to" flag
@@ -217,6 +219,7 @@ func Initialize(resumeJobID common.JobID, isBench bool) error {
 	common.AzcopyCurrentJobLogger.OpenLog()
 
 	glcm.SetForceLogging()
+
 	// currently, we only automatically do auto-tuning when benchmarking
 	preferToAutoTuneGRs := isBench
 	providePerformanceAdvice := isBench
@@ -263,12 +266,12 @@ var glcmSwapOnce = &sync.Once{}
 var Execute func() error = rootCmd.Execute
 
 func InitializeAndExecute() {
-	if err := rootCmd.Execute(); err != nil {
+	if err := Execute(); err != nil {
 		glcm.Error(err.Error())
 	} else {
 		if !azcopySkipVersionCheck && !isPipeDownload {
 			// our commands all control their own life explicitly with the lifecycle manager
-			// only commands that don't explicitly exit actually reach this point (e.g. help commands and login commands)
+			// only commands that don't explicitly exit actually reach this point (e.g. help commands)
 			select {
 			case <-beginDetectNewVersion():
 				// noop
