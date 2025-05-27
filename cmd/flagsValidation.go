@@ -318,20 +318,39 @@ func isUnsupportedPlatformForNFS(fromTo common.FromTo) (bool, error) {
 	return false, nil
 }
 
-func isUnsupportedScenarioForNFS(ctx context.Context, fromTo common.FromTo, source common.ResourceString, serviceClient *common.ServiceClient) (bool, error) {
-
-	// Check S2S: only valid if both ends are NFS shares
-	if fromTo.IsS2S() {
-		protocol, err := getShareProtocolType(ctx, serviceClient, source, "NFS")
-		if err != nil {
-			return true, err
-		}
-		if protocol != "NFS" {
-			return true, fmt.Errorf("Service-to-service NFS transfer is only supported from NFS shares. Found %s protocol.", protocol)
-		}
+func validateShareProtocolCompatibility(
+	ctx context.Context,
+	fromTo common.FromTo,
+	resource common.ResourceString,
+	serviceClient *common.ServiceClient,
+	isNFSCopy bool,
+	isSource bool,
+) error {
+	direction := "from"
+	if !isSource {
+		direction = "to"
 	}
 
-	return false, nil
+	// Determine fallback protocol
+	fallback := "NFS"
+	if !isNFSCopy {
+		fallback = "SMB"
+	}
+
+	protocol, err := getShareProtocolType(ctx, serviceClient, resource, fallback)
+	if err != nil {
+		return err
+	}
+
+	if protocol == "SMB" && isNFSCopy {
+		return fmt.Errorf("The %s share has SMB protocol enabled. To copy %s an SMB share, do not use the --nfs flag", direction, direction)
+	}
+
+	if protocol == "NFS" && !isNFSCopy {
+		return fmt.Errorf("The %s share has NFS protocol enabled. To copy %s an NFS share, please provide the --nfs flag", direction, direction)
+	}
+
+	return nil
 }
 
 // getShareProtocolType returns "SMB", "NFS", or "UNKNOWN" based on the share's enabled protocols.

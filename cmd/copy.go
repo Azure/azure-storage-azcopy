@@ -1591,30 +1591,24 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 	}
 
-	// NFS handling.
-	// S2S are supported only for NFS->NFS.Upload for linux->NFS,Download for NFS->linux
-	// Unsupported scenarios for source
-	if cca.isNFSCopy {
-		if isUnsupported, err := isUnsupportedScenarioForNFS(ctx,
-			cca.FromTo, cca.Source, jobPartOrder.SrcServiceClient); isUnsupported {
+	//Protocol compatibility for SMB and NFS
+	// Handles source validation
+	if cca.FromTo.IsS2S() {
+		if err := validateShareProtocolCompatibility(ctx,
+			cca.FromTo, cca.Source, jobPartOrder.SrcServiceClient, cca.isNFSCopy, true); err != nil {
 			return err
 		}
 	}
 
-	// Handling for both SMB and NFS
-	// Unsupported scenarios for destination
+	// Handle destination validation
 	if (cca.FromTo.IsUpload() || cca.FromTo.IsS2S()) && cca.FromTo.To() == common.ELocation.File() {
-		if err := validateProtocolCompatibility(ctx, cca.FromTo,
-			cca.Destination,
-			jobPartOrder.DstServiceClient,
-			cca.isNFSCopy); err != nil {
+		if err := validateShareProtocolCompatibility(ctx,
+			cca.FromTo, cca.Destination, jobPartOrder.DstServiceClient, cca.isNFSCopy, false); err != nil {
 			return err
 		}
 	} else if cca.FromTo.IsDownload() && cca.FromTo.From() == common.ELocation.File() {
-		if err := validateProtocolCompatibility(ctx, cca.FromTo,
-			cca.Source,
-			jobPartOrder.SrcServiceClient,
-			cca.isNFSCopy); err != nil {
+		if err := validateShareProtocolCompatibility(ctx,
+			cca.FromTo, cca.Source, jobPartOrder.SrcServiceClient, cca.isNFSCopy, true); err != nil {
 			return err
 		}
 	}
