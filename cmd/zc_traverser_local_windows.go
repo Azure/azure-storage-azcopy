@@ -71,9 +71,6 @@ func LogHardLinkIfDefaultPolicy(fileInfo os.FileInfo, hardlinkHandling common.Pr
 	return
 }
 
-// TODO: Add support for Windows later
-func logNFSLinkWarning(fileName, inodeNo string, isSymlink bool) { return }
-
 // TODO: Add support for hardlinks on Windows later
 func IsHardlink(fileInfo os.FileInfo) bool {
 	return false
