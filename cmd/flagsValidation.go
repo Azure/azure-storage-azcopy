@@ -101,57 +101,6 @@ func areBothLocationsSMBAware(fromTo common.FromTo) bool {
 	}
 }
 
-// validateProtocolCompatibility checks whether the target Azure Files share
-// supports the correct protocol (NFS or SMB) based on the transfer direction
-// and the presence of the --nfs flag. It attempts to fetch the share's properties,
-// and falls back to an assumption (with an info message) if the check fails.
-// func validateProtocolCompatibility(ctx context.Context,
-// 	fromTo common.FromTo,
-// 	resource common.ResourceString,
-// 	serviceClient *common.ServiceClient,
-// 	isNFSCopy bool) error {
-
-// 	fileURLParts, err := file.ParseURL(resource.Value)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	shareName := fileURLParts.ShareName
-
-// 	fileServiceClient, err := serviceClient.FileServiceClient()
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	direction := "to"
-// 	if fromTo.IsDownload() {
-// 		direction = "from"
-// 	}
-
-// 	shareClient := fileServiceClient.NewShareClient(shareName)
-// 	properties, err := shareClient.GetProperties(ctx, nil)
-// 	if err != nil {
-// 		if isNFSCopy {
-// 			glcm.Info(fmt.Sprintf("Failed to fetch share properties. Assuming the transfer %s Azure Files NFS", direction))
-// 		} else {
-// 			glcm.Info(fmt.Sprintf("Failed to fetch share properties. Assuming the transfer %s Azure Files SMB", direction))
-// 		}
-// 		return nil
-// 	}
-
-// 	// For older accounts, EnabledProtocols may be nil
-// 	if properties.EnabledProtocols == nil || *properties.EnabledProtocols == "SMB" {
-// 		if isNFSCopy {
-// 			return fmt.Errorf("The %s share has SMB protocol enabled. If you want to perform a copy %s an SMB share, do not use the --nfs flag", shareName, direction)
-// 		}
-// 	} else {
-// 		if !isNFSCopy {
-// 			return fmt.Errorf("The %s share has NFS protocol enabled. If you want to perform a copy %s an NFS share, please provide the --nfs flag", shareName, direction)
-// 		}
-// 	}
-
-// 	return nil
-// }
-
 // GetPreserveInfoFlagDefault returns the default value for the 'preserve-info' flag
 // based on the operating system and the copy type (NFS or SMB).
 // The default value is:
@@ -383,46 +332,4 @@ func getShareProtocolType(ctx context.Context,
 	}
 
 	return *properties.EnabledProtocols, nil
-}
-
-func validateProtocolCompatibility(
-	ctx context.Context,
-	fromTo common.FromTo,
-	resource common.ResourceString,
-	serviceClient *common.ServiceClient,
-	isNFSCopy bool,
-) error {
-
-	direction := "to"
-	if fromTo.IsDownload() {
-		direction = "from"
-	}
-
-	// Use the helper function to get protocol type
-	fallback := "NFS"
-	if !isNFSCopy {
-		fallback = "SMB"
-	}
-
-	protocol, err := getShareProtocolType(ctx, serviceClient, resource, fallback)
-	if err != nil {
-		return err
-	}
-
-	if protocol == "SMB" && isNFSCopy {
-		return fmt.Errorf(
-			"The target share has SMB protocol enabled. To copy %s an SMB share, do not use the --nfs flag",
-			direction,
-		)
-	}
-
-	if protocol == "NFS" && !isNFSCopy {
-		return fmt.Errorf(
-			"The target share has NFS protocol enabled. To copy %s an NFS share, please provide the --nfs flag",
-			direction,
-		)
-	}
-
-	// Otherwise, protocol and --nfs flag are compatible
-	return nil
 }

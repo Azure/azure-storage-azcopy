@@ -333,13 +333,16 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 
 	// Handle destination validation
 	if (cca.fromTo.IsUpload() || cca.fromTo.IsS2S()) && cca.fromTo.To() == common.ELocation.File() {
-		if err := validateShareProtocolCompatibility(ctx,
-			cca.fromTo, cca.destination, copyJobTemplate.DstServiceClient, cca.isNFSCopy, false); err != nil {
+		if err := validateShareProtocolCompatibility(ctx, cca.fromTo,
+			cca.destination,
+			copyJobTemplate.DstServiceClient,
+			cca.isNFSCopy, false); err != nil {
 			return nil, err
 		}
 	} else if cca.fromTo.IsDownload() && cca.fromTo.From() == common.ELocation.File() {
-		if err := validateShareProtocolCompatibility(ctx,
-			cca.fromTo, cca.source, copyJobTemplate.SrcServiceClient, cca.isNFSCopy, true); err != nil {
+		if err := validateShareProtocolCompatibility(ctx, cca.fromTo,
+			cca.source, copyJobTemplate.SrcServiceClient,
+			cca.isNFSCopy, true); err != nil {
 			return nil, err
 		}
 	}

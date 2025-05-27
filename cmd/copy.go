@@ -1753,7 +1753,6 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 	glcmSwapOnce.Do(func() {
 		Rpc(common.ERpcCmd.GetJobLCMWrapper(), &cca.jobID, &glcm)
 	})
-
 	summary.IsCleanupJob = cca.isCleanupJob // only FE knows this, so we can only set it here
 	cleanupStatusString := fmt.Sprintf("Cleanup %v/%v", summary.TransfersCompleted, summary.TotalTransfers)
 

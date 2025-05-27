@@ -87,7 +87,7 @@ func (t *transformer) processOneObject(ctx context.Context) bool {
 				return true
 			}
 			out, err := t.workerBody(in)
-			if out != nil { // For symbolic link in NFS share, we skip processing the file
+			if out != nil { // For symbolic link and special file in NFS share, we skip processing the file
 				t.output <- TransformResult{item: out, err: err}
 			}
 		}

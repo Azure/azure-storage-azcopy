@@ -66,3 +66,12 @@ func logNFSLinkWarning(fileName, inodeNo string, isSymlink bool) {
 
 	common.AzcopyCurrentJobLogger.Log(common.LogWarning, message)
 }
+
+func logSpecialFileWarning(fileName string) {
+	if common.AzcopyCurrentJobLogger == nil {
+		return
+	}
+
+	message := fmt.Sprintf("File '%s' at the source is a special file and will be skipped and not copied", fileName)
+	common.AzcopyCurrentJobLogger.Log(common.LogWarning, message)
+}

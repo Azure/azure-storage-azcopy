@@ -202,7 +202,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				fileProperties.Metadata,
 				targetURLParts.ShareName,
 			)
-			// NFS hardling for different file types
+			// NFS handling for different file types
 			if isNFSCopy {
 				if skip, err := evaluateAndLogNFSFileType(t.ctx, NFSFileMeta{
 					Name:        storedObject.name,
@@ -520,7 +520,7 @@ type NFSFileMeta struct {
 	FileID      string
 }
 
-// EvaluateAndLogNFSFileType determines whether an NFS file should be skipped based on its type,
+// evaluateAndLogNFSFileType determines whether an NFS file should be skipped based on its type,
 // and logs relevant warnings or metrics.
 //
 // Behavior:
@@ -539,7 +539,7 @@ type NFSFileMeta struct {
 //
 //   - Returns (false, nil) to allow processing
 //
-//   - If the file is of an unsupported or special type (not regular, symlink, or directory):
+//   - If the file is of an unsupported or special type (not regular, symlink, hardlink or directory):
 //
 //   - Logs a warning
 //
@@ -567,11 +567,7 @@ func evaluateAndLogNFSFileType(ctx context.Context, meta NFSFileMeta, incrementE
 		// Process normally
 
 	default:
-		// Special file
-		common.AzcopyCurrentJobLogger.Log(
-			common.LogWarning,
-			fmt.Sprintf("File '%s' at the source is a special file and will be skipped and not copied", meta.Name),
-		)
+		logSpecialFileWarning(meta.Name)
 		if incrementEnumerationCounter != nil {
 			incrementEnumerationCounter(common.EEntityType.Other())
 		}
