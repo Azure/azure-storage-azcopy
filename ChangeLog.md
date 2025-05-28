@@ -1,6 +1,11 @@
 
 # Change Log
 
+## Version 10.30.0
+
+### Security fixes
+1. Updated Go version to 1.24.2 to address security vulnerability CVE-2024-34156 in the encoding/gob package ([#3008](https://github.com/Azure/azure-storage-azcopy/pull/3008))
+
 ## Version 10.29.0
 
 ### Breaking changes
