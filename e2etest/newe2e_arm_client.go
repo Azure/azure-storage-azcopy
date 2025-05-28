@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"time"
 )
 
 type ARMSubject interface {
@@ -132,6 +133,7 @@ func (s *ARMRequestSettings) CreateRequest(baseURI url.URL) (*http.Request, erro
 // PerformRequest will deserialize to target (which assumes the target is a pointer)
 // If an LRO is required, an *ARMAsyncResponse will be returned. Otherwise, both armResp and err will be nil, and target will be written to.
 func PerformRequest[Props any](subject ARMSubject, reqSettings ARMRequestSettings, target *Props) (armResp *ARMAsyncResponse[Props], err error) {
+retry:
 	c := subject.Client()
 	baseURI := subject.ManagementURI()
 	client := c.getHTTPClient()
@@ -186,6 +188,9 @@ func PerformRequest[Props any](subject ARMSubject, reqSettings ARMRequestSetting
 		}
 
 		return nil, nil
+	case 503: // This is usually just... retryable.
+		time.Sleep(time.Second * 5)
+		goto retry
 	default:
 		rBody, err := io.ReadAll(resp.Body)
 		if err != nil {
