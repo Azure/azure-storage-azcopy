@@ -306,13 +306,13 @@ func init() {
 	// special E2E testing flags
 	rootCmd.PersistentFlags().BoolVar(&azcopyAwaitContinue, "await-continue", false,
 		"Used when debugging, to tell AzCopy to await `continue` on stdin before starting any work. "+
-			"Assists with debugging AzCopy via attach-to-process")
+			"\n Assists with debugging AzCopy via attach-to-process")
 	rootCmd.PersistentFlags().BoolVar(&azcopyAwaitAllowOpenFiles, "await-open", false,
 		"Used when debugging, to tell AzCopy to await `open` on stdin, after scanning but before opening the first file. "+
-			"Assists with testing cases around file modifications between scanning and usage")
+			"\n Assists with testing cases around file modifications between scanning and usage")
 	rootCmd.PersistentFlags().StringVar(&debugSkipFiles, "debug-skip-files", "",
 		"Used when debugging, to tell AzCopy to cancel the job midway."+
-			" List of relative paths to skip in the STE.")
+			"\n List of relative paths to skip in the STE.")
 
 	// reserved for partner teams
 	_ = rootCmd.PersistentFlags().MarkHidden("cancel-from-stdin")

@@ -102,28 +102,58 @@ func init() {
 	rootCmd.AddCommand(deleteCmd)
 
 	deleteCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "False by default. Look into sub-directories recursively when syncing between directories.")
-	deleteCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "Include only files where the name matches the pattern list. For example: *.jpg;*.pdf;exactName")
+	deleteCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "Include only files where the name matches the pattern list."+
+		"\n  For example: *.jpg;*.pdf;exactName")
 	deleteCmd.PersistentFlags().StringVar(&raw.includePath, "include-path", "", "Include only these paths when removing. "+
-		"This option does not support wildcard characters (*). Checks relative path prefix. For example: myFolder;myFolder/subDirName/file.pdf")
-	deleteCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "", "Exclude files where the name matches the pattern list. For example: *.jpg;*.pdf;exactName")
+		"\n This option does not support wildcard characters (*). "+
+		"\n Checks relative path prefix. For example: myFolder;myFolder/subDirName/file.pdf")
+	deleteCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "", "Exclude files where the name matches the pattern list. "+
+		"\n For example: *.jpg;*.pdf;exactName")
 	deleteCmd.PersistentFlags().StringVar(&raw.excludePath, "exclude-path", "", "Exclude these paths when removing. "+
-		"This option does not support wildcard characters (*). Checks relative path prefix. For example: myFolder;myFolder/subDirName/file.pdf")
-	deleteCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "False by default. When deleting an Azure Files file or folder, force the deletion to work even if the existing object is has its read-only attribute set")
-	deleteCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "Defines the location of a text file which contains the list of files and directories to be deleted. The relative paths should be delimited by line breaks, and the paths should NOT be URL-encoded.")
-	deleteCmd.PersistentFlags().StringVar(&raw.deleteSnapshotsOption, "delete-snapshots", "", "By default, the delete operation fails if a blob has snapshots. Specify 'include' to remove the root blob and all its snapshots; alternatively specify 'only' to remove only the snapshots but keep the root blob.")
-	deleteCmd.PersistentFlags().StringVar(&raw.listOfVersionIDs, "list-of-versions", "", "Specifies a text file where each version id is listed on a separate line. Ensure that the source must point to a single blob and all the version ids specified in the file using this flag must belong to the source blob only. Specified version ids of the given blob will get deleted from Azure Storage.")
-	deleteCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "False by default. Prints the path files that would be removed by the command. This flag does not trigger the removal of the files.")
-	deleteCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "Optionally specifies the source destination combination. For Example: BlobTrash, FileTrash, BlobFSTrash")
-	deleteCmd.PersistentFlags().StringVar(&raw.permanentDeleteOption, "permanent-delete", "none", "This is a preview feature that PERMANENTLY deletes soft-deleted snapshots/versions. Possible values include "+strings.Join(common.ValidPermanentDeleteOptions(), ", ")+". Default is 'none'.")
-	deleteCmd.PersistentFlags().StringVar(&raw.includeBefore, common.IncludeBeforeFlagName, "", "Include only those files modified before or on the given date/time. The value should be in ISO8601 format. If no timezone is specified, the value is assumed to be in the local timezone of the machine running AzCopy. E.g. '2020-08-19T15:04:00Z' for a UTC time, or '2020-08-19' for midnight (00:00) in the local timezone. As of AzCopy 10.7, this flag applies only to files, not folders, so folder properties won't be copied when using this flag with --preserve-smb-info or --preserve-smb-permissions.")
-	deleteCmd.PersistentFlags().StringVar(&raw.includeAfter, common.IncludeAfterFlagName, "", "Include only those files modified on or after the given date/time. The value should be in ISO8601 format. If no timezone is specified, the value is assumed to be in the local timezone of the machine running AzCopy. E.g. '2020-08-19T15:04:00Z' for a UTC time, or '2020-08-19' for midnight (00:00) in the local timezone. As of AzCopy 10.5, this flag applies only to files, not folders, so folder properties won't be copied when using this flag with --preserve-smb-info or --preserve-smb-permissions.")
-	deleteCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "'Enable' by default to treat file share related operations in a safe manner. Available options: "+strings.Join(common.ValidTrailingDotOptions(), ", ")+". "+
-		"Choose 'Disable' to go back to legacy (potentially unsafe) treatment of trailing dot files where the file service will trim any trailing dots in paths. This can result in potential data corruption if the transfer contains two paths that differ only by a trailing dot (ex: mypath and mypath.). If this flag is set to 'Disable' and AzCopy encounters a trailing dot file, it will warn customers in the scanning log but will not attempt to abort the operation."+
-		"If the destination does not support trailing dot files (Windows or Blob Storage), AzCopy will fail if the trailing dot file is the root of the transfer and skip any trailing dot paths encountered during enumeration.")
+		"\n This option does not support wildcard characters (*). "+
+		"\n Checks relative path prefix. For example: myFolder;myFolder/subDirName/file.pdf")
+	deleteCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "False by default. "+
+		"\n When deleting an Azure Files file or folder, force the deletion to work even if the existing object is has its read-only attribute set")
+	deleteCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "Defines the location of a text file which contains the list of files and directories to be deleted. "+
+		"\n The relative paths should be delimited by line breaks, and the paths should NOT be URL-encoded.")
+	deleteCmd.PersistentFlags().StringVar(&raw.deleteSnapshotsOption, "delete-snapshots", "", "By default, the delete operation fails if a blob has snapshots. "+
+		"\n Specify 'include' to remove the root blob and all its snapshots; "+
+		"\n alternatively specify 'only' to remove only the snapshots but keep the root blob.")
+	deleteCmd.PersistentFlags().StringVar(&raw.listOfVersionIDs, "list-of-versions", "", "Specifies a text file where each version id is listed on a separate line. "+
+		"\n Ensure that the source must point to a single blob and all the version ids specified in the file using this flag must belong to the source blob only. "+
+		"\n Specified version ids of the given blob will get deleted from Azure Storage.")
+	deleteCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "False by default. Prints the path files that would be removed by the command. "+
+		"\n This flag does not trigger the removal of the files.")
+	deleteCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "Optionally specifies the source destination combination. "+
+		"\n For Example: BlobTrash, FileTrash, BlobFSTrash")
+	deleteCmd.PersistentFlags().StringVar(&raw.permanentDeleteOption, "permanent-delete", "none", "This is a preview feature that PERMANENTLY deletes soft-deleted snapshots/versions. "+
+		"\n Possible values include \n "+
+		strings.Join(common.ValidPermanentDeleteOptions(), ", ")+". \n Default is 'none'.")
+	deleteCmd.PersistentFlags().StringVar(&raw.includeBefore, common.IncludeBeforeFlagName, "", "Include only those files modified before or on the given date/time. "+
+		"\n The value should be in ISO8601 format. "+
+		"\n If no timezone is specified, the value is assumed to be in the local timezone of the machine running AzCopy. "+
+		"\n E.g. '2020-08-19T15:04:00Z' for a UTC time, or '2020-08-19' for midnight (00:00) in the local timezone. "+
+		"\n As of AzCopy 10.7, this flag applies only to files, not folders, so folder properties won't be copied when using this flag with --preserve-smb-info or --preserve-smb-permissions.")
+	deleteCmd.PersistentFlags().StringVar(&raw.includeAfter, common.IncludeAfterFlagName, "", "Include only those files modified on or after the given date/time. "+
+		"\n The value should be in ISO8601 format. "+
+		"\n If no timezone is specified, the value is assumed to be in the local timezone of the machine running AzCopy. "+
+		"\n E.g. '2020-08-19T15:04:00Z' for a UTC time, or '2020-08-19' for midnight (00:00) in the local timezone. "+
+		"\n As of AzCopy 10.5, this flag applies only to files, not folders, so folder properties won't be copied when using this flag with --preserve-smb-info or --preserve-smb-permissions.")
+	deleteCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "'Enable' by default to treat file share related operations in a safe manner. "+
+		"\n Available options: "+strings.Join(common.ValidTrailingDotOptions(), ", ")+". "+
+		"\n Choose 'Disable' to go back to legacy (potentially unsafe) treatment of trailing dot files where the file service will trim any trailing dots in paths. "+
+		"\n This can result in potential data corruption if the transfer contains two paths that differ only by a trailing dot (ex: mypath and mypath.). "+
+		"\n If this flag is set to 'Disable' and AzCopy encounters a trailing dot file, it will warn customers in the scanning log but will not attempt to abort the operation."+
+		"\n If the destination does not support trailing dot files (Windows or Blob Storage), AzCopy will fail if the trailing dot file is the root of the transfer and skip any trailing dot paths encountered during enumeration.")
 	// Public Documentation: https://docs.microsoft.com/en-us/azure/storage/blobs/encryption-customer-provided-keys
 	// Clients making requests against Azure Blob storage have the option to provide an encryption key on a per-request basis.
 	// Including the encryption key on the request provides granular control over encryption settings for Blob storage operations.
 	// Customer-provided keys can be stored in Azure Key Vault or in another key store linked to storage account.
-	deleteCmd.PersistentFlags().StringVar(&raw.cpkScopeInfo, "cpk-by-name", "", "Client provided key by name let clients making requests against Azure Blob storage an option to provide an encryption key on a per-request basis. Provided key name will be fetched from Azure Key Vault and will be used to encrypt the data.")
-	deleteCmd.PersistentFlags().BoolVar(&raw.cpkInfo, "cpk-by-value", false, "False by default. Client provided key by name let clients making requests against Azure Blob storage an option to provide an encryption key on a per-request basis. Provided key and its hash will be fetched from environment variables CPK_ENCRYPTION_KEY and CPK_ENCRYPTION_KEY_SHA256 must be set).")
+	deleteCmd.PersistentFlags().StringVar(&raw.cpkScopeInfo, "cpk-by-name", "", "Client provided key by name let clients making requests against Azure Blob storage "+
+		"\n an option to provide an encryption key on a per-request basis. "+
+		"\n Provided key name will be fetched from Azure Key Vault and will be used to encrypt the data.")
+	deleteCmd.PersistentFlags().BoolVar(&raw.cpkInfo, "cpk-by-value", false, "False by default. "+
+		"\n Client provided key by name let clients making requests against "+
+		"\n Azure Blob storage an option to provide an encryption key on a per-request basis. "+
+		"\n Provided key and its hash will be fetched from environment variables CPK_ENCRYPTION_KEY and CPK_ENCRYPTION_KEY_SHA256 must be set).")
 }

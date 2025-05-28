@@ -146,12 +146,14 @@ Download a subset of containers within a storage account by using a wildcard sym
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[container*name]" "/path/to/dir" --recursive
 
 Download all the versions of a blob from Azure Storage listed in a text file (i.e, versionidsFile) to local directory. 
-Ensure that source is a valid blob, destination is a local folder and versionidsFile is a text file where each version is written on a separate line. All the specified versions will get downloaded in the destination folder specified.
+Ensure that source is a valid blob, destination is a local folder and versionidsFile is a text file where each version is written on a separate line. 
+All the specified versions will get downloaded in the destination folder specified.
 
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[containername]/[blobname]" "/path/to/dir" 
 	--list-of-versions="/another/path/to/dir/[versionidsFile]"
 
-Copy a subset of files within a flat container by using a wildcard symbol (*) in the container name without listing all files in the container.
+Copy a subset of files within a flat container by using a wildcard symbol (*) in the container name 
+without listing all files in the container.
 
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[containername]/*" "/path/to/dir" --include-pattern="1*"
 
@@ -188,7 +190,8 @@ First, set the environment variable AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY 
   - azcopy cp "https://s3.amazonaws.com/[bucket]/[folder]" 
 	"https://[destaccount].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
     
-    Please refer to https://docs.aws.amazon.com/AmazonS3/latest/user-guide/using-folders.html to better understand the [folder] placeholder.
+    Please refer to https://docs.aws.amazon.com/AmazonS3/latest/user-guide/using-folders.html 
+	to better understand the [folder] placeholder.
 
 Copy all buckets to Blob Storage from AWS by using an access key and a SAS token. 
 First, set the environment variable AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY for AWS S3 source.
@@ -229,7 +232,8 @@ First, set the environment variable GOOGLE_APPLICATION_CREDENTIALS for GCS sourc
 Copy an entire directory to Blob Storage from GCS by using a service account key and a SAS token. 
 First, set the environment variable GOOGLE_APPLICATION_CREDENTIALS for GCS source.
  
-  - azcopy cp "https://storage.cloud.google.com/[bucket]/[folder]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
+  - azcopy cp "https://storage.cloud.google.com/[bucket]/[folder]" 
+    "https://[destaccount].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
 
 Copy an entire bucket to Blob Storage from GCS by using a service account key and a SAS token. 
 First, set the environment variable GOOGLE_APPLICATION_CREDENTIALS for GCS source.
@@ -241,7 +245,8 @@ First, set the environment variables GOOGLE_APPLICATION_CREDENTIALS and GOOGLE_C
  
   - azcopy cp "https://storage.cloud.google.com/" "https://[destaccount].blob.core.windows.net/?[SAS]" --recursive=true
 
-Copy a subset of buckets by using a wildcard symbol (*) in the bucket name from GCS by using a service account key and a SAS token for destination. 
+Copy a subset of buckets by using a wildcard symbol (*) in the bucket name from GCS by using 
+a service account key and a SAS token for destination. 
 First, set the environment variables GOOGLE_APPLICATION_CREDENTIALS and GOOGLE_CLOUD_PROJECT=<project-id> for GCS source
  
   - azcopy cp "https://storage.cloud.google.com/[bucket*name]/" "https://[destaccount].blob.core.windows.net/?[SAS]" --recursive=true
@@ -250,7 +255,8 @@ To copy files changed before or after the AzCopy job has started, AzCopy provide
 (search for 'ISO 8601 START TIME' in the job log) that can be used with the --include-after and --include-before flags, see examples below. 
 This is helpful for incremental copies.
 
-Copy a subset of files modified on or after the given date/time (in ISO8601 format) in a container by using the include-after flag.
+Copy a subset of files modified on or after the given date/time (in ISO8601 format) in 
+a container by using the include-after flag.
 
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[containername]?[SAS]" 
 	"https://[dstaccount].blob.core.windows.net/[containername]?[SAS]" --include-after='2020-08-19T15:04:00Z''"
@@ -284,7 +290,8 @@ const showJobsCmdShortDescription = "Show detailed information for the given job
 
 const showJobsCmdLongDescription = `
 If you provide only a job ID, and not a flag, then this command returns the progress summary only.
-The byte counts and percent complete that appears when you run this command reflect only files that are completed in the job. They don't reflect partially completed files.
+The byte counts and percent complete that appears when you run this command reflect only files that are completed in the job. 
+They don't reflect partially completed files.
 If you set the with-status flag, then only the list of transfers associated with the given status appear.`
 
 const resumeJobsCmdShortDescription = "Resume the existing job with the given job ID."
@@ -311,7 +318,9 @@ const cleanJobsCmdExample = "  azcopy jobs clean --with-status=completed"
 // ===================================== LIST COMMAND ===================================== //
 const listCmdShortDescription = "List the entities in a given resource"
 
-const listCmdLongDescription = `This command lists accounts, containers, and directories. Blob Storage, Azure Data Lake Storage, and File Storage are supported. Microsoft Entra ID authorization for Files is currently not supported; please use SAS to authenticate for Files.`
+const listCmdLongDescription = `This command lists accounts, containers, and directories. 
+Blob Storage, Azure Data Lake Storage, and File Storage are supported. 
+Microsoft Entra ID authorization for Files is currently not supported; please use SAS to authenticate for Files.`
 
 const listCmdExample = "azcopy list [containerURL] --properties [semicolon(;) separated list of attributes " +
 	"(LastModifiedTime, VersionId, BlobType, BlobAccessTier, ContentType, ContentEncoding, ContentMD5, LeaseState, LeaseDuration, LeaseStatus) " +
@@ -320,7 +329,9 @@ const listCmdExample = "azcopy list [containerURL] --properties [semicolon(;) se
 // ===================================== LOGIN COMMAND ===================================== //
 const loginCmdShortDescription = "Log in to Microsoft Entra ID to access Azure Storage resources."
 
-const loginCmdLongDescription = `To be authorized to your Azure Storage account, you must assign the **Storage Blob Data Contributor** role to your user account in the context of either the Storage account, parent resource group or parent subscription.
+const loginCmdLongDescription = `To be authorized to your Azure Storage account, 
+you must assign the **Storage Blob Data Contributor** role to your user account in the context of either
+the Storage account, parent resource group or parent subscription.
 This command will cache encrypted login information for current user using the OS built-in mechanisms.
 Please refer to the examples for more information.
 
@@ -351,7 +362,8 @@ Log in by using the user-assigned identity of a VM and an Object ID of the servi
 
 Log in by using the user-assigned identity of a VM and a Resource ID of the service identity:
  
-   - azcopy login --identity --identity-resource-id "/subscriptions/<subscriptionId>/resourcegroups/myRG/providers/Microsoft.ManagedIdentity/userAssignedIdentities/myID"
+   - azcopy login --identity --identity-resource-id 
+     "/subscriptions/<subscriptionId>/resourcegroups/myRG/providers/Microsoft.ManagedIdentity/userAssignedIdentities/myID"
 
 Log in as a service principal by using a client secret:
 Set the environment variable AZCOPY_SPA_CLIENT_SECRET to the client secret for secret based service principal auth.
@@ -378,7 +390,8 @@ Log in using Managed Identity
     To use Client ID, set AZCOPY_MSI_CLIENT_ID.
     To use Resource string, set AZCOPY_MSI_RESOURCE_STRING.
       - azcopy login
-      Upon successful authentication, you will see messages indicating login with identity succeeded and authenticating to the destination using Microsoft Entra ID.
+      Upon successful authentication, you will see messages indicating login 
+      with identity succeeded and authenticating to the destination using Microsoft Entra ID.
 
 Subcommand for login to check the login status of your current session.
 	- azcopy login status 
@@ -428,12 +441,16 @@ Remove an entire virtual directory but exclude certain blobs from the scope (For
 
    - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true --exclude-pattern="foo*;*bar"
 
-Remove specified version ids of a blob from Azure Storage. Ensure that source is a valid blob and versionidsfile which takes in a path to the file where each version is written on a separate line. All the specified versions will be removed from Azure Storage.
+Remove specified version ids of a blob from Azure Storage. 
+Ensure that source is a valid blob and versionidsfile which takes in a path to the file where each version is written on a separate line. 
+All the specified versions will be removed from Azure Storage.
 
   - azcopy rm "https://[srcaccount].blob.core.windows.net/[containername]/[blobname]" "/path/to/dir" --list-of-versions="/path/to/dir/[versionidsfile]"
 
-Remove specific blobs and virtual directories by putting their relative paths (NOT URL-encoded) in a text file (i.e., list.txt) using the --list-of-files flag. In the text file, each blob and virtual directory is written on a separate line, see file contents below.
-The --list-of-files flag may incur performance costs due to additional transactions to retrieve object properties. For more details on the APIs AzCopy uses and performing cost estimations, visit
+Remove specific blobs and virtual directories by putting their relative paths (NOT URL-encoded) in a text file (i.e., list.txt) using the --list-of-files flag. 
+In the text file, each blob and virtual directory is written on a separate line, see file contents below.
+The --list-of-files flag may incur performance costs due to additional transactions to retrieve object properties. 
+For more details on the APIs AzCopy uses and performing cost estimations, visit
 https://aka.ms/AzCopyCostEstimation.
 
    - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/parent/dir]" --recursive=true --list-of-files=/usr/bar/list.txt
@@ -455,7 +472,9 @@ Remove a single directory from a Blob Storage account that has a hierarchical na
 const syncCmdShortDescription = "Replicate source to the destination location"
 
 const syncCmdLongDescription = `
-The last modified times are used for comparison. The file is skipped if the last modified time in the destination is more recent. Alternatively, you can use the --compare-hash flag to transfer only files which differ in their MD5 hash.  The supported directions and forms of authorization are:
+The last modified times are used for comparison. The file is skipped if the last modified time in the destination is more recent. 
+Alternatively, you can use the --compare-hash flag to transfer only files which differ in their MD5 hash.  
+The supported directions and forms of authorization are:
 
   - Local <-> Azure Blob / Azure File (Microsoft Entra ID or SAS)
   - Azure Blob <-> Azure Blob (Microsoft Entra ID SAS)
@@ -482,8 +501,9 @@ The built-in lookup table is small but on Unix it is augmented by the local syst
 
 On Windows, MIME types are extracted from the registry.
 
-By default, sync works off of the last modified times unless you override that default behavior by using the --compare-hash flag. So in the case of Azure File <-> Azure File,
-the header field Last-Modified is used instead of x-ms-file-change-time, which means that metadata changes at the source can also trigger a full copy.
+By default, sync works off of the last modified times unless you override that default behavior by using the --compare-hash flag. 
+So in the case of Azure File <-> Azure File, the header field Last-Modified is used instead of x-ms-file-change-time, 
+which means that metadata changes at the source can also trigger a full copy.
 `
 
 const syncCmdExample = `
@@ -507,29 +527,36 @@ Sync only the files inside of a directory but not subdirectories or the files in
 
 Sync a subset of files in a directory (For example: only jpg and pdf files, or if the file name is "exactName"):
 
-   - azcopy sync "/path/to/dir" "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]" --include-pattern="*.jpg;*.pdf;exactName"
+   - azcopy sync "/path/to/dir" "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]" 
+     --include-pattern="*.jpg;*.pdf;exactName"
 
 Sync an entire directory but exclude certain files from the scope (For example: every file that starts with foo or ends with bar):
 
-   - azcopy sync "/path/to/dir" "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]" --exclude-pattern="foo*;*bar"
+   - azcopy sync "/path/to/dir" 
+     "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]" --exclude-pattern="foo*;*bar"
 
 Sync a single blob:
 
-   - azcopy sync "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "https://[account].blob.core.windows.net/[container]/[path/to/blob]"
+   - azcopy sync "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" 
+     "https://[account].blob.core.windows.net/[container]/[path/to/blob]"
 
 Sync a virtual directory:
 
-   - azcopy sync "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]?[SAS]" "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]" --recursive=true
+   - azcopy sync "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]?[SAS]" 
+     "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]" --recursive=true
 
 Sync a virtual directory that has the same name as a blob (add a trailing slash to the path in order to disambiguate):
 
-   - azcopy sync "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]/?[SAS]" "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]/" --recursive=true
+   - azcopy sync "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]/?[SAS]" 
+     "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]/" --recursive=true
 
 Sync an Azure File directory (same syntax as Blob):
 
-   - azcopy sync "https://[account].file.core.windows.net/[share]/[path/to/dir]?[SAS]" "https://[account].file.core.windows.net/[share]/[path/to/dir]" --recursive=true
+   - azcopy sync "https://[account].file.core.windows.net/[share]/[path/to/dir]?[SAS]" 
+     "https://[account].file.core.windows.net/[share]/[path/to/dir]" --recursive=true
 
-Note: if include and exclude flags are used together, only files matching the include patterns are used, but those matching the exclude patterns are ignored.
+Note: if include and exclude flags are used together, only files matching the include patterns are used, 
+but those matching the exclude patterns are ignored.
 `
 
 // ===================================== DOC COMMAND ===================================== //
@@ -555,8 +582,8 @@ The benchmark command runs the same process as 'copy', except that:
   - Instead of requiring both source and destination parameters, benchmark takes just one. This is the 
     blob or Data Lake Storage container, or an Azure Files Share that you want to upload to or download from.
 
-  - The 'mode' parameter describes whether AzCopy should test uploads to or downloads from given target. Valid values are 'Upload'
-    and 'Download'. Default value is 'Upload'.
+  - The 'mode' parameter describes whether AzCopy should test uploads to or downloads from given target. 
+    Valid values are 'Upload' and 'Download'. Default value is 'Upload'.
 
   - For upload benchmarks, the payload is described by command line parameters, which control how many files are auto-generated and 
     how big they are. The generation process takes place entirely in memory. Disk is not used.
@@ -568,8 +595,8 @@ The benchmark command runs the same process as 'copy', except that:
   
   - Additional diagnostics are measured and reported.
   
-  - For uploads, the default behavior is to delete the transferred data at the end of the test run.  For downloads, the data
-    is never actually saved locally.
+  - For uploads, the default behavior is to delete the transferred data at the end of the test run.  
+    For downloads, the data is never actually saved locally.
 
 Benchmark mode will automatically tune itself to the number of parallel TCP connections that gives 
 the maximum throughput. It will display that number at the end. To prevent auto-tuning, set the 
