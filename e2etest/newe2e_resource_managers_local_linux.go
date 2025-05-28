@@ -1,5 +1,5 @@
-//go:build !windows
-// +build !windows
+//go:build linux
+// +build linux
 
 package e2etest
 
@@ -149,8 +149,8 @@ func (l LocalObjectResourceManager) PutSMBProperties(a Asserter, properties File
 // TODO: Add SMB handling for linux later
 func (l LocalObjectResourceManager) PutSDDL(sddlstr string, a Asserter) {}
 
-func (l LocalObjectResourceManager) CreateSpecialFile(a Asserter) error {
-	err := unix.Mkfifo(l.getWorkingPath(), 0666)
+func CreateSpecialFile(a Asserter, filepath string) error {
+	err := unix.Mkfifo(filepath, 0666)
 	if err != nil {
 		return err
 	}

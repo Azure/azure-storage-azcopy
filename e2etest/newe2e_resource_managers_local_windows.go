@@ -224,7 +224,7 @@ func (l LocalObjectResourceManager) PutNFSPermissions(a Asserter, permissions Fi
 	return
 }
 
-// TODO Add support for windows later
-func (l LocalObjectResourceManager) CreateSpecialFile(a Asserter) error {
+// Add support later when we support windows for NFS
+func CreateSpecialFile(a Asserter, filepath string) error {
 	return nil
 }
