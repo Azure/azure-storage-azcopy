@@ -3,7 +3,12 @@ work_dir=$(echo $1 | sed 's:/*$::')
 version=$2
 arch=`hostnamectl | grep "Arch" | rev | cut -d " " -f 1 | rev`
 
-if [ $arch != "arm64" ];then
+# Check for both 64-bit and 32-bit ARM architectures
+if [ "$arch" = "arm64" ]; then
+  arch="arm64"
+elif [ "$arch" = "arm" ] || [ "$arch" = "armv7l" ] || [ "$arch" = "armhf" ]; then
+  arch="arm"
+else
   arch="amd64"
 fi
 
