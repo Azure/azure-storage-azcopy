@@ -1,4 +1,5 @@
-//go:build linux
+//go:build !windows
+// +build !windows
 
 package e2etest
 

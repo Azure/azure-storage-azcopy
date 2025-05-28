@@ -548,11 +548,11 @@ func (f *FileObjectResourceManager) Create(a Asserter, body ObjectContentContain
 	case common.EEntityType.Hardlink():
 		client := f.getFileClient()
 
-		resp, err := client.CreateHardLink(ctx, props.HardLinkedFileName, &file.CreateHardLinkOptions{})
+		_, err := client.CreateHardLink(ctx, props.HardLinkedFileName, &file.CreateHardLinkOptions{})
 		a.NoError("Create file", err)
-		fmt.Println("Name", f.ObjectName())
-		fmt.Println("Resp.LinkCount", *resp.LinkCount)
-		fmt.Println("Resp.NFSFileType", *resp.NFSFileType)
+		// fmt.Println("Name", f.ObjectName())
+		// fmt.Println("Resp.LinkCount", *resp.LinkCount)
+		// fmt.Println("Resp.NFSFileType", *resp.NFSFileType)
 	case common.EEntityType.Other():
 		client := f.getFileClient()
 
