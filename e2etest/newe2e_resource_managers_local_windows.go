@@ -223,8 +223,3 @@ func (l LocalObjectResourceManager) PutNFSProperties(a Asserter, properties File
 func (l LocalObjectResourceManager) PutNFSPermissions(a Asserter, permissions FileNFSPermissions) {
 	return
 }
-
-// Add support later when we support windows for NFS
-func CreateSpecialFile(a Asserter, filepath string) error {
-	return nil
-}

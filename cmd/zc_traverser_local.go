@@ -670,15 +670,16 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 
 		entityType := common.EEntityType.File()
 		if isNFSCopy {
-			if singleFileInfo.Mode()&os.ModeSymlink != 0 {
+			if IsSymbolicLink(singleFileInfo) {
 				entityType = common.EEntityType.Symlink()
+				logSpecialFileWarning(singleFileInfo.Name())
 				if t.incrementEnumerationCounter != nil {
 					t.incrementEnumerationCounter(entityType)
 				}
 				return nil
 			} else if IsHardlink(singleFileInfo) {
-				LogHardLinkIfDefaultPolicy(singleFileInfo, t.hardlinkHandling)
 				entityType = common.EEntityType.Hardlink()
+				LogHardLinkIfDefaultPolicy(singleFileInfo, t.hardlinkHandling)
 			} else if IsRegularFile(singleFileInfo) {
 				entityType = common.EEntityType.File()
 			} else {
