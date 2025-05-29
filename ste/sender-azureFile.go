@@ -281,7 +281,7 @@ func (u *azureFileSenderBase) addNFSPropertiesToHeaders(info *TransferInfo) (sta
 		if err != nil {
 			return "Obtaining NFS properties", err
 		}
-		// TODO: commenting out for now. If required will add it while adding support o]
+		// TODO: commenting out for now. If required will add it later.
 		// fromTo := u.jptm.FromTo()
 		// if fromTo.From() == common.ELocation.File() { // Files SDK can panic when the service hands it something unexpected!
 		// 	defer func() { // recover from potential panics and output raw properties for debug purposes

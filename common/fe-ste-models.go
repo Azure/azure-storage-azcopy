@@ -1681,6 +1681,7 @@ func (EntityType) Folder() EntityType         { return EntityType(1) }
 func (EntityType) Symlink() EntityType        { return EntityType(2) }
 func (EntityType) FileProperties() EntityType { return EntityType(3) }
 func (EntityType) Hardlink() EntityType       { return EntityType(4) }
+func (EntityType) Other() EntityType          { return EntityType(5) }
 
 func (e EntityType) String() string {
 	return enum.StringInt(e, reflect.TypeOf(e))

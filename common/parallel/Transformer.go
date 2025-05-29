@@ -87,7 +87,9 @@ func (t *transformer) processOneObject(ctx context.Context) bool {
 				return true
 			}
 			out, err := t.workerBody(in)
-			t.output <- TransformResult{item: out, err: err}
+			if out != nil { // For symbolic link and special file in NFS share, we skip processing the file
+				t.output <- TransformResult{item: out, err: err}
+			}
 		}
 		return ok // exit this worker loop when input is closed and empty
 	case <-ctx.Done():

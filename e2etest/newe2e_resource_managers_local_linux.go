@@ -1,16 +1,18 @@
 //go:build linux
+// +build linux
 
 package e2etest
 
 import (
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"golang.org/x/sys/unix"
 	"os"
 	"strconv"
 	"syscall"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"golang.org/x/sys/unix"
 )
 
 func (l LocalObjectResourceManager) PutNFSProperties(a Asserter, properties FileNFSProperties) {

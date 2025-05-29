@@ -1,4 +1,4 @@
-//go:build linux
+//go:build !windows
 
 // Copyright © Microsoft <wastore@microsoft.com>
 //
@@ -102,4 +102,9 @@ func (osScenarioHelper) IsFileHidden(c asserter, filePath string) bool {
 	// On Unix-based systems, hidden files start with a dot
 	isHidden := strings.HasPrefix(fileName, ".")
 	return isHidden
+}
+
+func (osScenarioHelper) CreateSpecialFile(filePath string) error {
+	err := unix.Mkfifo(filePath, 0666)
+	return err
 }
