@@ -125,15 +125,16 @@ func (t *autoConcurrencyTuner) recordRetry() {
 }
 
 const (
-	ConcurrencyReasonNone          = ""
-	ConcurrencyReasonTunerDisabled = "tuner disabled" // used as the final (non-finished) state for null tuner
-	concurrencyReasonInitial       = "initial starting point"
-	concurrencyReasonSeeking       = "seeking optimum"
-	concurrencyReasonBackoff       = "backing off"
-	concurrencyReasonHitMax        = "hit max concurrency limit"
-	concurrencyReasonHighCpu       = "at optimum, but may be limited by CPU"
-	concurrencyReasonAtOptimum     = "at optimum"
-	concurrencyReasonFinished      = "tuning already finished (or never started)"
+	ConcurrencyReasonNone                = ""
+	ConcurrencyReasonTunerDisabled       = "tuner disabled" // used as the final (non-finished) state for null tuner
+	concurrencyReasonInitial             = "initial starting point"
+	concurrencyReasonSeeking             = "seeking optimum"
+	concurrencyReasonBackoff             = "backing off"
+	concurrencyReasonHitMax              = "hit max concurrency limit"
+	concurrencyReasonHighCpu             = "at optimum, but may be limited by CPU"
+	concurrencyReasonAtOptimum           = "at optimum"
+	concurrencyReasonFinished            = "tuning already finished (or never started)"
+	concurrencyReasonHighRequestLifetime = "atypical request lifetime"
 )
 
 func (t *autoConcurrencyTuner) worker() {
@@ -154,6 +155,8 @@ func (t *autoConcurrencyTuner) worker() {
 	dontBackoffRegardless := false
 	multiplierReductionCount := 0
 	lastReason := ConcurrencyReasonNone
+
+	requestLifetimeTracker := GetRequestLifetimeTracker()
 
 	// get initial baseline throughput
 	lastSpeed, _ := t.getCurrentSpeed()

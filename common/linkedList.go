@@ -37,6 +37,14 @@ func (l *LinkedList[T]) PopRear() {
 	}
 }
 
+func (l *LinkedList[T]) Front() T {
+	return l.front.data
+}
+
+func (l *LinkedList[T]) Back() T {
+	return l.back.data
+}
+
 func (l *LinkedList[T]) Insert(data T) {
 	if l.front == nil {
 		l.front = &linkedListElement[T]{
