@@ -7,14 +7,12 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"runtime"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/google/uuid"
-	"golang.org/x/sys/unix"
 )
 
 // enforce interface compliance at compile time
@@ -317,12 +315,8 @@ func (l *LocalObjectResourceManager) Create(a Asserter, body ObjectContentContai
 		err := os.Link(filepath.Join(l.container.RootPath, properties.HardLinkedFileName), l.getWorkingPath())
 		a.NoError("Create hardlink", err)
 	} else if l.entityType == common.EEntityType.Other() {
-		if runtime.GOOS == "linux" {
-			err := unix.Mkfifo(l.getWorkingPath(), 0666)
-			a.NoError("Create special file", err)
-		} else {
-			return
-		}
+		err := osScenarioHelper{}.CreateSpecialFile(l.getWorkingPath())
+		a.NoError("Create special file", err)
 	}
 
 	l.SetObjectProperties(a, properties)

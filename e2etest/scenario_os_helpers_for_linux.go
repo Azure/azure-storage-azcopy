@@ -103,3 +103,8 @@ func (osScenarioHelper) IsFileHidden(c asserter, filePath string) bool {
 	isHidden := strings.HasPrefix(fileName, ".")
 	return isHidden
 }
+
+func (osScenarioHelper) CreateSpecialFile(filePath string) error {
+	err := unix.Mkfifo(filePath, 0666)
+	return err
+}
