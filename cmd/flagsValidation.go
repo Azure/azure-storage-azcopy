@@ -39,6 +39,7 @@ func validatePreserveNFSPropertyOption(toPreserve bool, fromTo common.FromTo, fl
 	if toPreserve && !(fromTo == common.EFromTo.LocalFile() ||
 		fromTo == common.EFromTo.FileLocal() ||
 		fromTo == common.EFromTo.FileFile()) {
+		fmt.Println("----------------", fromTo.String())
 		return fmt.Errorf("%s is set but the job is not between %s-aware resources", flagName, common.Iff(flagName == PreserveInfoFlag, "permission", "NFS"))
 	}
 
@@ -292,11 +293,11 @@ func validateShareProtocolCompatibility(
 	}
 
 	if protocol == "SMB" && isNFSCopy {
-		return fmt.Errorf("The %s share has SMB protocol enabled. To copy %s an SMB share, do not use the --nfs flag", direction, direction)
+		return fmt.Errorf("The %s share has SMB protocol enabled. To copy %s a SMB share, do not use the --nfs flag", direction, direction)
 	}
 
 	if protocol == "NFS" && !isNFSCopy {
-		return fmt.Errorf("The %s share has NFS protocol enabled. To copy %s an NFS share, please provide the --nfs flag", direction, direction)
+		return fmt.Errorf("The %s share has NFS protocol enabled. To copy %s a NFS share, please provide the --nfs flag", direction, direction)
 	}
 
 	return nil
