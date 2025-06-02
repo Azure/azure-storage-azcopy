@@ -2,11 +2,12 @@ package e2etest
 
 import (
 	"fmt"
-	"github.com/google/uuid"
 	"os/user"
 	"runtime"
 	"strconv"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -573,7 +574,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 	ValidateHardlinkedSkippedCount(svm, stdOut, 2)
 }
 
-func (s *FilesNFSTestSuite) Scenario_TestInvalidScenarios(svm *ScenarioVariationManager) {
+func (s *FilesNFSTestSuite) Scenario_TestInvalidScenarioszForSMB(svm *ScenarioVariationManager) {
 
 	// Test Scenarios
 	// 1. If nfs flag is provided and if the source or destination is SMB its an unsupported scenario
@@ -663,11 +664,11 @@ func (s *FilesNFSTestSuite) Scenario_TestInvalidScenarios(svm *ScenarioVariation
 	}
 }
 
-func (s *FilesNFSTestSuite) Scenario_TestInvalidScenarios2(svm *ScenarioVariationManager) {
+func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForNFS(svm *ScenarioVariationManager) {
 
 	/*
 		Test Scenarios
-		1. If nfs flag is provided and if the source or destination is SMB its an unsupported scenario
+		1. If nfs flag is not provided and if the source or destination is NFS its an unsupported scenario
 	*/
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
 	preserveProperties := ResolveVariation(svm, []bool{true, false})
@@ -727,11 +728,7 @@ func (s *FilesNFSTestSuite) Scenario_TestInvalidScenarios2(svm *ScenarioVariatio
 			ShouldFail: true,
 		})
 
-	if srcObj.Location() == common.ELocation.Local() && runtime.GOOS != "linux" {
-		ValidateContainsError(svm, stdOut, []string{
-			"This functionality is only available on Linux.",
-		})
-	} else if srcObj.Location() == common.ELocation.File() {
+	if srcObj.Location() == common.ELocation.File() {
 		ValidateContainsError(svm, stdOut, []string{
 			"The from share has NFS protocol enabled. To copy from a NFS share, please provide the --nfs flag",
 		})
