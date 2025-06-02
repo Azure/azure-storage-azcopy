@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"testing"
 )
@@ -402,7 +403,9 @@ func (s *ScenarioVariationManagerCleanupAsserter) WrapCleanup(cf CleanupFunc) {
 				return
 			}
 
-			s.Log("Cleanup step panicked: %v", err)
+			stackTrace := debug.Stack()
+
+			s.Log("Cleanup step panicked: %v\n%s", err, string(stackTrace))
 		}
 	}()
 
