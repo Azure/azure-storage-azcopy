@@ -1833,6 +1833,7 @@ Number of Folder Transfers Failed: %v
 Number of File Transfers Skipped: %v
 Number of Folder Transfers Skipped: %v
 Total Number of Bytes Transferred: %v
+Total Number of Bytes Skipped: %v
 Final Job Status: %v%s%s
 `,
 					summary.JobID.String(),
@@ -1848,6 +1849,7 @@ Final Job Status: %v%s%s
 					summary.TransfersSkipped-summary.FoldersSkipped,
 					summary.FoldersSkipped,
 					summary.TotalBytesTransferred,
+					summary.TotalBytesSkipped,
 					summary.JobStatus,
 					screenStats,
 					formatPerfAdvice(summary.PerformanceAdvice))
