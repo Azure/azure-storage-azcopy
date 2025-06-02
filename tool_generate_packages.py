@@ -17,7 +17,7 @@ THIRD_PARTY_NOTICE_FILE_NAME = "ThirdPartyNotice.txt"
 
 # the list of executables to package are listed here
 EXECUTABLES_TO_ZIP = ["azcopy_darwin_amd64", "azcopy_windows_386.exe", "azcopy_windows_amd64.exe"]
-EXECUTABLES_TO_TAR = ["azcopy_linux_amd64"]
+EXECUTABLES_TO_TAR = ["azcopy_linux_amd64", "azcopy_linux_arm64"]
 
 
 def create_directory(dir):

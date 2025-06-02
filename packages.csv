@@ -11,7 +11,9 @@ Ubuntu-24.04,azcopyArmDeb,microsoft-ubuntu-noble-prod-apt,noble
 Debian-9.0,azcopyAmdDeb,microsoft-debian-stretch-prod-apt,stretch
 Debian-10.0,azcopyAmdDeb,microsoft-debian-buster-prod-apt,buster
 Debian-11.0,azcopyAmdDeb,microsoft-debian-bullseye-prod-apt,bullseye
+Debian-11.0,azcopyArmDeb,microsoft-debian-bullseye-prod-apt,bullseye
 Debian-12.0,azcopyAmdDeb,microsoft-debian-bookworm-prod-apt,bookworm
+Debian-12.0,azcopyArmDeb,microsoft-debian-bookworm-prod-apt,bookworm
 RHEL-7.5,azcopyAmdRpm,microsoft-rhel7.5-prod-yum,
 RHEL-7.8,azcopyAmdRpm,microsoft-rhel7.8-prod-yum,
 RHEL-8.1,azcopyAmdRpm,microsoft-rhel8.1-prod-yum,
