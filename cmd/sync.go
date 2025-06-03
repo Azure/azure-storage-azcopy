@@ -663,7 +663,7 @@ func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm common.LifecycleMgr, th
 		if cca.FirstPartOrdered() {
 			throughputString = fmt.Sprintf(", 2-sec Throughput (Mb/s): %v", jobsAdmin.ToFixed(throughput, 4))
 		}
-		return fmt.Sprintf("%v Files Scanned at Source, %v Files Scanned at Destination%s\n",
+		return fmt.Sprintf("%v Files Scanned at Source, %v Files Scanned at Destination%s",
 			srcScanned, dstScanned, throughputString)
 	})
 }
