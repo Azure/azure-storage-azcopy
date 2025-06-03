@@ -417,8 +417,6 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 	atomic.AddInt64(&syncQDepth, 1)
 	var _ = parallel.Crawl(ctx, root, syncOneDir, parallelism)
 
-	cca.waitUntilJobCompletion(false)
-
 	// XXX consider using wg
 	for {
 		qd := atomic.AddInt64(&syncQDepth, 0)

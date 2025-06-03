@@ -29,6 +29,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -724,7 +725,15 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 
 	if jobDone {
 		exitCode := common.EExitCode.Success()
-		if summary.TransfersFailed > 0 || summary.JobStatus == common.EJobStatus.Cancelled() || summary.JobStatus == common.EJobStatus.Cancelling() {
+
+		failureCheck := false
+		if buildmode.IsMover {
+			failureCheck = summary.TransfersFailed > 0 || summary.JobStatus == common.EJobStatus.Cancelled()
+		} else {
+			failureCheck = summary.TransfersFailed > 0 || summary.JobStatus == common.EJobStatus.Cancelled() || summary.JobStatus == common.EJobStatus.Cancelling()
+		}
+
+		if failureCheck {
 			exitCode = common.EExitCode.Error()
 		}
 
@@ -857,24 +866,20 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		return err
 	}
 
+	// trigger the progress reporting
+	if !cca.dryrunMode {
+		cca.waitUntilJobCompletion(false)
+	}
+
+	// trigger the enumeration
 	if !UseSyncOrchestrator {
-
-		// trigger the progress reporting
-		if !cca.dryrunMode {
-			cca.waitUntilJobCompletion(false)
-		}
-
-		// trigger the enumeration
 		err = enumerator.Enumerate()
-		if err != nil {
-			return err
-		}
 	} else {
-
 		err = CustomSyncHandler(cca, enumerator, ctx)
-		if err != nil {
-			return err
-		}
+	}
+
+	if err != nil {
+		return err
 	}
 
 	return nil
