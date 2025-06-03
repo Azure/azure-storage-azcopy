@@ -26,6 +26,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -223,15 +224,20 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 			return "<unparsable>", false
 		}
 		host := strings.ToLower(u.Host)
+		
+		// Strip port from host for suffix comparison (fixes issue #2792)
+		if h, _, err := net.SplitHostPort(host); err == nil {
+			host = h
+		}
 
 		for _, s := range suffixes {
 			s = strings.Trim(s, " *") // trim *.foo to .foo
 			s = strings.ToLower(s)
 			if strings.HasSuffix(host, s) {
-				return host, true
+				return u.Host, true // Return original host for error messages
 			}
 		}
-		return host, false
+		return u.Host, false
 	}
 
 	switch ct {
