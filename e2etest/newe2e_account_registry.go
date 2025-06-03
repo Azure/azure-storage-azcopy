@@ -87,15 +87,15 @@ func CreateAccount(a Asserter, accountType AccountType, options *CreateAccountOp
 	}
 
 	_, err := accountARMClient.Create(accountARMDefinition)
-	a.NoError("ARM create account call", err)
+	a.NoError("ARM create account call", err, true)
 	keys, err := accountARMClient.GetKeys()
-	a.NoError("ARM get keys call", err)
+	a.NoError("ARM get keys call", err, true)
 
 	acct := &AzureAccountResourceManager{
-		accountName: accountARMClient.AccountName,
-		accountKey:  keys.Keys[0].Value, // todo find useful key
-		accountType: accountType,
-		armClient:   accountARMClient,
+		InternalAccountName: accountARMClient.AccountName,
+		InternalAccountKey:  keys.Keys[0].Value, // todo find useful key
+		InternalAccountType: accountType,
+		ArmClient:           accountARMClient,
 	}
 
 	if rt, ok := a.(ResourceTracker); ok {
@@ -131,20 +131,26 @@ func AccountRegistryInitHook(a Asserter) {
 	if GlobalConfig.StaticResources() {
 		acctInfo := GlobalConfig.E2EAuthConfig.StaticStgAcctInfo
 
-		AccountRegistry[PrimaryStandardAcct] = &AzureAccountResourceManager{
-			accountName: acctInfo.Standard.AccountName,
-			accountKey:  acctInfo.Standard.AccountKey,
-			accountType: EAccountType.Standard(),
+		if acctInfo.Standard.AccountName != "" {
+			AccountRegistry[PrimaryStandardAcct] = &AzureAccountResourceManager{
+				InternalAccountName: acctInfo.Standard.AccountName,
+				InternalAccountKey:  acctInfo.Standard.AccountKey,
+				InternalAccountType: EAccountType.Standard(),
+			}
 		}
-		AccountRegistry[PrimaryHNSAcct] = &AzureAccountResourceManager{
-			accountName: acctInfo.HNS.AccountName,
-			accountKey:  acctInfo.HNS.AccountKey,
-			accountType: EAccountType.HierarchicalNamespaceEnabled(),
+		if acctInfo.HNS.AccountName != "" {
+			AccountRegistry[PrimaryHNSAcct] = &AzureAccountResourceManager{
+				InternalAccountName: acctInfo.HNS.AccountName,
+				InternalAccountKey:  acctInfo.HNS.AccountKey,
+				InternalAccountType: EAccountType.HierarchicalNamespaceEnabled(),
+			}
 		}
-		AccountRegistry[PremiumPageBlobAcct] = &AzureAccountResourceManager{
-			accountName: acctInfo.PremiumPage.AccountName,
-			accountKey:  acctInfo.PremiumPage.AccountKey,
-			accountType: EAccountType.PremiumPageBlobs(),
+		if acctInfo.PremiumPage.AccountName != "" {
+			AccountRegistry[PremiumPageBlobAcct] = &AzureAccountResourceManager{
+				InternalAccountName: acctInfo.PremiumPage.AccountName,
+				InternalAccountKey:  acctInfo.PremiumPage.AccountKey,
+				InternalAccountType: EAccountType.PremiumPageBlobs(),
+			}
 		}
 	} else {
 		// Create standard accounts

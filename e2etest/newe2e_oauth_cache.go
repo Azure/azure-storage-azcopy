@@ -20,32 +20,39 @@ const (
 var PrimaryOAuthCache *OAuthCache
 
 func SetupOAuthCache(a Asserter) {
-	if GlobalConfig.StaticResources() {
-		return // no-op, because there's no OAuth configured
-	}
+	var (
+		cred     azcore.TokenCredential
+		err      error
+		tenantId string
 
-	dynamicLoginInfo := GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo
-	staticLoginInfo := GlobalConfig.E2EAuthConfig.StaticStgAcctInfo.StaticOAuth
-	useStatic := GlobalConfig.StaticResources()
+		staticOAuth = GlobalConfig.E2EAuthConfig.StaticStgAcctInfo.StaticOAuth
+	)
 
-	var cred azcore.TokenCredential
-	var err error
-	var tenantId string
-	if dynamicLoginInfo.Environment == AzurePipeline {
-		tenantId = dynamicLoginInfo.DynamicOAuth.Workload.TenantId
+	// We don't consider workload identity in here because it's only used in a few tests
+
+	if GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo.Environment == AzurePipeline {
+		tenantId = GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo.DynamicOAuth.Workload.TenantId
 		cred, err = azidentity.NewDefaultAzureCredential(&azidentity.DefaultAzureCredentialOptions{
 			TenantID: tenantId,
 		})
+	} else if useSpn, tenant, appId, secret := GlobalConfig.GetSPNOptions(); useSpn {
+		tenantId = tenant
+		cred, err = azidentity.NewClientSecretCredential(tenant, appId, secret, nil)
+	} else if staticOAuth.OAuthSource.CLIInherit {
+		tenantId = staticOAuth.TenantID
+		cred, err = azidentity.NewAzureCLICredential(&azidentity.AzureCLICredentialOptions{
+			TenantID: tenantId,
+		})
+	} else if staticOAuth.OAuthSource.PSInherit {
+		tenantId = staticOAuth.TenantID
+		cred, err = common.NewPowershellContextCredential(&common.PowershellContextCredentialOptions{
+			TenantID: tenantId,
+		})
 	} else {
-		tenantId = common.Iff(useStatic, staticLoginInfo.TenantID, dynamicLoginInfo.DynamicOAuth.SPNSecret.TenantID)
-		cred, err = azidentity.NewClientSecretCredential(
-			tenantId,
-			common.Iff(useStatic, staticLoginInfo.ApplicationID, dynamicLoginInfo.DynamicOAuth.SPNSecret.ApplicationID),
-			common.Iff(useStatic, staticLoginInfo.ClientSecret, dynamicLoginInfo.DynamicOAuth.SPNSecret.ClientSecret),
-			nil, // Hopefully the defaults should be OK?
-		)
+		a.Log("OAuth Cache unconfigured.")
 	}
 	a.NoError("create credentials", err)
+	a.AssertNow("cred cannot be nil", Not{IsNil{}}, cred)
 
 	PrimaryOAuthCache = NewOAuthCache(cred, tenantId)
 }

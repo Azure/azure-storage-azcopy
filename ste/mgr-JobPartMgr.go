@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"mime"
-	"net"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -19,7 +18,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"golang.org/x/sync/semaphore"
 )
 
 var _ IJobPartMgr = &jobPartMgr{}
@@ -72,6 +70,7 @@ type IJobPartMgr interface {
 	/* Status Manager Updates */
 	SendXferDoneMsg(msg xferDoneMsg)
 	PropertiesToTransfer() common.SetPropertiesFlags
+	ResetFailedTransfersCount() // Resets number of failed transfers after a job is resumed
 }
 
 // NewAzcopyHTTPClient creates a new HTTP client.
@@ -80,14 +79,11 @@ type IJobPartMgr interface {
 // number of available network sockets on resource-constrained Linux systems. (E.g. when
 // 'ulimit -Hn' is low).
 func NewAzcopyHTTPClient(maxIdleConns int) *http.Client {
+	const concurrentDialsPerCpu = 10 // exact value doesn't matter too much, but too low will be too slow, and too high will reduce the beneficial effect on thread count
 	return &http.Client{
 		Transport: &http.Transport{
-			Proxy: common.GlobalProxyLookup,
-			DialContext: newDialRateLimiter(&net.Dialer{
-				Timeout:   30 * time.Second,
-				KeepAlive: 30 * time.Second,
-				DualStack: true,
-			}).DialContext,
+			Proxy:                  common.GlobalProxyLookup,
+			MaxConnsPerHost:        concurrentDialsPerCpu * runtime.NumCPU(),
 			MaxIdleConns:           0, // No limit
 			MaxIdleConnsPerHost:    maxIdleConns,
 			IdleConnTimeout:        180 * time.Second,
@@ -102,33 +98,6 @@ func NewAzcopyHTTPClient(maxIdleConns int) *http.Client {
 	}
 }
 
-// Prevents too many dials happening at once, because we've observed that that increases the thread
-// count in the app, to several times more than is actually necessary - presumably due to a blocking OS
-// call somewhere. It's tidier to avoid creating those excess OS threads.
-// Even our change from Dial (deprecated) to DialContext did not replicate the effect of dialRateLimiter.
-type dialRateLimiter struct {
-	dialer *net.Dialer
-	sem    *semaphore.Weighted
-}
-
-func newDialRateLimiter(dialer *net.Dialer) *dialRateLimiter {
-	const concurrentDialsPerCpu = 10 // exact value doesn't matter too much, but too low will be too slow, and too high will reduce the beneficial effect on thread count
-	return &dialRateLimiter{
-		dialer,
-		semaphore.NewWeighted(int64(concurrentDialsPerCpu * runtime.NumCPU())),
-	}
-}
-
-func (d *dialRateLimiter) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	err := d.sem.Acquire(context.Background(), 1)
-	if err != nil {
-		return nil, err
-	}
-	defer d.sem.Release(1)
-
-	return d.dialer.DialContext(ctx, network, address)
-}
-
 func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptions, transport policy.Transporter, log LogOptions, srcCred *common.ScopedToken, dstCred *common.ScopedAuthenticator) azcore.ClientOptions {
 	// Pipeline will look like
 	// [includeResponsePolicy, newAPIVersionPolicy (ignored), NewTelemetryPolicy, perCall, NewRetryPolicy, perRetry, NewLogPolicy, httpHeaderPolicy, bodyDownloadPolicy]
@@ -141,7 +110,7 @@ func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptio
 	if srcCred != nil {
 		perRetryPolicies = append(perRetryPolicies, NewSourceAuthPolicy(srcCred))
 	}
-	retry.ShouldRetry = getShouldRetry()
+	retry.ShouldRetry = GetShouldRetry(&log)
 
 	return azcore.ClientOptions{
 		//APIVersion: ,
@@ -263,7 +232,8 @@ func (jpm *jobPartMgr) Plan() *JobPartPlanHeader {
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
 func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	jobCtx = context.WithValue(jobCtx, ServiceAPIVersionOverride, DefaultServiceApiVersion)
-	jpm.atomicTransfersDone = 0 // Reset the # of transfers done back to 0
+	jpm.atomicTransfersDone = 0   // Reset the # of transfers done back to 0
+	jpm.atomicTransfersFailed = 0 // Resets the # transfers failed back to 0 during resume operation
 	// partplan file is opened and mapped when job part is added
 	// jpm.planMMF = jpm.filename.Map() // Open the job part plan file & memory-map it in
 	plan := jpm.planMMF.Plan()
@@ -346,6 +316,9 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		// If the transfer was failed, then while rescheduling the transfer marking it Started.
 		if ts == common.ETransferStatus.Failed() {
 			jppt.SetTransferStatus(common.ETransferStatus.Restarted(), true)
+			if failedCount := atomic.LoadUint32(&jpm.atomicTransfersFailed); failedCount > 0 {
+				atomic.AddUint32(&jpm.atomicTransfersFailed, ^uint32(0))
+			} // Adding uint32 max is effectively subtracting 1
 		}
 
 		if _, dst, isFolder := plan.TransferSrcDstStrings(t); isFolder {
@@ -570,7 +543,6 @@ func (jpm *jobPartMgr) IsSourceEncrypted() bool {
 func (jpm *jobPartMgr) PropertiesToTransfer() common.SetPropertiesFlags {
 	return jpm.SetPropertiesFlags
 }
-
 func (jpm *jobPartMgr) ShouldPutMd5() bool {
 	return jpm.putMd5
 }
@@ -619,6 +591,8 @@ func (jpm *jobPartMgr) updateJobPartProgress(status common.TransferStatus) {
 		atomic.AddUint32(&jpm.atomicTransfersFailed, 1)
 	case common.ETransferStatus.SkippedEntityAlreadyExists(), common.ETransferStatus.SkippedBlobHasSnapshots():
 		atomic.AddUint32(&jpm.atomicTransfersSkipped, 1)
+	case common.ETransferStatus.Restarted(): // When a job is resumed, number of failed should reset to 0
+		atomic.StoreUint32(&jpm.atomicTransfersFailed, 0)
 	case common.ETransferStatus.Cancelled():
 	default:
 		jpm.Log(common.LogError, fmt.Sprintf("Unexpected status: %v", status.String()))
@@ -695,6 +669,10 @@ func (jpm *jobPartMgr) SourceIsOAuth() bool {
 /* Status update messages should not fail */
 func (jpm *jobPartMgr) SendXferDoneMsg(msg xferDoneMsg) {
 	jpm.jobMgr.SendXferDoneMsg(msg)
+}
+
+func (jpm *jobPartMgr) ResetFailedTransfersCount() {
+	atomic.StoreUint32(&jpm.atomicTransfersFailed, 0)
 }
 
 // TODO: Can we delete this method?

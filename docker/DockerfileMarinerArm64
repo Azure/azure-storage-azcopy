@@ -1,0 +1,15 @@
+# Create container based on mariner 2.0 image
+FROM --platform=linux/arm64 mcr.microsoft.com/cbl-mariner/base/core:2.0
+
+# Install dependencies
+RUN tdnf update -y
+RUN tdnf install -y ca-certificates
+
+# Copy azcopy binary to executable path
+COPY ./azcopy /usr/local/bin/
+
+# Make azcopy executable
+RUN chmod +x /usr/local/bin/azcopy
+
+WORKDIR /azcopy
+CMD [ "azcopy" ]

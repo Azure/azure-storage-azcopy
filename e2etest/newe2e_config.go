@@ -4,10 +4,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	tableservice "github.com/Azure/azure-sdk-for-go/sdk/data/aztables"
+	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"os"
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var GlobalConfig NewE2EConfig
@@ -23,12 +27,18 @@ The following options can be as follows:
 - mutually_exclusive: Only one field under this must be completely fulfilled. Multiple is unacceptable. Ignored on values and json structs.
 - minimum_required: How many required fields under this field must match, separated by an equal. Only numbers are accepted.
 - default: must be the final argument, separated with an equal. Everything that follows will be used, including commas.
+- defaultfunc: exactly like AzCopyEnvironment except `func() (T, error)` (as of this time)
 
 All immediate fields of a mutually exclusive struct will be treated as required, and all but one field will be expected to fail.
 Structs that are not marked "required" will present Environment errors from "required" fields when one or more options are successfully set
 */
+const (
+	AzurePipeline = "AzurePipeline"
 
-const AzurePipeline = "AzurePipeline"
+	WorkloadIdentityServicePrincipalID = "servicePrincipalId"
+	WorkloadIdentityTenantID           = "tenantId"
+	WorkloadIdentityToken              = "idToken"
+)
 
 type NewE2EConfig struct {
 	E2EAuthConfig struct { // mutually exclusive
@@ -51,9 +61,18 @@ type NewE2EConfig struct {
 
 		StaticStgAcctInfo struct {
 			StaticOAuth struct {
-				TenantID      string `env:"NEW_E2E_STATIC_TENANT_ID"`
-				ApplicationID string `env:"NEW_E2E_STATIC_APPLICATION_ID,required"`
-				ClientSecret  string `env:"NEW_E2E_STATIC_CLIENT_SECRET,required"`
+				TenantID string `env:"NEW_E2E_STATIC_TENANT_ID"`
+
+				OAuthSource struct { // mutually exclusive
+					SPNSecret struct {
+						ApplicationID string `env:"NEW_E2E_STATIC_APPLICATION_ID,required"`
+						ClientSecret  string `env:"NEW_E2E_STATIC_CLIENT_SECRET,required"`
+					} `env:",required"`
+
+					PSInherit bool `env:"NEW_E2E_STATIC_PS_INHERIT,required"`
+
+					CLIInherit bool `env:"NEW_E2E_STATIC_CLI_INHERIT,required"`
+				} `env:",required,mutually_exclusive"`
 			}
 
 			// todo: should we automate this somehow? Currently each of these accounts needs some marginal boilerplate.
@@ -72,6 +91,16 @@ type NewE2EConfig struct {
 		} `env:",required,minimum_required=1"`
 	} `env:",required,mutually_exclusive"`
 
+	// Not required in any way-- Used in CI to record results regularly. SubscriptionLoginInfo should be used, or a static account key present here.
+	TelemetryConfig struct {
+		AccountName string `env:"NEW_E2E_TELEMETRY_ACCT_NAME"`
+		AccountKey  string `env:"NEW_E2E_TELEMETRY_ACCT_KEY"`
+		// The identifier in which all telemetry data will be added under this key. If nothing is specified, the present UNIX time will be used.
+		DataKey string `env:"NEW_E2E_TELEMETRY_DATA_KEY,defaultfunc=DefaultTelemetryDataKey"`
+
+		StressTestEnabled bool `env:"NEW_E2E_TELEMETRY_STRESS_TEST_ENABLED,default=false"`
+	}
+
 	AzCopyExecutableConfig struct {
 		ExecutablePath      string `env:"NEW_E2E_AZCOPY_PATH,required"`
 		AutobuildExecutable bool   `env:"NEW_E2E_AUTOBUILD_AZCOPY,default=true"` // todo: make this work. It does not as of 11-21-23
@@ -80,8 +109,178 @@ type NewE2EConfig struct {
 	} `env:",required"`
 }
 
+func (e NewE2EConfig) DefaultTelemetryDataKey() (string, error) {
+	return fmt.Sprint(time.Now().Unix()), nil
+}
+
 func (e NewE2EConfig) StaticResources() bool {
 	return e.E2EAuthConfig.SubscriptionLoginInfo.SubscriptionID == "" // all subscriptionlogininfo options would have to be filled due to required
+}
+
+func (e NewE2EConfig) GetSPNOptions() (present bool, tenant, applicationId, secret string) {
+	staticInfo := e.E2EAuthConfig.StaticStgAcctInfo.StaticOAuth
+	dynamicInfo := e.E2EAuthConfig.SubscriptionLoginInfo.DynamicOAuth.SPNSecret
+
+	if e.StaticResources() {
+		return staticInfo.OAuthSource.SPNSecret.ApplicationID != "",
+			staticInfo.TenantID,
+			staticInfo.OAuthSource.SPNSecret.ApplicationID,
+			staticInfo.OAuthSource.SPNSecret.ClientSecret
+	} else {
+		return dynamicInfo.ApplicationID != "",
+			dynamicInfo.TenantID,
+			dynamicInfo.ApplicationID,
+			dynamicInfo.ApplicationID
+	}
+}
+
+func (e NewE2EConfig) GetTenantID() string {
+	if e.StaticResources() {
+		return e.E2EAuthConfig.StaticStgAcctInfo.StaticOAuth.TenantID
+	} else {
+		dynamicInfo := e.E2EAuthConfig.SubscriptionLoginInfo.DynamicOAuth
+		if tid := dynamicInfo.SPNSecret.TenantID; tid != "" {
+			return tid
+		} else {
+			return dynamicInfo.Workload.TenantId // worst case if it bubbles down and it's all zero, that's OK.
+		}
+	}
+}
+
+func (e NewE2EConfig) TelemetryConfigured() bool {
+	if e.TelemetryConfig.AccountName == "" { // we need to know where to put the data
+		return false
+	}
+
+	if e.StaticResources() && e.TelemetryConfig.AccountKey == "" { // Auth needed in some form
+		return false
+	}
+
+	return true
+}
+
+var telemetryServiceCache struct {
+	blob  *blobservice.Client
+	file  *fileservice.Client
+	table *tableservice.Client
+}
+
+func (e NewE2EConfig) GetTelemetryBlobService() (*blobservice.Client, error) {
+	if telemetryServiceCache.blob != nil {
+		return telemetryServiceCache.blob, nil
+	}
+
+	if !e.TelemetryConfigured() {
+		return nil, errors.New("telemetry unconfigured")
+	}
+
+	uri := fmt.Sprintf("https://%s.blob.core.windows.net", e.TelemetryConfig.AccountName)
+
+	if e.StaticResources() {
+		sk, err := blobservice.NewSharedKeyCredential(e.TelemetryConfig.AccountName, e.TelemetryConfig.AccountKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to set up telemetry: invalid key: %w", err)
+		}
+
+		c, err := blobservice.NewClientWithSharedKeyCredential(
+			uri,
+			sk,
+			nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to set up telemetry: failed client creation: %w", err)
+		}
+
+		telemetryServiceCache.blob = c
+		return c, nil
+	} else {
+		c, err := blobservice.NewClient(
+			uri,
+			PrimaryOAuthCache.tc,
+			nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to set up telemetry: failed client creation: %w", err)
+		}
+
+		telemetryServiceCache.blob = c
+		return c, nil
+	}
+}
+
+func (e NewE2EConfig) GetTelemetryFileService() (*fileservice.Client, error) {
+	if telemetryServiceCache.blob != nil {
+		return telemetryServiceCache.file, nil
+	}
+
+	if !e.TelemetryConfigured() {
+		return nil, errors.New("telemetry unconfigured")
+	}
+
+	uri := fmt.Sprintf("https://%s.blob.core.windows.net", e.TelemetryConfig.AccountName)
+
+	if e.StaticResources() {
+		sk, err := fileservice.NewSharedKeyCredential(e.TelemetryConfig.AccountName, e.TelemetryConfig.AccountKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to set up telemetry: invalid key: %w", err)
+		}
+
+		c, err := fileservice.NewClientWithSharedKeyCredential(
+			uri,
+			sk,
+			nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to set up telemetry: failed client creation: %w", err)
+		}
+
+		telemetryServiceCache.file = c
+		return c, nil
+	} else {
+		c, err := fileservice.NewClient(
+			uri,
+			PrimaryOAuthCache.tc,
+			nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to set up telemetry: failed client creation: %w", err)
+		}
+
+		telemetryServiceCache.file = c
+		return c, nil
+	}
+}
+
+func (e NewE2EConfig) GetTelemetryTableService() (*tableservice.ServiceClient, error) {
+
+	if !e.TelemetryConfigured() {
+		return nil, errors.New("telemetry unconfigured")
+	}
+
+	uri := fmt.Sprintf("https://%s.table.core.windows.net", e.TelemetryConfig.AccountName)
+
+	if e.StaticResources() {
+		sk, err := tableservice.NewSharedKeyCredential(e.TelemetryConfig.AccountName, e.TelemetryConfig.AccountKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to set up telemetry: invalid key: %w", err)
+		}
+
+		c, err := tableservice.NewServiceClientWithSharedKey(
+			uri,
+			sk,
+			nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to set up telemetry: failed client creation: %w", err)
+		}
+
+		return c, nil
+	} else {
+		c, err := tableservice.NewServiceClient(
+			uri,
+			PrimaryOAuthCache.tc,
+			nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to set up telemetry: failed client creation: %w", err)
+		}
+
+		return c, nil
+	}
 }
 
 // ========= Tag Definition ==========
@@ -89,6 +288,7 @@ func (e NewE2EConfig) StaticResources() bool {
 type EnvTag struct {
 	EnvName                     string
 	DefaultValue                string
+	DefaultFunc                 string
 	Required, MutuallyExclusive bool
 	MinimumRequired             uint
 }
@@ -110,6 +310,8 @@ func ParseEnvTag(tag string) EnvTag {
 			out.Required = true
 		case strings.EqualFold(v, "mutually_exclusive"):
 			out.MutuallyExclusive = true
+		case strings.HasPrefix(v, "defaultfunc="):
+			out.DefaultFunc = strings.TrimPrefix(v+strings.Join(parts[i+1:], ","), "defaultfunc=")
 		case strings.HasPrefix(v, "default="):
 			out.DefaultValue = strings.TrimPrefix(v+strings.Join(parts[i+1:], ","), "default=")
 		case strings.HasPrefix(v, "minimum_required="):
@@ -237,6 +439,7 @@ func (c *ConfigReaderError) Finalize() *ConfigReaderError {
 // ========== Config Reader ===========
 
 func SetValue(fieldName string, val reflect.Value, tag EnvTag) *ConfigReaderError {
+
 	res, ok := os.LookupEnv(tag.EnvName)
 	if !ok {
 		if tag.DefaultValue != "" {
@@ -245,6 +448,20 @@ func SetValue(fieldName string, val reflect.Value, tag EnvTag) *ConfigReaderErro
 
 			if res == "" {
 				return nil // defensively code against a zero-default, though it makes no sense.
+			}
+		} else if tag.DefaultFunc != "" {
+			out := reflect.ValueOf(GlobalConfig).MethodByName(tag.DefaultFunc) // First, target the real value, this catches non-pointer methods
+
+			if !out.IsValid() {
+				return NewConfigReaderErrorEnv(tag.EnvName, fieldName, fmt.Errorf("Could not locate function %s attached to NewE2EConfig", tag.DefaultFunc))
+			}
+
+			ret := out.Call([]reflect.Value{})
+			if !ret[1].IsNil() {
+				return NewConfigReaderErrorEnv(tag.EnvName, fieldName, ret[1].Interface().(error))
+			} else {
+				val.Set(ret[0])
+				return nil
 			}
 		} else if tag.Required {
 			return NewConfigReaderErrorEnv(tag.EnvName, fieldName, errors.New("environment variable not found"))

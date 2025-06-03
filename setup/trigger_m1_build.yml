@@ -1,8 +1,14 @@
+parameters:
+  - name: download_path
+    type: string
+    default: '$(Build.ArtifactStagingDirectory)'
+
 steps:
   - task: Bash@3
     inputs:
       targetType: 'inline'
       script: |
+        set -ex
         echo "Triggering GitHub Actions workflow"
 
         GITHUB_OWNER="Azure"
@@ -110,7 +116,7 @@ steps:
               mkdir -p $ARTIFACTS_DIR/unzipped_artifacts
               ls -ltR $ARTIFACTS_DIR/
               unzip -o $ARTIFACTS_DIR/$artifact_name* -d "$ARTIFACTS_DIR/unzipped_artifacts"
-              mv $ARTIFACTS_DIR/unzipped_artifacts/azcopy_darwin_m1_arm64 $(Build.ArtifactStagingDirectory)/azcopy
+              mv $ARTIFACTS_DIR/unzipped_artifacts/azcopy_darwin_m1_arm64 ${{ parameters.download_path }}/azcopy
             else
               echo "Failed to download $artifact_name"
               exit 1

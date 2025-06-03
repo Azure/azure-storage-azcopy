@@ -1,6 +1,39 @@
 
 # Change Log
 
+## Version 10.29.1 
+
+### Bug Fixes 
+1. Fix the TokenStore getting stuck in a read lock ([#3035](https://github.com/Azure/azure-storage-azcopy/pull/3035))
+
+### Dependency Updates 
+1. golang.org/x/net 0.36.0 ->  0.38.0 (CVE-2025-22872) ([#3023](https://github.com/Azure/azure-storage-azcopy/pull/3023))
+2. golang.org/x/crypto 0.35.0 ->  0.36.0 ([#3023](https://github.com/Azure/azure-storage-azcopy/pull/3023))
+3. golang.org/x/sync 0.11.0 ->  0.12.0 ([#3023](https://github.com/Azure/azure-storage-azcopy/pull/3023))
+4. golang.org/x/sys 0.30.0 ->  0.31.0 ([#3023](https://github.com/Azure/azure-storage-azcopy/pull/3023))
+5. golang.org/x/text 0.22.0 ->  0.23.0 ([#3023](https://github.com/Azure/azure-storage-azcopy/pull/3023))
+
+## Version 10.29.0
+
+### Breaking changes
+1. TokenStore tokens now use sha256 ([#3006](https://github.com/Azure/azure-storage-azcopy/pull/3006))
+
+### Bug Fixes
+1. Fixed a regression where certain values were no longer output on dryruns ([#2923](https://github.com/Azure/azure-storage-azcopy/pull/2923))
+2. Catch and retry on certain Windows networking errors (e.g. port in use, remote host dropped) ([#2916](https://github.com/Azure/azure-storage-azcopy/pull/2916), [2962](https://github.com/Azure/azure-storage-azcopy/pull/2962), [2967](https://github.com/Azure/azure-storage-azcopy/pull/2967))
+3. Fixed an incorrect number of transfers being displayed upon resume ([#2961](https://github.com/Azure/azure-storage-azcopy/pull/2961))
+4. Fixed the URL output by AzCopy login to correct some sign in issues ([#2973](https://github.com/Azure/azure-storage-azcopy/pull/2973))
+5. Fixed a bug with `put-blob-mb` where a lower maximum threshold would be used ([#2936](https://github.com/Azure/azure-storage-azcopy/pull/2936))
+6. Catch EINTR responses from system calls appropriately ([#2942](https://github.com/Azure/azure-storage-azcopy/pull/2942))
+
+## Version 10.28.1
+
+### Dependency updates
+1.	Golang 1.22.7 -> 1.24.0 ([#2948](https://github.com/Azure/azure-storage-azcopy/pull/2948))
+2.	golang.org/x/oauth2 v0.23.0 -> v0.27.0 (CVE-2025-22868)([#2992](https://github.com/Azure/azure-storage-azcopy/pull/2992))
+3.	golang.org/x/net v0.33.0 -> v0.36.0 (CVE-2025-22870)([#2978](https://github.com/Azure/azure-storage-azcopy/pull/2978))
+4.	github.com/golang-jwt 5.2.1 -> 5.2.2 (CVE-2025-30204)([#2990](https://github.com/Azure/azure-storage-azcopy/pull/2990))
+
 ## Version 10.28.0
 
 ### New Features

@@ -1,0 +1,85 @@
+parameters:
+  host_architecture: ''
+  host_suffix: ''
+
+steps:
+  - checkout: self
+    displayName: 'Checkout repository'
+
+  # Custom script to install Go-lang
+  - task: ShellScript@2
+    inputs:
+      scriptPath: "$(System.DefaultWorkingDirectory)/go_installer.sh"
+      args: "$(System.DefaultWorkingDirectory)/ $(AZCOPY_GOLANG_VERSION)"
+    displayName: "Installing Go tools"
+  # install dependencies required for compiling azcopy
+  - script: |
+      sudo apt-get clean
+      sudo apt-get update --fix-missing
+      sudo apt-get install pkg-config libsecret-1-dev ruby ruby-dev rubygems libglib2.0-dev build-essential rpm -y
+      sudo gem install dotenv -v 2.8.1
+      sudo gem install fpm -V
+    displayName: "Installing Dependencies"
+  - script: |
+      mkdir -p $(binaries)
+      mkdir -p $(unsigned)
+    displayName: 'Create output paths'
+  - script: |
+      GOARCH=${{ parameters.host_architecture }} GOOS=linux go build -tags "netgo" -o "$(binaries)/azcopy_linux_${{ parameters.host_architecture }}"
+    displayName: 'Build'
+  - script: |
+      GOARCH=${{ parameters.host_architecture }} GOOS=linux go build -tags "netgo,se_integration" -o "$(binaries)/azcopy_linux_se_${{ parameters.host_architecture }}"
+    displayName: 'Build SE Integration'
+  - script: |
+      linux_dir="$(System.DefaultWorkingDirectory)/azcopy_linux_${{ parameters.host_architecture }}_$(azcopy_version)"
+      echo "##vso[task.setvariable variable=linux_dir]$linux_dir"
+      
+      linux_se_dir="$(System.DefaultWorkingDirectory)/azcopy_linux_se_${{ parameters.host_architecture }}_$(azcopy_version)"
+      echo "##vso[task.setvariable variable=linux_se_dir]$linux_se_dir"
+      
+      mkdir -p $linux_dir
+      mkdir -p $linux_se_dir
+      mkdir -p $(archives)
+      mkdir -p pkgDir/usr/bin/
+    displayName: 'Create archive directories'
+  - script: |
+      cp $(binaries)/azcopy_linux_${{ parameters.host_architecture }} $(linux_dir)/azcopy
+      cp NOTICE.txt $(linux_dir)/
+      
+      cp $(binaries)/azcopy_linux_se_${{ parameters.host_architecture }} $(linux_se_dir)/azcopy
+      cp NOTICE.txt $(linux_se_dir)/
+      
+      cp $(linux_dir)/azcopy pkgDir/usr/bin/
+      cp NOTICE.txt pkgDir/usr/bin/
+    displayName: 'Copy required files for packaging'
+  # using fpm tool for packaging of our binary & performing post-install operations
+  # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
+  - script: |
+      fpm -s dir -t deb -n azcopy -C pkgDir/ \
+      -v $(azcopy_version) \
+      --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
+      --url "https://github.com/Azure/azure-storage-azcopy" \
+      --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts"
+      mv ./azcopy*.deb $(unsigned)/azcopy-$(azcopy_version).${{ parameters.host_suffix }}.deb
+    displayName: 'Make deb Package'
+  - script: |
+      fpm -s dir -t rpm -n azcopy --rpm-digest sha256 -C pkgDir/ \
+      -v $(azcopy_version) \
+      --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
+      --url "https://github.com/Azure/azure-storage-azcopy" \
+      --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts"
+      mv ./azcopy*.rpm $(unsigned)/azcopy-$(azcopy_version).${{ parameters.host_suffix }}.rpm
+    displayName: 'Make rpm Package'
+  - task: ArchiveFiles@2
+    displayName: 'Archive Linux Build'
+    inputs:
+      rootFolderOrFile: '$(linux_dir)'
+      archiveType: tar
+      archiveFile: '$(unsigned)/azcopy_linux_${{ parameters.host_architecture }}_$(azcopy_version).tar.gz'
+
+  - task: ArchiveFiles@2
+    displayName: 'Archive Partner(SE) Linux Build'
+    inputs:
+      rootFolderOrFile: '$(linux_se_dir)'
+      archiveType: tar
+      archiveFile: '$(unsigned)/azcopy_linux_se_${{ parameters.host_architecture }}_$(azcopy_version).tar.gz'
