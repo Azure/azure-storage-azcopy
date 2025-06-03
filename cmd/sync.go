@@ -29,6 +29,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -662,7 +663,7 @@ func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm common.LifecycleMgr, th
 		if cca.FirstPartOrdered() {
 			throughputString = fmt.Sprintf(", 2-sec Throughput (Mb/s): %v", jobsAdmin.ToFixed(throughput, 4))
 		}
-		return fmt.Sprintf("%v Files Scanned at Source, %v Files Scanned at Destination%s",
+		return fmt.Sprintf("%v Files Scanned at Source, %v Files Scanned at Destination%s\n",
 			srcScanned, dstScanned, throughputString)
 	})
 }
@@ -724,7 +725,15 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 
 	if jobDone {
 		exitCode := common.EExitCode.Success()
-		if summary.TransfersFailed > 0 || summary.JobStatus == common.EJobStatus.Cancelled() || summary.JobStatus == common.EJobStatus.Cancelling() {
+
+		failureCheck := false
+		if buildmode.IsMover {
+			failureCheck = summary.TransfersFailed > 0 || summary.JobStatus == common.EJobStatus.Cancelled()
+		} else {
+			failureCheck = summary.TransfersFailed > 0 || summary.JobStatus == common.EJobStatus.Cancelled() || summary.JobStatus == common.EJobStatus.Cancelling()
+		}
+
+		if failureCheck {
 			exitCode = common.EExitCode.Error()
 		}
 
@@ -852,24 +861,25 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		return err
 	}
 
+	enumerator, err := cca.InitEnumerator(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	// trigger the progress reporting
+	if !cca.dryrunMode {
+		cca.waitUntilJobCompletion(false)
+	}
+
+	// trigger the enumeration
 	if !UseSyncOrchestrator {
-		enumerator, err := cca.InitEnumerator(ctx, nil)
-		if err != nil {
-			return err
-		}
-
-		// trigger the progress reporting
-		if !cca.dryrunMode {
-			cca.waitUntilJobCompletion(false)
-		}
-
-		// trigger the enumeration
 		err = enumerator.Enumerate()
-		if err != nil {
-			return err
-		}
 	} else {
-		err = customSyncHandler(cca, ctx)
+		err = CustomSyncHandler(cca, enumerator, ctx)
+	}
+
+	if err != nil {
+		return err
 	}
 
 	return nil

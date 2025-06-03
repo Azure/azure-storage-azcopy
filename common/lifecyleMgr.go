@@ -14,6 +14,8 @@ import (
 	"syscall"
 	"time"
 	"unicode"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 )
 
 // only one instance of the formatter should exist
@@ -615,7 +617,14 @@ func (lcm *lifecycleMgr) InitiateProgressReporting(jc WorkController) {
 			if newCount >= progressFrequencyThreshold && !cancelCalled {
 				// report less on progress  - to save on the CPU costs of doing so and because, if there are this many files,
 				// its going to be a long job anyway, so no need to report so often
-				wait = 2 * time.Minute
+
+				if buildmode.IsMover {
+					// if mover, we don't want to reduce the frequency of progress reporting
+					wait = 2 * time.Second
+				} else {
+					wait = 2 * time.Minute // wait for 2 minutes before next progress report
+				}
+
 				if oldCount < progressFrequencyThreshold {
 					lcm.Info(fmt.Sprintf("Reducing progress output frequency to %v, because there are over %d files", wait, progressFrequencyThreshold))
 				}

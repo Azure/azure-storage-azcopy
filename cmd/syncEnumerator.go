@@ -82,7 +82,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 	srcTraverserTemplate := ResourceTraverserTemplate{
 		location:                    cca.fromTo.From(),
 		credential:                  &srcCredInfo,
-		symlinkHandling:             common.ESymlinkHandlingType.Skip(),
+		symlinkHandling:             cca.symlinkHandling,
 		listOfFilesChannel:          nil,
 		recursive:                   cca.recursive,
 		getProperties:               getProperties,
@@ -103,7 +103,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 		includeVersionsList:         false,
 	}
 
-	sourceTraverser, err := InitResourceTraverser(cca.Source, cca.fromTo.From(), &ctx, &srcCredInfo, common.ESymlinkHandlingType.Skip(), nil, cca.recursive, getProperties, includeDirStubs, common.EPermanentDeleteOption.None(), func(entityType common.EntityType) {
+	sourceTraverser, err := InitResourceTraverser(cca.Source, cca.fromTo.From(), &ctx, &srcCredInfo, cca.symlinkHandling, nil, cca.recursive, true, includeDirStubs, common.EPermanentDeleteOption.None(), func(entityType common.EntityType) {
 		if entityType == common.EEntityType.File() {
 			atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 		} else if entityType == common.EEntityType.Folder() {
@@ -142,7 +142,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 		preservePermissions:   cca.preservePermissions,
 		logLevel:              AzcopyLogVerbosity,
 		cpkOptions:            cca.cpkOptions,
-		errorChannel:          nil,
+		errorChannel:          errorChannel,
 		stripTopDir:           false,
 		trailingDot:           cca.trailingDot,
 		destination:           nil,
