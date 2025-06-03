@@ -76,8 +76,10 @@ func (t *localTraverser) getInfoIfSingleFile() (os.FileInfo, bool, error) {
 	if t.stripTopDir {
 		return nil, false, nil // StripTopDir can NEVER be a single file. If a user wants to target a single file, they must escape the *.
 	}
-
-	fileInfo, err := common.OSStat(t.fullPath)
+	// Calling os.Lstat here instead of os.Stat because we want to handle symlinks correctly.
+	// If the file is a symlink, we want to return the symlink's properties, not the target's.
+	// In case of os.Stat, it would return the target's properties, which is not what we want.
+	fileInfo, err := os.Lstat(t.fullPath)
 
 	if err != nil {
 		return nil, false, err
