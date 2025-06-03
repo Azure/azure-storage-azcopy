@@ -41,8 +41,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 )
 
-const MAX_SYMLINKS_TO_FOLLOW = 40
-
 type localTraverser struct {
 	fullPath        string
 	recursive       bool
@@ -78,8 +76,10 @@ func (t *localTraverser) getInfoIfSingleFile() (os.FileInfo, bool, error) {
 	if t.stripTopDir {
 		return nil, false, nil // StripTopDir can NEVER be a single file. If a user wants to target a single file, they must escape the *.
 	}
-
-	fileInfo, err := common.OSStat(t.fullPath)
+	// Calling os.Lstat here instead of os.Stat because we want to handle symlinks correctly.
+	// If the file is a symlink, we want to return the symlink's properties, not the target's.
+	// In case of os.Stat, it would return the target's properties, which is not what we want.
+	fileInfo, err := os.Lstat(t.fullPath)
 
 	if err != nil {
 		return nil, false, err
@@ -203,7 +203,7 @@ func writeToErrorChannel(errorChannel chan<- ErrorFileInfo, err ErrorFileInfo) {
 // Separate this from the traverser for two purposes:
 // 1) Cleaner code
 // 2) Easier to test individually than to test the entire traverser.
-func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath.WalkFunc, symlinkHandling common.SymlinkHandlingType, errorChannel chan<- ErrorFileInfo, hardlinkHandling common.PreserveHardlinksOption) (err error) {
+func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath.WalkFunc, symlinkHandling common.SymlinkHandlingType, errorChannel chan<- ErrorFileInfo, hardlinkHandling common.PreserveHardlinksOption, incrementEnumerationCounter enumerationCounterFunc) (err error) {
 
 	// We want to re-queue symlinks up in their evaluated form because filepath.Walk doesn't evaluate them for us.
 	// So, what is the plan of attack?
@@ -275,6 +275,12 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				}
 
 				if symlinkHandling.None() {
+					if isNFSCopy {
+						if incrementEnumerationCounter != nil {
+							incrementEnumerationCounter(common.EEntityType.Symlink())
+						}
+						logNFSLinkWarning(fileInfo.Name(), "", true)
+					}
 					return nil // skip it
 				}
 
@@ -351,8 +357,17 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				}
 				return nil
 			} else {
-				CheckHardLink(fileInfo, hardlinkHandling)
-
+				if isNFSCopy {
+					LogHardLinkIfDefaultPolicy(fileInfo, hardlinkHandling)
+					if !IsRegularFile(fileInfo) && !fileInfo.IsDir() {
+						// We don't want to process other non-regular files here.
+						if incrementEnumerationCounter != nil {
+							incrementEnumerationCounter(common.EEntityType.Other())
+						}
+						logSpecialFileWarning(fileInfo.Name())
+						return nil
+					}
+				}
 				// not a symlink
 				result, err := filepath.Abs(filePath)
 
@@ -654,8 +669,33 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 
 	// if the path is a single file, then pass it through the filters and send to processor
 	if isSingleFile {
+
+		entityType := common.EEntityType.File()
+		if isNFSCopy {
+			if IsSymbolicLink(singleFileInfo) {
+				entityType = common.EEntityType.Symlink()
+				logSpecialFileWarning(singleFileInfo.Name())
+				if t.incrementEnumerationCounter != nil {
+					t.incrementEnumerationCounter(entityType)
+				}
+				return nil
+			} else if IsHardlink(singleFileInfo) {
+				entityType = common.EEntityType.Hardlink()
+				LogHardLinkIfDefaultPolicy(singleFileInfo, t.hardlinkHandling)
+			} else if IsRegularFile(singleFileInfo) {
+				entityType = common.EEntityType.File()
+			} else {
+				entityType = common.EEntityType.Other()
+				logSpecialFileWarning(singleFileInfo.Name())
+				if t.incrementEnumerationCounter != nil {
+					t.incrementEnumerationCounter(entityType)
+				}
+				return nil
+			}
+		}
+
 		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter(common.EEntityType.File())
+			t.incrementEnumerationCounter(entityType)
 		}
 
 		err := processIfPassedFilters(filters,
@@ -663,7 +703,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				preprocessor,
 				singleFileInfo.Name(),
 				"",
-				common.EEntityType.File(),
+				entityType,
 				singleFileInfo.ModTime(),
 				singleFileInfo.Size(),
 				noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
@@ -697,10 +737,15 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 					}
 
 					entityType = common.EEntityType.Folder()
-				} else if IsHardlink(fileInfo) {
-					entityType = common.EEntityType.Hardlink()
 				} else {
 					entityType = common.EEntityType.File()
+				}
+
+				// NFS Handling
+				if isNFSCopy {
+					if IsHardlink(fileInfo) {
+						entityType = common.EEntityType.Hardlink()
+					}
 				}
 
 				relPath := strings.TrimPrefix(strings.TrimPrefix(cleanLocalPath(filePath), cleanLocalPath(t.fullPath)), common.DeterminePathSeparator(t.fullPath))
@@ -732,7 +777,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 			}
 
 			// note: Walk includes root, so no need here to separately create StoredObject for root (as we do for other folder-aware sources)
-			return finalizer(WalkWithSymlinks(t.appCtx, t.fullPath, processFile, t.symlinkHandling, t.errorChannel, t.hardlinkHandling))
+			return finalizer(WalkWithSymlinks(t.appCtx, t.fullPath, processFile, t.symlinkHandling, t.errorChannel, t.hardlinkHandling, t.incrementEnumerationCounter))
 		} else {
 			// if recursive is off, we only need to scan the files immediately under the fullPath
 			// We don't transfer any directory properties here, not even the root. (Because the root's
@@ -752,6 +797,9 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				fileInfo, _ := entry.Info()
 				if fileInfo.Mode()&os.ModeSymlink != 0 {
 					if t.symlinkHandling.None() {
+						if isNFSCopy && t.incrementEnumerationCounter != nil {
+							t.incrementEnumerationCounter(common.EEntityType.Symlink())
+						}
 						continue
 					} else if t.symlinkHandling.Preserve() { // Mark the entity type as a symlink.
 						entityType = common.EEntityType.Symlink()
@@ -779,8 +827,18 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 							return err
 						}
 					}
-				} else if IsHardlink(fileInfo) {
-					entityType = common.EEntityType.Hardlink()
+				}
+				// NFS handling
+				if isNFSCopy {
+					if IsHardlink(fileInfo) {
+						entityType = common.EEntityType.Hardlink()
+					} else if !IsRegularFile(fileInfo) {
+						entityType = common.EEntityType.Other()
+						if t.incrementEnumerationCounter != nil {
+							t.incrementEnumerationCounter(entityType)
+						}
+						continue
+					}
 				}
 
 				if entry.IsDir() {
@@ -863,4 +921,31 @@ func cleanLocalPath(localPath string) string {
 	}
 
 	return normalizedPath
+}
+
+func logSpecialFileWarning(fileName string) {
+	if common.AzcopyCurrentJobLogger == nil {
+		return
+	}
+
+	message := fmt.Sprintf("File '%s' at the source is a special file and will be skipped and not copied", fileName)
+	common.AzcopyCurrentJobLogger.Log(common.LogWarning, message)
+}
+
+// logNFSLinkWarning logs a warning for either a symbolic link or a hard link in an NFS share.
+// - For symlinks: inodeNo should be empty.
+// - For hard links: inodeNo should be the file's inode number.
+func logNFSLinkWarning(fileName, inodeNo string, isSymlink bool) {
+	if common.AzcopyCurrentJobLogger == nil {
+		return
+	}
+
+	var message string
+	if isSymlink {
+		message = fmt.Sprintf("File '%s' at the source is a symbolic link and will be skipped and not copied", fileName)
+	} else {
+		message = fmt.Sprintf("File '%s' with inode '%s' at the source is a hard link, but is copied as a full file", fileName, inodeNo)
+	}
+
+	common.AzcopyCurrentJobLogger.Log(common.LogWarning, message)
 }

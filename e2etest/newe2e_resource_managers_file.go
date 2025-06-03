@@ -548,16 +548,24 @@ func (f *FileObjectResourceManager) Create(a Asserter, body ObjectContentContain
 	case common.EEntityType.Hardlink():
 		client := f.getFileClient()
 
-		resp, err := client.CreateHardLink(ctx, props.HardLinkedFileName, &file.CreateHardLinkOptions{})
+		_, err := client.CreateHardLink(ctx, props.HardLinkedFileName, &file.CreateHardLinkOptions{})
 		a.NoError("Create file", err)
-		fmt.Println("Resp.LinkCount", *resp.LinkCount)
-		fmt.Println("Resp.NFSFileType", *resp.NFSFileType)
-		// err = client.UploadStream(ctx, body.Reader(), &file.UploadStreamOptions{
-		// 	Concurrency: runtime.NumCPU(),
-		// })
-		// a.NoError("Upload Stream", err)
+		// fmt.Println("Name", f.ObjectName())
+		// fmt.Println("Resp.LinkCount", *resp.LinkCount)
+		// fmt.Println("Resp.NFSFileType", *resp.NFSFileType)
+	case common.EEntityType.Other():
+		client := f.getFileClient()
+
+		_, err := client.Create(ctx, body.Size(), &file.CreateOptions{
+			NFSProperties: nfsProperties,
+		})
+		a.NoError("Create file", err)
+		err = client.UploadStream(ctx, body.Reader(), &file.UploadStreamOptions{
+			Concurrency: runtime.NumCPU(),
+		})
+		a.NoError("Upload Stream", err)
 	default:
-		a.Error("File Objects only support Files,Folders and Hardlinks")
+		a.Error("File Objects only support Files,Folders,Special File and Hardlinks.Currently " + f.entityType.String())
 	}
 	// Reapply the properties after the resource is created, as the Last Write Time of the file will be reset when data is written.
 	f.SetObjectProperties(a, props)
@@ -573,6 +581,8 @@ func (f *FileObjectResourceManager) Delete(a Asserter) {
 	case common.EEntityType.Folder():
 		_, err = f.getDirClient().Delete(ctx, nil)
 	case common.EEntityType.Hardlink():
+		_, err = f.getFileClient().Delete(ctx, nil)
+	case common.EEntityType.Other():
 		_, err = f.getFileClient().Delete(ctx, nil)
 	default:
 		a.Error(fmt.Sprintf("entity type %s is not currently supported", f.entityType))
@@ -669,17 +679,36 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 				FileMode: resp.FileMode,
 			},
 		}
-	case common.EEntityType.Hardlink():
+	case common.EEntityType.Symlink():
 		resp, err := f.getFileClient().GetProperties(ctx, &file.GetPropertiesOptions{})
 		a.NoError("Get file properties", err)
 
-		// var permissions *string
-		// if pkey := DerefOrZero(resp.FilePermissionKey); pkey != "" {
-		// 	permResp, err := f.Share.InternalClient.GetPermission(ctx, pkey, nil)
-		// 	a.NoError("Get file permissions", err)
+		out = ObjectProperties{
+			EntityType: f.entityType,
+			HTTPHeaders: contentHeaders{
+				cacheControl:       resp.CacheControl,
+				contentDisposition: resp.ContentDisposition,
+				contentEncoding:    resp.ContentEncoding,
+				contentLanguage:    resp.ContentLanguage,
+				contentType:        resp.ContentType,
+				contentMD5:         resp.ContentMD5,
+			},
+			Metadata:         resp.Metadata,
+			LastModifiedTime: resp.LastModified,
+			FileNFSProperties: &FileNFSProperties{
+				FileCreationTime:  resp.FileCreationTime,
+				FileLastWriteTime: resp.FileLastWriteTime,
+			},
+			FileNFSPermissions: &FileNFSPermissions{
+				Owner:    resp.Owner,
+				Group:    resp.Group,
+				FileMode: resp.FileMode,
+			},
+		}
 
-		// 	permissions = permResp.Permission
-		// }
+	case common.EEntityType.Hardlink():
+		resp, err := f.getFileClient().GetProperties(ctx, &file.GetPropertiesOptions{})
+		a.NoError("Get file properties", err)
 
 		out = ObjectProperties{
 			EntityType: f.entityType,
@@ -711,7 +740,7 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 			},
 		}
 	default:
-		a.Error("EntityType must be Folder,File or Hardlink. Currently: " + f.entityType.String())
+		a.Error("EntityType must be Folder,File,Hardlink or Symlink. Currently: " + f.entityType.String())
 	}
 	return
 }

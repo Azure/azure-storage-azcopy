@@ -75,6 +75,13 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 			if entityType == common.EEntityType.File() {
 				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 			}
+			if isNFSCopy {
+				if entityType == common.EEntityType.Other() {
+					atomic.AddUint32(&cca.atomicSkippedSpecialFileCount, 1)
+				} else if entityType == common.EEntityType.Symlink() {
+					atomic.AddUint32(&cca.atomicSkippedSymlinkCount, 1)
+				}
+			}
 		},
 
 		CpkOptions: cca.cpkOptions,
@@ -315,18 +322,31 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		azureFileSpecificOptions,
 	)
 
+	//Protocol compatibility for SMB and NFS
+	// Handles source validation
+	if cca.fromTo.IsS2S() {
+		if cca.fromTo.From() == common.ELocation.File() {
+			if err := validateShareProtocolCompatibility(ctx,
+				cca.fromTo, cca.source, copyJobTemplate.SrcServiceClient, cca.isNFSCopy, true); err != nil {
+				return nil, err
+			}
+		} else if isNFSCopy {
+			return nil, errors.New("NFS copy is not supported for source location " + cca.fromTo.From().String())
+		}
+	}
+
+	// Handle destination validation
 	if (cca.fromTo.IsUpload() || cca.fromTo.IsS2S()) && cca.fromTo.To() == common.ELocation.File() {
-		if err := validateProtocolCompatibility(ctx, cca.fromTo,
+		if err := validateShareProtocolCompatibility(ctx, cca.fromTo,
 			cca.destination,
 			copyJobTemplate.DstServiceClient,
-			cca.isNFSCopy); err != nil {
+			cca.isNFSCopy, false); err != nil {
 			return nil, err
 		}
 	} else if cca.fromTo.IsDownload() && cca.fromTo.From() == common.ELocation.File() {
-		if err := validateProtocolCompatibility(ctx, cca.fromTo,
-			cca.source,
-			copyJobTemplate.SrcServiceClient,
-			cca.isNFSCopy); err != nil {
+		if err := validateShareProtocolCompatibility(ctx, cca.fromTo,
+			cca.source, copyJobTemplate.SrcServiceClient,
+			cca.isNFSCopy, true); err != nil {
 			return nil, err
 		}
 	}

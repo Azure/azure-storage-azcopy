@@ -23,17 +23,14 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"net/url"
 	"os"
 	"strings"
 	"sync"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-)
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
-const (
-	NumOfFilesPerDispatchJobPart = 10000
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func parsePatterns(pattern string) (cookedPatterns []string) {
@@ -205,7 +202,7 @@ func startsWith(s string, t string) bool {
 	return len(s) >= len(t) && strings.EqualFold(s[0:len(t)], t)
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////////////////////////////////////////////
 type s3URLPartsExtension struct {
 	common.S3URLParts
 }

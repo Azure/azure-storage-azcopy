@@ -223,3 +223,7 @@ func (l LocalObjectResourceManager) PutNFSProperties(a Asserter, properties File
 func (l LocalObjectResourceManager) PutNFSPermissions(a Asserter, permissions FileNFSPermissions) {
 	return
 }
+
+func (osScenarioHelper) CreateSpecialFile(filePath string) error {
+	return nil
+}
