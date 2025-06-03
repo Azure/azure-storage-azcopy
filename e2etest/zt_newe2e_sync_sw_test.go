@@ -802,7 +802,8 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbSync}) // Calculate verb early to create the destination object early
 
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
-	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})), ResourceDefinitionContainer{})
+
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.BlobFS(), common.ELocation.File()})), ResourceDefinitionContainer{})
 
 	dirsToCreate := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test"}
 
@@ -913,4 +914,3 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 		},
 	}, false)
 }
-
