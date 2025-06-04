@@ -25,18 +25,21 @@ Below a certain length, say, a couple seconds, this isn't particularly useful.
 const (
 	requestTrackingWindow = time.Minute // should be plenty more than enough to observe a request taking entirely too long
 	requestBucketLifetime = time.Second * 5
+)
 
-	requestActionInitiate uint = iota - 2
+const (
+	requestActionInitiate uint = iota
 	requestActionCancel
 	requestActionFinalize
 )
 
 var _requestLifetimeTrackerSingleton *RequestLifetimeTracker
+var _requestLifetimeTrackerOnce = &sync.Once{}
 
 // GetRequestLifetimeTracker returns the singleton *RequestLifetimeTracker which stems off into RequestLifetimeTrackerPolicy.
 
 func GetRequestLifetimeTracker() (tracker *RequestLifetimeTracker) {
-	if _requestLifetimeTrackerSingleton == nil {
+	_requestLifetimeTrackerOnce.Do(func() {
 		newAtomicInt := func() *int64 {
 			var n int64
 			return &n
@@ -65,7 +68,7 @@ func GetRequestLifetimeTracker() (tracker *RequestLifetimeTracker) {
 		_requestLifetimeTrackerSingleton.requestLifetimeBuckets.Insert(&common.LinkedList[time.Duration]{})
 
 		go _requestLifetimeTrackerSingleton.queueWorker()
-	}
+	})
 
 	return _requestLifetimeTrackerSingleton
 }

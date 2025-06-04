@@ -191,11 +191,12 @@ func (t *autoConcurrencyTuner) worker() {
 			rateChangeReason = concurrencyReasonHighRequestLifetime
 
 			lastReason = t.setConcurrency(concurrency, rateChangeReason)
-			exitChannel := make(chan bool)
+			exitChannel := make(chan bool, 1)
 			go func() {
 				for {
 					if requestLifetimeTracker.SimultaneousLiveRequests() < int64(concurrency) {
 						exitChannel <- true
+						return
 					}
 
 					time.Sleep(requestBucketLifetime) // Sleep for the duration of the tracking window to give us time to scale down.
