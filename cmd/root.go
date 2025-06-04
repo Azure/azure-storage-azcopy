@@ -309,8 +309,6 @@ func init() {
 	_ = rootCmd.PersistentFlags().MarkHidden("memory-profile")
 }
 
-const versionMetadataUrl = "https://azcopyvnextrelease.z22.web.core.windows.net/releasemetadata/latest_version.txt"
-
 // always spins up a new goroutine, because sometimes the aka.ms URL can't be reached (e.g. a constrained environment where
 // aka.ms is not resolvable to a reachable IP address). In such cases, this routine will run for ever, and the caller should
 // just give up on it.
@@ -359,11 +357,7 @@ func beginDetectNewVersion() chan struct{} {
 	return completionChannel
 }
 
-// Uses GitHub REST API to get the latest release version
-func getGitHubLatestRemoteVersion() (*Version, error) {
-	// GitHub REST API endpoint for latest release
-	apiEndpoint := "https://api.github.com/repos/Azure/azure-storage-azcopy/releases/latest"
-
+func getGitHubLatestRemoteVersionWithURL(apiEndpoint string) (*Version, error) {
 	// HTTP client with timeout
 	client := &http.Client{
 		Timeout: 60 * time.Second,
@@ -398,5 +392,12 @@ func getGitHubLatestRemoteVersion() (*Version, error) {
 	// Remove v prefix in TagName, convert str to Version
 	versionStr := strings.TrimPrefix(release.TagName, "v")
 	return NewVersion(versionStr)
+}
+
+// Uses GitHub REST API to get the latest release version
+func getGitHubLatestRemoteVersion() (*Version, error) {
+	// GitHub REST API endpoint for latest release
+	apiEndpoint := "https://api.github.com/repos/Azure/azure-storage-azcopy/releases/latest"
+	return getGitHubLatestRemoteVersionWithURL(apiEndpoint)
 
 }
