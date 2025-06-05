@@ -288,7 +288,7 @@ func init() {
 
 	rootCmd.PersistentFlags().BoolVar(&azcopySkipVersionCheck, "skip-version-check", false, "Do not perform the version check at startup. Intended for automation scenarios & airgapped use.")
 
-	rootCmd.PersistentFlags().StringVar(&azcopyTelemetryValue, "telemetry", "", "Adds additional telemetry information to the AzCopy user agent for identifying customers or partners in backend systems. This value is prefixed to the user agent string.")
+	rootCmd.PersistentFlags().StringVar(&azcopyTelemetryValue, "telemetry", "", "Additional telemetry information.")
 
 	// Note: this is due to Windows not supporting signals properly
 	rootCmd.PersistentFlags().BoolVar(&cancelFromStdin, "cancel-from-stdin", false, "Used by partner teams to send in `cancel` through stdin to stop a job.")
