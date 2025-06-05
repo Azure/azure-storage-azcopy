@@ -366,7 +366,7 @@ func isPublic(ctx context.Context, blobResourceURL string, cpkOptions common.Cpk
 		RetryDelay:    ste.UploadRetryDelay,
 		MaxRetryDelay: ste.UploadMaxRetryDelay,
 	}, policy.TelemetryOptions{
-		ApplicationID: common.AddUserAgentPrefix(common.UserAgent),
+		ApplicationID: buildUserAgentWithTelemetry(common.UserAgent),
 	}, nil, ste.LogOptions{}, nil, nil)
 
 	blobClient, _ := blob.NewClientWithNoCredential(bURLParts.String(), &blob.ClientOptions{ClientOptions: clientOptions})
@@ -399,7 +399,7 @@ func mdAccountNeedsOAuth(ctx context.Context, blobResourceURL string, cpkOptions
 		RetryDelay:    ste.UploadRetryDelay,
 		MaxRetryDelay: ste.UploadMaxRetryDelay,
 	}, policy.TelemetryOptions{
-		ApplicationID: common.AddUserAgentPrefix(common.UserAgent),
+		ApplicationID: buildUserAgentWithTelemetry(common.UserAgent),
 	}, nil, ste.LogOptions{}, nil, nil)
 
 	blobClient, _ := blob.NewClientWithNoCredential(blobResourceURL, &blob.ClientOptions{ClientOptions: clientOptions})
@@ -593,8 +593,24 @@ func createClientOptions(logger common.ILoggerResetable, srcCred *common.ScopedT
 		RetryDelay:    ste.UploadRetryDelay,
 		MaxRetryDelay: ste.UploadMaxRetryDelay,
 	}, policy.TelemetryOptions{
-		ApplicationID: common.AddUserAgentPrefix(common.UserAgent),
+		ApplicationID: buildUserAgentWithTelemetry(common.UserAgent),
 	}, ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost), logOptions, srcCred, reauthCred)
 }
 
 const frontEndMaxIdleConnectionsPerHost = http.DefaultMaxIdleConnsPerHost
+
+// buildUserAgentWithTelemetry creates the user agent string including both
+// environment variable prefix and CLI telemetry parameter
+func buildUserAgentWithTelemetry(baseUserAgent string) string {
+	userAgent := baseUserAgent
+	
+	// Add CLI telemetry parameter if provided
+	if len(azcopyTelemetryValue) > 0 {
+		userAgent = azcopyTelemetryValue + " " + userAgent
+	}
+	
+	// Add environment variable prefix if set
+	userAgent = common.AddUserAgentPrefix(userAgent)
+	
+	return userAgent
+}
