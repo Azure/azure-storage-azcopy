@@ -109,6 +109,7 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 		err = loginType.Parse(autoLoginType)
 		if err != nil {
 			glcm.Error("Invalid Auto-login type specified: " + autoLoginType)
+			return
 		}
 
 		// Fill up options

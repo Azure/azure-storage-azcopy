@@ -100,6 +100,7 @@ func RunLogin(args LoginOptions) {
 		prettyErr := strings.Replace(err.Error(), `\r\n`, "\n", -1)
 		prettyErr += "\n\nNOTE: If your credential was created in the last 5 minutes, please wait a few minutes and try again."
 		glcm.Error("Failed to perform login command: \n" + prettyErr + getErrorCodeUrl(err))
+		return
 	}
 }
 
