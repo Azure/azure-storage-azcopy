@@ -31,15 +31,26 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type ListResponse struct {
-	ErrorMsg string
+type JobsListOptions struct {
+	WithStatus common.JobStatus
+}
+
+type JobsListReq struct {
+	withStatus string
+}
+
+func (args JobsListReq) toOptions() (JobsListOptions, error) {
+	var status common.JobStatus
+	err := status.Parse(args.withStatus)
+	if err != nil {
+		return JobsListOptions{}, fmt.Errorf("Failed to parse --with-status due to error: %s.", err)
+	}
+	return JobsListOptions{
+		WithStatus: status,
+	}, nil
 }
 
 func init() {
-	type JobsListReq struct {
-		withStatus string
-	}
-
 	commandLineInput := JobsListReq{}
 
 	// lsCmd represents the listJob command
@@ -53,18 +64,17 @@ func init() {
 			// if there is any argument passed
 			// it is an error
 			if len(args) > 0 {
-				return fmt.Errorf("listJobs does not require any argument")
+				return fmt.Errorf("jobs list does not require any argument")
 			}
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			withStatus := common.EJobStatus
-			err := withStatus.Parse(commandLineInput.withStatus)
+			options, err := commandLineInput.toOptions()
 			if err != nil {
-				glcm.Error(fmt.Sprintf("Failed to parse --with-status due to error: %s.", err))
+				glcm.Error(fmt.Sprintf(err.Error()))
 			}
 
-			err = HandleListJobsCommand(withStatus)
+			err = RunJobsList(options)
 			if err == nil {
 				glcm.Exit(nil, common.EExitCode.Success())
 			} else {
@@ -80,11 +90,11 @@ func init() {
 			" CompletedWithErrors, CompletedWithFailures, CompletedWithErrorsAndSkipped")
 }
 
-// HandleListJobsCommand sends the ListJobs request to transfer engine
+// RunJobsList sends the ListJobs request to transfer engine
 // Print the Jobs in the history of Azcopy
-func HandleListJobsCommand(jobStatus common.JobStatus) error {
+func RunJobsList(options JobsListOptions) error {
 	resp := common.ListJobsResponse{}
-	Rpc(common.ERpcCmd.ListJobs(), jobStatus, &resp)
+	Rpc(common.ERpcCmd.ListJobs(), options.WithStatus, &resp)
 	return PrintExistingJobIds(resp)
 }
 

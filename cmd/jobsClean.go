@@ -30,13 +30,44 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
+type JobsCleanOptions struct {
+	WithStatus common.JobStatus
+}
+
+func RunJobsClean(opts JobsCleanOptions) error {
+	err := handleCleanJobsCommand(opts.WithStatus)
+	if err == nil {
+		if opts.WithStatus == common.EJobStatus.All() {
+			glcm.Exit(func(format common.OutputFormat) string {
+				return "Successfully removed all jobs."
+			}, common.EExitCode.Success())
+		} else {
+			glcm.Exit(func(format common.OutputFormat) string {
+				return fmt.Sprintf("Successfully removed jobs with status: %s.", opts.WithStatus)
+			}, common.EExitCode.Success())
+		}
+	} else {
+		glcm.Error(fmt.Sprintf("Failed to remove log/plan files due to error: %s.", err))
+	}
+	return nil
+}
+
 var JobsCleanupSuccessMsg = "Successfully removed all jobs."
 
-func init() {
-	type JobsCleanReq struct {
-		withStatus string
-	}
+type JobsCleanReq struct {
+	withStatus string
+}
 
+func (req JobsCleanReq) toOptions() (JobsCleanOptions, error) {
+	withStatus := common.EJobStatus
+	err := withStatus.Parse(req.withStatus)
+	if err != nil {
+		return JobsCleanOptions{}, fmt.Errorf("Failed to parse --with-status due to error: %s.", err)
+	}
+	return JobsCleanOptions{WithStatus: withStatus}, nil
+}
+
+func init() {
 	commandLineInput := JobsCleanReq{}
 
 	// remove a single job's log and plan file
@@ -53,26 +84,11 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			withStatus := common.EJobStatus
-			err := withStatus.Parse(commandLineInput.withStatus)
+			options, err := commandLineInput.toOptions()
 			if err != nil {
-				glcm.Error(fmt.Sprintf("Failed to parse --with-status due to error: %s.", err))
+				glcm.Error(err.Error())
 			}
-
-			err = handleCleanJobsCommand(withStatus)
-			if err == nil {
-				if withStatus == common.EJobStatus.All() {
-					glcm.Exit(func(format common.OutputFormat) string {
-						return "Successfully removed all jobs."
-					}, common.EExitCode.Success())
-				} else {
-					glcm.Exit(func(format common.OutputFormat) string {
-						return fmt.Sprintf("Successfully removed jobs with status: %s.", withStatus)
-					}, common.EExitCode.Success())
-				}
-			} else {
-				glcm.Error(fmt.Sprintf("Failed to remove log/plan files due to error: %s.", err))
-			}
+			_ = RunJobsClean(options)
 		},
 	}
 
