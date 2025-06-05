@@ -71,7 +71,7 @@ func init() {
 		Run: func(cmd *cobra.Command, args []string) {
 			options, err := commandLineInput.toOptions()
 			if err != nil {
-				glcm.Error(fmt.Sprintf(err.Error()))
+				glcm.Error(err.Error())
 			}
 
 			err = RunJobsList(options)
