@@ -2,6 +2,11 @@ package e2etest
 
 import (
 	"bytes"
+	"io"
+	"path"
+	"runtime"
+	"strings"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/directory"
@@ -11,10 +16,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"io"
-	"path"
-	"runtime"
-	"strings"
 )
 
 // check that everything aligns with interfaces
@@ -273,8 +274,9 @@ type BlobFSPathResourceProvider struct {
 	Service         *BlobFSServiceResourceManager
 	Container       *BlobFSFileSystemResourceManager
 
-	entityType common.EntityType
-	objectPath string
+	entityType         common.EntityType
+	objectPath         string
+	hardlinkedFilePath string
 }
 
 func (b *BlobFSPathResourceProvider) DefaultAuthType() ExplicitCredentialTypes {
@@ -337,6 +339,10 @@ func (b *BlobFSPathResourceProvider) ContainerName() string {
 
 func (b *BlobFSPathResourceProvider) ObjectName() string {
 	return b.objectPath
+}
+
+func (b *BlobFSPathResourceProvider) HardlinkedFileName() string {
+	return b.hardlinkedFilePath
 }
 
 func (b *BlobFSPathResourceProvider) CreateParents(a Asserter) {

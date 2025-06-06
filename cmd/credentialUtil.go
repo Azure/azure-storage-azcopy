@@ -59,10 +59,6 @@ func warnIfSharedKeyAuthForDatalake() {
 // (given appAppPathFolder is mapped to current user)
 var currentUserOAuthTokenManager *common.UserOAuthTokenManager
 
-const oauthLoginSessionCacheKeyName = "AzCopyOAuthTokenCache"
-const oauthLoginSessionCacheServiceName = "AzCopyV10"
-const oauthLoginSessionCacheAccountName = "AzCopyOAuthTokenCache"
-
 // GetUserOAuthTokenManagerInstance gets or creates OAuthTokenManager for current user.
 // Note: Currently, only support to have TokenManager for one user mapping to one tenantID.
 func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
@@ -201,9 +197,6 @@ type rawFromToInfo struct {
 	source, destination common.ResourceString
 }
 
-const trustedSuffixesNameAAD = "trusted-microsoft-suffixes"
-const trustedSuffixesAAD = "*.core.windows.net;*.core.chinacloudapi.cn;*.core.cloudapi.de;*.core.usgovcloudapi.net;*.storage.azure.net"
-
 // checkAuthSafeForTarget checks our "implicit" auth types (those that pick up creds from the environment
 // or a prior login) to make sure they are only being used in places where we know those auth types are safe.
 // This prevents, for example, us accidentally sending OAuth creds to some place they don't belong
@@ -295,7 +288,7 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 		}
 	case common.ECredentialType.GoogleAppCredentials():
 		if resourceType != common.ELocation.GCP() {
-			return fmt.Errorf("Google Application Credentials to %s is not valid", resourceType.String())
+			return fmt.Errorf("google application credentials to %s is not valid", resourceType.String())
 		}
 
 		u, err := url.Parse(resource)

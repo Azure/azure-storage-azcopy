@@ -1,10 +1,10 @@
 package cmd
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestServiceTraverserWithManyObjects(t *testing.T) {

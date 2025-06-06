@@ -21,8 +21,9 @@
 package ste
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // Abstraction of the methods needed to download files/blobs from a remote location
@@ -75,6 +76,17 @@ type smbPropertyAwareDownloader interface {
 
 type smbACLAwareDownloader interface {
 	PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error
+}
+
+// nfsPropertyAwareDownloader
+type nfsPropertyAwareDownloader interface {
+	PutNFSProperties(sip INFSPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error
+}
+
+// nfsPermissionsAwareDownloader
+type nfsPermissionsAwareDownloader interface {
+	PutNFSPermissions(sip INFSPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error
+	PutNFSDefaultPermissions(sip INFSPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error
 }
 
 type downloaderFactory func(jptm IJobPartTransferMgr) (downloader, error)

@@ -6,10 +6,14 @@ package ste
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
@@ -18,7 +22,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// This file implements the linux-triggered smbPropertyAwareDownloader interface.
+// This file implements the linux-triggered smbPropertyAwareDownloader and nfsPropertyAwareDownloader interface.
 
 // works for both folders and files
 func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error {
@@ -185,7 +189,7 @@ func (a *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider
 		}
 	}
 
-	if txInfo.PreserveSMBPermissions == common.EPreservePermissionsOption.OwnershipAndACLs() {
+	if txInfo.PreservePermissions == common.EPreservePermissionsOption.OwnershipAndACLs() {
 		securityInfoFlags |= sddl.OWNER_SECURITY_INFORMATION | sddl.GROUP_SECURITY_INFORMATION
 	}
 
@@ -229,4 +233,118 @@ func (a *azureFilesDownloader) parentIsShareRoot(source string) bool {
 	sep := common.DeterminePathSeparator(path)
 	splitPath := strings.Split(strings.Trim(path, sep), sep)
 	return path != "" && len(splitPath) == 1
+}
+
+// works for both folders and files
+func (*azureFilesDownloader) PutNFSProperties(sip INFSPropertyBearingSourceInfoProvider,
+	txInfo *TransferInfo) error {
+	propHolder, err := sip.GetNFSProperties()
+	if err != nil {
+		return fmt.Errorf("Failed to get NFS properties for %s: %w", txInfo.Destination, err)
+	}
+
+	lastWriteTime := propHolder.FileLastWriteTime()
+
+	// Convert the time to Unix timestamp (seconds and nanoseconds)
+	lastModifiedTimeSec := lastWriteTime.Unix()        // Seconds part
+	lastModifiedTimeNsec := lastWriteTime.Nanosecond() // Nanoseconds part
+
+	// Convert the time to syscall.Timeval type (seconds and microseconds)
+	// syscall.Timeval expects seconds and microseconds, so we convert the nanoseconds
+	tv := []syscall.Timeval{
+		{Sec: lastModifiedTimeSec, Usec: int64(lastModifiedTimeNsec / 1000)}, // Convert nanoseconds to microseconds
+		{Sec: lastModifiedTimeSec, Usec: int64(lastModifiedTimeNsec / 1000)}, // Set both atime and mtime to the same timestamp
+	}
+
+	// Use syscall.Utimes to set modification times
+	err = syscall.Utimes(txInfo.Destination, tv)
+	if err != nil {
+		return fmt.Errorf("Failed to set lastModifiedTime for %s. Error: %w", txInfo.Destination, err)
+	}
+	return nil
+}
+
+// PutNFSPermissions sets NFS permissions (owner, group, file mode) for a file or folder.
+// If none of the permissions are provided, it returns errorNoNFSPermissionsFound.
+func (a *azureFilesDownloader) PutNFSPermissions(sip INFSPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error {
+	nfsPermissions, err := sip.GetNFSPermissions()
+	if err != nil {
+		return fmt.Errorf("failed to get NFS permissions for %s: %w", txInfo.Destination, err)
+	}
+
+	ownerStr := nfsPermissions.GetOwner()
+	groupStr := nfsPermissions.GetGroup()
+	filemodeStr := nfsPermissions.GetFileMode()
+
+	if ownerStr == nil && groupStr == nil && filemodeStr == nil {
+		return errorNoNFSPermissionsFound
+	}
+
+	// Set ownership if owner or group is provided
+	uid, gid := -1, -1 // -1 means "do not change" in os.Chown
+	if ownerStr != nil {
+		if parsedUID, err := strconv.Atoi(*ownerStr); err == nil {
+			uid = parsedUID
+		} else {
+			return fmt.Errorf("invalid owner value for %s: %v", txInfo.Destination, err)
+		}
+	}
+	if groupStr != nil {
+		if parsedGID, err := strconv.Atoi(*groupStr); err == nil {
+			gid = parsedGID
+		} else {
+			return fmt.Errorf("invalid group value for %s: %v", txInfo.Destination, err)
+		}
+	}
+
+	if uid != -1 || gid != -1 {
+		if err := os.Chown(txInfo.Destination, uid, gid); err != nil {
+			return fmt.Errorf("failed to set owner/group for %s: %w", txInfo.Destination, err)
+		}
+	}
+
+	// Set file mode if provided
+	if filemodeStr != nil {
+		parsedMode, err := strconv.ParseUint(*filemodeStr, 8, 32)
+		if err != nil {
+			return fmt.Errorf("invalid mode value for %s: %v", txInfo.Destination, err)
+		}
+		if err := os.Chmod(txInfo.Destination, os.FileMode(parsedMode)); err != nil {
+			return fmt.Errorf("failed to set file mode for %s: %w", txInfo.Destination, err)
+		}
+	}
+
+	return nil
+}
+
+// PutNFSDefaultPermissions sets default ownership and permissions for NFS shares
+// when no explicit NFS permissions are provided by the source.
+// Default: 0755 for directories, 0644 for files. Owner/group set to root (UID 0, GID 0).
+func (a *azureFilesDownloader) PutNFSDefaultPermissions(sip INFSPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error {
+	const (
+		defaultFileMode = 0644
+		defaultDirMode  = 0755
+		defaultUID      = 0 // root
+		defaultGID      = 0 // root
+	)
+
+	// Determine file mode based on entity type
+	var mode os.FileMode
+	if txInfo.EntityType == common.EEntityType.Folder() {
+		mode = defaultDirMode
+	} else {
+		mode = defaultFileMode
+	}
+
+	// Set ownership
+	if err := os.Chown(txInfo.Destination, defaultUID, defaultGID); err != nil {
+		return fmt.Errorf("failed to set owner/group for %s: %w", txInfo.Destination, err)
+	}
+
+	// Set permissions
+	if err := os.Chmod(txInfo.Destination, mode); err != nil {
+		return fmt.Errorf("failed to set permissions for %s: %w", txInfo.Destination, err)
+	}
+
+	return nil
 }

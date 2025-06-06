@@ -1559,6 +1559,41 @@ func (pc *PerfConstraint) Parse(s string) error {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+var EPreserveHardlinksOption = PreserveHardlinksOption(0)
+
+var DefaultPreserveHardlinksOption = EPreserveHardlinksOption.Follow()
+
+type PreserveHardlinksOption uint8
+
+// Copy means copy the files to the destination as regular files
+func (PreserveHardlinksOption) Follow() PreserveHardlinksOption { return PreserveHardlinksOption(0) }
+
+func (pho PreserveHardlinksOption) String() string {
+	return enum.StringInt(pho, reflect.TypeOf(pho))
+}
+
+func (pho *PreserveHardlinksOption) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(pho), s, true, true)
+	if err == nil {
+		*pho = val.(PreserveHardlinksOption)
+	}
+	return err
+}
+
+func (pho PreserveHardlinksOption) MarshalJSON() ([]byte, error) {
+	return json.Marshal(pho.String())
+}
+
+func (pho *PreserveHardlinksOption) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	return pho.Parse(s)
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 type PerformanceAdvice struct {
 
 	// Code representing the type of the advice
@@ -1645,6 +1680,7 @@ func (EntityType) File() EntityType           { return EntityType(0) }
 func (EntityType) Folder() EntityType         { return EntityType(1) }
 func (EntityType) Symlink() EntityType        { return EntityType(2) }
 func (EntityType) FileProperties() EntityType { return EntityType(3) }
+func (EntityType) Hardlink() EntityType       { return EntityType(4) }
 
 func (e EntityType) String() string {
 	return enum.StringInt(e, reflect.TypeOf(e))
