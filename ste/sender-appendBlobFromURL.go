@@ -49,7 +49,7 @@ func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, destination string, pace
 	intentBool := false
 	if _, ok := srcInfoProvider.(*fileSourceInfoProvider); ok {
 		sUrl, _ := file.ParseURL(srcURL)
-		intentBool = sUrl.SAS.Signature() == "" //
+		intentBool = sUrl.SAS.Signature() == "" // No SAS means using OAuth
 	}
 	return &urlToAppendBlobCopier{
 		appendBlobSenderBase: *senderBase,

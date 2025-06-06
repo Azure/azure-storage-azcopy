@@ -1,8 +1,7 @@
 package e2etest
 
 import (
-	"fmt"
-
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -12,6 +11,7 @@ func init() {
 
 type FileOAuthTestSuite struct{}
 
+// Scenario_FileBlobOAuthSyncError tests that users cannot sync FileBlob using OAuth as of v10.30
 func (s *FileOAuthTestSuite) Scenario_FileBlobOAuthSyncError(svm *ScenarioVariationManager) {
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
@@ -29,14 +29,16 @@ func (s *FileOAuthTestSuite) Scenario_FileBlobOAuthSyncError(svm *ScenarioVariat
 					Recursive: pointerTo(true),
 				},
 			},
+			ShouldFail: true,
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{}, true)
 	// Should error out
 	ValidateContainsError(svm, stdout,
-		[]string{"S2S sync from Azure File authenticated with Azure AD to Blob/BlobFS is not supported"})
+		[]string{"Cannot perform sync due to error: S2S sync from Azure File authenticated with Azure AD to Blob/BlobFS is not supported"})
 }
 
+// Scenario_FileBlobOAuthNoError tests S2S FileBlob (default BlockBlob) copies using OAuth are successful
 func (s *FileOAuthTestSuite) Scenario_FileBlobOAuthNoError(svm *ScenarioVariationManager) {
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
@@ -52,27 +54,42 @@ func (s *FileOAuthTestSuite) Scenario_FileBlobOAuthNoError(svm *ScenarioVariatio
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
 					Recursive: pointerTo(true),
+					FromTo:    pointerTo(common.EFromTo.FileBlob()),
 				},
 			},
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{}, true)
-	// Should not error out
+	// Unlike sync, it should not error out
 	ValidateDoesNotContainError(svm, stdout,
 		[]string{"S2S copy from Azure File authenticated with Azure AD to Blob/BlobFS is not supported"})
 }
 
-func (s *FileOAuthTestSuite) Scenario_FileBlobOAuth(svm *ScenarioVariationManager) {
-	name := "test"
-	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.File()),
+// Test FilePageBlob and FileAppendBlob copies
+func (s *FileOAuthTestSuite) Scenario_AllBlobTypesOAuth(svm *ScenarioVariationManager) {
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionObject{})
+	blobTypesSDK := ResolveVariation(svm, []blob.BlobType{blob.BlobTypeAppendBlob, blob.BlobTypePageBlob})
+	dstObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()),
 		ResourceDefinitionObject{
-			ObjectName: &name,
-			Body:       NewRandomObjectContentContainer(SizeFromString("10k")),
+			ObjectProperties: ObjectProperties{
+				BlobProperties: BlobProperties{
+					Type: pointerTo(blobTypesSDK),
+				},
+			},
 		})
-	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{}).GetObject(svm,
-		name, common.EEntityType.File())
 
-	stdOut, _ := RunAzCopy(svm,
+	// Matches the SDK blob type to respective enum type
+	var blobType common.BlobType
+	switch blobTypesSDK {
+	case blob.BlobTypeAppendBlob:
+		blobType = common.EBlobType.AppendBlob()
+	case blob.BlobTypePageBlob:
+		blobType = common.EBlobType.PageBlob()
+	default:
+		blobType = common.EBlobType.BlockBlob()
+	}
+
+	RunAzCopy(svm,
 		AzCopyCommand{
 			Verb: AzCopyVerbCopy,
 			Targets: []ResourceManager{
@@ -83,12 +100,8 @@ func (s *FileOAuthTestSuite) Scenario_FileBlobOAuth(svm *ScenarioVariationManage
 					Recursive: pointerTo(true),
 					FromTo:    pointerTo(common.EFromTo.FileBlob()),
 				},
-				BlobType: pointerTo(ResolveVariation(svm,
-					[]common.BlobType{common.EBlobType.PageBlob(),
-						common.EBlobType.AppendBlob(),
-						common.EBlobType.BlockBlob()})),
+				BlobType: pointerTo(blobType),
 			},
 		})
-	svm.t.Log(fmt.Sprintf("Stdout %v", stdOut))
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{}, true)
 }

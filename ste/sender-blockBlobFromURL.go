@@ -59,15 +59,15 @@ func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, pacer pacer, srcInfoProvi
 	}
 
 	// Check if source is Files
-	addFileRequestIntent := false
+	intentBool := false
 	if _, ok := srcInfoProvider.(*fileSourceInfoProvider); ok {
 		sUrl, _ := file.ParseURL(srcURL)
-		addFileRequestIntent = (sUrl.SAS.Signature() == "") // Using OAuth
+		intentBool = sUrl.SAS.Signature() == "" // No SAS means using OAuth
 	}
 	return &urlToBlockBlobCopier{
 		blockBlobSenderBase:  *senderBase,
 		srcURL:               srcURL,
-		addFileRequestIntent: addFileRequestIntent}, nil
+		addFileRequestIntent: intentBool}, nil
 }
 
 // Returns a chunk-func for blob copies
