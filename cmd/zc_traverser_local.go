@@ -50,7 +50,7 @@ type localTraverser struct {
 	appCtx          context.Context
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
-	errorChannel                chan ErrorFileInfo
+	errorChannel                chan<- ErrorFileInfo
 
 	targetHashType common.SyncHashType
 	hashAdapter    common.HashDataAdapter
@@ -191,7 +191,7 @@ func (s symlinkTargetFileInfo) Name() string {
 	return s.name // override the name
 }
 
-func writeToErrorChannel(errorChannel chan ErrorFileInfo, err ErrorFileInfo) {
+func writeToErrorChannel(errorChannel chan<- ErrorFileInfo, err ErrorFileInfo) {
 	if errorChannel != nil {
 		errorChannel <- err
 	}
@@ -201,7 +201,7 @@ func writeToErrorChannel(errorChannel chan ErrorFileInfo, err ErrorFileInfo) {
 // Separate this from the traverser for two purposes:
 // 1) Cleaner code
 // 2) Easier to test individually than to test the entire traverser.
-func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath.WalkFunc, symlinkHandling common.SymlinkHandlingType, errorChannel chan ErrorFileInfo) (err error) {
+func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath.WalkFunc, symlinkHandling common.SymlinkHandlingType, errorChannel chan<- ErrorFileInfo) (err error) {
 
 	// We want to re-queue symlinks up in their evaluated form because filepath.Walk doesn't evaluate them for us.
 	// So, what is the plan of attack?
@@ -811,9 +811,9 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	return finalizer(err)
 }
 
-func newLocalTraverser(ctx context.Context, fullPath string, recursive bool, stripTopDir bool, symlinkHandling common.SymlinkHandlingType, syncHashType common.SyncHashType, incrementEnumerationCounter enumerationCounterFunc, errorChannel chan ErrorFileInfo) (*localTraverser, error) {
+func newLocalTraverser(fullPath string, ctx context.Context, opts InitResourceTraverserOptions) (*localTraverser, error) {
 	var hashAdapter common.HashDataAdapter
-	if syncHashType != common.ESyncHashType.None() { // Only initialize the hash adapter should we need it.
+	if opts.SyncHashType != common.ESyncHashType.None() { // Only initialize the hash adapter should we need it.
 		var err error
 		hashAdapter, err = common.NewHashDataAdapter(common.LocalHashDir, fullPath, common.LocalHashStorageMode)
 		if err != nil {
@@ -823,14 +823,14 @@ func newLocalTraverser(ctx context.Context, fullPath string, recursive bool, str
 
 	traverser := localTraverser{
 		fullPath:                    cleanLocalPath(fullPath),
-		recursive:                   recursive,
-		symlinkHandling:             symlinkHandling,
+		recursive:                   opts.Recursive,
+		symlinkHandling:             opts.SymlinkHandling,
 		appCtx:                      ctx,
-		incrementEnumerationCounter: incrementEnumerationCounter,
-		errorChannel:                errorChannel,
-		targetHashType:              syncHashType,
+		incrementEnumerationCounter: opts.IncrementEnumeration,
+		errorChannel:                opts.ErrorChannel,
+		targetHashType:              opts.SyncHashType,
 		hashAdapter:                 hashAdapter,
-		stripTopDir:                 stripTopDir,
+		stripTopDir:                 opts.StripTopDir,
 	}
 	return &traverser, nil
 }

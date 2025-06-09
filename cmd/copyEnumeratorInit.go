@@ -72,7 +72,30 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	jobPartOrder.S2SPreserveBlobTags = cca.S2sPreserveBlobTags
 
 	dest := cca.FromTo.To()
-	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &srcCredInfo, cca.SymlinkHandling, cca.ListOfFilesChannel, cca.Recursive, getRemoteProperties, cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, cca.S2sPreserveBlobTags, common.ESyncHashType.None(), cca.preservePermissions, azcopyLogVerbosity, cca.CpkOptions, nil, cca.StripTopDir, cca.trailingDot, &dest, cca.excludeContainer, false)
+	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), ctx, InitResourceTraverserOptions{
+		DestResourceType: &dest,
+
+		Credential: &srcCredInfo,
+
+		ListOfFiles:      cca.ListOfFilesChannel,
+		ListOfVersionIDs: cca.ListOfVersionIDs,
+
+		CpkOptions: cca.CpkOptions,
+
+		PreservePermissions: cca.preservePermissions,
+		SymlinkHandling:     cca.SymlinkHandling,
+		PermanentDelete:     cca.permanentDeleteOption,
+		SyncHashType:        common.ESyncHashType.None(),
+		TrailingDotOption:   cca.trailingDot,
+
+		Recursive:               cca.Recursive,
+		GetPropertiesInFrontend: getRemoteProperties,
+		IncludeDirectoryStubs:   cca.IncludeDirectoryStubs,
+		PreserveBlobTags:        cca.S2sPreserveBlobTags,
+		StripTopDir:             cca.StripTopDir,
+
+		ExcludeContainers: cca.excludeContainer,
+	})
 
 	if err != nil {
 		return nil, err
@@ -84,7 +107,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	}
 
 	// Check if the destination is a directory to correctly decide where our files land
-	isDestDir := cca.isDestDirectory(cca.Destination, &ctx)
+	isDestDir := cca.isDestDirectory(cca.Destination, ctx)
 	if cca.ListOfVersionIDs != nil && (!(cca.FromTo == common.EFromTo.BlobLocal() || cca.FromTo == common.EFromTo.BlobTrash()) || cca.IsSourceDir || !isDestDir) {
 		log.Fatalf("Either source is not a blob or destination is not a local folder")
 	}
@@ -330,7 +353,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 // This is condensed down into an individual function as we don't end up reusing the destination traverser at all.
 // This is just for the directory check.
-func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *context.Context) bool {
+func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx context.Context) bool {
 	var err error
 	dstCredInfo := common.CredentialInfo{}
 
@@ -338,11 +361,22 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 		return false
 	}
 
-	if dstCredInfo, _, err = GetCredentialInfoForLocation(*ctx, cca.FromTo.To(), cca.Destination, false, cca.CpkOptions); err != nil {
+	if dstCredInfo, _, err = GetCredentialInfoForLocation(ctx, cca.FromTo.To(), cca.Destination, false, cca.CpkOptions); err != nil {
 		return false
 	}
 
-	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, &dstCredInfo, common.ESymlinkHandlingType.Skip(), nil, false, false, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), cca.preservePermissions, common.LogNone, cca.CpkOptions, nil, cca.StripTopDir, cca.trailingDot, nil, cca.excludeContainer, false)
+	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, InitResourceTraverserOptions{
+		Credential: &dstCredInfo,
+
+		ListOfVersionIDs: cca.ListOfVersionIDs,
+
+		PreservePermissions: cca.preservePermissions,
+
+		StripTopDir:       cca.StripTopDir,
+		TrailingDotOption: cca.trailingDot,
+
+		ExcludeContainers: cca.excludeContainer,
+	})
 
 	if err != nil {
 		return false
