@@ -268,6 +268,10 @@ func (a shareFilePropertiesAdapter) ContentLength() int64 {
 	return common.IffNotNil(a.GetPropertiesResponse.ContentLength, 0)
 }
 
+func (a shareFilePropertiesAdapter) NFSFileType() string {
+	return common.IffNotNil((*string)(a.GetPropertiesResponse.NFSFileType), "")
+}
+
 func (a shareFilePropertiesAdapter) LinkCount() int64 {
 	return common.IffNotNil(a.GetPropertiesResponse.LinkCount, 0)
 }
@@ -318,6 +322,10 @@ func (a shareDirectoryPropertiesAdapter) ContentMD5() []byte {
 
 func (a shareDirectoryPropertiesAdapter) ContentLength() int64 {
 	return 0
+}
+
+func (a shareDirectoryPropertiesAdapter) NFSFileType() string {
+	return common.IffNotNil((*string)(a.GetPropertiesResponse.NFSFileType), "")
 }
 
 func (a shareDirectoryPropertiesAdapter) LinkCount() int64 {

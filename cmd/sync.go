@@ -265,9 +265,18 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked.excludeFileAttributes = parsePatterns(raw.excludeFileAttributes)
 
 	if raw.isNFSCopy {
+		SetNFSFlag(raw.isNFSCopy)
+		// check for unsupported NFS behavior
+		if isUnsupported, err := isUnsupportedPlatformForNFS(cooked.fromTo); isUnsupported {
+			return cooked, err
+		}
+
 		cooked.isNFSCopy, cooked.preserveInfo, cooked.preservePermissions, err = performNFSSpecificValidation(cooked.fromTo,
 			raw.isNFSCopy, raw.preserveInfo, raw.preservePermissions, raw.preserveSMBInfo, raw.preserveSMBPermissions)
 		if err != nil {
+			return cooked, err
+		}
+		if err = validateSymlinkFlag(raw.followSymlinks, raw.preserveSymlinks); err != nil {
 			return cooked, err
 		}
 		if err = cooked.preserveHardlinks.Parse(raw.preserveHardlinks); err != nil {
@@ -470,6 +479,8 @@ type cookedSyncCmdArgs struct {
 	deleteDestinationFileIfNecessary bool
 	isNFSCopy                        bool
 	preserveHardlinks                common.PreserveHardlinksOption
+	atomicSkippedSymlinkCount        uint32
+	atomicSkippedSpecialFileCount    uint32
 }
 
 func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
@@ -644,6 +655,9 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 			exitCode = common.EExitCode.Error()
 		}
 
+		summary.SkippedSymlinkCount = atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)
+		summary.SkippedSpecialFileCount = atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount)
+
 		lcm.Exit(func(format common.OutputFormat) string {
 			if format == common.EOutputFormat.Json() {
 				return cca.getJsonOfSyncJobSummary(summary)
@@ -662,6 +676,9 @@ Total Number of Copy Transfers: %v
 Number of Copy Transfers Completed: %v
 Number of Copy Transfers Failed: %v
 Number of Deletions at Destination: %v
+Number of Symbolic Links Skipped: %v
+Number of Special Files Skipped: %v
+Number of Hardlinks Converted: %v
 Total Number of Bytes Transferred: %v
 Total Number of Bytes Enumerated: %v
 Final Job Status: %v%s%s
@@ -676,6 +693,9 @@ Final Job Status: %v%s%s
 				summary.TransfersCompleted,
 				summary.TransfersFailed,
 				cca.atomicDeletionCount,
+				summary.SkippedSymlinkCount,
+				summary.SkippedSpecialFileCount,
+				summary.HardlinksConvertedCount,
 				summary.TotalBytesTransferred,
 				summary.TotalBytesEnumerated,
 				summary.JobStatus,

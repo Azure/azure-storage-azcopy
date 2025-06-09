@@ -62,6 +62,32 @@ func ValidateTags(a Asserter, expected, real map[string]string) {
 	a.Assert("Tags must match", Equal{Deep: true}, expected, real)
 }
 
+func ValidateSkippedSymLinkedCount(a Asserter, stdOut AzCopyStdout, expected uint32) {
+	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
+		return
+	}
+
+	parsedStdout := GetTypeOrAssert[*AzCopyParsedCopySyncRemoveStdout](a, stdOut)
+	skippedSymlinkedCount := parsedStdout.FinalStatus.SkippedSymlinkCount
+	if skippedSymlinkedCount != expected {
+		a.Error(fmt.Sprintf("expected skipped symlink count (%d) received count (%d)", expected, skippedSymlinkedCount))
+	}
+	return
+}
+
+func ValidateSkippedSpecialFileCount(a Asserter, stdOut AzCopyStdout, expected uint32) {
+	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
+		return
+	}
+
+	parsedStdout := GetTypeOrAssert[*AzCopyParsedCopySyncRemoveStdout](a, stdOut)
+	skippedSpecialFileCount := parsedStdout.FinalStatus.SkippedSpecialFileCount
+	if skippedSpecialFileCount != expected {
+		a.Error(fmt.Sprintf("expected skipped special file count (%d) received count (%d)", expected, skippedSpecialFileCount))
+	}
+	return
+}
+
 func ValidateResource[T ResourceManager](a Asserter, target T, definition MatchedResourceDefinition[T], validateObjectContent bool) {
 	a.AssertNow("Target resource and definition must not be null", Not{IsNil{}}, a, target, definition)
 	a.AssertNow("Target resource must be at a equal level to the resource definition", Equal{}, target.Level(), definition.DefinitionTarget())
@@ -184,15 +210,15 @@ func ValidateListOutput(a Asserter, stdout AzCopyStdout, expectedObjects map[AzC
 	a.Assert("summary must match", Equal{}, listStdout.Summary, DerefOrZero(expectedSummary))
 }
 
-func ValidateHardlinkedCount(a Asserter, stdOut AzCopyStdout, expected uint32) {
+func ValidateHardlinkedSkippedCount(a Asserter, stdOut AzCopyStdout, expected uint32) {
 	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
 		return
 	}
 
 	parsedStdout := GetTypeOrAssert[*AzCopyParsedCopySyncRemoveStdout](a, stdOut)
-	hardlikedConvertedCount := parsedStdout.FinalStatus.HardlinksConvertedCount
-	if hardlikedConvertedCount != expected {
-		a.Error(fmt.Sprintf("expected hardlink converted count (%d) received count (%d)", expected, hardlikedConvertedCount))
+	hardlinkedConvertedCount := parsedStdout.FinalStatus.HardlinksConvertedCount
+	if hardlinkedConvertedCount != expected {
+		a.Error(fmt.Sprintf("expected hardlink converted count (%d) received count (%d)", expected, hardlinkedConvertedCount))
 	}
 	return
 }

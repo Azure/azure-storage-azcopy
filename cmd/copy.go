@@ -34,6 +34,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -178,7 +179,20 @@ type rawCopyCmdArgs struct {
 	preserveHardlinks string
 }
 
-// blocSizeInBytes converts a FLOATING POINT number of MiB, to a number of bytes
+// this is a global variable so that we can use it in traversal phase
+var isNFSCopy bool
+
+func SetNFSFlag(isNFS bool) {
+	// SetNFSFlag sets the global isNFSCopy variable to the given value
+	isNFSCopy = isNFS
+}
+
+func GetNFSFlag() bool {
+	// GetNFSFlag returns the value of the global isNFSCopy variable
+	return isNFSCopy
+}
+
+// blockSizeInBytes converts a FLOATING POINT number of MiB, to a number of bytes
 // A non-nil error is returned if the conversion is not possible to do accurately (e.g. it comes out of a fractional number of bytes)
 // The purpose of using floating point is to allow specialist users (e.g. those who want small block sizes to tune their read IOPS)
 // to use fractions of a MiB. E.g.
@@ -599,9 +613,18 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	}
 
 	if raw.isNFSCopy {
+		SetNFSFlag(raw.isNFSCopy)
+		// check for unsupported NFS behavior
+		if isUnsupported, err := isUnsupportedPlatformForNFS(cooked.FromTo); isUnsupported {
+			return cooked, err
+		}
+
 		cooked.isNFSCopy, cooked.preserveInfo, cooked.preservePermissions, err = performNFSSpecificValidation(cooked.FromTo,
 			raw.isNFSCopy, raw.preserveInfo, raw.preservePermissions, raw.preserveSMBInfo, raw.preserveSMBPermissions)
 		if err != nil {
+			return cooked, err
+		}
+		if err = validateSymlinkFlag(raw.followSymlinks, raw.preserveSymlinks); err != nil {
 			return cooked, err
 		}
 		if err = cooked.preserveHardlinks.Parse(raw.preserveHardlinks); err != nil {
@@ -1139,8 +1162,10 @@ type CookedCopyCmdArgs struct {
 	// Whether the user wants to preserve the properties of a file...
 	preserveInfo bool
 	// Specifies whether the copy operation is an NFS copy
-	isNFSCopy         bool
-	preserveHardlinks common.PreserveHardlinksOption
+	isNFSCopy                     bool
+	preserveHardlinks             common.PreserveHardlinksOption
+	atomicSkippedSymlinkCount     uint32
+	atomicSkippedSpecialFileCount uint32
 }
 
 func (cca *CookedCopyCmdArgs) isRedirection() bool {
@@ -1566,18 +1591,28 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 	}
 
+	//Protocol compatibility for SMB and NFS
+	// Handles source validation
+	if cca.FromTo.IsS2S() {
+		if cca.FromTo.From() == common.ELocation.File() {
+			if err := validateShareProtocolCompatibility(ctx,
+				cca.FromTo, cca.Source, jobPartOrder.SrcServiceClient, cca.isNFSCopy, true); err != nil {
+				return err
+			}
+		} else if isNFSCopy {
+			return errors.New("NFS copy is not supported for source location " + cca.FromTo.From().String())
+		}
+	}
+
+	// Handle destination validation
 	if (cca.FromTo.IsUpload() || cca.FromTo.IsS2S()) && cca.FromTo.To() == common.ELocation.File() {
-		if err := validateProtocolCompatibility(ctx, cca.FromTo,
-			cca.Destination,
-			jobPartOrder.DstServiceClient,
-			cca.isNFSCopy); err != nil {
+		if err := validateShareProtocolCompatibility(ctx,
+			cca.FromTo, cca.Destination, jobPartOrder.DstServiceClient, cca.isNFSCopy, false); err != nil {
 			return err
 		}
 	} else if cca.FromTo.IsDownload() && cca.FromTo.From() == common.ELocation.File() {
-		if err := validateProtocolCompatibility(ctx, cca.FromTo,
-			cca.Source,
-			jobPartOrder.SrcServiceClient,
-			cca.isNFSCopy); err != nil {
+		if err := validateShareProtocolCompatibility(ctx,
+			cca.FromTo, cca.Source, jobPartOrder.SrcServiceClient, cca.isNFSCopy, true); err != nil {
 			return err
 		}
 	}
@@ -1780,6 +1815,9 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 	})
 
 	if jobDone {
+		summary.SkippedSymlinkCount = atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)
+		summary.SkippedSpecialFileCount = atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount)
+
 		exitCode := cca.getSuccessExitCode()
 		if summary.TransfersFailed > 0 || summary.JobStatus == common.EJobStatus.Cancelled() || summary.JobStatus == common.EJobStatus.Cancelling() {
 			exitCode = common.EExitCode.Error()
@@ -1808,8 +1846,10 @@ Number of File Transfers Failed: %v
 Number of Folder Transfers Failed: %v
 Number of File Transfers Skipped: %v
 Number of Folder Transfers Skipped: %v
-Total Number of Bytes Transferred: %v
+Number of Symbolic Links Skipped: %v
 Number of Hardlinks Converted: %v
+Number of Special Files Skipped: %v
+Total Number of Bytes Transferred: %v
 Final Job Status: %v%s%s
 `,
 					summary.JobID.String(),
@@ -1824,8 +1864,10 @@ Final Job Status: %v%s%s
 					summary.FoldersFailed,
 					summary.TransfersSkipped-summary.FoldersSkipped,
 					summary.FoldersSkipped,
-					summary.TotalBytesTransferred,
+					summary.SkippedSymlinkCount,
 					summary.HardlinksConvertedCount,
+					summary.SkippedSpecialFileCount,
+					summary.TotalBytesTransferred,
 					summary.JobStatus,
 					screenStats,
 					formatPerfAdvice(summary.PerformanceAdvice))

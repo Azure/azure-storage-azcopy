@@ -349,7 +349,7 @@ func TestWalkWithSymlinks_ToFolder(t *testing.T) {
 		fileCount++
 		return nil
 	},
-		common.ESymlinkHandlingType.Follow(), nil, common.EPreserveHardlinksOption.Follow()))
+		common.ESymlinkHandlingType.Follow(), nil, common.EPreserveHardlinksOption.Follow(), nil))
 
 	// 3 files live in base, 3 files live in symlink
 	a.Equal(6, fileCount)
@@ -416,7 +416,7 @@ func TestWalkWithSymlinksBreakLoop(t *testing.T) {
 		fileCount++
 		return nil
 	},
-		common.ESymlinkHandlingType.Follow(), nil, common.EPreserveHardlinksOption.Follow()))
+		common.ESymlinkHandlingType.Follow(), nil, common.EPreserveHardlinksOption.Follow(), nil))
 
 	a.Equal(3, fileCount)
 }
@@ -447,7 +447,7 @@ func TestWalkWithSymlinksDedupe(t *testing.T) {
 		fileCount++
 		return nil
 	},
-		common.ESymlinkHandlingType.Follow(), nil, common.EPreserveHardlinksOption.Follow()))
+		common.ESymlinkHandlingType.Follow(), nil, common.EPreserveHardlinksOption.Follow(), nil))
 
 	a.Equal(6, fileCount)
 }
@@ -479,7 +479,7 @@ func TestWalkWithSymlinksMultitarget(t *testing.T) {
 		fileCount++
 		return nil
 	},
-		common.ESymlinkHandlingType.Follow(), nil, common.EPreserveHardlinksOption.Follow()))
+		common.ESymlinkHandlingType.Follow(), nil, common.EPreserveHardlinksOption.Follow(), nil))
 
 	// 3 files live in base, 3 files live in first symlink, second & third symlink is ignored.
 	a.Equal(6, fileCount)
@@ -513,7 +513,7 @@ func TestWalkWithSymlinksToParentAndChild(t *testing.T) {
 		fileCount++
 		return nil
 	},
-		common.ESymlinkHandlingType.Follow(), nil, common.EPreserveHardlinksOption.Follow()))
+		common.ESymlinkHandlingType.Follow(), nil, common.EPreserveHardlinksOption.Follow(), nil))
 
 	// 6 files total live under toroot. tochild should be ignored (or if tochild was traversed first, child will be ignored on toroot).
 	a.Equal(6, fileCount)

@@ -322,14 +322,15 @@ type ListJobSummaryResponse struct {
 	ServerBusyPercentage   float32 `json:",string"`
 	NetworkErrorPercentage float32 `json:",string"`
 
-	FailedTransfers  []TransferDetail
-	SkippedTransfers []TransferDetail
-	PerfConstraint   PerfConstraint
-	PerfStrings      []string `json:"-"`
-
+	FailedTransfers         []TransferDetail
+	SkippedTransfers        []TransferDetail
+	PerfConstraint          PerfConstraint
+	PerfStrings             []string `json:"-"`
 	PerformanceAdvice       []PerformanceAdvice
 	IsCleanupJob            bool
+	SkippedSymlinkCount     uint32 `json:",string"`
 	HardlinksConvertedCount uint32 `json:",string"`
+	SkippedSpecialFileCount uint32 `json:",string"`
 }
 
 // wraps the standard ListJobSummaryResponse with sync-specific stats

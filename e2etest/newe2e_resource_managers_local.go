@@ -308,9 +308,15 @@ func (l *LocalObjectResourceManager) Create(a Asserter, body ObjectContentContai
 	} else if l.entityType == common.EEntityType.Folder() {
 		err := os.Mkdir(l.getWorkingPath(), 0775)
 		a.NoError("Mkdir", err)
+	} else if l.entityType == common.EEntityType.Symlink() {
+		err := os.Symlink(filepath.Join(l.container.RootPath, properties.SymlinkedFileName), l.getWorkingPath())
+		a.NoError("Create Symlink", err)
 	} else if l.entityType == common.EEntityType.Hardlink() {
 		err := os.Link(filepath.Join(l.container.RootPath, properties.HardLinkedFileName), l.getWorkingPath())
 		a.NoError("Create hardlink", err)
+	} else if l.entityType == common.EEntityType.Other() {
+		err := osScenarioHelper{}.CreateSpecialFile(l.getWorkingPath())
+		a.NoError("Create special file", err)
 	}
 
 	l.SetObjectProperties(a, properties)
