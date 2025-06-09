@@ -571,7 +571,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 	ValidateHardlinkedSkippedCount(svm, stdOut, 2)
 }
 
-func (s *FilesNFSTestSuite) Scenario_TestInvalidScenarioszForSMB(svm *ScenarioVariationManager) {
+func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForSMB(svm *ScenarioVariationManager) {
 
 	// Test Scenarios
 	// 1. If nfs flag is provided and if the source or destination is SMB its an unsupported scenario
@@ -667,6 +667,11 @@ func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForNFS(svm *ScenarioVar
 	//Test Scenarios
 	//1. If nfs flag is not provided and if the source or destination is NFS its an unsupported scenario
 	//
+
+	if runtime.GOOS == "darwin" {
+		svm.InvalidateScenario()
+		return
+	}
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
 	preserveProperties := ResolveVariation(svm, []bool{true, false})
 	preservePermissions := ResolveVariation(svm, []bool{true, false})
