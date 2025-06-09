@@ -221,11 +221,11 @@ func performSMBSpecificValidation(fromTo common.FromTo,
 // By default, symlink files will be skipped during NFS copy.
 func validateSymlinkFlag(followSymlinks, preserveSymlinks bool) error {
 
-	if followSymlinks == true {
+	if followSymlinks {
 		return fmt.Errorf("The '--follow-symlink' flag is not supported for NFS copy. Symlink files will be skipped by default.")
 
 	}
-	if preserveSymlinks == true {
+	if preserveSymlinks {
 		return fmt.Errorf("the --preserve-symlink flag is not support for NFS copy. Symlink files will be skipped by default.")
 	}
 	return nil
