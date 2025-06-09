@@ -1846,7 +1846,7 @@ Number of File Transfers Failed: %v
 Number of Folder Transfers Failed: %v
 Number of File Transfers Skipped: %v
 Number of Folder Transfers Skipped: %v
-Number of Symlink Skipped: %v
+Number of Symbolic Links Skipped: %v
 Number of Hardlinks Converted: %v
 Number of Special Files Skipped: %v
 Total Number of Bytes Transferred: %v
