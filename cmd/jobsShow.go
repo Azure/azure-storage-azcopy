@@ -45,7 +45,7 @@ func (args jobsShowArgs) toOptions() (JobsShowOptions, error) {
 		var withStatus common.TransferStatus
 		err := withStatus.Parse(args.OfStatus)
 		if err != nil {
-			return JobsShowOptions{}, fmt.Errorf("cannot parse the given Transfer Status %s", args.OfStatus)
+			return JobsShowOptions{}, fmt.Errorf("cannot parse the given Transfer Status %s, Accepted values are: All, Started, Success, Failed", args.OfStatus)
 		}
 		return JobsShowOptions{
 			JobID:      args.JobID,
