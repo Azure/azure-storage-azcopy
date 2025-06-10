@@ -175,8 +175,8 @@ type rawCopyCmdArgs struct {
 	// Opt-in flag to state if the copy is nfs copy
 	isNFSCopy bool
 	// Opt-in flag to persist additional properties to Azure Files
-	preserveInfo      bool
-	preserveHardlinks string
+	preserveInfo bool
+	hardlinks    string
 }
 
 // this is a global variable so that we can use it in traversal phase
@@ -619,6 +619,10 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 			return cooked, err
 		}
 
+		// if !raw.preservePermissions && cooked.FromTo == common.EFromTo.FileLocal() {
+		// 	return cooked, fmt.Errorf("preserve-permissions flag is required for NFS copy from Azure Files to local")
+		// }
+
 		cooked.isNFSCopy, cooked.preserveInfo, cooked.preservePermissions, err = performNFSSpecificValidation(cooked.FromTo,
 			raw.isNFSCopy, raw.preserveInfo, raw.preservePermissions, raw.preserveSMBInfo, raw.preserveSMBPermissions)
 		if err != nil {
@@ -627,10 +631,10 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		if err = validateSymlinkFlag(raw.followSymlinks, raw.preserveSymlinks); err != nil {
 			return cooked, err
 		}
-		if err = cooked.preserveHardlinks.Parse(raw.preserveHardlinks); err != nil {
+		if err = cooked.hardlinks.Parse(raw.hardlinks); err != nil {
 			return cooked, err
 		}
-		if err = validatePreserveHardlinks(cooked.preserveHardlinks, cooked.FromTo, cooked.isNFSCopy); err != nil {
+		if err = validateHardlinksFlag(cooked.hardlinks, cooked.FromTo, cooked.isNFSCopy); err != nil {
 			return cooked, err
 		}
 	} else {
@@ -869,7 +873,7 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaults() {
 	raw.s2sInvalidMetadataHandleOption = common.DefaultInvalidMetadataHandleOption.String()
 	raw.forceWrite = common.EOverwriteOption.True().String()
 	raw.preserveOwner = common.PreserveOwnerDefault
-	raw.preserveHardlinks = common.DefaultPreserveHardlinksOption.String()
+	raw.hardlinks = common.DefaultHardlinksOption.String()
 }
 
 func validateForceIfReadOnly(toForce bool, fromTo common.FromTo) error {
@@ -1163,7 +1167,7 @@ type CookedCopyCmdArgs struct {
 	preserveInfo bool
 	// Specifies whether the copy operation is an NFS copy
 	isNFSCopy                     bool
-	preserveHardlinks             common.PreserveHardlinksOption
+	hardlinks                     common.HardlinksOption
 	atomicSkippedSymlinkCount     uint32
 	atomicSkippedSpecialFileCount uint32
 }
@@ -2178,7 +2182,7 @@ func init() {
 	// Deletes destination blobs with uncommitted blocks when staging block, hidden because we want to preserve default behavior
 	cpCmd.PersistentFlags().BoolVar(&raw.deleteDestinationFileIfNecessary, "delete-destination-file", false, "False by default. Deletes destination blobs, specifically blobs with uncommitted blocks when staging block.")
 	_ = cpCmd.PersistentFlags().MarkHidden("delete-destination-file")
-	cpCmd.PersistentFlags().StringVar(&raw.preserveHardlinks, PreserveHardlinksFlag, "follow",
+	cpCmd.PersistentFlags().StringVar(&raw.hardlinks, HardlinksFlag, "follow",
 		"Specifies how hardlinks should be handled. This flag is only applicable when downloading from an NFS file share, uploading to an NFS share, or performing service-to-service copies involving NFS. "+
 			"The only supported option is 'follow' (default), which copies hardlinks as regular, independent files at the destination.")
 }

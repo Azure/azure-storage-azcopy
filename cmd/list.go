@@ -258,7 +258,7 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 		GetPropertiesInFrontend: true,
 
 		ListVersions:     getVersionId,
-		HardlinkHandling: common.EPreserveHardlinksOption.Follow(),
+		HardlinkHandling: common.EHardlinksOption.Follow(),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to initialize traverser: %s", err.Error())

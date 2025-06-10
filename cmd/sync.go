@@ -103,8 +103,8 @@ type rawSyncCmdArgs struct {
 	// Opt-in flag to state if the copy is nfs copy
 	isNFSCopy bool
 	// Opt-in flag to persist additional properties to Azure Files
-	preserveInfo      bool
-	preserveHardlinks string
+	preserveInfo bool
+	hardlinks    string
 }
 
 // it is assume that the given url has the SAS stripped, and safe to print
@@ -279,10 +279,10 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		if err = validateSymlinkFlag(raw.followSymlinks, raw.preserveSymlinks); err != nil {
 			return cooked, err
 		}
-		if err = cooked.preserveHardlinks.Parse(raw.preserveHardlinks); err != nil {
+		if err = cooked.hardlinks.Parse(raw.hardlinks); err != nil {
 			return cooked, err
 		}
-		if err = validatePreserveHardlinks(cooked.preserveHardlinks, cooked.fromTo, cooked.isNFSCopy); err != nil {
+		if err = validateHardlinksFlag(cooked.hardlinks, cooked.fromTo, cooked.isNFSCopy); err != nil {
 			return cooked, err
 		}
 	} else {
@@ -478,7 +478,7 @@ type cookedSyncCmdArgs struct {
 
 	deleteDestinationFileIfNecessary bool
 	isNFSCopy                        bool
-	preserveHardlinks                common.PreserveHardlinksOption
+	hardlinks                        common.HardlinksOption
 	atomicSkippedSymlinkCount        uint32
 	atomicSkippedSpecialFileCount    uint32
 }
@@ -925,5 +925,5 @@ func init() {
 	syncCmd.PersistentFlags().BoolVar(&raw.deleteDestinationFileIfNecessary, "delete-destination-file", false, "False by default. Deletes destination blobs, specifically blobs with uncommitted blocks when staging block.")
 	_ = syncCmd.PersistentFlags().MarkHidden("delete-destination-file")
 
-	syncCmd.PersistentFlags().StringVar(&raw.preserveHardlinks, PreserveHardlinksFlag, "follow", "Follow by default. Preserve hardlinks for NFS resources. This flag is only applicable when the source is NFS file share or the destination is NFS file share. Available options: skip, preserve, follow (default 'follow').")
+	syncCmd.PersistentFlags().StringVar(&raw.hardlinks, HardlinksFlag, "follow", "Follow by default. Preserve hardlinks for NFS resources. This flag is only applicable when the source is NFS file share or the destination is NFS file share. Available options: skip, preserve, follow (default 'follow').")
 }

@@ -38,8 +38,8 @@ func IsSymbolicLink(fileInfo os.FileInfo) bool {
 
 // LogHardLinkIfDefaultPolicy logs a warning if the given file is a hard link and the specified
 // hardlink handling policy is set to default hard links behaviour(follow).
-func LogHardLinkIfDefaultPolicy(fileInfo os.FileInfo, hardlinkHandling common.PreserveHardlinksOption) {
-	if !IsHardlink(fileInfo) || hardlinkHandling != common.DefaultPreserveHardlinksOption {
+func LogHardLinkIfDefaultPolicy(fileInfo os.FileInfo, hardlinkHandling common.HardlinksOption) {
+	if !IsHardlink(fileInfo) || hardlinkHandling != common.DefaultHardlinksOption {
 		return
 	}
 

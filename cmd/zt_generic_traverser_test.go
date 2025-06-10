@@ -87,7 +87,7 @@ func TestLocalWildcardOverlap(t *testing.T) {
 		TrailingDotOption: common.ETrailingDotOption.Enable(),
 		Recursive:         true,
 		StripTopDir:       true,
-		HardlinkHandling:  common.EPreserveHardlinksOption.Follow(),
+		HardlinkHandling:  common.EHardlinksOption.Follow(),
 	})
 	a.Nil(err)
 
@@ -132,7 +132,7 @@ func TestFilesGetProperties(t *testing.T) {
 	traverser := newFileTraverser(shareURL, serviceClientWithSAS, ctx, InitResourceTraverserOptions{
 		GetPropertiesInFrontend: true,
 		TrailingDotOption:       common.ETrailingDotOption.Enable(),
-		HardlinkHandling:        common.EPreserveHardlinksOption.Follow(),
+		HardlinkHandling:        common.EHardlinksOption.Follow(),
 	})
 
 	// embed the check into the processor for ease of use
@@ -161,7 +161,7 @@ func TestFilesGetProperties(t *testing.T) {
 	traverser = newFileTraverser(fileURL, serviceClientWithSAS, ctx, InitResourceTraverserOptions{
 		GetPropertiesInFrontend: true,
 		TrailingDotOption:       common.ETrailingDotOption.Enable(),
-		HardlinkHandling:        common.EPreserveHardlinksOption.Follow(),
+		HardlinkHandling:        common.EHardlinksOption.Follow(),
 	})
 
 	err = traverser.Traverse(noPreProccessor, processor, nil)
@@ -349,7 +349,7 @@ func TestWalkWithSymlinks_ToFolder(t *testing.T) {
 		fileCount++
 		return nil
 	},
-		common.ESymlinkHandlingType.Follow(), nil, common.EPreserveHardlinksOption.Follow(), nil))
+		common.ESymlinkHandlingType.Follow(), nil, common.EHardlinksOption.Follow(), nil))
 
 	// 3 files live in base, 3 files live in symlink
 	a.Equal(6, fileCount)
@@ -416,7 +416,7 @@ func TestWalkWithSymlinksBreakLoop(t *testing.T) {
 		fileCount++
 		return nil
 	},
-		common.ESymlinkHandlingType.Follow(), nil, common.EPreserveHardlinksOption.Follow(), nil))
+		common.ESymlinkHandlingType.Follow(), nil, common.EHardlinksOption.Follow(), nil))
 
 	a.Equal(3, fileCount)
 }
@@ -447,7 +447,7 @@ func TestWalkWithSymlinksDedupe(t *testing.T) {
 		fileCount++
 		return nil
 	},
-		common.ESymlinkHandlingType.Follow(), nil, common.EPreserveHardlinksOption.Follow(), nil))
+		common.ESymlinkHandlingType.Follow(), nil, common.EHardlinksOption.Follow(), nil))
 
 	a.Equal(6, fileCount)
 }
@@ -479,7 +479,7 @@ func TestWalkWithSymlinksMultitarget(t *testing.T) {
 		fileCount++
 		return nil
 	},
-		common.ESymlinkHandlingType.Follow(), nil, common.EPreserveHardlinksOption.Follow(), nil))
+		common.ESymlinkHandlingType.Follow(), nil, common.EHardlinksOption.Follow(), nil))
 
 	// 3 files live in base, 3 files live in first symlink, second & third symlink is ignored.
 	a.Equal(6, fileCount)
@@ -513,7 +513,7 @@ func TestWalkWithSymlinksToParentAndChild(t *testing.T) {
 		fileCount++
 		return nil
 	},
-		common.ESymlinkHandlingType.Follow(), nil, common.EPreserveHardlinksOption.Follow(), nil))
+		common.ESymlinkHandlingType.Follow(), nil, common.EHardlinksOption.Follow(), nil))
 
 	// 6 files total live under toroot. tochild should be ignored (or if tochild was traversed first, child will be ignored on toroot).
 	a.Equal(6, fileCount)
@@ -565,7 +565,7 @@ func TestTraverserWithSingleObject(t *testing.T) {
 		// construct a local traverser
 		localTraverser, _ := newLocalTraverser(filepath.Join(dstDirName, dstFileName), ctx, InitResourceTraverserOptions{
 			SymlinkHandling:  common.ESymlinkHandlingType.Follow(),
-			HardlinkHandling: common.EPreserveHardlinksOption.Follow(),
+			HardlinkHandling: common.EHardlinksOption.Follow(),
 		})
 
 		// invoke the local traversal with a dummy processor
