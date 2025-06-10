@@ -333,28 +333,3 @@ func getShareProtocolType(ctx context.Context,
 
 	return *properties.EnabledProtocols, nil
 }
-
-/*
-func checkSudoAccessForCurrentProcess() error {
-	// Step 1: Create the file
-	filePath := "testfile.txt"
-	file, err := os.Create(filePath)
-	if err != nil {
-		return fmt.Errorf("copying from NFS to local with --preserve-permissions=false requires sudo/root permissions")
-	}
-	file.Close()
-
-	// Step 2: Try setting UID/GID to root
-	err = os.Chown(filePath, 0, 0)
-	// Step 3: Delete the file on failure
-	_ = os.Remove(filePath)
-	if err != nil {
-
-		// Step 4: Return descriptive error
-		return fmt.Errorf(
-			"failed to set owner/group to root on '%s': copying from NFS to local with --preserve-permissions=false requires sudo/root permissions",
-			filePath,
-		)
-	}
-	return nil
-}*/

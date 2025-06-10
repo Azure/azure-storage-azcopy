@@ -271,6 +271,20 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 			return cooked, err
 		}
 
+		// If we are not preserving original file permissions (raw.preservePermissions == false),
+		// and the operation is a file copy from azure file NFS to local linux (FromTo == FileLocal),
+		// and the current OS is Linux, then we require root privileges to proceed.
+		//
+		// This is because modifying file ownership or permissions on Linux
+		// typically requires elevated privileges. To safely handle permission
+		// changes during the local file operation, we enforce that the process
+		// must be running as root.
+		if !raw.preservePermissions && cooked.fromTo == common.EFromTo.FileLocal() {
+			if err := common.EnsureRunningAsRoot(); err != nil {
+				return cooked, fmt.Errorf("copying from Azure File NFS to local Linux requires root privileges when not preserving file permissions")
+			}
+		}
+
 		cooked.isNFSCopy, cooked.preserveInfo, cooked.preservePermissions, err = performNFSSpecificValidation(cooked.fromTo,
 			raw.isNFSCopy, raw.preserveInfo, raw.preservePermissions, raw.preserveSMBInfo, raw.preserveSMBPermissions)
 		if err != nil {
