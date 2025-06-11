@@ -26,12 +26,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
 
 	"github.com/spf13/cobra"
 
@@ -256,7 +257,8 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 		Recursive:               true,
 		GetPropertiesInFrontend: true,
 
-		ListVersions: getVersionId,
+		ListVersions:     getVersionId,
+		HardlinkHandling: common.EHardlinkHandlingType.Follow(),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to initialize traverser: %s", err.Error())

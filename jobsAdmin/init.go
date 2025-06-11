@@ -195,11 +195,12 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 
 	// Update jobPart Status with the status Manager
 	jm.SendJobPartCreatedMsg(ste.JobPartCreatedMsg{TotalTransfers: uint32(len(order.Transfers.List)),
-		IsFinalPart:          order.IsFinalPart,
-		TotalBytesEnumerated: order.Transfers.TotalSizeInBytes,
-		FileTransfers:        order.Transfers.FileTransferCount,
-		SymlinkTransfers:     order.Transfers.SymlinkTransferCount,
-		FolderTransfer:       order.Transfers.FolderTransferCount})
+		IsFinalPart:             order.IsFinalPart,
+		TotalBytesEnumerated:    order.Transfers.TotalSizeInBytes,
+		FileTransfers:           order.Transfers.FileTransferCount,
+		SymlinkTransfers:        order.Transfers.SymlinkTransferCount,
+		FolderTransfer:          order.Transfers.FolderTransferCount,
+		HardlinksConvertedCount: order.Transfers.HardlinksConvertedCount})
 
 	return common.CopyJobPartOrderResponse{JobStarted: true}
 }
@@ -534,6 +535,8 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 				js.FolderPropertyTransfers++
 			case common.EEntityType.Symlink():
 				js.SymlinkTransfers++
+			case common.EEntityType.Hardlink():
+				js.HardlinksConvertedCount++
 			}
 
 			// check for all completed transfer to calculate the progress percentage at the end
