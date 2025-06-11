@@ -1605,6 +1605,17 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 	}
 
+	// if isNFSCopy {
+	// 	if cca.FromTo.IsS2S() {
+	// 		if isValidSource() {
+	// 			return errors.New("NFS copy is not supported for source location " + cca.FromTo.From().String())
+	// 		}
+	// 		if isValidDestination() {
+	// 			return errors.New("NFS copy is not supported for destination location " + cca.FromTo.To().String())
+	// 		}
+	// 	}
+	// }
+
 	//Protocol compatibility for SMB and NFS
 	// Handles source validation
 	if cca.FromTo.IsS2S() {
