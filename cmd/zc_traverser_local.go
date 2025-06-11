@@ -55,7 +55,7 @@ type localTraverser struct {
 	hashAdapter    common.HashDataAdapter
 	// receives fullPath entries and manages hashing of files lacking metadata.
 	hashTargetChannel chan string
-	hardlinkHandling  common.HardlinksOption
+	hardlinkHandling  common.HardlinkHandlingType
 }
 
 func (t *localTraverser) IsDirectory(bool) (bool, error) {
@@ -208,7 +208,7 @@ func WalkWithSymlinks(appCtx context.Context,
 	walkFunc filepath.WalkFunc,
 	symlinkHandling common.SymlinkHandlingType,
 	errorChannel chan<- ErrorFileInfo,
-	hardlinkHandling common.HardlinksOption,
+	hardlinkHandling common.HardlinkHandlingType,
 	incrementEnumerationCounter enumerationCounterFunc) (err error) {
 
 	// We want to re-queue symlinks up in their evaluated form because filepath.Walk doesn't evaluate them for us.

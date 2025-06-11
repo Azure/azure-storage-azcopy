@@ -54,7 +54,7 @@ type fileTraverser struct {
 	incrementEnumerationCounter enumerationCounterFunc
 	trailingDot                 common.TrailingDotOption
 	destination                 *common.Location
-	hardlinkHandling            common.HardlinksOption
+	hardlinkHandling            common.HardlinkHandlingType
 }
 
 func createShareClientFromServiceClient(fileURLParts file.URLParts, client *service.Client) (*share.Client, error) {

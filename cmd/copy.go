@@ -883,7 +883,7 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaults() {
 	raw.s2sInvalidMetadataHandleOption = common.DefaultInvalidMetadataHandleOption.String()
 	raw.forceWrite = common.EOverwriteOption.True().String()
 	raw.preserveOwner = common.PreserveOwnerDefault
-	raw.hardlinks = common.DefaultHardlinksOption.String()
+	raw.hardlinks = common.DefaultHardlinkHandlingType.String()
 }
 
 func validateForceIfReadOnly(toForce bool, fromTo common.FromTo) error {
@@ -1177,7 +1177,7 @@ type CookedCopyCmdArgs struct {
 	preserveInfo bool
 	// Specifies whether the copy operation is an NFS copy
 	isNFSCopy                     bool
-	hardlinks                     common.HardlinksOption
+	hardlinks                     common.HardlinkHandlingType
 	atomicSkippedSymlinkCount     uint32
 	atomicSkippedSpecialFileCount uint32
 }

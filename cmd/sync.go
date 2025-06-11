@@ -492,7 +492,7 @@ type cookedSyncCmdArgs struct {
 
 	deleteDestinationFileIfNecessary bool
 	isNFSCopy                        bool
-	hardlinks                        common.HardlinksOption
+	hardlinks                        common.HardlinkHandlingType
 	atomicSkippedSymlinkCount        uint32
 	atomicSkippedSpecialFileCount    uint32
 }

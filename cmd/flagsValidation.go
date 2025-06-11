@@ -231,7 +231,7 @@ func validateSymlinkFlag(followSymlinks, preserveSymlinks bool) error {
 	return nil
 }
 
-func validateHardlinksFlag(option common.HardlinksOption, fromTo common.FromTo, isNFSCopy bool) error {
+func validateHardlinksFlag(option common.HardlinkHandlingType, fromTo common.FromTo, isNFSCopy bool) error {
 
 	// Validate for Download: Only allowed when downloading from a local file system
 	if runtime.GOOS == "linux" && fromTo.IsDownload() && fromTo.From() != common.ELocation.File() {
@@ -243,7 +243,7 @@ func validateHardlinksFlag(option common.HardlinksOption, fromTo common.FromTo, 
 		return fmt.Errorf("The --hardlinks option, when uploading, is only supported from a NFS file share to a Linux filesystem or between NFS file shares.")
 	}
 
-	if option == common.DefaultHardlinksOption {
+	if option == common.DefaultHardlinkHandlingType {
 		glcm.Info("The --hardlinks option is set to 'follow'. Hardlinked files will be copied as a regular file at the destination.")
 	}
 	return nil

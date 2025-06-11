@@ -1559,32 +1559,34 @@ func (pc *PerfConstraint) Parse(s string) error {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-var EHardlinksOption = HardlinksOption(0)
+var EHardlinkHandlingType = HardlinkHandlingType(0)
 
-var DefaultHardlinksOption = EHardlinksOption.Follow()
+var DefaultHardlinkHandlingType = EHardlinkHandlingType.Follow()
 
-type HardlinksOption uint8
+type HardlinkHandlingType uint8
 
 // Copy means copy the files to the destination as regular files
-func (HardlinksOption) Follow() HardlinksOption { return HardlinksOption(0) }
+func (HardlinkHandlingType) Follow() HardlinkHandlingType {
+	return HardlinkHandlingType(0)
+}
 
-func (pho HardlinksOption) String() string {
+func (pho HardlinkHandlingType) String() string {
 	return enum.StringInt(pho, reflect.TypeOf(pho))
 }
 
-func (pho *HardlinksOption) Parse(s string) error {
+func (pho *HardlinkHandlingType) Parse(s string) error {
 	val, err := enum.ParseInt(reflect.TypeOf(pho), s, true, true)
 	if err == nil {
-		*pho = val.(HardlinksOption)
+		*pho = val.(HardlinkHandlingType)
 	}
 	return err
 }
 
-func (pho HardlinksOption) MarshalJSON() ([]byte, error) {
+func (pho HardlinkHandlingType) MarshalJSON() ([]byte, error) {
 	return json.Marshal(pho.String())
 }
 
-func (pho *HardlinksOption) UnmarshalJSON(b []byte) error {
+func (pho *HardlinkHandlingType) UnmarshalJSON(b []byte) error {
 	var s string
 	if err := json.Unmarshal(b, &s); err != nil {
 		return err
