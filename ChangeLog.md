@@ -1,7 +1,7 @@
 
 # Change Log
 
-## Version 10.30.0~preview.1 
+## Version 10.30.0-preview.1 
 
 ### New Feature
 1. Azure Files NFS Support via REST API
