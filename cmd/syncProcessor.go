@@ -28,6 +28,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
@@ -69,9 +70,6 @@ type interactiveDeleteProcessor struct {
 	// examples: a directory path, or url to container
 	objectLocationToDisplay string
 
-	// count the deletions that happened
-	incrementDeletionCount func()
-
 	// dryrunMode
 	dryrunMode bool
 }
@@ -111,6 +109,7 @@ func (d *interactiveDeleteProcessor) removeImmediately(object StoredObject) (err
 		return nil
 	}
 
+	WarnStdoutAndScanningLog(fmt.Sprintf("Start delete %s: %s", d.objectTypeToDisplay, object.relativePath))
 	err = d.deleter(object)
 	if err != nil {
 		msg := fmt.Sprintf("error %s deleting the object %s", err.Error(), object.relativePath)
@@ -118,10 +117,6 @@ func (d *interactiveDeleteProcessor) removeImmediately(object StoredObject) (err
 		if azcopyScanningLogger != nil {
 			azcopyScanningLogger.Log(common.LogError, msg+": "+err.Error())
 		}
-	}
-
-	if d.incrementDeletionCount != nil {
-		d.incrementDeletionCount()
 	}
 	return nil // Missing a file is an error, but it's not show-stopping. We logged it earlier; that's OK.
 }
@@ -161,13 +156,12 @@ func (d *interactiveDeleteProcessor) promptForConfirmation(object StoredObject) 
 }
 
 func newInteractiveDeleteProcessor(deleter objectProcessor, deleteDestination common.DeleteDestination,
-	objectTypeToDisplay string, objectLocationToDisplay common.ResourceString, incrementDeletionCounter func(), dryrun bool) *interactiveDeleteProcessor {
+	objectTypeToDisplay string, objectLocationToDisplay common.ResourceString, dryrun bool) *interactiveDeleteProcessor {
 
 	return &interactiveDeleteProcessor{
 		deleter:                 deleter,
 		objectTypeToDisplay:     objectTypeToDisplay,
 		objectLocationToDisplay: objectLocationToDisplay.Value,
-		incrementDeletionCount:  incrementDeletionCounter,
 		shouldPromptUser:        deleteDestination == common.EDeleteDestination.Prompt(),
 		shouldDelete:            deleteDestination == common.EDeleteDestination.True(), // if shouldPromptUser is true, this will start as false, but we will determine its value later
 		dryrunMode:              dryrun,
@@ -177,14 +171,22 @@ func newInteractiveDeleteProcessor(deleter objectProcessor, deleteDestination co
 const LocalFileObjectType = "local file"
 
 func newSyncLocalDeleteProcessor(cca *cookedSyncCmdArgs, fpo common.FolderPropertyOption) *interactiveDeleteProcessor {
-	localDeleter := localFileDeleter{rootPath: cca.Destination.ValueLocal(), fpo: fpo, folderManager: common.NewFolderDeletionManager(context.Background(), fpo, azcopyScanningLogger)}
-	return newInteractiveDeleteProcessor(localDeleter.deleteFile, cca.deleteDestination, LocalFileObjectType, cca.Destination, cca.incrementDeletionCount, cca.dryrunMode)
+	localDeleter := localFileDeleter{
+		rootPath:               cca.Destination.ValueLocal(),
+		fpo:                    fpo,
+		folderManager:          common.NewFolderDeletionManager(context.Background(), fpo, azcopyScanningLogger),
+		incrementDeletionCount: cca.incrementDeletionCount,
+	}
+	return newInteractiveDeleteProcessor(localDeleter.deleteFile, cca.deleteDestination, LocalFileObjectType, cca.Destination, cca.dryrunMode)
 }
 
 type localFileDeleter struct {
 	rootPath      string
 	fpo           common.FolderPropertyOption
 	folderManager common.FolderDeletionManager
+
+	// count the deletions that happened
+	incrementDeletionCount func()
 }
 
 func (l *localFileDeleter) getObjectURL(object StoredObject) *url.URL {
@@ -219,6 +221,10 @@ func (l *localFileDeleter) deleteFile(object StoredObject) error {
 		})
 	}
 
+	if l.incrementDeletionCount != nil {
+		l.incrementDeletionCount()
+	}
+
 	return nil
 }
 
@@ -230,12 +236,12 @@ func newSyncDeleteProcessor(cca *cookedSyncCmdArgs, fpo common.FolderPropertyOpt
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	deleter, err := newRemoteResourceDeleter(ctx, dstClient, rawURL, cca.fromTo.To(), fpo, cca.forceIfReadOnly)
+	deleter, err := newRemoteResourceDeleter(ctx, dstClient, rawURL, cca.fromTo.To(), fpo, cca.forceIfReadOnly, cca.incrementDeletionCount)
 	if err != nil {
 		return nil, err
 	}
 
-	return newInteractiveDeleteProcessor(deleter.delete, cca.deleteDestination, cca.fromTo.To().String(), cca.Destination, cca.incrementDeletionCount, cca.dryrunMode), nil
+	return newInteractiveDeleteProcessor(deleter.delete, cca.deleteDestination, cca.fromTo.To().String(), cca.Destination, cca.dryrunMode), nil
 }
 
 type remoteResourceDeleter struct {
@@ -247,22 +253,34 @@ type remoteResourceDeleter struct {
 	folderManager   common.FolderDeletionManager
 	folderOption    common.FolderPropertyOption
 	forceIfReadOnly bool
+
+	// count the deletions that happened
+	incrementDeletionCount func()
 }
 
-func newRemoteResourceDeleter(ctx context.Context, remoteClient *common.ServiceClient, rawRootURL *url.URL, targetLocation common.Location, fpo common.FolderPropertyOption, forceIfReadOnly bool) (*remoteResourceDeleter, error) {
+func newRemoteResourceDeleter(
+	ctx context.Context,
+	remoteClient *common.ServiceClient,
+	rawRootURL *url.URL,
+	targetLocation common.Location,
+	fpo common.FolderPropertyOption,
+	forceIfReadOnly bool,
+	incrementDeleteCounter func()) (*remoteResourceDeleter, error) {
+
 	containerName, rootPath, err := common.SplitContainerNameFromPath(rawRootURL.String())
 	if err != nil {
 		return nil, err
 	}
 	return &remoteResourceDeleter{
-		containerName:   containerName,
-		rootPath:        rootPath,
-		remoteClient:    remoteClient,
-		ctx:             ctx,
-		targetLocation:  targetLocation,
-		folderManager:   common.NewFolderDeletionManager(ctx, fpo, azcopyScanningLogger),
-		folderOption:    fpo,
-		forceIfReadOnly: forceIfReadOnly,
+		containerName:          containerName,
+		rootPath:               rootPath,
+		remoteClient:           remoteClient,
+		ctx:                    ctx,
+		targetLocation:         targetLocation,
+		folderManager:          common.NewFolderDeletionManager(ctx, fpo, azcopyScanningLogger, UseSyncOrchestrator),
+		folderOption:           fpo,
+		forceIfReadOnly:        forceIfReadOnly,
+		incrementDeletionCount: incrementDeleteCounter,
 	}, nil
 }
 
@@ -360,7 +378,10 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 
 		return nil
 	} else {
-		if b.folderOption == common.EFolderPropertiesOption.NoFolders() {
+		if !UseSyncOrchestrator && b.folderOption == common.EFolderPropertiesOption.NoFolders() {
+			// If we are not using the sync orchestrator, and secondary location is not folder aware
+			// we just return without any work
+			// ideally this should be a panic
 			return nil
 		}
 		var deleteFunc func(ctx context.Context, logger common.ILogger) bool
@@ -382,7 +403,14 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			}
 			if UseSyncOrchestrator {
 				cc := bsc.NewContainerClient(b.containerName)
-				IterateThroughFolder(cc, objectPath)
+				if err := b.RegisterFolderContentsForDeletion(
+					cc,
+					objectPath,
+					b.folderManager,
+					b.remoteClient,
+					b.containerName); err != nil {
+					return fmt.Errorf("failed to register folder contents for deletion: %v", err)
+				}
 			}
 		case common.ELocation.File():
 			fsc, _ := sc.FileServiceClient()
@@ -422,40 +450,221 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 		b.folderManager.RecordChildExists(objURL)
 		b.folderManager.RequestDeletion(objURL, deleteFunc)
 
+		if !UseSyncOrchestrator {
+
+			if b.incrementDeletionCount != nil {
+				b.incrementDeletionCount()
+			}
+		}
+
 		return nil
 	}
 }
-func IterateThroughFolder(containerClient *container.Client, folderPrefix string) error {
-	// Use "/" as the delimiter to get a hierarchical listing
-	pager := containerClient.NewListBlobsHierarchyPager("/", &container.ListBlobsHierarchyOptions{Prefix: &folderPrefix})
+
+// #region Recurive folder deletion for Azure Blobs
+
+const (
+	MaxDeletionWorkers    = 50  // Limit concurrent deletions
+	DeletionChannelBuffer = 200 // Buffer for work items
+)
+
+type DeletionTask struct {
+	BlobURL      *url.URL
+	DeletionFunc func()
+}
+
+// Replace the direct deletion approach with folder manager registration
+func (b *remoteResourceDeleter) RegisterFolderContentsForDeletion(
+	containerClient *container.Client,
+	folderPrefix string,
+	folderManager common.FolderDeletionManager,
+	remoteClient *common.ServiceClient,
+	containerName string) error {
 
 	ctx := context.Background()
-	for pager.More() {
-		page, err := pager.NextPage(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to get next page: %v", err)
-		}
+	return b.enumerateAndRegisterBlobs(ctx, containerClient, folderPrefix, folderManager, remoteClient, containerName)
+}
 
-		// Print directories
-		for _, blobPrefix := range page.Segment.BlobPrefixes {
-			if err := IterateThroughFolder(containerClient, *blobPrefix.Name); err != nil {
-				return err
-			}
-		}
+func (b *remoteResourceDeleter) deletionWorker(ctx context.Context, taskChan <-chan DeletionTask,
+	folderManager common.FolderDeletionManager, wg *sync.WaitGroup) {
 
-		// Print blobs
-		for _, blob := range page.Segment.BlobItems {
-			glcm.Info(fmt.Sprintf("Deleting extra blob object : %s\n", *blob.Name))
-			blobClient := containerClient.NewBlobClient(*blob.Name)
-			_, err := blobClient.Delete(ctx, nil)
-			if err != nil {
-				return fmt.Errorf("failed to delete blob: %v", err)
+	defer wg.Done()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case task, ok := <-taskChan:
+			if !ok {
+				return // Channel closed, no more work
 			}
+
+			// Process the deletion
+			task.DeletionFunc()
+			folderManager.RecordChildDeleted(task.BlobURL)
 		}
 	}
+}
+
+func (b *remoteResourceDeleter) enumerateAndRegisterBlobs(
+	ctx context.Context,
+	containerClient *container.Client,
+	folderPrefix string,
+	folderManager common.FolderDeletionManager,
+	remoteClient *common.ServiceClient,
+	containerName string) error {
+
+	// Create buffered channel for work distribution
+	taskChan := make(chan DeletionTask, DeletionChannelBuffer)
+
+	// Start fixed number of worker goroutines
+	var workerWg sync.WaitGroup
+	for i := 0; i < MaxDeletionWorkers; i++ {
+		workerWg.Add(1)
+		go b.deletionWorker(ctx, taskChan, folderManager, &workerWg)
+	}
+
+	// Enumerate and queue work (this is the producer)
+	go func() {
+		defer close(taskChan) // Signal workers to stop when done
+
+		// Use iterative approach to avoid deep recursion
+		foldersToProcess := []string{folderPrefix}
+		processedCount := 0
+
+		for len(foldersToProcess) > 0 {
+			currentFolder := foldersToProcess[0]
+			foldersToProcess = foldersToProcess[1:]
+
+			// List blobs hierarchically
+			pager := containerClient.NewListBlobsHierarchyPager("/",
+				&container.ListBlobsHierarchyOptions{
+					Prefix:     &currentFolder,
+					MaxResults: &[]int32{1000}[0],
+				})
+
+			for pager.More() {
+				page, err := pager.NextPage(ctx)
+				if err != nil {
+					// return fmt.Errorf("Enumeration failed (recursive blob directory delete) %s: %v", currentFolder, err)
+					// We don't want to stop the entire process if one folder fails, so we log and continue
+					// Idea is that we will catch it in a later sync run. This is in context of a mover sync job
+				}
+
+				// Register subdirectories for processing and with folder manager
+				for _, blobPrefix := range page.Segment.BlobPrefixes {
+					subFolderName := *blobPrefix.Name
+					foldersToProcess = append(foldersToProcess, subFolderName)
+
+					// Register the subdirectory with folder manager
+					if err := b.registerDirectoryForDeletion(subFolderName, folderManager,
+						remoteClient, containerName); err != nil {
+						// return err
+						// Skip this subdirectory and continue processing others
+					}
+				}
+
+				// Register blobs with folder manager
+				for _, blob := range page.Segment.BlobItems {
+					blobName := *blob.Name
+
+					// Create URL for the blob
+					bsc, _ := remoteClient.BlobServiceClient()
+					blobClient := bsc.NewContainerClient(containerName).NewBlobClient(blobName)
+					blobURL, err := url.Parse(blobClient.URL())
+					if err != nil {
+						continue
+						// return fmt.Errorf("failed to parse blob URL %s: %v", blobName, err)
+						// Skip this blob and do not stop the entire process
+					}
+
+					// Register with folder manager
+					folderManager.RecordChildExists(blobURL)
+
+					// Create a deletion function for this specific blob
+					deletionFunc := b.createBlobDeletionFunc(blobClient, blobName)
+
+					// Queue work instead of creating unlimited goroutines
+					select {
+					case taskChan <- DeletionTask{BlobURL: blobURL, DeletionFunc: deletionFunc}:
+						processedCount++
+					case <-ctx.Done():
+						return
+					}
+				}
+			}
+		}
+
+		// Progress logging
+		if processedCount > 0 && processedCount%1000 == 0 {
+			glcm.Info(fmt.Sprintf("Registered %d items for deletion, %d folders remaining",
+				processedCount, len(foldersToProcess)))
+		}
+
+	}()
+
+	// Wait for all workers to complete
+	workerWg.Wait()
+	return nil
+}
+
+func (b *remoteResourceDeleter) createBlobDeletionFunc(blobClient *blob.Client, blobName string) func() {
+	return func() {
+		ctx := context.Background()
+		//glcm.Info(fmt.Sprintf("Deleting extra blob object: %s", blobName))
+
+		if _, err := blobClient.Delete(ctx, nil); err != nil {
+			msg := fmt.Sprintf("Failed to delete blob %s: %v", blobName, err)
+			// glcm.Info(msg)
+			if azcopyScanningLogger != nil {
+				azcopyScanningLogger.Log(common.LogError, msg)
+			}
+		}
+
+		if b.incrementDeletionCount != nil {
+			b.incrementDeletionCount()
+		}
+	}
+}
+
+func (b *remoteResourceDeleter) registerDirectoryForDeletion(dirPath string, folderManager common.FolderDeletionManager,
+	remoteClient *common.ServiceClient, containerName string) error {
+
+	// Create URL for the directory
+	bsc, _ := remoteClient.BlobServiceClient()
+	blobClient := bsc.NewContainerClient(containerName).NewBlobClient(dirPath)
+	dirURL, err := url.Parse(blobClient.URL())
+	if err != nil {
+		return fmt.Errorf("failed to parse directory URL %s: %v", dirPath, err)
+	}
+
+	// Register directory existence
+	folderManager.RecordChildExists(dirURL)
+
+	// Create deletion function for the directory
+	deleteFunc := func(ctx context.Context, logger common.ILogger) bool {
+		//glcm.Info(fmt.Sprintf("Deleting extra directory: %s", dirPath))
+
+		// For blob directories, try to delete the directory marker blob
+		if _, err := blobClient.Delete(ctx, nil); err != nil {
+			// Directory markers might not exist, which is fine
+			// logger.Log(common.LogDebug, fmt.Sprintf("Directory marker deletion for %s: %v", dirPath, err))
+		}
+
+		if b.folderOption != common.EFolderPropertiesOption.NoFolders() &&
+			b.incrementDeletionCount != nil {
+			b.incrementDeletionCount()
+		}
+		return true // Always return true as directory "deletion" is best effort
+	}
+
+	// Register deletion request
+	folderManager.RequestDeletion(dirURL, deleteFunc)
 
 	return nil
 }
+
+// #endregion Recurive folder deletion for Azure Blobs
 
 func IterateThroughFolderForFiles(serviceClient *azFilesService.Client, folderPrefix string, containerName string) error {
 	shareClient := serviceClient.NewShareClient(containerName)

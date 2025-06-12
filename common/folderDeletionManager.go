@@ -74,19 +74,47 @@ func (f *folderDeletionState) shouldDeleteNow() bool {
 	return deletionRequested && f.childCount == 0
 }
 
-func NewFolderDeletionManager(ctx context.Context, fpo FolderPropertyOption, logger ILogger) FolderDeletionManager {
+func NewFolderDeletionManager(
+	ctx context.Context,
+	fpo FolderPropertyOption,
+	logger ILogger,
+	// optional boolean: if provided, uses the first value; otherwise defaults to false
+	recursiveDeletion ...bool,
+) FolderDeletionManager {
+	// default value
+	recursiveDel := false
+	if len(recursiveDeletion) > 0 {
+		recursiveDel = recursiveDeletion[0]
+	}
+
 	switch fpo {
 	case EFolderPropertiesOption.AllFolders(),
 		EFolderPropertiesOption.AllFoldersExceptRoot():
-		return &standardFolderDeletionManager{
+		mgr := &standardFolderDeletionManager{
 			mu:       &sync.Mutex{},
 			contents: make(map[string]*folderDeletionState),
 			logger:   logger,
 			ctx:      ctx,
 		}
+		return mgr
+
 	case EFolderPropertiesOption.NoFolders():
-		// no point in using a real implementation here, since it will just use memory and take time for no benefit
-		return &nullFolderDeletionManager{}
+
+		if recursiveDel {
+			// if we are doing recursive deletion, we need to provide a folder deletion manager
+			// even if secondary location is not folder-aware
+			mgr := &standardFolderDeletionManager{
+				mu:       &sync.Mutex{},
+				contents: make(map[string]*folderDeletionState),
+				logger:   logger,
+				ctx:      ctx,
+			}
+			return mgr
+		} else {
+			// no point in using a real implementation here, since it will just use memory and take time for no benefit
+			return &nullFolderDeletionManager{}
+		}
+
 	default:
 		panic("unknown folderPropertiesOption")
 	}

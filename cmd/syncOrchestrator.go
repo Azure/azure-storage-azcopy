@@ -24,25 +24,27 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io/fs"
 	"net/http"
 	_ "net/http/pprof"
+	"net/url"
 	"os"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 )
 
-var UseSyncOrchestrator = true
+var (
+	UseSyncOrchestrator bool = true
+)
+
+var syncMutex sync.Mutex
 
 type CustomSyncHandlerFunc func(cca *cookedSyncCmdArgs, enumerator *syncEnumerator, ctx context.Context) error
 
@@ -73,6 +75,106 @@ type SyncTraverser struct {
 	children   []StoredObject
 }
 
+// global runtime constants for sync orchestrator
+var (
+	isDestinationFolderAware bool = false
+)
+
+func getRootStoredObjectLocal(path string) (StoredObject, error) {
+	glcm.Info(fmt.Sprintf("OS Stat on source = %s \n", path))
+	fi, err := os.Stat(path)
+	if err != nil {
+		return StoredObject{}, err
+	}
+
+	var entityType common.EntityType = common.EEntityType.File()
+	if fi.IsDir() {
+		entityType = common.EEntityType.Folder()
+	}
+
+	root := newStoredObject(
+		nil,
+		fi.Name(),
+		"",
+		entityType,
+		time.Time{},
+		0,
+		noContentProps,
+		noBlobProps,
+		noMetadata,
+		"")
+
+	glcm.Info(fmt.Sprintf("Root object created: %s, Entity type: %s", root.relativePath, entityType.String()))
+
+	return root, nil
+}
+
+// getRootStoredObjectS3 returns the root object for the sync orchestrator based on the S3 source path.
+// It parses the S3 URL and determines the entity type (file or folder) based on the URL structure.
+//
+// Parameters:
+// - sourcePath: The S3 source path as a string.
+//
+// Returns:
+// - StoredObject: The root StoredObject for the given S3 source path.
+// - error: An error if parsing the URL or creating the StoredObject fails.
+func getRootStoredObjectS3(sourcePath string) (StoredObject, error) {
+
+	parsedURL, err := url.Parse(sourcePath)
+	if err != nil {
+		return StoredObject{}, err
+	}
+
+	s3UrlParts, err := common.NewS3URLParts(*parsedURL)
+	if err != nil {
+		return StoredObject{}, err
+	}
+
+	var entityType common.EntityType = common.EEntityType.Folder()
+	if s3UrlParts.IsObjectSyntactically() && !s3UrlParts.IsDirectorySyntactically() && !s3UrlParts.IsBucketSyntactically() {
+		// this is not working. It does not impact negatively if a valid prefix is passed.
+		entityType = common.EEntityType.File()
+	}
+
+	var searchPrefix string = strings.Join([]string{s3UrlParts.BucketName, s3UrlParts.ObjectKey}, common.AZCOPY_PATH_SEPARATOR_STRING)
+
+	root := newStoredObject(
+		nil,
+		searchPrefix,
+		"",
+		entityType,
+		time.Time{},
+		0,
+		noContentProps,
+		noBlobProps,
+		nil,
+		s3UrlParts.BucketName)
+
+	if enableDebugLogs {
+		glcm.Info(fmt.Sprintf("S3 Root: %s, Entity type: %s", searchPrefix, entityType.String()))
+	}
+
+	return root, nil
+}
+
+// GetRootStoredObject returns the root object for the sync orchestrator
+// based on the source path and fromTo
+// We don't really the StoredObject but just the relative path and the entityType
+// The rest of the fields are not used at the time of creation
+func GetRootStoredObject(path string, fromTo common.FromTo) (StoredObject, error) {
+
+	glcm.Info(fmt.Sprintf("Getting root object for path = %s\n", path))
+
+	switch fromTo.From() {
+	case common.ELocation.Local():
+		return getRootStoredObjectLocal(path)
+	case common.ELocation.S3():
+		return getRootStoredObjectS3(path)
+	default:
+		return StoredObject{}, fmt.Errorf("Sync orchestrator is not supported for %s source.", fromTo.From().String())
+	}
+}
+
 func (st *SyncTraverser) processor(so StoredObject) error {
 	var child_path string
 	var strs []string
@@ -82,7 +184,7 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 		strs = []string{so.relativePath}
 	}
 	child_path = strings.Join(strs, common.AZCOPY_PATH_SEPARATOR_STRING)
-	so.relativePath = child_path
+	so.relativePath = strings.Trim(child_path, common.AZCOPY_PATH_SEPARATOR_STRING)
 
 	if so.entityType == common.EEntityType.Folder() {
 		st.sub_dirs = append(st.sub_dirs, so)
@@ -97,8 +199,7 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 	return err
 }
 
-func (st *SyncTraverser) my_comparator(so StoredObject) error {
-
+func (st *SyncTraverser) customComparator(so StoredObject) error {
 	var child_path string
 
 	if so.relativePath == "" {
@@ -111,7 +212,8 @@ func (st *SyncTraverser) my_comparator(so StoredObject) error {
 			child_path = so.relativePath
 		}
 	}
-	so.relativePath = child_path
+
+	so.relativePath = strings.Trim(child_path, common.AZCOPY_PATH_SEPARATOR_STRING)
 
 	syncMutex.Lock()
 	err := st.comparator(so)
@@ -122,6 +224,7 @@ func (st *SyncTraverser) my_comparator(so StoredObject) error {
 
 func (st *SyncTraverser) Finalize() error {
 	for _, child := range st.children {
+
 		syncMutex.Lock()
 		so, present := st.enumerator.objectIndexer.indexMap[child.relativePath]
 		syncMutex.Unlock()
@@ -130,6 +233,7 @@ func (st *SyncTraverser) Finalize() error {
 			if err != nil {
 				return err
 			}
+
 			syncMutex.Lock()
 			delete(st.enumerator.objectIndexer.indexMap, so.relativePath)
 			syncMutex.Unlock()
@@ -149,111 +253,6 @@ func newSyncTraverser(enumerator *syncEnumerator, dir string, comparator objectP
 	}
 }
 
-var syncQDepth int64
-var syncMonitorRun int32
-var syncMonitorExited int32
-var syncMutex sync.Mutex
-var totalGoroutines int32
-var goroutineThreshold int32
-
-func monitorGoroutines() {
-	for {
-		current := runtime.NumGoroutine()
-		atomic.StoreInt32(&totalGoroutines, int32(current))
-		time.Sleep(5 * time.Second) // Sample at a reasonable interval
-	}
-}
-
-func shouldThrottle() bool {
-	return atomic.LoadInt32(&totalGoroutines) > goroutineThreshold
-}
-
-func continueThrottle() bool {
-	return atomic.LoadInt32(&totalGoroutines) > int32((goroutineThreshold*80)/100)
-}
-
-func getTotalVirtualMemory() (uint64, error) {
-	// Open /proc/self/statm
-	data, err := os.ReadFile("/proc/self/statm")
-	if err != nil {
-		return 0, err
-	}
-
-	// Parse the first field (total virtual memory pages)
-	fields := strings.Fields(string(data))
-	if len(fields) < 1 {
-		return 0, fmt.Errorf("unexpected format in /proc/self/statm")
-	}
-
-	// Convert pages to bytes (assuming 4KB pages)
-	pages, err := strconv.ParseUint(fields[0], 10, 64)
-	if err != nil {
-		return 0, err
-	}
-
-	pageSize := uint64(os.Getpagesize()) // Get system page size
-	return uint64((pages * pageSize) / 1024 / 1024), nil
-}
-
-func getRSSMemory() (uint64, error) {
-	// Open the /proc/<PID>/status file
-	pid := os.Getpid()
-	file, err := os.Open(fmt.Sprintf("/proc/%d/status", pid))
-	if err != nil {
-		return 0, err
-	}
-	defer file.Close()
-
-	// Scan the file line by line to find VmRSS
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.HasPrefix(line, "VmRSS:") {
-			fields := strings.Fields(line)
-			if len(fields) < 2 {
-				return 0, fmt.Errorf("unexpected VmRSS line format")
-			}
-			// Parse the value (in kB) and convert to bytes
-			rssKB, err := strconv.ParseUint(fields[1], 10, 64)
-			if err != nil {
-				return 0, err
-			}
-			return uint64(rssKB / 1024), nil
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return 0, err
-	}
-	return 0, fmt.Errorf("VmRSS not found in /proc/%d/status", pid)
-}
-
-func syncMonitor() {
-	syncMonitorRun = 1
-	syncMonitorExited = 0
-
-	WarnStdoutAndScanningLog("Starting SyncMonitor...\n")
-	var run int32
-
-	run = 1
-
-	for run == 1 {
-		t := time.Now()
-		ts := string(t.Format("2006-01-02 15:04:05"))
-
-		grs := atomic.LoadInt32(&totalGoroutines)
-		qd := atomic.AddInt64(&syncQDepth, 0)
-		vm, _ := getTotalVirtualMemory()
-		rss, _ := getRSSMemory()
-		WarnStdoutAndScanningLog(fmt.Sprintf("\n%s: SyncMonitor: QDepth = %v, GoRoutines = %v, VirtualMemory = %v, Resident = %v\n", ts, qd, grs, vm, rss))
-		time.Sleep(30 * time.Second)
-		run = atomic.AddInt32(&syncMonitorRun, 0)
-	}
-
-	WarnStdoutAndScanningLog("Exiting SyncMonitor...\n")
-	atomic.AddInt32(&syncMonitorExited, 1)
-}
-
 func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator, ctx context.Context) error {
 	// Start the profiling
 	go func() {
@@ -265,27 +264,107 @@ func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator,
 }
 
 func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ctx context.Context) (err error) {
-	go syncMonitor()
-	go monitorGoroutines()
+	mainCtx, cancel := context.WithCancel(ctx) // Use mainCtx for operations, cancel to signal shutdown
+	defer cancel()                             // Ensure cancellation happens on exit
 
-	goroutineThreshold = 30000
+	StartMetricsCollection(mainCtx)
+
+	// Initialize semaphore for directory concurrency control
+	if EnableDirectoryThrottling {
+		dirSemaphore = make(chan struct{}, MaxConcurrentDirectories)
+	}
+
+	// Initialize adaptive throttle controller
+	throttleController := NewAdaptiveThrottleController()
+
+	// Start enhanced system monitor
+	monitorWg := sync.WaitGroup{}
+	monitorWg.Add(1)
+	go func() {
+		defer monitorWg.Done()
+		enhancedSyncMonitor(mainCtx)
+	}()
+
+	// Start dedicated semaphore monitor
+	semaphoreMonitorWg := sync.WaitGroup{}
+	if EnableDirectoryThrottling {
+		semaphoreMonitorWg.Add(1)
+		go func() {
+			defer semaphoreMonitorWg.Done()
+			semaphoreMonitor(mainCtx)
+		}()
+	}
+
+	// Start monitoring goroutines
+	monitorGoroutinesWg := sync.WaitGroup{}
+	monitorGoroutinesWg.Add(1)
+	go func() {
+		defer monitorGoroutinesWg.Done()
+		monitorGoroutines(mainCtx)
+	}()
+
+	isDestinationFolderAware = cca.fromTo.To().IsFolderAware()
+
+	var crawlWg sync.WaitGroup // WaitGroup for all directory processing tasks
 
 	syncOneDir := func(
 		dir parallel.Directory,
 		enqueueDir func(parallel.Directory),
 		enqueueOutput func(parallel.DirectoryEntry, error)) error {
 
-		var waits int64
-		waits = 0
-		if shouldThrottle() {
-			for continueThrottle() {
-				if (waits % 1800) == 0 {
-					WarnStdoutAndScanningLog("Too many go routines, slowing down...\n")
-				}
-				time.Sleep(100 * time.Millisecond) // Simulate throttling
-				waits++
+		defer crawlWg.Done() // Signal this task is done when it finishes
+
+		dirPath := dir.(StoredObject).relativePath
+
+		// Track that this directory entered the processing queue
+		totalDirectoriesQueued.Add(1)
+
+		// 1. Semaphore-based directory concurrency control
+		if EnableDirectoryThrottling {
+			// Increment waiting counter before attempting to acquire semaphore
+			waitingForSemaphore.Add(1)
+
+			// Log when directory starts waiting (optional - for detailed debugging)
+			if enableDebugLogs {
+				WarnStdoutAndScanningLog(fmt.Sprintf(
+					"[SEMAPHORE-WAIT] Dir: %s | Waiting: %d | Active: %d | Total: %d",
+					dirPath,
+					waitingForSemaphore.Load(),
+					activeDirProcessors.Load(),
+					totalDirectoriesQueued.Load()))
 			}
-			WarnStdoutAndScanningLog("Continuing sync traversal...\n")
+
+			select {
+			case dirSemaphore <- struct{}{}:
+				// Successfully acquired semaphore slot
+				waitingForSemaphore.Add(-1) // No longer waiting
+				defer func() { <-dirSemaphore }()
+
+			case <-mainCtx.Done():
+				// Context cancelled while waiting
+				waitingForSemaphore.Add(-1) // No longer waiting
+
+				return mainCtx.Err()
+			}
+		}
+
+		// Track active directory processors
+		activeDirProcessors.Add(1)
+		defer activeDirProcessors.Add(-1)
+
+		// 2. Multi-metric adaptive throttling
+		if shouldThrottle, reason, metrics := throttleController.ShouldThrottle(); shouldThrottle {
+
+			if enableDebugLogs {
+				WarnStdoutAndScanningLog(fmt.Sprintf(
+					"[THROTTLE-START] Dir: %s | Reason: %s | Goroutines: %d | Memory: %dMB | ActiveDirs: %d | WaitingDirs: %d",
+					dirPath, reason, metrics.Goroutines, metrics.ResidentMemoryMB,
+					metrics.ActiveDirectories, metrics.WaitingDirectories))
+			}
+
+			if err := throttleController.PerformThrottling(mainCtx, dirPath); err != nil {
+				return err
+			}
 		}
 
 		sync_src := []string{cca.Source.Value, dir.(StoredObject).relativePath}
@@ -296,6 +375,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 		pt_src.Value = strings.Join(sync_src, common.AZCOPY_PATH_SEPARATOR_STRING)
 		st_src.Value = strings.Join(sync_dst, common.AZCOPY_PATH_SEPARATOR_STRING)
+
 		if runtime.GOOS == "windows" {
 			pt_src.Value = strings.ReplaceAll(pt_src.Value, "/", "\\")
 			st_src.Value = strings.ReplaceAll(st_src.Value, "\\", "/")
@@ -316,7 +396,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		pt, err := InitResourceTraverser(
 			pt_src,
 			ptt.location,
-			&ctx,
+			&mainCtx,
 			ptt.credential,
 			ptt.symlinkHandling,
 			ptt.listOfFilesChannel,
@@ -346,7 +426,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		st, err := InitResourceTraverser(
 			st_src,
 			stt.location,
-			&ctx,
+			&mainCtx,
 			stt.credential,
 			stt.symlinkHandling,
 			stt.listOfFilesChannel,
@@ -376,7 +456,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			WarnStdoutAndScanningLog(fmt.Sprintf("Creating target traverser failed : %s\n", err))
 			return err
 		}
-		err = st.Traverse(noPreProccessor, stra.my_comparator, enumerator.filters)
+		err = st.Traverse(noPreProccessor, stra.customComparator, enumerator.filters)
 		if err != nil {
 			if !strings.Contains(err.Error(), "RESPONSE 404") {
 				WarnStdoutAndScanningLog(fmt.Sprintf("Sync traversal failed type = %s \n", err))
@@ -390,60 +470,57 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			return err
 		}
 
-		// XXX should we worry about case??
+		// If we reach here, it means the directory has been processed successfully
 		syncMutex.Lock()
 		delete(stra.enumerator.objectIndexer.indexMap, dir.(StoredObject).relativePath)
 		syncMutex.Unlock()
 
-		atomic.AddInt64(&syncQDepth, int64(len(stra.sub_dirs)))
 		for _, sub_dir := range stra.sub_dirs {
+			crawlWg.Add(1) // IMPORTANT: Add to WaitGroup *before* enqueuing
 			enqueueDir(sub_dir)
 		}
-
-		atomic.AddInt64(&syncQDepth, -1)
 
 		return nil
 	}
 
-	fi, err := os.Stat(cca.Source.Value)
+	root, err := GetRootStoredObject(cca.Source.Value, cca.fromTo)
 	if err != nil {
+		WarnStdoutAndScanningLog(fmt.Sprintf("Root object creation failed: %s", err))
 		return err
 	}
 
-	root := newStoredObject(nil, fi.Name(), "", common.EEntityType.Folder(),
-		fi.ModTime(), fi.Size(), noContentProps, noBlobProps, noMetadata, "")
+	crawlWg.Add(1) // Add the root directory to the WaitGroup
 
-	parallelism := 4
-	atomic.AddInt64(&syncQDepth, 1)
-	var _ = parallel.Crawl(ctx, root, syncOneDir, parallelism)
-
-	// XXX consider using wg
-	for {
-		qd := atomic.AddInt64(&syncQDepth, 0)
-		if qd == 0 {
-			WarnStdoutAndScanningLog("Sync traversers exited..\n")
-			break
-		}
-		time.Sleep(1 * time.Second)
+	if enableDebugLogs {
+		WarnStdoutAndScanningLog(fmt.Sprintf(
+			"Starting enhanced crawl: Parallelism=%d | MaxDirs=%d | GoroutineLimit=%d | MemoryLimit=%dMB | Root=%s",
+			CrawlParallelism, MaxConcurrentDirectories, GoroutineThreshold, MemoryCriticalThresholdMB, root.relativePath))
 	}
 
-	atomic.AddInt32(&syncMonitorRun, -1)
+	parallel.Crawl(mainCtx, root, syncOneDir, CrawlParallelism)
 
-	for {
-		exited := atomic.AddInt32(&syncMonitorExited, 0)
-		if exited == 1 {
-			WarnStdoutAndScanningLog("Sync monitor exited, quitting..\n")
-			break
-		}
-		time.Sleep(1 * time.Second)
+	if enableDebugLogs {
+		WarnStdoutAndScanningLog("Crawl completed. Waiting for all directory processors to finish...")
 	}
+	crawlWg.Wait() // Wait for all tasks (root + enqueued via syncOneDir) to complete
+	WarnStdoutAndScanningLog("All sync traversers exited.")
 
-	WarnStdoutAndScanningLog("Enumerator finalize running...\n")
+	WarnStdoutAndScanningLog("Finalizing enumerator...")
 	err = enumerator.finalize()
 	if err != nil {
-		WarnStdoutAndScanningLog("Sync finalize failed!!\n")
+		WarnStdoutAndScanningLog(fmt.Sprintf("Enumerator finalize failed: %v", err))
 		return err
 	}
 
-	return nil
+	WarnStdoutAndScanningLog("All operations complete. Shutting down monitors...")
+	cancel() // Signal all goroutines using mainCtx to stop
+
+	monitorWg.Wait()           // Wait for syncMonitor to finish
+	monitorGoroutinesWg.Wait() // Wait for monitorGoroutines to finish
+	if EnableDirectoryThrottling {
+		semaphoreMonitorWg.Wait()
+	}
+	WarnStdoutAndScanningLog("Monitors exited. Orchestrator quitting.")
+
+	return err
 }

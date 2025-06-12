@@ -427,23 +427,26 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 			if err != nil {
 				return fmt.Errorf("cannot list files due to reason %s", err)
 			}
-			// queue up the sub virtual directories if recursive is true
-			if t.recursive ||UseSyncOrchestrator{
+			// queue up the sub virtual directories if recursive is true or sync orchestrator is used
+			// if the sync orchestrator is used, we always queue up the sub virtual directories
+			if t.recursive || UseSyncOrchestrator {
 				for _, virtualDir := range lResp.Segment.BlobPrefixes {
-					if !UseSyncOrchestrator{
-					enqueueDir(*virtualDir.Name)
+					if !UseSyncOrchestrator {
+						// If we're not using the sync orchestrator, we only enqueue directories that are under the search prefix
+						enqueueDir(*virtualDir.Name)
 					}
+
 					if azcopyScanningLogger != nil {
 						azcopyScanningLogger.Log(common.LogDebug, fmt.Sprintf("Enqueuing sub-directory %s for enumeration.", *virtualDir.Name))
 					}
 
-					if t.includeDirectoryStubs ||UseSyncOrchestrator{
+					if t.includeDirectoryStubs || UseSyncOrchestrator {
 						// try to get properties on the directory itself, since it's not listed in BlobItems
 						dName := strings.TrimSuffix(*virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)
 						blobClient := containerClient.NewBlobClient(dName)
+
 						if UseSyncOrchestrator && !t.isDFS {
 							folderRelativePath := strings.TrimPrefix(dName, searchPrefix)
-							glcm.Info(fmt.Sprintf(("Shilpa folderRelativePath %s"), folderRelativePath))
 							storedObject := newStoredObject(
 								preprocessor,
 								getObjectNameOnly(dName),
@@ -458,6 +461,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 							)
 							enqueueOutput(storedObject, err)
 						}
+
 					altNameCheck:
 						pResp, err := blobClient.GetProperties(t.ctx, nil)
 						if err == nil {
@@ -498,7 +502,6 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 									storedObject.blobTags = blobTagsMap
 								}
 							}
-
 							enqueueOutput(storedObject, err)
 						} else {
 							// There was nothing there, but is there folder/?
@@ -574,11 +577,12 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 			return workerError
 		}
 
+		object := item.(StoredObject)
+
 		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter(common.EEntityType.File())
+			t.incrementEnumerationCounter(object.entityType)
 		}
 
-		object := item.(StoredObject)
 		processErr := processIfPassedFilters(filters, object, processor)
 		_, processErr = getProcessingError(processErr)
 		if processErr != nil {

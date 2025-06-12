@@ -80,27 +80,33 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 		getProperties = false
 	}
 	srcTraverserTemplate := ResourceTraverserTemplate{
-		location:                    cca.fromTo.From(),
-		credential:                  &srcCredInfo,
-		symlinkHandling:             cca.symlinkHandling,
-		listOfFilesChannel:          nil,
-		recursive:                   cca.recursive,
-		getProperties:               getProperties,
-		includeDirectoryStubs:       includeDirStubs,
-		permanentDeleteOption:       common.EPermanentDeleteOption.None(),
-		incrementEnumerationCounter: func(entityType common.EntityType) {},
-		listOfVersionIds:            nil,
-		s2sPreserveBlobTags:         cca.s2sPreserveBlobTags,
-		syncHashType:                cca.compareHash,
-		preservePermissions:         cca.preservePermissions,
-		logLevel:                    AzcopyLogVerbosity,
-		cpkOptions:                  cca.cpkOptions,
-		errorChannel:                errorChannel,
-		stripTopDir:                 false,
-		trailingDot:                 cca.trailingDot,
-		destination:                 &dest,
-		excludeContainerNames:       nil,
-		includeVersionsList:         false,
+		location:              cca.fromTo.From(),
+		credential:            &srcCredInfo,
+		symlinkHandling:       cca.symlinkHandling,
+		listOfFilesChannel:    nil,
+		recursive:             cca.recursive,
+		getProperties:         getProperties,
+		includeDirectoryStubs: includeDirStubs,
+		permanentDeleteOption: common.EPermanentDeleteOption.None(),
+		incrementEnumerationCounter: func(entityType common.EntityType) {
+			if entityType == common.EEntityType.File() {
+				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
+			} else if entityType == common.EEntityType.Folder() {
+				atomic.AddUint64(&cca.atomicSourceFoldersScanned, 1)
+			}
+		},
+		listOfVersionIds:      nil,
+		s2sPreserveBlobTags:   cca.s2sPreserveBlobTags,
+		syncHashType:          cca.compareHash,
+		preservePermissions:   cca.preservePermissions,
+		logLevel:              AzcopyLogVerbosity,
+		cpkOptions:            cca.cpkOptions,
+		errorChannel:          errorChannel,
+		stripTopDir:           false,
+		trailingDot:           cca.trailingDot,
+		destination:           &dest,
+		excludeContainerNames: nil,
+		includeVersionsList:   false,
 	}
 
 	sourceTraverser, err := InitResourceTraverser(cca.Source, cca.fromTo.From(), &ctx, &srcCredInfo, cca.symlinkHandling, nil, cca.recursive, true, includeDirStubs, common.EPermanentDeleteOption.None(), func(entityType common.EntityType) {
@@ -365,157 +371,51 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 
 	// set up the comparator so that the source/destination can be compared
 	indexer := newObjectIndexer()
-	var comparator objectProcessor
-	var finalize func() error
 
 	switch cca.fromTo {
-	//based on UseSynOrchestrator flag add case for Blobfs
-	case common.EFromTo.LocalBlobFS():
-		if UseSyncOrchestrator {
-			// Upload implies transferring from a local disk to a remote resource.
-			// In this scenario, the local disk (source) is scanned/indexed first because it is assumed that local file systems will be faster to enumerate than remote resources
-			// Then the destination is scanned and filtered based on what the destination contains
-			destinationCleaner, err := newSyncDeleteProcessor(cca, fpo, copyJobTemplate.DstServiceClient)
-			if err != nil {
-				return nil, fmt.Errorf("unable to instantiate destination cleaner due to: %s", err.Error())
-			}
-			destCleanerFunc := newFpoAwareProcessor(fpo, destinationCleaner.removeImmediately)
-
-			// when uploading, we can delete remote objects immediately, because as we traverse the remote location
-			// we ALREADY have available a complete map of everything that exists locally
-			// so as soon as we see a remote destination object we can know whether it exists in the local source
-
-			comparator = newSyncDestinationComparator(
-				indexer,
-				transferScheduler.scheduleCopyTransfer,
-				destCleanerFunc,
-				cca.compareHash,
-				cca.preserveSMBInfo,
-				cca.mirrorMode,
-				func(entityType common.EntityType) {
-					if entityType == common.EEntityType.File() {
-						atomic.AddUint64(&cca.atomicSourceFilesTransferNotRequired, 1)
-					} else if entityType == common.EEntityType.Folder() {
-						atomic.AddUint64(&cca.atomicSourceFoldersTransferNotRequired, 1)
-					}
-				}).processIfNecessary
-
-			finalize = func() error {
-				// schedule every local file that doesn't exist at the destination
-				err = indexer.traverse(transferScheduler.scheduleCopyTransfer, filters)
-				if err != nil {
-					return err
-				}
-
-				jobInitiated, err := transferScheduler.dispatchFinalPart()
-				// sync cleanly exits if nothing is scheduled.
-				if err != nil && err != NothingScheduledError {
-					return err
-				}
-
-				quitIfInSync(jobInitiated, cca.GetDeletionCount() > 0, cca)
-				cca.setScanningComplete()
-				return nil
-			}
-			return newSyncEnumerator(srcTraverserTemplate, dstTraverserTemplate, sourceTraverser, destinationTraverser, indexer, filters, comparator, finalize, transferScheduler), nil
-		}
-		fallthrough
 
 	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile():
-		// Upload implies transferring from a local disk to a remote resource.
-		// In this scenario, the local disk (source) is scanned/indexed first because it is assumed that local file systems will be faster to enumerate than remote resources
-		// Then the destination is scanned and filtered based on what the destination contains
-		destinationCleaner, err := newSyncDeleteProcessor(cca, fpo, copyJobTemplate.DstServiceClient)
-		if err != nil {
-			return nil, fmt.Errorf("unable to instantiate destination cleaner due to: %s", err.Error())
-		}
-		destCleanerFunc := newFpoAwareProcessor(fpo, destinationCleaner.removeImmediately)
 
-		// when uploading, we can delete remote objects immediately, because as we traverse the remote location
-		// we ALREADY have available a complete map of everything that exists locally
-		// so as soon as we see a remote destination object we can know whether it exists in the local source
-
-		comparator = newSyncDestinationComparator(
+		return GetSyncEnumeratorWithDestComparator(
+			cca,
+			fpo,
+			copyJobTemplate,
+			srcTraverserTemplate,
+			dstTraverserTemplate,
+			sourceTraverser,
+			destinationTraverser,
 			indexer,
-			transferScheduler.scheduleCopyTransfer,
-			destCleanerFunc,
-			cca.compareHash,
-			cca.preserveSMBInfo,
-			cca.mirrorMode,
-			func(entityType common.EntityType) {
-				if entityType == common.EEntityType.File() {
-					atomic.AddUint64(&cca.atomicSourceFilesTransferNotRequired, 1)
-				} else if entityType == common.EEntityType.Folder() {
-					atomic.AddUint64(&cca.atomicSourceFoldersTransferNotRequired, 1)
-				}
-			}).processIfNecessary
-
-		finalize = func() error {
-			// schedule every local file that doesn't exist at the destination
-			err = indexer.traverse(transferScheduler.scheduleCopyTransfer, filters)
-			if err != nil {
-				return err
-			}
-
-			jobInitiated, err := transferScheduler.dispatchFinalPart()
-			// sync cleanly exits if nothing is scheduled.
-			if err != nil && err != NothingScheduledError {
-				return err
-			}
-
-			quitIfInSync(jobInitiated, cca.GetDeletionCount() > 0, cca)
-			cca.setScanningComplete()
-			return nil
-		}
-
-		return newSyncEnumerator(srcTraverserTemplate, dstTraverserTemplate, sourceTraverser, destinationTraverser, indexer, filters, comparator, finalize, transferScheduler), nil
+			filters,
+			transferScheduler,
+		)
 	default:
-		indexer.isDestinationCaseInsensitive = IsDestinationCaseInsensitive(cca.fromTo)
-		// in all other cases (download and S2S), the destination is scanned/indexed first
-		// then the source is scanned and filtered based on what the destination contains
-		comparator = newSyncSourceComparator(indexer, transferScheduler.scheduleCopyTransfer, cca.compareHash, cca.preserveSMBInfo, cca.mirrorMode, func(entityType common.EntityType) {
-			if entityType == common.EEntityType.File() {
-				atomic.AddUint64(&cca.atomicSourceFilesTransferNotRequired, 1)
-			} else if entityType == common.EEntityType.Folder() {
-				atomic.AddUint64(&cca.atomicSourceFoldersTransferNotRequired, 1)
-			}
-		}).processIfNecessary
-
-		finalize = func() error {
-			// remove the extra files at the destination that were not present at the source
-			// we can only know what needs to be deleted when we have FINISHED traversing the remote source
-			// since only then can we know which local files definitely don't exist remotely
-			var deleteScheduler objectProcessor
-			switch cca.fromTo.To() {
-			case common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS():
-				deleter, err := newSyncDeleteProcessor(cca, fpo, copyJobTemplate.DstServiceClient)
-				if err != nil {
-					return err
-				}
-				deleteScheduler = newFpoAwareProcessor(fpo, deleter.removeImmediately)
-			default:
-				deleteScheduler = newFpoAwareProcessor(fpo, newSyncLocalDeleteProcessor(cca, fpo).removeImmediately)
-			}
-
-			err = indexer.traverse(deleteScheduler, nil)
-			if err != nil {
-				return err
-			}
-
-			// let the deletions happen first
-			// otherwise if the final part is executed too quickly, we might quit before deletions could finish
-			jobInitiated, err := transferScheduler.dispatchFinalPart()
-			// sync cleanly exits if nothing is scheduled.
-			if err != nil && err != NothingScheduledError {
-				return err
-			}
-
-			quitIfInSync(jobInitiated, cca.GetDeletionCount() > 0, cca)
-			cca.setScanningComplete()
-			return nil
+		if UseSyncOrchestrator {
+			return GetSyncEnumeratorWithDestComparator(
+				cca,
+				fpo,
+				copyJobTemplate,
+				srcTraverserTemplate,
+				dstTraverserTemplate,
+				sourceTraverser,
+				destinationTraverser,
+				indexer,
+				filters,
+				transferScheduler,
+			)
+		} else {
+			return GetSyncEnumeratorWithSrcComparator(
+				cca,
+				fpo,
+				copyJobTemplate,
+				srcTraverserTemplate,
+				dstTraverserTemplate,
+				sourceTraverser,
+				destinationTraverser,
+				indexer,
+				filters,
+				transferScheduler,
+			)
 		}
-
-		return newSyncEnumerator(dstTraverserTemplate, srcTraverserTemplate, destinationTraverser, sourceTraverser, indexer, filters, comparator, finalize, transferScheduler), nil
 	}
 }
 
@@ -541,4 +441,157 @@ func quitIfInSync(transferJobInitiated, anyDestinationFileDeleted bool, cca *coo
 			return "The source and destination are now in sync."
 		}, common.EExitCode.Success())
 	}
+}
+
+// GetSyncEnumerator builds the syncEnumerator for Local->Blob/File scenarios.
+func GetSyncEnumeratorWithDestComparator(
+	cca *cookedSyncCmdArgs,
+	fpo common.FolderPropertyOption,
+	copyJobTemplate *common.CopyJobPartOrderRequest,
+	srcTemplate, dstTemplate ResourceTraverserTemplate,
+	sourceTraverser, destinationTraverser ResourceTraverser,
+	indexer *objectIndexer,
+	filters []ObjectFilter,
+	transferScheduler *copyTransferProcessor,
+) (*syncEnumerator, error) {
+
+	// Upload implies transferring from a local disk to a remote resource.
+	// In this scenario, the local disk (source) is scanned/indexed first because it is assumed that local file systems will be faster to enumerate than remote resources
+	// Then the destination is scanned and filtered based on what the destination contains
+	destinationCleaner, err := newSyncDeleteProcessor(cca, fpo, copyJobTemplate.DstServiceClient)
+	if err != nil {
+		return nil, fmt.Errorf("unable to instantiate destination cleaner due to: %s", err.Error())
+	}
+
+	destCleanerFunc := newFpoAwareProcessor(fpo, destinationCleaner.removeImmediately)
+
+	if UseSyncOrchestrator && cca.fromTo == common.EFromTo.S3Blob() {
+		// S3->Blob sync does recursive deletion for a prefix when sync orchestrator is enabled.
+		// This requires a valid deletion processor to be passed to the comparator.
+		destCleanerFunc = destinationCleaner.removeImmediately
+	}
+
+	// when uploading, we can delete remote objects immediately, because as we traverse the remote location
+	// we ALREADY have available a complete map of everything that exists locally
+	// so as soon as we see a remote destination object we can know whether it exists in the local source
+
+	comparator := newSyncDestinationComparator(
+		indexer,
+		transferScheduler.scheduleCopyTransfer,
+		destCleanerFunc,
+		cca.compareHash,
+		cca.preserveSMBInfo,
+		cca.mirrorMode,
+		func(entityType common.EntityType) {
+			if entityType == common.EEntityType.File() {
+				atomic.AddUint64(&cca.atomicSourceFilesTransferNotRequired, 1)
+			} else if entityType == common.EEntityType.Folder() {
+				atomic.AddUint64(&cca.atomicSourceFoldersTransferNotRequired, 1)
+			}
+		}).processIfNecessary
+
+	finalize := func() error {
+		// schedule every local file that doesn't exist at the destination
+		err = indexer.traverse(transferScheduler.scheduleCopyTransfer, filters)
+		if err != nil {
+			return err
+		}
+
+		jobInitiated, err := transferScheduler.dispatchFinalPart()
+		// sync cleanly exits if nothing is scheduled.
+		if err != nil && err != NothingScheduledError {
+			return err
+		}
+
+		quitIfInSync(jobInitiated, cca.GetDeletionCount() > 0, cca)
+		cca.setScanningComplete()
+		return nil
+	}
+
+	// build and return the syncEnumerator
+	return newSyncEnumerator(
+		srcTemplate,
+		dstTemplate,
+		sourceTraverser,
+		destinationTraverser,
+		indexer,
+		filters,
+		comparator,
+		finalize,
+		transferScheduler,
+	), nil
+}
+
+func GetSyncEnumeratorWithSrcComparator(
+	cca *cookedSyncCmdArgs,
+	fpo common.FolderPropertyOption,
+	copyJobTemplate *common.CopyJobPartOrderRequest,
+	srcTemplate, dstTemplate ResourceTraverserTemplate,
+	sourceTraverser, destinationTraverser ResourceTraverser,
+	indexer *objectIndexer,
+	filters []ObjectFilter,
+	transferScheduler *copyTransferProcessor,
+) (*syncEnumerator, error) {
+
+	indexer.isDestinationCaseInsensitive = IsDestinationCaseInsensitive(cca.fromTo)
+	// in all other cases (download and S2S), the destination is scanned/indexed first
+	// then the source is scanned and filtered based on what the destination contains
+	comparator := newSyncSourceComparator(
+		indexer,
+		transferScheduler.scheduleCopyTransfer,
+		cca.compareHash,
+		cca.preserveSMBInfo,
+		cca.mirrorMode,
+		func(entityType common.EntityType) {
+			if entityType == common.EEntityType.File() {
+				atomic.AddUint64(&cca.atomicSourceFilesTransferNotRequired, 1)
+			} else if entityType == common.EEntityType.Folder() {
+				atomic.AddUint64(&cca.atomicSourceFoldersTransferNotRequired, 1)
+			}
+		}).processIfNecessary
+
+	finalize := func() error {
+		// remove the extra files at the destination that were not present at the source
+		// we can only know what needs to be deleted when we have FINISHED traversing the remote source
+		// since only then can we know which local files definitely don't exist remotely
+		var deleteScheduler objectProcessor
+		switch cca.fromTo.To() {
+		case common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS():
+			deleter, err := newSyncDeleteProcessor(cca, fpo, copyJobTemplate.DstServiceClient)
+			if err != nil {
+				return err
+			}
+			deleteScheduler = newFpoAwareProcessor(fpo, deleter.removeImmediately)
+		default:
+			deleteScheduler = newFpoAwareProcessor(fpo, newSyncLocalDeleteProcessor(cca, fpo).removeImmediately)
+		}
+
+		err := indexer.traverse(deleteScheduler, nil)
+		if err != nil {
+			return err
+		}
+
+		// let the deletions happen first
+		// otherwise if the final part is executed too quickly, we might quit before deletions could finish
+		jobInitiated, err := transferScheduler.dispatchFinalPart()
+		// sync cleanly exits if nothing is scheduled.
+		if err != nil && err != NothingScheduledError {
+			return err
+		}
+
+		quitIfInSync(jobInitiated, cca.GetDeletionCount() > 0, cca)
+		cca.setScanningComplete()
+		return nil
+	}
+
+	return newSyncEnumerator(
+		dstTemplate,
+		srcTemplate,
+		destinationTraverser,
+		sourceTraverser,
+		indexer,
+		filters,
+		comparator,
+		finalize,
+		transferScheduler), nil
 }
