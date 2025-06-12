@@ -629,7 +629,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		// must be running as root.
 		if !raw.preservePermissions && cooked.FromTo == common.EFromTo.FileLocal() {
 			if err := common.EnsureRunningAsRoot(); err != nil {
-				return cooked, fmt.Errorf("copying from Azure File NFS to local Linux requires root privileges when not preserving file permissions")
+				return cooked, fmt.Errorf("failed to copy source to destination without preserving permissions: operation not permitted. Please retry with root privileges or use the default option (--preserve-permissions=true)")
 			}
 		}
 
@@ -2120,7 +2120,7 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveOwner, common.PreserveOwnerFlagName, common.PreserveOwnerDefault, "Only has an effect in downloads, and only when --preserve-smb-permissions is used. If true (the default), the file Owner and Group are preserved in downloads. If set to false, --preserve-smb-permissions will still preserve ACLs but Owner and Group will be based on the user running AzCopy")
 
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", (runtime.GOOS == "windows"), "Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Windows and Azure Files). On windows, this flag will be set to true by default. If the source or destination is a volume mounted on Linux using SMB protocol, this flag will have to be explicitly set to true. Only the attribute bits supported by Azure Files will be transferred; any others will be ignored. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern). The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
-	cpCmd.PersistentFlags().BoolVar(&raw.isNFSCopy, IsNFSProtocolFlag, false, "False by default. Specify this flag if you intend to transfer data to NFS file share. This flag is only applicable when the destination is an NFS file share.")
+	cpCmd.PersistentFlags().BoolVar(&raw.isNFSCopy, IsNFSProtocolFlag, false, "False by default. Users must specify this flag if they intend to transfer data to or from NFS shares.")
 	//Marking this flag as hidden as we might not support it in the future
 	_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-info")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveInfo, PreserveInfoFlag, false, "Specify this flag if you want to preserve properties during the transfer operation.The previously available flag for SMB (--preserve-smb-info) is now redirected to --preserve-info flag for both SMB and NFS operations. The default value is true for Windows when copying to Azure Files SMB share and for Linux when copying to Azure Files NFS share. ")
