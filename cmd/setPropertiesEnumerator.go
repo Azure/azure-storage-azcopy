@@ -64,7 +64,7 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 		StripTopDir:           cca.StripTopDir,
 
 		ExcludeContainers: cca.excludeContainer,
-		HardlinkHandling:  cca.preserveHardlinks,
+		HardlinkHandling:  cca.hardlinks,
 	})
 
 	// report failure to create traverser

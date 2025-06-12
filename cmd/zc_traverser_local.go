@@ -55,7 +55,7 @@ type localTraverser struct {
 	hashAdapter    common.HashDataAdapter
 	// receives fullPath entries and manages hashing of files lacking metadata.
 	hashTargetChannel chan string
-	hardlinkHandling  common.PreserveHardlinksOption
+	hardlinkHandling  common.HardlinkHandlingType
 }
 
 func (t *localTraverser) IsDirectory(bool) (bool, error) {
@@ -203,7 +203,13 @@ func writeToErrorChannel(errorChannel chan<- ErrorFileInfo, err ErrorFileInfo) {
 // Separate this from the traverser for two purposes:
 // 1) Cleaner code
 // 2) Easier to test individually than to test the entire traverser.
-func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath.WalkFunc, symlinkHandling common.SymlinkHandlingType, errorChannel chan<- ErrorFileInfo, hardlinkHandling common.PreserveHardlinksOption, incrementEnumerationCounter enumerationCounterFunc) (err error) {
+func WalkWithSymlinks(appCtx context.Context,
+	fullPath string,
+	walkFunc filepath.WalkFunc,
+	symlinkHandling common.SymlinkHandlingType,
+	errorChannel chan<- ErrorFileInfo,
+	hardlinkHandling common.HardlinkHandlingType,
+	incrementEnumerationCounter enumerationCounterFunc) (err error) {
 
 	// We want to re-queue symlinks up in their evaluated form because filepath.Walk doesn't evaluate them for us.
 	// So, what is the plan of attack?

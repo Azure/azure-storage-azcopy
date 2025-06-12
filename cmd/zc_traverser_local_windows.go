@@ -67,7 +67,7 @@ func WrapFolder(fullpath string, stat os.FileInfo) (os.FileInfo, error) {
 	}
 }
 
-func LogHardLinkIfDefaultPolicy(fileInfo os.FileInfo, hardlinkHandling common.PreserveHardlinksOption) {
+func LogHardLinkIfDefaultPolicy(fileInfo os.FileInfo, hardlinkHandling common.HardlinkHandlingType) {
 }
 
 // TODO: Add support for hardlinks on Windows later
