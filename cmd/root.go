@@ -196,8 +196,9 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
-		// currently, we only automatically do auto-tuning when benchmarking
-		preferToAutoTuneGRs := cmd == benchCmd // TODO: do we have a better way to do this than making benchCmd global?
+		// We want to auto-tune by default now, with the log message.
+		// By default, tuning for CPU cores can be a bit overzealous when the network is limited (e.g. via cap-mbps)
+		preferToAutoTuneGRs := true
 		providePerformanceAdvice := cmd == benchCmd
 
 		// startup of the STE happens here, so that the startup can access the values of command line parameters that are defined for "root" command
