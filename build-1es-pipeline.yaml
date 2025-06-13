@@ -1015,6 +1015,8 @@ extends:
 
                   - script: |
                       echo "v$(azcopy_version)"
+                      azcopy_github_tag=$(echo $(azcopy_version) | sed 's/~/-/')
+                      echo "##vso[task.setvariable variable=azcopy_github_tag]$azcopy_github_tag"
                     displayName: 'AzCopy Tag Name'
 
                   - task: GithubRelease@1
@@ -1025,7 +1027,7 @@ extends:
                       target: '$(Build.SourceVersion)'
                       tagSource: 'userSpecifiedTag'
                       title: "AzCopy v$(azcopy_version)"
-                      tag: "v$(azcopy_version)"
+                      tag: "v$(azcopy_github_tag)"
                       changeLogCompareToRelease: 'lastFullRelease'
                       changeLogType: 'commitBased'
                       isDraft: ${{ parameters.draft }}
