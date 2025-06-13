@@ -1154,7 +1154,7 @@ extends:
                         is_preview="true"
                         echo "##vso[task.setvariable variable=is_preview]$is_preview"
                       fi
-                      echo "##vso[task.setvariable variable=azcopy_version;isOutput=true]$version"
+
                       while IFS=, read -r distro archetype repoName releaseName; do
                         # If the package is preview, publish to mariner preview package
                         if [[ $distro == *"Mariner-"* ]]; then
