@@ -108,7 +108,6 @@ func UnfurlSymlinks(symlinkPath string) (result string, err error) {
 	if runtime.GOOS != "windows" {
 		return filepath.EvalSymlinks(symlinkPath)
 	}
-
 	for len(unfurlingPlan) > 0 {
 		item := unfurlingPlan[0]
 
@@ -419,10 +418,14 @@ func WalkWithSymlinks(
 
 						if ok, err := checkSymlinkCausesDirectoryLoop(finalSlPath); err != nil {
 							err = fmt.Errorf("checkSymlinkCausesDirectoryLoop failed with error: %v", err)
+							WarnStdoutAndScanningLog(err.Error())
+							writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err, Source: isSourceTraverser})
 							//writeToErrorChannel(ErrorFileInfo{FileName: fileInfo.Name(), FilePath: filePath, FileLastModifiedTime: fileInfo.ModTime(), FileSize: fileInfo.Size(), IsDir: fileInfo.IsDir(), ErrorMsg: err, IsSource: isSource})
-							return err
+							return nil
 						} else if ok {
 							err = fmt.Errorf("[Directory Loop Detected] %s -> %s, skipping", finalSlPath, result)
+							WarnStdoutAndScanningLog(err.Error())
+							writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err, Source: isSourceTraverser})
 							//writeToErrorChannel(ErrorFileInfo{FileName: fileInfo.Name(), FilePath: filePath, FileLastModifiedTime: fileInfo.ModTime(), FileSize: fileInfo.Size(), IsDir: fileInfo.IsDir(), ErrorMsg: err, IsSource: isSource})
 							return nil
 						} else {
@@ -846,59 +849,58 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 
 		return finalizer(err)
 	} else {
-		if t.recursive {
-			processFile := func(filePath string, fileInfo os.FileInfo, fileError error) error {
-				if fileError != nil {
-					WarnStdoutAndScanningLog(fmt.Sprintf("Accessing %s failed with error: %s", filePath, fileError.Error()))
-					return nil
-				}
-
-				var entityType common.EntityType
-				if fileInfo.Mode()&os.ModeSymlink == os.ModeSymlink {
-					entityType = common.EEntityType.Symlink()
-				} else if fileInfo.IsDir() {
-					newFileInfo, err := WrapFolder(filePath, fileInfo)
-					if err != nil {
-						WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get last change of target at %s: %s", filePath, err.Error()))
-					} else {
-						// fileInfo becomes nil in case we fail to wrap folder.
-						fileInfo = newFileInfo
-					}
-
-					entityType = common.EEntityType.Folder()
-				} else {
-					entityType = common.EEntityType.File()
-				}
-
-				relPath := strings.TrimPrefix(strings.TrimPrefix(cleanLocalPath(filePath), cleanLocalPath(t.fullPath)), common.DeterminePathSeparator(t.fullPath))
-				if t.symlinkHandling.None() && fileInfo.Mode()&os.ModeSymlink != 0 {
-					WarnStdoutAndScanningLog(fmt.Sprintf("Skipping over symlink at %s because symlinks are not handled (--follow-symlinks or --preserve-symlinks)", common.GenerateFullPath(t.fullPath, relPath)))
-					return nil
-				}
-
-				if t.incrementEnumerationCounter != nil {
-					t.incrementEnumerationCounter(entityType)
-				}
-
-				// This is an exception to the rule. We don't strip the error here, because WalkWithSymlinks catches it.
-				return processIfPassedFilters(filters,
-					newStoredObject(
-						preprocessor,
-						fileInfo.Name(),
-						strings.ReplaceAll(relPath, common.DeterminePathSeparator(t.fullPath), common.AZCOPY_PATH_SEPARATOR_STRING), // Consolidate relative paths to the azcopy path separator for sync
-						entityType,
-						fileInfo.ModTime(), // get this for both files and folders, since sync needs it for both.
-						fileInfo.Size(),
-						noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
-						noBlobProps,
-						noMetadata,
-						"", // Local has no such thing as containers
-					),
-					hashingProcessor, // hashingProcessor handles the mutex wrapper
-				)
+		processFile := func(filePath string, fileInfo os.FileInfo, fileError error) error {
+			if fileError != nil {
+				WarnStdoutAndScanningLog(fmt.Sprintf("Accessing %s failed with error: %s", filePath, fileError.Error()))
+				return nil
 			}
 
-			// note: Walk includes root, so no need here to separately create StoredObject for root (as we do for other folder-aware sources)
+			var entityType common.EntityType
+			if fileInfo.Mode()&os.ModeSymlink == os.ModeSymlink {
+				entityType = common.EEntityType.Symlink()
+			} else if fileInfo.IsDir() {
+				newFileInfo, err := WrapFolder(filePath, fileInfo)
+				if err != nil {
+					WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get last change of target at %s: %s", filePath, err.Error()))
+				} else {
+					// fileInfo becomes nil in case we fail to wrap folder.
+					fileInfo = newFileInfo
+				}
+
+				entityType = common.EEntityType.Folder()
+			} else {
+				entityType = common.EEntityType.File()
+			}
+
+			relPath := strings.TrimPrefix(strings.TrimPrefix(cleanLocalPath(filePath), cleanLocalPath(t.fullPath)), common.DeterminePathSeparator(t.fullPath))
+			if t.symlinkHandling.None() && fileInfo.Mode()&os.ModeSymlink != 0 {
+				WarnStdoutAndScanningLog(fmt.Sprintf("Skipping over symlink at %s because symlinks are not handled (--follow-symlinks or --preserve-symlinks)", common.GenerateFullPath(t.fullPath, relPath)))
+				return nil
+			}
+
+			if t.incrementEnumerationCounter != nil {
+				t.incrementEnumerationCounter(entityType)
+			}
+			// This is an exception to the rule. We don't strip the error here, because WalkWithSymlinks catches it.
+			return processIfPassedFilters(filters,
+				newStoredObject(
+					preprocessor,
+					fileInfo.Name(),
+					strings.ReplaceAll(relPath, common.DeterminePathSeparator(t.fullPath), common.AZCOPY_PATH_SEPARATOR_STRING), // Consolidate relative paths to the azcopy path separator for sync
+					entityType,
+					fileInfo.ModTime(), // get this for both files and folders, since sync needs it for both.
+					fileInfo.Size(),
+					noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
+					noBlobProps,
+					noMetadata,
+					"", // Local has no such thing as containers
+				),
+				hashingProcessor, // hashingProcessor handles the mutex wrapper
+			)
+		}
+
+		// note: Walk includes root, so no need here to separately create StoredObject for root (as we do for other folder-aware sources)
+		if t.recursive {
 			return finalizer(
 				WalkWithSymlinks(
 					t.appCtx,
@@ -935,7 +937,6 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 						symlinkPath := common.GenerateFullPath(t.fullPath, entry.Name())
 						// Evaluate the symlink
 						result, err := UnfurlSymlinks(symlinkPath)
-
 						if err != nil {
 							return err
 						}
@@ -953,6 +954,25 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 						if err != nil {
 							return err
 						}
+						if UseSyncOrchestrator {
+							if fileInfo.IsDir() {
+								path := t.fullPath + common.DeterminePathSeparator(t.fullPath) + entry.Name()
+								ok, _ := checkSymlinkCausesDirectoryLoop(path)
+								if ok {
+									err := fmt.Errorf("Symlink caused Direcorty loop")
+									writeToErrorChannel(t.errorChannel, ErrorFileInfo{FilePath: path, FileInfo: fileInfo, ErrorMsg: err, Source: t.syncOptions.isSource})
+									return nil
+								}
+								finalizer(WalkWithSymlinks(
+									t.appCtx,
+									path,
+									processFile,
+									t.symlinkHandling,
+									t.errorChannel,
+									t.syncOptions.isSource,
+									t.syncOptions.scannerLogger))
+							}
+						}
 					}
 				}
 				if counterIncrementer == nil {
@@ -966,6 +986,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 						entityType = common.EEntityType.File()
 					}
 				}
+
 				if t.incrementEnumerationCounter != nil {
 					if counterIncrementer == nil {
 						t.incrementEnumerationCounter(common.EEntityType.File())
