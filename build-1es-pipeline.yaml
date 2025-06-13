@@ -983,6 +983,8 @@ extends:
 
                   - script: |
                       mv azcopy_linux_arm64 azcopy
+                      azcopy_docker_version=$(echo $(azcopy_version) | sed 's/~/-/')
+                      echo "##vso[task.setvariable variable=azcopy_docker_version]$azcopy_docker_version"
                     displayName: 'Setup AzCopy in expected location'
 
                   - task: 1ES.BuildContainerImage@1
