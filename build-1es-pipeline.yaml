@@ -920,40 +920,42 @@ extends:
 
                   - script: |
                       mv azcopy_linux_amd64 azcopy
+                      azcopy_docker_version=$(echo $(azcopy_version) | sed 's/~/-/')
+                      echo "##vso[task.setvariable variable=azcopy_docker_version]$azcopy_docker_version"
                     displayName: 'Setup AzCopy in expected location'
 
                   - task: 1ES.BuildContainerImage@1
                     inputs:
-                      image: azcopycontainers.azurecr.io/azure-azcopy-ubuntu-x86_64.$(azcopy_version):latest
+                      image: azcopycontainers.azurecr.io/azure-azcopy-ubuntu-x86_64.$(azcopy_docker_version):latest
                       path: '$(System.DefaultWorkingDirectory)'
                       dockerfile: docker/Dockerfile
 
                   - task: 1ES.PushContainerImage@1
                     inputs:
-                      image: azcopycontainers.azurecr.io/azure-azcopy-ubuntu-x86_64.$(azcopy_version):latest
-                      remoteImage: azcopycontainers.azurecr.io/azure-azcopy-ubuntu-x86_64.$(azcopy_version):latest
+                      image: azcopycontainers.azurecr.io/azure-azcopy-ubuntu-x86_64.$(azcopy_docker_version):latest
+                      remoteImage: azcopycontainers.azurecr.io/azure-azcopy-ubuntu-x86_64.$(azcopy_docker_version):latest
 
                   - task: 1ES.BuildContainerImage@1
                     inputs:
-                      image: azcopycontainers.azurecr.io/azure-azcopy-mariner-x86_64.$(azcopy_version):latest
+                      image: azcopycontainers.azurecr.io/azure-azcopy-mariner-x86_64.$(azcopy_docker_version):latest
                       path: '$(System.DefaultWorkingDirectory)'
                       dockerfile: docker/DockerfileMariner
 
                   - task: 1ES.PushContainerImage@1
                     inputs:
-                      image: azcopycontainers.azurecr.io/azure-azcopy-mariner-x86_64.$(azcopy_version):latest
-                      remoteImage: azcopycontainers.azurecr.io/azure-azcopy-mariner-x86_64.$(azcopy_version):latest
+                      image: azcopycontainers.azurecr.io/azure-azcopy-mariner-x86_64.$(azcopy_docker_version):latest
+                      remoteImage: azcopycontainers.azurecr.io/azure-azcopy-mariner-x86_64.$(azcopy_docker_version):latest
                   
                   - task: 1ES.BuildContainerImage@1
                     inputs:
-                      image: azcopycontainers.azurecr.io/azure-azcopy-mariner-arm64.$(azcopy_version):latest
+                      image: azcopycontainers.azurecr.io/azure-azcopy-mariner-arm64.$(azcopy_docker_version):latest
                       path: '$(System.DefaultWorkingDirectory)'
                       dockerfile: docker/DockerfileMarinerArm64
 
                   - task: 1ES.PushContainerImage@1
                     inputs:
-                      image: azcopycontainers.azurecr.io/azure-azcopy-mariner-arm64.$(azcopy_version):latest
-                      remoteImage: azcopycontainers.azurecr.io/azure-azcopy-mariner-arm64.$(azcopy_version):latest
+                      image: azcopycontainers.azurecr.io/azure-azcopy-mariner-arm64.$(azcopy_docker_version):latest
+                      remoteImage: azcopycontainers.azurecr.io/azure-azcopy-mariner-arm64.$(azcopy_docker_version):latest
 
               - job: LinuxARM64
                 pool:
@@ -985,14 +987,14 @@ extends:
 
                   - task: 1ES.BuildContainerImage@1
                     inputs:
-                      image: azcopycontainers.azurecr.io/azure-azcopy-ubuntu-arm64.$(azcopy_version):latest
+                      image: azcopycontainers.azurecr.io/azure-azcopy-ubuntu-arm64.$(azcopy_docker_version):latest
                       path: '$(System.DefaultWorkingDirectory)'
                       dockerfile: docker/Dockerfile
 
                   - task: 1ES.PushContainerImage@1
                     inputs:
-                      image: azcopycontainers.azurecr.io/azure-azcopy-ubuntu-arm64.$(azcopy_version):latest
-                      remoteImage: azcopycontainers.azurecr.io/azure-azcopy-ubuntu-arm64.$(azcopy_version):latest
+                      image: azcopycontainers.azurecr.io/azure-azcopy-ubuntu-arm64.$(azcopy_docker_version):latest
+                      remoteImage: azcopycontainers.azurecr.io/azure-azcopy-ubuntu-arm64.$(azcopy_docker_version):latest
 
       - ${{ if eq(parameters.post_release, true) }}:
           - stage: ReleaseToGithub
@@ -1150,7 +1152,7 @@ extends:
                         is_preview="true"
                         echo "##vso[task.setvariable variable=is_preview]$is_preview"
                       fi
-                      
+                      echo "##vso[task.setvariable variable=azcopy_version;isOutput=true]$version"
                       while IFS=, read -r distro archetype repoName releaseName; do
                         # If the package is preview, publish to mariner preview package
                         if [[ $distro == *"Mariner-"* ]]; then
@@ -1171,7 +1173,7 @@ extends:
                           echo "Skipping for ARM type on $distro"
                         else
                           if [[ $distro == *"Mariner-"* ]]; then
-                            if [ "$is_preview" = "true" ]; then
+                            if [ "$(is_preview)" = "true" ]; then
                               repoName=$(echo $repoName | sed 's/prod/preview/')
                             fi
                           fi
