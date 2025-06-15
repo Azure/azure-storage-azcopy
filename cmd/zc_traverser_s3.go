@@ -100,7 +100,12 @@ func (e ErrorS3Info) IsSource() bool {
 // /////////////////////////////////////////////////////////////////////////
 func writeToS3ErrorChannel(errorChannel chan TraverserErrorItemInfo, err ErrorS3Info) {
 	if errorChannel != nil {
-		errorChannel <- err
+		select {
+		case errorChannel <- err:
+		default:
+			// Channel might be full, log the error instead
+			WarnStdoutAndScanningLog(fmt.Sprintf("Failed to send error to channel: %v", err.ErrorMessage()))
+		}
 	}
 }
 
@@ -276,7 +281,9 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 
 			// default to empty props, but retrieve real ones if required
 			oie := common.ObjectInfoExtension{ObjectInfo: minio.ObjectInfo{}}
-			if t.getProperties {
+
+			// If we are using sync orchestrator, we don't need to retrieve properties.
+			if !UseSyncOrchestrator && t.getProperties {
 				oi, err := t.s3Client.StatObject(t.s3URLParts.BucketName, objectInfo.Key, minio.StatObjectOptions{})
 				if err != nil {
 					errorS3Info := ErrorS3Info{
