@@ -202,6 +202,17 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 
 	// It's a bucket or virtual directory.
 	for objectInfo := range t.s3Client.ListObjectsV2(t.s3URLParts.BucketName, searchPrefix, t.recursive, t.ctx.Done()) {
+
+		// re-join the unescaped path.
+		relativePath := strings.TrimPrefix(objectInfo.Key, searchPrefix)
+
+		// Ignoring this object because it is a zero-byte placeholder typically created to simulate a folder in S3-compatible storage.
+		// These objects have an empty RelativePath and are marked as files, but they do not represent actual user data.
+		// Including them in processing could lead to incorrect assumptions about file presence or structure.
+		if len(relativePath) == 0 && objectInfo.StorageClass != "" {
+			continue
+		}
+
 		if objectInfo.Err != nil {
 			errorS3Info := ErrorS3Info{
 				S3Name:             objectInfo.Key,
@@ -215,10 +226,6 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			return fmt.Errorf("cannot list objects, %v", objectInfo.Err)
 		}
 
-		if objectInfo.StorageClass == "" {
-			// Directories are the only objects without storage classes.
-			continue
-		}
 		if invalidAzureBlobName(objectInfo.Key) {
 			//Throw a warning on console and continue
 			WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, objectInfo.Key))
@@ -237,44 +244,67 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 		objectPath := strings.Split(objectInfo.Key, "/")
 		objectName := objectPath[len(objectPath)-1]
 
-		// re-join the unescaped path.
-		relativePath := strings.TrimPrefix(objectInfo.Key, searchPrefix)
+		var storedObject StoredObject
+		if objectInfo.StorageClass == "" {
 
-		if strings.HasSuffix(relativePath, "/") {
-			// If a file has a suffix of /, it's still treated as a folder.
-			// Thus, akin to the old code. skip it.
-			continue
-		}
-
-		// default to empty props, but retrieve real ones if required
-		oie := common.ObjectInfoExtension{ObjectInfo: minio.ObjectInfo{}}
-		if t.getProperties {
-			oi, err := t.s3Client.StatObject(t.s3URLParts.BucketName, objectInfo.Key, minio.StatObjectOptions{})
-			if err != nil {
-				errorS3Info := ErrorS3Info{
-					S3Name:             objectName,
-					S3Path:             t.s3URLParts.ObjectKey,
-					ErrorMsg:           err,
-					Source:             true,
-					S3LastModifiedTime: oi.LastModified,
-					S3Size:             oi.Size,
-				}
-				writeToS3ErrorChannel(t.errorChannel, errorS3Info)
-				return err
+			// Directories are the only objects without storage classes.
+			if !UseSyncOrchestrator {
+				// Skip directories if not using sync orchestrator
+				continue
+			} else {
+				// For sync orchestrator, we need to treat directories as objects.
+				storedObject = newStoredObject(
+					preprocessor,
+					objectName,
+					relativePath,
+					common.EEntityType.Folder(),
+					objectInfo.LastModified,
+					0,
+					noContentProps,
+					noBlobProps,
+					noMetadata,
+					t.s3URLParts.BucketName)
 			}
-			oie = common.ObjectInfoExtension{ObjectInfo: oi}
+
+		} else {
+			if strings.HasSuffix(relativePath, "/") {
+				// If a file has a suffix of /, it's still treated as a folder.
+				// Thus, akin to the old code. skip it.
+				// NOTE: In case of UseSyncOrchestrator, what do we do??
+				continue
+			}
+
+			// default to empty props, but retrieve real ones if required
+			oie := common.ObjectInfoExtension{ObjectInfo: minio.ObjectInfo{}}
+			if t.getProperties {
+				oi, err := t.s3Client.StatObject(t.s3URLParts.BucketName, objectInfo.Key, minio.StatObjectOptions{})
+				if err != nil {
+					errorS3Info := ErrorS3Info{
+						S3Name:             objectName,
+						S3Path:             t.s3URLParts.ObjectKey,
+						ErrorMsg:           err,
+						Source:             true,
+						S3LastModifiedTime: oi.LastModified,
+						S3Size:             oi.Size,
+					}
+					writeToS3ErrorChannel(t.errorChannel, errorS3Info)
+					return err
+				}
+				oie = common.ObjectInfoExtension{ObjectInfo: oi}
+			}
+
+			storedObject = newStoredObject(
+				preprocessor,
+				objectName,
+				relativePath,
+				common.EEntityType.File(),
+				objectInfo.LastModified,
+				objectInfo.Size,
+				&oie,
+				noBlobProps,
+				oie.NewCommonMetadata(),
+				t.s3URLParts.BucketName)
 		}
-		storedObject := newStoredObject(
-			preprocessor,
-			objectName,
-			relativePath,
-			common.EEntityType.File(),
-			objectInfo.LastModified,
-			objectInfo.Size,
-			&oie,
-			noBlobProps,
-			oie.NewCommonMetadata(),
-			t.s3URLParts.BucketName)
 
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter(storedObject.entityType)
