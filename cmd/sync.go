@@ -832,6 +832,8 @@ func init() {
 				glcm.EnableCancelFromStdIn()
 			}
 
+			// The following code is to deal with deprecated flags
+			// preserveInfo
 			preserveInfoDefaultVal := GetPreserveInfoFlagDefault(cmd, raw.isNFSCopy)
 			if cmd.Flags().Changed(PreserveInfoFlag) && cmd.Flags().Changed(PreserveSMBInfoFlag) || cmd.Flags().Changed(PreserveInfoFlag) {
 				// we give precedence to raw.preserveInfo flag value if both flags are set
@@ -841,6 +843,11 @@ func init() {
 				raw.preserveInfo = preserveInfoDefaultVal
 			}
 
+			// preservePermissions
+			// TODO : Double check this logic. In the flag processing logic, we used to set a temporary variable isUserPersistingPermissions and that was a simple or of the deprecated and new flag.
+			if !raw.isNFSCopy {
+				raw.preservePermissions = raw.preservePermissions || raw.preserveSMBPermissions
+			}
 			if raw.isNFSCopy && ((raw.preserveSMBInfo && runtime.GOOS == "linux") || raw.preserveSMBPermissions) {
 				glcm.Error(InvalidFlagsForNFSMsg)
 			}
