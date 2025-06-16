@@ -31,11 +31,14 @@ type CustomSyncHandlerFunc func(cca *cookedSyncCmdArgs, enumerator *syncEnumerat
 type CustomCounterIncrementer func(entry fs.DirEntry, t *localTraverser) error
 
 var (
-	UseSyncOrchestrator                          = false
-	CustomSyncHandler   CustomSyncHandlerFunc    = nil
-	counterIncrementer  CustomCounterIncrementer = nil
+	UseSyncOrchestrator                       = false
+	CustomSyncHandler   CustomSyncHandlerFunc = nil
 )
 
 func GetCustomSyncHandlerInfo() string {
 	return "Sync Handler: Default"
+}
+
+func IsExpectedErrorForTargetDuringSync(err error) bool {
+	return false
 }

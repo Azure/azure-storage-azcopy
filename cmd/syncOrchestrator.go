@@ -134,7 +134,7 @@ func (e SyncOrchErrorInfo) IsSource() bool {
 // END - Implementing methods defined in TraverserErrorItemInfo
 // /////////////////////////////////////////////////////////////////////////
 
-func isExpectedErrorForTarget(err error) bool {
+func IsExpectedErrorForTargetDuringSync(err error) bool {
 	isExpectedError := false
 	for _, expectedErr := range expectedErrors {
 		if strings.Contains(err.Error(), expectedErr) {
@@ -552,7 +552,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		err = st.Traverse(noPreProccessor, stra.customComparator, enumerator.filters)
 		if err != nil {
 			// Only report unexpected errors (404s are normal for new files)
-			if !isExpectedErrorForTarget(err) {
+			if !IsExpectedErrorForTargetDuringSync(err) {
 				errMsg = fmt.Sprintf("Secondary traversal failed for dir %s = %s\n", st_src.Value, err)
 				WarnStdoutAndScanningLog(errMsg)
 				writeSyncErrToChannel(stt.errorChannel, SyncOrchErrorInfo{

@@ -371,6 +371,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 	cTransformed := parallel.Transform(workerContext, cCrawled, convertToStoredObject, parallelism)
 
+	notFoundErrorCount := 0
 	for x := range cTransformed {
 		item, workerError := x.Item()
 		if workerError != nil {
@@ -378,9 +379,20 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			if item != nil {
 				relativePath = item.(StoredObject).relativePath
 			}
-			glcm.Info("Failed to scan directory/file " + relativePath + ". Logging errors in scanning logs.")
+
+			if !UseSyncOrchestrator {
+				// If we are not using the sync orchestrator, we log the error to the scanning log
+				// As sync orchestrator is not recursive, we get many errors in the scanning log and terminal.
+				glcm.Info("Failed to scan directory/file " + relativePath + ". Logging errors in scanning logs.")
+			}
+
 			if azcopyScanningLogger != nil {
-				azcopyScanningLogger.Log(common.LogWarning, workerError.Error())
+				// For sync orchestrator, aggregate not found errors to reduce log noise
+				if IsExpectedErrorForTargetDuringSync(workerError) {
+					notFoundErrorCount++
+				} else {
+					azcopyScanningLogger.Log(common.LogWarning, workerError.Error())
+				}
 			}
 			continue
 		}
@@ -389,6 +401,11 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			cancelWorkers()
 			return processErr
 		}
+	}
+
+	if notFoundErrorCount > 0 && UseSyncOrchestrator {
+		// If we are using the sync orchestrator, we log the not found errors as a single error
+		azcopyScanningLogger.Log(common.LogWarning, fmt.Sprintf("Encountered %d 'not found' errors while scanning the file share. This is expected during a sync run.", notFoundErrorCount))
 	}
 
 	cancelWorkers()
