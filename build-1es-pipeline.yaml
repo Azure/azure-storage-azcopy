@@ -920,6 +920,7 @@ extends:
 
                   - script: |
                       mv azcopy_linux_amd64 azcopy
+                      # (~) to be replaced by (-) if azcopy version contains a tilde as this is not supported in docker image tags
                       azcopy_docker_version=$(echo $(azcopy_version) | sed 's/~/-/')
                       echo "##vso[task.setvariable variable=azcopy_docker_version]$azcopy_docker_version"
                     displayName: 'Setup AzCopy in expected location'
@@ -983,6 +984,7 @@ extends:
 
                   - script: |
                       mv azcopy_linux_arm64 azcopy
+                      # (~) to be replaced by (-) if azcopy version contains a tilde as this is not supported in docker image tags
                       azcopy_docker_version=$(echo $(azcopy_version) | sed 's/~/-/')
                       echo "##vso[task.setvariable variable=azcopy_docker_version]$azcopy_docker_version"
                     displayName: 'Setup AzCopy in expected location'
@@ -1017,6 +1019,7 @@ extends:
 
                   - script: |
                       echo "v$(azcopy_version)"
+                      # (~) to be replaced by (-) if azcopy version contains a tilde as this is not supported in github tags
                       azcopy_github_tag=$(echo $(azcopy_version) | sed 's/~/-/')
                       echo "##vso[task.setvariable variable=azcopy_github_tag]$azcopy_github_tag"
                     displayName: 'AzCopy Tag Name'
