@@ -841,6 +841,10 @@ func init() {
 				raw.preserveInfo = preserveInfoDefaultVal
 			}
 
+			if raw.isNFSCopy && ((raw.preserveSMBInfo && runtime.GOOS == "linux") || raw.preserveSMBPermissions) {
+				glcm.Error(InvalidFlagsForNFSMsg)
+			}
+
 			cooked, err := raw.cook()
 			if err != nil {
 				glcm.Error("error parsing the input given by the user. Failed with error " + err.Error() + getErrorCodeUrl(err))

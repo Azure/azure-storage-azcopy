@@ -21,7 +21,6 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"runtime"
 
@@ -134,33 +133,33 @@ func performNFSSpecificValidation(fromTo common.FromTo,
 	preserveSMBInfo,
 	preserveSMBPermissions bool) (isNFSCopyVal bool, preserveInfoVal bool, preservePermissionsVal common.PreservePermissionsOption, err error) {
 
-	if (preserveSMBInfo && runtime.GOOS == "linux") || preserveSMBPermissions {
-		err = errors.New(InvalidFlagsForNFSMsg)
-		return
-	}
-	isNFSCopyVal = isNFSCopy
-	preserveInfoVal = preserveInfo && areBothLocationsNFSAware(fromTo)
-	if err = validatePreserveNFSPropertyOption(preserveInfoVal,
-		fromTo,
-		PreserveInfoFlag); err != nil {
-		return
-	}
+	//if (preserveSMBInfo && runtime.GOOS == "linux") || preserveSMBPermissions {
+	//	err = errors.New(InvalidFlagsForNFSMsg)
+	//	return
+	//} moved to flag processing
+	//isNFSCopyVal = isNFSCopy
+	//preserveInfoVal = preserveInfo && areBothLocationsNFSAware(fromTo)
+	//if err = validatePreserveNFSPropertyOption(preserveInfoVal,
+	//	fromTo,
+	//	PreserveInfoFlag); err != nil {
+	//	return
+	//}
 
-	isUserPersistingPermissions := preservePermissions
-	if preserveInfoVal && !isUserPersistingPermissions {
-		glcm.Info(PreserveNFSPermissionsDisabledMsg)
-	}
-	if err = validatePreserveNFSPropertyOption(isUserPersistingPermissions,
-		fromTo,
-		PreservePermissionsFlag); err != nil {
-		return
-	}
-	//TBD: We will be preserving ACLs and ownership info in case of NFS. (UserID,GroupID and FileMode)
-	// Using the same EPreservePermissionsOption that we have today for NFS as well
-	// Please provide the feedback if we should introduce new EPreservePermissionsOption instead.
-	preservePermissionsVal = common.NewPreservePermissionsOption(isUserPersistingPermissions,
-		true,
-		fromTo)
+	//isUserPersistingPermissions := preservePermissions
+	//if preserveInfoVal && !isUserPersistingPermissions {
+	//	glcm.Info(PreserveNFSPermissionsDisabledMsg)
+	//}
+	//if err = validatePreserveNFSPropertyOption(isUserPersistingPermissions,
+	//	fromTo,
+	//	PreservePermissionsFlag); err != nil {
+	//	return
+	//}
+	////TBD: We will be preserving ACLs and ownership info in case of NFS. (UserID,GroupID and FileMode)
+	//// Using the same EPreservePermissionsOption that we have today for NFS as well
+	//// Please provide the feedback if we should introduce new EPreservePermissionsOption instead.
+	//preservePermissionsVal = common.NewPreservePermissionsOption(isUserPersistingPermissions,
+	//	true,
+	//	fromTo)
 	return
 }
 
@@ -185,33 +184,33 @@ func performSMBSpecificValidation(fromTo common.FromTo,
 	preserveOwner,
 	preserveSMBPermissions bool) (isNFSCopyVal bool, preserveInfoVal, preservePOSIXPropertiesVal bool, preservePermissionsVal common.PreservePermissionsOption, err error) {
 
-	preserveInfoVal = preserveInfo && areBothLocationsSMBAware(fromTo)
-	if err = validatePreserveSMBPropertyOption(preserveInfoVal,
-		fromTo,
-		PreserveInfoFlag); err != nil {
-		return
-	}
+	//preserveInfoVal = preserveInfo && areBothLocationsSMBAware(fromTo)
+	//if err = validatePreserveSMBPropertyOption(preserveInfoVal,
+	//	fromTo,
+	//	PreserveInfoFlag); err != nil {
+	//	return
+	//}
 
-	preservePOSIXPropertiesVal = preservePOSIXProperties
-	if preservePOSIXPropertiesVal && !areBothLocationsPOSIXAware(fromTo) {
-		err = errors.New(PreservePOSIXPropertiesIncompatibilityMsg)
-		return
-	}
+	//preservePOSIXPropertiesVal = preservePOSIXProperties
+	//if preservePOSIXPropertiesVal && !areBothLocationsPOSIXAware(fromTo) {
+	//	err = errors.New(PreservePOSIXPropertiesIncompatibilityMsg)
+	//	return
+	//}
 
-	isUserPersistingPermissions := preservePermissions || preserveSMBPermissions
-	if preserveInfoVal && !isUserPersistingPermissions {
-		glcm.Info(PreservePermissionsDisabledMsg)
-	}
+	//isUserPersistingPermissions := preservePermissions || preserveSMBPermissions
+	//if preserveInfoVal && !isUserPersistingPermissions {
+	//	glcm.Info(PreservePermissionsDisabledMsg)
+	//}
 
-	if err = validatePreserveSMBPropertyOption(isUserPersistingPermissions,
-		fromTo,
-		PreservePermissionsFlag); err != nil {
-		return
-	}
-
-	preservePermissionsVal = common.NewPreservePermissionsOption(isUserPersistingPermissions,
-		preserveOwner,
-		fromTo)
+	//if err = validatePreserveSMBPropertyOption(isUserPersistingPermissions,
+	//	fromTo,
+	//	PreservePermissionsFlag); err != nil {
+	//	return
+	//}
+	//
+	//preservePermissionsVal = common.NewPreservePermissionsOption(isUserPersistingPermissions,
+	//	preserveOwner,
+	//	fromTo)
 	return
 }
 
