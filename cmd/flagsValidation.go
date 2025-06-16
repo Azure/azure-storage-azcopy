@@ -291,9 +291,9 @@ func validateShareProtocolCompatibility(
 		return err
 	}
 
-	if protocol == "SMB" && isNFSCopy {
-		return fmt.Errorf("The %s share has SMB protocol enabled. To copy %s a SMB share, do not use the --nfs flag", direction, direction)
-	}
+	// if protocol == "SMB" && isNFSCopy {
+	// 	return fmt.Errorf("The %s share has SMB protocol enabled. To copy %s a SMB share, do not use the --nfs flag", direction, direction)
+	// }
 
 	if protocol == "NFS" && !isNFSCopy {
 		return fmt.Errorf("The %s share has NFS protocol enabled. To copy %s a NFS share, please provide the --nfs flag", direction, direction)
