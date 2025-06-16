@@ -81,11 +81,16 @@ func GetCustomSyncHandlerInfo() string {
 // SyncTraverser manages the traversal of a single directory during sync operations.
 // It processes files and subdirectories, storing them in the indexer and scheduling transfers.
 type SyncTraverser struct {
-	enumerator     *syncEnumerator // Main sync enumerator that coordinates the overall sync operation
-	comparator     objectProcessor // Processes objects from the destination for comparison
-	dir            string          // Current directory being processed (relative path)
-	sub_dirs_paths []string        // Subdirectories discovered during traversal (queued for processing)
-	children_paths []string        // All child paths (files and directories) found in current directory
+	enumerator *syncEnumerator // Main sync enumerator that coordinates the overall sync operation
+	comparator objectProcessor // Processes objects from the destination for comparison
+	dir        string          // Current directory being processed (relative path)
+
+	// There is a risk here to use pointers for sub directories because by the time we dereference
+	// this storedObject pointer and enqueue the directory, it is removed from the indexer by
+	// either comparator or finalize. Using paths here just to be safe.
+	sub_dirs_paths []string // Subdirectories discovered during traversal (queued for processing)
+
+	children []*StoredObject // Pointers to all child objects in indexer
 }
 
 // SyncOrchErrorInfo holds information about files and folders that failed enumeration.
@@ -158,30 +163,22 @@ func writeSyncErrToChannel(errorChannel chan TraverserErrorItemInfo, err SyncOrc
 }
 
 func getRootStoredObjectLocal(path string) (StoredObject, error) {
-	glcm.Info(fmt.Sprintf("OS Stat on source = %s \n", path))
 	fi, err := os.Stat(path)
 	if err != nil {
 		return StoredObject{}, err
-	}
-
-	var entityType common.EntityType = common.EEntityType.File()
-	if fi.IsDir() {
-		entityType = common.EEntityType.Folder()
 	}
 
 	root := newStoredObject(
 		nil,
 		fi.Name(),
 		"",
-		entityType,
+		common.EEntityType.Folder(),
 		time.Time{},
 		0,
 		noContentProps,
 		noBlobProps,
 		noMetadata,
 		"")
-
-	glcm.Info(fmt.Sprintf("Root object created: %s, Entity type: %s", root.relativePath, entityType.String()))
 
 	return root, nil
 }
@@ -207,29 +204,19 @@ func getRootStoredObjectS3(sourcePath string) (StoredObject, error) {
 		return StoredObject{}, err
 	}
 
-	var entityType common.EntityType = common.EEntityType.Folder()
-	if s3UrlParts.IsObjectSyntactically() && !s3UrlParts.IsDirectorySyntactically() && !s3UrlParts.IsBucketSyntactically() {
-		// this is not working. It does not impact negatively if a valid prefix is passed.
-		entityType = common.EEntityType.File()
-	}
-
 	var searchPrefix string = strings.Join([]string{s3UrlParts.BucketName, s3UrlParts.ObjectKey}, common.AZCOPY_PATH_SEPARATOR_STRING)
 
 	root := newStoredObject(
 		nil,
 		searchPrefix,
 		"",
-		entityType,
+		common.EEntityType.Folder(),
 		time.Time{},
 		0,
 		noContentProps,
 		noBlobProps,
 		nil,
 		s3UrlParts.BucketName)
-
-	if enableDebugLogs {
-		glcm.Info(fmt.Sprintf("S3 Root: %s, Entity type: %s", searchPrefix, entityType.String()))
-	}
 
 	return root, nil
 }
@@ -285,24 +272,35 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 	// Build full path for the object relative to current directory
 	so.relativePath = buildChildPath(st.dir, so.relativePath)
 
+	// Thread-safe storage in the indexer first
+	syncMutex.Lock()
+	err := st.enumerator.objectIndexer.store(so)
+	if err != nil {
+		syncMutex.Unlock()
+		return err
+	}
+
+	// Get pointer to the stored object from indexer
+	storedObjectPtr, exists := st.enumerator.objectIndexer.indexMap[so.relativePath]
+	if !exists {
+		syncMutex.Unlock()
+		return fmt.Errorf("failed to retrieve stored object for path: %s", so.relativePath)
+	}
+
 	if so.entityType == common.EEntityType.Folder() {
 		st.sub_dirs_paths = append(st.sub_dirs_paths, so.relativePath)
 	}
 
 	// Track all children for transfer scheduling
-	st.children_paths = append(st.children_paths, so.relativePath)
-
-	// Thread-safe storage in the indexer
-	syncMutex.Lock()
-	err := st.enumerator.objectIndexer.store(so)
+	st.children = append(st.children, &storedObjectPtr)
 
 	// Update throttling counters if enabled
-	if EnableThrottling && err == nil {
-		TotalFilesInIndexer.Add(1) // Increment the count of files in the indexer
+	if enableThrottling && err == nil {
+		totalFilesInIndexer.Add(1) // Increment the count of files in the indexer
 	}
 	syncMutex.Unlock()
 
-	return err
+	return nil
 }
 
 // customComparator processes StoredObjects from the destination location during traversal.
@@ -325,32 +323,35 @@ func (st *SyncTraverser) customComparator(so StoredObject) error {
 func (st *SyncTraverser) Finalize() error {
 	// Update final file count for throttling
 	syncMutex.Lock()
-	if EnableThrottling {
-		TotalFilesInIndexer.Store(int64(len(st.enumerator.objectIndexer.indexMap))) // Set accurate count
+	if enableThrottling {
+		totalFilesInIndexer.Store(int64(len(st.enumerator.objectIndexer.indexMap))) // Set accurate count
 	}
 	syncMutex.Unlock()
 
 	// Schedule transfers for all children discovered in this directory
-	for _, child := range st.children_paths {
-		syncMutex.Lock()
-		so, present := st.enumerator.objectIndexer.indexMap[child]
-		syncMutex.Unlock()
-
-		if present {
-			// Schedule the file/directory for transfer
-			err := st.enumerator.ctp.scheduleCopyTransfer(so)
-			if err != nil {
-				return err
-			}
-
-			// Remove from indexer to free memory
+	for _, childPtr := range st.children {
+		if childPtr != nil {
 			syncMutex.Lock()
-			delete(st.enumerator.objectIndexer.indexMap, so.relativePath)
-
-			if EnableThrottling {
-				TotalFilesInIndexer.Add(-1) // Decrement the count after processing
-			}
+			// Get pointer to the stored object from indexer
+			storedObjectPtr, exists := st.enumerator.objectIndexer.indexMap[childPtr.relativePath]
 			syncMutex.Unlock()
+
+			if exists {
+				// Schedule the file/directory for transfer using the pointer
+				err := st.enumerator.ctp.scheduleCopyTransfer(storedObjectPtr)
+				if err != nil {
+					return err
+				}
+
+				// Remove from indexer to free memory
+				syncMutex.Lock()
+				delete(st.enumerator.objectIndexer.indexMap, childPtr.relativePath)
+
+				if enableThrottling {
+					totalFilesInIndexer.Add(-1) // Decrement the count after processing
+				}
+				syncMutex.Unlock()
+			}
 		}
 	}
 
@@ -363,8 +364,8 @@ func newSyncTraverser(enumerator *syncEnumerator, dir string, comparator objectP
 	return &SyncTraverser{
 		enumerator:     enumerator,
 		dir:            dir,
-		sub_dirs_paths: make([]string, 0, 1024),
-		children_paths: make([]string, 0, 1024),
+		sub_dirs_paths: make([]string, 0, directorySizeBuffer),
+		children:       make([]*StoredObject, 0, directorySizeBuffer),
 		comparator:     comparator,
 	}
 }
@@ -372,14 +373,16 @@ func newSyncTraverser(enumerator *syncEnumerator, dir string, comparator objectP
 // syncOrchestratorHandler is the main entry point for the sync orchestrator.
 // It initializes profiling, sets up resource limits, and delegates to runSyncOrchestrator.
 func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator, ctx context.Context) error {
-	// Start the profiling server for performance monitoring
-	go func() {
-		WarnStdoutAndScanningLog("Listening to port 6060..\n")
-		http.ListenAndServe("localhost:6060", nil)
-	}()
+	if startGoProfiling {
+		// Start the profiling server for performance monitoring
+		go func() {
+			WarnStdoutAndScanningLog("Listening to port 6060..\n")
+			http.ListenAndServe("localhost:6060", nil)
+		}()
+	}
 
 	// Initialize resource limits based on source/destination types
-	IntilizeLimits(cca.fromTo)
+	initializeLimits(cca.fromTo)
 	return cca.runSyncOrchestrator(enumerator, ctx)
 }
 
@@ -398,14 +401,14 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 	defer cancel()                             // Ensure cancellation happens on exit
 
 	// Initialize semaphore for directory concurrency control
-	if EnableThrottling {
-		dirSemaphore = NewDirSemaphore()
+	if enableThrottling {
+		dirSemaphore = NewDirSemaphore(ctx)
 		defer dirSemaphore.Close()
 	}
 
 	// Start dedicated semaphore monitor for resource tracking
 	semaphoreMonitorWg := sync.WaitGroup{}
-	if EnableThrottling {
+	if enableThrottling {
 		semaphoreMonitorWg.Add(1)
 		go func() {
 			defer semaphoreMonitorWg.Done()
@@ -425,10 +428,10 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		defer crawlWg.Done() // Signal this task is done when it finishes
 
 		// Track that this directory entered the processing queue
-		defer TotalDirectoriesProcessed.Add(1)
+		defer totalDirectoriesProcessed.Add(1)
 
 		// Acquire semaphore slot to limit concurrent directory processing
-		if EnableThrottling {
+		if enableThrottling {
 			dirSemaphore.AcquireSlot(mainCtx)
 			defer dirSemaphore.ReleaseSlot()
 		}
@@ -591,6 +594,16 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		return nil
 	}
 
+	// verify that the traversers are targeting the same type of resources
+	// Sync orchestrator supports only directory to directory sync. The similarity has
+	// already been checked in InitEnumerator. Here we check if it is directory or not.
+	srcIsDir, _ := enumerator.primaryTraverser.IsDirectory(true)
+
+	if !srcIsDir {
+		WarnStdoutAndScanningLog(fmt.Sprintf("Source is not recognized as a directory. Err: %s", err))
+		return err
+	}
+
 	// Get the root object to start synchronization
 	root, err := GetRootStoredObject(cca.Source.Value, cca.fromTo)
 	if err != nil {
@@ -601,7 +614,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 	crawlWg.Add(1) // Add the root directory to the WaitGroup
 
 	// Start parallel crawling with specified concurrency
-	parallel.Crawl(mainCtx, root, syncOneDir, int(CrawlParallelism))
+	parallel.Crawl(mainCtx, root, syncOneDir, int(crawlParallelism))
 
 	if enableDebugLogs {
 		WarnStdoutAndScanningLog("Crawl completed. Waiting for all directory processors to finish...")
@@ -621,7 +634,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 	WarnStdoutAndScanningLog("All operations complete. Shutting down monitors...")
 	cancel() // Signal all goroutines using mainCtx to stop
 
-	if EnableThrottling {
+	if enableThrottling {
 		semaphoreMonitorWg.Wait()
 	}
 	WarnStdoutAndScanningLog(fmt.Sprintf("Orchestrator exiting. Execution time: %v.", time.Since(startTime)))
