@@ -107,7 +107,7 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 		// must be running as root.
 		if !cooked.preservePermissions.IsTruthy() && cooked.FromTo == common.EFromTo.FileLocal() {
 			if err := common.EnsureRunningAsRoot(); err != nil {
-				return fmt.Errorf("copying from Azure File NFS to local Linux requires root privileges when not preserving file permissions")
+				return fmt.Errorf("failed to copy source to destination without preserving permissions: operation not permitted. Please retry with root privileges or use the default option (--preserve-permissions=true)")
 			}
 		}
 
