@@ -90,7 +90,7 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 		}
 	}
 
-	// NFS/SMB part
+	// NFS/SMB validation
 	if cooked.isNFSCopy {
 		// check for unsupported NFS behavior
 		if isUnsupported, err := isUnsupportedPlatformForNFS(cooked.FromTo); isUnsupported {
