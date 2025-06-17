@@ -1,6 +1,9 @@
 package e2etest
 
 import (
+	"io"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
@@ -8,8 +11,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"io"
-	"time"
 )
 
 type GetURIOptions struct {
@@ -276,9 +277,10 @@ type ObjectProperties struct {
 	Metadata         common.Metadata
 	LastModifiedTime *time.Time
 
-	BlobProperties   BlobProperties
-	BlobFSProperties BlobFSProperties
-	FileProperties   FileProperties
+	BlobProperties    BlobProperties
+	BlobFSProperties  BlobFSProperties
+	FileProperties    FileProperties
+	SymlinkedFileName string
 }
 
 type BlobProperties struct {

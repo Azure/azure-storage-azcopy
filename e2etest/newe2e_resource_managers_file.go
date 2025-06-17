@@ -3,6 +3,11 @@ package e2etest
 import (
 	"bytes"
 	"fmt"
+	"io"
+	"path"
+	"runtime"
+	"strings"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
@@ -13,10 +18,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"io"
-	"path"
-	"runtime"
-	"strings"
 )
 
 // check that everything complies with interfaces
@@ -617,6 +618,33 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 				LastModifiedTime:  resp.LastModified,
 			},
 		}
+
+	case common.EEntityType.Symlink():
+		resp, err := f.getFileClient().GetProperties(ctx, &file.GetPropertiesOptions{})
+		a.NoError("Get file properties", err)
+
+		out = ObjectProperties{
+			EntityType: f.entityType,
+			HTTPHeaders: contentHeaders{
+				cacheControl:       resp.CacheControl,
+				contentDisposition: resp.ContentDisposition,
+				contentEncoding:    resp.ContentEncoding,
+				contentLanguage:    resp.ContentLanguage,
+				contentType:        resp.ContentType,
+				contentMD5:         resp.ContentMD5,
+			},
+			Metadata:         resp.Metadata,
+			LastModifiedTime: resp.LastModified,
+			/*FileNFSProperties: &FileNFSProperties{
+				FileCreationTime:  resp.FileCreationTime,
+				FileLastWriteTime: resp.FileLastWriteTime,
+			},
+			FileNFSPermissions: &FileNFSPermissions{
+				Owner:    resp.Owner,
+				Group:    resp.Group,
+				FileMode: resp.FileMode,
+			},*/
+		}
 	default:
 		a.Error("EntityType must be Folder or File. Currently: " + f.entityType.String())
 	}
@@ -698,6 +726,7 @@ func (f *FileObjectResourceManager) SetObjectProperties(a Asserter, props Object
 		_, err = f.getDirClient().SetMetadata(ctx, &directory.SetMetadataOptions{Metadata: props.Metadata})
 		a.NoError("Set folder metadata", err)
 	}
+
 }
 
 func (f *FileObjectResourceManager) getFileClient() *file.Client {

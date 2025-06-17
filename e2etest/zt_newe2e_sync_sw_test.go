@@ -1077,3 +1077,198 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 		},
 	}, false)
 }
+
+/*
+	func (s *SWSyncTestSuite) Scenario_Symlink(svm *ScenarioVariationManager) {
+		azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbSync}) // Calculate verb early to create the destination object early
+
+		srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
+		rootDir := "dir_file_copy_test_" + uuid.NewString()
+
+		dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})), ResourceDefinitionContainer{})
+
+		dirsToCreate := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test"}
+
+		// Create destination directories
+		srcObjs := make(ObjectResourceMappingFlat)
+		for _, dir := range dirsToCreate {
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(dir), ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}}
+			if dstContainer.Location() != common.ELocation.Blob() {
+				srcObjs[dir] = obj
+			}
+			for i := range 5 {
+				name := dir + "/test" + strconv.Itoa(i) + ".txt"
+				obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
+				srcObjs[name] = obj
+			}
+		}
+
+		for _, obj := range srcObjs {
+			if obj.EntityType != common.EEntityType.Folder() {
+				CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+			}
+		}
+
+		svm.InsertVariationSeparator("_DeleteDestination_")
+		deleteDestination := ResolveVariation(svm, []bool{true, false}) // Add variation for DeleteDestination flag
+		sasOpts := GenericAccountSignatureValues{}
+
+		RunAzCopy(
+			svm,
+			AzCopyCommand{
+				// Sync is not included at this moment, because sync requires
+				Verb: azCopyVerb,
+				Targets: []ResourceManager{
+					TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+						SASTokenOptions: sasOpts,
+					}),
+					TryApplySpecificAuthType(dstContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+						SASTokenOptions: sasOpts,
+					}),
+				},
+				Flags: SyncFlags{
+					CopySyncCommonFlags: CopySyncCommonFlags{
+						Recursive:             pointerTo(false),
+						IncludeDirectoryStubs: pointerTo(true),
+					},
+					DeleteDestination: pointerTo(true),
+				},
+			})
+
+		ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+			Objects: srcObjs,
+		}, true)
+	}
+*/
+func (s *SWSyncTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariationManager) {
+
+	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy}) // Calculate verb early to create the destination object early
+	//preserveProperties := ResolveVariation(svm, []bool{true, false})
+	preservePermissions := ResolveVariation(svm, []bool{true, false})
+	srcLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local()})
+
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()}), GetResourceOptions{
+		PreferredAccount: common.Iff(srcLoc == common.ELocation.BlobFS(), pointerTo(PrimaryHNSAcct), nil),
+	}), ResourceDefinitionContainer{
+		Properties: ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				EnabledProtocols: pointerTo("NFS"),
+			},
+		},
+	})
+
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
+
+	rootDir := "dir_file_copy_test_" + uuid.NewString()
+
+	var dst ResourceManager
+	if azCopyVerb == AzCopyVerbSync {
+		dstObj := dstContainer.GetObject(svm, rootDir+"/test1.txt", common.EEntityType.File())
+		dstObj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
+		if !svm.Dryrun() {
+			// Make sure the LMT is in the past
+			time.Sleep(time.Second * 5)
+		}
+		dst = dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+	} else {
+		dst = dstContainer
+	}
+
+	//folderProperties, fileProperties, fileOrFolderPermissions := getPropertiesAndPermissions(svm, preserveProperties, preservePermissions)
+
+	srcObjs := make(ObjectResourceMappingFlat)
+	srcObjRes := make(map[string]ObjectResourceManager)
+
+	obj := ResourceDefinitionObject{
+		ObjectName: pointerTo(rootDir),
+		ObjectProperties: ObjectProperties{
+			EntityType: common.EEntityType.Folder(),
+			//		FileNFSProperties:  folderProperties,
+			//		FileNFSPermissions: fileOrFolderPermissions,
+		},
+	}
+	srcObjRes[rootDir] = CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+	srcObjs[rootDir] = obj
+
+	for i := range 2 {
+		name := rootDir + "/test" + strconv.Itoa(i) + ".txt"
+		obj := ResourceDefinitionObject{
+			ObjectName: pointerTo(name),
+			Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
+			ObjectProperties: ObjectProperties{
+				EntityType: common.EEntityType.File(),
+				//			FileNFSProperties:  fileProperties,
+				//			FileNFSPermissions: fileOrFolderPermissions,
+			}}
+		srcObjRes[name] = CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+		srcObjs[name] = obj
+	}
+
+	// create one symlink
+	targetFileName := rootDir + "/starget.txt"
+	obj = ResourceDefinitionObject{
+		ObjectName: pointerTo(targetFileName),
+		ObjectProperties: ObjectProperties{
+			EntityType: common.EEntityType.File(),
+			//		FileNFSProperties:  fileProperties,
+			//		FileNFSPermissions: fileOrFolderPermissions,
+		},
+	}
+	srcObjRes[targetFileName] = CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+	srcObjs[targetFileName] = obj
+
+	symLinkedFileName := rootDir + "/symlinked.txt"
+	obj = ResourceDefinitionObject{
+		ObjectName: pointerTo(symLinkedFileName),
+		ObjectProperties: ObjectProperties{
+			EntityType: common.EEntityType.Symlink(),
+			//		FileNFSProperties:  fileProperties,
+			//		FileNFSPermissions: fileOrFolderPermissions,
+			SymlinkedFileName: targetFileName,
+		}}
+	srcObjRes[symLinkedFileName] = CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+	srcObjs[symLinkedFileName] = obj
+
+	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+
+	sasOpts := GenericAccountSignatureValues{}
+
+	RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: azCopyVerb,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcDirObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+				TryApplySpecificAuthType(dst, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive: pointerTo(true),
+					// --preserve-info flag will be true by default in case of linux
+					//PreserveInfo:        pointerTo(preserveProperties),
+					PreservePermissions: pointerTo(preservePermissions),
+				},
+			},
+		})
+	//As we cannot set creationTime in linux we will fetch the properties from local and set it to src object properties
+	/*for objName := range srcObjs {
+		obj := srcObjs[objName]
+		objProp := srcObjRes[objName].GetProperties(svm)
+		if obj.ObjectProperties.FileNFSProperties != nil {
+			obj.ObjectProperties.FileNFSProperties.FileCreationTime = objProp.FileProperties.FileCreationTime
+		}
+	}*/
+	// Dont validate the root directory in case of sync
+	if azCopyVerb == AzCopyVerbSync {
+		delete(srcObjs, rootDir)
+	}
+
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: srcObjs,
+	}, true)
+
+}
