@@ -100,6 +100,11 @@ type rawSyncCmdArgs struct {
 
 	// when specified, AzCopy deletes the destination blob that has uncommitted blocks, not just the uncommitted blocks
 	deleteDestinationFileIfNecessary bool
+	// Opt-in flag to state if the copy is nfs copy
+	isNFSCopy bool
+	// Opt-in flag to persist additional properties to Azure Files
+	preserveInfo bool
+	hardlinks    string
 }
 
 // it is assume that the given url has the SAS stripped, and safe to print
@@ -174,7 +179,7 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	switch cooked.fromTo {
 	case common.EFromTo.Unknown():
-		return cooked, fmt.Errorf("Unable to infer the source '%s' / destination '%s'. ", raw.src, raw.dst)
+		return cooked, fmt.Errorf("unable to infer the source '%s' / destination '%s'. ", raw.src, raw.dst)
 	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile(), common.EFromTo.LocalBlobFS():
 		cooked.destination, err = SplitResourceString(raw.dst, cooked.fromTo.To())
 		common.PanicIfErr(err)
@@ -259,29 +264,51 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked.includeFileAttributes = parsePatterns(raw.includeFileAttributes)
 	cooked.excludeFileAttributes = parsePatterns(raw.excludeFileAttributes)
 
-	cooked.preserveSMBInfo = raw.preserveSMBInfo && areBothLocationsSMBAware(cooked.fromTo)
+	if raw.isNFSCopy {
+		SetNFSFlag(raw.isNFSCopy)
+		// check for unsupported NFS behavior
+		if isUnsupported, err := isUnsupportedPlatformForNFS(cooked.fromTo); isUnsupported {
+			return cooked, err
+		}
 
-	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.fromTo, nil, "preserve-smb-info"); err != nil {
-		return cooked, err
-	}
+		// If we are not preserving original file permissions (raw.preservePermissions == false),
+		// and the operation is a file copy from azure file NFS to local linux (FromTo == FileLocal),
+		// and the current OS is Linux, then we require root privileges to proceed.
+		//
+		// This is because modifying file ownership or permissions on Linux
+		// typically requires elevated privileges. To safely handle permission
+		// changes during the local file operation, we enforce that the process
+		// must be running as root.
+		if !raw.preservePermissions && cooked.fromTo == common.EFromTo.FileLocal() {
+			if err := common.EnsureRunningAsRoot(); err != nil {
+				return cooked, fmt.Errorf("failed to copy source to destination without preserving permissions: operation not permitted. Please retry with root privileges or use the default option (--preserve-permissions=true)")
+			}
+		}
 
-	isUserPersistingPermissions := raw.preserveSMBPermissions || raw.preservePermissions
-	if cooked.preserveSMBInfo && !isUserPersistingPermissions {
-		glcm.Info("Please note: the preserve-permissions flag is set to false, thus AzCopy will not copy SMB ACLs between the source and destination. To learn more: https://aka.ms/AzCopyandAzureFiles.")
-	}
-
-	if err = validatePreserveSMBPropertyOption(isUserPersistingPermissions, cooked.fromTo, nil, PreservePermissionsFlag); err != nil {
-		return cooked, err
-	}
-	// TODO: the check on raw.preservePermissions on the next line can be removed once we have full support for these properties in sync
-	// if err = validatePreserveOwner(raw.preserveOwner, cooked.fromTo); raw.preservePermissions && err != nil {
-	//	return cooked, err
-	// }
-	cooked.preservePermissions = common.NewPreservePermissionsOption(isUserPersistingPermissions, raw.preserveOwner, cooked.fromTo)
-
-	cooked.preservePOSIXProperties = raw.preservePOSIXProperties
-	if cooked.preservePOSIXProperties && !areBothLocationsPOSIXAware(cooked.fromTo) {
-		return cooked, fmt.Errorf("in order to use --preserve-posix-properties, both the source and destination must be POSIX-aware (valid pairings are Linux->Blob, Blob->Linux, Blob->Blob)")
+		cooked.isNFSCopy, cooked.preserveInfo, cooked.preservePermissions, err = performNFSSpecificValidation(cooked.fromTo,
+			raw.isNFSCopy, raw.preserveInfo, raw.preservePermissions, raw.preserveSMBInfo, raw.preserveSMBPermissions)
+		if err != nil {
+			return cooked, err
+		}
+		if err = validateSymlinkFlag(raw.followSymlinks, raw.preserveSymlinks); err != nil {
+			return cooked, err
+		}
+		if err = cooked.hardlinks.Parse(raw.hardlinks); err != nil {
+			return cooked, err
+		}
+		if err = validateHardlinksFlag(cooked.hardlinks, cooked.fromTo, cooked.isNFSCopy); err != nil {
+			return cooked, err
+		}
+	} else {
+		cooked.isNFSCopy, cooked.preserveInfo, cooked.preservePOSIXProperties, cooked.preservePermissions, err = performSMBSpecificValidation(cooked.fromTo,
+			raw.isNFSCopy, raw.preserveInfo, raw.preservePOSIXProperties, raw.preservePermissions, raw.preserveOwner, raw.preserveSMBPermissions)
+		if err != nil {
+			return cooked, err
+		}
+		// TODO: the check on raw.preservePermissions on the next line can be removed once we have full support for these properties in sync
+		// if err = validatePreserveOwner(raw.preserveOwner, cooked.fromTo); raw.preservePermissions && err != nil {
+		//	return cooked, err
+		// }
 	}
 
 	if err = cooked.compareHash.Parse(raw.compareHash); err != nil {
@@ -415,7 +442,7 @@ type cookedSyncCmdArgs struct {
 	// options
 	compareHash             common.SyncHashType
 	preservePermissions     common.PreservePermissionsOption
-	preserveSMBInfo         bool
+	preserveInfo            bool
 	preservePOSIXProperties bool
 	putMd5                  bool
 	md5ValidationOption     common.HashValidationOption
@@ -464,6 +491,10 @@ type cookedSyncCmdArgs struct {
 	trailingDot common.TrailingDotOption
 
 	deleteDestinationFileIfNecessary bool
+	isNFSCopy                        bool
+	hardlinks                        common.HardlinkHandlingType
+	atomicSkippedSymlinkCount        uint32
+	atomicSkippedSpecialFileCount    uint32
 }
 
 func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
@@ -638,6 +669,9 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 			exitCode = common.EExitCode.Error()
 		}
 
+		summary.SkippedSymlinkCount = atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)
+		summary.SkippedSpecialFileCount = atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount)
+
 		lcm.Exit(func(format common.OutputFormat) string {
 			if format == common.EOutputFormat.Json() {
 				return cca.getJsonOfSyncJobSummary(summary)
@@ -656,6 +690,9 @@ Total Number of Copy Transfers: %v
 Number of Copy Transfers Completed: %v
 Number of Copy Transfers Failed: %v
 Number of Deletions at Destination: %v
+Number of Symbolic Links Skipped: %v
+Number of Special Files Skipped: %v
+Number of Hardlinks Converted: %v
 Total Number of Bytes Transferred: %v
 Total Number of Bytes Enumerated: %v
 Final Job Status: %v%s%s
@@ -670,6 +707,9 @@ Final Job Status: %v%s%s
 				summary.TransfersCompleted,
 				summary.TransfersFailed,
 				cca.atomicDeletionCount,
+				summary.SkippedSymlinkCount,
+				summary.SkippedSpecialFileCount,
+				summary.HardlinksConvertedCount,
 				summary.TotalBytesTransferred,
 				summary.TotalBytesEnumerated,
 				summary.JobStatus,
@@ -792,6 +832,15 @@ func init() {
 				glcm.EnableCancelFromStdIn()
 			}
 
+			preserveInfoDefaultVal := GetPreserveInfoFlagDefault(cmd, raw.isNFSCopy)
+			if cmd.Flags().Changed(PreserveInfoFlag) && cmd.Flags().Changed(PreserveSMBInfoFlag) || cmd.Flags().Changed(PreserveInfoFlag) {
+				// we give precedence to raw.preserveInfo flag value if both flags are set
+			} else if cmd.Flags().Changed(PreserveSMBInfoFlag) {
+				raw.preserveInfo = raw.preserveSMBInfo
+			} else {
+				raw.preserveInfo = preserveInfoDefaultVal
+			}
+
 			cooked, err := raw.cook()
 			if err != nil {
 				glcm.Error("error parsing the input given by the user. Failed with error " + err.Error() + getErrorCodeUrl(err))
@@ -822,11 +871,17 @@ func init() {
 		"\n Preserves SMB ACLs between aware resources (Azure Files). "+
 		"\n This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
 	syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", (runtime.GOOS == "windows"), "Preserves SMB property info (last write time, creation time, attribute bits)"+
-		"between SMB-aware resources (Windows and Azure Files). On windows, this flag will be set to true by default. \n If the source or destination is a "+
-		"\n volume mounted on Linux using SMB protocol, this flag will have to be explicitly set to true. \n  Only the attribute bits supported by Azure Files "+
-		"will be transferred; any others will be ignored. "+
+		" between SMB-aware resources (Windows and Azure Files). On windows, this flag will be set to true by default. \n If the source or destination is a "+
+		"\n volume mounted on Linux using SMB protocol, this flag will have to be explicitly set to true.\n  Only the attribute bits supported by Azure Files "+
+		"will be transferred; any others will be ignored. " +
 		"\n This flag applies to both files and folders, unless a file-only filter is specified "+
 		"(e.g. include-pattern). \n The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
+
+	syncCmd.PersistentFlags().BoolVar(&raw.isNFSCopy, IsNFSProtocolFlag, false, "False by default. Users must specify this flag if they intend to transfer data to or from NFS shares.")
+	//Marking this flag as hidden as we might not support it in the future
+	_ = syncCmd.PersistentFlags().MarkHidden("preserve-smb-info")
+	syncCmd.PersistentFlags().BoolVar(&raw.preserveInfo, PreserveInfoFlag, false, "Specify this flag if you want to preserve properties during the transfer operation.The previously available flag for SMB (--preserve-smb-info) is now redirected to --preserve-info flag for both SMB and NFS operations. The default value is true for Windows when copying to Azure Files SMB share and for Linux when copying to Azure Files NFS share. ")
+
 	syncCmd.PersistentFlags().BoolVar(&raw.preservePOSIXProperties, "preserve-posix-properties", false, "False by default. 'Preserves' property info gleaned from stat or statx into object metadata.")
 
 	// TODO: enable when we support local <-> File
@@ -911,9 +966,13 @@ func init() {
 
 	// Deprecate the old persist-smb-permissions flag
 	_ = syncCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
-	syncCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default. Preserves ACLs between aware resources (Windows and Azure Files, or Data Lake Storage to Data Lake Storage). For Hierarchical Namespace accounts, you will need a container SAS or OAuth token with Modify Ownership and Modify Permissions permissions. For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
+	syncCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default. Preserves ACLs between aware resources (Windows and Azure Files SMB, or Data Lake Storage to Data Lake Storage) and permissions between aware resources(Linux to Azure Files NFS). For accounts that have a hierarchical namespace, your security principal must be the owning user of the target container or it must be assigned the Storage Blob Data Owner role, scoped to the target container, storage account, parent resource group, or subscription. For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
 
 	// Deletes destination blobs with uncommitted blocks when staging block, hidden because we want to preserve default behavior
 	syncCmd.PersistentFlags().BoolVar(&raw.deleteDestinationFileIfNecessary, "delete-destination-file", false, "False by default. Deletes destination blobs, specifically blobs with uncommitted blocks when staging block.")
 	_ = syncCmd.PersistentFlags().MarkHidden("delete-destination-file")
+
+	syncCmd.PersistentFlags().StringVar(&raw.hardlinks, HardlinksFlag, "follow", "Follow by default. Preserve hardlinks for NFS resources. " +
+		"\n This flag is only applicable when the source is NFS file share or the destination is NFS file share. " +
+		"\n Available options: skip, preserve, follow (default 'follow').")
 }

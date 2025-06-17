@@ -3,11 +3,12 @@ package e2etest
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"math"
 	"os"
 	"strconv"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func init() {

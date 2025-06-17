@@ -3,9 +3,10 @@ package e2etest
 import (
 	"bytes"
 	"fmt"
+	"io"
+
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"io"
 )
 
 /*
@@ -253,11 +254,12 @@ func (m *MockContainerResourceManager) GetResourceTarget(a Asserter) string {
 }
 
 type MockObjectResourceManager struct {
-	overrideLocation common.Location // If there is no parent, e.g. this is a lone file, it needs to be overridden
-	parent           *MockContainerResourceManager
-	account          *MockAccountResourceManager
-	entityType       common.EntityType
-	path             string
+	overrideLocation   common.Location // If there is no parent, e.g. this is a lone file, it needs to be overridden
+	parent             *MockContainerResourceManager
+	account            *MockAccountResourceManager
+	entityType         common.EntityType
+	path               string
+	hardlinkedFilePath string
 }
 
 func (m *MockObjectResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
@@ -318,6 +320,10 @@ func (m *MockObjectResourceManager) ContainerName() string {
 
 func (m *MockObjectResourceManager) ObjectName() string {
 	return m.path
+}
+
+func (l *MockObjectResourceManager) HardlinkedFileName() string {
+	return l.hardlinkedFilePath
 }
 
 func (m *MockObjectResourceManager) Create(a Asserter, body ObjectContentContainer, properties ObjectProperties) {

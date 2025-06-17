@@ -24,10 +24,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -35,6 +31,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
@@ -110,7 +111,7 @@ func (s *StoredObject) isMoreRecentThan(storedObject2 StoredObject, preferSMBTim
 }
 
 func (s *StoredObject) isSingleSourceFile() bool {
-	return s.relativePath == "" && s.entityType == common.EEntityType.File()
+	return s.relativePath == "" && (s.entityType == common.EEntityType.File() || s.entityType == common.EEntityType.Hardlink())
 }
 
 func (s *StoredObject) isSourceRootFolder() bool {
@@ -123,7 +124,7 @@ func (s *StoredObject) isSourceRootFolder() bool {
 // We can't just implement this filtering in ToNewCopyTransfer, because delete transfers (from sync)
 // do not pass through that routine.  So we need to make the filtering available in a separate function
 // so that the sync deletion code path(s) can access it.
-func (s *StoredObject) isCompatibleWithEntitySettings(fpo common.FolderPropertyOption, sht common.SymlinkHandlingType) bool {
+func (s *StoredObject) isCompatibleWithEntitySettings(fpo common.FolderPropertyOption, sht common.SymlinkHandlingType, pho common.HardlinkHandlingType) bool {
 	if s.entityType == common.EEntityType.File() {
 		return true
 	} else if s.entityType == common.EEntityType.Folder() {
@@ -139,6 +140,10 @@ func (s *StoredObject) isCompatibleWithEntitySettings(fpo common.FolderPropertyO
 		}
 	} else if s.entityType == common.EEntityType.Symlink() {
 		return sht == common.ESymlinkHandlingType.Preserve()
+	} else if s.entityType == common.EEntityType.Hardlink() {
+		return pho == common.EHardlinkHandlingType.Follow()
+	} else if s.entityType == common.EEntityType.Other() {
+		return false
 	} else {
 		panic("undefined entity type")
 	}
@@ -160,7 +165,7 @@ var ErrorHashAsyncCalculation = errors.New("hash is calculating asynchronously")
 // We use this, so that we can easily test for compatibility in the sync deletion code (which expects an objectProcessor)
 func newFpoAwareProcessor(fpo common.FolderPropertyOption, inner objectProcessor) objectProcessor {
 	return func(s StoredObject) error {
-		if s.isCompatibleWithEntitySettings(fpo, common.ESymlinkHandlingType.Skip()) {
+		if s.isCompatibleWithEntitySettings(fpo, common.ESymlinkHandlingType.Skip(), common.EHardlinkHandlingType.Follow()) {
 			return inner(s)
 		} else {
 			return nil // nothing went wrong, because we didn't do anything
@@ -168,9 +173,15 @@ func newFpoAwareProcessor(fpo common.FolderPropertyOption, inner objectProcessor
 	}
 }
 
-func (s *StoredObject) ToNewCopyTransfer(steWillAutoDecompress bool, Source string, Destination string, preserveBlobTier bool, folderPropertiesOption common.FolderPropertyOption, symlinkHandlingType common.SymlinkHandlingType) (transfer common.CopyTransfer, shouldSendToSte bool) {
+func (s *StoredObject) ToNewCopyTransfer(steWillAutoDecompress bool,
+	Source string,
+	Destination string,
+	preserveBlobTier bool,
+	folderPropertiesOption common.FolderPropertyOption,
+	symlinkHandlingType common.SymlinkHandlingType,
+	hardlinkHandlingType common.HardlinkHandlingType) (transfer common.CopyTransfer, shouldSendToSte bool) {
 
-	if !s.isCompatibleWithEntitySettings(folderPropertiesOption, symlinkHandlingType) {
+	if !s.isCompatibleWithEntitySettings(folderPropertiesOption, symlinkHandlingType, hardlinkHandlingType) {
 		return common.CopyTransfer{}, false
 	}
 
@@ -248,6 +259,9 @@ type filePropsProvider interface {
 	LastModified() time.Time
 	FileLastWriteTime() time.Time
 	ContentLength() int64
+	NFSFileType() string
+	LinkCount() int64
+	FileID() string
 }
 
 // a constructor is used so that in case the StoredObject has to change, the callers would get a compilation error
@@ -363,6 +377,7 @@ type InitResourceTraverserOptions struct {
 
 	ExcludeContainers []string // Blob account
 	ListVersions      bool     // Blob
+	HardlinkHandling  common.HardlinkHandlingType
 }
 
 func (o *InitResourceTraverserOptions) PerformChecks() error {
@@ -835,7 +850,7 @@ func passedFilters(filters []ObjectFilter, storedObject StoredObject) bool {
 				glcm.Error(msg)
 			}
 
-			if filter.AppliesOnlyToFiles() && storedObject.entityType != common.EEntityType.File() {
+			if filter.AppliesOnlyToFiles() && (storedObject.entityType != common.EEntityType.File() && storedObject.entityType != common.EEntityType.Hardlink()) {
 				// don't pass folders to filters that only know how to deal with files
 				// As at Feb 2020, we have separate logic to weed out folder properties (and not even send them)
 				// if any filter applies only to files... but that logic runs after this point, so we need this

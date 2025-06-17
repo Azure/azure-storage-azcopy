@@ -99,7 +99,7 @@ func getDefaultRawCopyInput(src, dst string) rawCopyCmdArgs {
 func validateS2STransfersAreScheduled(a *assert.Assertions, srcDirName string, dstDirName string, expectedTransfers []string, mockedRPC interceptor) {
 	// validate that the right number of transfers were scheduled
 	a.Equal(len(expectedTransfers), len(mockedRPC.transfers))
-
+	debugMode := true
 	if debugMode {
 		fmt.Println("expectedTransfers: ")
 		printTransfers(expectedTransfers)
@@ -1318,9 +1318,7 @@ func TestCopyWithDFSResource(t *testing.T) {
 	// set up the parent
 	parentDirNameSource := generateName("dir", 0)
 	parentDirClientSource := fsClientSource.NewDirectoryClient(parentDirNameSource)
-	_, err := parentDirClientSource.Create(ctx, &datalakedirectory.CreateOptions{AccessConditions:
-		&datalakedirectory.AccessConditions{ModifiedAccessConditions:
-			&datalakedirectory.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETagAny)}}})
+	_, err := parentDirClientSource.Create(ctx, &datalakedirectory.CreateOptions{AccessConditions: &datalakedirectory.AccessConditions{ModifiedAccessConditions: &datalakedirectory.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETagAny)}}})
 	a.Nil(err)
 
 	// set up the file
@@ -1341,9 +1339,7 @@ func TestCopyWithDFSResource(t *testing.T) {
 	// set up the parent
 	parentDirName := generateName("dir", 0)
 	parentDirClient := fsClient.NewDirectoryClient(parentDirName)
-	_, err = parentDirClient.Create(ctx, &datalakedirectory.CreateOptions{AccessConditions:
-		&datalakedirectory.AccessConditions{ModifiedAccessConditions:
-			&datalakedirectory.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETagAny)}}})
+	_, err = parentDirClient.Create(ctx, &datalakedirectory.CreateOptions{AccessConditions: &datalakedirectory.AccessConditions{ModifiedAccessConditions: &datalakedirectory.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETagAny)}}})
 	a.Nil(err)
 
 	dirClientWithSAS := serviceClientWithSAS.NewFileSystemClient(fsName).NewDirectoryClient(parentDirName)
