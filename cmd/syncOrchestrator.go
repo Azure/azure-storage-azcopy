@@ -88,9 +88,7 @@ type SyncTraverser struct {
 	// There is a risk here to use pointers for sub directories because by the time we dereference
 	// this storedObject pointer and enqueue the directory, it is removed from the indexer by
 	// either comparator or finalize. Using paths here just to be safe.
-	sub_dirs_paths []string // Subdirectories discovered during traversal (queued for processing)
-
-	children []*StoredObject // Pointers to all child objects in indexer
+	sub_dirs_paths []string // Subdirectories discovered during traversal (queued for enqueueing post processing))
 }
 
 // SyncOrchErrorInfo holds information about files and folders that failed enumeration.
@@ -280,23 +278,13 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 		return err
 	}
 
-	// Get pointer to the stored object from indexer
-	storedObjectPtr, exists := st.enumerator.objectIndexer.indexMap[so.relativePath]
-	if !exists {
-		syncMutex.Unlock()
-		return fmt.Errorf("failed to retrieve stored object for path: %s", so.relativePath)
+	// Update throttling counters if enabled
+	if enableThrottling && err == nil {
+		totalFilesInIndexer.Add(1) // Increment the count of files in the indexer
 	}
 
 	if so.entityType == common.EEntityType.Folder() {
 		st.sub_dirs_paths = append(st.sub_dirs_paths, so.relativePath)
-	}
-
-	// Track all children for transfer scheduling
-	st.children = append(st.children, &storedObjectPtr)
-
-	// Update throttling counters if enabled
-	if enableThrottling && err == nil {
-		totalFilesInIndexer.Add(1) // Increment the count of files in the indexer
 	}
 	syncMutex.Unlock()
 
@@ -321,38 +309,104 @@ func (st *SyncTraverser) customComparator(so StoredObject) error {
 // transfers for all discovered files and cleaning up the indexer.
 // This method is called after both source and destination traversals are complete.
 func (st *SyncTraverser) Finalize() error {
+
+	// Build the directory prefix for matching child objects
+	var dirPrefix string
+	if st.dir == "" {
+		// Root directory - we need to match items that don't have a parent directory
+		// or items that are direct children of root
+		dirPrefix = ""
+	} else {
+		// Non-root directory - match items that start with "dir/"
+		dirPrefix = st.dir + common.AZCOPY_PATH_SEPARATOR_STRING
+	}
+
 	// Update final file count for throttling
 	syncMutex.Lock()
 	if enableThrottling {
 		totalFilesInIndexer.Store(int64(len(st.enumerator.objectIndexer.indexMap))) // Set accurate count
 	}
+
+	// Collect items to process (we need to collect first to avoid modifying map while iterating)
+	var itemsToProcess []string
+	for path := range st.enumerator.objectIndexer.indexMap {
+		if st.belongsToCurrentDirectory(path, dirPrefix) {
+			itemsToProcess = append(itemsToProcess, path)
+		}
+	}
 	syncMutex.Unlock()
 
-	// Schedule transfers for all children discovered in this directory
-	for _, childPtr := range st.children {
-		if childPtr != nil {
-			syncMutex.Lock()
-			// Get pointer to the stored object from indexer
-			storedObjectPtr, exists := st.enumerator.objectIndexer.indexMap[childPtr.relativePath]
-			syncMutex.Unlock()
-
-			if exists {
-				// Schedule the file/directory for transfer using the pointer
-				err := st.enumerator.ctp.scheduleCopyTransfer(storedObjectPtr)
-				if err != nil {
-					return err
-				}
-
-				// Remove from indexer to free memory
-				syncMutex.Lock()
-				delete(st.enumerator.objectIndexer.indexMap, childPtr.relativePath)
-
-				if enableThrottling {
-					totalFilesInIndexer.Add(-1) // Decrement the count after processing
-				}
-				syncMutex.Unlock()
-			}
+	// Process collected items
+	for _, path := range itemsToProcess {
+		err := st.FinalizeChild(path)
+		if err != nil {
+			return err
 		}
+	}
+
+	return nil
+}
+
+// belongsToCurrentDirectory determines if a given path belongs to the current directory
+// being processed by this SyncTraverser instance.
+func (st *SyncTraverser) belongsToCurrentDirectory(path, dirPrefix string) bool {
+	if st.dir == "" {
+		// Root directory case:
+		// - Accept paths that don't contain any separators (direct children)
+		// - Or paths that are exactly what we're looking for at root level
+		if !strings.Contains(path, common.AZCOPY_PATH_SEPARATOR_STRING) {
+			return true
+		}
+		// For root, we might also want to include direct children
+		// Count separators to determine if it's a direct child
+		separatorCount := strings.Count(path, common.AZCOPY_PATH_SEPARATOR_STRING)
+		return separatorCount <= 1 // Direct child or root item
+	} else {
+		// Non-root directory case:
+		// Must start with our directory prefix and be a direct child
+		if !strings.HasPrefix(path, dirPrefix) {
+			return false
+		}
+
+		// Get the remainder after our prefix
+		remainder := path[len(dirPrefix):]
+
+		// If remainder is empty, this is the directory itself
+		if remainder == "" {
+			return true
+		}
+
+		// If remainder contains separators, it's a grandchild, not direct child
+		// We only want direct children
+		return !strings.Contains(remainder, common.AZCOPY_PATH_SEPARATOR_STRING)
+	}
+}
+
+// FinalizeChild processes a single child object (file or directory) by scheduling it for transfer.
+// It retrieves the stored object from the indexer and schedules it for transfer.
+// If the object is a directory, it will be processed after all files in that directory are finalized.
+// This method is called after the traversal is complete for each child object.
+func (st *SyncTraverser) FinalizeChild(child string) error {
+	syncMutex.Lock()
+	// Get pointer to the stored object from indexer
+	storedObject, exists := st.enumerator.objectIndexer.indexMap[child]
+	syncMutex.Unlock()
+
+	if exists {
+		// Schedule the file/directory for transfer using the pointer
+		err := st.enumerator.ctp.scheduleCopyTransfer(storedObject)
+		if err != nil {
+			return err
+		}
+
+		// Remove from indexer to free memory
+		syncMutex.Lock()
+		delete(st.enumerator.objectIndexer.indexMap, child)
+
+		if enableThrottling {
+			totalFilesInIndexer.Add(-1) // Decrement the count after processing
+		}
+		syncMutex.Unlock()
 	}
 
 	return nil
@@ -365,7 +419,6 @@ func newSyncTraverser(enumerator *syncEnumerator, dir string, comparator objectP
 		enumerator:     enumerator,
 		dir:            dir,
 		sub_dirs_paths: make([]string, 0, directorySizeBuffer),
-		children:       make([]*StoredObject, 0, directorySizeBuffer),
 		comparator:     comparator,
 	}
 }
