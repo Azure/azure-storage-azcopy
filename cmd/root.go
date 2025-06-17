@@ -248,8 +248,16 @@ var glcmSwapOnce = &sync.Once{}
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
+// It will output warning if more than one AzCopy process is running
+func Execute(logPathFolder, jobPlanFolder, appPathFolder string, maxFileAndSocketHandles int, jobID common.JobID) {
+	currPid := os.Getpid()
+	if err := WarnMultipleProcesses(appPathFolder, currPid); err != nil {
+		glcm.Error(fmt.Sprintf("error checking number of AzCopy processes: %v", err.Error()))
+	}
+	glcm.RegisterCloseFunc(func() { // Remove pid files after Execute finished - process is no longer active
+		CleanUpPidFile(appPathFolder, currPid)
+	})
 
-func Execute(logPathFolder, jobPlanFolder string, maxFileAndSocketHandles int, jobID common.JobID) {
 	azcopyLogPathFolder = logPathFolder
 	common.AzcopyJobPlanFolder = jobPlanFolder
 	azcopyMaxFileAndSocketHandles = maxFileAndSocketHandles
