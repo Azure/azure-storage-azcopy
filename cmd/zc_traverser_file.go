@@ -159,12 +159,8 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	}
 
 	// We stop remove operations if file/dir name is only dots
-	flag := false
 	checkAllDots := func(path string) bool {
-		if path != "" {
-			flag = strings.Trim(path, ".") == ""
-		}
-		return flag
+		return path != "" && strings.Trim(path, ".") == ""
 	}
 	// if not pointing to a share, check if we are pointing to a single file
 	if targetURLParts.DirectoryOrFilePath != "" {
