@@ -1605,40 +1605,33 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 	}
 
-	// if isNFSCopy {
-	// 	if cca.FromTo.IsS2S() {
-	// 		if isValidSource() {
-	// 			return errors.New("NFS copy is not supported for source location " + cca.FromTo.From().String())
-	// 		}
-	// 		if isValidDestination() {
-	// 			return errors.New("NFS copy is not supported for destination location " + cca.FromTo.To().String())
-	// 		}
-	// 	}
-	// }
-
 	//Protocol compatibility for SMB and NFS
 	// Handles source validation
-	if cca.FromTo.IsS2S() {
+	// Checks if the source protocol is NFS and if nfs flag is provided or not
+	var srcShareProtocol, dstShareProtocol string
+	if cca.FromTo.IsS2S() || cca.FromTo.IsDownload() {
 		if cca.FromTo.From() == common.ELocation.File() {
-			if err := validateShareProtocolCompatibility(ctx,
+			if srcShareProtocol, err = validateShareProtocolCompatibility(ctx,
 				cca.FromTo, cca.Source, jobPartOrder.SrcServiceClient, cca.isNFSCopy, true); err != nil {
 				return err
 			}
-		} else if isNFSCopy {
-			return errors.New("NFS copy is not supported for source location " + cca.FromTo.From().String())
 		}
 	}
 
 	// Handle destination validation
-	if (cca.FromTo.IsUpload() || cca.FromTo.IsS2S()) && cca.FromTo.To() == common.ELocation.File() {
-		if err := validateShareProtocolCompatibility(ctx,
-			cca.FromTo, cca.Destination, jobPartOrder.DstServiceClient, cca.isNFSCopy, false); err != nil {
-			return err
+	// Checks if the destination protocol is NFS and if nfs flag is provided or not
+	if cca.FromTo.IsUpload() || cca.FromTo.IsS2S() {
+		if cca.FromTo.To() == common.ELocation.File() {
+			if dstShareProtocol, err = validateShareProtocolCompatibility(ctx,
+				cca.FromTo, cca.Destination, jobPartOrder.DstServiceClient, cca.isNFSCopy, false); err != nil {
+				return err
+			}
 		}
-	} else if cca.FromTo.IsDownload() && cca.FromTo.From() == common.ELocation.File() {
-		if err := validateShareProtocolCompatibility(ctx,
-			cca.FromTo, cca.Source, jobPartOrder.SrcServiceClient, cca.isNFSCopy, true); err != nil {
-			return err
+	}
+
+	if isNFSCopy {
+		if cca.FromTo.IsS2S() && isInvalidNFSCombination(srcShareProtocol, dstShareProtocol) {
+			return fmt.Errorf("NFS copy is not supported between %s and %s", srcShareProtocol, dstShareProtocol)
 		}
 	}
 

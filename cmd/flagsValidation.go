@@ -274,7 +274,7 @@ func validateShareProtocolCompatibility(
 	serviceClient *common.ServiceClient,
 	isNFSCopy bool,
 	isSource bool,
-) error {
+) (string, error) {
 	direction := "from"
 	if !isSource {
 		direction = "to"
@@ -288,7 +288,7 @@ func validateShareProtocolCompatibility(
 
 	protocol, err := getShareProtocolType(ctx, serviceClient, resource, fallback)
 	if err != nil {
-		return err
+		return protocol, err
 	}
 
 	// if protocol == "SMB" && isNFSCopy {
@@ -296,10 +296,10 @@ func validateShareProtocolCompatibility(
 	// }
 
 	if protocol == "NFS" && !isNFSCopy {
-		return fmt.Errorf("The %s share has NFS protocol enabled. To copy %s a NFS share, please provide the --nfs flag", direction, direction)
+		return protocol, fmt.Errorf("The %s share has NFS protocol enabled. To copy %s a NFS share, please provide the --nfs flag", direction, direction)
 	}
 
-	return nil
+	return protocol, nil
 }
 
 // getShareProtocolType returns "SMB", "NFS", or "UNKNOWN" based on the share's enabled protocols.
@@ -332,4 +332,24 @@ func getShareProtocolType(ctx context.Context,
 	}
 
 	return *properties.EnabledProtocols, nil
+}
+
+// isInvalidNFSCombination returns true if the NFS copy between the given source and destination
+// protocols is not supported.
+func isInvalidNFSCombination(srcProtocol, dstProtocol string) bool {
+
+	switch {
+	case srcProtocol == "NFS" && dstProtocol == "NFS":
+		// NFS to NFS: Supported
+		return false
+	case srcProtocol == "NFS" && dstProtocol == "SMB":
+		// NFS to SMB: Supported with limitations (e.g., no permission preservation)
+		return false
+	case srcProtocol == "SMB" && dstProtocol == "NFS":
+		// SMB to NFS: Supported with limitations (e.g., no permission preservation)
+		return false
+	default:
+		// Other combinations (e.g., unknown protocols): Treat as invalid
+		return true
+	}
 }
