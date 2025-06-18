@@ -17,6 +17,10 @@ const (
 )
 
 func UploadMemoryProfile(a Asserter, profilePath string, runCount uint) {
+	if GlobalConfig.E2EFrameworkSpecialConfig.SkipTelemetry {
+		return
+	}
+
 	// We don't need telemetry configured to dump details on peak memory usage, and we need to grab these anyway.
 	cmd := exec.Command("go", "tool", "pprof", "-top", "-unit=bytes", profilePath)
 
