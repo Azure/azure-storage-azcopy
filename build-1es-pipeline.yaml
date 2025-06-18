@@ -1110,6 +1110,11 @@ extends:
                       mv -v "$(signed)/mariner/azcopy"*.arm64.rpm "$marinerArmFileName"
                       mv -v "$(signed)/mariner/azcopy"*.x86_64.rpm "$marinerAmdFileName"
                       
+                      # if file name conatins preview in it. Create preview files for preview upload
+                      if [[ "$arm64file" == *preview* ]]; then
+                        cp signed/azcopy*.x86_64.deb signed/azcopy-preview-*.x86_64.deb
+                      fi
+                      
                       mv "$(signed)/mariner/azcopy"*.rpm "$(signed)/"
                       rm -r "$(signed)/mariner/"
                     displayName: 'Rename Mariner binaries'
@@ -1127,9 +1132,13 @@ extends:
                     displayName: 'Upload files'
 
                   - script: |
+                      
+                      azcopyPreviewAmdDeb=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy-preview*.x86_64.deb`
+                      echo "Azcopy AMD Preview DEB ID: $azcopyPreviewAmdDeb"
+
                       azcopyAmdDeb=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy*.x86_64.deb`
                       echo "Azcopy AMD DEB ID: $azcopyAmdDeb"
-                      
+
                       azcopyAmdRpmFile=$(ls azcopy-* | grep -vE 'cm2\.x86_64\.rpm|arm64\.deb|x86_64\.deb|arm64\.rpm')
                       azcopyAmdRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $azcopyAmdRpmFile)
                       echo "Azcopy AMD RPM ID: $azcopyAmdRpm"
