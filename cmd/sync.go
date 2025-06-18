@@ -225,7 +225,7 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 	switch cooked.compareHash {
 	case common.ESyncHashType.MD5():
 		// Save any new MD5s on files we download.
-		raw.putMd5 = true
+		cooked.putMd5 = true
 	default: // no need to put a hash of any kind.
 	}
 
