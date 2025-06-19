@@ -41,6 +41,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 )
 
 // -------------------------------------- Component Definitions -------------------------------------- \\
@@ -584,9 +585,9 @@ func InitResourceTraverser(
 			if !recursive {
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
-			output = newFileAccountTraverser(fsc, shareName, *ctx, getProperties, incrementEnumerationCounter, trailingDot, destination)
+			output = newFileAccountTraverser(fsc, shareName, *ctx, getProperties, incrementEnumerationCounter, trailingDot, destination, syncOptions)
 		} else {
-			output = newFileTraverser(r, fsc, *ctx, recursive, getProperties, incrementEnumerationCounter, trailingDot, destination)
+			output = newFileTraverser(r, fsc, *ctx, recursive, getProperties, incrementEnumerationCounter, trailingDot, destination, syncOptions)
 		}
 	case common.ELocation.BlobFS():
 		resourceURL, err := resource.FullURL()
@@ -828,6 +829,7 @@ func (e *syncEnumerator) Enumerate() (err error) {
 		return err
 	}
 
+	glcm.Info(fmt.Sprintf("Object indexer map size: %d", e.objectIndexer.counter))
 	// enumerate the secondary resource and as the objects pass the filters
 	// they will be passed to the object comparator
 	// which can process given objects based on what's already indexed
@@ -874,6 +876,10 @@ func WarnStdoutAndScanningLog(toLog string) {
 	if azcopyScanningLogger != nil {
 		// ste.JobsAdmin.LogToJobLog(toLog, pipeline.LogWarning)
 		azcopyScanningLogger.Log(common.LogWarning, toLog)
+	}
+
+	if buildmode.IsMover {
+		fmt.Sprintf("[AzCopy] " + toLog)
 	}
 }
 

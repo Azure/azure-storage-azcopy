@@ -74,14 +74,18 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
 	dest := cca.fromTo.To()
-
+	var getProperties = true
+	if ctx.Value(customCreds) != nil {
+		//if c2c sync we want to disable this to increase perf
+		getProperties = false
+	}
 	srcTraverserTemplate := ResourceTraverserTemplate{
 		location:                    cca.fromTo.From(),
 		credential:                  &srcCredInfo,
-		symlinkHandling:             common.ESymlinkHandlingType.Skip(),
+		symlinkHandling:             cca.symlinkHandling,
 		listOfFilesChannel:          nil,
 		recursive:                   cca.recursive,
-		getProperties:               true,
+		getProperties:               getProperties,
 		includeDirectoryStubs:       includeDirStubs,
 		permanentDeleteOption:       common.EPermanentDeleteOption.None(),
 		incrementEnumerationCounter: func(entityType common.EntityType) {},
@@ -91,7 +95,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 		preservePermissions:         cca.preservePermissions,
 		logLevel:                    AzcopyLogVerbosity,
 		cpkOptions:                  cca.cpkOptions,
-		errorChannel:                nil,
+		errorChannel:                errorChannel,
 		stripTopDir:                 false,
 		trailingDot:                 cca.trailingDot,
 		destination:                 &dest,
@@ -99,13 +103,13 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 		includeVersionsList:         false,
 	}
 
-	sourceTraverser, err := InitResourceTraverser(cca.Source, cca.fromTo.From(), &ctx, &srcCredInfo, common.ESymlinkHandlingType.Skip(), nil, cca.recursive, true, includeDirStubs, common.EPermanentDeleteOption.None(), func(entityType common.EntityType) {
+	sourceTraverser, err := InitResourceTraverser(cca.Source, cca.fromTo.From(), &ctx, &srcCredInfo, cca.symlinkHandling, nil, cca.recursive, true, includeDirStubs, common.EPermanentDeleteOption.None(), func(entityType common.EntityType) {
 		if entityType == common.EEntityType.File() {
 			atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 		} else if entityType == common.EEntityType.Folder() {
 			atomic.AddUint64(&cca.atomicSourceFoldersScanned, 1)
 		}
-	}, nil, cca.s2sPreserveBlobTags, cca.compareHash, cca.preservePermissions, AzcopyLogVerbosity, cca.cpkOptions, nil, false, cca.trailingDot, &dest, nil, false, *syncSrcTraverserOptions)
+	}, nil, cca.s2sPreserveBlobTags, cca.compareHash, cca.preservePermissions, AzcopyLogVerbosity, cca.cpkOptions, errorChannel, false, cca.trailingDot, &dest, nil, false, *syncSrcTraverserOptions)
 
 	if err != nil {
 		return nil, err
@@ -138,7 +142,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 		preservePermissions:   cca.preservePermissions,
 		logLevel:              AzcopyLogVerbosity,
 		cpkOptions:            cca.cpkOptions,
-		errorChannel:          nil,
+		errorChannel:          errorChannel,
 		stripTopDir:           false,
 		trailingDot:           cca.trailingDot,
 		destination:           nil,
@@ -469,7 +473,13 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 		indexer.isDestinationCaseInsensitive = IsDestinationCaseInsensitive(cca.fromTo)
 		// in all other cases (download and S2S), the destination is scanned/indexed first
 		// then the source is scanned and filtered based on what the destination contains
-		comparator = newSyncSourceComparator(indexer, transferScheduler.scheduleCopyTransfer, cca.compareHash, cca.preserveSMBInfo, cca.mirrorMode).processIfNecessary
+		comparator = newSyncSourceComparator(indexer, transferScheduler.scheduleCopyTransfer, cca.compareHash, cca.preserveSMBInfo, cca.mirrorMode, func(entityType common.EntityType) {
+			if entityType == common.EEntityType.File() {
+				atomic.AddUint64(&cca.atomicSourceFilesTransferNotRequired, 1)
+			} else if entityType == common.EEntityType.Folder() {
+				atomic.AddUint64(&cca.atomicSourceFoldersTransferNotRequired, 1)
+			}
+		}).processIfNecessary
 
 		finalize = func() error {
 			// remove the extra files at the destination that were not present at the source

@@ -23,6 +23,7 @@ jobs:
           imageName: 'macos-latest'
           build_name: 'azcopy_darwin_amd64'
           display_name: "MacOS"
+        
     pool:
       vmImage: $(imageName)
 
@@ -71,12 +72,13 @@ jobs:
             
             # Print "Building executable"
             Write-Output "Building executable"
-            
+            Write-Output "***************: $env:build_name"
             # Set platform-specific environment variables and tags
             $tags = ""
             $suffix = ""
             $build_name = ""
             $display_name = ""
+            
             if ($IsWindows) {
               $env:GOOS = "windows"
               $env:GOARCH = "amd64"
@@ -86,10 +88,9 @@ jobs:
             } elseif ($IsLinux) {
               $env:GOOS = "linux"
               $env:GOARCH = "amd64"
-              $tags = "netgo"
               $build_name = "azcopy_linux_amd64"
               $display_name = "Linux"
-            } elseif ($IsMacOS) {
+            }  elseif ($IsMacOS) {
               $env:GOOS = "darwin"
               $env:GOARCH = "amd64"
               $env:CGO_ENABLED = "1"
@@ -104,7 +105,11 @@ jobs:
             if ($tags -ne "") {
               go build -cover -tags $tags -o $build_name
             } else {
-              go build -cover -o $build_name
+              if ('${{ parameters.test_cli_param }}' -like "*SWSyncTestSuite*") {
+                go build -cover -tags smslidingwindow -o $build_name
+              } else {
+                go build -cover -o $build_name
+              } 
             }
             
             # Print "Running tests"

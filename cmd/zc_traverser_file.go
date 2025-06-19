@@ -23,14 +23,15 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"runtime"
+	"strings"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
-	"runtime"
-	"strings"
-	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -50,6 +51,8 @@ type fileTraverser struct {
 	incrementEnumerationCounter enumerationCounterFunc
 	trailingDot                 common.TrailingDotOption
 	destination                 *common.Location
+
+	syncOptions SyncTraverserOptions
 }
 
 func createShareClientFromServiceClient(fileURLParts file.URLParts, client *service.Client) (*share.Client, error) {
@@ -392,7 +395,17 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	return
 }
 
-func newFileTraverser(rawURL string, serviceClient *service.Client, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc, trailingDot common.TrailingDotOption, destination *common.Location) (t *fileTraverser) {
+func newFileTraverser(
+	rawURL string,
+	serviceClient *service.Client,
+	ctx context.Context,
+	recursive,
+	getProperties bool,
+	incrementEnumerationCounter enumerationCounterFunc,
+	trailingDot common.TrailingDotOption,
+	destination *common.Location,
+	syncOptions SyncTraverserOptions) (t *fileTraverser) {
+
 	t = &fileTraverser{
 		rawURL:                      rawURL,
 		serviceClient:               serviceClient,
@@ -402,6 +415,7 @@ func newFileTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		incrementEnumerationCounter: incrementEnumerationCounter,
 		trailingDot:                 trailingDot,
 		destination:                 destination,
+		syncOptions:                 syncOptions,
 	}
 	return
 }

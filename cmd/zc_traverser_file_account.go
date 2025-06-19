@@ -23,6 +23,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -39,6 +40,7 @@ type fileAccountTraverser struct {
 	incrementEnumerationCounter enumerationCounterFunc
 	trailingDot                 common.TrailingDotOption
 	destination                 *common.Location
+	syncOptions                 SyncTraverserOptions
 }
 
 func (t *fileAccountTraverser) IsDirectory(isSource bool) (bool, error) {
@@ -90,7 +92,7 @@ func (t *fileAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 
 	for _, v := range shareList {
 		shareURL := t.serviceClient.NewShareClient(v).URL()
-		shareTraverser := newFileTraverser(shareURL, t.serviceClient, t.ctx, true, t.getProperties, t.incrementEnumerationCounter, t.trailingDot, t.destination)
+		shareTraverser := newFileTraverser(shareURL, t.serviceClient, t.ctx, true, t.getProperties, t.incrementEnumerationCounter, t.trailingDot, t.destination, NewDefaultSyncTraverserOptions())
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
@@ -105,7 +107,16 @@ func (t *fileAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 	return nil
 }
 
-func newFileAccountTraverser(serviceClient *service.Client, shareName string, ctx context.Context, getProperties bool, incrementEnumerationCounter enumerationCounterFunc, trailingDot common.TrailingDotOption, destination *common.Location) (t *fileAccountTraverser) {
+func newFileAccountTraverser(
+	serviceClient *service.Client,
+	shareName string,
+	ctx context.Context,
+	getProperties bool,
+	incrementEnumerationCounter enumerationCounterFunc,
+	trailingDot common.TrailingDotOption,
+	destination *common.Location,
+	syncOptions SyncTraverserOptions) (t *fileAccountTraverser) {
+
 	t = &fileAccountTraverser{
 		ctx:                         ctx,
 		incrementEnumerationCounter: incrementEnumerationCounter,
@@ -114,6 +125,7 @@ func newFileAccountTraverser(serviceClient *service.Client, shareName string, ct
 		getProperties:               getProperties,
 		trailingDot:                 trailingDot,
 		destination:                 destination,
+		syncOptions:                 syncOptions,
 	}
 	return
 }

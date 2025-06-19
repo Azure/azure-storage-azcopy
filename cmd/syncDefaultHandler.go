@@ -29,9 +29,9 @@ import (
 
 var UseSyncOrchestrator = false
 
-type CustomSyncHandler func(cca *cookedSyncCmdArgs, ctx context.Context) error
+type CustomSyncHandlerFunc func(cca *cookedSyncCmdArgs, enumerator *syncEnumerator, ctx context.Context) error
 
-var customSyncHandler CustomSyncHandler = nil
+var CustomSyncHandler CustomSyncHandlerFunc = nil
 
 type CustomCounterIncrementer func(entry fs.DirEntry, t *localTraverser) error
 
