@@ -1469,6 +1469,7 @@ Number of Symbolic Links Skipped: %v
 Number of Hardlinks Converted: %v
 Number of Special Files Skipped: %v
 Total Number of Bytes Transferred: %v
+Total Number of Bytes Skipped: %v
 Final Job Status: %v%s%s
 `,
 					summary.JobID.String(),
@@ -1487,6 +1488,7 @@ Final Job Status: %v%s%s
 					summary.HardlinksConvertedCount,
 					summary.SkippedSpecialFileCount,
 					summary.TotalBytesTransferred,
+					summary.TotalBytesSkipped,
 					summary.JobStatus,
 					screenStats,
 					formatPerfAdvice(summary.PerformanceAdvice))
