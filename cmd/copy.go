@@ -21,7 +21,6 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -215,232 +214,131 @@ func blockSizeInBytes(rawBlockSizeInMiB float64) (int64, error) {
 	return int64(math.Round(rawSizeInBytes)), nil
 }
 
-func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
-	cooked := CookedCopyCmdArgs{
-		jobID: azcopyCurrentJobID,
+func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
+	cooked = CookedCopyCmdArgs{
+		Recursive:                raw.recursive,
+		ForceIfReadOnly:          raw.forceIfReadOnly,
+		autoDecompress:           raw.autoDecompress,
+		BlockSizeMB:              raw.blockSizeMB,
+		PutBlobSizeMB:            raw.putBlobSizeMB,
+		ListOfFiles:              raw.listOfFilesToCopy,
+		ListOfVersionIDs:         raw.listOfVersionIDs,
+		metadata:                 raw.metadata,
+		contentType:              raw.contentType,
+		contentEncoding:          raw.contentEncoding,
+		contentLanguage:          raw.contentLanguage,
+		contentDisposition:       raw.contentDisposition,
+		cacheControl:             raw.cacheControl,
+		noGuessMimeType:          raw.noGuessMimeType,
+		preserveLastModifiedTime: raw.preserveLastModifiedTime,
+		disableAutoDecoding:      raw.disableAutoDecoding,
+		blobTags:                 raw.blobTags,
+		S2sPreserveBlobTags:      raw.s2sPreserveBlobTags,
+		cpkByName:                raw.cpkScopeInfo,
+		cpkByValue:               raw.cpkInfo,
+		putMd5:                   raw.putMd5,
+		CheckLength:              raw.CheckLength,
+
+		// NFS/SMB part
+		isNFSCopy:     raw.isNFSCopy,
+		preserveOwner: raw.preserveOwner,
+
+		asSubdir:              raw.asSubdir, // --as-subdir is OK on all sources and destinations, but additional verification has to be done down the line. (e.g. https://account.blob.core.windows.net is not a valid root)
+		IncludeDirectoryStubs: raw.includeDirectoryStubs,
+		backupMode:            raw.backupMode,
+		s2sPreserveProperties: boolDefaultTrue{
+			value:         raw.s2sPreserveProperties,
+			isManuallySet: cpCmd.Flags().Changed("s2s-preserve-properties"),
+		},
+		s2sPreserveAccessTier: boolDefaultTrue{
+			value:         raw.s2sPreserveAccessTier,
+			isManuallySet: cpCmd.Flags().Changed("s2s-preserve-access-tier"),
+		},
+		s2sGetPropertiesInBackend:        raw.s2sGetPropertiesInBackend,
+		s2sSourceChangeValidation:        raw.s2sSourceChangeValidation,
+		dryrunMode:                       raw.dryrun,
+		deleteDestinationFileIfNecessary: raw.deleteDestinationFileIfNecessary,
 	}
 
-	// set up the front end scanning logger
-	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, azcopyLogVerbosity, azcopyLogPathFolder, "-scanning")
-	azcopyScanningLogger.OpenLog()
-	glcm.RegisterCloseFunc(func() {
-		azcopyScanningLogger.CloseLog()
-	})
-
-	// if no logging, set this empty so that we don't display the log location
-	if azcopyLogVerbosity == common.LogNone {
-		azcopyLogPathFolder = ""
-	}
-
-	fromTo, err := ValidateFromTo(raw.src, raw.dst, raw.fromTo) // TODO: src/dst
+	// We infer FromTo and validate it here since it is critical to a lot of other options parsing below.
+	cooked.FromTo, err = ValidateFromTo(raw.src, raw.dst, raw.fromTo)
 	if err != nil {
 		return cooked, err
 	}
 
-	var tempSrc string
+	// Destination
 	tempDest := raw.dst
-
 	if strings.EqualFold(tempDest, common.Dev_Null) && runtime.GOOS == "windows" {
 		tempDest = common.Dev_Null // map all capitalization of "NUL"/"nul" to one because (on Windows) they all mean the same thing
 	}
+	// Strip the SAS from the source and destination whenever there is SAS exists in URL.
+	// Note: SAS could exists in source of S2S copy, even if the credential type is OAuth for destination.
+	cooked.Destination, err = SplitResourceString(tempDest, cooked.FromTo.To())
+	if err != nil {
+		return cooked, err
+	}
 
+	// Source
+	tempSrc := raw.src
 	// Check if source has a trailing wildcard on a URL
-	if fromTo.From().IsRemote() {
-		tempSrc, cooked.StripTopDir, err = stripTrailingWildcardOnRemoteSource(raw.src, fromTo.From())
+	if cooked.FromTo.From().IsRemote() {
+		tempSrc, cooked.StripTopDir, err = stripTrailingWildcardOnRemoteSource(raw.src, cooked.FromTo.From())
 
 		if err != nil {
 			return cooked, err
 		}
-	} else {
-		tempSrc = raw.src
 	}
+	cooked.Source, err = SplitResourceString(tempSrc, cooked.FromTo.From())
+	if err != nil {
+		return cooked, err
+	}
+
 	if raw.internalOverrideStripTopDir {
 		cooked.StripTopDir = true
 	}
-
-	// Strip the SAS from the source and destination whenever there is SAS exists in URL.
-	// Note: SAS could exists in source of S2S copy, even if the credential type is OAuth for destination.
-
-	cooked.Source, err = SplitResourceString(tempSrc, fromTo.From())
-	if err != nil {
-		return cooked, err
-	}
-
-	cooked.Destination, err = SplitResourceString(tempDest, fromTo.To())
-	if err != nil {
-		return cooked, err
-	}
-
-	cooked.FromTo = fromTo
-	cooked.Recursive = raw.recursive
-	cooked.ForceIfReadOnly = raw.forceIfReadOnly
-	if err = validateForceIfReadOnly(cooked.ForceIfReadOnly, cooked.FromTo); err != nil {
-		return cooked, err
+	// cooked.StripTopDir is effectively a workaround for the lack of wildcards in remote sources.
+	// Local, however, still supports wildcards, and thus needs its top directory stripped whenever a wildcard is used.
+	// Thus, we check for wildcards and instruct the processor to strip the top dir later instead of repeatedly checking cca.Source for wildcards.
+	if cooked.FromTo.From() == common.ELocation.Local() && strings.Contains(cooked.Source.ValueLocal(), "*") {
+		cooked.StripTopDir = true
 	}
 
 	if err = cooked.SymlinkHandling.Determine(raw.followSymlinks, raw.preserveSymlinks); err != nil {
 		return cooked, err
 	}
 
-	if err = validateSymlinkHandlingMode(cooked.SymlinkHandling, cooked.FromTo); err != nil {
-		return cooked, err
-	}
-
-	// copy&transform flags to type-safety
 	err = cooked.ForceWrite.Parse(raw.forceWrite)
 	if err != nil {
 		return cooked, err
 	}
-	allowAutoDecompress := fromTo == common.EFromTo.BlobLocal() || fromTo == common.EFromTo.FileLocal()
-	if raw.autoDecompress && !allowAutoDecompress {
-		return cooked, errors.New("automatic decompression is only supported for downloads from Blob and Azure Files") // as at Sept 2019, our ADLS Gen 2 Swagger does not include content-encoding for directory (path) listings so we can't support it there
-	}
-	cooked.autoDecompress = raw.autoDecompress
 
-	// cooked.StripTopDir is effectively a workaround for the lack of wildcards in remote sources.
-	// Local, however, still supports wildcards, and thus needs its top directory stripped whenever a wildcard is used.
-	// Thus, we check for wildcards and instruct the processor to strip the top dir later instead of repeatedly checking cca.Source for wildcards.
-	if fromTo.From() == common.ELocation.Local() && strings.Contains(cooked.Source.ValueLocal(), "*") {
-		cooked.StripTopDir = true
-	}
-
-	cooked.blockSize, err = blockSizeInBytes(raw.blockSizeMB)
-	if err != nil {
-		return cooked, err
-	}
-
-	cooked.putBlobSize, err = blockSizeInBytes(raw.putBlobSizeMB)
-	if err != nil {
-		return cooked, err
-	}
-
-	// parse the given blob type.
 	err = cooked.blobType.Parse(raw.blobType)
 	if err != nil {
 		return cooked, err
-	}
-
-	// If the given blobType is AppendBlob, block-size-mb should not be greater than
-	// common.MaxAppendBlobBlockSize.
-	if cookedSize, _ := blockSizeInBytes(raw.blockSizeMB); cooked.blobType == common.EBlobType.AppendBlob() && cookedSize > common.MaxAppendBlobBlockSize {
-		return cooked, fmt.Errorf("block size cannot be greater than %dMB for AppendBlob blob type", common.MaxAppendBlobBlockSize/common.MegaByte)
 	}
 
 	err = cooked.blockBlobTier.Parse(raw.blockBlobTier)
 	if err != nil {
 		return cooked, err
 	}
+
 	err = cooked.pageBlobTier.Parse(raw.pageBlobTier)
 	if err != nil {
 		return cooked, err
 	}
 
 	if raw.rehydratePriority == "" {
-		raw.rehydratePriority = "standard"
+		raw.rehydratePriority = "standard" // default value
 	}
 	err = cooked.rehydratePriority.Parse(raw.rehydratePriority)
 	if err != nil {
 		return cooked, err
 	}
 
-	// Everything uses the new implementation of list-of-files now.
-	// This handles both list-of-files and include-path as a list enumerator.
-	// This saves us time because we know *exactly* what we're looking for right off the bat.
-	// Note that exclude-path is handled as a filter unlike include-path.
-
 	if raw.legacyInclude != "" || raw.legacyExclude != "" {
 		return cooked, fmt.Errorf("the include and exclude parameters have been replaced by include-pattern; include-path; exclude-pattern and exclude-path. For info, run: azcopy copy help")
 	}
-
-	if (len(raw.include) > 0 || len(raw.exclude) > 0) && cooked.FromTo == common.EFromTo.BlobFSTrash() {
-		return cooked, fmt.Errorf("include/exclude flags are not supported for this destination")
-		// note there's another, more rigorous check, in removeBfsResources()
-	}
-
-	// warn on exclude unsupported wildcards here. Include have to be later, to cover list-of-files
-	warnIfHasWildcard(excludeWarningOncer, "exclude-path", raw.excludePath)
-
-	// unbuffered so this reads as we need it to rather than all at once in bulk
-	listChan := make(chan string)
-	var f *os.File
-
-	if raw.listOfFilesToCopy != "" {
-		f, err = os.Open(raw.listOfFilesToCopy)
-
-		if err != nil {
-			return cooked, fmt.Errorf("cannot open %s file passed with the list-of-file flag", raw.listOfFilesToCopy)
-		}
-	}
-
-	// Prepare UTF-8 byte order marker
-	utf8BOM := string([]byte{0xEF, 0xBB, 0xBF})
-
-	go func() {
-		defer close(listChan)
-
-		addToChannel := func(v string, paramName string) {
-			// empty strings should be ignored, otherwise the source root itself is selected
-			if len(v) > 0 {
-				warnIfHasWildcard(includeWarningOncer, paramName, v)
-				listChan <- v
-			}
-		}
-
-		if f != nil {
-			scanner := bufio.NewScanner(f)
-			checkBOM := false
-			headerLineNum := 0
-			firstLineIsCurlyBrace := false
-
-			for scanner.Scan() {
-				v := scanner.Text()
-
-				// Check if the UTF-8 BOM is on the first line and remove it if necessary.
-				// Note that the UTF-8 BOM can be present on the same line feed as the first line of actual data, so just use TrimPrefix.
-				// If the line feed were separate, the empty string would be skipped later.
-				if !checkBOM {
-					v = strings.TrimPrefix(v, utf8BOM)
-					checkBOM = true
-				}
-
-				// provide clear warning if user uses old (obsolete) format by mistake
-				if headerLineNum <= 1 {
-					cleanedLine := strings.Replace(strings.Replace(v, " ", "", -1), "\t", "", -1)
-					cleanedLine = strings.TrimSuffix(cleanedLine, "[") // don't care which line this is on, could be third line
-					if cleanedLine == "{" && headerLineNum == 0 {
-						firstLineIsCurlyBrace = true
-					} else {
-						const jsonStart = "{\"Files\":"
-						jsonStartNoBrace := strings.TrimPrefix(jsonStart, "{")
-						isJson := cleanedLine == jsonStart || firstLineIsCurlyBrace && cleanedLine == jsonStartNoBrace
-						if isJson {
-							glcm.Error("The format for list-of-files has changed. The old JSON format is no longer supported")
-						}
-					}
-					headerLineNum++
-				}
-
-				addToChannel(v, "list-of-files")
-			}
-		}
-
-		// This occurs much earlier than the other include or exclude filters. It would be preferable to move them closer later on in the refactor.
-		includePathList := parsePatterns(raw.includePath)
-
-		for _, v := range includePathList {
-			addToChannel(v, "include-path")
-		}
-	}()
-
-	// A combined implementation reduces the amount of code duplication present.
-	// However, it _does_ increase the amount of code-intertwining present.
-	if raw.listOfFilesToCopy != "" && raw.includePath != "" {
-		return cooked, errors.New("cannot combine list of files and include path")
-	}
-
-	if raw.listOfFilesToCopy != "" || raw.includePath != "" {
-		cooked.ListOfFilesChannel = listChan
-	}
+	cooked.IncludePathPatterns = parsePatterns(raw.includePath)
 
 	if raw.includeBefore != "" {
 		// must set chooseEarliest = false, so that if there's an ambiguous local date, the latest will be returned
@@ -462,130 +360,11 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		cooked.IncludeAfter = &parsedIncludeAfter
 	}
 
-	versionsChan := make(chan string)
-	var filePtr *os.File
-	// Get file path from user which would contain list of all versionIDs
-	// Process the file line by line and then prepare a list of all version ids of the blob.
-	if raw.listOfVersionIDs != "" {
-		filePtr, err = os.Open(raw.listOfVersionIDs)
-		if err != nil {
-			return cooked, fmt.Errorf("cannot open %s file passed with the list-of-versions flag", raw.listOfVersionIDs)
-		}
-	}
-
-	go func() {
-		defer close(versionsChan)
-		addToChannel := func(v string) {
-			if len(v) > 0 {
-				versionsChan <- v
-			}
-		}
-
-		if filePtr != nil {
-			scanner := bufio.NewScanner(filePtr)
-			checkBOM := false
-			for scanner.Scan() {
-				v := scanner.Text()
-
-				if !checkBOM {
-					v = strings.TrimPrefix(v, utf8BOM)
-					checkBOM = true
-				}
-
-				addToChannel(v)
-			}
-		}
-	}()
-
-	if raw.listOfVersionIDs != "" {
-		cooked.ListOfVersionIDs = versionsChan
-	}
-
-	if cooked.FromTo.To() == common.ELocation.None() && strings.EqualFold(raw.metadata, common.MetadataAndBlobTagsClearFlag) { // in case of Blob, BlobFS and Files
-		glcm.Warn("*** WARNING *** Metadata will be cleared because of input --metadata=clear ")
-	}
-	cooked.metadata = raw.metadata
-	if err = validateMetadataString(cooked.metadata); err != nil {
-		return cooked, err
-	}
-	cooked.contentType = raw.contentType
-	cooked.contentEncoding = raw.contentEncoding
-	cooked.contentLanguage = raw.contentLanguage
-	cooked.contentDisposition = raw.contentDisposition
-	cooked.cacheControl = raw.cacheControl
-	cooked.noGuessMimeType = raw.noGuessMimeType
-	cooked.preserveLastModifiedTime = raw.preserveLastModifiedTime
-	cooked.disableAutoDecoding = raw.disableAutoDecoding
-
 	err = cooked.trailingDot.Parse(raw.trailingDot)
 	if err != nil {
 		return cooked, err
 	}
 
-	if !(cooked.FromTo.To() == common.ELocation.Blob() || cooked.FromTo == common.EFromTo.BlobNone() || cooked.FromTo != common.EFromTo.BlobFSNone()) && raw.blobTags != "" {
-		return cooked, errors.New("blob tags can only be set when transferring to blob storage")
-	}
-	if cooked.FromTo.To() == common.ELocation.None() && strings.EqualFold(raw.blobTags, common.MetadataAndBlobTagsClearFlag) { // in case of Blob and BlobFS
-		glcm.Warn("*** WARNING *** BlobTags will be cleared because of input --blob-tags=clear ")
-	}
-	blobTags := common.ToCommonBlobTagsMap(raw.blobTags)
-	err = validateBlobTagsKeyValue(blobTags)
-	if err != nil {
-		return cooked, err
-	}
-	cooked.blobTags = blobTags
-
-	// Check if user has provided `s2s-preserve-blob-tags` flag. If yes, we have to ensure that
-	// 1. Both source and destination must be blob storages.
-	// 2. `blob-tags` is not present as they create conflicting scenario of whether to preserve blob tags from the source or set user defined tags on the destination
-	if raw.s2sPreserveBlobTags {
-		if cooked.FromTo.From() != common.ELocation.Blob() || cooked.FromTo.To() != common.ELocation.Blob() {
-			return cooked, errors.New("either source or destination is not a blob storage. blob index tags is a property of blobs only therefore both source and destination must be blob storage")
-		} else if raw.blobTags != "" {
-			return cooked, errors.New("both s2s-preserve-blob-tags and blob-tags flags cannot be used in conjunction")
-		} else {
-			cooked.S2sPreserveBlobTags = raw.s2sPreserveBlobTags
-		}
-	}
-
-	// Setting CPK-N
-	cpkOptions := common.CpkOptions{}
-	// Setting CPK-N
-	if raw.cpkScopeInfo != "" {
-		if raw.cpkInfo {
-			return cooked, errors.New("cannot use both cpk-by-name and cpk-by-value at the same time")
-		}
-		cpkOptions.CpkScopeInfo = raw.cpkScopeInfo
-	}
-
-	// Setting CPK-V
-	// Get the key (EncryptionKey and EncryptionKeySHA256) value from environment variables when required.
-	cpkOptions.CpkInfo = raw.cpkInfo
-
-	if cpkOptions.CpkScopeInfo != "" || cpkOptions.CpkInfo {
-		// We only support transfer from source encrypted by user key when user wishes to download.
-		// Due to service limitation, S2S transfer is not supported for source encrypted by user key.
-		if cooked.FromTo.IsDownload() || cooked.FromTo.IsDelete() {
-			glcm.Info("Client Provided Key (CPK) for encryption/decryption is provided for download or delete scenario. " +
-				"Assuming source is encrypted.")
-			cpkOptions.IsSourceEncrypted = true
-		}
-
-		// TODO: Remove these warnings once service starts supporting it
-		if cooked.blockBlobTier != common.EBlockBlobTier.None() || cooked.pageBlobTier != common.EPageBlobTier.None() {
-			glcm.Info("Tier is provided by user explicitly. Ignoring it because Azure Service currently does" +
-				" not support setting tier when client provided keys are involved.")
-		}
-
-		destUrl, _ := url.Parse(cooked.Destination.Value)
-		if strings.Contains(destUrl.Host, "dfs.core.windows.net") {
-			return cooked, errors.New("client provided keys (CPK) based encryption is only supported with blob endpoints (blob.core.windows.net)")
-		}
-	}
-
-	cooked.CpkOptions = cpkOptions
-
-	// Make sure the given input is the one of the enums given by the blob SDK
 	err = cooked.deleteSnapshotsOption.Parse(raw.deleteSnapshotsOption)
 	if err != nil {
 		return cooked, err
@@ -595,228 +374,52 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		cooked.noGuessMimeType = true // As specified in the help text, noGuessMimeType is inferred here.
 	}
 
-	cooked.putMd5 = raw.putMd5
 	err = cooked.md5ValidationOption.Parse(raw.md5ValidationOption)
 	if err != nil {
 		return cooked, err
 	}
 
-	cooked.CheckLength = raw.CheckLength
 	// length of devnull will be 0, thus this will always fail unless downloading an empty file
 	if cooked.Destination.Value == common.Dev_Null {
 		cooked.CheckLength = false
 	}
 
+	// This will only happen in CLI commands, not AzCopy as a library.
 	// if redirection is triggered, avoid printing any output
 	if cooked.isRedirection() {
 		glcm.SetOutputFormat(common.EOutputFormat.None())
 	}
 
-	if raw.isNFSCopy {
-		SetNFSFlag(raw.isNFSCopy)
-		// check for unsupported NFS behavior
-		if isUnsupported, err := isUnsupportedPlatformForNFS(cooked.FromTo); isUnsupported {
-			return cooked, err
-		}
-
-		// If we are not preserving original file permissions (raw.preservePermissions == false),
-		// and the operation is a file copy from azure file NFS to local linux (FromTo == FileLocal),
-		// and the current OS is Linux, then we require root privileges to proceed.
-		//
-		// This is because modifying file ownership or permissions on Linux
-		// typically requires elevated privileges. To safely handle permission
-		// changes during the local file operation, we enforce that the process
-		// must be running as root.
-		if !raw.preservePermissions && cooked.FromTo == common.EFromTo.FileLocal() {
-			if err := common.EnsureRunningAsRoot(); err != nil {
-				return cooked, fmt.Errorf("copying from Azure File NFS to local Linux requires root privileges when not preserving file permissions")
-			}
-		}
-
-		cooked.isNFSCopy, cooked.preserveInfo, cooked.preservePermissions, err = performNFSSpecificValidation(cooked.FromTo,
-			raw.isNFSCopy, raw.preserveInfo, raw.preservePermissions, raw.preserveSMBInfo, raw.preserveSMBPermissions)
-		if err != nil {
-			return cooked, err
-		}
-		if err = validateSymlinkFlag(raw.followSymlinks, raw.preserveSymlinks); err != nil {
-			return cooked, err
-		}
+	// NFS/SMB part
+	if cooked.isNFSCopy {
+		cooked.preserveInfo = raw.preserveInfo && areBothLocationsNFSAware(cooked.FromTo)
+		//TBD: We will be preserving ACLs and ownership info in case of NFS. (UserID,GroupID and FileMode)
+		// Using the same EPreservePermissionsOption that we have today for NFS as well
+		// Please provide the feedback if we should introduce new EPreservePermissionsOption instead.
+		cooked.preservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
+			true,
+			cooked.FromTo)
 		if err = cooked.hardlinks.Parse(raw.hardlinks); err != nil {
 			return cooked, err
 		}
-		if err = validateHardlinksFlag(cooked.hardlinks, cooked.FromTo, cooked.isNFSCopy); err != nil {
-			return cooked, err
-		}
 	} else {
-		cooked.isNFSCopy, cooked.preserveInfo, cooked.preservePOSIXProperties, cooked.preservePermissions, err = performSMBSpecificValidation(cooked.FromTo,
-			raw.isNFSCopy, raw.preserveInfo, raw.preservePOSIXProperties, raw.preservePermissions, raw.preserveOwner, raw.preserveSMBPermissions)
-		if err != nil {
-			return cooked, err
-		}
-		if err = validatePreserveOwner(raw.preserveOwner, cooked.FromTo); err != nil {
-			return cooked, err
-		}
+		cooked.preserveInfo = raw.preserveInfo && areBothLocationsSMBAware(cooked.FromTo)
+		cooked.preservePOSIXProperties = raw.preservePOSIXProperties
+		cooked.preservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
+			raw.preserveOwner,
+			cooked.FromTo)
 	}
 
-	// --as-subdir is OK on all sources and destinations, but additional verification has to be done down the line. (e.g. https://account.blob.core.windows.net is not a valid root)
-	cooked.asSubdir = raw.asSubdir
-
-	cooked.IncludeDirectoryStubs = raw.includeDirectoryStubs
+	// TODO: Figure out this preservePermissinos stuff
 	if cooked.preservePermissions.IsTruthy() && cooked.FromTo.From() == common.ELocation.Blob() {
 		// If a user is trying to persist from Blob storage with ACLs, they probably want directories too, because ACLs only exist in HNS.
 		cooked.IncludeDirectoryStubs = true
 	}
 
-	cooked.backupMode = raw.backupMode
-	if err = validateBackupMode(cooked.backupMode, cooked.FromTo); err != nil {
-		return cooked, err
-	}
-
-	// Make sure the given input is the one of the enums given by the blob SDK
 	err = cooked.permanentDeleteOption.Parse(raw.permanentDeleteOption)
 	if err != nil {
 		return cooked, err
 	}
-
-	// check for the flag value relative to fromTo location type
-	// Example1: for Local to Blob, preserve-last-modified-time flag should not be set to true
-	// Example2: for Blob to Local, follow-symlinks, blob-tier flags should not be provided with values.
-	switch cooked.FromTo {
-	case common.EFromTo.LocalBlobFS():
-		if cooked.blobType != common.EBlobType.Detect() {
-			return cooked, fmt.Errorf("blob-type is not supported on ADLS Gen 2")
-		}
-		if cooked.preserveLastModifiedTime {
-			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while uploading")
-		}
-		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
-			cooked.pageBlobTier != common.EPageBlobTier.None() {
-			return cooked, fmt.Errorf("blob-tier is not supported while uploading to ADLS Gen 2")
-		}
-		if cooked.preservePermissions.IsTruthy() {
-			return cooked, fmt.Errorf("preserve-smb-permissions is not supported while uploading to ADLS Gen 2")
-		}
-		if cooked.s2sPreserveProperties {
-			return cooked, fmt.Errorf("s2s-preserve-properties is not supported while uploading")
-		}
-		if cooked.s2sPreserveAccessTier {
-			return cooked, fmt.Errorf("s2s-preserve-access-tier is not supported while uploading")
-		}
-		if cooked.s2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {
-			return cooked, fmt.Errorf("s2s-handle-invalid-metadata is not supported while uploading")
-		}
-		if cooked.s2sSourceChangeValidation {
-			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while uploading")
-		}
-	case common.EFromTo.LocalBlob():
-		if cooked.preserveLastModifiedTime {
-			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while uploading to Blob Storage")
-		}
-		if cooked.s2sPreserveProperties {
-			return cooked, fmt.Errorf("s2s-preserve-properties is not supported while uploading to Blob Storage")
-		}
-		if cooked.s2sPreserveAccessTier {
-			return cooked, fmt.Errorf("s2s-preserve-access-tier is not supported while uploading to Blob Storage")
-		}
-		if cooked.s2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {
-			return cooked, fmt.Errorf("s2s-handle-invalid-metadata is not supported while uploading to Blob Storage")
-		}
-		if cooked.s2sSourceChangeValidation {
-			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while uploading to Blob Storage")
-		}
-	case common.EFromTo.LocalFile():
-		if cooked.preserveLastModifiedTime {
-			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while uploading")
-		}
-		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
-			cooked.pageBlobTier != common.EPageBlobTier.None() {
-			return cooked, fmt.Errorf("blob-tier is not supported while uploading to Azure File")
-		}
-		if cooked.s2sPreserveProperties {
-			return cooked, fmt.Errorf("s2s-preserve-properties is not supported while uploading")
-		}
-		if cooked.s2sPreserveAccessTier {
-			return cooked, fmt.Errorf("s2s-preserve-access-tier is not supported while uploading")
-		}
-		if cooked.s2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {
-			return cooked, fmt.Errorf("s2s-handle-invalid-metadata is not supported while uploading")
-		}
-		if cooked.s2sSourceChangeValidation {
-			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while uploading")
-		}
-		if cooked.blobType != common.EBlobType.Detect() {
-			return cooked, fmt.Errorf("blob-type is not supported on Azure File")
-		}
-	case common.EFromTo.BlobLocal(),
-		common.EFromTo.FileLocal(),
-		common.EFromTo.BlobFSLocal():
-		if cooked.SymlinkHandling.Follow() {
-			return cooked, fmt.Errorf("follow-symlinks flag is not supported while downloading")
-		}
-		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
-			cooked.pageBlobTier != common.EPageBlobTier.None() {
-			return cooked, fmt.Errorf("blob-tier is not supported while downloading")
-		}
-		if cooked.noGuessMimeType {
-			return cooked, fmt.Errorf("no-guess-mime-type is not supported while downloading")
-		}
-		if len(cooked.contentType) > 0 || len(cooked.contentEncoding) > 0 || len(cooked.contentLanguage) > 0 || len(cooked.contentDisposition) > 0 || len(cooked.cacheControl) > 0 || len(cooked.metadata) > 0 {
-			return cooked, fmt.Errorf("content-type, content-encoding, content-language, content-disposition, cache-control, or metadata is not supported while downloading")
-		}
-		if cooked.s2sPreserveProperties {
-			return cooked, fmt.Errorf("s2s-preserve-properties is not supported while downloading")
-		}
-		if cooked.s2sPreserveAccessTier {
-			return cooked, fmt.Errorf("s2s-preserve-access-tier is not supported while downloading")
-		}
-		if cooked.s2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {
-			return cooked, fmt.Errorf("s2s-handle-invalid-metadata is not supported while downloading")
-		}
-		if cooked.s2sSourceChangeValidation {
-			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while downloading")
-		}
-	case common.EFromTo.BlobFile(),
-		common.EFromTo.S3Blob(),
-		common.EFromTo.BlobBlob(),
-		common.EFromTo.FileBlob(),
-		common.EFromTo.FileFile(),
-		common.EFromTo.GCPBlob():
-		if cooked.preserveLastModifiedTime {
-			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while copying from service to service")
-		}
-		if cooked.SymlinkHandling.Follow() {
-			return cooked, fmt.Errorf("follow-symlinks flag is not supported while copying from service to service")
-		}
-		// blob type is not supported if destination is not blob
-		if cooked.blobType != common.EBlobType.Detect() && cooked.FromTo.To() != common.ELocation.Blob() {
-			return cooked, fmt.Errorf("blob-type is not supported for the scenario (%s)", cooked.FromTo.String())
-		}
-
-		// Setting blob tier is supported only when destination is a blob storage. Disabling it for all the other transfer scenarios.
-		if (cooked.blockBlobTier != common.EBlockBlobTier.None() || cooked.pageBlobTier != common.EPageBlobTier.None()) &&
-			cooked.FromTo.To() != common.ELocation.Blob() {
-			return cooked, fmt.Errorf("blob-tier is not supported for the scenario (%s)", cooked.FromTo.String())
-		}
-		if cooked.noGuessMimeType {
-			return cooked, fmt.Errorf("no-guess-mime-type is not supported while copying from service to service")
-		}
-		if len(cooked.contentType) > 0 || len(cooked.contentEncoding) > 0 || len(cooked.contentLanguage) > 0 || len(cooked.contentDisposition) > 0 || len(cooked.cacheControl) > 0 || len(cooked.metadata) > 0 {
-			return cooked, fmt.Errorf("content-type, content-encoding, content-language, content-disposition, cache-control, or metadata is not supported while copying from service to service")
-		}
-	}
-	if err = validatePutMd5(cooked.putMd5, cooked.FromTo); err != nil {
-		return cooked, err
-	}
-	if err = validateMd5Option(cooked.md5ValidationOption, cooked.FromTo); err != nil {
-		return cooked, err
-	}
-
-	// Because of some of our defaults, these must live down here and can't be properly checked.
-	// TODO: Remove the above checks where they can't be done.
-	cooked.s2sPreserveProperties = raw.s2sPreserveProperties
-	cooked.s2sGetPropertiesInBackend = raw.s2sGetPropertiesInBackend
-	cooked.s2sPreserveAccessTier = raw.s2sPreserveAccessTier
-	cooked.s2sSourceChangeValidation = raw.s2sSourceChangeValidation
 
 	// If the user has provided some input with excludeBlobType flag, parse the input.
 	if len(raw.excludeBlobType) > 0 {
@@ -837,36 +440,28 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		return cooked, err
 	}
 
-	// parse the filter patterns
 	cooked.IncludePatterns = parsePatterns(raw.include)
 	cooked.ExcludePatterns = parsePatterns(raw.exclude)
 	cooked.ExcludePathPatterns = parsePatterns(raw.excludePath)
 	cooked.excludeContainer = parsePatterns(raw.excludeContainer)
-
-	if (raw.includeFileAttributes != "" || raw.excludeFileAttributes != "") && fromTo.From() != common.ELocation.Local() {
-		return cooked, errors.New("cannot check file attributes on remote objects")
-	}
 	cooked.IncludeFileAttributes = parsePatterns(raw.includeFileAttributes)
 	cooked.ExcludeFileAttributes = parsePatterns(raw.excludeFileAttributes)
-
 	cooked.includeRegex = parsePatterns(raw.includeRegex)
 	cooked.excludeRegex = parsePatterns(raw.excludeRegex)
 
-	cooked.dryrunMode = raw.dryrun
+	return cooked, nil
+}
 
-	if azcopyOutputVerbosity == common.EOutputVerbosity.Quiet() || azcopyOutputVerbosity == common.EOutputVerbosity.Essential() {
-		if cooked.ForceWrite == common.EOverwriteOption.Prompt() {
-			err = fmt.Errorf("cannot set output level '%s' with overwrite option '%s'", azcopyOutputVerbosity.String(), cooked.ForceWrite.String())
-		} else if cooked.dryrunMode {
-			err = fmt.Errorf("cannot set output level '%s' with dry-run mode", azcopyOutputVerbosity.String())
-		}
-	}
-	if err != nil {
+func (raw rawCopyCmdArgs) cook() (cooked CookedCopyCmdArgs, err error) {
+	if cooked, err = raw.toOptions(); err != nil {
 		return cooked, err
 	}
-
-	cooked.deleteDestinationFileIfNecessary = raw.deleteDestinationFileIfNecessary
-
+	if err = cooked.validate(); err != nil {
+		return cooked, err
+	}
+	if err = cooked.processArgs(); err != nil {
+		return cooked, err
+	}
 	return cooked, nil
 }
 
@@ -1054,7 +649,7 @@ type CookedCopyCmdArgs struct {
 	excludeRegex []string
 
 	// list of version ids
-	ListOfVersionIDs chan string
+	ListOfVersionIDsChannel chan string
 	// filters from flags
 	ListOfFilesChannel chan string // Channels are nullable.
 	Recursive          bool
@@ -1074,7 +669,7 @@ type CookedCopyCmdArgs struct {
 	blobType        common.BlobType
 	// Blob index tags categorize data in your storage account utilizing key-value tag attributes.
 	// These tags are automatically indexed and exposed as a queryable multi-dimensional index to easily find data.
-	blobTags                 common.BlobTags
+	blobTags                 string
 	blockBlobTier            common.BlockBlobTier
 	pageBlobTier             common.PageBlobTier
 	metadata                 string
@@ -1127,14 +722,14 @@ type CookedCopyCmdArgs struct {
 	// whether user wants to preserve full properties during service to service copy, the default value is true.
 	// For S3 and Azure File non-single file source, as list operation doesn't return full properties of objects/files,
 	// to preserve full properties AzCopy needs to send one additional request per object/file.
-	s2sPreserveProperties bool
+	s2sPreserveProperties boolDefaultTrue
 	// useful when preserveS3Properties set to true, enables get S3 objects' or Azure files' properties during s2s copy in backend, the default value is true
-	s2sGetPropertiesInBackend bool
+	s2sGetPropertiesInBackend bool // TODO: This is default true, how do we deal with this in AzCopy as a library
 	// whether user wants to preserve access tier during service to service copy, the default value is true.
 	// In some case, e.g. target is a GPv1 storage account, access tier cannot be set properly.
 	// In such cases, use s2sPreserveAccessTier=false to bypass the access tier copy.
 	// For more details, please refer to https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers
-	s2sPreserveAccessTier bool
+	s2sPreserveAccessTier boolDefaultTrue
 	// whether user wants to check if source has changed after enumerating, the default value is true.
 	// For S2S copy, as source is a remote resource, validating whether source has changed need additional request costs.
 	s2sSourceChangeValidation bool
@@ -1180,6 +775,16 @@ type CookedCopyCmdArgs struct {
 	hardlinks                     common.HardlinkHandlingType
 	atomicSkippedSymlinkCount     uint32
 	atomicSkippedSpecialFileCount uint32
+
+	BlockSizeMB         float64
+	PutBlobSizeMB       float64
+	IncludePathPatterns []string
+	ListOfFiles         string
+	ListOfVersionIDs    string
+	blobTagsMap         common.BlobTags
+	cpkByName           string
+	cpkByValue          bool
+	preserveOwner       bool
 }
 
 func (cca *CookedCopyCmdArgs) isRedirection() bool {
@@ -1356,7 +961,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 			metadataMap[kv[0]] = &kv[1]
 		}
 	}
-	blobTags := cca.blobTags
+	blobTags := cca.blobTagsMap
 	var bbAccessTier *blob.AccessTier
 	if cca.blockBlobTier != common.EBlockBlobTier.None() {
 		bbAccessTier = to.Ptr(blob.AccessTier(cca.blockBlobTier.String()))
@@ -1501,7 +1106,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			MD5ValidationOption:      cca.md5ValidationOption,
 			DeleteSnapshotsOption:    cca.deleteSnapshotsOption,
 			// Setting tags when tags explicitly provided by the user through blob-tags flag
-			BlobTagsString:                   cca.blobTags.ToString(),
+			BlobTagsString:                   cca.blobTagsMap.ToString(),
 			DeleteDestinationFileIfNecessary: cca.deleteDestinationFileIfNecessary,
 		},
 		CommandString:  cca.commandString,
@@ -1995,12 +1600,14 @@ func isStdinPipeIn() (bool, error) {
 	return info.Mode()&(os.ModeNamedPipe|os.ModeSocket) != 0, nil
 }
 
+var cpCmd *cobra.Command
+
 // TODO check file size, max is 4.75TB
 func init() {
 	raw := rawCopyCmdArgs{}
 
 	// cpCmd represents the cp command
-	cpCmd := &cobra.Command{
+	cpCmd = &cobra.Command{
 		Use:        "copy [source] [destination]",
 		Aliases:    []string{"cp", "c"},
 		SuggestFor: []string{"cpy", "cy", "mv"}, // TODO why does message appear twice on the console
@@ -2048,6 +1655,8 @@ func init() {
 		},
 		Run: func(cmd *cobra.Command, args []string) {
 
+			// The following code is to deal with deprecated flags
+			// preserveInfo
 			preserveInfoDefaultVal := GetPreserveInfoFlagDefault(cmd, raw.isNFSCopy)
 			if cmd.Flags().Changed(PreserveInfoFlag) && cmd.Flags().Changed(PreserveSMBInfoFlag) || cmd.Flags().Changed(PreserveInfoFlag) {
 				// we give precedence to raw.preserveInfo flag value if both flags are set
@@ -2055,6 +1664,15 @@ func init() {
 				raw.preserveInfo = raw.preserveSMBInfo
 			} else {
 				raw.preserveInfo = preserveInfoDefaultVal
+			}
+
+			// preservePermissions
+			// TODO : Double check this logic. In the flag processing logic, we used to set a temporary variable isUserPersistingPermissions and that was a simple or of the deprecated and new flag.
+			if !raw.isNFSCopy {
+				raw.preservePermissions = raw.preservePermissions || raw.preserveSMBPermissions
+			}
+			if raw.isNFSCopy && ((raw.preserveSMBInfo && runtime.GOOS == "linux") || raw.preserveSMBPermissions) {
+				glcm.Error(InvalidFlagsForNFSMsg)
 			}
 
 			cooked, err := raw.cook()
@@ -2080,8 +1698,8 @@ func init() {
 
 	// filters change which files get transferred
 	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "False by default. Follow symbolic links when uploading from local file system.")
-	cpCmd.PersistentFlags().StringVar(&raw.includeBefore, common.IncludeBeforeFlagName, "", "Include only those files were modified before or on the given date/time. The value should be in ISO8601 format. If no timezone is specified, the value is assumed to be in the local timezone of the machine running AzCopy. E.g. '2020-08-19T15:04:00Z' for a UTC time, or '2020-08-19' for midnight (00:00) in the local timezone. As of AzCopy 10.7, this flag applies only to files, not folders, so folder properties won't be copied when using this flag with --preserve-smb-info or --preserve-smb-permissions.")
-	cpCmd.PersistentFlags().StringVar(&raw.includeAfter, common.IncludeAfterFlagName, "", "Include only those files modified on or after the given date/time. The value should be in ISO8601 format. If no timezone is specified, the value is assumed to be in the local timezone of the machine running AzCopy. E.g. '2020-08-19T15:04:00Z' for a UTC time, or '2020-08-19' for midnight (00:00) in the local timezone. As of AzCopy 10.5, this flag applies only to files, not folders, so folder properties won't be copied when using this flag with --preserve-smb-info or --preserve-smb-permissions.")
+	cpCmd.PersistentFlags().StringVar(&raw.includeBefore, common.IncludeBeforeFlagName, "", "Include only those files were modified before or on the given date/time. The value should be in ISO8601 format. If no timezone is specified, the value is assumed to be in the local timezone of the machine running AzCopy. E.g. '2020-08-19T15:04:00Z' for a UTC time, or '2020-08-19' for midnight (00:00) in the local timezone. As of AzCopy 10.7, this flag applies only to files, not folders, so folder properties won't be copied when using this flag with --preserve-info or --preserve-permissions.")
+	cpCmd.PersistentFlags().StringVar(&raw.includeAfter, common.IncludeAfterFlagName, "", "Include only those files modified on or after the given date/time. The value should be in ISO8601 format. If no timezone is specified, the value is assumed to be in the local timezone of the machine running AzCopy. E.g. '2020-08-19T15:04:00Z' for a UTC time, or '2020-08-19' for midnight (00:00) in the local timezone. As of AzCopy 10.5, this flag applies only to files, not folders, so folder properties won't be copied when using this flag with --preserve-info or --preserve-permissions.")
 	cpCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "Include only these files when copying. "+
 		"This option supports wildcard characters (*). Separate files by using a ';' (For example: *.jpg;*.pdf;exactName).")
 	cpCmd.PersistentFlags().StringVar(&raw.includePath, "include-path", "", "Include only these paths when copying. "+
@@ -2120,7 +1738,7 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveOwner, common.PreserveOwnerFlagName, common.PreserveOwnerDefault, "Only has an effect in downloads, and only when --preserve-smb-permissions is used. If true (the default), the file Owner and Group are preserved in downloads. If set to false, --preserve-smb-permissions will still preserve ACLs but Owner and Group will be based on the user running AzCopy")
 
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", (runtime.GOOS == "windows"), "Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Windows and Azure Files). On windows, this flag will be set to true by default. If the source or destination is a volume mounted on Linux using SMB protocol, this flag will have to be explicitly set to true. Only the attribute bits supported by Azure Files will be transferred; any others will be ignored. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern). The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
-	cpCmd.PersistentFlags().BoolVar(&raw.isNFSCopy, IsNFSProtocolFlag, false, "False by default. Specify this flag if you intend to transfer data to NFS file share. This flag is only applicable when the destination is an NFS file share.")
+	cpCmd.PersistentFlags().BoolVar(&raw.isNFSCopy, IsNFSProtocolFlag, false, "False by default. Users must specify this flag if they intend to transfer data to or from NFS shares.")
 	//Marking this flag as hidden as we might not support it in the future
 	_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-info")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveInfo, PreserveInfoFlag, false, "Specify this flag if you want to preserve properties during the transfer operation.The previously available flag for SMB (--preserve-smb-info) is now redirected to --preserve-info flag for both SMB and NFS operations. The default value is true for Windows when copying to Azure Files SMB share and for Linux when copying to Azure Files NFS share. ")
@@ -2187,7 +1805,7 @@ func init() {
 
 	// Deprecate the old persist-smb-permissions flag
 	_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
-	cpCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default. Preserves ACLs between aware resources (Windows and Azure Files SMB, or Data Lake Storage to Data Lake Storage) and permissions between aware resourcec(Linux to Azure Files NFS). For accounts that have a hierarchical namespace, your security principal must be the owning user of the target container or it must be assigned the Storage Blob Data Owner role, scoped to the target container, storage account, parent resource group, or subscription. For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
+	cpCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default. Preserves ACLs between aware resources (Windows and Azure Files SMB, or Data Lake Storage to Data Lake Storage) and permissions between aware resources(Linux to Azure Files NFS). For accounts that have a hierarchical namespace, your security principal must be the owning user of the target container or it must be assigned the Storage Blob Data Owner role, scoped to the target container, storage account, parent resource group, or subscription. For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
 
 	// Deletes destination blobs with uncommitted blocks when staging block, hidden because we want to preserve default behavior
 	cpCmd.PersistentFlags().BoolVar(&raw.deleteDestinationFileIfNecessary, "delete-destination-file", false, "False by default. Deletes destination blobs, specifically blobs with uncommitted blocks when staging block.")
