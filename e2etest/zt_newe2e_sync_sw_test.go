@@ -28,6 +28,9 @@ func (s *SWSyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariat
 		return
 	}
 
+	svm.InsertVariationSeparator("_DeleteDestination_")
+	deleteDestination := ResolveVariation(svm, []bool{true, false}) // Add variation for DeleteDestination flag
+
 	srcRes := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, srcLoc, GetResourceOptions{
 		PreferredAccount: common.Iff(srcLoc == common.ELocation.BlobFS(), pointerTo(PrimaryHNSAcct), nil),
 	}), ResourceDefinitionContainer{})
@@ -51,14 +54,14 @@ func (s *SWSyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariat
 				Recursive:             pointerTo(false),
 				IncludeDirectoryStubs: pointerTo(true),
 			},
-			DeleteDestination: pointerTo(true),
+			DeleteDestination: pointerTo(deleteDestination),
 		},
 	})
 
 	ValidateResource[ContainerResourceManager](svm, dstRes, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
-			"deleteme.txt":      ResourceDefinitionObject{ObjectShouldExist: pointerTo(false)},
-			"also/deleteme.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(false)},
+			"deleteme.txt":      ResourceDefinitionObject{ObjectShouldExist: pointerTo(!deleteDestination)},
+			"also/deleteme.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(!deleteDestination)},
 		},
 	}, false)
 }
@@ -76,6 +79,9 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationM
 	)
 
 	resourceType := ResolveVariation(a, []string{CreateFolder})
+
+	a.InsertVariationSeparator("_DeleteDestination_")
+	deleteDestination := ResolveVariation(a, []bool{true, false}) // Add variation for DeleteDestination flag
 
 	// Select source map
 	srcMap := map[string]ObjectResourceMappingFlat{
@@ -144,6 +150,7 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationM
 			CopySyncCommonFlags: CopySyncCommonFlags{
 				Recursive: pointerTo(false),
 			},
+			DeleteDestination: pointerTo(deleteDestination),
 		},
 	})
 
@@ -390,20 +397,12 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUpload_NoChange(svm *ScenarioVariati
 	srcLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local()})
 	// Scale up from service to object
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})), ResourceDefinitionContainer{})
-	//declare metadata map[string]*string
-	metadata := map[string]*string{
-		"POSIXATimeMeta": pointerTo("1749795780487414538"),
-		"POSIXGroupMeta": pointerTo("1004"),
-	}
 	// Scale up from service to object
 	srcDef := ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
 			"abc":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
 			"def":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
 			"foobar": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
-		},
-		Properties: ContainerProperties{
-			Metadata: metadata,
 		},
 	}
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, srcLoc), srcDef)
@@ -464,9 +463,6 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUpload_NoChange(svm *ScenarioVariati
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcDef.Objects,
-		Properties: ContainerProperties{
-			Metadata: metadata,
-		},
 	}, true)
 
 	//Retrigger Sync with no change in dataset
@@ -491,15 +487,12 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUpload_NoChange(svm *ScenarioVariati
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcDef.Objects,
-		Properties: ContainerProperties{
-			Metadata: metadata,
-		},
 	}, true)
 }
 
 // Sync entire directory with subdirectories and files
 // Add new files to the source and validate that they are copied to the destination
-func (s *SWSyncTestSuite) Scenario_EntireDirectory_UploadContainer(svm *ScenarioVariationManager) {
+func (s *SWSyncTestSuite) Scenario_NewFileAdditionAtSource_UploadContainer(svm *ScenarioVariationManager) {
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbSync}) // Calculate verb early to create the destination object early
 
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
