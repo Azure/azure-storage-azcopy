@@ -743,11 +743,15 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 			}
 			screenStats, logStats := formatExtraStats(cca.fromTo, summary.AverageIOPS, summary.AverageE2EMilliseconds, summary.NetworkErrorPercentage, summary.ServerBusyPercentage)
 
-			output := fmt.Sprintf(
-				`
+			var output string
+
+			if !buildmode.IsMover {
+				output = fmt.Sprintf(
+					`
 Job %s Summary
 Files Scanned at Source: %v
 Files Scanned at Destination: %v
+Folders Scanned at Source: %v
 Elapsed Time (Minutes): %v
 Number of Copy Transfers for Files: %v
 Number of Copy Transfers for Folder Properties: %v 
@@ -760,22 +764,64 @@ Total Number of Bytes Transferred: %v
 Total Number of Bytes Enumerated: %v
 Final Job Status: %v%s%s
 `,
-				summary.JobID.String(),
-				atomic.LoadUint64(&cca.atomicSourceFilesScanned),
-				atomic.LoadUint64(&cca.atomicDestinationFilesScanned),
-				jobsAdmin.ToFixed(duration.Minutes(), 4),
-				summary.FileTransfers,
-				summary.FolderPropertyTransfers,
-				summary.FilePropertyTransfers,
-				summary.TotalTransfers,
-				summary.TransfersCompleted,
-				summary.TransfersFailed,
-				cca.atomicDeletionCount,
-				summary.TotalBytesTransferred,
-				summary.TotalBytesEnumerated,
-				summary.JobStatus,
-				screenStats,
-				formatPerfAdvice(summary.PerformanceAdvice))
+					summary.JobID.String(),
+					atomic.LoadUint64(&cca.atomicSourceFilesScanned),
+					atomic.LoadUint64(&cca.atomicDestinationFilesScanned),
+					atomic.LoadUint64(&cca.atomicSourceFoldersScanned),
+					jobsAdmin.ToFixed(duration.Minutes(), 4),
+					summary.FileTransfers,
+					summary.FolderPropertyTransfers,
+					summary.FilePropertyTransfers,
+					summary.TotalTransfers,
+					summary.TransfersCompleted,
+					summary.TransfersFailed,
+					cca.atomicDeletionCount,
+					summary.TotalBytesTransferred,
+					summary.TotalBytesEnumerated,
+					summary.JobStatus,
+					screenStats,
+					formatPerfAdvice(summary.PerformanceAdvice))
+			} else {
+				output = fmt.Sprintf(
+					`
+Job %s Summary
+Files Scanned at Source: %v
+Files Scanned at Destination: %v
+Folders Scanned at Source: %v
+Elapsed Time (Minutes): %v
+Number of Copy Transfers for Files: %v
+Number of Copy Transfers for Folder Properties: %v 
+Number of Copy Transfers for Files Properties: %v
+Total Number of Copy Transfers: %v
+Number of Copy Transfers Completed: %v
+Number of Copy Transfers Failed: %v
+Number of Deletions at Destination: %v
+Number of Files that don't require transfer: %v
+Number of Folders that don't require transfer: %v
+Total Number of Bytes Transferred: %v
+Total Number of Bytes Enumerated: %v
+Final Job Status: %v%s%s
+`,
+					summary.JobID.String(),
+					atomic.LoadUint64(&cca.atomicSourceFilesScanned),
+					atomic.LoadUint64(&cca.atomicDestinationFilesScanned),
+					atomic.LoadUint64(&cca.atomicSourceFoldersScanned),
+					jobsAdmin.ToFixed(duration.Minutes(), 4),
+					summary.FileTransfers,
+					summary.FolderPropertyTransfers,
+					summary.FilePropertyTransfers,
+					summary.TotalTransfers,
+					summary.TransfersCompleted,
+					summary.TransfersFailed,
+					cca.atomicDeletionCount,
+					atomic.LoadUint64(&cca.atomicSourceFilesTransferNotRequired),
+					atomic.LoadUint64(&cca.atomicSourceFoldersTransferNotRequired),
+					summary.TotalBytesTransferred,
+					summary.TotalBytesEnumerated,
+					summary.JobStatus,
+					screenStats,
+					formatPerfAdvice(summary.PerformanceAdvice))
+			}
 
 			jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
 			if exists {

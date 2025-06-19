@@ -24,814 +24,414 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	_ "net/http/pprof"
-	"os"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
-)
 
-var (
-	enableThrottling bool = false
-	enableDebugLogs  bool = false
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // --- BEGIN Throttling and Concurrency Configuration ---
-var (
-	// Core concurrency settings
-	CrawlParallelism         int = 4  // Default concurrent directory processors
-	MaxConcurrentDirectories int = 50 // Semaphore limit for directory processing
-
-	// Goroutine thresholds
-	GoroutineThreshold    int32 = 30000       // Max total goroutines before throttling
-	GoroutineLowThreshold int32 = 0.8 * 30000 // Resume threshold (80% of max)
-
-	// Memory thresholds (in MB)
-	MemoryLowThresholdMB      uint64 = 2048 // Resume processing (2GB)
-	MemoryHighThresholdMB     uint64 = 3072 // Start throttling (3GB)
-	MemoryCriticalThresholdMB uint64 = 4096 // Emergency stop (4GB)
-
-	// Monitoring and logging
-	MonitorIntervalSecs     int = 10 // Stats logging interval (reduced for better visibility)
-	ThrottleLogIntervalSecs int = 5  // How often to log during throttling
+const (
+	enableDebugLogs    bool = false
+	enableThrottleLogs bool = true
+	startGoProfiling   bool = true
 
 	// Throttling control flags
-	EnableGoroutineThrottling bool = false
-	EnableMemoryThrottling    bool = false
-	EnableDirectoryThrottling bool = true
-	EnableAdaptiveThrottling  bool = true
+	enableThrottling               bool = true
+	enableFileBasedThrottling      bool = true
+	enableMemoryBasedThrottling    bool = true
+	enableGoroutineBasedThrottling bool = true
+	onlyReduceLimits               bool = true // If true, only reduce limits, never increase
 
-	// Adaptive controller weights (must sum to 1.0)
-	// These weights will be normalized based on control flags above
-	GoroutineWeight float64 = 0.4
-	MemoryWeight    float64 = 0.4
-	DirectoryWeight float64 = 0.2
+	absoluteMaxActiveFiles     int64 = 10_000_000 // Absolute max active files, used for dynamic limits
+	maxFilesPerActiveDirectory int64 = 80_000     // Max files per active directory
+
+	// These are static limits as of now. This can be dynamically adjusted later
+	// by the StatsMonitor based on available system resources.
+	maxActiveGoRoutines   int64 = 50_000 // Max active goroutines, used for dynamic limits
+	maxMemoryUsagePercent int32 = 80     // Max memory usage percentage, used for dynamic limits
+
+	throttleLogIntervalSecs       int           = 60 * 60                               // How often to log during throttling
+	semaphoreThrottleWaitInterval time.Duration = time.Duration(time.Millisecond * 100) // How often to check semaphore after throttle limit is hit
+	semaphoreWaitInterval         time.Duration = time.Duration(time.Millisecond * 50)  // How often to check semaphore status
+
+	// Performance tuning constants
+	filesPerGBMemory          = 500_000 // Files per GB of memory
+	crawlMultiplierLocal      = 4       // Local to remote multiplier
+	crawlMultiplierS3         = 8       // S3 to blob multiplier
+	crawlMultiplierDefault    = 2       // Default multiplier
+	snapshotRetentionCount    = 50      // Number of snapshots to keep
+	consistencyThreshold      = 10      // Samples needed for consistency
+	adjustmentCooldownMinutes = 2       // Minutes between adjustments
+
+	// Hysteresis percentages to prevent oscillation
+	throttleEngageThreshold  = 100 // Engage throttling at 100% of limit
+	throttleReleaseThreshold = 85  // Release throttling at 85% of limit
+
+	memoryEngageThreshold  = 80.0 // Engage at 80% memory usage
+	memoryReleaseThreshold = 70.0 // Release at 70% memory usage
+
+	goroutineEngageThreshold  = 100 // Engage at 100% of goroutine limit
+	goroutineReleaseThreshold = 85  // Release at 85% of goroutine limit
+
+	// Defaults
+	defaultPhysicalMemoryGB uint64 = 16 // Default physical memory in GB, used if sysinfo fails
+	defaultNumCores         int32  = 8  // Default number of CPU cores, used if runtime.NumCPU() fails
+
+	directorySizeBuffer = 1024
+
+	gbToBytesMultiplier = 1024 * 1024 * 1024
+	mbToBytesMultiplier = 1024 * 1024
 )
+
+// Global variables that control the throttling behavior and resource limits.
+// These are configured based on system capabilities and transfer scenarios.
+var (
+	// Core concurrency settings
+	crawlParallelism int32
+	maxActiveFiles   int64
+
+	// Counters
+	activeDirectories         atomic.Int64
+	totalFilesInIndexer       atomic.Int64
+	totalDirectoriesProcessed atomic.Uint64 // never decremented
+
+	// Dynamic limits
+	activeFilesLimit atomic.Int64 // Dynamic limit for active files managed by StatsMonitor
+)
+
+// initializeLimits initializes the concurrency and memory limits based on system resources
+// and the transfer scenario (FromTo). It sets MaxActiveFiles based on available memory
+// and CrawlParallelism based on CPU cores with scenario-specific multipliers.
+func initializeLimits(fromTo common.FromTo) {
+	maxActiveFiles = int64(GetTotalPhysicalMemoryGB()) * filesPerGBMemory // Set based on physical memory, 1 million files per GB
+	activeFilesLimit.Store(maxActiveFiles)
+
+	var multiplier int
+	switch fromTo.From() {
+	case common.ELocation.Local():
+		// Local to remote, use default limits
+		// Parallelism will deal with parallel File I/O operations
+		multiplier = crawlMultiplierLocal
+	case common.ELocation.S3():
+		// S3 to blob, use higher limits
+		// parallelism will deal with API calls
+		multiplier = crawlMultiplierS3
+	default:
+		// Default case, use moderate limits
+		multiplier = crawlMultiplierDefault
+	}
+
+	crawlParallelism = int32(runtime.NumCPU() * multiplier) // Set parallelism based on CPU cores
+}
 
 // --- END Throttling and Concurrency Configuration ---
 
-// Global state variables
-var (
-	totalGoroutines        atomic.Int32
-	activeDirProcessors    atomic.Int32
-	waitingForSemaphore    atomic.Int32
-	totalDirectoriesQueued atomic.Uint64
-	dirSemaphore           chan struct{}
-)
-
-// Cached metrics with atomic operations for thread safety
-type CachedSystemMetrics struct {
-	// Fast-changing metrics (updated every 2 seconds)
-	goroutines      atomic.Int32  // Current goroutine count
-	activeDirs      atomic.Int32  // Active directory processors
-	waitingDirs     atomic.Int32  // Directories waiting for semaphore
-	totalQueuedDirs atomic.Uint64 // Total directories queued for processing
-
-	// Expensive metrics (updated every 5 seconds)
-	heapAllocMB      atomic.Uint64 // Heap allocated memory in MB
-	heapSysMB        atomic.Uint64 // Heap system memory in MB
-	gcPauses         atomic.Uint64 // Total GC pause time in milliseconds
-	numGC            atomic.Uint32 // Number of GC cycles
-	residentMemoryMB atomic.Uint64 // RSS memory from /proc/*/status
-	virtualMemoryMB  atomic.Uint64 // Virtual memory from /proc/*/statm
-
-	// Timestamps for freshness checking
-	lastExpensiveMetricsUpdate atomic.Int64 // Unix timestamp for expensive metrics
-	lastFastMetricsUpdate      atomic.Int64 // Unix timestamp for fast metrics
-
-	mutex sync.RWMutex
-}
-
-// SystemMetrics holds current system performance metrics
-type SystemMetrics struct {
-	Timestamp              time.Time
-	Goroutines             int32
-	ActiveDirectories      int32
-	WaitingDirectories     int32
-	TotalQueuedDirectories uint64
-	VirtualMemoryMB        uint64
-	ResidentMemoryMB       uint64
-	CPUUsagePercent        float64
-	GCPauses               uint64
-	HeapAllocMB            uint64
-	HeapSysMB              uint64
-	NumGC                  uint32
-}
-
-// AdaptiveThrottleController manages multi-metric throttling decisions
-type AdaptiveThrottleController struct {
-	maxGoroutines int32
-	maxMemoryMB   uint64
-	maxActiveDirs int32
-
-	// Throttling state
-	isThrottling      bool
-	throttleStartTime time.Time
-	lastLogTime       time.Time
-
-	mutex sync.RWMutex
-}
-
-// MetricReliability tracks which metrics are currently working
-type MetricReliability struct {
-	goroutineMetricsOK bool
-	memoryMetricsOK    bool
-	lastGoroutineError time.Time
-	lastMemoryError    time.Time
-	mutex              sync.RWMutex
-}
-
-// Memory state tracking for error handling
-type memoryMetricsState struct {
-	lastValidRSS      uint64
-	lastValidVM       uint64
-	consecutiveErrors int
-	lastErrorTime     time.Time
-	mutex             sync.RWMutex
-}
-
-var (
-	globalMetricsCache = &CachedSystemMetrics{}
-	metricReliability  = &MetricReliability{
-		goroutineMetricsOK: true,
-		memoryMetricsOK:    true,
-	}
-	memoryState = &memoryMetricsState{}
-)
-
-// Constants for update intervals
-const (
-	FastMetricsUpdateInterval      = 2 * time.Second  // For goroutines + active dirs
-	ExpensiveMetricsUpdateInterval = 5 * time.Second  // For memory + GC stats
-	StaleDataThreshold             = 10 * time.Second // Consider data stale after this
-)
-
-// Optimized memory reading with error caching
-var (
-	memoryReadCache = struct {
-		rss       uint64
-		vm        uint64
-		lastRead  time.Time
-		cacheTime time.Duration
-		mutex     sync.RWMutex
-	}{
-		cacheTime: 1 * time.Second, // Cache for 1 second
-	}
-)
-
-// NewAdaptiveThrottleController creates a new adaptive throttle controller
-func NewAdaptiveThrottleController() *AdaptiveThrottleController {
-	return &AdaptiveThrottleController{
-		maxGoroutines: GoroutineThreshold,
-		maxMemoryMB:   MemoryCriticalThresholdMB,
-		maxActiveDirs: int32(MaxConcurrentDirectories),
-	}
-}
-
-// Lightweight metrics getter - uses cached values
-func GetSystemMetricsOptimized() SystemMetrics {
-	cache := globalMetricsCache
-	cache.mutex.RLock()
-	defer cache.mutex.RUnlock()
-
-	now := time.Now()
-
-	// Check data freshness with better variable names
-	expensiveMetricsAge := now.Unix() - cache.lastExpensiveMetricsUpdate.Load()
-	fastMetricsAge := now.Unix() - cache.lastFastMetricsUpdate.Load()
-
-	metrics := SystemMetrics{
-		Timestamp:              now,
-		Goroutines:             cache.goroutines.Load(),
-		ActiveDirectories:      cache.activeDirs.Load(),
-		WaitingDirectories:     waitingForSemaphore.Load(),
-		TotalQueuedDirectories: totalDirectoriesQueued.Load(),
-		HeapAllocMB:            cache.heapAllocMB.Load(),
-		HeapSysMB:              cache.heapSysMB.Load(),
-		GCPauses:               cache.gcPauses.Load(),
-		NumGC:                  cache.numGC.Load(),
-		ResidentMemoryMB:       cache.residentMemoryMB.Load(),
-		VirtualMemoryMB:        cache.virtualMemoryMB.Load(),
-	}
-
-	// Add data freshness indicators with better descriptions
-	if expensiveMetricsAge > int64(StaleDataThreshold.Seconds()) {
-		WarnStdoutAndScanningLog(fmt.Sprintf("Warning: Expensive metrics (memory/GC) are %d seconds old", expensiveMetricsAge))
-	}
-	if fastMetricsAge > int64(StaleDataThreshold.Seconds()) {
-		WarnStdoutAndScanningLog(fmt.Sprintf("Warning: Fast metrics (goroutines/dirs) are %d seconds old", fastMetricsAge))
-	}
-
-	return metrics
-}
-
-// Background goroutine for updating expensive metrics (memory + GC stats)
-func updateExpensiveMetricsBackground(ctx context.Context) {
-	ticker := time.NewTicker(ExpensiveMetricsUpdateInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			updateExpensiveMetrics()
-		}
-	}
-}
-
-// Background goroutine for updating fast-changing metrics (goroutines + active directories)
-func updateFastMetricsBackground(ctx context.Context) {
-	ticker := time.NewTicker(FastMetricsUpdateInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			updateFastMetrics()
-		}
-	}
-}
-
-// Update expensive metrics: memory stats, GC stats, heap stats
-func updateExpensiveMetrics() {
-	cache := globalMetricsCache
-
-	// Get runtime memory stats (expensive operation - this rarely fails)
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-
-	// Get system memory info with error handling
-	rss, rssErr := getRSSMemoryOptimized()
-	vm, vmErr := getTotalVirtualMemoryOptimized()
-
-	memoryState.mutex.Lock()
-
-	// Handle RSS memory reading
-	if rssErr != nil {
-		memoryState.consecutiveErrors++
-		memoryState.lastErrorTime = time.Now()
-
-		// Log error periodically (not every failure to avoid spam)
-		if memoryState.consecutiveErrors == 1 || memoryState.consecutiveErrors%10 == 0 {
-			WarnStdoutAndScanningLog(fmt.Sprintf(
-				"Warning: Failed to read RSS memory (attempt %d): %v. Using last valid value: %dMB",
-				memoryState.consecutiveErrors, rssErr, memoryState.lastValidRSS))
-		}
-
-		// Use last known good value
-		rss = memoryState.lastValidRSS
-
-		// If we've never had a good reading, use heap as fallback
-		if rss == 0 {
-			rss = m.HeapSys / 1024 / 1024 // Heap system memory as approximation
-			WarnStdoutAndScanningLog(fmt.Sprintf(
-				"Using heap system memory as RSS fallback: %dMB", rss))
-		}
-
-		// Update reliability tracking
-		metricReliability.mutex.Lock()
-		if metricReliability.memoryMetricsOK {
-			WarnStdoutAndScanningLog("Memory metrics failed - switching to directory fallback throttling")
-		}
-		metricReliability.memoryMetricsOK = false
-		metricReliability.lastMemoryError = time.Now()
-		metricReliability.mutex.Unlock()
+// GetTotalPhysicalMemoryGB retrieves the total physical memory available on the system in GB.
+// It uses syscall.Sysinfo to get system information and falls back to a default value
+// if the system call fails.
+func GetTotalPhysicalMemoryGB() uint64 {
+	var sysInfo syscall.Sysinfo_t
+	var totalGB uint64
+	if err := syscall.Sysinfo(&sysInfo); err != nil {
+		totalGB = defaultPhysicalMemoryGB
 	} else {
-		// Successful read - reset error state
-		if memoryState.consecutiveErrors > 0 {
-			WarnStdoutAndScanningLog(fmt.Sprintf(
-				"RSS memory reading recovered after %d failures", memoryState.consecutiveErrors))
-			memoryState.consecutiveErrors = 0
-		}
-		memoryState.lastValidRSS = rss
-
-		// Update reliability tracking
-		metricReliability.mutex.Lock()
-		if !metricReliability.memoryMetricsOK {
-			WarnStdoutAndScanningLog("Memory metrics recovered - re-enabling memory throttling")
-		}
-		metricReliability.memoryMetricsOK = true
-		metricReliability.mutex.Unlock()
+		// Convert from bytes to GB
+		totalGB = (uint64(sysInfo.Totalram)) * uint64(sysInfo.Unit) / gbToBytesMultiplier
 	}
 
-	// Handle Virtual Memory reading similarly
-	if vmErr != nil {
-		if memoryState.lastValidVM == 0 {
-			vm = rss * 2 // Simple fallback: assume VM is roughly 2x RSS
-		} else {
-			vm = memoryState.lastValidVM
-		}
-	} else {
-		memoryState.lastValidVM = vm
-	}
-
-	memoryState.mutex.Unlock()
-
-	// Update cache atomically with validated values
-	cache.heapAllocMB.Store(m.HeapAlloc / 1024 / 1024)
-	cache.heapSysMB.Store(m.HeapSys / 1024 / 1024)
-	cache.gcPauses.Store(m.PauseTotalNs / 1000000)
-	cache.numGC.Store(m.NumGC)
-	cache.residentMemoryMB.Store(rss) // Now guaranteed to be non-zero
-	cache.virtualMemoryMB.Store(vm)
-	cache.lastExpensiveMetricsUpdate.Store(time.Now().Unix())
+	return totalGB
 }
 
-// Update fast-changing metrics: goroutine count, active directory processors
-func updateFastMetrics() {
-	cache := globalMetricsCache
-
-	// Goroutine count (this can theoretically fail in extreme cases)
-	defer func() {
-		if r := recover(); r != nil {
-			metricReliability.mutex.Lock()
-			if metricReliability.goroutineMetricsOK {
-				WarnStdoutAndScanningLog(fmt.Sprintf(
-					"Goroutine metrics failed (panic: %v) - switching to directory fallback throttling", r))
-			}
-			metricReliability.goroutineMetricsOK = false
-			metricReliability.lastGoroutineError = time.Now()
-			metricReliability.mutex.Unlock()
-		}
-	}()
-
-	// These are very fast operations (just reading counters)
-	current := runtime.NumGoroutine()
-	activeDirs := activeDirProcessors.Load()
-
-	metricReliability.mutex.Lock()
-	if !metricReliability.goroutineMetricsOK {
-		WarnStdoutAndScanningLog("Goroutine metrics recovered - re-enabling goroutine throttling")
+// GetNumCPU returns the number of logical CPU cores available on the system.
+// It uses runtime.NumCPU() and falls back to a default value if the call fails.
+func GetNumCPU() int32 {
+	// Use runtime.NumCPU() to get the number of logical CPUs
+	numCores := runtime.NumCPU()
+	if numCores <= 0 {
+		// Fallback to default if NumCPU fails
+		numCores = int(defaultNumCores)
 	}
-	metricReliability.goroutineMetricsOK = true
-	metricReliability.mutex.Unlock()
-
-	cache.goroutines.Store(int32(current))
-	cache.activeDirs.Store(activeDirs)
-	cache.lastFastMetricsUpdate.Store(time.Now().Unix())
+	glcm.Info(fmt.Sprintf("Number of CPU cores: %d", numCores))
+	return int32(numCores)
 }
 
-// Check which metrics are currently reliable
-func GetMetricReliability() (goroutineOK, memoryOK bool) {
-	metricReliability.mutex.RLock()
-	defer metricReliability.mutex.RUnlock()
+// DirSemaphore manages directory processing concurrency using a semaphore pattern.
+// It controls how many directories can be processed simultaneously and includes
+// throttling logic based on file indexer size and system resource usage.
+type DirSemaphore struct {
+	// Semaphore for directory processing
+	dirSemaphore chan struct{}
 
-	// Consider metrics unreliable if they failed recently (within last 30 seconds)
-	now := time.Now()
-	goroutineRecent := now.Sub(metricReliability.lastGoroutineError) < 30*time.Second
-	memoryRecent := now.Sub(metricReliability.lastMemoryError) < 30*time.Second
+	waitingForSemaphore atomic.Int32
 
-	goroutineOK = metricReliability.goroutineMetricsOK && !goroutineRecent
-	memoryOK = metricReliability.memoryMetricsOK && !memoryRecent
+	// Monitoring
+	lastLogTime time.Time
 
-	return goroutineOK, memoryOK
+	statsMonitor *StatsMonitor
+
+	// Hysteresis state tracking
+	isThrottling       bool         // Current throttling state
+	throttleStateMutex sync.RWMutex // Protect throttling state
+
+	// Individual throttle states for different resources
+	fileThrottleActive      bool
+	memoryThrottleActive    bool
+	goroutineThrottleActive bool
+
+	// Context-based cancellation instead of channel
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
-// Enhanced memory reading with better error handling
-func getRSSMemoryOptimized() (uint64, error) {
-	cache := &memoryReadCache
-	cache.mutex.RLock()
+// NewDirSemaphore creates and initializes a new DirSemaphore with pre-filled tokens
+// and starts the associated stats monitor for dynamic throttling adjustments.
+func NewDirSemaphore(parentCtx context.Context) *DirSemaphore {
+	// Create child context for this semaphore
+	ctx, cancel := context.WithCancel(parentCtx)
 
-	// Return cached value if recent enough
-	if time.Since(cache.lastRead) < cache.cacheTime {
-		rss := cache.rss
-		cache.mutex.RUnlock()
-		return rss, nil
-	}
-	cache.mutex.RUnlock()
+	ds := &DirSemaphore{
+		dirSemaphore: make(chan struct{}, crawlParallelism),
+		lastLogTime:  time.Now(),
+		ctx:          ctx,
+		cancel:       cancel,
 
-	// Need to read fresh data
-	cache.mutex.Lock()
-	defer cache.mutex.Unlock()
-
-	// Double-check after acquiring write lock
-	if time.Since(cache.lastRead) < cache.cacheTime {
-		return cache.rss, nil
+		// Initialize hysteresis state
+		isThrottling:            false,
+		fileThrottleActive:      false,
+		memoryThrottleActive:    false,
+		goroutineThrottleActive: false,
 	}
 
-	// Read fresh data with retries
-	rss, err := getRSSMemoryWithRetry(3) // Try up to 3 times
-	if err == nil {
-		cache.rss = rss
-		cache.lastRead = time.Now()
-	} else {
-		// Don't update cache on error - keep last good value
-		WarnStdoutAndScanningLog(fmt.Sprintf("RSS memory read failed after retries: %v", err))
+	// Pre-fill semaphore with tokens
+	for i := int32(0); i < crawlParallelism; i++ {
+		ds.dirSemaphore <- struct{}{}
 	}
 
-	return rss, err
+	ds.statsMonitor = NewStatsMonitor()
+	ds.statsMonitor.Start(ctx) // Pass context to stats monitor
+
+	// Start semaphore monitoring with context
+	go ds.semaphoreMonitor(ctx)
+
+	return ds
 }
 
-func getTotalVirtualMemoryOptimized() (uint64, error) {
-	cache := &memoryReadCache
-	cache.mutex.RLock()
-
-	if time.Since(cache.lastRead) < cache.cacheTime {
-		vm := cache.vm
-		cache.mutex.RUnlock()
-		return vm, nil
-	}
-	cache.mutex.RUnlock()
-
-	cache.mutex.Lock()
-	defer cache.mutex.Unlock()
-
-	if time.Since(cache.lastRead) < cache.cacheTime {
-		return cache.vm, nil
+// Close gracefully shuts down the DirSemaphore by stopping the stats monitor.
+// This should be called when the semaphore is no longer needed to prevent resource leaks.
+func (ds *DirSemaphore) Close() {
+	// Cancel the context to stop all monitoring goroutines
+	if ds.cancel != nil {
+		ds.cancel()
 	}
 
-	vm, err := getTotalVirtualMemoryWithRetry(3)
-	if err == nil {
-		cache.vm = vm
-		cache.lastRead = time.Now()
-	}
-
-	return vm, err
+	// Stop the stats monitor
+	ds.statsMonitor.Stop()
 }
 
-// RSS memory reading with retry logic
-func getRSSMemoryWithRetry(maxRetries int) (uint64, error) {
-	var lastErr error
-
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		rss, err := getRSSMemoryDirect()
-		if err == nil {
-			return rss, nil
-		}
-
-		lastErr = err
-
-		// Wait before retry (exponential backoff)
-		if attempt < maxRetries-1 {
-			time.Sleep(time.Duration(50*(attempt+1)) * time.Millisecond)
-		}
-	}
-
-	return 0, fmt.Errorf("failed after %d attempts, last error: %v", maxRetries, lastErr)
-}
-
-// Virtual memory reading with retry logic
-func getTotalVirtualMemoryWithRetry(maxRetries int) (uint64, error) {
-	var lastErr error
-
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		vm, err := getTotalVirtualMemoryDirect()
-		if err == nil {
-			return vm, nil
-		}
-
-		lastErr = err
-
-		if attempt < maxRetries-1 {
-			time.Sleep(time.Duration(50*(attempt+1)) * time.Millisecond)
-		}
-	}
-
-	return 0, fmt.Errorf("failed after %d attempts, last error: %v", maxRetries, lastErr)
-}
-
-// Enhanced /proc reading with better error handling
-func getRSSMemoryDirect() (uint64, error) {
-	pid := os.Getpid()
-	filePath := fmt.Sprintf("/proc/%d/status", pid)
-
-	file, err := os.Open(filePath)
-	if err != nil {
-		return 0, fmt.Errorf("failed to open %s: %w", filePath, err)
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.HasPrefix(line, "VmRSS:") {
-			fields := strings.Fields(line)
-			if len(fields) < 2 {
-				return 0, fmt.Errorf("unexpected VmRSS line format: %s", line)
-			}
-
-			rssKB, err := strconv.ParseUint(fields[1], 10, 64)
-			if err != nil {
-				return 0, fmt.Errorf("failed to parse VmRSS value '%s': %w", fields[1], err)
-			}
-
-			rssMB := rssKB / 1024
-			if rssMB == 0 {
-				return 0, fmt.Errorf("RSS memory reading returned 0 MB (raw: %d kB)", rssKB)
-			}
-
-			return rssMB, nil
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return 0, fmt.Errorf("error scanning %s: %w", filePath, err)
-	}
-
-	return 0, fmt.Errorf("VmRSS not found in %s", filePath)
-}
-
-func getTotalVirtualMemoryDirect() (uint64, error) {
-	// Open /proc/self/statm
-	data, err := os.ReadFile("/proc/self/statm")
-	if err != nil {
-		return 0, fmt.Errorf("failed to read /proc/self/statm: %w", err)
-	}
-
-	// Parse the first field (total virtual memory pages)
-	fields := strings.Fields(string(data))
-	if len(fields) < 1 {
-		return 0, fmt.Errorf("unexpected format in /proc/self/statm")
-	}
-
-	// Convert pages to bytes (assuming 4KB pages)
-	pages, err := strconv.ParseUint(fields[0], 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("failed to parse virtual memory pages: %w", err)
-	}
-
-	pageSize := uint64(os.Getpagesize()) // Get system page size
-	vmMB := (pages * pageSize) / 1024 / 1024
-
-	if vmMB == 0 {
-		return 0, fmt.Errorf("virtual memory reading returned 0 MB")
-	}
-
-	return vmMB, nil
-}
-
-// Updated throttle controller with fallback logic
-func (atc *AdaptiveThrottleController) CalculateThrottleScoreOptimized() (float64, string, SystemMetrics) {
-	metrics := GetSystemMetricsOptimized()
-	goroutineOK, memoryOK := GetMetricReliability()
-
-	var reasons []string
-	var score float64
-	var totalActiveWeight float64
-	var goroutineComponent, memoryComponent, directoryComponent float64
-
-	// Only use goroutine throttling if metrics are reliable
-	if EnableGoroutineThrottling && goroutineOK {
-		goroutineRatio := float64(metrics.Goroutines) / float64(atc.maxGoroutines)
-		goroutineComponent = goroutineRatio * GoroutineWeight
-		totalActiveWeight += GoroutineWeight
-
-		if goroutineRatio > 0.8 {
-			reasons = append(reasons, fmt.Sprintf("goroutines=%.1f%% (%d/%d)",
-				goroutineRatio*100, metrics.Goroutines, atc.maxGoroutines))
-		}
-	} else if EnableGoroutineThrottling && !goroutineOK {
-		reasons = append(reasons, "goroutine-metrics-failed")
-	}
-
-	// Only use memory throttling if metrics are reliable
-	if EnableMemoryThrottling && memoryOK {
-		memoryRatio := float64(metrics.ResidentMemoryMB) / float64(atc.maxMemoryMB)
-		memoryComponent = memoryRatio * MemoryWeight
-		totalActiveWeight += MemoryWeight
-
-		if memoryRatio > 0.75 {
-			reasons = append(reasons, fmt.Sprintf("memory=%.1f%% (%dMB/%dMB)",
-				memoryRatio*100, metrics.ResidentMemoryMB, atc.maxMemoryMB))
-		}
-	} else if EnableMemoryThrottling && !memoryOK {
-		reasons = append(reasons, "memory-metrics-failed")
-	}
-
-	// Use directory throttling if enabled, OR as fallback if other metrics failed
-	useDirThrottling := EnableDirectoryThrottling ||
-		(EnableGoroutineThrottling && !goroutineOK) ||
-		(EnableMemoryThrottling && !memoryOK)
-
-	if useDirThrottling {
-		dirRatio := float64(metrics.ActiveDirectories) / float64(atc.maxActiveDirs)
-		directoryComponent = dirRatio * DirectoryWeight
-		totalActiveWeight += DirectoryWeight
-
-		if dirRatio > 0.8 {
-			dirStatus := "directories"
-			if !goroutineOK || !memoryOK {
-				dirStatus = "directories(fallback)"
-			}
-			reasons = append(reasons, fmt.Sprintf("%s=%.1f%% (%d/%d)",
-				dirStatus, dirRatio*100, metrics.ActiveDirectories, atc.maxActiveDirs))
-		}
-	}
-
-	// Normalize the score based on active weights
-	if totalActiveWeight > 0 {
-		score = (goroutineComponent + memoryComponent + directoryComponent) / totalActiveWeight
-	} else {
-		// All throttling disabled/failed - never throttle
-		score = 0
-		reasons = append(reasons, "all throttling disabled or failed")
-	}
-
-	reason := strings.Join(reasons, ", ")
-	return score, reason, metrics
-}
-
-// Add method to check if memory metrics are reliable
-func (atc *AdaptiveThrottleController) AreMemoryMetricsReliable() bool {
-	memoryState.mutex.RLock()
-	defer memoryState.mutex.RUnlock()
-
-	// Consider unreliable if we've had many consecutive errors recently
-	recentErrors := memoryState.consecutiveErrors > 5
-	oldErrors := time.Since(memoryState.lastErrorTime) < 30*time.Second
-
-	return !(recentErrors && oldErrors)
-}
-
-// Correct hysteresis implementation
-func (atc *AdaptiveThrottleController) ShouldThrottle() (bool, string, SystemMetrics) {
-	score, reason, metrics := atc.CalculateThrottleScoreOptimized()
-	shouldThrottle := EnableAdaptiveThrottling && score > 1.0 // Start at 100%
-	return shouldThrottle, reason, metrics
-}
-
-func (atc *AdaptiveThrottleController) ContinueThrottle() (bool, string, SystemMetrics) {
-	score, reason, metrics := atc.CalculateThrottleScoreOptimized()
-	// Continue until score drops to 80% (not score * 0.8 > 100%)
-	continueThrottle := EnableAdaptiveThrottling && score > 0.8 // Stop at 80%
-	return continueThrottle, reason, metrics
-}
-
-// PerformThrottling executes the throttling logic with context cancellation support
-func (atc *AdaptiveThrottleController) PerformThrottling(ctx context.Context, dirPath string) error {
-	atc.mutex.Lock()
-	if !atc.isThrottling {
-		atc.isThrottling = true
-		atc.throttleStartTime = time.Now()
-		atc.lastLogTime = time.Now()
-	}
-	atc.mutex.Unlock()
-
-	var waitCount int64
-
-	for {
-		shouldContinue, reason, metrics := atc.ContinueThrottle() // Already uses optimized version
-		if !shouldContinue {
-			break
-		}
-
-		// Log periodically during throttling
-		if time.Since(atc.lastLogTime) >= time.Duration(ThrottleLogIntervalSecs)*time.Second {
-			duration := time.Since(atc.throttleStartTime).Round(time.Second)
-			WarnStdoutAndScanningLog(fmt.Sprintf(
-				"[THROTTLE] Dir: %s | Duration: %v | Reason: %s | Goroutines: %d | Memory: %dMB | ActiveDirs: %d | WaitingDirs: %d",
-				dirPath, duration, reason, metrics.Goroutines, metrics.ResidentMemoryMB,
-				metrics.ActiveDirectories, metrics.WaitingDirectories))
-			atc.lastLogTime = time.Now()
-		}
-
-		// Wait with context cancellation support
-		select {
-		case <-ctx.Done():
-			WarnStdoutAndScanningLog(fmt.Sprintf("Throttling cancelled for dir: %s due to context: %v", dirPath, ctx.Err()))
-			return ctx.Err()
-		case <-time.After(100 * time.Millisecond):
-			waitCount++
-		}
-
-		// Force garbage collection every 50 iterations during memory pressure
-		// if waitCount%50 == 0 && EnableMemoryThrottling {
-		// 	runtime.GC()
-		// }
-	}
-
-	atc.mutex.Lock()
-	if atc.isThrottling {
-		duration := time.Since(atc.throttleStartTime).Round(time.Second)
-		WarnStdoutAndScanningLog(fmt.Sprintf(
-			"[THROTTLE-END] Dir: %s | Total duration: %v | Resumed processing", dirPath, duration))
-		atc.isThrottling = false
-	}
-	atc.mutex.Unlock()
-
-	return nil
-}
-
-// Legacy monitoring function for compatibility
-func monitorGoroutines(ctx context.Context) {
-	ticker := time.NewTicker(2 * time.Second) // Fast sampling for goroutine count
-	defer ticker.Stop()
+// AcquireSlot blocks until a semaphore slot is available and throttling conditions allow processing.
+// It implements context-aware cancellation and respects throttling limits to prevent system overload.
+// Returns an error if the context is cancelled during acquisition.
+func (ds *DirSemaphore) AcquireSlot(ctx context.Context) error {
+	// This blocks until semaphore is available AND throttling allows it
+	ds.waitingForSemaphore.Add(1)
+	defer ds.waitingForSemaphore.Add(-1)
 
 	for {
 		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			current := runtime.NumGoroutine()
-			totalGoroutines.Store(int32(current))
-		}
-	}
-}
 
-// Enhanced monitoring function with metric reliability status
-func enhancedSyncMonitor(ctx context.Context) {
-	WarnStdoutAndScanningLog("Starting Enhanced SyncMonitor with Fallback Logic...")
+		case <-ds.dirSemaphore:
+			// Got semaphore token
+			if ds.shouldThrottle() {
+				// Should throttle - put token back and wait
+				ds.dirSemaphore <- struct{}{}
 
-	ticker := time.NewTicker(time.Duration(MonitorIntervalSecs) * time.Second)
-	defer ticker.Stop()
-
-	var lastMetrics SystemMetrics
-
-	for {
-		select {
-		case <-ctx.Done():
-			WarnStdoutAndScanningLog("Enhanced SyncMonitor received termination signal. Exiting...")
-			return
-		case <-ticker.C:
-			metrics := GetSystemMetricsOptimized()
-			goroutineOK, memoryOK := GetMetricReliability()
-
-			// Calculate rates if we have previous metrics
-			var gcRate, memAllocRate, dirRate string
-			if lastMetrics.Timestamp != (time.Time{}) {
-				timeDiff := metrics.Timestamp.Sub(lastMetrics.Timestamp).Seconds()
-				if timeDiff > 0 {
-					gcDiff := metrics.NumGC - lastMetrics.NumGC
-					gcRate = fmt.Sprintf(" | GC/s: %.1f", float64(gcDiff)/timeDiff)
-
-					memDiff := int64(metrics.HeapAllocMB) - int64(lastMetrics.HeapAllocMB)
-					memAllocRate = fmt.Sprintf(" | MemΔ: %+dMB", memDiff)
-
-					queuedDiff := metrics.TotalQueuedDirectories - lastMetrics.TotalQueuedDirectories
-					dirRate = fmt.Sprintf(" | DirRate: %.1f/s", float64(queuedDiff)/timeDiff)
+				// Cancellation-aware sleep
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(semaphoreThrottleWaitInterval):
+					continue
 				}
 			}
 
-			// Calculate semaphore utilization
-			var semaphoreInfo string
-			if EnableDirectoryThrottling {
-				utilization := float64(metrics.ActiveDirectories) / float64(MaxConcurrentDirectories) * 100
-				semaphoreInfo = fmt.Sprintf(" | Semaphore: %d/%d (%.1f%%) | Waiting: %d",
-					metrics.ActiveDirectories, MaxConcurrentDirectories, utilization, metrics.WaitingDirectories)
-			}
+			// Track active directory processors
+			activeDirectories.Add(1)
+			return nil
 
-			// Create reliability indicators
-			var reliabilityStatus []string
-			if !goroutineOK {
-				reliabilityStatus = append(reliabilityStatus, "GOR-FAIL")
+		default:
+			// No semaphore available - wait
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(semaphoreWaitInterval):
+				continue
 			}
-			if !memoryOK {
-				reliabilityStatus = append(reliabilityStatus, "MEM-FAIL")
-			}
-			if len(reliabilityStatus) > 0 {
-				reliabilityStatus = append([]string{"DIR-FALLBACK"}, reliabilityStatus...)
-			}
-
-			reliabilityStr := ""
-			if len(reliabilityStatus) > 0 {
-				reliabilityStr = fmt.Sprintf(" | Status: %s", strings.Join(reliabilityStatus, ","))
-			}
-
-			// Format comprehensive status log
-			status := fmt.Sprintf(
-				"\n[SYNC-MONITOR-FALLBACK] %s | Goroutines: %d | RSS: %dMB | Heap: %dMB/%dMB | GC: %dms%s%s%s%s",
-				metrics.Timestamp.Format("15:04:05"),
-				metrics.Goroutines,
-				metrics.ResidentMemoryMB,
-				metrics.HeapAllocMB,
-				metrics.HeapSysMB,
-				metrics.GCPauses,
-				semaphoreInfo,
-				dirRate,
-				gcRate,
-				memAllocRate,
-			)
-
-			if len(reliabilityStatus) > 0 {
-				status += reliabilityStr
-			}
-
-			WarnStdoutAndScanningLog(status)
-
-			// Alert if too many directories are waiting
-			if metrics.WaitingDirectories > int32(MaxConcurrentDirectories/2) {
-				WarnStdoutAndScanningLog(fmt.Sprintf(
-					"[SEMAPHORE-ALERT] High semaphore contention: %d directories waiting for %d slots",
-					metrics.WaitingDirectories, MaxConcurrentDirectories))
-			}
-
-			lastMetrics = metrics
 		}
 	}
 }
 
-// Add a specific semaphore monitoring function for detailed tracking
-func semaphoreMonitor(ctx context.Context) {
-	ticker := time.NewTicker(2 * time.Second) // More frequent monitoring
+// ReleaseSlot returns a semaphore token and decrements the active directory counter.
+// This should be called when directory processing is complete to allow other operations to proceed.
+func (ds *DirSemaphore) ReleaseSlot() {
+	ds.dirSemaphore <- struct{}{} // Put token back
+	activeDirectories.Add(-1)     // Decrement active directory count
+}
+
+// shouldThrottle determines whether directory processing should be throttled with hysteresis
+// to prevent oscillating behavior between throttled and non-throttled states.
+func (ds *DirSemaphore) shouldThrottle() bool {
+	ds.throttleStateMutex.Lock()
+	defer ds.throttleStateMutex.Unlock()
+
+	// Check each resource with hysteresis
+	fileThrottle := enableFileBasedThrottling && ds.shouldThrottleBasedOnFiles()
+	memoryThrottle := enableMemoryBasedThrottling && ds.shouldThrottleBasedOnMemory()
+	goroutineThrottle := enableGoroutineBasedThrottling && ds.shouldThrottleBasedOnGoroutines()
+
+	// Update overall throttling state
+	previousState := ds.isThrottling
+	ds.isThrottling = fileThrottle || memoryThrottle || goroutineThrottle
+
+	// Log state changes
+	if enableThrottleLogs && (previousState != ds.isThrottling) {
+		var reasons []string
+
+		if fileThrottle {
+			reasons = append(reasons, "FILES")
+		}
+		if memoryThrottle {
+			reasons = append(reasons, "MEMORY")
+		}
+		if goroutineThrottle {
+			reasons = append(reasons, "GOROUTINES")
+		}
+
+		if ds.isThrottling {
+			glcm.Info(fmt.Sprintf("THROTTLE ENGAGED: %s", strings.Join(reasons, ", ")))
+		} else {
+			glcm.Info("THROTTLE RELEASED: All resources below release thresholds")
+		}
+	}
+
+	return ds.isThrottling
+}
+
+// shouldThrottleBasedOnFiles applies hysteresis to file indexer throttling
+func (ds *DirSemaphore) shouldThrottleBasedOnFiles() bool {
+	currentFiles := totalFilesInIndexer.Load()
+	activeFilesLimit := activeFilesLimit.Load()
+
+	// Calculate usage percentage
+	usagePercent := float64(currentFiles) * 100.0 / float64(activeFilesLimit)
+
+	if !ds.fileThrottleActive {
+		// Not currently throttling - check if we should start
+		if usagePercent >= throttleEngageThreshold {
+			ds.fileThrottleActive = true
+			ds.logThrottling("FILES: Engaging throttle at %.1f%% (%d/%d files)",
+				usagePercent, currentFiles, activeFilesLimit)
+			return true
+		}
+	} else {
+		// Currently throttling - check if we should stop
+		if usagePercent <= throttleReleaseThreshold {
+			ds.fileThrottleActive = false
+			ds.logThrottling("FILES: Releasing throttle at %.1f%% (%d/%d files)",
+				usagePercent, currentFiles, activeFilesLimit)
+			return false
+		}
+		// Stay throttled
+		return true
+	}
+
+	return false
+}
+
+// shouldThrottleBasedOnMemory applies hysteresis to memory pressure throttling
+func (ds *DirSemaphore) shouldThrottleBasedOnMemory() bool {
+	var memStats runtime.MemStats
+	runtime.ReadMemStats(&memStats)
+
+	totalMemoryBytes := GetTotalPhysicalMemoryGB() * gbToBytesMultiplier
+	usagePercent := float64(memStats.Sys) / float64(totalMemoryBytes) * 100
+
+	if !ds.memoryThrottleActive {
+		// Not currently throttling - check if we should start
+		if usagePercent >= memoryEngageThreshold {
+			ds.memoryThrottleActive = true
+			ds.logThrottling(fmt.Sprintf("MEMORY: Engaging throttle at %.1f%% usage", usagePercent))
+			return true
+		}
+	} else {
+		// Currently throttling - check if we should stop
+		if usagePercent <= memoryReleaseThreshold {
+			ds.memoryThrottleActive = false
+			ds.logThrottling(fmt.Sprintf("MEMORY: Releasing throttle at %.1f%% usage", usagePercent))
+			return false
+		}
+		// Stay throttled
+		return true
+	}
+
+	return false
+}
+
+// shouldThrottleBasedOnGoroutines applies hysteresis to goroutine throttling
+func (ds *DirSemaphore) shouldThrottleBasedOnGoroutines() bool {
+	currentGoroutines := int64(runtime.NumGoroutine())
+
+	// Calculate usage percentage
+	usagePercent := float64(currentGoroutines) * 100.0 / float64(maxActiveGoRoutines)
+
+	if !ds.goroutineThrottleActive {
+		// Not currently throttling - check if we should start
+		if usagePercent >= goroutineEngageThreshold {
+			ds.goroutineThrottleActive = true
+			ds.logThrottling("GOROUTINES: Engaging throttle at %.1f%% (%d/%d goroutines)",
+				usagePercent, currentGoroutines, maxActiveGoRoutines)
+			return true
+		}
+	} else {
+		// Currently throttling - check if we should stop
+		if usagePercent <= goroutineReleaseThreshold {
+			ds.goroutineThrottleActive = false
+			ds.logThrottling("GOROUTINES: Releasing throttle at %.1f%% (%d/%d goroutines)",
+				usagePercent, currentGoroutines, maxActiveGoRoutines)
+			return false
+		}
+		// Stay throttled
+		return true
+	}
+
+	return false
+}
+
+func (ds *DirSemaphore) logThrottling(msgFmt string, args ...interface{}) {
+
+	if !enableThrottleLogs {
+		return
+	}
+
+	now := time.Now()
+	if now.Sub(ds.lastLogTime) > time.Duration(throttleLogIntervalSecs)*time.Second {
+		glcm.Info(msgFmt)
+		ds.lastLogTime = now
+	}
+}
+
+// semaphoreMonitor provides detailed monitoring and logging of semaphore utilization.
+// It runs in a separate goroutine and periodically reports on contention and resource usage.
+// The monitoring helps identify performance bottlenecks and system stress conditions.
+func (ds *DirSemaphore) semaphoreMonitor(ctx context.Context) {
+	ticker := time.NewTicker(time.Duration(throttleLogIntervalSecs) * time.Second) // More frequent monitoring
 	defer ticker.Stop()
 
 	for {
@@ -839,27 +439,28 @@ func semaphoreMonitor(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if EnableDirectoryThrottling {
-				waiting := waitingForSemaphore.Load()
-				active := activeDirProcessors.Load()
-				queued := totalDirectoriesQueued.Load()
+			if enableThrottling {
+				waiting := ds.waitingForSemaphore.Load()
+				active := activeDirectories.Load()
+				queued := totalDirectoriesProcessed.Load()
+				files := totalFilesInIndexer.Load()
+				limit := activeFilesLimit.Load()
 
 				// Only log if there's activity or contention
-				if waiting > 0 || active > 0 {
-					utilization := float64(active) / float64(MaxConcurrentDirectories) * 100
-					if enableDebugLogs {
+				if waiting > 5 || active > 5 {
+					if enableThrottleLogs {
 						WarnStdoutAndScanningLog(fmt.Sprintf(
-							"[SEMAPHORE-STATUS] Active: %d/%d (%.1f%%) | Waiting: %d | Total Queued: %d",
-							active, MaxConcurrentDirectories, utilization, waiting, queued))
+							"[INFO] Active Dirs: %d | Wait: %d | Total: %d | Active Files: %d/%d",
+							active, waiting, queued, files, limit))
 					}
 				}
 
 				// Alert on high contention
-				if waiting > int32(MaxConcurrentDirectories) {
-					if enableDebugLogs {
+				if waiting > int32(float64(crawlParallelism)*0.8) {
+					if enableThrottleLogs {
 						WarnStdoutAndScanningLog(fmt.Sprintf(
-							"[SEMAPHORE-WARNING] Severe contention: %d directories waiting (exceeds semaphore capacity of %d)",
-							waiting, MaxConcurrentDirectories))
+							"[WARN] Severe contention: %d directories waiting (exceeds semaphore capacity of %d)",
+							waiting, crawlParallelism))
 					}
 				}
 			}
@@ -867,55 +468,306 @@ func semaphoreMonitor(ctx context.Context) {
 	}
 }
 
-// Diagnostic function to check current throttling strategy
-func GetCurrentThrottlingStrategy() string {
-	goroutineOK, memoryOK := GetMetricReliability()
+// StatsState represents different operational states of the system based on resource utilization.
+// These states drive dynamic adjustments to concurrency limits and throttling behavior.
+type StatsState int
 
-	var activeStrategies []string
-	var fallbackStrategies []string
+const (
+	StateOptimal       StatsState = iota // 80-100%
+	StateUnderutilized                   // < 60% - increase directories
+	StateCritical                        // > 120% - decrease directories
+	StateAboveOptimal                    // 100-120% - slight decrease
+	StateBelowOptimal                    // 60-80% - slight increase
+)
 
-	if EnableGoroutineThrottling && goroutineOK {
-		activeStrategies = append(activeStrategies, "Goroutine")
-	} else if EnableGoroutineThrottling && !goroutineOK {
-		fallbackStrategies = append(fallbackStrategies, "Goroutine→Directory")
-	}
-
-	if EnableMemoryThrottling && memoryOK {
-		activeStrategies = append(activeStrategies, "Memory")
-	} else if EnableMemoryThrottling && !memoryOK {
-		fallbackStrategies = append(fallbackStrategies, "Memory→Directory")
-	}
-
-	if EnableDirectoryThrottling {
-		activeStrategies = append(activeStrategies, "Directory")
-	}
-
-	strategy := fmt.Sprintf("Active: [%s]", strings.Join(activeStrategies, ", "))
-	if len(fallbackStrategies) > 0 {
-		strategy += fmt.Sprintf(" | Fallbacks: [%s]", strings.Join(fallbackStrategies, ", "))
-	}
-
-	return strategy
+// StatsSnapshot captures a point-in-time view of system performance metrics.
+// These snapshots are used for trend analysis and dynamic limit adjustments.
+type StatsSnapshot struct {
+	Timestamp          time.Time
+	IndexerSize        int64
+	ActiveDirectories  int64
+	MemoryUsageMB      uint64
+	UtilizationPercent float64
 }
 
-// Add diagnostics function
-func GetMemoryMetricsDiagnostics() string {
-	memoryState.mutex.RLock()
-	defer memoryState.mutex.RUnlock()
+// StatsMonitor analyzes system performance over time and dynamically adjusts
+// concurrency limits to maintain optimal throughput while preventing resource exhaustion.
+// It implements a feedback control system with configurable thresholds and cooldown periods.
+type StatsMonitor struct {
+	// Target configuration
+	targetIndexerSize      int64 // Target
+	optimalRangeMin        int64 // 80% of target
+	optimalRangeMax        int64 // 100% of target
+	criticalThreshold      int64 // 120% of target - must reduce
+	underutilizedThreshold int64 // 60% of target - can increase
 
-	return fmt.Sprintf(
-		"Memory Metrics: LastValidRSS=%dMB, LastValidVM=%dMB, ConsecutiveErrors=%d, LastError=%v",
-		memoryState.lastValidRSS, memoryState.lastValidVM,
-		memoryState.consecutiveErrors, memoryState.lastErrorTime)
+	// Analysis parameters
+	consistencyThreshold int           // Number of consecutive samples needed
+	adjustmentCooldown   time.Duration // Minimum time between adjustments
+	lastAdjustmentTime   time.Time
+
+	// Context for cancellation
+	ctx    context.Context
+	cancel context.CancelFunc
+
+	// Rest of the fields...
+	snapshots          []StatsSnapshot
+	snapshotMutex      sync.RWMutex
+	maxSnapshots       int32 // Max number of snapshots to keep
+	monitoringInterval time.Duration
+	stopMonitoring     chan struct{}
+	monitoringWG       sync.WaitGroup
 }
 
-// Initialize the background metrics collection
-func StartMetricsCollection(ctx context.Context) {
-	// Initialize cache with current values
-	updateExpensiveMetrics()
-	updateFastMetrics()
+// NewStatsMonitor creates and configures a new StatsMonitor with target thresholds
+// based on the maximum active files limit. It sets up analysis parameters including
+// consistency requirements and adjustment cooldown periods.
+func NewStatsMonitor() *StatsMonitor {
+	targetSize := int64(maxActiveFiles)
 
-	// Start background updaters with descriptive names
-	go updateExpensiveMetricsBackground(ctx)
-	go updateFastMetricsBackground(ctx)
+	return &StatsMonitor{
+		// Target thresholds
+		targetIndexerSize:      targetSize,
+		optimalRangeMin:        targetSize * 80 / 100,
+		optimalRangeMax:        targetSize,
+		criticalThreshold:      targetSize * 120 / 100,
+		underutilizedThreshold: targetSize * 60 / 100,
+
+		// Analysis parameters
+		consistencyThreshold: consistencyThreshold,                    // Need 10 consecutive samples
+		adjustmentCooldown:   time.Minute * adjustmentCooldownMinutes, // Wait 2 minutes between adjustments
+
+		// Monitoring
+		snapshots:          make([]StatsSnapshot, 0, 50),
+		maxSnapshots:       50,               // Keep last 50 snapshots
+		monitoringInterval: time.Second * 20, // Check every 20 seconds
+		stopMonitoring:     make(chan struct{}),
+	}
+}
+
+// Start begins the monitoring loop in a separate goroutine.
+// It starts periodic sampling and analysis of system performance metrics
+// to enable dynamic throttling adjustments.
+func (sm *StatsMonitor) Start(parentCtx context.Context) {
+	// Create child context
+	sm.ctx, sm.cancel = context.WithCancel(parentCtx)
+
+	sm.monitoringWG.Add(1)
+	go sm.monitoringLoop()
+
+	glcm.Info(fmt.Sprintf(
+		"Started monitoring for active throttling (Active files limit: %d, Crawl parallelism: %d)",
+		activeFilesLimit.Load(),
+		crawlParallelism))
+}
+
+// Stop gracefully shuts down the monitoring loop and waits for completion.
+// This should be called during cleanup to prevent goroutine leaks.
+func (sm *StatsMonitor) Stop() {
+	// Cancel context
+	if sm.cancel != nil {
+		sm.cancel()
+	}
+
+	close(sm.stopMonitoring)
+	sm.monitoringWG.Wait()
+}
+
+// monitoringLoop is the main monitoring routine that runs periodically to:
+// 1. Take performance snapshots
+// 2. Analyze trends and system state
+// 3. Calculate and apply optimal limit adjustments
+// It runs until the stop signal is received.
+func (sm *StatsMonitor) monitoringLoop() {
+	defer sm.monitoringWG.Done()
+
+	ticker := time.NewTicker(sm.monitoringInterval)
+	defer ticker.Stop()
+	logCounter := 0
+
+	for {
+		select {
+		case <-sm.ctx.Done():
+			// Context cancelled - shutdown gracefully
+			return
+
+		case <-ticker.C:
+			// Check if context is still valid before processing
+			if sm.ctx.Err() != nil {
+				return
+			}
+
+			snapshot := sm.takeSnapshot()
+			sm.addSnapshot(snapshot)
+			logCounter++
+
+			// Check for adjustment
+			currentLimit := activeFilesLimit.Load()
+			newLimit, adjusted := sm.calculateOptimalLimit(currentLimit)
+			if adjusted {
+				activeFilesLimit.Store(newLimit)
+				sm.lastAdjustmentTime = time.Now()
+			}
+		}
+	}
+}
+
+// analyzeStats examines recent performance samples to determine the current system state.
+// It requires a minimum number of consistent samples before making state determinations
+// to avoid oscillating adjustments based on temporary fluctuations.
+func (sm *StatsMonitor) analyzeStats(samples []StatsSnapshot) StatsState {
+	if len(samples) < sm.consistencyThreshold {
+		return StateOptimal // Not enough data
+	}
+
+	// Check last N samples for consistency
+	recentSamples := samples[len(samples)-sm.consistencyThreshold:]
+
+	// Count samples in each range
+	var optimal, underutilized, critical, aboveOptimal, belowOptimal int
+
+	for _, sample := range recentSamples {
+		size := sample.IndexerSize
+
+		switch {
+		case size >= sm.criticalThreshold:
+			critical++
+		case size >= sm.optimalRangeMax:
+			aboveOptimal++
+		case size >= sm.optimalRangeMin:
+			optimal++
+		case size >= sm.underutilizedThreshold:
+			belowOptimal++
+		default:
+			underutilized++
+		}
+	}
+
+	// Determine state based on majority of samples
+	majority := (sm.consistencyThreshold + 1) / 2
+
+	if critical >= majority {
+		return StateCritical
+	} else if underutilized >= majority {
+		return StateUnderutilized
+	} else if aboveOptimal >= majority {
+		return StateAboveOptimal
+	} else if belowOptimal >= majority {
+		return StateBelowOptimal
+	} else {
+		return StateOptimal
+	}
+}
+
+// calculateOptimalLimit determines the optimal active files limit based on recent performance data.
+// It implements a feedback control system that:
+// - Reduces limits when system is overloaded (critical state)
+// - Increases limits when system is underutilized
+// - Respects cooldown periods to prevent oscillation
+// Returns the new limit and whether an adjustment was made.
+func (sm *StatsMonitor) calculateOptimalLimit(currentLimit int64) (int64, bool) {
+	sm.snapshotMutex.RLock()
+	defer sm.snapshotMutex.RUnlock()
+
+	if currentLimit == absoluteMaxActiveFiles {
+		return currentLimit, false // Already at absolute max, no adjustment needed
+	}
+
+	if len(sm.snapshots) < sm.consistencyThreshold {
+		return currentLimit, false // Not enough data to adjust
+	}
+
+	// Check cooldown period
+	if time.Since(sm.lastAdjustmentTime) < sm.adjustmentCooldown {
+		return currentLimit, false // Still in cooldown
+	}
+
+	state := sm.analyzeStats(sm.snapshots)
+
+	var newLimit int64
+	var reason string
+
+	switch state {
+	case StateCritical:
+		// > target consistently - REDUCE directories aggressively
+		newLimit = int64(float64(currentLimit) * 0.8) // 20% reduction
+		reason = fmt.Sprintf(
+			"CRITICAL: Indexer size > %dM files - reducing directories",
+			sm.criticalThreshold/1000000)
+
+	case StateAboveOptimal:
+		// slightly higher than target - slight reduction
+		newLimit = int64(float64(currentLimit) * 0.9) // 10% reduction
+		reason = "Above optimal range - slight reduction"
+
+	case StateUnderutilized:
+		// < target consistently - INCREASE directories aggressively
+		newLimit = int64(float64(currentLimit) * 1.3) // 30% increase
+		reason = fmt.Sprintf("UNDERUTILIZED: Indexer size < %dM files - increasing directories",
+			sm.underutilizedThreshold/1000000)
+
+	case StateBelowOptimal:
+		// slightly less than target - slight increase
+		newLimit = int64(float64(currentLimit) * 1.1) // 10% increase
+		reason = "Below optimal range - slight increase"
+
+	case StateOptimal:
+		// 4M - 5M files - maintain current limit
+		return currentLimit, false
+
+	default:
+		return currentLimit, false
+	}
+
+	if newLimit > currentLimit && onlyReduceLimits {
+		// If we are only reducing limits, skip increases
+		return currentLimit, false
+	}
+
+	newLimit = min(newLimit, absoluteMaxActiveFiles) // Cap at absolute max
+
+	if newLimit != currentLimit {
+		glcm.Info(fmt.Sprintf("ADJUSTMENT: %s | %d -> %d files",
+			reason, currentLimit, newLimit))
+	}
+
+	return newLimit, (newLimit != currentLimit)
+}
+
+// takeSnapshot captures current system performance metrics including:
+// - File indexer size and active directory count
+// - Memory usage statistics
+// - Utilization percentage relative to target
+// Returns a StatsSnapshot for trend analysis.
+func (sm *StatsMonitor) takeSnapshot() StatsSnapshot {
+	var memStats runtime.MemStats
+	runtime.ReadMemStats(&memStats)
+
+	currentIndexerSize := totalFilesInIndexer.Load()
+	activeDirs := activeDirectories.Load()
+
+	// Calculate utilization percentage
+	utilizationPercent := float64(currentIndexerSize) / float64(sm.targetIndexerSize) * 100
+
+	return StatsSnapshot{
+		Timestamp:          time.Now(),
+		IndexerSize:        currentIndexerSize,
+		ActiveDirectories:  activeDirs,
+		MemoryUsageMB:      memStats.HeapInuse / mbToBytesMultiplier,
+		UtilizationPercent: utilizationPercent,
+	}
+}
+
+// addSnapshot adds a new performance snapshot to the monitoring history.
+// It maintains a sliding window of recent snapshots by removing old entries
+// when the maximum snapshot count is exceeded.
+func (sm *StatsMonitor) addSnapshot(snapshot StatsSnapshot) {
+	sm.snapshotMutex.Lock()
+	defer sm.snapshotMutex.Unlock()
+
+	sm.snapshots = append(sm.snapshots, snapshot)
+
+	if len(sm.snapshots) > int(sm.maxSnapshots) {
+		sm.snapshots = sm.snapshots[1:]
+	}
 }

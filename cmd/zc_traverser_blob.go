@@ -128,7 +128,12 @@ var NonErrorDirectoryStubOverlappable = errors.New("The directory stub exists, a
 
 func writeToBlobErrorChannel(errorChannel chan TraverserErrorItemInfo, err ErrorBlobInfo) {
 	if errorChannel != nil {
-		errorChannel <- err
+		select {
+		case errorChannel <- err:
+		default:
+			// Channel might be full, log the error instead
+			WarnStdoutAndScanningLog(fmt.Sprintf("Failed to send error to channel: %v", err.ErrorMessage()))
+		}
 	}
 }
 

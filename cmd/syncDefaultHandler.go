@@ -27,16 +27,18 @@ import (
 	"io/fs"
 )
 
-var UseSyncOrchestrator = false
-
 type CustomSyncHandlerFunc func(cca *cookedSyncCmdArgs, enumerator *syncEnumerator, ctx context.Context) error
-
-var CustomSyncHandler CustomSyncHandlerFunc = nil
-
 type CustomCounterIncrementer func(entry fs.DirEntry, t *localTraverser) error
 
-var counterIncrementer CustomCounterIncrementer = nil
+var (
+	UseSyncOrchestrator                       = false
+	CustomSyncHandler   CustomSyncHandlerFunc = nil
+)
 
 func GetCustomSyncHandlerInfo() string {
 	return "Sync Handler: Default"
+}
+
+func IsExpectedErrorForTargetDuringSync(err error) bool {
+	return false
 }

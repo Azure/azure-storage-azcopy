@@ -64,7 +64,12 @@ type localTraverser struct {
 
 func writeToErrorChannel(errorChannel chan TraverserErrorItemInfo, err ErrorFileInfo) {
 	if errorChannel != nil {
-		errorChannel <- err
+		select {
+		case errorChannel <- err:
+		default:
+			// Channel might be full, log the error instead
+			WarnStdoutAndScanningLog(fmt.Sprintf("Failed to send error to channel: %v", err.ErrorMessage()))
+		}
 	}
 }
 
@@ -920,10 +925,17 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				return err
 			}
 
-			entityType := common.EEntityType.File()
+			var entityType common.EntityType
 
 			// go through the files and return if any of them fail to process
 			for _, entry := range entries {
+
+				if entry.IsDir() {
+					entityType = common.EEntityType.Folder()
+				} else {
+					entityType = common.EEntityType.File()
+				}
+
 				// This won't change. It's purely to hand info off to STE about where the symlink lives.
 				relativePath := entry.Name()
 				fileInfo, _ := entry.Info()
@@ -954,12 +966,13 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 						if err != nil {
 							return err
 						}
+
 						if UseSyncOrchestrator {
 							if fileInfo.IsDir() {
 								path := t.fullPath + common.DeterminePathSeparator(t.fullPath) + entry.Name()
 								ok, _ := checkSymlinkCausesDirectoryLoop(path)
 								if ok {
-									err := fmt.Errorf("Symlink caused Direcorty loop")
+									err := errors.New("symlink caused cyclic loop")
 									writeToErrorChannel(t.errorChannel, ErrorFileInfo{FilePath: path, FileInfo: fileInfo, ErrorMsg: err, Source: t.syncOptions.isSource})
 									return nil
 								}
@@ -975,24 +988,9 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 						}
 					}
 				}
-				if counterIncrementer == nil {
-					if entry.IsDir() {
-						continue
-					}
-				} else {
-					if entry.IsDir() {
-						entityType = common.EEntityType.Folder()
-					} else {
-						entityType = common.EEntityType.File()
-					}
-				}
 
 				if t.incrementEnumerationCounter != nil {
-					if counterIncrementer == nil {
-						t.incrementEnumerationCounter(common.EEntityType.File())
-					} else {
-						counterIncrementer(entry, t)
-					}
+					t.incrementEnumerationCounter(entityType)
 				}
 
 				err := processIfPassedFilters(filters,
