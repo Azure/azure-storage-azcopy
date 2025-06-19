@@ -129,7 +129,7 @@ jobs:
     parameters:
       name: 'New_E2E'
       test_cli_param: '-run "TestNewE2E/.*"'
-
+      
   - job: Test_On_Ubuntu
     variables:
       isMutexSet: 'false'
