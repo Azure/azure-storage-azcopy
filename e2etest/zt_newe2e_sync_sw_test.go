@@ -608,6 +608,9 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFileAtSource(svm *ScenarioVariationMa
 
 	dirsToCreate := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test"}
 
+	svm.InsertVariationSeparator("_DeleteDestination_")
+	deleteDestination := ResolveVariation(svm, []bool{true, false}) // Add variation for DeleteDestination flag
+
 	// Create destination directories
 	srcObjs := make(ObjectResourceMappingFlat)
 	for _, dir := range dirsToCreate {
@@ -648,7 +651,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFileAtSource(svm *ScenarioVariationMa
 					Recursive:             pointerTo(false),
 					IncludeDirectoryStubs: pointerTo(true),
 				},
-				DeleteDestination: pointerTo(true),
+				DeleteDestination: pointerTo(deleteDestination),
 			},
 		})
 
@@ -704,7 +707,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFileAtSource(svm *ScenarioVariationMa
 					Recursive:             pointerTo(false),
 					IncludeDirectoryStubs: pointerTo(true),
 				},
-				DeleteDestination: pointerTo(true),
+				DeleteDestination: pointerTo(deleteDestination),
 			},
 		})
 
@@ -714,17 +717,21 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFileAtSource(svm *ScenarioVariationMa
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
-			"dir_file_copy_test/test0.txt":                   ResourceDefinitionObject{ObjectShouldExist: pointerTo(false)},
-			"dir_file_copy_test/sub_dir_copy_test/test0.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(false)},
+			"dir_file_copy_test/test0.txt":                   ResourceDefinitionObject{ObjectShouldExist: pointerTo(!deleteDestination)},
+			"dir_file_copy_test/sub_dir_copy_test/test0.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(!deleteDestination)},
 		},
 	}, false)
 }
 
+// Its failing for the files when deletedestination is false
 func (s *SWSyncTestSuite) Scenario_RenameOfFolderAtSource(svm *ScenarioVariationManager) {
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbSync}) // Calculate verb early to create the destination object early
 
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
-	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File(), common.ELocation.Blob(), common.ELocation.BlobFS()})), ResourceDefinitionContainer{})
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File(), common.ELocation.Blob(), common.Elocation.BlobFS()})), ResourceDefinitionContainer{})
+
+	svm.InsertVariationSeparator("_DeleteDestination_")
+	deleteDestination := ResolveVariation(svm, []bool{true, false}) // Add variation for DeleteDestination flag
 
 	dirsToCreate := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test"}
 
@@ -765,16 +772,21 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFolderAtSource(svm *ScenarioVariation
 			},
 			Flags: SyncFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
-					Recursive:             pointerTo(false),
-					IncludeDirectoryStubs: pointerTo(true),
+					Recursive: pointerTo(false),
 				},
-				DeleteDestination: pointerTo(true),
+				DeleteDestination: pointerTo(deleteDestination),
 			},
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcObjs,
 	}, true)
+
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"dir_file_copy_test/sub_dir_copy_test/test0.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(true)},
+		},
+	}, false)
 
 	srcContainerNew := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
 	//Change the sub directory name from dir_file_copy_test/sub_dir_copy_test to dir_file_copy_test/sub_dir_copy_test_new
@@ -818,7 +830,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFolderAtSource(svm *ScenarioVariation
 					Recursive:             pointerTo(false),
 					IncludeDirectoryStubs: pointerTo(true),
 				},
-				DeleteDestination: pointerTo(true),
+				DeleteDestination: pointerTo(deleteDestination),
 			},
 		})
 
@@ -828,7 +840,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFolderAtSource(svm *ScenarioVariation
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
-			"dir_file_copy_test/sub_dir_copy_test": ResourceDefinitionObject{ObjectShouldExist: pointerTo(false)},
+			"dir_file_copy_test/sub_dir_copy_test/test0.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(!deleteDestination)},
 		},
 	}, false)
 }
