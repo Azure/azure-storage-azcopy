@@ -21,10 +21,10 @@
 package cmd
 
 import (
-	"context"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
-	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
@@ -211,24 +211,37 @@ func TestValidateCachedVersion2(t *testing.T) {
 	a.Error(err)
 }
 
-func TestCheckReleaseMetadata(t *testing.T) {
+func TestGetGitHubLatestVersion(t *testing.T) {
+	a := assert.New(t)
+	latestVersion, err := getGitHubLatestRemoteVersion()
+	a.NoError(err)
+	a.NotNil(latestVersion)
+	a.NotEmpty(latestVersion.original)
+	versionVar, _ := NewVersion(common.AzcopyVersion)
+	a.Equal(latestVersion, versionVar)
+}
+
+// Mocked test of getGitHubLatestRemoteVersionWithURL
+func TestGetGitHubLatestVersionWithMocking(t *testing.T) {
 	a := assert.New(t)
 
-	// sanity test for checking if the release metadata exists and can be downloaded
-	options := createClientOptions(nil, nil, nil)
+	// Mocked API Response
+	mockResp :=
+		`{
+			"tag_name": "v10.29.1",
+			"name": "AzCopy v10.29.1"
+		}`
 
-	blobClient, err := blob.NewClientWithNoCredential(versionMetadataUrl, &blob.ClientOptions{ClientOptions: options})
+	// HTTP test server
+	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, err := w.Write([]byte(mockResp))
+		a.NoError(err)
+	}))
+	defer testServer.Close()
+
+	version, err := getGitHubLatestRemoteVersionWithURL(testServer.URL)
+	versionSegments := []int64{10, 29, 1} // Cast to match Version struct type
+	expected := version.segments
 	a.NoError(err)
-
-	downloadBlobResp, err := blobClient.DownloadStream(context.TODO(), nil)
-	a.NoError(err)
-
-	// step 4: read newest version str
-	data := make([]byte, *downloadBlobResp.ContentLength)
-	_, err = downloadBlobResp.Body.Read(data)
-	a.False(err != nil && err != io.EOF) // err can be nil or EOF
-
-	remoteVer, err := NewVersion(string(data))
-	a.NoError(err)
-	a.NotNil(remoteVer)
+	a.Equal(expected, versionSegments)
 }

@@ -30,7 +30,7 @@ import (
 )
 
 type Version struct {
-	segments []int64
+	segments []int64 // {10, 29, 1}
 	preview  bool
 	original string
 }
