@@ -48,7 +48,7 @@ const (
 	defaultS2SPreserveProperties     = true
 	defaultS2SPreserveAccessTier     = true
 	defaultS2SGetPropertiesInBackend = true
-	defaultS2SSourceChangeValidation = true
+	defaultS2SSourceChangeValidation = false
 	debugMode                        = false // keep the debugMode temporarily, as merging happens frequently, and this might be useful for solving potential issue.
 )
 
