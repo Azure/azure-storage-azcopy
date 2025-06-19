@@ -5,12 +5,13 @@ package ste
 
 import (
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
 	"unsafe"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
@@ -84,7 +85,7 @@ func (bd *azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceIn
 		smbLastWriteFileTime := windows.NsecToFiletime(smbLastWrite.UnixNano())
 
 		pLastWriteTime := &smbLastWriteFileTime
-		if !txInfo.ShouldTransferLastWriteTime() {
+		if !txInfo.ShouldTransferLastWriteTime(bd.jptm.FromTo()) {
 			pLastWriteTime = nil
 		}
 

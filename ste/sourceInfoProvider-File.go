@@ -40,6 +40,7 @@ import (
 type shareFilePropertyProvider interface {
 	FileCreationTime() time.Time
 	FileLastWriteTime() time.Time
+	FileChangeTime() time.Time
 	FileAttributes() (*file.NTFSFileAttributes, error)
 	FilePermissionKey() string
 	Metadata() map[string]*string
@@ -104,6 +105,10 @@ func (f fileGetPropertiesAdapter) LastModified() time.Time {
 	return common.IffNotNil(f.GetProperties.LastModified, time.Time{})
 }
 
+func (f fileGetPropertiesAdapter) FileChangeTime() time.Time {
+	return common.IffNotNil(f.GetProperties.FileChangeTime, time.Time{})
+}
+
 type directoryGetPropertiesAdapter struct {
 	GetProperties directory.GetPropertiesResponse
 }
@@ -153,6 +158,10 @@ func (d directoryGetPropertiesAdapter) Metadata() map[string]*string {
 }
 
 func (d directoryGetPropertiesAdapter) LastModified() time.Time {
+	return common.IffNotNil(d.GetProperties.LastModified, time.Time{})
+}
+
+func (d directoryGetPropertiesAdapter) FileChangeTime() time.Time {
 	return common.IffNotNil(d.GetProperties.LastModified, time.Time{})
 }
 

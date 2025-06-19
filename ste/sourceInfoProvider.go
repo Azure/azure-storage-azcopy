@@ -22,11 +22,12 @@ package ste
 
 import (
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -82,6 +83,7 @@ type IBlobSourceInfoProvider interface {
 type TypedSMBPropertyHolder interface {
 	FileCreationTime() time.Time
 	FileLastWriteTime() time.Time
+	FileChangeTime() time.Time
 	FileAttributes() (*file.NTFSFileAttributes, error)
 }
 
