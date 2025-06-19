@@ -927,6 +927,8 @@ func validateSymlinkHandlingMode(symlinkHandling common.SymlinkHandlingType, fro
 			return nil // Fine on all OSes that support symlink via the OS package. (Win, MacOS, and Linux do, and that's what we officially support.)
 		case common.EFromTo.BlobBlob(), common.EFromTo.BlobFSBlobFS(), common.EFromTo.BlobBlobFS(), common.EFromTo.BlobFSBlob():
 			return nil // Blob->Blob doesn't involve any local requirements
+		case common.EFromTo.LocalFile():
+			return nil
 		default:
 			return fmt.Errorf("flag --%s can only be used on Blob<->Blob or Local<->Blob", common.PreserveSymlinkFlagName)
 		}

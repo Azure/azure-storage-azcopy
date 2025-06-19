@@ -22,6 +22,7 @@ package ste
 
 import (
 	"fmt"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -89,11 +90,47 @@ func (u *azureFileUploader) Epilogue() {
 
 			u.headersToApply.ContentMD5 = md5Hash
 			_, err := u.getFileClient().SetHTTPHeaders(u.ctx, &file.SetHTTPHeadersOptions{
-				HTTPHeaders: &u.headersToApply,
-				Permissions: &u.permissionsToApply,
+				HTTPHeaders:   &u.headersToApply,
+				Permissions:   &u.permissionsToApply,
 				SMBProperties: &u.smbPropertiesToApply,
 			})
 			return err
 		})
 	}
+}
+
+func (u *azureFileUploader) SendSymlink(linkData string) error {
+	// meta := common.Metadata{} // meta isn't traditionally supported for dfs, but still exists
+	// adapter, err := u.GetSourcePOSIXProperties()
+	// if err != nil {
+	// 	return fmt.Errorf("when polling for POSIX properties: %w", err)
+	// } else if adapter == nil {
+	// 	return nil // No-op
+	// }
+
+	// common.AddStatToBlobMetadata(adapter, meta)
+	// meta[common.POSIXSymlinkMeta] = to.Ptr("true") // just in case there isn't any metadata
+	// blobHeaders := blob.HTTPHeaders{               // translate headers, since those still apply
+	// 	BlobContentType:        u.creationTimeHeaders.ContentType,
+	// 	BlobContentEncoding:    u.creationTimeHeaders.ContentEncoding,
+	// 	BlobContentLanguage:    u.creationTimeHeaders.ContentLanguage,
+	// 	BlobContentDisposition: u.creationTimeHeaders.ContentDisposition,
+	// 	BlobCacheControl:       u.creationTimeHeaders.CacheControl,
+	// 	BlobContentMD5:         u.creationTimeHeaders.ContentMD5,
+	// }
+	// _, err = u.fileOrDirClient.Upload(
+	// 	u.jptm.Context(),
+	// 	streaming.NopCloser(strings.NewReader(linkData)),
+	// 	&blockblob.UploadOptions{
+	// 		HTTPHeaders: &blobHeaders,
+	// 		Metadata:    meta,
+	// 	})
+
+	_, err := u.getFileClient().CreateSymbolicLink(u.ctx, linkData, nil)
+	if err != nil {
+		u.jptm.FailActiveUpload("Creating symlink", err)
+		return fmt.Errorf("failed to create symlink: %w", err)
+	}
+	u.jptm.Log(common.LogDebug, fmt.Sprintf("Created symlink with data: %s", linkData))
+	return nil
 }
