@@ -221,8 +221,7 @@ func Initialize(resumeJobID common.JobID, isBench bool) error {
 	glcm.SetForceLogging()
 
 	// currently, we only automatically do auto-tuning when benchmarking
-	preferToAutoTuneGRs := isBench
-	providePerformanceAdvice := isBench
+	preferToAutoTuneGRs, providePerformanceAdvice := isBench, isBench
 
 	// startup of the STE happens here, so that the startup can access the values of command line parameters that are defined for "root" command
 	concurrencySettings := ste.NewConcurrencySettings(azcopyMaxFileAndSocketHandles, preferToAutoTuneGRs)
