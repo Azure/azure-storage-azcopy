@@ -48,17 +48,17 @@ var outputFormatRaw string
 var outputVerbosityRaw string
 var logVerbosityRaw string
 var cancelFromStdin bool
-var azcopyOutputFormat common.OutputFormat
-var azcopyOutputVerbosity common.OutputVerbosity
-var azcopyLogVerbosity common.LogLevel
-var cmdLineCapMegaBitsPerSecond float64
-var azcopySkipVersionCheck bool
+var OutputFormat common.OutputFormat
+var OutputLevel common.OutputVerbosity
+var LogLevel common.LogLevel
+var CapMbps float64
+var SkipVersionCheck bool
 
 // It's not pretty that this one is read directly by credential util.
 // But doing otherwise required us passing it around in many places, even though really
 // it can be thought of as an "ambient" property. That's the (weak?) justification for implementing
 // it as a global
-var cmdLineExtraSuffixesAAD string
+var TrustedSuffixes string
 var azcopyAwaitContinue bool
 var azcopyAwaitAllowOpenFiles bool
 var azcopyScanningLogger common.ILoggerResetable
@@ -118,17 +118,17 @@ var rootCmd = &cobra.Command{
 			glcm.E2EAwaitContinue()
 		}
 
-		err = azcopyOutputFormat.Parse(outputFormatRaw)
+		err = OutputFormat.Parse(outputFormatRaw)
 		if err != nil {
 			return err
 		}
 
-		err = azcopyOutputVerbosity.Parse(outputVerbosityRaw)
+		err = OutputLevel.Parse(outputVerbosityRaw)
 		if err != nil {
 			return err
 		}
 
-		err = azcopyLogVerbosity.Parse(logVerbosityRaw)
+		err = LogLevel.Parse(logVerbosityRaw)
 		if err != nil {
 			return err
 		}
@@ -208,14 +208,14 @@ func Initialize(resumeJobID common.JobID, isBench bool) error {
 	loggerInfo := jobLoggerInfo{jobID, azcopyLogPathFolder}
 
 	timeAtPrestart := time.Now()
-	glcm.SetOutputFormat(azcopyOutputFormat)
-	glcm.SetOutputVerbosity(azcopyOutputVerbosity)
+	glcm.SetOutputFormat(OutputFormat)
+	glcm.SetOutputVerbosity(OutputLevel)
 
 	if !resumeJobID.IsEmpty() {
 		loggerInfo.jobID = resumeJobID
 	}
 
-	common.AzcopyCurrentJobLogger = common.NewJobLogger(loggerInfo.jobID, azcopyLogVerbosity, loggerInfo.logFileFolder, "")
+	common.AzcopyCurrentJobLogger = common.NewJobLogger(loggerInfo.jobID, LogLevel, loggerInfo.logFileFolder, "")
 	common.AzcopyCurrentJobLogger.OpenLog()
 
 	glcm.SetForceLogging()
@@ -225,7 +225,7 @@ func Initialize(resumeJobID common.JobID, isBench bool) error {
 
 	// startup of the STE happens here, so that the startup can access the values of command line parameters that are defined for "root" command
 	concurrencySettings := ste.NewConcurrencySettings(azcopyMaxFileAndSocketHandles, preferToAutoTuneGRs)
-	err = jobsAdmin.MainSTE(concurrencySettings, float64(cmdLineCapMegaBitsPerSecond), common.AzcopyJobPlanFolder, azcopyLogPathFolder, providePerformanceAdvice)
+	err = jobsAdmin.MainSTE(concurrencySettings, float64(CapMbps), common.AzcopyJobPlanFolder, azcopyLogPathFolder, providePerformanceAdvice)
 	if err != nil {
 		return err
 	}
@@ -242,7 +242,7 @@ func Initialize(resumeJobID common.JobID, isBench bool) error {
 		common.IncludeAfterFlagName, IncludeAfterDateFilter{}.FormatAsUTC(adjustedTime))
 	jobsAdmin.JobsAdmin.LogToJobLog(startTimeMessage, common.LogInfo)
 
-	if !azcopySkipVersionCheck && !isPipeDownload {
+	if !SkipVersionCheck && !isPipeDownload {
 		// spawn a routine to fetch and compare the local application's version against the latest version available
 		// if there's a newer version that can be used, then write the suggestion to stderr
 		// however if this takes too long the message won't get printed
@@ -268,7 +268,7 @@ func InitializeAndExecute() {
 	if err := Execute(); err != nil {
 		glcm.Error(err.Error())
 	} else {
-		if !azcopySkipVersionCheck && !isPipeDownload {
+		if !SkipVersionCheck && !isPipeDownload {
 			// our commands all control their own life explicitly with the lifecycle manager
 			// only commands that don't explicitly exit actually reach this point (e.g. help commands)
 			select {
@@ -327,15 +327,15 @@ func init() {
 	// replace the word "global" to avoid confusion (e.g. it doesn't affect all instances of AzCopy)
 	rootCmd.SetUsageTemplate(strings.Replace((&cobra.Command{}).UsageTemplate(), "Global Flags", "Flags Applying to All Commands", -1))
 
-	rootCmd.PersistentFlags().Float64Var(&cmdLineCapMegaBitsPerSecond, "cap-mbps", 0, "Caps the transfer rate, in megabits per second. Moment-by-moment throughput might vary slightly from the cap. If this option is set to zero, or it is omitted, the throughput isn't capped.")
+	rootCmd.PersistentFlags().Float64Var(&CapMbps, "cap-mbps", 0, "Caps the transfer rate, in megabits per second. Moment-by-moment throughput might vary slightly from the cap. If this option is set to zero, or it is omitted, the throughput isn't capped.")
 	rootCmd.PersistentFlags().StringVar(&outputFormatRaw, "output-type", "text", "Format of the command's output. The choices include: text, json. The default value is 'text'.")
 	rootCmd.PersistentFlags().StringVar(&outputVerbosityRaw, "output-level", "default", "Define the output verbosity. Available levels: essential, quiet.")
 	rootCmd.PersistentFlags().StringVar(&logVerbosityRaw, "log-level", "INFO", "Define the log verbosity for the log file, available levels: DEBUG(detailed trace), INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs). (default 'INFO').")
 
-	rootCmd.PersistentFlags().StringVar(&cmdLineExtraSuffixesAAD, trustedSuffixesNameAAD, "", "Specifies additional domain suffixes where Azure Active Directory login tokens may be sent.  The default is '"+
+	rootCmd.PersistentFlags().StringVar(&TrustedSuffixes, trustedSuffixesNameAAD, "", "Specifies additional domain suffixes where Azure Active Directory login tokens may be sent.  The default is '"+
 		trustedSuffixesAAD+"'. Any listed here are added to the default. For security, you should only put Microsoft Azure domains here. Separate multiple entries with semi-colons.")
 
-	rootCmd.PersistentFlags().BoolVar(&azcopySkipVersionCheck, "skip-version-check", false, "Do not perform the version check at startup. Intended for automation scenarios & airgapped use.")
+	rootCmd.PersistentFlags().BoolVar(&SkipVersionCheck, "skip-version-check", false, "Do not perform the version check at startup. Intended for automation scenarios & airgapped use.")
 
 	// Note: this is due to Windows not supporting signals properly, reserved for partner teams
 	rootCmd.PersistentFlags().BoolVar(&cancelFromStdin, "cancel-from-stdin", false, "Used by partner teams to send in `cancel` through stdin to stop a job.")

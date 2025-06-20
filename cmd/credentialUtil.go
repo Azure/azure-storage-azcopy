@@ -436,7 +436,7 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 			return
 		}
 
-		if err = checkAuthSafeForTarget(credType, resource.Value, cmdLineExtraSuffixesAAD, location); err != nil {
+		if err = checkAuthSafeForTarget(credType, resource.Value, TrustedSuffixes, location); err != nil {
 			credType = common.ECredentialType.Unknown()
 			public = false
 		}
