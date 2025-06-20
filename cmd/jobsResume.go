@@ -362,7 +362,7 @@ func (rca resumeCmdArgs) process() error {
 	}
 
 	// if no logging, set this empty so that we don't display the log location
-	if azcopyLogVerbosity == common.LogNone {
+	if LogLevel == common.LogNone {
 		azcopyLogPathFolder = ""
 	}
 

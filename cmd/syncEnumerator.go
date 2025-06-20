@@ -247,7 +247,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		},
 		ForceWrite:                     common.EOverwriteOption.True(), // once we decide to transfer for a sync operation, we overwrite the destination regardless
 		ForceIfReadOnly:                cca.forceIfReadOnly,
-		LogLevel:                       azcopyLogVerbosity,
+		LogLevel:                       LogLevel,
 		PreservePermissions:            cca.preservePermissions,
 		PreserveInfo:                   cca.preserveInfo,
 		PreservePOSIXProperties:        cca.preservePOSIXProperties,

@@ -1085,7 +1085,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		ForceIfReadOnly:     cca.ForceIfReadOnly,
 		AutoDecompress:      cca.autoDecompress,
 		Priority:            common.EJobPriority.Normal(),
-		LogLevel:            azcopyLogVerbosity,
+		LogLevel:            LogLevel,
 		ExcludeBlobType:     cca.excludeBlobType,
 		SymlinkHandlingType: cca.SymlinkHandling,
 		BlobAttributes: common.BlobTransferAttributes{
