@@ -288,56 +288,16 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 
 	// NFS/SMB validation
 	if cooked.isNFSCopy {
-		// check for unsupported NFS behavior
-		if isUnsupported, err := isUnsupportedPlatformForNFS(cooked.fromTo); isUnsupported {
-			return err
-		}
-
-		// If we are not preserving original file permissions (raw.preservePermissions == false),
-		// and the operation is a file copy from azure file NFS to local linux (FromTo == FileLocal),
-		// and the current OS is Linux, then we require root privileges to proceed.
-		//
-		// This is because modifying file ownership or permissions on Linux
-		// typically requires elevated privileges. To safely handle permission
-		// changes during the local file operation, we enforce that the process
-		// must be running as root.
-		if !cooked.preservePermissions.IsTruthy() && cooked.fromTo == common.EFromTo.FileLocal() {
-			if err := common.EnsureRunningAsRoot(); err != nil {
-				return fmt.Errorf("failed to copy source to destination without preserving permissions: operation not permitted. Please retry with root privileges or use the default option (--preserve-permissions=true)")
-			}
-		}
-
-		if err = validatePreserveNFSPropertyOption(cooked.preserveInfo,
-			cooked.fromTo,
-			PreserveInfoFlag); err != nil {
-			return err
-		}
-		if err = validatePreserveNFSPropertyOption(cooked.preservePermissions.IsTruthy(),
-			cooked.fromTo,
-			PreservePermissionsFlag); err != nil {
-			return err
-		}
-
-		if err = validateSymlinkFlag(cooked.symlinkHandling == common.ESymlinkHandlingType.Follow(), cooked.symlinkHandling == common.ESymlinkHandlingType.Preserve()); err != nil {
-			return err
-		}
-
-		if err = validateHardlinksFlag(cooked.hardlinks, cooked.fromTo, cooked.isNFSCopy); err != nil {
+		if err := performNFSSpecificValidation(
+			cooked.fromTo, cooked.preservePermissions, cooked.preserveInfo,
+			cooked.symlinkHandling, cooked.hardlinks); err != nil {
 			return err
 		}
 	} else {
-		if err = validatePreserveSMBPropertyOption(cooked.preserveInfo,
-			cooked.fromTo,
-			PreserveInfoFlag); err != nil {
+		if err := performSMBSpecificValidation(
+			cooked.fromTo, cooked.preservePermissions, cooked.preserveInfo,
+			cooked.preservePOSIXProperties); err != nil {
 			return err
-		}
-		if cooked.preservePOSIXProperties && !areBothLocationsPOSIXAware(cooked.fromTo) {
-			return errors.New(PreservePOSIXPropertiesIncompatibilityMsg)
-		}
-		if err = validatePreserveSMBPropertyOption(cooked.preservePermissions.IsTruthy(),
-			cooked.fromTo,
-			PreservePermissionsFlag); err != nil {
-			return
 		}
 	}
 
