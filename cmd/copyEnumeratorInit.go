@@ -670,10 +670,10 @@ func NewFolderPropertyOption(fromTo common.FromTo, recursive, stripTopDir bool, 
 	bothFolderAware := (fromTo.AreBothFolderAware() || preservePosixProperties || preservePermissions || includeDirectoryStubs) && !isDstNull
 	isRemoveFromFolderAware := fromTo == common.EFromTo.FileTrash()
 	if bothFolderAware || isRemoveFromFolderAware {
-		if !recursive {
-			// return common.EFolderPropertiesOption.NoFolders(), // doesn't make sense to move folders when not recursive. E.g. if invoked with /* and WITHOUT recursive
-			// "Any empty folders will not be processed, because --recursive was not specified" +
-			//getSuffix(false)
+		if !UseSyncOrchestrator && !recursive {
+			return common.EFolderPropertiesOption.NoFolders(), // doesn't make sense to move folders when not recursive. E.g. if invoked with /* and WITHOUT recursive
+				"Any empty folders will not be processed, because --recursive was not specified" +
+					getSuffix(false)
 		}
 
 		// check filters. Otherwise, if filter was say --include-pattern *.txt, we would transfer properties

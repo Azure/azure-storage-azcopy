@@ -32,7 +32,10 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
-	azFilesService "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/filesystem"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
@@ -401,6 +404,7 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 				_, err = blobClient.Delete(b.ctx, nil)
 				return (err == nil)
 			}
+
 			if UseSyncOrchestrator {
 				cc := bsc.NewContainerClient(b.containerName)
 				if err := b.RegisterFolderContentsForDeletion(
@@ -426,9 +430,18 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 				}, dirClient, b.forceIfReadOnly)
 				return (err == nil)
 			}
+
+			// Use the new Azure Files implementation with common.ServiceClient
 			if UseSyncOrchestrator {
-				serviceClient, _ := sc.FileServiceClient()
-				IterateThroughFolderForFiles(serviceClient, objectPath, b.containerName)
+				shareClient := fsc.NewShareClient(b.containerName)
+				if err := b.RegisterFileFolderContentsForDeletion(
+					shareClient,
+					objectPath,
+					b.folderManager,
+					b.remoteClient,
+					b.containerName); err != nil {
+					return fmt.Errorf("failed to register Azure Files folder contents for deletion: %v", err)
+				}
 			}
 		case common.ELocation.BlobFS():
 			dsc, _ := sc.DatalakeServiceClient()
@@ -443,6 +456,12 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 				_, err = directoryClient.Delete(recursiveContext, nil)
 				return (err == nil)
 			}
+
+			// The above deletion function deletes the whole directory along with its contents.
+			// but we still count this as 1 deletion. We can potentially count the number of objects
+			// under this directory, but that would require an additional enumeration and doesn't seem
+			// worth the overhead in this context.
+			// the function countBlobFSItems below can be used to count the items in the directory
 		default:
 			panic("not implemented, check your code")
 		}
@@ -450,8 +469,8 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 		b.folderManager.RecordChildExists(objURL)
 		b.folderManager.RequestDeletion(objURL, deleteFunc)
 
-		if !UseSyncOrchestrator {
-
+		if (object.entityType == common.EEntityType.Folder() && b.folderOption != common.EFolderPropertiesOption.NoFolders()) ||
+			object.entityType != common.EEntityType.File() {
 			if b.incrementDeletionCount != nil {
 				b.incrementDeletionCount()
 			}
@@ -597,8 +616,11 @@ func (b *remoteResourceDeleter) enumerateAndRegisterBlobs(
 
 		// Progress logging
 		if processedCount > 0 && processedCount%1000 == 0 {
-			glcm.Info(fmt.Sprintf("Registered %d items for deletion, %d folders remaining",
-				processedCount, len(foldersToProcess)))
+			msg := fmt.Sprintf("Registered %d items for deletion, %d folders remaining",
+				processedCount, len(foldersToProcess))
+			if azcopyScanningLogger != nil {
+				azcopyScanningLogger.Log(common.LogError, msg)
+			}
 		}
 
 	}()
@@ -666,30 +688,323 @@ func (b *remoteResourceDeleter) registerDirectoryForDeletion(dirPath string, fol
 
 // #endregion Recurive folder deletion for Azure Blobs
 
-func IterateThroughFolderForFiles(serviceClient *azFilesService.Client, folderPrefix string, containerName string) error {
-	shareClient := serviceClient.NewShareClient(containerName)
-	pager := shareClient.NewDirectoryClient(folderPrefix).NewListFilesAndDirectoriesPager(nil)
+// #region Recurive folder deletion for Azure Files
+const (
+	MaxFileDeletionWorkers    = 30  // Slightly lower than blob due to Files API limits
+	FileDeletionChannelBuffer = 150 // Buffer for file deletion work items
+)
+
+type FileDeletionTask struct {
+	FileURL      *url.URL
+	DeletionFunc func()
+	IsDirectory  bool
+}
+
+// Separate implementation for Azure Files folder deletion
+func (b *remoteResourceDeleter) RegisterFileFolderContentsForDeletion(
+	shareClient *share.Client,
+	folderPrefix string,
+	folderManager common.FolderDeletionManager,
+	remoteClient *common.ServiceClient,
+	shareName string) error {
+
 	ctx := context.Background()
-	for pager.More() {
-		lResp, err := pager.NextPage(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to get next page: %v", err)
-		}
-		for _, fileInfo := range lResp.Segment.Files {
-			//delete the file
-			glcm.Info(fmt.Sprintf("Deleting Extra file object : %s\n", *fileInfo.Name))
-			fileClient := shareClient.NewDirectoryClient(folderPrefix).NewFileClient(*fileInfo.Name)
-			_, err := fileClient.Delete(ctx, nil)
-			if err != nil {
-				return fmt.Errorf("failed to delete file: %v", err)
+	return b.enumerateAndRegisterFiles(ctx, shareClient, folderPrefix, folderManager, remoteClient, shareName)
+}
+
+func (b *remoteResourceDeleter) fileDeletionWorker(
+	ctx context.Context,
+	taskChan <-chan FileDeletionTask,
+	folderManager common.FolderDeletionManager,
+	wg *sync.WaitGroup) {
+
+	defer wg.Done()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case task, ok := <-taskChan:
+			if !ok {
+				return // Channel closed, no more work
 			}
-		}
-		for _, dirInfo := range lResp.Segment.Directories {
-			if err := IterateThroughFolderForFiles(serviceClient, path.Join(folderPrefix, *dirInfo.Name), containerName); err != nil {
-				return err
+
+			// Process the deletion
+			task.DeletionFunc()
+			if !task.IsDirectory {
+				// Only record file deletions immediately
+				// Directory deletions are handled by folder manager
+				folderManager.RecordChildDeleted(task.FileURL)
 			}
 		}
 	}
+}
+
+func (b *remoteResourceDeleter) enumerateAndRegisterFiles(
+	ctx context.Context,
+	shareClient *share.Client,
+	folderPrefix string,
+	folderManager common.FolderDeletionManager,
+	remoteClient *common.ServiceClient,
+	shareName string) error {
+
+	// Create buffered channel for work distribution
+	taskChan := make(chan FileDeletionTask, FileDeletionChannelBuffer)
+
+	// Start fixed number of worker goroutines
+	var workerWg sync.WaitGroup
+	for i := 0; i < MaxFileDeletionWorkers; i++ {
+		workerWg.Add(1)
+		go b.fileDeletionWorker(ctx, taskChan, folderManager, &workerWg)
+	}
+
+	// Enumerate and queue work (this is the producer)
+	go func() {
+		defer close(taskChan) // Signal workers to stop when done
+
+		// Use iterative approach to avoid deep recursion
+		foldersToProcess := []string{folderPrefix}
+		processedFileCount := 0
+		processedDirCount := 0
+
+		for len(foldersToProcess) > 0 {
+			currentFolder := foldersToProcess[0]
+			foldersToProcess = foldersToProcess[1:]
+
+			// Create directory client for current folder
+			dirClient := shareClient.NewDirectoryClient(currentFolder)
+
+			// List files and directories in current folder
+			pager := dirClient.NewListFilesAndDirectoriesPager(&directory.ListFilesAndDirectoriesOptions{
+				MaxResults: &[]int32{1000}[0],
+			})
+
+			for pager.More() {
+				page, err := pager.NextPage(ctx)
+				if err != nil {
+					// Log error but continue processing other folders
+					msg := fmt.Sprintf("Failed to enumerate Azure Files directory %s: %v", currentFolder, err)
+					if azcopyScanningLogger != nil {
+						azcopyScanningLogger.Log(common.LogError, msg)
+					}
+					break // Break from this folder's pagination, continue with next folder
+				}
+
+				// Process subdirectories first
+				for _, dirInfo := range page.Segment.Directories {
+					if dirInfo.Name != nil {
+						subDirPath := path.Join(currentFolder, *dirInfo.Name)
+						foldersToProcess = append(foldersToProcess, subDirPath)
+
+						// Register the subdirectory with folder manager
+						if err := b.registerFileDirectoryForDeletion(subDirPath, folderManager,
+							remoteClient, shareName); err != nil {
+							// Log error but continue processing
+							msg := fmt.Sprintf("Failed to register directory %s for deletion: %v", subDirPath, err)
+							if azcopyScanningLogger != nil {
+								azcopyScanningLogger.Log(common.LogError, msg)
+							}
+						} else {
+							processedDirCount++
+						}
+					}
+				}
+
+				// Process files in current directory
+				for _, fileInfo := range page.Segment.Files {
+					if fileInfo.Name != nil {
+						filePath := path.Join(currentFolder, *fileInfo.Name)
+
+						// Create file client
+						fileClient := shareClient.NewDirectoryClient(currentFolder).NewFileClient(*fileInfo.Name)
+						fileURL, err := url.Parse(fileClient.URL())
+						if err != nil {
+							// Log error but continue processing
+							msg := fmt.Sprintf("Failed to parse file URL for %s: %v", filePath, err)
+							if azcopyScanningLogger != nil {
+								azcopyScanningLogger.Log(common.LogError, msg)
+							}
+							continue
+						}
+
+						// Register with folder manager
+						folderManager.RecordChildExists(fileURL)
+						// Create a deletion function for this specific file
+						deletionFunc := b.createFileDeletionFunc(fileClient, filePath)
+
+						// Queue work
+						select {
+						case taskChan <- FileDeletionTask{
+							FileURL:      fileURL,
+							DeletionFunc: deletionFunc,
+							IsDirectory:  false,
+						}:
+							processedFileCount++
+						case <-ctx.Done():
+							return
+						}
+					}
+				}
+			}
+
+			// Progress logging every 1000 items
+			totalProcessed := processedFileCount + processedDirCount
+			if totalProcessed > 0 && totalProcessed%1000 == 0 {
+				msg := fmt.Sprintf("Azure Files: Registered %d files and %d directories for deletion, %d folders remaining",
+					processedFileCount, processedDirCount, len(foldersToProcess))
+				if azcopyScanningLogger != nil {
+					azcopyScanningLogger.Log(common.LogError, msg)
+				}
+			}
+		}
+
+		msg := fmt.Sprintf("Azure Files: Completed registration - %d files and %d directories queued for deletion",
+			processedFileCount, processedDirCount)
+		if azcopyScanningLogger != nil {
+			azcopyScanningLogger.Log(common.LogError, msg)
+		}
+	}()
+
+	// Wait for all workers to complete
+	workerWg.Wait()
+	return nil
+}
+
+func (b *remoteResourceDeleter) createFileDeletionFunc(fileClient *file.Client, filePath string) func() {
+	return func() {
+		ctx := context.Background()
+		//glcm.Info(fmt.Sprintf("Deleting extra file object: %s", filePath))
+
+		if _, err := fileClient.Delete(ctx, nil); err != nil {
+			msg := fmt.Sprintf("Failed to delete file %s: %v", filePath, err)
+			// glcm.Info(msg)
+			if azcopyScanningLogger != nil {
+				azcopyScanningLogger.Log(common.LogError, msg)
+			}
+		}
+
+		// Increment deletion count
+		if b.incrementDeletionCount != nil {
+			b.incrementDeletionCount()
+		}
+	}
+}
+
+func (b *remoteResourceDeleter) registerFileDirectoryForDeletion(dirPath string, folderManager common.FolderDeletionManager,
+	remoteClient *common.ServiceClient, shareName string) error {
+
+	// Get the Azure Files service client
+	fsc, err := remoteClient.FileServiceClient()
+	if err != nil {
+		return fmt.Errorf("failed to get Azure Files service client: %v", err)
+	}
+
+	// Create URL for the directory
+	shareClient := fsc.NewShareClient(shareName)
+	dirClient := shareClient.NewDirectoryClient(dirPath)
+	dirURL, err := url.Parse(dirClient.URL())
+	if err != nil {
+		return fmt.Errorf("failed to parse directory URL %s: %v", dirPath, err)
+	}
+
+	// Register directory existence
+	folderManager.RecordChildExists(dirURL)
+
+	// Create deletion function for the directory
+	deleteFunc := func(ctx context.Context, logger common.ILogger) bool {
+		// Get fresh service client for the deletion
+		freshFsc, err := remoteClient.FileServiceClient()
+		if err != nil {
+			msg := fmt.Sprintf("Failed to get Azure Files service client for deleting directory %s: %v", dirPath, err)
+			if logger != nil {
+				logger.Log(common.LogError, msg)
+			}
+			return false
+		}
+
+		// Create fresh directory client for deletion
+		freshShareClient := freshFsc.NewShareClient(shareName)
+		freshDirClient := freshShareClient.NewDirectoryClient(dirPath)
+
+		// Use the same read-only override logic as the main delete function
+		err = common.DoWithOverrideReadOnlyOnAzureFiles(ctx, func() (interface{}, error) {
+			return freshDirClient.Delete(ctx, nil)
+		}, freshDirClient, b.forceIfReadOnly)
+
+		if err != nil {
+			// Log the error but don't fail the overall operation
+			msg := fmt.Sprintf("Failed to delete Azure Files directory %s: %v", dirPath, err)
+			if logger != nil {
+				logger.Log(common.LogError, msg)
+			}
+			return false
+		}
+
+		// Increment deletion count for directories
+		if b.folderOption != common.EFolderPropertiesOption.NoFolders() &&
+			b.incrementDeletionCount != nil {
+			b.incrementDeletionCount()
+		}
+		return true
+	}
+
+	// Register deletion request
+	folderManager.RequestDeletion(dirURL, deleteFunc)
 
 	return nil
 }
+
+// #endregion Recurive folder deletion for Azure Files
+// #region Recurive folder deletion for Blob FileSystem
+// Count Blob FS items
+func (b *remoteResourceDeleter) countBlobFSItems(
+	ctx context.Context,
+	serviceClient *common.ServiceClient,
+	folderPrefix string,
+	containerName string) (int64, error) {
+
+	var counts int64 = 0
+
+	datalakeServiceClient, err := serviceClient.DatalakeServiceClient()
+	if err != nil {
+		return counts, fmt.Errorf("failed to get Blob FS service client: %v", err)
+	}
+
+	filesystemClient := datalakeServiceClient.NewFileSystemClient(containerName)
+
+	// List all paths under the folder
+	pager := filesystemClient.NewListPathsPager(true, &filesystem.ListPathsOptions{
+		Prefix:     &folderPrefix,
+		MaxResults: &[]int32{5000}[0], // Higher limit for counting
+	})
+
+	for pager.More() {
+		page, err := pager.NextPage(ctx)
+		if err != nil {
+			return counts, fmt.Errorf("failed to list Blob FS paths: %v", err)
+		}
+
+		for _, pathInfo := range page.Paths {
+			if pathInfo.Name == nil {
+				continue
+			}
+
+			// Skip the folder itself
+			if *pathInfo.Name == folderPrefix {
+				continue
+			}
+
+			// if pathInfo.IsDirectory != nil && *pathInfo.IsDirectory {
+			// 	counts.Directories++
+			// } else {
+			// 	counts.Files++
+			// }
+
+			counts++ // Count all items (both files and directories)
+		}
+	}
+
+	return counts, nil
+}
+
+// #endregion Recurive folder deletion for Blob FileSystem
