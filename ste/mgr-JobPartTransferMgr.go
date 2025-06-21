@@ -166,8 +166,14 @@ func (i *TransferInfo) IsFolderPropertiesTransfer() bool {
 // The secondary reason is that folder LMT's don't actually tell the user anything particularly useful. Specifically,
 // they do NOT tell you when the folder contents (recursively) were last updated: in Azure Files they are never updated
 // when folder contents change; and in NTFS they are only updated when immediate children are changed (not grandchildren).
-func (i *TransferInfo) ShouldTransferLastWriteTime() bool {
-	return !i.IsFolderPropertiesTransfer()
+//
+// param isDownload indicates whether the transfer is a download or an upload.
+// returns true if the last write time should be transferred, false otherwise.
+func (i *TransferInfo) ShouldTransferLastWriteTime(fromTo common.FromTo) bool {
+	if fromTo.IsDownload() {
+		return !i.IsFolderPropertiesTransfer()
+	}
+	return true
 }
 
 // entityTypeLogIndicator returns a string that can be used in logging to distinguish folder property transfers from "normal" transfers.

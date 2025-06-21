@@ -5,12 +5,13 @@ package ste
 
 import (
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
 	"golang.org/x/sys/unix"
-	"strings"
-	"time"
 )
 
 func (f localFileSourceInfoProvider) HasUNIXProperties() bool {
@@ -225,6 +226,11 @@ func (hi HandleInfo) FileCreationTime() time.Time {
 func (hi HandleInfo) FileLastWriteTime() time.Time {
 	// This returns nanoseconds since Unix Epoch.
 	return time.Unix(0, hi.LastWriteTime.Nanoseconds())
+}
+
+func (hi HandleInfo) FileChangeTime() time.Time {
+	// This returns nanoseconds since Unix Epoch.
+	return time.Unix(0, hi.ChangeTime.Nanoseconds())
 }
 
 func (hi HandleInfo) FileAttributes() (*file.NTFSFileAttributes, error) {

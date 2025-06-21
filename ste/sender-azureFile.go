@@ -200,6 +200,13 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		creationProperties.Attributes.ReadOnly = false
 	}
 
+	// Set last write time to the minimum time to enable retry copy on next sync
+	// Source last write time will be set in epilogue
+	if u.jptm.Info().PreserveSMBInfo && creationProperties.LastWriteTime != nil {
+		minimalLwt := time.Unix(0, 0)
+		creationProperties.LastWriteTime = &minimalLwt
+	}
+
 	err = common.DoWithOverrideReadOnlyOnAzureFiles(u.ctx,
 		func() (interface{}, error) {
 			return u.getFileClient().Create(u.ctx, info.SourceSize, &file.CreateOptions{HTTPHeaders: &u.headersToApply, Permissions: &u.permissionsToApply, SMBProperties: &creationProperties, Metadata: u.metadataToApply})
@@ -317,9 +324,13 @@ func (u *azureFileSenderBase) addSMBPropertiesToHeaders(info *TransferInfo) (sta
 		attribs, _ := smbProps.FileAttributes()
 		u.smbPropertiesToApply.Attributes = attribs
 
-		if info.ShouldTransferLastWriteTime() {
+		if info.ShouldTransferLastWriteTime(u.jptm.FromTo()) {
 			lwTime := smbProps.FileLastWriteTime()
 			u.smbPropertiesToApply.LastWriteTime = &lwTime
+		}
+
+		if lcTime := smbProps.FileChangeTime(); !lcTime.Equal(time.Time{}) {
+			u.smbPropertiesToApply.ChangeTime = &lcTime
 		}
 
 		creationTime := smbProps.FileCreationTime()
@@ -484,7 +495,7 @@ func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, shareCli
 	if len(segments) == 0 {
 		// If we are trying to create root, perform GetProperties instead.
 		// Azure Files has delayed creation of root, and if we do not perform GetProperties,
-		// some operations like SetMetadata or SetProperties will fail. 
+		// some operations like SetMetadata or SetProperties will fail.
 		// TODO: Remove this block once the bug is fixed.
 		_, err := directoryClient.GetProperties(ctx, nil)
 		return err

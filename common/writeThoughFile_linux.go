@@ -57,6 +57,7 @@ type ByHandleFileInformation struct {
 	CreationTime       Filetime
 	LastAccessTime     Filetime
 	LastWriteTime      Filetime
+	ChangeTime         Filetime
 	VolumeSerialNumber uint32
 	FileSizeHigh       uint32
 	FileSizeLow        uint32
@@ -143,6 +144,7 @@ func GetFileInformation(path string) (ByHandleFileInformation, error) {
 	info.CreationTime = StatxTimestampToFiletime(stx.Btime)
 	info.LastAccessTime = StatxTimestampToFiletime(stx.Atime)
 	info.LastWriteTime = StatxTimestampToFiletime(stx.Mtime)
+	info.ChangeTime = StatxTimestampToFiletime(stx.Ctime)
 
 	// TODO: Do we need this?
 	info.VolumeSerialNumber = 0
