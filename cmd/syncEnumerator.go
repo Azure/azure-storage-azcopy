@@ -30,7 +30,6 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
@@ -171,14 +170,15 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 			// At this point, we'll let the destination be written to with the original resource type.
 		}
 	} else if err != nil && fileerror.HasCode(err, fileerror.ShareNotFound) { // We can resolve a missing share. Let's create it.
-		ft := destinationTraverser.(*fileTraverser)
-		sc := ft.serviceClient
-		fUrlParts, _ := file.ParseURL(ft.rawURL)                         // this should have succeeded by now.
-		_, err = sc.NewShareClient(fUrlParts.ShareName).Create(ctx, nil) // If it doesn't work out, this will surely bubble up later anyway. It won't be long.
-		if err != nil {
-			glcm.Warn(fmt.Sprintf("Failed to create the missing destination container: %v", err))
-		}
-		// At this point, we'll let the destination be written to with the original resource type, as it will get created in this transfer.
+		return nil, fmt.Errorf("the destination share %s does not exist. Please create it manually with the required quota and settings before running sync", cca.destination.Value)
+		// ft := destinationTraverser.(*fileTraverser)
+		// sc := ft.serviceClient
+		// fUrlParts, _ := file.ParseURL(ft.rawURL)                         // this should have succeeded by now.
+		// _, err = sc.NewShareClient(fUrlParts.ShareName).Create(ctx, nil) // If it doesn't work out, this will surely bubble up later anyway. It won't be long.
+		// if err != nil {
+		// 	glcm.Warn(fmt.Sprintf("Failed to create the missing destination container: %v", err))
+		// }
+		// // At this point, we'll let the destination be written to with the original resource type, as it will get created in this transfer.
 	} else if err == nil && sourceIsDir != destIsDir {
 		// If the destination exists, and isn't blob though, we have to match resource types.
 		return nil, resourceMismatchError
