@@ -78,6 +78,12 @@ type NewE2EConfig struct {
 
 		LogDropPath string `env:"AZCOPY_E2E_LOG_OUTPUT"`
 	} `env:",required"`
+
+	// Extra config for the e2e framework that isn't always applicable.
+	E2EFrameworkSpecialConfig struct {
+		SkipTelemetry              bool `env:"NEW_E2E_SKIP_TELEMETRY,default=false"`
+		OverrideWindowsSymlinkSkip bool `env:"NEW_E2E_OVERRIDE_WINDOWS_SYMLINK,default=false"`
+	}
 }
 
 func (e NewE2EConfig) StaticResources() bool {
