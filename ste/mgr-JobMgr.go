@@ -714,6 +714,10 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 					jm.Log(common.LogInfo, fmt.Sprintf("%s %s successfully completed, cancelled or paused", partDescription, jm.jobID.String()))
 				}
 
+				if jobStatus == common.EJobStatus.InProgress() && partDescription == "all parts of entire Job" {
+					jm.waitForSymlinkCopy() // wait for symlink copy to complete before we set the job status to completed
+				}
+
 				switch part0Plan.JobStatus() {
 				case common.EJobStatus.Cancelling():
 					part0Plan.SetJobStatus(common.EJobStatus.Cancelled())
@@ -738,6 +742,36 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 				jm.Log(common.LogInfo, fmt.Sprintf("is part of Job which %d total number of parts done ", partsDone))
 			}
 		}
+	}
+}
+
+var (
+	symlinkMap   = make(map[string]string) // symlink path -> resolved target path
+	symlinkMapMu sync.Mutex                // mutex to protect concurrent access
+)
+
+func GetSymlinkMap() map[string]string {
+	symlinkMapMu.Lock()
+	defer symlinkMapMu.Unlock()
+	// Return a copy of the symlink map to avoid concurrent modification issues
+	copiedMap := make(map[string]string, len(symlinkMap))
+	for k, v := range symlinkMap {
+		copiedMap[k] = v
+	}
+	return copiedMap
+}
+
+func AddSymlink(symlinkPath, targetPath string) {
+	symlinkMapMu.Lock()
+	defer symlinkMapMu.Unlock()
+	// Add or update the symlink path and its target
+	symlinkMap[symlinkPath] = targetPath
+}
+
+func (jm *jobMgr) waitForSymlinkCopy() {
+	for symlinkPath, targetPath := range GetSymlinkMap() {
+		computeJobXfer(jm.fromTo(), nil)
+		SendSymlink(symlinkPath)
 	}
 }
 

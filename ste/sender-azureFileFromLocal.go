@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
@@ -99,34 +100,8 @@ func (u *azureFileUploader) Epilogue() {
 	}
 }
 
-func (u *azureFileUploader) SendSymlink(linkData string) error {
-	// meta := common.Metadata{} // meta isn't traditionally supported for dfs, but still exists
-	// adapter, err := u.GetSourcePOSIXProperties()
-	// if err != nil {
-	// 	return fmt.Errorf("when polling for POSIX properties: %w", err)
-	// } else if adapter == nil {
-	// 	return nil // No-op
-	// }
-
-	// common.AddStatToBlobMetadata(adapter, meta)
-	// meta[common.POSIXSymlinkMeta] = to.Ptr("true") // just in case there isn't any metadata
-	// blobHeaders := blob.HTTPHeaders{               // translate headers, since those still apply
-	// 	BlobContentType:        u.creationTimeHeaders.ContentType,
-	// 	BlobContentEncoding:    u.creationTimeHeaders.ContentEncoding,
-	// 	BlobContentLanguage:    u.creationTimeHeaders.ContentLanguage,
-	// 	BlobContentDisposition: u.creationTimeHeaders.ContentDisposition,
-	// 	BlobCacheControl:       u.creationTimeHeaders.CacheControl,
-	// 	BlobContentMD5:         u.creationTimeHeaders.ContentMD5,
-	// }
-	// _, err = u.fileOrDirClient.Upload(
-	// 	u.jptm.Context(),
-	// 	streaming.NopCloser(strings.NewReader(linkData)),
-	// 	&blockblob.UploadOptions{
-	// 		HTTPHeaders: &blobHeaders,
-	// 		Metadata:    meta,
-	// 	})
-
-	_, err := u.getFileClient().CreateSymbolicLink(u.ctx, linkData, nil)
+func (u *azureFileUploader) SendSymlink(ctx context.Context, linkData string) error {
+	_, err := u.getFileClient().CreateSymbolicLink(ctx, linkData, nil)
 	if err != nil {
 		u.jptm.FailActiveUpload("Creating symlink", err)
 		return fmt.Errorf("failed to create symlink: %w", err)
