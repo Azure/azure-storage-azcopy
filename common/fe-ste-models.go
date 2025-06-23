@@ -1559,6 +1559,43 @@ func (pc *PerfConstraint) Parse(s string) error {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+var EHardlinkHandlingType = HardlinkHandlingType(0)
+
+var DefaultHardlinkHandlingType = EHardlinkHandlingType.Follow()
+
+type HardlinkHandlingType uint8
+
+// Copy means copy the files to the destination as regular files
+func (HardlinkHandlingType) Follow() HardlinkHandlingType {
+	return HardlinkHandlingType(0)
+}
+
+func (pho HardlinkHandlingType) String() string {
+	return enum.StringInt(pho, reflect.TypeOf(pho))
+}
+
+func (pho *HardlinkHandlingType) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(pho), s, true, true)
+	if err == nil {
+		*pho = val.(HardlinkHandlingType)
+	}
+	return err
+}
+
+func (pho HardlinkHandlingType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(pho.String())
+}
+
+func (pho *HardlinkHandlingType) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	return pho.Parse(s)
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 type PerformanceAdvice struct {
 
 	// Code representing the type of the advice
@@ -1645,6 +1682,8 @@ func (EntityType) File() EntityType           { return EntityType(0) }
 func (EntityType) Folder() EntityType         { return EntityType(1) }
 func (EntityType) Symlink() EntityType        { return EntityType(2) }
 func (EntityType) FileProperties() EntityType { return EntityType(3) }
+func (EntityType) Hardlink() EntityType       { return EntityType(4) }
+func (EntityType) Other() EntityType          { return EntityType(5) }
 
 func (e EntityType) String() string {
 	return enum.StringInt(e, reflect.TypeOf(e))
@@ -1714,6 +1753,17 @@ func (p PreservePermissionsOption) IsTruthy() bool {
 		EPreservePermissionsOption.OwnershipAndACLs():
 		return true
 	case EPreservePermissionsOption.None():
+		return false
+	default:
+		panic("unknown permissions option")
+	}
+}
+
+func (p PreservePermissionsOption) IsOwner() bool {
+	switch p {
+	case EPreservePermissionsOption.OwnershipAndACLs():
+		return true
+	case EPreservePermissionsOption.ACLsOnly(), EPreservePermissionsOption.None():
 		return false
 	default:
 		panic("unknown permissions option")

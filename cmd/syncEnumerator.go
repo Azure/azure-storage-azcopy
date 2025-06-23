@@ -24,13 +24,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
+	"strings"
+	"sync/atomic"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
-	"runtime"
-	"strings"
-	"sync/atomic"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
@@ -74,6 +75,13 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 			if entityType == common.EEntityType.File() {
 				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 			}
+			if isNFSCopy {
+				if entityType == common.EEntityType.Other() {
+					atomic.AddUint32(&cca.atomicSkippedSpecialFileCount, 1)
+				} else if entityType == common.EEntityType.Symlink() {
+					atomic.AddUint32(&cca.atomicSkippedSymlinkCount, 1)
+				}
+			}
 		},
 
 		CpkOptions: cca.cpkOptions,
@@ -86,6 +94,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		GetPropertiesInFrontend: true,
 		IncludeDirectoryStubs:   includeDirStubs,
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
+		HardlinkHandling:        cca.hardlinks,
 	})
 
 	if err != nil {
@@ -120,6 +129,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		GetPropertiesInFrontend: true,
 		IncludeDirectoryStubs:   includeDirStubs,
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
+		HardlinkHandling:        common.EHardlinkHandlingType.Follow(),
 	})
 	if err != nil {
 		return nil, err
@@ -204,7 +214,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 
 	// decide our folder transfer strategy
 	// sync always acts like stripTopDir=true, but if we intend to persist the root, we must tell NewFolderPropertyOption stripTopDir=false.
-	fpo, folderMessage := NewFolderPropertyOption(cca.fromTo, cca.recursive, !cca.includeRoot, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), false, strings.EqualFold(cca.destination.Value, common.Dev_Null), cca.includeDirectoryStubs)
+	fpo, folderMessage := NewFolderPropertyOption(cca.fromTo, cca.recursive, !cca.includeRoot, filters, cca.preserveInfo, cca.preservePermissions.IsTruthy(), false, strings.EqualFold(cca.destination.Value, common.Dev_Null), cca.includeDirectoryStubs)
 	if !cca.dryrunMode {
 		glcm.Info(folderMessage)
 	}
@@ -228,7 +238,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 
 		// flags
 		BlobAttributes: common.BlobTransferAttributes{
-			PreserveLastModifiedTime:         cca.preserveSMBInfo, // true by default for sync so that future syncs have this information available
+			PreserveLastModifiedTime:         cca.preserveInfo, // true by default for sync so that future syncs have this information available
 			PutMd5:                           cca.putMd5,
 			MD5ValidationOption:              cca.md5ValidationOption,
 			BlockSizeInBytes:                 cca.blockSize,
@@ -237,9 +247,9 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		},
 		ForceWrite:                     common.EOverwriteOption.True(), // once we decide to transfer for a sync operation, we overwrite the destination regardless
 		ForceIfReadOnly:                cca.forceIfReadOnly,
-		LogLevel:                       azcopyLogVerbosity,
-		PreserveSMBPermissions:         cca.preservePermissions,
-		PreserveSMBInfo:                cca.preserveSMBInfo,
+		LogLevel:                       LogLevel,
+		PreservePermissions:            cca.preservePermissions,
+		PreserveInfo:                   cca.preserveInfo,
 		PreservePOSIXProperties:        cca.preservePOSIXProperties,
 		S2SSourceChangeValidation:      true,
 		DestLengthValidation:           true,
@@ -252,6 +262,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.trailingDot,
 		},
+		IsNFSCopy: cca.isNFSCopy,
 	}
 
 	var srcReauthTok *common.ScopedAuthenticator
@@ -311,6 +322,35 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		azureFileSpecificOptions,
 	)
 
+	//Protocol compatibility for SMB and NFS
+	// Handles source validation
+	if cca.fromTo.IsS2S() {
+		if cca.fromTo.From() == common.ELocation.File() {
+			if err := validateShareProtocolCompatibility(ctx,
+				cca.fromTo, cca.source, copyJobTemplate.SrcServiceClient, cca.isNFSCopy, true); err != nil {
+				return nil, err
+			}
+		} else if isNFSCopy {
+			return nil, errors.New("NFS copy is not supported for source location " + cca.fromTo.From().String())
+		}
+	}
+
+	// Handle destination validation
+	if (cca.fromTo.IsUpload() || cca.fromTo.IsS2S()) && cca.fromTo.To() == common.ELocation.File() {
+		if err := validateShareProtocolCompatibility(ctx, cca.fromTo,
+			cca.destination,
+			copyJobTemplate.DstServiceClient,
+			cca.isNFSCopy, false); err != nil {
+			return nil, err
+		}
+	} else if cca.fromTo.IsDownload() && cca.fromTo.From() == common.ELocation.File() {
+		if err := validateShareProtocolCompatibility(ctx, cca.fromTo,
+			cca.source, copyJobTemplate.SrcServiceClient,
+			cca.isNFSCopy, true); err != nil {
+			return nil, err
+		}
+	}
+
 	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo, copyJobTemplate)
 
 	// set up the comparator so that the source/destination can be compared
@@ -333,7 +373,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		// we ALREADY have available a complete map of everything that exists locally
 		// so as soon as we see a remote destination object we can know whether it exists in the local source
 
-		comparator = newSyncDestinationComparator(indexer, transferScheduler.scheduleCopyTransfer, destCleanerFunc, cca.compareHash, cca.preserveSMBInfo, cca.mirrorMode).processIfNecessary
+		comparator = newSyncDestinationComparator(indexer, transferScheduler.scheduleCopyTransfer, destCleanerFunc, cca.compareHash, cca.preserveInfo, cca.mirrorMode).processIfNecessary
 		finalize = func() error {
 			// schedule every local file that doesn't exist at the destination
 			err = indexer.traverse(transferScheduler.scheduleCopyTransfer, filters)
@@ -357,7 +397,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		indexer.isDestinationCaseInsensitive = IsDestinationCaseInsensitive(cca.fromTo)
 		// in all other cases (download and S2S), the destination is scanned/indexed first
 		// then the source is scanned and filtered based on what the destination contains
-		comparator = newSyncSourceComparator(indexer, transferScheduler.scheduleCopyTransfer, cca.compareHash, cca.preserveSMBInfo, cca.mirrorMode).processIfNecessary
+		comparator = newSyncSourceComparator(indexer, transferScheduler.scheduleCopyTransfer, cca.compareHash, cca.preserveInfo, cca.mirrorMode).processIfNecessary
 
 		finalize = func() error {
 			// remove the extra files at the destination that were not present at the source

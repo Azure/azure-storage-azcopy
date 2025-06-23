@@ -124,11 +124,12 @@ func ConsolidatePathSeparators(path string) string {
 // Transfers describes each file/folder being transferred in a given JobPartOrder, and
 // other auxiliary details of this order.
 type Transfers struct {
-	List                 []CopyTransfer
-	TotalSizeInBytes     uint64
-	FileTransferCount    uint32
-	FolderTransferCount  uint32
-	SymlinkTransferCount uint32
+	List                    []CopyTransfer
+	TotalSizeInBytes        uint64
+	FileTransferCount       uint32
+	FolderTransferCount     uint32
+	SymlinkTransferCount    uint32
+	HardlinksConvertedCount uint32
 }
 
 // This struct represents the job info (a single part) to be sent to the storage engine
@@ -162,8 +163,8 @@ type CopyJobPartOrderRequest struct {
 	CommandString  string // commandString hold the user given command which is logged to the Job log file
 	CredentialInfo CredentialInfo
 
-	PreserveSMBPermissions         PreservePermissionsOption
-	PreserveSMBInfo                bool
+	PreservePermissions            PreservePermissionsOption
+	PreserveInfo                   bool
 	PreservePOSIXProperties        bool
 	S2SGetPropertiesInBackend      bool
 	S2SSourceChangeValidation      bool
@@ -179,6 +180,7 @@ type CopyJobPartOrderRequest struct {
 	// This may not always be the case (for instance, if we opt to use multiple OAuth tokens). At that point, this will likely be it's own CredentialInfo.
 	S2SSourceCredentialType CredentialType // Only Anonymous and OAuth will really be used in response to this, but S3 and GCP will come along too...
 	FileAttributes          FileTransferAttributes
+	IsNFSCopy               bool
 }
 
 // CredentialInfo contains essential credential info which need be transited between modules,
@@ -320,13 +322,15 @@ type ListJobSummaryResponse struct {
 	ServerBusyPercentage   float32 `json:",string"`
 	NetworkErrorPercentage float32 `json:",string"`
 
-	FailedTransfers  []TransferDetail
-	SkippedTransfers []TransferDetail
-	PerfConstraint   PerfConstraint
-	PerfStrings      []string `json:"-"`
-
-	PerformanceAdvice []PerformanceAdvice
-	IsCleanupJob      bool
+	FailedTransfers         []TransferDetail
+	SkippedTransfers        []TransferDetail
+	PerfConstraint          PerfConstraint
+	PerfStrings             []string `json:"-"`
+	PerformanceAdvice       []PerformanceAdvice
+	IsCleanupJob            bool
+	SkippedSymlinkCount     uint32 `json:",string"`
+	HardlinksConvertedCount uint32 `json:",string"`
+	SkippedSpecialFileCount uint32 `json:",string"`
 }
 
 // wraps the standard ListJobSummaryResponse with sync-specific stats
