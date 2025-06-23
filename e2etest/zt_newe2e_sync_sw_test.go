@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 )
 
+var UseSyncOrchestrator = true
 type SWSyncTestSuite struct{}
 
 func init() {
@@ -1086,4 +1087,51 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 			"dir_file_copy_test/sub_dir_copy_test/test0.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(!deleteDestination)},
 		},
 	}, false)
+}
+
+func (s *SWSyncTestSuite) Scenario_TestFollowLinks(svm *ScenarioVariationManager) {
+        srcBody := NewRandomObjectContentContainer(1024)
+
+        source := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{
+                Objects: ObjectResourceMappingFlat{
+                        "foo": ResourceDefinitionObject{
+                                ObjectProperties: ObjectProperties{
+                                        EntityType:        common.EEntityType.Symlink(),
+                                        SymlinkedFileName: "bar",
+                                },
+                        },
+                        "bar": ResourceDefinitionObject{
+                                Body: srcBody,
+                        },
+                },
+        })
+
+        dest := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
+
+        _, _ = RunAzCopy(
+                svm,
+                AzCopyCommand{
+                        Verb: AzCopyVerbCopy, // sync doesn't support symlinks at this time
+                        Targets: []ResourceManager{
+                                source, dest,
+                        },
+                        Flags: CopyFlags{
+                                CopySyncCommonFlags: CopySyncCommonFlags{
+                                        Recursive: pointerTo(true),
+                                },
+                                FollowSymlinks: pointerTo(true),
+                                AsSubdir:       pointerTo(false),
+                        },
+                })
+
+        ValidateResource(svm, dest, ResourceDefinitionContainer{
+                Objects: ObjectResourceMappingFlat{
+                        "foo": ResourceDefinitionObject{
+                                Body: srcBody,
+                        },
+                        "bar": ResourceDefinitionObject{
+                                Body: srcBody,
+                        },
+                },
+        }, true)
 }
