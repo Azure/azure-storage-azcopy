@@ -132,10 +132,7 @@ func handleCleanJobsCommand(givenStatus common.JobStatus) error {
 func blindDeleteAllJobFiles() (int, error) {
 	// get rid of the job plan files
 	numPlanFilesRemoved, err := removeFilesWithPredicate(common.AzcopyJobPlanFolder, func(s string) bool {
-		if strings.Contains(s, ".steV") {
-			return true
-		}
-		return false
+		return strings.Contains(s, ".steV")
 	})
 	if err != nil {
 		return numPlanFilesRemoved, err

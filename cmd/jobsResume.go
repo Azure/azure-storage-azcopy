@@ -415,7 +415,7 @@ func (rca *JobsResumeOptions) getSourceAndDestinationServiceClients(
 // dispatches the resume Job order to the storage engine.
 func (rca *JobsResumeOptions) process() error {
 	// if no logging, set this empty so that we don't display the log location
-	if azcopyLogVerbosity == common.LogNone {
+	if LogLevel == common.LogNone {
 		azcopyLogPathFolder = ""
 	}
 
