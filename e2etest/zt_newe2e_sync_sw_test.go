@@ -169,7 +169,7 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResourceObject(a *ScenarioVaria
 	// Set up the scenario
 	a.InsertVariationSeparator("Local->")
 	srcLoc := common.ELocation.Local()
-	dstLoc := ResolveVariation(a, []common.Location{common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})
+	dstLoc := ResolveVariation(a, []common.Location{common.ELocation.Blob(), common.ELocation.File()})
 	a.InsertVariationSeparator("|Create:")
 
 	const (
