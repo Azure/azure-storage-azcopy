@@ -23,6 +23,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"runtime"
 	"strings"
@@ -121,60 +122,31 @@ func validateURLIsNotServiceLevel(url string, location common.Location) error {
 	return nil
 }
 
-// validates and transform raw input into cooked input
-func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
-	cooked := cookedSyncCmdArgs{}
-
-	// set up the front end scanning logger
-	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, LogLevel, azcopyLogPathFolder, "-scanning")
-	azcopyScanningLogger.OpenLog()
-	glcm.RegisterCloseFunc(func() {
-		azcopyScanningLogger.CloseLog()
-	})
-
-	// if no logging, set this empty so that we don't display the log location
-	if LogLevel == common.LogNone {
-		azcopyLogPathFolder = ""
+func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
+	cooked = cookedSyncCmdArgs{
+		dryrunMode:                       raw.dryrun,
+		blockSizeMB:                      raw.blockSizeMB,
+		putBlobSizeMB:                    raw.putBlobSizeMB,
+		recursive:                        raw.recursive,
+		forceIfReadOnly:                  raw.forceIfReadOnly,
+		backupMode:                       raw.backupMode,
+		isNFSCopy:                        raw.isNFSCopy,
+		putMd5:                           raw.putMd5,
+		s2sPreserveBlobTags:              raw.s2sPreserveBlobTags,
+		cpkByName:                        raw.cpkScopeInfo,
+		cpkByValue:                       raw.cpkInfo,
+		mirrorMode:                       raw.mirrorMode,
+		deleteDestinationFileIfNecessary: raw.deleteDestinationFileIfNecessary,
+		includeDirectoryStubs:            raw.includeDirectoryStubs,
+		includeRoot:                      raw.includeRoot,
 	}
-
-	// this if statement ladder remains instead of being separated to help determine valid combinations for sync
-	// consider making a map of valid source/dest combos and consolidating this to generic source/dest setups, akin to the lower if statement
-	// TODO: if expand the set of source/dest combos supported by sync, update this method the declarative test framework:
-
-	var err error
 	err = cooked.trailingDot.Parse(raw.trailingDot)
 	if err != nil {
 		return cooked, err
 	}
-
 	cooked.fromTo, err = ValidateFromTo(raw.src, raw.dst, raw.fromTo)
 	if err != nil {
 		return cooked, err
-	}
-
-	// display a warning message to console and job log file if there is a sync operation being performed from local to file share.
-	// Reference : https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-files#synchronize-files
-	if cooked.fromTo == common.EFromTo.LocalFile() {
-
-		glcm.Warn(LocalToFileShareWarnMsg)
-		if jobsAdmin.JobsAdmin != nil {
-			jobsAdmin.JobsAdmin.LogToJobLog(LocalToFileShareWarnMsg, common.LogWarning)
-		}
-		if raw.dryrun {
-			glcm.Dryrun(func(of common.OutputFormat) string {
-				if of == common.EOutputFormat.Json() {
-					var out struct {
-						Warn string `json:"warn"`
-					}
-
-					out.Warn = LocalToFileShareWarnMsg
-					buf, _ := json.Marshal(out)
-					return string(buf)
-				}
-
-				return fmt.Sprintf("DRYRUN: warn %s", LocalToFileShareWarnMsg)
-			})
-		}
 	}
 
 	switch cooked.fromTo {
@@ -202,45 +174,7 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		cooked.destination = common.ResourceString{Value: common.ToExtendedPath(cleanLocalPath(raw.dst))}
 	}
 
-	// we do not support service level sync yet
-	if cooked.fromTo.From().IsRemote() {
-		err = validateURLIsNotServiceLevel(cooked.source.Value, cooked.fromTo.From())
-		if err != nil {
-			return cooked, err
-		}
-	}
-
-	// we do not support service level sync yet
-	if cooked.fromTo.To().IsRemote() {
-		err = validateURLIsNotServiceLevel(cooked.destination.Value, cooked.fromTo.To())
-		if err != nil {
-			return cooked, err
-		}
-	}
-
-	// use the globally generated JobID
-	cooked.jobID = azcopyCurrentJobID
-
-	cooked.blockSize, err = blockSizeInBytes(raw.blockSizeMB)
-	if err != nil {
-		return cooked, err
-	}
-	cooked.putBlobSize, err = blockSizeInBytes(raw.putBlobSizeMB)
-	if err != nil {
-		return cooked, err
-	}
-
 	if err = cooked.symlinkHandling.Determine(raw.followSymlinks, raw.preserveSymlinks); err != nil {
-		return cooked, err
-	}
-	cooked.recursive = raw.recursive
-	cooked.forceIfReadOnly = raw.forceIfReadOnly
-	if err = validateForceIfReadOnly(cooked.forceIfReadOnly, cooked.fromTo); err != nil {
-		return cooked, err
-	}
-
-	cooked.backupMode = raw.backupMode
-	if err = validateBackupMode(cooked.backupMode, cooked.fromTo); err != nil {
 		return cooked, err
 	}
 
@@ -264,70 +198,38 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked.includeFileAttributes = parsePatterns(raw.includeFileAttributes)
 	cooked.excludeFileAttributes = parsePatterns(raw.excludeFileAttributes)
 
-	if raw.isNFSCopy {
-		SetNFSFlag(raw.isNFSCopy)
-		// check for unsupported NFS behavior
-		if isUnsupported, err := isUnsupportedPlatformForNFS(cooked.fromTo); isUnsupported {
-			return cooked, err
-		}
-
-		// If we are not preserving original file permissions (raw.preservePermissions == false),
-		// and the operation is a file copy from azure file NFS to local linux (FromTo == FileLocal),
-		// and the current OS is Linux, then we require root privileges to proceed.
-		//
-		// This is because modifying file ownership or permissions on Linux
-		// typically requires elevated privileges. To safely handle permission
-		// changes during the local file operation, we enforce that the process
-		// must be running as root.
-		if !raw.preservePermissions && cooked.fromTo == common.EFromTo.FileLocal() {
-			if err := common.EnsureRunningAsRoot(); err != nil {
-				return cooked, fmt.Errorf("failed to copy source to destination without preserving permissions: operation not permitted. Please retry with root privileges or use the default option (--preserve-permissions=true)")
-			}
-		}
-
-		cooked.isNFSCopy, cooked.preserveInfo, cooked.preservePermissions, err = performNFSSpecificValidation(cooked.fromTo,
-			raw.isNFSCopy, raw.preserveInfo, raw.preservePermissions, raw.preserveSMBInfo, raw.preserveSMBPermissions)
-		if err != nil {
-			return cooked, err
-		}
-		if err = validateSymlinkFlag(raw.followSymlinks, raw.preserveSymlinks); err != nil {
-			return cooked, err
-		}
+	// NFS/SMB arg processing
+	if cooked.isNFSCopy {
+		cooked.preserveInfo = raw.preserveInfo && areBothLocationsNFSAware(cooked.fromTo)
+		//TBD: We will be preserving ACLs and ownership info in case of NFS. (UserID,GroupID and FileMode)
+		// Using the same EPreservePermissionsOption that we have today for NFS as well
+		// Please provide the feedback if we should introduce new EPreservePermissionsOption instead.
+		cooked.preservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
+			true,
+			cooked.fromTo)
 		if err = cooked.hardlinks.Parse(raw.hardlinks); err != nil {
 			return cooked, err
 		}
-		if err = validateHardlinksFlag(cooked.hardlinks, cooked.fromTo, cooked.isNFSCopy); err != nil {
-			return cooked, err
-		}
 	} else {
-		cooked.isNFSCopy, cooked.preserveInfo, cooked.preservePOSIXProperties, cooked.preservePermissions, err = performSMBSpecificValidation(cooked.fromTo,
-			raw.isNFSCopy, raw.preserveInfo, raw.preservePOSIXProperties, raw.preservePermissions, raw.preserveOwner, raw.preserveSMBPermissions)
-		if err != nil {
-			return cooked, err
-		}
-		// TODO: the check on raw.preservePermissions on the next line can be removed once we have full support for these properties in sync
-		// if err = validatePreserveOwner(raw.preserveOwner, cooked.fromTo); raw.preservePermissions && err != nil {
-		//	return cooked, err
-		// }
+		cooked.preserveInfo = raw.preserveInfo && areBothLocationsSMBAware(cooked.fromTo)
+		cooked.preservePOSIXProperties = raw.preservePOSIXProperties
+		cooked.preservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
+			raw.preserveOwner,
+			cooked.fromTo)
 	}
 
 	if err = cooked.compareHash.Parse(raw.compareHash); err != nil {
 		return cooked, err
-	} else {
-		switch cooked.compareHash {
-		case common.ESyncHashType.MD5():
-			// Save any new MD5s on files we download.
-			raw.putMd5 = true
-		default: // no need to put a hash of any kind.
-		}
+	}
+
+	switch cooked.compareHash {
+	case common.ESyncHashType.MD5():
+		// Save any new MD5s on files we download.
+		cooked.putMd5 = true
+	default: // no need to put a hash of any kind.
 	}
 
 	if err = common.LocalHashStorageMode.Parse(raw.localHashStorageMode); err != nil {
-		return cooked, err
-	}
-
-	cooked.putMd5 = raw.putMd5
-	if err = validatePutMd5(cooked.putMd5, cooked.fromTo); err != nil {
 		return cooked, err
 	}
 
@@ -335,55 +237,88 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	if err != nil {
 		return cooked, err
 	}
-	if err = validateMd5Option(cooked.md5ValidationOption, cooked.fromTo); err != nil {
-		return cooked, err
-	}
 
 	if cooked.fromTo.IsS2S() {
 		cooked.preserveAccessTier = raw.s2sPreserveAccessTier
 	}
 
-	// Check if user has provided `s2s-preserve-blob-tags` flag.
-	// If yes, we have to ensure that both source and destination must be blob storages.
-	if raw.s2sPreserveBlobTags {
-		if cooked.fromTo.From() != common.ELocation.Blob() || cooked.fromTo.To() != common.ELocation.Blob() {
-			return cooked, fmt.Errorf("either source or destination is not a blob storage. " +
-				"blob index tags is a property of blobs only therefore both source and destination must be blob storage")
-		} else {
-			cooked.s2sPreserveBlobTags = raw.s2sPreserveBlobTags
-		}
-	}
-
-	// Setting CPK-N
-	cpkOptions := common.CpkOptions{}
-	// Setting CPK-N
-	if raw.cpkScopeInfo != "" {
-		if raw.cpkInfo {
-			return cooked, fmt.Errorf("cannot use both cpk-by-name and cpk-by-value at the same time")
-		}
-		cpkOptions.CpkScopeInfo = raw.cpkScopeInfo
-	}
-
-	// Setting CPK-V
-	// Get the key (EncryptionKey and EncryptionKeySHA256) value from environment variables when required.
-	cpkOptions.CpkInfo = raw.cpkInfo
-
-	// We only support transfer from source encrypted by user key when user wishes to download.
-	// Due to service limitation, S2S transfer is not supported for source encrypted by user key.
-	if cooked.fromTo.IsDownload() && (cpkOptions.CpkScopeInfo != "" || cpkOptions.CpkInfo) {
-		glcm.Info("Client Provided Key for encryption/decryption is provided for download scenario. " +
-			"Assuming source is encrypted.")
-		cpkOptions.IsSourceEncrypted = true
-	}
-
-	cooked.cpkOptions = cpkOptions
-
-	cooked.mirrorMode = raw.mirrorMode
-
 	cooked.includeRegex = parsePatterns(raw.includeRegex)
 	cooked.excludeRegex = parsePatterns(raw.excludeRegex)
 
-	cooked.dryrunMode = raw.dryrun
+	return cooked, nil
+}
+
+// validates and transform raw input into cooked input
+func (raw *rawSyncCmdArgs) cook() (cooked cookedSyncCmdArgs, err error) {
+	if cooked, err = raw.toOptions(); err != nil {
+		return cooked, err
+	}
+	if err = cooked.validate(); err != nil {
+		return cooked, err
+	}
+	if err = cooked.processArgs(); err != nil {
+		return cooked, err
+	}
+	return cooked, nil
+}
+
+func (cooked *cookedSyncCmdArgs) validate() (err error) {
+	// we do not support service level sync yet
+	if cooked.fromTo.From().IsRemote() {
+		err = validateURLIsNotServiceLevel(cooked.source.Value, cooked.fromTo.From())
+		if err != nil {
+			return err
+		}
+	}
+
+	if cooked.fromTo.To().IsRemote() {
+		err = validateURLIsNotServiceLevel(cooked.destination.Value, cooked.fromTo.To())
+		if err != nil {
+			return err
+		}
+	}
+
+	if err = validateForceIfReadOnly(cooked.forceIfReadOnly, cooked.fromTo); err != nil {
+		return err
+	}
+
+	if err = validateBackupMode(cooked.backupMode, cooked.fromTo); err != nil {
+		return err
+	}
+
+	// NFS/SMB validation
+	if cooked.isNFSCopy {
+		if err := performNFSSpecificValidation(
+			cooked.fromTo, cooked.preservePermissions, cooked.preserveInfo,
+			cooked.symlinkHandling, cooked.hardlinks); err != nil {
+			return err
+		}
+	} else {
+		if err := performSMBSpecificValidation(
+			cooked.fromTo, cooked.preservePermissions, cooked.preserveInfo,
+			cooked.preservePOSIXProperties); err != nil {
+			return err
+		}
+	}
+
+	if err = validatePutMd5(cooked.putMd5, cooked.fromTo); err != nil {
+		return err
+	}
+
+	if err = validateMd5Option(cooked.md5ValidationOption, cooked.fromTo); err != nil {
+		return err
+	}
+
+	// Check if user has provided `s2s-preserve-blob-tags` flag.
+	// If yes, we have to ensure that both source and destination must be blob storage.
+	if cooked.s2sPreserveBlobTags && (cooked.fromTo.From() != common.ELocation.Blob() || cooked.fromTo.To() != common.ELocation.Blob()) {
+		return fmt.Errorf("either source or destination is not a blob storage. " +
+			"blob index tags is a property of blobs only therefore both source and destination must be blob storage")
+	}
+
+	if cooked.cpkByName != "" && cooked.cpkByValue {
+		return errors.New("cannot use both cpk-by-name and cpk-by-value at the same time")
+	}
 
 	if OutputLevel == common.EOutputVerbosity.Quiet() || OutputLevel == common.EOutputVerbosity.Essential() {
 		if cooked.deleteDestination == common.EDeleteDestination.Prompt() {
@@ -393,15 +328,79 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		}
 	}
 	if err != nil {
-		return cooked, err
+		return err
 	}
 
-	cooked.deleteDestinationFileIfNecessary = raw.deleteDestinationFileIfNecessary
+	return nil
+}
 
-	cooked.includeDirectoryStubs = raw.includeDirectoryStubs
-	cooked.includeRoot = raw.includeRoot
+func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
+	// set up the front end scanning logger
+	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, LogLevel, azcopyLogPathFolder, "-scanning")
+	azcopyScanningLogger.OpenLog()
+	glcm.RegisterCloseFunc(func() {
+		azcopyScanningLogger.CloseLog()
+	})
 
-	return cooked, nil
+	// if no logging, set this empty so that we don't display the log location
+	if LogLevel == common.LogNone {
+		azcopyLogPathFolder = ""
+	}
+
+	// display a warning message to console and job log file if there is a sync operation being performed from local to file share.
+	// Reference : https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-files#synchronize-files
+	if cooked.fromTo == common.EFromTo.LocalFile() {
+
+		glcm.Warn(LocalToFileShareWarnMsg)
+		if jobsAdmin.JobsAdmin != nil {
+			jobsAdmin.JobsAdmin.LogToJobLog(LocalToFileShareWarnMsg, common.LogWarning)
+		}
+		if cooked.dryrunMode {
+			glcm.Dryrun(func(of common.OutputFormat) string {
+				if of == common.EOutputFormat.Json() {
+					var out struct {
+						Warn string `json:"warn"`
+					}
+
+					out.Warn = LocalToFileShareWarnMsg
+					buf, _ := json.Marshal(out)
+					return string(buf)
+				}
+
+				return fmt.Sprintf("DRYRUN: warn %s", LocalToFileShareWarnMsg)
+			})
+		}
+	}
+
+	// use the globally generated JobID
+	cooked.jobID = azcopyCurrentJobID
+
+	cooked.blockSize, err = blockSizeInBytes(cooked.blockSizeMB)
+	if err != nil {
+		return err
+	}
+	cooked.putBlobSize, err = blockSizeInBytes(cooked.putBlobSizeMB)
+	if err != nil {
+		return err
+	}
+
+	// NFS/SMB processing
+	SetNFSFlag(cooked.isNFSCopy)
+
+	cooked.cpkOptions = common.CpkOptions{
+		CpkScopeInfo: cooked.cpkByName,  // Setting CPK-N
+		CpkInfo:      cooked.cpkByValue, // Setting CPK-V
+		// Get the key (EncryptionKey and EncryptionKeySHA256) value from environment variables when required.
+	}
+	// We only support transfer from source encrypted by user key when user wishes to download.
+	// Due to service limitation, S2S transfer is not supported for source encrypted by user key.
+	if cooked.fromTo.IsDownload() && (cooked.cpkOptions.CpkScopeInfo != "" || cooked.cpkOptions.CpkInfo) {
+		glcm.Info("Client Provided Key for encryption/decryption is provided for download scenario. " +
+			"Assuming source is encrypted.")
+		cooked.cpkOptions.IsSourceEncrypted = true
+	}
+
+	return nil
 }
 
 type cookedSyncCmdArgs struct {
@@ -495,6 +494,11 @@ type cookedSyncCmdArgs struct {
 	hardlinks                        common.HardlinkHandlingType
 	atomicSkippedSymlinkCount        uint32
 	atomicSkippedSpecialFileCount    uint32
+
+	blockSizeMB   float64
+	putBlobSizeMB float64
+	cpkByName     string
+	cpkByValue    bool
 }
 
 func (cca *cookedSyncCmdArgs) incrementDeletionCount() {

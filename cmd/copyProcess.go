@@ -164,7 +164,6 @@ func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 		}
 	}
 
-	// NFS/SMB part
 	SetNFSFlag(cooked.isNFSCopy)
 	if cooked.preserveInfo && !cooked.preservePermissions.IsTruthy() {
 		if cooked.isNFSCopy {
