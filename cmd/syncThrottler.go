@@ -138,14 +138,14 @@ func initializeLimits(fromTo common.FromTo) {
 // It uses syscall.Sysinfo to get system information and falls back to a default value
 // if the system call fails.
 func GetTotalPhysicalMemoryGB() uint64 {
-	var sysInfo syscall.Sysinfo_t
+	/*var sysInfo syscall.Sysinfo_t
 	var totalGB uint64
 	if err := syscall.Sysinfo(&sysInfo); err != nil {
-		totalGB = defaultPhysicalMemoryGB
 	} else {
 		// Convert from bytes to GB
 		totalGB = (uint64(sysInfo.Totalram)) * uint64(sysInfo.Unit) / gbToBytesMultiplier
-	}
+	}*/
+		totalGB = defaultPhysicalMemoryGB
 
 	return totalGB
 }
