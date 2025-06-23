@@ -23,6 +23,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
@@ -35,60 +36,32 @@ type LoginStatusOptions struct {
 	Method      bool
 }
 
-func (options LoginStatusOptions) process() error {
+type LoginStatus struct {
+	Valid       bool
+	TenantID    string
+	AADEndpoint string
+	AuthMethod  common.AutoLoginType
+}
+
+func (options LoginStatusOptions) process() (LoginStatus, error) {
 	// getting current token info and refreshing it with GetTokenInfo()
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	uotm := GetUserOAuthTokenManagerInstance()
 	tokenInfo, err := uotm.GetTokenInfo(ctx)
-	var Info = LoginStatusOutput{
+	var status = LoginStatus{
 		Valid: err == nil && !tokenInfo.IsExpired(),
 	}
-
-	logText := func(format string, a ...any) {
-		if OutputFormat == common.EOutputFormat.None() || OutputFormat == common.EOutputFormat.Text() {
-			glcm.Info(fmt.Sprintf(format, a...))
-		}
-	}
-	if Info.Valid {
-		logText("You have successfully refreshed your token. Your login session is still active")
-
-		if options.TenantID {
-			logText("Tenant ID: %v", tokenInfo.Tenant)
-			Info.TenantID = &tokenInfo.Tenant
-		}
-
-		if options.AADEndpoint {
-			logText(fmt.Sprintf("Active directory endpoint: %v", tokenInfo.ActiveDirectoryEndpoint))
-			Info.AADEndpoint = &tokenInfo.ActiveDirectoryEndpoint
-		}
-
-		if options.Method {
-			logText(fmt.Sprintf("Authorized using %s", tokenInfo.LoginType))
-			method := tokenInfo.LoginType.String()
-			Info.AuthMethod = &method
-		}
+	if status.Valid {
+		status.TenantID = tokenInfo.Tenant
+		status.AADEndpoint = tokenInfo.ActiveDirectoryEndpoint
+		status.AuthMethod = tokenInfo.LoginType
+		return status, nil
 	} else {
-		logText("You are currently not logged in. Please login using 'azcopy login'")
+		return status, errors.New("You are currently not logged in. Please login using 'azcopy login'")
 	}
-
-	if OutputFormat == common.EOutputFormat.Json() {
-		glcm.Output(
-			func(_ common.OutputFormat) string {
-				buf, err := json.Marshal(Info)
-				if err != nil {
-					panic(err)
-				}
-
-				return string(buf)
-			}, common.EOutputMessageType.LoginStatusInfo())
-	}
-
-	glcm.Exit(nil, common.Iff(Info.Valid, common.EExitCode.Success(), common.EExitCode.Error()))
-	return nil
-
 }
 
-func RunLoginStatus(options LoginStatusOptions) error {
+func RunLoginStatus(options LoginStatusOptions) (LoginStatus, error) {
 	return options.process()
 }
 
@@ -113,7 +86,50 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			_ = RunLoginStatus(commandLineInput)
+			logText := func(format string, a ...any) {
+				if OutputFormat == common.EOutputFormat.None() || OutputFormat == common.EOutputFormat.Text() {
+					glcm.Info(fmt.Sprintf(format, a...))
+				}
+			}
+			status, _ := RunLoginStatus(commandLineInput)
+			var Info = LoginStatusOutput{
+				Valid: status.Valid,
+			}
+			if Info.Valid {
+				logText("You have successfully refreshed your token. Your login session is still active")
+
+				if commandLineInput.TenantID {
+					logText("Tenant ID: %v", status.TenantID)
+					Info.TenantID = &status.TenantID
+				}
+
+				if commandLineInput.AADEndpoint {
+					logText(fmt.Sprintf("Active directory endpoint: %v", status.AADEndpoint))
+					Info.AADEndpoint = &status.AADEndpoint
+				}
+
+				if commandLineInput.Method {
+					logText(fmt.Sprintf("Authorized using %s", status.AuthMethod))
+					method := status.AuthMethod.String()
+					Info.AuthMethod = &method
+				}
+			} else {
+				logText("You are currently not logged in. Please login using 'azcopy login'")
+			}
+
+			if OutputFormat == common.EOutputFormat.Json() {
+				glcm.Output(
+					func(_ common.OutputFormat) string {
+						buf, err := json.Marshal(Info)
+						if err != nil {
+							panic(err)
+						}
+
+						return string(buf)
+					}, common.EOutputMessageType.LoginStatusInfo())
+			}
+
+			glcm.Exit(nil, common.Iff(Info.Valid, common.EExitCode.Success(), common.EExitCode.Error()))
 		},
 	}
 

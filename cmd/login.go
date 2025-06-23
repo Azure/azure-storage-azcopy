@@ -80,12 +80,18 @@ var lgCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		RunLogin(options)
+		err = RunLogin(options)
+		if err != nil {
+			// the errors from adal contains \r\n in the body, get rid of them to make the error easier to look at
+			prettyErr := strings.Replace(err.Error(), `\r\n`, "\n", -1)
+			prettyErr += "\n\nNOTE: If your credential was created in the last 5 minutes, please wait a few minutes and try again."
+			glcm.Error("Failed to perform login command: \n" + prettyErr + getErrorCodeUrl(err))
+		}
 		return nil
 	},
 }
 
-func RunLogin(args LoginOptions) {
+func RunLogin(args LoginOptions) error {
 	args.certificatePassword = common.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
 	args.clientSecret = common.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
 	args.persistToken = true
@@ -94,14 +100,8 @@ func RunLogin(args LoginOptions) {
 		glcm.Info(environmentVariableNotice)
 	}
 
-	err := args.process()
-	if err != nil {
-		// the errors from adal contains \r\n in the body, get rid of them to make the error easier to look at
-		prettyErr := strings.Replace(err.Error(), `\r\n`, "\n", -1)
-		prettyErr += "\n\nNOTE: If your credential was created in the last 5 minutes, please wait a few minutes and try again."
-		glcm.Error("Failed to perform login command: \n" + prettyErr + getErrorCodeUrl(err))
-		return
-	}
+	return args.process()
+
 }
 
 func init() {
