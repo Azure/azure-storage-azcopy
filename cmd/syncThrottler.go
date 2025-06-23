@@ -31,7 +31,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -139,15 +138,13 @@ func initializeLimits(fromTo common.FromTo) {
 // if the system call fails.
 func GetTotalPhysicalMemoryGB() uint64 {
 	/*var sysInfo syscall.Sysinfo_t
-	var totalGB uint64
 	if err := syscall.Sysinfo(&sysInfo); err != nil {
 	} else {
 		// Convert from bytes to GB
 		totalGB = (uint64(sysInfo.Totalram)) * uint64(sysInfo.Unit) / gbToBytesMultiplier
 	}*/
-		totalGB = defaultPhysicalMemoryGB
+	return defaultPhysicalMemoryGB
 
-	return totalGB
 }
 
 // GetNumCPU returns the number of logical CPU cores available on the system.
