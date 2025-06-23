@@ -5,12 +5,13 @@ package ste
 
 import (
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
 	"unsafe"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
@@ -196,7 +197,7 @@ func (a *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider
 		securityInfoFlags |= windows.PROTECTED_DACL_SECURITY_INFORMATION
 	}
 
-	if txInfo.PreserveSMBPermissions == common.EPreservePermissionsOption.OwnershipAndACLs() {
+	if txInfo.PreservePermissions == common.EPreservePermissionsOption.OwnershipAndACLs() {
 		securityInfoFlags |= windows.OWNER_SECURITY_INFORMATION | windows.GROUP_SECURITY_INFORMATION
 	}
 
@@ -257,4 +258,14 @@ func (a *azureFilesDownloader) parentIsShareRoot(source string) bool {
 	sep := common.DeterminePathSeparator(path)
 	splitPath := strings.Split(strings.Trim(path, sep), sep)
 	return path != "" && len(splitPath) == 1
+}
+
+// place holders added. //Implementation will be added at the time of supporting Azure Files NFS to windows download
+func (bd *azureFilesDownloader) PutNFSProperties(sip INFSPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error {
+	return nil
+}
+
+// place holders added. //Implementation will be added at the time of supporting Azure Files NFS to windows download
+func (bd *azureFilesDownloader) PutNFSPermissions(sip INFSPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error {
+	return nil
 }
