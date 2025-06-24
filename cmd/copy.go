@@ -171,24 +171,9 @@ type rawCopyCmdArgs struct {
 
 	// when specified, AzCopy deletes the destination blob that has uncommitted blocks, not just the uncommitted blocks
 	deleteDestinationFileIfNecessary bool
-	// Opt-in flag to state if the copy is nfs copy
-	isNFSCopy bool
 	// Opt-in flag to persist additional properties to Azure Files
 	preserveInfo bool
 	hardlinks    string
-}
-
-// this is a global variable so that we can use it in traversal phase
-var isNFSCopy bool
-
-func SetNFSFlag(isNFS bool) {
-	// SetNFSFlag sets the global isNFSCopy variable to the given value
-	isNFSCopy = isNFS
-}
-
-func GetNFSFlag() bool {
-	// GetNFSFlag returns the value of the global isNFSCopy variable
-	return isNFSCopy
 }
 
 // blockSizeInBytes converts a FLOATING POINT number of MiB, to a number of bytes
@@ -238,10 +223,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 		cpkByValue:               raw.cpkInfo,
 		putMd5:                   raw.putMd5,
 		CheckLength:              raw.CheckLength,
-
-		// NFS/SMB part
-		isNFSCopy:     raw.isNFSCopy,
-		preserveOwner: raw.preserveOwner,
+		preserveOwner:            raw.preserveOwner,
 
 		asSubdir:              raw.asSubdir, // --as-subdir is OK on all sources and destinations, but additional verification has to be done down the line. (e.g. https://account.blob.core.windows.net is not a valid root)
 		IncludeDirectoryStubs: raw.includeDirectoryStubs,
@@ -390,11 +372,8 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 		glcm.SetOutputFormat(common.EOutputFormat.None())
 	}
 
-	if cooked.isNFSCopy {
-		cooked.preserveInfo = raw.preserveInfo && areBothLocationsNFSAware(cooked.FromTo)
-		//TBD: We will be preserving ACLs and ownership info in case of NFS. (UserID,GroupID and FileMode)
-		// Using the same EPreservePermissionsOption that we have today for NFS as well
-		// Please provide the feedback if we should introduce new EPreservePermissionsOption instead.
+	if common.IsNFSCopy() {
+		cooked.preserveInfo = raw.preserveInfo
 		cooked.preservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
 			true,
 			cooked.FromTo)
@@ -768,9 +747,7 @@ type CookedCopyCmdArgs struct {
 
 	deleteDestinationFileIfNecessary bool
 	// Whether the user wants to preserve the properties of a file...
-	preserveInfo bool
-	// Specifies whether the copy operation is an NFS copy
-	isNFSCopy                     bool
+	preserveInfo                  bool
 	hardlinks                     common.HardlinkHandlingType
 	atomicSkippedSymlinkCount     uint32
 	atomicSkippedSpecialFileCount uint32
@@ -1214,10 +1191,10 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	if cca.FromTo.IsS2S() {
 		if cca.FromTo.From() == common.ELocation.File() {
 			if err := validateShareProtocolCompatibility(ctx,
-				cca.FromTo, cca.Source, jobPartOrder.SrcServiceClient, cca.isNFSCopy, true); err != nil {
+				cca.FromTo, cca.Source, jobPartOrder.SrcServiceClient, common.IsNFSCopy(), true); err != nil {
 				return err
 			}
-		} else if isNFSCopy {
+		} else if common.IsNFSCopy() {
 			return errors.New("NFS copy is not supported for source location " + cca.FromTo.From().String())
 		}
 	}
@@ -1225,12 +1202,12 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// Handle destination validation
 	if (cca.FromTo.IsUpload() || cca.FromTo.IsS2S()) && cca.FromTo.To() == common.ELocation.File() {
 		if err := validateShareProtocolCompatibility(ctx,
-			cca.FromTo, cca.Destination, jobPartOrder.DstServiceClient, cca.isNFSCopy, false); err != nil {
+			cca.FromTo, cca.Destination, jobPartOrder.DstServiceClient, common.IsNFSCopy(), false); err != nil {
 			return err
 		}
 	} else if cca.FromTo.IsDownload() && cca.FromTo.From() == common.ELocation.File() {
 		if err := validateShareProtocolCompatibility(ctx,
-			cca.FromTo, cca.Source, jobPartOrder.SrcServiceClient, cca.isNFSCopy, true); err != nil {
+			cca.FromTo, cca.Source, jobPartOrder.SrcServiceClient, common.IsNFSCopy(), true); err != nil {
 			return err
 		}
 	}
@@ -1656,7 +1633,7 @@ func init() {
 
 			// The following code is to deal with deprecated flags
 			// preserveInfo
-			preserveInfoDefaultVal := GetPreserveInfoFlagDefault(cmd, raw.isNFSCopy)
+			preserveInfoDefaultVal := GetPreserveInfoFlagDefault(cmd, raw.fromTo)
 			if cmd.Flags().Changed(PreserveInfoFlag) && cmd.Flags().Changed(PreserveSMBInfoFlag) || cmd.Flags().Changed(PreserveInfoFlag) {
 				// we give precedence to raw.preserveInfo flag value if both flags are set
 			} else if cmd.Flags().Changed(PreserveSMBInfoFlag) {
@@ -1667,10 +1644,10 @@ func init() {
 
 			// preservePermissions
 			// TODO : Double check this logic. In the flag processing logic, we used to set a temporary variable isUserPersistingPermissions and that was a simple or of the deprecated and new flag.
-			if !raw.isNFSCopy {
+			if !common.IsNFSCopy() {
 				raw.preservePermissions = raw.preservePermissions || raw.preserveSMBPermissions
 			}
-			if raw.isNFSCopy && ((raw.preserveSMBInfo && runtime.GOOS == "linux") || raw.preserveSMBPermissions) {
+			if common.IsNFSCopy() && ((raw.preserveSMBInfo && runtime.GOOS == "linux") || raw.preserveSMBPermissions) {
 				glcm.Error(InvalidFlagsForNFSMsg)
 			}
 
@@ -1737,7 +1714,6 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveOwner, common.PreserveOwnerFlagName, common.PreserveOwnerDefault, "Only has an effect in downloads, and only when --preserve-smb-permissions is used. If true (the default), the file Owner and Group are preserved in downloads. If set to false, --preserve-smb-permissions will still preserve ACLs but Owner and Group will be based on the user running AzCopy")
 
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", (runtime.GOOS == "windows"), "Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Windows and Azure Files). On windows, this flag will be set to true by default. If the source or destination is a volume mounted on Linux using SMB protocol, this flag will have to be explicitly set to true. Only the attribute bits supported by Azure Files will be transferred; any others will be ignored. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern). The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
-	cpCmd.PersistentFlags().BoolVar(&raw.isNFSCopy, IsNFSProtocolFlag, false, "False by default. Users must specify this flag if they intend to transfer data to or from NFS shares.")
 	//Marking this flag as hidden as we might not support it in the future
 	_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-info")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveInfo, PreserveInfoFlag, false, "Specify this flag if you want to preserve properties during the transfer operation.The previously available flag for SMB (--preserve-smb-info) is now redirected to --preserve-info flag for both SMB and NFS operations. The default value is true for Windows when copying to Azure Files SMB share and for Linux when copying to Azure Files NFS share. ")

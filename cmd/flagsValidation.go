@@ -74,13 +74,15 @@ func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, fl
 }
 
 func areBothLocationsNFSAware(fromTo common.FromTo) bool {
-	// 1. Upload (Windows/Linux -> Azure File)
-	// 2. Download (Azure File -> Windows/Linux)
-	// 3. S2S (Azure File -> Azure File)
-	if (runtime.GOOS == "windows" || runtime.GOOS == "linux") &&
-		(fromTo == common.EFromTo.LocalFile() || fromTo == common.EFromTo.FileLocal()) {
+	// 1. Upload (Linux -> Azure File)
+	// 2. Download (Azure File -> Linux)
+	// 3. S2S (Azure File -> Azure File) (Works on Windows,Linux,Mac)
+	if (runtime.GOOS == "linux") &&
+		(fromTo == common.EFromTo.LocalNFS() || fromTo == common.EFromTo.NFSLocal()) {
+		common.SetNFSFlag(true)
 		return true
-	} else if fromTo == common.EFromTo.FileFile() {
+	} else if fromTo == common.EFromTo.NFSNFS() {
+		common.SetNFSFlag(true)
 		return true
 	} else {
 		return false
@@ -108,11 +110,16 @@ func areBothLocationsSMBAware(fromTo common.FromTo) bool {
 // - false otherwise.
 //
 // This default behavior ensures that file preservation logic is aligned with the OS and copy type.
-func GetPreserveInfoFlagDefault(cmd *cobra.Command, isNFSCopy bool) bool {
+func GetPreserveInfoFlagDefault(cmd *cobra.Command, fromTo string) bool {
 	// For Linux systems, if it's an NFS copy, we set the default value of preserveInfo to true.
 	// For Windows systems, if it's an SMB copy, we set the default value of preserveInfo to true.
 	// These default values are important to set here for the logic of file preservation based on the system and copy type.
-	return (runtime.GOOS == "linux" && isNFSCopy) || (runtime.GOOS == "windows" && !isNFSCopy)
+	var userFromTo common.FromTo
+	err := userFromTo.Parse(fromTo)
+	if err != nil || (userFromTo != common.EFromTo.PipeBlob() && userFromTo != common.EFromTo.BlobPipe()) {
+		return false
+	}
+	return (runtime.GOOS == "linux" && areBothLocationsNFSAware(userFromTo)) || (runtime.GOOS == "windows" && !areBothLocationsSMBAware(userFromTo))
 }
 
 // performNFSSpecificValidation performs validation specific to NFS (Network File System) configurations

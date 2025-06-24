@@ -598,6 +598,8 @@ func (Location) S3() Location        { return Location(6) }
 func (Location) Benchmark() Location { return Location(7) }
 func (Location) GCP() Location       { return Location(8) }
 func (Location) None() Location      { return Location(9) } // None is used in case we're transferring properties
+func (Location) SMB() Location       { return Location(10) }
+func (Location) NFS() Location       { return Location(11) }
 
 func (Location) AzureAccount() Location { return Location(100) } // AzureAccount is never used within AzCopy, and won't be detected, (for now)
 
@@ -633,7 +635,7 @@ func FromToValue(from Location, to Location) FromTo {
 
 func (l Location) IsRemote() bool {
 	switch l {
-	case ELocation.BlobFS(), ELocation.Blob(), ELocation.File(), ELocation.S3(), ELocation.GCP():
+	case ELocation.BlobFS(), ELocation.Blob(), ELocation.File(), ELocation.S3(), ELocation.GCP(), ELocation.SMB(), ELocation.NFS():
 		return true
 	case ELocation.Local(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown(), ELocation.None():
 		return false
@@ -652,7 +654,7 @@ func (l Location) IsLocal() bool {
 
 // IsAzure checks if location is Azure (BlobFS, Blob, File)
 func (l Location) IsAzure() bool {
-	return l == ELocation.BlobFS() || l == ELocation.Blob() || l == ELocation.File()
+	return l == ELocation.BlobFS() || l == ELocation.Blob() || l == ELocation.File() || l == ELocation.SMB() || l == ELocation.NFS()
 }
 
 // IsFolderAware returns true if the location has real folders (e.g. there's such a thing as an empty folder,
@@ -721,6 +723,11 @@ func (FromTo) GCPBlob() FromTo      { return FromToValue(ELocation.GCP(), ELocat
 func (FromTo) BlobNone() FromTo     { return FromToValue(ELocation.Blob(), ELocation.None()) }
 func (FromTo) BlobFSNone() FromTo   { return FromToValue(ELocation.BlobFS(), ELocation.None()) }
 func (FromTo) FileNone() FromTo     { return FromToValue(ELocation.File(), ELocation.None()) }
+func (FromTo) LocalNFS() FromTo     { return FromToValue(ELocation.Local(), ELocation.NFS()) }
+func (FromTo) NFSLocal() FromTo     { return FromToValue(ELocation.NFS(), ELocation.Local()) }
+func (FromTo) NFSNFS() FromTo       { return FromToValue(ELocation.NFS(), ELocation.NFS()) }
+func (FromTo) SMBNFS() FromTo       { return FromToValue(ELocation.SMB(), ELocation.NFS()) }
+func (FromTo) NFSSMB() FromTo       { return FromToValue(ELocation.NFS(), ELocation.SMB()) }
 
 // todo: to we really want these?  Starts to look like a bit of a combinatorial explosion
 func (FromTo) BenchmarkBlob() FromTo {

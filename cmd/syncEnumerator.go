@@ -75,7 +75,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 			if entityType == common.EEntityType.File() {
 				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 			}
-			if isNFSCopy {
+			if common.IsNFSCopy() {
 				if entityType == common.EEntityType.Other() {
 					atomic.AddUint32(&cca.atomicSkippedSpecialFileCount, 1)
 				} else if entityType == common.EEntityType.Symlink() {
@@ -262,7 +262,6 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.trailingDot,
 		},
-		IsNFSCopy: cca.isNFSCopy,
 	}
 
 	var srcReauthTok *common.ScopedAuthenticator
@@ -327,10 +326,10 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	if cca.fromTo.IsS2S() {
 		if cca.fromTo.From() == common.ELocation.File() {
 			if err := validateShareProtocolCompatibility(ctx,
-				cca.fromTo, cca.source, copyJobTemplate.SrcServiceClient, cca.isNFSCopy, true); err != nil {
+				cca.fromTo, cca.source, copyJobTemplate.SrcServiceClient, common.IsNFSCopy(), true); err != nil {
 				return nil, err
 			}
-		} else if isNFSCopy {
+		} else if common.IsNFSCopy() {
 			return nil, errors.New("NFS copy is not supported for source location " + cca.fromTo.From().String())
 		}
 	}
@@ -340,13 +339,13 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		if err := validateShareProtocolCompatibility(ctx, cca.fromTo,
 			cca.destination,
 			copyJobTemplate.DstServiceClient,
-			cca.isNFSCopy, false); err != nil {
+			common.IsNFSCopy(), false); err != nil {
 			return nil, err
 		}
 	} else if cca.fromTo.IsDownload() && cca.fromTo.From() == common.ELocation.File() {
 		if err := validateShareProtocolCompatibility(ctx, cca.fromTo,
 			cca.source, copyJobTemplate.SrcServiceClient,
-			cca.isNFSCopy, true); err != nil {
+			common.IsNFSCopy(), true); err != nil {
 			return nil, err
 		}
 	}
