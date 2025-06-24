@@ -373,7 +373,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	}
 
 	if common.IsNFSCopy() {
-		cooked.preserveInfo = raw.preserveInfo
+		cooked.preserveInfo = raw.preserveInfo && areBothLocationsNFSAware(cooked.FromTo)
 		cooked.preservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
 			true,
 			cooked.FromTo)
