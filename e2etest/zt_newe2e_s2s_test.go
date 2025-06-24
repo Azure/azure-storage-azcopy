@@ -138,7 +138,6 @@ func (s *S2STestSuite) Scenario_SingleFilePropertyMetadata(svm *ScenarioVariatio
 			// Preserve properties behavior is default
 		},
 	})
-
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body:             srcBody,
 		ObjectProperties: srcProps,
