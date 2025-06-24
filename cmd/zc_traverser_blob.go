@@ -450,23 +450,6 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 						dName := strings.TrimSuffix(*virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)
 						blobClient := containerClient.NewBlobClient(dName)
 
-						if UseSyncOrchestrator && !t.isDFS {
-							folderRelativePath := strings.TrimPrefix(dName, searchPrefix)
-							storedObject := newStoredObject(
-								preprocessor,
-								getObjectNameOnly(dName),
-								folderRelativePath,
-								common.EEntityType.Folder(),
-								time.Now(),
-								0,
-								noContentProps,
-								noBlobProps,
-								common.Metadata{},
-								containerName,
-							)
-							enqueueOutput(storedObject, err)
-						}
-
 					altNameCheck:
 						pResp, err := blobClient.GetProperties(t.ctx, nil)
 						if err == nil {
