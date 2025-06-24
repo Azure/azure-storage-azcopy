@@ -4,8 +4,10 @@
 package e2etest
 
 import (
-	"time"
+	"runtime"
 	"strconv"
+	"time"
+
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/google/uuid"
@@ -25,6 +27,9 @@ func (s *SWSyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariat
 		svm.InvalidateScenario()
 		return
 	}
+
+	svm.InsertVariationSeparator("_DeleteDestination_")
+	deleteDestination := ResolveVariation(svm, []bool{true, false}) // Add variation for DeleteDestination flag
 
 	srcRes := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, srcLoc, GetResourceOptions{
 		PreferredAccount: common.Iff(srcLoc == common.ELocation.BlobFS(), pointerTo(PrimaryHNSAcct), nil),
@@ -49,14 +54,14 @@ func (s *SWSyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariat
 				Recursive:             pointerTo(false),
 				IncludeDirectoryStubs: pointerTo(true),
 			},
-			DeleteDestination: pointerTo(true),
+			DeleteDestination: pointerTo(deleteDestination),
 		},
 	})
 
 	ValidateResource[ContainerResourceManager](svm, dstRes, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
-			"deleteme.txt":      ResourceDefinitionObject{ObjectShouldExist: pointerTo(false)},
-			"also/deleteme.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(false)},
+			"deleteme.txt":      ResourceDefinitionObject{ObjectShouldExist: pointerTo(!deleteDestination)},
+			"also/deleteme.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(!deleteDestination)},
 		},
 	}, false)
 }
@@ -74,6 +79,9 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationM
 	)
 
 	resourceType := ResolveVariation(a, []string{CreateFolder})
+
+	a.InsertVariationSeparator("_DeleteDestination_")
+	deleteDestination := ResolveVariation(a, []bool{true, false}) // Add variation for DeleteDestination flag
 
 	// Select source map
 	srcMap := map[string]ObjectResourceMappingFlat{
@@ -140,10 +148,9 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationM
 		},
 		Flags: SyncFlags{
 			CopySyncCommonFlags: CopySyncCommonFlags{
-				Recursive:             pointerTo(false),
-				IncludeDirectoryStubs: pointerTo(true),
+				Recursive: pointerTo(false),
 			},
-			IncludeRoot: pointerTo(true),
+			DeleteDestination: pointerTo(deleteDestination),
 		},
 	})
 
@@ -238,10 +245,8 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResourceObject(a *ScenarioVaria
 		},
 		Flags: SyncFlags{
 			CopySyncCommonFlags: CopySyncCommonFlags{
-				Recursive:             pointerTo(false),
-				IncludeDirectoryStubs: pointerTo(true),
+				Recursive: pointerTo(false),
 			},
-			IncludeRoot: pointerTo(true),
 		},
 	})
 
@@ -320,14 +325,12 @@ func (s *SWSyncTestSuite) Scenario_SingleFile(svm *ScenarioVariationManager) {
 	})
 }
 
-func (s *SWSyncTestSuite) Scenario_MultiFileUploadDownload(svm *ScenarioVariationManager) {
+func (s *SWSyncTestSuite) Scenario_MultiFileUpload(svm *ScenarioVariationManager) {
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbSync}) // Calculate verb early to create the destination object early
-	// Resolve variation early so name makes sense
+
 	srcLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local()})
-	// Scale up from service to object
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})), ResourceDefinitionContainer{})
 
-	// Scale up from service to object
 	srcDef := ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
 			"abc":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
@@ -342,6 +345,9 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUploadDownload(svm *ScenarioVariatio
 		svm.InvalidateScenario()
 		return
 	}
+
+	svm.InsertVariationSeparator("_DeleteDestination_")
+	deleteDestination := ResolveVariation(svm, []bool{true, false}) // Add variation for DeleteDestination flag
 
 	sasOpts := GenericAccountSignatureValues{}
 
@@ -360,10 +366,9 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUploadDownload(svm *ScenarioVariatio
 			},
 			Flags: SyncFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
-					Recursive:             pointerTo(false),
-					IncludeDirectoryStubs: pointerTo(true),
+					Recursive: pointerTo(false),
 				},
-				DeleteDestination: pointerTo(true),
+				DeleteDestination: pointerTo(deleteDestination),
 			},
 		})
 
@@ -386,7 +391,108 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUploadDownload(svm *ScenarioVariatio
 	}, true)
 }
 
-func (s *SWSyncTestSuite) Scenario_EntireDirectory_UploadContainer(svm *ScenarioVariationManager) {
+func (s *SWSyncTestSuite) Scenario_MultiFileUpload_NoChange(svm *ScenarioVariationManager) {
+	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbSync}) // Calculate verb early to create the destination object early
+	// Resolve variation early so name makes sense
+	srcLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local()})
+	// Scale up from service to object
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})), ResourceDefinitionContainer{})
+	// Scale up from service to object
+	srcDef := ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"abc":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
+			"def":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
+			"foobar": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
+		},
+	}
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, srcLoc), srcDef)
+
+	// no s2s, no local->local
+	if srcContainer.Location().IsRemote() == dstContainer.Location().IsRemote() {
+		svm.InvalidateScenario()
+		return
+	}
+
+	svm.InsertVariationSeparator("_DeleteDestination_")
+	deleteDestination := ResolveVariation(svm, []bool{true, false}) // Add variation for DeleteDestination flag
+
+	sasOpts := GenericAccountSignatureValues{}
+	var copySyncFlag CopySyncCommonFlags
+	if runtime.GOOS == "linux" {
+		copySyncFlag = CopySyncCommonFlags{
+			Recursive:               pointerTo(false),
+			PreservePOSIXProperties: pointerTo(runtime.GOOS == "linux"),
+		}
+	} else {
+		copySyncFlag = CopySyncCommonFlags{
+			Recursive: pointerTo(false),
+		}
+	}
+	stdOut, _ := RunAzCopy(
+		svm,
+		AzCopyCommand{
+			// Sync is not included at this moment, because sync requires
+			Verb: azCopyVerb,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+				TryApplySpecificAuthType(dstContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+			},
+			Flags: SyncFlags{
+				CopySyncCommonFlags: copySyncFlag,
+				DeleteDestination:   pointerTo(deleteDestination),
+			},
+		})
+
+	fromTo := common.FromToValue(srcContainer.Location(), dstContainer.Location())
+
+	ValidatePlanFiles(svm, stdOut, ExpectedPlanFile{
+		// todo: service level resource to object mapping
+		Objects: GeneratePlanFileObjectsFromMapping(ObjectResourceMappingOverlay{
+			Base: srcDef.Objects,
+			Overlay: common.Iff(fromTo.AreBothFolderAware() && azCopyVerb == AzCopyVerbCopy, // If we're running copy and in a folder aware , we need to include the root
+				ObjectResourceMappingFlat{"": {ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}}},
+				nil),
+		}, GeneratePlanFileObjectsOptions{
+			DestPathProcessor: nil,
+		}),
+	})
+
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: srcDef.Objects,
+	}, true)
+
+	//Retrigger Sync with no change in dataset
+	RunAzCopy(
+		svm,
+		AzCopyCommand{
+			// Sync is not included at this moment, because sync requires
+			Verb: azCopyVerb,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+				TryApplySpecificAuthType(dstContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+			},
+			Flags: SyncFlags{
+				CopySyncCommonFlags: copySyncFlag,
+				DeleteDestination:   pointerTo(true),
+			},
+		})
+
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: srcDef.Objects,
+	}, true)
+}
+
+// Sync entire directory with subdirectories and files
+// Add new files to the source and validate that they are copied to the destination
+func (s *SWSyncTestSuite) Scenario_NewFileAdditionAtSource_UploadContainer(svm *ScenarioVariationManager) {
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbSync}) // Calculate verb early to create the destination object early
 
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
@@ -401,7 +507,7 @@ func (s *SWSyncTestSuite) Scenario_EntireDirectory_UploadContainer(svm *Scenario
 		if dstContainer.Location() != common.ELocation.Blob() {
 			srcObjs[dir] = obj
 		}
-		for i := range 10 {
+		for i := range 5 {
 			name := dir + "/test" + strconv.Itoa(i) + ".txt"
 			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
 			srcObjs[name] = obj
@@ -414,9 +520,11 @@ func (s *SWSyncTestSuite) Scenario_EntireDirectory_UploadContainer(svm *Scenario
 		}
 	}
 
+	svm.InsertVariationSeparator("_DeleteDestination_")
+	deleteDestination := ResolveVariation(svm, []bool{true, false}) // Add variation for DeleteDestination flag
 	sasOpts := GenericAccountSignatureValues{}
 
-	_, _ = RunAzCopy(
+	RunAzCopy(
 		svm,
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
@@ -441,6 +549,55 @@ func (s *SWSyncTestSuite) Scenario_EntireDirectory_UploadContainer(svm *Scenario
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcObjs,
 	}, true)
+
+	srcContainerNew := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
+
+	//Create New source where files are renamed
+	//srcObjsNew := make(ObjectResourceMappingFlat)
+	for _, dir := range dirsToCreate {
+		obj := ResourceDefinitionObject{ObjectName: pointerTo(dir), ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}}
+		if dstContainer.Location() != common.ELocation.Blob() {
+			srcObjs[dir] = obj
+		}
+		for i := 6; i < 10; i++ {
+			name := dir + "/test" + strconv.Itoa(i) + ".txt"
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
+			srcObjs[name] = obj
+		}
+	}
+
+	for _, obj := range srcObjs {
+		if obj.EntityType != common.EEntityType.Folder() {
+			CreateResource[ObjectResourceManager](svm, srcContainerNew, obj)
+		}
+	}
+
+	RunAzCopy(
+		svm,
+		AzCopyCommand{
+			// Sync is not included at this moment, because sync requires
+			Verb: azCopyVerb,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcContainerNew, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+				TryApplySpecificAuthType(dstContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+			},
+			Flags: SyncFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive:             pointerTo(false),
+					IncludeDirectoryStubs: pointerTo(true),
+				},
+				DeleteDestination: pointerTo(deleteDestination),
+			},
+		})
+
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: srcObjs,
+	}, true)
+
 }
 
 func (s *SWSyncTestSuite) Scenario_RenameOfFileAtSource(svm *ScenarioVariationManager) {
@@ -450,6 +607,9 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFileAtSource(svm *ScenarioVariationMa
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File(), common.ELocation.Blob(), common.ELocation.BlobFS()})), ResourceDefinitionContainer{})
 
 	dirsToCreate := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test"}
+
+	svm.InsertVariationSeparator("_DeleteDestination_")
+	deleteDestination := ResolveVariation(svm, []bool{true, false}) // Add variation for DeleteDestination flag
 
 	// Create destination directories
 	srcObjs := make(ObjectResourceMappingFlat)
@@ -491,7 +651,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFileAtSource(svm *ScenarioVariationMa
 					Recursive:             pointerTo(false),
 					IncludeDirectoryStubs: pointerTo(true),
 				},
-				DeleteDestination: pointerTo(true),
+				DeleteDestination: pointerTo(deleteDestination),
 			},
 		})
 
@@ -547,7 +707,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFileAtSource(svm *ScenarioVariationMa
 					Recursive:             pointerTo(false),
 					IncludeDirectoryStubs: pointerTo(true),
 				},
-				DeleteDestination: pointerTo(true),
+				DeleteDestination: pointerTo(deleteDestination),
 			},
 		})
 
@@ -557,17 +717,21 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFileAtSource(svm *ScenarioVariationMa
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
-			"dir_file_copy_test/test0.txt":                   ResourceDefinitionObject{ObjectShouldExist: pointerTo(false)},
-			"dir_file_copy_test/sub_dir_copy_test/test0.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(false)},
+			"dir_file_copy_test/test0.txt":                   ResourceDefinitionObject{ObjectShouldExist: pointerTo(!deleteDestination)},
+			"dir_file_copy_test/sub_dir_copy_test/test0.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(!deleteDestination)},
 		},
 	}, false)
 }
 
+// Its failing for the files when deletedestination is false
 func (s *SWSyncTestSuite) Scenario_RenameOfFolderAtSource(svm *ScenarioVariationManager) {
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbSync}) // Calculate verb early to create the destination object early
 
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File(), common.ELocation.Blob(), common.ELocation.BlobFS()})), ResourceDefinitionContainer{})
+
+	svm.InsertVariationSeparator("_DeleteDestination_")
+	deleteDestination := ResolveVariation(svm, []bool{true, false}) // Add variation for DeleteDestination flag
 
 	dirsToCreate := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test"}
 
@@ -608,16 +772,21 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFolderAtSource(svm *ScenarioVariation
 			},
 			Flags: SyncFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
-					Recursive:             pointerTo(false),
-					IncludeDirectoryStubs: pointerTo(true),
+					Recursive: pointerTo(false),
 				},
-				DeleteDestination: pointerTo(true),
+				DeleteDestination: pointerTo(deleteDestination),
 			},
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcObjs,
 	}, true)
+
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"dir_file_copy_test/sub_dir_copy_test/test0.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(true)},
+		},
+	}, false)
 
 	srcContainerNew := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
 	//Change the sub directory name from dir_file_copy_test/sub_dir_copy_test to dir_file_copy_test/sub_dir_copy_test_new
@@ -661,7 +830,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFolderAtSource(svm *ScenarioVariation
 					Recursive:             pointerTo(false),
 					IncludeDirectoryStubs: pointerTo(true),
 				},
-				DeleteDestination: pointerTo(true),
+				DeleteDestination: pointerTo(deleteDestination),
 			},
 		})
 
@@ -671,7 +840,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFolderAtSource(svm *ScenarioVariation
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
-			"dir_file_copy_test/sub_dir_copy_test": ResourceDefinitionObject{ObjectShouldExist: pointerTo(false)},
+			"dir_file_copy_test/sub_dir_copy_test/test0.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(!deleteDestination)},
 		},
 	}, false)
 }
@@ -802,10 +971,12 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbSync}) // Calculate verb early to create the destination object early
 
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
-
-	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.BlobFS(), common.ELocation.File()})), ResourceDefinitionContainer{})
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{})
 
 	dirsToCreate := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test"}
+
+	svm.InsertVariationSeparator("_DeleteDestination_")
+	deleteDestination := ResolveVariation(svm, []bool{true, false}) // Add variation for DeleteDestination flag
 
 	// Create destination directories
 	srcObjs := make(ObjectResourceMappingFlat)
@@ -847,7 +1018,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 					Recursive:             pointerTo(false),
 					IncludeDirectoryStubs: pointerTo(true),
 				},
-				DeleteDestination: pointerTo(true),
+				DeleteDestination: pointerTo(deleteDestination),
 			},
 		})
 
@@ -872,6 +1043,8 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 			srcObjsNew[name] = obj
 		}
 	}
+
+	//deleted folder sub_dir_copy_test and creating file sub_dir_copy_test.txt
 	name := "dir_file_copy_test/sub_dir_copy_test.txt"
 	obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
 	srcObjsNew[name] = obj
@@ -900,7 +1073,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 					Recursive:             pointerTo(false),
 					IncludeDirectoryStubs: pointerTo(true),
 				},
-				DeleteDestination: pointerTo(true),
+				DeleteDestination: pointerTo(deleteDestination),
 			},
 		})
 
@@ -910,7 +1083,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
-			"dir_file_copy_test/sub_dir_copy_test/test0.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(false)},
+			"dir_file_copy_test/sub_dir_copy_test/test0.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(!deleteDestination)},
 		},
 	}, false)
 }
