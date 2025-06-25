@@ -199,6 +199,17 @@ func writeToErrorChannel(errorChannel chan<- ErrorFileInfo, err ErrorFileInfo) {
 	}
 }
 
+var (
+	symlinkMap   = make(map[string]string) // symlink path -> resolved target path
+	symlinkMapMu sync.Mutex                // mutex to protect concurrent access
+)
+
+func recordSymlink(symlinkPath, targetPath string) {
+	symlinkMapMu.Lock()
+	defer symlinkMapMu.Unlock()
+	symlinkMap[symlinkPath] = targetPath
+}
+
 // WalkWithSymlinks is a symlinks-aware, parallelized, version of filePath.Walk.
 // Separate this from the traverser for two purposes:
 // 1) Cleaner code
@@ -260,9 +271,22 @@ func WalkWithSymlinks(appCtx context.Context,
 			}
 			if fileInfo.Mode()&os.ModeSymlink != 0 {
 				if symlinkHandling.Preserve() {
-					// Handle it like it's not a symlink
-					result, err := filepath.Abs(filePath)
 
+					//TODO: Add proper comment
+					// if isNFSCopy {
+					// targetPath, err := os.Readlink(filePath)
+					// if err != nil {
+					// 	// handle error
+					// 	fmt.Println("Error reading symlink:", err)
+					// } else {
+					// 	fmt.Println("Symlink points to:", targetPath)
+					// }
+					// // Record the symlink and its resolved target in the global map
+					// fmt.Println("Recording symlink:", filePath, "->", targetPath)
+					// recordSymlink(filePath, targetPath)
+					// // } else {
+					// // Handle it like it's not a symlink
+					result, err := filepath.Abs(filePath)
 					if err != nil {
 						WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get absolute path of %s: %s", filePath, err))
 						return nil
@@ -276,7 +300,7 @@ func WalkWithSymlinks(appCtx context.Context,
 					if !skipped {
 						seenPaths.Record(common.ToExtendedPath(result))
 					}
-
+					//}
 					return err
 				}
 
