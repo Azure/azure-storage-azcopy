@@ -21,7 +21,7 @@
 package main
 
 import (
-	"github.com/minio/minio-go"
+	"github.com/minio/minio-go/v7"
 	"math"
 	"net/http"
 	"path"

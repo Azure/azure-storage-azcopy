@@ -27,9 +27,11 @@ import (
 	"net/url"
 	"os"
 	"time"
+	"context"
+	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	minio "github.com/minio/minio-go"
+	minio "github.com/minio/minio-go/v7"
 )
 
 // Source info provider for S3
@@ -49,6 +51,9 @@ type s3SourceInfoProvider struct {
 const defaultPresignExpires = time.Hour * 7 * 24
 
 var s3ClientFactory = common.NewS3ClientFactory()
+
+var c2c_src = os.Getenv("C2C_SOURCE")
+var c2c_src_proxy = os.Getenv("C2C_PROXY_ENDPOINT")
 
 func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, error) {
 	var err error
@@ -93,14 +98,24 @@ func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, err
 }
 
 func (p *s3SourceInfoProvider) PreSignedSourceURL() (string, error) {
+
 	if p.credType == common.ECredentialType.S3PublicBucket() {
 		return p.rawSourceURL.String(), nil
 	}
-	source, err := p.s3Client.PresignedGetObject(p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, defaultPresignExpires, url.Values{})
+	// RAM: This needs a more closer review to see if the calling azcopy function need
+	// 		to pass down the context
+	source, err := p.s3Client.PresignedGetObject(context.Background(), p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, defaultPresignExpires, url.Values{})
 	if err != nil {
 		return "", err
 	}
-	return source.String(), nil
+
+	ps_url := source.String()
+	rep := strings.Replace(ps_url, c2c_src, c2c_src_proxy, 1)
+
+	// fmt.Println("PreSignedSourceURL: C2C-Source = ", c2c_src, " C2C-Source-Proxy = ", c2c_src_proxy)
+	// fmt.Println("PreSignedSourceURL: Orig-PSString = ", ps_url, " Replaced = ", rep)
+
+	return rep, nil
 }
 
 func (p *s3SourceInfoProvider) Properties() (*SrcProperties, error) {
@@ -111,8 +126,10 @@ func (p *s3SourceInfoProvider) Properties() (*SrcProperties, error) {
 	}
 
 	// Get properties in backend.
+	// RAM: This needs a more closer review to see if the calling azcopy function needs
+	// 		to pass down the context
 	if p.transferInfo.S2SGetPropertiesInBackend {
-		objectInfo, err := p.s3Client.StatObject(p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, minio.StatObjectOptions{})
+		objectInfo, err := p.s3Client.StatObject(context.Background(), p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, minio.StatObjectOptions{})
 		if err != nil {
 			return nil, err
 		}
@@ -184,7 +201,9 @@ func (p *s3SourceInfoProvider) IsLocal() bool {
 }
 
 func (p *s3SourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, error) {
-	objectInfo, err := p.s3Client.StatObject(p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, minio.StatObjectOptions{})
+	// RAM: This needs a more closer review to see if the calling azcopy function needs
+	// 		to pass down the context
+	objectInfo, err := p.s3Client.StatObject(context.Background(), p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, minio.StatObjectOptions{})
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -203,7 +222,9 @@ func (p *s3SourceInfoProvider) GetMD5(offset, count int64) ([]byte, error) {
 	}
 
 	// s3 does not support getting range md5
-	body, err := p.s3Client.GetObject(p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, options)
+	// RAM: This needs a more closer review to see if the calling azcopy function needs
+	// 		to pass down the context
+	body, err := p.s3Client.GetObject(context.Background(), p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, options)
 	if err != nil {
 		return nil, err
 	}

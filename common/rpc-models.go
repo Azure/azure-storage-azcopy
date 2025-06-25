@@ -8,7 +8,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	datalake "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
-	"github.com/minio/minio-go/pkg/credentials"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 
 	"github.com/JeffreyRichter/enum/enum"
 )

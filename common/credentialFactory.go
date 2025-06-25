@@ -24,13 +24,20 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"os"
+	"net/http"
+	"net/url"
+	"crypto/tls"
 
 	gcpUtils "cloud.google.com/go/storage"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
-	"github.com/minio/minio-go"
-	"github.com/minio/minio-go/pkg/credentials"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 )
+
+var c2c_src = os.Getenv("C2C_SOURCE")
+var c2c_src_proxy = os.Getenv("C2C_PROXY_ENDPOINT")
 
 // ==============================================================================================
 // credential factories
@@ -62,6 +69,48 @@ func (o CredentialOpOptions) panicError(err error) {
 	}
 }
 
+type c2cProxyRoundTripper struct {
+    transport http.RoundTripper
+	proxy *url.URL
+}
+
+func (p *c2cProxyRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+    clonedReq := req.Clone(req.Context())
+
+	// fmt.Println("Original : ", clonedReq.URL.Scheme, clonedReq.URL.Host)
+
+    clonedReq.URL.Scheme = p.proxy.Scheme
+    clonedReq.URL.Host = p.proxy.Host
+    clonedReq.Host = p.proxy.Host
+
+	// fmt.Println("Modified : ", clonedReq.URL.Scheme, clonedReq.URL.Host)
+
+    return p.transport.RoundTrip(clonedReq)
+}
+
+func createC2CProxyTransport() (http.RoundTripper) {
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+
+	if c2c_src_proxy == "" {
+		fmt.Println("createC2CProxyTransport: c2cProxy not setup, skipping proxy!")
+		return tr
+	}
+
+	tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+
+	proxy_url, err := url.Parse(c2c_src_proxy)
+	if err != nil {
+		panic("Parsing failed")
+	}
+
+	c2c_rt := &c2cProxyRoundTripper {
+		transport	: tr,
+		proxy 		: proxy_url,
+	}
+
+	return c2c_rt
+}
+
 // CreateS3Credential creates AWS S3 credential according to credential info.
 func CreateS3Credential(ctx context.Context, credInfo CredentialInfo, options CredentialOpOptions) (*credentials.Credentials, error) {
 	switch credInfo.CredentialType {
@@ -86,21 +135,48 @@ func CreateS3Credential(ctx context.Context, credInfo CredentialInfo, options Cr
 func CreateS3Client(ctx context.Context, credInfo CredentialInfo, option CredentialOpOptions, logger ILogger) (*minio.Client, error) {
 	if credInfo.CredentialType == ECredentialType.S3PublicBucket() {
 		cred := credentials.NewStatic("", "", "", credentials.SignatureAnonymous)
-		return minio.NewWithOptions(credInfo.S3CredentialInfo.Endpoint, &minio.Options{Creds: cred, Secure: true, Region: credInfo.S3CredentialInfo.Region})
+		s3Client, err := minio.New(credInfo.S3CredentialInfo.Endpoint, &minio.Options{Creds: cred, Secure: true, Region: credInfo.S3CredentialInfo.Region, Transport: createC2CProxyTransport() })
+		if err == nil {
+			s3Client.SetS3EnableDualstack(false)
+		}
+		return s3Client, err
 	}
-	//support custom credential provider
+
+	// support custom credential provider
 	if credInfo.S3CredentialInfo.Provider != nil {
 		fmt.Println("Using custom credentials")
 		creds := credentials.New(credInfo.S3CredentialInfo.Provider)
-		s3Client, err := minio.NewWithCredentials(credInfo.S3CredentialInfo.Endpoint, creds, true, credInfo.S3CredentialInfo.Region)
+
+		s3Client, err := minio.New(credInfo.S3CredentialInfo.Endpoint, &minio.Options{
+			Creds:        creds,
+			Secure:       true,
+			Region:       credInfo.S3CredentialInfo.Region,
+			BucketLookup: minio.BucketLookupPath,
+			Transport: createC2CProxyTransport(),
+		})
+
+		if err == nil {
+			s3Client.SetS3EnableDualstack(false)
+		}
+		// s3Client, err := minio.NewWithCredentials(credInfo.S3CredentialInfo.Endpoint, creds, true, credInfo.S3CredentialInfo.Region)
 		return s3Client, err
 	}
+
 	// Support access key
 	credential, err := CreateS3Credential(ctx, credInfo, option)
 	if err != nil {
 		return nil, err
 	}
-	s3Client, err := minio.NewWithCredentials(credInfo.S3CredentialInfo.Endpoint, credential, true, credInfo.S3CredentialInfo.Region)
+
+	s3Client, err := minio.New(credInfo.S3CredentialInfo.Endpoint, &minio.Options{
+		Creds:        credential,
+		Secure:       true,
+		Region:       credInfo.S3CredentialInfo.Region,
+		BucketLookup: minio.BucketLookupPath,
+		Transport: createC2CProxyTransport(),
+	})
+
+	s3Client.SetS3EnableDualstack(false)
 
 	if logger != nil {
 		s3Client.TraceOn(NewS3HTTPTraceLogger(logger, LogDebug))

@@ -61,7 +61,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
-	"github.com/minio/minio-go"
+	"github.com/minio/minio-go/v7"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )

@@ -10,7 +10,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/minio/minio-go"
+	"github.com/minio/minio-go/v7"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )

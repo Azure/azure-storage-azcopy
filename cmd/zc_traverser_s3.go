@@ -28,8 +28,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/minio/minio-go"
-	"github.com/minio/minio-go/pkg/credentials"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -118,7 +118,7 @@ func (t *s3Traverser) IsDirectory(isSource bool) (bool, error) {
 		return isDirDirect, nil
 	}
 
-	_, err := t.s3Client.StatObject(t.s3URLParts.BucketName, t.s3URLParts.ObjectKey, minio.StatObjectOptions{})
+	_, err := t.s3Client.StatObject(context.Background(), t.s3URLParts.BucketName, t.s3URLParts.ObjectKey, minio.StatObjectOptions{})
 
 	if err != nil {
 		return true, err
@@ -141,7 +141,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 	if t.s3URLParts.IsObjectSyntactically() && !t.s3URLParts.IsDirectorySyntactically() && !t.s3URLParts.IsBucketSyntactically() {
 		objectPath := strings.Split(t.s3URLParts.ObjectKey, "/")
 		objectName := objectPath[len(objectPath)-1]
-		oi, err := t.s3Client.StatObject(t.s3URLParts.BucketName, t.s3URLParts.ObjectKey, minio.StatObjectOptions{})
+		oi, err := t.s3Client.StatObject(context.Background(), t.s3URLParts.BucketName, t.s3URLParts.ObjectKey, minio.StatObjectOptions{})
 		if invalidAzureBlobName(t.s3URLParts.ObjectKey) {
 			errorS3Info := ErrorS3Info{
 				S3Name:             objectName,
@@ -205,8 +205,13 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 	// This is because * is both a valid URL path character and a valid portion of an object key in S3.
 	searchPrefix := t.s3URLParts.ObjectKey
 
+	opts := minio.ListObjectsOptions{
+		Recursive: t.recursive,
+		Prefix:    searchPrefix,
+	}
+
 	// It's a bucket or virtual directory.
-	for objectInfo := range t.s3Client.ListObjectsV2(t.s3URLParts.BucketName, searchPrefix, t.recursive, t.ctx.Done()) {
+	for objectInfo := range t.s3Client.ListObjects(t.ctx, t.s3URLParts.BucketName, opts) {
 
 		// re-join the unescaped path.
 		relativePath := strings.TrimPrefix(objectInfo.Key, searchPrefix)
@@ -284,7 +289,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 
 			// If we are using sync orchestrator, we don't need to retrieve properties.
 			if !UseSyncOrchestrator && t.getProperties {
-				oi, err := t.s3Client.StatObject(t.s3URLParts.BucketName, objectInfo.Key, minio.StatObjectOptions{})
+				oi, err := t.s3Client.StatObject(context.Background(), t.s3URLParts.BucketName, objectInfo.Key, minio.StatObjectOptions{})
 				if err != nil {
 					errorS3Info := ErrorS3Info{
 						S3Name:             objectName,
