@@ -500,7 +500,9 @@ func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectCon
 		// Override blob type
 		properties.BlobProperties.Type = pointerTo(blob.BlobTypeBlockBlob)
 	case common.EEntityType.Symlink():
-		// body should already be path
+		if body == nil {
+			body = NewStringObjectContentContainer(properties.SymlinkedFileName)
+		}
 
 		// Set symlink meta
 		properties.Metadata = copyMeta()
@@ -777,6 +779,13 @@ func (b *BlobObjectResourceManager) Download(a Asserter) io.ReadSeeker {
 	}
 
 	return bytes.NewReader(buf.Bytes())
+}
+
+func (b *BlobObjectResourceManager) ReadLink(a Asserter) string {
+	reader := b.Download(a)
+	buf, err := io.ReadAll(reader)
+	a.NoError("Read symlink body", err)
+	return string(buf)
 }
 
 func (b *BlobObjectResourceManager) Exists() bool {
