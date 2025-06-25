@@ -318,7 +318,6 @@ func WalkWithSymlinks(
 				writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err, Source: isSourceTraverser})
 				return nil
 			}
-
 			if fileInfo.Mode()&os.ModeSymlink != 0 {
 				if symlinkHandling.Preserve() {
 					// Handle it like it's not a symlink
@@ -476,7 +475,7 @@ func WalkWithSymlinks(
 					return nil
 				}
 
-				if !seenPaths.HasSeen(result) {
+				if !seenPaths.HasSeen(result)|| UseSyncOrchestrator {
 					err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
 					// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
 					skipped, err := getProcessingError(err)
