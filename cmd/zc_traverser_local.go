@@ -977,7 +977,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 									writeToErrorChannel(t.errorChannel, ErrorFileInfo{FilePath: path, FileInfo: fileInfo, ErrorMsg: err, Source: t.syncOptions.isSource})
 									return nil
 								}
-								return finalizer(WalkWithSymlinks(
+								finalizer(WalkWithSymlinks(
 									t.appCtx,
 									path,
 									processFile,
@@ -985,6 +985,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 									t.errorChannel,
 									t.syncOptions.isSource,
 									t.syncOptions.scannerLogger))
+								continue
 							}
 						}
 					}
