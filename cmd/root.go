@@ -245,11 +245,24 @@ var rootCmd = &cobra.Command{
 // hold a pointer to the global lifecycle controller so that commands could output messages and exit properly
 var glcm = common.GetLifecycleMgr()
 var glcmSwapOnce = &sync.Once{}
+var ErrMultipleProcesses = errors.New(common.ERR_MULTIPLE_PROCESSES)
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
+// It will output warning if more than one AzCopy process is running
+func Execute(logPathFolder, jobPlanFolder, appPathFolder string, maxFileAndSocketHandles int, jobID common.JobID) {
+	currPid := os.Getpid()
+	if err := WarnMultipleProcesses(appPathFolder, currPid); err != nil {
+		if errors.Is(err, ErrMultipleProcesses) {
+			glcm.Warn("More than one AzCopy process is running. It is best practice to run a single process per VM.")
+		} else {
+			glcm.Error(fmt.Sprintf("error checking number of AzCopy processes: %v", err.Error()))
+		}
+	}
+	glcm.RegisterCloseFunc(func() { // Remove pid files after Execute finished - process is no longer active
+		CleanUpPidFile(appPathFolder, currPid)
+	})
 
-func Execute(logPathFolder, jobPlanFolder string, maxFileAndSocketHandles int, jobID common.JobID) {
 	azcopyLogPathFolder = logPathFolder
 	common.AzcopyJobPlanFolder = jobPlanFolder
 	azcopyMaxFileAndSocketHandles = maxFileAndSocketHandles
