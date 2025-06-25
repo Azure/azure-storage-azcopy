@@ -78,10 +78,10 @@ func areBothLocationsNFSAware(fromTo common.FromTo) bool {
 	// 2. Download (Azure File -> Linux)
 	// 3. S2S (Azure File -> Azure File) (Works on Windows,Linux,Mac)
 	if (runtime.GOOS == "linux") &&
-		(fromTo == common.EFromTo.LocalNFS() || fromTo == common.EFromTo.NFSLocal()) {
+		(fromTo == common.EFromTo.LocalFileNFS() || fromTo == common.EFromTo.FileNFSLocal()) {
 		common.SetNFSFlag(true)
 		return true
-	} else if fromTo == common.EFromTo.NFSNFS() {
+	} else if fromTo == common.EFromTo.FileNFSFileNFS() {
 		common.SetNFSFlag(true)
 		return true
 	} else {
@@ -110,16 +110,11 @@ func areBothLocationsSMBAware(fromTo common.FromTo) bool {
 // - false otherwise.
 //
 // This default behavior ensures that file preservation logic is aligned with the OS and copy type.
-func GetPreserveInfoFlagDefault(cmd *cobra.Command, fromTo string) bool {
+func GetPreserveInfoFlagDefault(cmd *cobra.Command, fromTo common.FromTo) bool {
 	// For Linux systems, if it's an NFS copy, we set the default value of preserveInfo to true.
 	// For Windows systems, if it's an SMB copy, we set the default value of preserveInfo to true.
 	// These default values are important to set here for the logic of file preservation based on the system and copy type.
-	var userFromTo common.FromTo
-	err := userFromTo.Parse(fromTo)
-	if err != nil || (userFromTo != common.EFromTo.PipeBlob() && userFromTo != common.EFromTo.BlobPipe()) {
-		return false
-	}
-	return (runtime.GOOS == "linux" && areBothLocationsNFSAware(userFromTo)) || (runtime.GOOS == "windows" && !areBothLocationsSMBAware(userFromTo))
+	return (runtime.GOOS == "linux" && areBothLocationsNFSAware(fromTo)) || (runtime.GOOS == "windows" && !areBothLocationsSMBAware(fromTo))
 }
 
 // performNFSSpecificValidation performs validation specific to NFS (Network File System) configurations
@@ -331,4 +326,34 @@ func getShareProtocolType(ctx context.Context,
 	}
 
 	return *properties.EnabledProtocols, nil
+}
+
+// ComputePreserveFlags determines the final preserveInfo and preservePermissions flag values
+// based on user inputs, deprecated flags, and validation rules.
+func ComputePreserveFlags(cmd *cobra.Command, userFromTo common.FromTo, preserveInfo, preserveSMBInfo, preservePermissions, preserveSMBPermissions bool) (bool, bool) {
+	// Compute default value
+	preserveInfoDefaultVal := GetPreserveInfoFlagDefault(cmd, userFromTo)
+
+	// Final preserveInfo logic
+	var finalPreserveInfo bool
+	if cmd.Flags().Changed(PreserveInfoFlag) && cmd.Flags().Changed(PreserveSMBInfoFlag) || cmd.Flags().Changed(PreserveInfoFlag) {
+		finalPreserveInfo = preserveInfo
+	} else if cmd.Flags().Changed(PreserveSMBInfoFlag) {
+		finalPreserveInfo = preserveSMBInfo
+	} else {
+		finalPreserveInfo = preserveInfoDefaultVal
+	}
+
+	// Final preservePermissions logic
+	finalPreservePermissions := preservePermissions
+	if !common.IsNFSCopy() {
+		finalPreservePermissions = preservePermissions || preserveSMBPermissions
+	}
+
+	if common.IsNFSCopy() && ((preserveSMBInfo && runtime.GOOS == "linux") || preserveSMBPermissions) {
+		glcm.Error(InvalidFlagsForNFSMsg)
+		//return false, false, fmt.Errorf(InvalidFlagsForNFSMsg)
+	}
+
+	return finalPreserveInfo, finalPreservePermissions
 }

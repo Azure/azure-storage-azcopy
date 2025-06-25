@@ -828,26 +828,16 @@ func init() {
 			if cancelFromStdin {
 				glcm.EnableCancelFromStdIn()
 			}
-
-			// The following code is to deal with deprecated flags
-			// preserveInfo
-			preserveInfoDefaultVal := GetPreserveInfoFlagDefault(cmd, raw.fromTo)
-			if cmd.Flags().Changed(PreserveInfoFlag) && cmd.Flags().Changed(PreserveSMBInfoFlag) || cmd.Flags().Changed(PreserveInfoFlag) {
-				// we give precedence to raw.preserveInfo flag value if both flags are set
-			} else if cmd.Flags().Changed(PreserveSMBInfoFlag) {
-				raw.preserveInfo = raw.preserveSMBInfo
-			} else {
-				raw.preserveInfo = preserveInfoDefaultVal
+			// We infer FromTo and validate it here since it is critical to a lot of other options parsing below.
+			userFromTo, err := ValidateFromTo(raw.src, raw.dst, raw.fromTo)
+			if err != nil {
+				glcm.Error("failed to parse --from-to user input due to error: " + err.Error())
 			}
 
-			// preservePermissions
-			// TODO : Double check this logic. In the flag processing logic, we used to set a temporary variable isUserPersistingPermissions and that was a simple or of the deprecated and new flag.
-			if !common.IsNFSCopy() {
-				raw.preservePermissions = raw.preservePermissions || raw.preserveSMBPermissions
-			}
-			if common.IsNFSCopy() && ((raw.preserveSMBInfo && runtime.GOOS == "linux") || raw.preserveSMBPermissions) {
-				glcm.Error(InvalidFlagsForNFSMsg)
-			}
+			raw.preserveInfo, raw.preservePermissions = ComputePreserveFlags(cmd, userFromTo,
+				raw.preserveInfo, raw.preserveSMBInfo, raw.preservePermissions, raw.preserveSMBPermissions)
+			// TODO: Remove. Added for debugging purposes.
+			fmt.Println(fmt.Sprintf("PreserveInfo: %v, PreservePermissions: %v, NFS: %v", raw.preserveInfo, raw.preservePermissions, common.IsNFSCopy()))
 
 			cooked, err := raw.cook()
 			if err != nil {

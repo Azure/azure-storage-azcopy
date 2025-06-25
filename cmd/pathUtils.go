@@ -2,11 +2,12 @@ package cmd
 
 import (
 	"fmt"
+	"net/url"
+	"strings"
+
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	datalakesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
-	"net/url"
-	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/pkg/errors"
@@ -249,7 +250,7 @@ func splitAuthTokenFromResource(resource string, location common.Location) (reso
 		bURLParts.SAS = blobsas.QueryParameters{} // clear the SAS token and drop the raw, base URL
 		resourceBase = bURLParts.String()
 		return
-	case common.ELocation.File():
+	case common.ELocation.File(), common.ELocation.NFS(), common.ELocation.SMB():
 		var fURLParts filesas.URLParts
 		fURLParts, err = filesas.ParseURL(resource)
 		if err != nil {
