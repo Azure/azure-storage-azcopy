@@ -4,15 +4,13 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"regexp"
-	"strconv"
 )
 
 // WarnMultipleProcesses warns if there are multiple AzCopy processes running
 func WarnMultipleProcesses(directory string, currentPid int) error {
-	currPidFileName := strconv.Itoa(currentPid) + ".pid"
-
-	pidsSubDir := path.Join(directory, "pids") // Made subdir to not clog main dir
+	currPidFileName := fmt.Sprintf("%d.pid", currentPid)
+	// Made subdir to not clog main dir
+	pidsSubDir := path.Join(directory, "pids")
 	if err := os.MkdirAll(pidsSubDir, 0755); err != nil {
 		glcm.Error(fmt.Sprintf("error creating pids dir: %v", err))
 	}
@@ -25,19 +23,14 @@ func WarnMultipleProcesses(directory string, currentPid int) error {
 	}
 	defer file.Close()
 
-	// Check if there is a matching .pid file in directory
-	pidFileRegex, _ := regexp.Compile(`\.pid$`)
 	dir, err := os.ReadDir(pidsSubDir)
 	if err != nil {
 		glcm.Error(fmt.Sprintf("error reading dir: %v", err))
 		return err
 	}
 	for _, fileName := range dir {
-		if matched := pidFileRegex.MatchString(fileName.Name()); matched {
-			if fileName.Name() != currPidFileName {
-				glcm.Warn("More than one AzCopy process is running. It is best practice to run a single process per VM.")
-				return nil
-			}
+		if fileName.Name() != currPidFileName {
+			return fmt.Errorf("%w", ErrMultipleProcesses)
 		}
 	}
 	return nil
@@ -46,11 +39,11 @@ func WarnMultipleProcesses(directory string, currentPid int) error {
 // CleanUpPidFile removes the PID files after the AzCopy run has exited. Ensures we only check against
 // active Azcopy instances
 func CleanUpPidFile(directory string, processID int) {
-	currPidFileName := strconv.Itoa(processID) + ".pid"
+	currPidFileName := fmt.Sprintf("%d.pid", processID)
 	pidSubDir := path.Join(directory, "pids")
 	pidFilePath := path.Join(pidSubDir, currPidFileName)
 
 	if err := os.Remove(pidFilePath); err != nil {
-		glcm.Error(fmt.Sprintf("error removing the %v file after exiting", pidFilePath))
+		glcm.Error(fmt.Sprintf("%v error removing the %v file after exiting", err, pidFilePath))
 	}
 }

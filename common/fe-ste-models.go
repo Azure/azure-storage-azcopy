@@ -59,6 +59,7 @@ const (
 	BLOB_NOT_FOUND         = "BlobNotFound"
 	FILE_NOT_FOUND         = "The specified file was not found."
 	EINTR_RETRY_COUNT      = 5
+	ERR_MULTIPLE_PROCESSES = "more than one AzCopy process is running"
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
