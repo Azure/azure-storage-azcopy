@@ -43,7 +43,6 @@ import (
 )
 
 const MAX_SYMLINKS_TO_FOLLOW = 40
-
 type localTraverser struct {
 	fullPath        string
 	recursive       bool
@@ -267,7 +266,6 @@ func WalkWithSymlinks(
 	errorChannel chan TraverserErrorItemInfo,
 	isSourceTraverser bool,
 	scannerLogger common.ILoggerResetable) (err error) {
-
 	// We want to re-queue symlinks up in their evaluated form because filepath.Walk doesn't evaluate them for us.
 	// So, what is the plan of attack?
 	// Because we can't create endless channels, we create an array instead and use it as a queue.
@@ -356,7 +354,6 @@ func WalkWithSymlinks(
 				 * TODO: Need to handle this case.
 				 */
 				result, err := UnfurlSymlinks(filePath)
-
 				if err != nil {
 					err = fmt.Errorf("failed to resolve symlink %s: %w", filePath, err)
 					WarnStdoutAndScanningLog(err.Error())
@@ -467,6 +464,10 @@ func WalkWithSymlinks(
 			} else {
 				// not a symlink
 				result, err := filepath.Abs(filePath)
+				rStat, err := os.Stat(result)
+				if rStat.IsDir() {
+					return nil
+				}
 
 				if err != nil {
 					err = fmt.Errorf("failed to get absolute path of %s: %w", filePath, err)
@@ -976,7 +977,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 									writeToErrorChannel(t.errorChannel, ErrorFileInfo{FilePath: path, FileInfo: fileInfo, ErrorMsg: err, Source: t.syncOptions.isSource})
 									return nil
 								}
-								finalizer(WalkWithSymlinks(
+								return finalizer(WalkWithSymlinks(
 									t.appCtx,
 									path,
 									processFile,
