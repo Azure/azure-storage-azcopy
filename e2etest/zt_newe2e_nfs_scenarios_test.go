@@ -205,7 +205,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
 					Recursive: pointerTo(true),
-					NFS:       pointerTo(true),
+					FromTo:    pointerTo(common.EFromTo.LocalNFS()),
 					// --preserve-info flag will be true by default in case of linux
 					PreserveInfo:        pointerTo(preserveProperties),
 					PreservePermissions: pointerTo(preservePermissions),
@@ -380,7 +380,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
 					Recursive:           pointerTo(true),
-					NFS:                 pointerTo(true),
+					FromTo:              pointerTo(common.EFromTo.NFSLocal()),
 					PreservePermissions: pointerTo(preservePermissions),
 					PreserveInfo:        pointerTo(preserveProperties),
 				},
@@ -553,7 +553,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
 					Recursive:           pointerTo(true),
-					NFS:                 pointerTo(true),
+					FromTo:              pointerTo(common.EFromTo.NFSNFS()),
 					PreservePermissions: pointerTo(preservePermissions),
 					PreserveInfo:        pointerTo(preserveProperties),
 				},
@@ -619,6 +619,13 @@ func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForSMB(svm *ScenarioVar
 	}
 	sasOpts := GenericAccountSignatureValues{}
 
+	var fromTo common.FromTo
+	if srcObj.Location() == common.ELocation.Local() {
+		fromTo = common.EFromTo.LocalNFS()
+	} else if srcObj.Location() == common.ELocation.File() {
+		fromTo = common.EFromTo.NFSNFS()
+	}
+
 	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
@@ -633,7 +640,7 @@ func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForSMB(svm *ScenarioVar
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
-					NFS:                 pointerTo(true),
+					FromTo:              pointerTo(fromTo),
 					PreserveInfo:        pointerTo(preserveProperties),
 					PreservePermissions: pointerTo(preservePermissions),
 				},
@@ -708,6 +715,13 @@ func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForNFS(svm *ScenarioVar
 	}
 	sasOpts := GenericAccountSignatureValues{}
 
+	var fromTo common.FromTo
+	if srcObj.Location() == common.ELocation.Local() {
+		fromTo = common.EFromTo.LocalNFS()
+	} else if srcObj.Location() == common.ELocation.File() {
+		fromTo = common.EFromTo.NFSNFS()
+	}
+
 	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
@@ -722,7 +736,7 @@ func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForNFS(svm *ScenarioVar
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
-					NFS:                 pointerTo(false),
+					FromTo:              pointerTo(fromTo),
 					PreserveInfo:        pointerTo(preserveProperties),
 					PreservePermissions: pointerTo(preservePermissions),
 				},

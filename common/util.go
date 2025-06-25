@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"net"
 	"net/url"
 	"strings"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
@@ -411,4 +412,16 @@ func IsSystemContainer(containerName string) bool {
 		}
 	}
 	return false
+}
+
+// this is a global variable so that we can use it in traversal phase
+var isNFSCopy bool
+
+func SetNFSFlag(isNFS bool) {
+	// SetNFSFlag sets the global isNFSCopy variable to the given value
+	isNFSCopy = isNFS
+}
+
+func IsNFSCopy() bool {
+	return isNFSCopy
 }

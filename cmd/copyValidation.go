@@ -3,9 +3,10 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"net/url"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // Note: blockSize, blobTagsMap is set here
@@ -90,7 +91,7 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 		}
 	}
 
-	if cooked.isNFSCopy {
+	if common.IsNFSCopy() {
 		if err := performNFSSpecificValidation(
 			cooked.FromTo, cooked.preservePermissions, cooked.preserveInfo,
 			cooked.SymlinkHandling, cooked.hardlinks); err != nil {

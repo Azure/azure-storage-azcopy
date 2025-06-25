@@ -101,8 +101,6 @@ type rawSyncCmdArgs struct {
 
 	// when specified, AzCopy deletes the destination blob that has uncommitted blocks, not just the uncommitted blocks
 	deleteDestinationFileIfNecessary bool
-	// Opt-in flag to state if the copy is nfs copy
-	isNFSCopy bool
 	// Opt-in flag to persist additional properties to Azure Files
 	preserveInfo bool
 	hardlinks    string
@@ -130,7 +128,6 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 		recursive:                        raw.recursive,
 		forceIfReadOnly:                  raw.forceIfReadOnly,
 		backupMode:                       raw.backupMode,
-		isNFSCopy:                        raw.isNFSCopy,
 		putMd5:                           raw.putMd5,
 		s2sPreserveBlobTags:              raw.s2sPreserveBlobTags,
 		cpkByName:                        raw.cpkScopeInfo,
@@ -199,7 +196,7 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 	cooked.excludeFileAttributes = parsePatterns(raw.excludeFileAttributes)
 
 	// NFS/SMB arg processing
-	if cooked.isNFSCopy {
+	if common.IsNFSCopy() {
 		cooked.preserveInfo = raw.preserveInfo && areBothLocationsNFSAware(cooked.fromTo)
 		//TBD: We will be preserving ACLs and ownership info in case of NFS. (UserID,GroupID and FileMode)
 		// Using the same EPreservePermissionsOption that we have today for NFS as well
@@ -287,7 +284,7 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 	}
 
 	// NFS/SMB validation
-	if cooked.isNFSCopy {
+	if common.IsNFSCopy() {
 		if err := performNFSSpecificValidation(
 			cooked.fromTo, cooked.preservePermissions, cooked.preserveInfo,
 			cooked.symlinkHandling, cooked.hardlinks); err != nil {
@@ -383,9 +380,6 @@ func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
 	if err != nil {
 		return err
 	}
-
-	// NFS/SMB processing
-	SetNFSFlag(cooked.isNFSCopy)
 
 	cooked.cpkOptions = common.CpkOptions{
 		CpkScopeInfo: cooked.cpkByName,  // Setting CPK-N
@@ -490,7 +484,6 @@ type cookedSyncCmdArgs struct {
 	trailingDot common.TrailingDotOption
 
 	deleteDestinationFileIfNecessary bool
-	isNFSCopy                        bool
 	hardlinks                        common.HardlinkHandlingType
 	atomicSkippedSymlinkCount        uint32
 	atomicSkippedSpecialFileCount    uint32
@@ -835,26 +828,16 @@ func init() {
 			if cancelFromStdin {
 				glcm.EnableCancelFromStdIn()
 			}
-
-			// The following code is to deal with deprecated flags
-			// preserveInfo
-			preserveInfoDefaultVal := GetPreserveInfoFlagDefault(cmd, raw.isNFSCopy)
-			if cmd.Flags().Changed(PreserveInfoFlag) && cmd.Flags().Changed(PreserveSMBInfoFlag) || cmd.Flags().Changed(PreserveInfoFlag) {
-				// we give precedence to raw.preserveInfo flag value if both flags are set
-			} else if cmd.Flags().Changed(PreserveSMBInfoFlag) {
-				raw.preserveInfo = raw.preserveSMBInfo
-			} else {
-				raw.preserveInfo = preserveInfoDefaultVal
+			// We infer FromTo and validate it here since it is critical to a lot of other options parsing below.
+			userFromTo, err := ValidateFromTo(raw.src, raw.dst, raw.fromTo)
+			if err != nil {
+				glcm.Error("failed to parse --from-to user input due to error: " + err.Error())
 			}
 
-			// preservePermissions
-			// TODO : Double check this logic. In the flag processing logic, we used to set a temporary variable isUserPersistingPermissions and that was a simple or of the deprecated and new flag.
-			if !raw.isNFSCopy {
-				raw.preservePermissions = raw.preservePermissions || raw.preserveSMBPermissions
-			}
-			if raw.isNFSCopy && ((raw.preserveSMBInfo && runtime.GOOS == "linux") || raw.preserveSMBPermissions) {
-				glcm.Error(InvalidFlagsForNFSMsg)
-			}
+			raw.preserveInfo, raw.preservePermissions = ComputePreserveFlags(cmd, userFromTo,
+				raw.preserveInfo, raw.preserveSMBInfo, raw.preservePermissions, raw.preserveSMBPermissions)
+			// TODO: Remove. Added for debugging purposes.
+			fmt.Println(fmt.Sprintf("PreserveInfo: %v, PreservePermissions: %v, NFS: %v", raw.preserveInfo, raw.preservePermissions, common.IsNFSCopy()))
 
 			cooked, err := raw.cook()
 			if err != nil {
@@ -876,7 +859,8 @@ func init() {
 
 	rootCmd.AddCommand(syncCmd)
 	syncCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", true, "True by default, look into sub-directories recursively when syncing between directories. (default true).")
-	syncCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "Optionally specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalFile, FileLocal, BlobFile, FileBlob, etc.")
+	syncCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "",
+		"Source-to-destination combination. Required for NFS transfers; optional for SMB. Examples: LocalBlob, BlobLocal, LocalFile, FileLocal, BlobFile, FileBlob, LocalNFS, NFSLocal, NFSNFS, etc.")
 	syncCmd.PersistentFlags().BoolVar(&raw.includeDirectoryStubs, "include-directory-stub", false, "False by default, includes blobs with the hdi_isfolder metadata in the transfer.")
 
 	// TODO: enable for copy with IfSourceNewer
@@ -888,7 +872,6 @@ func init() {
 		"will be transferred; any others will be ignored. This flag applies to both files and folders, unless a file-only filter is specified "+
 		"(e.g. include-pattern). The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
 
-	syncCmd.PersistentFlags().BoolVar(&raw.isNFSCopy, IsNFSProtocolFlag, false, "False by default. Users must specify this flag if they intend to transfer data to or from NFS shares.")
 	//Marking this flag as hidden as we might not support it in the future
 	_ = syncCmd.PersistentFlags().MarkHidden("preserve-smb-info")
 	syncCmd.PersistentFlags().BoolVar(&raw.preserveInfo, PreserveInfoFlag, false, "Specify this flag if you want to preserve properties during the transfer operation.The previously available flag for SMB (--preserve-smb-info) is now redirected to --preserve-info flag for both SMB and NFS operations. The default value is true for Windows when copying to Azure Files SMB share and for Linux when copying to Azure Files NFS share. ")
