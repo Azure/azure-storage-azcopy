@@ -293,6 +293,9 @@ func (l *LocalObjectResourceManager) Create(a Asserter, body ObjectContentContai
 		if !os.IsExist(err) {
 			a.NoError("Mkdir", err)
 		}
+	}else if l.entityType == common.EEntityType.Symlink() {
+		err := os.Symlink(filepath.Join(l.container.RootPath, properties.SymlinkedFileName), l.getWorkingPath())
+		a.NoError("Create Symlink", err)
 	}
 
 	l.SetObjectProperties(a, properties)

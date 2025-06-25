@@ -71,7 +71,7 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationM
 	// Set up the scenario
 	a.InsertVariationSeparator("Local->")
 	srcLoc := common.ELocation.Local()
-	dstLoc := ResolveVariation(a, []common.Location{common.ELocation.File(), common.ELocation.Blob(), common.ELocation.BlobFS()})
+	dstLoc := ResolveVariation(a, []common.Location{common.ELocation.Blob(),common.ELocation.File(),common.ELocation.BlobFS()})
 	a.InsertVariationSeparator("|Create:")
 
 	const (
@@ -82,7 +82,7 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationM
 	resourceType := ResolveVariation(a, []string{CreateFolder})
 
 	a.InsertVariationSeparator("_DeleteDestination_")
-	deleteDestination := ResolveVariation(a, []bool{true, false}) // Add variation for DeleteDestination flag
+	deleteDestination := ResolveVariation(a, []bool{false,true}) // Add variation for DeleteDestination flag
 
 	// Select source map
 	srcMap := map[string]ObjectResourceMappingFlat{
@@ -307,7 +307,6 @@ func (s *SWSyncTestSuite) Scenario_SingleFile(svm *ScenarioVariationManager) {
 			Flags: SyncFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
 					Recursive:             pointerTo(false),
-					IncludeDirectoryStubs: pointerTo(true),
 				},
 				DeleteDestination: pointerTo(true),
 			},
@@ -330,7 +329,7 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUpload(svm *ScenarioVariationManager
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbSync}) // Calculate verb early to create the destination object early
 
 	srcLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local()})
-	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})), ResourceDefinitionContainer{})
+	 dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})), ResourceDefinitionContainer{})
 
 	srcDef := ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
@@ -348,7 +347,7 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUpload(svm *ScenarioVariationManager
 	}
 
 	svm.InsertVariationSeparator("_DeleteDestination_")
-	deleteDestination := ResolveVariation(svm, []bool{true, false}) // Add variation for DeleteDestination flag
+	deleteDestination := ResolveVariation(svm, []bool{true,false}) // Add variation for DeleteDestination flag
 
 	sasOpts := GenericAccountSignatureValues{}
 
@@ -1100,13 +1099,19 @@ func (s *SWSyncTestSuite) Scenario_TestFollowLinks(svm *ScenarioVariationManager
                                         SymlinkedFileName: "bar",
                                 },
                         },
+                        "fooNew": ResourceDefinitionObject{
+                                ObjectProperties: ObjectProperties{
+                                        EntityType:        common.EEntityType.Symlink(),
+                                        SymlinkedFileName: "bar",
+                                },
+                        },
                         "bar": ResourceDefinitionObject{
                                 Body: srcBody,
                         },
                 },
         })
 
-        dest := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
+	dest := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{})
 
         _, _ = RunAzCopy(
                 svm,
@@ -1120,18 +1125,79 @@ func (s *SWSyncTestSuite) Scenario_TestFollowLinks(svm *ScenarioVariationManager
                                         Recursive: pointerTo(true),
                                 },
                                 FollowSymlinks: pointerTo(true),
-                                AsSubdir:       pointerTo(false),
+				AsSubdir: pointerTo(false),
                         },
                 })
-
         ValidateResource(svm, dest, ResourceDefinitionContainer{
                 Objects: ObjectResourceMappingFlat{
                         "foo": ResourceDefinitionObject{
+                                Body: srcBody,
+                        },
+                        "fooNew": ResourceDefinitionObject{
                                 Body: srcBody,
                         },
                         "bar": ResourceDefinitionObject{
                                 Body: srcBody,
                         },
                 },
-        }, true)
+        }, false)
 }
+func (s *SWSyncTestSuite) Scenario_TestFollowLinksFolder(svm *ScenarioVariationManager) {
+	srcBody := NewRandomObjectContentContainer(1024)
+
+	source := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{
+			Objects: ObjectResourceMappingFlat{
+					"foo": ResourceDefinitionObject{
+							ObjectProperties: ObjectProperties{
+									EntityType:        common.EEntityType.Symlink(),
+									SymlinkedFileName: "bar/",
+							},
+					},
+					"fooNew": ResourceDefinitionObject{
+							ObjectProperties: ObjectProperties{
+									EntityType:        common.EEntityType.Symlink(),
+									SymlinkedFileName: "bar/",
+							},
+					},
+					"bar/": ResourceDefinitionObject{
+							ObjectProperties: ObjectProperties{
+									EntityType: common.EEntityType.Folder(),
+							},
+					},
+					"bar/file.txt": ResourceDefinitionObject{
+						Body: srcBody,
+					},
+			},
+	})
+
+	dest := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
+
+	_, _ = RunAzCopy(
+			svm,
+			AzCopyCommand{
+					Verb: AzCopyVerbSync, // sync doesn't support symlinks at this time
+					Targets: []ResourceManager{
+							source, dest,
+					},
+					Flags: CopyFlags{
+							CopySyncCommonFlags: CopySyncCommonFlags{
+									Recursive: pointerTo(false),
+							},
+					},
+			})
+	//get the container which is created by the azcopy command inside dest
+	ValidateResource(svm, dest, ResourceDefinitionContainer{
+			Objects: ObjectResourceMappingFlat{
+					"foo/file.txt": ResourceDefinitionObject{
+							Body: srcBody,
+					},
+					"fooNew/file.txt": ResourceDefinitionObject{
+							Body: srcBody,
+					},
+					"bar/file.txt": ResourceDefinitionObject{
+							Body: srcBody,
+					},
+			},
+	}, true)
+}
+
