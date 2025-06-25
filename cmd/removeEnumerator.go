@@ -54,7 +54,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 		Credential: &cca.credentialInfo,
 
 		ListOfFiles:      cca.ListOfFilesChannel,
-		ListOfVersionIDs: cca.ListOfVersionIDs,
+		ListOfVersionIDs: cca.ListOfVersionIDsChannel,
 
 		CpkOptions: cca.CpkOptions,
 
