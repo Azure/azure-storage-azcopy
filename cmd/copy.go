@@ -1713,12 +1713,12 @@ func init() {
 		"Include only those files were modified before or on the given date/time. \n "+
 			"The value should be in ISO8601 format. If no timezone is specified, the value is assumed to be in the local timezone of the machine running AzCopy. "+
 			"\n E.g. '2020-08-19T15:04:00Z' for a UTC time, or '2020-08-19' for midnight (00:00) in the local timezone. "+
-			"\n As of AzCopy 10.7, this flag applies only to files, not folders, so folder properties won't be copied when using this flag with --preserve-smb-info or --preserve-smb-permissions.")
+			"\n As of AzCopy 10.7, this flag applies only to files, not folders, so folder properties won't be copied when using this flag with --preserve-info or --preserve-permissions.")
 	cpCmd.PersistentFlags().StringVar(&raw.includeAfter, common.IncludeAfterFlagName, "",
 		"Include only those files modified on or after the given date/time. \n "+
 			"The value should be in ISO8601 format. If no timezone is specified, the value is assumed to be in the local timezone of the machine running AzCopy. "+
 			"\n E.g. '2020-08-19T15:04:00Z' for a UTC time, or '2020-08-19' for midnight (00:00) in the local timezone. "+
-			"\n As of AzCopy 10.5, this flag applies only to files, not folders, so folder properties won't be copied when using this flag with --preserve-smb-info or --preserve-smb-permissions.")
+			"\n As of AzCopy 10.5, this flag applies only to files, not folders, so folder properties won't be copied when using this flag with --preserve-info or --preserve-permissions.")
 	cpCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "",
 		"Include only these files when copying. "+
 			"\n This option supports wildcard characters (*). Separate files by using a ';' (For example: *.jpg;*.pdf;exactName).")
@@ -1795,7 +1795,8 @@ func init() {
 		"\n For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. "+
 		"\n This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
 	cpCmd.PersistentFlags().BoolVar(&raw.asSubdir, "as-subdir", true, "True by default. Places folder sources as subdirectories under the destination.")
-	cpCmd.PersistentFlags().BoolVar(&raw.preserveOwner, common.PreserveOwnerFlagName, common.PreserveOwnerDefault, "Only has an effect in downloads, and only when --preserve-smb-permissions is used. If true (the default), the file Owner and Group are preserved in downloads. "+
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveOwner, common.PreserveOwnerFlagName, common.PreserveOwnerDefault, "Only has an effect in downloads, and only when --preserve-smb-permissions is used. "+
+		"\n If true (the default), the file Owner and Group are preserved in downloads. "+
 		"\n If set to false, --preserve-smb-permissions will still preserve ACLs but Owner and Group will be based on the user running AzCopy")
 
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", (runtime.GOOS == "windows"), "Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Windows and Azure Files). "+
@@ -1892,21 +1893,20 @@ func init() {
 
 	// Deprecate the old persist-smb-permissions flag
 	_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
-	cpCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default." +
-		" Preserves ACLs between aware resources (Windows and Azure Files SMB, or Data Lake Storage to Data Lake Storage) and " +
-		"\n permissions between aware resources(Linux to Azure Files NFS). \n" +
-		"For accounts that have a hierarchical namespace, your security principal must be the owning user of the target container or " +
-		"\n it must be assigned the Storage Blob Data Owner role, scoped to the target container, storage account, parent resource group, or subscription." +
-		"\n  For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy." +
+	cpCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default."+
+		" Preserves ACLs between aware resources (Windows and Azure Files SMB, or Data Lake Storage to Data Lake Storage) and "+
+		"\n permissions between aware resources(Linux to Azure Files NFS). \n"+
+		"For accounts that have a hierarchical namespace, your security principal must be the owning user of the target container or "+
+		"\n it must be assigned the Storage Blob Data Owner role, scoped to the target container, storage account, parent resource group, or subscription."+
+		"\n  For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy."+
 		"\n  This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
-
 
 	// Deletes destination blobs with uncommitted blocks when staging block, hidden because we want to preserve default behavior
 	cpCmd.PersistentFlags().BoolVar(&raw.deleteDestinationFileIfNecessary, "delete-destination-file", false, "False by default. "+
 		"\n Deletes destination blobs, specifically blobs with uncommitted blocks when staging block.")
 	_ = cpCmd.PersistentFlags().MarkHidden("delete-destination-file")
 	cpCmd.PersistentFlags().StringVar(&raw.hardlinks, HardlinksFlag, "follow",
-		"Specifies how hardlinks should be handled. " +
-		"\n This flag is only applicable when downloading from an NFS file share, uploading to an NFS share, or performing service-to-service copies involving NFS. \n"+
-		"\n The only supported option is 'follow' (default), which copies hardlinks as regular, independent files at the destination.")
+		"Specifies how hardlinks should be handled. "+
+			"\n This flag is only applicable when downloading from an NFS file share, uploading to an NFS share, or performing service-to-service copies involving NFS. \n"+
+			"\n The only supported option is 'follow' (default), which copies hardlinks as regular, independent files at the destination.")
 }
