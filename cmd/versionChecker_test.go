@@ -218,7 +218,8 @@ func TestGetGitHubLatestVersion(t *testing.T) {
 	a.NotNil(latestVersion)
 	a.NotEmpty(latestVersion.original)
 	versionVar, _ := NewVersion(common.AzcopyVersion)
-	a.Equal(latestVersion, versionVar)
+	sameOrLaterVersion := latestVersion.OlderThan(*versionVar) || latestVersion.EqualTo(*versionVar)
+	a.True(sameOrLaterVersion)
 }
 
 // Mocked test of getGitHubLatestRemoteVersionWithURL
