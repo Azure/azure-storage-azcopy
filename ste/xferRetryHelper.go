@@ -50,30 +50,29 @@ func GetShouldRetry(log *LogOptions) RetryFunc {
 				errorCodes := getErrorCodes(resp)
 				if errorCodes != nil {
 					for _, errorCode := range errorCodes {
-						if errorCode != "" {
-							if policy, ok := storageErrorCodes[errorCode]; ok {
-								if policy && log != nil && log.ShouldLog(common.ELogLevel.Debug()) {
-									log.Log(
-										common.ELogLevel.Debug(),
-										fmt.Sprintf("Request %s retried on custom condition %s",
-											resp.Header.Get("x-ms-client-request-id"),
-											errorCode))
-								}
-
-								if policy {
-									return policy
-								}
-							} else if !ok && storageErrorCodes["*"] {
-								return true
+						if policy, ok := storageErrorCodes[errorCode]; ok {
+							if policy && log != nil && log.ShouldLog(common.ELogLevel.Debug()) {
+								log.Log(
+									common.ELogLevel.Debug(),
+									fmt.Sprintf("Request %s retried on custom condition %s",
+										resp.Header.Get("x-ms-client-request-id"),
+										errorCode))
 							}
+
+							if policy {
+								return policy
+							}
+						} else if !ok && storageErrorCodes["*"] {
+							return true
 						}
+
 					}
 				}
 			}
 			// Check if copy source status code is present
 			respStatusCode := getCopySourceStatusCode(resp)
 			if respStatusCode != "" {
-				if copyStatusCode, err := strconv.Atoi(respStatusCode); err != nil {
+				if copyStatusCode, err := strconv.Atoi(respStatusCode); err == nil {
 					if _, exists := RetryStatusCodes[copyStatusCode]; exists {
 						if log != nil && log.ShouldLog(common.ELogLevel.Debug()) {
 							log.Log(
@@ -100,22 +99,22 @@ func getErrorCodes(resp *http.Response) []string {
 	var errorCodes []string
 	if resp.Header["x-ms-error-code"] != nil { //nolint:staticcheck
 		errorCodes = append(errorCodes, resp.Header["x-ms-error-code"][0]) //nolint:staticcheck
-	} else if resp.Header["X-Ms-Error-Code"] != nil {
-		errorCodes = append(errorCodes, resp.Header["X-Ms-Error-Code"][0])
+	} else if resp.Header["X-Ms-Error-Code"] != nil { //nolint:staticcheck
+		errorCodes = append(errorCodes, resp.Header["X-Ms-Error-Code"][0]) //nolint:staticcheck
 	}
-	if resp.Header["x-ms-copy-source-error-code"] != nil {
-		errorCodes = append(errorCodes, resp.Header["x-ms-copy-source-error-code"][0])
-	} else if resp.Header["X-Ms-Copy-Source-Error-Code"] != nil {
-		errorCodes = append(errorCodes, resp.Header["X-Ms-Copy-Source-Error-Code"][0])
+	if resp.Header["x-ms-copy-source-error-code"] != nil { //nolint:staticcheck
+		errorCodes = append(errorCodes, resp.Header["x-ms-copy-source-error-code"][0]) //nolint:staticcheck
+	} else if resp.Header["X-Ms-Copy-Source-Error-Code"] != nil { //nolint:staticcheck
+		errorCodes = append(errorCodes, resp.Header["X-Ms-Copy-Source-Error-Code"][0]) //nolint:staticcheck
 	}
 	return errorCodes
 }
 
 func getCopySourceStatusCode(resp *http.Response) string {
-	if resp.Header["x-ms-copy-source-status-code"] != nil {
-		return resp.Header["x-ms-copy-source-status-code"][0]
-	} else if resp.Header["X-Ms-Copy-Source-Status-Code"] != nil {
-		return resp.Header["X-Ms-Copy-Source-Status-Code"][0]
+	if resp.Header["x-ms-copy-source-status-code"] != nil { //nolint:staticcheck
+		return resp.Header["x-ms-copy-source-status-code"][0] //nolint:staticcheck
+	} else if resp.Header["X-Ms-Copy-Source-Status-Code"] != nil { //nolint:staticcheck
+		return resp.Header["X-Ms-Copy-Source-Status-Code"][0] //nolint:staticcheck
 	}
 	return ""
 }
@@ -125,14 +124,12 @@ func GetRetryStatusCodes(log *LogOptions) []int {
 	}
 	storageStatusCodes := slices.Sorted(maps.Keys(RetryStatusCodes))
 	var statusCodes []int
-	for _, statusCode := range storageStatusCodes {
-		statusCodes = append(statusCodes, statusCode)
-	}
+	statusCodes = append(statusCodes, storageStatusCodes...)
 
 	if log != nil && log.ShouldLog(common.ELogLevel.Debug()) {
 		log.Log(
 			common.ELogLevel.Debug(),
-			fmt.Sprintf("Request retried on custom status"))
+			fmt.Sprintf("Request retried on custom %v status", statusCodes))
 	}
 	return statusCodes
 }

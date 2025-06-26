@@ -189,7 +189,7 @@ func TestGetCopySourceStatusCodes(t *testing.T) {
 
 	// Test with copy source status code
 	header = make(http.Header)
-	header.Set("X-Ms-Copy-Source-Error-Code", "429")
+	header.Set("X-Ms-Copy-Source-Status-Code", "429")
 	response = &http.Response{Header: header}
 	code = getCopySourceStatusCode(response)
 	a.Equal("429", code)
