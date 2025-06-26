@@ -151,9 +151,6 @@ type rawLoginArgs struct {
 	//Required to sign in with a SPN (Service Principal Name)
 	applicationID string
 	certPath      string
-	certPass      string
-	clientSecret  string
-	persistToken  bool
 }
 
 func (args rawLoginArgs) toOptions() (LoginOptions, error) {
