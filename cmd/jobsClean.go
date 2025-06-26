@@ -86,7 +86,7 @@ func init() {
 
 func handleCleanJobsCommand(givenStatus common.JobStatus) error {
 	if givenStatus == common.EJobStatus.All() {
-		numFilesDeleted, err := blindDeleteAllJobFiles()
+		numFilesDeleted, err := BlindDeleteAllJobFiles()
 		glcm.Info(fmt.Sprintf("Removed %v files.", numFilesDeleted))
 		return err
 	}
@@ -103,7 +103,7 @@ func handleCleanJobsCommand(givenStatus common.JobStatus) error {
 		// delete all jobs matching the givenStatus
 		if job.JobStatus == givenStatus {
 			glcm.Info(fmt.Sprintf("Removing files for job %s", job.JobId))
-			err := handleRemoveSingleJob(job.JobId)
+			err := HandleRemoveSingleJob(job.JobId)
 			if err != nil {
 				return err
 			}
@@ -113,7 +113,7 @@ func handleCleanJobsCommand(givenStatus common.JobStatus) error {
 	return nil
 }
 
-func blindDeleteAllJobFiles() (int, error) {
+func BlindDeleteAllJobFiles() (int, error) {
 	// get rid of the job plan files
 	numPlanFilesRemoved, err := removeFilesWithPredicate(common.AzcopyJobPlanFolder, func(s string) bool {
 		return strings.Contains(s, ".steV")

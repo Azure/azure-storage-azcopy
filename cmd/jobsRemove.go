@@ -58,7 +58,7 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			err := handleRemoveSingleJob(commandLineInput.JobID)
+			err := HandleRemoveSingleJob(commandLineInput.JobID)
 			if err == nil {
 				glcm.Exit(func(format common.OutputFormat) string {
 					return fmt.Sprintf("Successfully removed log and job plan files for job %s.", commandLineInput.JobID)
@@ -72,7 +72,7 @@ func init() {
 	jobsCmd.AddCommand(jobsRemoveCmd)
 }
 
-func handleRemoveSingleJob(jobID common.JobID) error {
+func HandleRemoveSingleJob(jobID common.JobID) error {
 	// get rid of the job plan files
 	numPlanFileRemoved, err := removeFilesWithPredicate(common.AzcopyJobPlanFolder, func(s string) bool {
 		if strings.Contains(s, jobID.String()) && strings.Contains(s, ".steV") {
