@@ -124,7 +124,7 @@ func (d AutoLoginType) String() string {
 }
 
 func (d *AutoLoginType) Parse(s string) error {
-	// allow empty to mean "Enable"
+	// allow empty to mean "Device"
 	if s == "" {
 		*d = EAutoLoginType.Device()
 		return nil
