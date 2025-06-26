@@ -43,7 +43,6 @@ import (
 )
 
 const MAX_SYMLINKS_TO_FOLLOW = 40
-
 type localTraverser struct {
 	fullPath        string
 	recursive       bool
@@ -267,7 +266,6 @@ func WalkWithSymlinks(
 	errorChannel chan TraverserErrorItemInfo,
 	isSourceTraverser bool,
 	scannerLogger common.ILoggerResetable) (err error) {
-
 	// We want to re-queue symlinks up in their evaluated form because filepath.Walk doesn't evaluate them for us.
 	// So, what is the plan of attack?
 	// Because we can't create endless channels, we create an array instead and use it as a queue.
@@ -320,7 +318,6 @@ func WalkWithSymlinks(
 				writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err, Source: isSourceTraverser})
 				return nil
 			}
-
 			if fileInfo.Mode()&os.ModeSymlink != 0 {
 				if symlinkHandling.Preserve() {
 					// Handle it like it's not a symlink
@@ -356,7 +353,6 @@ func WalkWithSymlinks(
 				 * TODO: Need to handle this case.
 				 */
 				result, err := UnfurlSymlinks(filePath)
-
 				if err != nil {
 					err = fmt.Errorf("failed to resolve symlink %s: %w", filePath, err)
 					WarnStdoutAndScanningLog(err.Error())
@@ -467,6 +463,10 @@ func WalkWithSymlinks(
 			} else {
 				// not a symlink
 				result, err := filepath.Abs(filePath)
+				rStat, err := os.Stat(result)
+				if rStat.IsDir() {
+					return nil
+				}
 
 				if err != nil {
 					err = fmt.Errorf("failed to get absolute path of %s: %w", filePath, err)
@@ -475,7 +475,7 @@ func WalkWithSymlinks(
 					return nil
 				}
 
-				if !seenPaths.HasSeen(result) {
+				if !seenPaths.HasSeen(result)|| UseSyncOrchestrator {
 					err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
 					// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
 					skipped, err := getProcessingError(err)
@@ -984,6 +984,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 									t.errorChannel,
 									t.syncOptions.isSource,
 									t.syncOptions.scannerLogger))
+								continue
 							}
 						}
 					}
