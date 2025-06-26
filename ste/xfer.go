@@ -177,3 +177,13 @@ func inferBlobType(filename string, defaultBlobType blob.BlobType) blob.BlobType
 
 	return defaultBlobType
 }
+
+func init() {
+	requestTryTimeout := common.GetEnvironmentVariable(common.EEnvironmentVariable.RequestTryTimeout())
+	if requestTryTimeout != "" {
+		timeout, err := time.ParseDuration(requestTryTimeout + "m")
+		if err == nil {
+			UploadTryTimeout = timeout
+		}
+	}
+}
