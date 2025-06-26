@@ -65,7 +65,7 @@ func init() {
 			}
 
 			logText := func(format string, a ...any) {
-				if azcopyOutputFormat == common.EOutputFormat.None() || azcopyOutputFormat == common.EOutputFormat.Text() {
+				if OutputFormat == common.EOutputFormat.None() || OutputFormat == common.EOutputFormat.Text() {
 					glcm.Info(fmt.Sprintf(format, a...))
 				}
 			}
@@ -92,7 +92,7 @@ func init() {
 				logText("You are currently not logged in. Please login using 'azcopy login'")
 			}
 
-			if azcopyOutputFormat == common.EOutputFormat.Json() {
+			if OutputFormat == common.EOutputFormat.Json() {
 				glcm.Output(
 					func(_ common.OutputFormat) string {
 						buf, err := json.Marshal(Info)

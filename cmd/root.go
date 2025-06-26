@@ -27,6 +27,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
@@ -42,23 +43,26 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var AzcopyAppPathFolder string
 var azcopyLogPathFolder string
-var azcopyMaxFileAndSocketHandles int
 var outputFormatRaw string
 var outputVerbosityRaw string
 var logVerbosityRaw string
 var cancelFromStdin bool
-var azcopyOutputFormat common.OutputFormat
-var azcopyOutputVerbosity common.OutputVerbosity
-var azcopyLogVerbosity common.LogLevel
-var loggerInfo jobLoggerInfo
-var cmdLineCapMegaBitsPerSecond float64
+var OutputFormat common.OutputFormat
+var OutputLevel common.OutputVerbosity
+var LogLevel common.LogLevel
+var CapMbps float64
+var SkipVersionCheck bool
+
+// It's not pretty that this one is read directly by credential util.
+// But doing otherwise required us passing it around in many places, even though really
+// it can be thought of as an "ambient" property. That's the (weak?) justification for implementing
+// it as a global
+var TrustedSuffixes string
 var azcopyAwaitContinue bool
 var azcopyAwaitAllowOpenFiles bool
 var azcopyScanningLogger common.ILoggerResetable
 var azcopyCurrentJobID common.JobID
-var azcopySkipVersionCheck bool
 var isPipeDownload bool
 var retryStatusCodes string
 var debugMemoryProfile string
@@ -67,12 +71,6 @@ type jobLoggerInfo struct {
 	jobID         common.JobID
 	logFileFolder string
 }
-
-// It's not pretty that this one is read directly by credential util.
-// But doing otherwise required us passing it around in many places, even though really
-// it can be thought of as an "ambient" property. That's the (weak?) justification for implementing
-// it as a global
-var cmdLineExtraSuffixesAAD string
 
 // It would be preferable if this was a local variable, since it just gets altered and shot off to the STE
 var debugSkipFiles string
@@ -104,14 +102,6 @@ var rootCmd = &cobra.Command{
 			}
 		})
 
-		requestTryTimeout := common.GetEnvironmentVariable(common.EEnvironmentVariable.RequestTryTimeout())
-		if requestTryTimeout != "" {
-			timeout, err := time.ParseDuration(requestTryTimeout + "m")
-			if err == nil {
-				ste.UploadTryTimeout = timeout
-			}
-		}
-
 		// referencing https://github.com/Azure/azure-sdk-for-go/blob/main/sdk/azcore/policy/policy.go#L114
 		rscList := "408;429;500;502;503;504"
 		if retryStatusCodes != "" {
@@ -128,41 +118,37 @@ var rootCmd = &cobra.Command{
 			glcm.E2EAwaitContinue()
 		}
 
-		timeAtPrestart := time.Now()
-
-		err = azcopyOutputFormat.Parse(outputFormatRaw)
-		glcm.SetOutputFormat(azcopyOutputFormat)
+		err = OutputFormat.Parse(outputFormatRaw)
 		if err != nil {
 			return err
 		}
 
-		err = azcopyOutputVerbosity.Parse(outputVerbosityRaw)
-		glcm.SetOutputVerbosity(azcopyOutputVerbosity)
+		err = OutputLevel.Parse(outputVerbosityRaw)
 		if err != nil {
 			return err
 		}
 
-		err = azcopyLogVerbosity.Parse(logVerbosityRaw)
+		err = LogLevel.Parse(logVerbosityRaw)
 		if err != nil {
 			return err
 		}
 
 		// If the command is for resuming a job with a specific JobID,
 		// use the provided JobID to resume the job; otherwise, create a new JobID.
+		var resumeJobID common.JobID
 		if cmd.Use == "resume [jobID]" {
 			// If no argument is passed then it is not valid
 			if len(args) != 1 {
 				return errors.New("this command requires jobId to be passed as argument")
 			}
-
-			loggerInfo.jobID, err = common.ParseJobID(args[0])
-
+			resumeJobID, err = common.ParseJobID(args[0])
 			if err != nil {
 				return err
 			}
-
 		}
 
+		// Check if we are downloading to Pipe so we can bypass version check and not write it to stdout, customer is
+		// only expecting blob data in stdout
 		var fromToFlagValue string
 		if cmd.Flags().Changed("from-to") {
 			// Access the value of the "from-to" flag
@@ -174,11 +160,6 @@ var rootCmd = &cobra.Command{
 				isPipeDownload = true
 			}
 		}
-
-		common.AzcopyCurrentJobLogger = common.NewJobLogger(loggerInfo.jobID, azcopyLogVerbosity, loggerInfo.logFileFolder, "")
-		common.AzcopyCurrentJobLogger.OpenLog()
-
-		glcm.SetForceLogging()
 
 		// warn Windows users re quoting (since our docs all use single quotes, but CMD needs double)
 		// Single ones just come through as part of the args, in CMD.
@@ -196,38 +177,6 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
-		// currently, we only automatically do auto-tuning when benchmarking
-		preferToAutoTuneGRs := cmd == benchCmd // TODO: do we have a better way to do this than making benchCmd global?
-		providePerformanceAdvice := cmd == benchCmd
-
-		// startup of the STE happens here, so that the startup can access the values of command line parameters that are defined for "root" command
-		concurrencySettings := ste.NewConcurrencySettings(azcopyMaxFileAndSocketHandles, preferToAutoTuneGRs)
-		err = jobsAdmin.MainSTE(concurrencySettings, float64(cmdLineCapMegaBitsPerSecond), common.AzcopyJobPlanFolder, azcopyLogPathFolder, providePerformanceAdvice)
-		if err != nil {
-			return err
-		}
-		EnumerationParallelism = concurrencySettings.EnumerationPoolSize.Value
-		EnumerationParallelStatFiles = concurrencySettings.ParallelStatFiles.Value
-
-		// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter
-		// Subtract a few seconds, to ensure that this date DEFINITELY falls before the LMT of any file changed while this
-		// job is running. I.e. using this later with --include-after is _guaranteed_ to pick up all files that changed during
-		// or after this job
-		adjustedTime := timeAtPrestart.Add(-5 * time.Second)
-		startTimeMessage := fmt.Sprintf("ISO 8601 START TIME: to copy files that changed before or after this job started, use the parameter --%s=%s or --%s=%s",
-			common.IncludeBeforeFlagName, IncludeBeforeDateFilter{}.FormatAsUTC(adjustedTime),
-			common.IncludeAfterFlagName, IncludeAfterDateFilter{}.FormatAsUTC(adjustedTime))
-		jobsAdmin.JobsAdmin.LogToJobLog(startTimeMessage, common.LogInfo)
-
-		if !azcopySkipVersionCheck && !isPipeDownload {
-			// spawn a routine to fetch and compare the local application's version against the latest version available
-			// if there's a newer version that can be used, then write the suggestion to stderr
-			// however if this takes too long the message won't get printed
-			// Note: this function is necessary for non-help, non-login commands, since they don't reach the corresponding
-			// beginDetectNewVersion call in Execute (below)
-			beginDetectNewVersion()
-		}
-
 		if debugSkipFiles != "" {
 			for _, v := range strings.Split(debugSkipFiles, ";") {
 				if strings.HasPrefix(v, "/") {
@@ -238,8 +187,72 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
-		return nil
+		isBench := cmd.Use == "bench [destination]"
+
+		return Initialize(resumeJobID, isBench)
 	},
+}
+
+func Initialize(resumeJobID common.JobID, isBench bool) error {
+	azcopyLogPathFolder, common.AzcopyJobPlanFolder = initializeFolders()
+
+	configureGoMaxProcs()
+
+	// Perform os specific initialization
+	azcopyMaxFileAndSocketHandles, err := processOSSpecificInitialization()
+	if err != nil {
+		log.Fatalf("initialization failed: %v", err)
+	}
+	jobID := common.NewJobID()
+	azcopyCurrentJobID = jobID
+	loggerInfo := jobLoggerInfo{jobID, azcopyLogPathFolder}
+
+	timeAtPrestart := time.Now()
+	glcm.SetOutputFormat(OutputFormat)
+	glcm.SetOutputVerbosity(OutputLevel)
+
+	if !resumeJobID.IsEmpty() {
+		loggerInfo.jobID = resumeJobID
+	}
+
+	common.AzcopyCurrentJobLogger = common.NewJobLogger(loggerInfo.jobID, LogLevel, loggerInfo.logFileFolder, "")
+	common.AzcopyCurrentJobLogger.OpenLog()
+
+	glcm.SetForceLogging()
+
+	// currently, we only automatically do auto-tuning when benchmarking
+	preferToAutoTuneGRs, providePerformanceAdvice := isBench, isBench
+
+	// startup of the STE happens here, so that the startup can access the values of command line parameters that are defined for "root" command
+	concurrencySettings := ste.NewConcurrencySettings(azcopyMaxFileAndSocketHandles, preferToAutoTuneGRs)
+	err = jobsAdmin.MainSTE(concurrencySettings, float64(CapMbps), common.AzcopyJobPlanFolder, azcopyLogPathFolder, providePerformanceAdvice)
+	if err != nil {
+		return err
+	}
+	EnumerationParallelism = concurrencySettings.EnumerationPoolSize.Value
+	EnumerationParallelStatFiles = concurrencySettings.ParallelStatFiles.Value
+
+	// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter
+	// Subtract a few seconds, to ensure that this date DEFINITELY falls before the LMT of any file changed while this
+	// job is running. I.e. using this later with --include-after is _guaranteed_ to pick up all files that changed during
+	// or after this job
+	adjustedTime := timeAtPrestart.Add(-5 * time.Second)
+	startTimeMessage := fmt.Sprintf("ISO 8601 START TIME: to copy files that changed before or after this job started, use the parameter --%s=%s or --%s=%s",
+		common.IncludeBeforeFlagName, IncludeBeforeDateFilter{}.FormatAsUTC(adjustedTime),
+		common.IncludeAfterFlagName, IncludeAfterDateFilter{}.FormatAsUTC(adjustedTime))
+	jobsAdmin.JobsAdmin.LogToJobLog(startTimeMessage, common.LogInfo)
+
+	if !SkipVersionCheck && !isPipeDownload {
+		// spawn a routine to fetch and compare the local application's version against the latest version available
+		// if there's a newer version that can be used, then write the suggestion to stderr
+		// however if this takes too long the message won't get printed
+		// Note: this function is necessary for non-help, non-login commands, since they don't reach the corresponding
+		// beginDetectNewVersion call in Execute (below)
+		beginDetectNewVersion()
+	}
+
+	return nil
+
 }
 
 // hold a pointer to the global lifecycle controller so that commands could output messages and exit properly
@@ -249,19 +262,15 @@ var glcmSwapOnce = &sync.Once{}
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 
-func Execute(logPathFolder, jobPlanFolder string, maxFileAndSocketHandles int, jobID common.JobID) {
-	azcopyLogPathFolder = logPathFolder
-	common.AzcopyJobPlanFolder = jobPlanFolder
-	azcopyMaxFileAndSocketHandles = maxFileAndSocketHandles
-	azcopyCurrentJobID = jobID
-	loggerInfo = jobLoggerInfo{jobID, logPathFolder}
+var Execute func() error = rootCmd.Execute
 
-	if err := rootCmd.Execute(); err != nil {
+func InitializeAndExecute() {
+	if err := Execute(); err != nil {
 		glcm.Error(err.Error())
 	} else {
-		if !azcopySkipVersionCheck && !isPipeDownload {
+		if !SkipVersionCheck && !isPipeDownload {
 			// our commands all control their own life explicitly with the lifecycle manager
-			// only commands that don't explicitly exit actually reach this point (e.g. help commands and login commands)
+			// only commands that don't explicitly exit actually reach this point (e.g. help commands)
 			select {
 			case <-beginDetectNewVersion():
 				// noop
@@ -270,6 +279,47 @@ func Execute(logPathFolder, jobPlanFolder string, maxFileAndSocketHandles int, j
 			}
 		}
 		glcm.Exit(nil, common.EExitCode.Success())
+	}
+}
+
+func initializeFolders() (azcopyLogPathFolder, azcopyJobPlanFolder string) {
+	azcopyLogPathFolder = common.GetEnvironmentVariable(common.EEnvironmentVariable.LogLocation())     // user specified location for log files
+	azcopyJobPlanFolder = common.GetEnvironmentVariable(common.EEnvironmentVariable.JobPlanLocation()) // user specified location for plan files
+
+	// note: azcopyAppPathFolder is the default location for all AzCopy data (logs, job plans, oauth token on Windows)
+	// but all the above can be put elsewhere as they can become very large
+	azcopyAppPathFolder := getAzCopyAppPath()
+
+	// the user can optionally put the log files somewhere else
+	if azcopyLogPathFolder == "" {
+		azcopyLogPathFolder = azcopyAppPathFolder
+	}
+	if err := os.Mkdir(azcopyLogPathFolder, os.ModeDir|os.ModePerm); err != nil && !os.IsExist(err) {
+		log.Fatalf("Problem making .azcopy directory. Try setting AZCOPY_LOG_LOCATION env variable. %v", err)
+	}
+
+	// the user can optionally put the plan files somewhere else
+	if azcopyJobPlanFolder == "" {
+		// make the app path folder ".azcopy" first so we can make a plans folder in it
+		if err := os.MkdirAll(azcopyAppPathFolder, os.ModeDir); err != nil && !os.IsExist(err) {
+			log.Fatalf("Problem making .azcopy directory. Try setting AZCOPY_JOB_PLAN_LOCATION env variable. %v", err)
+		}
+		azcopyJobPlanFolder = path.Join(azcopyAppPathFolder, "plans")
+	}
+
+	if err := os.MkdirAll(azcopyJobPlanFolder, os.ModeDir|os.ModePerm); err != nil && !os.IsExist(err) {
+		log.Fatalf("Problem making .azcopy directory. Try setting AZCOPY_JOB_PLAN_LOCATION env variable. %v", err)
+	}
+	return
+}
+
+// Ensure we always have more than 1 OS thread running goroutines, since there are issues with having just 1.
+// (E.g. version check doesn't happen at login time, if have only one go proc. Not sure why that happens if have only one
+// proc. Is presumably due to the high CPU usage we see on login if only 1 CPU, even tho can't see any busy-wait in that code)
+func configureGoMaxProcs() {
+	isOnlyOne := runtime.GOMAXPROCS(0) == 1
+	if isOnlyOne {
+		runtime.GOMAXPROCS(2)
 	}
 }
 
@@ -316,18 +366,12 @@ func init() {
 
 	// reserved for partner teams
 	_ = rootCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
-
+  
 	// special flags to be used in case of unexpected service errors.
 	rootCmd.PersistentFlags().StringVar(&retryStatusCodes, "retry-status-codes", "",
 		"Comma-separated list of HTTP status codes to retry on. (default '408;429;500;502;503;504')")
 	_ = rootCmd.PersistentFlags().MarkHidden("retry-status-codes")
-
-	// debug-only
-	_ = rootCmd.PersistentFlags().MarkHidden("await-continue")
-	_ = rootCmd.PersistentFlags().MarkHidden("await-open")
-	_ = rootCmd.PersistentFlags().MarkHidden("debug-skip-files")
-	rootCmd.PersistentFlags().StringVar(&debugMemoryProfile, "memory-profile", "",
-		"Export pprof memory profile")
+	rootCmd.PersistentFlags().StringVar(&debugMemoryProfile, "memory-profile", "", "Export pprof memory profile")
 	_ = rootCmd.PersistentFlags().MarkHidden("memory-profile")
 }
 
