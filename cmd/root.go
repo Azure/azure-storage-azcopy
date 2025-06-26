@@ -327,7 +327,7 @@ func init() {
 	// replace the word "global" to avoid confusion (e.g. it doesn't affect all instances of AzCopy)
 	rootCmd.SetUsageTemplate(strings.Replace((&cobra.Command{}).UsageTemplate(), "Global Flags", "Flags Applying to All Commands", -1))
 
-	rootCmd.PersistentFlags().Float64Var(&cmdLineCapMegaBitsPerSecond, "cap-mbps", 0,
+	rootCmd.PersistentFlags().Float64Var(&CapMbps, "cap-mbps", 0,
 		"Caps the transfer rate, in megabits per second. "+
 			"\n Moment-by-moment throughput might vary slightly from the cap."+
 			"\n If this option is set to zero, or it is omitted, the throughput isn't capped.")
@@ -341,12 +341,12 @@ func init() {
 			"\n available levels: DEBUG(detailed trace), INFO(all requests/responses), WARNING(slow responses),"+
 			"\n ERROR(only failed requests), and NONE(no output logs). (default 'INFO').")
 
-	rootCmd.PersistentFlags().StringVar(&cmdLineExtraSuffixesAAD, trustedSuffixesNameAAD, "",
+	rootCmd.PersistentFlags().StringVar(&TrustedSuffixes, trustedSuffixesNameAAD, "",
 		"\nSpecifies additional domain suffixes where Azure Active Directory login tokens may be sent.  \nThe default is '"+
 			trustedSuffixesAAD+"'. \n Any listed here are added to the default. For security, you should only put Microsoft Azure domains here. "+
 			"\n Separate multiple entries with semi-colons.")
 
-	rootCmd.PersistentFlags().BoolVar(&azcopySkipVersionCheck, "skip-version-check", false,
+	rootCmd.PersistentFlags().BoolVar(&SkipVersionCheck, "skip-version-check", false,
 		"Do not perform the version check at startup. \nIntended for automation scenarios & airgapped use.")
 
 	// Note: this is due to Windows not supporting signals properly
@@ -366,7 +366,7 @@ func init() {
 
 	// reserved for partner teams
 	_ = rootCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
-  
+
 	// special flags to be used in case of unexpected service errors.
 	rootCmd.PersistentFlags().StringVar(&retryStatusCodes, "retry-status-codes", "",
 		"Comma-separated list of HTTP status codes to retry on. (default '408;429;500;502;503;504')")
