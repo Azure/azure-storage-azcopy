@@ -24,11 +24,14 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"maps"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 )
 
+// Defines the retry policy rules
 var RetryStatusCodes RetryCodes
 
 var platformRetryPolicy func(response *http.Response, err error) bool
@@ -39,29 +42,49 @@ func GetShouldRetry(log *LogOptions) RetryFunc {
 	if len(RetryStatusCodes) == 0 {
 		return nil
 	}
+
 	return func(resp *http.Response, err error) bool {
 		if resp != nil {
 			if storageErrorCodes, ok := RetryStatusCodes[resp.StatusCode]; ok {
 				// compare to status codes
-				errorCode := getErrorCode(resp)
-				if errorCode != "" {
-					if policy, ok := storageErrorCodes[errorCode]; ok {
-						if policy && log != nil && log.ShouldLog(common.ELogLevel.Debug()) {
-							log.Log(
-								common.ELogLevel.Debug(),
-								fmt.Sprintf("Request %s retried on custom condition %s", resp.Header.Get("x-ms-client-request-id"), errorCode))
+				errorCodes := getErrorCodes(resp)
+				if errorCodes != nil {
+					for _, errorCode := range errorCodes {
+						if policy, ok := storageErrorCodes[errorCode]; ok {
+							if policy && log != nil && log.ShouldLog(common.ELogLevel.Debug()) {
+								log.Log(
+									common.ELogLevel.Debug(),
+									fmt.Sprintf("Request %s retried on custom condition %s",
+										resp.Header.Get("x-ms-client-request-id"),
+										errorCode))
+							}
+
+							if policy {
+								return policy
+							}
+						} else if !ok && storageErrorCodes["*"] {
+							return true
 						}
 
-						if policy {
-							return policy
+					}
+				}
+			}
+			// Check if copy source status code is present
+			respStatusCode := getCopySourceStatusCode(resp)
+			if respStatusCode != "" {
+				if copyStatusCode, err := strconv.Atoi(respStatusCode); err == nil {
+					if _, exists := RetryStatusCodes[copyStatusCode]; exists {
+						if log != nil && log.ShouldLog(common.ELogLevel.Debug()) {
+							log.Log(
+								common.ELogLevel.Debug(),
+								fmt.Sprintf("Request %s retried on copy source status code %s",
+									resp.Header.Get("x-ms-client-request-id"), respStatusCode))
 						}
-					} else if !ok && storageErrorCodes["*"] {
 						return true
 					}
 				}
 			}
 		}
-
 		// fall back to our platform retry policy
 		if platformRetryPolicy != nil {
 			return platformRetryPolicy(resp, err)
@@ -71,13 +94,44 @@ func GetShouldRetry(log *LogOptions) RetryFunc {
 	}
 }
 
-func getErrorCode(resp *http.Response) string {
+func getErrorCodes(resp *http.Response) []string {
+	// There can be multiple error code headers per response
+	var errorCodes []string
 	if resp.Header["x-ms-error-code"] != nil { //nolint:staticcheck
-		return resp.Header["x-ms-error-code"][0] //nolint:staticcheck
-	} else if resp.Header["X-Ms-Error-Code"] != nil {
-		return resp.Header["X-Ms-Error-Code"][0]
+		errorCodes = append(errorCodes, resp.Header["x-ms-error-code"][0]) //nolint:staticcheck
+	} else if resp.Header["X-Ms-Error-Code"] != nil { //nolint:staticcheck
+		errorCodes = append(errorCodes, resp.Header["X-Ms-Error-Code"][0]) //nolint:staticcheck
+	}
+	if resp.Header["x-ms-copy-source-error-code"] != nil { //nolint:staticcheck
+		errorCodes = append(errorCodes, resp.Header["x-ms-copy-source-error-code"][0]) //nolint:staticcheck
+	} else if resp.Header["X-Ms-Copy-Source-Error-Code"] != nil { //nolint:staticcheck
+		errorCodes = append(errorCodes, resp.Header["X-Ms-Copy-Source-Error-Code"][0]) //nolint:staticcheck
+	}
+	return errorCodes
+}
+
+func getCopySourceStatusCode(resp *http.Response) string {
+	if resp.Header["x-ms-copy-source-status-code"] != nil { //nolint:staticcheck
+		return resp.Header["x-ms-copy-source-status-code"][0] //nolint:staticcheck
+	} else if resp.Header["X-Ms-Copy-Source-Status-Code"] != nil { //nolint:staticcheck
+		return resp.Header["X-Ms-Copy-Source-Status-Code"][0] //nolint:staticcheck
 	}
 	return ""
+}
+func GetRetryStatusCodes(log *LogOptions) []int {
+	if len(RetryStatusCodes) == 0 {
+		return nil
+	}
+	storageStatusCodes := slices.Sorted(maps.Keys(RetryStatusCodes))
+	var statusCodes []int
+	statusCodes = append(statusCodes, storageStatusCodes...)
+
+	if log != nil && log.ShouldLog(common.ELogLevel.Debug()) {
+		log.Log(
+			common.ELogLevel.Debug(),
+			fmt.Sprintf("Request retried on custom %v status", statusCodes))
+	}
+	return statusCodes
 }
 
 type StorageErrorCodes map[string]bool // where map[string]bool is the set of storage error codes; true = retry,  = no retry
