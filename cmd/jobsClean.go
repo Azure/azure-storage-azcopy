@@ -31,25 +31,8 @@ import (
 )
 
 type JobsCleanOptions struct {
-	WithStatus common.JobStatus
-}
-
-func RunJobsClean(opts JobsCleanOptions) error {
-	err := handleCleanJobsCommand(opts.WithStatus)
-	if err == nil {
-		if opts.WithStatus == common.EJobStatus.All() {
-			glcm.Exit(func(format common.OutputFormat) string {
-				return "Successfully removed all jobs."
-			}, common.EExitCode.Success())
-		} else {
-			glcm.Exit(func(format common.OutputFormat) string {
-				return fmt.Sprintf("Successfully removed jobs with status: %s.", opts.WithStatus)
-			}, common.EExitCode.Success())
-		}
-	} else {
-		glcm.Error(fmt.Sprintf("Failed to remove log/plan files due to error: %s.", err))
-	}
-	return nil
+	WithStatus    common.JobStatus
+	OnJobDeletion func(jobID common.JobID)
 }
 
 var JobsCleanupSuccessMsg = "Successfully removed all jobs."
@@ -88,7 +71,24 @@ func init() {
 			if err != nil {
 				glcm.Error(err.Error())
 			}
-			_ = RunJobsClean(options)
+			options.OnJobDeletion = func(jobID common.JobID) {
+				glcm.Info(fmt.Sprintf("Removing files for job %s", jobID))
+			}
+			numFilesDeleted, err := RunJobsClean(options)
+			if err == nil {
+				if options.WithStatus == common.EJobStatus.All() {
+					glcm.Info(fmt.Sprintf("Removed %v files.", numFilesDeleted))
+					glcm.Exit(func(format common.OutputFormat) string {
+						return "Successfully removed all jobs."
+					}, common.EExitCode.Success())
+				} else {
+					glcm.Exit(func(format common.OutputFormat) string {
+						return fmt.Sprintf("Successfully removed jobs with status: %s.", options.WithStatus)
+					}, common.EExitCode.Success())
+				}
+			} else {
+				glcm.Error(fmt.Sprintf("Failed to remove log/plan files due to error: %s.", err))
+			}
 		},
 	}
 
@@ -100,11 +100,10 @@ func init() {
 			" CompletedWithErrors, CompletedWithSkipped, CompletedWithErrorsAndSkipped")
 }
 
-func handleCleanJobsCommand(givenStatus common.JobStatus) error {
-	if givenStatus == common.EJobStatus.All() {
+func RunJobsClean(opts JobsCleanOptions) (int, error) {
+	if opts.WithStatus == common.EJobStatus.All() {
 		numFilesDeleted, err := blindDeleteAllJobFiles()
-		glcm.Info(fmt.Sprintf("Removed %v files.", numFilesDeleted))
-		return err
+		return numFilesDeleted, err
 	}
 
 	// we must query the jobs and find out which one to remove
@@ -112,21 +111,23 @@ func handleCleanJobsCommand(givenStatus common.JobStatus) error {
 	Rpc(common.ERpcCmd.ListJobs(), common.EJobStatus.All(), &resp)
 
 	if resp.ErrorMessage != "" {
-		return errors.New("failed to query the list of jobs")
+		return 0, errors.New("failed to query the list of jobs")
 	}
 
 	for _, job := range resp.JobIDDetails {
 		// delete all jobs matching the givenStatus
-		if job.JobStatus == givenStatus {
-			glcm.Info(fmt.Sprintf("Removing files for job %s", job.JobId))
+		if job.JobStatus == opts.WithStatus {
+			if opts.OnJobDeletion != nil {
+				opts.OnJobDeletion(job.JobId)
+			}
 			err := handleRemoveSingleJob(job.JobId)
 			if err != nil {
-				return err
+				return 0, err
 			}
 		}
 	}
 
-	return nil
+	return len(resp.JobIDDetails), nil
 }
 
 func blindDeleteAllJobFiles() (int, error) {

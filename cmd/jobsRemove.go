@@ -36,15 +36,7 @@ type JobsRemoveOptions struct {
 }
 
 func RunJobsRemove(opts JobsRemoveOptions) error {
-	err := handleRemoveSingleJob(opts.JobID)
-	if err == nil {
-		glcm.Exit(func(format common.OutputFormat) string {
-			return fmt.Sprintf("Successfully removed log and job plan files for job %s.", opts.JobID)
-		}, common.EExitCode.Success())
-	} else {
-		glcm.Error(fmt.Sprintf("Failed to remove log and job plan files for job %s due to error: %s.", opts.JobID, err))
-	}
-	return nil
+	return handleRemoveSingleJob(opts.JobID)
 }
 
 func init() {
@@ -70,7 +62,14 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			_ = RunJobsRemove(commandLineInput)
+			err := RunJobsRemove(commandLineInput)
+			if err == nil {
+				glcm.Exit(func(format common.OutputFormat) string {
+					return fmt.Sprintf("Successfully removed log and job plan files for job %s.", commandLineInput.JobID)
+				}, common.EExitCode.Success())
+			} else {
+				glcm.Error(fmt.Sprintf("Failed to remove log and job plan files for job %s due to error: %s.", commandLineInput.JobID, err))
+			}
 		},
 	}
 

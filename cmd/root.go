@@ -189,7 +189,28 @@ var rootCmd = &cobra.Command{
 
 		isBench := cmd.Use == "bench [destination]"
 
-		return Initialize(resumeJobID, isBench)
+		timeAtPrestart := time.Now()
+		err = Initialize(resumeJobID, isBench)
+		// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter
+		// Subtract a few seconds, to ensure that this date DEFINITELY falls before the LMT of any file changed while this
+		// job is running. I.e. using this later with --include-after is _guaranteed_ to pick up all files that changed during
+		// or after this job
+		adjustedTime := timeAtPrestart.Add(-5 * time.Second)
+		startTimeMessage := fmt.Sprintf("ISO 8601 START TIME: to copy files that changed before or after this job started, use the parameter --%s=%s or --%s=%s",
+			common.IncludeBeforeFlagName, IncludeBeforeDateFilter{}.FormatAsUTC(adjustedTime),
+			common.IncludeAfterFlagName, IncludeAfterDateFilter{}.FormatAsUTC(adjustedTime))
+		jobsAdmin.JobsAdmin.LogToJobLog(startTimeMessage, common.LogInfo)
+
+		if !SkipVersionCheck && !isPipeDownload {
+			// spawn a routine to fetch and compare the local application's version against the latest version available
+			// if there's a newer version that can be used, then write the suggestion to stderr
+			// however if this takes too long the message won't get printed
+			// Note: this function is necessary for non-help, non-login commands, since they don't reach the corresponding
+			// beginDetectNewVersion call in Execute (below)
+			beginDetectNewVersion()
+		}
+
+		return err
 	},
 }
 
@@ -207,7 +228,6 @@ func Initialize(resumeJobID common.JobID, isBench bool) error {
 	azcopyCurrentJobID = jobID
 	loggerInfo := jobLoggerInfo{jobID, azcopyLogPathFolder}
 
-	timeAtPrestart := time.Now()
 	glcm.SetOutputFormat(OutputFormat)
 	glcm.SetOutputVerbosity(OutputLevel)
 
@@ -231,25 +251,6 @@ func Initialize(resumeJobID common.JobID, isBench bool) error {
 	}
 	EnumerationParallelism = concurrencySettings.EnumerationPoolSize.Value
 	EnumerationParallelStatFiles = concurrencySettings.ParallelStatFiles.Value
-
-	// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter
-	// Subtract a few seconds, to ensure that this date DEFINITELY falls before the LMT of any file changed while this
-	// job is running. I.e. using this later with --include-after is _guaranteed_ to pick up all files that changed during
-	// or after this job
-	adjustedTime := timeAtPrestart.Add(-5 * time.Second)
-	startTimeMessage := fmt.Sprintf("ISO 8601 START TIME: to copy files that changed before or after this job started, use the parameter --%s=%s or --%s=%s",
-		common.IncludeBeforeFlagName, IncludeBeforeDateFilter{}.FormatAsUTC(adjustedTime),
-		common.IncludeAfterFlagName, IncludeAfterDateFilter{}.FormatAsUTC(adjustedTime))
-	jobsAdmin.JobsAdmin.LogToJobLog(startTimeMessage, common.LogInfo)
-
-	if !SkipVersionCheck && !isPipeDownload {
-		// spawn a routine to fetch and compare the local application's version against the latest version available
-		// if there's a newer version that can be used, then write the suggestion to stderr
-		// however if this takes too long the message won't get printed
-		// Note: this function is necessary for non-help, non-login commands, since they don't reach the corresponding
-		// beginDetectNewVersion call in Execute (below)
-		beginDetectNewVersion()
-	}
 
 	return nil
 
