@@ -42,9 +42,6 @@ func inprocSend(rpcCmd common.RpcCmd, requestData interface{}, responseData inte
 	case common.ERpcCmd.GetJobLCMWrapper():
 		*(responseData.(*common.LifecycleMgr)) = jobsAdmin.GetJobLCMWrapper(*requestData.(*common.JobID))
 
-	case common.ERpcCmd.ListJobs():
-		*(responseData.(*common.ListJobsResponse)) = jobsAdmin.ListJobs(requestData.(common.JobStatus))
-
 	case common.ERpcCmd.ListJobSummary():
 		*(responseData.(*common.ListJobSummaryResponse)) = jobsAdmin.GetJobSummary(*requestData.(*common.JobID))
 
