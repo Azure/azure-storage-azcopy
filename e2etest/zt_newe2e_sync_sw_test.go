@@ -4,6 +4,7 @@
 package e2etest
 
 import (
+	"os"
 	"runtime"
 	"strconv"
 	"time"
@@ -14,6 +15,7 @@ import (
 )
 
 var UseSyncOrchestrator = true
+
 type SWSyncTestSuite struct{}
 
 func init() {
@@ -71,7 +73,7 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationM
 	// Set up the scenario
 	a.InsertVariationSeparator("Local->")
 	srcLoc := common.ELocation.Local()
-	dstLoc := ResolveVariation(a, []common.Location{common.ELocation.Blob(),common.ELocation.File(),common.ELocation.BlobFS()})
+	dstLoc := ResolveVariation(a, []common.Location{common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})
 	a.InsertVariationSeparator("|Create:")
 
 	const (
@@ -82,7 +84,7 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationM
 	resourceType := ResolveVariation(a, []string{CreateFolder})
 
 	a.InsertVariationSeparator("_DeleteDestination_")
-	deleteDestination := ResolveVariation(a, []bool{false,true}) // Add variation for DeleteDestination flag
+	deleteDestination := ResolveVariation(a, []bool{false, true}) // Add variation for DeleteDestination flag
 
 	// Select source map
 	srcMap := map[string]ObjectResourceMappingFlat{
@@ -306,7 +308,7 @@ func (s *SWSyncTestSuite) Scenario_SingleFile(svm *ScenarioVariationManager) {
 			},
 			Flags: SyncFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
-					Recursive:             pointerTo(false),
+					Recursive: pointerTo(false),
 				},
 				DeleteDestination: pointerTo(true),
 			},
@@ -329,7 +331,7 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUpload(svm *ScenarioVariationManager
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbSync}) // Calculate verb early to create the destination object early
 
 	srcLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local()})
-	 dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})), ResourceDefinitionContainer{})
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})), ResourceDefinitionContainer{})
 
 	srcDef := ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
@@ -347,7 +349,7 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUpload(svm *ScenarioVariationManager
 	}
 
 	svm.InsertVariationSeparator("_DeleteDestination_")
-	deleteDestination := ResolveVariation(svm, []bool{true,false}) // Add variation for DeleteDestination flag
+	deleteDestination := ResolveVariation(svm, []bool{true, false}) // Add variation for DeleteDestination flag
 
 	sasOpts := GenericAccountSignatureValues{}
 
@@ -1089,115 +1091,332 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 }
 
 func (s *SWSyncTestSuite) Scenario_TestFollowLinks(svm *ScenarioVariationManager) {
-        srcBody := NewRandomObjectContentContainer(1024)
+	srcBody := NewRandomObjectContentContainer(1024)
 
-        source := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{
-                Objects: ObjectResourceMappingFlat{
-                        "foo": ResourceDefinitionObject{
-                                ObjectProperties: ObjectProperties{
-                                        EntityType:        common.EEntityType.Symlink(),
-                                        SymlinkedFileName: "bar",
-                                },
-                        },
-                        "fooNew": ResourceDefinitionObject{
-                                ObjectProperties: ObjectProperties{
-                                        EntityType:        common.EEntityType.Symlink(),
-                                        SymlinkedFileName: "bar",
-                                },
-                        },
-                        "bar": ResourceDefinitionObject{
-                                Body: srcBody,
-                        },
-                },
-        })
+	source := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"foo": ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType:        common.EEntityType.Symlink(),
+					SymlinkedFileName: "bar",
+				},
+			},
+			"fooNew": ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType:        common.EEntityType.Symlink(),
+					SymlinkedFileName: "bar",
+				},
+			},
+			"bar": ResourceDefinitionObject{
+				Body: srcBody,
+			},
+		},
+	})
 
 	dest := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{})
 
-        _, _ = RunAzCopy(
-                svm,
-                AzCopyCommand{
-                        Verb: AzCopyVerbCopy, // sync doesn't support symlinks at this time
-                        Targets: []ResourceManager{
-                                source, dest,
-                        },
-                        Flags: CopyFlags{
-                                CopySyncCommonFlags: CopySyncCommonFlags{
-                                        Recursive: pointerTo(true),
-                                },
-                                FollowSymlinks: pointerTo(true),
-				AsSubdir: pointerTo(false),
-                        },
-                })
-        ValidateResource(svm, dest, ResourceDefinitionContainer{
-                Objects: ObjectResourceMappingFlat{
-                        "foo": ResourceDefinitionObject{
-                                Body: srcBody,
-                        },
-                        "fooNew": ResourceDefinitionObject{
-                                Body: srcBody,
-                        },
-                        "bar": ResourceDefinitionObject{
-                                Body: srcBody,
-                        },
-                },
-        }, false)
+	_, _ = RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbCopy, // sync doesn't support symlinks at this time
+			Targets: []ResourceManager{
+				source, dest,
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive: pointerTo(true),
+				},
+				FollowSymlinks: pointerTo(true),
+				AsSubdir:       pointerTo(false),
+			},
+		})
+	ValidateResource(svm, dest, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"foo": ResourceDefinitionObject{
+				Body: srcBody,
+			},
+			"fooNew": ResourceDefinitionObject{
+				Body: srcBody,
+			},
+			"bar": ResourceDefinitionObject{
+				Body: srcBody,
+			},
+		},
+	}, false)
 }
 func (s *SWSyncTestSuite) Scenario_TestFollowLinksFolder(svm *ScenarioVariationManager) {
 	srcBody := NewRandomObjectContentContainer(1024)
 
 	source := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{
-			Objects: ObjectResourceMappingFlat{
-					"foo": ResourceDefinitionObject{
-							ObjectProperties: ObjectProperties{
-									EntityType:        common.EEntityType.Symlink(),
-									SymlinkedFileName: "bar/",
-							},
-					},
-					"fooNew": ResourceDefinitionObject{
-							ObjectProperties: ObjectProperties{
-									EntityType:        common.EEntityType.Symlink(),
-									SymlinkedFileName: "bar/",
-							},
-					},
-					"bar/": ResourceDefinitionObject{
-							ObjectProperties: ObjectProperties{
-									EntityType: common.EEntityType.Folder(),
-							},
-					},
-					"bar/file.txt": ResourceDefinitionObject{
-						Body: srcBody,
-					},
+		Objects: ObjectResourceMappingFlat{
+			"foo": ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType:        common.EEntityType.Symlink(),
+					SymlinkedFileName: "bar/",
+				},
 			},
+			"fooNew": ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType:        common.EEntityType.Symlink(),
+					SymlinkedFileName: "bar/",
+				},
+			},
+			"bar/": ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType: common.EEntityType.Folder(),
+				},
+			},
+			"bar/file.txt": ResourceDefinitionObject{
+				Body: srcBody,
+			},
+		},
 	})
 
 	dest := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
 
 	_, _ = RunAzCopy(
-			svm,
-			AzCopyCommand{
-					Verb: AzCopyVerbSync, // sync doesn't support symlinks at this time
-					Targets: []ResourceManager{
-							source, dest,
-					},
-					Flags: CopyFlags{
-							CopySyncCommonFlags: CopySyncCommonFlags{
-									Recursive: pointerTo(false),
-							},
-					},
-			})
+		svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbSync, // sync doesn't support symlinks at this time
+			Targets: []ResourceManager{
+				source, dest,
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive: pointerTo(false),
+				},
+			},
+		})
 	//get the container which is created by the azcopy command inside dest
 	ValidateResource(svm, dest, ResourceDefinitionContainer{
-			Objects: ObjectResourceMappingFlat{
-					"foo/file.txt": ResourceDefinitionObject{
-							Body: srcBody,
-					},
-					"fooNew/file.txt": ResourceDefinitionObject{
-							Body: srcBody,
-					},
-					"bar/file.txt": ResourceDefinitionObject{
-							Body: srcBody,
-					},
+		Objects: ObjectResourceMappingFlat{
+			"foo/file.txt": ResourceDefinitionObject{
+				Body: srcBody,
 			},
+			"fooNew/file.txt": ResourceDefinitionObject{
+				Body: srcBody,
+			},
+			"bar/file.txt": ResourceDefinitionObject{
+				Body: srcBody,
+			},
+		},
 	}, true)
 }
 
+func (s *SWSyncTestSuite) Scenario_FileMetadataModTimeChange(svm *ScenarioVariationManager) {
+	if runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbSync})
+	dest := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.BlobFS()})), ResourceDefinitionContainer{})
+	body := NewRandomObjectContentContainer(SizeFromString("10K"))
+
+	source := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"foo": ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType: common.EEntityType.File(),
+				},
+				Body: body,
+			},
+		},
+	})
+	filePath := source.URI() + "/foo"
+	stats, _ := os.Stat(filePath)
+	fileInfo, _ := stats.(os.FileInfo)
+	var modTime time.Time
+	if fileInfo != nil {
+		modTime = fileInfo.ModTime()
+	}
+	modTimeUnix := modTime.UTC().Unix()
+	mtimeStr := strconv.FormatInt(modTimeUnix, 10)
+	metadata := common.Metadata{
+		"Modtime": pointerTo(mtimeStr),
+	}
+
+	sasOpts := GenericAccountSignatureValues{}
+
+	RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: azCopyVerb,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(source, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+				TryApplySpecificAuthType(dest, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+			},
+			Flags: SyncFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive:               pointerTo(false),
+					PreservePOSIXProperties: pointerTo(true),
+					IncludeDirectoryStubs:   pointerTo(true),
+				},
+				DeleteDestination: pointerTo(true),
+			},
+		})
+	ValidateResource(svm, dest, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"foo": ResourceDefinitionObject{
+				Body: body,
+				ObjectProperties: ObjectProperties{
+					EntityType: common.EEntityType.File(),
+					Metadata:   metadata,
+				},
+			},
+		},
+	}, true)
+
+	//update the modtime of the file and perfom sync. Ensure that modtime is update in the destination
+	newModTime := time.Now().UTC().Add(+1 * time.Hour).Unix()
+	newModTimeUnix := time.Unix(newModTime, 0)
+	os.Chtimes(filePath, newModTimeUnix, newModTimeUnix)
+	mtimeNewStr := strconv.FormatInt(newModTime, 10)
+	Newmetadata := common.Metadata{
+		"Modtime": pointerTo(mtimeNewStr),
+	}
+	RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: azCopyVerb,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(source, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+				TryApplySpecificAuthType(dest, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+			},
+			Flags: SyncFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive:               pointerTo(false),
+					PreservePOSIXProperties: pointerTo(true),
+				},
+				DeleteDestination: pointerTo(true),
+			},
+		})
+	ValidateResource(svm, dest, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"foo": ResourceDefinitionObject{
+				Body: body,
+				ObjectProperties: ObjectProperties{
+					EntityType: common.EEntityType.File(),
+					Metadata:   Newmetadata,
+				},
+			},
+		},
+	}, true)
+
+}
+
+func (s *SWSyncTestSuite) Scenario_FolderMetadataModTimeChange(svm *ScenarioVariationManager) {
+	if runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbSync})
+	dest := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.BlobFS()})), ResourceDefinitionContainer{})
+	body := NewRandomObjectContentContainer(SizeFromString("10K"))
+
+	source := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"foo/": ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType: common.EEntityType.Folder(),
+				},
+			},
+			"foo/file.txt": ResourceDefinitionObject{
+				Body: body,
+			},
+		},
+	})
+	folderPath := source.URI() + "/foo"
+	stats, _ := os.Stat(folderPath)
+	folderInfo, _ := stats.(os.FileInfo)
+	var modTime time.Time
+	if folderInfo != nil {
+		modTime = folderInfo.ModTime()
+	}
+	modTimeUnix := modTime.UTC().Unix()
+	mtimeStr := strconv.FormatInt(modTimeUnix, 10)
+	metadata := common.Metadata{
+		"Modtime": pointerTo(mtimeStr),
+	}
+
+	sasOpts := GenericAccountSignatureValues{}
+
+	RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: azCopyVerb,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(source, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+				TryApplySpecificAuthType(dest, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+			},
+			Flags: SyncFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive:               pointerTo(false),
+					PreservePOSIXProperties: pointerTo(true),
+					IncludeDirectoryStubs:   pointerTo(true),
+				},
+				DeleteDestination: pointerTo(true),
+			},
+		})
+	ValidateResource(svm, dest, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"foo": ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType: common.EEntityType.Folder(),
+					Metadata:   metadata,
+				},
+			},
+		},
+	}, true)
+
+	//update the modtime of the folder and perfom sync. Ensure that modtime is update in the destination
+	newModTime := time.Now().UTC().Add(+1 * time.Hour).Unix()
+	newModTimeUnix := time.Unix(newModTime, 0)
+	os.Chtimes(folderPath, newModTimeUnix, newModTimeUnix)
+	mtimeNewStr := strconv.FormatInt(newModTime, 10)
+	Newmetadata := common.Metadata{
+		"Modtime": pointerTo(mtimeNewStr),
+	}
+	RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: azCopyVerb,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(source, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+				TryApplySpecificAuthType(dest, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+			},
+			Flags: SyncFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive:               pointerTo(false),
+					PreservePOSIXProperties: pointerTo(true),
+				},
+				DeleteDestination: pointerTo(true),
+			},
+		})
+	ValidateResource(svm, dest, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"foo": ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType: common.EEntityType.Folder(),
+					Metadata:   Newmetadata,
+				},
+			},
+		},
+	}, true)
+
+}
