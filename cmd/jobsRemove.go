@@ -23,8 +23,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"os"
-	"path"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -74,7 +73,7 @@ func init() {
 
 func HandleRemoveSingleJob(jobID common.JobID) error {
 	// get rid of the job plan files
-	numPlanFileRemoved, err := removeFilesWithPredicate(common.AzcopyJobPlanFolder, func(s string) bool {
+	numPlanFileRemoved, err := jobsAdmin.RemoveFilesWithPredicate(common.AzcopyJobPlanFolder, func(s string) bool {
 		if strings.Contains(s, jobID.String()) && strings.Contains(s, ".steV") {
 			return true
 		}
@@ -87,7 +86,7 @@ func HandleRemoveSingleJob(jobID common.JobID) error {
 	// get rid of the logs
 	// even though we only have 1 file right now, still scan the directory since we may change the
 	// way we name the logs in the future (with suffix or whatnot)
-	numLogFileRemoved, err := removeFilesWithPredicate(azcopyLogPathFolder, func(s string) bool {
+	numLogFileRemoved, err := jobsAdmin.RemoveFilesWithPredicate(azcopyLogPathFolder, func(s string) bool {
 		if strings.Contains(s, jobID.String()) && strings.HasSuffix(s, ".log") {
 			return true
 		}
@@ -102,26 +101,4 @@ func HandleRemoveSingleJob(jobID common.JobID) error {
 	}
 
 	return nil
-}
-
-// remove all files whose names are approved by the predicate in the targetFolder
-func removeFilesWithPredicate(targetFolder string, predicate func(string) bool) (int, error) {
-	count := 0
-	files, err := os.ReadDir(targetFolder)
-	if err != nil {
-		return count, err
-	}
-
-	// go through the files and return if any of them fail to be removed
-	for _, singleFile := range files {
-		if predicate(singleFile.Name()) {
-			err := os.Remove(path.Join(targetFolder, singleFile.Name()))
-			if err != nil {
-				return count, err
-			}
-			count += 1
-		}
-	}
-
-	return count, nil
 }

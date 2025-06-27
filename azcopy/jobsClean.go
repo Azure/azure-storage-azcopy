@@ -24,7 +24,8 @@ func (c Client) CleanJobs(opts CleanJobs) (result CleanJobsResult, err error) {
 	status := common.IffNil(opts.WithStatus, common.EJobStatus.All())
 
 	if status == common.EJobStatus.All() {
-		result.Count, err = cmd.BlindDeleteAllJobFiles()
+		// TODO : Do we need current job id here?
+		result.Count, err = jobsAdmin.BlindDeleteAllJobFiles(c.JobPlanFolder, c.LogPathFolder, c.CurrentJobID)
 	} else {
 		resp := jobsAdmin.ListJobs(status)
 		if resp.ErrorMessage != "" {

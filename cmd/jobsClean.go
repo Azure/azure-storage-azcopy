@@ -23,11 +23,9 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"strings"
-
-	"github.com/spf13/cobra"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/spf13/cobra"
 )
 
 var JobsCleanupSuccessMsg = "Successfully removed all jobs."
@@ -86,7 +84,7 @@ func init() {
 
 func handleCleanJobsCommand(givenStatus common.JobStatus) error {
 	if givenStatus == common.EJobStatus.All() {
-		numFilesDeleted, err := BlindDeleteAllJobFiles()
+		numFilesDeleted, err := jobsAdmin.BlindDeleteAllJobFiles(common.AzcopyJobPlanFolder, azcopyLogPathFolder, azcopyCurrentJobID)
 		glcm.Info(fmt.Sprintf("Removed %v files.", numFilesDeleted))
 		return err
 	}
@@ -111,26 +109,4 @@ func handleCleanJobsCommand(givenStatus common.JobStatus) error {
 	}
 
 	return nil
-}
-
-func BlindDeleteAllJobFiles() (int, error) {
-	// get rid of the job plan files
-	numPlanFilesRemoved, err := removeFilesWithPredicate(common.AzcopyJobPlanFolder, func(s string) bool {
-		return strings.Contains(s, ".steV")
-	})
-	if err != nil {
-		return numPlanFilesRemoved, err
-	}
-	// get rid of the logs
-	numLogFilesRemoved, err := removeFilesWithPredicate(azcopyLogPathFolder, func(s string) bool {
-		// Do not remove the current job's log file this will cause the cleanup job to fail.
-		if strings.Contains(s, azcopyCurrentJobID.String()) {
-			return false
-		} else if strings.HasSuffix(s, ".log") {
-			return true
-		}
-		return false
-	})
-
-	return numPlanFilesRemoved + numLogFilesRemoved, err
 }

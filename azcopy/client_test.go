@@ -1,8 +1,6 @@
 package azcopy
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -10,9 +8,9 @@ import (
 func TestInitialization(t *testing.T) {
 	a := assert.New(t)
 
-	_, err := NewClient()
+	c, err := NewClient()
 
 	a.Nil(err)
-	a.NotNil(jobsAdmin.JobsAdmin)
-	a.NotEmpty(common.AzcopyJobPlanFolder)
+	a.NotEmpty(c.JobPlanFolder)
+	a.NotEmpty(c.LogPathFolder)
 }
