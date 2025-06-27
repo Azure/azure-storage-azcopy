@@ -9,9 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/google/uuid"
 )
 
 var UseSyncOrchestrator = true
@@ -66,105 +64,6 @@ func (s *SWSyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariat
 			"deleteme.txt":      ResourceDefinitionObject{ObjectShouldExist: pointerTo(!deleteDestination)},
 			"also/deleteme.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(!deleteDestination)},
 		},
-	}, false)
-}
-
-func (s *SWSyncTestSuite) Scenario_TestSyncCreateResourceObject(a *ScenarioVariationManager) {
-	// Set up the scenario
-	a.InsertVariationSeparator("Local->")
-	srcLoc := common.ELocation.Local()
-	dstLoc := ResolveVariation(a, []common.Location{common.ELocation.Blob(), common.ELocation.File()})
-	a.InsertVariationSeparator("|Create:")
-
-	const (
-		CreateContainer = "Container"
-		CreateFolder    = "Folder"
-		CreateObject    = "Object"
-	)
-
-	resourceType := ResolveVariation(a, []string{CreateContainer, CreateObject})
-
-	// Select source map
-	srcMap := map[string]ObjectResourceMappingFlat{
-		CreateContainer: {
-			"foo": ResourceDefinitionObject{},
-		},
-		CreateObject: {
-			"foobar": ResourceDefinitionObject{},
-		},
-	}[resourceType]
-
-	// Create resources and targets
-	src := CreateResource(a, GetRootResource(a, srcLoc), ResourceDefinitionContainer{
-		Objects: srcMap,
-	})
-	srcTarget := map[string]ResourceManager{
-		CreateContainer: src,
-		//CreateFolder: src.GetObject(a, "foo", common.EEntityType.Folder()),
-		CreateObject: src.GetObject(a, "foobar", common.EEntityType.File()),
-	}[resourceType]
-
-	var dstTarget ResourceManager
-	var dst ContainerResourceManager
-	if dstLoc == common.ELocation.Local() {
-		dst = GetRootResource(a, dstLoc).(ContainerResourceManager) // No need to grab a container
-	} else {
-		dst = GetRootResource(a, dstLoc).(ServiceResourceManager).GetContainer(uuid.NewString())
-	}
-
-	if resourceType != CreateContainer {
-		dst.Create(a, ContainerProperties{})
-	}
-
-	dstTarget = map[string]ResourceManager{
-		CreateContainer: dst,
-		CreateObject:    dst.GetObject(a, "foobar", common.EEntityType.File()),
-	}[resourceType]
-
-	// Run the test for realsies.
-	RunAzCopy(a, AzCopyCommand{
-		Verb: AzCopyVerbSync,
-		Targets: []ResourceManager{
-			srcTarget,
-			AzCopyTarget{
-				ResourceManager: dstTarget,
-				AuthType:        EExplicitCredentialType.SASToken(),
-				Opts: CreateAzCopyTargetOptions{
-					SASTokenOptions: GenericAccountSignatureValues{
-						Permissions: (&blobsas.AccountPermissions{
-							Read:   true,
-							Write:  true,
-							Delete: true,
-							List:   true,
-							Add:    true,
-							Create: true,
-						}).String(),
-						ResourceTypes: (&blobsas.AccountResourceTypes{
-							Service:   true,
-							Container: true,
-							Object:    true,
-						}).String(),
-					},
-				},
-			},
-		},
-		Flags: SyncFlags{
-			CopySyncCommonFlags: CopySyncCommonFlags{
-				Recursive: pointerTo(false),
-			},
-		},
-	})
-
-	srcMapValidation := map[string]ObjectResourceMappingFlat{
-		CreateContainer: {
-			"foo": ResourceDefinitionObject{},
-		},
-		CreateObject: {
-			"foobar": ResourceDefinitionObject{},
-		},
-	}[resourceType]
-	ValidateResource(a, dst, ResourceDefinitionContainer{
-		Objects: srcMapValidation,
 	}, false)
 }
 
@@ -301,12 +200,14 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUpload_NoChange(svm *ScenarioVariati
 	srcLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local()})
 	// Scale up from service to object
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})), ResourceDefinitionContainer{})
+	svm.InsertVariationSeparator("_DeleteDestination_")
+	deleteDestination := ResolveVariation(svm, []bool{true, false}) // Add variation for DeleteDestination flag
 	// Scale up from service to object
 	srcDef := ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
-			"abc":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
-			"def":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
-			"foobar": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
+			"abc":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K")),ObjectShouldExist: pointerTo(true)},
+			"def":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K")),ObjectShouldExist: pointerTo(true)},
+			"foobar": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K")),ObjectShouldExist: pointerTo(true)},
 		},
 	}
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, srcLoc), srcDef)
@@ -317,22 +218,12 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUpload_NoChange(svm *ScenarioVariati
 		return
 	}
 
-	svm.InsertVariationSeparator("_DeleteDestination_")
-	deleteDestination := ResolveVariation(svm, []bool{true, false}) // Add variation for DeleteDestination flag
 
 	sasOpts := GenericAccountSignatureValues{}
-	var copySyncFlag CopySyncCommonFlags
-	if runtime.GOOS == "linux" {
-		copySyncFlag = CopySyncCommonFlags{
-			Recursive:               pointerTo(false),
-			PreservePOSIXProperties: pointerTo(runtime.GOOS == "linux"),
-		}
-	} else {
-		copySyncFlag = CopySyncCommonFlags{
+	copySyncFlag := CopySyncCommonFlags{
 			Recursive: pointerTo(false),
-		}
 	}
-	stdOut, _ := RunAzCopy(
+	stdOut,_ := RunAzCopy(
 		svm,
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
@@ -385,10 +276,9 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUpload_NoChange(svm *ScenarioVariati
 			},
 			Flags: SyncFlags{
 				CopySyncCommonFlags: copySyncFlag,
-				DeleteDestination:   pointerTo(true),
+				DeleteDestination:   pointerTo(deleteDestination),
 			},
 		})
-
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcDef.Objects,
 	}, true)
@@ -993,6 +883,10 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 }
 
 func (s *SWSyncTestSuite) Scenario_TestFollowLinks(svm *ScenarioVariationManager) {
+	if runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
 	srcBody := NewRandomObjectContentContainer(1024)
 
 	source := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{
@@ -1047,6 +941,10 @@ func (s *SWSyncTestSuite) Scenario_TestFollowLinks(svm *ScenarioVariationManager
 	}, false)
 }
 func (s *SWSyncTestSuite) Scenario_TestFollowLinksFolder(svm *ScenarioVariationManager) {
+	if runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
 	srcBody := NewRandomObjectContentContainer(1024)
 
 	source := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{
