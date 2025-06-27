@@ -102,12 +102,6 @@ func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec flo
 			deserialize(request, &payload)
 			serialize(ExecuteNewCopyJobPartOrder(payload), writer)
 		})
-	http.HandleFunc(common.ERpcCmd.ListJobs().Pattern(),
-		func(writer http.ResponseWriter, request *http.Request) {
-			// var payload common.ListRequest
-			// deserialize(request, &payload)
-			serialize(ListJobs(common.EJobStatus.All()), writer)
-		})
 	http.HandleFunc(common.ERpcCmd.ListJobSummary().Pattern(),
 		func(writer http.ResponseWriter, request *http.Request) {
 			var payload common.JobID
@@ -711,11 +705,6 @@ func GetJobLCMWrapper(jobID common.JobID) common.LifecycleMgr {
 		JobManager:   jobmgr,
 		LifecycleMgr: lcm,
 	}
-}
-
-// ListJobs returns the jobId of all the jobs existing in the current instance of azcopy
-func ListJobs(givenStatus common.JobStatus) common.ListJobsResponse {
-	return JobsAdmin.ListJobs(givenStatus)
 }
 
 // GetJobDetails api returns the job FromTo info.

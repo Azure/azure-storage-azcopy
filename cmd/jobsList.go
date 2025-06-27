@@ -23,6 +23,8 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"sort"
 	"strings"
 	"time"
@@ -83,19 +85,18 @@ func init() {
 // HandleListJobsCommand sends the ListJobs request to transfer engine
 // Print the Jobs in the history of Azcopy
 func HandleListJobsCommand(jobStatus common.JobStatus) error {
-	resp := common.ListJobsResponse{}
-	Rpc(common.ERpcCmd.ListJobs(), jobStatus, &resp)
+	resp, err := Client.ListJobs(azcopy.ListJobsOptions{WithStatus: to.Ptr(jobStatus)})
+	if err != nil {
+		return err
+	}
 	return PrintExistingJobIds(resp)
 }
 
 // PrintExistingJobIds prints the response of listOrder command when listOrder command requested the list of existing jobs
-func PrintExistingJobIds(listJobResponse common.ListJobsResponse) error {
-	if listJobResponse.ErrorMessage != "" {
-		return fmt.Errorf("request failed with following error message: %s", listJobResponse.ErrorMessage)
-	}
+func PrintExistingJobIds(listJobResponse azcopy.ListJobsResponse) error {
 
 	// before displaying the jobs, sort them accordingly so that they are displayed in a consistent way
-	sortJobs(listJobResponse.JobIDDetails)
+	sortJobs(listJobResponse.Details)
 
 	glcm.Exit(func(format common.OutputFormat) string {
 		if format == common.EOutputFormat.Json() {
@@ -106,24 +107,23 @@ func PrintExistingJobIds(listJobResponse common.ListJobsResponse) error {
 
 		var sb strings.Builder
 		sb.WriteString("Existing Jobs \n")
-		for index := 0; index < len(listJobResponse.JobIDDetails); index++ {
-			jobDetail := listJobResponse.JobIDDetails[index]
+		for _, detail := range listJobResponse.Details {
 			sb.WriteString(fmt.Sprintf("JobId: %s\nStart Time: %s\nStatus: %s\nCommand: %s\n\n",
-				jobDetail.JobId.String(),
-				time.Unix(0, jobDetail.StartTime).Format(time.RFC850),
-				jobDetail.JobStatus,
-				jobDetail.CommandString))
+				detail.JobID.String(),
+				detail.StartTime.Format(time.RFC850),
+				detail.Status,
+				detail.Command))
 		}
 		return sb.String()
 	}, common.EExitCode.Success())
 	return nil
 }
 
-func sortJobs(jobsDetails []common.JobIDDetails) {
+func sortJobs(jobsDetails []azcopy.JobDetail) {
 	// sort the jobs so that the latest one is shown first
 	sort.Slice(jobsDetails, func(i, j int) bool {
 		// this function essentially asks whether i should be placed before j
 		// we say yes if the job i is more recent
-		return jobsDetails[i].StartTime > jobsDetails[j].StartTime
+		return jobsDetails[i].StartTime.After(jobsDetails[j].StartTime)
 	})
 }

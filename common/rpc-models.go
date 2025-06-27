@@ -20,7 +20,6 @@ type RpcCmd string
 func (RpcCmd) None() RpcCmd               { return RpcCmd("--none--") }
 func (RpcCmd) CopyJobPartOrder() RpcCmd   { return RpcCmd("CopyJobPartOrder") }
 func (RpcCmd) GetJobLCMWrapper() RpcCmd   { return RpcCmd("GetJobLCMWrapper") }
-func (RpcCmd) ListJobs() RpcCmd           { return RpcCmd("ListJobs") }
 func (RpcCmd) ListJobSummary() RpcCmd     { return RpcCmd("ListJobSummary") }
 func (RpcCmd) ListSyncJobSummary() RpcCmd { return RpcCmd("ListSyncJobSummary") }
 func (RpcCmd) ListJobTransfers() RpcCmd   { return RpcCmd("ListJobTransfers") }
