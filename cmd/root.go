@@ -193,8 +193,8 @@ var rootCmd = &cobra.Command{
 	},
 }
 
-func Initialize(resumeJobID common.JobID, isBench bool) error {
-	Client, err := azcopy.NewClient()
+func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
+	Client, err = azcopy.NewClient()
 	if err != nil {
 		return err
 	}
