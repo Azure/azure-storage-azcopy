@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"strconv"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
@@ -86,7 +88,7 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 
 			ValidateMetadata(a, vProps.Metadata, cProps.Metadata)
 			//check the testcase name here
-			
+
 			if manager.Location() == common.ELocation.Blob() || manager.Location() == common.ELocation.BlobFS() {
 				ValidatePropertyPtr(a, canonPathPrefix+"Public access", vProps.BlobContainerProperties.Access, cProps.BlobContainerProperties.Access)
 			}
@@ -140,34 +142,34 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 				}
 			}
 			ValidateMetadata(a, vProps.Metadata, oProps.Metadata)
-			    if vProps.Metadata != nil {
+			if vProps.Metadata != nil {
 				for k, v := range vProps.Metadata {
-				    ov, ok := oProps.Metadata[k]
-				    if !ok {
-					a.Assert("Metadata key "+k+"  does not exist in object properties",Equal{})
-				    }else{
-					//check if value is equal
-					if strings.Contains(k, "time") || strings.Contains(k, "Time") {
-					    if ov != nil {
-						    ovTime, err := time.Parse(time.RFC3339, *ov)
-						if err == nil {
-						    unixStr := fmt.Sprintf("%d", ovTime.UTC().Unix())
-						    ov = &unixStr
-						}
-					    }
-					    ovNs := *ov
-					    vNs := *v
-					    ns, _:= strconv.ParseInt(ovNs, 10, 64)
-					    sec := ns / 1e9
-					    secStr := fmt.Sprintf("%d", sec)
-					    if vNs != secStr {
-						a.Assert("Metadata value for key " +k+" does not match.",Equal{}, v, ov)
-					    }
+					ov, ok := oProps.Metadata[k]
+					if !ok {
+						a.Assert("Metadata key "+k+"  does not exist in object properties", Equal{})
+					} else {
+						//check if value is equal
+						if strings.Contains(k, "time") || strings.Contains(k, "Time") {
+							if ov != nil {
+								ovTime, err := time.Parse(time.RFC3339, *ov)
+								if err == nil {
+									unixStr := fmt.Sprintf("%d", ovTime.UTC().Unix())
+									ov = &unixStr
+								}
+							}
+							ovNs := *ov
+							vNs := *v
+							ns, _ := strconv.ParseInt(ovNs, 10, 64)
+							sec := ns / 1e9
+							secStr := fmt.Sprintf("%d", sec)
+							if vNs != secStr {
+								a.Assert("Metadata value for key "+k+" does not match.", Equal{}, v, ov)
+							}
 						}
 					}
-                }
+				}
 			}
-         	ValidatePropertyPtr(a, canonPathPrefix+"Cache control", vProps.HTTPHeaders.cacheControl, oProps.HTTPHeaders.cacheControl)
+			ValidatePropertyPtr(a, canonPathPrefix+"Cache control", vProps.HTTPHeaders.cacheControl, oProps.HTTPHeaders.cacheControl)
 			ValidatePropertyPtr(a, canonPathPrefix+"Content disposition", vProps.HTTPHeaders.contentDisposition, oProps.HTTPHeaders.contentDisposition)
 			ValidatePropertyPtr(a, canonPathPrefix+"Content encoding", vProps.HTTPHeaders.contentEncoding, oProps.HTTPHeaders.contentEncoding)
 			ValidatePropertyPtr(a, canonPathPrefix+"Content language", vProps.HTTPHeaders.contentLanguage, oProps.HTTPHeaders.contentLanguage)
