@@ -888,7 +888,7 @@ func init() {
 	syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", (runtime.GOOS == "windows"), "Preserves SMB property info (last write time, creation time, attribute bits)"+
 		" between SMB-aware resources (Windows and Azure Files). On windows, this flag will be set to true by default. \n If the source or destination is a "+
 		"\n volume mounted on Linux using SMB protocol, this flag will have to be explicitly set to true.\n  Only the attribute bits supported by Azure Files "+
-		"will be transferred; any others will be ignored. " +
+		"will be transferred; any others will be ignored. "+
 		"\n This flag applies to both files and folders, unless a file-only filter is specified "+
 		"(e.g. include-pattern). \n The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
 
@@ -981,13 +981,18 @@ func init() {
 
 	// Deprecate the old persist-smb-permissions flag
 	_ = syncCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
-	syncCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default. Preserves ACLs between aware resources (Windows and Azure Files SMB, or Data Lake Storage to Data Lake Storage) and permissions between aware resources(Linux to Azure Files NFS). For accounts that have a hierarchical namespace, your security principal must be the owning user of the target container or it must be assigned the Storage Blob Data Owner role, scoped to the target container, storage account, parent resource group, or subscription. For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
+	syncCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default. "+
+		"\nPreserves ACLs between aware resources (Windows and Azure Files SMB, or Data Lake Storage to Data Lake Storage) and permissions between aware resources(Linux to Azure Files NFS). "+
+		"\nFor accounts that have a hierarchical namespace, your security principal must be the owning user of the target container or it must be assigned "+
+		"\nthe Storage Blob Data Owner role, scoped to the target container, storage account, parent resource group, or subscription. "+
+		"\nFor downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. "+
+		"\nThis flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
 
 	// Deletes destination blobs with uncommitted blocks when staging block, hidden because we want to preserve default behavior
 	syncCmd.PersistentFlags().BoolVar(&raw.deleteDestinationFileIfNecessary, "delete-destination-file", false, "False by default. Deletes destination blobs, specifically blobs with uncommitted blocks when staging block.")
 	_ = syncCmd.PersistentFlags().MarkHidden("delete-destination-file")
 
-	syncCmd.PersistentFlags().StringVar(&raw.hardlinks, HardlinksFlag, "follow", "Follow by default. Preserve hardlinks for NFS resources. " +
-		"\n This flag is only applicable when the source is NFS file share or the destination is NFS file share. " +
+	syncCmd.PersistentFlags().StringVar(&raw.hardlinks, HardlinksFlag, "follow", "Follow by default. Preserve hardlinks for NFS resources. "+
+		"\n This flag is only applicable when the source is NFS file share or the destination is NFS file share. "+
 		"\n Available options: skip, preserve, follow (default 'follow').")
 }

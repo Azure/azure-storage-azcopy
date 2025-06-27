@@ -205,8 +205,8 @@ func init() {
 	listContainerCmd.PersistentFlags().BoolVar(&raw.RunningTally, "running-tally", false, "False by default. Counts the total number of files and their sizes.")
 	listContainerCmd.PersistentFlags().BoolVar(&raw.MegaUnits, "mega-units", false, "False by default. Displays units in orders of 1000, not 1024.")
 	listContainerCmd.PersistentFlags().StringVar(&raw.Properties, "properties", "", "Properties to be displayed in list output. "+
-		"Possible properties include: "+strings.Join(validPropertiesString(), ", ")+". "+
-		"Delimiter (;) should be used to separate multiple values of properties (i.e. 'LastModifiedTime;VersionId;BlobType').")
+		"\n Possible properties include: "+strings.Join(validPropertiesString(), ", ")+". "+
+		"\n Delimiter (;) should be used to separate multiple values of properties (i.e. 'LastModifiedTime;VersionId;BlobType').")
 	listContainerCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "'Enable' by default to treat file share related operations in a safe manner. "+
 		"\n Available options: "+strings.Join(common.ValidTrailingDotOptions(), ", ")+". "+
 		"\n Choose 'Disable' to go back to legacy (potentially unsafe) treatment of trailing dot files where the file service will trim any trailing dots in paths. "+
