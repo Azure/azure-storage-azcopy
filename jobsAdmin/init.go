@@ -102,12 +102,6 @@ func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec flo
 			deserialize(request, &payload)
 			serialize(ExecuteNewCopyJobPartOrder(payload), writer)
 		})
-	http.HandleFunc(common.ERpcCmd.ListJobSummary().Pattern(),
-		func(writer http.ResponseWriter, request *http.Request) {
-			var payload common.JobID
-			deserialize(request, &payload)
-			serialize(GetJobSummary(payload), writer)
-		})
 	http.HandleFunc(common.ERpcCmd.ListJobTransfers().Pattern(),
 		func(writer http.ResponseWriter, request *http.Request) {
 			var payload common.ListJobTransfersRequest

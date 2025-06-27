@@ -24,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/spf13/cobra"
 )
 
@@ -58,9 +59,7 @@ func (cca cookedCancelCmdArgs) process() error {
 	if !cancelJobResponse.CancelledPauseResumed {
 		if cca.ignoreCompletedJobError && cancelJobResponse.JobStatus == common.EJobStatus.Completed() {
 			glcm.Info(cancelJobResponse.ErrorMsg)
-			resp := common.ListJobSummaryResponse{}
-			rpcCmd := common.ERpcCmd.ListJobSummary()
-			Rpc(rpcCmd, &cca.jobID, &resp)
+			resp := jobsAdmin.GetJobSummary(cca.jobID)
 			PrintJobProgressSummary(resp)
 			return nil
 		}

@@ -20,7 +20,6 @@ type RpcCmd string
 func (RpcCmd) None() RpcCmd               { return RpcCmd("--none--") }
 func (RpcCmd) CopyJobPartOrder() RpcCmd   { return RpcCmd("CopyJobPartOrder") }
 func (RpcCmd) GetJobLCMWrapper() RpcCmd   { return RpcCmd("GetJobLCMWrapper") }
-func (RpcCmd) ListJobSummary() RpcCmd     { return RpcCmd("ListJobSummary") }
 func (RpcCmd) ListSyncJobSummary() RpcCmd { return RpcCmd("ListSyncJobSummary") }
 func (RpcCmd) ListJobTransfers() RpcCmd   { return RpcCmd("ListJobTransfers") }
 func (RpcCmd) CancelJob() RpcCmd          { return RpcCmd("Cancel") }
@@ -284,7 +283,7 @@ type ListJobSummaryResponse struct {
 	CompleteJobOrdered bool
 	JobStatus          JobStatus
 
-	TotalTransfers uint32 `json:",string"` // = FileTransfers + FolderPropertyTransfers. It also = TransfersCompleted + TransfersFailed + TransfersSkipped
+	TotalTransfers uint32 `json:",string"` // = FileTransfers + Fo lderPropertyTransfers. It also = TransfersCompleted + TransfersFailed + TransfersSkipped
 	// FileTransfers and FolderPropertyTransfers just break the total down into the two types.
 	// The name FolderPropertyTransfers is used to emphasise that is is only counting transferring the properties and existence of
 	// folders. A "folder property transfer" does not include any files that may be in the folder. Those are counted as

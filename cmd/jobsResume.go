@@ -91,8 +91,7 @@ func (cca *resumeJobController) Cancel(lcm common.LifecycleMgr) {
 // TODO: can we combine this with the copy one (and the sync one?)
 func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint32) {
 	// fetch a job status
-	var summary common.ListJobSummaryResponse
-	Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
+	summary := jobsAdmin.GetJobSummary(cca.jobID)
 	glcmSwapOnce.Do(func() {
 		Rpc(common.ERpcCmd.GetJobLCMWrapper(), &cca.jobID, &glcm)
 	})

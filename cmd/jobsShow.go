@@ -23,6 +23,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"strings"
 
 	"encoding/json"
@@ -57,6 +58,7 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
+			// TODO (gapra): Consider getting rid of this type? Seems unnecessary
 			listRequest := common.ListRequest{}
 			listRequest.JobID = commandLineInput.JobID
 			listRequest.OfStatus = commandLineInput.OfStatus
@@ -80,23 +82,20 @@ func init() {
 // dispatches the list order to the transfer engine
 func HandleShowCommand(listRequest common.ListRequest) error {
 	if listRequest.OfStatus == "" {
-		resp := common.ListJobSummaryResponse{}
-		rpcCmd := common.ERpcCmd.ListJobSummary()
-		Rpc(rpcCmd, &listRequest.JobID, &resp)
-		PrintJobProgressSummary(resp)
+		resp, _ := Client.GetJobStatistics(azcopy.GetJobStatisticsOptions{JobID: listRequest.JobID})
+		// note: error handling is done in arg processing and in PrintJobProgressSummary
+		PrintJobProgressSummary(common.ListJobSummaryResponse(resp))
 	} else {
-		lsRequest := common.ListJobTransfersRequest{}
-		lsRequest.JobID = listRequest.JobID
+		options := azcopy.ListTransfersOptions{JobID: listRequest.JobID}
 		// Parse the given expected Transfer Status
 		// If there is an error parsing, then kill return the error
-		err := lsRequest.OfStatus.Parse(listRequest.OfStatus)
+		err := options.WithStatus.Parse(listRequest.OfStatus)
 		if err != nil {
 			return fmt.Errorf("cannot parse the given Transfer Status %s", listRequest.OfStatus)
 		}
-		resp := common.ListJobTransfersResponse{}
-		rpcCmd := common.ERpcCmd.ListJobTransfers()
-		Rpc(rpcCmd, lsRequest, &resp)
-		PrintJobTransfers(resp)
+		resp, _ := Client.ListTransfers(options)
+		// note: error handling is done in arg processing, above and in PrintJobTransfers
+		PrintJobTransfers(common.ListJobTransfersResponse(resp))
 	}
 	return nil
 }
