@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"context"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"os"
 	"strings"
 	"testing"
@@ -96,7 +97,8 @@ func TestCheckAuthSafeForTarget(t *testing.T) {
 }
 
 func TestCheckAuthSafeForTargetIsCalledWhenGettingAuthType(t *testing.T) {
-	common.AzcopyJobPlanFolder = os.TempDir()
+	Client = azcopy.Client{}
+	Client.JobPlanFolder = os.TempDir()
 	a := assert.New(t)
 	mockGetCredTypeFromEnvVar := func() common.CredentialType {
 		return common.ECredentialType.OAuthToken() // force it to OAuth, which is the case we want to test

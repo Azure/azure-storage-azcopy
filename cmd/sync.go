@@ -336,7 +336,7 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 
 func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
 	// set up the front end scanning logger
-	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, LogLevel, azcopyLogPathFolder, "-scanning")
+	azcopyScanningLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, Client.LogPathFolder, "-scanning")
 	azcopyScanningLogger.OpenLog()
 	glcm.RegisterCloseFunc(func() {
 		azcopyScanningLogger.CloseLog()
@@ -344,7 +344,7 @@ func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
 
 	// if no logging, set this empty so that we don't display the log location
 	if LogLevel == common.LogNone {
-		azcopyLogPathFolder = ""
+		Client.LogPathFolder = ""
 	}
 
 	// display a warning message to console and job log file if there is a sync operation being performed from local to file share.
@@ -373,7 +373,7 @@ func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
 	}
 
 	// use the globally generated JobID
-	cooked.jobID = azcopyCurrentJobID
+	cooked.jobID = Client.CurrentJobID
 
 	cooked.blockSize, err = blockSizeInBytes(cooked.blockSizeMB)
 	if err != nil {
@@ -536,8 +536,8 @@ func (cca *cookedSyncCmdArgs) waitUntilJobCompletion(blocking bool) {
 	// print initial message to indicate that the job is starting
 	// Output the log location if log-level is set to other then NONE
 	var logPathFolder string
-	if azcopyLogPathFolder != "" {
-		logPathFolder = fmt.Sprintf("%s%s%s.log", azcopyLogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
+	if Client.LogPathFolder != "" {
+		logPathFolder = fmt.Sprintf("%s%s%s.log", Client.LogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
 	}
 	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), logPathFolder, false, ""))
 

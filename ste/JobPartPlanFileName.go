@@ -15,6 +15,9 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
+// TODO (gapra) : Figure out a better way to handle the JobPlanFolder - is creating another variable really the best way?.
+var JobPlanFolder string
+
 type JobPartPlanFileName string
 
 func (jppfn *JobPartPlanFileName) Exists() bool {
@@ -23,8 +26,8 @@ func (jppfn *JobPartPlanFileName) Exists() bool {
 }
 
 func (jppfn *JobPartPlanFileName) GetJobPartPlanPath() string {
-	if common.AzcopyJobPlanFolder != "" {
-		return fmt.Sprintf("%s%s%s", common.AzcopyJobPlanFolder, common.AZCOPY_PATH_SEPARATOR_STRING, string(*jppfn))
+	if JobPlanFolder != "" {
+		return fmt.Sprintf("%s%s%s", JobPlanFolder, common.AZCOPY_PATH_SEPARATOR_STRING, string(*jppfn))
 	} else {
 		return string(*jppfn)
 	}
