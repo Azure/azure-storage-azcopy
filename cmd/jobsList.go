@@ -25,7 +25,6 @@ import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
-	"sort"
 	"strings"
 	"time"
 
@@ -95,9 +94,6 @@ func HandleListJobsCommand(jobStatus common.JobStatus) error {
 // PrintExistingJobIds prints the response of listOrder command when listOrder command requested the list of existing jobs
 func PrintExistingJobIds(listJobResponse azcopy.ListJobsResponse) error {
 
-	// before displaying the jobs, sort them accordingly so that they are displayed in a consistent way
-	sortJobs(listJobResponse.Details)
-
 	glcm.Exit(func(format common.OutputFormat) string {
 		if format == common.EOutputFormat.Json() {
 			jsonOutput, err := json.Marshal(listJobResponse)
@@ -117,13 +113,4 @@ func PrintExistingJobIds(listJobResponse azcopy.ListJobsResponse) error {
 		return sb.String()
 	}, common.EExitCode.Success())
 	return nil
-}
-
-func sortJobs(jobsDetails []azcopy.JobDetail) {
-	// sort the jobs so that the latest one is shown first
-	sort.Slice(jobsDetails, func(i, j int) bool {
-		// this function essentially asks whether i should be placed before j
-		// we say yes if the job i is more recent
-		return jobsDetails[i].StartTime.After(jobsDetails[j].StartTime)
-	})
 }
