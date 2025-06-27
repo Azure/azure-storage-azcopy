@@ -144,9 +144,6 @@ func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, 
 	ja.appCtx = context.WithValue(ja.appCtx, ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	ja.jobLogger = common.AzcopyCurrentJobLogger
 
-	// TODO (gapra): Figure out a better way to set the job logger.
-	ste.JobPlanFolder = ja.planDir
-
 	// create concurrency tuner...
 	// ... but don't spin up the main pool. That is done when
 	// the first piece of work actually arrives. Why do it then?

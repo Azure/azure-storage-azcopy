@@ -15,28 +15,25 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-// TODO (gapra) : Figure out a better way to handle the JobPlanFolder - is creating another variable really the best way?.
-var JobPlanFolder string
-
 type JobPartPlanFileName string
 
-func (jppfn *JobPartPlanFileName) Exists() bool {
+func (jppfn JobPartPlanFileName) Exists() bool {
 	_, err := os.Stat(jppfn.GetJobPartPlanPath())
 	return err == nil
 }
 
-func (jppfn *JobPartPlanFileName) GetJobPartPlanPath() string {
-	if JobPlanFolder != "" {
-		return fmt.Sprintf("%s%s%s", JobPlanFolder, common.AZCOPY_PATH_SEPARATOR_STRING, string(*jppfn))
+func (jppfn JobPartPlanFileName) GetJobPartPlanPath() string {
+	if common.AzcopyJobPlanFolder != "" {
+		return fmt.Sprintf("%s%s%s", common.AzcopyJobPlanFolder, common.AZCOPY_PATH_SEPARATOR_STRING, string(jppfn))
 	} else {
-		return string(*jppfn)
+		return string(jppfn)
 	}
 }
 
 const JobPartPlanFileNameFormat = "%v--%05d.steV%d"
 
 // TODO: This needs testing
-func (jpfn JobPartPlanFileName) Parse() (jobID common.JobID, partNumber common.PartNumber, err error) {
+func (jppfn JobPartPlanFileName) Parse() (jobID common.JobID, partNumber common.PartNumber, err error) {
 	var dataSchemaVersion common.Version
 	// n, err := fmt.Sscanf(string(jpfn), jobPartPlanFileNameFormat, &jobID, &partNumber, &dataSchemaVersion)
 	// if err != nil || n != 3 {
@@ -46,10 +43,10 @@ func (jpfn JobPartPlanFileName) Parse() (jobID common.JobID, partNumber common.P
 	//	err = fmt.Errorf("job part Plan file's data schema version ('%d') doesn't match whatthis app requires ('%d')", dataSchemaVersion, DataSchemaVersion)
 	// }
 	// TODO: confirm the alternative approach. fmt.Sscanf not working for reading back string into struct JobId.
-	jpfnSplit := strings.Split(string(jpfn), "--")
+	jpfnSplit := strings.Split(string(jppfn), "--")
 	jobId, err := common.ParseJobID(jpfnSplit[0])
 	if err != nil {
-		err = fmt.Errorf("failed to parse the JobId from JobPartFileName %s. Failed with error %w", string(jpfn), err) //nolint:staticcheck
+		err = fmt.Errorf("failed to parse the JobId from JobPartFileName %s. Failed with error %w", string(jppfn), err) //nolint:staticcheck
 		common.GetLifecycleMgr().Warn(err.Error())
 	}
 	jobID = jobId
@@ -63,13 +60,13 @@ func (jpfn JobPartPlanFileName) Parse() (jobID common.JobID, partNumber common.P
 	return
 }
 
-func (jpfn JobPartPlanFileName) Delete() error {
-	return os.Remove(string(jpfn))
+func (jppfn JobPartPlanFileName) Delete() error {
+	return os.Remove(string(jppfn))
 }
 
-func (jpfn JobPartPlanFileName) Map() *JobPartPlanMMF {
+func (jppfn JobPartPlanFileName) Map() *JobPartPlanMMF {
 	// opening the file with given filename
-	file, err := os.OpenFile(jpfn.GetJobPartPlanPath(), os.O_RDWR, common.DEFAULT_FILE_PERM)
+	file, err := os.OpenFile(jppfn.GetJobPartPlanPath(), os.O_RDWR, common.DEFAULT_FILE_PERM)
 	common.PanicIfErr(err)
 	// Ensure the file gets closed (although we can continue to use the MMF)
 	defer file.Close()
@@ -82,9 +79,9 @@ func (jpfn JobPartPlanFileName) Map() *JobPartPlanMMF {
 }
 
 // createJobPartPlanFile creates the memory map JobPartPlanHeader using the given JobPartOrder and JobPartPlanBlobData
-func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
-	if jpfn.Exists() {
-		panic(fmt.Sprint("Duplicate job created. You probably shouldn't ever see this, but if you do, try cleaning out", jpfn.GetJobPartPlanPath()))
+func (jppfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
+	if jppfn.Exists() {
+		panic(fmt.Sprint("Duplicate job created. You probably shouldn't ever see this, but if you do, try cleaning out", jppfn.GetJobPartPlanPath()))
 	}
 
 	// Validate that the passed-in strings can fit in their respective fields
@@ -145,9 +142,9 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 
 	// create the Job Part Plan file
 	// planPathname := planDir + "/" + string(jpfn)
-	file, err := os.Create(jpfn.GetJobPartPlanPath())
+	file, err := os.Create(jppfn.GetJobPartPlanPath())
 	if err != nil {
-		panic(fmt.Errorf("couldn't create job part plan file %q: %w", jpfn, err))
+		panic(fmt.Errorf("couldn't create job part plan file %q: %w", jppfn, err))
 	}
 	defer file.Close()
 

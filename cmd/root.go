@@ -208,7 +208,7 @@ func Initialize(resumeJobID common.JobID, isBench bool) error {
 	}
 	jobID := common.NewJobID()
 	Client.CurrentJobID = jobID
-	loggerInfo := jobLoggerInfo{jobID, Client.LogPathFolder}
+	loggerInfo := jobLoggerInfo{jobID, common.LogPathFolder}
 
 	timeAtPrestart := time.Now()
 	glcm.SetOutputFormat(OutputFormat)
@@ -228,7 +228,7 @@ func Initialize(resumeJobID common.JobID, isBench bool) error {
 
 	// startup of the STE happens here, so that the startup can access the values of command line parameters that are defined for "root" command
 	concurrencySettings := ste.NewConcurrencySettings(azcopyMaxFileAndSocketHandles, preferToAutoTuneGRs)
-	err = jobsAdmin.MainSTE(concurrencySettings, float64(CapMbps), Client.JobPlanFolder, Client.LogPathFolder, providePerformanceAdvice)
+	err = jobsAdmin.MainSTE(concurrencySettings, float64(CapMbps), common.AzcopyJobPlanFolder, common.LogPathFolder, providePerformanceAdvice)
 	if err != nil {
 		return err
 	}
@@ -350,7 +350,7 @@ func beginDetectNewVersion() chan struct{} {
 		}
 
 		// step 1: fetch & validate cached version and if it is updated, return without making API calls
-		filePath := filepath.Join(Client.LogPathFolder, "latest_version.txt")
+		filePath := filepath.Join(common.LogPathFolder, "latest_version.txt")
 		cachedVersion, err := ValidateCachedVersion(filePath) // same as the remote version
 		if err == nil {
 			PrintOlderVersion(*cachedVersion, *localVersion)

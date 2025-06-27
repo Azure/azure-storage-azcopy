@@ -63,13 +63,13 @@ var currentUserOAuthTokenManager *common.UserOAuthTokenManager
 // Note: Currently, only support to have TokenManager for one user mapping to one tenantID.
 func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
 	once.Do(func() {
-		if Client.JobPlanFolder == "" {
+		if common.AzcopyJobPlanFolder == "" {
 			panic("invalid state, AzcopyJobPlanFolder should not be an empty string")
 		}
 		cacheName := common.GetEnvironmentVariable(common.EEnvironmentVariable.LoginCacheName())
 
 		currentUserOAuthTokenManager = common.NewUserOAuthTokenManagerInstance(common.CredCacheOptions{
-			DPAPIFilePath: Client.JobPlanFolder,
+			DPAPIFilePath: common.AzcopyJobPlanFolder,
 			KeyName:       common.Iff(cacheName != "", cacheName, oauthLoginSessionCacheKeyName),
 			ServiceName:   oauthLoginSessionCacheServiceName,
 			AccountName:   common.Iff(cacheName != "", cacheName, oauthLoginSessionCacheAccountName),

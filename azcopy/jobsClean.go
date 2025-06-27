@@ -24,7 +24,7 @@ func (c Client) CleanJobs(opts CleanJobsOptions) (result CleanJobsResult, err er
 	status := common.IffNil(opts.WithStatus, common.EJobStatus.All())
 
 	if status == common.EJobStatus.All() {
-		result.Count, err = jobsAdmin.BlindDeleteAllJobFiles(c.JobPlanFolder, c.LogPathFolder, c.CurrentJobID)
+		result.Count, err = jobsAdmin.BlindDeleteAllJobFiles(c.CurrentJobID)
 	} else {
 		resp := jobsAdmin.ListJobs(status)
 		if resp.ErrorMessage != "" {
@@ -35,7 +35,7 @@ func (c Client) CleanJobs(opts CleanJobsOptions) (result CleanJobsResult, err er
 				result.Jobs = []common.JobID{}
 			}
 			result.Jobs = append(result.Jobs, job.JobId)
-			err = jobsAdmin.RemoveSingleJobFiles(c.JobPlanFolder, c.LogPathFolder, job.JobId)
+			err = jobsAdmin.RemoveSingleJobFiles(job.JobId)
 			if err != nil {
 				return result, fmt.Errorf("failed to remove job %s due to error: %w", job.JobId, err)
 			} else {

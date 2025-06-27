@@ -11,16 +11,16 @@ import (
 // TODO (gapra): Re-evaluate the need for currentJobID.
 
 // BlindDeleteAllJobFiles removes all job plan files and log files in the specified folders.
-func BlindDeleteAllJobFiles(jobPlanFolder, logPathFolder string, currentJobID common.JobID) (int, error) {
+func BlindDeleteAllJobFiles(currentJobID common.JobID) (int, error) {
 	// get rid of the job plan files
-	numPlanFilesRemoved, err := removeFilesWithPredicate(jobPlanFolder, func(s string) bool {
+	numPlanFilesRemoved, err := removeFilesWithPredicate(common.AzcopyJobPlanFolder, func(s string) bool {
 		return strings.Contains(s, ".steV")
 	})
 	if err != nil {
 		return numPlanFilesRemoved, err
 	}
 	// get rid of the logs
-	numLogFilesRemoved, err := removeFilesWithPredicate(logPathFolder, func(s string) bool {
+	numLogFilesRemoved, err := removeFilesWithPredicate(common.LogPathFolder, func(s string) bool {
 		// Do not remove the current job's log file this will cause the cleanup job to fail.
 		if strings.Contains(s, currentJobID.String()) {
 			return false
@@ -33,9 +33,9 @@ func BlindDeleteAllJobFiles(jobPlanFolder, logPathFolder string, currentJobID co
 	return numPlanFilesRemoved + numLogFilesRemoved, err
 }
 
-func RemoveSingleJobFiles(jobPlanFolder, logPathFolder string, jobID common.JobID) error {
+func RemoveSingleJobFiles(jobID common.JobID) error {
 	// get rid of the job plan files
-	numPlanFileRemoved, err := removeFilesWithPredicate(jobPlanFolder, func(s string) bool {
+	numPlanFileRemoved, err := removeFilesWithPredicate(common.AzcopyJobPlanFolder, func(s string) bool {
 		if strings.Contains(s, jobID.String()) && strings.Contains(s, ".steV") {
 			return true
 		}
@@ -48,7 +48,7 @@ func RemoveSingleJobFiles(jobPlanFolder, logPathFolder string, jobID common.JobI
 	// get rid of the logs
 	// even though we only have 1 file right now, still scan the directory since we may change the
 	// way we name the logs in the future (with suffix or whatnot)
-	numLogFileRemoved, err := removeFilesWithPredicate(logPathFolder, func(s string) bool {
+	numLogFileRemoved, err := removeFilesWithPredicate(common.LogPathFolder, func(s string) bool {
 		if strings.Contains(s, jobID.String()) && strings.HasSuffix(s, ".log") {
 			return true
 		}

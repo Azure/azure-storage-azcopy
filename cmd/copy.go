@@ -1292,8 +1292,8 @@ func (cca *CookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
 	if !cca.dryrunMode {
 		// Output the log location if log-level is set to other then NONE
 		var logPathFolder string
-		if Client.LogPathFolder != "" {
-			logPathFolder = fmt.Sprintf("%s%s%s.log", Client.LogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
+		if common.LogPathFolder != "" {
+			logPathFolder = fmt.Sprintf("%s%s%s.log", common.LogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
 		}
 		glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(),
 			logPathFolder,

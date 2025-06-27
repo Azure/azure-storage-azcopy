@@ -22,7 +22,7 @@ func (c Client) RemoveJob(opts RemoveJobOptions) (result RemoveJobResult, err er
 	if opts.JobID.IsEmpty() {
 		return result, errors.New("RemoveJob requires the JobID")
 	}
-	err = jobsAdmin.RemoveSingleJobFiles(c.JobPlanFolder, c.LogPathFolder, opts.JobID)
+	err = jobsAdmin.RemoveSingleJobFiles(opts.JobID)
 	if err != nil {
 		return result, fmt.Errorf("failed to remove log and job plan files for job %s due to error: %w", opts.JobID, err)
 	}

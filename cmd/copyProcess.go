@@ -11,7 +11,7 @@ import (
 func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 	cooked.jobID = Client.CurrentJobID
 	// set up the front end scanning logger
-	azcopyScanningLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, Client.LogPathFolder, "-scanning")
+	azcopyScanningLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "-scanning")
 	azcopyScanningLogger.OpenLog()
 	glcm.RegisterCloseFunc(func() {
 		azcopyScanningLogger.CloseLog()
@@ -19,7 +19,7 @@ func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 
 	// if no logging, set this empty so that we don't display the log location
 	if LogLevel == common.LogNone {
-		Client.LogPathFolder = ""
+		common.LogPathFolder = ""
 	}
 
 	cooked.putBlobSize, err = blockSizeInBytes(cooked.PutBlobSizeMB)
