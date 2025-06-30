@@ -425,6 +425,7 @@ type cookedSyncCmdArgs struct {
 	atomicFirstPartOrdered uint32
 	// defines the number of folders listed at the source and compared.
 	atomicSourceFoldersScanned             uint64
+	atomicDestinationFoldersScanned        uint64
 	atomicSourceFilesTransferNotRequired   uint64
 	atomicSourceFoldersTransferNotRequired uint64
 
@@ -514,22 +515,6 @@ type cookedSyncCmdArgs struct {
 	// accountName.blob.core.windows.net/container/dir1/file1.txt
 	// accountName.blob.core.windows.net/container/dir1/file2.txt
 	StripTopDir bool
-
-	// Limit on size of ObjectIndexerMap in memory.
-	// This is used only by the sync process and it controls how much the source traverser can fill the ObjectIndexerMap before it has to wait
-	// for target traverser to process and empty it. This should be kept to a value less than the system RAM to avoid thrashing.
-	// If you are not interested in source traverser scanning all the files for estimation purpose you can keep it low, just enough to never have the
-	// target traverser wait for directories to scan. The only reason we would want to keep it high is to let the source complete scanning irrespective
-	// of the target traverser speed, so that the scanned information can then be used for ETA estimation.
-	//
-	maxObjectIndexerSizeInGB uint32
-
-	//
-	// Sync only file metadata if only metadata has changed and not the file content, else for changed files both file data and metadata are sync’ed.
-	// The latter could be expensive especially for cases where user updates some file metadata (owner/mode/atime/mtime/etc) recursively. How we find out
-	// whether only metadata has changed or only data has changed, or both have changed.
-	//
-	metaDataOnlySync bool
 }
 
 func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
@@ -583,6 +568,11 @@ func (cca *cookedSyncCmdArgs) GetSourceFilesScanned() uint64 {
 // GetDestinationFilesScanned returns files scanned at destination.
 func (cca *cookedSyncCmdArgs) GetDestinationFilesScanned() uint64 {
 	return atomic.LoadUint64(&cca.atomicDestinationFilesScanned)
+}
+
+// GetDestinationFoldersScanned returns folders scanned at destination.
+func (cca *cookedSyncCmdArgs) GetDestinationFoldersScanned() uint64 {
+	return atomic.LoadUint64(&cca.atomicDestinationFoldersScanned)
 }
 
 // wraps call to lifecycle manager to wait for the job to complete
@@ -788,6 +778,7 @@ Job %s Summary
 Files Scanned at Source: %v
 Files Scanned at Destination: %v
 Folders Scanned at Source: %v
+Folders Scanned at Destination: %v
 Elapsed Time (Minutes): %v
 Number of Copy Transfers for Files: %v
 Number of Copy Transfers for Folder Properties: %v 
@@ -806,6 +797,7 @@ Final Job Status: %v%s%s
 					atomic.LoadUint64(&cca.atomicSourceFilesScanned),
 					atomic.LoadUint64(&cca.atomicDestinationFilesScanned),
 					atomic.LoadUint64(&cca.atomicSourceFoldersScanned),
+					atomic.LoadUint64(&cca.atomicDestinationFoldersScanned),
 					jobsAdmin.ToFixed(duration.Minutes(), 4),
 					summary.FileTransfers,
 					summary.FolderPropertyTransfers,
@@ -907,7 +899,8 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		return err
 	}
 
-	enumerator, err := cca.InitEnumerator(ctx, nil)
+	orchestratorOptions := NewTestSyncOrchestratorOptions()
+	enumerator, err := cca.InitEnumerator(ctx, nil, &orchestratorOptions)
 	if err != nil {
 		return err
 	}

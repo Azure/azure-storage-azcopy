@@ -56,7 +56,7 @@ func TestIsSourceDirWithStub(t *testing.T) {
 	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, dirName).URL()
 	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
 	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false,
-		common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false, nil, NewDefaultSyncTraverserOptions())
+		common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false, nil)
 
 	isDir, err := blobTraverser.IsDirectory(true)
 	a.True(isDir)
@@ -79,7 +79,7 @@ func TestIsSourceDirWithNoStub(t *testing.T) {
 	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, dirName).URL()
 	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
 	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false,
-		common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false, nil, NewDefaultSyncTraverserOptions())
+		common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false, nil)
 
 	isDir, err := blobTraverser.IsDirectory(true)
 	a.True(isDir)
@@ -102,7 +102,7 @@ func TestIsDestDirWithBlobEP(t *testing.T) {
 	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, dirName).URL()
 	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
 	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false,
-		common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false, nil, NewDefaultSyncTraverserOptions())
+		common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false, nil)
 
 	isDir, err := blobTraverser.IsDirectory(false)
 	a.True(isDir)
@@ -113,7 +113,7 @@ func TestIsDestDirWithBlobEP(t *testing.T) {
 	// List
 	rawBlobURLWithSAS = scenarioHelper{}.getBlobClientWithSAS(a, containerName, dirName).URL()
 	blobTraverser = newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false,
-		common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false, nil, NewDefaultSyncTraverserOptions())
+		common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false, nil)
 
 	isDir, err = blobTraverser.IsDirectory(false)
 	a.False(isDir)
@@ -140,7 +140,7 @@ func TestIsDestDirWithDFSEP(t *testing.T) {
 	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, fileSystemName, parentDirName).URL()
 	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
 	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false,
-		common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), true, nil, NewDefaultSyncTraverserOptions())
+		common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), true, nil)
 
 	// a directory with name parentDirName exists on target. So irrespective of
 	// isSource, IsDirectory()  should return true.
@@ -158,7 +158,7 @@ func TestIsDestDirWithDFSEP(t *testing.T) {
 	parentDirName = "dirDoesNotExist"
 	rawBlobURLWithSAS = scenarioHelper{}.getBlobClientWithSAS(a, fileSystemName, parentDirName).URL()
 	blobTraverser = newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false,
-		common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), true, nil, NewDefaultSyncTraverserOptions())
+		common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), true, nil)
 
 	// The directory does not exist, so IsDirectory()
 	// should return false, in all cases
@@ -176,7 +176,7 @@ func TestIsDestDirWithDFSEP(t *testing.T) {
 	parentDirNameWithSeparator := "dirDoesNotExist" + common.OS_PATH_SEPARATOR
 	rawBlobURLWithSAS = scenarioHelper{}.getBlobClientWithSAS(a, fileSystemName, parentDirNameWithSeparator).URL()
 	blobTraverser = newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false,
-		common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), true, nil, NewDefaultSyncTraverserOptions())
+		common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), true, nil)
 
 	// The directory does not exist, but with a path separator
 	// we should identify it as a directory.
@@ -208,7 +208,7 @@ func TestIsSourceFileExists(t *testing.T) {
 	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, fileName).URL()
 	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
 	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false,
-		common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false, nil, NewDefaultSyncTraverserOptions())
+		common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false, nil)
 
 	isDir, err := blobTraverser.IsDirectory(true)
 	a.False(isDir)
@@ -231,7 +231,7 @@ func TestIsSourceFileDoesNotExist(t *testing.T) {
 	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, fileName).URL()
 	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
 	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false,
-		common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false, nil, NewDefaultSyncTraverserOptions())
+		common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false, nil)
 
 	isDir, err := blobTraverser.IsDirectory(true)
 	a.False(isDir)

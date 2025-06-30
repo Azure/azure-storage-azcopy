@@ -52,13 +52,18 @@ import (
 // we can add more properties if needed, as this is easily extensible
 // ** DO NOT instantiate directly, always use newStoredObject ** (to make sure its fully populated and any preprocessor method runs)
 type StoredObject struct {
-	name                string
-	entityType          common.EntityType
-	lastModifiedTime    time.Time
-	smbLastModifiedTime time.Time
-	size                int64
-	md5                 []byte
-	blobType            blob.BlobType // will be "None" when unknown or not applicable
+	name             string
+	entityType       common.EntityType
+	lastModifiedTime time.Time
+
+	// For SMB, this is last write time and change time.
+	// For NFS, this is populated from POSIX properties - posix_ctime, modtime
+	lastWriteTime time.Time
+	changeTime    time.Time
+
+	size     int64
+	md5      []byte
+	blobType blob.BlobType // will be "None" when unknown or not applicable
 
 	// all of these will be empty when unknown or not applicable.
 	contentDisposition string
@@ -99,15 +104,19 @@ type StoredObject struct {
 
 func (s *StoredObject) isMoreRecentThan(storedObject2 StoredObject, preferSMBTime bool) bool {
 	lmtA := s.lastModifiedTime
-	if preferSMBTime && !s.smbLastModifiedTime.IsZero() {
-		lmtA = s.smbLastModifiedTime
+	if preferSMBTime && !s.lastWriteTime.IsZero() {
+		lmtA = s.lastWriteTime
 	}
 	lmtB := storedObject2.lastModifiedTime
-	if preferSMBTime && !storedObject2.smbLastModifiedTime.IsZero() {
-		lmtB = storedObject2.smbLastModifiedTime
+	if preferSMBTime && !storedObject2.lastWriteTime.IsZero() {
+		lmtB = storedObject2.lastWriteTime
 	}
 
-	return lmtA.After(lmtB)
+	if buildmode.IsMover {
+		return lmtA.Compare(lmtB) != 0
+	} else {
+		return lmtA.After(lmtB)
+	}
 }
 
 func (s *StoredObject) isSingleSourceFile() bool {
@@ -125,7 +134,7 @@ func (s *StoredObject) isSourceRootFolder() bool {
 // do not pass through that routine.  So we need to make the filtering available in a separate function
 // so that the sync deletion code path(s) can access it.
 func (s *StoredObject) isCompatibleWithEntitySettings(fpo common.FolderPropertyOption, sht common.SymlinkHandlingType) bool {
-	if s.entityType == common.EEntityType.File() {
+	if s.entityType == common.EEntityType.File() || s.entityType == common.EEntityType.FileProperties() {
 		return true
 	} else if s.entityType == common.EEntityType.Folder() {
 		switch fpo {
@@ -247,7 +256,8 @@ type filePropsProvider interface {
 	contentPropsProvider
 	Metadata() common.Metadata
 	LastModified() time.Time
-	FileLastWriteTime() time.Time
+	LastWriteTime() time.Time
+	ChangeTime() time.Time
 	ContentLength() int64
 }
 
@@ -293,6 +303,18 @@ func newStoredObject(morpher objectMorpher, name string, relativePath string, en
 	return obj
 }
 
+// updateTimestamps updates the lastWriteTime and changeTime fields of a StoredObject
+func (so *StoredObject) updateTimestamps(lastWriteTime, changeTime time.Time) {
+	so.lastWriteTime = lastWriteTime
+	so.changeTime = changeTime
+}
+
+// tryUpdateTimestampsFromMetadata updates the lastWriteTime and changeTime fields of a StoredObject
+func (so *StoredObject) tryUpdateTimestampsFromMetadata(meta common.Metadata) {
+	so.lastWriteTime, _, _ = common.TryReadModTimeFromMetadata(meta)
+	so.changeTime, _, _ = common.TryReadCTimeFromMetadata(meta)
+}
+
 type ResourceTraverserTemplate struct {
 	location                    common.Location
 	credential                  *common.CredentialInfo
@@ -315,6 +337,7 @@ type ResourceTraverserTemplate struct {
 	destination                 *common.Location
 	excludeContainerNames       []string
 	includeVersionsList         bool
+	incrementNotTransferred     enumerationCounterFunc
 }
 
 // capable of traversing a structured resource like container or local directory
@@ -389,8 +412,7 @@ func InitResourceTraverser(
 	trailingDot common.TrailingDotOption,
 	destination *common.Location,
 	excludeContainerNames []string,
-	includeVersionsList bool,
-	syncOptions SyncTraverserOptions) (ResourceTraverser, error) {
+	includeVersionsList bool) (ResourceTraverser, error) {
 
 	var output ResourceTraverser
 
@@ -476,10 +498,10 @@ func InitResourceTraverser(
 		} else {
 			if ctx != nil {
 				output, _ = newLocalTraverser(*ctx, resource.ValueLocal(), recursive, stripTopDir, symlinkHandling,
-					syncHashType, incrementEnumerationCounter, errorChannel, syncOptions)
+					syncHashType, incrementEnumerationCounter, errorChannel)
 			} else {
 				output, _ = newLocalTraverser(context.TODO(), resource.ValueLocal(), recursive, stripTopDir,
-					symlinkHandling, syncHashType, incrementEnumerationCounter, errorChannel, syncOptions)
+					symlinkHandling, syncHashType, incrementEnumerationCounter, errorChannel)
 			}
 		}
 	case common.ELocation.Benchmark():
@@ -538,7 +560,7 @@ func InitResourceTraverser(
 			output = newBlobVersionsTraverser(r, bsc, *ctx, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds, cpkOptions)
 		} else {
 			output = newBlobTraverser(r, bsc, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions,
-				includeDeleted, includeSnapshot, includeVersion, preservePermissions, false, errorChannel, syncOptions)
+				includeDeleted, includeSnapshot, includeVersion, preservePermissions, false, errorChannel)
 		}
 	case common.ELocation.File():
 		// TODO (last service migration) : Remove dependency on URLs.
@@ -585,9 +607,9 @@ func InitResourceTraverser(
 			if !recursive {
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
-			output = newFileAccountTraverser(fsc, shareName, *ctx, getProperties, incrementEnumerationCounter, trailingDot, destination, syncOptions)
+			output = newFileAccountTraverser(fsc, shareName, *ctx, getProperties, incrementEnumerationCounter, trailingDot, destination)
 		} else {
-			output = newFileTraverser(r, fsc, *ctx, recursive, getProperties, incrementEnumerationCounter, trailingDot, destination, syncOptions)
+			output = newFileTraverser(r, fsc, *ctx, recursive, getProperties, incrementEnumerationCounter, trailingDot, destination)
 		}
 	case common.ELocation.BlobFS():
 		resourceURL, err := resource.FullURL()
@@ -638,7 +660,7 @@ func InitResourceTraverser(
 			output = newBlobVersionsTraverser(r, bsc, *ctx, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds, cpkOptions)
 		} else {
 			output = newBlobTraverser(r, bsc, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags,
-				cpkOptions, includeDeleted, includeSnapshot, includeVersion, preservePermissions, true, errorChannel, syncOptions)
+				cpkOptions, includeDeleted, includeSnapshot, includeVersion, preservePermissions, true, errorChannel)
 		}
 	case common.ELocation.S3():
 		resourceURL, err := resource.FullURL()
@@ -792,10 +814,12 @@ type syncEnumerator struct {
 
 	// a finalizer that is always called if the enumeration finishes properly
 	finalize func() error
+
+	orchestratorOptions *syncOrchestratorOptions
 }
 
 func newSyncEnumerator(primaryTemplate ResourceTraverserTemplate, secondaryTemplate ResourceTraverserTemplate, primaryTraverser ResourceTraverser, secondaryTraverser ResourceTraverser, indexer *objectIndexer,
-	filters []ObjectFilter, comparator objectProcessor, finalize func() error, ctp *copyTransferProcessor) *syncEnumerator {
+	filters []ObjectFilter, comparator objectProcessor, finalize func() error, ctp *copyTransferProcessor, orchestratorOptions *syncOrchestratorOptions) *syncEnumerator {
 	return &syncEnumerator{
 		primaryTraverserTemplate:   primaryTemplate,
 		secondaryTraverserTemplate: secondaryTemplate,
@@ -806,6 +830,7 @@ func newSyncEnumerator(primaryTemplate ResourceTraverserTemplate, secondaryTempl
 		objectComparator:           comparator,
 		finalize:                   finalize,
 		ctp:                        ctp,
+		orchestratorOptions:        orchestratorOptions,
 	}
 }
 

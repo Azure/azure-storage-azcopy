@@ -36,7 +36,7 @@ func TestSyncSourceComparator(t *testing.T) {
 
 	// set up the indexer as well as the source comparator
 	indexer := newObjectIndexer()
-	sourceComparator := newSyncSourceComparator(indexer, dummyCopyScheduler.process, common.ESyncHashType.None(), false, false)
+	sourceComparator := newSyncSourceComparator(indexer, dummyCopyScheduler.process, common.ESyncHashType.None(), false, false, nil)
 
 	// create a sample destination object
 	sampleDestinationObject := StoredObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now(), md5: destMD5}
@@ -90,7 +90,7 @@ func TestSyncSrcCompDisableComparator(t *testing.T) {
 
 	// set up the indexer as well as the source comparator
 	indexer := newObjectIndexer()
-	sourceComparator := newSyncSourceComparator(indexer, dummyCopyScheduler.process, common.ESyncHashType.None(), false, true)
+	sourceComparator := newSyncSourceComparator(indexer, dummyCopyScheduler.process, common.ESyncHashType.None(), false, true, nil)
 
 	// test the comparator in case a given source object is not present at the destination
 	// meaning no entry in the index, so the comparator should pass the given object to schedule a transfer
@@ -135,12 +135,13 @@ func TestSyncDestinationComparator(t *testing.T) {
 	a := assert.New(t)
 	dummyCopyScheduler := dummyProcessor{}
 	dummyCleaner := dummyProcessor{}
+	dummyOrchestratorOptions := NewDefaultSyncOrchestratorOptions()
 	srcMD5 := []byte{'s'}
 	destMD5 := []byte{'d'}
 
 	// set up the indexer as well as the destination comparator
 	indexer := newObjectIndexer()
-	destinationComparator := newSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, common.ESyncHashType.None(), false, false, nil)
+	destinationComparator := newSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, common.ESyncHashType.None(), false, false, nil, &dummyOrchestratorOptions)
 
 	// create a sample source object
 	sampleSourceObject := StoredObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now(), md5: srcMD5}
@@ -193,12 +194,13 @@ func TestSyncDestCompDisableComparison(t *testing.T) {
 	a := assert.New(t)
 	dummyCopyScheduler := dummyProcessor{}
 	dummyCleaner := dummyProcessor{}
+	dummyOrchestratorOptions := NewDefaultSyncOrchestratorOptions()
 	srcMD5 := []byte{'s'}
 	destMD5 := []byte{'d'}
 
 	// set up the indexer as well as the destination comparator
 	indexer := newObjectIndexer()
-	destinationComparator := newSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, common.ESyncHashType.None(), false, true, nil)
+	destinationComparator := newSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, common.ESyncHashType.None(), false, true, nil, &dummyOrchestratorOptions)
 
 	// create a sample source object
 	currTime := time.Now()

@@ -22,6 +22,7 @@ package ste
 
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 )
 
 // anyToRemote_folder handles all kinds of sender operations for FOLDERS - both uploads from local files, and S2S copies
@@ -51,8 +52,8 @@ func anyToRemote_fileProperties(jptm IJobPartTransferMgr, info *TransferInfo, pa
 		return
 	}
 
-	if jptm.GetOverwriteOption() != common.EOverwriteOption.PosixProperties() ||
-		srcInfoProvider.EntityType() != common.EEntityType.File() {
+	if (!buildmode.IsMover && jptm.GetOverwriteOption() != common.EOverwriteOption.PosixProperties()) ||
+		srcInfoProvider.EntityType() != common.EEntityType.FileProperties() {
 		panic("configuration error. Source Info Provider does not have FileProperties entity type")
 	}
 
