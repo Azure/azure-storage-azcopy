@@ -20,54 +20,15 @@
 
 package common
 
-// TODO : Remove this?
-// GetBlocksRoundedUp returns the number of blocks given size, rounded up
-func GetBlocksRoundedUp(size uint64, blockSize uint64) uint16 {
-	return uint16(size/blockSize) + uint16(Iff((size%blockSize) == 0, 0, 1))
-}
+import (
+	"path"
+	"strings"
+)
 
-func FirstOrZero[T any](list []T) T {
-	if len(list) != 0 {
-		return list[0]
-	}
+// getAzCopyAppPath returns the path of Azcopy in local appdata.
+func getAzCopyAppPath() string {
+	userProfile := GetEnvironmentVariable(EEnvironmentVariable.UserDir())
+	azcopyAppDataFolder := strings.ReplaceAll(path.Join(userProfile, ".azcopy"), "/", `\`)
 
-	var zero T
-	return zero
-}
-
-func DerefOrZero[T any](in *T) (out T) {
-	if in != nil {
-		out = *in
-	}
-
-	return
-}
-
-func Iff[T any](test bool, trueVal, falseVal T) T {
-	if test {
-		return trueVal
-	}
-	return falseVal
-}
-
-func IffNil[T any](wanted *T, instead T) T {
-	if wanted == nil {
-		return instead
-	}
-	return *wanted
-}
-
-func IffNotNil[T any](wanted *T, instead T) T {
-	if wanted == nil {
-		return instead
-	}
-
-	return *wanted
-}
-
-func IffNotEmpty(wanted string) *string {
-	if wanted == "" {
-		return nil
-	}
-	return &wanted
+	return azcopyAppDataFolder
 }
