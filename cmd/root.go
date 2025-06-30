@@ -218,15 +218,6 @@ var rootCmd = &cobra.Command{
 			common.IncludeAfterFlagName, IncludeAfterDateFilter{}.FormatAsUTC(adjustedTime))
 		jobsAdmin.JobsAdmin.LogToJobLog(startTimeMessage, common.LogInfo)
 
-		//if !azcopySkipVersionCheck && !isPipeDownload {
-		//	// spawn a routine to fetch and compare the local application's version against the latest version available
-		//	// if there's a newer version that can be used, then write the suggestion to stderr
-		//	// however if this takes too long the message won't get printed
-		//	// Note: this function is necessary for non-help, non-login commands, since they don't reach the corresponding
-		//	// beginDetectNewVersion call in Execute (below)
-		//	beginDetectNewVersion()
-		//}
-
 		if debugSkipFiles != "" {
 			for _, v := range strings.Split(debugSkipFiles, ";") {
 				if strings.HasPrefix(v, "/") {
