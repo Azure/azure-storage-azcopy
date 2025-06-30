@@ -438,3 +438,33 @@ func AddStatToBlobMetadata(s UnixStatAdapter, metadata Metadata) {
 func StatXReturned(mask uint32, want uint32) bool {
 	return (mask & want) == want
 }
+
+// TryReadTimeFromMetadata reads a timestamp from the metadata based on the specified type.
+// It returns the timestamp as a time.Time, a boolean indicating if it was found,
+// and an error if there was a problem parsing the timestamp.
+func TryReadTimeFromMetadata(metadata Metadata, timeType string) (time.Time, bool, error) {
+	if timeStr, ok := TryReadMetadata(metadata, timeType); ok {
+		timestamp, err := strconv.ParseInt(*timeStr, 10, 64)
+		if err != nil {
+			return time.Time{}, false, err
+		}
+
+		return time.Unix(0, timestamp), true, nil
+	}
+
+	return time.Time{}, false, nil
+}
+
+// TryReadCTimeFromMetadata reads the ctime from the metadata.
+// It returns the ctime as a time.Time, a boolean indicating if it was found,
+// and an error if there was a problem parsing the ctime.
+func TryReadCTimeFromMetadata(metadata Metadata) (time.Time, bool, error) {
+	return TryReadTimeFromMetadata(metadata, POSIXCTimeMeta)
+}
+
+// TryReadModTimeFromMetadata reads the mod time from the metadata.
+// It returns the mod time as a time.Time, a boolean indicating if it was found,
+// and an error if there was a problem parsing the mod time.
+func TryReadModTimeFromMetadata(metadata Metadata) (time.Time, bool, error) {
+	return TryReadTimeFromMetadata(metadata, POSIXModTimeMeta)
+}

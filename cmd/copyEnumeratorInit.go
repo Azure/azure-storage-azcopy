@@ -75,7 +75,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &srcCredInfo, cca.SymlinkHandling, cca.ListOfFilesChannel, cca.Recursive,
 		getRemoteProperties, cca.IncludeDirectoryStubs, cca.PermanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, cca.S2sPreserveBlobTags,
 		common.ESyncHashType.None(), cca.PreservePermissions, AzcopyLogVerbosity, cca.CpkOptions, nil, cca.StripTopDir, cca.TrailingDot, &dest, cca.excludeContainer,
-		false, NewDefaultSyncTraverserOptions())
+		false)
 
 	if err != nil {
 		return nil, err
@@ -331,7 +331,7 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 		return false
 	}
 
-	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, &dstCredInfo, common.ESymlinkHandlingType.Skip(), nil, false, false, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), cca.PreservePermissions, common.LogNone, cca.CpkOptions, nil, cca.StripTopDir, cca.TrailingDot, nil, cca.excludeContainer, false, NewDefaultSyncTraverserOptions())
+	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, &dstCredInfo, common.ESymlinkHandlingType.Skip(), nil, false, false, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), cca.PreservePermissions, common.LogNone, cca.CpkOptions, nil, cca.StripTopDir, cca.TrailingDot, nil, cca.excludeContainer, false)
 
 	if err != nil {
 		return false

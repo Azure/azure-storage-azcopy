@@ -58,8 +58,6 @@ type localTraverser struct {
 	hashAdapter    common.HashDataAdapter
 	// receives fullPath entries and manages hashing of files lacking metadata.
 	hashTargetChannel chan string
-
-	syncOptions SyncTraverserOptions
 }
 
 func writeToErrorChannel(errorChannel chan TraverserErrorItemInfo, err ErrorFileInfo) {
@@ -264,9 +262,7 @@ func WalkWithSymlinks(
 	fullPath string,
 	walkFunc filepath.WalkFunc,
 	symlinkHandling common.SymlinkHandlingType,
-	errorChannel chan TraverserErrorItemInfo,
-	isSourceTraverser bool,
-	scannerLogger common.ILoggerResetable) (err error) {
+	errorChannel chan TraverserErrorItemInfo) (err error) {
 
 	// We want to re-queue symlinks up in their evaluated form because filepath.Walk doesn't evaluate them for us.
 	// So, what is the plan of attack?
@@ -298,12 +294,8 @@ func WalkWithSymlinks(
 		// (for simplicity of coding, we don't parallelize across multiple queueItems)
 		parallel.Walk(appCtx, queueItem.fullPath, EnumerationParallelism, EnumerationParallelStatFiles, func(filePath string, fileInfo os.FileInfo, fileError error) error {
 			if fileError != nil {
-				if scannerLogger != nil {
-					scannerLogger.Log(common.LogDebug, fileError.Error())
-				} else {
-					WarnStdoutAndScanningLog(fmt.Sprintf("Accessing '%s' failed with error: %s", filePath, fileError.Error()))
-				}
-				writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: fileError, Source: isSourceTraverser})
+				WarnStdoutAndScanningLog(fmt.Sprintf("Accessing '%s' failed with error: %s", filePath, fileError.Error()))
+				writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: fileError})
 				return nil
 			}
 			computedRelativePath := strings.TrimPrefix(cleanLocalPath(filePath), cleanLocalPath(queueItem.fullPath))
@@ -317,7 +309,7 @@ func WalkWithSymlinks(
 			if fileInfo == nil {
 				err := fmt.Errorf("fileInfo is nil for file %s", filePath)
 				WarnStdoutAndScanningLog(err.Error())
-				writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err, Source: isSourceTraverser})
+				writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 				return nil
 			}
 
@@ -328,7 +320,7 @@ func WalkWithSymlinks(
 
 					if err != nil {
 						WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get absolute path of %s: %s", filePath, err))
-						writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err, Source: isSourceTraverser})
+						writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 						return nil
 					}
 
@@ -360,7 +352,7 @@ func WalkWithSymlinks(
 				if err != nil {
 					err = fmt.Errorf("failed to resolve symlink %s: %w", filePath, err)
 					WarnStdoutAndScanningLog(err.Error())
-					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err, Source: isSourceTraverser})
+					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
 				}
 
@@ -368,7 +360,7 @@ func WalkWithSymlinks(
 				if err != nil {
 					err = fmt.Errorf("failed to get absolute path of symlink result %s: %w", filePath, err)
 					WarnStdoutAndScanningLog(err.Error())
-					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err, Source: isSourceTraverser})
+					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
 				}
 
@@ -376,7 +368,7 @@ func WalkWithSymlinks(
 				if err != nil {
 					err = fmt.Errorf("failed to get absolute path of %s: %w", filePath, err)
 					WarnStdoutAndScanningLog(err.Error())
-					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err, Source: isSourceTraverser})
+					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
 				}
 
@@ -384,7 +376,7 @@ func WalkWithSymlinks(
 				if err != nil {
 					err = fmt.Errorf("failed to get properties of symlink target at %s: %w", result, err)
 					WarnStdoutAndScanningLog(err.Error())
-					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err, Source: isSourceTraverser})
+					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
 				}
 
@@ -424,13 +416,13 @@ func WalkWithSymlinks(
 						if ok, err := checkSymlinkCausesDirectoryLoop(finalSlPath); err != nil {
 							err = fmt.Errorf("checkSymlinkCausesDirectoryLoop failed with error: %v", err)
 							WarnStdoutAndScanningLog(err.Error())
-							writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err, Source: isSourceTraverser})
+							writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 							//writeToErrorChannel(ErrorFileInfo{FileName: fileInfo.Name(), FilePath: filePath, FileLastModifiedTime: fileInfo.ModTime(), FileSize: fileInfo.Size(), IsDir: fileInfo.IsDir(), ErrorMsg: err, IsSource: isSource})
 							return nil
 						} else if ok {
 							err = fmt.Errorf("[Directory Loop Detected] %s -> %s, skipping", finalSlPath, result)
 							WarnStdoutAndScanningLog(err.Error())
-							writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err, Source: isSourceTraverser})
+							writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 							//writeToErrorChannel(ErrorFileInfo{FileName: fileInfo.Name(), FilePath: filePath, FileLastModifiedTime: fileInfo.ModTime(), FileSize: fileInfo.Size(), IsDir: fileInfo.IsDir(), ErrorMsg: err, IsSource: isSource})
 							return nil
 						} else {
@@ -459,7 +451,7 @@ func WalkWithSymlinks(
 					err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), targetFi, fileError)
 					_, err = getProcessingError(err)
 					if err != nil {
-						writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err, Source: isSourceTraverser})
+						writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					}
 					return err
 				}
@@ -471,7 +463,7 @@ func WalkWithSymlinks(
 				if err != nil {
 					err = fmt.Errorf("failed to get absolute path of %s: %w", filePath, err)
 					WarnStdoutAndScanningLog(err.Error())
-					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err, Source: isSourceTraverser})
+					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
 				}
 
@@ -587,9 +579,7 @@ func (t *localTraverser) GetHashData(relPath string) (*common.SyncHashData, erro
 	if err != nil {
 		if !errors.Is(err, fs.ErrNotExist) {
 			common.LogHashStorageFailure()
-			if t.syncOptions.scannerLogger != nil {
-				t.syncOptions.scannerLogger.Log(common.LogDebug, err.Error())
-			} else if azcopyScanningLogger != nil {
+			if azcopyScanningLogger != nil {
 				azcopyScanningLogger.Log(common.LogError, fmt.Sprintf("failed to read hash data for %s: %s", relPath, err.Error()))
 			}
 		}
@@ -808,9 +798,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	singleFileInfo, isSingleFile, err := t.getInfoIfSingleFile()
 	// it fails here if file does not exist
 	if err != nil {
-		if t.syncOptions.scannerLogger != nil {
-			t.syncOptions.scannerLogger.Log(common.LogDebug, err.Error())
-		} else if azcopyScanningLogger != nil {
+		if azcopyScanningLogger != nil {
 			azcopyScanningLogger.Log(common.LogError, fmt.Sprintf("Failed to scan path %s: %s", t.fullPath, err.Error()))
 		}
 
@@ -819,7 +807,6 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				FilePath: t.fullPath,
 				FileInfo: nil,
 				ErrorMsg: err,
-				Source:   t.syncOptions.isSource,
 			}
 			t.errorChannel <- ErrorFileInfo
 		}
@@ -912,9 +899,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 					t.fullPath,
 					processFile,
 					t.symlinkHandling,
-					t.errorChannel,
-					t.syncOptions.isSource,
-					t.syncOptions.scannerLogger))
+					t.errorChannel))
 		} else {
 			// if recursive is off, we only need to scan the files immediately under the fullPath
 			// We don't transfer any directory properties here, not even the root. (Because the root's
@@ -973,7 +958,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 								ok, _ := checkSymlinkCausesDirectoryLoop(path)
 								if ok {
 									err := errors.New("symlink caused cyclic loop")
-									writeToErrorChannel(t.errorChannel, ErrorFileInfo{FilePath: path, FileInfo: fileInfo, ErrorMsg: err, Source: t.syncOptions.isSource})
+									writeToErrorChannel(t.errorChannel, ErrorFileInfo{FilePath: path, FileInfo: fileInfo, ErrorMsg: err})
 									return nil
 								}
 								finalizer(WalkWithSymlinks(
@@ -981,9 +966,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 									path,
 									processFile,
 									t.symlinkHandling,
-									t.errorChannel,
-									t.syncOptions.isSource,
-									t.syncOptions.scannerLogger))
+									t.errorChannel))
 							}
 						}
 					}
@@ -993,19 +976,39 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 					t.incrementEnumerationCounter(entityType)
 				}
 
+				storedObject := newStoredObject(
+					preprocessor,
+					entry.Name(),
+					strings.ReplaceAll(relativePath, common.DeterminePathSeparator(t.fullPath), common.AZCOPY_PATH_SEPARATOR_STRING), // Consolidate relative paths to the azcopy path separator for sync
+					entityType, // TODO: add code path for folders
+					fileInfo.ModTime(),
+					fileInfo.Size(),
+					noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
+					noBlobProps,
+					noMetadata,
+					"", // Local has no such thing as containers
+				)
+
+				if UseSyncOrchestrator {
+					extendedProp, err := common.GetExtendedProperties(
+						common.GenerateFullPath(t.fullPath, relativePath),
+						storedObject.entityType)
+					if err != nil {
+						// What do we here?
+						// During enumeration, we can check for Zero time and skip any optimization.
+						// The upload layer will fetch the properties again.
+						WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get extended properties for %s: %s", t.fullPath, err.Error()))
+					} else {
+						storedObject.changeTime = extendedProp.GetChangeTime()
+						storedObject.lastWriteTime = extendedProp.GetLastWriteTime()
+					}
+				}
+				fmt.Printf("Local %s: %s %s (LWT: %v, CT: %v, LMT: %v)\n",
+					storedObject.entityType, t.fullPath, storedObject.relativePath,
+					storedObject.lastWriteTime.UTC(), storedObject.changeTime.UTC(), storedObject.lastModifiedTime.UTC())
+
 				err := processIfPassedFilters(filters,
-					newStoredObject(
-						preprocessor,
-						entry.Name(),
-						strings.ReplaceAll(relativePath, common.DeterminePathSeparator(t.fullPath), common.AZCOPY_PATH_SEPARATOR_STRING), // Consolidate relative paths to the azcopy path separator for sync
-						entityType, // TODO: add code path for folders
-						fileInfo.ModTime(),
-						fileInfo.Size(),
-						noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
-						noBlobProps,
-						noMetadata,
-						"", // Local has no such thing as containers
-					),
+					storedObject,
 					hashingProcessor, // hashingProcessor handles the mutex wrapper
 				)
 				_, err = getProcessingError(err)
@@ -1027,8 +1030,7 @@ func newLocalTraverser(
 	symlinkHandling common.SymlinkHandlingType,
 	syncHashType common.SyncHashType,
 	incrementEnumerationCounter enumerationCounterFunc,
-	errorChannel chan TraverserErrorItemInfo,
-	syncOptions SyncTraverserOptions) (*localTraverser, error) {
+	errorChannel chan TraverserErrorItemInfo) (*localTraverser, error) {
 
 	var hashAdapter common.HashDataAdapter
 	if syncHashType != common.ESyncHashType.None() { // Only initialize the hash adapter should we need it.
@@ -1049,7 +1051,6 @@ func newLocalTraverser(
 		targetHashType:              syncHashType,
 		hashAdapter:                 hashAdapter,
 		stripTopDir:                 stripTopDir,
-		syncOptions:                 syncOptions,
 	}
 	return &traverser, nil
 }

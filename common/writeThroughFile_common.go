@@ -1,6 +1,3 @@
-//go:build smslidingwindow
-// +build smslidingwindow
-
 // Copyright © 2017 Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -20,25 +17,19 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
-package cmd
 
-import (
-	"context"
-	"io/fs"
-)
+package common
 
-type CustomSyncHandlerFunc func(cca *cookedSyncCmdArgs, enumerator *syncEnumerator, ctx context.Context) error
-type CustomCounterIncrementer func(entry fs.DirEntry, t *localTraverser) error
+import "time"
 
-var (
-	UseSyncOrchestrator                       = false
-	CustomSyncHandler   CustomSyncHandlerFunc = nil
-)
+// EntityTimestamps provides a common interface for file information across platforms
+type ExtendedProperties interface {
+	// GetLastAccessTime returns the last access time
+	GetLastAccessTime() time.Time
 
-func GetCustomSyncHandlerInfo() string {
-	return "Sync Handler: Default"
-}
+	// GetLastWriteTime returns the last write time
+	GetLastWriteTime() time.Time
 
-func IsExpectedErrorForTargetDuringSync(err error) bool {
-	return false
+	// GetChangeTime returns the change time (may be same as write time on some platforms)
+	GetChangeTime() time.Time
 }
