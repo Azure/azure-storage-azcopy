@@ -713,11 +713,6 @@ func GetJobLCMWrapper(jobID common.JobID) common.LifecycleMgr {
 	}
 }
 
-// ListJobs returns the jobId of all the jobs existing in the current instance of azcopy
-func ListJobs(givenStatus common.JobStatus) common.ListJobsResponse {
-	return JobsAdmin.ListJobs(givenStatus)
-}
-
 // GetJobDetails api returns the job FromTo info.
 func GetJobDetails(r common.GetJobDetailsRequest) common.GetJobDetailsResponse {
 	jm, found := JobsAdmin.JobMgr(r.JobID)

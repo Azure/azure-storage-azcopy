@@ -12,7 +12,7 @@ type CleanJobsOptions struct {
 }
 
 type CleanJobsResult struct {
-	Count int            // Number of jobs cleaned
+	Count int            // Number of files cleaned
 	Jobs  []common.JobID // List of job IDs cleaned if WithStatus is not All, otherwise nil
 }
 
@@ -35,11 +35,11 @@ func (c Client) CleanJobs(opts CleanJobsOptions) (result CleanJobsResult, err er
 				result.Jobs = []common.JobID{}
 			}
 			result.Jobs = append(result.Jobs, job.JobId)
-			err = jobsAdmin.RemoveSingleJobFiles(job.JobId)
+			count, err := jobsAdmin.RemoveSingleJobFiles(job.JobId)
 			if err != nil {
 				return result, fmt.Errorf("failed to remove job %s due to error: %w", job.JobId, err)
 			} else {
-				result.Count++
+				result.Count += count
 			}
 		}
 	}
