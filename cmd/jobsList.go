@@ -96,7 +96,22 @@ func PrintExistingJobIds(listJobResponse azcopy.ListJobsResponse) error {
 
 	glcm.Exit(func(format common.OutputFormat) string {
 		if format == common.EOutputFormat.Json() {
-			jsonOutput, err := json.Marshal(listJobResponse)
+			// Create the response structure using types from the common package.
+			resp := common.ListJobsResponse{
+				JobIDDetails: make([]common.JobIDDetails, len(listJobResponse.Details)),
+			}
+
+			// Convert from azcopy.JobDetail to common.JobIDDetails.
+			for i, d := range listJobResponse.Details {
+				resp.JobIDDetails[i] = common.JobIDDetails{
+					JobId:         d.JobID,
+					CommandString: d.Command,
+					StartTime:     d.StartTime.Unix(),
+					JobStatus:     d.Status,
+				}
+			}
+
+			jsonOutput, err := json.Marshal(resp)
 			common.PanicIfErr(err)
 			return string(jsonOutput)
 		}
