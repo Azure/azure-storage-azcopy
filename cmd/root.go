@@ -382,7 +382,7 @@ func beginDetectNewVersion() chan struct{} {
 		} else {
 			// Step 2: Gets latest release on GitHub
 			// If the cache version is expired, then we need to make a new API call
-			glcm.Info("checking against latest Github release version")
+			// checking against latest Github release version
 			gitHubRemoteVersion, err := getGitHubLatestRemoteVersion()
 			if err != nil {
 				return
