@@ -12,17 +12,16 @@ type RemoveJobOptions struct {
 }
 
 type RemoveJobResult struct {
+	Count int // Number of files cleaned
 }
-
-// TODO: (gapra) Should we only return error or leave result for futureproofing?
 
 // RemoveJob removes a job with the specified JobID.
 func (c Client) RemoveJob(opts RemoveJobOptions) (result RemoveJobResult, err error) {
 	result = RemoveJobResult{}
 	if opts.JobID.IsEmpty() {
-		return result, errors.New("RemoveJob requires the JobID")
+		return result, errors.New("remove job requires the JobID")
 	}
-	err = jobsAdmin.RemoveSingleJobFiles(opts.JobID)
+	result.Count, err = jobsAdmin.RemoveSingleJobFiles(opts.JobID)
 	if err != nil {
 		return result, fmt.Errorf("failed to remove log and job plan files for job %s due to error: %w", opts.JobID, err)
 	}

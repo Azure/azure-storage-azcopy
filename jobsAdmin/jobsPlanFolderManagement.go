@@ -75,7 +75,7 @@ func BlindDeleteAllJobFiles(currentJobID common.JobID) (int, error) {
 	return numPlanFilesRemoved + numLogFilesRemoved, err
 }
 
-func RemoveSingleJobFiles(jobID common.JobID) error {
+func RemoveSingleJobFiles(jobID common.JobID) (int, error) {
 	// get rid of the job plan files
 	numPlanFileRemoved, err := removeFilesWithPredicate(common.AzcopyJobPlanFolder, func(s string) bool {
 		if strings.Contains(s, jobID.String()) && strings.Contains(s, ".steV") {
@@ -84,7 +84,7 @@ func RemoveSingleJobFiles(jobID common.JobID) error {
 		return false
 	})
 	if err != nil {
-		return err
+		return numPlanFileRemoved, err
 	}
 
 	// get rid of the logs
@@ -97,14 +97,14 @@ func RemoveSingleJobFiles(jobID common.JobID) error {
 		return false
 	})
 	if err != nil {
-		return err
+		return numPlanFileRemoved + numLogFileRemoved, err
 	}
 
 	if numLogFileRemoved+numPlanFileRemoved == 0 {
-		return errors.New("cannot find any log or job plan file with the specified ID")
+		return 0, errors.New("cannot find any log or job plan file with the specified ID")
 	}
 
-	return nil
+	return numPlanFileRemoved + numLogFileRemoved, nil
 }
 
 // remove all files whose names are approved by the predicate in the targetFolder
@@ -127,4 +127,40 @@ func removeFilesWithPredicate(targetFolder string, predicate func(string) bool) 
 	}
 
 	return count, nil
+}
+
+func ListJobs(givenStatus common.JobStatus) common.ListJobsResponse {
+	ret := common.ListJobsResponse{JobIDDetails: []common.JobIDDetails{}}
+	files := func(ext string) []os.FileInfo {
+		var files []os.FileInfo
+		_ = filepath.Walk(common.AzcopyJobPlanFolder, func(path string, fileInfo os.FileInfo, _ error) error {
+			if !fileInfo.IsDir() && strings.HasSuffix(fileInfo.Name(), ext) {
+				files = append(files, fileInfo)
+			}
+			return nil
+		})
+		return files
+	}(fmt.Sprintf(".steV%d", ste.DataSchemaVersion))
+
+	// TODO : sort the file.
+	for f := 0; f < len(files); f++ {
+		planFile := ste.JobPartPlanFileName(files[f].Name())
+		jobID, partNum, err := planFile.Parse()
+		if err != nil || partNum != 0 { // Summary is in 0th JobPart
+			continue
+		}
+
+		mmf := planFile.Map()
+		jpph := mmf.Plan()
+
+		if givenStatus == common.EJobStatus.All() || givenStatus == jpph.JobStatus() {
+			ret.JobIDDetails = append(ret.JobIDDetails,
+				common.JobIDDetails{JobId: jobID, CommandString: jpph.CommandString(),
+					StartTime: jpph.StartTime, JobStatus: jpph.JobStatus()})
+		}
+
+		mmf.Unmap()
+	}
+
+	return ret
 }
