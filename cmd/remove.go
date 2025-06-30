@@ -130,12 +130,12 @@ func init() {
 		"\n The value should be in ISO8601 format. "+
 		"\n If no timezone is specified, the value is assumed to be in the local timezone of the machine running AzCopy. "+
 		"\n E.g. '2020-08-19T15:04:00Z' for a UTC time, or '2020-08-19' for midnight (00:00) in the local timezone. "+
-		"\n As of AzCopy 10.7, this flag applies only to files, not folders, so folder properties won't be copied when using this flag with --preserve-smb-info or --preserve-smb-permissions.")
+		"\n As of AzCopy 10.7, this flag applies only to files, not folders, so folder properties won't be copied when using this flag with --preserve-info or --preserve-permissions.")
 	deleteCmd.PersistentFlags().StringVar(&raw.includeAfter, common.IncludeAfterFlagName, "", "Include only those files modified on or after the given date/time. "+
 		"\n The value should be in ISO8601 format. "+
 		"\n If no timezone is specified, the value is assumed to be in the local timezone of the machine running AzCopy. "+
 		"\n E.g. '2020-08-19T15:04:00Z' for a UTC time, or '2020-08-19' for midnight (00:00) in the local timezone. "+
-		"\n As of AzCopy 10.5, this flag applies only to files, not folders, so folder properties won't be copied when using this flag with --preserve-smb-info or --preserve-smb-permissions.")
+		"\n As of AzCopy 10.5, this flag applies only to files, not folders, so folder properties won't be copied when using this flag with --preserve-info or --preserve-permissions.")
 	deleteCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "'Enable' by default to treat file share related operations in a safe manner. "+
 		"\n Available options: "+strings.Join(common.ValidTrailingDotOptions(), ", ")+". "+
 		"\n Choose 'Disable' to go back to legacy (potentially unsafe) treatment of trailing dot files where the file service will trim any trailing dots in paths. "+
