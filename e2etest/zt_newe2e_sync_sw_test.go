@@ -67,68 +67,6 @@ func (s *SWSyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariat
 	}, false)
 }
 
-/*
-func (s *SWSyncTestSuite) Scenario_SingleFile(svm *ScenarioVariationManager) {
-	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbSync})
-	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.BlobFS()})), ResourceDefinitionContainer{}).GetObject(svm, "test", common.EEntityType.File())
-	// The object must exist already if we're syncing.
-	if azCopyVerb == AzCopyVerbSync {
-		dstObj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
-
-		if !svm.Dryrun() {
-			// Make sure the LMT is in the past
-			time.Sleep(time.Second * 10)
-		}
-	}
-
-	body := NewRandomObjectContentContainer(SizeFromString("10K"))
-	// Scale up from service to object
-	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local()})), ResourceDefinitionObject{
-		ObjectName: pointerTo("test"),
-		Body:       body,
-	})
-
-	// no local->local
-	if srcObj.Location().IsLocal() && dstObj.Location().IsLocal() {
-		svm.InvalidateScenario()
-		return
-	}
-
-	sasOpts := GenericAccountSignatureValues{}
-
-	stdOut, _ := RunAzCopy(
-		svm,
-		AzCopyCommand{
-			Verb: azCopyVerb,
-			Targets: []ResourceManager{
-				TryApplySpecificAuthType(srcObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
-					SASTokenOptions: sasOpts,
-				}),
-				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
-					SASTokenOptions: sasOpts,
-				}),
-			},
-			Flags: SyncFlags{
-				CopySyncCommonFlags: CopySyncCommonFlags{
-					Recursive: pointerTo(false),
-				},
-				DeleteDestination: pointerTo(true),
-			},
-		})
-
-	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
-		Body: body,
-	}, true)
-
-	ValidatePlanFiles(svm, stdOut, ExpectedPlanFile{
-		Objects: map[PlanFilePath]PlanFileObject{
-			PlanFilePath{SrcPath: "", DstPath: ""}: {
-				Properties: ObjectProperties{},
-			},
-		},
-	})
-}
-*/
 func (s *SWSyncTestSuite) Scenario_MultiFileUpload(svm *ScenarioVariationManager) {
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbSync}) // Calculate verb early to create the destination object early
 
@@ -206,9 +144,9 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUpload_NoChange(svm *ScenarioVariati
 	// Scale up from service to object
 	srcDef := ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
-			"abc":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K")),ObjectShouldExist: pointerTo(true)},
-			"def":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K")),ObjectShouldExist: pointerTo(true)},
-			"foobar": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K")),ObjectShouldExist: pointerTo(true)},
+			"abc":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K")), ObjectShouldExist: pointerTo(true)},
+			"def":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K")), ObjectShouldExist: pointerTo(true)},
+			"foobar": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K")), ObjectShouldExist: pointerTo(true)},
 		},
 	}
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, srcLoc), srcDef)
@@ -219,12 +157,11 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUpload_NoChange(svm *ScenarioVariati
 		return
 	}
 
-
 	sasOpts := GenericAccountSignatureValues{}
 	copySyncFlag := CopySyncCommonFlags{
-			Recursive: pointerTo(false),
+		Recursive: pointerTo(false),
 	}
-	stdOut,_ := RunAzCopy(
+	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
@@ -746,7 +683,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFileAndCreateFolderWithSameName(svm *Sc
 		Objects: srcObjsNew,
 	}, true)
 
-	if dstContainer.Location() == common.ELocation.Blob() || dstContainer.Location() == common.ELocation.BlobFS(){
+	if dstContainer.Location() == common.ELocation.Blob() || dstContainer.Location() == common.ELocation.BlobFS() {
 		ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 			Objects: ObjectResourceMappingFlat{
 				"dir_file_copy_test/test0.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(true)},
@@ -1217,6 +1154,111 @@ func (s *SWSyncTestSuite) Scenario_FolderMetadataModTimeChange(svm *ScenarioVari
 				},
 			},
 		},
+	}, true)
+
+}
+
+func (s *SWSyncTestSuite) Scenario_AddNonEmptyFolder(svm *ScenarioVariationManager) {
+	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbSync}) // Calculate verb early to create the destination object early
+
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})), ResourceDefinitionContainer{})
+
+	dirsToCreate := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test"}
+
+	// Create destination directories
+	srcObjs := make(ObjectResourceMappingFlat)
+	for _, dir := range dirsToCreate {
+		obj := ResourceDefinitionObject{ObjectName: pointerTo(dir), ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}}
+		if dstContainer.Location() != common.ELocation.Blob() {
+			srcObjs[dir] = obj
+		}
+		for i := range 5 {
+			name := dir + "/test" + strconv.Itoa(i) + ".txt"
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
+			srcObjs[name] = obj
+		}
+	}
+
+	for _, obj := range srcObjs {
+		if obj.EntityType != common.EEntityType.Folder() {
+			CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+		}
+	}
+
+	sasOpts := GenericAccountSignatureValues{}
+
+	RunAzCopy(
+		svm,
+		AzCopyCommand{
+			// Sync is not included at this moment, because sync requires
+			Verb: azCopyVerb,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+				TryApplySpecificAuthType(dstContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+			},
+			Flags: SyncFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive: pointerTo(false),
+					//IncludeDirectoryStubs: pointerTo(true),
+				},
+				DeleteDestination: pointerTo(true),
+			},
+		})
+
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: srcObjs,
+	}, true)
+
+	//Add new diretory dir_file_copy_test/new_folder
+	dirsToCreateNew := []string{"dir_file_copy_test/new_folder"}
+
+	for _, dir := range dirsToCreateNew {
+		obj := ResourceDefinitionObject{ObjectName: pointerTo(dir), ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}}
+		if dstContainer.Location() != common.ELocation.Blob() {
+			srcObjs[dir] = obj
+		}
+		for i := range 5 {
+			name := dir + "/test" + strconv.Itoa(i) + ".txt"
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
+			srcObjs[name] = obj
+		}
+	}
+
+	for _, obj := range srcObjs {
+		if obj.EntityType != common.EEntityType.Folder() {
+			CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+		}
+	}
+
+	RunAzCopy(
+		svm,
+		AzCopyCommand{
+			// Sync is not included at this moment, because sync requires
+			Verb: azCopyVerb,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+				TryApplySpecificAuthType(dstContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+			},
+			Flags: SyncFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive: pointerTo(false),
+					//IncludeDirectoryStubs: pointerTo(true),
+				},
+				DeleteDestination: pointerTo(true),
+			},
+		})
+
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: srcObjs,
 	}, true)
 
 }
