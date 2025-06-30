@@ -21,6 +21,7 @@
 package cmd
 
 import (
+	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
 	"net/http"
@@ -217,8 +218,12 @@ func TestGetGitHubLatestVersion(t *testing.T) {
 	a.NoError(err)
 	a.NotNil(latestVersion)
 	a.NotEmpty(latestVersion.original)
-	versionVar, _ := NewVersion(common.AzcopyVersion)
-	sameOrLaterVersion := latestVersion.OlderThan(*versionVar) || latestVersion.EqualTo(*versionVar)
+	versionVar, err := NewVersion(common.AzcopyVersion)
+	a.NoError(err)
+	a.NotNil(versionVar)
+	fmt.Println(latestVersion.original, versionVar.original)
+	sameOrLaterVersion := latestVersion.OlderThan(common.DerefOrZero(versionVar)) ||
+		latestVersion.EqualTo(common.DerefOrZero(versionVar))
 	a.True(sameOrLaterVersion)
 }
 
