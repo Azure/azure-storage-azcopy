@@ -148,7 +148,7 @@ func performNFSSpecificValidation(fromTo common.FromTo,
 	// typically requires elevated privileges. To safely handle permission
 	// changes during the local file operation, we enforce that the process
 	// must be running as root.
-	fmt.Println("-------------FromTo: ", fromTo.String())
+	//fmt.Println("-------------FromTo: ", fromTo.String())
 	if !preservePermissions.IsTruthy() && fromTo == common.EFromTo.FileNFSLocal() {
 		if err := common.EnsureRunningAsRoot(); err != nil {
 			return fmt.Errorf("failed to copy source to destination without preserving permissions: operation not permitted. Please retry with root privileges or use the default option (--preserve-permissions=true)")
