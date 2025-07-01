@@ -51,8 +51,9 @@ func createJobWithStatus(t *testing.T, status common.JobStatus) common.JobID {
 	jobID := common.NewJobID()
 	// Create a dummy job part order request
 	order := common.CopyJobPartOrderRequest{
-		JobID:   jobID,
-		PartNum: 0,
+		JobID:         jobID,
+		PartNum:       0,
+		CommandString: jobID.String(), // This is just a placeholder; in a real scenario, it would be the command string for the job.
 	}
 
 	// Create the plan file name
