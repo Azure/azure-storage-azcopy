@@ -103,7 +103,7 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 			case common.ELocation.Blob(),
 				common.ELocation.S3(), common.ELocation.GCP():
 				return newURLToBlobCopier
-			case common.ELocation.File():
+			case common.ELocation.File(), common.ELocation.FileNFS():
 				return newURLToAzureFileCopier
 			case common.ELocation.BlobFS():
 				return newURLToBlobCopier
@@ -115,7 +115,7 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 			switch fromTo.To() {
 			case common.ELocation.Blob():
 				return newBlobUploader
-			case common.ELocation.File():
+			case common.ELocation.File(), common.ELocation.FileNFS():
 				return newAzureFilesUploader
 			case common.ELocation.BlobFS():
 				return newBlobFSUploader
@@ -133,7 +133,7 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 			return newBenchmarkSourceInfoProvider
 		case common.ELocation.Blob():
 			return newBlobSourceInfoProvider
-		case common.ELocation.File():
+		case common.ELocation.File(), common.ELocation.FileNFS():
 			return newFileSourceInfoProvider
 		case common.ELocation.BlobFS():
 			return newBlobSourceInfoProvider // Blob source info provider pulls info from blob and dfs
