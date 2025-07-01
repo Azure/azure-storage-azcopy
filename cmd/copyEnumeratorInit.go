@@ -63,8 +63,10 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	// If preserve properties is enabled, but get properties in backend is disabled, turn it on
 	// If source change validation is enabled on files to remote, turn it on (consider a separate flag entirely?)
 	getRemoteProperties := cca.ForceWrite == common.EOverwriteOption.IfSourceNewer() ||
-		(cca.FromTo.From() == common.ELocation.File() && !cca.FromTo.To().IsRemote()) || // If it's a download, we still need LMT and MD5 from files.
-		(cca.FromTo.From() == common.ELocation.File() && cca.FromTo.To().IsRemote() && (cca.s2sSourceChangeValidation || cca.IncludeAfter != nil || cca.IncludeBefore != nil)) || // If S2S from File to *, and sourceChangeValidation is enabled, we get properties so that we have LMTs. Likewise, if we are using includeAfter or includeBefore, which require LMTs.
+		((cca.FromTo.From() == common.ELocation.File() || cca.FromTo.From() == common.ELocation.FileNFS()) &&
+			!cca.FromTo.To().IsRemote()) || // If it's a download, we still need LMT and MD5 from files.
+		((cca.FromTo.From() == common.ELocation.File() || cca.FromTo.From() == common.ELocation.FileNFS()) &&
+			cca.FromTo.To().IsRemote() && (cca.s2sSourceChangeValidation || cca.IncludeAfter != nil || cca.IncludeBefore != nil)) || // If S2S from File to *, and sourceChangeValidation is enabled, we get properties so that we have LMTs. Likewise, if we are using includeAfter or includeBefore, which require LMTs.
 		(cca.FromTo.From().IsRemote() && cca.FromTo.To().IsRemote() && cca.s2sPreserveProperties.Value() && !cca.s2sGetPropertiesInBackend) // If S2S and preserve properties AND get properties in backend is on, turn this off, as properties will be obtained in the backend.
 	jobPartOrder.S2SGetPropertiesInBackend = cca.s2sPreserveProperties.Value() && !getRemoteProperties && cca.s2sGetPropertiesInBackend // Infer GetProperties if GetPropertiesInBackend is enabled.
 	jobPartOrder.S2SSourceChangeValidation = cca.s2sSourceChangeValidation
@@ -529,7 +531,7 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 			return nil
 		}
 		return err
-	case common.ELocation.File():
+	case common.ELocation.File(), common.ELocation.FileNFS():
 		fsc, _ := sc.FileServiceClient()
 		sc := fsc.NewShareClient(containerName)
 
@@ -600,7 +602,8 @@ func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool
 	pathParts := strings.Split(path, common.AZCOPY_PATH_SEPARATOR_STRING)
 
 	// If downloading on Windows or uploading to files, encode unsafe characters.
-	if (loc == common.ELocation.Local() && !source && runtime.GOOS == "windows") || (!source && loc == common.ELocation.File()) {
+	if (loc == common.ELocation.Local() && !source && runtime.GOOS == "windows") ||
+		(!source && (loc == common.ELocation.File() || loc == common.ELocation.FileNFS())) {
 		// invalidChars := `<>\/:"|?*` + string(0x00)
 
 		for k, c := range encodedInvalidCharacters {
@@ -610,7 +613,8 @@ func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool
 		}
 
 		// If uploading from Windows or downloading from files, decode unsafe chars if user enables decoding
-	} else if ((!source && fromTo.From() == common.ELocation.Local() && runtime.GOOS == "windows") || (!source && fromTo.From() == common.ELocation.File())) && !disableAutoDecoding {
+	} else if ((!source && fromTo.From() == common.ELocation.Local() && runtime.GOOS == "windows") ||
+		(!source && (fromTo.From() == common.ELocation.File() || fromTo.From() == common.ELocation.FileNFS()))) && !disableAutoDecoding {
 
 		for encoded, c := range reverseEncodedChars {
 			for k, p := range pathParts {

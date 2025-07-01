@@ -460,7 +460,7 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaults() {
 }
 
 func validateForceIfReadOnly(toForce bool, fromTo common.FromTo) error {
-	targetIsFiles := fromTo.To() == common.ELocation.File() ||
+	targetIsFiles := (fromTo.To() == common.ELocation.File() || fromTo.To() == common.ELocation.FileNFS()) ||
 		fromTo == common.EFromTo.FileTrash()
 	targetIsWindowsFS := fromTo.To() == common.ELocation.Local() &&
 		runtime.GOOS == "windows"
@@ -1013,7 +1013,10 @@ func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.
 func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// Make AUTO default for Azure Files since Azure Files throttles too easily unless user specified concurrency value
-	if jobsAdmin.JobsAdmin != nil && (cca.FromTo.From() == common.ELocation.File() || cca.FromTo.To() == common.ELocation.File()) && common.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue()) == "" {
+	if jobsAdmin.JobsAdmin != nil &&
+		((cca.FromTo.From() == common.ELocation.File() || cca.FromTo.From() == common.ELocation.FileNFS()) ||
+			(cca.FromTo.To() == common.ELocation.File() || cca.FromTo.To() == common.ELocation.FileNFS())) &&
+		common.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue()) == "" {
 		jobsAdmin.JobsAdmin.SetConcurrencySettingsToAuto()
 	}
 
@@ -1105,7 +1108,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, srcReauth)
 	var azureFileSpecificOptions any
-	if cca.FromTo.From() == common.ELocation.File() {
+	if cca.FromTo.From() == common.ELocation.File() || cca.FromTo.From() == common.ELocation.FileNFS() {
 		azureFileSpecificOptions = &common.FileClientOptions{
 			AllowTrailingDot: cca.trailingDot.IsEnabled(),
 		}
@@ -1123,10 +1126,11 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		return err
 	}
 
-	if cca.FromTo.To() == common.ELocation.File() {
+	if cca.FromTo.To() == common.ELocation.File() || cca.FromTo.To() == common.ELocation.FileNFS() {
 		azureFileSpecificOptions = &common.FileClientOptions{
-			AllowTrailingDot:       cca.trailingDot.IsEnabled(),
-			AllowSourceTrailingDot: cca.trailingDot.IsEnabled() && cca.FromTo.From() == common.ELocation.File(),
+			AllowTrailingDot: cca.trailingDot.IsEnabled(),
+			AllowSourceTrailingDot: cca.trailingDot.IsEnabled() &&
+				(cca.FromTo.From() == common.ELocation.File() || cca.FromTo.From() == common.ELocation.FileNFS()),
 		}
 	}
 
@@ -1171,7 +1175,8 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	}
 
 	// TODO: Remove this check when FileBlob w/ File OAuth works.
-	if cca.FromTo.IsS2S() && cca.FromTo.From() == common.ELocation.File() && srcCredInfo.CredentialType.IsAzureOAuth() && cca.FromTo.To() != common.ELocation.File() {
+	if cca.FromTo.IsS2S() && (cca.FromTo.From() == common.ELocation.File() || cca.FromTo.From() == common.ELocation.FileNFS()) &&
+		srcCredInfo.CredentialType.IsAzureOAuth() && (cca.FromTo.To() != common.ELocation.File() || cca.FromTo.To() != common.ELocation.FileNFS()) {
 		return fmt.Errorf("S2S copy from Azure File authenticated with Azure AD to Blob/BlobFS is not supported")
 	}
 
@@ -1186,30 +1191,9 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 	}
 
-	//Protocol compatibility for SMB and NFS
-	// Handles source validation
-	if cca.FromTo.IsS2S() {
-		if cca.FromTo.From() == common.ELocation.File() {
-			if err := validateShareProtocolCompatibility(ctx,
-				cca.FromTo, cca.Source, jobPartOrder.SrcServiceClient, common.IsNFSCopy(), true); err != nil {
-				return err
-			}
-		} else if common.IsNFSCopy() {
-			return errors.New("NFS copy is not supported for source location " + cca.FromTo.From().String())
-		}
-	}
-
-	// Handle destination validation
-	if (cca.FromTo.IsUpload() || cca.FromTo.IsS2S()) && cca.FromTo.To() == common.ELocation.File() {
-		if err := validateShareProtocolCompatibility(ctx,
-			cca.FromTo, cca.Destination, jobPartOrder.DstServiceClient, common.IsNFSCopy(), false); err != nil {
-			return err
-		}
-	} else if cca.FromTo.IsDownload() && cca.FromTo.From() == common.ELocation.File() {
-		if err := validateShareProtocolCompatibility(ctx,
-			cca.FromTo, cca.Source, jobPartOrder.SrcServiceClient, common.IsNFSCopy(), true); err != nil {
-			return err
-		}
+	// Check protocol compatibility for File Shares
+	if err := validateProtocolCompatibility(ctx, cca.FromTo, cca.Source, cca.Destination, jobPartOrder.SrcServiceClient, jobPartOrder.DstServiceClient); err != nil {
+		return err
 	}
 
 	switch {
@@ -1639,7 +1623,7 @@ func init() {
 			raw.preserveInfo, raw.preservePermissions = ComputePreserveFlags(cmd, userFromTo,
 				raw.preserveInfo, raw.preserveSMBInfo, raw.preservePermissions, raw.preserveSMBPermissions)
 			// TODO: Remove. Added for debugging purposes.
-			fmt.Println(fmt.Sprintf("PreserveInfo: %v, PreservePermissions: %v, NFS: %v", raw.preserveInfo, raw.preservePermissions, common.IsNFSCopy()))
+			fmt.Println(fmt.Sprintf("PreserveInfo: %v, PreservePermissions: %v, NFS: %v, fromTo: %v", raw.preserveInfo, raw.preservePermissions, common.IsNFSCopy(), userFromTo.String()))
 
 			cooked, err := raw.cook()
 			if err != nil {

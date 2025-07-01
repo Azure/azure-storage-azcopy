@@ -19,7 +19,7 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 		return err
 	}
 
-	allowAutoDecompress := cooked.FromTo == common.EFromTo.BlobLocal() || cooked.FromTo == common.EFromTo.FileLocal()
+	allowAutoDecompress := cooked.FromTo == common.EFromTo.BlobLocal() || cooked.FromTo == common.EFromTo.FileLocal() || cooked.FromTo == common.EFromTo.FileNFSLocal()
 	if cooked.autoDecompress && !allowAutoDecompress {
 		return errors.New("automatic decompression is only supported for downloads from Blob and Azure Files") // as at Sept 2019, our ADLS Gen 2 Swagger does not include content-encoding for directory (path) listings so we can't support it there
 	}
@@ -159,7 +159,7 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 		if cooked.s2sSourceChangeValidation {
 			return fmt.Errorf("s2s-detect-source-changed is not supported while uploading to Blob Storage")
 		}
-	case common.EFromTo.LocalFile():
+	case common.EFromTo.LocalFile(), common.EFromTo.LocalFileNFS():
 		if cooked.preserveLastModifiedTime {
 			return fmt.Errorf("preserve-last-modified-time is not supported while uploading")
 		}
@@ -184,6 +184,7 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 		}
 	case common.EFromTo.BlobLocal(),
 		common.EFromTo.FileLocal(),
+		common.EFromTo.FileNFSLocal(),
 		common.EFromTo.BlobFSLocal():
 		if cooked.SymlinkHandling.Follow() {
 			return fmt.Errorf("follow-symlinks flag is not supported while downloading")
@@ -215,7 +216,9 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 		common.EFromTo.BlobBlob(),
 		common.EFromTo.FileBlob(),
 		common.EFromTo.FileFile(),
-		common.EFromTo.GCPBlob():
+		common.EFromTo.GCPBlob(),
+		common.EFromTo.FileNFSFileNFS():
+
 		if cooked.preserveLastModifiedTime {
 			return fmt.Errorf("preserve-last-modified-time is not supported while copying from service to service")
 		}

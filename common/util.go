@@ -193,7 +193,7 @@ func GetServiceClientForLocation(loc Location,
 		ret.bsc = bsc
 		return ret, nil
 
-	case ELocation.File():
+	case ELocation.File(), ELocation.FileNFS():
 		fileURLParts, err := file.ParseURL(resourceURL)
 		if err != nil {
 			return nil, err

@@ -51,6 +51,14 @@ func ValidateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo,
 
 	}
 
+	if userFromTo == common.EFromTo.LocalFileSMB() {
+		userFromTo = common.EFromTo.LocalFile()
+	} else if userFromTo == common.EFromTo.FileSMBLocal() {
+		userFromTo = common.EFromTo.FileLocal()
+	} else if userFromTo == common.EFromTo.FileSMBFileSMB() {
+		userFromTo = common.EFromTo.FileFile()
+	}
+
 	return userFromTo, nil
 }
 
