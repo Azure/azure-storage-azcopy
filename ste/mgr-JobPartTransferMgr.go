@@ -143,7 +143,6 @@ type TransferInfo struct {
 
 	VersionID  string
 	SnapshotID string
-	IsNFSCopy  bool
 }
 
 func (i *TransferInfo) IsFilePropertiesTransfer() bool {
@@ -439,7 +438,6 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 		RehydratePriority: plan.RehydratePriority.ToRehydratePriorityType(),
 		VersionID:         versionID,
 		SnapshotID:        snapshotID,
-		IsNFSCopy:         plan.IsNFSCopy,
 	}
 }
 
