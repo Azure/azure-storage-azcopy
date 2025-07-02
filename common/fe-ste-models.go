@@ -55,10 +55,11 @@ const (
 
 	// Since we haven't updated the Go SDKs to handle CPK just yet, we need to detect CPK related errors
 	// and inform the user that we don't support CPK yet.
-	CPK_ERROR_SERVICE_CODE = "BlobUsesCustomerSpecifiedEncryption"
-	BLOB_NOT_FOUND         = "BlobNotFound"
-	FILE_NOT_FOUND         = "The specified file was not found."
-	EINTR_RETRY_COUNT      = 5
+	CPK_ERROR_SERVICE_CODE    = "BlobUsesCustomerSpecifiedEncryption"
+	BLOB_NOT_FOUND            = "BlobNotFound"
+	FILE_NOT_FOUND            = "The specified file was not found."
+	EINTR_RETRY_COUNT         = 5
+	RECOMMENDED_OBJECTS_COUNT = 10000000
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
