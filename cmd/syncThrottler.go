@@ -31,7 +31,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -45,13 +44,14 @@ const (
 
 	// Throttling control flags
 	enableThrottling               bool = true
-	enableFileBasedThrottling      bool = true
+	enableEnumerationThrottling    bool = true // Throttle directory enumeration to prevent deadlocks
+	enableFileBasedThrottling      bool = false
 	enableMemoryBasedThrottling    bool = true
 	enableGoroutineBasedThrottling bool = true
 	onlyReduceLimits               bool = true // If true, only reduce limits, never increase
 
 	absoluteMaxActiveFiles     int64 = 10_000_000 // Absolute max active files, used for dynamic limits
-	maxFilesPerActiveDirectory int64 = 80_000     // Max files per active directory
+	maxFilesPerActiveDirectory int64 = 1_000_000  // Max files per active directory
 
 	// These are static limits as of now. This can be dynamically adjusted later
 	// by the StatsMonitor based on available system resources.
@@ -82,8 +82,8 @@ const (
 	goroutineReleaseThreshold = 85  // Release at 85% of goroutine limit
 
 	// Defaults
-	defaultPhysicalMemoryGB uint64 = 16 // Default physical memory in GB, used if sysinfo fails
-	defaultNumCores         int32  = 8  // Default number of CPU cores, used if runtime.NumCPU() fails
+	defaultPhysicalMemoryGB uint64 = 8 // Default physical memory in GB, used if sysinfo fails
+	defaultNumCores         int32  = 4 // Default number of CPU cores, used if runtime.NumCPU() fails
 
 	directorySizeBuffer = 1024
 
@@ -95,24 +95,46 @@ const (
 // These are configured based on system capabilities and transfer scenarios.
 var (
 	// Core concurrency settings
-	crawlParallelism int32
-	maxActiveFiles   int64
+	crawlParallelism                  int32
+	maxActiveFiles                    int64
+	maxActivelyEnumeratingDirectories int64
 
 	// Counters
-	activeDirectories         atomic.Int64
-	totalFilesInIndexer       atomic.Int64
-	totalDirectoriesProcessed atomic.Uint64 // never decremented
+	activeDirectories            atomic.Int64
+	activeDirectoriesEnumerating atomic.Int64 // Number of directories currently being enumerated
+	totalFilesInIndexer          atomic.Int64
+	totalDirectoriesProcessed    atomic.Uint64 // never decremented
 
 	// Dynamic limits
-	activeFilesLimit atomic.Int64 // Dynamic limit for active files managed by StatsMonitor
+	activeFilesLimit          atomic.Int64 // Dynamic limit for active files managed by StatsMonitor
+	enumeratingDirectoryLimit atomic.Int64 // Dynamic limit for actively enumerating directories
 )
 
 // initializeLimits initializes the concurrency and memory limits based on system resources
 // and the transfer scenario (FromTo). It sets MaxActiveFiles based on available memory
 // and CrawlParallelism based on CPU cores with scenario-specific multipliers.
-func initializeLimits(fromTo common.FromTo) {
-	maxActiveFiles = int64(GetTotalPhysicalMemoryGB()) * filesPerGBMemory // Set based on physical memory, 1 million files per GB
+func initializeLimits(fromTo common.FromTo, orchestratorOptions *syncOrchestratorOptions) {
+	memory, err := common.GetTotalPhysicalMemory()
+	if err != nil {
+		glcm.Warn(fmt.Sprintf("Failed to get total physical memory: %v", err))
+		memory = int64(defaultPhysicalMemoryGB)
+	}
+	memoryGB := memory / gbToBytesMultiplier            // Convert to GB
+	maxActiveFiles = int64(memoryGB) * filesPerGBMemory // Set based on physical memory, 1 million files per GB
+
+	maxDirectoryDirectChildCount := maxFilesPerActiveDirectory // Default max direct children per directory
+	if orchestratorOptions != nil {
+		maxDirectoryDirectChildCount = orchestratorOptions.maxDirectoryDirectChildCount
+	}
+
+	if maxDirectoryDirectChildCount > maxActiveFiles {
+		glcm.Warn(fmt.Sprintf("Max directory direct child count (%d) exceeds max active files (%d), adjusting to prevent deadlock", maxDirectoryDirectChildCount, maxActiveFiles))
+		maxDirectoryDirectChildCount = maxActiveFiles // Prevent deadlock by ensuring at least one directory can be processed
+	}
+
+	maxActivelyEnumeratingDirectories = maxActiveFiles / maxDirectoryDirectChildCount // Ensure at least one directory can be processed
 	activeFilesLimit.Store(maxActiveFiles)
+	enumeratingDirectoryLimit.Store(maxActivelyEnumeratingDirectories) // Set initial limit for actively enumerating directories
 
 	var multiplier int
 	switch fromTo.From() {
@@ -133,22 +155,6 @@ func initializeLimits(fromTo common.FromTo) {
 }
 
 // --- END Throttling and Concurrency Configuration ---
-
-// GetTotalPhysicalMemoryGB retrieves the total physical memory available on the system in GB.
-// It uses syscall.Sysinfo to get system information and falls back to a default value
-// if the system call fails.
-func GetTotalPhysicalMemoryGB() uint64 {
-	var sysInfo syscall.Sysinfo_t
-	var totalGB uint64
-	if err := syscall.Sysinfo(&sysInfo); err != nil {
-		totalGB = defaultPhysicalMemoryGB
-	} else {
-		// Convert from bytes to GB
-		totalGB = (uint64(sysInfo.Totalram)) * uint64(sysInfo.Unit) / gbToBytesMultiplier
-	}
-
-	return totalGB
-}
 
 // GetNumCPU returns the number of logical CPU cores available on the system.
 // It uses runtime.NumCPU() and falls back to a default value if the call fails.
@@ -292,17 +298,22 @@ func (ds *DirSemaphore) shouldThrottle() bool {
 	defer ds.throttleStateMutex.Unlock()
 
 	// Check each resource with hysteresis
+	enumerationThrottling := enableEnumerationThrottling && ds.shouldThrottlingDirectoryEnumeration()
 	fileThrottle := enableFileBasedThrottling && ds.shouldThrottleBasedOnFiles()
 	memoryThrottle := enableMemoryBasedThrottling && ds.shouldThrottleBasedOnMemory()
 	goroutineThrottle := enableGoroutineBasedThrottling && ds.shouldThrottleBasedOnGoroutines()
 
 	// Update overall throttling state
 	previousState := ds.isThrottling
-	ds.isThrottling = fileThrottle || memoryThrottle || goroutineThrottle
+	ds.isThrottling = enumerationThrottling || fileThrottle || memoryThrottle || goroutineThrottle
 
 	// Log state changes
 	if enableThrottleLogs && (previousState != ds.isThrottling) {
 		var reasons []string
+
+		if enumerationThrottling {
+			reasons = append(reasons, "DIRECTORY ENUMERATION")
+		}
 
 		if fileThrottle {
 			reasons = append(reasons, "FILES")
@@ -322,6 +333,22 @@ func (ds *DirSemaphore) shouldThrottle() bool {
 	}
 
 	return ds.isThrottling
+}
+
+func (ds *DirSemaphore) shouldThrottlingDirectoryEnumeration() bool {
+	currentActivelyEnumerating := activeDirectoriesEnumerating.Load()
+	enumeratingLimit := enumeratingDirectoryLimit.Load()
+
+	// We want to do simple throttling here without any hysteresis
+	if currentActivelyEnumerating >= enumeratingLimit {
+		if enableThrottleLogs {
+			glcm.Info(fmt.Sprintf("DIRECTORY ENUMERATION THROTTLED: %d directories actively enumerating (limit: %d)",
+				currentActivelyEnumerating, enumeratingLimit))
+		}
+		return true // Throttle if we hit the limit
+	}
+
+	return false // No throttling needed
 }
 
 // shouldThrottleBasedOnFiles applies hysteresis to file indexer throttling
@@ -360,7 +387,10 @@ func (ds *DirSemaphore) shouldThrottleBasedOnMemory() bool {
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
 
-	totalMemoryBytes := GetTotalPhysicalMemoryGB() * gbToBytesMultiplier
+	totalMemoryBytes, err := common.GetTotalPhysicalMemory()
+	if err != nil {
+		totalMemoryBytes = int64(defaultPhysicalMemoryGB) * gbToBytesMultiplier
+	}
 	usagePercent := float64(memStats.Sys) / float64(totalMemoryBytes) * 100
 
 	if !ds.memoryThrottleActive {
@@ -483,11 +513,13 @@ const (
 // StatsSnapshot captures a point-in-time view of system performance metrics.
 // These snapshots are used for trend analysis and dynamic limit adjustments.
 type StatsSnapshot struct {
-	Timestamp          time.Time
-	IndexerSize        int64
-	ActiveDirectories  int64
-	MemoryUsageMB      uint64
-	UtilizationPercent float64
+	Timestamp              time.Time
+	IndexerSize            int64
+	ActiveDirectories      int64
+	ProcessedDirectories   int64
+	EnumeratingDirectories int64
+	MemoryUsageMB          uint64
+	UtilizationPercent     float64
 }
 
 // StatsMonitor analyzes system performance over time and dynamically adjusts
@@ -539,8 +571,8 @@ func NewStatsMonitor() *StatsMonitor {
 
 		// Monitoring
 		snapshots:          make([]StatsSnapshot, 0, 50),
-		maxSnapshots:       50,               // Keep last 50 snapshots
-		monitoringInterval: time.Second * 20, // Check every 20 seconds
+		maxSnapshots:       50,
+		monitoringInterval: time.Minute * 15,
 		stopMonitoring:     make(chan struct{}),
 	}
 }
@@ -556,8 +588,9 @@ func (sm *StatsMonitor) Start(parentCtx context.Context) {
 	go sm.monitoringLoop()
 
 	glcm.Info(fmt.Sprintf(
-		"Started monitoring for active throttling (Active files limit: %d, Crawl parallelism: %d)",
+		"Started monitoring for active throttling (Active files limit: %d, Enumerating directories limit: %d, Crawl parallelism: %d)",
 		activeFilesLimit.Load(),
+		enumeratingDirectoryLimit.Load(),
 		crawlParallelism))
 }
 
@@ -583,7 +616,6 @@ func (sm *StatsMonitor) monitoringLoop() {
 
 	ticker := time.NewTicker(sm.monitoringInterval)
 	defer ticker.Stop()
-	logCounter := 0
 
 	for {
 		select {
@@ -598,140 +630,9 @@ func (sm *StatsMonitor) monitoringLoop() {
 			}
 
 			snapshot := sm.takeSnapshot()
-			sm.addSnapshot(snapshot)
-			logCounter++
-
-			// Check for adjustment
-			currentLimit := activeFilesLimit.Load()
-			newLimit, adjusted := sm.calculateOptimalLimit(currentLimit)
-			if adjusted {
-				activeFilesLimit.Store(newLimit)
-				sm.lastAdjustmentTime = time.Now()
-			}
+			sm.logSnapshot(snapshot)
 		}
 	}
-}
-
-// analyzeStats examines recent performance samples to determine the current system state.
-// It requires a minimum number of consistent samples before making state determinations
-// to avoid oscillating adjustments based on temporary fluctuations.
-func (sm *StatsMonitor) analyzeStats(samples []StatsSnapshot) StatsState {
-	if len(samples) < sm.consistencyThreshold {
-		return StateOptimal // Not enough data
-	}
-
-	// Check last N samples for consistency
-	recentSamples := samples[len(samples)-sm.consistencyThreshold:]
-
-	// Count samples in each range
-	var optimal, underutilized, critical, aboveOptimal, belowOptimal int
-
-	for _, sample := range recentSamples {
-		size := sample.IndexerSize
-
-		switch {
-		case size >= sm.criticalThreshold:
-			critical++
-		case size >= sm.optimalRangeMax:
-			aboveOptimal++
-		case size >= sm.optimalRangeMin:
-			optimal++
-		case size >= sm.underutilizedThreshold:
-			belowOptimal++
-		default:
-			underutilized++
-		}
-	}
-
-	// Determine state based on majority of samples
-	majority := (sm.consistencyThreshold + 1) / 2
-
-	if critical >= majority {
-		return StateCritical
-	} else if underutilized >= majority {
-		return StateUnderutilized
-	} else if aboveOptimal >= majority {
-		return StateAboveOptimal
-	} else if belowOptimal >= majority {
-		return StateBelowOptimal
-	} else {
-		return StateOptimal
-	}
-}
-
-// calculateOptimalLimit determines the optimal active files limit based on recent performance data.
-// It implements a feedback control system that:
-// - Reduces limits when system is overloaded (critical state)
-// - Increases limits when system is underutilized
-// - Respects cooldown periods to prevent oscillation
-// Returns the new limit and whether an adjustment was made.
-func (sm *StatsMonitor) calculateOptimalLimit(currentLimit int64) (int64, bool) {
-	sm.snapshotMutex.RLock()
-	defer sm.snapshotMutex.RUnlock()
-
-	if currentLimit == absoluteMaxActiveFiles {
-		return currentLimit, false // Already at absolute max, no adjustment needed
-	}
-
-	if len(sm.snapshots) < sm.consistencyThreshold {
-		return currentLimit, false // Not enough data to adjust
-	}
-
-	// Check cooldown period
-	if time.Since(sm.lastAdjustmentTime) < sm.adjustmentCooldown {
-		return currentLimit, false // Still in cooldown
-	}
-
-	state := sm.analyzeStats(sm.snapshots)
-
-	var newLimit int64
-	var reason string
-
-	switch state {
-	case StateCritical:
-		// > target consistently - REDUCE directories aggressively
-		newLimit = int64(float64(currentLimit) * 0.8) // 20% reduction
-		reason = fmt.Sprintf(
-			"CRITICAL: Indexer size > %dM files - reducing directories",
-			sm.criticalThreshold/1000000)
-
-	case StateAboveOptimal:
-		// slightly higher than target - slight reduction
-		newLimit = int64(float64(currentLimit) * 0.9) // 10% reduction
-		reason = "Above optimal range - slight reduction"
-
-	case StateUnderutilized:
-		// < target consistently - INCREASE directories aggressively
-		newLimit = int64(float64(currentLimit) * 1.3) // 30% increase
-		reason = fmt.Sprintf("UNDERUTILIZED: Indexer size < %dM files - increasing directories",
-			sm.underutilizedThreshold/1000000)
-
-	case StateBelowOptimal:
-		// slightly less than target - slight increase
-		newLimit = int64(float64(currentLimit) * 1.1) // 10% increase
-		reason = "Below optimal range - slight increase"
-
-	case StateOptimal:
-		// 4M - 5M files - maintain current limit
-		return currentLimit, false
-
-	default:
-		return currentLimit, false
-	}
-
-	if newLimit > currentLimit && onlyReduceLimits {
-		// If we are only reducing limits, skip increases
-		return currentLimit, false
-	}
-
-	newLimit = min(newLimit, absoluteMaxActiveFiles) // Cap at absolute max
-
-	if newLimit != currentLimit {
-		glcm.Info(fmt.Sprintf("ADJUSTMENT: %s | %d -> %d files",
-			reason, currentLimit, newLimit))
-	}
-
-	return newLimit, (newLimit != currentLimit)
 }
 
 // takeSnapshot captures current system performance metrics including:
@@ -745,29 +646,34 @@ func (sm *StatsMonitor) takeSnapshot() StatsSnapshot {
 
 	currentIndexerSize := totalFilesInIndexer.Load()
 	activeDirs := activeDirectories.Load()
+	enumeratingDirs := activeDirectoriesEnumerating.Load()
+	processedDirs := totalDirectoriesProcessed.Load()
 
 	// Calculate utilization percentage
 	utilizationPercent := float64(currentIndexerSize) / float64(sm.targetIndexerSize) * 100
 
 	return StatsSnapshot{
-		Timestamp:          time.Now(),
-		IndexerSize:        currentIndexerSize,
-		ActiveDirectories:  activeDirs,
-		MemoryUsageMB:      memStats.HeapInuse / mbToBytesMultiplier,
-		UtilizationPercent: utilizationPercent,
+		Timestamp:              time.Now(),
+		IndexerSize:            currentIndexerSize,
+		ActiveDirectories:      activeDirs,
+		ProcessedDirectories:   int64(processedDirs),
+		EnumeratingDirectories: enumeratingDirs,
+		MemoryUsageMB:          memStats.HeapInuse / mbToBytesMultiplier,
+		UtilizationPercent:     utilizationPercent,
 	}
 }
 
-// addSnapshot adds a new performance snapshot to the monitoring history.
+// logSnapshot logs the performance snapshot using glcm.Info and adds it to the monitoring history.
 // It maintains a sliding window of recent snapshots by removing old entries
 // when the maximum snapshot count is exceeded.
-func (sm *StatsMonitor) addSnapshot(snapshot StatsSnapshot) {
-	sm.snapshotMutex.Lock()
-	defer sm.snapshotMutex.Unlock()
-
-	sm.snapshots = append(sm.snapshots, snapshot)
-
-	if len(sm.snapshots) > int(sm.maxSnapshots) {
-		sm.snapshots = sm.snapshots[1:]
-	}
+func (sm *StatsMonitor) logSnapshot(snapshot StatsSnapshot) {
+	// Log the snapshot information
+	glcm.Info(fmt.Sprintf("Performance Snapshot - Timestamp: %s, IndexerSize: %d, ActiveDirs: %d, ProcessedDirs: %d, EnumeratingDirs: %d, MemoryUsageMB: %d, UtilizationPercent: %.2f%%",
+		snapshot.Timestamp.UTC(),
+		snapshot.IndexerSize,
+		snapshot.ActiveDirectories,
+		snapshot.ProcessedDirectories,
+		snapshot.EnumeratingDirectories,
+		snapshot.MemoryUsageMB,
+		snapshot.UtilizationPercent))
 }

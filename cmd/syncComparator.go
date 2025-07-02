@@ -29,15 +29,18 @@ import (
 )
 
 const (
-	syncSkipReasonTime                        = "the source has an older LMT than the destination"
-	syncSkipReasonTimeAndMissingHash          = "the source lacks an associated hash (please upload with --put-md5 for hash comparison) and has an older LMT than the destination"
-	syncSkipReasonMissingHash                 = "the source lacks an associated hash; please upload with --put-md5"
-	syncSkipReasonSameHash                    = "the source has the same hash"
-	syncOverwriteReasonNewerHash              = "the source has a differing hash"
-	syncOverwriteReasonNewerLMT               = "the source is more recent than the destination"
-	syncOverwriteReasonNewerLMTAndMissingHash = "the source lacks an associated hash (please upload with --put-md5 for hash comparison) and is more recent than the destination"
-	syncStatusSkipped                         = "skipped"
-	syncStatusOverwritten                     = "overwritten"
+	syncSkipReasonTime                          = "the source has an older LMT than the destination"
+	syncSkipReasonTimeAndMissingHash            = "the source lacks an associated hash (please upload with --put-md5 for hash comparison) and has an older LMT than the destination"
+	syncSkipReasonMissingHash                   = "the source lacks an associated hash; please upload with --put-md5"
+	syncSkipReasonSameHash                      = "the source has the same hash"
+	syncOverwriteReasonNewerHash                = "the source has a differing hash"
+	syncOverwriteReasonNewerLMT                 = "the source is more recent than the destination"
+	syncOverwriteReasonNewerLMTAndMissingHash   = "the source lacks an associated hash (please upload with --put-md5 for hash comparison) and is more recent than the destination"
+	syncStatusSkipped                           = "skipped"
+	syncStatusOverwritten                       = "overwritten"
+	syncSkipReasonNoChangeInLWTorCT             = "the source has no change in LastWriteTime or ChangeTime compared to the destination"
+	syncSkipReasonEntityTypeChangedNoDelete     = "the source object type has changed compared to the destination and --delete-destination is false"
+	syncSkipReasonEntityTypeChangedFailedDelete = "the source object type has changed compared to the destination and delete destination failed"
 )
 
 func syncComparatorLog(fileName, status, skipReason string, stdout bool) {
@@ -69,9 +72,12 @@ type syncDestinationComparator struct {
 
 	preferSMBTime     bool
 	disableComparison bool
+	deleteDestination common.DeleteDestination
 
 	// Function to increment files/folders not transferred as a result of no change since last sync.
 	incrementNotTransferred func(common.EntityType)
+
+	orchestratorOptions *syncOrchestratorOptions
 }
 
 func newSyncDestinationComparator(
@@ -79,9 +85,12 @@ func newSyncDestinationComparator(
 	copyScheduler,
 	cleaner objectProcessor,
 	comparisonHashType common.SyncHashType,
-	preferSMBTime,
+	preferSMBTime bool,
 	disableComparison bool,
-	incrementNotTransferred func(common.EntityType)) *syncDestinationComparator {
+	deleteDestination common.DeleteDestination,
+	incrementNotTransferred func(common.EntityType),
+	orchestratorOptions *syncOrchestratorOptions,
+) *syncDestinationComparator {
 
 	return &syncDestinationComparator{
 		sourceIndex:             i,
@@ -89,8 +98,11 @@ func newSyncDestinationComparator(
 		destinationCleaner:      cleaner,
 		preferSMBTime:           preferSMBTime,
 		disableComparison:       disableComparison,
+		deleteDestination:       deleteDestination,
 		comparisonHashType:      comparisonHashType,
-		incrementNotTransferred: incrementNotTransferred}
+		incrementNotTransferred: incrementNotTransferred,
+		orchestratorOptions:     orchestratorOptions,
+	}
 }
 
 // it will only schedule transfers for destination objects that are present in the indexer but stale compared to the entry in the map
@@ -112,6 +124,62 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 		if f.disableComparison {
 			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, false)
 			return f.copyTransferScheduler(sourceObjectInMap)
+		}
+
+		if UseSyncOrchestrator && f.orchestratorOptions != nil && f.orchestratorOptions.valid {
+			// Use optimized comparison logic using source and target timestamps and sizes
+			typeChanged, dataChanged, metadataChanged, valid := f.compareSourceAndDestinationObject(sourceObjectInMap, destinationObject)
+
+			if valid {
+
+				if typeChanged {
+					// if the entity type has changed, we will not be able to transfer the file
+					// unless the destination object is deleted first
+					// XDM: Does destination support different entity type with same name?
+					if f.deleteDestination == common.EDeleteDestination.True() {
+						err := f.destinationCleaner(destinationObject)
+						if err != nil {
+							syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonEntityTypeChangedFailedDelete, false)
+							return nil
+						}
+					} else if f.deleteDestination == common.EDeleteDestination.False() {
+						// If deleteDestination is set to false, we cannot transfer the file
+						// because the destination object is not compatible with the source object.
+						syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonEntityTypeChangedNoDelete, false)
+						return nil
+					}
+				}
+
+				if metadataChanged && sourceObjectInMap.entityType.IsFolder() {
+					dataChanged = true // If metadata has changed for a folder, we consider data changed as well.
+				}
+
+				if metadataChanged && !f.orchestratorOptions.metaDataOnlySync {
+					dataChanged = true // If metadata has changed and metaDataOnlySync is not enabled, we consider data changed as well.
+				}
+
+				if dataChanged || typeChanged {
+					return f.copyTransferScheduler(sourceObjectInMap)
+				}
+
+				if metadataChanged {
+					// This will execute for all entity types other than folders.
+					// If metadata has changed but data hasn't, we still want to transfer the file\folder properties.
+					// XDM: Do we check symlinks entity type here?
+					fmt.Printf("Metadata changed for %s, but data is the same. Transferring metadata only.\n", sourceObjectInMap.relativePath)
+					sourceObjectInMap.size = 0                                         // Set size to 0 to indicate that we are not transferring data, only metadata.
+					sourceObjectInMap.entityType = common.EEntityType.FileProperties() // Set entity type to FileProperties to indicate metadata transfer.
+					return f.copyTransferScheduler(sourceObjectInMap)
+				}
+
+				if !dataChanged && !metadataChanged && !typeChanged {
+					if f.incrementNotTransferred != nil {
+						f.incrementNotTransferred(sourceObjectInMap.entityType)
+					}
+					syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonNoChangeInLWTorCT, false)
+					return nil
+				}
+			}
 		}
 
 		if f.comparisonHashType != common.ESyncHashType.None() && sourceObjectInMap.entityType == common.EEntityType.File() {
@@ -143,13 +211,12 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 		} else if sourceObjectInMap.isMoreRecentThan(destinationObject, f.preferSMBTime) {
 			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMT, false)
 			return f.copyTransferScheduler(sourceObjectInMap)
-		} else {
-			// Neither data nor metadata for the file has changed, hence file is not transferred.
-			if f.incrementNotTransferred != nil {
-				f.incrementNotTransferred(sourceObjectInMap.entityType)
-			}
 		}
 
+		// Neither data nor metadata for the file has changed, hence file is not transferred.
+		if f.incrementNotTransferred != nil {
+			f.incrementNotTransferred(sourceObjectInMap.entityType)
+		}
 		// skip if dest is more recent
 		syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonTime, false)
 	} else {
@@ -159,6 +226,77 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 	}
 
 	return nil
+}
+
+// compareSourceAndDestinationObject compares the source and destination objects to determine if data or metadata has changed.
+func (f *syncDestinationComparator) compareSourceAndDestinationObject(
+	sourceObject StoredObject,
+	destinationObject StoredObject,
+) (typeChanged, dataChanged, metadataChanged, valid bool) {
+	// Check if data has changed by comparing size and modification time
+	typeChanged = false
+	dataChanged = false
+	metadataChanged = false
+	valid = true
+
+	if sourceObject.entityType != destinationObject.entityType {
+		typeChanged = true
+		dataChanged = true     // If types differ, we consider data changed
+		metadataChanged = true // Metadata is also considered changed if types differ
+		fmt.Printf("Entity type changed for %s: source type %s, destination type %s\n", sourceObject.relativePath, sourceObject.entityType, destinationObject.entityType)
+		return typeChanged, dataChanged, metadataChanged, valid
+	}
+
+	if !sourceObject.entityType.IsFolder() {
+		// Compare file sizes first
+		// XDM NOTE: Do we really need to compare sizes here if we are already comparing LWT?
+		if sourceObject.size != destinationObject.size {
+			dataChanged = true
+			fmt.Printf("File size changed for %s: source size %d, destination size %d\n", sourceObject.relativePath, sourceObject.size, destinationObject.size)
+			return typeChanged, dataChanged, metadataChanged, valid
+		}
+	}
+
+	if sourceObject.lastWriteTime.IsZero() || destinationObject.lastWriteTime.IsZero() {
+		valid = false
+		fmt.Printf("Last write time is zero for %s: source LWT %v, destination LWT %v\n",
+			sourceObject.relativePath, common.TimeAsRFC3339String(sourceObject.lastWriteTime),
+			common.TimeAsRFC3339String(destinationObject.lastWriteTime))
+		return typeChanged, dataChanged, metadataChanged, valid
+	}
+
+	// Compare last write times
+	if sourceObject.lastWriteTime.Compare(destinationObject.lastWriteTime) != 0 {
+		dataChanged = true
+		fmt.Printf("Last write time changed for %s: source LWT %v, destination LWT %v\n",
+			sourceObject.relativePath, common.TimeAsRFC3339String(sourceObject.lastWriteTime),
+			common.TimeAsRFC3339String(destinationObject.lastWriteTime))
+		return typeChanged, dataChanged, metadataChanged, valid
+	}
+
+	if sourceObject.changeTime.IsZero() || destinationObject.changeTime.IsZero() {
+		// If change time is not available, we cannot determine metadata changes
+		metadataChanged = true
+		fmt.Printf("Change time is zero for %s: source CT %v, destination CT %v\n",
+			sourceObject.relativePath, common.TimeAsRFC3339String(sourceObject.changeTime),
+			common.TimeAsRFC3339String(destinationObject.changeTime))
+		return typeChanged, dataChanged, metadataChanged, valid
+	}
+
+	// Compare change times
+	if sourceObject.changeTime.Compare(destinationObject.changeTime) != 0 {
+		metadataChanged = true
+		fmt.Printf("Change time changed for %s: source CT %v, destination CT %v\n",
+			sourceObject.relativePath, common.TimeAsRFC3339String(sourceObject.changeTime),
+			common.TimeAsRFC3339String(destinationObject.changeTime))
+		return typeChanged, dataChanged, metadataChanged, valid
+	}
+
+	fmt.Printf("No changes detected for %s: source LWT %v, CT %v, size %d; destination LWT %v, CT %v, size %d\n",
+		sourceObject.relativePath,
+		common.TimeAsRFC3339String(sourceObject.lastWriteTime), common.TimeAsRFC3339String(sourceObject.changeTime), sourceObject.size,
+		common.TimeAsRFC3339String(destinationObject.lastWriteTime), common.TimeAsRFC3339String(destinationObject.changeTime), destinationObject.size)
+	return typeChanged, dataChanged, metadataChanged, valid
 }
 
 // with the help of an objectIndexer containing the destination objects

@@ -379,6 +379,10 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			return err
 		}
 
+		if b.incrementDeletionCount != nil {
+			b.incrementDeletionCount()
+		}
+
 		return nil
 	} else {
 		if !UseSyncOrchestrator && b.folderOption == common.EFolderPropertiesOption.NoFolders() {
@@ -469,8 +473,7 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 		b.folderManager.RecordChildExists(objURL)
 		b.folderManager.RequestDeletion(objURL, deleteFunc)
 
-		if (object.entityType == common.EEntityType.Folder() && b.folderOption != common.EFolderPropertiesOption.NoFolders()) ||
-			object.entityType != common.EEntityType.File() {
+		if b.folderOption != common.EFolderPropertiesOption.NoFolders() {
 			if b.incrementDeletionCount != nil {
 				b.incrementDeletionCount()
 			}

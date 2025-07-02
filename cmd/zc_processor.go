@@ -167,6 +167,8 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 		return nil // skip this one
 	}
 
+	fmt.Printf("Scheduling %s to %s\n", storedObject.String(), dstRelativePath)
+
 	if s.dryrunMode {
 		glcm.Dryrun(func(format common.OutputFormat) string {
 			prettySrcRelativePath, prettyDstRelativePath := srcRelativePath, dstRelativePath
