@@ -200,3 +200,71 @@ func SetBackupMode(enable bool, fromTo FromTo) error {
 	// n/a on this platform
 	return nil
 }
+
+func GetExtendedProperties(path string, entityType EntityType) (ExtendedProperties, error) {
+	{ // attempt to call statx, if ENOSYS is returned, statx is unavailable
+		var stat unix.Statx_t
+
+		statxFlags := unix.AT_STATX_SYNC_AS_STAT
+		if entityType == EEntityType.Symlink() {
+			statxFlags |= unix.AT_SYMLINK_NOFOLLOW
+		}
+		// dirfd is a null pointer, because we should only ever be passing relative paths here, and directories will be passed via transferInfo.Source.
+		// AT_SYMLINK_NOFOLLOW is not used, because we automagically resolve symlinks. TODO: Add option to not follow symlinks, and use AT_SYMLINK_NOFOLLOW when resolving is disabled.
+		err := unix.Statx(0, path, statxFlags, unix.STATX_ALL, &stat)
+
+		if err != nil && err != unix.ENOSYS {
+			return nil, err
+		} else if err == nil {
+			return &UnixStatxProperties{info: stat}, nil
+		}
+	}
+
+	var stat unix.Stat_t
+	err := unix.Stat(path, &stat)
+	if err != nil {
+		return nil, err
+	}
+
+	return &UnixStatProperties{info: stat}, nil
+}
+
+// UnixStatxProperties wraps unix.Statx_t to implement the ExtendedProperties interface
+type UnixStatxProperties struct {
+	info unix.Statx_t
+}
+
+// GetChangeTime returns the change time
+func (p *UnixStatxProperties) GetChangeTime() time.Time {
+	return time.Unix(p.info.Ctime.Sec, int64(p.info.Ctime.Nsec))
+}
+
+// GetLastWriteTime returns the last write time
+func (p *UnixStatxProperties) GetLastWriteTime() time.Time {
+	return time.Unix(p.info.Mtime.Sec, int64(p.info.Mtime.Nsec))
+}
+
+// GetLastAccessTime returns the last access time
+func (p *UnixStatxProperties) GetLastAccessTime() time.Time {
+	return time.Unix(p.info.Atime.Sec, int64(p.info.Atime.Nsec))
+}
+
+// UnixStatProperties wraps unix.Stat_t to implement the ExtendedProperties interface
+type UnixStatProperties struct {
+	info unix.Stat_t
+}
+
+// GetChangeTime returns the change time
+func (p *UnixStatProperties) GetChangeTime() time.Time {
+	return time.Unix(p.info.Ctim.Sec, p.info.Ctim.Nsec)
+}
+
+// GetLastWriteTime returns the last write time
+func (p *UnixStatProperties) GetLastWriteTime() time.Time {
+	return time.Unix(p.info.Mtim.Sec, p.info.Mtim.Nsec)
+}
+
+// GetLastAccessTime returns the last access time
+func (p *UnixStatProperties) GetLastAccessTime() time.Time {
+	return time.Unix(p.info.Atim.Sec, p.info.Atim.Nsec)
+}
