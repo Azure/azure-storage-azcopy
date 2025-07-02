@@ -1733,7 +1733,7 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.forceWrite, "overwrite", "true",
 		"Overwrite the conflicting files and blobs at the destination if this flag is set to true (default 'true'). "+
 			"\n Possible values include 'true', 'false', 'prompt', and 'ifSourceNewer'."+
-			"\n  For destinations that support folders, conflicting folder-level properties will be overwritten this flag is 'true' or if a positive response is provided to the prompt.")
+			"\n  For destinations that support folders, conflicting folder-level properties will be overwritten if this flag is 'true' or if a positive response is provided to the prompt.")
 	cpCmd.PersistentFlags().BoolVar(&raw.autoDecompress, "decompress", false,
 		"False by default. Automatically decompress files when downloading, if their content-encoding indicates that they are compressed."+
 			"\n  The supported content-encoding values are 'gzip' and 'deflate'. "+
