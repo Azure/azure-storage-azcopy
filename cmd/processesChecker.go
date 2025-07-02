@@ -15,13 +15,6 @@ func WarnMultipleProcesses(directory string, currentPid int) error {
 		glcm.Error(fmt.Sprintf("error creating pids dir: %v", err))
 	}
 	filePath := path.Join(pidsSubDir, currPidFileName) // E.g "\.azcopy\pids\\XXX.pid"
-	// Creates .pid file with specific pid
-	file, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		glcm.Error(fmt.Sprintf("error creating the .pid file: %v", err))
-		return err
-	}
-	defer file.Close()
 
 	dir, err := os.ReadDir(pidsSubDir)
 	if err != nil {
@@ -33,6 +26,13 @@ func WarnMultipleProcesses(directory string, currentPid int) error {
 			return fmt.Errorf("%w", ErrMultipleProcesses)
 		}
 	}
+	// Creates .pid file with specific pid
+	file, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		glcm.Error(fmt.Sprintf("error creating the .pid file: %v", err))
+		return err
+	}
+	defer file.Close()
 	return nil
 }
 

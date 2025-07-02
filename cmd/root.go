@@ -42,7 +42,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var AzcopyAppPathFolder string
 var azcopyLogPathFolder string
 var azcopyMaxFileAndSocketHandles int
 var outputFormatRaw string
