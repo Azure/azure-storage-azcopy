@@ -82,7 +82,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 					atomic.AddUint32(&cca.atomicSkippedSymlinkCount, 1)
 				}
 			}
-			if cca.atomicScanningStatus == 1 && atomic.LoadUint64(&cca.atomicSourceFilesScanned) > common.RECOMMENDED_OBJECTS_COUNT {
+			if atomic.LoadUint32(&cca.atomicScanningStatus) == 1 && atomic.LoadUint64(&cca.atomicSourceFilesScanned) > common.RECOMMENDED_OBJECTS_COUNT {
 				WarnStdoutAndScanningLog("This job contains more than 10M objects, best practice to run less than this.")
 			}
 		},
