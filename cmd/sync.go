@@ -320,11 +320,11 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 		return errors.New("cannot use both cpk-by-name and cpk-by-value at the same time")
 	}
 
-	if azcopyOutputVerbosity == common.EOutputVerbosity.Quiet() || azcopyOutputVerbosity == common.EOutputVerbosity.Essential() {
+	if OutputLevel == common.EOutputVerbosity.Quiet() || OutputLevel == common.EOutputVerbosity.Essential() {
 		if cooked.deleteDestination == common.EDeleteDestination.Prompt() {
-			err = fmt.Errorf("cannot set output level '%s' with delete-destination option '%s'", azcopyOutputVerbosity.String(), cooked.deleteDestination.String())
+			err = fmt.Errorf("cannot set output level '%s' with delete-destination option '%s'", OutputLevel.String(), cooked.deleteDestination.String())
 		} else if cooked.dryrunMode {
-			err = fmt.Errorf("cannot set output level '%s' with dry-run mode", azcopyOutputVerbosity.String())
+			err = fmt.Errorf("cannot set output level '%s' with dry-run mode", OutputLevel.String())
 		}
 	}
 	if err != nil {
@@ -336,14 +336,14 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 
 func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
 	// set up the front end scanning logger
-	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, azcopyLogVerbosity, azcopyLogPathFolder, "-scanning")
+	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, LogLevel, azcopyLogPathFolder, "-scanning")
 	azcopyScanningLogger.OpenLog()
 	glcm.RegisterCloseFunc(func() {
 		azcopyScanningLogger.CloseLog()
 	})
 
 	// if no logging, set this empty so that we don't display the log location
-	if azcopyLogVerbosity == common.LogNone {
+	if LogLevel == common.LogNone {
 		azcopyLogPathFolder = ""
 	}
 
