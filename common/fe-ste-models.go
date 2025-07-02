@@ -1584,6 +1584,10 @@ func (e EntityType) String() string {
 	return enum.StringInt(e, reflect.TypeOf(e))
 }
 
+func (e *EntityType) IsFolder() bool {
+	return *e == EEntityType.Folder()
+}
+
 func (e *EntityType) Parse(s string) error {
 	val, err := enum.ParseInt(reflect.TypeOf(e), s, true, true)
 	if err == nil {
