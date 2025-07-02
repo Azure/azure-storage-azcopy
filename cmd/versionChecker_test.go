@@ -21,12 +21,12 @@
 package cmd
 
 import (
-	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -218,10 +218,15 @@ func TestGetGitHubLatestVersion(t *testing.T) {
 	a.NoError(err)
 	a.NotNil(latestVersion)
 	a.NotEmpty(latestVersion.original)
-	versionVar, err := NewVersion(common.AzcopyVersion)
+	versionStr := common.AzcopyVersion
+	if idx := strings.Index(versionStr, "preview"); idx != -1 {
+		versionStr = versionStr[:idx]
+	}
+	versionStr = strings.Replace(versionStr, "~", "-", 1) // Linux package versions might use "~"
+	versionVar, err := NewVersion(versionStr)
 	a.NoError(err)
 	a.NotNil(versionVar)
-	fmt.Println(latestVersion.original, versionVar.original)
+	// Check if API response is newer or the same
 	sameOrLaterVersion := latestVersion.OlderThan(common.DerefOrZero(versionVar)) ||
 		latestVersion.EqualTo(common.DerefOrZero(versionVar))
 	a.True(sameOrLaterVersion)
@@ -247,7 +252,7 @@ func TestGetGitHubLatestVersionWithMocking(t *testing.T) {
 
 	version, err := getGitHubLatestRemoteVersionWithURL(testServer.URL)
 	versionSegments := []int64{10, 29, 1} // Cast to match Version struct type
-	expected := version.segments
 	a.NoError(err)
+	expected := version.segments
 	a.Equal(expected, versionSegments)
 }
