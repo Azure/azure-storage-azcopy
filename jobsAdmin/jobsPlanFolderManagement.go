@@ -75,7 +75,7 @@ func BlindDeleteAllJobFiles(currentJobID common.JobID) (int, error) {
 	return numPlanFilesRemoved + numLogFilesRemoved, err
 }
 
-func RemoveSingleJobFiles(jobID common.JobID) error {
+func RemoveSingleJobFiles(jobID common.JobID) (int, error) {
 	// get rid of the job plan files
 	numPlanFileRemoved, err := removeFilesWithPredicate(common.AzcopyJobPlanFolder, func(s string) bool {
 		if strings.Contains(s, jobID.String()) && strings.Contains(s, ".steV") {
@@ -84,7 +84,7 @@ func RemoveSingleJobFiles(jobID common.JobID) error {
 		return false
 	})
 	if err != nil {
-		return err
+		return numPlanFileRemoved, err
 	}
 
 	// get rid of the logs
@@ -97,14 +97,14 @@ func RemoveSingleJobFiles(jobID common.JobID) error {
 		return false
 	})
 	if err != nil {
-		return err
+		return numPlanFileRemoved + numLogFileRemoved, err
 	}
 
 	if numLogFileRemoved+numPlanFileRemoved == 0 {
-		return errors.New("cannot find any log or job plan file with the specified ID")
+		return 0, errors.New("cannot find any log or job plan file with the specified ID")
 	}
 
-	return nil
+	return numPlanFileRemoved + numLogFileRemoved, nil
 }
 
 // remove all files whose names are approved by the predicate in the targetFolder
