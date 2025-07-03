@@ -41,7 +41,11 @@ import (
 
 // -------------------------------------- Implemented Enumerators -------------------------------------- \\
 
-func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel chan TraverserErrorItemInfo) (enumerator *syncEnumerator, err error) {
+func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel chan TraverserErrorItemInfo, orchestratorOptions *syncOrchestratorOptions) (enumerator *syncEnumerator, err error) {
+
+	if orchestratorOptions != nil {
+		orchestratorOptions.validate(cca.fromTo.From())
+	}
 
 	srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.Source, true, cca.cpkOptions)
 
@@ -62,12 +66,6 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 	}
 
 	includeDirStubs := (cca.fromTo.From().SupportsHnsACLs() && cca.fromTo.To().SupportsHnsACLs() && cca.preservePermissions.IsTruthy()) || cca.includeDirectoryStubs
-
-	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-	syncSrcTraverserOptions := &SyncTraverserOptions{}
-
-	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 	// TODO: enable symlink support in a future release after evaluating the implications
 	// TODO: Consider passing an errorChannel so that enumeration errors during sync can be conveyed to the caller.
@@ -107,6 +105,13 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 		destination:           &dest,
 		excludeContainerNames: nil,
 		includeVersionsList:   false,
+		incrementNotTransferred: func(entityType common.EntityType) {
+			if entityType == common.EEntityType.File() {
+				atomic.AddUint64(&cca.atomicSourceFilesTransferNotRequired, 1)
+			} else if entityType == common.EEntityType.Folder() {
+				atomic.AddUint64(&cca.atomicSourceFoldersTransferNotRequired, 1)
+			}
+		},
 	}
 
 	sourceTraverser, err := InitResourceTraverser(cca.Source, cca.fromTo.From(), &ctx, &srcCredInfo, cca.symlinkHandling, nil, cca.recursive, true, includeDirStubs, common.EPermanentDeleteOption.None(), func(entityType common.EntityType) {
@@ -115,7 +120,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 		} else if entityType == common.EEntityType.Folder() {
 			atomic.AddUint64(&cca.atomicSourceFoldersScanned, 1)
 		}
-	}, nil, cca.s2sPreserveBlobTags, cca.compareHash, cca.preservePermissions, AzcopyLogVerbosity, cca.cpkOptions, errorChannel, false, cca.trailingDot, &dest, nil, false, *syncSrcTraverserOptions)
+	}, nil, cca.s2sPreserveBlobTags, cca.compareHash, cca.preservePermissions, AzcopyLogVerbosity, cca.cpkOptions, errorChannel, false, cca.trailingDot, &dest, nil, false)
 
 	if err != nil {
 		return nil, err
@@ -140,27 +145,24 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 		incrementEnumerationCounter: func(entityType common.EntityType) {
 			if entityType == common.EEntityType.File() {
 				atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
+			} else if entityType == common.EEntityType.Folder() {
+				atomic.AddUint64(&cca.atomicDestinationFoldersScanned, 1)
 			}
 		},
-		listOfVersionIds:      nil,
-		s2sPreserveBlobTags:   cca.s2sPreserveBlobTags,
-		syncHashType:          cca.compareHash,
-		preservePermissions:   cca.preservePermissions,
-		logLevel:              AzcopyLogVerbosity,
-		cpkOptions:            cca.cpkOptions,
-		errorChannel:          errorChannel,
-		stripTopDir:           false,
-		trailingDot:           cca.trailingDot,
-		destination:           nil,
-		excludeContainerNames: nil,
-		includeVersionsList:   false,
+		listOfVersionIds:        nil,
+		s2sPreserveBlobTags:     cca.s2sPreserveBlobTags,
+		syncHashType:            cca.compareHash,
+		preservePermissions:     cca.preservePermissions,
+		logLevel:                AzcopyLogVerbosity,
+		cpkOptions:              cca.cpkOptions,
+		errorChannel:            errorChannel,
+		stripTopDir:             false,
+		trailingDot:             cca.trailingDot,
+		destination:             nil,
+		excludeContainerNames:   nil,
+		includeVersionsList:     false,
+		incrementNotTransferred: nil,
 	}
-
-	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-	syncTgtTraverserOptions := &SyncTraverserOptions{}
-
-	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 	// TODO: enable symlink support in a future release after evaluating the implications
 	// GetProperties is enabled by default as sync supports both upload and download.
@@ -168,8 +170,10 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 	destinationTraverser, err := InitResourceTraverser(cca.Destination, cca.fromTo.To(), &ctx, &dstCredInfo, common.ESymlinkHandlingType.Skip(), nil, cca.recursive, true, includeDirStubs, common.EPermanentDeleteOption.None(), func(entityType common.EntityType) {
 		if entityType == common.EEntityType.File() {
 			atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
+		} else if entityType == common.EEntityType.Folder() {
+			atomic.AddUint64(&cca.atomicDestinationFoldersScanned, 1)
 		}
-	}, nil, cca.s2sPreserveBlobTags, cca.compareHash, cca.preservePermissions, AzcopyLogVerbosity, cca.cpkOptions, nil, false, cca.trailingDot, nil, nil, false, *syncTgtTraverserOptions)
+	}, nil, cca.s2sPreserveBlobTags, cca.compareHash, cca.preservePermissions, AzcopyLogVerbosity, cca.cpkOptions, nil, false, cca.trailingDot, nil, nil, false)
 	if err != nil {
 		return nil, err
 	}
@@ -387,6 +391,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 			indexer,
 			filters,
 			transferScheduler,
+			orchestratorOptions,
 		)
 	default:
 		if UseSyncOrchestrator {
@@ -401,6 +406,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 				indexer,
 				filters,
 				transferScheduler,
+				orchestratorOptions,
 			)
 		} else {
 			return GetSyncEnumeratorWithSrcComparator(
@@ -414,6 +420,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 				indexer,
 				filters,
 				transferScheduler,
+				orchestratorOptions,
 			)
 		}
 	}
@@ -453,6 +460,7 @@ func GetSyncEnumeratorWithDestComparator(
 	indexer *objectIndexer,
 	filters []ObjectFilter,
 	transferScheduler *copyTransferProcessor,
+	orchestratorOptions *syncOrchestratorOptions,
 ) (*syncEnumerator, error) {
 
 	// Upload implies transferring from a local disk to a remote resource.
@@ -482,13 +490,15 @@ func GetSyncEnumeratorWithDestComparator(
 		cca.compareHash,
 		cca.preserveSMBInfo,
 		cca.mirrorMode,
+		cca.deleteDestination,
 		func(entityType common.EntityType) {
 			if entityType == common.EEntityType.File() {
 				atomic.AddUint64(&cca.atomicSourceFilesTransferNotRequired, 1)
 			} else if entityType == common.EEntityType.Folder() {
 				atomic.AddUint64(&cca.atomicSourceFoldersTransferNotRequired, 1)
 			}
-		}).processIfNecessary
+		},
+		orchestratorOptions).processIfNecessary
 
 	finalize := func() error {
 		// schedule every local file that doesn't exist at the destination
@@ -519,6 +529,7 @@ func GetSyncEnumeratorWithDestComparator(
 		comparator,
 		finalize,
 		transferScheduler,
+		orchestratorOptions,
 	), nil
 }
 
@@ -531,6 +542,7 @@ func GetSyncEnumeratorWithSrcComparator(
 	indexer *objectIndexer,
 	filters []ObjectFilter,
 	transferScheduler *copyTransferProcessor,
+	orchestratorOptions *syncOrchestratorOptions,
 ) (*syncEnumerator, error) {
 
 	indexer.isDestinationCaseInsensitive = IsDestinationCaseInsensitive(cca.fromTo)
@@ -593,5 +605,6 @@ func GetSyncEnumeratorWithSrcComparator(
 		filters,
 		comparator,
 		finalize,
-		transferScheduler), nil
+		transferScheduler,
+		orchestratorOptions), nil
 }

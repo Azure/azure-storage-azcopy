@@ -72,8 +72,6 @@ type blobTraverser struct {
 	includeVersion bool
 
 	isDFS bool
-
-	syncOptions SyncTraverserOptions
 }
 
 // ErrorFileInfo holds information about files and folders that failed enumeration.
@@ -282,7 +280,6 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		errorBlobInfo := ErrorBlobInfo{
 			BlobPath: blobURLParts.BlobName,
 			ErrorMsg: err,
-			Source:   t.syncOptions.isSource,
 		}
 
 		// Don't error out unless it's a CPK error just yet
@@ -313,10 +310,7 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			panic("isBlob should never be set if getting properties is an error")
 		}
 
-		if t.syncOptions.scannerLogger != nil {
-			err := fmt.Errorf("Detected the root[%v] as a blob.", t.rawURL)
-			t.syncOptions.scannerLogger.Log(common.LogDebug, err.Error())
-		} else if azcopyScanningLogger != nil {
+		if azcopyScanningLogger != nil {
 			azcopyScanningLogger.Log(common.LogDebug, "Detected the root as a blob.")
 			azcopyScanningLogger.Log(common.LogDebug, fmt.Sprintf("Root entity type: %s", getEntityType(blobProperties.Metadata)))
 		}
@@ -337,8 +331,8 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			blobPropsAdapter,
 			blobPropsAdapter,
 			blobPropsAdapter.Metadata,
-			blobURLParts.ContainerName,
-		)
+			blobURLParts.ContainerName)
+		storedObject.tryUpdateTimestampsFromMetadata(blobPropsAdapter.Metadata)
 
 		if t.s2sPreserveSourceTags {
 			blobTagsMap, err := t.getBlobTags()
@@ -423,8 +417,13 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 		currentDirPath := dir.(string)
 
 		pager := containerClient.NewListBlobsHierarchyPager("/", &container.ListBlobsHierarchyOptions{
-			Prefix:  &currentDirPath,
-			Include: container.ListBlobsInclude{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.includeDeleted, Snapshots: t.includeSnapshot, Versions: t.includeVersion},
+			Prefix: &currentDirPath,
+			Include: container.ListBlobsInclude{
+				Metadata:  true,
+				Tags:      t.s2sPreserveSourceTags,
+				Deleted:   t.includeDeleted,
+				Snapshots: t.includeSnapshot,
+				Versions:  t.includeVersion},
 		})
 		var marker *string
 		for pager.More() {
@@ -444,6 +443,8 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 					if azcopyScanningLogger != nil {
 						azcopyScanningLogger.Log(common.LogDebug, fmt.Sprintf("Enqueuing sub-directory %s for enumeration.", *virtualDir.Name))
 					}
+
+					enqueuedDir := false
 
 					if t.includeDirectoryStubs || UseSyncOrchestrator {
 						// try to get properties on the directory itself, since it's not listed in BlobItems
@@ -478,6 +479,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 								pbPropAdapter.Metadata,
 								containerName,
 							)
+							storedObject.tryUpdateTimestampsFromMetadata(pbPropAdapter.Metadata)
 
 							if t.s2sPreserveSourceTags {
 								tResp, err := blobClient.GetTags(t.ctx, nil)
@@ -491,6 +493,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 								}
 							}
 							enqueueOutput(storedObject, err)
+							enqueuedDir = true
 						} else {
 							// There was nothing there, but is there folder/?
 							if !strings.HasSuffix(dName, "/") {
@@ -500,6 +503,28 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 							}
 						}
 					skipDirAdd:
+					}
+
+					if UseSyncOrchestrator && !enqueuedDir {
+						// If we didn't enqueue the directory, it means we didn't find a blob with the folder metadata.
+						// We still want to enqueue the virtual directory as a stub, so that we can compare it with the source during local -> blob sync.
+						// This blob prefix enqueue is necessary to track extra objects in target during mirror sync
+						// operations, so that we can delete them if they are not present in source.
+						dName := strings.TrimSuffix(*virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)
+						folderRelativePath := strings.TrimPrefix(dName, searchPrefix)
+						storedObject := newStoredObject(
+							preprocessor,
+							getObjectNameOnly(dName),
+							folderRelativePath,
+							common.EEntityType.Folder(),
+							time.Time{},
+							0,
+							noContentProps,
+							noBlobProps,
+							noMetadata,
+							containerName,
+						)
+						enqueueOutput(storedObject, err)
 					}
 				}
 			}
@@ -561,7 +586,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 	for x := range cCrawled {
 		item, workerError := x.Item()
 		if workerError != nil {
-			writeToBlobErrorChannel(t.errorChannel, ErrorBlobInfo{ErrorMsg: workerError, Source: t.syncOptions.isSource})
+			writeToBlobErrorChannel(t.errorChannel, ErrorBlobInfo{ErrorMsg: workerError})
 			return workerError
 		}
 
@@ -580,8 +605,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 					BlobPath:             object.relativePath,
 					BlobLastModifiedTime: object.lastModifiedTime,
 					Dir:                  object.entityType == common.EEntityType.Folder(),
-					ErrorMsg:             processErr,
-					Source:               t.syncOptions.isSource})
+					ErrorMsg:             processErr})
 			return processErr
 		}
 	}
@@ -618,6 +642,7 @@ func (t *blobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, bl
 		blobInfo.Metadata,
 		containerName,
 	)
+	object.tryUpdateTimestampsFromMetadata(blobInfo.Metadata)
 
 	object.blobDeleted = common.IffNotNil(blobInfo.Deleted, false)
 	if t.includeDeleted && t.includeSnapshot {
@@ -705,8 +730,7 @@ func newBlobTraverser(
 	includeVersion bool,
 	preservePermissions common.PreservePermissionsOption,
 	isDFS bool,
-	errorChannel chan TraverserErrorItemInfo,
-	syncOptions SyncTraverserOptions) (t *blobTraverser) {
+	errorChannel chan TraverserErrorItemInfo) (t *blobTraverser) {
 
 	t = &blobTraverser{
 		rawURL:                      rawURL,
@@ -724,7 +748,6 @@ func newBlobTraverser(
 		preservePermissions:         preservePermissions,
 		isDFS:                       isDFS,
 		errorChannel:                errorChannel,
-		syncOptions:                 syncOptions,
 	}
 
 	disableHierarchicalScanning := strings.ToLower(common.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning()))

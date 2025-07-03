@@ -52,13 +52,18 @@ import (
 // we can add more properties if needed, as this is easily extensible
 // ** DO NOT instantiate directly, always use newStoredObject ** (to make sure its fully populated and any preprocessor method runs)
 type StoredObject struct {
-	name                string
-	entityType          common.EntityType
-	lastModifiedTime    time.Time
-	smbLastModifiedTime time.Time
-	size                int64
-	md5                 []byte
-	blobType            blob.BlobType // will be "None" when unknown or not applicable
+	name             string
+	entityType       common.EntityType
+	lastModifiedTime time.Time
+
+	// For SMB, this is last write time and change time.
+	// For NFS, this is populated from POSIX properties - posix_ctime, modtime
+	lastWriteTime time.Time
+	changeTime    time.Time
+
+	size     int64
+	md5      []byte
+	blobType blob.BlobType // will be "None" when unknown or not applicable
 
 	// all of these will be empty when unknown or not applicable.
 	contentDisposition string
@@ -97,17 +102,100 @@ type StoredObject struct {
 	leaseDuration lease.DurationType
 }
 
-func (s *StoredObject) isMoreRecentThan(storedObject2 StoredObject, preferSMBTime bool) bool {
-	lmtA := s.lastModifiedTime
-	if preferSMBTime && !s.smbLastModifiedTime.IsZero() {
-		lmtA = s.smbLastModifiedTime
-	}
-	lmtB := storedObject2.lastModifiedTime
-	if preferSMBTime && !storedObject2.smbLastModifiedTime.IsZero() {
-		lmtB = storedObject2.smbLastModifiedTime
+// String returns a formatted string representation of the StoredObject
+// providing a human-readable summary of the object's key properties.
+func (s *StoredObject) String() string {
+	var sb strings.Builder
+
+	// Basic identification
+	sb.WriteString("StoredObject{\n")
+	sb.WriteString(fmt.Sprintf("  Name: %q\n", s.name))
+	sb.WriteString(fmt.Sprintf("  RelativePath: %q\n", s.relativePath))
+	sb.WriteString(fmt.Sprintf("  EntityType: %s\n", s.entityType.String()))
+
+	// Size and timestamps
+	if s.entityType == common.EEntityType.File() {
+		sb.WriteString(fmt.Sprintf("  Size: %d bytes\n", s.size))
 	}
 
-	return lmtA.After(lmtB)
+	if !s.lastModifiedTime.IsZero() {
+		sb.WriteString(fmt.Sprintf("  LastModified: %s\n", s.lastModifiedTime.UTC().Format(time.RFC3339)))
+	}
+
+	if !s.lastWriteTime.IsZero() {
+		sb.WriteString(fmt.Sprintf("  LastWriteTime: %s\n", s.lastWriteTime.UTC().Format(time.RFC3339)))
+	}
+
+	if !s.changeTime.IsZero() {
+		sb.WriteString(fmt.Sprintf("  ChangeTime: %s\n", s.changeTime.UTC().Format(time.RFC3339)))
+	}
+
+	// Content properties (if applicable)
+	if s.contentType != "" {
+		sb.WriteString(fmt.Sprintf("  ContentType: %q\n", s.contentType))
+	}
+
+	if s.contentEncoding != "" {
+		sb.WriteString(fmt.Sprintf("  ContentEncoding: %q\n", s.contentEncoding))
+	}
+
+	// Container information
+	if s.ContainerName != "" {
+		sb.WriteString(fmt.Sprintf("  ContainerName: %q\n", s.ContainerName))
+	}
+
+	if s.DstContainerName != "" {
+		sb.WriteString(fmt.Sprintf("  DstContainerName: %q\n", s.DstContainerName))
+	}
+
+	// Version/snapshot information
+	if s.blobVersionID != "" {
+		sb.WriteString(fmt.Sprintf("  VersionID: %q\n", s.blobVersionID))
+	}
+
+	if s.blobSnapshotID != "" {
+		sb.WriteString(fmt.Sprintf("  SnapshotID: %q\n", s.blobSnapshotID))
+	}
+
+	// Hash information
+	if len(s.md5) > 0 {
+		sb.WriteString(fmt.Sprintf("  MD5: %x\n", s.md5))
+	}
+
+	// Metadata count
+	if len(s.Metadata) > 0 {
+		sb.WriteString(fmt.Sprintf("  Metadata: %d entries\n", len(s.Metadata)))
+	}
+
+	// Tags count
+	if len(s.blobTags) > 0 {
+		sb.WriteString(fmt.Sprintf("  BlobTags: %d entries\n", len(s.blobTags)))
+	}
+
+	// Special flags
+	if s.blobDeleted {
+		sb.WriteString("  Deleted: true\n")
+	}
+
+	sb.WriteString("}")
+	return sb.String()
+}
+
+func (s *StoredObject) isMoreRecentThan(storedObject2 StoredObject, preferSMBTime bool) bool {
+	lmtA := s.lastModifiedTime
+	if preferSMBTime && !s.lastWriteTime.IsZero() {
+		lmtA = s.lastWriteTime
+	}
+	lmtB := storedObject2.lastModifiedTime
+	if preferSMBTime && !storedObject2.lastWriteTime.IsZero() {
+		lmtB = storedObject2.lastWriteTime
+	}
+
+	if buildmode.IsMover {
+		return lmtA.Compare(lmtB) != 0
+	} else {
+		return lmtA.After(lmtB)
+	}
 }
 
 func (s *StoredObject) isSingleSourceFile() bool {
@@ -125,7 +213,7 @@ func (s *StoredObject) isSourceRootFolder() bool {
 // do not pass through that routine.  So we need to make the filtering available in a separate function
 // so that the sync deletion code path(s) can access it.
 func (s *StoredObject) isCompatibleWithEntitySettings(fpo common.FolderPropertyOption, sht common.SymlinkHandlingType) bool {
-	if s.entityType == common.EEntityType.File() {
+	if s.entityType == common.EEntityType.File() || s.entityType == common.EEntityType.FileProperties() {
 		return true
 	} else if s.entityType == common.EEntityType.Folder() {
 		switch fpo {
@@ -247,7 +335,8 @@ type filePropsProvider interface {
 	contentPropsProvider
 	Metadata() common.Metadata
 	LastModified() time.Time
-	FileLastWriteTime() time.Time
+	LastWriteTime() time.Time
+	ChangeTime() time.Time
 	ContentLength() int64
 }
 
@@ -293,6 +382,18 @@ func newStoredObject(morpher objectMorpher, name string, relativePath string, en
 	return obj
 }
 
+// updateTimestamps updates the lastWriteTime and changeTime fields of a StoredObject
+func (so *StoredObject) updateTimestamps(lastWriteTime, changeTime time.Time) {
+	so.lastWriteTime = lastWriteTime
+	so.changeTime = changeTime
+}
+
+// tryUpdateTimestampsFromMetadata updates the lastWriteTime and changeTime fields of a StoredObject
+func (so *StoredObject) tryUpdateTimestampsFromMetadata(meta common.Metadata) {
+	so.lastWriteTime, _, _ = common.TryReadModTimeFromMetadata(meta)
+	so.changeTime, _, _ = common.TryReadCTimeFromMetadata(meta)
+}
+
 type ResourceTraverserTemplate struct {
 	location                    common.Location
 	credential                  *common.CredentialInfo
@@ -315,6 +416,7 @@ type ResourceTraverserTemplate struct {
 	destination                 *common.Location
 	excludeContainerNames       []string
 	includeVersionsList         bool
+	incrementNotTransferred     enumerationCounterFunc
 }
 
 // capable of traversing a structured resource like container or local directory
@@ -389,8 +491,7 @@ func InitResourceTraverser(
 	trailingDot common.TrailingDotOption,
 	destination *common.Location,
 	excludeContainerNames []string,
-	includeVersionsList bool,
-	syncOptions SyncTraverserOptions) (ResourceTraverser, error) {
+	includeVersionsList bool) (ResourceTraverser, error) {
 
 	var output ResourceTraverser
 
@@ -476,10 +577,10 @@ func InitResourceTraverser(
 		} else {
 			if ctx != nil {
 				output, _ = newLocalTraverser(*ctx, resource.ValueLocal(), recursive, stripTopDir, symlinkHandling,
-					syncHashType, incrementEnumerationCounter, errorChannel, syncOptions)
+					syncHashType, incrementEnumerationCounter, errorChannel)
 			} else {
 				output, _ = newLocalTraverser(context.TODO(), resource.ValueLocal(), recursive, stripTopDir,
-					symlinkHandling, syncHashType, incrementEnumerationCounter, errorChannel, syncOptions)
+					symlinkHandling, syncHashType, incrementEnumerationCounter, errorChannel)
 			}
 		}
 	case common.ELocation.Benchmark():
@@ -538,7 +639,7 @@ func InitResourceTraverser(
 			output = newBlobVersionsTraverser(r, bsc, *ctx, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds, cpkOptions)
 		} else {
 			output = newBlobTraverser(r, bsc, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions,
-				includeDeleted, includeSnapshot, includeVersion, preservePermissions, false, errorChannel, syncOptions)
+				includeDeleted, includeSnapshot, includeVersion, preservePermissions, false, errorChannel)
 		}
 	case common.ELocation.File():
 		// TODO (last service migration) : Remove dependency on URLs.
@@ -585,9 +686,9 @@ func InitResourceTraverser(
 			if !recursive {
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
-			output = newFileAccountTraverser(fsc, shareName, *ctx, getProperties, incrementEnumerationCounter, trailingDot, destination, syncOptions)
+			output = newFileAccountTraverser(fsc, shareName, *ctx, getProperties, incrementEnumerationCounter, trailingDot, destination)
 		} else {
-			output = newFileTraverser(r, fsc, *ctx, recursive, getProperties, incrementEnumerationCounter, trailingDot, destination, syncOptions)
+			output = newFileTraverser(r, fsc, *ctx, recursive, getProperties, incrementEnumerationCounter, trailingDot, destination)
 		}
 	case common.ELocation.BlobFS():
 		resourceURL, err := resource.FullURL()
@@ -638,7 +739,7 @@ func InitResourceTraverser(
 			output = newBlobVersionsTraverser(r, bsc, *ctx, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds, cpkOptions)
 		} else {
 			output = newBlobTraverser(r, bsc, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags,
-				cpkOptions, includeDeleted, includeSnapshot, includeVersion, preservePermissions, true, errorChannel, syncOptions)
+				cpkOptions, includeDeleted, includeSnapshot, includeVersion, preservePermissions, true, errorChannel)
 		}
 	case common.ELocation.S3():
 		resourceURL, err := resource.FullURL()
@@ -792,10 +893,12 @@ type syncEnumerator struct {
 
 	// a finalizer that is always called if the enumeration finishes properly
 	finalize func() error
+
+	orchestratorOptions *syncOrchestratorOptions
 }
 
 func newSyncEnumerator(primaryTemplate ResourceTraverserTemplate, secondaryTemplate ResourceTraverserTemplate, primaryTraverser ResourceTraverser, secondaryTraverser ResourceTraverser, indexer *objectIndexer,
-	filters []ObjectFilter, comparator objectProcessor, finalize func() error, ctp *copyTransferProcessor) *syncEnumerator {
+	filters []ObjectFilter, comparator objectProcessor, finalize func() error, ctp *copyTransferProcessor, orchestratorOptions *syncOrchestratorOptions) *syncEnumerator {
 	return &syncEnumerator{
 		primaryTraverserTemplate:   primaryTemplate,
 		secondaryTraverserTemplate: secondaryTemplate,
@@ -806,6 +909,7 @@ func newSyncEnumerator(primaryTemplate ResourceTraverserTemplate, secondaryTempl
 		objectComparator:           comparator,
 		finalize:                   finalize,
 		ctp:                        ctp,
+		orchestratorOptions:        orchestratorOptions,
 	}
 }
 

@@ -70,7 +70,22 @@ var (
 	expectedErrors []string = []string{
 		"RESPONSE 404",
 	}
+
+	orchestratorOptions *syncOrchestratorOptions
 )
+
+type minimalStoredObject struct {
+	relativePath string // Relative path of the object within the directory
+
+	// Originally, we only needed to store relativePath for the purpose of enqueueing subdirectories.
+	// We are adding changeTime to this struct to provide us parent directory change time while we
+	// process subdirectories. This is for enabling the optimization of skipping target traversal.
+	// This has an implication of increased memory usage for all scenarios to provide optimization for
+	// just NFS sources (as of 06/01/2025). Ideally, we can decide to not store changeTime here
+	// at the time of initialization of the SyncTraverser. This is an optimization that we will consider
+	// later.
+	changeTime time.Time // Change time of the object
+}
 
 // GetCustomSyncHandlerInfo returns a description of the current sync handler implementation.
 // Used for logging and debugging purposes to identify which sync strategy is active.
@@ -88,7 +103,7 @@ type SyncTraverser struct {
 	// There is a risk here to use pointers for sub directories because by the time we dereference
 	// this storedObject pointer and enqueue the directory, it is removed from the indexer by
 	// either comparator or finalize. Using paths here just to be safe.
-	sub_dirs_paths []string // Subdirectories discovered during traversal (queued for enqueueing post processing))
+	sub_dirs []minimalStoredObject // Subdirectories discovered during traversal (queued for enqueueing post processing)
 }
 
 // SyncOrchErrorInfo holds information about files and folders that failed enumeration.
@@ -279,12 +294,15 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 	}
 
 	// Update throttling counters if enabled
-	if enableThrottling && err == nil {
+	if enableThrottling {
 		totalFilesInIndexer.Add(1) // Increment the count of files in the indexer
 	}
 
 	if so.entityType == common.EEntityType.Folder() {
-		st.sub_dirs_paths = append(st.sub_dirs_paths, so.relativePath)
+		st.sub_dirs = append(st.sub_dirs, minimalStoredObject{
+			relativePath: so.relativePath,
+			changeTime:   so.changeTime,
+		})
 	}
 	syncMutex.Unlock()
 
@@ -308,7 +326,7 @@ func (st *SyncTraverser) customComparator(so StoredObject) error {
 // Finalize completes the processing of the current directory by scheduling
 // transfers for all discovered files and cleaning up the indexer.
 // This method is called after both source and destination traversals are complete.
-func (st *SyncTraverser) Finalize() error {
+func (st *SyncTraverser) Finalize(scheduleTransfer bool) error {
 
 	// Build the directory prefix for matching child objects
 	var dirPrefix string
@@ -338,7 +356,7 @@ func (st *SyncTraverser) Finalize() error {
 
 	// Process collected items
 	for _, path := range itemsToProcess {
-		err := st.FinalizeChild(path)
+		err := st.FinalizeChild(path, scheduleTransfer)
 		if err != nil {
 			return err
 		}
@@ -382,11 +400,54 @@ func (st *SyncTraverser) belongsToCurrentDirectory(path, dirPrefix string) bool 
 	}
 }
 
+// hasAnyChildChangedSinceLastSync checks if at least 1 child object changed in the current directory
+// since the last successful sync job start time.
+func (st *SyncTraverser) hasAnyChildChangedSinceLastSync() (bool, uint32) {
+	// Build the directory prefix for matching child objects
+	var dirPrefix string
+	if st.dir == "" {
+		// Root directory - we need to match items that don't have a parent directory
+		// or items that are direct children of root
+		dirPrefix = ""
+	} else {
+		// Non-root directory - match items that start with "dir/"
+		dirPrefix = st.dir + common.AZCOPY_PATH_SEPARATOR_STRING
+	}
+
+	foundOneChanged := false
+
+	// This is purely for incrementing the metrics with a computation cost
+	childCount := uint32(0)
+
+	syncMutex.Lock()
+	// Collect items to process (we need to collect first to avoid modifying map while iterating)
+	for path := range st.enumerator.objectIndexer.indexMap {
+		if st.belongsToCurrentDirectory(path, dirPrefix) {
+			// Increment child count for each item
+			// This will be the total number of children in the directory only if there are
+			// no changes in any file.
+			childCount++
+
+			if st.enumerator.objectIndexer.indexMap[path].changeTime.IsZero() {
+				// If change time is zero, we cannot determine if it changed since last sync
+				// so we assume it has changed
+				foundOneChanged = true
+				break
+			} else if st.enumerator.objectIndexer.indexMap[path].changeTime.After(orchestratorOptions.lastSuccessfulSyncJobStartTime) {
+				foundOneChanged = true
+				break
+			}
+		}
+	}
+	syncMutex.Unlock()
+	return foundOneChanged, childCount - uint32(len(st.sub_dirs))
+}
+
 // FinalizeChild processes a single child object (file or directory) by scheduling it for transfer.
 // It retrieves the stored object from the indexer and schedules it for transfer.
 // If the object is a directory, it will be processed after all files in that directory are finalized.
 // This method is called after the traversal is complete for each child object.
-func (st *SyncTraverser) FinalizeChild(child string) error {
+func (st *SyncTraverser) FinalizeChild(child string, scheduleTransfer bool) error {
 	syncMutex.Lock()
 	// Get pointer to the stored object from indexer
 	storedObject, exists := st.enumerator.objectIndexer.indexMap[child]
@@ -394,9 +455,11 @@ func (st *SyncTraverser) FinalizeChild(child string) error {
 
 	if exists {
 		// Schedule the file/directory for transfer using the pointer
-		err := st.enumerator.ctp.scheduleCopyTransfer(storedObject)
-		if err != nil {
-			return err
+		if scheduleTransfer {
+			err := st.enumerator.ctp.scheduleCopyTransfer(storedObject)
+			if err != nil {
+				return err
+			}
 		}
 
 		// Remove from indexer to free memory
@@ -412,14 +475,48 @@ func (st *SyncTraverser) FinalizeChild(child string) error {
 	return nil
 }
 
+// shouldTrySkippingTargetTraversal checks if we should even try skipping the target traversal
+func (st *SyncTraverser) shouldTrySkippingTargetTraversal(parentDirCTime time.Time, deleteDestination common.DeleteDestination) bool {
+
+	// Check 1: valid
+	// This flag indicates whether the sync orchestrator options are valid.
+	//
+	// Check 2: optimizeEnumerationByCTime
+	// This flag indicates whether we can optimize enumeration by using ctime values. Usually this is set to true
+	// when the sync orchestrator is used with XDM Mover and only for source objects that have reliable ctime values.
+	// As of the wrting of this comment [06/01/2025], this was true for NFS sources that have ctime posix properties.
+	//
+	// Check 3: deleteDestination
+	// Skipping target traversal is only safe if we are not deleting any destination objects. If we are deleting destination objects,
+	// we need to enumerate the destination objects to ensure that we do not miss any objects that need to be deleted.
+	// If we are not deleting destination objects, we can use ctime optimization to skip enumeration of
+	// destination objects that have not changed since the last successful sync job.
+	//
+	// Check 4: parentDirCTime
+	// We can only use ctime optimization if the parent directory has a valid ctime value
+	//
+	// Check 5: lastSuccessfulSyncJobStartTime
+	// We can only use ctime optimization if the parent directory ctime is before the last successful sync job start time.
+	// This ensures that we do not miss any objects that were added after the last successful sync job.
+	// If the parent directory ctime is after the last successful sync job start time,
+	// we need to enumerate the destination objects to ensure that we do not miss any objects that need to be deleted.
+
+	return orchestratorOptions != nil &&
+		orchestratorOptions.valid &&
+		orchestratorOptions.optimizeEnumerationByCTime &&
+		deleteDestination == common.EDeleteDestination.False() &&
+		!parentDirCTime.IsZero() &&
+		parentDirCTime.Before(orchestratorOptions.lastSuccessfulSyncJobStartTime)
+}
+
 // newSyncTraverser creates a new SyncTraverser instance for processing a specific directory.
 // Pre-allocates slices with reasonable capacity to reduce memory allocations.
 func newSyncTraverser(enumerator *syncEnumerator, dir string, comparator objectProcessor) *SyncTraverser {
 	return &SyncTraverser{
-		enumerator:     enumerator,
-		dir:            dir,
-		sub_dirs_paths: make([]string, 0, directorySizeBuffer),
-		comparator:     comparator,
+		enumerator: enumerator,
+		dir:        dir,
+		sub_dirs:   make([]minimalStoredObject, 0, directorySizeBuffer),
+		comparator: comparator,
 	}
 }
 
@@ -434,8 +531,10 @@ func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator,
 		}()
 	}
 
+	orchestratorOptions = enumerator.orchestratorOptions
+
 	// Initialize resource limits based on source/destination types
-	initializeLimits(cca.fromTo)
+	initializeLimits(cca.fromTo, orchestratorOptions)
 	return cca.runSyncOrchestrator(enumerator, ctx)
 }
 
@@ -489,6 +588,8 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			defer dirSemaphore.ReleaseSlot()
 		}
 
+		activeDirectoriesEnumerating.Add(1) // Increment active directory count
+
 		// Build source and destination paths for current directory
 		sync_src := []string{cca.Source.Value, dir.(StoredObject).relativePath}
 		sync_dst := []string{cca.Destination.Value, dir.(StoredObject).relativePath}
@@ -535,8 +636,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			ptt.trailingDot,
 			ptt.destination,
 			ptt.excludeContainerNames,
-			ptt.includeVersionsList,
-			NewDefaultSyncTraverserOptions())
+			ptt.includeVersionsList)
 		if err != nil {
 			errMsg = fmt.Sprintf("Creating source traverser failed for dir %s: %s", pt_src.Value, err)
 			WarnStdoutAndScanningLog(errMsg)
@@ -573,8 +673,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			stt.trailingDot,
 			stt.destination,
 			stt.excludeContainerNames,
-			stt.includeVersionsList,
-			NewDefaultSyncTraverserOptions())
+			stt.includeVersionsList)
 		if err != nil {
 			errMsg = fmt.Sprintf("Creating target traverser failed for dir %s: %s\n", st_src.Value, err)
 			WarnStdoutAndScanningLog(errMsg)
@@ -603,48 +702,95 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			})
 			return err
 		}
+		activeDirectoriesEnumerating.Add(-1) // Decrement active directory count
 
-		// Traverse destination location for comparison
-		err = st.Traverse(noPreProccessor, stra.customComparator, enumerator.filters)
-		if err != nil {
-			// Only report unexpected errors (404s are normal for new files)
-			if !IsExpectedErrorForTargetDuringSync(err) {
-				errMsg = fmt.Sprintf("Secondary traversal failed for dir %s = %s\n", st_src.Value, err)
+		traverseDestination := true // Flag to control whether we traverse the destination
+
+		// Before proceeding, check if we need to enumerate the destination
+		if stra.shouldTrySkippingTargetTraversal(dir.(StoredObject).changeTime, cca.deleteDestination) {
+			// It is safe to use change time comparison to determine if the destination needs enumeration,
+			// Enumerate all child objects of this directory in the indexer and check all of their change times.
+			// If any of them is after the last successful sync, we need to enumerate the destination.
+			// Otherwise, we can skip the destination enumeration and proceed with scheduling transfers.
+			if changed, fileCount := stra.hasAnyChildChangedSinceLastSync(); !changed {
+				err = stra.Finalize(false) // false indicates we do not want to schedule transfers yet
+				if err != nil {
+					errMsg = fmt.Sprintf("Sync finalize to skip target enumeration failed for source dir %s.\n", pt_src.Value)
+					WarnStdoutAndScanningLog(errMsg)
+					writeSyncErrToChannel(ptt.errorChannel, SyncOrchErrorInfo{
+						DirPath:  pt_src.Value,
+						DirName:  dir.(StoredObject).relativePath,
+						ErrorMsg: errors.New(errMsg),
+						Source:   true,
+					})
+					return err
+				}
+				traverseDestination = false // No need to traverse destination if we are skipping it
+
+				for range fileCount {
+					// We can increment the count of not transferred files as well
+					ptt.incrementNotTransferred(common.EEntityType.File())
+				}
+
+				for range stra.sub_dirs {
+					ptt.incrementNotTransferred(common.EEntityType.Folder())
+				}
+			}
+		}
+
+		if traverseDestination {
+			// Traverse destination location for comparison
+			err = st.Traverse(noPreProccessor, stra.customComparator, enumerator.filters)
+			if err != nil {
+				// Only report unexpected errors (404s are normal for new files)
+				if !IsExpectedErrorForTargetDuringSync(err) {
+					errMsg = fmt.Sprintf("Secondary traversal failed for dir %s = %s\n", st_src.Value, err)
+					WarnStdoutAndScanningLog(errMsg)
+					writeSyncErrToChannel(stt.errorChannel, SyncOrchErrorInfo{
+						DirPath:  st_src.Value,
+						DirName:  dir.(StoredObject).relativePath,
+						ErrorMsg: errors.New(errMsg),
+						Source:   false,
+					})
+					return err
+				}
+			}
+
+			// Complete processing for this directory and schedule transfers
+			err = stra.Finalize(true) // true indicates we want to schedule transfers
+			if err != nil {
+				errMsg = fmt.Sprintf("Sync finalize failed for source dir %s.\n", pt_src.Value)
 				WarnStdoutAndScanningLog(errMsg)
-				writeSyncErrToChannel(stt.errorChannel, SyncOrchErrorInfo{
-					DirPath:  st_src.Value,
+				writeSyncErrToChannel(ptt.errorChannel, SyncOrchErrorInfo{
+					DirPath:  pt_src.Value,
 					DirName:  dir.(StoredObject).relativePath,
 					ErrorMsg: errors.New(errMsg),
-					Source:   false,
+					Source:   true,
 				})
 				return err
 			}
 		}
 
-		// Complete processing for this directory and schedule transfers
-		err = stra.Finalize()
-		if err != nil {
-			errMsg = fmt.Sprintf("Sync finalize failed for source dir %s.\n", pt_src.Value)
-			WarnStdoutAndScanningLog(errMsg)
-			writeSyncErrToChannel(ptt.errorChannel, SyncOrchErrorInfo{
-				DirPath:  pt_src.Value,
-				DirName:  dir.(StoredObject).relativePath,
-				ErrorMsg: errors.New(errMsg),
-				Source:   true,
-			})
-			return err
-		}
-
 		// Enqueue discovered subdirectories for processing
-		for _, sub_dir := range stra.sub_dirs_paths {
+		for _, sub_dir := range stra.sub_dirs {
 			crawlWg.Add(1) // IMPORTANT: Add to WaitGroup *before* enqueuing
 			enqueueDir(StoredObject{
-				relativePath: sub_dir,
+				relativePath: sub_dir.relativePath,
 				entityType:   common.EEntityType.Folder(),
+				changeTime:   sub_dir.changeTime,
 			})
 		}
 
 		return nil
+	}
+
+	if cca.recursive {
+		return errors.New("Sync orchestrator does not support recursive traversal. Use --recursive=false.")
+	}
+
+	if cca.StripTopDir {
+		// Ideally this should work but it is not tested so blocking it to be safe.
+		return errors.New("Sync orchestrator does not support syncing top dir. Use source path without a trailing '/*'.")
 	}
 
 	// verify that the traversers are targeting the same type of resources

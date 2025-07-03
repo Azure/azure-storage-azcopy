@@ -223,7 +223,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		if buildmode.IsMover {
 			// Create a concise log message for Mover. This is to avoid bloating up the log files
 			// with the full message for an expected and harmless error.
-			parentNotFoundLog = fmt.Sprintf("ParentNotFound for %s", u.fileOrDirClient.URL())
+			parentNotFoundLog = fmt.Sprintf("ParentNotFound (will be created) for %s. ReqId: %s", u.fileOrDirClient.URL(), ErrorEx{err}.MSRequestID())
 		}
 
 		jptm.Log(common.LogError, parentNotFoundLog)
