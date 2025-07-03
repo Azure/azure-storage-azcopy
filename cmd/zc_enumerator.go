@@ -894,11 +894,11 @@ type syncEnumerator struct {
 	// a finalizer that is always called if the enumeration finishes properly
 	finalize func() error
 
-	orchestratorOptions *syncOrchestratorOptions
+	orchestratorOptions *SyncOrchestratorOptions
 }
 
 func newSyncEnumerator(primaryTemplate ResourceTraverserTemplate, secondaryTemplate ResourceTraverserTemplate, primaryTraverser ResourceTraverser, secondaryTraverser ResourceTraverser, indexer *objectIndexer,
-	filters []ObjectFilter, comparator objectProcessor, finalize func() error, ctp *copyTransferProcessor, orchestratorOptions *syncOrchestratorOptions) *syncEnumerator {
+	filters []ObjectFilter, comparator objectProcessor, finalize func() error, ctp *copyTransferProcessor, orchestratorOptions *SyncOrchestratorOptions) *syncEnumerator {
 	return &syncEnumerator{
 		primaryTraverserTemplate:   primaryTemplate,
 		secondaryTraverserTemplate: secondaryTemplate,

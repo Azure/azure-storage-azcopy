@@ -924,6 +924,10 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 	return nil
 }
 
+func (cca *cookedSyncCmdArgs) GetFromTo() common.FromTo {
+	return cca.fromTo
+}
+
 func init() {
 	raw := RawSyncCmdArgs{}
 	// syncCmd represents the sync command

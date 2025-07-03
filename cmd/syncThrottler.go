@@ -113,7 +113,7 @@ var (
 // initializeLimits initializes the concurrency and memory limits based on system resources
 // and the transfer scenario (FromTo). It sets MaxActiveFiles based on available memory
 // and CrawlParallelism based on CPU cores with scenario-specific multipliers.
-func initializeLimits(fromTo common.FromTo, orchestratorOptions *syncOrchestratorOptions) {
+func initializeLimits(fromTo common.FromTo, orchestratorOptions *SyncOrchestratorOptions) {
 	memory, err := common.GetTotalPhysicalMemory()
 	if err != nil {
 		glcm.Warn(fmt.Sprintf("Failed to get total physical memory: %v", err))

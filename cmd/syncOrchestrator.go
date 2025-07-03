@@ -71,7 +71,7 @@ var (
 		"RESPONSE 404",
 	}
 
-	orchestratorOptions *syncOrchestratorOptions
+	orchestratorOptions *SyncOrchestratorOptions
 )
 
 type minimalStoredObject struct {
@@ -109,10 +109,10 @@ type SyncTraverser struct {
 // SyncOrchErrorInfo holds information about files and folders that failed enumeration.
 // Implements TraverserErrorItemInfo interface to provide consistent error reporting.
 type SyncOrchErrorInfo struct {
-	DirPath  string // Full path to the directory or file that failed
-	DirName  string // Name of the directory or file that failed
-	ErrorMsg error  // The actual error that occurred during processing
-	Source   bool   // Whether the error occurred on source (true) or destination (false)
+	DirPath           string          // Full path to the directory or file that failed
+	DirName           string          // Name of the directory or file that failed
+	ErrorMsg          error           // The actual error that occurred during processing
+	TraverserLocation common.Location // The location of the error (source or destination)
 }
 
 // Compile-time check to ensure ErrorFileInfo implements TraverserErrorItemInfo
@@ -145,8 +145,8 @@ func (e SyncOrchErrorInfo) ErrorMessage() error {
 	return e.ErrorMsg
 }
 
-func (e SyncOrchErrorInfo) IsSource() bool {
-	return e.Source
+func (e SyncOrchErrorInfo) Location() common.Location {
+	return e.TraverserLocation
 }
 
 // END - Implementing methods defined in TraverserErrorItemInfo
@@ -641,10 +641,10 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			errMsg = fmt.Sprintf("Creating source traverser failed for dir %s: %s", pt_src.Value, err)
 			WarnStdoutAndScanningLog(errMsg)
 			writeSyncErrToChannel(ptt.errorChannel, SyncOrchErrorInfo{
-				DirPath:  pt_src.Value,
-				DirName:  dir.(StoredObject).relativePath,
-				ErrorMsg: errors.New(errMsg),
-				Source:   true,
+				DirPath:           pt_src.Value,
+				DirName:           dir.(StoredObject).relativePath,
+				ErrorMsg:          errors.New(errMsg),
+				TraverserLocation: cca.fromTo.From(),
 			})
 			return err
 		}
@@ -678,10 +678,10 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			errMsg = fmt.Sprintf("Creating target traverser failed for dir %s: %s\n", st_src.Value, err)
 			WarnStdoutAndScanningLog(errMsg)
 			writeSyncErrToChannel(stt.errorChannel, SyncOrchErrorInfo{
-				DirPath:  st_src.Value,
-				DirName:  dir.(StoredObject).relativePath,
-				ErrorMsg: errors.New(errMsg),
-				Source:   false,
+				DirPath:           st_src.Value,
+				DirName:           dir.(StoredObject).relativePath,
+				ErrorMsg:          errors.New(errMsg),
+				TraverserLocation: cca.fromTo.To(),
 			})
 			return err
 		}
@@ -695,10 +695,10 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			errMsg = fmt.Sprintf("primary traversal failed for dir %s : %s\n", pt_src.Value, err)
 			WarnStdoutAndScanningLog(errMsg)
 			writeSyncErrToChannel(ptt.errorChannel, SyncOrchErrorInfo{
-				DirPath:  pt_src.Value,
-				DirName:  dir.(StoredObject).relativePath,
-				ErrorMsg: errors.New(errMsg),
-				Source:   true,
+				DirPath:           pt_src.Value,
+				DirName:           dir.(StoredObject).relativePath,
+				ErrorMsg:          errors.New(errMsg),
+				TraverserLocation: cca.fromTo.From(),
 			})
 			return err
 		}
@@ -718,10 +718,10 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 					errMsg = fmt.Sprintf("Sync finalize to skip target enumeration failed for source dir %s.\n", pt_src.Value)
 					WarnStdoutAndScanningLog(errMsg)
 					writeSyncErrToChannel(ptt.errorChannel, SyncOrchErrorInfo{
-						DirPath:  pt_src.Value,
-						DirName:  dir.(StoredObject).relativePath,
-						ErrorMsg: errors.New(errMsg),
-						Source:   true,
+						DirPath:           pt_src.Value,
+						DirName:           dir.(StoredObject).relativePath,
+						ErrorMsg:          errors.New(errMsg),
+						TraverserLocation: cca.fromTo.From(),
 					})
 					return err
 				}
@@ -747,10 +747,10 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 					errMsg = fmt.Sprintf("Secondary traversal failed for dir %s = %s\n", st_src.Value, err)
 					WarnStdoutAndScanningLog(errMsg)
 					writeSyncErrToChannel(stt.errorChannel, SyncOrchErrorInfo{
-						DirPath:  st_src.Value,
-						DirName:  dir.(StoredObject).relativePath,
-						ErrorMsg: errors.New(errMsg),
-						Source:   false,
+						DirPath:           st_src.Value,
+						DirName:           dir.(StoredObject).relativePath,
+						ErrorMsg:          errors.New(errMsg),
+						TraverserLocation: cca.fromTo.To(),
 					})
 					return err
 				}
@@ -762,10 +762,10 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 				errMsg = fmt.Sprintf("Sync finalize failed for source dir %s.\n", pt_src.Value)
 				WarnStdoutAndScanningLog(errMsg)
 				writeSyncErrToChannel(ptt.errorChannel, SyncOrchErrorInfo{
-					DirPath:  pt_src.Value,
-					DirName:  dir.(StoredObject).relativePath,
-					ErrorMsg: errors.New(errMsg),
-					Source:   true,
+					DirPath:           pt_src.Value,
+					DirName:           dir.(StoredObject).relativePath,
+					ErrorMsg:          errors.New(errMsg),
+					TraverserLocation: cca.fromTo.From(),
 				})
 				return err
 			}
@@ -786,11 +786,6 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 	if cca.recursive {
 		return errors.New("Sync orchestrator does not support recursive traversal. Use --recursive=false.")
-	}
-
-	if cca.StripTopDir {
-		// Ideally this should work but it is not tested so blocking it to be safe.
-		return errors.New("Sync orchestrator does not support syncing top dir. Use source path without a trailing '/*'.")
 	}
 
 	// verify that the traversers are targeting the same type of resources

@@ -197,7 +197,6 @@ type ErrorFileInfo struct {
 	FilePath string
 	FileInfo os.FileInfo
 	ErrorMsg error
-	Source   bool
 }
 
 // Compile-time check to ensure ErrorFileInfo implements TraverserErrorItemInfo
@@ -242,8 +241,8 @@ func (e ErrorFileInfo) ErrorMessage() error {
 	return e.ErrorMsg
 }
 
-func (e ErrorFileInfo) IsSource() bool {
-	return e.Source
+func (e ErrorFileInfo) Location() common.Location {
+	return common.ELocation.Local()
 }
 
 // END - Implementing methods defined in TraverserErrorItemInfo

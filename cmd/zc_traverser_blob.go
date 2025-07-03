@@ -81,7 +81,6 @@ type ErrorBlobInfo struct {
 	BlobName             string
 	BlobLastModifiedTime time.Time
 	ErrorMsg             error
-	Source               bool
 	Dir                  bool
 }
 
@@ -115,8 +114,8 @@ func (e ErrorBlobInfo) ErrorMessage() error {
 	return e.ErrorMsg
 }
 
-func (e ErrorBlobInfo) IsSource() bool {
-	return e.Source
+func (e ErrorBlobInfo) Location() common.Location {
+	return common.ELocation.Blob()
 }
 
 // END - Implementing methods defined in TraverserErrorItemInfo

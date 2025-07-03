@@ -77,7 +77,7 @@ type syncDestinationComparator struct {
 	// Function to increment files/folders not transferred as a result of no change since last sync.
 	incrementNotTransferred func(common.EntityType)
 
-	orchestratorOptions *syncOrchestratorOptions
+	orchestratorOptions *SyncOrchestratorOptions
 }
 
 func newSyncDestinationComparator(
@@ -89,7 +89,7 @@ func newSyncDestinationComparator(
 	disableComparison bool,
 	deleteDestination common.DeleteDestination,
 	incrementNotTransferred func(common.EntityType),
-	orchestratorOptions *syncOrchestratorOptions,
+	orchestratorOptions *SyncOrchestratorOptions,
 ) *syncDestinationComparator {
 
 	return &syncDestinationComparator{

@@ -38,7 +38,7 @@ import (
 // - FileLastModifiedTime() time.Time: Returns the last modified time of the file.
 // - IsDir() bool: Returns true if the file is a directory, false otherwise.
 // - ErrorMsg() error: Returns the error message associated with the file.
-// - IsSource() bool: Returns true if the file is a source, false otherwise.
+// - Location() common.Location: Returns the source of the error (common.Location).
 type TraverserErrorItemInfo interface {
 	FullPath() string
 	Name() string
@@ -46,12 +46,12 @@ type TraverserErrorItemInfo interface {
 	LastModifiedTime() time.Time
 	IsDir() bool
 	ErrorMessage() error
-	IsSource() bool
+	Location() common.Location
 }
 
-// syncOrchestratorOptions defines the options for the enumerator that are required for the sync operation.
+// SyncOrchestratorOptions defines the options for the enumerator that are required for the sync operation.
 // It contains various settings and configurations used during the sync process.
-type syncOrchestratorOptions struct {
+type SyncOrchestratorOptions struct {
 	valid bool // Indicates whether the options are valid or not. If false, the enumerator will not be used.
 
 	// MaxDirectoryDirectChildCount is the maximum number of direct children in a directory.
@@ -73,7 +73,7 @@ type syncOrchestratorOptions struct {
 	optimizeEnumerationByCTime bool
 }
 
-func (s *syncOrchestratorOptions) validate(from common.Location) {
+func (s *SyncOrchestratorOptions) validate(from common.Location) {
 	if s.valid && from != common.ELocation.Local() {
 		panic("sync optimizations using timestamps should only be used for local to remote syncs")
 	}
@@ -85,9 +85,25 @@ func (s *syncOrchestratorOptions) validate(from common.Location) {
 	}
 }
 
+// NewSyncOrchestratorOptions initializes a SyncOrchestratorOptions struct with the provided parameters.
+func NewSyncOrchestratorOptions(
+	maxDirectoryDirectChildCount int64,
+	metaDataOnlySync bool,
+	lastSuccessfulSyncJobStartTime time.Time,
+	optimizeEnumerationByCTime bool,
+) SyncOrchestratorOptions {
+	return SyncOrchestratorOptions{
+		maxDirectoryDirectChildCount:   maxDirectoryDirectChildCount,
+		metaDataOnlySync:               metaDataOnlySync,
+		lastSuccessfulSyncJobStartTime: lastSuccessfulSyncJobStartTime,
+		optimizeEnumerationByCTime:     optimizeEnumerationByCTime,
+		valid:                          true,
+	}
+}
+
 // Function to initialize a default SyncEnumeratorOptions struct object
-func NewDefaultSyncOrchestratorOptions() syncOrchestratorOptions {
-	return syncOrchestratorOptions{
+func NewDefaultSyncOrchestratorOptions() SyncOrchestratorOptions {
+	return SyncOrchestratorOptions{
 		maxDirectoryDirectChildCount:   0,
 		metaDataOnlySync:               false,
 		lastSuccessfulSyncJobStartTime: time.Time{},
@@ -97,7 +113,7 @@ func NewDefaultSyncOrchestratorOptions() syncOrchestratorOptions {
 }
 
 // Function to initialize a test SyncEnumeratorOptions struct object
-func NewTestSyncOrchestratorOptions() syncOrchestratorOptions {
+func NewTestSyncOrchestratorOptions() SyncOrchestratorOptions {
 	utcString := "Sat Jun 28 22:30:15 UTC 2025"
 	layout := "Mon Jan 2 15:04:05 MST 2006"
 
@@ -108,7 +124,7 @@ func NewTestSyncOrchestratorOptions() syncOrchestratorOptions {
 
 	customTime = time.Now().Add(-10 * time.Minute)
 
-	return syncOrchestratorOptions{
+	return SyncOrchestratorOptions{
 		maxDirectoryDirectChildCount:   1_000_000,
 		metaDataOnlySync:               true,
 		lastSuccessfulSyncJobStartTime: customTime,

@@ -41,7 +41,7 @@ import (
 
 // -------------------------------------- Implemented Enumerators -------------------------------------- \\
 
-func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel chan TraverserErrorItemInfo, orchestratorOptions *syncOrchestratorOptions) (enumerator *syncEnumerator, err error) {
+func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel chan TraverserErrorItemInfo, orchestratorOptions *SyncOrchestratorOptions) (enumerator *syncEnumerator, err error) {
 
 	if orchestratorOptions != nil {
 		orchestratorOptions.validate(cca.fromTo.From())
@@ -460,7 +460,7 @@ func GetSyncEnumeratorWithDestComparator(
 	indexer *objectIndexer,
 	filters []ObjectFilter,
 	transferScheduler *copyTransferProcessor,
-	orchestratorOptions *syncOrchestratorOptions,
+	orchestratorOptions *SyncOrchestratorOptions,
 ) (*syncEnumerator, error) {
 
 	// Upload implies transferring from a local disk to a remote resource.
@@ -542,7 +542,7 @@ func GetSyncEnumeratorWithSrcComparator(
 	indexer *objectIndexer,
 	filters []ObjectFilter,
 	transferScheduler *copyTransferProcessor,
-	orchestratorOptions *syncOrchestratorOptions,
+	orchestratorOptions *SyncOrchestratorOptions,
 ) (*syncEnumerator, error) {
 
 	indexer.isDestinationCaseInsensitive = IsDestinationCaseInsensitive(cca.fromTo)

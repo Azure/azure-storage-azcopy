@@ -58,7 +58,6 @@ type ErrorS3Info struct {
 	S3Name             string
 	S3LastModifiedTime time.Time
 	ErrorMsg           error
-	Source             bool
 	Dir                bool
 }
 
@@ -92,8 +91,8 @@ func (e ErrorS3Info) ErrorMessage() error {
 	return e.ErrorMsg
 }
 
-func (e ErrorS3Info) IsSource() bool {
-	return e.Source
+func (e ErrorS3Info) Location() common.Location {
+	return common.ELocation.S3()
 }
 
 // END - Implementing methods defined in TraverserErrorItemInfo
@@ -149,7 +148,6 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 				S3LastModifiedTime: oi.LastModified,
 				S3Size:             oi.Size,
 				ErrorMsg:           err,
-				Source:             true,
 			}
 			writeToS3ErrorChannel(t.errorChannel, errorS3Info)
 			WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, t.s3URLParts.ObjectKey))
@@ -184,7 +182,6 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 					S3Name:             objectName,
 					S3Path:             t.s3URLParts.ObjectKey,
 					ErrorMsg:           err,
-					Source:             true,
 					S3LastModifiedTime: oi.LastModified,
 					S3Size:             oi.Size,
 				}
@@ -221,7 +218,6 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 		if objectInfo.Err != nil {
 			errorS3Info := ErrorS3Info{
 				S3Name:             objectInfo.Key,
-				Source:             true,
 				S3Size:             objectInfo.Size,
 				S3LastModifiedTime: objectInfo.LastModified,
 				S3Path:             t.s3URLParts.ObjectKey,
@@ -236,7 +232,6 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, objectInfo.Key))
 			errorS3Info := ErrorS3Info{
 				S3Name:             objectInfo.Key,
-				Source:             true,
 				S3Size:             objectInfo.Size,
 				S3LastModifiedTime: objectInfo.LastModified,
 				S3Path:             t.s3URLParts.ObjectKey,
@@ -290,7 +285,6 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 						S3Name:             objectName,
 						S3Path:             t.s3URLParts.ObjectKey,
 						ErrorMsg:           err,
-						Source:             true,
 						S3LastModifiedTime: oi.LastModified,
 						S3Size:             oi.Size,
 					}
@@ -325,7 +319,6 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 				S3Name:             objectName,
 				S3Path:             t.s3URLParts.ObjectKey,
 				ErrorMsg:           err,
-				Source:             true,
 				S3LastModifiedTime: storedObject.lastModifiedTime,
 				S3Size:             storedObject.size,
 			}
