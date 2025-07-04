@@ -608,7 +608,7 @@ func (jm *jobMgr) ResumeTransfers(appCtx context.Context) {
 	// Since while creating the JobMgr, atomicAllTransfersScheduled is set to true
 	// reset it to false while resuming it
 	// jm.ResetAllTransfersScheduled()
-	jm.jobPartMgrs.Iterate(false, func(p common.PartNumber, jpm IJobPartMgr) {
+	jm.jobPartMgrs.Iterate(true, func(p common.PartNumber, jpm IJobPartMgr) {
 		jm.QueueJobParts(jpm)
 		// jpm.ScheduleTransfers(jm.ctx, includeTransfer, excludeTransfer)
 	})
