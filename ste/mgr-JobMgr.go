@@ -642,6 +642,7 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 	for {
 		select {
 		case <-jm.reportCancelCh:
+			fmt.Printf("reportCancelCh received cancel event for job %s\n", jm.jobID.String())
 			jobPart0Mgr, ok := jm.jobPartMgrs.Get(0)
 			if ok {
 				part0plan := jobPart0Mgr.Plan()
@@ -654,12 +655,14 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 				jm.Log(common.LogError, "part0Plan of job invalid")
 			}
 			jm.Log(common.LogInfo, "reportJobPartDoneHandler done called")
+			fmt.Printf("reportJobPartDoneHandler done called for job %s\n", jm.jobID.String())
 			return
 
 		case partProgressInfo := <-jm.jobPartProgress:
 			jobPart0Mgr, ok := jm.jobPartMgrs.Get(0)
 			if !ok {
-				jm.Panic(fmt.Errorf("Failed to find Job %v, Part #0", jm.jobID))
+				fmt.Printf("Failed to find Job %v, partProgressInfo: %v", jm.jobID, partProgressInfo)
+				//jm.Panic(fmt.Errorf("Failed to find Job %v, Part #0", jm.jobID))
 			}
 			part0Plan := jobPart0Mgr.Plan()
 			jobStatus := part0Plan.JobStatus() // status of part 0 is status of job as a whole
