@@ -355,6 +355,10 @@ func (m *MockObjectResourceManager) Download(a Asserter) io.ReadSeeker {
 	return bytes.NewReader([]byte{})
 }
 
+func (b *MockObjectResourceManager) ReadLink(a Asserter) string {
+	return ""
+}
+
 func (m *MockObjectResourceManager) Exists() bool {
 	return true
 }

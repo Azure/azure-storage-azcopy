@@ -666,6 +666,18 @@ func (sm *StatsMonitor) takeSnapshot() StatsSnapshot {
 // logSnapshot logs the performance snapshot using glcm.Info and adds it to the monitoring history.
 // It maintains a sliding window of recent snapshots by removing old entries
 // when the maximum snapshot count is exceeded.
+
+func (sm *StatsMonitor) addSnapshot(snapshot StatsSnapshot) {
+	sm.snapshotMutex.Lock()
+	defer sm.snapshotMutex.Unlock()
+
+	sm.snapshots = append(sm.snapshots, snapshot)
+
+	if len(sm.snapshots) > int(sm.maxSnapshots) {
+		sm.snapshots = sm.snapshots[1:]
+	}
+}
+
 func (sm *StatsMonitor) logSnapshot(snapshot StatsSnapshot) {
 	// Log the snapshot information
 	glcm.Info(fmt.Sprintf("Performance Snapshot - Timestamp: %s, IndexerSize: %d, ActiveDirs: %d, ProcessedDirs: %d, EnumeratingDirs: %d, MemoryUsageMB: %d, UtilizationPercent: %.2f%%",
@@ -677,3 +689,4 @@ func (sm *StatsMonitor) logSnapshot(snapshot StatsSnapshot) {
 		snapshot.MemoryUsageMB,
 		snapshot.UtilizationPercent))
 }
+

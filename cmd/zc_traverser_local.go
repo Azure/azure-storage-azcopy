@@ -43,7 +43,6 @@ import (
 )
 
 const MAX_SYMLINKS_TO_FOLLOW = 40
-
 type localTraverser struct {
 	fullPath        string
 	recursive       bool
@@ -311,7 +310,6 @@ func WalkWithSymlinks(
 				writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 				return nil
 			}
-
 			if fileInfo.Mode()&os.ModeSymlink != 0 {
 				if symlinkHandling.Preserve() {
 					// Handle it like it's not a symlink
@@ -347,7 +345,6 @@ func WalkWithSymlinks(
 				 * TODO: Need to handle this case.
 				 */
 				result, err := UnfurlSymlinks(filePath)
-
 				if err != nil {
 					err = fmt.Errorf("failed to resolve symlink %s: %w", filePath, err)
 					WarnStdoutAndScanningLog(err.Error())
@@ -458,6 +455,10 @@ func WalkWithSymlinks(
 			} else {
 				// not a symlink
 				result, err := filepath.Abs(filePath)
+				rStat, err := os.Stat(result)
+				if rStat.IsDir() {
+					return nil
+				}
 
 				if err != nil {
 					err = fmt.Errorf("failed to get absolute path of %s: %w", filePath, err)
@@ -466,7 +467,7 @@ func WalkWithSymlinks(
 					return nil
 				}
 
-				if !seenPaths.HasSeen(result) {
+				if !seenPaths.HasSeen(result)|| UseSyncOrchestrator {
 					err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
 					// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
 					skipped, err := getProcessingError(err)
@@ -966,6 +967,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 									processFile,
 									t.symlinkHandling,
 									t.errorChannel))
+                continue
 							}
 						}
 					}
