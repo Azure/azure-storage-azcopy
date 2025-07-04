@@ -214,7 +214,7 @@ func GetExtendedProperties(path string, entityType EntityType) (ExtendedProperti
 		err := unix.Statx(0, path, statxFlags, unix.STATX_ALL, &stat)
 
 		if err != nil && err != unix.ENOSYS {
-			return nil, err
+			return DefaultExtendedProperties{}, err
 		} else if err == nil {
 			return &UnixStatxProperties{info: stat}, nil
 		}
@@ -223,7 +223,7 @@ func GetExtendedProperties(path string, entityType EntityType) (ExtendedProperti
 	var stat unix.Stat_t
 	err := unix.Stat(path, &stat)
 	if err != nil {
-		return nil, err
+		return DefaultExtendedProperties{}, err
 	}
 
 	return &UnixStatProperties{info: stat}, nil

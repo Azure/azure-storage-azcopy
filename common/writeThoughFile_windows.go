@@ -303,7 +303,7 @@ func GetExtendedProperties(path string, entityType EntityType) (ExtendedProperti
 	// This function is not implemented for Windows, as it uses Statx which is a Linux-specific syscall.
 	extProp, err := GetFileInformation(path)
 	if err != nil {
-		return nil, err
+		return DefaultExtendedProperties{}, err
 	}
 	return &WindowsExtendedProperties{info: extProp}, nil
 }

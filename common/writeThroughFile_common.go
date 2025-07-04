@@ -33,3 +33,17 @@ type ExtendedProperties interface {
 	// GetChangeTime returns the change time (may be same as write time on some platforms)
 	GetChangeTime() time.Time
 }
+
+type DefaultExtendedProperties struct{}
+
+func (d DefaultExtendedProperties) GetLastAccessTime() time.Time {
+	return time.Time{}
+}
+
+func (d DefaultExtendedProperties) GetLastWriteTime() time.Time {
+	return time.Time{}
+}
+
+func (d DefaultExtendedProperties) GetChangeTime() time.Time {
+	return time.Time{}
+}
