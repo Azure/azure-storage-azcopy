@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"net"
 	"net/url"
 	"strings"
+	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
@@ -411,4 +413,9 @@ func IsSystemContainer(containerName string) bool {
 		}
 	}
 	return false
+}
+
+// TimeToString returns the time in RFC3339 format, compatible with AzCopy.
+func TimeAsRFC3339String(t time.Time) string {
+	return t.UTC().Format(time.RFC3339)
 }

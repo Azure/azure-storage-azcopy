@@ -22,6 +22,7 @@ package ste
 
 import (
 	"fmt"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -89,11 +90,49 @@ func (u *azureFileUploader) Epilogue() {
 
 			u.headersToApply.ContentMD5 = md5Hash
 			_, err := u.getFileClient().SetHTTPHeaders(u.ctx, &file.SetHTTPHeadersOptions{
-				HTTPHeaders: &u.headersToApply,
-				Permissions: &u.permissionsToApply,
+				HTTPHeaders:   &u.headersToApply,
+				Permissions:   &u.permissionsToApply,
 				SMBProperties: &u.smbPropertiesToApply,
 			})
 			return err
 		})
 	}
+}
+
+func (s *azureFileUploader) GenerateCopyMetadata(id common.ChunkID) chunkFunc {
+	return createChunkFunc(true, s.jptm, id, func() {
+		info := s.jptm.Info()
+
+		_, err := s.addPermissionsToHeaders(info, s.getFileClient().URL())
+		if err != nil {
+			s.jptm.FailActiveSend("Setting file metadata", err)
+			return
+		}
+
+		_, err = s.addSMBPropertiesToHeaders(info)
+		if err != nil {
+			s.jptm.FailActiveSend("Setting file metadata", err)
+			return
+		}
+
+		err = common.DoWithOverrideReadOnlyOnAzureFiles(s.ctx,
+			func() (interface{}, error) {
+				_, err := s.getFileClient().SetMetadata(s.ctx, &file.SetMetadataOptions{Metadata: s.metadataToApply})
+				if err != nil {
+					return nil, err
+				}
+				return s.getFileClient().SetHTTPHeaders(s.ctx, &file.SetHTTPHeadersOptions{
+					HTTPHeaders:   &s.headersToApply,
+					Permissions:   &s.permissionsToApply,
+					SMBProperties: &s.smbPropertiesToApply,
+				})
+			},
+			s.fileOrDirClient,
+			s.jptm.GetForceIfReadOnly())
+
+		if err != nil {
+			s.jptm.FailActiveUpload("Applying final attribute settings", err)
+			return
+		}
+	})
 }

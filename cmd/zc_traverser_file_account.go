@@ -40,7 +40,6 @@ type fileAccountTraverser struct {
 	incrementEnumerationCounter enumerationCounterFunc
 	trailingDot                 common.TrailingDotOption
 	destination                 *common.Location
-	syncOptions                 SyncTraverserOptions
 }
 
 func (t *fileAccountTraverser) IsDirectory(isSource bool) (bool, error) {
@@ -92,7 +91,7 @@ func (t *fileAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 
 	for _, v := range shareList {
 		shareURL := t.serviceClient.NewShareClient(v).URL()
-		shareTraverser := newFileTraverser(shareURL, t.serviceClient, t.ctx, true, t.getProperties, t.incrementEnumerationCounter, t.trailingDot, t.destination, NewDefaultSyncTraverserOptions())
+		shareTraverser := newFileTraverser(shareURL, t.serviceClient, t.ctx, true, t.getProperties, t.incrementEnumerationCounter, t.trailingDot, t.destination)
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
@@ -114,8 +113,7 @@ func newFileAccountTraverser(
 	getProperties bool,
 	incrementEnumerationCounter enumerationCounterFunc,
 	trailingDot common.TrailingDotOption,
-	destination *common.Location,
-	syncOptions SyncTraverserOptions) (t *fileAccountTraverser) {
+	destination *common.Location) (t *fileAccountTraverser) {
 
 	t = &fileAccountTraverser{
 		ctx:                         ctx,
@@ -125,7 +123,6 @@ func newFileAccountTraverser(
 		getProperties:               getProperties,
 		trailingDot:                 trailingDot,
 		destination:                 destination,
-		syncOptions:                 syncOptions,
 	}
 	return
 }

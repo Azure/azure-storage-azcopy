@@ -27,6 +27,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -296,4 +297,31 @@ func SetBackupMode(enable bool, fromTo FromTo) error {
 	}
 
 	return nil
+}
+
+func GetExtendedProperties(path string, entityType EntityType) (ExtendedProperties, error) {
+	// This function is not implemented for Windows, as it uses Statx which is a Linux-specific syscall.
+	extProp, err := GetFileInformation(path)
+	if err != nil {
+		return nil, err
+	}
+	return &WindowsExtendedProperties{info: extProp}, nil
+}
+
+// WindowsExtendedProperties wraps windows.ByHandleFileInformation to implement the FileInfo interface
+type WindowsExtendedProperties struct {
+	info windows.ByHandleFileInformation
+}
+
+func (wfi *WindowsExtendedProperties) GetLastAccessTime() time.Time {
+	return time.Unix(0, wfi.info.LastAccessTime.Nanoseconds())
+}
+
+func (wfi *WindowsExtendedProperties) GetLastWriteTime() time.Time {
+	return time.Unix(0, wfi.info.LastWriteTime.Nanoseconds())
+}
+
+func (wfi *WindowsExtendedProperties) GetChangeTime() time.Time {
+	// Windows doesn't have a separate change time, use default
+	return time.Time{}
 }
