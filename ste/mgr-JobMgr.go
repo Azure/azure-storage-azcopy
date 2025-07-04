@@ -663,6 +663,7 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 			if !ok {
 				fmt.Printf("Failed to find Job %v, partProgressInfo: %v", jm.jobID, partProgressInfo)
 				//jm.Panic(fmt.Errorf("Failed to find Job %v, Part #0", jm.jobID))
+				return
 			}
 			part0Plan := jobPart0Mgr.Plan()
 			jobStatus := part0Plan.JobStatus() // status of part 0 is status of job as a whole
@@ -778,12 +779,12 @@ func (jm *jobMgr) DeferredCleanupJobMgr() {
 
 	jm.Log(common.LogInfo, "DeferredCleanupJobMgr out of sleep")
 
+	// Transfer Thread Cleanup.
+	jm.cleanupTransferRoutine()
+
 	// Call jm.Cancel to signal routines workdone.
 	// This will take care of any jobPartMgr release.
 	jm.Cancel()
-
-	// Transfer Thread Cleanup.
-	jm.cleanupTransferRoutine()
 
 	// Remove JobPartsMgr from jobPartMgr kv.
 	jm.deleteJobPartsMgrs()
