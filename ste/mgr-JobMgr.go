@@ -662,8 +662,7 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 			jobPart0Mgr, ok := jm.jobPartMgrs.Get(0)
 			if !ok {
 				fmt.Printf("Failed to find Job %v, partProgressInfo: %v", jm.jobID, partProgressInfo)
-				//jm.Panic(fmt.Errorf("Failed to find Job %v, Part #0", jm.jobID))
-				return
+				jm.Panic(fmt.Errorf("Failed to find Job %v, Part #0", jm.jobID))
 			}
 			part0Plan := jobPart0Mgr.Plan()
 			jobStatus := part0Plan.JobStatus() // status of part 0 is status of job as a whole
