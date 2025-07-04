@@ -291,7 +291,9 @@ func (l *LocalObjectResourceManager) CreateParents(a Asserter) {
 
 func (l *LocalObjectResourceManager) Create(a Asserter, body ObjectContentContainer, properties ObjectProperties) {
 	a.HelperMarker().Helper()
-	a.AssertNow("Object must be file to have content", Equal{})
+	if properties.EntityType != l.entityType {
+		l.entityType = properties.EntityType
+	}
 
 	l.CreateParents(a)
 
@@ -441,6 +443,13 @@ func (l *LocalObjectResourceManager) Download(a Asserter) io.ReadSeeker {
 	a.NoError("read file", err)
 
 	return bytes.NewReader(buf.Bytes())
+}
+
+func (l *LocalObjectResourceManager) ReadLink(a Asserter) string {
+	out, err := os.Readlink(l.getWorkingPath())
+	a.NoError("ReadLink", err)
+
+	return out
 }
 
 func (l *LocalObjectResourceManager) Exists() bool {
