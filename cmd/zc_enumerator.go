@@ -390,6 +390,10 @@ func (so *StoredObject) updateTimestamps(lastWriteTime, changeTime time.Time) {
 
 // tryUpdateTimestampsFromMetadata updates the lastWriteTime and changeTime fields of a StoredObject
 func (so *StoredObject) tryUpdateTimestampsFromMetadata(meta common.Metadata) {
+	if meta == nil {
+		return
+	}
+
 	so.lastWriteTime, _, _ = common.TryReadModTimeFromMetadata(meta)
 	so.changeTime, _, _ = common.TryReadCTimeFromMetadata(meta)
 }

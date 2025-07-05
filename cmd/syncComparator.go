@@ -128,99 +128,92 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 
 		if UseSyncOrchestrator && f.orchestratorOptions != nil && f.orchestratorOptions.valid {
 			// Use optimized comparison logic using source and target timestamps and sizes
-			typeChanged, dataChanged, metadataChanged, valid := f.compareSourceAndDestinationObject(sourceObjectInMap, destinationObject)
+			typeChanged, dataChanged, metadataChanged := f.compareSourceAndDestinationObject(sourceObjectInMap, destinationObject)
 
-			if valid {
-
-				if typeChanged {
-					// if the entity type has changed, we will not be able to transfer the file
-					// unless the destination object is deleted first
-					// XDM: Does destination support different entity type with same name?
-					if f.deleteDestination == common.EDeleteDestination.True() {
-						err := f.destinationCleaner(destinationObject)
-						if err != nil {
-							syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonEntityTypeChangedFailedDelete, false)
-							return nil
-						}
-					} else if f.deleteDestination == common.EDeleteDestination.False() {
-						// If deleteDestination is set to false, we cannot transfer the file
-						// because the destination object is not compatible with the source object.
-						syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonEntityTypeChangedNoDelete, false)
+			if typeChanged {
+				// if the entity type has changed, we will not be able to transfer the file
+				// unless the destination object is deleted first
+				// XDM: Does destination support different entity type with same name?
+				if f.deleteDestination == common.EDeleteDestination.True() {
+					err := f.destinationCleaner(destinationObject)
+					if err != nil {
+						syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonEntityTypeChangedFailedDelete, false)
 						return nil
 					}
-				}
-
-				// If metadata has changed for a folder, we consider data changed as well.
-				if metadataChanged && sourceObjectInMap.entityType.IsFolder() {
-					dataChanged = true
-				}
-
-				// If metadata has changed and metaDataOnlySync is not enabled, we consider data changed as well.
-				if metadataChanged && !f.orchestratorOptions.metaDataOnlySync {
-					dataChanged = true
-				}
-
-				// if data or type has changes, we will transfer the file
-				if dataChanged || typeChanged {
-					return f.copyTransferScheduler(sourceObjectInMap)
-				}
-
-				// If metadata has changed but data hasn't, we still want to transfer the file properties.
-				if metadataChanged {
-					// This will execute for all entity types other than folders.
-					// XDM: Do we check symlinks entity type here?
-					sourceObjectInMap.size = 0                                         // Set size to 0 to indicate that we are not transferring data, only metadata.
-					sourceObjectInMap.entityType = common.EEntityType.FileProperties() // Set entity type to FileProperties to indicate metadata transfer.
-					return f.copyTransferScheduler(sourceObjectInMap)
-				}
-
-				if !dataChanged && !metadataChanged && !typeChanged {
-					if f.incrementNotTransferred != nil {
-						f.incrementNotTransferred(sourceObjectInMap.entityType)
-					}
-					syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonNoChangeInLWTorCT, false)
+				} else if f.deleteDestination == common.EDeleteDestination.False() {
+					// If deleteDestination is set to false, we cannot transfer the file
+					// because the destination object is not compatible with the source object.
+					syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonEntityTypeChangedNoDelete, false)
 					return nil
 				}
 			}
-		}
 
-		if f.comparisonHashType != common.ESyncHashType.None() && sourceObjectInMap.entityType == common.EEntityType.File() {
-			switch f.comparisonHashType {
-			case common.ESyncHashType.MD5():
-				if sourceObjectInMap.md5 == nil {
-					if sourceObjectInMap.isMoreRecentThan(destinationObject, f.preferSMBTime) {
-						syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMTAndMissingHash, false)
-						return f.copyTransferScheduler(sourceObjectInMap)
-					} else {
-						// skip if dest is more recent
-						syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonTimeAndMissingHash, false)
-						return nil
-					}
-				}
-
-				if !reflect.DeepEqual(sourceObjectInMap.md5, destinationObject.md5) {
-					syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, false)
-
-					// hash inequality = source "newer" in this model.
-					return f.copyTransferScheduler(sourceObjectInMap)
-				}
-			default:
-				panic("sanity check: unsupported hash type " + f.comparisonHashType.String())
+			// If metadata has changed for a folder, we consider data changed as well.
+			if metadataChanged && sourceObjectInMap.entityType.IsFolder() {
+				dataChanged = true
 			}
 
-			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonSameHash, false)
-			return nil
-		} else if sourceObjectInMap.isMoreRecentThan(destinationObject, f.preferSMBTime) {
-			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMT, false)
-			return f.copyTransferScheduler(sourceObjectInMap)
-		}
+			// If metadata has changed and metaDataOnlySync is not enabled, we consider data changed as well.
+			if metadataChanged && !f.orchestratorOptions.metaDataOnlySync {
+				dataChanged = true
+			}
 
-		// Neither data nor metadata for the file has changed, hence file is not transferred.
-		if f.incrementNotTransferred != nil {
-			f.incrementNotTransferred(sourceObjectInMap.entityType)
+			// if data or type has changes, we will transfer the file
+			if dataChanged || typeChanged {
+				return f.copyTransferScheduler(sourceObjectInMap)
+			}
+
+			// If metadata has changed but data hasn't, we still want to transfer the file properties.
+			if metadataChanged {
+				// This will execute for all entity types other than folders.
+				// XDM: Do we check symlinks entity type here?
+				sourceObjectInMap.size = 0                                         // Set size to 0 to indicate that we are not transferring data, only metadata.
+				sourceObjectInMap.entityType = common.EEntityType.FileProperties() // Set entity type to FileProperties to indicate metadata transfer.
+				return f.copyTransferScheduler(sourceObjectInMap)
+			}
+
+			if !dataChanged && !metadataChanged && !typeChanged {
+				if f.incrementNotTransferred != nil {
+					f.incrementNotTransferred(sourceObjectInMap.entityType)
+				}
+				syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonNoChangeInLWTorCT, false)
+				return nil
+			}
+		} else {
+			if f.comparisonHashType != common.ESyncHashType.None() && sourceObjectInMap.entityType == common.EEntityType.File() {
+				switch f.comparisonHashType {
+				case common.ESyncHashType.MD5():
+					if sourceObjectInMap.md5 == nil {
+						if sourceObjectInMap.isMoreRecentThan(destinationObject, f.preferSMBTime) {
+							syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMTAndMissingHash, false)
+							return f.copyTransferScheduler(sourceObjectInMap)
+						} else {
+							// skip if dest is more recent
+							syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonTimeAndMissingHash, false)
+							return nil
+						}
+					}
+
+					if !reflect.DeepEqual(sourceObjectInMap.md5, destinationObject.md5) {
+						syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, false)
+
+						// hash inequality = source "newer" in this model.
+						return f.copyTransferScheduler(sourceObjectInMap)
+					}
+				default:
+					panic("sanity check: unsupported hash type " + f.comparisonHashType.String())
+				}
+
+				syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonSameHash, false)
+				return nil
+			} else if sourceObjectInMap.isMoreRecentThan(destinationObject, f.preferSMBTime) {
+				syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMT, false)
+				return f.copyTransferScheduler(sourceObjectInMap)
+			}
+
+			// skip if dest is more recent
+			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonTime, false)
 		}
-		// skip if dest is more recent
-		syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonTime, false)
 	} else {
 		// purposefully ignore the error from destinationCleaner
 		// it's a tolerable error, since it just means some extra destination object might hang around a bit longer
@@ -234,18 +227,17 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 	sourceObject StoredObject,
 	destinationObject StoredObject,
-) (typeChanged, dataChanged, metadataChanged, valid bool) {
+) (typeChanged, dataChanged, metadataChanged bool) {
 	// Check if data has changed by comparing size and modification time
 	typeChanged = false
 	dataChanged = false
 	metadataChanged = false
-	valid = true
 
 	if sourceObject.entityType != destinationObject.entityType {
 		typeChanged = true
 		dataChanged = true     // If types differ, we consider data changed
 		metadataChanged = true // Metadata is also considered changed if types differ
-		return typeChanged, dataChanged, metadataChanged, valid
+		return typeChanged, dataChanged, metadataChanged
 	}
 
 	if !sourceObject.entityType.IsFolder() {
@@ -253,33 +245,33 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 		// XDM NOTE: Do we really need to compare sizes here if we are already comparing LWT?
 		if sourceObject.size != destinationObject.size {
 			dataChanged = true
-			return typeChanged, dataChanged, metadataChanged, valid
+			return typeChanged, dataChanged, metadataChanged
 		}
 	}
 
 	if sourceObject.lastWriteTime.IsZero() || destinationObject.lastWriteTime.IsZero() {
-		valid = false
-		return typeChanged, dataChanged, metadataChanged, valid
+		dataChanged = true
+		return typeChanged, dataChanged, metadataChanged
 	}
 
 	// Compare last write times
 	if sourceObject.lastWriteTime.Compare(destinationObject.lastWriteTime) != 0 {
 		dataChanged = true
-		return typeChanged, dataChanged, metadataChanged, valid
+		return typeChanged, dataChanged, metadataChanged
 	}
 
 	if sourceObject.changeTime.IsZero() || destinationObject.changeTime.IsZero() {
 		// If change time is not available, we cannot determine metadata changes
 		metadataChanged = true
-		return typeChanged, dataChanged, metadataChanged, valid
+		return typeChanged, dataChanged, metadataChanged
 	}
 
 	// Compare change times
 	if sourceObject.changeTime.Compare(destinationObject.changeTime) != 0 {
 		metadataChanged = true
-		return typeChanged, dataChanged, metadataChanged, valid
+		return typeChanged, dataChanged, metadataChanged
 	}
-	return typeChanged, dataChanged, metadataChanged, valid
+	return typeChanged, dataChanged, metadataChanged
 }
 
 // with the help of an objectIndexer containing the destination objects
