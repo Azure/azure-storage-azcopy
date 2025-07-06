@@ -760,7 +760,7 @@ func newSyncEnumerator(primaryTraverser, secondaryTraverser ResourceTraverser, i
 	}
 }
 
-func (e *syncEnumerator) enumerate() (err error) {
+func (e *syncEnumerator) Enumerate() (err error) {
 	handleAcceptableErrors := func() {
 		switch {
 		case err == nil: // don't do any error checking

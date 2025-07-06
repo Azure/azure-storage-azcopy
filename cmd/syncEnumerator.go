@@ -40,7 +40,7 @@ import (
 
 // -------------------------------------- Implemented Enumerators -------------------------------------- \\
 
-func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *syncEnumerator, err error) {
+func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context) (enumerator *syncEnumerator, err error) {
 
 	srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source, true, cca.cpkOptions)
 

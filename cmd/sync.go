@@ -499,6 +499,8 @@ type cookedSyncCmdArgs struct {
 	putBlobSizeMB float64
 	cpkByName     string
 	cpkByValue    bool
+
+	stripTopDir bool
 }
 
 func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
@@ -732,10 +734,9 @@ Final Job Status: %v%s%s
 	return
 }
 
-func (cca *cookedSyncCmdArgs) process() (err error) {
-	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+func (cca *cookedSyncCmdArgs) setCredentialInfo(ctx context.Context) error {
 
-	err = common.SetBackupMode(cca.backupMode, cca.fromTo)
+	err := common.SetBackupMode(cca.backupMode, cca.fromTo)
 	if err != nil {
 		return err
 	}
@@ -794,8 +795,18 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 			return fmt.Errorf("cannot copy to system container '%s'", dstContainerName)
 		}
 	}
+	return nil
+}
 
-	enumerator, err := cca.initEnumerator(ctx)
+func (cca *cookedSyncCmdArgs) process() (err error) {
+	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+
+	err = cca.setCredentialInfo(ctx)
+	if err != nil {
+		return err
+	}
+
+	enumerator, err := cca.InitEnumerator(ctx)
 	if err != nil {
 		return err
 	}
@@ -806,7 +817,7 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 	}
 
 	// trigger the enumeration
-	err = enumerator.enumerate()
+	err = enumerator.Enumerate()
 	if err != nil {
 		return err
 	}
