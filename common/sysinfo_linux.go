@@ -77,7 +77,7 @@ func GetMemAvailable() (int64, error) {
 	var kernelVersion unix.Utsname
 	_ = unix.Uname(&kernelVersion)
 
-	err = fmt.Errorf(fmt.Sprintf("MemAvailable entry not found, kernel version: %+v", kernelVersion))
+	err = fmt.Errorf("MemAvailable entry not found, kernel version: %+v", kernelVersion)
 	return 0, err
 }
 
@@ -143,6 +143,6 @@ func GetTotalPhysicalMemory() (int64, error) {
 	var kernelVersion unix.Utsname
 	_ = unix.Uname(&kernelVersion)
 
-	err = fmt.Errorf(fmt.Sprintf("MemTotal entry not found, kernel version: %+v", kernelVersion))
+	err = fmt.Errorf("MemTotal entry not found, kernel version: %+v", kernelVersion)
 	return 0, err
 }
