@@ -39,7 +39,7 @@ import (
 )
 
 type SyncEnumeratorOptions struct {
-	errorChannel chan TraverserErrorItemInfo
+	ErrorChannel chan TraverserErrorItemInfo
 }
 
 // -------------------------------------- Implemented Enumerators -------------------------------------- \\
@@ -78,6 +78,8 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		IncrementEnumeration: func(entityType common.EntityType) {
 			if entityType == common.EEntityType.File() {
 				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
+			} else if entityType == common.EEntityType.Folder() {
+				atomic.AddUint64(&cca.atomicSourceFoldersScanned, 1)
 			}
 			if isNFSCopy {
 				if entityType == common.EEntityType.Other() {
@@ -120,6 +122,8 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		IncrementEnumeration: func(entityType common.EntityType) {
 			if entityType == common.EEntityType.File() {
 				atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
+			} else if entityType == common.EEntityType.Folder() {
+				atomic.AddUint64(&cca.atomicDestinationFoldersScanned, 1)
 			}
 		},
 

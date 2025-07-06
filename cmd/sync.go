@@ -418,6 +418,12 @@ type cookedSyncCmdArgs struct {
 	// 0 means first part is not ordered and 1 means first part is ordered.
 	atomicFirstPartOrdered uint32
 
+	// defines the number of folders listed at the source and compared.
+	atomicSourceFoldersScanned             uint64
+	atomicDestinationFoldersScanned        uint64
+	atomicSourceFilesTransferNotRequired   uint64
+	atomicSourceFoldersTransferNotRequired uint64
+
 	// deletion count keeps track of how many extra files from the destination were removed
 	atomicDeletionCount uint32
 
@@ -529,6 +535,36 @@ func (cca *cookedSyncCmdArgs) setScanningComplete() {
 // scanningComplete returns the value of atomicScanningStatus.
 func (cca *cookedSyncCmdArgs) scanningComplete() bool {
 	return atomic.LoadUint32(&cca.atomicScanningStatus) > 0
+}
+
+// GetSourceFilesScanned returns files scanned at source.
+func (cca *cookedSyncCmdArgs) GetSourceFoldersScanned() uint64 {
+	return atomic.LoadUint64(&cca.atomicSourceFoldersScanned)
+}
+
+// GetSourceFilesTransferredNotRequired returns number of files not changed, hence require no transfer.
+func (cca *cookedSyncCmdArgs) GetSourceFilesTransferredNotRequired() uint64 {
+	return atomic.LoadUint64(&cca.atomicSourceFilesTransferNotRequired)
+}
+
+// GetSourceFoldersTransferredNotRequired returns number of folders not changed, hence require no transfer.
+func (cca *cookedSyncCmdArgs) GetSourceFoldersTransferredNotRequired() uint64 {
+	return atomic.LoadUint64(&cca.atomicSourceFoldersTransferNotRequired)
+}
+
+// GetSourceFilesScanned returns files scanned at source.
+func (cca *cookedSyncCmdArgs) GetSourceFilesScanned() uint64 {
+	return atomic.LoadUint64(&cca.atomicSourceFilesScanned)
+}
+
+// GetDestinationFilesScanned returns files scanned at destination.
+func (cca *cookedSyncCmdArgs) GetDestinationFilesScanned() uint64 {
+	return atomic.LoadUint64(&cca.atomicDestinationFilesScanned)
+}
+
+// GetDestinationFoldersScanned returns folders scanned at destination.
+func (cca *cookedSyncCmdArgs) GetDestinationFoldersScanned() uint64 {
+	return atomic.LoadUint64(&cca.atomicDestinationFoldersScanned)
 }
 
 // wraps call to lifecycle manager to wait for the job to complete
