@@ -101,6 +101,9 @@ var JobsAdmin interface {
 	// JobMgrCleanUp do the JobMgr cleanup.
 	JobMgrCleanUp(jobId common.JobID)
 	ListJobs(givenStatus common.JobStatus) common.ListJobsResponse
+
+	// Update bandwidth
+	UpdateTargetBandwidth(newTarget int64)
 }
 
 func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64, azcopyJobPlanFolder string, azcopyLogPathFolder string, providePerfAdvice bool) {

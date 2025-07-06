@@ -99,6 +99,17 @@ func (p *tokenBucketPacer) RequestTrafficAllocation(ctx context.Context, byteCou
 		return nil
 	}
 
+	// Wait until p.targetBytesPerSecond() is positive or zero
+	// A negative value indicates the pacer is temporarily disabled/throttled
+	// Prevents token allocation errors and CPU waste from busy-waiting on invalid targets
+	for p.targetBytesPerSecond() < 0 {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Second * 5): // sleep for five seconds
+		}
+	}
+
 	if targetBytes < byteCount {
 		return errors.New("request size greater than pacer target")
 	}
@@ -121,7 +132,7 @@ func (p *tokenBucketPacer) RequestTrafficAllocation(ctx context.Context, byteCou
 		case <-time.After(modifiedSleepDuration):
 			// keep looping
 		}
-		
+
 		// If we've updated target to a NULL pacer, we'll return immediately
 		if p.targetBytesPerSecond() == 0 {
 			atomic.AddInt64(&p.atomicGrandTotal, byteCount)
@@ -159,7 +170,7 @@ func (p *tokenBucketPacer) pacerBody() {
 		select {
 		case <-p.done:
 			return
-		case newTarget = <- p.newTargetBytesPerSecond:
+		case newTarget = <-p.newTargetBytesPerSecond:
 		default:
 		}
 
