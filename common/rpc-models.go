@@ -124,12 +124,13 @@ func ConsolidatePathSeparators(path string) string {
 // Transfers describes each file/folder being transferred in a given JobPartOrder, and
 // other auxiliary details of this order.
 type Transfers struct {
-	List                    []CopyTransfer
-	TotalSizeInBytes        uint64
-	FileTransferCount       uint32
-	FolderTransferCount     uint32
-	SymlinkTransferCount    uint32
-	HardlinksConvertedCount uint32
+	List                      []CopyTransfer
+	TotalSizeInBytes          uint64
+	FileTransferCount         uint32
+	FolderTransferCount       uint32
+	SymlinkTransferCount      uint32
+	HardlinksConvertedCount   uint32
+	FilePropertyTransferCount uint32
 }
 
 // This struct represents the job info (a single part) to be sent to the storage engine
@@ -293,6 +294,7 @@ type ListJobSummaryResponse struct {
 	FileTransfers           uint32 `json:",string"`
 	FolderPropertyTransfers uint32 `json:",string"`
 	SymlinkTransfers        uint32 `json:",string"`
+	FilePropertyTransfers   uint32 `json:",string"`
 
 	FoldersCompleted   uint32 `json:",string"` // Files can be figured out by TransfersCompleted - FoldersCompleted
 	TransfersCompleted uint32 `json:",string"`
