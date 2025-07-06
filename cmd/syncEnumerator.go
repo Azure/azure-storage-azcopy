@@ -38,9 +38,13 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
+type SyncEnumeratorOptions struct {
+	errorChannel chan TraverserErrorItemInfo
+}
+
 // -------------------------------------- Implemented Enumerators -------------------------------------- \\
 
-func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context) (enumerator *syncEnumerator, err error) {
+func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOptions *SyncEnumeratorOptions) (enumerator *syncEnumerator, err error) {
 
 	srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source, true, cca.cpkOptions)
 

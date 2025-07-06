@@ -36,6 +36,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
@@ -49,7 +50,7 @@ type localTraverser struct {
 	appCtx          context.Context
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
-	errorChannel                chan<- ErrorFileInfo
+	errorChannel                chan<- TraverserErrorItemInfo
 
 	targetHashType common.SyncHashType
 	hashAdapter    common.HashDataAdapter
@@ -189,11 +190,59 @@ type ErrorFileInfo struct {
 	ErrorMsg error
 }
 
+var _ TraverserErrorItemInfo = (*ErrorFileInfo)(nil)
+
+///////////////////////////////////////////////////////////////////////////
+// START - Implementing methods defined in TraverserErrorItemInfo
+
+func (e ErrorFileInfo) FullPath() string {
+	return e.FilePath
+}
+
+func (e ErrorFileInfo) Name() string {
+	if e.FileInfo == nil {
+		return ""
+	}
+	return e.FileInfo.Name()
+}
+
+func (e ErrorFileInfo) Size() int64 {
+	if e.FileInfo == nil {
+		return 0
+	}
+	return e.FileInfo.Size()
+}
+
+func (e ErrorFileInfo) LastModifiedTime() time.Time {
+	if e.FileInfo == nil {
+		return time.Time{}
+	}
+	return e.FileInfo.ModTime()
+}
+
+func (e ErrorFileInfo) IsDir() bool {
+	if e.FileInfo == nil {
+		return false
+	}
+	return e.FileInfo.IsDir()
+}
+
+func (e ErrorFileInfo) ErrorMessage() error {
+	return e.ErrorMsg
+}
+
+func (e ErrorFileInfo) Location() common.Location {
+	return common.ELocation.Local()
+}
+
+// END - Implementing methods defined in TraverserErrorItemInfo
+///////////////////////////////////////////////////////////////////////////
+
 func (s symlinkTargetFileInfo) Name() string {
 	return s.name // override the name
 }
 
-func writeToErrorChannel(errorChannel chan<- ErrorFileInfo, err ErrorFileInfo) {
+func writeToErrorChannel(errorChannel chan<- TraverserErrorItemInfo, err ErrorFileInfo) {
 	if errorChannel != nil {
 		errorChannel <- err
 	}
@@ -207,7 +256,7 @@ func WalkWithSymlinks(appCtx context.Context,
 	fullPath string,
 	walkFunc filepath.WalkFunc,
 	symlinkHandling common.SymlinkHandlingType,
-	errorChannel chan<- ErrorFileInfo,
+	errorChannel chan<- TraverserErrorItemInfo,
 	hardlinkHandling common.HardlinkHandlingType,
 	incrementEnumerationCounter enumerationCounterFunc) (err error) {
 

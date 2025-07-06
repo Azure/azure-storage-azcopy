@@ -806,7 +806,7 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		return err
 	}
 
-	enumerator, err := cca.InitEnumerator(ctx)
+	enumerator, err := cca.InitEnumerator(ctx, nil)
 	if err != nil {
 		return err
 	}

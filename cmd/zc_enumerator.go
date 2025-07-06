@@ -357,9 +357,12 @@ type InitResourceTraverserOptions struct {
 	Credential           *common.CredentialInfo // Required for most remote traversers
 	IncrementEnumeration enumerationCounterFunc
 
-	ListOfFiles      <-chan string        // Creates a list of files traverser
-	ListOfVersionIDs <-chan string        // Used by Blob/DFS
-	ErrorChannel     chan<- ErrorFileInfo // Used by local traverser
+	ListOfFiles      <-chan string // Creates a list of files traverser
+	ListOfVersionIDs <-chan string // Used by Blob/DFS
+
+	// Used by local traverser. Extended to Blob, S3 traversers by XDM.
+	// Interface is extensible to other traversers.
+	ErrorChannel chan<- TraverserErrorItemInfo
 
 	CpkOptions common.CpkOptions // Used by Blob
 
