@@ -104,6 +104,9 @@ var JobsAdmin interface {
 
 	// Update bandwidth
 	UpdateTargetBandwidth(newTarget int64)
+
+	// ChangeLogLevel change the log level for specific job.
+	ChangeLogLevel(level common.LogLevel, jobId common.JobID) error
 }
 
 func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64, azcopyJobPlanFolder string, azcopyLogPathFolder string, providePerfAdvice bool) {
@@ -532,6 +535,26 @@ func (ja *jobsAdmin) LogToJobLog(msg string, level common.LogLevel) {
 		prefix = fmt.Sprintf("%s: ", common.LogLevel(level)) // so readers can find serious ones, but information ones still look uncluttered without INFO:
 	}
 	ja.jobLogger.Log(level, prefix+msg)
+}
+
+// ChangeLogLevel changes the log level for a specific job identified by jobId.
+// If the job manager for the given jobId is not found, it returns an error.
+//
+// Parameters:
+//   - level: The new log level to set for the job.
+//   - jobId: The identifier of the job whose log level is to be changed.
+//
+// Returns:
+//   - error: An error if the job manager for the given jobId is not found, otherwise nil.
+func (ja *jobsAdmin) ChangeLogLevel(level common.LogLevel, jobId common.JobID) error {
+	jm, found := ja.jobIDToJobMgr.Get(jobId)
+	if !found {
+		err := fmt.Errorf("No JobMgr found with this JobId(%s)", jobId.String())
+		return err
+	} else {
+		jm.ChangeLogLevel(level)
+		return nil
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
