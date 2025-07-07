@@ -240,6 +240,10 @@ func (a shareFilePropertiesAdapter) FileLastWriteTime() time.Time {
 	return common.IffNotNil(a.GetPropertiesResponse.FileLastWriteTime, time.Time{})
 }
 
+func (a shareFilePropertiesAdapter) FileChangeTime() time.Time {
+	return common.IffNotNil(a.GetPropertiesResponse.FileChangeTime, time.Time{})
+}
+
 func (a shareFilePropertiesAdapter) CacheControl() string {
 	return common.IffNotNil(a.GetPropertiesResponse.CacheControl, "")
 }
@@ -294,6 +298,10 @@ func (a shareDirectoryPropertiesAdapter) LastModified() time.Time {
 
 func (a shareDirectoryPropertiesAdapter) FileLastWriteTime() time.Time {
 	return common.IffNotNil(a.GetPropertiesResponse.FileLastWriteTime, time.Time{})
+}
+
+func (a shareDirectoryPropertiesAdapter) FileChangeTime() time.Time {
+	return common.IffNotNil(a.GetPropertiesResponse.FileChangeTime, time.Time{})
 }
 
 func (a shareDirectoryPropertiesAdapter) CacheControl() string {
