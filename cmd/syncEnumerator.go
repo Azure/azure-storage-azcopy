@@ -46,6 +46,13 @@ type SyncEnumeratorOptions struct {
 	SyncOrchOptions *SyncOrchestratorOptions
 }
 
+func NewSyncDefaultEnumeratorOptions() *SyncEnumeratorOptions {
+	return &SyncEnumeratorOptions{
+		ErrorChannel:    nil,
+		SyncOrchOptions: nil,
+	}
+}
+
 // NewSyncEnumeratorOptions creates a new SyncEnumeratorOptions with the specified error channel size and SyncOrchestratorOptions.
 func NewSyncEnumeratorOptions(errorChannelSize int, options *SyncOrchestratorOptions) *SyncEnumeratorOptions {
 	return &SyncEnumeratorOptions{
@@ -57,6 +64,10 @@ func NewSyncEnumeratorOptions(errorChannelSize int, options *SyncOrchestratorOpt
 // -------------------------------------- Implemented Enumerators -------------------------------------- \\
 
 func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOptions *SyncEnumeratorOptions) (enumerator *syncEnumerator, err error) {
+
+	if enumeratorOptions == nil {
+		enumeratorOptions = NewSyncDefaultEnumeratorOptions()
+	}
 
 	srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source, true, cca.cpkOptions)
 
