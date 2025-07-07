@@ -409,6 +409,15 @@ type InitResourceTraverserOptions struct {
 	ExcludeContainers []string // Blob account
 	ListVersions      bool     // Blob
 	HardlinkHandling  common.HardlinkHandlingType
+
+	IncrementNotTransferred enumerationCounterFunc
+}
+
+// XDM: These templates are used to create directory level non-recursive traversers
+// in syncOrchestrator.
+type ResourceTraverserTemplate struct {
+	location common.Location
+	options  InitResourceTraverserOptions
 }
 
 func (o *InitResourceTraverserOptions) PerformChecks() error {
@@ -777,17 +786,32 @@ type syncEnumerator struct {
 
 	// a finalizer that is always called if the enumeration finishes properly
 	finalize func() error
+
+	// XDM: These templates are used to create directory level non-recursive traversers
+	// in syncOrchestrator.
+	primaryTraverserTemplate   ResourceTraverserTemplate
+	secondaryTraverserTemplate ResourceTraverserTemplate
+
+	// XDM: This is used sync orchestrator to finalize directory level non-recursive traversals
+	ctp *copyTransferProcessor
+
+	orchestratorOptions *SyncOrchestratorOptions
 }
 
 func newSyncEnumerator(primaryTraverser, secondaryTraverser ResourceTraverser, indexer *objectIndexer,
-	filters []ObjectFilter, comparator objectProcessor, finalize func() error) *syncEnumerator {
+	filters []ObjectFilter, comparator objectProcessor, finalize func() error,
+	primaryTemplate, secondaryTemplate ResourceTraverserTemplate, ctp *copyTransferProcessor, orchestratorOptions *SyncOrchestratorOptions) *syncEnumerator {
 	return &syncEnumerator{
-		primaryTraverser:   primaryTraverser,
-		secondaryTraverser: secondaryTraverser,
-		objectIndexer:      indexer,
-		filters:            filters,
-		objectComparator:   comparator,
-		finalize:           finalize,
+		primaryTraverser:           primaryTraverser,
+		secondaryTraverser:         secondaryTraverser,
+		objectIndexer:              indexer,
+		filters:                    filters,
+		objectComparator:           comparator,
+		finalize:                   finalize,
+		primaryTraverserTemplate:   primaryTemplate,
+		secondaryTraverserTemplate: secondaryTemplate,
+		ctp:                        ctp,
+		orchestratorOptions:        orchestratorOptions,
 	}
 }
 

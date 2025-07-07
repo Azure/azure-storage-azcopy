@@ -39,7 +39,19 @@ import (
 )
 
 type SyncEnumeratorOptions struct {
+	// ErrorChannel is a channel for sending errors encountered during enumeration.
 	ErrorChannel chan TraverserErrorItemInfo
+
+	// SyncOrchOptions contains options for the sync orchestrator.
+	SyncOrchOptions *SyncOrchestratorOptions
+}
+
+// NewSyncEnumeratorOptions creates a new SyncEnumeratorOptions with the specified error channel size and SyncOrchestratorOptions.
+func NewSyncEnumeratorOptions(errorChannelSize int, options *SyncOrchestratorOptions) *SyncEnumeratorOptions {
+	return &SyncEnumeratorOptions{
+		ErrorChannel:    make(chan TraverserErrorItemInfo, errorChannelSize),
+		SyncOrchOptions: options,
+	}
 }
 
 // -------------------------------------- Implemented Enumerators -------------------------------------- \\
@@ -71,7 +83,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
 	dest := cca.fromTo.To()
-	sourceTraverser, err := InitResourceTraverser(cca.source, cca.fromTo.From(), ctx, InitResourceTraverserOptions{
+	sourceTraverserOptions := InitResourceTraverserOptions{
 		DestResourceType: &dest,
 
 		Credential: &srcCredInfo,
@@ -101,7 +113,19 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		IncludeDirectoryStubs:   includeDirStubs,
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
 		HardlinkHandling:        cca.hardlinks,
-	})
+		IncrementNotTransferred: func(entityType common.EntityType) {
+			if entityType == common.EEntityType.File() {
+				atomic.AddUint64(&cca.atomicSourceFilesTransferNotRequired, 1)
+			} else if entityType == common.EEntityType.Folder() {
+				atomic.AddUint64(&cca.atomicSourceFoldersTransferNotRequired, 1)
+			}
+		},
+	}
+	srcTraverserTemplate := ResourceTraverserTemplate{
+		location: cca.fromTo.From(),
+		options:  sourceTraverserOptions,
+	}
+	sourceTraverser, err := InitResourceTraverser(cca.source, cca.fromTo.From(), ctx, sourceTraverserOptions)
 
 	if err != nil {
 		return nil, err
@@ -117,7 +141,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 	// TODO: enable symlink support in a future release after evaluating the implications
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
-	destinationTraverser, err := InitResourceTraverser(cca.destination, cca.fromTo.To(), ctx, InitResourceTraverserOptions{
+	destinationTraverserOptions := InitResourceTraverserOptions{
 		Credential: &dstCredInfo,
 		IncrementEnumeration: func(entityType common.EntityType) {
 			if entityType == common.EEntityType.File() {
@@ -138,7 +162,12 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		IncludeDirectoryStubs:   includeDirStubs,
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
 		HardlinkHandling:        common.EHardlinkHandlingType.Follow(),
-	})
+	}
+	dstTraverserTemplate := ResourceTraverserTemplate{
+		location: cca.fromTo.To(),
+		options:  sourceTraverserOptions,
+	}
+	destinationTraverser, err := InitResourceTraverser(cca.destination, cca.fromTo.To(), ctx, destinationTraverserOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -363,85 +392,43 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 
 	// set up the comparator so that the source/destination can be compared
 	indexer := newObjectIndexer()
-	var comparator objectProcessor
-	var finalize func() error
 
 	switch cca.fromTo {
 	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile():
+
 		// Upload implies transferring from a local disk to a remote resource.
 		// In this scenario, the local disk (source) is scanned/indexed first because it is assumed that local file systems will be faster to enumerate than remote resources
 		// Then the destination is scanned and filtered based on what the destination contains
-		destinationCleaner, err := newSyncDeleteProcessor(cca, fpo, copyJobTemplate.DstServiceClient)
-		if err != nil {
-			return nil, fmt.Errorf("unable to instantiate destination cleaner due to: %s", err.Error())
-		}
-		destCleanerFunc := newFpoAwareProcessor(fpo, destinationCleaner.removeImmediately)
-
-		// when uploading, we can delete remote objects immediately, because as we traverse the remote location
-		// we ALREADY have available a complete map of everything that exists locally
-		// so as soon as we see a remote destination object we can know whether it exists in the local source
-
-		comparator = newSyncDestinationComparator(indexer, transferScheduler.scheduleCopyTransfer, destCleanerFunc, cca.compareHash, cca.preserveInfo, cca.mirrorMode).processIfNecessary
-		finalize = func() error {
-			// schedule every local file that doesn't exist at the destination
-			err = indexer.traverse(transferScheduler.scheduleCopyTransfer, filters)
-			if err != nil {
-				return err
-			}
-
-			jobInitiated, err := transferScheduler.dispatchFinalPart()
-			// sync cleanly exits if nothing is scheduled.
-			if err != nil && err != NothingScheduledError {
-				return err
-			}
-
-			quitIfInSync(jobInitiated, cca.getDeletionCount() > 0, cca)
-			cca.setScanningComplete()
-			return nil
-		}
-
-		return newSyncEnumerator(sourceTraverser, destinationTraverser, indexer, filters, comparator, finalize), nil
+		return GetSyncEnumeratorWithDestComparator(
+			cca,
+			fpo,
+			copyJobTemplate,
+			sourceTraverser,
+			destinationTraverser,
+			indexer,
+			filters,
+			transferScheduler,
+			srcTraverserTemplate,
+			dstTraverserTemplate,
+			enumeratorOptions,
+		)
 	default:
-		indexer.isDestinationCaseInsensitive = IsDestinationCaseInsensitive(cca.fromTo)
+
 		// in all other cases (download and S2S), the destination is scanned/indexed first
 		// then the source is scanned and filtered based on what the destination contains
-		comparator = newSyncSourceComparator(indexer, transferScheduler.scheduleCopyTransfer, cca.compareHash, cca.preserveInfo, cca.mirrorMode).processIfNecessary
-
-		finalize = func() error {
-			// remove the extra files at the destination that were not present at the source
-			// we can only know what needs to be deleted when we have FINISHED traversing the remote source
-			// since only then can we know which local files definitely don't exist remotely
-			var deleteScheduler objectProcessor
-			switch cca.fromTo.To() {
-			case common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS():
-				deleter, err := newSyncDeleteProcessor(cca, fpo, copyJobTemplate.DstServiceClient)
-				if err != nil {
-					return err
-				}
-				deleteScheduler = newFpoAwareProcessor(fpo, deleter.removeImmediately)
-			default:
-				deleteScheduler = newFpoAwareProcessor(fpo, newSyncLocalDeleteProcessor(cca, fpo).removeImmediately)
-			}
-
-			err = indexer.traverse(deleteScheduler, nil)
-			if err != nil {
-				return err
-			}
-
-			// let the deletions happen first
-			// otherwise if the final part is executed too quickly, we might quit before deletions could finish
-			jobInitiated, err := transferScheduler.dispatchFinalPart()
-			// sync cleanly exits if nothing is scheduled.
-			if err != nil && err != NothingScheduledError {
-				return err
-			}
-
-			quitIfInSync(jobInitiated, cca.getDeletionCount() > 0, cca)
-			cca.setScanningComplete()
-			return nil
-		}
-
-		return newSyncEnumerator(destinationTraverser, sourceTraverser, indexer, filters, comparator, finalize), nil
+		return GetSyncEnumeratorWithSrcComparator(
+			cca,
+			fpo,
+			copyJobTemplate,
+			sourceTraverser,
+			destinationTraverser,
+			indexer,
+			filters,
+			transferScheduler,
+			srcTraverserTemplate,
+			dstTraverserTemplate,
+			enumeratorOptions,
+		)
 	}
 }
 
@@ -467,4 +454,105 @@ func quitIfInSync(transferJobInitiated, anyDestinationFileDeleted bool, cca *coo
 			return "The source and destination are now in sync."
 		}, common.EExitCode.Success())
 	}
+}
+
+// GetSyncEnumerator builds the syncEnumerator for Local->Blob/File scenarios.
+func GetSyncEnumeratorWithDestComparator(
+	cca *cookedSyncCmdArgs,
+	fpo common.FolderPropertyOption,
+	copyJobTemplate *common.CopyJobPartOrderRequest,
+	sourceTraverser, destinationTraverser ResourceTraverser,
+	indexer *objectIndexer,
+	filters []ObjectFilter,
+	transferScheduler *copyTransferProcessor,
+	srcTraverserTemplate, dstTraverserTemplate ResourceTraverserTemplate,
+	enumeratorOptions *SyncEnumeratorOptions,
+) (*syncEnumerator, error) {
+	// Upload implies transferring from a local disk to a remote resource.
+	// In this scenario, the local disk (source) is scanned/indexed first because it is assumed that local file systems will be faster to enumerate than remote resources
+	// Then the destination is scanned and filtered based on what the destination contains
+	destinationCleaner, err := newSyncDeleteProcessor(cca, fpo, copyJobTemplate.DstServiceClient)
+	if err != nil {
+		return nil, fmt.Errorf("unable to instantiate destination cleaner due to: %s", err.Error())
+	}
+	destCleanerFunc := newFpoAwareProcessor(fpo, destinationCleaner.removeImmediately)
+
+	// when uploading, we can delete remote objects immediately, because as we traverse the remote location
+	// we ALREADY have available a complete map of everything that exists locally
+	// so as soon as we see a remote destination object we can know whether it exists in the local source
+
+	comparator := newSyncDestinationComparator(indexer, transferScheduler.scheduleCopyTransfer, destCleanerFunc, cca.compareHash, cca.preserveInfo, cca.mirrorMode).processIfNecessary
+	finalize := func() error {
+		// schedule every local file that doesn't exist at the destination
+		err := indexer.traverse(transferScheduler.scheduleCopyTransfer, filters)
+		if err != nil {
+			return err
+		}
+
+		jobInitiated, err := transferScheduler.dispatchFinalPart()
+		// sync cleanly exits if nothing is scheduled.
+		if err != nil && err != NothingScheduledError {
+			return err
+		}
+
+		quitIfInSync(jobInitiated, cca.getDeletionCount() > 0, cca)
+		cca.setScanningComplete()
+		return nil
+	}
+
+	return newSyncEnumerator(sourceTraverser, destinationTraverser, indexer, filters, comparator, finalize, srcTraverserTemplate, dstTraverserTemplate, transferScheduler, enumeratorOptions.SyncOrchOptions), nil
+}
+
+func GetSyncEnumeratorWithSrcComparator(
+	cca *cookedSyncCmdArgs,
+	fpo common.FolderPropertyOption,
+	copyJobTemplate *common.CopyJobPartOrderRequest,
+	sourceTraverser, destinationTraverser ResourceTraverser,
+	indexer *objectIndexer,
+	filters []ObjectFilter,
+	transferScheduler *copyTransferProcessor,
+	srcTraverserTemplate, dstTraverserTemplate ResourceTraverserTemplate,
+	enumeratorOptions *SyncEnumeratorOptions,
+) (*syncEnumerator, error) {
+
+	indexer.isDestinationCaseInsensitive = IsDestinationCaseInsensitive(cca.fromTo)
+	// in all other cases (download and S2S), the destination is scanned/indexed first
+	// then the source is scanned and filtered based on what the destination contains
+	comparator := newSyncSourceComparator(indexer, transferScheduler.scheduleCopyTransfer, cca.compareHash, cca.preserveInfo, cca.mirrorMode).processIfNecessary
+
+	finalize := func() error {
+		// remove the extra files at the destination that were not present at the source
+		// we can only know what needs to be deleted when we have FINISHED traversing the remote source
+		// since only then can we know which local files definitely don't exist remotely
+		var deleteScheduler objectProcessor
+		switch cca.fromTo.To() {
+		case common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS():
+			deleter, err := newSyncDeleteProcessor(cca, fpo, copyJobTemplate.DstServiceClient)
+			if err != nil {
+				return err
+			}
+			deleteScheduler = newFpoAwareProcessor(fpo, deleter.removeImmediately)
+		default:
+			deleteScheduler = newFpoAwareProcessor(fpo, newSyncLocalDeleteProcessor(cca, fpo).removeImmediately)
+		}
+
+		err := indexer.traverse(deleteScheduler, nil)
+		if err != nil {
+			return err
+		}
+
+		// let the deletions happen first
+		// otherwise if the final part is executed too quickly, we might quit before deletions could finish
+		jobInitiated, err := transferScheduler.dispatchFinalPart()
+		// sync cleanly exits if nothing is scheduled.
+		if err != nil && err != NothingScheduledError {
+			return err
+		}
+
+		quitIfInSync(jobInitiated, cca.getDeletionCount() > 0, cca)
+		cca.setScanningComplete()
+		return nil
+	}
+
+	return newSyncEnumerator(destinationTraverser, sourceTraverser, indexer, filters, comparator, finalize, srcTraverserTemplate, dstTraverserTemplate, transferScheduler, enumeratorOptions.SyncOrchOptions), nil
 }
