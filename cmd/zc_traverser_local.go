@@ -192,7 +192,6 @@ type ErrorFileInfo struct {
 
 var _ TraverserErrorItemInfo = (*ErrorFileInfo)(nil)
 
-///////////////////////////////////////////////////////////////////////////
 // START - Implementing methods defined in TraverserErrorItemInfo
 
 func (e ErrorFileInfo) FullPath() string {
@@ -236,7 +235,6 @@ func (e ErrorFileInfo) Location() common.Location {
 }
 
 // END - Implementing methods defined in TraverserErrorItemInfo
-///////////////////////////////////////////////////////////////////////////
 
 func (s symlinkTargetFileInfo) Name() string {
 	return s.name // override the name
@@ -244,7 +242,12 @@ func (s symlinkTargetFileInfo) Name() string {
 
 func writeToErrorChannel(errorChannel chan<- TraverserErrorItemInfo, err ErrorFileInfo) {
 	if errorChannel != nil {
-		errorChannel <- err
+		select {
+		case errorChannel <- err:
+		default:
+			// Channel might be full, log the error instead
+			WarnStdoutAndScanningLog(fmt.Sprintf("Failed to send error to channel: %v", err.ErrorMessage()))
+		}
 	}
 }
 
@@ -717,6 +720,13 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	// it fails here if file does not exist
 	if err != nil {
 		azcopyScanningLogger.Log(common.LogError, fmt.Sprintf("Failed to scan path %s: %s", t.fullPath, err.Error()))
+
+		writeToErrorChannel(t.errorChannel, ErrorFileInfo{
+			FilePath: t.fullPath,
+			FileInfo: nil,
+			ErrorMsg: err,
+		})
+
 		return fmt.Errorf("failed to scan path %s due to %w", t.fullPath, err)
 	}
 

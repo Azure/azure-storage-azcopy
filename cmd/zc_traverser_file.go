@@ -55,6 +55,64 @@ type fileTraverser struct {
 	trailingDot                 common.TrailingDotOption
 	destination                 *common.Location
 	hardlinkHandling            common.HardlinkHandlingType
+
+	errorChannel chan<- TraverserErrorItemInfo
+}
+
+// ErrorFileInfo holds information about files and folders that failed enumeration.
+type ErrorAzFileInfo struct {
+	FilePath             string
+	FileSize             int64
+	FileName             string
+	FileLastModifiedTime time.Time
+	Error                error
+	Dir                  bool
+}
+
+// Compile-time check to ensure ErrorFileInfo implements TraverserErrorItemInfo
+var _ TraverserErrorItemInfo = (*ErrorAzFileInfo)(nil)
+
+// START - Implementing methods defined in TraverserErrorItemInfo
+
+func (e ErrorAzFileInfo) FullPath() string {
+	return e.FilePath
+}
+
+func (e ErrorAzFileInfo) Name() string {
+	return e.FileName
+}
+
+func (e ErrorAzFileInfo) Size() int64 {
+	return e.FileSize
+}
+
+func (e ErrorAzFileInfo) LastModifiedTime() time.Time {
+	return e.FileLastModifiedTime
+}
+
+func (e ErrorAzFileInfo) IsDir() bool {
+	return e.Dir
+}
+
+func (e ErrorAzFileInfo) ErrorMessage() error {
+	return e.Error
+}
+
+func (e ErrorAzFileInfo) Location() common.Location {
+	return common.ELocation.File()
+}
+
+// END - Implementing methods defined in TraverserErrorItemInfo
+
+func (t *fileTraverser) writeToErrorChannel(err ErrorAzFileInfo) {
+	if t.errorChannel != nil {
+		select {
+		case t.errorChannel <- err:
+		default:
+			// Channel might be full, log the error instead
+			WarnStdoutAndScanningLog(fmt.Sprintf("Failed to send error to channel: %v", err.ErrorMessage()))
+		}
+	}
 }
 
 func createShareClientFromServiceClient(fileURLParts file.URLParts, client *service.Client) (*share.Client, error) {
@@ -155,6 +213,10 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	}
 	targetURLParts, err := file.ParseURL(t.rawURL)
 	if err != nil {
+		t.writeToErrorChannel(ErrorAzFileInfo{
+			FilePath: t.rawURL,
+			Error:    err,
+		})
 		return err
 	}
 
@@ -165,6 +227,11 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	// if not pointing to a share, check if we are pointing to a single file
 	if targetURLParts.DirectoryOrFilePath != "" {
 		if invalidBlobOrWindowsName(targetURLParts.DirectoryOrFilePath) {
+			t.writeToErrorChannel(ErrorAzFileInfo{
+				FilePath: targetURLParts.DirectoryOrFilePath,
+				FileName: getObjectNameOnly(targetURLParts.DirectoryOrFilePath),
+				Error:    err,
+			})
 			WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, targetURLParts.DirectoryOrFilePath))
 			return common.EAzError.InvalidBlobOrWindowsName()
 		}
@@ -183,6 +250,11 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		// check if the url points to a single file
 		fileProperties, isFile, err := t.getPropertiesIfSingleFile()
 		if err != nil {
+			t.writeToErrorChannel(ErrorAzFileInfo{
+				FilePath: targetURLParts.DirectoryOrFilePath,
+				FileName: getObjectNameOnly(targetURLParts.DirectoryOrFilePath),
+				Error:    err,
+			})
 			return err
 		}
 		if isFile {
@@ -438,11 +510,20 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			if azcopyScanningLogger != nil {
 				azcopyScanningLogger.Log(common.LogWarning, workerError.Error())
 			}
+			t.writeToErrorChannel(ErrorAzFileInfo{Error: workerError})
 			continue
 		}
+
+		object := item.(StoredObject)
 		processErr := processStoredObject(item.(StoredObject))
 		if processErr != nil {
 			cancelWorkers()
+			t.writeToErrorChannel(ErrorAzFileInfo{
+				FileName:             object.name,
+				FilePath:             object.relativePath,
+				FileLastModifiedTime: object.lastModifiedTime,
+				Dir:                  object.entityType == common.EEntityType.Folder(),
+				Error:                processErr})
 			return processErr
 		}
 	}
