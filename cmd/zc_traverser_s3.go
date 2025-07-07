@@ -26,6 +26,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/minio/minio-go"
 
@@ -43,6 +44,64 @@ type s3Traverser struct {
 
 	// A generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
+
+	errorChannel chan<- TraverserErrorItemInfo
+}
+
+// ErrorFileInfo holds information about files and folders that failed enumeration.
+type ErrorS3Info struct {
+	S3Path             string
+	S3Size             int64
+	S3Name             string
+	S3LastModifiedTime time.Time
+	ErrorMsg           error
+	Dir                bool
+}
+
+// Compile-time check to ensure ErrorFileInfo implements TraverserErrorItemInfo
+var _ TraverserErrorItemInfo = (*ErrorS3Info)(nil)
+
+// START - Implementing methods defined in TraverserErrorItemInfo
+
+func (e ErrorS3Info) FullPath() string {
+	return e.S3Path
+}
+
+func (e ErrorS3Info) Name() string {
+	return e.S3Name
+}
+
+func (e ErrorS3Info) Size() int64 {
+	return e.S3Size
+}
+
+func (e ErrorS3Info) LastModifiedTime() time.Time {
+	return e.S3LastModifiedTime
+}
+
+func (e ErrorS3Info) IsDir() bool {
+	return e.Dir
+}
+
+func (e ErrorS3Info) ErrorMessage() error {
+	return e.ErrorMsg
+}
+
+func (e ErrorS3Info) Location() common.Location {
+	return common.ELocation.S3()
+}
+
+// END - Implementing methods defined in TraverserErrorItemInfo
+
+func (t *s3Traverser) writeToS3ErrorChannel(err ErrorS3Info) {
+	if t.errorChannel != nil {
+		select {
+		case t.errorChannel <- err:
+		default:
+			// Channel might be full, log the error instead
+			WarnStdoutAndScanningLog(fmt.Sprintf("Failed to send error to channel: %v", err.ErrorMessage()))
+		}
+	}
 }
 
 func (t *s3Traverser) IsDirectory(isSource bool) (bool, error) {
@@ -87,6 +146,14 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 
 		oi, err := t.s3Client.StatObject(t.s3URLParts.BucketName, t.s3URLParts.ObjectKey, minio.StatObjectOptions{})
 		if invalidAzureBlobName(t.s3URLParts.ObjectKey) {
+
+			t.writeToS3ErrorChannel(ErrorS3Info{
+				S3Name:             objectName,
+				S3Path:             t.s3URLParts.ObjectKey,
+				S3LastModifiedTime: oi.LastModified,
+				S3Size:             oi.Size,
+				ErrorMsg:           err,
+			})
 			WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, t.s3URLParts.ObjectKey))
 			return common.EAzError.InvalidBlobName()
 		}
@@ -115,6 +182,13 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 				processor)
 			_, err = getProcessingError(err)
 			if err != nil {
+				t.writeToS3ErrorChannel(ErrorS3Info{
+					S3Name:             objectName,
+					S3Path:             t.s3URLParts.ObjectKey,
+					ErrorMsg:           err,
+					S3LastModifiedTime: oi.LastModified,
+					S3Size:             oi.Size,
+				})
 				return err
 			}
 
@@ -133,7 +207,16 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 
 	// It's a bucket or virtual directory.
 	for objectInfo := range t.s3Client.ListObjectsV2(t.s3URLParts.BucketName, searchPrefix, t.recursive, t.ctx.Done()) {
+		errInfo := ErrorS3Info{
+			S3Name:             objectInfo.Key,
+			S3Size:             objectInfo.Size,
+			S3LastModifiedTime: objectInfo.LastModified,
+			S3Path:             t.s3URLParts.ObjectKey,
+			ErrorMsg:           objectInfo.Err,
+		}
+
 		if objectInfo.Err != nil {
+			t.writeToS3ErrorChannel(errInfo)
 			return fmt.Errorf("cannot list objects, %v", objectInfo.Err)
 		}
 
@@ -145,6 +228,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 		if invalidAzureBlobName(objectInfo.Key) {
 			//Throw a warning on console and continue
 			WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, objectInfo.Key))
+			t.writeToS3ErrorChannel(errInfo)
 			continue
 		}
 
@@ -165,6 +249,13 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 		if t.getProperties {
 			oi, err := t.s3Client.StatObject(t.s3URLParts.BucketName, objectInfo.Key, minio.StatObjectOptions{})
 			if err != nil {
+				t.writeToS3ErrorChannel(ErrorS3Info{
+					S3Name:             objectName,
+					S3Path:             t.s3URLParts.ObjectKey,
+					ErrorMsg:           err,
+					S3LastModifiedTime: oi.LastModified,
+					S3Size:             oi.Size,
+				})
 				return err
 			}
 			oie = common.ObjectInfoExtension{ObjectInfo: oi}
@@ -186,6 +277,13 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			processor)
 		_, err = getProcessingError(err)
 		if err != nil {
+			t.writeToS3ErrorChannel(ErrorS3Info{
+				S3Name:             objectName,
+				S3Path:             t.s3URLParts.ObjectKey,
+				ErrorMsg:           err,
+				S3LastModifiedTime: storedObject.lastModifiedTime,
+				S3Size:             storedObject.size,
+			})
 			return
 		}
 	}
