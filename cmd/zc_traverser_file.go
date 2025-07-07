@@ -290,7 +290,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				}
 			}
 
-			storedObject.smbLastModifiedTime = *fileProperties.FileLastWriteTime
+			storedObject.updateTimestamps(*fileProperties.FileLastWriteTime, *fileProperties.FileChangeTime)
 
 			if t.incrementEnumerationCounter != nil {
 				t.incrementEnumerationCounter(storedObject.entityType)
@@ -318,8 +318,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 		size := f.contentLength
 		// We need to omit some properties if we don't get properties
-		var lmt time.Time
-		var smbLMT time.Time
+		var lmt, lwt, ct time.Time
 		var contentProps contentPropsProvider = noContentProps
 		var metadata common.Metadata
 
@@ -351,7 +350,8 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		// Only get the properties if we're told to
 		if t.getProperties {
 			lmt = fullProperties.LastModified()
-			smbLMT = fullProperties.FileLastWriteTime()
+			lwt = fullProperties.FileLastWriteTime()
+			ct = fullProperties.FileChangeTime()
 			contentProps = fullProperties
 			// Get an up-to-date size, because it's documented that the size returned by the listing might not be up-to-date,
 			// if an SMB client has modified by not yet closed the file. (See https://docs.microsoft.com/en-us/rest/api/storageservices/list-directories-and-files)
@@ -374,7 +374,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			targetURLParts.ShareName,
 		)
 
-		obj.smbLastModifiedTime = smbLMT
+		obj.updateTimestamps(lwt, ct)
 
 		return obj, nil
 	}
