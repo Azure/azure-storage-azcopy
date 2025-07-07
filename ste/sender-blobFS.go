@@ -23,9 +23,10 @@ package ste
 import (
 	"context"
 	"fmt"
-	datalakesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
 	"strings"
 	"time"
+
+	datalakesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
@@ -250,7 +251,7 @@ func (u *blobFSSenderBase) SetPOSIXProperties() error {
 		return nil
 	}
 
-	meta := u.metadataToSet
+	meta := u.metadataToSet.Clone() // clone the metadata to avoid modifying the original
 	common.AddStatToBlobMetadata(adapter, meta)
 	delete(meta, common.POSIXFolderMeta) // Can't be set on HNS accounts.
 
@@ -315,4 +316,21 @@ func (u *blobFSSenderBase) SendSymlink(linkData string) error {
 		})
 
 	return err
+}
+
+func (u *blobFSSenderBase) GenerateCopyMetadata(id common.ChunkID) chunkFunc {
+	return createChunkFunc(true, u.jptm, id, func() {
+
+		if u.jptm.Info().PreservePOSIXProperties { // metadata would be set here
+			err := u.SetPOSIXProperties()
+			if err != nil {
+				u.jptm.FailActiveUpload("Setting POSIX Properties", err)
+			}
+		} else if len(u.metadataToSet) > 0 { // but if we aren't writing POSIX properties, let's set metadata to be consistent.
+			_, err := u.blobClient.SetMetadata(u.jptm.Context(), u.metadataToSet, nil)
+			if err != nil {
+				u.jptm.FailActiveUpload("Setting blob metadata", err)
+			}
+		}
+	})
 }
