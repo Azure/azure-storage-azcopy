@@ -64,6 +64,16 @@ type FolderDeletionManager interface {
 	//     or will we just leave such folders there, with no logged message other than any "per attempt" logging?
 }
 
+type FolderDeletionManagerOptions struct {
+	recursive bool
+}
+
+func NewDefaultFolderDeletionManagerOptions() FolderDeletionManagerOptions {
+	return FolderDeletionManagerOptions{
+		recursive: false, // default to non-recursive deletion
+	}
+}
+
 type folderDeletionState struct {
 	childCount int64
 	deleter    FolderDeletionFunc
@@ -74,19 +84,35 @@ func (f *folderDeletionState) shouldDeleteNow() bool {
 	return deletionRequested && f.childCount == 0
 }
 
-func NewFolderDeletionManager(ctx context.Context, fpo FolderPropertyOption, logger ILogger) FolderDeletionManager {
+func NewFolderDeletionManager(ctx context.Context, fpo FolderPropertyOption, logger ILogger, opts ...FolderDeletionManagerOptions) FolderDeletionManager {
+
+	options := NewDefaultFolderDeletionManagerOptions()
+	if len(opts) > 0 {
+		options = opts[0]
+	}
+
+	mgr := standardFolderDeletionManager{
+		mu:       &sync.Mutex{},
+		contents: make(map[string]*folderDeletionState),
+		logger:   logger,
+		ctx:      ctx,
+	}
+
 	switch fpo {
 	case EFolderPropertiesOption.AllFolders(),
 		EFolderPropertiesOption.AllFoldersExceptRoot():
-		return &standardFolderDeletionManager{
-			mu:       &sync.Mutex{},
-			contents: make(map[string]*folderDeletionState),
-			logger:   logger,
-			ctx:      ctx,
-		}
+		return &mgr
+
 	case EFolderPropertiesOption.NoFolders():
+		if options.recursive {
+			// if we are doing recursive deletion, we need to provide a folder deletion manager
+			// even if location is not folder-aware
+			return &mgr
+		}
+
 		// no point in using a real implementation here, since it will just use memory and take time for no benefit
 		return &nullFolderDeletionManager{}
+
 	default:
 		panic("unknown folderPropertiesOption")
 	}
