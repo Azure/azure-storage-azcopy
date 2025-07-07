@@ -23,7 +23,6 @@ package e2etest
 import (
 	"crypto/md5"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"io"
 	"io/fs"
 	"net/url"
@@ -33,6 +32,8 @@ import (
 	"runtime/debug"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
@@ -344,7 +345,7 @@ func (s *scenario) runAzCopy(logDirectory string) {
 	if result.finalStatus.JobStatus == common.EJobStatus.Cancelled() {
 		for _, v := range result.finalStatus.FailedTransfers {
 			if v.ErrorCode == 403 {
-				s.a.Error("Job " + result.jobID.String() + " authorization failed, perhaps SPN auth or the SAS token is bad?")
+				s.a.Error("Job " + result.jobID.String() + " authorization failed, perhaps SPN auth or the SAS token is bad?. Error message: " + v.ErrorMessage)
 			}
 		}
 	}
