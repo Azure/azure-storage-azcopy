@@ -78,7 +78,7 @@ var JobsAdmin interface {
 	// AddJobPartMgr associates the specified JobPartMgr with the Jobs Administrator
 	//AddJobPartMgr(appContext context.Context, planFile JobPartPlanFileName) IJobPartMgr
 	/*ScheduleTransfer(jptm IJobPartTransferMgr)*/
-	ResurrectJob(jobId common.JobID, sourceSAS string, destinationSAS string, srcServiceClient *common.ServiceClient, dstServiceClient *common.ServiceClient, srcIsOAuth bool) bool
+	ResurrectJob(jobId common.JobID, srcServiceClient *common.ServiceClient, dstServiceClient *common.ServiceClient, srcIsOAuth bool) bool
 
 	// AppPathFolder returns the Azcopy application path folder.
 	// JobPartPlanFile will be created inside this folder.
@@ -356,8 +356,6 @@ func (ja *jobsAdmin) SuccessfulBytesInActiveFiles() uint64 {
 */
 
 func (ja *jobsAdmin) ResurrectJob(jobId common.JobID,
-	sourceSAS string,
-	destinationSAS string,
 	srcServiceClient *common.ServiceClient,
 	dstServiceClient *common.ServiceClient,
 	srcIsOAuth bool) bool {
