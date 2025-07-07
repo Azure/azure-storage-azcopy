@@ -55,6 +55,12 @@ type fileTraverser struct {
 	trailingDot                 common.TrailingDotOption
 	destination                 *common.Location
 	hardlinkHandling            common.HardlinkHandlingType
+
+	// As per https://learn.microsoft.com/en-us/rest/api/storageservices/list-directories-and-files,
+	// the listing of files and directories does not include extended info by default.
+	// To retrieve current property values, use x-ms-file-extended-info: true for a directory
+	// located on a File Share with SMB protocol enabled, or call Get File Properties against the specific file.
+	includeExtendedInfo bool // whether to include extended info in the listing, such as SMB properties
 }
 
 func createShareClientFromServiceClient(fileURLParts file.URLParts, client *service.Client) (*share.Client, error) {
@@ -197,7 +203,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				common.EEntityType.File(),
 				*fileProperties.LastModified,
 				*fileProperties.ContentLength,
-				shareFilePropertiesAdapter{fileProperties},
+				shareFilePropertiesResponseAdapter{fileProperties},
 				noBlobProps,
 				fileProperties.Metadata,
 				targetURLParts.ShareName,
@@ -251,7 +257,8 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		var contentProps contentPropsProvider = noContentProps
 		var metadata common.Metadata
 
-		fullProperties, err := f.propertyGetter(t.ctx)
+		fetchFullProperties := t.getProperties && !t.includeExtendedInfo
+		fullProperties, err := f.propertyGetter(t.ctx, fetchFullProperties)
 		if err != nil {
 			return StoredObject{
 				relativePath: relativePath,
@@ -326,7 +333,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	// So include the root dir/share in the enumeration results, if it exists or is just the share root.
 	_, err = directoryClient.GetProperties(t.ctx, nil)
 	if err == nil || targetURLParts.DirectoryOrFilePath == "" {
-		s, err := convertToStoredObject(newAzFileRootDirectoryEntity(directoryClient, ""))
+		s, err := convertToStoredObject(newAzFileRootDirectoryEntity(directoryClient, nil))
 		if err != nil {
 			return err
 		}
@@ -340,7 +347,19 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	// This func must be threadsafe/goroutine safe
 	enumerateOneDir := func(dir parallel.Directory, enqueueDir func(parallel.Directory), enqueueOutput func(parallel.DirectoryEntry, error)) error {
 		currentDirectoryClient := dir.(*directory.Client)
-		pager := currentDirectoryClient.NewListFilesAndDirectoriesPager(nil)
+
+		var dirListOptions *directory.ListFilesAndDirectoriesOptions = nil
+		if t.includeExtendedInfo {
+			dirListOptions = &directory.ListFilesAndDirectoriesOptions{
+				Include: directory.ListFilesInclude{
+					Timestamps:    true,
+					ETag:          true,
+					PermissionKey: true,
+					Attributes:    true},
+				IncludeExtendedInfo: &t.includeExtendedInfo}
+		}
+		pager := currentDirectoryClient.NewListFilesAndDirectoriesPager(dirListOptions)
+
 		var marker *string
 		for pager.More() {
 			lResp, err := pager.NextPage(t.ctx)
@@ -373,7 +392,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 						azcopyScanningLogger.Log(common.LogWarning, fmt.Sprintf(trailingDotErrMsg, *dirInfo.Name))
 					}
 				}
-				enqueueOutput(newAzFileSubdirectoryEntity(currentDirectoryClient, *dirInfo.Name), nil)
+				enqueueOutput(newAzFileSubdirectoryEntity(currentDirectoryClient, dirInfo), nil)
 				if t.recursive {
 					// If recursive is turned on, add sub directories to be processed
 					enqueueDir(currentDirectoryClient.NewSubdirectoryClient(*dirInfo.Name))
@@ -462,7 +481,16 @@ func newFileTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		trailingDot:                 opts.TrailingDotOption,
 		destination:                 opts.DestResourceType,
 		hardlinkHandling:            opts.HardlinkHandling,
+		includeExtendedInfo:         false,
 	}
+
+	// Using this flag to test the feature before enabling it by default
+	if !isNFSCopy {
+		// Only using for SMB as FileId, LinkCount etc are not available in
+		// FileProperty object of ListFilesAndDirectoriesResponse
+		t.includeExtendedInfo = true
+	}
+
 	return
 }
 
@@ -471,7 +499,7 @@ type azfileEntity struct {
 	name           string
 	contentLength  int64
 	url            string
-	propertyGetter func(ctx context.Context) (filePropsProvider, error)
+	propertyGetter func(ctx context.Context, fetchFullProperties bool) (filePropsProvider, error)
 	entityType     common.EntityType
 }
 
@@ -481,33 +509,54 @@ func newAzFileFileEntity(parentDirectoryClient *directory.Client, fileInfo *dire
 		*fileInfo.Name,
 		*fileInfo.Properties.ContentLength,
 		fileClient.URL(),
-		func(ctx context.Context) (filePropsProvider, error) {
-			fileProperties, err := fileClient.GetProperties(ctx, nil)
-			if err != nil {
-				return nil, err
+		func(ctx context.Context, fetchFullProperties bool) (filePropsProvider, error) {
+			if fetchFullProperties {
+				fileProperties, err := fileClient.GetProperties(ctx, nil)
+				if err != nil {
+					return nil, err
+				}
+				return shareFilePropertiesResponseAdapter{&fileProperties}, nil
+			} else {
+				// if we are not fetching full properties, we can just return the properties from the listing
+				return shareDirectoryFilePropertiesAdapter{fileInfo.Properties}, nil
 			}
-			return shareFilePropertiesAdapter{&fileProperties}, nil
 		},
 		common.EEntityType.File(),
 	}
 }
 
-func newAzFileSubdirectoryEntity(parentDirectoryClient *directory.Client, dirName string) azfileEntity {
+func newAzFileSubdirectoryEntity(parentDirectoryClient *directory.Client, dirInfo *directory.Directory) azfileEntity {
+	dirName := "" // if dirInfo is nil, it means we are at the root directory
+	if dirInfo != nil {
+		dirName = *dirInfo.Name
+	}
 	directoryClient := parentDirectoryClient.NewSubdirectoryClient(dirName)
-	return newAzFileRootDirectoryEntity(directoryClient, dirName) // now that we have directoryClient, the logic is same as if it was the root
+	return newAzFileRootDirectoryEntity(directoryClient, dirInfo) // now that we have directoryClient, the logic is same as if it was the root
 }
 
-func newAzFileRootDirectoryEntity(directoryClient *directory.Client, name string) azfileEntity {
+func newAzFileRootDirectoryEntity(directoryClient *directory.Client, dirInfo *directory.Directory) azfileEntity {
+	dirName := "" // if dirInfo is nil, it means we are at the root directory
+	var dirProperties *directory.FileProperty = nil
+	if dirInfo != nil {
+		dirName = *dirInfo.Name
+		dirProperties = dirInfo.Properties
+	}
+
 	return azfileEntity{
-		name,
+		dirName,
 		0,
 		directoryClient.URL(),
-		func(ctx context.Context) (filePropsProvider, error) {
-			directoryProperties, err := directoryClient.GetProperties(ctx, nil)
-			if err != nil {
-				return nil, err
+		func(ctx context.Context, fetchFullProperties bool) (filePropsProvider, error) {
+			if fetchFullProperties {
+				directoryProperties, err := directoryClient.GetProperties(ctx, nil)
+				if err != nil {
+					return nil, err
+				}
+				return shareDirectoryPropertiesResponseAdapter{&directoryProperties}, nil
+			} else {
+				// if we are not fetching full properties, we can just return the properties from the listing
+				return shareDirectoryFilePropertiesAdapter{dirProperties}, nil
 			}
-			return shareDirectoryPropertiesAdapter{&directoryProperties}, nil
 		},
 		common.EEntityType.Folder(),
 	}
