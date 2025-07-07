@@ -258,6 +258,7 @@ type filePropsProvider interface {
 	Metadata() common.Metadata
 	LastModified() time.Time
 	FileLastWriteTime() time.Time
+	FileChangeTime() time.Time
 	ContentLength() int64
 	NFSFileType() string
 	LinkCount() int64
