@@ -233,6 +233,11 @@ func (hi HandleInfo) FileLastWriteTime() time.Time {
 	return time.Unix(0, hi.LastWriteTime.Nanoseconds())
 }
 
+func (hi HandleInfo) FileChangeTime() time.Time {
+	// This returns nanoseconds since Unix Epoch.
+	return time.Unix(0, hi.ChangeTime.Nanoseconds())
+}
+
 func (hi HandleInfo) FileAttributes() (*file.NTFSFileAttributes, error) {
 	// Can't shorthand it because the function name overrides.
 	return FileAttributesFromUint32(hi.ByHandleFileInformation.FileAttributes)

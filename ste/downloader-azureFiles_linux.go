@@ -25,7 +25,7 @@ import (
 // This file implements the linux-triggered smbPropertyAwareDownloader and nfsPropertyAwareDownloader interface.
 
 // works for both folders and files
-func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error {
+func (bd *azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error {
 	propHolder, err := sip.GetSMBProperties()
 	if err != nil {
 		return fmt.Errorf("Failed to get SMB properties for %s: %w", txInfo.Destination, err)
@@ -59,7 +59,7 @@ func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoP
 		smbCreation := propHolder.FileCreationTime()
 		smbLastWrite := propHolder.FileLastWriteTime()
 
-		if txInfo.ShouldTransferLastWriteTime() {
+		if txInfo.ShouldTransferLastWriteTime(bd.jptm.FromTo()) {
 			var ts [2]unix.Timespec
 
 			// Don't set atime.

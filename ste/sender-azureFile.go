@@ -237,6 +237,17 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		creationProperties.Attributes.ReadOnly = false
 	}
 
+	// Set last write time to the minimum time to enable retry copy on next sync
+	// The service started updating the last-write-time in March 2021 when the file is modified.
+	// So when we uploaded the ranges, we've unintentionally changed the last-write-time.
+	// This will ensure that the last-write-time is set to the minimum time and epilogue
+	// will set the last-write-time to the correct value.
+	// XDM: Need to confirm before enabling this change for NFS.
+	if !u.jptm.Info().IsNFSCopy && u.jptm.Info().PreserveInfo && creationProperties.LastWriteTime != nil {
+		minimalLwt := time.Unix(0, 0)
+		creationProperties.LastWriteTime = &minimalLwt
+	}
+
 	err := common.DoWithOverrideReadOnlyOnAzureFiles(u.ctx,
 		func() (interface{}, error) {
 			return u.getFileClient().Create(u.ctx, info.SourceSize, createOptions)
@@ -297,7 +308,7 @@ func (u *azureFileSenderBase) addNFSPropertiesToHeaders(info *TransferInfo) (sta
 		// 	}()
 		// }
 
-		if info.ShouldTransferLastWriteTime() {
+		if info.ShouldTransferLastWriteTime(u.jptm.FromTo()) {
 			lwTime := nfsProps.FileLastWriteTime()
 			u.nfsPropertiesToApply.LastWriteTime = &lwTime
 		}
@@ -414,9 +425,13 @@ func (u *azureFileSenderBase) addSMBPropertiesToHeaders(info *TransferInfo) (sta
 		attribs, _ := smbProps.FileAttributes()
 		u.smbPropertiesToApply.Attributes = attribs
 
-		if info.ShouldTransferLastWriteTime() {
+		if info.ShouldTransferLastWriteTime(u.jptm.FromTo()) {
 			lwTime := smbProps.FileLastWriteTime()
 			u.smbPropertiesToApply.LastWriteTime = &lwTime
+		}
+
+		if lcTime := smbProps.FileChangeTime(); !lcTime.Equal(time.Time{}) {
+			u.smbPropertiesToApply.ChangeTime = &lcTime
 		}
 
 		creationTime := smbProps.FileCreationTime()

@@ -85,7 +85,7 @@ func (bd *azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceIn
 		smbLastWriteFileTime := windows.NsecToFiletime(smbLastWrite.UnixNano())
 
 		pLastWriteTime := &smbLastWriteFileTime
-		if !txInfo.ShouldTransferLastWriteTime() {
+		if !txInfo.ShouldTransferLastWriteTime(bd.jptm.FromTo()) {
 			pLastWriteTime = nil
 		}
 
