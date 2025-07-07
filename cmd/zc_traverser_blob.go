@@ -322,6 +322,7 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			blobPropsAdapter.Metadata,
 			blobURLParts.ContainerName,
 		)
+		storedObject.tryUpdateTimestampsFromMetadata(blobPropsAdapter.Metadata)
 
 		if t.s2sPreserveSourceTags {
 			blobTagsMap, err := t.getBlobTags()
@@ -455,6 +456,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 								pbPropAdapter.Metadata,
 								containerName,
 							)
+							storedObject.tryUpdateTimestampsFromMetadata(pbPropAdapter.Metadata)
 
 							if t.s2sPreserveSourceTags {
 								tResp, err := blobClient.GetTags(t.ctx, nil)
@@ -593,6 +595,7 @@ func (t *blobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, bl
 		blobInfo.Metadata,
 		containerName,
 	)
+	object.tryUpdateTimestampsFromMetadata(blobInfo.Metadata)
 
 	object.blobDeleted = common.IffNotNil(blobInfo.Deleted, false)
 	if t.include.Deleted() && t.include.Snapshots() {

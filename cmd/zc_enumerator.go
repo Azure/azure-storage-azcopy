@@ -95,6 +95,11 @@ type StoredObject struct {
 	leaseState    lease.StateType
 	leaseStatus   lease.StatusType
 	leaseDuration lease.DurationType
+
+	// For SMB, this is last write time and change time.
+	// For NFS, this is populated from POSIX properties - posix_ctime, modtime
+	lastWriteTime time.Time
+	changeTime    time.Time
 }
 
 func (s *StoredObject) isMoreRecentThan(storedObject2 StoredObject, preferSMBTime bool) bool {
@@ -147,6 +152,28 @@ func (s *StoredObject) isCompatibleWithEntitySettings(fpo common.FolderPropertyO
 	} else {
 		panic("undefined entity type")
 	}
+}
+
+// updateTimestamps updates the lastWriteTime and changeTime fields of a StoredObject
+func (so *StoredObject) updateTimestamps(lastWriteTime, changeTime time.Time) {
+	// XDM: There is no reason for this duplication but renaming caused pipeline test
+	// DetectFileChangedDuringTransfer.Copy-BlobFile to fail. Retaining the old field
+	// for now until RCA
+	so.smbLastModifiedTime = lastWriteTime
+	so.lastWriteTime = lastWriteTime
+
+	so.changeTime = changeTime
+}
+
+// tryUpdateTimestampsFromMetadata updates the lastWriteTime and changeTime fields of a StoredObject
+func (so *StoredObject) tryUpdateTimestampsFromMetadata(meta common.Metadata) {
+
+	if meta == nil {
+		return
+	}
+
+	so.lastWriteTime, _, _ = common.TryReadModTimeFromMetadata(meta)
+	so.changeTime, _, _ = common.TryReadCTimeFromMetadata(meta)
 }
 
 // ErrorNoHashPresent , ErrorHashNoLongerValid, and ErrorHashNotCompatible indicate a hash is not present, not obtainable, and/or not usable.
