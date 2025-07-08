@@ -21,13 +21,10 @@
 package cmd
 
 import (
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/minio/minio-go"
 	"math"
 	"net/http"
-	"path"
-	"strings"
-
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // processOSSpecificInitialization changes the soft limit for filedescriptor for process
@@ -41,14 +38,6 @@ func processOSSpecificInitialization() (int, error) {
 	const effectivelyUnlimited = math.MaxInt32
 
 	return effectivelyUnlimited, nil
-}
-
-// getAzCopyAppPath returns the path of Azcopy in local appdata.
-func getAzCopyAppPath() string {
-	userProfile := common.GetEnvironmentVariable(common.EEnvironmentVariable.UserDir())
-	azcopyAppDataFolder := strings.ReplaceAll(path.Join(userProfile, ".azcopy"), "/", `\`)
-
-	return azcopyAppDataFolder
 }
 
 func init() {
