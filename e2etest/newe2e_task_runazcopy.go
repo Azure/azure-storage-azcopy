@@ -375,6 +375,8 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 				commandSpec.Flags = JobsCleanFlags{}
 			case AzCopyVerbJobsRemove:
 				commandSpec.Flags = JobsRemoveFlags{}
+			case AzCopyVerbJobsList:
+				commandSpec.Flags = JobsListFlags{}
 			default:
 				commandSpec.Flags = GlobalFlags{}
 			}
