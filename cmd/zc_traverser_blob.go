@@ -65,6 +65,11 @@ type blobTraverser struct {
 	isDFS bool
 
 	errorChannel chan<- TraverserErrorItemInfo
+
+	// includeDirectoryOrPrefix is used to determine if we should enqueue directories or prefixes
+	// in the traversal process. If true, prefixes will be enqueued as well even if location
+	// is not folder aware.
+	includeDirectoryOrPrefix bool
 }
 
 // ErrorFileInfo holds information about files and folders that failed enumeration.
@@ -416,15 +421,19 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 			if err != nil {
 				return fmt.Errorf("cannot list files due to reason %s", err)
 			}
-			// queue up the sub virtual directories if recursive is true
-			if t.recursive {
+			// queue up the sub virtual directories if recursive is true or if enqueueDirorPrefix is true
+			if t.recursive || t.includeDirectoryOrPrefix {
 				for _, virtualDir := range lResp.Segment.BlobPrefixes {
-					enqueueDir(*virtualDir.Name)
-					if azcopyScanningLogger != nil {
-						azcopyScanningLogger.Log(common.LogDebug, fmt.Sprintf("Enqueuing sub-directory %s for enumeration.", *virtualDir.Name))
+					if t.recursive {
+						enqueueDir(*virtualDir.Name)
+						if azcopyScanningLogger != nil {
+							azcopyScanningLogger.Log(common.LogDebug, fmt.Sprintf("Enqueuing sub-directory %s for enumeration.", *virtualDir.Name))
+						}
 					}
 
-					if t.include.DirStubs() {
+					enqueuedDirAsOutput := false // Reset the flag for each directory processed
+
+					if t.include.DirStubs() || t.includeDirectoryOrPrefix {
 						// try to get properties on the directory itself, since it's not listed in BlobItems
 						dName := strings.TrimSuffix(*virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)
 						blobClient := containerClient.NewBlobClient(dName)
@@ -471,6 +480,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 							}
 
 							enqueueOutput(storedObject, err)
+							enqueuedDirAsOutput = true
 						} else {
 							// There was nothing there, but is there folder/?
 							if !strings.HasSuffix(dName, "/") {
@@ -480,6 +490,32 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 							}
 						}
 					skipDirAdd:
+					}
+
+					if t.includeDirectoryOrPrefix && !enqueuedDirAsOutput {
+						// For HNS accounts, we will include the virtual directory as a stub if it does not have a blob with the folder metadata in the above section.
+						// However, for non-HNS accounts, we will not enqueue the virtual directory as a stub if it does not have a blob with the folder metadata.
+						//
+						// If we didn't enqueue the directory, it means that it is a non-HNS account and we didn't find a blob with the folder metadata.
+						// We still want to enqueue the virtual directory as a stub, so that we can compare it with the source during local -> blob sync.
+						// This blob prefix enqueue is necessary to track extra objects in target during mirror sync
+						// operations, so that we can delete them if they are not present in source.
+						// Note: We can skip this if deleteDestination is set to false but we don't have that option for blob traverser.
+						dName := strings.TrimSuffix(*virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)
+						folderRelativePath := strings.TrimPrefix(dName, searchPrefix)
+						storedObject := newStoredObject(
+							preprocessor,
+							getObjectNameOnly(dName),
+							folderRelativePath,
+							common.EEntityType.Folder(),
+							time.Time{},
+							0,
+							noContentProps,
+							noBlobProps,
+							noMetadata,
+							containerName,
+						)
+						enqueueOutput(storedObject, err)
 					}
 				}
 			}
@@ -545,11 +581,12 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 			return workerError
 		}
 
+		object := item.(StoredObject)
+
 		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter(common.EEntityType.File())
+			t.incrementEnumerationCounter(object.entityType)
 		}
 
-		object := item.(StoredObject)
 		processErr := processIfPassedFilters(filters, object, processor)
 		_, processErr = getProcessingError(processErr)
 		if processErr != nil {
@@ -689,6 +726,8 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		isDFS:                       common.DerefOrZero(common.FirstOrZero(blobOpts).isDFS),
 		errorChannel:                opts.ErrorChannel,
 	}
+
+	t.includeDirectoryOrPrefix = UseSyncOrchestrator && !t.recursive
 
 	disableHierarchicalScanning := strings.ToLower(common.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning()))
 
