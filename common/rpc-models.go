@@ -21,7 +21,6 @@ func (RpcCmd) None() RpcCmd               { return RpcCmd("--none--") }
 func (RpcCmd) CopyJobPartOrder() RpcCmd   { return RpcCmd("CopyJobPartOrder") }
 func (RpcCmd) GetJobLCMWrapper() RpcCmd   { return RpcCmd("GetJobLCMWrapper") }
 func (RpcCmd) ListSyncJobSummary() RpcCmd { return RpcCmd("ListSyncJobSummary") }
-func (RpcCmd) ListJobTransfers() RpcCmd   { return RpcCmd("ListJobTransfers") }
 func (RpcCmd) CancelJob() RpcCmd          { return RpcCmd("Cancel") }
 func (RpcCmd) PauseJob() RpcCmd           { return RpcCmd("PauseJob") }
 func (RpcCmd) ResumeJob() RpcCmd          { return RpcCmd("ResumeJob") }

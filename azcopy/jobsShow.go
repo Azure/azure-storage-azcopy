@@ -17,7 +17,7 @@ type JobStatistics common.ListJobSummaryResponse
 
 func (c Client) GetJobStatistics(opts GetJobStatisticsOptions) (result JobStatistics, err error) {
 	if opts.JobID.IsEmpty() {
-		return JobStatistics{}, errors.New("JobsShow requires the JobID")
+		return JobStatistics{}, errors.New("get job statistics requires the JobID")
 	}
 	resp := jobsAdmin.GetJobSummary(opts.JobID)
 

@@ -100,12 +100,6 @@ func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec flo
 			deserialize(request, &payload)
 			serialize(ExecuteNewCopyJobPartOrder(payload), writer)
 		})
-	http.HandleFunc(common.ERpcCmd.ListJobTransfers().Pattern(),
-		func(writer http.ResponseWriter, request *http.Request) {
-			var payload common.ListJobTransfersRequest
-			deserialize(request, &payload)
-			serialize(ListJobTransfers(payload), writer) // TODO: make struct
-		})
 	/*
 		http.HandleFunc(common.ERpcCmd.CancelJob().Pattern(),
 			func(writer http.ResponseWriter, request *http.Request) {
@@ -735,5 +729,15 @@ func GetJobDetails(r common.GetJobDetailsRequest) common.GetJobDetailsResponse {
 		Source:      source,
 		Destination: destination,
 		TrailingDot: jp0.Plan().DstFileData.TrailingDot,
+	}
+}
+
+func init() {
+	requestTryTimeout := common.GetEnvironmentVariable(common.EEnvironmentVariable.RequestTryTimeout())
+	if requestTryTimeout != "" {
+		timeout, err := time.ParseDuration(requestTryTimeout + "m")
+		if err == nil {
+			UploadTryTimeout = timeout
+		}
 	}
 }

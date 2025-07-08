@@ -45,7 +45,6 @@ func (i *interceptor) intercept(cmd common.RpcCmd, request interface{}, response
 		} else {
 			*(response.(*common.CopyJobPartOrderResponse)) = common.CopyJobPartOrderResponse{JobStarted: false, ErrorMsg: common.ECopyJobPartOrderErrorType.NoTransfersScheduledErr()}
 		}
-	case common.ERpcCmd.ListJobTransfers():
 	case common.ERpcCmd.PauseJob():
 	case common.ERpcCmd.CancelJob():
 	case common.ERpcCmd.ResumeJob():
