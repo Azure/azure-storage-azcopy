@@ -223,6 +223,7 @@ type AzCopyParsedJobsListStdout struct {
 	AzCopyParsedStdout
 	listenChan chan<- common.JsonOutputTemplate
 	JobsCount  int
+	Jobs       []common.JobIDDetails
 }
 
 func (a *AzCopyParsedJobsListStdout) Write(p []byte) (n int, err error) {
@@ -236,6 +237,7 @@ func (a *AzCopyParsedJobsListStdout) Write(p []byte) (n int, err error) {
 				}
 
 				a.JobsCount = len(tx.JobIDDetails)
+				a.Jobs = tx.JobIDDetails
 			}
 		})
 	}
