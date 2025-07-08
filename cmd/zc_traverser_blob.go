@@ -584,7 +584,11 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 		object := item.(StoredObject)
 
 		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter(object.entityType)
+			if UseSyncOrchestrator {
+				t.incrementEnumerationCounter(object.entityType)
+			} else {
+				t.incrementEnumerationCounter(common.EEntityType.File())
+			}
 		}
 
 		processErr := processIfPassedFilters(filters, object, processor)
