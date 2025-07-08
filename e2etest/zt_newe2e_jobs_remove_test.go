@@ -91,7 +91,7 @@ func (s *JobsRemoveSuite) Scenario_JobsRemoveNonExistentJob(svm *ScenarioVariati
 			},
 		})
 
-	ValidateContainsError(svm, jobsRemoveOutput, []string{"failed to remove log and job plan files for job 4a2542df-90ce-1043-69f0-e7481379b5b1 due to error: cannot find any log or job plan file with the specified ID."})
+	ValidateContainsError(svm, jobsRemoveOutput, []string{"failed to remove log and job plan files for job 4a2542df-90ce-1043-69f0-e7481379b5b1 due to error: cannot find any log or job plan file with the specified ID"})
 }
 
 func (s *JobsRemoveSuite) Scenario_JobsRemove(svm *ScenarioVariationManager) {
