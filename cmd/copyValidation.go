@@ -90,58 +90,17 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 		}
 	}
 
-	// NFS/SMB part
 	if cooked.isNFSCopy {
-		// check for unsupported NFS behavior
-		if isUnsupported, err := isUnsupportedPlatformForNFS(cooked.FromTo); isUnsupported {
-			return err
-		}
-
-		// If we are not preserving original file permissions (raw.preservePermissions == false),
-		// and the operation is a file copy from azure file NFS to local linux (FromTo == FileLocal),
-		// and the current OS is Linux, then we require root privileges to proceed.
-		//
-		// This is because modifying file ownership or permissions on Linux
-		// typically requires elevated privileges. To safely handle permission
-		// changes during the local file operation, we enforce that the process
-		// must be running as root.
-		if !cooked.preservePermissions.IsTruthy() && cooked.FromTo == common.EFromTo.FileLocal() {
-			if err := common.EnsureRunningAsRoot(); err != nil {
-				return fmt.Errorf("failed to copy source to destination without preserving permissions: operation not permitted. Please retry with root privileges or use the default option (--preserve-permissions=true)")
-			}
-		}
-
-		if err = validatePreserveNFSPropertyOption(cooked.preserveInfo,
-			cooked.FromTo,
-			PreserveInfoFlag); err != nil {
-			return err
-		}
-		if err = validatePreserveNFSPropertyOption(cooked.preservePermissions.IsTruthy(),
-			cooked.FromTo,
-			PreservePermissionsFlag); err != nil {
-			return err
-		}
-
-		if err = validateSymlinkFlag(cooked.SymlinkHandling == common.ESymlinkHandlingType.Follow(), cooked.SymlinkHandling == common.ESymlinkHandlingType.Preserve()); err != nil {
-			return err
-		}
-
-		if err = validateHardlinksFlag(cooked.hardlinks, cooked.FromTo, cooked.isNFSCopy); err != nil {
+		if err := performNFSSpecificValidation(
+			cooked.FromTo, cooked.preservePermissions, cooked.preserveInfo,
+			cooked.SymlinkHandling, cooked.hardlinks); err != nil {
 			return err
 		}
 	} else {
-		if err = validatePreserveSMBPropertyOption(cooked.preserveInfo,
-			cooked.FromTo,
-			PreserveInfoFlag); err != nil {
+		if err := performSMBSpecificValidation(
+			cooked.FromTo, cooked.preservePermissions, cooked.preserveInfo,
+			cooked.preservePOSIXProperties); err != nil {
 			return err
-		}
-		if cooked.preservePOSIXProperties && !areBothLocationsPOSIXAware(cooked.FromTo) {
-			return errors.New(PreservePOSIXPropertiesIncompatibilityMsg)
-		}
-		if err = validatePreserveSMBPropertyOption(cooked.preservePermissions.IsTruthy(),
-			cooked.FromTo,
-			PreservePermissionsFlag); err != nil {
-			return
 		}
 
 		if err = validatePreserveOwner(cooked.preserveOwner, cooked.FromTo); err != nil {
@@ -290,11 +249,11 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 		return errors.New("cannot check file attributes on remote objects")
 	}
 
-	if azcopyOutputVerbosity == common.EOutputVerbosity.Quiet() || azcopyOutputVerbosity == common.EOutputVerbosity.Essential() {
+	if OutputLevel == common.EOutputVerbosity.Quiet() || OutputLevel == common.EOutputVerbosity.Essential() {
 		if cooked.ForceWrite == common.EOverwriteOption.Prompt() {
-			err = fmt.Errorf("cannot set output level '%s' with overwrite option '%s'", azcopyOutputVerbosity.String(), cooked.ForceWrite.String())
+			err = fmt.Errorf("cannot set output level '%s' with overwrite option '%s'", OutputLevel.String(), cooked.ForceWrite.String())
 		} else if cooked.dryrunMode {
-			err = fmt.Errorf("cannot set output level '%s' with dry-run mode", azcopyOutputVerbosity.String())
+			err = fmt.Errorf("cannot set output level '%s' with dry-run mode", OutputLevel.String())
 		}
 	}
 	if err != nil {

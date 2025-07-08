@@ -11,14 +11,14 @@ import (
 func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 	cooked.jobID = azcopyCurrentJobID
 	// set up the front end scanning logger
-	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, azcopyLogVerbosity, azcopyLogPathFolder, "-scanning")
+	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, LogLevel, azcopyLogPathFolder, "-scanning")
 	azcopyScanningLogger.OpenLog()
 	glcm.RegisterCloseFunc(func() {
 		azcopyScanningLogger.CloseLog()
 	})
 
 	// if no logging, set this empty so that we don't display the log location
-	if azcopyLogVerbosity == common.LogNone {
+	if LogLevel == common.LogNone {
 		azcopyLogPathFolder = ""
 	}
 
@@ -164,7 +164,6 @@ func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 		}
 	}
 
-	// NFS/SMB part
 	SetNFSFlag(cooked.isNFSCopy)
 	if cooked.preserveInfo && !cooked.preservePermissions.IsTruthy() {
 		if cooked.isNFSCopy {
