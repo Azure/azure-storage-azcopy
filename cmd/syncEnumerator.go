@@ -82,8 +82,8 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 					atomic.AddUint32(&cca.atomicSkippedSymlinkCount, 1)
 				}
 			}
-			if cca.atomicScanningStatus == 1 && atomic.LoadUint64(&cca.atomicSourceFilesScanned) > common.RECOMMENDED_OBJECTS_COUNT {
-				WarnStdoutAndScanningLog("This job contains more than 10M objects, best practice to run less than this.")
+			if cca.atomicScanningStatus == 1 && atomic.LoadUint64(&cca.atomicSourceFilesScanned) > common.GetRecommendedMaxObjectsPerJob() {
+				common.WarnIfTooManyObjects(&common.TooManyObjWarningOnce)
 			}
 		},
 
@@ -121,8 +121,8 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 				atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
 			}
 			if cca.atomicScanningStatus == 1 &&
-				atomic.LoadUint64(&cca.atomicDestinationFilesScanned) > common.RECOMMENDED_OBJECTS_COUNT {
-				WarnStdoutAndScanningLog("This job contains more than 10M objects, best practice to run less than this.")
+				atomic.LoadUint64(&cca.atomicDestinationFilesScanned) > common.GetRecommendedMaxObjectsPerJob() {
+				common.WarnIfTooManyObjects(&common.TooManyObjWarningOnce)
 			}
 		},
 

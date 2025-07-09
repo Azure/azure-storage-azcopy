@@ -31,6 +31,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -1908,4 +1909,14 @@ func (sht *SymlinkHandlingType) Determine(Follow, Preserve bool) error {
 	}
 
 	return nil
+}
+
+// /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+var TooManyObjWarningOnce = sync.Once{}
+
+func WarnIfTooManyObjects(oncer *sync.Once) {
+	oncer.Do(func() {
+		GetLifecycleMgr().Warn(fmt.Sprintf("This job contains more than %d objects, best practice to run less than this.",
+			GetRecommendedMaxObjectsPerJob()))
+	})
 }
