@@ -883,11 +883,12 @@ func NewCopyEnumerator(traverser ResourceTraverser, filters []ObjectFilter, obje
 }
 
 func WarnStdoutAndScanningLog(toLog string) {
-	glcm.Info(toLog)
 
 	if buildmode.IsMover {
 		toLog = "[AzCopy] " + toLog
 	}
+
+	glcm.Info(toLog)
 
 	if azcopyScanningLogger != nil {
 		// ste.JobsAdmin.LogToJobLog(toLog, pipeline.LogWarning)

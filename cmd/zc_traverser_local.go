@@ -550,7 +550,7 @@ func checkSymlinkCausesDirectoryLoop(absSymlinkPath string) (bool, error) {
 	// Stat() the symlink target directory to find its inode.
 	tgtStat, err := os.Stat(absSymlinkPath)
 	if err != nil {
-		fmt.Printf("os.Stat(%s) failed: %v\n", absSymlinkPath, err)
+		WarnStdoutAndScanningLog(fmt.Sprintf("os.Stat(%s) failed: %v\n", absSymlinkPath, err))
 		return false, err
 	}
 
@@ -573,7 +573,7 @@ func checkSymlinkCausesDirectoryLoop(absSymlinkPath string) (bool, error) {
 		tmpPath = filepath.Dir(tmpPath)
 
 		if tmpPath == tgtPath {
-			fmt.Printf("Symlink (%s) points to its ancestor (%s), matching target path is %s\n", absSymlinkPath, tmpPath, tgtPath)
+			WarnStdoutAndScanningLog(fmt.Sprintf("Symlink (%s) points to its ancestor (%s), matching target path is %s\n", absSymlinkPath, tmpPath, tgtPath))
 			return true, nil
 		}
 
@@ -990,13 +990,14 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				return err
 			}
 
-			entityType := common.EEntityType.File()
-
+			var entityType common.EntityType
 			// go through the files and return if any of them fail to process
 			for _, entry := range entries {
 				// This won't change. It's purely to hand info off to STE about where the symlink lives.
 				relativePath := entry.Name()
 				fileInfo, _ := entry.Info()
+				entityType = common.EEntityType.File() // Default entity type is file, unless we find out otherwise.
+
 				if fileInfo.Mode()&os.ModeSymlink != 0 {
 
 					if t.symlinkHandling.None() {
@@ -1123,8 +1124,8 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 						WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get extended properties for %s: %s", t.fullPath, err.Error()))
 					} else {
 						storedObject.updateTimestamps(
-							extendedProp.GetChangeTime(),
-							extendedProp.GetLastWriteTime())
+							extendedProp.GetLastWriteTime(),
+							extendedProp.GetChangeTime())
 					}
 				}
 
