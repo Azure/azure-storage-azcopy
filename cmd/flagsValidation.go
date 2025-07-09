@@ -114,7 +114,8 @@ func GetPreserveInfoFlagDefault(cmd *cobra.Command, fromTo common.FromTo) bool {
 	// For Linux systems, if it's an NFS copy, we set the default value of preserveInfo to true.
 	// For Windows systems, if it's an SMB copy, we set the default value of preserveInfo to true.
 	// These default values are important to set here for the logic of file preservation based on the system and copy type.
-	return (runtime.GOOS == "linux" && areBothLocationsNFSAware(fromTo)) || (runtime.GOOS == "windows" && !areBothLocationsSMBAware(fromTo))
+	return (runtime.GOOS == "linux" && areBothLocationsNFSAware(fromTo)) ||
+		(runtime.GOOS == "windows" && areBothLocationsSMBAware(fromTo))
 }
 
 // performNFSSpecificValidation performs validation specific to NFS (Network File System) configurations
@@ -170,7 +171,7 @@ func performNFSSpecificValidation(fromTo common.FromTo,
 		return err
 	}
 
-	if err = validateHardlinksFlag(hardlinkHandling, fromTo, true); err != nil {
+	if err = validateHardlinksFlag(hardlinkHandling, fromTo, common.IsNFSCopy()); err != nil {
 		return err
 	}
 	return nil
@@ -192,7 +193,8 @@ func performNFSSpecificValidation(fromTo common.FromTo,
 func performSMBSpecificValidation(fromTo common.FromTo,
 	preservePermissions common.PreservePermissionsOption,
 	preserveInfo bool,
-	preservePOSIXProperties bool) (err error) {
+	preservePOSIXProperties bool,
+	hardlinkHandling common.HardlinkHandlingType) (err error) {
 
 	if err = validatePreserveSMBPropertyOption(preserveInfo,
 		fromTo,
@@ -205,6 +207,9 @@ func performSMBSpecificValidation(fromTo common.FromTo,
 	if err = validatePreserveSMBPropertyOption(preservePermissions.IsTruthy(),
 		fromTo,
 		PreservePermissionsFlag); err != nil {
+		return err
+	}
+	if err = validateHardlinksFlag(hardlinkHandling, fromTo, common.IsNFSCopy()); err != nil {
 		return err
 	}
 	return nil
@@ -228,13 +233,13 @@ func validateSymlinkFlag(followSymlinks, preserveSymlinks bool) error {
 
 func validateHardlinksFlag(option common.HardlinkHandlingType, fromTo common.FromTo, isNFSCopy bool) error {
 
-	// Validate for Download: Only allowed when downloading from a local file system
-	if runtime.GOOS == "linux" && fromTo.IsDownload() && (fromTo.From() != common.ELocation.File() && fromTo.From() != common.ELocation.FileNFS()) {
+	// Validate for Download: Only allowed when downloading from an NFS share to a Linux filesystem
+	if runtime.GOOS == "linux" && fromTo.IsDownload() && (fromTo.From() != common.ELocation.FileNFS()) {
 		return fmt.Errorf("The --hardlinks option, when downloading, is only supported from a NFS file share to a Linux filesystem.")
 	}
 
 	// Validate for Upload or S2S: Only allowed when uploading *to* a local file system
-	if runtime.GOOS == "linux" && (fromTo.IsUpload() || fromTo.IsS2S()) && (fromTo.To() != common.ELocation.File() && fromTo.To() != common.ELocation.FileNFS()) {
+	if runtime.GOOS == "linux" && (fromTo.IsUpload() || fromTo.IsS2S()) && (fromTo.To() != common.ELocation.FileNFS()) {
 		return fmt.Errorf("The --hardlinks option, when uploading, is only supported from a NFS file share to a Linux filesystem or between NFS file shares.")
 	}
 
