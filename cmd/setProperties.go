@@ -160,22 +160,36 @@ func init() {
 
 	rootCmd.AddCommand(setPropCmd)
 
-	setPropCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "Set the given location with these key-value pairs (separated by ';') as metadata.")
-	setPropCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "Optionally specifies the source destination combination. Valid values : BlobNone, FileNone, BlobFSNone")
-	setPropCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "Include only files where the name matches the pattern list. For example: *.jpg;*.pdf;exactName")
+	setPropCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "Set the given location with "+
+		"\n these key-value pairs (separated by ';') as metadata.")
+	setPropCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "Optionally specifies the source destination combination. "+
+		"\n Valid values : BlobNone, FileNone, BlobFSNone")
+	setPropCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "Include only files where the name matches the pattern list. "+
+		"\n For example: *.jpg;*.pdf;exactName")
 	setPropCmd.PersistentFlags().StringVar(&raw.includePath, "include-path", "", "Include only these paths when setting property. "+
-		"This option does not support wildcard characters (*). Checks relative path prefix. For example: myFolder;myFolder/subDirName/file.pdf")
-	setPropCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "", "Exclude files where the name matches the pattern list. For example: *.jpg;*.pdf;exactName")
+		"This option does not support wildcard characters (*). Checks relative path prefix."+
+		"\n  For example: myFolder;myFolder/subDirName/file.pdf")
+	setPropCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "", "Exclude files where the name matches the pattern list. "+
+		"\n For example: *.jpg;*.pdf;exactName")
 	setPropCmd.PersistentFlags().StringVar(&raw.excludePath, "exclude-path", "", "Exclude these paths when removing. "+
-		"This option does not support wildcard characters (*). Checks relative path prefix. For example: myFolder;myFolder/subDirName/file.pdf")
+		"This option does not support wildcard characters (*). Checks relative path prefix. "+
+		"\n For example: myFolder;myFolder/subDirName/file.pdf")
 	setPropCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "Defines the location of text file which has the list of only files to be copied.")
-	setPropCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "Changes the access tier of the block blobs to the given tier. (default 'None'). Valid options are Hot, Cold, Cool, Archive")
-	setPropCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "Changes the access tier of the page blobs to the given tier. (default 'None'). Valid options are P10, P15, P20, P30, P4, P40, P50, P6")
+	setPropCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "Changes the access tier of the block blobs to the given tier. (default 'None'). "+
+		"\n Valid options are Hot, Cold, Cool, Archive")
+	setPropCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "Changes the access tier of the page blobs to the given tier. (default 'None'). "+
+		"\n Valid options are P10, P15, P20, P30, P4, P40, P50, P6")
 	setPropCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Look into sub-directories recursively when uploading from local file system.")
-	setPropCmd.PersistentFlags().StringVar(&raw.rehydratePriority, "rehydrate-priority", "Standard", "Optional flag that sets rehydrate priority for rehydration. Valid values: Standard, High. Default- standard")
-	setPropCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "Prints the file paths that would be affected by this command. This flag does not affect the actual files.")
+	setPropCmd.PersistentFlags().StringVar(&raw.rehydratePriority, "rehydrate-priority", "Standard", "Optional flag that sets rehydrate priority for rehydration. "+
+		"\n Valid values: Standard, High. Default- standard")
+	setPropCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "Prints the file paths that would be affected by this command. "+
+		"\n This flag does not affect the actual files.")
 	setPropCmd.PersistentFlags().StringVar(&raw.blobTags, "blob-tags", "", "Set tags on blobs to categorize data in your storage account (separated by '&')")
-	setPropCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "'Enable' by default to treat file share related operations in a safe manner. Available options: "+strings.Join(common.ValidTrailingDotOptions(), ", ")+". "+
-		"Choose 'Disable' to go back to legacy (potentially unsafe) treatment of trailing dot files where the file service will trim any trailing dots in paths. This can result in potential data corruption if the transfer contains two paths that differ only by a trailing dot (ex: mypath and mypath.). If this flag is set to 'Disable' and AzCopy encounters a trailing dot file, it will warn customers in the scanning log but will not attempt to abort the operation."+
-		"If the destination does not support trailing dot files (Windows or Blob Storage), AzCopy will fail if the trailing dot file is the root of the transfer and skip any trailing dot paths encountered during enumeration.")
+	setPropCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "'Enable' by default to treat file share related operations in a safe manner. "+
+		"\n Available options: \n"+strings.Join(common.ValidTrailingDotOptions(), ", ")+". "+
+		"\n Choose 'Disable' to go back to legacy (potentially unsafe) treatment of trailing dot files where the file service will trim any trailing dots in paths. "+
+		"\n This can result in potential data corruption if the transfer contains two paths that differ only by a trailing dot (ex: mypath and mypath.). "+
+		"\n If this flag is set to 'Disable' and AzCopy encounters a trailing dot file, it will warn customers in the scanning log but will not attempt to abort the operation."+
+		"\n If the destination does not support trailing dot files (Windows or Blob Storage), "+
+		"\n AzCopy will fail if the trailing dot file is the root of the transfer and skip any trailing dot paths encountered during enumeration.")
 }
