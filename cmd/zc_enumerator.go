@@ -42,6 +42,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 )
 
 // -------------------------------------- Component Definitions -------------------------------------- \\
@@ -883,6 +884,11 @@ func NewCopyEnumerator(traverser ResourceTraverser, filters []ObjectFilter, obje
 
 func WarnStdoutAndScanningLog(toLog string) {
 	glcm.Info(toLog)
+
+	if buildmode.IsMover {
+		toLog = "[AzCopy] " + toLog
+	}
+
 	if azcopyScanningLogger != nil {
 		// ste.JobsAdmin.LogToJobLog(toLog, pipeline.LogWarning)
 		azcopyScanningLogger.Log(common.LogWarning, toLog)

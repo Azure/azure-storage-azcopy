@@ -37,6 +37,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 )
 
 type FileClientStub interface {
@@ -256,8 +257,18 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		u.jptm.GetForceIfReadOnly())
 
 	if fileerror.HasCode(err, fileerror.ParentNotFound) {
+		parentNotFoundLog := fmt.Sprintf(
+			"%s: %s \n AzCopy is going to create parent directories of the Azure files",
+			fileerror.ParentNotFound, err.Error())
+		if buildmode.IsMover {
+			// Create a concise log message for Mover. This is to avoid bloating up the log files
+			// with the full message for an expected and harmless error. In the scenario of sync orchestrator for sync,
+			// we expect to see a high number of ParentNotFound errors, as we create the parent directories
+			parentNotFoundLog = fmt.Sprintf("ParentNotFound (will be created) for %s. ReqId: %s", u.fileOrDirClient.URL(), ErrorEx{err}.MSRequestID())
+		}
+
 		// Create the parent directories of the file. Note share must be existed, as the files are listed from share or directory.
-		jptm.Log(common.LogError, fmt.Sprintf("%s: %s \n AzCopy is going to create parent directories of the Azure files", fileerror.ParentNotFound, err.Error()))
+		jptm.Log(common.LogError, parentNotFoundLog)
 		err = AzureFileParentDirCreator{}.CreateParentDirToRoot(u.ctx, u.getFileClient(), u.shareClient, u.jptm.GetFolderCreationTracker())
 		if err != nil {
 			u.jptm.FailActiveUpload("Creating parent directory", err)
