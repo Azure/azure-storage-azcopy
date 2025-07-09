@@ -36,20 +36,12 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
+const (
+	SyncThrottlingTestMode = false // Set to true to enable throttling test mode
+)
+
 // --- BEGIN Throttling and Concurrency Configuration ---
 const (
-	enableDebugLogs    bool = false
-	enableThrottleLogs bool = true
-	startGoProfiling   bool = true
-
-	// Throttling control flags
-	enableThrottling               bool = true
-	enableEnumerationThrottling    bool = true // Throttle directory enumeration to prevent deadlocks
-	enableFileBasedThrottling      bool = false
-	enableMemoryBasedThrottling    bool = true
-	enableGoroutineBasedThrottling bool = true
-	onlyReduceLimits               bool = true // If true, only reduce limits, never increase
-
 	absoluteMaxActiveFiles     int64 = 10_000_000 // Absolute max active files, used for dynamic limits
 	maxFilesPerActiveDirectory int64 = 1_000_000  // Max files per active directory
 
@@ -94,6 +86,10 @@ const (
 // Global variables that control the throttling behavior and resource limits.
 // These are configured based on system capabilities and transfer scenarios.
 var (
+	enableDebugLogs    bool = false
+	enableThrottleLogs bool = true
+	startGoProfiling   bool = false
+
 	// Core concurrency settings
 	crawlParallelism                  int32
 	maxActiveFiles                    int64
@@ -105,15 +101,48 @@ var (
 	totalFilesInIndexer          atomic.Int64
 	totalDirectoriesProcessed    atomic.Uint64 // never decremented
 
+	// Throttling control flags
+	enableThrottling               bool = true
+	enableEnumerationThrottling    bool = true // Throttle directory enumeration to prevent deadlocks
+	enableFileBasedThrottling      bool = false
+	enableMemoryBasedThrottling    bool = true
+	enableGoroutineBasedThrottling bool = true
+
 	// Dynamic limits
 	activeFilesLimit          atomic.Int64 // Dynamic limit for active files managed by StatsMonitor
 	enumeratingDirectoryLimit atomic.Int64 // Dynamic limit for actively enumerating directories
 )
 
+func initializeTestModeLimits() {
+	// In test mode, we set fixed limits for easier testing
+	maxActiveFiles = 10000 // not being used right now
+	maxActivelyEnumeratingDirectories = 100
+
+	enableDebugLogs = false
+	enableThrottleLogs = false
+	startGoProfiling = false
+
+	enableThrottling = true
+	enableEnumerationThrottling = true // Throttle directory enumeration to prevent deadlocks
+	enableFileBasedThrottling = false
+	enableMemoryBasedThrottling = false
+	enableGoroutineBasedThrottling = false
+
+	activeFilesLimit.Store(maxActiveFiles)
+	enumeratingDirectoryLimit.Store(maxActivelyEnumeratingDirectories)
+	crawlParallelism = 4
+}
+
 // initializeLimits initializes the concurrency and memory limits based on system resources
 // and the transfer scenario (FromTo). It sets MaxActiveFiles based on available memory
 // and CrawlParallelism based on CPU cores with scenario-specific multipliers.
 func initializeLimits(fromTo common.FromTo, orchestratorOptions *SyncOrchestratorOptions) {
+
+	if SyncThrottlingTestMode {
+		initializeTestModeLimits()
+		return
+	}
+
 	memory, err := common.GetTotalPhysicalMemory()
 	if err != nil {
 		glcm.Warn(fmt.Sprintf("Failed to get total physical memory: %v", err))
@@ -123,7 +152,8 @@ func initializeLimits(fromTo common.FromTo, orchestratorOptions *SyncOrchestrato
 	maxActiveFiles = int64(memoryGB) * filesPerGBMemory // Set based on physical memory, 1 million files per GB
 
 	maxDirectoryDirectChildCount := maxFilesPerActiveDirectory // Default max direct children per directory
-	if orchestratorOptions != nil {
+
+	if orchestratorOptions != nil && orchestratorOptions.valid && orchestratorOptions.maxDirectoryDirectChildCount > 0 {
 		maxDirectoryDirectChildCount = orchestratorOptions.maxDirectoryDirectChildCount
 	}
 
@@ -133,8 +163,6 @@ func initializeLimits(fromTo common.FromTo, orchestratorOptions *SyncOrchestrato
 	}
 
 	maxActivelyEnumeratingDirectories = maxActiveFiles / maxDirectoryDirectChildCount // Ensure at least one directory can be processed
-	activeFilesLimit.Store(maxActiveFiles)
-	enumeratingDirectoryLimit.Store(maxActivelyEnumeratingDirectories) // Set initial limit for actively enumerating directories
 
 	var multiplier int
 	switch fromTo.From() {
@@ -152,6 +180,8 @@ func initializeLimits(fromTo common.FromTo, orchestratorOptions *SyncOrchestrato
 	}
 
 	crawlParallelism = int32(runtime.NumCPU() * multiplier) // Set parallelism based on CPU cores
+	activeFilesLimit.Store(maxActiveFiles)
+	enumeratingDirectoryLimit.Store(maxActivelyEnumeratingDirectories) // Set initial limit for actively enumerating directories
 }
 
 // --- END Throttling and Concurrency Configuration ---
