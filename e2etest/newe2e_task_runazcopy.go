@@ -144,6 +144,7 @@ type AzCopyEnvironment struct {
 	AzureClientId           *string `env:"AZURE_CLIENT_ID"`
 
 	LoginCacheName *string `env:"AZCOPY_LOGIN_CACHE_NAME"`
+	SyncThrottling *bool   `env:"DISABLE_SYNC_THROTTLING"`
 
 	// InheritEnvironment is a lowercase list of environment variables to always inherit.
 	// Specifying "*" as an entry with the value "true" will act as a wildcard, and inherit all env vars.

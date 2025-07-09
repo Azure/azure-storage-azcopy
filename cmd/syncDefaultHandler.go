@@ -31,8 +31,9 @@ type CustomSyncHandlerFunc func(cca *cookedSyncCmdArgs, enumerator *syncEnumerat
 type CustomCounterIncrementer func(entry fs.DirEntry, t *localTraverser) error
 
 var (
-	UseSyncOrchestrator                       = false
-	CustomSyncHandler   CustomSyncHandlerFunc = nil
+	SyncThrottlingTestMode                       = false // Set to true to enable throttling test mode
+	UseSyncOrchestrator                          = false
+	CustomSyncHandler      CustomSyncHandlerFunc = nil
 )
 
 func GetCustomSyncHandlerInfo() string {

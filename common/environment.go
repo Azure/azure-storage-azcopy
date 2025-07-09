@@ -477,3 +477,11 @@ func (EnvironmentVariable) DisableBlobTransferResume() EnvironmentVariable {
 		Description:  "An incomplete transfer to blob endpoint will be resumed from start if set to true",
 	}
 }
+
+func (EnvironmentVariable) DisableThrottling() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:         "DISABLE_SYNC_THROTTLING",
+		Description:  "If set to true, throttling will be disabled. If set to false, throttling will be enabled. This is useful for testing purposes.",
+		DefaultValue: "false",
+	}
+}
