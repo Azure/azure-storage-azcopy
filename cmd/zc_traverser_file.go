@@ -57,6 +57,9 @@ type fileTraverser struct {
 	hardlinkHandling            common.HardlinkHandlingType
 
 	errorChannel chan<- TraverserErrorItemInfo
+
+	// skipRootProperties bool // if true, we skip properties of the root directory/file
+	skipRootProperties bool
 }
 
 // ErrorFileInfo holds information about files and folders that failed enumeration.
@@ -396,8 +399,9 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 	// Our rule is that enumerators of folder-aware sources should include the root folder's properties.
 	// So include the root dir/share in the enumeration results, if it exists or is just the share root.
+	// XDM: We are breaking this rule in the case of SyncOrchestrator, because of directory level processing.
 	_, err = directoryClient.GetProperties(t.ctx, nil)
-	if err == nil || targetURLParts.DirectoryOrFilePath == "" {
+	if !t.skipRootProperties && (err == nil || targetURLParts.DirectoryOrFilePath == "") {
 		s, err := convertToStoredObject(newAzFileRootDirectoryEntity(directoryClient, ""))
 		if err != nil {
 			return err
@@ -544,6 +548,9 @@ func newFileTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		destination:                 opts.DestResourceType,
 		hardlinkHandling:            opts.HardlinkHandling,
 	}
+
+	t.skipRootProperties = UseSyncOrchestrator && !t.recursive
+
 	return
 }
 

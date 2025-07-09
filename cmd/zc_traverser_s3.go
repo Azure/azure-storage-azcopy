@@ -31,6 +31,7 @@ import (
 	"github.com/minio/minio-go"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 )
 
 type s3Traverser struct {
@@ -46,6 +47,11 @@ type s3Traverser struct {
 	incrementEnumerationCounter enumerationCounterFunc
 
 	errorChannel chan<- TraverserErrorItemInfo
+
+	// includeDirectoryOrPrefix is used to determine if we should enqueue directories or prefixes
+	// in a non-recursive traversal process. If true, prefixes will be enqueued as well even if location
+	// is not folder aware.
+	includeDirectoryOrPrefix bool
 }
 
 // ErrorFileInfo holds information about files and folders that failed enumeration.
@@ -207,6 +213,16 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 
 	// It's a bucket or virtual directory.
 	for objectInfo := range t.s3Client.ListObjectsV2(t.s3URLParts.BucketName, searchPrefix, t.recursive, t.ctx.Done()) {
+		// re-join the unescaped path.
+		relativePath := strings.TrimPrefix(objectInfo.Key, searchPrefix)
+
+		// Ignoring this object because it is a zero-byte placeholder typically created to simulate a folder in S3-compatible storage.
+		// These objects have an empty RelativePath and are marked as files, but they do not represent actual user data.
+		// Including them in processing could lead to incorrect assumptions about file presence or structure.
+		if len(relativePath) == 0 && objectInfo.StorageClass != "" {
+			continue
+		}
+
 		errInfo := ErrorS3Info{
 			S3Name:             objectInfo.Key,
 			S3Size:             objectInfo.Size,
@@ -234,43 +250,68 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 
 		objectPath := strings.Split(objectInfo.Key, "/")
 		objectName := objectPath[len(objectPath)-1]
+		var storedObject StoredObject
+		if objectInfo.StorageClass == "" {
 
-		// re-join the unescaped path.
-		relativePath := strings.TrimPrefix(objectInfo.Key, searchPrefix)
-
-		if strings.HasSuffix(relativePath, "/") {
-			// If a file has a suffix of /, it's still treated as a folder.
-			// Thus, akin to the old code. skip it.
-			continue
-		}
-
-		// default to empty props, but retrieve real ones if required
-		oie := common.ObjectInfoExtension{ObjectInfo: minio.ObjectInfo{}}
-		if t.getProperties {
-			oi, err := t.s3Client.StatObject(t.s3URLParts.BucketName, objectInfo.Key, minio.StatObjectOptions{})
-			if err != nil {
-				t.writeToS3ErrorChannel(ErrorS3Info{
-					S3Name:             objectName,
-					S3Path:             t.s3URLParts.ObjectKey,
-					ErrorMsg:           err,
-					S3LastModifiedTime: oi.LastModified,
-					S3Size:             oi.Size,
-				})
-				return err
+			// Directories are the only objects without storage classes.
+			if !t.includeDirectoryOrPrefix {
+				// Skip directories if not using sync orchestrator
+				continue
 			}
-			oie = common.ObjectInfoExtension{ObjectInfo: oi}
+
+			// For sync orchestrator, we need to treat directories as objects.
+			storedObject = newStoredObject(
+				preprocessor,
+				objectName,
+				relativePath,
+				common.EEntityType.Folder(),
+				objectInfo.LastModified,
+				0,
+				noContentProps,
+				noBlobProps,
+				noMetadata,
+				t.s3URLParts.BucketName)
+
+		} else {
+			if strings.HasSuffix(relativePath, "/") {
+				// If a file has a suffix of /, it's still treated as a folder.
+				// Thus, akin to the old code. skip it.
+				// XDM: What do we do for SyncOrchrestrator?
+				continue
+			}
+
+			// default to empty props, but retrieve real ones if required
+			oie := common.ObjectInfoExtension{ObjectInfo: minio.ObjectInfo{}}
+			if t.getProperties {
+				oi, err := t.s3Client.StatObject(t.s3URLParts.BucketName, objectInfo.Key, minio.StatObjectOptions{})
+				if err != nil {
+					t.writeToS3ErrorChannel(ErrorS3Info{
+						S3Name:             objectName,
+						S3Path:             t.s3URLParts.ObjectKey,
+						ErrorMsg:           err,
+						S3LastModifiedTime: oi.LastModified,
+						S3Size:             oi.Size,
+					})
+					return err
+				}
+				oie = common.ObjectInfoExtension{ObjectInfo: oi}
+			}
+			storedObject = newStoredObject(
+				preprocessor,
+				objectName,
+				relativePath,
+				common.EEntityType.File(),
+				objectInfo.LastModified,
+				objectInfo.Size,
+				&oie,
+				noBlobProps,
+				oie.NewCommonMetadata(),
+				t.s3URLParts.BucketName)
 		}
-		storedObject := newStoredObject(
-			preprocessor,
-			objectName,
-			relativePath,
-			common.EEntityType.File(),
-			objectInfo.LastModified,
-			objectInfo.Size,
-			&oie,
-			noBlobProps,
-			oie.NewCommonMetadata(),
-			t.s3URLParts.BucketName)
+
+		if t.incrementEnumerationCounter != nil {
+			t.incrementEnumerationCounter(storedObject.entityType)
+		}
 
 		err = processIfPassedFilters(filters,
 			storedObject,
@@ -291,8 +332,26 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 }
 
 func newS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTraverserOptions) (t *s3Traverser, err error) {
-	t = &s3Traverser{rawURL: rawURL, ctx: ctx, recursive: opts.Recursive, getProperties: opts.GetPropertiesInFrontend,
+	t = &s3Traverser{
+		rawURL:                      rawURL,
+		ctx:                         ctx,
+		recursive:                   opts.Recursive,
+		getProperties:               opts.GetPropertiesInFrontend,
 		incrementEnumerationCounter: opts.IncrementEnumeration}
+
+	if buildmode.IsMover {
+		// If we are using this in context of Mover flow, set getProperties to false.
+		// Individual getProperties have a significant performance impact in traversing S3.
+		// This can be adopted by default but keeping it scoped to Mover flow for now.
+
+		if t.getProperties {
+			WarnStdoutAndScanningLog("getProperties is being changed to false for S3 traverser for performance improvement.")
+		}
+
+		t.getProperties = false
+	}
+
+	t.includeDirectoryOrPrefix = UseSyncOrchestrator && !t.recursive
 
 	// initialize S3 client and URL parts
 	var s3URLParts common.S3URLParts
