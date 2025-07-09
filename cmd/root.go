@@ -189,44 +189,39 @@ var rootCmd = &cobra.Command{
 }
 
 func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
-	Client, err = azcopy.NewClient()
+	jobsAdmin.BenchmarkResults = isBench
+	Client, err = azcopy.NewClient(azcopy.ClientOptions{CapMbps: CapMbps})
 	if err != nil {
 		return err
 	}
-
-	configureGoMaxProcs()
-
-	// Perform os specific initialization
-	azcopyMaxFileAndSocketHandles, err := processOSSpecificInitialization()
-	if err != nil {
-		log.Fatalf("initialization failed: %v", err)
+	Client.CurrentJobID = resumeJobID
+	if Client.CurrentJobID.IsEmpty() {
+		Client.CurrentJobID = common.NewJobID()
 	}
-	jobID := resumeJobID
-	if jobID.IsEmpty() {
-		jobID = common.NewJobID()
-	}
-	Client.CurrentJobID = jobID
 
 	timeAtPrestart := time.Now()
 	glcm.SetOutputFormat(OutputFormat)
 	glcm.SetOutputVerbosity(OutputLevel)
 
-	common.AzcopyCurrentJobLogger = common.NewJobLogger(jobID, LogLevel, common.LogPathFolder, "")
+	common.AzcopyCurrentJobLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "")
 	common.AzcopyCurrentJobLogger.OpenLog()
 
 	glcm.SetForceLogging()
 
-	// currently, we only automatically do auto-tuning when benchmarking
-	preferToAutoTuneGRs, providePerformanceAdvice := isBench, isBench
+	// For benchmarking, try to autotune if possible, otherwise use the default values
+	if jobsAdmin.JobsAdmin != nil && isBench {
+		envVar := common.EEnvironmentVariable.ConcurrencyValue()
+		userValue := common.GetEnvironmentVariable(envVar)
+		if userValue == "" || userValue == "auto" {
+			jobsAdmin.JobsAdmin.SetConcurrencySettingsToAuto()
+		} else {
+			// Tell user that we can't actually auto tune, because configured value takes precedence
+			// This case happens when benchmarking with a fixed value from the env var
+			glcm.Info(fmt.Sprintf("Cannot auto-tune concurrency because it is fixed by environment variable %s", envVar.Name))
+		}
 
-	// startup of the STE happens here, so that the startup can access the values of command line parameters that are defined for "root" command
-	concurrencySettings := ste.NewConcurrencySettings(azcopyMaxFileAndSocketHandles, preferToAutoTuneGRs)
-	err = jobsAdmin.MainSTE(concurrencySettings, float64(CapMbps), providePerformanceAdvice)
-	if err != nil {
-		return err
 	}
-	EnumerationParallelism = concurrencySettings.EnumerationPoolSize.Value
-	EnumerationParallelStatFiles = concurrencySettings.ParallelStatFiles.Value
+	EnumerationParallelism, EnumerationParallelStatFiles = jobsAdmin.JobsAdmin.GetConcurrencySettings()
 
 	// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter
 	// Subtract a few seconds, to ensure that this date DEFINITELY falls before the LMT of any file changed while this
@@ -275,16 +270,6 @@ func InitializeAndExecute() {
 			}
 		}
 		glcm.Exit(nil, common.EExitCode.Success())
-	}
-}
-
-// Ensure we always have more than 1 OS thread running goroutines, since there are issues with having just 1.
-// (E.g. version check doesn't happen at login time, if have only one go proc. Not sure why that happens if have only one
-// proc. Is presumably due to the high CPU usage we see on login if only 1 CPU, even tho can't see any busy-wait in that code)
-func configureGoMaxProcs() {
-	isOnlyOne := runtime.GOMAXPROCS(0) == 1
-	if isOnlyOne {
-		runtime.GOMAXPROCS(2)
 	}
 }
 

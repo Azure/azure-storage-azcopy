@@ -54,9 +54,9 @@ func ToFixed(num float64, precision int) float64 {
 }
 
 // MainSTE initializes the Storage Transfer Engine
-func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64, providePerfAdvice bool) error {
+func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64) error {
 	// Initialize the JobsAdmin, resurrect Job plan files
-	initJobsAdmin(steCtx, concurrency, targetRateInMegaBitsPerSec, providePerfAdvice)
+	initJobsAdmin(steCtx, concurrency, targetRateInMegaBitsPerSec)
 	// TODO: We may want to list listen first and terminate if there is already an instance listening
 
 	// if we've a custom mime map
