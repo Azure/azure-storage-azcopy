@@ -731,13 +731,3 @@ func GetJobDetails(r common.GetJobDetailsRequest) common.GetJobDetailsResponse {
 		TrailingDot: jp0.Plan().DstFileData.TrailingDot,
 	}
 }
-
-func init() {
-	requestTryTimeout := common.GetEnvironmentVariable(common.EEnvironmentVariable.RequestTryTimeout())
-	if requestTryTimeout != "" {
-		timeout, err := time.ParseDuration(requestTryTimeout + "m")
-		if err == nil {
-			UploadTryTimeout = timeout
-		}
-	}
-}
