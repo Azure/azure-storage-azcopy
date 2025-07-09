@@ -425,21 +425,40 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		)
 	default:
 
-		// in all other cases (download and S2S), the destination is scanned/indexed first
-		// then the source is scanned and filtered based on what the destination contains
-		return GetSyncEnumeratorWithSrcComparator(
-			cca,
-			fpo,
-			copyJobTemplate,
-			sourceTraverser,
-			destinationTraverser,
-			indexer,
-			filters,
-			transferScheduler,
-			srcTraverserTemplate,
-			dstTraverserTemplate,
-			enumeratorOptions,
-		)
+		if UseSyncOrchestrator {
+
+			// If we are using the sync orchestrator, we always scan the destination first
+			return GetSyncEnumeratorWithDestComparator(
+				cca,
+				fpo,
+				copyJobTemplate,
+				sourceTraverser,
+				destinationTraverser,
+				indexer,
+				filters,
+				transferScheduler,
+				srcTraverserTemplate,
+				dstTraverserTemplate,
+				enumeratorOptions,
+			)
+		} else {
+
+			// in all other cases (download and S2S), the destination is scanned/indexed first
+			// then the source is scanned and filtered based on what the destination contains
+			return GetSyncEnumeratorWithSrcComparator(
+				cca,
+				fpo,
+				copyJobTemplate,
+				sourceTraverser,
+				destinationTraverser,
+				indexer,
+				filters,
+				transferScheduler,
+				srcTraverserTemplate,
+				dstTraverserTemplate,
+				enumeratorOptions,
+			)
+		}
 	}
 }
 
@@ -488,11 +507,27 @@ func GetSyncEnumeratorWithDestComparator(
 	}
 	destCleanerFunc := newFpoAwareProcessor(fpo, destinationCleaner.removeImmediately)
 
+	if UseSyncOrchestrator && cca.fromTo == common.EFromTo.S3Blob() {
+		// newFpoAwareProcessor sets the destCleanerFunc to nil for a non folder aware source destination pair like S3->Blob.
+		// But in case of SyncOrchestrator, S3->Blob sync does recursive deletion for a prefix.
+		// This requires a valid deletion processor to be passed to the comparator.
+		destCleanerFunc = destinationCleaner.removeImmediately
+	}
+
 	// when uploading, we can delete remote objects immediately, because as we traverse the remote location
 	// we ALREADY have available a complete map of everything that exists locally
 	// so as soon as we see a remote destination object we can know whether it exists in the local source
 
-	comparator := newSyncDestinationComparator(indexer, transferScheduler.scheduleCopyTransfer, destCleanerFunc, cca.compareHash, cca.preserveInfo, cca.mirrorMode).processIfNecessary
+	comparator := newSyncDestinationComparator(
+		indexer,
+		transferScheduler.scheduleCopyTransfer,
+		destCleanerFunc,
+		cca.compareHash,
+		cca.preserveInfo,
+		cca.mirrorMode,
+		cca.deleteDestination,
+		srcTraverserTemplate.options.IncrementNotTransferred,
+		enumeratorOptions.SyncOrchOptions).processIfNecessary
 	finalize := func() error {
 		// schedule every local file that doesn't exist at the destination
 		err := indexer.traverse(transferScheduler.scheduleCopyTransfer, filters)
@@ -529,7 +564,7 @@ func GetSyncEnumeratorWithSrcComparator(
 	indexer.isDestinationCaseInsensitive = IsDestinationCaseInsensitive(cca.fromTo)
 	// in all other cases (download and S2S), the destination is scanned/indexed first
 	// then the source is scanned and filtered based on what the destination contains
-	comparator := newSyncSourceComparator(indexer, transferScheduler.scheduleCopyTransfer, cca.compareHash, cca.preserveInfo, cca.mirrorMode).processIfNecessary
+	comparator := newSyncSourceComparator(indexer, transferScheduler.scheduleCopyTransfer, cca.compareHash, cca.preserveInfo, cca.mirrorMode, srcTraverserTemplate.options.IncrementNotTransferred).processIfNecessary
 
 	finalize := func() error {
 		// remove the extra files at the destination that were not present at the source

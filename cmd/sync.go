@@ -400,6 +400,10 @@ func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
 		cooked.cpkOptions.IsSourceEncrypted = true
 	}
 
+	if cooked.fromTo.From() == common.ELocation.Local() && strings.Contains(cooked.source.ValueLocal(), "*") {
+		cooked.stripTopDir = true
+	}
+
 	return nil
 }
 
@@ -853,7 +857,11 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 	}
 
 	// trigger the enumeration
-	err = enumerator.Enumerate()
+	if UseSyncOrchestrator {
+		err = CustomSyncHandler(cca, enumerator, ctx)
+	} else {
+		err = enumerator.Enumerate()
+	}
 	if err != nil {
 		return err
 	}
