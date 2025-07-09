@@ -22,9 +22,10 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"reflect"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 const (
@@ -37,6 +38,12 @@ const (
 	syncOverwriteReasonNewerLMTAndMissingHash = "the source lacks an associated hash (please upload with --put-md5 for hash comparison) and is more recent than the destination"
 	syncStatusSkipped                         = "skipped"
 	syncStatusOverwritten                     = "overwritten"
+
+	// Reasons for skipping an object during sync comparison based on source and destination LWT or ChangeTime
+	// This comparison is used only for SyncOrchestrator
+	syncSkipReasonNoChangeInLWTorCT             = "the source has no change in LastWriteTime or ChangeTime compared to the destination"
+	syncSkipReasonEntityTypeChangedNoDelete     = "the source object type has changed compared to the destination and --delete-destination is false"
+	syncSkipReasonEntityTypeChangedFailedDelete = "the source object type has changed compared to the destination and delete destination failed"
 )
 
 func syncComparatorLog(fileName, status, skipReason string, stdout bool) {
@@ -68,10 +75,35 @@ type syncDestinationComparator struct {
 
 	preferSMBTime     bool
 	disableComparison bool
+	deleteDestination common.DeleteDestination
+
+	// Function to increment files/folders not transferred as a result of no change since last sync.
+	incrementNotTransferred func(common.EntityType)
+
+	orchestratorOptions *SyncOrchestratorOptions
 }
 
-func newSyncDestinationComparator(i *objectIndexer, copyScheduler, cleaner objectProcessor, comparisonHashType common.SyncHashType, preferSMBTime, disableComparison bool) *syncDestinationComparator {
-	return &syncDestinationComparator{sourceIndex: i, copyTransferScheduler: copyScheduler, destinationCleaner: cleaner, preferSMBTime: preferSMBTime, disableComparison: disableComparison, comparisonHashType: comparisonHashType}
+func newSyncDestinationComparator(
+	i *objectIndexer,
+	copyScheduler,
+	cleaner objectProcessor,
+	comparisonHashType common.SyncHashType,
+	preferSMBTime,
+	disableComparison bool,
+	deleteDestination common.DeleteDestination,
+	incrementNotTransferred func(common.EntityType),
+	orchestratorOptions *SyncOrchestratorOptions) *syncDestinationComparator {
+	return &syncDestinationComparator{
+		sourceIndex:             i,
+		copyTransferScheduler:   copyScheduler,
+		destinationCleaner:      cleaner,
+		preferSMBTime:           preferSMBTime,
+		disableComparison:       disableComparison,
+		comparisonHashType:      comparisonHashType,
+		deleteDestination:       deleteDestination,
+		incrementNotTransferred: incrementNotTransferred,
+		orchestratorOptions:     orchestratorOptions,
+	}
 }
 
 // it will only schedule transfers for destination objects that are present in the indexer but stale compared to the entry in the map
@@ -89,6 +121,12 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 	// if the destinationObject is present at source and stale, we transfer the up-to-date version from source
 	if present {
 		defer delete(f.sourceIndex.indexMap, destinationObject.relativePath)
+
+		processed, _ := f.processIfNecessaryWithOrchestrator(sourceObjectInMap, destinationObject)
+
+		if processed {
+			return nil
+		}
 
 		if f.disableComparison {
 			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, false)
@@ -126,6 +164,11 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 			return f.copyTransferScheduler(sourceObjectInMap)
 		}
 
+		// if source is not more recent, we skip the transfer
+		if f.incrementNotTransferred != nil {
+			f.incrementNotTransferred(sourceObjectInMap.entityType)
+		}
+
 		// skip if dest is more recent
 		syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonTime, false)
 	} else {
@@ -135,6 +178,134 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 	}
 
 	return nil
+}
+
+// processIfNecessaryWithOrchestrator processes the source and destination objects using the SyncOrchestrator options.
+func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
+	sourceObjectInMap StoredObject,
+	destinationObject StoredObject) (bool, error) {
+
+	if !UseSyncOrchestrator || f.orchestratorOptions == nil || (f.orchestratorOptions != nil && !f.orchestratorOptions.valid) {
+		return false, nil
+	}
+
+	// Use optimized comparison logic using source and target timestamps and sizes
+	typeChanged, dataChanged, metadataChanged, valid := f.compareSourceAndDestinationObject(sourceObjectInMap, destinationObject)
+
+	if !valid {
+		return false, fmt.Errorf("invalid comparison between source and destination objects for %s", sourceObjectInMap.relativePath)
+	}
+
+	if typeChanged {
+		// if the entity type has changed, we will not be able to transfer the file
+		// unless the destination object is deleted first
+		// XDM: Does destination support different entity type with same name?
+		if f.deleteDestination == common.EDeleteDestination.True() {
+			err := f.destinationCleaner(destinationObject)
+			if err != nil {
+				syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonEntityTypeChangedFailedDelete, false)
+				if f.incrementNotTransferred != nil {
+					// XDM:maybe we should have a different counter for skipped transfers
+					f.incrementNotTransferred(sourceObjectInMap.entityType)
+				}
+				return true, nil
+			}
+		} else if f.deleteDestination == common.EDeleteDestination.False() {
+			// If deleteDestination is set to false, we cannot transfer the file
+			// because the destination object is not compatible with the source object.
+			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonEntityTypeChangedNoDelete, false)
+			if f.incrementNotTransferred != nil {
+				// XDM: maybe we should have a different counter for skipped transfers
+				f.incrementNotTransferred(sourceObjectInMap.entityType)
+			}
+			return true, nil
+		} else if f.deleteDestination == common.EDeleteDestination.Prompt() {
+			panic("unsupported delete destination option for sync orchestrator compare " + f.deleteDestination.String())
+		}
+
+		dataChanged = true // If the type has changed, we consider data changed as well.
+	}
+
+	// If metadata has changed for a folder, we consider data changed as well.
+	if metadataChanged && sourceObjectInMap.entityType == common.EEntityType.Folder() {
+		dataChanged = true
+	}
+
+	// If metadata has changed and metaDataOnlySync is not enabled, we consider data changed as well.
+	if metadataChanged && !f.orchestratorOptions.metaDataOnlySync {
+		dataChanged = true
+	}
+
+	if dataChanged {
+		return true, f.copyTransferScheduler(sourceObjectInMap)
+	}
+
+	// If metadata has changed but data hasn't, we still want to transfer the file properties.
+	if metadataChanged {
+		// This will execute for all entity types other than folders.
+		// XDM: Do we check symlinks/hardlinks/other entity type here?
+		sourceObjectInMap.size = 0                                         // Set size to 0 to indicate that we are not transferring data, only metadata.
+		sourceObjectInMap.entityType = common.EEntityType.FileProperties() // Set entity type to FileProperties to indicate metadata transfer.
+		return true, f.copyTransferScheduler(sourceObjectInMap)
+	}
+
+	// Data and metadata are unchanged, so we skip the transfer.
+	if f.incrementNotTransferred != nil {
+		f.incrementNotTransferred(sourceObjectInMap.entityType)
+	}
+	syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonNoChangeInLWTorCT, false)
+	return true, nil
+}
+
+// compareSourceAndDestinationObject compares the source and destination objects to determine if data or metadata has changed.
+func (f *syncDestinationComparator) compareSourceAndDestinationObject(
+	sourceObject StoredObject,
+	destinationObject StoredObject,
+) (typeChanged, dataChanged, metadataChanged, valid bool) {
+	// Check if data has changed by comparing size and modification time
+	typeChanged = false
+	dataChanged = false
+	metadataChanged = false
+	valid = true
+
+	if sourceObject.entityType != destinationObject.entityType {
+		typeChanged = true
+		dataChanged = true     // If types differ, we consider data changed
+		metadataChanged = true // Metadata is also considered changed if types differ
+		return typeChanged, dataChanged, metadataChanged, valid
+	}
+
+	if sourceObject.entityType != common.EEntityType.Folder() {
+		// Compare file sizes first
+		// XDM NOTE: Do we really need to compare sizes here if we are already comparing LWT?
+		if sourceObject.size != destinationObject.size {
+			dataChanged = true
+			return typeChanged, dataChanged, metadataChanged, valid
+		}
+	}
+
+	if sourceObject.lastWriteTime.IsZero() || destinationObject.lastWriteTime.IsZero() {
+		valid = false
+		return typeChanged, dataChanged, metadataChanged, valid
+	}
+
+	// Compare last write times
+	if sourceObject.lastWriteTime.Compare(destinationObject.lastWriteTime) != 0 {
+		dataChanged = true
+		return typeChanged, dataChanged, metadataChanged, valid
+	}
+
+	if sourceObject.changeTime.IsZero() || destinationObject.changeTime.IsZero() {
+		valid = false
+		return typeChanged, dataChanged, metadataChanged, valid
+	}
+
+	// Compare change times
+	if sourceObject.changeTime.Compare(destinationObject.changeTime) != 0 {
+		metadataChanged = true
+		return typeChanged, dataChanged, metadataChanged, valid
+	}
+	return typeChanged, dataChanged, metadataChanged, valid
 }
 
 // with the help of an objectIndexer containing the destination objects
@@ -151,10 +322,26 @@ type syncSourceComparator struct {
 
 	preferSMBTime     bool
 	disableComparison bool
+
+	// Function to increment files/folders not transferred as a result of no change since last sync.
+	incrementNotTransferred func(common.EntityType)
 }
 
-func newSyncSourceComparator(i *objectIndexer, copyScheduler objectProcessor, comparisonHashType common.SyncHashType, preferSMBTime, disableComparison bool) *syncSourceComparator {
-	return &syncSourceComparator{destinationIndex: i, copyTransferScheduler: copyScheduler, preferSMBTime: preferSMBTime, disableComparison: disableComparison, comparisonHashType: comparisonHashType}
+func newSyncSourceComparator(
+	i *objectIndexer,
+	copyScheduler objectProcessor,
+	comparisonHashType common.SyncHashType,
+	preferSMBTime,
+	disableComparison bool,
+	incrementNotTransferred func(common.EntityType)) *syncSourceComparator {
+	return &syncSourceComparator{
+		destinationIndex:        i,
+		copyTransferScheduler:   copyScheduler,
+		preferSMBTime:           preferSMBTime,
+		disableComparison:       disableComparison,
+		comparisonHashType:      comparisonHashType,
+		incrementNotTransferred: incrementNotTransferred,
+	}
 }
 
 // it will only transfer source items that are:
@@ -209,6 +396,11 @@ func (f *syncSourceComparator) processIfNecessary(sourceObject StoredObject) err
 			// if destination is stale, schedule source
 			syncComparatorLog(sourceObject.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMT, false)
 			return f.copyTransferScheduler(sourceObject)
+		}
+
+		// Neither data nor metadata for the file has changed, hence file is not transferred.
+		if f.incrementNotTransferred != nil {
+			f.incrementNotTransferred(sourceObject.entityType)
 		}
 
 		// skip if dest is more recent

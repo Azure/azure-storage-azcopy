@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
@@ -49,6 +50,9 @@ type copyTransferProcessor struct {
 	symlinkHandlingType    common.SymlinkHandlingType
 	dryrunMode             bool
 	hardlinkHandlingType   common.HardlinkHandlingType
+
+	//XDM: This is only essential when sync is through syncOrchestrator
+	syncTransferMutex sync.Mutex // mutex to synchronize access to the transfer scheduler
 }
 
 func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int, source, destination common.ResourceString, reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier, dryrunMode bool) *copyTransferProcessor {
@@ -273,6 +277,11 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 			}
 		})
 		return nil
+	}
+
+	if UseSyncOrchestrator {
+		s.syncTransferMutex.Lock()
+		defer s.syncTransferMutex.Unlock()
 	}
 
 	if len(s.copyJobTemplate.Transfers.List) == s.numOfTransfersPerPart {

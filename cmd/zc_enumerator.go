@@ -130,9 +130,14 @@ func (s *StoredObject) isSourceRootFolder() bool {
 // do not pass through that routine.  So we need to make the filtering available in a separate function
 // so that the sync deletion code path(s) can access it.
 func (s *StoredObject) isCompatibleWithEntitySettings(fpo common.FolderPropertyOption, sht common.SymlinkHandlingType, pho common.HardlinkHandlingType) bool {
-	if s.entityType == common.EEntityType.File() {
+	switch s.entityType {
+	case common.EEntityType.File():
 		return true
-	} else if s.entityType == common.EEntityType.Folder() {
+	case common.EEntityType.FileProperties():
+		// XDM: This needs to be evaluated as we don't know how this will be used in future.
+		// XDM: Without this, call from ToCopyTransfer will skip the file properties object
+		return true
+	case common.EEntityType.Folder():
 		switch fpo {
 		case common.EFolderPropertiesOption.NoFolders():
 			return false
@@ -143,13 +148,13 @@ func (s *StoredObject) isCompatibleWithEntitySettings(fpo common.FolderPropertyO
 		default:
 			panic("undefined folder properties option")
 		}
-	} else if s.entityType == common.EEntityType.Symlink() {
+	case common.EEntityType.Symlink():
 		return sht == common.ESymlinkHandlingType.Preserve()
-	} else if s.entityType == common.EEntityType.Hardlink() {
+	case common.EEntityType.Hardlink():
 		return pho == common.EHardlinkHandlingType.Follow()
-	} else if s.entityType == common.EEntityType.Other() {
+	case common.EEntityType.Other():
 		return false
-	} else {
+	default:
 		panic("undefined entity type")
 	}
 }
