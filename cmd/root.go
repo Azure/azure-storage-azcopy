@@ -65,11 +65,6 @@ var isPipeDownload bool
 var retryStatusCodes string
 var debugMemoryProfile string
 
-type jobLoggerInfo struct {
-	jobID         common.JobID
-	logFileFolder string
-}
-
 // It would be preferable if this was a local variable, since it just gets altered and shot off to the STE
 var debugSkipFiles string
 
@@ -206,19 +201,17 @@ func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
 	if err != nil {
 		log.Fatalf("initialization failed: %v", err)
 	}
-	jobID := common.NewJobID()
+	jobID := resumeJobID
+	if jobID.IsEmpty() {
+		jobID = common.NewJobID()
+	}
 	Client.CurrentJobID = jobID
-	loggerInfo := jobLoggerInfo{jobID, common.LogPathFolder}
 
 	timeAtPrestart := time.Now()
 	glcm.SetOutputFormat(OutputFormat)
 	glcm.SetOutputVerbosity(OutputLevel)
 
-	if !resumeJobID.IsEmpty() {
-		loggerInfo.jobID = resumeJobID
-	}
-
-	common.AzcopyCurrentJobLogger = common.NewJobLogger(loggerInfo.jobID, LogLevel, loggerInfo.logFileFolder, "")
+	common.AzcopyCurrentJobLogger = common.NewJobLogger(jobID, LogLevel, common.LogPathFolder, "")
 	common.AzcopyCurrentJobLogger.OpenLog()
 
 	glcm.SetForceLogging()
@@ -228,7 +221,7 @@ func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
 
 	// startup of the STE happens here, so that the startup can access the values of command line parameters that are defined for "root" command
 	concurrencySettings := ste.NewConcurrencySettings(azcopyMaxFileAndSocketHandles, preferToAutoTuneGRs)
-	err = jobsAdmin.MainSTE(concurrencySettings, float64(CapMbps), common.AzcopyJobPlanFolder, common.LogPathFolder, providePerformanceAdvice)
+	err = jobsAdmin.MainSTE(concurrencySettings, float64(CapMbps), providePerformanceAdvice)
 	if err != nil {
 		return err
 	}
