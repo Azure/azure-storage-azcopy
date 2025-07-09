@@ -521,6 +521,9 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 		jpp := jpm.Plan()
 		js.CompleteJobOrdered = js.CompleteJobOrdered || jpp.IsFinalPart
 		js.TotalTransfers += jpp.NumTransfers
+		if js.TotalTransfers > uint32(common.GetRecommendedMaxObjectsPerJob()) {
+			common.WarnIfTooManyObjects(&common.TooManyObjWarningOnce)
+		}
 
 		// Iterate through this job part's transfers
 		for t := uint32(0); t < jpp.NumTransfers; t++ {
