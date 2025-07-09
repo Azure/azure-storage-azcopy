@@ -103,7 +103,11 @@ jobs:
             if ($tags -ne "") {
               go build -cover -tags $tags -o $build_name
             } else {
-              go build -cover -o $build_name
+              if ('${{ parameters.test_cli_param }}' -like "*SWSyncTestSuite*") {
+                go build -cover -tags smslidingwindow -o $build_name
+              } else {
+                go build -cover -o $build_name
+              } 
             }
             
             # Az PS login
