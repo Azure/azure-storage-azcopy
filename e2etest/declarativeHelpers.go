@@ -354,7 +354,8 @@ func (TestFromTo) AllAzureS2S() TestFromTo {
 	result.filter = func(ft common.FromTo) bool {
 		isFromAzure := ft.From() == common.ELocation.BlobFS() ||
 			ft.From() == common.ELocation.Blob() ||
-			ft.From() == common.ELocation.File()
+			ft.From() == common.ELocation.File() ||
+			ft.From() == common.ELocation.FileNFS()
 		return ft.IsS2S() && isFromAzure
 	}
 	return result
@@ -368,6 +369,7 @@ func (TestFromTo) AllRemove() TestFromTo {
 		froms: []common.Location{
 			common.ELocation.Blob(),
 			common.ELocation.File(),
+			common.ELocation.FileNFS(),
 			common.ELocation.BlobFS(),
 		},
 		tos: []common.Location{
@@ -383,12 +385,14 @@ func (TestFromTo) AllSync() TestFromTo {
 		froms: []common.Location{
 			common.ELocation.Blob(),
 			common.ELocation.File(),
+			common.ELocation.FileNFS(),
 			common.ELocation.Local(),
 			common.ELocation.BlobFS(),
 		},
 		tos: []common.Location{
 			common.ELocation.Blob(),
 			common.ELocation.File(),
+			common.ELocation.FileNFS(),
 			common.ELocation.Local(),
 			common.ELocation.BlobFS(),
 		},
@@ -443,6 +447,8 @@ func (tft TestFromTo) getValues(op Operation) []common.FromTo {
 			if !tft.suppressAutoFileToFile {
 				if from == common.ELocation.File() && to == common.ELocation.Blob() {
 					to = common.ELocation.File()
+				} else if from == common.ELocation.FileNFS() && to == common.ELocation.Blob() {
+					to = common.ELocation.FileNFS()
 				}
 			}
 
