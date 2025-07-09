@@ -30,6 +30,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -163,6 +164,15 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 		common.PanicIfErr(err)
 		cooked.source, err = SplitResourceString(raw.src, cooked.fromTo.From())
 		common.PanicIfErr(err)
+	case common.EFromTo.S3Blob():
+		if buildmode.IsMover {
+			cooked.destination, err = SplitResourceString(raw.dst, cooked.fromTo.To())
+			common.PanicIfErr(err)
+			cooked.source, err = SplitResourceString(raw.src, cooked.fromTo.From())
+			common.PanicIfErr(err)
+		} else {
+			return cooked, fmt.Errorf("source '%s' / destination '%s' combination '%s' not supported for sync command ", raw.src, raw.dst, cooked.fromTo)
+		}
 	default:
 		return cooked, fmt.Errorf("source '%s' / destination '%s' combination '%s' not supported for sync command ", raw.src, raw.dst, cooked.fromTo)
 	}
@@ -428,6 +438,10 @@ type cookedSyncCmdArgs struct {
 	atomicSourceFilesTransferNotRequired   uint64
 	atomicSourceFoldersTransferNotRequired uint64
 
+	// defined the failure counters for sync operation through SyncOrchestrator
+	atomicSourceFolderEnumerationFailed      atomic.Uint64
+	atomicDestinationFolderEnumerationFailed atomic.Uint64
+
 	// deletion count keeps track of how many extra files from the destination were removed
 	atomicDeletionCount uint32
 
@@ -571,6 +585,22 @@ func (cca *cookedSyncCmdArgs) GetDestinationFoldersScanned() uint64 {
 	return atomic.LoadUint64(&cca.atomicDestinationFoldersScanned)
 }
 
+func (cca *cookedSyncCmdArgs) IncrementSourceFolderEnumerationFailed() {
+	cca.atomicSourceFolderEnumerationFailed.Add(1)
+}
+
+func (cca *cookedSyncCmdArgs) IncrementDestinationFolderEnumerationFailed() {
+	cca.atomicDestinationFolderEnumerationFailed.Add(1)
+}
+
+func (cca *cookedSyncCmdArgs) GetSourceFolderEnumerationFailed() uint64 {
+	return cca.atomicSourceFolderEnumerationFailed.Load()
+}
+
+func (cca *cookedSyncCmdArgs) GetDestinationFolderEnumerationFailed() uint64 {
+	return cca.atomicDestinationFolderEnumerationFailed.Load()
+}
+
 // wraps call to lifecycle manager to wait for the job to complete
 // if blocking is specified to true, then this method will never return
 // if blocking is specified to false, then another goroutine spawns and wait out the job
@@ -711,7 +741,15 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 
 	if jobDone {
 		exitCode := common.EExitCode.Success()
-		if summary.TransfersFailed > 0 || summary.JobStatus == common.EJobStatus.Cancelled() || summary.JobStatus == common.EJobStatus.Cancelling() {
+
+		failureCheck := false
+		if buildmode.IsMover {
+			failureCheck = summary.TransfersFailed > 0 || summary.JobStatus == common.EJobStatus.Cancelled()
+		} else {
+			failureCheck = summary.TransfersFailed > 0 || summary.JobStatus == common.EJobStatus.Cancelled() || summary.JobStatus == common.EJobStatus.Cancelling()
+		}
+
+		if failureCheck {
 			exitCode = common.EExitCode.Error()
 		}
 
@@ -724,43 +762,12 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 			}
 			screenStats, logStats := formatExtraStats(cca.fromTo, summary.AverageIOPS, summary.AverageE2EMilliseconds, summary.NetworkErrorPercentage, summary.ServerBusyPercentage)
 
-			output := fmt.Sprintf(
-				`
-Job %s Summary
-Files Scanned at Source: %v
-Files Scanned at Destination: %v
-Elapsed Time (Minutes): %v
-Number of Copy Transfers for Files: %v
-Number of Copy Transfers for Folder Properties: %v 
-Total Number of Copy Transfers: %v
-Number of Copy Transfers Completed: %v
-Number of Copy Transfers Failed: %v
-Number of Deletions at Destination: %v
-Number of Symbolic Links Skipped: %v
-Number of Special Files Skipped: %v
-Number of Hardlinks Converted: %v
-Total Number of Bytes Transferred: %v
-Total Number of Bytes Enumerated: %v
-Final Job Status: %v%s%s
-`,
-				summary.JobID.String(),
-				atomic.LoadUint64(&cca.atomicSourceFilesScanned),
-				atomic.LoadUint64(&cca.atomicDestinationFilesScanned),
-				jobsAdmin.ToFixed(duration.Minutes(), 4),
-				summary.FileTransfers,
-				summary.FolderPropertyTransfers,
-				summary.TotalTransfers,
-				summary.TransfersCompleted,
-				summary.TransfersFailed,
-				cca.atomicDeletionCount,
-				summary.SkippedSymlinkCount,
-				summary.SkippedSpecialFileCount,
-				summary.HardlinksConvertedCount,
-				summary.TotalBytesTransferred,
-				summary.TotalBytesEnumerated,
-				summary.JobStatus,
-				screenStats,
-				formatPerfAdvice(summary.PerformanceAdvice))
+			var output string
+			if buildmode.IsMover {
+				output = cca.GetElaborateOutputMessage(summary, screenStats, duration)
+			} else {
+				output = cca.GetDefaultOutputMessage(summary, screenStats, duration)
+			}
 
 			jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
 			if exists {
@@ -866,6 +873,100 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		return err
 	}
 	return nil
+}
+
+func (cca *cookedSyncCmdArgs) GetDefaultOutputMessage(summary common.ListJobSummaryResponse, screenStats string, duration time.Duration) string {
+	return fmt.Sprintf(
+		`
+Job %s Summary
+Files Scanned at Source: %v
+Files Scanned at Destination: %v
+Elapsed Time (Minutes): %v
+Number of Copy Transfers for Files: %v
+Number of Copy Transfers for Folder Properties: %v
+Total Number of Copy Transfers: %v
+Number of Copy Transfers Completed: %v
+Number of Copy Transfers Failed: %v
+Number of Deletions at Destination: %v
+Number of Symbolic Links Skipped: %v
+Number of Special Files Skipped: %v
+Number of Hardlinks Converted: %v
+Total Number of Bytes Transferred: %v
+Total Number of Bytes Enumerated: %v
+Final Job Status: %v%s%s
+`,
+		summary.JobID.String(),
+		atomic.LoadUint64(&cca.atomicSourceFilesScanned),
+		atomic.LoadUint64(&cca.atomicDestinationFilesScanned),
+		jobsAdmin.ToFixed(duration.Minutes(), 4),
+		summary.FileTransfers,
+		summary.FolderPropertyTransfers,
+		summary.TotalTransfers,
+		summary.TransfersCompleted,
+		summary.TransfersFailed,
+		cca.atomicDeletionCount,
+		summary.SkippedSymlinkCount,
+		summary.SkippedSpecialFileCount,
+		summary.HardlinksConvertedCount,
+		summary.TotalBytesTransferred,
+		summary.TotalBytesEnumerated,
+		summary.JobStatus,
+		screenStats,
+		formatPerfAdvice(summary.PerformanceAdvice))
+}
+
+func (cca *cookedSyncCmdArgs) GetElaborateOutputMessage(summary common.ListJobSummaryResponse, screenStats string, duration time.Duration) string {
+	return fmt.Sprintf(
+		`
+Job %s Summary
+Files Scanned at Source: %v
+Files Scanned at Destination: %v
+Folders Scanned at Source: %v
+Folders Scanned at Destination: %v
+Elapsed Time (Minutes): %v
+Number of Copy Transfers for Files: %v
+Number of Copy Transfers for Folder Properties: %v
+Number of Copy Transfers for Files Properties: %v
+Total Number of Copy Transfers: %v
+Number of Copy Transfers Completed: %v
+Number of Copy Transfers Failed: %v
+Number of Deletions at Destination: %v
+Number of Symbolic Links Skipped: %v
+Number of Special Files Skipped: %v
+Number of Hardlinks Converted: %v
+Number of Files that don't require transfer: %v
+Number of Folders that don't require transfer: %v
+Number of Source Folders that failed during enumeration: %v
+Number of Destination Folders that failed during enumeration: %v
+Total Number of Bytes Transferred: %v
+Total Number of Bytes Enumerated: %v
+Final Job Status: %v%s%s
+`,
+		summary.JobID.String(),
+		atomic.LoadUint64(&cca.atomicSourceFilesScanned),
+		atomic.LoadUint64(&cca.atomicDestinationFilesScanned),
+		atomic.LoadUint64(&cca.atomicSourceFoldersScanned),
+		atomic.LoadUint64(&cca.atomicDestinationFoldersScanned),
+		jobsAdmin.ToFixed(duration.Minutes(), 4),
+		summary.FileTransfers,
+		summary.FolderPropertyTransfers,
+		summary.FilePropertyTransfers,
+		summary.TotalTransfers,
+		summary.TransfersCompleted,
+		summary.TransfersFailed,
+		cca.atomicDeletionCount,
+		summary.SkippedSymlinkCount,
+		summary.SkippedSpecialFileCount,
+		summary.HardlinksConvertedCount,
+		atomic.LoadUint64(&cca.atomicSourceFilesTransferNotRequired),
+		atomic.LoadUint64(&cca.atomicSourceFoldersTransferNotRequired),
+		cca.atomicSourceFolderEnumerationFailed.Load(),
+		cca.atomicDestinationFolderEnumerationFailed.Load(),
+		summary.TotalBytesTransferred,
+		summary.TotalBytesEnumerated,
+		summary.JobStatus,
+		screenStats,
+		formatPerfAdvice(summary.PerformanceAdvice))
 }
 
 func init() {

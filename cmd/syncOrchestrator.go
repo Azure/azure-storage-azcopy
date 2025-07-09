@@ -662,6 +662,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 				ErrorMsg:          errors.New(errMsg),
 				TraverserLocation: cca.fromTo.From(),
 			})
+			cca.IncrementSourceFolderEnumerationFailed()
 			return err
 		}
 		activeDirectoriesEnumerating.Add(-1) // Decrement active directory count
@@ -714,6 +715,8 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 						ErrorMsg:          errors.New(errMsg),
 						TraverserLocation: cca.fromTo.To(),
 					})
+
+					cca.IncrementDestinationFolderEnumerationFailed()
 					return err
 				}
 			}
