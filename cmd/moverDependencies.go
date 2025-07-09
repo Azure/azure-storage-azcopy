@@ -291,6 +291,14 @@ func (cooked *cookedSyncCmdArgs) SetJobId(jobID common.JobID) {
 	cooked.jobID = jobID
 }
 
+func (cooked *cookedSyncCmdArgs) SetDestination(destination common.ResourceString) {
+	cooked.destination = destination
+}
+
+func (cooked *cookedSyncCmdArgs) SetDestinationValue(destination string) {
+	cooked.destination.Value = destination
+}
+
 // ============================================================================
 // Utility Functions - Misellaneous
 // ============================================================================
