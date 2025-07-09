@@ -1,6 +1,7 @@
 package e2etest
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -128,7 +129,7 @@ func (s *S2STestSuite) Scenario_SingleFilePropertyMetadata(svm *ScenarioVariatio
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{})
 	dstObj := dstContainer.GetObject(svm, fileName, common.EEntityType.File())
 
-	RunAzCopy(svm, AzCopyCommand{
+	stdOut, _ := RunAzCopy(svm, AzCopyCommand{
 		Verb:    AzCopyVerbCopy,
 		Targets: []ResourceManager{srcObj, dstObj.(RemoteResourceManager).WithSpecificAuthType(EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{})},
 		Flags: CopyFlags{
@@ -138,6 +139,7 @@ func (s *S2STestSuite) Scenario_SingleFilePropertyMetadata(svm *ScenarioVariatio
 			// Preserve properties behavior is default
 		},
 	})
+	fmt.Println("StdOUT--------", stdOut)
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body:             srcBody,
 		ObjectProperties: srcProps,

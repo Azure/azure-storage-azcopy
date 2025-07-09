@@ -22,10 +22,11 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
-	"github.com/stretchr/testify/assert"
 	"strings"
 	"testing"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestBlobAccountCopyToFileShareS2S actually ends up testing the entire account->container scenario as that is not dependent on destination or source.
@@ -94,6 +95,8 @@ func TestBlobCopyToFileS2SImplicitDstShare(t *testing.T) {
 
 	// prepare a destination container URL to be deleted.
 	dstShareClient := fsc.NewShareClient(srcContainerName)
+	_, err := dstShareClient.Create(ctx, nil)
+	a.Nil(err)
 	defer deleteShare(a, dstShareClient)
 
 	// create a scenario on the source container
