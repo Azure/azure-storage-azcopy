@@ -137,8 +137,8 @@ func initializeTestModeLimits() {
 // and the transfer scenario (FromTo). It sets MaxActiveFiles based on available memory
 // and CrawlParallelism based on CPU cores with scenario-specific multipliers.
 func initializeLimits(fromTo common.FromTo, orchestratorOptions *SyncOrchestratorOptions) {
-	disableThrottling := strings.ToLower(common.GetEnvironmentVariable(common.EEnvironmentVariable.DisableThrottling()))
-	if disableThrottling == "true" {
+
+	if SyncThrottlingTestMode {
 		initializeTestModeLimits()
 		return
 	}

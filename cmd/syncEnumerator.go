@@ -176,7 +176,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 	}
 	dstTraverserTemplate := ResourceTraverserTemplate{
 		location: cca.fromTo.To(),
-		options:  sourceTraverserOptions,
+		options:  destinationTraverserOptions,
 	}
 	destinationTraverser, err := InitResourceTraverser(cca.destination, cca.fromTo.To(), ctx, destinationTraverserOptions)
 	if err != nil {

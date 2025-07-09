@@ -42,6 +42,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 )
 
 // -------------------------------------- Component Definitions -------------------------------------- \\
@@ -52,13 +53,12 @@ import (
 // we can add more properties if needed, as this is easily extensible
 // ** DO NOT instantiate directly, always use newStoredObject ** (to make sure its fully populated and any preprocessor method runs)
 type StoredObject struct {
-	name                string
-	entityType          common.EntityType
-	lastModifiedTime    time.Time
-	smbLastModifiedTime time.Time
-	size                int64
-	md5                 []byte
-	blobType            blob.BlobType // will be "None" when unknown or not applicable
+	name             string
+	entityType       common.EntityType
+	lastModifiedTime time.Time
+	size             int64
+	md5              []byte
+	blobType         blob.BlobType // will be "None" when unknown or not applicable
 
 	// all of these will be empty when unknown or not applicable.
 	contentDisposition string
@@ -104,12 +104,12 @@ type StoredObject struct {
 
 func (s *StoredObject) isMoreRecentThan(storedObject2 StoredObject, preferSMBTime bool) bool {
 	lmtA := s.lastModifiedTime
-	if preferSMBTime && !s.smbLastModifiedTime.IsZero() {
-		lmtA = s.smbLastModifiedTime
+	if preferSMBTime && !s.lastWriteTime.IsZero() {
+		lmtA = s.lastWriteTime
 	}
 	lmtB := storedObject2.lastModifiedTime
-	if preferSMBTime && !storedObject2.smbLastModifiedTime.IsZero() {
-		lmtB = storedObject2.smbLastModifiedTime
+	if preferSMBTime && !storedObject2.lastWriteTime.IsZero() {
+		lmtB = storedObject2.lastWriteTime
 	}
 
 	return lmtA.After(lmtB)
@@ -161,12 +161,7 @@ func (s *StoredObject) isCompatibleWithEntitySettings(fpo common.FolderPropertyO
 
 // updateTimestamps updates the lastWriteTime and changeTime fields of a StoredObject
 func (so *StoredObject) updateTimestamps(lastWriteTime, changeTime time.Time) {
-	// XDM: There is no reason for this duplication but renaming caused pipeline test
-	// DetectFileChangedDuringTransfer.Copy-BlobFile to fail. Retaining the old field
-	// for now until RCA
-	so.smbLastModifiedTime = lastWriteTime
 	so.lastWriteTime = lastWriteTime
-
 	so.changeTime = changeTime
 }
 
@@ -882,7 +877,13 @@ func NewCopyEnumerator(traverser ResourceTraverser, filters []ObjectFilter, obje
 }
 
 func WarnStdoutAndScanningLog(toLog string) {
+
+	if buildmode.IsMover {
+		toLog = "[AzCopy] " + toLog
+	}
+
 	glcm.Info(toLog)
+
 	if azcopyScanningLogger != nil {
 		// ste.JobsAdmin.LogToJobLog(toLog, pipeline.LogWarning)
 		azcopyScanningLogger.Log(common.LogWarning, toLog)
