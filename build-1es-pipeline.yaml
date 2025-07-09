@@ -1078,7 +1078,7 @@ extends:
                     name: pmcCertificate
                     displayName: 'Download pmc pem file'
                     inputs:
-                      secureFile: 'blobfusebuildvault-blobfuse-release-pmc1-20230911.pem'
+                      secureFile: 'azstorage-devex-kv-blobfuse-release-pmc1-10102025.pem'
 
                   - task: DownloadSecureFile@1
                     name: settings
@@ -1094,102 +1094,102 @@ extends:
                       fi
                     displayName: 'Test PMC installation'
 
-                  # DownloadPipelineArtifacts AFTER checkout since checkout wipes out the DefaultWorkingDirectory
-                  - task: DownloadPipelineArtifact@2
-                    inputs:
-                      artifactName: azcopy-linux-signed
-                      targetPath: $(signed)
-                      displayName: "Download Linux Signed"
+                  # # DownloadPipelineArtifacts AFTER checkout since checkout wipes out the DefaultWorkingDirectory
+                  # - task: DownloadPipelineArtifact@2
+                  #   inputs:
+                  #     artifactName: azcopy-linux-signed
+                  #     targetPath: $(signed)
+                  #     displayName: "Download Linux Signed"
 
-                  - script: |
-                      arm64file=$(ls "$(signed)/mariner/azcopy"*.arm64.rpm)
-                      amd64file=$(ls "$(signed)/mariner/azcopy"*.x86_64.rpm)
-                      marinerArmFileName="${arm64file/.arm64.rpm/-cm2.arm64.rpm}"
-                      marinerAmdFileName="${amd64file/.x86_64.rpm/-cm2.x86_64.rpm}"
+                  # - script: |
+                  #     arm64file=$(ls "$(signed)/mariner/azcopy"*.arm64.rpm)
+                  #     amd64file=$(ls "$(signed)/mariner/azcopy"*.x86_64.rpm)
+                  #     marinerArmFileName="${arm64file/.arm64.rpm/-cm2.arm64.rpm}"
+                  #     marinerAmdFileName="${amd64file/.x86_64.rpm/-cm2.x86_64.rpm}"
                       
-                      mv -v "$(signed)/mariner/azcopy"*.arm64.rpm "$marinerArmFileName"
-                      mv -v "$(signed)/mariner/azcopy"*.x86_64.rpm "$marinerAmdFileName"
+                  #     mv -v "$(signed)/mariner/azcopy"*.arm64.rpm "$marinerArmFileName"
+                  #     mv -v "$(signed)/mariner/azcopy"*.x86_64.rpm "$marinerAmdFileName"
                       
-                      mv "$(signed)/mariner/azcopy"*.rpm "$(signed)/"
-                      rm -r "$(signed)/mariner/"
-                    displayName: 'Rename Mariner binaries'
+                  #     mv "$(signed)/mariner/azcopy"*.rpm "$(signed)/"
+                  #     rm -r "$(signed)/mariner/"
+                  #   displayName: 'Rename Mariner binaries'
 
-                  - script: |
-                      rm -r $(signed)/azcopy_linux_*.tar.gz
-                    displayName: 'Remove tar gz files'
+                  # - script: |
+                  #     rm -r $(signed)/azcopy_linux_*.tar.gz
+                  #   displayName: 'Remove tar gz files'
 
-                  - script: |
-                      rm -r $(signed)/_manifest
-                    displayName: 'Remove manifest'
+                  # - script: |
+                  #     rm -r $(signed)/_manifest
+                  #   displayName: 'Remove manifest'
 
-                  - script: |
-                      pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package upload signed
-                    displayName: 'Upload files'
+                  # - script: |
+                  #     pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package upload signed
+                  #   displayName: 'Upload files'
 
-                  - script: |
-                      azcopyAmdDeb=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy*.x86_64.deb`
-                      echo "Azcopy AMD DEB ID: $azcopyAmdDeb"
+                  # - script: |
+                  #     azcopyAmdDeb=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy*.x86_64.deb`
+                  #     echo "Azcopy AMD DEB ID: $azcopyAmdDeb"
                       
-                      azcopyAmdRpmFile=$(ls azcopy-* | grep -vE 'cm2\.x86_64\.rpm|arm64\.deb|x86_64\.deb|arm64\.rpm')
-                      azcopyAmdRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $azcopyAmdRpmFile)
-                      echo "Azcopy AMD RPM ID: $azcopyAmdRpm"
+                  #     azcopyAmdRpmFile=$(ls azcopy-* | grep -vE 'cm2\.x86_64\.rpm|arm64\.deb|x86_64\.deb|arm64\.rpm')
+                  #     azcopyAmdRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $azcopyAmdRpmFile)
+                  #     echo "Azcopy AMD RPM ID: $azcopyAmdRpm"
                       
-                      azcopyArmDeb=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy*.arm64.deb`
-                      echo "Azcopy ARM DEB ID: $azcopyArmDeb"
+                  #     azcopyArmDeb=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy*.arm64.deb`
+                  #     echo "Azcopy ARM DEB ID: $azcopyArmDeb"
                       
-                      azcopyArmRpmFile=$(ls azcopy* | grep -vE 'cm2\.arm64\.rpm|arm64\.deb|x86_64\.deb|x86_64\.rpm')
-                      azcopyArmRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $azcopyArmRpmFile)
-                      echo "Azcopy ARM RPM $azcopyArmRpmFile"
-                      echo "Azcopy ARM RPM ID: $azcopyArmRpm"
+                  #     azcopyArmRpmFile=$(ls azcopy* | grep -vE 'cm2\.arm64\.rpm|arm64\.deb|x86_64\.deb|x86_64\.rpm')
+                  #     azcopyArmRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $azcopyArmRpmFile)
+                  #     echo "Azcopy ARM RPM $azcopyArmRpmFile"
+                  #     echo "Azcopy ARM RPM ID: $azcopyArmRpm"
                       
-                      # Find the Mariner RPM file and upload
-                      marinerAmdRpmFile=$(ls azcopy-* | grep 'cm2\.x86_64\.rpm')
-                      marinerAmdRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $marinerAmdRpmFile)
-                      echo "Azcopy mariner AMD RPM $marinerAmdRpmFile"
-                      echo "Azcopy mariner AMD RPM ID: $marinerAmdRpm"
+                  #     # Find the Mariner RPM file and upload
+                  #     marinerAmdRpmFile=$(ls azcopy-* | grep 'cm2\.x86_64\.rpm')
+                  #     marinerAmdRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $marinerAmdRpmFile)
+                  #     echo "Azcopy mariner AMD RPM $marinerAmdRpmFile"
+                  #     echo "Azcopy mariner AMD RPM ID: $marinerAmdRpm"
                       
-                      marinerAarchRpmFile=$(ls azcopy-* | grep 'cm2\.arm64\.rpm')
-                      marinerAarchRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $marinerAarchRpmFile)
-                      echo "Azcopy mariner ARM RPM: $marinerAarchRpmFile"
-                      echo "Azcopy mariner ARM RPM ID: $marinerAarchRpm"
+                  #     marinerAarchRpmFile=$(ls azcopy-* | grep 'cm2\.arm64\.rpm')
+                  #     marinerAarchRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $marinerAarchRpmFile)
+                  #     echo "Azcopy mariner ARM RPM: $marinerAarchRpmFile"
+                  #     echo "Azcopy mariner ARM RPM ID: $marinerAarchRpm"
                       
-                      is_preview="false"
-                      echo "##vso[task.setvariable variable=is_preview]$is_preview"
-                      if [[ $marinerAmdRpmFile == *"preview"* ]]; then
-                        is_preview="true"
-                        echo "##vso[task.setvariable variable=is_preview]$is_preview"
-                      fi
+                  #     is_preview="false"
+                  #     echo "##vso[task.setvariable variable=is_preview]$is_preview"
+                  #     if [[ $marinerAmdRpmFile == *"preview"* ]]; then
+                  #       is_preview="true"
+                  #       echo "##vso[task.setvariable variable=is_preview]$is_preview"
+                  #     fi
 
-                      while IFS=, read -r distro archetype repoName releaseName; do
-                        # If the package is preview, publish to mariner preview package
-                        if [[ $distro == *"Mariner-"* ]]; then
-                          if [ $is_preview = "true" ]; then
-                            repoName=$(echo $repoName | sed 's/prod/preview/')
-                          fi
-                        fi
-                        echo "Uploading packages for $distro"
-                        echo "Repo Name: $repoName"
-                        pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!archetype} $repoName $releaseName
-                      done < <(tail -n +3 ../packages.csv)
-                    displayName: 'Add uploaded packages to repository'
-                    workingDirectory: $(signed)
+                  #     while IFS=, read -r distro archetype repoName releaseName; do
+                  #       # If the package is preview, publish to mariner preview package
+                  #       if [[ $distro == *"Mariner-"* ]]; then
+                  #         if [ $is_preview = "true" ]; then
+                  #           repoName=$(echo $repoName | sed 's/prod/preview/')
+                  #         fi
+                  #       fi
+                  #       echo "Uploading packages for $distro"
+                  #       echo "Repo Name: $repoName"
+                  #       pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!archetype} $repoName $releaseName
+                  #     done < <(tail -n +3 ../packages.csv)
+                  #   displayName: 'Add uploaded packages to repository'
+                  #   workingDirectory: $(signed)
 
-                  - script: |
-                      while IFS=, read -r distro archetype repoName releaseName; do
-                        if [[ $archetype == *"Arm"* ]]; then
-                          echo "Skipping for ARM type on $distro"
-                        else
-                          if [[ $distro == *"Mariner-"* ]]; then
-                            if [ "$(is_preview)" = "true" ]; then
-                              repoName=$(echo $repoName | sed 's/prod/preview/')
-                            fi
-                          fi
-                          echo "Repo Name: $repoName"
-                          pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo publish $repoName
-                        fi
-                      done < <(tail -n +3 ../packages.csv)
-                    displayName: 'Publish the repository'
-                    workingDirectory: $(signed)
+                  # - script: |
+                  #     while IFS=, read -r distro archetype repoName releaseName; do
+                  #       if [[ $archetype == *"Arm"* ]]; then
+                  #         echo "Skipping for ARM type on $distro"
+                  #       else
+                  #         if [[ $distro == *"Mariner-"* ]]; then
+                  #           if [ "$(is_preview)" = "true" ]; then
+                  #             repoName=$(echo $repoName | sed 's/prod/preview/')
+                  #           fi
+                  #         fi
+                  #         echo "Repo Name: $repoName"
+                  #         pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo publish $repoName
+                  #       fi
+                  #     done < <(tail -n +3 ../packages.csv)
+                  #   displayName: 'Publish the repository'
+                  #   workingDirectory: $(signed)
 
       - ${{ if eq(parameters.update_version, true) }}:
           - stage: UpdateLatestVersion
