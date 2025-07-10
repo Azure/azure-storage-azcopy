@@ -25,6 +25,8 @@ import (
 	"os"
 	"path"
 	"runtime"
+	"net/http"          // for pprof server
+	_ "net/http/pprof"   // registers pprof handlers
 
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -34,6 +36,26 @@ import (
 var glcm = common.GetLifecycleMgr()
 
 func main() {
+	// Start a pprof metrics endpoint so that runtime and application metrics can be scraped.
+	// The default listen address is ":6060" but can be overridden by setting the AZCOPY_PPROF_PORT environment variable.
+	go func() {
+		addr := ":6060"
+		if port := os.Getenv("AZCOPY_PPROF_PORT"); port != "" {
+			// allow user to specify full address (e.g. ":7070") or just port (e.g. "7070")
+			if port[0] != ':' {
+				addr = ":" + port
+			} else {
+				addr = port
+			}
+		}
+
+		// It is safe to ignore the error returned here because azcopy's primary functionality
+		// should not be blocked if the metrics endpoint fails to start. Log and continue.
+		if err := http.ListenAndServe(addr, nil); err != nil {
+			log.Printf("pprof endpoint failed to start on %s: %v", addr, err)
+		}
+	}()
+
 	azcopyLogPathFolder := common.GetEnvironmentVariable(common.EEnvironmentVariable.LogLocation())     // user specified location for log files
 	azcopyJobPlanFolder := common.GetEnvironmentVariable(common.EEnvironmentVariable.JobPlanLocation()) // user specified location for plan files
 
