@@ -352,9 +352,8 @@ func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
 	if cooked.fromTo == common.EFromTo.LocalFile() {
 
 		glcm.Warn(LocalToFileShareWarnMsg)
-		if jobsAdmin.JobsAdmin != nil {
-			jobsAdmin.JobsAdmin.LogToJobLog(LocalToFileShareWarnMsg, common.LogWarning)
-		}
+		common.LogToJobLogWithPrefix(LocalToFileShareWarnMsg, common.LogWarning)
+
 		if cooked.dryrunMode {
 			glcm.Dryrun(func(of common.OutputFormat) string {
 				if of == common.EOutputFormat.Json() {
@@ -629,8 +628,8 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 
 	// fetch a job status and compute throughput if the first part was dispatched
 	if cca.firstPartOrdered() {
-		summary = jobsAdmin.GetJobSummary(cca.jobID)
-		Rpc(common.ERpcCmd.GetJobLCMWrapper(), &cca.jobID, &lcm)
+		summary := jobsAdmin.GetJobSummary(cca.jobID)
+		lcm = jobsAdmin.GetJobLCMWrapper(cca.jobID)
 		jobDone = summary.JobStatus.IsJobDone()
 		totalKnownCount = summary.TotalTransfers
 

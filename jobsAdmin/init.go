@@ -24,9 +24,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"math"
-	"net/http"
 	"os"
 	"sync"
 	"time"
@@ -54,9 +52,9 @@ func ToFixed(num float64, precision int) float64 {
 }
 
 // MainSTE initializes the Storage Transfer Engine
-func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64, providePerfAdvice bool) error {
+func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64) error {
 	// Initialize the JobsAdmin, resurrect Job plan files
-	initJobsAdmin(steCtx, concurrency, targetRateInMegaBitsPerSec, providePerfAdvice)
+	initJobsAdmin(steCtx, concurrency, targetRateInMegaBitsPerSec)
 	// TODO: We may want to list listen first and terminate if there is already an instance listening
 
 	// if we've a custom mime map
@@ -74,65 +72,6 @@ func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec flo
 
 		ste.EnvironmentMimeMap = config.MIMETypeMapping
 	}
-
-	deserialize := func(request *http.Request, v interface{}) {
-		// TODO: Check the HTTP verb here?
-		// reading the entire request body and closing the request body
-		body, err := io.ReadAll(request.Body)
-		request.Body.Close()
-		if err != nil {
-			JobsAdmin.Panic(fmt.Errorf("error deserializing HTTP request"))
-		}
-		_ = json.Unmarshal(body, v)
-	}
-	serialize := func(v interface{}, response http.ResponseWriter) {
-		payload, err := json.Marshal(response)
-		if err != nil {
-			JobsAdmin.Panic(fmt.Errorf("error serializing HTTP response"))
-		}
-		// sending successful response back to front end
-		response.WriteHeader(http.StatusAccepted)
-		_, _ = response.Write(payload)
-	}
-	http.HandleFunc(common.ERpcCmd.CopyJobPartOrder().Pattern(),
-		func(writer http.ResponseWriter, request *http.Request) {
-			var payload common.CopyJobPartOrderRequest
-			deserialize(request, &payload)
-			serialize(ExecuteNewCopyJobPartOrder(payload), writer)
-		})
-	/*
-		http.HandleFunc(common.ERpcCmd.CancelJob().Pattern(),
-			func(writer http.ResponseWriter, request *http.Request) {
-				var payload common.JobID
-				deserialize(request, &payload)
-				serialize(CancelPauseJobOrder(payload, common.EJobStatus.Cancelling()), writer)
-			})
-		http.HandleFunc(common.ERpcCmd.PauseJob().Pattern(),
-			func(writer http.ResponseWriter, request *http.Request) {
-				var payload common.JobID
-				deserialize(request, &payload)
-				serialize(CancelPauseJobOrder(payload, common.EJobStatus.Paused()), writer)
-			})
-	*/
-	http.HandleFunc(common.ERpcCmd.ResumeJob().Pattern(),
-		func(writer http.ResponseWriter, request *http.Request) {
-			var payload common.ResumeJobRequest
-			deserialize(request, &payload)
-			serialize(ResumeJobOrder(payload), writer)
-		})
-
-	http.HandleFunc(common.ERpcCmd.GetJobDetails().Pattern(),
-		func(writer http.ResponseWriter, request *http.Request) {
-			var payload common.GetJobDetailsRequest
-			deserialize(request, &payload)
-			serialize(GetJobDetails(payload), writer)
-		})
-
-	// Listen for front-end requests
-	// if err := http.ListenAndServe("localhost:1337", nil); err != nil {
-	//	fmt.Print("Server already initialized")
-	//	return err
-	// }
 	return nil // TODO: don't return (like normal main)
 }
 

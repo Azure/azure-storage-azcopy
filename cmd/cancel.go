@@ -54,8 +54,7 @@ type cookedCancelCmdArgs struct {
 // handles the cancel command
 // dispatches the cancel Job order to the storage engine
 func (cca cookedCancelCmdArgs) process() error {
-	var cancelJobResponse common.CancelPauseResumeResponse
-	Rpc(common.ERpcCmd.CancelJob(), cca.jobID, &cancelJobResponse)
+	cancelJobResponse := jobsAdmin.CancelPauseJobOrder(cca.jobID, common.EJobStatus.Cancelling())
 	if !cancelJobResponse.CancelledPauseResumed {
 		if cca.ignoreCompletedJobError && cancelJobResponse.JobStatus == common.EJobStatus.Completed() {
 			glcm.Info(cancelJobResponse.ErrorMsg)
