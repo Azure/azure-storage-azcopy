@@ -531,7 +531,10 @@ func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator,
 		}()
 	}
 
-	orchestratorOptions = enumerator.orchestratorOptions
+	if enumerator.orchestratorOptions != nil && enumerator.orchestratorOptions.valid {
+		enumerator.orchestratorOptions.validate(cca.fromTo.From())
+		orchestratorOptions = enumerator.orchestratorOptions
+	}
 
 	// Initialize resource limits based on source/destination types
 	initializeLimits(cca.fromTo, orchestratorOptions)
