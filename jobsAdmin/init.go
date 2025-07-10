@@ -77,8 +77,9 @@ func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec flo
 
 // /////////////////////////////////////////////////////////////////////////////
 
+var ExecuteNewCopyJobPartOrder =
 // ExecuteNewCopyJobPartOrder api executes a new job part order
-func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
 	// Get the file name for this Job Part's Plan
 	jppfn := JobsAdmin.NewJobPartPlanFileName(order.JobID, order.PartNum)
 	jppfn.Create(order)                                                                  // Convert the order to a plan file
