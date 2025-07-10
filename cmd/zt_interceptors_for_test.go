@@ -33,6 +33,7 @@ type interceptor struct {
 func (i *interceptor) intercept(copyRequest common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
 	// cache the transfers
 	i.transfers = append(i.transfers, copyRequest.Transfers.List...)
+
 	// mock the result
 	if len(i.transfers) != 0 || !copyRequest.IsFinalPart {
 		return common.CopyJobPartOrderResponse{JobStarted: true}
