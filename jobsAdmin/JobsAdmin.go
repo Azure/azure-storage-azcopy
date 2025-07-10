@@ -118,10 +118,8 @@ func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, 
 	pacer := ste.NewTokenBucketPacer(targetRateInBytesPerSec, unusedExpectedCoarseRequestByteCount)
 	// Note: as at July 2019, we don't currently have a shutdown method/event on JobsAdmin where this pacer
 	// could be shut down. But, it's global anyway, so we just leave it running until application exit.
-
 	ja := &jobsAdmin{
 		concurrency:        concurrency,
-		logger:             common.AzcopyCurrentJobLogger,
 		jobIDToJobMgr:      newJobIDToJobMgr(),
 		pacer:              pacer,
 		slicePool:          common.NewMultiSizeSlicePool(common.MaxBlockBlobBlockSize),
@@ -230,7 +228,6 @@ type jobsAdmin struct {
 	atomicBytesTransferredWhileTuning int64
 	atomicTuningEndSeconds            int64
 	concurrency                       ste.ConcurrencySettings
-	logger                            common.ILoggerResetable
 	jobIDToJobMgr                     jobIDToJobMgr // Thread-safe map from each JobID to its JobInfo
 	// Other global state can be stored in more fields here...
 	appCtx             context.Context
@@ -271,7 +268,7 @@ func (ja *jobsAdmin) JobMgrEnsureExists(jobID common.JobID,
 	return ja.jobIDToJobMgr.EnsureExists(jobID,
 		func() ste.IJobMgr {
 			// Return existing or new IJobMgr to caller
-			return ste.NewJobMgr(ja.concurrency, jobID, ja.appCtx, ja.cpuMonitor, level, commandString, ja.concurrencyTuner, ja.pacer, ja.slicePool, ja.cacheLimiter, ja.fileCountLimiter, ja.logger, false)
+			return ste.NewJobMgr(ja.concurrency, jobID, ja.appCtx, ja.cpuMonitor, level, commandString, ja.concurrencyTuner, ja.pacer, ja.slicePool, ja.cacheLimiter, ja.fileCountLimiter, common.AzcopyCurrentJobLogger, false)
 		})
 }
 
@@ -435,10 +432,14 @@ func (ja *jobsAdmin) DeleteJob(jobID common.JobID) {
 	ja.DeleteJob(jobID)
 }
 */
-func (ja *jobsAdmin) ShouldLog(level common.LogLevel) bool  { return ja.logger.ShouldLog(level) }
-func (ja *jobsAdmin) Log(level common.LogLevel, msg string) { ja.logger.Log(level, msg) }
-func (ja *jobsAdmin) Panic(err error)                       { ja.logger.Panic(err) }
-func (ja *jobsAdmin) CloseLog()                             { ja.logger.CloseLog() }
+func (ja *jobsAdmin) ShouldLog(level common.LogLevel) bool {
+	return common.AzcopyCurrentJobLogger.ShouldLog(level)
+}
+func (ja *jobsAdmin) Log(level common.LogLevel, msg string) {
+	common.AzcopyCurrentJobLogger.Log(level, msg)
+}
+func (ja *jobsAdmin) Panic(err error) { common.AzcopyCurrentJobLogger.Panic(err) }
+func (ja *jobsAdmin) CloseLog()       { common.AzcopyCurrentJobLogger.CloseLog() }
 
 func (ja *jobsAdmin) slicePoolPruneLoop() {
 	// if something in the pool has been unused for this long, we probably don't need it
@@ -463,9 +464,9 @@ func (ja *jobsAdmin) slicePoolPruneLoop() {
 func (ja *jobsAdmin) LogToJobLog(msg string, level common.LogLevel) {
 	prefix := ""
 	if level <= common.LogWarning {
-		prefix = fmt.Sprintf("%s: ", common.LogLevel(level)) // so readers can find serious ones, but information ones still look uncluttered without INFO:
+		prefix = fmt.Sprintf("%s: ", level) // so readers can find serious ones, but information ones still look uncluttered without INFO:
 	}
-	ja.logger.Log(level, prefix+msg)
+	common.AzcopyCurrentJobLogger.Log(level, prefix+msg)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
