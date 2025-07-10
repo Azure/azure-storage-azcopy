@@ -84,47 +84,49 @@ func TestBlobAccountCopyToFileShareS2S(t *testing.T) {
 }
 
 // TestBlobCopyToFileS2SImplicitDstShare uses a service-level URL on the destination to implicitly create the destination share.
-func TestBlobCopyToFileS2SImplicitDstShare(t *testing.T) {
-	a := assert.New(t)
-	bsc := getBlobServiceClient()
-	fsc := getFileServiceClient()
+// This test case is no longer valid because the logic to create the destination share
+// has been removed from AzCopy. If the destination share does not exist, AzCopy will not create it.
+// func TestBlobCopyToFileS2SImplicitDstShare(t *testing.T) {
+// 	a := assert.New(t)
+// 	bsc := getBlobServiceClient()
+// 	fsc := getFileServiceClient()
 
-	// create source container
-	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
-	defer deleteContainer(a, srcContainerClient)
+// 	// create source container
+// 	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+// 	defer deleteContainer(a, srcContainerClient)
 
-	// prepare a destination container URL to be deleted.
-	dstShareClient := fsc.NewShareClient(srcContainerName)
-	_, err := dstShareClient.Create(ctx, nil)
-	a.Nil(err)
-	defer deleteShare(a, dstShareClient)
+// 	// prepare a destination container URL to be deleted.
+// 	dstShareClient := fsc.NewShareClient(srcContainerName)
+// 	// _, err := dstShareClient.Create(ctx, nil)
+// 	// a.Nil(err)
+// 	defer deleteShare(a, dstShareClient)
 
-	// create a scenario on the source container
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerClient, "blobFileImplicitDest")
-	a.NotZero(len(fileList)) // Ensure that at least one blob is present
+// 	// create a scenario on the source container
+// 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerClient, "blobFileImplicitDest")
+// 	a.NotZero(len(fileList)) // Ensure that at least one blob is present
 
-	// initialize the mocked RPC
-	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
-	mockedRPC.init()
+// 	// initialize the mocked RPC
+// 	mockedRPC := interceptor{}
+// 	Rpc = mockedRPC.intercept
+// 	mockedRPC.init()
 
-	// Create raw arguments
-	srcContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, srcContainerName)
-	dstServiceURLWithSAS := scenarioHelper{}.getRawFileServiceURLWithSAS(a)
-	raw := getDefaultRawCopyInput(srcContainerURLWithSAS.String(), dstServiceURLWithSAS.String())
-	// recursive is enabled by default
+// 	// Create raw arguments
+// 	srcContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, srcContainerName)
+// 	dstServiceURLWithSAS := scenarioHelper{}.getRawFileServiceURLWithSAS(a)
+// 	raw := getDefaultRawCopyInput(srcContainerURLWithSAS.String(), dstServiceURLWithSAS.String())
+// 	// recursive is enabled by default
 
-	// run the copy, check the container, and check the transfer success.
-	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err) // Check there was no error
+// 	// run the copy, check the container, and check the transfer success.
+// 	runCopyAndVerify(a, raw, func(err error) {
+// 		a.Nil(err) // Check there was no error
 
-		_, err = dstShareClient.GetProperties(ctx, nil)
-		a.Nil(err) // Ensure the destination share exists
+// 		_, err = dstShareClient.GetProperties(ctx, nil)
+// 		a.Nil(err) // Ensure the destination share exists
 
-		// Ensure the transfers were scheduled
-		validateS2STransfersAreScheduled(a, "/", "/"+srcContainerName+"/", fileList, mockedRPC)
-	})
-}
+// 		// Ensure the transfers were scheduled
+// 		validateS2STransfersAreScheduled(a, "/", "/"+srcContainerName+"/", fileList, mockedRPC)
+// 	})
+// }
 
 func TestBlobCopyToFileS2SWithSingleFile(t *testing.T) {
 	a := assert.New(t)
