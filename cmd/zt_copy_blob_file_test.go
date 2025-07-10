@@ -23,6 +23,8 @@ package cmd
 import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/stretchr/testify/assert"
 	"strings"
 	"testing"
@@ -64,7 +66,9 @@ func TestBlobAccountCopyToFileShareS2S(t *testing.T) {
 
 	// initialize mocked RPC
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// generate raw input
@@ -102,7 +106,9 @@ func TestBlobCopyToFileS2SImplicitDstShare(t *testing.T) {
 
 	// initialize the mocked RPC
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// Create raw arguments
@@ -140,7 +146,9 @@ func TestBlobCopyToFileS2SWithSingleFile(t *testing.T) {
 
 		// set up the interceptor
 		mockedRPC := interceptor{}
-		Rpc = mockedRPC.intercept
+		jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+			return mockedRPC.intercept(order)
+		}
 		mockedRPC.init()
 
 		// construct the raw input for explicit destination
@@ -161,7 +169,9 @@ func TestBlobCopyToFileS2SWithSingleFile(t *testing.T) {
 
 		// set up the interceptor
 		mockedRPC := interceptor{}
-		Rpc = mockedRPC.intercept
+		jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+			return mockedRPC.intercept(order)
+		}
 		mockedRPC.init()
 
 		// construct the raw input for implicit destination
@@ -197,7 +207,9 @@ func TestContainerToShareCopyS2S(t *testing.T) {
 
 	// set up the interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// set up the raw input with recursive = true to copy
@@ -268,7 +280,9 @@ func TestBlobFileCopyS2SWithIncludeAndIncludeDirFlag(t *testing.T) {
 
 	// set up the interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input
@@ -331,7 +345,9 @@ func TestBlobToFileCopyS2SWithExcludeAndExcludeDirFlag(t *testing.T) {
 
 	// set up the interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input
@@ -393,7 +409,9 @@ func TestBlobToFileCopyS2SIncludeExcludeMix(t *testing.T) {
 
 	// set up the interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input
@@ -428,7 +446,9 @@ func TestBlobToFileCopyS2SWithDirectory(t *testing.T) {
 
 	// initialize mocked RPC
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// generate raw copy command
