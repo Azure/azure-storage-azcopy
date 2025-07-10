@@ -352,9 +352,8 @@ func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
 	if cooked.fromTo == common.EFromTo.LocalFile() {
 
 		glcm.Warn(LocalToFileShareWarnMsg)
-		if jobsAdmin.JobsAdmin != nil {
-			jobsAdmin.JobsAdmin.LogToJobLog(LocalToFileShareWarnMsg, common.LogWarning)
-		}
+		common.LogToJobLogWithPrefix(LocalToFileShareWarnMsg, common.LogWarning)
+
 		if cooked.dryrunMode {
 			glcm.Dryrun(func(of common.OutputFormat) string {
 				if of == common.EOutputFormat.Json() {

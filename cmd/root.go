@@ -231,7 +231,7 @@ func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
 	startTimeMessage := fmt.Sprintf("ISO 8601 START TIME: to copy files that changed before or after this job started, use the parameter --%s=%s or --%s=%s",
 		common.IncludeBeforeFlagName, IncludeBeforeDateFilter{}.FormatAsUTC(adjustedTime),
 		common.IncludeAfterFlagName, IncludeAfterDateFilter{}.FormatAsUTC(adjustedTime))
-	jobsAdmin.JobsAdmin.LogToJobLog(startTimeMessage, common.LogInfo)
+	common.LogToJobLogWithPrefix(startTimeMessage, common.LogInfo)
 
 	if !SkipVersionCheck && !isPipeDownload {
 		// spawn a routine to fetch and compare the local application's version against the latest version available

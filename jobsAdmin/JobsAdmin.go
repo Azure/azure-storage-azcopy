@@ -83,10 +83,7 @@ var JobsAdmin interface {
 	// returns the current value of bytesOverWire.
 	BytesOverWire() int64
 
-	LogToJobLog(msg string, level common.LogLevel)
-
 	//DeleteJob(jobID common.JobID)
-	common.ILoggerCloser
 
 	TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint32, fromTo common.FromTo, dir common.TransferDirection, p *ste.PipelineNetworkStats) []common.PerformanceAdvice
 
@@ -214,7 +211,7 @@ func (ja *jobsAdmin) recordTuningCompleted(showOutput bool) {
 			common.GetLifecycleMgr().Info("*** You do not need to wait for whole job to finish.                                                  ***")
 		}
 		common.GetLifecycleMgr().Info("")
-		ja.LogToJobLog(msg, common.LogInfo)
+		common.LogToJobLogWithPrefix(msg, common.LogInfo)
 	}
 }
 
@@ -432,15 +429,6 @@ func (ja *jobsAdmin) DeleteJob(jobID common.JobID) {
 	ja.DeleteJob(jobID)
 }
 */
-func (ja *jobsAdmin) ShouldLog(level common.LogLevel) bool {
-	return common.AzcopyCurrentJobLogger.ShouldLog(level)
-}
-func (ja *jobsAdmin) Log(level common.LogLevel, msg string) {
-	common.AzcopyCurrentJobLogger.Log(level, msg)
-}
-func (ja *jobsAdmin) Panic(err error) { common.AzcopyCurrentJobLogger.Panic(err) }
-func (ja *jobsAdmin) CloseLog()       { common.AzcopyCurrentJobLogger.CloseLog() }
-
 func (ja *jobsAdmin) slicePoolPruneLoop() {
 	// if something in the pool has been unused for this long, we probably don't need it
 	const pruneInterval = 5 * time.Second
@@ -456,17 +444,6 @@ func (ja *jobsAdmin) slicePoolPruneLoop() {
 			break
 		}
 	}
-}
-
-// TODO: review or replace (or confirm to leave as is?)  Originally, JobAdmin couldn't use individual job logs because there could
-// be several concurrent jobs running. That's not the case any more, so this is safe now, but it doesn't quite fit with the
-// architecture around it.
-func (ja *jobsAdmin) LogToJobLog(msg string, level common.LogLevel) {
-	prefix := ""
-	if level <= common.LogWarning {
-		prefix = fmt.Sprintf("%s: ", level) // so readers can find serious ones, but information ones still look uncluttered without INFO:
-	}
-	common.AzcopyCurrentJobLogger.Log(level, prefix+msg)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
