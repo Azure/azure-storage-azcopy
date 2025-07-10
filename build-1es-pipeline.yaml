@@ -761,7 +761,6 @@ extends:
                 displayName: 'Verify exe in zip'
 
       # VerifyArtifacts end here
-
       - stage: UploadToStorage
         dependsOn:
           - AzCopyVersion
@@ -779,8 +778,6 @@ extends:
                 value: '$(System.DefaultWorkingDirectory)/release'
               - name: drop
                 value: '$(System.DefaultWorkingDirectory)/drop'
-              - name: publish_to_container
-                value: ${{ parameters.publish_to_container }}
               - name: publish_to_m1_container
                 value: ${{ parameters.publish_to_m1_container }}
               - name: azcopy_version
@@ -876,14 +873,10 @@ extends:
                   scriptLocation: inlineScript
                   inlineScript: |
                     today=$(date +"%Y%m%d")
-                    if [ $(publish_to_container) = "True" ]; then
-                      container_url="https://azcopyvnextrelease.blob.core.windows.net/%24web/releases/release-$(azcopy_version)-$today"
-                    else
-                      container_url="https://azcopyprivatedrops.blob.core.windows.net/%24web/releases/release-$(azcopy_version)-$today"
-                    fi
-                    echo "Artifacts will be uploaded to: $container_url"
+                    container_url="https://azcopyprivatedrops.blob.core.windows.net/%24web/releases/release-$(azcopy_version)-$today"
+                    echo "Artifacts will be uploaded to private drop container: $container_url"
                     AZCOPY_AUTO_LOGIN_TYPE=AzCLI ./azcopy cp "$(release)/*" "$container_url" --recursive --put-md5=true
-                    
+
                     if [ $(publish_to_m1_container) = "True" ]; then
                       m1_container_url="https://azcopyvnextrelease.blob.core.windows.net/%24web/azcopy-m1-drops/azcopy-$(azcopy_version)-$today"
                     AZCOPY_AUTO_LOGIN_TYPE=AzCLI ./azcopy cp "$(input)/azcopy-binaries-mac/azcopy_darwin_m1_arm64" "$m1_container_url" --recursive --put-md5=true
@@ -1024,6 +1017,27 @@ extends:
                       echo "##vso[task.setvariable variable=azcopy_github_tag]$azcopy_github_tag"
                     displayName: 'AzCopy Tag Name'
 
+                  - task : DownloadPipelineArtifacts@2
+                    displayName: 'Download Linux, Windows, Mac Build Artifacts'
+                    inputs:
+                      artifactName: 'azcopy-*-signed'
+                      downloadPath: $(Build.ArtifactStagingDirectory)
+
+                  - script: |
+                      sudo ls -lRt $(Build.ArtifactStagingDirectory)
+                    displayName: 'List Artifacts'
+
+                  - script: |
+                      sudo apt-get clean 
+                      sudo apt-get update 
+                      sudo apt-get upgrade -y 
+                      sudo apt-get install -f --fix-missing 
+                      wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
+                      sudo dpkg -i packages-microsoft-prod.deb
+                      sudo apt install apt-transport-https -y 
+                      sudo apt install dotnet-sdk-6.0 -y
+                    displayName: 'Update Dependencies'
+
                   - task: GithubRelease@1
                     inputs:
                       githubConnection: 'azcopy-github-connection'
@@ -1034,16 +1048,22 @@ extends:
                       title: "AzCopy v$(azcopy_version)"
                       tag: "v$(azcopy_github_tag)"
                       changeLogCompareToRelease: 'lastFullRelease'
-                      changeLogType: 'commitBased'
+                      changeLogType: 'issueBased'
                       isDraft: ${{ parameters.draft }}
                       isPreRelease: ${{ parameters.prerelease }}
+                      assets: |
+                        $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.deb
+                        $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.rpm
+                        $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.tar.gz
+                        $(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*.zip
+                        $(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*.zip
                       assetUploadMode: replace
+                      addChangeLog: true
 
       - ${{ if eq(parameters.publish_artifacts, true) }}:
           - stage: PublishArtifacts
             dependsOn:
               - AzCopyVersion
-              - UploadToStorage
             jobs:
               - job: Job
                 timeoutInMinutes: 120
@@ -1195,7 +1215,6 @@ extends:
           - stage: UpdateLatestVersion
             dependsOn:
               - AzCopyVersion
-              - UploadToStorage
             jobs:
               - job: Job
                 pool:
