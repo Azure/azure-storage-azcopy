@@ -187,7 +187,7 @@ func (envCtx *AzCopyEnvironmentContext) DoCleanup(a Asserter) {
 }
 
 func (env *AzCopyEnvironment) DoCleanup(a Asserter) {
-	p := env.ParentContext
+	/*p := env.ParentContext
 	envPath := p.GetEnvTempPath(env)
 
 	// Upload the memory profiles even if we didn't fail
@@ -199,7 +199,7 @@ func (env *AzCopyEnvironment) DoCleanup(a Asserter) {
 
 		UploadMemoryProfile(a, memProfLoc, pprofRun)
 	}
-
+	*/
 	// set up the log drop path
 	logDropPath := GlobalConfig.AzCopyExecutableConfig.LogDropPath
 	if !a.Failed() || logDropPath == "" {

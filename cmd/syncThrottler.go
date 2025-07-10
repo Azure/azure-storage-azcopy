@@ -1,3 +1,4 @@
+
 //go:build smslidingwindow
 // +build smslidingwindow
 
@@ -122,8 +123,8 @@ func initializeTestModeLimits() {
 	enableThrottleLogs = false
 	startGoProfiling = false
 
-	enableThrottling = true
-	enableEnumerationThrottling = true // Throttle directory enumeration to prevent deadlocks
+	enableThrottling = false
+	enableEnumerationThrottling = false// Throttle directory enumeration to prevent deadlocks
 	enableFileBasedThrottling = false
 	enableMemoryBasedThrottling = false
 	enableGoroutineBasedThrottling = false

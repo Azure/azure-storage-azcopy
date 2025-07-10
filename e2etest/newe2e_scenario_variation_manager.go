@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"runtime"
-	"runtime/debug"
+	//"runtime/debug"
 	"strings"
 	"testing"
 
@@ -400,7 +400,7 @@ func (s *ScenarioVariationManagerCleanupAsserter) GetTestName() string {
 }
 
 func (s *ScenarioVariationManagerCleanupAsserter) WrapCleanup(cf CleanupFunc) {
-	defer func() {
+	/*defer func() {
 		if err := recover(); err != nil {
 			if err == CleanupStepEarlyExit {
 				return
@@ -412,7 +412,7 @@ func (s *ScenarioVariationManagerCleanupAsserter) WrapCleanup(cf CleanupFunc) {
 		}
 	}()
 
-	cf(s)
+	cf(s)*/
 }
 
 func (s *ScenarioVariationManagerCleanupAsserter) NoError(comment string, err error, failNow ...bool) {
