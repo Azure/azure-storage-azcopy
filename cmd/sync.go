@@ -853,7 +853,7 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		return err
 	}
 
-	enumerator, err := cca.InitEnumerator(ctx, nil)
+	enumerator, err := cca.InitEnumerator(ctx, NewSyncDefaultEnumeratorOptions())
 	if err != nil {
 		return err
 	}
