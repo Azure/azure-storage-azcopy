@@ -47,7 +47,7 @@ func init() {
 		Long:  showJobsCmdLongDescription,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
-				return errors.New("show job command requires only the JobID")
+				return errors.New("show job command requires the JobID")
 			}
 			// Parse the JobId
 			jobId, err := common.ParseJobID(args[0])
@@ -82,18 +82,18 @@ func init() {
 // dispatches the list order to the transfer engine
 func HandleShowCommand(listRequest common.ListRequest) error {
 	if listRequest.OfStatus == "" {
-		resp, _ := Client.GetJobStatistics(azcopy.GetJobStatisticsOptions{JobID: listRequest.JobID})
+		resp, _ := Client.GetJobSummary(azcopy.GetJobSummaryOptions{JobID: listRequest.JobID})
 		// note: error handling is done in arg processing and in PrintJobProgressSummary
 		PrintJobProgressSummary(common.ListJobSummaryResponse(resp))
 	} else {
-		options := azcopy.ListTransfersOptions{JobID: listRequest.JobID}
 		// Parse the given expected Transfer Status
 		// If there is an error parsing, then kill return the error
-		err := options.WithStatus.Parse(listRequest.OfStatus)
+		var status common.TransferStatus
+		err := status.Parse(listRequest.OfStatus)
 		if err != nil {
 			return fmt.Errorf("cannot parse the given Transfer Status %s", listRequest.OfStatus)
 		}
-		resp, _ := Client.ListTransfers(options)
+		resp, _ := Client.ListJobTransfers(azcopy.ListJobTransfersOptions{JobID: listRequest.JobID, WithStatus: &status})
 		// note: error handling is done in arg processing, above and in PrintJobTransfers
 		PrintJobTransfers(common.ListJobTransfersResponse(resp))
 	}
@@ -106,26 +106,27 @@ func PrintJobTransfers(listTransfersResponse common.ListJobTransfersResponse) {
 		glcm.Error("request failed with following message " + listTransfersResponse.ErrorMsg)
 	}
 
-	glcm.Exit(func(format common.OutputFormat) string {
+	glcm.Output(func(format common.OutputFormat) string {
 		if format == common.EOutputFormat.Json() {
 			jsonOutput, err := json.Marshal(listTransfersResponse)
 			common.PanicIfErr(err)
 			return string(jsonOutput)
-		}
-
-		var sb strings.Builder
-		sb.WriteString("----------- Transfers for JobId " + listTransfersResponse.JobID.String() + " -----------\n")
-		for index := 0; index < len(listTransfersResponse.Details); index++ {
-			folderChar := ""
-			if listTransfersResponse.Details[index].IsFolderProperties {
-				folderChar = "/"
+		} else {
+			var sb strings.Builder
+			sb.WriteString("----------- Transfers for JobId " + listTransfersResponse.JobID.String() + " -----------\n")
+			for index := 0; index < len(listTransfersResponse.Details); index++ {
+				folderChar := ""
+				if listTransfersResponse.Details[index].IsFolderProperties {
+					folderChar = "/"
+				}
+				sb.WriteString("transfer--> source: " + listTransfersResponse.Details[index].Src + folderChar + " destination: " +
+					listTransfersResponse.Details[index].Dst + folderChar + " status " + listTransfersResponse.Details[index].TransferStatus.String() + "\n")
 			}
-			sb.WriteString("transfer--> source: " + listTransfersResponse.Details[index].Src + folderChar + " destination: " +
-				listTransfersResponse.Details[index].Dst + folderChar + " status " + listTransfersResponse.Details[index].TransferStatus.String() + "\n")
-		}
 
-		return sb.String()
-	}, common.EExitCode.Success())
+			return sb.String()
+		}
+	}, common.EOutputMessageType.ListJobTransfers())
+	glcm.Exit(nil, common.EExitCode.Success())
 }
 
 // PrintJobProgressSummary prints the response of listOrder command when listOrder command requested the progress summary of an existing job
@@ -137,7 +138,7 @@ func PrintJobProgressSummary(summary common.ListJobSummaryResponse) {
 	// Reset the bytes over the wire counter
 	summary.BytesOverWire = 0
 
-	glcm.Exit(func(format common.OutputFormat) string {
+	glcm.Output(func(format common.OutputFormat) string {
 		if format == common.EOutputFormat.Json() {
 			jsonOutput, err := json.Marshal(summary) // see note below re % complete being approximate. We can't include "approx" in the JSON.
 			common.PanicIfErr(err)
@@ -176,5 +177,6 @@ Final Job Status: %v
 			summary.PercentComplete, // noted as approx in the format string because won't include in-flight files if this Show command is run from a different process
 			summary.JobStatus,
 		)
-	}, common.EExitCode.Success())
+	}, common.EOutputMessageType.GetJobSummary())
+	glcm.Exit(nil, common.EExitCode.Success())
 }

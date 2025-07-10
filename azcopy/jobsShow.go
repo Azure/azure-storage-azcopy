@@ -9,43 +9,43 @@ import (
 
 // TODO: (gapra) We should refactor some of the common.XXXX types without the ErrorMsg field if possible.
 
-type GetJobStatisticsOptions struct {
+type GetJobSummaryOptions struct {
 	JobID common.JobID
 }
 
-type JobStatistics common.ListJobSummaryResponse
+type JobSummaryResponse common.ListJobSummaryResponse
 
-func (c Client) GetJobStatistics(opts GetJobStatisticsOptions) (result JobStatistics, err error) {
+func (c Client) GetJobSummary(opts GetJobSummaryOptions) (result JobSummaryResponse, err error) {
 	if opts.JobID.IsEmpty() {
-		return JobStatistics{}, errors.New("get job statistics requires the JobID")
+		return JobSummaryResponse{}, errors.New("get job statistics requires the JobID")
 	}
 	resp := jobsAdmin.GetJobSummary(opts.JobID)
 
 	if resp.ErrorMsg != "" {
-		return JobStatistics{}, fmt.Errorf("failed to get job summary for job %s due to error: %s", opts.JobID, resp.ErrorMsg)
+		return JobSummaryResponse(resp), fmt.Errorf("failed to get job summary for job %s due to error: %s", opts.JobID, resp.ErrorMsg)
 	}
 
-	return JobStatistics(resp), nil
+	return JobSummaryResponse(resp), nil
 }
 
-type ListTransfersOptions struct {
+type ListJobTransfersOptions struct {
 	JobID      common.JobID
 	WithStatus *common.TransferStatus
 }
 
-type ListTransfersResponse common.ListJobTransfersResponse
+type ListJobTransfersResponse common.ListJobTransfersResponse
 
-// ListTransfers lists the transfers for a job with the specified JobID and given transfer status.
-func (c Client) ListTransfers(opts ListTransfersOptions) (result ListTransfersResponse, err error) {
+// ListJobTransfers lists the transfers for a job with the specified JobID and given transfer status.
+func (c Client) ListJobTransfers(opts ListJobTransfersOptions) (result ListJobTransfersResponse, err error) {
 	if opts.JobID.IsEmpty() {
-		return result, errors.New("ListTransfers requires the JobID")
+		return result, errors.New("list job transfers requires the JobID")
 	}
 	status := common.IffNil(opts.WithStatus, common.ETransferStatus.All())
 
 	resp := jobsAdmin.ListJobTransfers(common.ListJobTransfersRequest{JobID: opts.JobID, OfStatus: status})
 
 	if resp.ErrorMsg != "" {
-		return ListTransfersResponse{}, fmt.Errorf("failed to list transfers for job %s due to error: %s", opts.JobID, resp.ErrorMsg)
+		return ListJobTransfersResponse(resp), fmt.Errorf("failed to list transfers for job %s due to error: %s", opts.JobID, resp.ErrorMsg)
 	}
-	return ListTransfersResponse(resp), nil
+	return ListJobTransfersResponse(resp), nil
 }
