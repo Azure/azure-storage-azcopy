@@ -336,8 +336,7 @@ func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err 
 
 // only test the response on the final dispatch to help diagnose root cause of test failures from 0 transfers
 func (s *copyTransferProcessor) sendPartToSte() common.CopyJobPartOrderResponse {
-	var resp common.CopyJobPartOrderResponse
-	Rpc(common.ERpcCmd.CopyJobPartOrder(), s.copyJobTemplate, &resp)
+	resp := jobsAdmin.ExecuteNewCopyJobPartOrder(*s.copyJobTemplate)
 
 	// if the current part order sent to ste is 0, then alert the progress reporting routine
 	if s.copyJobTemplate.PartNum == 0 && s.reportFirstPartDispatched != nil {

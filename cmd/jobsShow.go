@@ -23,6 +23,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"strings"
 
 	"encoding/json"
@@ -80,9 +81,7 @@ func init() {
 // dispatches the list order to the transfer engine
 func HandleShowCommand(listRequest common.ListRequest) error {
 	if listRequest.OfStatus == "" {
-		resp := common.ListJobSummaryResponse{}
-		rpcCmd := common.ERpcCmd.ListJobSummary()
-		Rpc(rpcCmd, &listRequest.JobID, &resp)
+		resp := jobsAdmin.GetJobSummary(listRequest.JobID)
 		PrintJobProgressSummary(resp)
 	} else {
 		lsRequest := common.ListJobTransfersRequest{}
@@ -93,9 +92,7 @@ func HandleShowCommand(listRequest common.ListRequest) error {
 		if err != nil {
 			return fmt.Errorf("cannot parse the given Transfer Status %s", listRequest.OfStatus)
 		}
-		resp := common.ListJobTransfersResponse{}
-		rpcCmd := common.ERpcCmd.ListJobTransfers()
-		Rpc(rpcCmd, lsRequest, &resp)
+		resp := jobsAdmin.ListJobTransfers(lsRequest)
 		PrintJobTransfers(resp)
 	}
 	return nil

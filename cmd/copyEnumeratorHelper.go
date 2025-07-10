@@ -20,9 +20,7 @@ func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer
 	// while the frontend is still gathering more transfers
 	if len(e.Transfers.List) == NumOfFilesPerDispatchJobPart {
 		shuffleTransfers(e.Transfers.List)
-		resp := common.CopyJobPartOrderResponse{}
-
-		Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(e), &resp)
+		resp := jobsAdmin.ExecuteNewCopyJobPartOrder(*e)
 
 		if !resp.JobStarted {
 			return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNum, resp.ErrorMsg)
@@ -68,8 +66,7 @@ func shuffleTransfers(transfers []common.CopyTransfer) {
 func dispatchFinalPart(e *common.CopyJobPartOrderRequest, cca *CookedCopyCmdArgs) error {
 	shuffleTransfers(e.Transfers.List)
 	e.IsFinalPart = true
-	var resp common.CopyJobPartOrderResponse
-	Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(e), &resp)
+	resp := jobsAdmin.ExecuteNewCopyJobPartOrder(*e)
 
 	if !resp.JobStarted {
 		// Output the log location if log-level is set to other then NONE
