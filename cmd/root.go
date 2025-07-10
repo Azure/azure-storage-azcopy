@@ -241,15 +241,6 @@ func Initialize(resumeJobID common.JobID, isBench bool) error {
 		common.IncludeAfterFlagName, IncludeAfterDateFilter{}.FormatAsUTC(adjustedTime))
 	jobsAdmin.JobsAdmin.LogToJobLog(startTimeMessage, common.LogInfo)
 
-	if !SkipVersionCheck && !isPipeDownload {
-		// spawn a routine to fetch and compare the local application's version against the latest version available
-		// if there's a newer version that can be used, then write the suggestion to stderr
-		// however if this takes too long the message won't get printed
-		// Note: this function is necessary for non-help, non-login commands, since they don't reach the corresponding
-		// beginDetectNewVersion call in Execute (below)
-		beginDetectNewVersion()
-	}
-
 	return nil
 
 }
@@ -404,9 +395,16 @@ func beginDetectNewVersion() chan struct{} {
 }
 
 func getGitHubLatestRemoteVersionWithURL(apiEndpoint string) (*Version, error) {
-	// HTTP client with timeout
+	transport := &http.Transport{
+		MaxIdleConns:       10,
+		IdleConnTimeout:    30 * time.Second,
+		DisableCompression: true,  // GitHub API responses are small
+		DisableKeepAlives:  false, // Connections are reused
+	}
+
 	client := &http.Client{
-		Timeout: 60 * time.Second,
+		Timeout:   30 * time.Second,
+		Transport: transport,
 	}
 	// Get Request
 	req, err := http.NewRequest("GET", apiEndpoint, nil)
