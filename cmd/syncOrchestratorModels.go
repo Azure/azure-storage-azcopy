@@ -21,11 +21,21 @@
 package cmd
 
 import (
+	"errors"
 	"runtime"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
+
+// DefaultSyncOrchestratorOptions provides a default-initialized SyncOrchestratorOptions struct.
+var DefaultSyncOrchestratorOptions = SyncOrchestratorOptions{
+	valid:                          false,
+	maxDirectoryDirectChildCount:   10_000, // This will not get honored by e2e test framework
+	metaDataOnlySync:               false,
+	lastSuccessfulSyncJobStartTime: time.Time{},
+	optimizeEnumerationByCTime:     false,
+}
 
 // SyncOrchestratorOptions defines the options for the enumerator that are required for the sync operation.
 // It contains various settings and configurations used during the sync process.
@@ -35,7 +45,7 @@ type SyncOrchestratorOptions struct {
 	// MaxDirectoryDirectChildCount is the maximum number of direct children in a directory.
 	// This is used to limit the number of direct children that can be enumerated in a directory.
 	// This is useful for performance optimization and to avoid excessive memory usage.
-	maxDirectoryDirectChildCount int64
+	maxDirectoryDirectChildCount uint64
 
 	//
 	// Sync only file metadata if only metadata has changed and not the file content, else for changed files both file data and metadata are sync’ed.
@@ -51,21 +61,55 @@ type SyncOrchestratorOptions struct {
 	optimizeEnumerationByCTime bool
 }
 
-func (s *SyncOrchestratorOptions) validate(from common.Location) {
-	if s.valid && from != common.ELocation.Local() {
-		panic("sync optimizations using timestamps should only be used for local to remote syncs")
+func (s *SyncOrchestratorOptions) validate(from common.Location) error {
+
+	if !s.valid {
+		return nil
 	}
 
+	if !UseSyncOrchestrator {
+		return errors.New("sync orchestrator options should only be used when UseSyncOrchestrator is true")
+	}
+
+	if from != common.ELocation.Local() {
+		return errors.New("sync optimizations using timestamps should only be used for local to remote syncs")
+	}
+
+	if s.maxDirectoryDirectChildCount == 0 {
+		return errors.New("maxDirectoryDirectChildCount must be greater than 0")
+	}
+
+	if s.lastSuccessfulSyncJobStartTime.IsZero() {
+		return errors.New("lastSuccessfulSyncJobStartTime must be a valid time")
+	}
 	// The main limitation in windows OS that prevents us from using the optimizations is its dependendy on posix timestamps.
 	// We can use the optimizations on Windows by disabling the ctime optimization.
-	if runtime.GOOS != "linux" && s.valid {
-		panic("sync optimizations using posix timestamps are not supported on non-linux platforms")
+	if runtime.GOOS != "linux" {
+		return errors.New("sync optimizations using posix timestamps are not supported on non-linux platforms")
 	}
+
+	return nil
+}
+
+func IsSyncOrchestratorOptionsValid(orchestratorOptions *SyncOrchestratorOptions) bool {
+	return orchestratorOptions != nil && orchestratorOptions.valid
+}
+
+func (s *SyncOrchestratorOptions) IsMetaDataOnlySync() bool {
+	return s.valid && s.metaDataOnlySync
+}
+
+func (s *SyncOrchestratorOptions) GetMaxDirectoryDirectChildCount() uint64 {
+	if s.valid && s.maxDirectoryDirectChildCount > 0 {
+		return s.maxDirectoryDirectChildCount
+	}
+
+	panic("maxDirectoryDirectChildCount is not valid or not set")
 }
 
 // NewSyncOrchestratorOptions initializes a SyncOrchestratorOptions struct with the provided parameters.
 func NewSyncOrchestratorOptions(
-	maxDirectoryDirectChildCount int64,
+	maxDirectoryDirectChildCount uint64,
 	metaDataOnlySync bool,
 	lastSuccessfulSyncJobStartTime time.Time,
 	optimizeEnumerationByCTime bool,
@@ -81,13 +125,7 @@ func NewSyncOrchestratorOptions(
 
 // Function to initialize a default SyncEnumeratorOptions struct object
 func NewDefaultSyncOrchestratorOptions() SyncOrchestratorOptions {
-	return SyncOrchestratorOptions{
-		maxDirectoryDirectChildCount:   0,
-		metaDataOnlySync:               false,
-		lastSuccessfulSyncJobStartTime: time.Time{},
-		optimizeEnumerationByCTime:     false,
-		valid:                          false,
-	}
+	return DefaultSyncOrchestratorOptions
 }
 
 // Function to initialize a test SyncEnumeratorOptions struct object

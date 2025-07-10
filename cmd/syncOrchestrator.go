@@ -520,7 +520,7 @@ func newSyncTraverser(enumerator *syncEnumerator, dir string, comparator objectP
 	}
 }
 
-func validate(cca *cookedSyncCmdArgs) error {
+func validate(cca *cookedSyncCmdArgs, orchestratorOptions *SyncOrchestratorOptions) error {
 	switch cca.fromTo {
 	case common.EFromTo.LocalBlob(), common.EFromTo.LocalBlobFS(), common.EFromTo.LocalFile(), common.EFromTo.S3Blob():
 	default:
@@ -537,6 +537,10 @@ func validate(cca *cookedSyncCmdArgs) error {
 		return errors.New("sync orchestrator does not support recursive traversal. Use --recursive=false.")
 	}
 
+	if orchestratorOptions != nil && orchestratorOptions.valid {
+		return orchestratorOptions.validate(cca.fromTo.From())
+	}
+
 	return nil
 }
 
@@ -551,12 +555,14 @@ func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator,
 		}()
 	}
 
-	err := validate(cca) // Validate the command arguments for sync orchestrator
+	err := validate(cca, enumerator.orchestratorOptions) // Validate the command arguments for sync orchestrator
 	if err != nil {
 		return err
 	}
 
-	orchestratorOptions = enumerator.orchestratorOptions
+	if enumerator.orchestratorOptions != nil {
+		orchestratorOptions = enumerator.orchestratorOptions
+	}
 
 	// Initialize resource limits based on source/destination types
 	initializeLimits(cca.fromTo, orchestratorOptions)

@@ -154,7 +154,7 @@ func initializeLimits(fromTo common.FromTo, orchestratorOptions *SyncOrchestrato
 	maxDirectoryDirectChildCount := maxFilesPerActiveDirectory // Default max direct children per directory
 
 	if orchestratorOptions != nil && orchestratorOptions.valid && orchestratorOptions.maxDirectoryDirectChildCount > 0 {
-		maxDirectoryDirectChildCount = orchestratorOptions.maxDirectoryDirectChildCount
+		maxDirectoryDirectChildCount = int64(orchestratorOptions.GetMaxDirectoryDirectChildCount())
 	}
 
 	if maxDirectoryDirectChildCount > maxActiveFiles {
