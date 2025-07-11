@@ -124,7 +124,7 @@ func (d AutoLoginType) String() string {
 }
 
 func (d *AutoLoginType) Parse(s string) error {
-	// allow empty to mean "Enable"
+	// allow empty to mean "Device"
 	if s == "" {
 		*d = EAutoLoginType.Device()
 		return nil
@@ -418,7 +418,7 @@ func (EnvironmentVariable) CredentialType() EnvironmentVariable {
 func (EnvironmentVariable) DefaultServiceApiVersion() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:         "AZCOPY_DEFAULT_SERVICE_API_VERSION",
-		DefaultValue: "2023-08-03",
+		DefaultValue: "2025-05-05",
 		Description:  "Overrides the service API version so that AzCopy could accommodate custom environments such as Azure Stack.",
 	}
 }
