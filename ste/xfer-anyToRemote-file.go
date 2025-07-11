@@ -544,7 +544,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", err)
 			}
 
-			if !lmt.Equal(jptm.LastModifiedTime()) {
+			if common.ToWindowsEpoch(lmt) != jptm.LastModifiedEpochTime() {
 				// **** Note that this check is ESSENTIAL and not just for the obvious reason of not wanting to upload
 				//      corrupt or inconsistent data. It's also essential to the integrity of our MD5 hashes.
 				common.DocumentationForDependencyOnChangeDetection() // <-- read the documentation here ***
