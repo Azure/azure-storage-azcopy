@@ -442,3 +442,12 @@ func (t *testJobPartTransferManager) TransferIndex() (partNum, transferIndex uin
 func (t *testJobPartTransferManager) RestartedTransfer() bool {
 	return false
 }
+
+func (t *testJobPartTransferManager) IsLastModifiedUnixEpoch() bool {
+	panic("implement me")
+}
+
+// LastModifiedEpochTime returns the last modified time as Unix epoch seconds.
+func (t *testJobPartTransferManager) LastModifiedEpochTime() int64 {
+	panic("implement me")
+}

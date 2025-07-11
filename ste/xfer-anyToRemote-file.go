@@ -549,8 +549,31 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 				//      corrupt or inconsistent data. It's also essential to the integrity of our MD5 hashes.
 				common.DocumentationForDependencyOnChangeDetection() // <-- read the documentation here ***
 
-				jptm.Log(common.LogError, fmt.Sprintf("Source Modified during transfer. Enumeration %v, current %v", jptm.LastModifiedTime(), lmt))
-				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", errors.New("source modified during transfer"))
+				isFatalError := true
+				if !jptm.IsLastModifiedUnixEpoch() {
+					// If the last modified epoch time is not valid, we are dealing with a time beyond the range of int64.
+					// In this case, we cannot compare the last modified time of the source with the last modified time of
+					// the job part transfer manager. We will log an error but not fail the transfer.
+					jptm.Log(common.LogError,
+						fmt.Sprintf("Last modified time is beyond the supported range. Enumeration: %v, epoch: %d, current: %v",
+							jptm.LastModifiedTime(),
+							jptm.LastModifiedEpochTime(),
+							lmt))
+					isFatalError = false
+					// Here the assumption is that considering the last modified is very old and likely not modified recently.
+					// It is still possible that it could have been manually set or a backup was restored.
+					// but in this case, we will continue with the transfer.
+				} else {
+					jptm.Log(common.LogError,
+						fmt.Sprintf("Source Modified during transfer. Enumeration %v, epoch: %d, current %v",
+							jptm.LastModifiedTime(),
+							jptm.LastModifiedEpochTime(),
+							lmt))
+				}
+
+				if isFatalError {
+					jptm.FailActiveSend("epilogueWithCleanupSendToRemote", errors.New("source modified during transfer"))
+				}
 			}
 		}
 	}

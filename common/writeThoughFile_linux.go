@@ -40,11 +40,6 @@ const (
 	CIFS_XATTR_CIFS_NTSD_FULL = "system.cifs_ntsd_full"  // Owner, Group, DACL, SACL.
 )
 
-// 100-nanosecond intervals from Windows Epoch (January 1, 1601) to Unix Epoch (January 1, 1970).
-const (
-	TICKS_FROM_WINDOWS_EPOCH_TO_UNIX_EPOCH = 116444736000000000
-)
-
 // windows.Filetime.
 type Filetime struct {
 	LowDateTime  uint32
@@ -67,35 +62,47 @@ type ByHandleFileInformation struct {
 }
 
 // Nanoseconds converts Filetime (as ticks since Windows Epoch) to nanoseconds since Unix Epoch (January 1, 1970).
-func (ft *Filetime) Nanoseconds() int64 {
+func (ft *Filetime) NanosecondsSinceWinEpoch() uint64 {
 	// 100-nanosecond intervals (ticks) since Windows Epoch (January 1, 1601).
-	nsec := int64(ft.HighDateTime)<<32 + int64(ft.LowDateTime)
+	ticks := uint64(ft.HighDateTime)<<32 + uint64(ft.LowDateTime)
 
-	// 100-nanosecond intervals since Unix Epoch (January 1, 1970).
-	nsec -= TICKS_FROM_WINDOWS_EPOCH_TO_UNIX_EPOCH
+	// if inUnixEpoch {
+	// 	// 100-nanosecond intervals since Unix Epoch (January 1, 1970).
+	// 	ticks -= TICKS_FROM_WINDOWS_EPOCH_TO_UNIX_EPOCH
+	// }
 
-	// nanoseconds since Unix Epoch.
-	return nsec * 100
+	return ticks * 100
+}
+
+// ToTime converts Filetime to time.Time with fallback to Windows epoch for times before Unix epoch.
+// If the Filetime represents a time before Unix epoch (January 1, 1970), it falls back to Windows epoch (January 1, 1601).
+func (ft *Filetime) ToTime() time.Time {
+
+	// Get ticks since Windows epoch
+	nanosecondsSinceWinEpoch := ft.NanosecondsSinceWinEpoch()
+	ticksSinceWinEpoch := nanosecondsSinceWinEpoch / uint64(100) // Convert to 100-nanosecond intervals
+
+	if ticksSinceWinEpoch < TICKS_FROM_WINDOWS_EPOCH_TO_MIN_UNIX_EPOCH {
+		return EpochNanoSecToTime(int64(nanosecondsSinceWinEpoch), false).Local()
+	}
+
+	ticksSinceUnixEpoch := int64(ticksSinceWinEpoch) - TICKS_FROM_WINDOWS_EPOCH_TO_UNIX_EPOCH
+	nanosecondsSinceUnixEpoch := ticksSinceUnixEpoch * 100 // Convert to nanoseconds
+	return EpochNanoSecToTime(nanosecondsSinceUnixEpoch, true).Local()
 }
 
 // Convert nanoseconds since Unix Epoch (January 1, 1970) to Filetime since Windows Epoch (January 1, 1601).
-func NsecToFiletime(nsec int64) Filetime {
+func NsecToFiletime(nsec, negativeOffsetUnixEpochInSec uint64) Filetime {
 	// 100-nanosecond intervals since Unix Epoch (January 1, 1970).
-	nsec /= 100
+	ticks := nsec / 100
 
 	// 100-nanosecond intervals since Windows Epoch (January 1, 1601).
-	nsec += TICKS_FROM_WINDOWS_EPOCH_TO_UNIX_EPOCH
+	ticks += TICKS_FROM_WINDOWS_EPOCH_TO_UNIX_EPOCH
+	ticks -= negativeOffsetUnixEpochInSec * 10_000_000 // Convert seconds to 100-nanosecond intervals
 
-	return Filetime{LowDateTime: uint32(nsec & 0xFFFFFFFF), HighDateTime: uint32(nsec >> 32)}
-}
+	ft := Filetime{LowDateTime: uint32(ticks & 0xFFFFFFFF), HighDateTime: uint32(ticks >> 32)}
 
-// WindowsTicksToUnixNano converts ticks (100-ns intervals) since Windows Epoch to nanoseconds since Unix Epoch.
-func WindowsTicksToUnixNano(ticks int64) int64 {
-	// 100-nanosecond intervals since Unix Epoch (January 1, 1970).
-	ticks -= TICKS_FROM_WINDOWS_EPOCH_TO_UNIX_EPOCH
-
-	// nanoseconds since Unix Epoch (January 1, 1970).
-	return ticks * 100
+	return ft
 }
 
 // UnixNanoToWindowsTicks converts nanoseconds since Unix Epoch to ticks since Windows Epoch.
@@ -112,7 +119,21 @@ func UnixNanoToWindowsTicks(nsec int64) int64 {
 // StatxTimestampToFiletime converts the unix StatxTimestamp (sec, nsec) to the Windows' Filetime.
 // Note that StatxTimestamp is from Unix Epoch while Filetime holds time from Windows Epoch.
 func StatxTimestampToFiletime(ts unix.StatxTimestamp) Filetime {
-	return NsecToFiletime(ts.Sec*int64(time.Second) + int64(ts.Nsec))
+	// Unix.StatxTimestamp holds seconds since Unix epoch and nanoseconds component.
+	// Sec  int64   // Seconds since Unix epoch (January 1, 1970)
+	// Nsec uint32  // Nanoseconds component (0-999,999,999)
+
+	negativeOffsetUnixEpochInSec := uint64(0)
+	tsSec := ts.Sec
+	if ts.Sec < 0 {
+		// Sec can be negative, representing time before Unix epoch.
+		negativeOffsetUnixEpochInSec = uint64(-ts.Sec)
+		tsSec = 0
+	}
+
+	nsec := uint64(tsSec)*uint64(time.Second) + uint64(ts.Nsec)
+
+	return NsecToFiletime(nsec, negativeOffsetUnixEpochInSec)
 }
 
 func GetFileInformation(path string, isNFSCopy bool) (ByHandleFileInformation, error) {

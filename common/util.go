@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"net"
 	"net/url"
 	"strings"
+	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
@@ -411,4 +413,26 @@ func IsSystemContainer(containerName string) bool {
 		}
 	}
 	return false
+}
+
+func ToExtendedEpoch(t time.Time) (int64, bool) {
+	// Validate input
+	if t.IsZero() {
+		return 0, false
+	}
+
+	utcTime := t.UTC()
+
+	if utcTime.Before(MinSafeUnixTime) {
+		windowsEpoch := time.Date(1601, 1, 1, 0, 0, 0, 0, time.UTC)
+
+		// Ensure we're not before Windows epoch
+		if utcTime.Before(windowsEpoch) {
+			return 0, false
+		}
+
+		return utcTime.Sub(windowsEpoch).Nanoseconds(), false
+	}
+
+	return utcTime.UnixNano(), true
 }
