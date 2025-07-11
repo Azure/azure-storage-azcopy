@@ -437,11 +437,10 @@ func newCopyOrSyncCommandResult(rawOutput string, op Operation) (CopyOrSyncComma
 
 	// parse out the final status
 	// -2 because the last line is empty
-	statusLineFromEnd := common.Iff(op == eOperation.Cancel(), 3, 2) // Cancel returns the job summary as a GetJobSummary MessageType THEN sends EndOfJob MessageType, so we need to read 3 lines from the end.
-	if len(lines) < statusLineFromEnd {
+	if len(lines) < 2 {
 		return CopyOrSyncCommandResult{}, false
 	}
-	finalLine := lines[len(lines)-statusLineFromEnd]
+	finalLine := lines[len(lines)-2]
 	finalMsg := common.JsonOutputTemplate{}
 	err := json.Unmarshal([]byte(finalLine), &finalMsg)
 	if err != nil {
@@ -479,8 +478,8 @@ func newJobsShowCommandResult(rawOutput string) JobsShowCommandResult {
 	lines := strings.Split(rawOutput, "\n")
 
 	// parse out the final status
-	// -3 because the last line is empty
-	finalLine := lines[len(lines)-3]
+	// -2 because the last line is empty
+	finalLine := lines[len(lines)-2]
 	finalMsg := common.JsonOutputTemplate{}
 	err := json.Unmarshal([]byte(finalLine), &finalMsg)
 	if err != nil {
