@@ -21,10 +21,15 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"path"
+	"path/filepath"
 	"runtime"
+	pprof "runtime/pprof"
+	runtimeTrace "runtime/trace"
+	"time"
 	"net/http"          // for pprof server
 	_ "net/http/pprof"   // registers pprof handlers
 
@@ -36,6 +41,20 @@ import (
 var glcm = common.GetLifecycleMgr()
 
 func main() {
+	// ---------------------------------------------------------------------
+	// Automatic pprof capture setup
+	// ---------------------------------------------------------------------
+	if basePath := os.Getenv("PPROF_FOLDER_PATH"); basePath != "" {
+		// Create a unique sub-directory for this run using UTC timestamp.
+		sessionDir := filepath.Join(basePath, time.Now().UTC().Format("20060102_150405"))
+		if err := os.MkdirAll(sessionDir, os.ModePerm); err != nil {
+			log.Printf("[pprof] Failed to create output directory %s: %v", sessionDir, err)
+		} else {
+			// Start background collection goroutine.
+			go collectPprofPeriodically(sessionDir)
+		}
+	}
+
 	// Start a pprof metrics endpoint so that runtime and application metrics can be scraped.
 	// The default listen address is ":6060" but can be overridden by setting the AZCOPY_PPROF_PORT environment variable.
 	go func() {
@@ -110,5 +129,68 @@ func configureGoMaxProcs() {
 	isOnlyOne := runtime.GOMAXPROCS(0) == 1
 	if isOnlyOne {
 		runtime.GOMAXPROCS(2)
+	}
+}
+
+// collectPprofPeriodically writes various pprof data to outputDir every 10 minutes.
+// A collection cycle includes:
+//   • 30-second CPU profile
+//   • 5-second execution trace
+//   • All available runtime/pprof profiles (heap, goroutine, allocs, etc.)
+// Each output file is named <timestamp>_<profile>.pprof or .out.
+func collectPprofPeriodically(outputDir string) {
+	// Immediately collect once so that we have data early, then every 10 minutes.
+	collectPprofOnce(outputDir)
+
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+	for {
+		<-ticker.C
+		collectPprofOnce(outputDir)
+	}
+}
+
+func collectPprofOnce(outputDir string) {
+	ts := time.Now().UTC().Format("20060102_150405")
+
+	// ---------------- CPU Profile ----------------
+	cpuPath := filepath.Join(outputDir, fmt.Sprintf("%s_cpu.pprof", ts))
+	if f, err := os.Create(cpuPath); err == nil {
+		if err := pprof.StartCPUProfile(f); err == nil {
+			time.Sleep(30 * time.Second)
+			pprof.StopCPUProfile()
+		} else {
+			log.Printf("[pprof] Could not start CPU profile: %v", err)
+		}
+		f.Close()
+	} else {
+		log.Printf("[pprof] Could not create CPU profile file %s: %v", cpuPath, err)
+	}
+
+	// ---------------- Execution Trace ----------------
+	tracePath := filepath.Join(outputDir, fmt.Sprintf("%s_trace.out", ts))
+	if f, err := os.Create(tracePath); err == nil {
+		if err := runtimeTrace.Start(f); err == nil {
+			time.Sleep(5 * time.Second)
+			runtimeTrace.Stop()
+		} else {
+			log.Printf("[pprof] Could not start execution trace: %v", err)
+		}
+		f.Close()
+	} else {
+		log.Printf("[pprof] Could not create trace file %s: %v", tracePath, err)
+	}
+
+	// ---------------- Standard Profiles ----------------
+	for _, prof := range pprof.Profiles() {
+		profilePath := filepath.Join(outputDir, fmt.Sprintf("%s_%s.pprof", ts, prof.Name()))
+		if f, err := os.Create(profilePath); err == nil {
+			if err := prof.WriteTo(f, 0); err != nil {
+				log.Printf("[pprof] Error writing profile %s: %v", prof.Name(), err)
+			}
+			f.Close()
+		} else {
+			log.Printf("[pprof] Could not create profile file %s: %v", profilePath, err)
+		}
 	}
 }
