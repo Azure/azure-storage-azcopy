@@ -337,7 +337,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 			jptm.ReportTransferDone()
 			return
 		}
-		if !lmt.Equal(jptm.LastModifiedTime()) {
+		if common.ToWindowsEpoch(lmt) != jptm.LastModifiedEpochTime() {
 			jptm.LogSendError(info.Source, info.Destination, "File modified since transfer scheduled", 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.ReportTransferDone()
