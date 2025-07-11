@@ -58,16 +58,25 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			// TODO (gapra): Consider getting rid of this type? Seems unnecessary
-			listRequest := common.ListRequest{}
-			listRequest.JobID = commandLineInput.JobID
-			listRequest.OfStatus = commandLineInput.OfStatus
-
-			err := HandleShowCommand(listRequest)
-			if err == nil {
-				glcm.Exit(nil, common.EExitCode.Success())
+			if commandLineInput.OfStatus == "" {
+				resp, err := Client.GetJobSummary(azcopy.GetJobSummaryOptions{JobID: commandLineInput.JobID})
+				if err != nil {
+					glcm.Error(err.Error())
+				}
+				PrintJobProgressSummary(common.ListJobSummaryResponse(resp))
 			} else {
-				glcm.Error(err.Error())
+				// Parse the given expected Transfer Status
+				// If there is an error parsing, then kill return the error
+				var status common.TransferStatus
+				err := status.Parse(commandLineInput.OfStatus)
+				if err != nil {
+					glcm.Error(fmt.Sprintf("cannot parse the given Transfer Status %s", commandLineInput.OfStatus))
+				}
+				resp, err := Client.ListJobTransfers(azcopy.ListJobTransfersOptions{JobID: commandLineInput.JobID, WithStatus: &status})
+				if err != nil {
+					glcm.Error(err.Error())
+				}
+				PrintJobTransfers(common.ListJobTransfersResponse(resp))
 			}
 		},
 	}
@@ -78,34 +87,8 @@ func init() {
 	shJob.PersistentFlags().StringVar(&commandLineInput.OfStatus, "with-status", "", "List only the transfers of job with the specified status. Available values include: All, Started, Success, Failed.")
 }
 
-// handles the list command
-// dispatches the list order to the transfer engine
-func HandleShowCommand(listRequest common.ListRequest) error {
-	if listRequest.OfStatus == "" {
-		resp, _ := Client.GetJobSummary(azcopy.GetJobSummaryOptions{JobID: listRequest.JobID})
-		// note: error handling is done in arg processing and in PrintJobProgressSummary
-		PrintJobProgressSummary(common.ListJobSummaryResponse(resp))
-	} else {
-		// Parse the given expected Transfer Status
-		// If there is an error parsing, then kill return the error
-		var status common.TransferStatus
-		err := status.Parse(listRequest.OfStatus)
-		if err != nil {
-			return fmt.Errorf("cannot parse the given Transfer Status %s", listRequest.OfStatus)
-		}
-		resp, _ := Client.ListJobTransfers(azcopy.ListJobTransfersOptions{JobID: listRequest.JobID, WithStatus: &status})
-		// note: error handling is done in arg processing, above and in PrintJobTransfers
-		PrintJobTransfers(common.ListJobTransfersResponse(resp))
-	}
-	return nil
-}
-
 // PrintJobTransfers prints the response of listOrder command when list Order command requested the list of specific transfer of an existing job
 func PrintJobTransfers(listTransfersResponse common.ListJobTransfersResponse) {
-	if listTransfersResponse.ErrorMsg != "" {
-		glcm.Error("request failed with following message " + listTransfersResponse.ErrorMsg)
-	}
-
 	glcm.Output(func(format common.OutputFormat) string {
 		if format == common.EOutputFormat.Json() {
 			jsonOutput, err := json.Marshal(listTransfersResponse)
@@ -126,15 +109,10 @@ func PrintJobTransfers(listTransfersResponse common.ListJobTransfersResponse) {
 			return sb.String()
 		}
 	}, common.EOutputMessageType.ListJobTransfers())
-	glcm.Exit(nil, common.EExitCode.Success())
 }
 
 // PrintJobProgressSummary prints the response of listOrder command when listOrder command requested the progress summary of an existing job
 func PrintJobProgressSummary(summary common.ListJobSummaryResponse) {
-	if summary.ErrorMsg != "" {
-		glcm.Error("list progress summary of job failed because " + summary.ErrorMsg)
-	}
-
 	// Reset the bytes over the wire counter
 	summary.BytesOverWire = 0
 
@@ -178,5 +156,4 @@ Final Job Status: %v
 			summary.JobStatus,
 		)
 	}, common.EOutputMessageType.GetJobSummary())
-	glcm.Exit(nil, common.EExitCode.Success())
 }

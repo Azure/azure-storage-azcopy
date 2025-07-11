@@ -93,7 +93,7 @@ func (s *JobsShowSuite) Scenario_JobsShowNonExistentJob(svm *ScenarioVariationMa
 			},
 		})
 
-	ValidateContainsError(svm, jobsShowOutput, []string{"list progress summary of job failed because no job with JobId 4a2542df-90ce-1043-69f0-e7481379b5b1 exists"})
+	ValidateContainsError(svm, jobsShowOutput, []string{"no job with JobId 4a2542df-90ce-1043-69f0-e7481379b5b1 exists"})
 }
 
 func (s *JobsShowSuite) Scenario_JobsShow(svm *ScenarioVariationManager) {

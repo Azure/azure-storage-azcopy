@@ -478,8 +478,8 @@ func newJobsShowCommandResult(rawOutput string) JobsShowCommandResult {
 	lines := strings.Split(rawOutput, "\n")
 
 	// parse out the final status
-	// -3 because the last line is empty
-	finalLine := lines[len(lines)-3]
+	// -2 because the last line is empty
+	finalLine := lines[len(lines)-2]
 	finalMsg := common.JsonOutputTemplate{}
 	err := json.Unmarshal([]byte(finalLine), &finalMsg)
 	if err != nil {

@@ -23,6 +23,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/spf13/cobra"
@@ -58,8 +59,11 @@ func (cca cookedCancelCmdArgs) process() error {
 	if !cancelJobResponse.CancelledPauseResumed {
 		if cca.ignoreCompletedJobError && cancelJobResponse.JobStatus == common.EJobStatus.Completed() {
 			glcm.Info(cancelJobResponse.ErrorMsg)
-			resp := jobsAdmin.GetJobSummary(cca.jobID)
-			PrintJobProgressSummary(resp)
+			resp, err := Client.GetJobSummary(azcopy.GetJobSummaryOptions{JobID: cca.jobID})
+			if err != nil {
+				return err
+			}
+			PrintJobProgressSummary(common.ListJobSummaryResponse(resp))
 			return nil
 		}
 		return errors.New(cancelJobResponse.ErrorMsg)
@@ -97,8 +101,6 @@ func init() {
 			if err != nil {
 				glcm.Error("failed to perform cancel command due to error " + err.Error())
 			}
-
-			glcm.Exit(nil, common.EExitCode.Success())
 		},
 		// hide features not relevant to BFS
 		// TODO remove after preview release.
