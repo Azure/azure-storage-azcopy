@@ -415,24 +415,46 @@ func IsSystemContainer(containerName string) bool {
 	return false
 }
 
-func ToExtendedEpoch(t time.Time) (int64, bool) {
-	// Validate input
+// ToWindowsEpoch converts a time.Time to Windows epoch time in nanoseconds.
+// The Windows epoch starts on January 1, 1601, and the function returns the
+// number of nanosecond since that epoch.
+//
+// With nanoseconds from windows epoch, we can track 584 years from 1601 which is year 2185
+// That should be more than enough... unless time travel becomes a thing.
+func ToWindowsEpoch(t time.Time) uint64 {
+	// If the time is zero, return 0
 	if t.IsZero() {
-		return 0, false
+		return 0
 	}
 
-	utcTime := t.UTC()
+	winEpochNanoSec := uint64(0)
 
-	if utcTime.Before(MinSafeUnixTime) {
-		windowsEpoch := time.Date(1601, 1, 1, 0, 0, 0, 0, time.UTC)
+	// Ensure we're not before Windows epoch
+	// Ideally this should not happen
+	if t.Before(WindowsEpochUTC) {
+		return 0
+	}
 
-		// Ensure we're not before Windows epoch
-		if utcTime.Before(windowsEpoch) {
-			return 0, false
+	if t.Before(time.Unix(0, 0)) {
+		// If the time is before Unix epoch, we need to handle it differently
+		// Problem here is that if we subtract windows epoch then we will hit
+		// integer overflow for years after 1893.
+		if t.Before(MidYearEpochUTC) {
+			// If before mid year epoch, we can safely use the Windows epoch as a reference point
+			// to avoid overflow.
+			winEpochNanoSec = uint64(t.UTC().Sub(WindowsEpochUTC).Nanoseconds())
+		} else {
+			// We can use the mid year epoch as a reference point to avoid overflow.
+			// time is between mid year epoch and unix epoch, year 1985
+			winEpochNanoSec = uint64(TICKS_FROM_WINDOWS_EPOCH_TO_MIDWAY_POINT) * uint64(100)
+			winEpochNanoSec += uint64(t.UTC().Sub(MidYearEpochUTC).Nanoseconds())
 		}
-
-		return utcTime.Sub(windowsEpoch).Nanoseconds(), false
+	} else {
+		// If the time is after Unix epoch, we can safely use the Windows epoch as a reference point
+		// We do it in steps to avoid overflow.
+		winEpochNanoSec = uint64(TICKS_FROM_WINDOWS_EPOCH_TO_UNIX_EPOCH) * uint64(100)
+		winEpochNanoSec += uint64(t.Sub(time.Unix(0, 0)).Nanoseconds())
 	}
 
-	return utcTime.UnixNano(), true
+	return winEpochNanoSec
 }

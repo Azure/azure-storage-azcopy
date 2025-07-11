@@ -443,11 +443,7 @@ func (t *testJobPartTransferManager) RestartedTransfer() bool {
 	return false
 }
 
-func (t *testJobPartTransferManager) IsLastModifiedUnixEpoch() bool {
-	panic("implement me")
-}
-
 // LastModifiedEpochTime returns the last modified time as Unix epoch seconds.
-func (t *testJobPartTransferManager) LastModifiedEpochTime() int64 {
+func (t *testJobPartTransferManager) LastModifiedEpochTime() uint64 {
 	panic("implement me")
 }

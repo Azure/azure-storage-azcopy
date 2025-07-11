@@ -337,16 +337,5 @@ func NanosecondsSinceWinEpoch(ft *windows.Filetime) uint64 {
 // ToTime converts Filetime to time.Time with fallback to Windows epoch for times before Unix epoch.
 // If the Filetime represents a time before Unix epoch (January 1, 1970), it falls back to Windows epoch (January 1, 1601).
 func WinFiletimeToTime(ft *windows.Filetime) time.Time {
-
-	// Get ticks since Windows epoch
-	nanosecondsSinceWinEpoch := ft.Nanoseconds()
-	ticksSinceWinEpoch := NanosecondsSinceWinEpoch(ft) / uint64(100) // Convert to 100-nanosecond intervals
-
-	if ticksSinceWinEpoch < TICKS_FROM_WINDOWS_EPOCH_TO_MIN_UNIX_EPOCH {
-		return EpochNanoSecToTime(int64(nanosecondsSinceWinEpoch), false).Local()
-	}
-
-	ticksSinceUnixEpoch := int64(ticksSinceWinEpoch) - TICKS_FROM_WINDOWS_EPOCH_TO_UNIX_EPOCH
-	nanosecondsSinceUnixEpoch := ticksSinceUnixEpoch * 100 // Convert to nanoseconds
-	return EpochNanoSecToTime(nanosecondsSinceUnixEpoch, true).Local()
+	return WinEpochNanoSecToTime(NanosecondsSinceWinEpoch(ft))
 }

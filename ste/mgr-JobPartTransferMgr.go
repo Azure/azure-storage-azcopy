@@ -24,8 +24,7 @@ type IJobPartTransferMgr interface {
 	Info() *TransferInfo
 	ResourceDstData(dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata, blobTags common.BlobTags, cpkOptions common.CpkOptions)
 	LastModifiedTime() time.Time
-	LastModifiedEpochTime() int64
-	IsLastModifiedUnixEpoch() bool
+	LastModifiedEpochTime() uint64
 	PreserveLastModifiedTime() (time.Time, bool)
 	ShouldPutMd5() bool
 	DeleteDestinationFileIfNecessary() bool
@@ -549,14 +548,10 @@ func (jptm *jobPartTransferMgr) ResourceDstData(dataFileToXfer []byte) (headers 
 
 // TODO refactor into something like jptm.IsLastModifiedTimeEqual() so that there is NO LastModifiedTime method and people therefore CAN'T do it wrong due to time zone
 func (jptm *jobPartTransferMgr) LastModifiedTime() time.Time {
-	return common.EpochNanoSecToTime(jptm.jobPartPlanTransfer.ModifiedTime, jptm.jobPartPlanTransfer.IsLastModifiedUnixEpoch)
+	return common.WinEpochNanoSecToTime(jptm.jobPartPlanTransfer.ModifiedTime)
 }
 
-func (jptm *jobPartTransferMgr) IsLastModifiedUnixEpoch() bool {
-	return jptm.jobPartPlanTransfer.IsLastModifiedUnixEpoch
-}
-
-func (jptm *jobPartTransferMgr) LastModifiedEpochTime() int64 {
+func (jptm *jobPartTransferMgr) LastModifiedEpochTime() uint64 {
 	return jptm.jobPartPlanTransfer.ModifiedTime
 }
 

@@ -61,7 +61,7 @@ type ByHandleFileInformation struct {
 	FileIndexLow       uint32
 }
 
-// Nanoseconds converts Filetime (as ticks since Windows Epoch) to nanoseconds since Unix Epoch (January 1, 1970).
+// Nanoseconds converts Filetime (as ticks since Windows Epoch).
 func (ft *Filetime) NanosecondsSinceWinEpoch() uint64 {
 	// 100-nanosecond intervals (ticks) since Windows Epoch (January 1, 1601).
 	ticks := uint64(ft.HighDateTime)<<32 + uint64(ft.LowDateTime)
@@ -74,21 +74,9 @@ func (ft *Filetime) NanosecondsSinceWinEpoch() uint64 {
 	return ticks * 100
 }
 
-// ToTime converts Filetime to time.Time with fallback to Windows epoch for times before Unix epoch.
-// If the Filetime represents a time before Unix epoch (January 1, 1970), it falls back to Windows epoch (January 1, 1601).
+// ToTime converts Filetime to time.Time.
 func (ft *Filetime) ToTime() time.Time {
-
-	// Get ticks since Windows epoch
-	nanosecondsSinceWinEpoch := ft.NanosecondsSinceWinEpoch()
-	ticksSinceWinEpoch := nanosecondsSinceWinEpoch / uint64(100) // Convert to 100-nanosecond intervals
-
-	if ticksSinceWinEpoch < TICKS_FROM_WINDOWS_EPOCH_TO_MIN_UNIX_EPOCH {
-		return EpochNanoSecToTime(int64(nanosecondsSinceWinEpoch), false).Local()
-	}
-
-	ticksSinceUnixEpoch := int64(ticksSinceWinEpoch) - TICKS_FROM_WINDOWS_EPOCH_TO_UNIX_EPOCH
-	nanosecondsSinceUnixEpoch := ticksSinceUnixEpoch * 100 // Convert to nanoseconds
-	return EpochNanoSecToTime(nanosecondsSinceUnixEpoch, true).Local()
+	return WinEpochNanoSecToTime(ft.NanosecondsSinceWinEpoch())
 }
 
 // Convert nanoseconds since Unix Epoch (January 1, 1970) to Filetime since Windows Epoch (January 1, 1601).
@@ -103,6 +91,15 @@ func NsecToFiletime(nsec, negativeOffsetUnixEpochInSec uint64) Filetime {
 	ft := Filetime{LowDateTime: uint32(ticks & 0xFFFFFFFF), HighDateTime: uint32(ticks >> 32)}
 
 	return ft
+}
+
+// WindowsTicksToUnixNano converts ticks (100-ns intervals) since Windows Epoch to nanoseconds since Unix Epoch.
+func WindowsTicksToUnixNano(ticks int64) int64 {
+	// 100-nanosecond intervals since Unix Epoch (January 1, 1970).
+	ticks -= TICKS_FROM_WINDOWS_EPOCH_TO_UNIX_EPOCH
+
+	// nanoseconds since Unix Epoch (January 1, 1970).
+	return ticks * 100
 }
 
 // UnixNanoToWindowsTicks converts nanoseconds since Unix Epoch to ticks since Windows Epoch.

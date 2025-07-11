@@ -303,16 +303,14 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			panic(fmt.Sprintf("The length of tags %s exceeds maximum allowed length, and cannot be processed.", order.Transfers.List[t].BlobTags))
 		}
 		// Create & initialize this transfer's Job Part Plan Transfer
-		lmt, isUnixEpoch := common.ToExtendedEpoch(order.Transfers.List[t].LastModifiedTime)
 		jppt := JobPartPlanTransfer{
-			SrcOffset:               currentSrcStringOffset, // SrcOffset of the src string
-			SrcLength:               int16(len(order.Transfers.List[t].Source)),
-			DstLength:               int16(len(order.Transfers.List[t].Destination)),
-			EntityType:              order.Transfers.List[t].EntityType,
-			ModifiedTime:            lmt,
-			IsLastModifiedUnixEpoch: isUnixEpoch,
-			SourceSize:              order.Transfers.List[t].SourceSize,
-			CompletionTime:          0,
+			SrcOffset:      currentSrcStringOffset, // SrcOffset of the src string
+			SrcLength:      int16(len(order.Transfers.List[t].Source)),
+			DstLength:      int16(len(order.Transfers.List[t].Destination)),
+			EntityType:     order.Transfers.List[t].EntityType,
+			ModifiedTime:   common.ToWindowsEpoch(order.Transfers.List[t].LastModifiedTime),
+			SourceSize:     order.Transfers.List[t].SourceSize,
+			CompletionTime: 0,
 			// For S2S copy, per Transfer source's properties
 			SrcContentTypeLength:        int16(len(order.Transfers.List[t].ContentType)),
 			SrcContentEncodingLength:    int16(len(order.Transfers.List[t].ContentEncoding)),

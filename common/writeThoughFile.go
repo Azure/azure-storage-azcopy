@@ -30,9 +30,16 @@ import (
 
 const (
 	// 100-nanosecond intervals from Windows Epoch (January 1, 1601) to Unix Epoch (January 1, 1970).
-	TICKS_FROM_WINDOWS_EPOCH_TO_UNIX_EPOCH     = 116_444_736_000_000_000
+	TICKS_FROM_WINDOWS_EPOCH_TO_UNIX_EPOCH = 116_444_736_000_000_000
+
+	// time.Time is limited to 9,214,748,364 seconds before and after Unix epoch (January 1, 1970) due to int64 limitations.
+	// This is the maximum negative offset from Unix epoch in seconds.
+	// It corresponds to the time 1678-01-01T00:00:00Z.
+	// This is the minimum time.Time value that can be represented in Go.
 	TICKS_FROM_WINDOWS_EPOCH_TO_MIN_UNIX_EPOCH = 24_299_136_000_000_000 // 24299136000000000
-	MAX_NEGATIVE_OFFSET_UNIX_EPOCH_IN_SEC      = 9_214_560_000
+
+	TICKS_FROM_WINDOWS_EPOCH_TO_MIDWAY_POINT = 58_065_120_000_000_000 // Jan 1 1601 to Jan 1 1785
+	TICKS_FROM_MIDWAY_EPOCH_TO_UNIX_EPOCH    = 58_379_616_000_000_000 // Jan 1 1785 to Jan 1 1970
 )
 
 const IncludeBeforeFlagName = "include-before"
@@ -42,10 +49,13 @@ const PreserveOwnerFlagName = "preserve-owner"
 const PreserveSymlinkFlagName = "preserve-symlinks"
 const PreserveOwnerDefault = true
 
-// If before Unix epoch limit, use Windows epoch (1601-01-01 UTC)
-// Date: Around December 2, 1677, 15:30:08 UTC Year: ~1677
-// (approximately 292 years before Unix epoch)
-var MinSafeUnixTime = time.Date(1678, 1, 1, 0, 0, 0, 0, time.UTC)
+var (
+	// Windows epoch (1601-01-01 UTC)
+	WindowsEpochUTC = time.Date(1601, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	// Mid year between Windows and Unix epochs
+	MidYearEpochUTC = time.Date(1785, 1, 1, 0, 0, 0, 0, time.UTC)
+)
 
 // The regex doesn't require a / on the ending, it just requires something similar to the following
 // C:
@@ -141,44 +151,36 @@ func (d DefaultExtendedProperties) GetChangeTime() time.Time {
 	return time.Time{}
 }
 
-func EpochNanoSecToTime(nsec int64, isUnixEpoch bool) time.Time {
+// WinEpochNanoSecToTime converts nanoseconds since Windows epoch to time.Time.
+// It handles the conversion from Windows epoch (1601-01-01)
+func WinEpochNanoSecToTime(nsecWinEpoch uint64) time.Time {
+	ticksWinEpoch := nsecWinEpoch / uint64(100) // Convert to 100-nanosecond intervals
 
-	if isUnixEpoch && nsec >= 0 {
-		return time.Unix(0, nsec).In(time.UTC)
+	if ticksWinEpoch < uint64(TICKS_FROM_WINDOWS_EPOCH_TO_MIN_UNIX_EPOCH) {
+		// If nsec is less than the minimum ticks from Windows epoch to Unix epoch,
+		// we are dealing with a time beyond what unix.Time can handle
+		// Windows epoch
+		windowsEpoch := time.Date(1601, 1, 1, 0, 0, 0, 0, time.UTC)
+		return windowsEpoch.Add(time.Duration(nsecWinEpoch)).In(time.UTC)
 	}
 
-	if isUnixEpoch && nsec < 0 {
-		// It's a Unix epoch time before 1970 and after 1678
-		// Use Go's internal unixTime function approach
-		seconds := nsec / 1e9
-		nsec := nsec % 1e9
+	ticksUnixEpoch := int64(ticksWinEpoch) - TICKS_FROM_WINDOWS_EPOCH_TO_UNIX_EPOCH
+	nsecUnixEpoch := ticksUnixEpoch * 100 // Convert to nanoseconds
 
-		// Handle negative nanoseconds (Go's normalization)
-		if nsec < 0 {
-			seconds--
-			nsec += 1e9
-		}
-
-		return time.Unix(seconds, nsec)
+	if nsecUnixEpoch >= 0 {
+		return time.Unix(0, nsecUnixEpoch).In(time.UTC)
 	}
 
+	// It's a Unix epoch time before 1970 and after 1678
+	// Use Go's internal unixTime function approach
+	seconds := nsecUnixEpoch / 1e9
+	nsec := nsecUnixEpoch % 1e9
+
+	// Handle negative nanoseconds (Go's normalization)
 	if nsec < 0 {
-		// If nsec is negative and not a Unix epoch time
-		// we are dealing with a time before the Windows epoch which is unlikely
-		// setting it to Windows epoch (1601-01-01 UTC)
-		nsec = 0
+		seconds--
+		nsec += 1e9
 	}
 
-	// Windows epoch
-	windowsEpoch := time.Date(1601, 1, 1, 0, 0, 0, 0, time.UTC)
-	return windowsEpoch.Add(time.Duration(nsec)).In(time.UTC)
-}
-
-// WindowsTicksToUnixNano converts ticks (100-ns intervals) since Windows Epoch to nanoseconds since Unix Epoch.
-func WindowsTicksToUnixNano(ticks int64) int64 {
-	// 100-nanosecond intervals since Unix Epoch (January 1, 1970).
-	ticks -= TICKS_FROM_WINDOWS_EPOCH_TO_UNIX_EPOCH
-
-	// nanoseconds since Unix Epoch (January 1, 1970).
-	return ticks * 100
+	return time.Unix(seconds, nsec).In(time.UTC)
 }

@@ -362,8 +362,7 @@ type JobPartPlanTransfer struct {
 	// We use a dedicated field for this because the alternative (of doing something fancy the names) was too complex and error-prone
 	EntityType common.EntityType
 	// ModifiedTime represents the last time at which source was modified before start of transfer stored as nanoseconds.
-	ModifiedTime            int64
-	IsLastModifiedUnixEpoch bool
+	ModifiedTime uint64
 	// SourceSize represents the actual size of the source on disk
 	SourceSize int64
 	// CompletionTime represents the time at which transfer was completed
