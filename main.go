@@ -41,6 +41,8 @@ import (
 var glcm = common.GetLifecycleMgr()
 
 func main() {
+
+	glcm.Info("Starting AzCopy [OOM Kill version]")
 	// ---------------------------------------------------------------------
 	// Automatic pprof capture setup
 	// ---------------------------------------------------------------------
@@ -48,7 +50,7 @@ func main() {
 		// Create a unique sub-directory for this run using UTC timestamp.
 		sessionDir := filepath.Join(basePath, time.Now().UTC().Format("20060102_150405"))
 		if err := os.MkdirAll(sessionDir, os.ModePerm); err != nil {
-			log.Printf("[pprof] Failed to create output directory %s: %v", sessionDir, err)
+			glcm.Warn(fmt.Sprintf("[pprof] Failed to create output directory %s: %v", sessionDir, err))
 		} else {
 			// Start background collection goroutine.
 			go collectPprofPeriodically(sessionDir)
@@ -71,7 +73,7 @@ func main() {
 		// It is safe to ignore the error returned here because azcopy's primary functionality
 		// should not be blocked if the metrics endpoint fails to start. Log and continue.
 		if err := http.ListenAndServe(addr, nil); err != nil {
-			log.Printf("pprof endpoint failed to start on %s: %v", addr, err)
+			glcm.Warn(fmt.Sprintf("pprof endpoint failed to start on %s: %v", addr, err))
 		}
 	}()
 
@@ -160,11 +162,11 @@ func collectPprofOnce(outputDir string) {
 			time.Sleep(30 * time.Second)
 			pprof.StopCPUProfile()
 		} else {
-			log.Printf("[pprof] Could not start CPU profile: %v", err)
+			glcm.Warn(fmt.Sprintf("[pprof] Could not start CPU profile: %v", err))
 		}
 		f.Close()
 	} else {
-		log.Printf("[pprof] Could not create CPU profile file %s: %v", cpuPath, err)
+		glcm.Warn(fmt.Sprintf("[pprof] Could not create CPU profile file %s: %v", cpuPath, err))
 	}
 
 	// ---------------- Execution Trace ----------------
@@ -174,11 +176,11 @@ func collectPprofOnce(outputDir string) {
 			time.Sleep(5 * time.Second)
 			runtimeTrace.Stop()
 		} else {
-			log.Printf("[pprof] Could not start execution trace: %v", err)
+			glcm.Warn(fmt.Sprintf("[pprof] Could not start execution trace: %v", err))
 		}
 		f.Close()
 	} else {
-		log.Printf("[pprof] Could not create trace file %s: %v", tracePath, err)
+		glcm.Warn(fmt.Sprintf("[pprof] Could not create trace file %s: %v", tracePath, err))
 	}
 
 	// ---------------- Standard Profiles ----------------
@@ -186,11 +188,11 @@ func collectPprofOnce(outputDir string) {
 		profilePath := filepath.Join(outputDir, fmt.Sprintf("%s_%s.pprof", ts, prof.Name()))
 		if f, err := os.Create(profilePath); err == nil {
 			if err := prof.WriteTo(f, 0); err != nil {
-				log.Printf("[pprof] Error writing profile %s: %v", prof.Name(), err)
+				glcm.Warn(fmt.Sprintf("[pprof] Error writing profile %s: %v", prof.Name(), err))
 			}
 			f.Close()
 		} else {
-			log.Printf("[pprof] Could not create profile file %s: %v", profilePath, err)
+			glcm.Warn(fmt.Sprintf("[pprof] Could not create profile file %s: %v", profilePath, err))
 		}
 	}
 }
