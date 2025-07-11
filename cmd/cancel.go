@@ -101,6 +101,7 @@ func init() {
 			if err != nil {
 				glcm.Error("failed to perform cancel command due to error " + err.Error())
 			}
+			glcm.Exit(nil, common.EExitCode.Success())
 		},
 		// hide features not relevant to BFS
 		// TODO remove after preview release.

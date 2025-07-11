@@ -394,7 +394,7 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 		// either it succeeded, for it returned a failure code in a clean (non-panic) way.
 		// In both cases, we want out to be parsed, to get us the job ID.  E.g. maybe 1 transfer out of several failed,
 		// and that's what we'er actually testing for (so can't treat this as a fatal error).
-		r, ok := newCopyOrSyncCommandResult(string(out))
+		r, ok := newCopyOrSyncCommandResult(string(out), operation)
 		if ok {
 			return r, true, err
 		} else {
@@ -432,15 +432,16 @@ type CopyOrSyncCommandResult struct {
 	finalStatus common.ListSyncJobSummaryResponse
 }
 
-func newCopyOrSyncCommandResult(rawOutput string) (CopyOrSyncCommandResult, bool) {
+func newCopyOrSyncCommandResult(rawOutput string, op Operation) (CopyOrSyncCommandResult, bool) {
 	lines := strings.Split(rawOutput, "\n")
 
 	// parse out the final status
 	// -2 because the last line is empty
-	if len(lines) < 2 {
+	statusLineFromEnd := common.Iff(op == eOperation.Cancel(), 3, 2) // Cancel returns the job summary as a GetJobSummary MessageType THEN sends EndOfJob MessageType, so we need to read 3 lines from the end.
+	if len(lines) < statusLineFromEnd {
 		return CopyOrSyncCommandResult{}, false
 	}
-	finalLine := lines[len(lines)-2]
+	finalLine := lines[len(lines)-statusLineFromEnd]
 	finalMsg := common.JsonOutputTemplate{}
 	err := json.Unmarshal([]byte(finalLine), &finalMsg)
 	if err != nil {
@@ -478,8 +479,8 @@ func newJobsShowCommandResult(rawOutput string) JobsShowCommandResult {
 	lines := strings.Split(rawOutput, "\n")
 
 	// parse out the final status
-	// -2 because the last line is empty
-	finalLine := lines[len(lines)-2]
+	// -3 because the last line is empty
+	finalLine := lines[len(lines)-3]
 	finalMsg := common.JsonOutputTemplate{}
 	err := json.Unmarshal([]byte(finalLine), &finalMsg)
 	if err != nil {
