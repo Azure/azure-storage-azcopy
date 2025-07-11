@@ -99,7 +99,7 @@ func PrintJobTransfers(listTransfersResponse common.ListJobTransfersResponse) {
 				}
 
 				return string(buf)
-			}, common.EOutputMessageType.GetJobSummary())
+			}, common.EOutputMessageType.ListJobTransfers())
 	}
 	glcm.Exit(func(format common.OutputFormat) string {
 		if format == common.EOutputFormat.Json() {
