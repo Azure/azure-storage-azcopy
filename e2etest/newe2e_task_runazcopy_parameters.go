@@ -489,6 +489,11 @@ type JobsListFlags struct {
 	WithStatus *common.JobStatus `flag:"with-status"`
 }
 
+type JobsShowFlags struct {
+	GlobalFlags
+	WithStatus *common.TransferStatus `flag:"with-status"`
+}
+
 type WindowsAttribute uint32
 
 const (

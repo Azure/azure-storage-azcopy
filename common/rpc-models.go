@@ -185,13 +185,6 @@ type CopyJobPartOrderResponse struct {
 	JobStarted bool
 }
 
-// represents the raw list command input from the user when requested the list of transfer with given status for given JobId
-type ListRequest struct {
-	JobID    JobID
-	OfStatus string // TODO: OfStatus with string type sounds not good, change it to enum
-	Output   OutputFormat
-}
-
 // This struct represents the optional attribute for blob request header
 type BlobTransferAttributes struct {
 	BlobType                         BlobType              // The type of a blob - BlockBlob, PageBlob, AppendBlob
