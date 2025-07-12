@@ -1,6 +1,8 @@
 package common
 
-import "sync/atomic"
+import (
+	"sync/atomic"
+)
 
 // AtomicMorpherInt32 identifies a method passed to and invoked by the AtomicMorphInt32 function.
 // The AtomicMorpher callback is passed a startValue and based on this value it returns
@@ -73,6 +75,22 @@ func AtomicMorphUint64(target *uint64, morpher AtomicMorpherUint64) interface{} 
 		currentVal := atomic.LoadUint64(target)
 		desiredVal, morphResult := morpher(currentVal)
 		if atomic.CompareAndSwapUint64(target, currentVal, desiredVal) {
+			return morphResult
+		}
+	}
+}
+
+type AtomicMorpher[T any, R any] func(startVal T) (val T, res R)
+
+func AtomicMorph[T any, R any](target Atomic[T], morpher AtomicMorpher[T, R]) R {
+	if morpher == nil {
+		panic("morpher must not be nil")
+	}
+
+	for {
+		currentVal := target.Load()
+		desiredVal, morphResult := morpher(currentVal)
+		if target.CompareAndSwap(currentVal, desiredVal) {
 			return morphResult
 		}
 	}
