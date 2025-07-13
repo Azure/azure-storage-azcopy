@@ -520,6 +520,26 @@ func newSyncTraverser(enumerator *syncEnumerator, dir string, comparator objectP
 	}
 }
 
+func validate(cca *cookedSyncCmdArgs) error {
+	switch cca.fromTo {
+	case common.EFromTo.LocalBlob(), common.EFromTo.LocalBlobFS(), common.EFromTo.LocalFile(), common.EFromTo.S3Blob():
+	default:
+		return fmt.Errorf(
+			"sync orchestrator is only supported for the following source and destination types:\n" +
+				"\t- Local->Blob\n" +
+				"\t- Local->BlobFS\n" +
+				"\t- Local->File\n" +
+				"\t- S3->Blob",
+		)
+	}
+
+	if cca.recursive {
+		return errors.New("sync orchestrator does not support recursive traversal. Use --recursive=false.")
+	}
+
+	return nil
+}
+
 // syncOrchestratorHandler is the main entry point for the sync orchestrator.
 // It initializes profiling, sets up resource limits, and delegates to runSyncOrchestrator.
 func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator, ctx context.Context) error {
@@ -529,6 +549,11 @@ func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator,
 			WarnStdoutAndScanningLog("Listening to port 6060..\n")
 			http.ListenAndServe("localhost:6060", nil)
 		}()
+	}
+
+	err := validate(cca) // Validate the command arguments for sync orchestrator
+	if err != nil {
+		return err
 	}
 
 	orchestratorOptions = enumerator.orchestratorOptions
@@ -747,10 +772,6 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		}
 
 		return nil
-	}
-
-	if cca.recursive {
-		return errors.New("Sync orchestrator does not support recursive traversal. Use --recursive=false.")
 	}
 
 	// verify that the traversers are targeting the same type of resources
