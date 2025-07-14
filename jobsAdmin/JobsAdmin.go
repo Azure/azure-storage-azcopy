@@ -148,7 +148,7 @@ func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, 
 	}
 	// create new context with the defaultService api version set as value to serviceAPIVersionOverride in the app context.
 	ja.appCtx = context.WithValue(ja.appCtx, ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	ja.jobLogger = common.AzcopyCurrentJobLogger
+	//ja.jobLogger = common.AzcopyCurrentJobLogger
 
 	// create concurrency tuner...
 	// ... but don't spin up the main pool. That is done when
@@ -259,7 +259,7 @@ type jobsAdmin struct {
 	commandLineMbpsCap      float64
 	provideBenchmarkResults bool
 	cpuMonitor              common.CPUMonitor
-	jobLogger               common.ILoggerResetable
+	//jobLogger               common.ILoggerResetable
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

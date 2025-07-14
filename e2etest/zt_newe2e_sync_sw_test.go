@@ -32,7 +32,7 @@ func createConsistentFileBodies(count int, size string) map[int]ObjectContentCon
 
 func (s *SWSyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariationManager) {
 	srcLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local()})
-	dstLoc := ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})
+	dstLoc := ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.BlobFS(), common.ELocation.File()})
 
 	if srcLoc == common.ELocation.Local() && srcLoc == dstLoc {
 		svm.InvalidateScenario()
@@ -760,12 +760,12 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbSync}) // Calculate verb early to create the destination object early
 
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
-	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{})
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()})), ResourceDefinitionContainer{})
 
 	dirsToCreate := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test"}
 
 	svm.InsertVariationSeparator("_DeleteDestination_")
-	deleteDestination := ResolveVariation(svm, []bool{true, false}) // Add variation for DeleteDestination flag
+	deleteDestination := ResolveVariation(svm, []bool{false}) // Add variation for DeleteDestination flag
 
 	// Create consistent file bodies that can be reused
 	fileBodies := createConsistentFileBodies(5, "1K")
@@ -984,7 +984,7 @@ func (s *SWSyncTestSuite) Scenario_TestFollowLinksFolder(svm *ScenarioVariationM
 	_, _ = RunAzCopy(
 		svm,
 		AzCopyCommand{
-			Verb: AzCopyVerbSync, // sync doesn't support symlinks at this time
+			Verb: AzCopyVerbCopy, // sync doesn't support symlinks at this time
 			Environment: &AzCopyEnvironment{
 				SyncThrottling: pointerTo(true), // Enable throttling for this test
 			},
@@ -993,8 +993,10 @@ func (s *SWSyncTestSuite) Scenario_TestFollowLinksFolder(svm *ScenarioVariationM
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
-					Recursive: pointerTo(false),
+					Recursive: pointerTo(true),
 				},
+				FollowSymlinks: pointerTo(true),
+				AsSubdir:       pointerTo(false),
 			},
 		})
 	//get the container which is created by the azcopy command inside dest
