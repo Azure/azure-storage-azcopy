@@ -227,7 +227,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					}
 
 					err = cca.createDstContainer(bucketName, cca.Destination, ctx, existingContainers, common.ELogLevel.None())
-					if cca.FromTo.To() == common.ELocation.File() {
+					if cca.FromTo.To() == common.ELocation.File() && err != nil {
 						// If the destination share is file and if it does not exists azcopy will not create the share
 						// and will return an error.
 						return nil, err
@@ -256,7 +256,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 				if err == nil {
 					err = cca.createDstContainer(resName, cca.Destination, ctx, existingContainers, common.ELogLevel.None())
-					if cca.FromTo.To() == common.ELocation.File() {
+					if cca.FromTo.To() == common.ELocation.File() && err != nil {
 						// If the destination share is file and if it does not exists azcopy will not create the share
 						// and will return an error.
 						return nil, err
