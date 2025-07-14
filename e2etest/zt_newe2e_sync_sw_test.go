@@ -55,6 +55,9 @@ func (s *SWSyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariat
 
 	RunAzCopy(svm, AzCopyCommand{
 		Verb: AzCopyVerbSync,
+		Environment: &AzCopyEnvironment{
+			SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
+		},
 		Targets: []ResourceManager{
 			srcRes,
 			dstRes,
@@ -107,6 +110,9 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUpload(svm *ScenarioVariationManager
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
+			Environment: &AzCopyEnvironment{
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
+			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -175,6 +181,9 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUpload_NoChange(svm *ScenarioVariati
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
+			Environment: &AzCopyEnvironment{
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
+			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -213,6 +222,9 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUpload_NoChange(svm *ScenarioVariati
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
+			Environment: &AzCopyEnvironment{
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
+			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -270,6 +282,9 @@ func (s *SWSyncTestSuite) Scenario_NewFileAdditionAtSource_UploadContainer(svm *
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
+			Environment: &AzCopyEnvironment{
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
+			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -318,6 +333,9 @@ func (s *SWSyncTestSuite) Scenario_NewFileAdditionAtSource_UploadContainer(svm *
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
+			Environment: &AzCopyEnvironment{
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
+			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainerNew, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -382,6 +400,9 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFileAtSource(svm *ScenarioVariationMa
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
+			Environment: &AzCopyEnvironment{
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
+			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -438,6 +459,9 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFileAtSource(svm *ScenarioVariationMa
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
+			Environment: &AzCopyEnvironment{
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
+			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainerNew, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -509,6 +533,9 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFolderAtSource(svm *ScenarioVariation
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
+			Environment: &AzCopyEnvironment{
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
+			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -564,6 +591,9 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFolderAtSource(svm *ScenarioVariation
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
+			Environment: &AzCopyEnvironment{
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
+			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainerNew, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -630,6 +660,9 @@ func (s *SWSyncTestSuite) Scenario_DeleteFileAndCreateFolderWithSameName(svm *Sc
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
+			Environment: &AzCopyEnvironment{
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
+			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -680,6 +713,9 @@ func (s *SWSyncTestSuite) Scenario_DeleteFileAndCreateFolderWithSameName(svm *Sc
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
+			Environment: &AzCopyEnvironment{
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
+			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainerNew, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -760,6 +796,9 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
+			Environment: &AzCopyEnvironment{
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
+			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -815,6 +854,9 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
+			Environment: &AzCopyEnvironment{
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
+			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainerNew, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -876,6 +918,9 @@ func (s *SWSyncTestSuite) Scenario_TestFollowLinks(svm *ScenarioVariationManager
 		svm,
 		AzCopyCommand{
 			Verb: AzCopyVerbCopy, // sync doesn't support symlinks at this time
+			Environment: &AzCopyEnvironment{
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
+			},
 			Targets: []ResourceManager{
 				source, dest,
 			},
@@ -939,6 +984,9 @@ func (s *SWSyncTestSuite) Scenario_TestFollowLinksFolder(svm *ScenarioVariationM
 		svm,
 		AzCopyCommand{
 			Verb: AzCopyVerbSync, // sync doesn't support symlinks at this time
+			Environment: &AzCopyEnvironment{
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
+			},
 			Targets: []ResourceManager{
 				source, dest,
 			},
@@ -1002,6 +1050,9 @@ func (s *SWSyncTestSuite) Scenario_FileMetadataModTimeChange(svm *ScenarioVariat
 		svm,
 		AzCopyCommand{
 			Verb: azCopyVerb,
+			Environment: &AzCopyEnvironment{
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
+			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(source, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -1043,6 +1094,9 @@ func (s *SWSyncTestSuite) Scenario_FileMetadataModTimeChange(svm *ScenarioVariat
 		svm,
 		AzCopyCommand{
 			Verb: azCopyVerb,
+			Environment: &AzCopyEnvironment{
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
+			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(source, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -1113,6 +1167,9 @@ func (s *SWSyncTestSuite) Scenario_FolderMetadataModTimeChange(svm *ScenarioVari
 		svm,
 		AzCopyCommand{
 			Verb: azCopyVerb,
+			Environment: &AzCopyEnvironment{
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
+			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(source, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -1153,6 +1210,9 @@ func (s *SWSyncTestSuite) Scenario_FolderMetadataModTimeChange(svm *ScenarioVari
 		svm,
 		AzCopyCommand{
 			Verb: azCopyVerb,
+			Environment: &AzCopyEnvironment{
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
+			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(source, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -1217,6 +1277,9 @@ func (s *SWSyncTestSuite) Scenario_AddNonEmptyFolder(svm *ScenarioVariationManag
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
+			Environment: &AzCopyEnvironment{
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
+			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -1264,6 +1327,9 @@ func (s *SWSyncTestSuite) Scenario_AddNonEmptyFolder(svm *ScenarioVariationManag
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
+			Environment: &AzCopyEnvironment{
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
+			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -1322,6 +1388,9 @@ func (s *SWSyncTestSuite) Scenario_DeleteNonEmptyFolder(svm *ScenarioVariationMa
 		svm,
 		AzCopyCommand{
 			Verb: azCopyVerb,
+			Environment: &AzCopyEnvironment{
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
+			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -1365,6 +1434,9 @@ func (s *SWSyncTestSuite) Scenario_DeleteNonEmptyFolder(svm *ScenarioVariationMa
 		svm,
 		AzCopyCommand{
 			Verb: azCopyVerb,
+			Environment: &AzCopyEnvironment{
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
+			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
