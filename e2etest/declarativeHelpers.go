@@ -21,10 +21,11 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/JeffreyRichter/enum/enum"
@@ -183,6 +184,8 @@ type params struct {
 	deleteDestinationFile  bool
 	trailingDot            common.TrailingDotOption
 	decompress             bool
+	preserveInfo           *bool
+	isNFSCopy              bool
 	// looks like this for a folder transfer:
 	/*
 		INFO: source: /New folder/New Text Document.txt dest: /Test/New folder/New Text Document.txt

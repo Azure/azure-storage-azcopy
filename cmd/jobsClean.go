@@ -80,7 +80,8 @@ func init() {
 
 	// NOTE: we have way more job status than we normally need, only show the most common ones
 	jobsCleanCmd.PersistentFlags().StringVar(&commandLineInput.withStatus, "with-status", "All",
-		"Only remove the jobs with the specified status. Available values include: All, Cancelled, Failed, Completed,"+
+		"Only remove the jobs with the specified status. Available values include: "+
+			"\n All, Cancelled, Failed, Completed,"+
 			" CompletedWithErrors, CompletedWithSkipped, CompletedWithErrorsAndSkipped")
 }
 
@@ -116,10 +117,7 @@ func handleCleanJobsCommand(givenStatus common.JobStatus) error {
 func blindDeleteAllJobFiles() (int, error) {
 	// get rid of the job plan files
 	numPlanFilesRemoved, err := removeFilesWithPredicate(common.AzcopyJobPlanFolder, func(s string) bool {
-		if strings.Contains(s, ".steV") {
-			return true
-		}
-		return false
+		return strings.Contains(s, ".steV")
 	})
 	if err != nil {
 		return numPlanFilesRemoved, err
