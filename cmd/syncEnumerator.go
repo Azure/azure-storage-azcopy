@@ -171,6 +171,9 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		}
 	} else if err != nil && fileerror.HasCode(err, fileerror.ShareNotFound) {
 		return nil, fmt.Errorf("the destination file share %s does not exist; please create it manually with the required quota and settings before running the copy —refer to https://learn.microsoft.com/en-us/azure/storage/files/storage-how-to-create-file-share?tabs=azure-portal for SMB or https://learn.microsoft.com/en-us/azure/storage/files/storage-files-quick-create-use-linux for NFS.", cca.destination.Value)
+	} else if err == nil && sourceIsDir != destIsDir {
+		// If the destination exists, and isn't blob though, we have to match resource types.
+		return nil, resourceMismatchError
 	}
 
 	// set up the filters in the right order
