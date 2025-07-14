@@ -12,9 +12,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-var UseSyncOrchestrator = true
-var SyncThrottlingTestMode = true
-
 type SWSyncTestSuite struct{}
 
 func init() {
@@ -57,7 +54,7 @@ func (s *SWSyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariat
 	RunAzCopy(svm, AzCopyCommand{
 		Verb: AzCopyVerbSync,
 		Environment: &AzCopyEnvironment{
-			SyncThrottling: pointerTo(true), // Enable throttling for this test
+			SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
 		},
 		Targets: []ResourceManager{
 			srcRes,
@@ -112,7 +109,7 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUpload(svm *ScenarioVariationManager
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
 			Environment: &AzCopyEnvironment{
-				SyncThrottling: pointerTo(true), // Enable throttling for this test
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
 			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
@@ -183,7 +180,7 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUpload_NoChange(svm *ScenarioVariati
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
 			Environment: &AzCopyEnvironment{
-				SyncThrottling: pointerTo(true), // Enable throttling for this test
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
 			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
@@ -224,7 +221,7 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUpload_NoChange(svm *ScenarioVariati
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
 			Environment: &AzCopyEnvironment{
-				SyncThrottling: pointerTo(true), // Enable throttling for this test
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
 			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
@@ -284,7 +281,7 @@ func (s *SWSyncTestSuite) Scenario_NewFileAdditionAtSource_UploadContainer(svm *
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
 			Environment: &AzCopyEnvironment{
-				SyncThrottling: pointerTo(true), // Enable throttling for this test
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
 			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
@@ -335,7 +332,7 @@ func (s *SWSyncTestSuite) Scenario_NewFileAdditionAtSource_UploadContainer(svm *
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
 			Environment: &AzCopyEnvironment{
-				SyncThrottling: pointerTo(true), // Enable throttling for this test
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
 			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainerNew, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
@@ -402,7 +399,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFileAtSource(svm *ScenarioVariationMa
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
 			Environment: &AzCopyEnvironment{
-				SyncThrottling: pointerTo(true), // Enable throttling for this test
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
 			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
@@ -461,7 +458,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFileAtSource(svm *ScenarioVariationMa
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
 			Environment: &AzCopyEnvironment{
-				SyncThrottling: pointerTo(true), // Enable throttling for this test
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
 			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainerNew, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
@@ -535,7 +532,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFolderAtSource(svm *ScenarioVariation
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
 			Environment: &AzCopyEnvironment{
-				SyncThrottling: pointerTo(true), // Enable throttling for this test
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
 			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
@@ -593,7 +590,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFolderAtSource(svm *ScenarioVariation
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
 			Environment: &AzCopyEnvironment{
-				SyncThrottling: pointerTo(true), // Enable throttling for this test
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
 			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainerNew, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
@@ -662,7 +659,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFileAndCreateFolderWithSameName(svm *Sc
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
 			Environment: &AzCopyEnvironment{
-				SyncThrottling: pointerTo(true), // Enable throttling for this test
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
 			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
@@ -715,7 +712,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFileAndCreateFolderWithSameName(svm *Sc
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
 			Environment: &AzCopyEnvironment{
-				SyncThrottling: pointerTo(true), // Enable throttling for this test
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
 			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainerNew, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
@@ -798,7 +795,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
 			Environment: &AzCopyEnvironment{
-				SyncThrottling: pointerTo(true), // Enable throttling for this test
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
 			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
@@ -856,7 +853,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
 			Environment: &AzCopyEnvironment{
-				SyncThrottling: pointerTo(true), // Enable throttling for this test
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
 			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainerNew, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
@@ -920,7 +917,7 @@ func (s *SWSyncTestSuite) Scenario_TestFollowLinks(svm *ScenarioVariationManager
 		AzCopyCommand{
 			Verb: AzCopyVerbCopy, // sync doesn't support symlinks at this time
 			Environment: &AzCopyEnvironment{
-				SyncThrottling: pointerTo(true), // Enable throttling for this test
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
 			},
 			Targets: []ResourceManager{
 				source, dest,
@@ -986,7 +983,7 @@ func (s *SWSyncTestSuite) Scenario_TestFollowLinksFolder(svm *ScenarioVariationM
 		AzCopyCommand{
 			Verb: AzCopyVerbSync, // sync doesn't support symlinks at this time
 			Environment: &AzCopyEnvironment{
-				SyncThrottling: pointerTo(true), // Enable throttling for this test
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
 			},
 			Targets: []ResourceManager{
 				source, dest,
@@ -1052,7 +1049,7 @@ func (s *SWSyncTestSuite) Scenario_FileMetadataModTimeChange(svm *ScenarioVariat
 		AzCopyCommand{
 			Verb: azCopyVerb,
 			Environment: &AzCopyEnvironment{
-				SyncThrottling: pointerTo(true), // Enable throttling for this test
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
 			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(source, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
@@ -1096,7 +1093,7 @@ func (s *SWSyncTestSuite) Scenario_FileMetadataModTimeChange(svm *ScenarioVariat
 		AzCopyCommand{
 			Verb: azCopyVerb,
 			Environment: &AzCopyEnvironment{
-				SyncThrottling: pointerTo(true), // Enable throttling for this test
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
 			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(source, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
@@ -1169,7 +1166,7 @@ func (s *SWSyncTestSuite) Scenario_FolderMetadataModTimeChange(svm *ScenarioVari
 		AzCopyCommand{
 			Verb: azCopyVerb,
 			Environment: &AzCopyEnvironment{
-				SyncThrottling: pointerTo(true), // Enable throttling for this test
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
 			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(source, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
@@ -1212,7 +1209,7 @@ func (s *SWSyncTestSuite) Scenario_FolderMetadataModTimeChange(svm *ScenarioVari
 		AzCopyCommand{
 			Verb: azCopyVerb,
 			Environment: &AzCopyEnvironment{
-				SyncThrottling: pointerTo(true), // Enable throttling for this test
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
 			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(source, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
@@ -1279,7 +1276,7 @@ func (s *SWSyncTestSuite) Scenario_AddNonEmptyFolder(svm *ScenarioVariationManag
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
 			Environment: &AzCopyEnvironment{
-				SyncThrottling: pointerTo(true), // Enable throttling for this test
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
 			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
@@ -1329,7 +1326,7 @@ func (s *SWSyncTestSuite) Scenario_AddNonEmptyFolder(svm *ScenarioVariationManag
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
 			Environment: &AzCopyEnvironment{
-				SyncThrottling: pointerTo(true), // Enable throttling for this test
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
 			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
@@ -1390,7 +1387,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteNonEmptyFolder(svm *ScenarioVariationMa
 		AzCopyCommand{
 			Verb: azCopyVerb,
 			Environment: &AzCopyEnvironment{
-				SyncThrottling: pointerTo(true), // Enable throttling for this test
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
 			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
@@ -1436,7 +1433,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteNonEmptyFolder(svm *ScenarioVariationMa
 		AzCopyCommand{
 			Verb: azCopyVerb,
 			Environment: &AzCopyEnvironment{
-				SyncThrottling: pointerTo(true), // Enable throttling for this test
+				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
 			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{

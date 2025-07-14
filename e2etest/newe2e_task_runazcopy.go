@@ -144,7 +144,10 @@ type AzCopyEnvironment struct {
 	AzureClientId           *string `env:"AZURE_CLIENT_ID"`
 
 	LoginCacheName *string `env:"AZCOPY_LOGIN_CACHE_NAME"`
-	SyncThrottling *bool   `env:"DISABLE_SYNC_THROTTLING"`
+
+	// SyncOrchestratorTestMode is used to control the sync orchestrator test mode.
+	// Refer to common.SyncOrchTestMode for more details.
+	SyncOrchestratorTestMode *string `env:"AZCOPY_SYNC_ORCHESTRATOR_TEST_MODE,defaultfunc:DefaultSyncOrchestratorTestMode"`
 
 	// InheritEnvironment is a lowercase list of environment variables to always inherit.
 	// Specifying "*" as an entry with the value "true" will act as a wildcard, and inherit all env vars.
@@ -213,6 +216,14 @@ func (env *AzCopyEnvironment) DefaultPlanLoc(a ScenarioAsserter, ctx context.Con
 	}
 
 	return *env.JobPlanLocation
+}
+
+func (env *AzCopyEnvironment) DefaultSyncOrchestratorTestMode(a ScenarioAsserter, ctx context.Context) string {
+	if env.SyncOrchestratorTestMode == nil {
+		env.SyncOrchestratorTestMode = pointerTo(string(common.SyncOrchTestModeNone))
+	}
+
+	return *env.SyncOrchestratorTestMode
 }
 
 func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) string {

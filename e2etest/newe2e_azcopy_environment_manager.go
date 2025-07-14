@@ -128,6 +128,7 @@ func (envCtx *AzCopyEnvironmentContext) RegisterEnvironment(env *AzCopyEnvironme
 
 	env.EnvironmentId = pointerTo(uint(len(envCtx.Environments)))
 	env.ParentContext = envCtx
+	envCtx.Environments = append(envCtx.Environments, env)
 
 	return rc
 }
