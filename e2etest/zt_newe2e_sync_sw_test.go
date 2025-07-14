@@ -1,5 +1,5 @@
-//go:build !smslidingwindow
-// +build !smslidingwindow
+//go:build smslidingwindow
+// +build smslidingwindow
 
 package e2etest
 
@@ -18,6 +18,15 @@ type SWSyncTestSuite struct{}
 
 func init() {
 	suiteManager.RegisterSuite(&SWSyncTestSuite{})
+}
+
+// Helper function to create consistent file content
+func createConsistentFileBodies(count int, size string) map[int]ObjectContentContainer {
+	fileBodies := make(map[int]ObjectContentContainer)
+	for i := 0; i < count; i++ {
+		fileBodies[i] = NewRandomObjectContentContainer(SizeFromString(size))
+	}
+	return fileBodies
 }
 
 func (s *SWSyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariationManager) {
@@ -344,10 +353,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFileAtSource(svm *ScenarioVariationMa
 	deleteDestination := ResolveVariation(svm, []bool{true, false}) // Add variation for DeleteDestination flag
 
 	// Create consistent file bodies that can be reused
-	fileBodies := make(map[int]ObjectContentContainer)
-	for i := range 5 {
-		fileBodies[i] = NewRandomObjectContentContainer(SizeFromString("1K"))
-	}
+	fileBodies := createConsistentFileBodies(5, "1K")
 
 	// Create destination directories
 	srcObjs := make(ObjectResourceMappingFlat)
@@ -474,10 +480,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFolderAtSource(svm *ScenarioVariation
 	dirsToCreate := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test"}
 
 	// Create consistent file bodies that can be reused
-	fileBodies := make(map[int]ObjectContentContainer)
-	for i := range 5 {
-		fileBodies[i] = NewRandomObjectContentContainer(SizeFromString("1K"))
-	}
+	fileBodies := createConsistentFileBodies(5, "1K")
 
 	// Create destination directories
 	srcObjs := make(ObjectResourceMappingFlat)
@@ -598,10 +601,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFileAndCreateFolderWithSameName(svm *Sc
 	dirsToCreate := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test"}
 
 	//Create consistent file bodies that can be reused
-	fileBodies := make(map[int]ObjectContentContainer)
-	for i := range 5 {
-		fileBodies[i] = NewRandomObjectContentContainer(SizeFromString("1K"))
-	}
+	fileBodies := createConsistentFileBodies(5, "1K")
 
 	// Create destination directories
 	srcObjs := make(ObjectResourceMappingFlat)
@@ -731,10 +731,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 	deleteDestination := ResolveVariation(svm, []bool{true, false}) // Add variation for DeleteDestination flag
 
 	// Create consistent file bodies that can be reused
-	fileBodies := make(map[int]ObjectContentContainer)
-	for i := range 5 {
-		fileBodies[i] = NewRandomObjectContentContainer(SizeFromString("1K"))
-	}
+	fileBodies := createConsistentFileBodies(5, "1K")
 
 	// Create destination directories
 	srcObjs := make(ObjectResourceMappingFlat)
