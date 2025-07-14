@@ -1,5 +1,5 @@
-//go:build !smslidingwindow
-// +build !smslidingwindow
+//go:build smslidingwindow
+// +build smslidingwindow
 
 package e2etest
 
