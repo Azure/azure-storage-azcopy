@@ -204,6 +204,13 @@ func (env *AzCopyEnvironment) DoCleanup(a Asserter) {
 			PprofSubdir,
 			fmt.Sprintf(PprofMemFmt, pprofRun))
 
+		// Check if parent directory exists
+		pprofDir := filepath.Dir(memProfLoc)
+		if _, err := os.Stat(pprofDir); os.IsNotExist(err) {
+			a.Log("Memory profile directory does not exist at %s, skipping", pprofDir)
+			continue
+		}
+
 		UploadMemoryProfile(a, memProfLoc, pprofRun)
 	}
 
