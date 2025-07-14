@@ -54,6 +54,24 @@ type ILoggerResetable interface {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+type LogLevelOverrideLogger struct {
+	ILoggerResetable
+	MinimumLevelToLog LogLevel
+}
+
+func (l LogLevelOverrideLogger) MinimumLogLevel() LogLevel {
+	return l.MinimumLevelToLog
+}
+
+func (l LogLevelOverrideLogger) ShouldLog(level LogLevel) bool {
+	if level == LogNone {
+		return false
+	}
+	return level <= l.MinimumLevelToLog
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 const maxLogSize = 500 * 1024 * 1024
 
 type jobLogger struct {
