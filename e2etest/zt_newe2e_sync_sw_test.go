@@ -13,6 +13,7 @@ import (
 )
 
 var UseSyncOrchestrator = true
+var SyncThrottlingTestMode = true
 
 type SWSyncTestSuite struct{}
 
