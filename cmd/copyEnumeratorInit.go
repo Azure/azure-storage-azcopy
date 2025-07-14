@@ -563,7 +563,7 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 		// If the share does not exist, azcopy will fail, prompting the customer to create
 		// the share manually with the required quota and settings.
 		if fileerror.HasCode(err, fileerror.ShareNotFound) {
-			return fmt.Errorf("the destination file share %s does not exist. Please create it manually with the required quota and settings before running copy", containerName)
+			return fmt.Errorf("the destination file share %s does not exist; please create it manually with the required quota and settings before running the copy —refer to https://learn.microsoft.com/en-us/azure/storage/files/storage-how-to-create-file-share?tabs=azure-portal for SMB or https://learn.microsoft.com/en-us/azure/storage/files/storage-files-quick-create-use-linux for NFS.", containerName)
 		}
 		return err
 	case common.ELocation.BlobFS():
