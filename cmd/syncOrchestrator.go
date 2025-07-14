@@ -506,6 +506,7 @@ func (st *SyncTraverser) shouldTrySkippingTargetTraversal(parentDirCTime time.Ti
 		orchestratorOptions.optimizeEnumerationByCTime &&
 		deleteDestination == common.EDeleteDestination.False() &&
 		!parentDirCTime.IsZero() &&
+		!orchestratorOptions.lastSuccessfulSyncJobStartTime.IsZero() &&
 		parentDirCTime.Before(orchestratorOptions.lastSuccessfulSyncJobStartTime)
 }
 
@@ -523,6 +524,7 @@ func newSyncTraverser(enumerator *syncEnumerator, dir string, comparator objectP
 func validate(cca *cookedSyncCmdArgs, orchestratorOptions *SyncOrchestratorOptions) error {
 	switch cca.fromTo {
 	case common.EFromTo.LocalBlob(), common.EFromTo.LocalBlobFS(), common.EFromTo.LocalFile(), common.EFromTo.S3Blob():
+		// sync orchestrator is supported for these types
 	default:
 		return fmt.Errorf(
 			"sync orchestrator is only supported for the following source and destination types:\n" +
@@ -706,6 +708,10 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			// Enumerate all child objects of this directory in the indexer and check all of their change times.
 			// If any of them is after the last successful sync, we need to enumerate the destination.
 			// Otherwise, we can skip the destination enumeration and proceed with scheduling transfers.
+
+			// For debugging:
+			// fmt.Printf("Checking if destination enumeration for dir %s can be skipped.\n", st_src.Value)
+
 			if changed, fileCount := stra.hasAnyChildChangedSinceLastSync(); !changed {
 				err = stra.Finalize(false) // false indicates we do not want to schedule transfers yet
 				if err != nil {
@@ -719,6 +725,9 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 					})
 					return err
 				}
+
+				// For debugging:
+				// fmt.Printf("Skipping destination enumeration for dir %s.\n", st_src.Value)
 				traverseDestination = false // No need to traverse destination if we are skipping it
 
 				for range fileCount {
@@ -729,6 +738,8 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 				for range stra.sub_dirs {
 					ptt.options.IncrementNotTransferred(common.EEntityType.Folder())
 				}
+
+				cca.IncrementDestinationFolderEnumerationSkipped()
 			}
 		}
 
