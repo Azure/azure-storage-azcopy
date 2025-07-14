@@ -1,5 +1,5 @@
-//go:build smslidingwindow
-// +build smslidingwindow
+//go:build !smslidingwindow
+// +build !smslidingwindow
 
 package e2etest
 
@@ -361,6 +361,12 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFileAtSource(svm *ScenarioVariationMa
 	svm.InsertVariationSeparator("_DeleteDestination_")
 	deleteDestination := ResolveVariation(svm, []bool{true, false}) // Add variation for DeleteDestination flag
 
+	// Create consistent file bodies that can be reused
+	fileBodies := make(map[int]ObjectContentContainer)
+	for i := range 5 {
+		fileBodies[i] = NewRandomObjectContentContainer(SizeFromString("1K"))
+	}
+
 	// Create destination directories
 	srcObjs := make(ObjectResourceMappingFlat)
 	for _, dir := range dirsToCreate {
@@ -370,7 +376,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFileAtSource(svm *ScenarioVariationMa
 		}
 		for i := range 5 {
 			name := dir + "/test" + strconv.Itoa(i) + ".txt"
-			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: fileBodies[i]}
 			srcObjs[name] = obj
 		}
 	}
@@ -431,7 +437,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFileAtSource(svm *ScenarioVariationMa
 
 		for i := 2; i < 5; i++ {
 			name := dir + "/test" + strconv.Itoa(i) + ".txt"
-			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: fileBodies[i]}
 			srcObjsNew[name] = obj
 		}
 	}
@@ -491,6 +497,12 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFolderAtSource(svm *ScenarioVariation
 
 	dirsToCreate := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test"}
 
+	// Create consistent file bodies that can be reused
+	fileBodies := make(map[int]ObjectContentContainer)
+	for i := range 5 {
+		fileBodies[i] = NewRandomObjectContentContainer(SizeFromString("1K"))
+	}
+
 	// Create destination directories
 	srcObjs := make(ObjectResourceMappingFlat)
 	for _, dir := range dirsToCreate {
@@ -500,7 +512,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFolderAtSource(svm *ScenarioVariation
 		}
 		for i := range 5 {
 			name := dir + "/test" + strconv.Itoa(i) + ".txt"
-			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: fileBodies[i]}
 			srcObjs[name] = obj
 		}
 	}
@@ -560,7 +572,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFolderAtSource(svm *ScenarioVariation
 		}
 		for i := range 5 {
 			name := dir + "/test" + strconv.Itoa(i) + ".txt"
-			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: fileBodies[i]}
 			srcObjsNew[name] = obj
 		}
 	}
@@ -615,6 +627,12 @@ func (s *SWSyncTestSuite) Scenario_DeleteFileAndCreateFolderWithSameName(svm *Sc
 
 	dirsToCreate := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test"}
 
+	//Create consistent file bodies that can be reused
+	fileBodies := make(map[int]ObjectContentContainer)
+	for i := range 5 {
+		fileBodies[i] = NewRandomObjectContentContainer(SizeFromString("1K"))
+	}
+
 	// Create destination directories
 	srcObjs := make(ObjectResourceMappingFlat)
 	for _, dir := range dirsToCreate {
@@ -624,7 +642,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFileAndCreateFolderWithSameName(svm *Sc
 		}
 		for i := range 5 {
 			name := dir + "/test" + strconv.Itoa(i) + ".txt"
-			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: fileBodies[i]}
 			srcObjs[name] = obj
 		}
 	}
@@ -679,7 +697,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFileAndCreateFolderWithSameName(svm *Sc
 		}
 		for i := 1; i < 5; i++ {
 			name := dir + "/test" + strconv.Itoa(i) + ".txt"
-			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: fileBodies[i]}
 			srcObjsNew[name] = obj
 		}
 	}
@@ -722,7 +740,10 @@ func (s *SWSyncTestSuite) Scenario_DeleteFileAndCreateFolderWithSameName(svm *Sc
 	if dstContainer.Location() == common.ELocation.Blob() || dstContainer.Location() == common.ELocation.BlobFS() {
 		ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 			Objects: ObjectResourceMappingFlat{
+				// The original file test0.txt should be replaced by the folder
 				"dir_file_copy_test/test0.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(true)},
+				// Files inside the new folder should exist
+				"dir_file_copy_test/test0.txt/inside0.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(true)},
 			},
 		}, true)
 	} else {
@@ -745,6 +766,12 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 	svm.InsertVariationSeparator("_DeleteDestination_")
 	deleteDestination := ResolveVariation(svm, []bool{true, false}) // Add variation for DeleteDestination flag
 
+	// Create consistent file bodies that can be reused
+	fileBodies := make(map[int]ObjectContentContainer)
+	for i := range 5 {
+		fileBodies[i] = NewRandomObjectContentContainer(SizeFromString("1K"))
+	}
+
 	// Create destination directories
 	srcObjs := make(ObjectResourceMappingFlat)
 	for _, dir := range dirsToCreate {
@@ -754,7 +781,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 		}
 		for i := range 5 {
 			name := dir + "/test" + strconv.Itoa(i) + ".txt"
-			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: fileBodies[i]}
 			srcObjs[name] = obj
 		}
 	}
@@ -809,13 +836,13 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 		}
 		for i := range 5 {
 			name := dir + "/test" + strconv.Itoa(i) + ".txt"
-			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: fileBodies[i]}
 			srcObjsNew[name] = obj
 		}
 	}
 
-	//deleted folder sub_dir_copy_test and creating file sub_dir_copy_test.txt
-	name := "dir_file_copy_test/sub_dir_copy_test.txt"
+	//deleted folder sub_dir_copy_test and creating file sub_dir_copy_test
+	name := "dir_file_copy_test/sub_dir_copy_test"
 	obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
 	srcObjsNew[name] = obj
 
