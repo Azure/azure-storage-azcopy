@@ -296,5 +296,5 @@ func (env *AzCopyEnvironment) DoCleanup(a Asserter) {
 	a.NoError("failed to copy plans", err)
 
 	uploadRelPath := strings.TrimPrefix(logDropPath, GlobalConfig.AzCopyExecutableConfig.LogDropPath)
-	a.Log("Uploaded logs for session to %s", uploadRelPath)
+	a.Log("Scenario %s: Uploaded logs for session to %s", env.ParentContext.ScenarioID.String(), uploadRelPath)
 }
