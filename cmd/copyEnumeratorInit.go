@@ -187,7 +187,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		if cca.FromTo.From().IsRemote() && dstContainerName != "" { // if the destination has a explicit container name
 			// Attempt to create the container. If we fail, fail silently.
 			err = cca.createDstContainer(dstContainerName, cca.Destination, ctx, existingContainers, common.ELogLevel.None())
-			if cca.FromTo.To() == common.ELocation.File() {
+			if cca.FromTo.To() == common.ELocation.File() && err != nil {
 				// If the destination share is file and if it does not exists azcopy will not create the share
 				// and will return an error.
 				return nil, err
