@@ -151,7 +151,7 @@ func (args rawLoginArgs) toOptions() (azcopy.LoginOptions, error) {
 }
 
 func RunLogin(options azcopy.LoginOptions) error {
-	err := Client.Login(options)
+	_, err := Client.Login(options)
 	if err != nil {
 		return err
 	}
