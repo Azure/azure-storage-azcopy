@@ -149,6 +149,10 @@ type AzCopyEnvironment struct {
 	// Specifying "*" as an entry with the value "true" will act as a wildcard, and inherit all env vars.
 	InheritEnvironment map[string]bool `env:",defaultfunc:DefaultInheritEnvironment"`
 
+	// SyncOrchestratorTestMode is used to control the sync orchestrator test mode.
+	// Refer to common.SyncOrchTestMode for more details.
+	SyncOrchestratorTestMode *string `env:"AZCOPY_SYNC_ORCHESTRATOR_TEST_MODE,defaultfunc:DefaultSyncOrchestratorTestMode"`
+
 	ManualLogin bool
 
 	// These fields should almost never be intentionally set by a test writer unless the author really knows what they're doing,
@@ -212,6 +216,14 @@ func (env *AzCopyEnvironment) DefaultPlanLoc(a ScenarioAsserter, ctx context.Con
 	}
 
 	return *env.JobPlanLocation
+}
+
+func (env *AzCopyEnvironment) DefaultSyncOrchestratorTestMode(a ScenarioAsserter, ctx context.Context) string {
+	if env.SyncOrchestratorTestMode == nil {
+		env.SyncOrchestratorTestMode = pointerTo(string(common.SyncOrchTestModeNone))
+	}
+
+	return *env.SyncOrchestratorTestMode
 }
 
 func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) string {

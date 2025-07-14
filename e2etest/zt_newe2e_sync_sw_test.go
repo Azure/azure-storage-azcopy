@@ -1,5 +1,5 @@
-//go:build smslidingwindow
-// +build smslidingwindow
+//go:build !smslidingwindow
+// +build !smslidingwindow
 
 package e2etest
 
@@ -12,12 +12,17 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-var UseSyncOrchestrator = true
-
 type SWSyncTestSuite struct{}
 
 func init() {
 	suiteManager.RegisterSuite(&SWSyncTestSuite{})
+}
+
+func getDefaultEnvironment() *AzCopyEnvironment {
+	return &AzCopyEnvironment{
+		InheritEnvironment:       map[string]bool{"*": true},
+		SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)),
+	}
 }
 
 func (s *SWSyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariationManager) {
@@ -57,6 +62,7 @@ func (s *SWSyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariat
 			},
 			DeleteDestination: pointerTo(deleteDestination),
 		},
+		Environment: getDefaultEnvironment(),
 	})
 
 	ValidateResource[ContainerResourceManager](svm, dstRes, ResourceDefinitionContainer{
@@ -112,6 +118,7 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUpload(svm *ScenarioVariationManager
 				},
 				DeleteDestination: pointerTo(deleteDestination),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	fromTo := common.FromToValue(srcContainer.Location(), dstContainer.Location())
@@ -178,6 +185,7 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUpload_NoChange(svm *ScenarioVariati
 				CopySyncCommonFlags: copySyncFlag,
 				DeleteDestination:   pointerTo(deleteDestination),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	fromTo := common.FromToValue(srcContainer.Location(), dstContainer.Location())
@@ -216,6 +224,7 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUpload_NoChange(svm *ScenarioVariati
 				CopySyncCommonFlags: copySyncFlag,
 				DeleteDestination:   pointerTo(deleteDestination),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcDef.Objects,
@@ -276,6 +285,7 @@ func (s *SWSyncTestSuite) Scenario_NewFileAdditionAtSource_UploadContainer(svm *
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -324,6 +334,7 @@ func (s *SWSyncTestSuite) Scenario_NewFileAdditionAtSource_UploadContainer(svm *
 				},
 				DeleteDestination: pointerTo(deleteDestination),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -385,6 +396,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFileAtSource(svm *ScenarioVariationMa
 				},
 				DeleteDestination: pointerTo(deleteDestination),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -441,6 +453,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFileAtSource(svm *ScenarioVariationMa
 				},
 				DeleteDestination: pointerTo(deleteDestination),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -508,6 +521,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFolderAtSource(svm *ScenarioVariation
 				},
 				DeleteDestination: pointerTo(deleteDestination),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -564,6 +578,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFolderAtSource(svm *ScenarioVariation
 				},
 				DeleteDestination: pointerTo(deleteDestination),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -627,6 +642,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFileAndCreateFolderWithSameName(svm *Sc
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -677,6 +693,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFileAndCreateFolderWithSameName(svm *Sc
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -751,6 +768,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 				},
 				DeleteDestination: pointerTo(deleteDestination),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -806,6 +824,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 				},
 				DeleteDestination: pointerTo(deleteDestination),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -862,6 +881,7 @@ func (s *SWSyncTestSuite) Scenario_TestFollowLinks(svm *ScenarioVariationManager
 				FollowSymlinks: pointerTo(true),
 				AsSubdir:       pointerTo(false),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 	ValidateResource(svm, dest, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
@@ -923,6 +943,7 @@ func (s *SWSyncTestSuite) Scenario_TestFollowLinksFolder(svm *ScenarioVariationM
 					Recursive: pointerTo(false),
 				},
 			},
+			Environment: getDefaultEnvironment(),
 		})
 	//get the container which is created by the azcopy command inside dest
 	ValidateResource(svm, dest, ResourceDefinitionContainer{
@@ -994,6 +1015,7 @@ func (s *SWSyncTestSuite) Scenario_FileMetadataModTimeChange(svm *ScenarioVariat
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 	ValidateResource(svm, dest, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
@@ -1034,6 +1056,7 @@ func (s *SWSyncTestSuite) Scenario_FileMetadataModTimeChange(svm *ScenarioVariat
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 	ValidateResource(svm, dest, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
@@ -1105,6 +1128,7 @@ func (s *SWSyncTestSuite) Scenario_FolderMetadataModTimeChange(svm *ScenarioVari
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 	ValidateResource(svm, dest, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
@@ -1144,6 +1168,7 @@ func (s *SWSyncTestSuite) Scenario_FolderMetadataModTimeChange(svm *ScenarioVari
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 	ValidateResource(svm, dest, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
@@ -1208,6 +1233,7 @@ func (s *SWSyncTestSuite) Scenario_AddNonEmptyFolder(svm *ScenarioVariationManag
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -1255,6 +1281,7 @@ func (s *SWSyncTestSuite) Scenario_AddNonEmptyFolder(svm *ScenarioVariationManag
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -1312,6 +1339,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteNonEmptyFolder(svm *ScenarioVariationMa
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -1355,6 +1383,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteNonEmptyFolder(svm *ScenarioVariationMa
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
