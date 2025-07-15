@@ -45,7 +45,7 @@ const (
 // GetSyncOrchTestModeFromEnv retrieves the SyncOrchTestMode from the environment variable "SYNC_ORCHESTRATOR_TEST_MODE".
 // If the variable is not set or invalid, it returns SyncOrchTestModeNone.
 func GetSyncOrchTestModeFromEnv() SyncOrchTestMode {
-	val := strings.ToUpper(os.Getenv("SYNC_ORCHESTRATOR_TEST_MODE"))
+	val := strings.ToUpper(os.Getenv("AZCOPY_SYNC_ORCHESTRATOR_TEST_MODE"))
 	switch SyncOrchTestMode(val) {
 	case SyncOrchTestModeDefault,
 		SyncOrchTestModeCTimeOpt,
