@@ -740,10 +740,9 @@ type CookedCopyCmdArgs struct {
 
 	// followup/cleanup properties are NOT available on resume, and so should not be used for jobs that may be resumed
 	// TODO: consider find a way to enforce that, or else to allow them to be preserved. Initially, they are just for benchmark jobs, so not a problem immediately because those jobs can't be resumed, by design.
-	followupJobArgs   *CookedCopyCmdArgs
-	priorJobExitCode  *common.ExitCode
-	isCleanupJob      bool // triggers abbreviated status reporting, since we don't want full reporting for cleanup jobs
-	cleanupJobMessage string
+	followupJobArgs  *CookedCopyCmdArgs
+	priorJobExitCode *common.ExitCode
+	isCleanupJob     bool // triggers abbreviated status reporting, since we don't want full reporting for cleanup jobs
 
 	// whether to include blobs that have metadata 'hdi_isfolder = true'
 	IncludeDirectoryStubs bool
@@ -1296,10 +1295,7 @@ func (cca *CookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
 		if common.LogPathFolder != "" {
 			logPathFolder = fmt.Sprintf("%s%s%s.log", common.LogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
 		}
-		glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(),
-			logPathFolder,
-			cca.isCleanupJob,
-			cca.cleanupJobMessage))
+		glcm.OnStart(common.JobContext{JobID: cca.jobID, LogPath: logPathFolder, IsCleanup: cca.isCleanupJob})
 	}
 
 	// initialize the times necessary to track progress

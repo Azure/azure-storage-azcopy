@@ -76,7 +76,7 @@ func (m *mockedLifecycleManager) Progress(o common.OutputBuilder) {
 	default:
 	}
 }
-func (*mockedLifecycleManager) Init(common.OutputBuilder) {}
+func (*mockedLifecycleManager) OnStart(common.OutputBuilder) {}
 func (m *mockedLifecycleManager) Info(msg string) {
 	select {
 	case m.infoLog <- msg:

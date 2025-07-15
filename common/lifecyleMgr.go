@@ -49,7 +49,7 @@ var lcm = func() (lcmgr *lifecycleMgr) {
 // create a public interface so that consumers outside of this package can refer to the lifecycle manager
 // but they would not be able to instantiate one
 type LifecycleMgr interface {
-	Init(OutputBuilder)                                          // let the user know the job has started and initial information like log location
+	OnStart(JobContext)                                          // let the user know the job has started and initial information like log location
 	Progress(OutputBuilder)                                      // print on the same line over and over again, not allowed to float up
 	Exit(OutputBuilder, ExitCode)                                // indicates successful execution exit after printing, allow user to specify exit code
 	Info(string)                                                 // simple print, allowed to float up
@@ -78,6 +78,8 @@ type LifecycleMgr interface {
 func GetLifecycleMgr() LifecycleMgr {
 	return lcm
 }
+
+var _ JobLifecycleHandler = &lifecycleMgr{}
 
 // single point of control for all outputs
 type lifecycleMgr struct {
@@ -251,7 +253,10 @@ func (lcm *lifecycleMgr) checkAndTriggerMemoryProfiling() {
 	}
 }
 
-func (lcm *lifecycleMgr) Init(o OutputBuilder) {
+const cleanUpJobMessage = "Running cleanup job to delete files created during benchmarking"
+
+func (lcm *lifecycleMgr) OnStart(ctx JobContext) {
+	o := GetStandardInitOutputBuilder(ctx)
 	lcm.msgQueue <- outputMessage{
 		msgContent: o(lcm.outputFormat),
 		msgType:    EOutputMessageType.Init(),
@@ -549,7 +554,7 @@ func (lcm *lifecycleMgr) processTextOutput(msgToOutput outputMessage) {
 		// read the response to the prompt and send it back through the channel
 		msgToOutput.inputChannel <- lcm.getInputAfterTime(questionTime)
 	default:
-		// Init, Info, Dryrun, Response, ListSummary, ListObject, and any other new message types will use default
+		// OnStart, Info, Dryrun, Response, ListSummary, ListObject, and any other new message types will use default
 		if lcm.progressCache != "" { // a progress status is already on the last line
 			// print the info from the beginning on current line
 			fmt.Print("\r")

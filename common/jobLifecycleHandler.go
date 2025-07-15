@@ -1,12 +1,11 @@
-package azcopy
+package common
 
 type JobLifecycleHandler interface {
 	OnStart(ctx JobContext)
-	OnComplete()
 }
 
 type JobContext struct {
 	LogPath   string
-	JobID     string
+	JobID     JobID
 	IsCleanup bool
 }
