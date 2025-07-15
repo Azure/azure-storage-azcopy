@@ -100,16 +100,13 @@ jobs:
             }
             
             # Build the Go program
-            if ($tags -ne "") {
+            if ('${{ parameters.test_cli_param }}' -like "*SWSyncTestSuite*") {
+                Write-Output "Building executable wiith sliding window and mover tags"
+                go build -cover -tags mover,smslidingwindow -o $build_name
+            }elseif ($tags -ne "") {
               go build -cover -tags $tags -o $build_name
             } else {
-              if ('${{ parameters.test_cli_param }}' -like "*SWSyncTestSuite*") {
-                Write-Output "Building executable wiith sliding window and mover tags"
-            
-                go build -cover -tags mover,smslidingwindow -o $build_name
-              } else {
-                go build -cover -o $build_name
-              } 
+                go build -cover -o $build_name 
             }
             
             # Az PS login
