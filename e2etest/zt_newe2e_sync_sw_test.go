@@ -36,7 +36,7 @@ func getDefaultEnvironment() *AzCopyEnvironment {
 
 func (s *SWSyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariationManager) {
 	srcLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local()})
-	dstLoc := ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})
+	dstLoc := ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.BlobFS(), common.ELocation.File()})
 
 	if srcLoc == common.ELocation.Local() && srcLoc == dstLoc {
 		svm.InvalidateScenario()
@@ -626,7 +626,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFileAndCreateFolderWithSameName(svm *Sc
 			srcObjs[dir] = obj
 		}
 		for i := range 5 {
-			name := dir + "/test" + strconv.Itoa(i) + ".txt"
+			name := dir + "/test" + strconv.Itoa(i) 
 			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: fileBodies[i]}
 			srcObjs[name] = obj
 		}
@@ -669,7 +669,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFileAndCreateFolderWithSameName(svm *Sc
 
 	srcContainerNew := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
 	//Change the sub directory name from dir_file_copy_test/sub_dir_copy_test to dir_file_copy_test/sub_dir_copy_test_new
-	dirsToCreateNew := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test", "dir_file_copy_test/test0.txt"}
+	dirsToCreateNew := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test", "dir_file_copy_test/test0"}
 
 	//Create New source where files are renamed
 	srcObjsNew := make(ObjectResourceMappingFlat)
@@ -679,7 +679,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFileAndCreateFolderWithSameName(svm *Sc
 			srcObjsNew[dir] = obj
 		}
 		for i := 1; i < 5; i++ {
-			name := dir + "/test" + strconv.Itoa(i) + ".txt"
+			name := dir + "/test" + strconv.Itoa(i) 
 			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: fileBodies[i]}
 			srcObjsNew[name] = obj
 		}
@@ -721,16 +721,16 @@ func (s *SWSyncTestSuite) Scenario_DeleteFileAndCreateFolderWithSameName(svm *Sc
 	if dstContainer.Location() == common.ELocation.Blob() || dstContainer.Location() == common.ELocation.BlobFS() {
 		ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 			Objects: ObjectResourceMappingFlat{
-				// The original file test0.txt should be replaced by the folder
-				"dir_file_copy_test/test0.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(true)},
+				// The original file test0 should be replaced by the folder
+				"dir_file_copy_test/test0": ResourceDefinitionObject{ObjectShouldExist: pointerTo(true)},
 				// Files inside the new folder should exist
-				"dir_file_copy_test/test0.txt/inside0.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(true)},
+				"dir_file_copy_test/test0/test1": ResourceDefinitionObject{ObjectShouldExist: pointerTo(true)},
 			},
 		}, true)
 	} else {
 		ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 			Objects: ObjectResourceMappingFlat{
-				"dir_file_copy_test/test0.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(false)},
+				"dir_file_copy_test/test0": ResourceDefinitionObject{ObjectShouldExist: pointerTo(false)},
 			},
 		}, false)
 	}
@@ -740,12 +740,12 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbSync}) // Calculate verb early to create the destination object early
 
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
-	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{})
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(),common.ELocation.File()})), ResourceDefinitionContainer{})
 
 	dirsToCreate := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test"}
 
 	svm.InsertVariationSeparator("_DeleteDestination_")
-	deleteDestination := ResolveVariation(svm, []bool{true, false}) // Add variation for DeleteDestination flag
+	deleteDestination := ResolveVariation(svm, []bool{true,false}) // Add variation for DeleteDestination flag
 
 	// Create consistent file bodies that can be reused
 	fileBodies := createConsistentFileBodies(5, "1K")
@@ -817,7 +817,6 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 		}
 	}
 
-	//deleted folder sub_dir_copy_test and creating file sub_dir_copy_test
 	name := "dir_file_copy_test/sub_dir_copy_test"
 	obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
 	srcObjsNew[name] = obj
@@ -850,7 +849,6 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 			},
 			Environment: getDefaultEnvironment(),
 		})
-
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcObjsNew,
 	}, true)
@@ -958,14 +956,16 @@ func (s *SWSyncTestSuite) Scenario_TestFollowLinksFolder(svm *ScenarioVariationM
 	_, _ = RunAzCopy(
 		svm,
 		AzCopyCommand{
-			Verb: AzCopyVerbSync, // sync doesn't support symlinks at this time
+			Verb: AzCopyVerbCopy, // sync doesn't support symlinks at this time
 			Targets: []ResourceManager{
 				source, dest,
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
-					Recursive: pointerTo(false),
+					Recursive: pointerTo(true),
 				},
+				FollowSymlinks: pointerTo(true),
+				AsSubdir:       pointerTo(false),
 			},
 			Environment: getDefaultEnvironment(),
 		})
