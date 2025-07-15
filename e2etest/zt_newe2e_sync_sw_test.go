@@ -12,12 +12,26 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-var UseSyncOrchestrator = true
-
 type SWSyncTestSuite struct{}
 
 func init() {
 	suiteManager.RegisterSuite(&SWSyncTestSuite{})
+}
+
+// Helper function to create consistent file content
+func createConsistentFileBodies(count int, size string) map[int]ObjectContentContainer {
+	fileBodies := make(map[int]ObjectContentContainer)
+	for i := 0; i < count; i++ {
+		fileBodies[i] = NewRandomObjectContentContainer(SizeFromString(size))
+	}
+	return fileBodies
+}
+
+func getDefaultEnvironment() *AzCopyEnvironment {
+	return &AzCopyEnvironment{
+		InheritEnvironment:       map[string]bool{"*": true},
+		SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)),
+	}
 }
 
 func (s *SWSyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariationManager) {
@@ -57,6 +71,7 @@ func (s *SWSyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariat
 			},
 			DeleteDestination: pointerTo(deleteDestination),
 		},
+		Environment: getDefaultEnvironment(),
 	})
 
 	ValidateResource[ContainerResourceManager](svm, dstRes, ResourceDefinitionContainer{
@@ -112,6 +127,7 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUpload(svm *ScenarioVariationManager
 				},
 				DeleteDestination: pointerTo(deleteDestination),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	fromTo := common.FromToValue(srcContainer.Location(), dstContainer.Location())
@@ -178,6 +194,7 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUpload_NoChange(svm *ScenarioVariati
 				CopySyncCommonFlags: copySyncFlag,
 				DeleteDestination:   pointerTo(deleteDestination),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	fromTo := common.FromToValue(srcContainer.Location(), dstContainer.Location())
@@ -216,6 +233,7 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUpload_NoChange(svm *ScenarioVariati
 				CopySyncCommonFlags: copySyncFlag,
 				DeleteDestination:   pointerTo(deleteDestination),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcDef.Objects,
@@ -276,6 +294,7 @@ func (s *SWSyncTestSuite) Scenario_NewFileAdditionAtSource_UploadContainer(svm *
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -324,6 +343,7 @@ func (s *SWSyncTestSuite) Scenario_NewFileAdditionAtSource_UploadContainer(svm *
 				},
 				DeleteDestination: pointerTo(deleteDestination),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -343,6 +363,9 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFileAtSource(svm *ScenarioVariationMa
 	svm.InsertVariationSeparator("_DeleteDestination_")
 	deleteDestination := ResolveVariation(svm, []bool{true, false}) // Add variation for DeleteDestination flag
 
+	// Create consistent file bodies that can be reused
+	fileBodies := createConsistentFileBodies(5, "1K")
+
 	// Create destination directories
 	srcObjs := make(ObjectResourceMappingFlat)
 	for _, dir := range dirsToCreate {
@@ -352,7 +375,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFileAtSource(svm *ScenarioVariationMa
 		}
 		for i := range 5 {
 			name := dir + "/test" + strconv.Itoa(i) + ".txt"
-			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: fileBodies[i]}
 			srcObjs[name] = obj
 		}
 	}
@@ -385,6 +408,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFileAtSource(svm *ScenarioVariationMa
 				},
 				DeleteDestination: pointerTo(deleteDestination),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -410,7 +434,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFileAtSource(svm *ScenarioVariationMa
 
 		for i := 2; i < 5; i++ {
 			name := dir + "/test" + strconv.Itoa(i) + ".txt"
-			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: fileBodies[i]}
 			srcObjsNew[name] = obj
 		}
 	}
@@ -441,6 +465,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFileAtSource(svm *ScenarioVariationMa
 				},
 				DeleteDestination: pointerTo(deleteDestination),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -467,6 +492,9 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFolderAtSource(svm *ScenarioVariation
 
 	dirsToCreate := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test"}
 
+	// Create consistent file bodies that can be reused
+	fileBodies := createConsistentFileBodies(5, "1K")
+
 	// Create destination directories
 	srcObjs := make(ObjectResourceMappingFlat)
 	for _, dir := range dirsToCreate {
@@ -476,7 +504,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFolderAtSource(svm *ScenarioVariation
 		}
 		for i := range 5 {
 			name := dir + "/test" + strconv.Itoa(i) + ".txt"
-			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: fileBodies[i]}
 			srcObjs[name] = obj
 		}
 	}
@@ -508,6 +536,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFolderAtSource(svm *ScenarioVariation
 				},
 				DeleteDestination: pointerTo(deleteDestination),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -533,7 +562,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFolderAtSource(svm *ScenarioVariation
 		}
 		for i := range 5 {
 			name := dir + "/test" + strconv.Itoa(i) + ".txt"
-			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: fileBodies[i]}
 			srcObjsNew[name] = obj
 		}
 	}
@@ -564,6 +593,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFolderAtSource(svm *ScenarioVariation
 				},
 				DeleteDestination: pointerTo(deleteDestination),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -585,6 +615,9 @@ func (s *SWSyncTestSuite) Scenario_DeleteFileAndCreateFolderWithSameName(svm *Sc
 
 	dirsToCreate := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test"}
 
+	//Create consistent file bodies that can be reused
+	fileBodies := createConsistentFileBodies(5, "1K")
+
 	// Create destination directories
 	srcObjs := make(ObjectResourceMappingFlat)
 	for _, dir := range dirsToCreate {
@@ -594,7 +627,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFileAndCreateFolderWithSameName(svm *Sc
 		}
 		for i := range 5 {
 			name := dir + "/test" + strconv.Itoa(i) + ".txt"
-			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: fileBodies[i]}
 			srcObjs[name] = obj
 		}
 	}
@@ -627,6 +660,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFileAndCreateFolderWithSameName(svm *Sc
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -646,7 +680,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFileAndCreateFolderWithSameName(svm *Sc
 		}
 		for i := 1; i < 5; i++ {
 			name := dir + "/test" + strconv.Itoa(i) + ".txt"
-			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: fileBodies[i]}
 			srcObjsNew[name] = obj
 		}
 	}
@@ -677,6 +711,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFileAndCreateFolderWithSameName(svm *Sc
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -686,7 +721,10 @@ func (s *SWSyncTestSuite) Scenario_DeleteFileAndCreateFolderWithSameName(svm *Sc
 	if dstContainer.Location() == common.ELocation.Blob() || dstContainer.Location() == common.ELocation.BlobFS() {
 		ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 			Objects: ObjectResourceMappingFlat{
+				// The original file test0.txt should be replaced by the folder
 				"dir_file_copy_test/test0.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(true)},
+				// Files inside the new folder should exist
+				"dir_file_copy_test/test0.txt/inside0.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(true)},
 			},
 		}, true)
 	} else {
@@ -709,6 +747,9 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 	svm.InsertVariationSeparator("_DeleteDestination_")
 	deleteDestination := ResolveVariation(svm, []bool{true, false}) // Add variation for DeleteDestination flag
 
+	// Create consistent file bodies that can be reused
+	fileBodies := createConsistentFileBodies(5, "1K")
+
 	// Create destination directories
 	srcObjs := make(ObjectResourceMappingFlat)
 	for _, dir := range dirsToCreate {
@@ -718,7 +759,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 		}
 		for i := range 5 {
 			name := dir + "/test" + strconv.Itoa(i) + ".txt"
-			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: fileBodies[i]}
 			srcObjs[name] = obj
 		}
 	}
@@ -751,6 +792,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 				},
 				DeleteDestination: pointerTo(deleteDestination),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -770,13 +812,13 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 		}
 		for i := range 5 {
 			name := dir + "/test" + strconv.Itoa(i) + ".txt"
-			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: fileBodies[i]}
 			srcObjsNew[name] = obj
 		}
 	}
 
-	//deleted folder sub_dir_copy_test and creating file sub_dir_copy_test.txt
-	name := "dir_file_copy_test/sub_dir_copy_test.txt"
+	//deleted folder sub_dir_copy_test and creating file sub_dir_copy_test
+	name := "dir_file_copy_test/sub_dir_copy_test"
 	obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
 	srcObjsNew[name] = obj
 
@@ -806,6 +848,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 				},
 				DeleteDestination: pointerTo(deleteDestination),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -862,6 +905,7 @@ func (s *SWSyncTestSuite) Scenario_TestFollowLinks(svm *ScenarioVariationManager
 				FollowSymlinks: pointerTo(true),
 				AsSubdir:       pointerTo(false),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 	ValidateResource(svm, dest, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
@@ -923,6 +967,7 @@ func (s *SWSyncTestSuite) Scenario_TestFollowLinksFolder(svm *ScenarioVariationM
 					Recursive: pointerTo(false),
 				},
 			},
+			Environment: getDefaultEnvironment(),
 		})
 	//get the container which is created by the azcopy command inside dest
 	ValidateResource(svm, dest, ResourceDefinitionContainer{
@@ -994,6 +1039,7 @@ func (s *SWSyncTestSuite) Scenario_FileMetadataModTimeChange(svm *ScenarioVariat
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 	ValidateResource(svm, dest, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
@@ -1034,6 +1080,7 @@ func (s *SWSyncTestSuite) Scenario_FileMetadataModTimeChange(svm *ScenarioVariat
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 	ValidateResource(svm, dest, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
@@ -1105,6 +1152,7 @@ func (s *SWSyncTestSuite) Scenario_FolderMetadataModTimeChange(svm *ScenarioVari
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 	ValidateResource(svm, dest, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
@@ -1144,6 +1192,7 @@ func (s *SWSyncTestSuite) Scenario_FolderMetadataModTimeChange(svm *ScenarioVari
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 	ValidateResource(svm, dest, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
@@ -1208,6 +1257,7 @@ func (s *SWSyncTestSuite) Scenario_AddNonEmptyFolder(svm *ScenarioVariationManag
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -1255,6 +1305,7 @@ func (s *SWSyncTestSuite) Scenario_AddNonEmptyFolder(svm *ScenarioVariationManag
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -1312,6 +1363,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteNonEmptyFolder(svm *ScenarioVariationMa
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -1355,6 +1407,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteNonEmptyFolder(svm *ScenarioVariationMa
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
