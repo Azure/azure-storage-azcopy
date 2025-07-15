@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/google/uuid"
 	"io"
 	"io/fs"
 	"os"
@@ -12,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type AzCopyEnvironmentManagerKey struct{}
@@ -127,13 +128,14 @@ func (envCtx *AzCopyEnvironmentContext) RegisterEnvironment(env *AzCopyEnvironme
 
 	env.EnvironmentId = pointerTo(uint(len(envCtx.Environments)))
 	env.ParentContext = envCtx
+	envCtx.Environments = append(envCtx.Environments, env)
 
 	return rc
 }
 
 func (envCtx *AzCopyEnvironmentContext) RegisterLogUpload(upload LogUpload) {
 	envCtx.mu.Lock()
-	envCtx.mu.Unlock()
+	defer envCtx.mu.Unlock()
 
 	envCtx.LogUploads = append(envCtx.LogUploads, upload)
 }
@@ -162,6 +164,11 @@ func (envCtx *AzCopyEnvironmentContext) DoCleanup(a Asserter) {
 
 	if a.Failed() && GlobalConfig.AzCopyExecutableConfig.LogDropPath != "" {
 		for _, logUpload := range envCtx.LogUploads {
+			if int(logUpload.EnvironmentID) >= len(envCtx.Environments) {
+				a.Log("Warning: LogUpload references non-existent environment ID %d (have %d environments)",
+					logUpload.EnvironmentID, len(envCtx.Environments))
+				continue
+			}
 			env := envCtx.Environments[logUpload.EnvironmentID]
 			envUploadDir := envCtx.GetEnvUploadPath(env)
 
@@ -196,6 +203,13 @@ func (env *AzCopyEnvironment) DoCleanup(a Asserter) {
 			envPath,
 			PprofSubdir,
 			fmt.Sprintf(PprofMemFmt, pprofRun))
+
+		// Check if parent directory exists
+		pprofDir := filepath.Dir(memProfLoc)
+		if _, err := os.Stat(pprofDir); os.IsNotExist(err) {
+			a.Log("Memory profile directory does not exist at %s, skipping", pprofDir)
+			continue
+		}
 
 		UploadMemoryProfile(a, memProfLoc, pprofRun)
 	}
