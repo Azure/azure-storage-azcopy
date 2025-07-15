@@ -274,8 +274,7 @@ func TestBasic_CopyDownloadDir(t *testing.T) {
 
 func TestBasic_CopyS2SDir(t *testing.T) {
 	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllS2S(), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
-		recursive:          true,
-		relativeSourcePath: "sharedir/",
+		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "1M",
 		shouldTransfer: []interface{}{
