@@ -293,7 +293,7 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 	} else {
 		if err := performSMBSpecificValidation(
 			cooked.fromTo, cooked.preservePermissions, cooked.preserveInfo,
-			cooked.preservePOSIXProperties); err != nil {
+			cooked.preservePOSIXProperties,cooked.hardlinks); err != nil {
 			return err
 		}
 	}
