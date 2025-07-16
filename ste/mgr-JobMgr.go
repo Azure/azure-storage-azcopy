@@ -801,12 +801,12 @@ func (jm *jobMgr) DeferredCleanupJobMgr() {
 
 	jm.Log(common.LogInfo, "DeferredCleanupJobMgr out of sleep")
 
+	// Transfer Thread Cleanup.
+	jm.cleanupTransferRoutine()
+
 	// Call jm.Cancel to signal routines workdone.
 	// This will take care of any jobPartMgr release.
 	jm.Cancel()
-
-	// Transfer Thread Cleanup.
-	jm.cleanupTransferRoutine()
 
 	// Remove JobPartsMgr from jobPartMgr kv.
 	jm.deleteJobPartsMgrs()
