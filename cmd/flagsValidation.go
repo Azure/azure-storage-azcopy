@@ -171,7 +171,7 @@ func performNFSSpecificValidation(fromTo common.FromTo,
 		return err
 	}
 
-	if err = validateHardlinksFlag(hardlinkHandling, fromTo, common.IsNFSCopy()); err != nil {
+	if err = validateHardlinksFlag(hardlinkHandling, fromTo); err != nil {
 		return err
 	}
 	return nil
@@ -209,7 +209,7 @@ func performSMBSpecificValidation(fromTo common.FromTo,
 		PreservePermissionsFlag); err != nil {
 		return err
 	}
-	if err = validateHardlinksFlag(hardlinkHandling, fromTo, common.IsNFSCopy()); err != nil {
+	if err = validateHardlinksFlag(hardlinkHandling, fromTo); err != nil {
 		return err
 	}
 	return nil
@@ -231,16 +231,18 @@ func validateSymlinkFlag(followSymlinks, preserveSymlinks bool) error {
 	return nil
 }
 
-func validateHardlinksFlag(option common.HardlinkHandlingType, fromTo common.FromTo, isNFSCopy bool) error {
+func validateHardlinksFlag(option common.HardlinkHandlingType, fromTo common.FromTo) error {
 
 	// Validate for Download: Only allowed when downloading from an NFS share to a Linux filesystem
-	if runtime.GOOS == "linux" && fromTo.IsDownload() && (fromTo.From() != common.ELocation.FileNFS()) {
-		return fmt.Errorf("The --hardlinks option, when downloading, is only supported from a NFS file share to a Linux filesystem.")
-	}
+	if common.IsNFSCopy() {
+		if runtime.GOOS == "linux" && fromTo.IsDownload() && (fromTo.From() != common.ELocation.FileNFS()) {
+			return fmt.Errorf("The --hardlinks option, when downloading, is only supported from a NFS file share to a Linux filesystem.")
+		}
 
-	// Validate for Upload or S2S: Only allowed when uploading *to* a local file system
-	if runtime.GOOS == "linux" && (fromTo.IsUpload() || fromTo.IsS2S()) && (fromTo.To() != common.ELocation.FileNFS()) {
-		return fmt.Errorf("The --hardlinks option, when uploading, is only supported from a NFS file share to a Linux filesystem or between NFS file shares.")
+		// Validate for Upload or S2S: Only allowed when uploading *to* a local file system
+		if runtime.GOOS == "linux" && (fromTo.IsUpload() || fromTo.IsS2S()) && (fromTo.To() != common.ELocation.FileNFS()) {
+			return fmt.Errorf("The --hardlinks option, when uploading, is only supported from a NFS file share to a Linux filesystem or between NFS file shares.")
+		}
 	}
 
 	if option == common.DefaultHardlinkHandlingType {
