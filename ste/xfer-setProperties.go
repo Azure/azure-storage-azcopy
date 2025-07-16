@@ -13,7 +13,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-func SetProperties(jptm IJobPartTransferMgr, _ pacer) {
+func SetProperties(jptm IJobPartTransferMgr) {
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytes transferred by the size of the source.
 	if jptm.WasCanceled() {
 		jptm.ReportTransferDone()

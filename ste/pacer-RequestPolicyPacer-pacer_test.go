@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"io"
+	"math"
 	"math/rand"
 	"net/http"
 	"os"
@@ -22,7 +23,7 @@ import (
 	"time"
 )
 
-func NewTestPolicyPacer(target uint64, manualTick bool) (pacer RequestPolicyPacer, tickFunc func()) {
+func newTestPolicyPacer(target uint64, manualTick bool) (pacer *requestPolicyPacer, tickFunc func()) {
 	var ticker *time.Ticker
 	if manualTick {
 		t := make(chan time.Time, 1)
@@ -44,12 +45,13 @@ func NewTestPolicyPacer(target uint64, manualTick bool) (pacer RequestPolicyPace
 		bytesPerTick:            &atomic.Uint64{},
 		maxAvailableBytes:       &atomic.Uint64{},
 		availableBytes:          &atomic.Uint64{},
+		isLive:                  &atomic.Pointer[bool]{},
 		requestInitChannel:      make(chan *policyPacerBody, 300),
 		respInitChannel:         make(chan *policyPacerBody, 300),
 		pacerExitChannel:        make(chan *policyPacerBody, 300),
-		allocationRequestchannel: make(chan struct {
-			pacerID uuid.UUID
-			size    uint64
+		reqSeekChannel: make(chan struct {
+			p        *policyPacerBody
+			newAlloc uint64
 		}, 300),
 		shutdownCh:         make(chan bool, 300),
 		liveBodies:         make(map[uuid.UUID]*policyPacerBody),
@@ -59,7 +61,7 @@ func NewTestPolicyPacer(target uint64, manualTick bool) (pacer RequestPolicyPace
 	}
 
 	pacer.UpdateTargetBytesPerSecond(target)
-	go pacer.(*requestPolicyPacer).pacerBody()
+	go pacer.pacerBody()
 
 	return
 }
@@ -92,7 +94,7 @@ func TestPolicyPacer_ReqRespSync(t *testing.T) {
 		var readBytes uint64
 		for tries := 0; tries < 100; tries++ {
 			readBytes = body.readHead.Load()
-			assert.LessOrEqual(t, readBytes, count)
+			assert.LessOrEqual(t, count, readBytes)
 			if readBytes >= count {
 				read = true
 				break
@@ -105,7 +107,7 @@ func TestPolicyPacer_ReqRespSync(t *testing.T) {
 	}
 
 	// Create a manually ticked policy pacer
-	p, ticker := NewTestPolicyPacer(PacerRate, true)
+	p, ticker := newTestPolicyPacer(PacerRate, true)
 
 	// Get random bodies
 	reqBody := NewRandomBody(BodySize)
@@ -113,7 +115,7 @@ func TestPolicyPacer_ReqRespSync(t *testing.T) {
 
 	// Initialize our request body
 	var err error
-	reqBody, err = p.GetPacedRequestBody(streaming.NopCloser(reqBody))
+	reqBody = p.GetPacedRequestBody(streaming.NopCloser(reqBody), BodySize)
 	rawReqBody := reqBody.(*policyPacerRequestBody)
 	assert.NoError(t, err, "Get Paced Request Body")
 
@@ -122,7 +124,7 @@ func TestPolicyPacer_ReqRespSync(t *testing.T) {
 		buf := make([]byte, BodySize)
 		n, err := reqBody.Read(buf)
 		assert.NoError(t, err, "Read body")
-		assert.Equal(t, n, BodySize, "Read expected amount from request")
+		assert.Equal(t, BodySize, n, "Read expected amount from request")
 	}()
 
 	// Tick the pacer until completion, validating that each step is what we expect.
@@ -139,10 +141,10 @@ func TestPolicyPacer_ReqRespSync(t *testing.T) {
 
 	// Give it a little bit for everything to settle
 	time.Sleep(time.Millisecond)
-	assert.Equal(t, int(BodySize), int(p.GetTotalTraffic()))
+	assert.Equal(t, BodySize, int(p.GetTotalTraffic()))
 
 	// Fire up the new body
-	respBody, err = p.GetPacedResponseBody(io.NopCloser(respBody), BodySize)
+	respBody = p.GetPacedResponseBody(io.NopCloser(respBody), BodySize)
 	rawRespBody := respBody.(*policyPacerBody)
 	assert.NoError(t, err, "Get Paced Response Body")
 
@@ -151,7 +153,7 @@ func TestPolicyPacer_ReqRespSync(t *testing.T) {
 		buf := make([]byte, BodySize)
 		n, err := respBody.Read(buf)
 		assert.NoError(t, err, "Read body")
-		assert.Equal(t, n, BodySize, "Read expected amount from response")
+		assert.Equal(t, BodySize, n, "Read expected amount from response")
 	}()
 
 	for i := uint64(PacerBytesPerTick); i <= BodySize; i += PacerBytesPerTick {
@@ -164,11 +166,13 @@ func TestPolicyPacer_ReqRespSync(t *testing.T) {
 	assert.NoError(t, err, "Close resp body")
 
 	assert.Equal(t, BodySize*2, int(p.GetTotalTraffic()))
+
+	p.Cleanup()
 }
 
-type NullWriter struct{}
+type nilWriter struct{}
 
-func (n2 NullWriter) Write(p []byte) (n int, err error) {
+func (n2 nilWriter) Write(p []byte) (n int, err error) {
 	_ = p // discard the buffer
 	return len(p), nil
 }
@@ -178,7 +182,7 @@ func TestPolicyPacer_Multibody(t *testing.T) {
 	const (
 		BodyCount = 100
 		BodySize  = common.MegaByte * 10
-		PacerMbps = common.MegaByte * 10
+		PacerBps  = common.MegaByte * 10
 
 		// We don't want this test to take 100 seconds,
 		// so we send ticks much faster than normal to effectively speed through this test.
@@ -202,7 +206,7 @@ func TestPolicyPacer_Multibody(t *testing.T) {
 	wg.Wait()
 
 	// === Initialize the pacer ===
-	p, tickerFunc := NewTestPolicyPacer(PacerMbps, true)
+	p, tickerFunc := newTestPolicyPacer(PacerBps, true)
 	tickerRelease := make(chan bool)
 	go func() {
 		internalTickrate := PacerTickrate / PacerTickrateDivisor
@@ -225,12 +229,11 @@ func TestPolicyPacer_Multibody(t *testing.T) {
 		go func() {
 			defer wg.Done()
 
-			body, err := p.GetPacedRequestBody(bodies[bodyId])
-			assert.NoError(t, err, "Get paced body request for body %d", bodyId)
+			body := p.GetPacedRequestBody(bodies[bodyId], BodySize)
 
-			bytesRead, err := io.Copy(&NullWriter{}, body)
+			bytesRead, err := io.Copy(&nilWriter{}, body)
 			assert.NoError(t, err, "Read body %d, successfully managed %d bytes", bodyId, bytesRead)
-			assert.Equal(t, bytesRead, int64(BodySize), "Read whole body for body %d", bodyId)
+			assert.Equal(t, int64(BodySize), bytesRead, "Read whole body for body %d", bodyId)
 
 			err = body.Close()
 			assert.NoError(t, err)
@@ -245,13 +248,15 @@ func TestPolicyPacer_Multibody(t *testing.T) {
 
 	// Release the ticker
 	tickerRelease <- true
+
+	p.Cleanup()
 }
 
 // Validate that the pipeline policy works as expected
 func TestPolicyPacer_Policy(t *testing.T) {
 	const (
-		BodySize  = common.MegaByte * 100
-		PacerMbps = common.MegaByte * 10
+		BodySize = common.MegaByte * 100
+		PacerBps = common.MegaByte * 10
 
 		// We don't want this test to take 10 seconds,
 		// so we send ticks much faster than normal to effectively speed through this test.
@@ -261,7 +266,7 @@ func TestPolicyPacer_Policy(t *testing.T) {
 	)
 
 	// === Set up the pacer ===
-	p, tickerFunc := NewTestPolicyPacer(PacerMbps, true)
+	p, tickerFunc := newTestPolicyPacer(PacerBps, true)
 	cleanupTicker := make(chan bool, 1)
 	go func() {
 		t := time.NewTicker(PacerTickrate / PacerTickrateDivisor)
@@ -317,7 +322,7 @@ func TestPolicyPacer_Policy(t *testing.T) {
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
-		n, err := io.Copy(&NullWriter{}, dsr.Body)
+		n, err := io.Copy(&nilWriter{}, dsr.Body)
 		assert.NoError(t, err, "Read body")
 		assert.Equal(t, int(n), int(p.GetTotalTraffic()), "Expected n and total traffic to match")
 		assert.Equal(t, int(BodySize), int(p.GetTotalTraffic()), "Expected total traffic to match body size")
@@ -329,6 +334,8 @@ func TestPolicyPacer_Policy(t *testing.T) {
 
 	wg.Wait()
 	cleanupTicker <- true
+
+	p.Cleanup()
 }
 
 type nilReader struct {
@@ -383,56 +390,150 @@ func TestPolicyPacer_FullIdle(t *testing.T) {
 	}
 
 	const (
-		PacerMbps    = common.MegaByte * 10
+		PacerBps     = common.MegaByte * 10
 		TestDuration = time.Second * 60
+		BodySize     = common.MegaByte * 100
 	)
 
-	p, _ := NewTestPolicyPacer(PacerMbps, false)
+	p, _ := newTestPolicyPacer(PacerBps, false)
 
-	body, _ := p.GetPacedRequestBody(&nilReader{len: common.MegaByte * 100})
+	body := p.GetPacedRequestBody(&nilReader{len: BodySize}, BodySize)
 
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		_, _ = io.Copy(&NullWriter{}, body)
+		_, _ = io.Copy(&nilWriter{}, body)
 	}()
 
 	time.Sleep(TestDuration)
 	wg.Wait()
+
+	p.Cleanup()
 }
 
-// Validate that idle bodies don't bog down resources on live bodies.
-// We want to make sure of this, because if somebody forgets to close a body, we don't want it hogging
-// resources until it naturally exits.
-func TestPolicyPacer_IdleBody(t *testing.T) {
+// Since bodies take up allocation space in the pacer,
+// they should stop consuming that bandwidth after the
+// request and response have received their full allocations.
+func TestPolicyPacer_BodyAllocationFreesBytesPerSecond(t *testing.T) {
 	const (
-		BodyCount     = 5
-		BodySize      = common.MegaByte * 5
-		FirstBodySize = BodySize * 5
-		PacerMbps     = common.MegaByte
+		PacerBytesPerTick   = common.MegaByte
+		PacerBytesPerSecond = PacerBytesPerTick * uint64(time.Second/PacerTickrate)
+		ReqSize             = PacerBytesPerTick * 2
+		RespSize            = ReqSize * 2
+
+		// request and response bodies
+		ClearRequestTickCount  = int((ReqSize * 2) / PacerBytesPerTick)
+		ClearResponseTickCount = int((RespSize - ReqSize) / PacerBytesPerTick)
 	)
 
-	p, ticker := NewTestPolicyPacer(PacerMbps, true)
+	p, tickFunc := newTestPolicyPacer(PacerBytesPerSecond, true)
 
-	// spin up 5 bodies
-	bodies := make([]*policyPacerRequestBody, BodyCount)
-	for k := range bodies {
-		rootBody := NewRandomBody(common.Iff[uint64](k == 0, FirstBodySize, BodySize))
-		b, err := p.GetPacedRequestBody(rootBody)
-		assert.NoError(t, err)
+	wg := &sync.WaitGroup{} // prepare to wait for two bodies
+	wg.Add(2)
 
-		bodies[k] = b.(*policyPacerRequestBody)
+	// Set up req/resp bodies
+	reqBody := p.GetPacedRequestBody(&nilReader{len: ReqSize}, ReqSize)
+	respBody := p.GetPacedResponseBody(&nilReader{len: RespSize}, RespSize)
+
+	readBody := func(body io.ReadCloser, name string) {
+		_, err := io.Copy(&nilWriter{}, body)
+		if err != io.EOF {
+			assert.NoError(t, err, "read "+name)
+		}
+		wg.Done()
 	}
 
-	// Start the first body reading
-	go func() {
-		b := bodies[0]
-		w, err := io.Copy(&NullWriter{}, b)
-		assert.NoError(t, err)
-		assert.Equal(t, w, FirstBodySize)
-	}()
+	// Fire up reads of both bodies
+	go readBody(reqBody, "req")
+	go readBody(respBody, "resp")
 
-	ticker() // Tick once
+	// We want to let the allocations clear the first body
+	for i := 0; i < ClearRequestTickCount; i++ {
+		tickFunc()
 
+		if i == 0 {
+			// Check that the pacer has earmarked both bodies
+			time.Sleep(time.Millisecond)
+			assert.Equal(t, PacerBodyMinimumBytesPerSecond*2, int(p.allocatedBytesPerSecond.Load()))
+			assert.Equal(t, len(p.liveBodies), 2)
+		}
+	}
+
+	// Check that the pacer has discounted the now finished bodies
+	time.Sleep(time.Millisecond)
+	assert.Equal(t, len(p.liveBodies), 1)
+	assert.Equal(t, PacerBodyMinimumBytesPerSecond, int(p.allocatedBytesPerSecond.Load()))
+
+	// Then the second body
+	for i := 0; i < ClearResponseTickCount; i++ {
+		tickFunc()
+	}
+
+	// Check that all bodies have cleared
+	time.Sleep(time.Millisecond)
+	assert.Equal(t, len(p.liveBodies), 0)
+	assert.Equal(t, 0, int(p.allocatedBytesPerSecond.Load()))
+
+	// Let the readers clear
+	wg.Wait()
+
+	// Kill the pacer
+	p.Cleanup()
+}
+
+func TestPolicyPacer_BodySeekAfterCompleteAllocation(t *testing.T) {
+	const (
+		PacerBytesPerTick   = common.MegaByte
+		PacerBytesPerSecond = PacerBytesPerTick * uint64(time.Second/PacerTickrate)
+		ReqSize             = PacerBytesPerTick * 2
+
+		// request and response bodies
+		ClearRequestTickCount = int((ReqSize * 2) / PacerBytesPerTick)
+	)
+
+	p, tickFunc := newTestPolicyPacer(PacerBytesPerSecond, true)
+
+	reqBody := p.GetPacedRequestBody(&nilReader{len: ReqSize}, ReqSize)
+
+	for range ClearRequestTickCount {
+		tickFunc() // fully allocate the body
+	}
+	time.Sleep(time.Millisecond) // let atomic stuff settle
+
+	pacerBody := reqBody.(*policyPacerRequestBody)
+	assert.Equal(t, BodyStatusCompleted, *pacerBody.bodyStatus.Load())
+	pacerBody.captureAllocations(false)
+	assert.Equal(t, ReqSize, int(min(pacerBody.allocatedBytes.Load(), math.MaxInt)))
+	_, hasAllocReq := p.allocationRequests[pacerBody.id]
+	_, isMarkedLive := p.liveBodies[pacerBody.id]
+
+	assert.Equal(t, false, hasAllocReq)
+	assert.Equal(t, false, isMarkedLive)
+
+	// read everything so we use the entire allocation
+	n, err := io.Copy(&nilWriter{}, reqBody)
+	assert.NoError(t, err)
+	assert.Equal(t, ReqSize, int(n))
+
+	// Seek to the middle of the body
+	n, err = reqBody.Seek(ReqSize/2, io.SeekStart)
+	assert.NoError(t, err)
+	assert.Equal(t, ReqSize/2, int(n))
+
+	// Tick to clear
+	for range (ClearRequestTickCount / 2) + 1 {
+		tickFunc()
+	}
+
+	// read everything so we use the entire allocation
+	n, err = io.Copy(&nilWriter{}, reqBody)
+	assert.NoError(t, err)
+	assert.Equal(t, ReqSize/2, int(n))
+
+	// Validate total traffic
+	assert.Equal(t, ReqSize+(ReqSize/2), int(p.GetTotalTraffic()))
+
+	// Close out the pacer
+	p.Cleanup()
 }

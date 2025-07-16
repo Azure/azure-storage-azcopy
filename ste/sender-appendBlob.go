@@ -43,7 +43,7 @@ type appendBlobSenderBase struct {
 	destAppendBlobClient *appendblob.Client
 	chunkSize            int64
 	numChunks            uint32
-	pacer                pacer
+
 	// Headers and other info that we will apply to the destination
 	// object. For S2S, these come from the source service.
 	// When sending local data, they are computed based on
@@ -59,7 +59,7 @@ type appendBlobSenderBase struct {
 
 type appendBlockFunc = func()
 
-func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, srcInfoProvider ISourceInfoProvider) (*appendBlobSenderBase, error) {
+func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, srcInfoProvider ISourceInfoProvider) (*appendBlobSenderBase, error) {
 	transferInfo := jptm.Info()
 
 	// compute chunk count
@@ -90,7 +90,6 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer
 		destAppendBlobClient:   destAppendBlobClient,
 		chunkSize:              chunkSize,
 		numChunks:              numChunks,
-		pacer:                  pacer,
 		headersToApply:         props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
 		metadataToApply:        props.SrcMetadata,
 		blobTagsToApply:        props.SrcBlobTags,

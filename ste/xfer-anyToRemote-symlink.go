@@ -4,7 +4,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-func anyToRemote_symlink(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
+func anyToRemote_symlink(jptm IJobPartTransferMgr, info *TransferInfo, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
 	// Check if cancelled
 	if jptm.WasCanceled() {
 		/* This is earliest we detect that jptm has been cancelled before we reach destination */

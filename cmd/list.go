@@ -446,44 +446,6 @@ func (cooked cookedListCmdArgs) newListSummary(fileCount, totalFileSize int64) A
 	}
 }
 
-var megaSize = []string{
-	"B",
-	"KB",
-	"MB",
-	"GB",
-	"TB",
-	"PB",
-	"EB",
-}
-
-func ByteSizeToString(size int64) string {
-	units := []string{
-		"B",
-		"KiB",
-		"MiB",
-		"GiB",
-		"TiB",
-		"PiB",
-		"EiB", // Let's face it, a file, account, or container probably won't be more than 1000 exabytes in YEARS.
-		// (and int64 literally isn't large enough to handle too many exbibytes. 128 bit processors when)
-	}
-	unit := 0
-	floatSize := float64(size)
-	gigSize := 1024
-
-	if cooked.MegaUnits {
-		gigSize = 1000
-		units = megaSize
-	}
-
-	for floatSize/float64(gigSize) >= 1 {
-		unit++
-		floatSize /= float64(gigSize)
-	}
-
-	return strconv.FormatFloat(floatSize, 'f', 2, 64) + " " + units[unit]
-}
-
 func getPath(containerName, relativePath string, level LocationLevel, entityType common.EntityType) string {
 	builder := strings.Builder{}
 	if level == level.Service() {
@@ -497,5 +459,5 @@ func getPath(containerName, relativePath string, level LocationLevel, entityType
 }
 
 func sizeToString(size int64, machineReadable bool) string {
-	return common.Iff(machineReadable, strconv.Itoa(int(size)), ByteSizeToString(size))
+	return common.Iff(machineReadable, strconv.Itoa(int(size)), common.ByteSizeToString(size, cooked.MegaUnits))
 }

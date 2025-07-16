@@ -109,7 +109,7 @@ type IJobMgr interface {
 
 func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx context.Context, cpuMon common.CPUMonitor, level common.LogLevel,
 	commandString string, logFileFolder string, tuner ConcurrencyTuner,
-	pacer PacerAdmin, slicePool common.ByteSlicePooler, cacheLimiter common.CacheLimiter, fileCountLimiter common.CacheLimiter,
+	pacer RequestPolicyPacer, slicePool common.ByteSlicePooler, cacheLimiter common.CacheLimiter, fileCountLimiter common.CacheLimiter,
 	jobLogger common.ILoggerResetable, daemonMode bool) IJobMgr {
 	const channelSize = 100000
 	// PartsChannelSize defines the number of JobParts which can be placed into the
@@ -328,7 +328,7 @@ type jobMgr struct {
 	poolSizingChannels  poolSizingChannels
 	concurrencyTuner    ConcurrencyTuner
 	cpuMon              common.CPUMonitor
-	pacer               PacerAdmin
+	pacer               RequestPolicyPacer
 	slicePool           common.ByteSlicePooler
 	cacheLimiter        common.CacheLimiter
 	fileCountLimiter    common.CacheLimiter
@@ -926,7 +926,7 @@ func (jm *jobMgr) poolSizer() {
 
 	nextWorkerId := 0
 	actualConcurrency := 0
-	lastBytesOnWire := int64(0)
+	lastBytesOnWire := uint64(0)
 	lastBytesTime := time.Now()
 	hasHadTimeToStablize := false
 	initialMonitoringInterval := time.Duration(4 * time.Second)

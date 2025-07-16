@@ -12,7 +12,7 @@ func TestBToString(t *testing.T) {
 	expects := []string{"50.00 B", "100.00 B", "125.00 B"}
 
 	for k, v := range inputs {
-		output := ByteSizeToString(v)
+		output := common.ByteSizeToString(v)
 		a.Equal(expects[k], output)
 	}
 }
@@ -23,7 +23,7 @@ func TestKiBToString(t *testing.T) {
 	expects := []string{"1.00 KiB", "50.00 KiB", "125.00 KiB", "5.50 KiB", "5.25 KiB"}
 
 	for k, v := range inputs {
-		output := ByteSizeToString(v)
+		output := common.ByteSizeToString(v)
 		a.Equal(expects[k], output)
 	}
 }
@@ -34,7 +34,7 @@ func TestMiBToString(t *testing.T) {
 	expects := []string{"1.00 MiB", "50.00 MiB", "125.00 MiB", "5.50 MiB", "5.25 MiB"}
 
 	for k, v := range inputs {
-		output := ByteSizeToString(v)
+		output := common.ByteSizeToString(v)
 		a.Equal(expects[k], output)
 	}
 }
@@ -45,7 +45,7 @@ func TestGiBToString(t *testing.T) {
 	expects := []string{"1.00 GiB", "50.00 GiB", "125.00 GiB", "5.50 GiB", "5.25 GiB"}
 
 	for k, v := range inputs {
-		output := ByteSizeToString(v)
+		output := common.ByteSizeToString(v)
 		a.Equal(expects[k], output)
 	}
 }
@@ -56,7 +56,7 @@ func TestTiBToString(t *testing.T) {
 	expects := []string{"1.00 TiB", "50.00 TiB", "125.00 TiB", "5.50 TiB", "5.25 TiB"}
 
 	for k, v := range inputs {
-		output := ByteSizeToString(v)
+		output := common.ByteSizeToString(v)
 		a.Equal(expects[k], output)
 	}
 }
@@ -67,7 +67,7 @@ func TestPiBToString(t *testing.T) {
 	expects := []string{"1.00 PiB", "50.00 PiB", "125.00 PiB", "5.50 PiB", "5.25 PiB"}
 
 	for k, v := range inputs {
-		output := ByteSizeToString(v)
+		output := common.ByteSizeToString(v)
 		a.Equal(expects[k], output)
 	}
 }
@@ -78,7 +78,7 @@ func TestEiBToString(t *testing.T) {
 	expects := []string{"1.00 EiB", "5.50 EiB", "5.25 EiB"} //50 & 125 aren't present Because they overflow int64
 
 	for k, v := range inputs {
-		output := ByteSizeToString(v)
+		output := common.ByteSizeToString(v)
 		a.Equal(expects[k], output)
 	}
 }

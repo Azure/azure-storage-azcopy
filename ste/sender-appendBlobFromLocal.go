@@ -50,8 +50,8 @@ func (u *appendBlobUploader) Prologue(ps common.PrologueState) (destinationModif
 	return u.appendBlobSenderBase.Prologue(ps)
 }
 
-func newAppendBlobUploader(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (sender, error) {
-	senderBase, err := newAppendBlobSenderBase(jptm, destination, pacer, sip)
+func newAppendBlobUploader(jptm IJobPartTransferMgr, destination string, sip ISourceInfoProvider) (sender, error) {
+	senderBase, err := newAppendBlobSenderBase(jptm, destination, sip)
 	if err != nil {
 		return nil, err
 	}
@@ -66,11 +66,10 @@ func (u *appendBlobUploader) Md5Channel() chan<- []byte {
 func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
 	appendBlockFromLocal := func() {
 		u.jptm.LogChunkStatus(id, common.EWaitReason.Body())
-		body := newPacedRequestBody(u.jptm.Context(), reader, u.pacer)
 		offset := id.OffsetInFile()
 		var timeoutFromCtx bool
 		ctx := withTimeoutNotification(u.jptm.Context(), &timeoutFromCtx)
-		_, err := u.destAppendBlobClient.AppendBlock(ctx, body,
+		_, err := u.destAppendBlobClient.AppendBlock(ctx, reader,
 			&appendblob.AppendBlockOptions{
 				AppendPositionAccessConditions: &appendblob.AppendPositionAccessConditions{AppendPosition: &offset},
 				CPKInfo:                        u.jptm.CpkInfo(),

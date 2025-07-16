@@ -35,7 +35,7 @@ type urlToPageBlobCopier struct {
 	sourcePageRangeOptimizer *pageRangeOptimizer // nil if src is not a page blob
 }
 
-func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
+func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
 	srcURL, err := srcInfoProvider.PreSignedSourceURL()
 	if err != nil {
 		return nil, err
@@ -76,7 +76,7 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, pacer 
 		}
 	}
 
-	senderBase, err := newPageBlobSenderBase(jptm, destination, pacer, srcInfoProvider, destBlobTier)
+	senderBase, err := newPageBlobSenderBase(jptm, destination, srcInfoProvider, destBlobTier)
 	if err != nil {
 		return nil, err
 	}

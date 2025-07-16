@@ -25,10 +25,7 @@ func (p pacerPolicy) Do(req *policy.Request) (*http.Response, error) {
 	raw := req.Raw()
 
 	if reqBody := req.Body(); reqBody != nil {
-		pacedBody, err := p.parent.GetPacedRequestBody(reqBody)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get paced body: %w", err)
-		}
+		pacedBody := p.parent.GetPacedRequestBody(reqBody, uint64(max(req.Raw().ContentLength, 0)))
 
 		err = req.SetBody(pacedBody, raw.Header.Get("Content-Type"))
 		if err != nil {
@@ -43,11 +40,7 @@ func (p pacerPolicy) Do(req *policy.Request) (*http.Response, error) {
 	}
 
 	if resp.Body != nil {
-		pacedBody, err := p.parent.GetPacedResponseBody(resp.Body, uint64(resp.ContentLength))
-		if err != nil {
-			return nil, fmt.Errorf("failed to get paced body: %w", err)
-		}
-
+		pacedBody := p.parent.GetPacedResponseBody(resp.Body, uint64(max(resp.ContentLength, 0)))
 		resp.Body = pacedBody
 	}
 

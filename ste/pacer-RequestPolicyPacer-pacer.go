@@ -16,8 +16,8 @@ A couple problems must be solved here.
 */
 
 const (
-	// RequestMinimumBytesPerSecond is the bare minimum bytes per second we're allowed to allocate to a request.
-	RequestMinimumBytesPerSecond = common.MegaByte / 60 // 1 minute per megabyte
+	// PacerBodyMinimumBytesPerSecond is the bare minimum bytes per second we're allowed to allocate to a request.
+	PacerBodyMinimumBytesPerSecond = common.MegaByte / 60 // 1 minute per megabyte
 
 	// PacerTickrate defines how frequently we provide bytes to requests in flight. This must be less than or equal to a second.
 	PacerTickrate = time.Second / 10
@@ -48,10 +48,10 @@ func NewRequestPolicyPacer(bytesPerSecond uint64) RequestPolicyPacer {
 		respInitChannel:    make(chan *policyPacerBody, 300),
 		pacerExitChannel:   make(chan *policyPacerBody, 300),
 		allocationRequests: make(map[uuid.UUID]uint64),
-		allocationRequestchannel: make(chan struct {
-			pacerID uuid.UUID
-			size    uint64
-		}),
+		reqSeekChannel: make(chan struct {
+			p        *policyPacerBody
+			newAlloc uint64
+		}, 300),
 		ticker: time.NewTicker(PacerTickrate),
 	}
 
@@ -75,13 +75,20 @@ type requestPolicyPacer struct {
 
 	isLive *atomic.Pointer[bool]
 
-	requestInitChannel       chan *policyPacerBody // Requests are paced
-	respInitChannel          chan *policyPacerBody // Responses come as a part of the req/resp package and are processed instantly, with priority.
-	pacerExitChannel         chan *policyPacerBody // Requests *and* responses exit here
-	allocationRequestchannel chan struct {
-		pacerID uuid.UUID
-		size    uint64
-	}
+	/*
+		Why not just one control channel?
+		- Responses are preallocated by their request and should take priority in the queue
+		- Bodies exits clogging the init channels would cause trouble taking in new requests
+		- Request seeks can clog init channels
+	*/
+
+	requestInitChannel chan *policyPacerBody // Requests are paced
+	respInitChannel    chan *policyPacerBody // Responses come as a part of the req/resp package and are processed instantly, with priority.
+	pacerExitChannel   chan *policyPacerBody // Requests *and* responses exit here
+	reqSeekChannel     chan struct {
+		p        *policyPacerBody
+		newAlloc uint64
+	} // when a request seeks, it should fire itself down this channel to manage its allocation
 
 	shutdownCh chan bool
 
@@ -107,6 +114,7 @@ func (r *requestPolicyPacer) pacerBody() {
 			r.deallocateFinishedRequests() // Deallocate what we can
 			r.allocateNewRequests()        // Add new requests
 			r.allocateNewResponses()       // Add new responses
+			r.reallocateSeeks()            // Reallocate seeks
 			r.feedRequests()               // Use the bytes in the bucket
 		}
 	}
@@ -125,7 +133,8 @@ func (r *requestPolicyPacer) deallocateFinishedRequests() {
 		select {
 		case req := <-r.pacerExitChannel:
 			delete(r.liveBodies, req.id)
-			common.AtomicSubtract(r.allocatedBytesPerSecond, RequestMinimumBytesPerSecond)
+			common.AtomicSubtract(r.allocatedBytesPerSecond, PacerBodyMinimumBytesPerSecond)
+			req.bodyStatus.Store(to.Ptr(BodyStatusDeallocated))
 		default:
 			escape = true // break doesn't work in here
 		}
@@ -140,7 +149,7 @@ func (r *requestPolicyPacer) allocateNewRequests() {
 	// Allow new requests
 	// todo try to keep in flight requests to a certain percentage of our "actual" hit bandwidth.
 	maxBytesPerSecond := r.maxBytesPerSecond.Load()
-	reqRespAllocation := uint64(RequestMinimumBytesPerSecond * 2)
+	reqRespAllocation := uint64(PacerBodyMinimumBytesPerSecond * 2)
 
 	if maxBytesPerSecond != 0 { // If we have a throughput limit, trickle in requests up to our redline.
 		redlineBytesPerSecond := uint64(float64(maxBytesPerSecond) * PacerRedlinePercentage)
@@ -160,8 +169,9 @@ func (r *requestPolicyPacer) allocateNewRequests() {
 			escape := false
 			select {
 			case newRequest := <-r.requestInitChannel:
-				r.liveBodies[newRequest.id] = newRequest         // Register the request
-				r.allocatedBytesPerSecond.Add(reqRespAllocation) // Allocate the bytes
+				r.liveBodies[newRequest.id] = newRequest                  // Register the request
+				r.allocatedBytesPerSecond.Add(reqRespAllocation)          // Allocate the bytes
+				r.allocationRequests[newRequest.id] = newRequest.bodySize // Put in the allocation request
 
 				// Inform the body that it is allocated
 				newRequest.bodyStatus.Store(to.Ptr(BodyStatusAllocated))
@@ -181,11 +191,11 @@ func (r *requestPolicyPacer) allocateNewRequests() {
 			escape := false
 			select {
 			case newRequest := <-r.requestInitChannel:
-				r.liveBodies[newRequest.id] = newRequest         // Register the request
-				r.allocatedBytesPerSecond.Add(reqRespAllocation) // Allocate the bytes
+				r.liveBodies[newRequest.id] = newRequest            // Register the request
+				newRequest.allocationChannel <- newRequest.bodySize // allocate all of the bytes
 
 				// Inform the body that it is allocated
-				newRequest.bodyStatus.Store(to.Ptr(BodyStatusAllocated))
+				newRequest.bodyStatus.Store(to.Ptr(BodyStatusCompleted))
 			default: // there's nothing new, so let's use what we have.
 				escape = true
 			}
@@ -205,6 +215,12 @@ func (r *requestPolicyPacer) allocateNewResponses() {
 		case newResponse := <-r.respInitChannel:
 			r.liveBodies[newResponse.id] = newResponse
 
+			if r.maxBytesPerSecond.Load() == 0 {
+				newResponse.allocationChannel <- newResponse.bodySize
+			} else {
+				r.allocationRequests[newResponse.id] = newResponse.bodySize
+			}
+
 			// Inform the body that it is allocated
 			newResponse.bodyStatus.Store(to.Ptr(BodyStatusAllocated))
 		default:
@@ -217,6 +233,31 @@ func (r *requestPolicyPacer) allocateNewResponses() {
 	}
 }
 
+func (r *requestPolicyPacer) reallocateSeeks() {
+	/*
+		Requests and responses immediately ask for their allocations.
+		However, requests can re-seek, and thus need reallocation.
+	*/
+
+	for {
+		select {
+		case req := <-r.reqSeekChannel:
+			// At this point, it's our goal to keep the body moving quickly as we can
+			// So we don't really care if we've overallocated.
+			if _, ok := r.liveBodies[req.p.id]; !ok {
+				r.liveBodies[req.p.id] = req.p
+				r.allocatedBytesPerSecond.Add(PacerBodyMinimumBytesPerSecond)
+				req.p.bodyStatus.Store(to.Ptr(BodyStatusAllocated))
+			}
+
+			r.allocationRequests[req.p.id] = req.newAlloc
+
+		default:
+			return
+		}
+	}
+}
+
 func (r *requestPolicyPacer) feedRequests() {
 	/*
 		We ideally want to repeat this process as little as possible, and want to give
@@ -224,22 +265,6 @@ func (r *requestPolicyPacer) feedRequests() {
 
 		To do this, we start with seeding what we can, and re-iterate until we've exhausted the pool, or we can't allocate anything more.
 	*/
-
-	// First, receive requests.
-	func() { // Enter a closure so we can cleanly exit the loop without special tricks
-		for {
-			select {
-			case req := <-r.allocationRequestchannel: // A body should never be requesting more than one read at a time.
-				if _, ok := r.allocationRequests[req.pacerID]; req.size <= 0 && ok {
-					delete(r.allocationRequests, req.pacerID)
-				} else if req.size > 0 {
-					r.allocationRequests[req.pacerID] = req.size
-				}
-			default:
-				return
-			}
-		}
-	}()
 
 	// If we are in standard allocation mode, do our rounds.
 	if bytesPerTick := r.bytesPerTick.Load(); bytesPerTick != 0 {
@@ -262,7 +287,9 @@ func (r *requestPolicyPacer) feedRequests() {
 			allocations[id] += n // Prepare the allocation
 			r.allocationRequests[id] -= n
 
-			if r.allocationRequests[id] == 0 { // Trim it from the list if it doesn't need anything else.
+			if r.allocationRequests[id] == 0 {
+				// Trim it from the list if it doesn't need anything else so we stop
+				// considering it as part of the average now.
 				delete(r.allocationRequests, id)
 			}
 		}
@@ -291,6 +318,13 @@ func (r *requestPolicyPacer) feedRequests() {
 
 		for k, v := range allocations {
 			common.NonBlockingSafeSend(r.liveBodies[k].allocationChannel, v)
+
+			if _, ok := r.allocationRequests[k]; !ok {
+				// Finalize our cleanup of an allocated body from earlier.
+				common.AtomicSubtract(r.allocatedBytesPerSecond, PacerBodyMinimumBytesPerSecond)
+				r.liveBodies[k].bodyStatus.Store(to.Ptr(BodyStatusCompleted))
+				delete(r.liveBodies, k)
+			}
 		}
 	}
 }
@@ -323,6 +357,10 @@ func (r *requestPolicyPacer) ReturnBytes(returned uint64) {
 
 func (r *requestPolicyPacer) ProcessBytes(processed uint64) {
 	r.processedBytes.Add(processed)
+}
+
+func (r *requestPolicyPacer) UndoBytes(u uint64) {
+	common.AtomicSubtract(r.processedBytes, u)
 }
 
 func (r *requestPolicyPacer) GetTotalTraffic() uint64 {

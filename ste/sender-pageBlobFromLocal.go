@@ -36,8 +36,8 @@ type pageBlobUploader struct {
 	sip        ISourceInfoProvider
 }
 
-func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (sender, error) {
-	senderBase, err := newPageBlobSenderBase(jptm, destination, pacer, sip, nil)
+func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, sip ISourceInfoProvider) (sender, error) {
+	senderBase, err := newPageBlobSenderBase(jptm, destination, sip, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -111,9 +111,8 @@ func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int3
 
 		// send it
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
-		body := newPacedRequestBody(jptm.Context(), reader, u.pacer)
 		enrichedContext := withRetryNotification(jptm.Context(), u.filePacer)
-		_, err := u.destPageBlobClient.UploadPages(enrichedContext, body, blob.HTTPRange{Offset: id.OffsetInFile(), Count: reader.Length()},
+		_, err := u.destPageBlobClient.UploadPages(enrichedContext, reader, blob.HTTPRange{Offset: id.OffsetInFile(), Count: reader.Length()},
 			&pageblob.UploadPagesOptions{
 				CPKInfo:      u.jptm.CpkInfo(),
 				CPKScopeInfo: u.jptm.CpkScopeInfo(),

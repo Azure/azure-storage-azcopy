@@ -36,7 +36,7 @@ type blobDownloader struct {
 	// what type of page blob it is (e.g. premium) and can be significantly lower than the blob account limit.
 	// Using a automatic pacer here lets us find the right rate for this particular page blob, at which
 	// we won't be trying to move the faster than the Service wants us to.
-	filePacer autopacer
+	filePacer RequestPolicyPacer
 
 	// used to avoid downloading zero ranges of page blobs
 	pageRangeOptimizer *pageRangeOptimizer
@@ -130,7 +130,7 @@ func (bd *blobDownloader) Epilogue() {
 }
 
 // Returns a chunk-func for blob downloads
-func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer pacer) chunkFunc {
+func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64) chunkFunc {
 	return createDownloadChunkFunc(jptm, id, func() {
 
 		// If the range does not contain any data, write out empty data to disk without performing download
@@ -194,7 +194,7 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, destWri
 			OnFailedRead: common.NewBlobReadLogFunc(jptm, jptm.Info().Source),
 		})
 		defer retryReader.Close()
-		err = destWriter.EnqueueChunk(jptm.Context(), id, length, newPacedResponseBody(jptm.Context(), retryReader, pacer), true)
+		err = destWriter.EnqueueChunk(jptm.Context(), id, length, retryReader, true)
 		if err != nil {
 			jptm.FailActiveDownload("Enqueuing chunk", err)
 			return

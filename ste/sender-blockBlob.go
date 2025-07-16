@@ -48,7 +48,6 @@ type blockBlobSenderBase struct {
 	destBlockBlobClient *blockblob.Client
 	chunkSize           int64
 	numChunks           uint32
-	pacer               pacer
 	blockIDs            []string
 	destBlobTier        *blob.AccessTier
 
@@ -152,7 +151,7 @@ func getBlockNamePrefix(jobID common.JobID, partNum uint32, transferIndex uint32
 	return fmt.Sprintf("%s%s%05d%05d", placeHolderPrefix, jobIdStr, partNum, transferIndex)
 }
 
-func newBlockBlobSenderBase(jptm IJobPartTransferMgr, pacer pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType *blob.AccessTier) (*blockBlobSenderBase, error) {
+func newBlockBlobSenderBase(jptm IJobPartTransferMgr, srcInfoProvider ISourceInfoProvider, inferredAccessTierType *blob.AccessTier) (*blockBlobSenderBase, error) {
 	// compute chunk count
 	chunkSize, numChunks, err := getVerifiedChunkParams(jptm.Info(), jptm.CacheLimiter().Limit(), jptm.CacheLimiter().StrictLimit())
 	if err != nil {
@@ -192,7 +191,6 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, pacer pacer, srcInfoProvid
 		destBlockBlobClient: destBlockBlobClient,
 		chunkSize:           chunkSize,
 		numChunks:           numChunks,
-		pacer:               pacer,
 		blockIDs:            make([]string, numChunks),
 		headersToApply:      props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
 		metadataToApply:     props.SrcMetadata,

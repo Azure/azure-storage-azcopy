@@ -31,8 +31,8 @@ type azureFileUploader struct {
 	md5Channel chan []byte
 }
 
-func newAzureFilesUploader(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (sender, error) {
-	senderBase, err := newAzureFileSenderBase(jptm, destination, pacer, sip)
+func newAzureFilesUploader(jptm IJobPartTransferMgr, destination string, sip ISourceInfoProvider) (sender, error) {
+	senderBase, err := newAzureFileSenderBase(jptm, destination, sip)
 	if err != nil {
 		return nil, err
 	}
@@ -66,8 +66,7 @@ func (u *azureFileUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int
 
 		// upload the byte range represented by this chunk
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
-		body := newPacedRequestBody(u.ctx, reader, u.pacer)
-		_, err := u.getFileClient().UploadRange(u.ctx, id.OffsetInFile(), body, nil)
+		_, err := u.getFileClient().UploadRange(u.ctx, id.OffsetInFile(), reader, nil)
 		if err != nil {
 			jptm.FailActiveUpload("Uploading range", err)
 			return
@@ -89,8 +88,8 @@ func (u *azureFileUploader) Epilogue() {
 
 			u.headersToApply.ContentMD5 = md5Hash
 			_, err := u.getFileClient().SetHTTPHeaders(u.ctx, &file.SetHTTPHeadersOptions{
-				HTTPHeaders: &u.headersToApply,
-				Permissions: &u.permissionsToApply,
+				HTTPHeaders:   &u.headersToApply,
+				Permissions:   &u.permissionsToApply,
 				SMBProperties: &u.smbPropertiesToApply,
 			})
 			return err

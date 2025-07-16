@@ -23,15 +23,15 @@ package ste
 import (
 	"errors"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"os"
 	"time"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 type blobFSDownloader struct {
-	jptm IJobPartTransferMgr
-	txInfo *TransferInfo
-	srcFileClient   *file.Client
+	jptm          IJobPartTransferMgr
+	txInfo        *TransferInfo
+	srcFileClient *file.Client
 }
 
 func newBlobFSDownloader(jptm IJobPartTransferMgr) (downloader, error) {
@@ -75,7 +75,7 @@ func (bd *blobFSDownloader) Epilogue() {
 
 // Returns a chunk-func for ADLS gen2 downloads
 
-func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer pacer) chunkFunc {
+func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64) chunkFunc {
 	return createDownloadChunkFunc(jptm, id, func() {
 
 		srcFileClient := bd.srcFileClient
@@ -101,11 +101,11 @@ func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, destW
 		// The retryReader encapsulates any retries that may be necessary while downloading the body
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		retryReader := get.NewRetryReader(jptm.Context(), &file.RetryReaderOptions{
-			MaxRetries: MaxRetryPerDownloadBody,
+			MaxRetries:   MaxRetryPerDownloadBody,
 			OnFailedRead: common.NewDatalakeReadLogFunc(jptm, srcFileClient.DFSURL()),
 		})
 		defer retryReader.Close()
-		err = destWriter.EnqueueChunk(jptm.Context(), id, length, newPacedResponseBody(jptm.Context(), retryReader, pacer), true)
+		err = destWriter.EnqueueChunk(jptm.Context(), id, length, retryReader, true)
 		if err != nil {
 			jptm.FailActiveDownload("Enqueuing chunk", err)
 			return

@@ -53,13 +53,12 @@ type blobFSSenderBase struct {
 	parentDirClient     *directory.Client
 	chunkSize           int64
 	numChunks           uint32
-	pacer               pacer
 	creationTimeHeaders *file.HTTPHeaders
 	flushThreshold      int64
 	metadataToSet       common.Metadata
 }
 
-func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (*blobFSSenderBase, error) {
+func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, sip ISourceInfoProvider) (*blobFSSenderBase, error) {
 	info := jptm.Info()
 
 	// compute chunk size and number of chunks
@@ -105,7 +104,6 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, pacer pac
 		parentDirClient:     fsc.NewDirectoryClient(parentPath),
 		chunkSize:           chunkSize,
 		numChunks:           numChunks,
-		pacer:               pacer,
 		creationTimeHeaders: &headers,
 		flushThreshold:      chunkSize * int64(ADLSFlushThreshold),
 		metadataToSet:       props.SrcMetadata,

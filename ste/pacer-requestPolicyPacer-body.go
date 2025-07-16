@@ -19,21 +19,12 @@ const (
 
 	BodyStatusNew         BodyStatus = 0
 	BodyStatusAllocated   BodyStatus = 1
+	BodyStatusCompleted   BodyStatus = 2
 	BodyStatusDeallocated BodyStatus = -1
 )
 
-func (r *requestPolicyPacer) GetPacedRequestBody(body io.ReadSeekCloser) (io.ReadSeekCloser, error) {
-	n, err := body.Seek(0, io.SeekEnd) // find the length of the body
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = body.Seek(0, io.SeekStart)
-	if err != nil {
-		return nil, err
-	}
-
-	pacedBody := newPolicyPacerBody(r, body, uint64(n))
+func (r *requestPolicyPacer) GetPacedRequestBody(body io.ReadSeekCloser, contentLength uint64) io.ReadSeekCloser {
+	pacedBody := newPolicyPacerBody(r, body, contentLength)
 
 	pacedBody.bodySeekable = true
 
@@ -43,15 +34,10 @@ func (r *requestPolicyPacer) GetPacedRequestBody(body io.ReadSeekCloser) (io.Rea
 		pacedBody.AwaitFlight()
 	}
 
-	r.allocationRequestchannel <- struct {
-		pacerID uuid.UUID
-		size    uint64
-	}{pacerID: pacedBody.id, size: uint64(max(n, 0)) + 1}
-
-	return &policyPacerRequestBody{body, pacedBody}, nil
+	return &policyPacerRequestBody{body, pacedBody}
 }
 
-func (r *requestPolicyPacer) GetPacedResponseBody(body io.ReadCloser, contentLength uint64) (io.ReadCloser, error) {
+func (r *requestPolicyPacer) GetPacedResponseBody(body io.ReadCloser, contentLength uint64) io.ReadCloser {
 	pacedBody := newPolicyPacerBody(r, body, contentLength)
 
 	// This makes a strong assumption that nobody will misuse this API!
@@ -63,12 +49,49 @@ func (r *requestPolicyPacer) GetPacedResponseBody(body io.ReadCloser, contentLen
 		pacedBody.AwaitFlight()
 	}
 
-	r.allocationRequestchannel <- struct {
-		pacerID uuid.UUID
-		size    uint64
-	}{pacerID: pacedBody.id, size: contentLength}
+	return pacedBody
+}
 
-	return pacedBody, nil
+var s2sBodySizeWarnOnce = &sync.Once{}
+var s2sBodySizeWarnString = `Due to the nature of pacing service to service requests, at a large enough chunk size, the cap-mbps flag can prove ineffective. For more effective throughput limiting, it is recommended to decrease --block-size-mb. The chunk size when this warning was triggered was: %v MiB`
+
+func (r *requestPolicyPacer) GetS2SPacerAllocation(contentLength uint64) {
+	// Unfortunately, due to the _nature_ of S2S, it's impossible to properly pace a S2S request.
+	// You can, however, pace the rate at which the requests happen. The window grows larger, but,
+	// Across that window, the average is still technically "accurate".
+	// This does encounter a slight issue though. What if the size is a gigabyte,
+	// and we only technically allow through a couple megs per second.
+	// this is a hacky workaround, but we should warn if we see something like that.
+
+	if r.maxBytesPerSecond.Load()*10 < contentLength {
+		s2sBodySizeWarnOnce.Do(func() {
+			logStr := fmt.Sprintf(
+				s2sBodySizeWarnString,
+				float64(contentLength)/float64(common.MegaByte),
+			)
+
+			common.GetLifecycleMgr().Info(logStr)
+			common.AzcopyCurrentJobLogger.Log(common.ELogLevel.Warning(), logStr)
+		})
+	}
+
+	pacedBody := &policyPacerBody{
+		parent: r,
+		id:     uuid.New(),
+
+		bodySize:     contentLength,
+		bodySeekable: false,
+		bodyStatus:   &atomic.Pointer[BodyStatus]{},
+
+		allocationChannel: make(chan uint64, 10),
+	}
+
+	r.respInitChannel <- pacedBody
+
+	for alloc := uint64(0); alloc < pacedBody.bodySize; alloc += <-pacedBody.allocationChannel {
+	}
+
+	return
 }
 
 type policyPacerBody struct {
@@ -83,6 +106,7 @@ type policyPacerBody struct {
 	timeout *time.Timer
 
 	bodySize       uint64
+	totalReadBytes common.AtomicNumeric[uint64]
 	readHead       common.AtomicNumeric[uint64]
 	allocatedBytes common.AtomicNumeric[uint64]
 
@@ -107,6 +131,7 @@ func newPolicyPacerBody(parent *requestPolicyPacer, body io.ReadCloser, contentL
 		bodyStatus: &atomic.Pointer[BodyStatus]{},
 
 		bodySize:       contentLength,
+		totalReadBytes: &atomic.Uint64{},
 		readHead:       &atomic.Uint64{},
 		allocatedBytes: &atomic.Uint64{},
 
@@ -140,6 +165,12 @@ func (b *policyPacerBody) Read(p []byte) (n int, err error) {
 		allocu64 := b.captureAllocations(true)
 		// Pull only what we need for this read from our real allocation pool
 		allocation := int(min(allocu64, uint64(len(p)-writeHead)))
+
+		if status := *b.bodyStatus.Load(); status != BodyStatusAllocated && status != BodyStatusCompleted {
+			return writeHead, errors.New("body is not yet allocated or has been deallocated")
+		} else if status == BodyStatusCompleted && uint64(max(allocation, 0))+b.readHead.Load() < b.bodySize {
+			return writeHead, errors.New("body is complete but was not allocated enough bytes")
+		}
 
 		if allocation < 0 {
 			allocation = len(p)
@@ -207,7 +238,22 @@ func (b *policyPacerBody) captureAllocations(blocking ...bool) uint64 {
 
 	var out = b.allocatedBytes.Load()
 	if toBlock && out == 0 {
-		out = b.allocatedBytes.Add(uint64(<-b.allocationChannel))
+		func() { // open a closure so it's easy to exit the loop
+			t := time.NewTicker(PacerTickrate)
+			defer t.Stop()
+
+			for {
+				select {
+				case alloc := <-b.allocationChannel:
+					out = b.allocatedBytes.Add(alloc)
+					return
+				case <-t.C:
+					if status := *b.bodyStatus.Load(); status != BodyStatusAllocated && status != BodyStatusCompleted {
+						return // now we should exit near immediately
+					}
+				}
+			}
+		}()
 	}
 
 	for {
@@ -218,6 +264,11 @@ func (b *policyPacerBody) captureAllocations(blocking ...bool) uint64 {
 			return out
 		}
 	}
+}
+
+func (b *policyPacerBody) UndoBytes() {
+	b.parent.UndoBytes(b.totalReadBytes.Load())
+	b.totalReadBytes.Store(0)
 }
 
 type policyPacerRequestBody struct {
@@ -235,16 +286,17 @@ func (b *policyPacerRequestBody) Seek(offset int64, whence int) (int64, error) {
 
 	n, err := b.seeker.Seek(offset, whence)
 	b.readHead.Store(uint64(n))
+
+	b.parent.reqSeekChannel <- struct {
+		p        *policyPacerBody
+		newAlloc uint64
+	}{p: b.policyPacerBody, newAlloc: b.bodySize - uint64(max(n, 0))}
+
 	return n, err
 }
 
 func (b *policyPacerRequestBody) DeallocateResponse() {
 	b.respDeallocateOnce.Do(func() {
-		common.AtomicSubtract(b.parent.allocatedBytesPerSecond, RequestMinimumBytesPerSecond)
+		common.AtomicSubtract(b.parent.allocatedBytesPerSecond, PacerBodyMinimumBytesPerSecond)
 	})
-}
-
-type pacerBodyAllocationBucket struct {
-	Requested int64
-	Allocated int64
 }

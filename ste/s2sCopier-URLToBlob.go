@@ -33,7 +33,7 @@ import (
 var LogBlobConversionOnce = &sync.Once{}
 
 // Creates the right kind of URL to blob copier, based on the blob type of the source
-func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (sender, error) {
+func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, sip ISourceInfoProvider) (sender, error) {
 	srcInfoProvider := sip.(IRemoteSourceInfoProvider) // "downcast" to the type we know it really has
 
 	// If our destination is a dfs endpoint, make an attempt to cast it to the blob endpoint
@@ -110,11 +110,11 @@ func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, pacer pace
 
 	switch targetBlobType {
 	case blob.BlobTypeBlockBlob:
-		return newURLToBlockBlobCopier(jptm, pacer, srcInfoProvider)
+		return newURLToBlockBlobCopier(jptm, srcInfoProvider)
 	case blob.BlobTypeAppendBlob:
-		return newURLToAppendBlobCopier(jptm, destination, pacer, srcInfoProvider)
+		return newURLToAppendBlobCopier(jptm, destination, srcInfoProvider)
 	case blob.BlobTypePageBlob:
-		return newURLToPageBlobCopier(jptm, destination, pacer, srcInfoProvider)
+		return newURLToPageBlobCopier(jptm, destination, srcInfoProvider)
 	default:
 		if jptm.ShouldLog(common.LogDebug) { // To save fmt.Sprintf
 			jptm.LogTransferInfo(
@@ -123,6 +123,6 @@ func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, pacer pace
 				destination,
 				fmt.Sprintf("BlobType %q is used for destination blob by default.", blob.BlobTypeBlockBlob))
 		}
-		return newURLToBlockBlobCopier(jptm, pacer, srcInfoProvider)
+		return newURLToBlockBlobCopier(jptm, srcInfoProvider)
 	}
 }

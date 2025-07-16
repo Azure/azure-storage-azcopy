@@ -33,7 +33,7 @@ type downloader interface {
 	// GenerateDownloadFunc returns a func() that will download the specified portion of the remote file into dstFile
 	// Instead of taking destination file as a parameter, it takes a helper that will write to the file. That keeps details of
 	// file IO out out the download func, and lets that func concentrate only on the details of the remote endpoint
-	GenerateDownloadFunc(jptm IJobPartTransferMgr, writer common.ChunkedFileWriter, id common.ChunkID, length int64, pacer pacer) chunkFunc
+	GenerateDownloadFunc(jptm IJobPartTransferMgr, writer common.ChunkedFileWriter, id common.ChunkID, length int64) chunkFunc
 
 	// Epilogue does cleanup. MAY be the only method that gets called (in error cases). So must not fail simply because
 	// Prologue has not yet been called

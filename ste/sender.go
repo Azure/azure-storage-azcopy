@@ -28,9 +28,9 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-/////////////////////////////////////////////////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////////////////////////////////////////////
 // sender is the abstraction that contains common sender behavior, for sending files/blobs.
-/////////////////////////////////////////////////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////////////////////////////////////////////
 type sender interface {
 	// ChunkSize returns the chunk size that should be used
 	ChunkSize() int64
@@ -75,9 +75,9 @@ type propertiesSender interface {
 	GenerateCopyMetadata(id common.ChunkID) chunkFunc
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////////////////////////////////////////////
 // folderSender is a sender that also knows how to send folder property information
-/////////////////////////////////////////////////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////////////////////////////////////////////
 type folderSender interface {
 	EnsureFolderExists() error
 	SetFolderProperties() error
@@ -98,22 +98,22 @@ func (f folderPropertiesNotOverwroteInCreation) Error() string {
 	panic("Not a real error")
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////////////////////////////////////////////
 // symlinkSender is a sender that also knows how to send symlink properties
-/////////////////////////////////////////////////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////////////////////////////////////////////
 type symlinkSender interface {
 	SendSymlink(linkData string) error
 }
 
-type senderFactory func(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (sender, error)
+type senderFactory func(jptm IJobPartTransferMgr, destination string, sip ISourceInfoProvider) (sender, error)
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 // For copying folder properties, many of the ISender of the methods needed to copy one file from URL to a remote location
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
-/////////////////////////////////////////////////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////////////////////////////////////////////
 // Abstraction of the methods needed to copy one file from URL to a remote location
-/////////////////////////////////////////////////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////////////////////////////////////////////
 type s2sCopier interface {
 	sender
 
@@ -209,7 +209,7 @@ func createChunkFunc(setDoneStatusOnExit bool, jptm IJobPartTransferMgr, id comm
 }
 
 // newBlobUploader detects blob type and creates a uploader manually
-func newBlobUploader(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (sender, error) {
+func newBlobUploader(jptm IJobPartTransferMgr, destination string, sip ISourceInfoProvider) (sender, error) {
 	override := jptm.BlobTypeOverride()
 	intendedType := override.ToBlobType()
 
@@ -228,13 +228,13 @@ func newBlobUploader(jptm IJobPartTransferMgr, destination string, pacer pacer, 
 
 	switch intendedType {
 	case blob.BlobTypeBlockBlob:
-		return newBlockBlobUploader(jptm, pacer, sip)
+		return newBlockBlobUploader(jptm, sip)
 	case blob.BlobTypePageBlob:
-		return newPageBlobUploader(jptm, destination, pacer, sip)
+		return newPageBlobUploader(jptm, destination, sip)
 	case blob.BlobTypeAppendBlob:
-		return newAppendBlobUploader(jptm, destination, pacer, sip)
+		return newAppendBlobUploader(jptm, destination, sip)
 	default:
-		return newBlockBlobUploader(jptm, pacer, sip) // If no blob type was inferred, assume block blob.
+		return newBlockBlobUploader(jptm, sip) // If no blob type was inferred, assume block blob.
 	}
 }
 

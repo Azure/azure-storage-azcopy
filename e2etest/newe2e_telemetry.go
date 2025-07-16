@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/data/aztables"
-	cmd2 "github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"os"
 	"os/exec"
 	"strconv"
@@ -43,7 +43,7 @@ func UploadMemoryProfile(a Asserter, profilePath string, runCount uint) {
 	}
 
 	// Output the data so that if the upload fails or the acct isn't configured, we're good to go.
-	a.Log("Test run sampled a heap size of %s", cmd2.ByteSizeToString(totalBytes))
+	a.Log("Test run sampled a heap size of %s", common.ByteSizeToString(totalBytes))
 	if !GlobalConfig.TelemetryConfigured() {
 		return
 	}

@@ -18,7 +18,7 @@ var logBlobFSDeleteWarnOnce = &sync.Once{}
 
 const blobFSDeleteWarning = "Displayed file count will be either 1 or based upon list-of-files entries, and thus inaccurate, as deletes are performed recursively service-side."
 
-func DeleteHNSResource(jptm IJobPartTransferMgr, pacer pacer) {
+func DeleteHNSResource(jptm IJobPartTransferMgr) {
 	// If the transfer was cancelled, then report the transfer as done.
 	if jptm.WasCanceled() {
 		jptm.ReportTransferDone()

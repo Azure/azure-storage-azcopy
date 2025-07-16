@@ -103,7 +103,7 @@ func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptio
 	// [includeResponsePolicy, newAPIVersionPolicy (ignored), NewTelemetryPolicy, perCall, NewRetryPolicy, perRetry, NewLogPolicy, httpHeaderPolicy, bodyDownloadPolicy]
 	perCallPolicies := []policy.Policy{azruntime.NewRequestIDPolicy(), NewVersionPolicy(), newFileUploadRangeFromURLFixPolicy()}
 	// TODO : Default logging policy is not equivalent to old one. tracing HTTP request
-	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), newLogPolicy(log), newStatsPolicy()}
+	perRetryPolicies := []policy.Policy{todoRequestPolicyPacer, NewPolicyInjector(PolicyAutoPacerKey), newRetryNotificationPolicy(), newLogPolicy(log), newStatsPolicy()}
 	if dstCred != nil {
 		perCallPolicies = append(perRetryPolicies, NewDestReauthPolicy(dstCred))
 	}
@@ -188,7 +188,7 @@ type jobPartMgr struct {
 
 	priority common.JobPriority
 
-	pacer pacer // Pacer is used to cap throughput
+	pacer RequestPolicyPacer // Pacer is used to cap throughput
 
 	slicePool common.ByteSlicePooler
 
@@ -446,7 +446,7 @@ func (jpm *jobPartMgr) ExclusiveDestinationMap() *common.ExclusiveStringMap {
 }
 
 func (jpm *jobPartMgr) StartJobXfer(jptm IJobPartTransferMgr) {
-	jpm.newJobXfer(jptm, jpm.pacer)
+	jpm.newJobXfer(jptm)
 }
 
 func (jpm *jobPartMgr) GetOverwriteOption() common.OverwriteOption {

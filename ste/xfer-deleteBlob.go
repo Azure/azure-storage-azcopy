@@ -16,7 +16,7 @@ import (
 
 var explainedSkippedRemoveOnce sync.Once
 
-func DeleteBlob(jptm IJobPartTransferMgr, pacer pacer) {
+func DeleteBlob(jptm IJobPartTransferMgr) {
 
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.
 	if jptm.WasCanceled() {

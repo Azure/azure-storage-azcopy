@@ -37,19 +37,19 @@ const azcopyTempDownloadPrefix string = ".azDownload-%s-"
 
 // xfer.go requires just a single xfer function for the whole job.
 // This routine serves that role for downloads and redirects for each transfer to a file or folder implementation
-func remoteToLocal(jptm IJobPartTransferMgr, pacer pacer, df downloaderFactory) {
+func remoteToLocal(jptm IJobPartTransferMgr, df downloaderFactory) {
 	info := jptm.Info()
 	if info.IsFolderPropertiesTransfer() {
-		remoteToLocal_folder(jptm, pacer, df)
+		remoteToLocal_folder(jptm, df)
 	} else if info.EntityType == common.EEntityType.Symlink() {
-		remoteToLocal_symlink(jptm, pacer, df)
+		remoteToLocal_symlink(jptm, df)
 	} else {
-		remoteToLocal_file(jptm, pacer, df)
+		remoteToLocal_file(jptm, df)
 	}
 }
 
 // general-purpose "any remote persistence location" to local, for files
-func remoteToLocal_file(jptm IJobPartTransferMgr, pacer pacer, df downloaderFactory) {
+func remoteToLocal_file(jptm IJobPartTransferMgr, df downloaderFactory) {
 
 	info := jptm.Info()
 
@@ -323,7 +323,7 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, pacer pacer, df downloaderFact
 		_ = dstWriter.WaitToScheduleChunk(jptm.Context(), id, adjustedChunkSize)
 
 		// create download func that is a appropriate to the remote data source
-		downloadFunc := dl.GenerateDownloadFunc(jptm, dstWriter, id, adjustedChunkSize, pacer)
+		downloadFunc := dl.GenerateDownloadFunc(jptm, dstWriter, id, adjustedChunkSize)
 
 		// schedule the download chunk job
 		jptm.ScheduleChunks(downloadFunc)

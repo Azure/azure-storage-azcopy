@@ -57,7 +57,6 @@ type azureFileSenderBase struct {
 	shareClient          *share.Client
 	chunkSize            int64
 	numChunks            uint32
-	pacer                pacer
 	ctx                  context.Context
 	sip                  ISourceInfoProvider
 	// Headers and other info that we will apply to the destination
@@ -70,7 +69,7 @@ type azureFileSenderBase struct {
 	metadataToApply      common.Metadata
 }
 
-func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (*azureFileSenderBase, error) {
+func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, sip ISourceInfoProvider) (*azureFileSenderBase, error) {
 	info := jptm.Info()
 
 	// compute chunk size (irrelevant but harmless for folders)
@@ -138,7 +137,6 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 		fileOrDirClient:      client,
 		chunkSize:            chunkSize,
 		numChunks:            numChunks,
-		pacer:                pacer,
 		ctx:                  jptm.Context(),
 		headersToApply:       props.SrcHTTPHeaders.ToFileHTTPHeaders(),
 		smbPropertiesToApply: file.SMBProperties{},
@@ -484,7 +482,7 @@ func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, shareCli
 	if len(segments) == 0 {
 		// If we are trying to create root, perform GetProperties instead.
 		// Azure Files has delayed creation of root, and if we do not perform GetProperties,
-		// some operations like SetMetadata or SetProperties will fail. 
+		// some operations like SetMetadata or SetProperties will fail.
 		// TODO: Remove this block once the bug is fixed.
 		_, err := directoryClient.GetProperties(ctx, nil)
 		return err

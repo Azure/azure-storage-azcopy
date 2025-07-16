@@ -25,7 +25,7 @@ import (
 )
 
 // general-purpose "any remote persistence location" to local, for folders
-func remoteToLocal_folder(jptm IJobPartTransferMgr, pacer pacer, df downloaderFactory) {
+func remoteToLocal_folder(jptm IJobPartTransferMgr, df downloaderFactory) {
 
 	info := jptm.Info()
 

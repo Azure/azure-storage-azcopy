@@ -43,7 +43,7 @@ func newAzureFilesDownloader(jptm IJobPartTransferMgr) (downloader, error) {
 	}
 
 	source := fsc.NewShareClient(jptm.Info().SrcContainer)
-	
+
 	if jptm.Info().SnapshotID != "" {
 		source, err = source.WithSnapshot(jptm.Info().SnapshotID)
 		if err != nil {
@@ -129,7 +129,7 @@ func (bd *azureFilesDownloader) Epilogue() {
 }
 
 // GenerateDownloadFunc returns a chunk-func for file downloads
-func (bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer pacer) chunkFunc {
+func (bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64) chunkFunc {
 	return createDownloadChunkFunc(jptm, id, func() {
 
 		// step 1: Downloading the file from range startIndex till (startIndex + adjustedChunkSize)
@@ -159,7 +159,7 @@ func (bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, d
 			OnFailedRead: common.NewFileReadLogFunc(jptm, jptm.Info().Source),
 		})
 		defer retryReader.Close()
-		err = destWriter.EnqueueChunk(jptm.Context(), id, length, newPacedResponseBody(jptm.Context(), retryReader, pacer), true)
+		err = destWriter.EnqueueChunk(jptm.Context(), id, length, retryReader, true)
 		if err != nil {
 			jptm.FailActiveDownload("Enqueuing chunk", err)
 			return
