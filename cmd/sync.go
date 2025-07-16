@@ -412,6 +412,7 @@ func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
 
 	if cooked.fromTo.From() == common.ELocation.Local() && strings.Contains(cooked.source.ValueLocal(), "*") {
 		cooked.stripTopDir = true
+		cooked.source.Value = strings.TrimSuffix(cooked.source.Value, "/*")
 	}
 
 	return nil
