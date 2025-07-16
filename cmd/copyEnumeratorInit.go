@@ -230,7 +230,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					// For file share,if the share does not exist, azcopy will fail, prompting the customer to create
 					// the share manually with the required quota and settings.
 					if fileerror.HasCode(err, fileerror.ShareNotFound) {
-						return nil, fmt.Errorf("the destination file share %s does not exist; please create it manually with the required quota and settings before running the copy —refer to https://learn.microsoft.com/en-us/azure/storage/files/storage-how-to-create-file-share?tabs=azure-portal for SMB or https://learn.microsoft.com/en-us/azure/storage/files/storage-files-quick-create-use-linux for NFS.", dstContainerName)
+						return nil, fmt.Errorf("%s Destination file share: %s", DstShareDoesNotExists, dstContainerName)
 					}
 
 					// if JobsAdmin is nil, we're probably in testing mode.
