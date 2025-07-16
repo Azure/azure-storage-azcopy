@@ -308,7 +308,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			SrcLength:      int16(len(order.Transfers.List[t].Source)),
 			DstLength:      int16(len(order.Transfers.List[t].Destination)),
 			EntityType:     order.Transfers.List[t].EntityType,
-			ModifiedTime:   order.Transfers.List[t].LastModifiedTime.UnixNano(),
+			ModifiedTime:   common.ToWindowsEpoch(order.Transfers.List[t].LastModifiedTime),
 			SourceSize:     order.Transfers.List[t].SourceSize,
 			CompletionTime: 0,
 			// For S2S copy, per Transfer source's properties
