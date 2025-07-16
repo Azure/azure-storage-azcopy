@@ -293,7 +293,7 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 	} else {
 		if err := performSMBSpecificValidation(
 			cooked.fromTo, cooked.preservePermissions, cooked.preserveInfo,
-			cooked.preservePOSIXProperties,cooked.hardlinks); err != nil {
+			cooked.preservePOSIXProperties, cooked.hardlinks); err != nil {
 			return err
 		}
 	}
@@ -859,13 +859,8 @@ func init() {
 
 	rootCmd.AddCommand(syncCmd)
 	syncCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", true, "True by default, look into sub-directories recursively when syncing between directories. (default true).")
-<<<<<<< HEAD
 	syncCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "",
 		"Source-to-destination combination. Required for NFS transfers; optional for SMB. Examples: LocalBlob, BlobLocal, LocalFile, FileLocal, BlobFile, FileBlob, LocalNFS, NFSLocal, NFSNFS, etc.")
-=======
-	syncCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "Optionally specifies the source destination combination. "+
-		"\n For Example: LocalBlob, BlobLocal, LocalFile, FileLocal, BlobFile, FileBlob, etc.")
->>>>>>> f2fe6dddbcfaba99a1f2b3a6d0fcb22099cecf97
 	syncCmd.PersistentFlags().BoolVar(&raw.includeDirectoryStubs, "include-directory-stub", false, "False by default, includes blobs with the hdi_isfolder metadata in the transfer.")
 
 	// TODO: enable for copy with IfSourceNewer
