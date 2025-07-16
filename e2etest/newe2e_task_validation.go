@@ -184,7 +184,7 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 							sec := ns / 1e9
 							secStr := fmt.Sprintf("%d", sec)
 							if vNs != secStr {
-								a.Assert("Metadata value for key "+k+" does not match.", Equal{}, v, ov)
+								a.Assert("Metadata value for key "+k+" does not match.", Equal{}, vNs, ovNs)
 							}
 						}
 					}
