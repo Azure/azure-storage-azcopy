@@ -188,6 +188,11 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		if cca.FromTo.From().IsRemote() && dstContainerName != "" { // if the destination has a explicit container name
 			// Attempt to create the container. If we fail, fail silently.
 			err = cca.createDstContainer(dstContainerName, cca.Destination, ctx, existingContainers, common.ELogLevel.None())
+			// For file share,if the share does not exist, azcopy will fail, prompting the customer to create
+			// the share manually with the required quota and settings.
+			if fileerror.HasCode(err, fileerror.ShareNotFound) {
+				return nil, fmt.Errorf("the destination file share %s does not exist; please create it manually with the required quota and settings before running the copy —refer to https://learn.microsoft.com/en-us/azure/storage/files/storage-how-to-create-file-share?tabs=azure-portal for SMB or https://learn.microsoft.com/en-us/azure/storage/files/storage-files-quick-create-use-linux for NFS.", dstContainerName)
+			}
 
 			// check against seenFailedContainers so we don't spam the job log with initialization failed errors
 			if _, ok := seenFailedContainers[dstContainerName]; err != nil && jobsAdmin.JobsAdmin != nil && !ok {
@@ -223,6 +228,11 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					}
 
 					err = cca.createDstContainer(bucketName, cca.Destination, ctx, existingContainers, common.ELogLevel.None())
+					// For file share,if the share does not exist, azcopy will fail, prompting the customer to create
+					// the share manually with the required quota and settings.
+					if fileerror.HasCode(err, fileerror.ShareNotFound) {
+						return nil, fmt.Errorf("%s Destination file share: %s", DstShareDoesNotExists, dstContainerName)
+					}
 
 					// if JobsAdmin is nil, we're probably in testing mode.
 					// As a result, container creation failures are expected as we don't give the SAS tokens adequate permissions.
@@ -247,6 +257,11 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 				if err == nil {
 					err = cca.createDstContainer(resName, cca.Destination, ctx, existingContainers, common.ELogLevel.None())
+					// For file share,if the share does not exist, azcopy will fail, prompting the customer to create
+					// the share manually with the required quota and settings.
+					if fileerror.HasCode(err, fileerror.ShareNotFound) {
+						return nil, fmt.Errorf("the destination file share %s does not exist; please create it manually with the required quota and settings before running the copy —refer to https://learn.microsoft.com/en-us/azure/storage/files/storage-how-to-create-file-share?tabs=azure-portal for SMB or https://learn.microsoft.com/en-us/azure/storage/files/storage-files-quick-create-use-linux for NFS.", dstContainerName)
+					}
 
 					if _, ok := seenFailedContainers[dstContainerName]; err != nil && jobsAdmin.JobsAdmin != nil && !ok {
 						logDstContainerCreateFailureOnce.Do(func() {
@@ -521,7 +536,6 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 		bcc := bsc.NewContainerClient(containerName)
 
 		_, err = bcc.GetProperties(ctx, nil)
-
 		if err == nil {
 			return err // Container already exists, return gracefully
 		}
@@ -537,15 +551,17 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 
 		_, err = sc.GetProperties(ctx, nil)
 		if err == nil {
-			return err
+			return err // If err is nil share already exists, return gracefully
 		}
 
-		// Create a destination share with the default service quota
-		// TODO: Create a flag for the quota
-		_, err = sc.Create(ctx, nil)
-		if fileerror.HasCode(err, fileerror.ShareAlreadyExists) {
-			return nil
-		}
+		// For file shares using NFS and SMB, we will not create the share if it does not exist.
+		//
+		// Rationale: This decision was made after evaluating the implications of the upcoming V2 APIs.
+		// In V2, customers are billed based on the provisioned quota rather than actual usage.
+		// Automatically creating a share with a default quota could result in unintended charges,
+		// even if the share is never used.
+		//
+		// Therefore, to avoid unexpected billing, we will not auto-create the share here.
 		return err
 	case common.ELocation.BlobFS():
 		dsc, _ := sc.DatalakeServiceClient()
