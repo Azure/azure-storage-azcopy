@@ -224,13 +224,13 @@ type HandleInfo struct {
 }
 
 func (hi HandleInfo) FileCreationTime() time.Time {
-	// This returns nanoseconds since Unix Epoch.
-	return time.Unix(0, hi.CreationTime.Nanoseconds())
+	// This returns nanoseconds since Windows Epoch.
+	return hi.CreationTime.ToTime()
 }
 
 func (hi HandleInfo) FileLastWriteTime() time.Time {
-	// This returns nanoseconds since Unix Epoch.
-	return time.Unix(0, hi.LastWriteTime.Nanoseconds())
+	// This returns nanoseconds since Windows Epoch.
+	return hi.LastWriteTime.ToTime()
 }
 
 func (hi HandleInfo) FileAttributes() (*file.NTFSFileAttributes, error) {
@@ -239,8 +239,8 @@ func (hi HandleInfo) FileAttributes() (*file.NTFSFileAttributes, error) {
 }
 
 func (hi HandleInfo) FileAccessTime() time.Time {
-	// This returns nanoseconds since Unix Epoch.
-	return time.Unix(0, hi.LastAccessTime.Nanoseconds())
+	// This returns nanoseconds since Windows Epoch.
+	return hi.LastAccessTime.ToTime()
 }
 
 func (f localFileSourceInfoProvider) GetNFSProperties() (TypedNFSPropertyHolder, error) {

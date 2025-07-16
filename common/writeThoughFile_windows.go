@@ -27,6 +27,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -296,4 +297,18 @@ func SetBackupMode(enable bool, fromTo FromTo) error {
 	}
 
 	return nil
+}
+
+// Nanoseconds converts Filetime (as ticks since Windows Epoch) to nanoseconds since Unix Epoch (January 1, 1970).
+func NanosecondsSinceWinEpoch(ft *windows.Filetime) uint64 {
+	// 100-nanosecond intervals (ticks) since Windows Epoch (January 1, 1601).
+	ticks := uint64(ft.HighDateTime)<<32 + uint64(ft.LowDateTime)
+
+	return ticks * 100
+}
+
+// ToTime converts Filetime to time.Time with fallback to Windows epoch for times before Unix epoch.
+// If the Filetime represents a time before Unix epoch (January 1, 1970), it falls back to Windows epoch (January 1, 1601).
+func WinFiletimeToTime(ft *windows.Filetime) time.Time {
+	return WinEpochNanoSecToTime(NanosecondsSinceWinEpoch(ft))
 }

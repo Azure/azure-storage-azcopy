@@ -25,6 +25,21 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
+)
+
+const (
+	// 100-nanosecond intervals from Windows Epoch (January 1, 1601) to Unix Epoch (January 1, 1970).
+	TICKS_FROM_WINDOWS_EPOCH_TO_UNIX_EPOCH = 116_444_736_000_000_000
+
+	// time.Time is limited to 9,214,748,364 seconds before and after Unix epoch (January 1, 1970) due to int64 limitations.
+	// This is the maximum negative offset from Unix epoch in seconds.
+	// It corresponds to the time 1678-01-01T00:00:00Z.
+	// This is the minimum time.Time value that can be represented in Go.
+	TICKS_FROM_WINDOWS_EPOCH_TO_MIN_UNIX_EPOCH = 24_299_136_000_000_000 // 24299136000000000
+
+	TICKS_FROM_WINDOWS_EPOCH_TO_MIDWAY_POINT = 58_065_120_000_000_000 // Jan 1 1601 to Jan 1 1785
+	TICKS_FROM_MIDWAY_EPOCH_TO_UNIX_EPOCH    = 58_379_616_000_000_000 // Jan 1 1785 to Jan 1 1970
 )
 
 const IncludeBeforeFlagName = "include-before"
@@ -33,6 +48,14 @@ const BackupModeFlagName = "backup" // original name, backup mode, matches the n
 const PreserveOwnerFlagName = "preserve-owner"
 const PreserveSymlinkFlagName = "preserve-symlinks"
 const PreserveOwnerDefault = true
+
+var (
+	// Windows epoch (1601-01-01 UTC)
+	WindowsEpochUTC = time.Date(1601, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	// Mid year between Windows and Unix epochs
+	MidYearEpochUTC = time.Date(1785, 1, 1, 0, 0, 0, 0, time.UTC)
+)
 
 // The regex doesn't require a / on the ending, it just requires something similar to the following
 // C:
@@ -100,4 +123,38 @@ func CreateDirectoryIfNotExist(directory string, tracker FolderCreationTracker) 
 	} else { // if err is nil, we return err. if err has an error, we return it.
 		return nil
 	}
+}
+
+// WinEpochNanoSecToTime converts nanoseconds since Windows epoch to time.Time.
+// It handles the conversion from Windows epoch (1601-01-01)
+func WinEpochNanoSecToTime(nsecWinEpoch uint64) time.Time {
+	ticksWinEpoch := nsecWinEpoch / uint64(100) // Convert to 100-nanosecond intervals
+
+	if ticksWinEpoch < uint64(TICKS_FROM_WINDOWS_EPOCH_TO_MIN_UNIX_EPOCH) {
+		// If nsec is less than the minimum ticks from Windows epoch to Unix epoch,
+		// we are dealing with a time beyond what unix.Time can handle
+		// Windows epoch
+		windowsEpoch := time.Date(1601, 1, 1, 0, 0, 0, 0, time.UTC)
+		return windowsEpoch.Add(time.Duration(nsecWinEpoch)).In(time.UTC)
+	}
+
+	ticksUnixEpoch := int64(ticksWinEpoch) - TICKS_FROM_WINDOWS_EPOCH_TO_UNIX_EPOCH
+	nsecUnixEpoch := ticksUnixEpoch * 100 // Convert to nanoseconds
+
+	if nsecUnixEpoch >= 0 {
+		return time.Unix(0, nsecUnixEpoch).In(time.UTC)
+	}
+
+	// It's a Unix epoch time before 1970 and after 1678
+	// Use Go's internal unixTime function approach
+	seconds := nsecUnixEpoch / 1e9
+	nsec := nsecUnixEpoch % 1e9
+
+	// Handle negative nanoseconds (Go's normalization)
+	if nsec < 0 {
+		seconds--
+		nsec += 1e9
+	}
+
+	return time.Unix(seconds, nsec).In(time.UTC)
 }

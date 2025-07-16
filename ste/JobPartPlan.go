@@ -13,7 +13,11 @@ import (
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
 // current version of azcopy
 // To be Incremented every time when we release azcopy with changed dataSchema
-const DataSchemaVersion common.Version = 19
+//
+// Version 20:
+//   - Updated JobPartPlanHeader.ModifiedTime to use uint64 instead of int64.
+//     This is to support windows epoch time format which is in nanoseconds since 1601-01-01.
+const DataSchemaVersion common.Version = 20
 
 const (
 	CustomHeaderMaxBytes = 256
@@ -361,7 +365,7 @@ type JobPartPlanTransfer struct {
 	// We use a dedicated field for this because the alternative (of doing something fancy the names) was too complex and error-prone
 	EntityType common.EntityType
 	// ModifiedTime represents the last time at which source was modified before start of transfer stored as nanoseconds.
-	ModifiedTime int64
+	ModifiedTime uint64
 	// SourceSize represents the actual size of the source on disk
 	SourceSize int64
 	// CompletionTime represents the time at which transfer was completed
