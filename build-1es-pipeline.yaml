@@ -1,12 +1,7 @@
 variables:
-  AZCOPY_GOLANG_VERSION: '1.24.0'
+  AZCOPY_GOLANG_VERSION: '1.24.2'
 
 parameters:
-  - name: publish_to_container
-    displayName: 'Publish To Container'
-    type: boolean
-    default: false
-
   - name: publish_to_m1_container
     displayName: 'Publish To M1 Container'
     type: boolean
@@ -1057,6 +1052,7 @@ extends:
                         $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.tar.gz
                         $(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*.zip
                         $(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*.zip
+                        $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/mariner/*
                       assetUploadMode: replace
                       addChangeLog: true
 
@@ -1238,16 +1234,9 @@ extends:
                       go build -tags "netgo" -o azcopy
                     displayName: 'Build AzCopy'
 
-                  - task: AzureCLI@2
-                    inputs:
-                      azureSubscription: 'ESRP KeyVault identity'
-                      scriptType: bash
-                      scriptLocation: inlineScript
-                      inlineScript: |
-                        export AZCOPY_AUTO_LOGIN_TYPE=AzCLI
-                        echo "azcopy version: $(azcopy_version)"
-                        #Upload to release version blob file
-                        upload_url="https://azcopyvnextrelease.blob.core.windows.net/%24web/releasemetadata/latest_version.txt"
-                        echo "Version will be uploaded to: $upload_url"
-                        echo $(azcopy_version) | ./azcopy copy "$upload_url" --from-to=PipeBlob --log-level=DEBUG --output-type=text 2>&1 | tee /dev/null
-                        exit ${PIPESTATUS[1]}
+                  - script: |
+                      echo "azcopy version: $(azcopy_version)"
+                      "$(azcopy_version)" > latest_version.txt
+                      echo "Updated latest_version.txt with version: $(azcopy_version)"
+                      cat latest_version.txt
+                    displayName: 'Update latest_version.txt file'
