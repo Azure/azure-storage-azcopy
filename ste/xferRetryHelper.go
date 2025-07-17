@@ -24,9 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"maps"
 	"net/http"
-	"slices"
 	"strconv"
 	"strings"
 )
@@ -48,25 +46,23 @@ func GetShouldRetry(log *LogOptions) RetryFunc {
 			if storageErrorCodes, ok := RetryStatusCodes[resp.StatusCode]; ok {
 				// compare to status codes
 				errorCodes := getErrorCodes(resp)
-				if errorCodes != nil {
-					for _, errorCode := range errorCodes {
-						if policy, ok := storageErrorCodes[errorCode]; ok {
-							if policy && log != nil && log.ShouldLog(common.ELogLevel.Debug()) {
-								log.Log(
-									common.ELogLevel.Debug(),
-									fmt.Sprintf("Request %s retried on custom condition %s",
-										resp.Header.Get("x-ms-client-request-id"),
-										errorCode))
-							}
-
-							if policy {
-								return policy
-							}
-						} else if !ok && storageErrorCodes["*"] {
-							return true
+				for _, errorCode := range errorCodes {
+					if policy, ok := storageErrorCodes[errorCode]; ok {
+						if policy && log != nil && log.ShouldLog(common.ELogLevel.Debug()) {
+							log.Log(
+								common.ELogLevel.Debug(),
+								fmt.Sprintf("Request %s retried on custom condition %s",
+									resp.Header.Get("x-ms-client-request-id"),
+									errorCode))
 						}
 
+						if policy {
+							return policy
+						}
+					} else if !ok && storageErrorCodes["*"] {
+						return true
 					}
+
 				}
 			}
 			// Check if copy source status code is present
@@ -117,21 +113,6 @@ func getCopySourceStatusCode(resp *http.Response) string {
 		return resp.Header["X-Ms-Copy-Source-Status-Code"][0] //nolint:staticcheck
 	}
 	return ""
-}
-func GetRetryStatusCodes(log *LogOptions) []int {
-	if len(RetryStatusCodes) == 0 {
-		return nil
-	}
-	storageStatusCodes := slices.Sorted(maps.Keys(RetryStatusCodes))
-	var statusCodes []int
-	statusCodes = append(statusCodes, storageStatusCodes...)
-
-	if log != nil && log.ShouldLog(common.ELogLevel.Debug()) {
-		log.Log(
-			common.ELogLevel.Debug(),
-			fmt.Sprintf("Request retried on custom %v status", statusCodes))
-	}
-	return statusCodes
 }
 
 type StorageErrorCodes map[string]bool // where map[string]bool is the set of storage error codes; true = retry,  = no retry
