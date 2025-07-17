@@ -69,6 +69,7 @@ type rawSyncCmdArgs struct {
 	preservePOSIXProperties bool
 	followSymlinks          bool
 	preserveSymlinks        bool
+	preserveRootProps       bool
 	backupMode              bool
 	putMd5                  bool
 	md5ValidationOption     string
@@ -443,6 +444,7 @@ type cookedSyncCmdArgs struct {
 	preservePermissions     common.PreservePermissionsOption
 	preserveInfo            bool
 	preservePOSIXProperties bool
+	preserveRootProps       bool
 	putMd5                  bool
 	md5ValidationOption     common.HashValidationOption
 	blockSize               int64
