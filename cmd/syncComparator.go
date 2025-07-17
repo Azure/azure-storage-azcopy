@@ -257,8 +257,10 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 		// If metadata has changed for a folder, we consider data changed as well.
 		// If metadata has changed for a symlink, both mtime and ctime will change
 		// so data change will take care of it.
+		glcm.Info("Metadata has changed")
 		if sourceObjectInMap.entityType == common.EEntityType.Folder() {
 			transferObject = true
+			glcm.Info("Metadata has changed for folder")
 		}
 
 		if sourceObjectInMap.entityType == common.EEntityType.File() {
@@ -268,6 +270,7 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 			sourceObjectInMap.size = 0                                         // Set size to 0 to indicate that we are not transferring data, only metadata.
 			sourceObjectInMap.entityType = common.EEntityType.FileProperties() // Set entity type to FileProperties to indicate metadata transfer.
 			transferObject = true
+			glcm.Info("Metadata has changed for file")
 		}
 	}
 
@@ -292,13 +295,15 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 	sourceObject StoredObject,
 	destinationObject StoredObject,
 ) (dataChanged, metadataChanged, valid bool) {
-
+	glcm.Info("Comparing source and destination objects for sync orchestrator...")
 	// Check if data has changed by comparing size and modification time
 	dataChanged = false
 	metadataChanged = false
 	valid = true
 
 	if sourceObject.entityType != common.EEntityType.Folder() {
+		glcm.Info("Entity type is not folder")
+
 		// Compare file sizes first
 		// XDM NOTE: Do we really need to compare sizes here if we are already comparing LWT?
 		if sourceObject.size != destinationObject.size {
@@ -309,23 +314,28 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 
 	if sourceObject.lastWriteTime.IsZero() || destinationObject.lastWriteTime.IsZero() {
 		valid = false
+		glcm.Info("Either source/destination last write time is 0")
+
 		return dataChanged, metadataChanged, valid
 	}
 
 	// Compare last write times
 	if sourceObject.lastWriteTime.Compare(destinationObject.lastWriteTime) != 0 {
 		dataChanged = true
+		glcm.Info("Source and destination last write times are different")
 		return dataChanged, metadataChanged, valid
 	}
 
 	if sourceObject.changeTime.IsZero() || destinationObject.changeTime.IsZero() {
 		valid = false
+		glcm.Info("Either source/destination change time is 0")
 		return dataChanged, metadataChanged, valid
 	}
 
 	// Compare change times
 	if sourceObject.changeTime.Compare(destinationObject.changeTime) != 0 {
 		metadataChanged = true
+		glcm.Info("Source and destination change times are different")
 		return dataChanged, metadataChanged, valid
 	}
 	return dataChanged, metadataChanged, valid
