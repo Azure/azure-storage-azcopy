@@ -735,11 +735,6 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		}
 	}
 
-	// TODO: Remove this check when FileBlob w/ File OAuth works.
-	if cca.fromTo.IsS2S() && cca.fromTo.From() == common.ELocation.File() && srcCredInfo.CredentialType.IsAzureOAuth() && cca.fromTo.To() != common.ELocation.File() {
-		return fmt.Errorf("S2S sync from Azure File authenticated with Azure AD to Blob/BlobFS is not supported")
-	}
-
 	// Check if destination is system container
 	if cca.fromTo.IsS2S() || cca.fromTo.IsUpload() {
 		dstContainerName, err := GetContainerName(cca.destination.Value, cca.fromTo.To())
