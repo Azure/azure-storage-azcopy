@@ -1914,6 +1914,10 @@ func (sht *SymlinkHandlingType) Determine(Follow, Preserve bool) error {
 // /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 var TooManyObjWarningOnce = sync.Once{}
 
+func GetRecommendedMaxObjectsPerJob() uint64 {
+	return RECOMMENDED_OBJECTS_COUNT
+}
+
 func WarnIfTooManyObjects(oncer *sync.Once) {
 	oncer.Do(func() {
 		GetLifecycleMgr().Warn(fmt.Sprintf("This job contains more than %d objects, best practice to run less than this.",

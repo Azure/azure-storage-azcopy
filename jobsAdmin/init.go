@@ -182,6 +182,12 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 	// Supply no plan MMF because we don't have one, and AddJobPart will create one on its own.
 	// Add this part to the Job and schedule its transfers
 
+	// Warn if more objects than recommended threshold
+	jm.AddTotalNumFilesProcessed(int64(len(order.Transfers.List)))
+	if jm.GetTotalNumFilesProcessed() > common.RECOMMENDED_OBJECTS_COUNT {
+		common.WarnIfTooManyObjects(&common.TooManyObjWarningOnce)
+	}
+
 	args := &ste.AddJobPartArgs{
 		PartNum:           order.PartNum,
 		PlanFile:          jppfn,

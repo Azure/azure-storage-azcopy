@@ -52,10 +52,6 @@ func ClearEnvironmentVariable(variable EnvironmentVariable) {
 	_ = os.Setenv(variable.Name, "")
 }
 
-func GetRecommendedMaxObjectsPerJob() uint64 {
-	return RECOMMENDED_OBJECTS_COUNT
-}
-
 // This array needs to be updated when a new public environment variable is added
 // Things are here, rather than in command line parameters for one of two reasons:
 // 1. They are optional and obscure (e.g. performance tuning parameters) or
