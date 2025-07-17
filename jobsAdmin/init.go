@@ -185,7 +185,7 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 	// Warn if more objects than recommended threshold
 	jm.AddTotalNumFilesProcessed(int64(len(order.Transfers.List)))
 	if jm.GetTotalNumFilesProcessed() > common.RECOMMENDED_OBJECTS_COUNT {
-		common.WarnIfTooManyObjects(&common.TooManyObjWarningOnce)
+		common.WarnIfTooManyObjects()
 	}
 
 	args := &ste.AddJobPartArgs{
@@ -527,8 +527,8 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 		jpp := jpm.Plan()
 		js.CompleteJobOrdered = js.CompleteJobOrdered || jpp.IsFinalPart
 		js.TotalTransfers += jpp.NumTransfers
-		if js.TotalTransfers > uint32(common.GetRecommendedMaxObjectsPerJob()) {
-			common.WarnIfTooManyObjects(&common.TooManyObjWarningOnce)
+		if js.TotalTransfers > common.RECOMMENDED_OBJECTS_COUNT {
+			common.WarnIfTooManyObjects()
 		}
 
 		// Iterate through this job part's transfers

@@ -128,8 +128,8 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 			}
 			js.CompleteJobOrdered = js.CompleteJobOrdered || msg.IsFinalPart
 			js.TotalTransfers += msg.TotalTransfers
-			if js.TotalTransfers > uint32(common.GetRecommendedMaxObjectsPerJob()) {
-				common.WarnIfTooManyObjects(&common.TooManyObjWarningOnce)
+			if js.TotalTransfers > common.RECOMMENDED_OBJECTS_COUNT {
+				common.WarnIfTooManyObjects()
 			}
 			js.FileTransfers += msg.FileTransfers
 			js.FolderPropertyTransfers += msg.FolderTransfer
