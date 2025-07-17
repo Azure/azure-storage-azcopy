@@ -131,7 +131,7 @@ func (raw rawListCmdArgs) cook() (cookedListCmdArgs, error) {
 	// Only support listing for Azure locations
 	switch cooked.location {
 	case common.ELocation.Blob():
-	case common.ELocation.File():
+	case common.ELocation.File(),common.ELocation.FileNFS():
 	case common.ELocation.BlobFS():
 		break
 	default:

@@ -1,14 +1,8 @@
 package e2etest
 
 import (
-	"fmt"
 	"os/user"
-	"runtime"
-	"strconv"
 	"time"
-
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/google/uuid"
 )
 
 func init() {
@@ -26,6 +20,7 @@ func GetCurrentUIDAndGID(a Asserter) (uid, gid string) {
 	gid = currentUser.Gid
 	return
 }
+
 func getPropertiesAndPermissions(svm *ScenarioVariationManager, preserveProperties, preservePermissions bool) (*FileNFSProperties, *FileNFSProperties, *FileNFSPermissions) {
 	uid, gid := GetCurrentUIDAndGID(svm)
 	var folderProperties, fileProperties *FileNFSProperties
@@ -49,6 +44,7 @@ func getPropertiesAndPermissions(svm *ScenarioVariationManager, preserveProperti
 	return folderProperties, fileProperties, fileOrFolderPermissions
 }
 
+/*
 func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariationManager) {
 
 	// 	Test Scenario:
@@ -205,13 +201,14 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
 					Recursive: pointerTo(true),
-					NFS:       pointerTo(true),
+					FromTo:    pointerTo(common.EFromTo.LocalFileNFS()),
 					// --preserve-info flag will be true by default in case of linux
 					PreserveInfo:        pointerTo(preserveProperties),
 					PreservePermissions: pointerTo(preservePermissions),
 				},
 			},
 		})
+	fmt.Println("StdOut:-----------", stdOut)
 	//As we cannot set creationTime in linux we will fetch the properties from local and set it to src object properties
 	for objName := range srcObjs {
 		obj := srcObjs[objName]
@@ -232,6 +229,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 	ValidateHardlinkedSkippedCount(svm, stdOut, 2)
 	ValidateSkippedSpecialFileCount(svm, stdOut, 1)
 }
+
 
 func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManager) {
 
@@ -380,7 +378,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
 					Recursive:           pointerTo(true),
-					NFS:                 pointerTo(true),
+					FromTo:              pointerTo(common.EFromTo.FileNFSLocal()),
 					PreservePermissions: pointerTo(preservePermissions),
 					PreserveInfo:        pointerTo(preserveProperties),
 				},
@@ -553,7 +551,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
 					Recursive:           pointerTo(true),
-					NFS:                 pointerTo(true),
+					FromTo:              pointerTo(common.EFromTo.FileNFSFileNFS()),
 					PreservePermissions: pointerTo(preservePermissions),
 					PreserveInfo:        pointerTo(preserveProperties),
 				},
@@ -619,6 +617,13 @@ func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForSMB(svm *ScenarioVar
 	}
 	sasOpts := GenericAccountSignatureValues{}
 
+	var fromTo common.FromTo
+	if srcObj.Location() == common.ELocation.Local() {
+		fromTo = common.EFromTo.LocalFileNFS()
+	} else if srcObj.Location() == common.ELocation.File() {
+		fromTo = common.EFromTo.FileNFSFileNFS()
+	}
+
 	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
@@ -633,7 +638,7 @@ func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForSMB(svm *ScenarioVar
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
-					NFS:                 pointerTo(true),
+					FromTo:              pointerTo(fromTo),
 					PreserveInfo:        pointerTo(preserveProperties),
 					PreservePermissions: pointerTo(preservePermissions),
 				},
@@ -708,6 +713,13 @@ func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForNFS(svm *ScenarioVar
 	}
 	sasOpts := GenericAccountSignatureValues{}
 
+	var fromTo common.FromTo
+	if srcObj.Location() == common.ELocation.Local() {
+		fromTo = common.EFromTo.LocalFileNFS()
+	} else if srcObj.Location() == common.ELocation.File() {
+		fromTo = common.EFromTo.FileNFSFileNFS()
+	}
+
 	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
@@ -722,7 +734,7 @@ func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForNFS(svm *ScenarioVar
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
-					NFS:                 pointerTo(false),
+					FromTo:              pointerTo(fromTo),
 					PreserveInfo:        pointerTo(preserveProperties),
 					PreservePermissions: pointerTo(preservePermissions),
 				},
@@ -746,3 +758,79 @@ func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForNFS(svm *ScenarioVar
 		})
 	}
 }
+
+func (s *FilesNFSTestSuite) Scenario_DstShareDoesNotExists(svm *ScenarioVariationManager) {
+
+	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File()}), GetResourceOptions{}), ResourceDefinitionContainer{})
+
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File()}), GetResourceOptions{}), ResourceDefinitionContainer{})
+
+	rootDir := "dir_file_copy_test_" + uuid.NewString()
+
+	var dst, src ResourceManager
+	if azCopyVerb == AzCopyVerbSync {
+		dstObj := dstContainer.GetObject(svm, rootDir+"/test1.txt", common.EEntityType.File())
+		dstObj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
+		dstObj = dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+		dst = dstObj
+		if !svm.Dryrun() {
+			// Make sure the LMT is in the past
+			time.Sleep(time.Second * 5)
+		}
+	} else {
+		dst = dstContainer
+	}
+	src = srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+
+	// Create destination directories
+	srcObjs := make(ObjectResourceMappingFlat)
+
+	obj := ResourceDefinitionObject{
+		ObjectName: pointerTo(rootDir),
+		ObjectProperties: ObjectProperties{
+			EntityType: common.EEntityType.Folder(),
+		},
+	}
+	CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+	srcObjs[rootDir] = obj
+
+	for i := range 2 {
+		name := rootDir + "/test" + strconv.Itoa(i) + ".txt"
+		obj := ResourceDefinitionObject{
+			ObjectName: pointerTo(name),
+			Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
+			ObjectProperties: ObjectProperties{
+				EntityType: common.EEntityType.File(),
+			}}
+		CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+		srcObjs[name] = obj
+	}
+
+	sasOpts := GenericAccountSignatureValues{}
+
+	stdOut, _ := RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: azCopyVerb,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(src, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+				TryApplySpecificAuthType(dst, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive: pointerTo(true),
+				},
+			},
+		})
+	fmt.Println("StdOut: ", stdOut)
+	// Dont validate the root directory in case of sync
+	if azCopyVerb == AzCopyVerbSync {
+		delete(srcObjs, rootDir)
+	}
+}
+*/

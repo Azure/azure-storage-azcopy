@@ -51,6 +51,14 @@ func ValidateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo,
 
 	}
 
+	if userFromTo == common.EFromTo.LocalFileSMB() {
+		userFromTo = common.EFromTo.LocalFile()
+	} else if userFromTo == common.EFromTo.FileSMBLocal() {
+		userFromTo = common.EFromTo.FileLocal()
+	} else if userFromTo == common.EFromTo.FileSMBFileSMB() {
+		userFromTo = common.EFromTo.FileFile()
+	}
+
 	return userFromTo, nil
 }
 
@@ -85,7 +93,7 @@ var fromToHelp = func() string {
 
 var fromToHelpText = fromToHelp
 
-const locationHelpFormat = "Specified to nudge AzCopy when resource detection may not work (e.g. emulator/azure stack); Valid Location are Source words (e.g. Blob, File) that specify the source resource type. All valid Locations are: %s"
+const locationHelpFormat = "Specified to nudge AzCopy when resource detection may not work (e.g. emulator/azure stack); Required for NFS transfers; optional for SMB. Valid Location are Source words (e.g. Blob, File) that specify the source resource type. All valid Locations are: %s"
 
 var locationHelp = func() string {
 	validLocations := ""
@@ -218,8 +226,8 @@ func InferArgumentLocation(arg string) common.Location {
 			if common.IsGCPURL(*u) {
 				return common.ELocation.GCP()
 			}
-      
-			// If none of the above conditions match, return Unknown 
+
+			// If none of the above conditions match, return Unknown
 			return common.ELocation.Unknown()
 		}
 	}
