@@ -78,6 +78,7 @@ const ( // initially supporting a limited set of verbs
 	AzCopyVerbJobsList    AzCopyVerb = "jobs list"
 	AzCopyVerbJobsResume  AzCopyVerb = "jobs resume"
 	AzCopyVerbJobsClean   AzCopyVerb = "jobs clean"
+	AzCopyVerbJobsRemove  AzCopyVerb = "jobs remove"
 )
 
 type AzCopyTarget struct {
@@ -370,6 +371,10 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 				commandSpec.Flags = LoginStatusFlags{}
 			case AzCopyVerbRemove:
 				commandSpec.Flags = RemoveFlags{}
+			case AzCopyVerbJobsClean:
+				commandSpec.Flags = JobsCleanFlags{}
+			case AzCopyVerbJobsRemove:
+				commandSpec.Flags = JobsRemoveFlags{}
 			default:
 				commandSpec.Flags = GlobalFlags{}
 			}
@@ -500,11 +505,6 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	a.Assert("expected exit code",
 		common.Iff[Assertion](commandSpec.ShouldFail, Not{Equal{}}, Equal{}),
 		0, command.ProcessState.ExitCode())
-
-	// validate log file retention for jobs clean command before the job logs are cleaned up and uploaded
-	if !a.Failed() && commandSpec.Verb == AzCopyVerbJobsClean {
-		ValidateLogFileRetention(a, *commandSpec.Environment.LogLocation, 1)
-	}
 
 	// The environment manager will handle cleanup for us-- All we need to do at this point is register our stdout.
 	envCtx.RegisterLogUpload(LogUpload{

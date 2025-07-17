@@ -101,7 +101,7 @@ func (raw rawBenchmarkCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	glcm.Info(common.BenchmarkPreviewNotice)
 
 	dummyCooked := CookedCopyCmdArgs{}
-	virtualDir := "benchmark-" + azcopyCurrentJobID.String() // create unique directory name, so we won't overwrite anything
+	virtualDir := "benchmark-" + Client.CurrentJobID.String() // create unique directory name, so we won't overwrite anything
 
 	if raw.fileCount <= 0 {
 		return dummyCooked, errors.New(common.FileCountParam + " must be greater than zero")

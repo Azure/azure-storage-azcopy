@@ -23,8 +23,8 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"strings"
-
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/spf13/cobra"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -86,52 +86,17 @@ func init() {
 }
 
 func handleCleanJobsCommand(givenStatus common.JobStatus) error {
-	if givenStatus == common.EJobStatus.All() {
-		numFilesDeleted, err := blindDeleteAllJobFiles()
-		glcm.Info(fmt.Sprintf("Removed %v files.", numFilesDeleted))
+	result, err := Client.CleanJobs(azcopy.CleanJobsOptions{WithStatus: to.Ptr(givenStatus)})
+	if err != nil {
 		return err
 	}
 
-	// we must query the jobs and find out which one to remove
-	resp := common.ListJobsResponse{}
-	Rpc(common.ERpcCmd.ListJobs(), common.EJobStatus.All(), &resp)
-
-	if resp.ErrorMessage != "" {
-		return errors.New("failed to query the list of jobs")
-	}
-
-	for _, job := range resp.JobIDDetails {
-		// delete all jobs matching the givenStatus
-		if job.JobStatus == givenStatus {
-			glcm.Info(fmt.Sprintf("Removing files for job %s", job.JobId))
-			err := handleRemoveSingleJob(job.JobId)
-			if err != nil {
-				return err
-			}
+	if givenStatus == common.EJobStatus.All() {
+		glcm.Info(fmt.Sprintf("Removed %v files.", result.Count))
+	} else {
+		for _, job := range result.Jobs {
+			glcm.Info(fmt.Sprintf("Removing files for job %s", job))
 		}
 	}
-
 	return nil
-}
-
-func blindDeleteAllJobFiles() (int, error) {
-	// get rid of the job plan files
-	numPlanFilesRemoved, err := removeFilesWithPredicate(common.AzcopyJobPlanFolder, func(s string) bool {
-		return strings.Contains(s, ".steV")
-	})
-	if err != nil {
-		return numPlanFilesRemoved, err
-	}
-	// get rid of the logs
-	numLogFilesRemoved, err := removeFilesWithPredicate(azcopyLogPathFolder, func(s string) bool {
-		// Do not remove the current job's log file this will cause the cleanup job to fail.
-		if strings.Contains(s, azcopyCurrentJobID.String()) {
-			return false
-		} else if strings.HasSuffix(s, ".log") {
-			return true
-		}
-		return false
-	})
-
-	return numPlanFilesRemoved + numLogFilesRemoved, err
 }
