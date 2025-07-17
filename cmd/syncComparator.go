@@ -117,9 +117,12 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 		lcRelativePath := strings.ToLower(destinationObject.relativePath)
 		sourceObjectInMap, present = f.sourceIndex.indexMap[lcRelativePath]
 	}
+	glcm.Info("Inside processIfNcessary")
 
 	// if the destinationObject is present at source and stale, we transfer the up-to-date version from source
 	if present {
+		glcm.Info("Inside processIfNcessary destinationObject is present at source")
+
 		defer delete(f.sourceIndex.indexMap, destinationObject.relativePath)
 
 		processed, _ := f.processIfNecessaryWithOrchestrator(sourceObjectInMap, destinationObject)
@@ -186,13 +189,14 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 	sourceObjectInMap StoredObject,
 	destinationObject StoredObject) (bool, error) {
-
+	glcm.Info("Processing source and destination objects with orchestrator options...")
 	if !UseSyncOrchestrator {
 		return false, nil
 	}
 
 	typeChanged, dataChanged, metadataChanged, valid, transferObject := false, false, false, true, false
 	if sourceObjectInMap.entityType != destinationObject.entityType {
+		glcm.Info("Entity type has changed between source and destination objects")
 		// This entity type compararison is necessary for SyncOrchestrator as we have the visibility
 		// of a deleted object in the source only once during the directory non-recusrive enumeration.
 		// The default flow keeps all the objects in the memory and has the complete view of the source
@@ -200,7 +204,7 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 		// Sync orchestator needs to take care of deletion of folder recursively the first chance it gets.
 		typeChanged = true
 	}
-
+	glcm.Info(fmt.Sprintf("Syn orecestraotr options %+v", f.orchestratorOptions))
 	if !typeChanged && f.orchestratorOptions != nil && f.orchestratorOptions.valid {
 		// Use optimized comparison logic using source and target timestamps and sizes
 		dataChanged, metadataChanged, valid = f.compareSourceAndDestinationObject(sourceObjectInMap, destinationObject)
