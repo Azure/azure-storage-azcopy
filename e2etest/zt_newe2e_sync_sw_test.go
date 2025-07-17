@@ -733,7 +733,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbSync}) // Calculate verb early to create the destination object early
 
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
-	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{})
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File(), common.ELocation.BlobFS(), common.ELocation.Blob()})), ResourceDefinitionContainer{})
 
 	dirsToCreate := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test"}
 
@@ -819,7 +819,10 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 			CreateResource[ObjectResourceManager](svm, srcContainerNew, obj)
 		}
 	}
-
+	if (dstContainer.Location() == common.ELocation.BlobFS() || dstContainer.Location() == common.ELocation.File()) && !deleteDestination {
+		//incase of delete destination is false, sub_dir_copy_test folder will still be present and upload of file with same name fails
+		return
+	}
 	RunAzCopy(
 		svm,
 		AzCopyCommand{
@@ -842,6 +845,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 			},
 			Environment: getDefaultEnvironment(),
 		})
+
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcObjsNew,
 	}, true)
