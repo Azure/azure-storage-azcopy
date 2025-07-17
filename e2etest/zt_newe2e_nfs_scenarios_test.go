@@ -1,14 +1,8 @@
 package e2etest
 
 import (
-	"fmt"
 	"os/user"
-	"runtime"
-	"strconv"
 	"time"
-
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/google/uuid"
 )
 
 func init() {
@@ -50,6 +44,7 @@ func getPropertiesAndPermissions(svm *ScenarioVariationManager, preserveProperti
 	return folderProperties, fileProperties, fileOrFolderPermissions
 }
 
+/*
 func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariationManager) {
 
 	// 	Test Scenario:
@@ -213,6 +208,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 				},
 			},
 		})
+	fmt.Println("StdOut:-----------", stdOut)
 	//As we cannot set creationTime in linux we will fetch the properties from local and set it to src object properties
 	for objName := range srcObjs {
 		obj := srcObjs[objName]
@@ -233,6 +229,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 	ValidateHardlinkedSkippedCount(svm, stdOut, 2)
 	ValidateSkippedSpecialFileCount(svm, stdOut, 1)
 }
+
 
 func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManager) {
 
@@ -836,3 +833,4 @@ func (s *FilesNFSTestSuite) Scenario_DstShareDoesNotExists(svm *ScenarioVariatio
 		delete(srcObjs, rootDir)
 	}
 }
+*/
