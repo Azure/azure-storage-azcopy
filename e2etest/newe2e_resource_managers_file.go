@@ -860,6 +860,11 @@ func (f *FileObjectResourceManager) Download(a Asserter) io.ReadSeeker {
 	return bytes.NewReader(buf.Bytes())
 }
 
+func (f *FileObjectResourceManager) ReadLink(a Asserter) string {
+	a.Error("Symlinks are unsupported on Files.")
+	return ""
+}
+
 func (f *FileObjectResourceManager) Exists() bool {
 	var err error
 	if f.entityType != common.EEntityType.Folder() {
