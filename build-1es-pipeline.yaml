@@ -31,12 +31,6 @@ parameters:
     displayName: 'Publish Artifacts to Linux Repos'
     type: boolean
     default: false
-
-  - name: update_version
-    displayName: 'Update Version'
-    type: boolean
-    default: false
-
 # Do not trigger this pipeline automatically
 trigger: none
 pr: none
@@ -1206,37 +1200,3 @@ extends:
                       done < <(tail -n +3 ../packages.csv)
                     displayName: 'Publish the repository'
                     workingDirectory: $(signed)
-
-      - ${{ if eq(parameters.update_version, true) }}:
-          - stage: UpdateLatestVersion
-            dependsOn:
-              - AzCopyVersion
-            jobs:
-              - job: Job
-                pool:
-                  name: azcopy-pool
-                  image: ubuntu22-1espt
-                  os: linux
-                variables:
-                  - name: azcopy_version
-                    value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
-                steps:
-                  - checkout: self
-                    displayName: 'Checkout repository'
-
-                  - task: GoTool@0
-                    env:
-                      GO111MODULE: 'on'
-                    inputs:
-                      version: $(AZCOPY_GOLANG_VERSION)
-
-                  - script: |
-                      go build -tags "netgo" -o azcopy
-                    displayName: 'Build AzCopy'
-
-                  - script: |
-                      echo "azcopy version: $(azcopy_version)"
-                      "$(azcopy_version)" > latest_version.txt
-                      echo "Updated latest_version.txt with version: $(azcopy_version)"
-                      cat latest_version.txt
-                    displayName: 'Update latest_version.txt file'
