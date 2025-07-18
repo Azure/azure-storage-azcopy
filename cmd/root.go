@@ -76,10 +76,17 @@ var debugSkipFiles string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Version: common.AzcopyVersion, // will enable the user to see the version info in the standard posix way: --version
-	Use:     "azcopy",
-	Short:   rootCmdShortDescription,
-	Long:    rootCmdLongDescription,
+	Version: func() string {
+		if !SkipVersionCheck && !isPipeDownload {
+			_, version := beginDetectNewVersion()
+			return version
+		} else {
+			return common.AzcopyVersion
+		}
+	}(), // will enable the user to see the version info in the standard posix way: --version
+	Use:   "azcopy",
+	Short: rootCmdShortDescription,
+	Long:  rootCmdLongDescription,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		glcm.RegisterCloseFunc(func() {
 			if debugMemoryProfile != "" {
@@ -258,16 +265,6 @@ func InitializeAndExecute() {
 	if err := Execute(); err != nil {
 		glcm.Error(err.Error())
 	} else {
-		if !SkipVersionCheck && !isPipeDownload {
-			// our commands all control their own life explicitly with the lifecycle manager
-			// only commands that don't explicitly exit actually reach this point (e.g. help commands)
-			select {
-			case <-beginDetectNewVersion():
-				// noop
-			case <-time.After(time.Second * 8):
-				// don't wait too long
-			}
-		}
 		glcm.Exit(nil, common.EExitCode.Success())
 	}
 }
@@ -370,7 +367,7 @@ func init() {
 // just give up on it.
 // We spin up the GR here, not in the caller, so that the need to use a separate GC can never be forgotten
 // (if do it synchronously, and can't resolve URL, this blocks caller for ever)
-func beginDetectNewVersion() chan struct{} {
+func beginDetectNewVersion() (chan struct{}, string) {
 	completionChannel := make(chan struct{})
 	go func() {
 		// Step 0: check the Stderr, check local version
@@ -410,7 +407,7 @@ func beginDetectNewVersion() chan struct{} {
 		close(completionChannel)
 	}()
 
-	return completionChannel
+	return completionChannel, common.AzcopyVersion
 }
 
 func getGitHubLatestRemoteVersionWithURL(apiEndpoint string) (*Version, error) {
