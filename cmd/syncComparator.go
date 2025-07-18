@@ -204,8 +204,9 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 		// Sync orchestator needs to take care of deletion of folder recursively the first chance it gets.
 		typeChanged = true
 	}
-	glcm.Info(fmt.Sprintf("Syn orecestraotr options %+v", f.orchestratorOptions))
+	glcm.Info(fmt.Sprintf("Sync orchestrator options %+v", f.orchestratorOptions))
 	if !typeChanged && f.orchestratorOptions != nil && f.orchestratorOptions.valid {
+		glcm.Info("Using orchestrator options for comparison")
 		// Use optimized comparison logic using source and target timestamps and sizes
 		dataChanged, metadataChanged, valid = f.compareSourceAndDestinationObject(sourceObjectInMap, destinationObject)
 	}
@@ -226,6 +227,7 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 		// if the entity type has changed, we will not be able to transfer the file
 		// unless the destination folder is deleted first
 		// XDM: Does destination support different entity type with same name?
+		glcm.Info("Entity type has changed for folder, checking delete destination option")
 		if f.deleteDestination == common.EDeleteDestination.True() {
 			err := f.destinationCleaner(destinationObject)
 			if err != nil {
@@ -252,6 +254,7 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 
 	if sourceObjectInMap.entityType == common.EEntityType.Hardlink() ||
 		sourceObjectInMap.entityType == common.EEntityType.Other() {
+		glcm.Info("Source object is a hardlink or other entity type, skipping transfer")
 		// As of now, for hardlinks and special files at source, fallback to the default behavior
 		return false, nil
 	}
@@ -283,7 +286,8 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 	if dataChanged {
 		transferObject = true
 	}
-
+	glcm.Info(fmt.Sprintf("Data changed: %v, Metadata changed: %v, Type changed: %v, Transfer object: %v",
+		dataChanged, metadataChanged, typeChanged, transferObject))
 	if transferObject {
 		return true, f.copyTransferScheduler(sourceObjectInMap)
 	}
@@ -292,6 +296,7 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 	if f.incrementNotTransferred != nil {
 		f.incrementNotTransferred(sourceObjectInMap.entityType)
 	}
+	glcm.Info("Data, metadata or entity type are unchanged, skipping transfer")
 	syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonNoChangeInLWTorCT, false)
 	return true, nil
 }
