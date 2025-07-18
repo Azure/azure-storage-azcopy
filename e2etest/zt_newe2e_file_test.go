@@ -227,6 +227,7 @@ func (s *FileTestSuite) Scenario_DownloadPreserveLMTFile(svm *ScenarioVariationM
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body: body,
 		ObjectProperties: ObjectProperties{
+
 			LastModifiedTime: srcObjLMT,
 		},
 	}, false)

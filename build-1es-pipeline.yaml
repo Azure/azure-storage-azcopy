@@ -790,7 +790,7 @@ extends:
                   go build -tags "netgo" -o azcopy
                 displayName: 'Build AzCopy'
 
-              # DownloadPipelineArtifacts AFTER checkout since checkout wipes out the DefaultWorkingDirectory
+              # DownloadPipelineArtifact AFTER checkout since checkout wipes out the DefaultWorkingDirectory
               - task: DownloadPipelineArtifact@2
                 inputs:
                   artifactName: azcopy-linux-signed
@@ -1006,7 +1006,7 @@ extends:
                       echo "##vso[task.setvariable variable=azcopy_github_tag]$azcopy_github_tag"
                     displayName: 'AzCopy Tag Name'
 
-                  - task : DownloadPipelineArtifacts@2
+                  - task : DownloadPipelineArtifact@2
                     displayName: 'Download Linux, Windows, Mac Build Artifacts'
                     inputs:
                       artifactName: 'azcopy-*-signed'
@@ -1104,7 +1104,7 @@ extends:
                       fi
                     displayName: 'Test PMC installation'
 
-                  # DownloadPipelineArtifacts AFTER checkout since checkout wipes out the DefaultWorkingDirectory
+                  # DownloadPipelineArtifact AFTER checkout since checkout wipes out the DefaultWorkingDirectory
                   - task: DownloadPipelineArtifact@2
                     inputs:
                       artifactName: azcopy-linux-signed
