@@ -210,10 +210,12 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 		dataChanged, metadataChanged, valid = f.compareSourceAndDestinationObject(sourceObjectInMap, destinationObject)
 	}
 
+	glcm.Info("Checked if data or metadata has changed")
 	if !valid {
+		glcm.Info("Invalid comparison between source and destination objects")
 		return false, fmt.Errorf("invalid comparison between source and destination objects for %s", sourceObjectInMap.relativePath)
 	}
-
+	glcm.Info("Comparison between source and destination objects is valid")
 	if typeChanged && destinationObject.entityType == common.EEntityType.Folder() {
 		// If the destination object is a folder and the source object type has changed,
 		// we need to handle it based on the deleteDestination option.
