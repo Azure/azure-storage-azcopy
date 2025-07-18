@@ -11,33 +11,6 @@ func init() {
 
 type FileOAuthTestSuite struct{}
 
-// Scenario_FileBlobOAuthSyncError tests that users cannot sync FileBlob using OAuth as of v10.30
-func (s *FileOAuthTestSuite) Scenario_FileBlobOAuthSyncError(svm *ScenarioVariationManager) {
-	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
-	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
-
-	stdout, _ := RunAzCopy(
-		svm,
-		AzCopyCommand{
-			Verb: AzCopyVerbSync,
-			Targets: []ResourceManager{
-				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{}),
-				TryApplySpecificAuthType(dstContainer, EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{}),
-			},
-			Flags: CopyFlags{
-				CopySyncCommonFlags: CopySyncCommonFlags{
-					Recursive: pointerTo(true),
-				},
-			},
-			ShouldFail: true,
-		})
-
-	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{}, true)
-	// Should error out
-	ValidateContainsError(svm, stdout,
-		[]string{"Cannot perform sync due to error: S2S sync from Azure File authenticated with Azure AD to Blob/BlobFS is not supported"})
-}
-
 // Scenario_FileBlobOAuthNoError tests S2S FileBlob (default BlockBlob) copies using OAuth are successful
 func (s *FileOAuthTestSuite) Scenario_FileBlobOAuthNoError(svm *ScenarioVariationManager) {
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
@@ -61,9 +34,9 @@ func (s *FileOAuthTestSuite) Scenario_FileBlobOAuthNoError(svm *ScenarioVariatio
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{}, true)
-	// Unlike sync, it should not error out
 	ValidateDoesNotContainError(svm, stdout,
-		[]string{"S2S copy from Azure File authenticated with Azure AD to Blob/BlobFS is not supported"})
+		[]string{"S2S copy from Azure File authenticated with Azure AD to Blob/BlobFS is not supported",
+			"S2S sync from Azure File authenticated with Azure AD to Blob/BlobFS is not supported"})
 }
 
 // Test FilePageBlob and FileAppendBlob copies
