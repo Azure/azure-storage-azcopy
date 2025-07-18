@@ -1009,7 +1009,7 @@ extends:
                   - task : DownloadPipelineArtifact@2
                     displayName: 'Download Linux, Windows, Mac Build Artifacts'
                     inputs:
-                      artifactName: 'azcopy-*-signed'
+                      itemPattern: 'azcopy-*-signed/**'
                       downloadPath: $(Build.ArtifactStagingDirectory)
 
                   - script: |
