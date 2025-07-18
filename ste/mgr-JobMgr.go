@@ -62,6 +62,8 @@ type IJobMgr interface {
 	AllTransfersScheduled() bool
 	ConfirmAllTransfersScheduled()
 	ResetAllTransfersScheduled()
+	GetTotalNumFilesProcessed() int64
+	AddTotalNumFilesProcessed(numFiles int64)
 	Reset(context.Context, string) IJobMgr
 	PipelineLogInfo() LogOptions
 	ReportJobPartDone(jobPartProgressInfo)
@@ -287,14 +289,14 @@ type jobMgr struct {
 	atomicAllTransfersScheduled     int32
 	atomicFinalPartOrderedIndicator int32
 	atomicTransferDirection         common.TransferDirection
-
-	concurrency          ConcurrencySettings
-	logger               common.ILoggerResetable
-	chunkStatusLogger    common.ChunkStatusLoggerCloser
-	jobID                common.JobID // The Job's unique ID
-	ctx                  context.Context
-	cancel               context.CancelFunc
-	pipelineNetworkStats *PipelineNetworkStats
+	atomicTotalFilesProcessed       int64 // Number of files processed across multiple job parts
+	concurrency                     ConcurrencySettings
+	logger                          common.ILoggerResetable
+	chunkStatusLogger               common.ChunkStatusLoggerCloser
+	jobID                           common.JobID // The Job's unique ID
+	ctx                             context.Context
+	cancel                          context.CancelFunc
+	pipelineNetworkStats            *PipelineNetworkStats
 
 	// Share the same HTTP Client across all job parts, so that the we maximize reuse of
 	// its internal connection pool
@@ -640,6 +642,14 @@ func (jm *jobMgr) ConfirmAllTransfersScheduled() {
 // ResetAllTransfersScheduled sets the ResetAllTransfersScheduled to false
 func (jm *jobMgr) ResetAllTransfersScheduled() {
 	atomic.StoreInt32(&jm.atomicAllTransfersScheduled, 0)
+}
+
+func (jm *jobMgr) GetTotalNumFilesProcessed() int64 {
+	return atomic.LoadInt64(&jm.atomicTotalFilesProcessed)
+}
+
+func (jm *jobMgr) AddTotalNumFilesProcessed(numFiles int64) {
+	atomic.AddInt64(&jm.atomicTotalFilesProcessed, numFiles)
 }
 
 // ReportJobPartDone is called to report that a job part completed or failed
