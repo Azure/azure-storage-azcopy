@@ -29,9 +29,16 @@ func createConsistentFileBodies(count int, size string) map[int]ObjectContentCon
 	return fileBodies
 }
 
+func getDefaultEnvironment() *AzCopyEnvironment {
+	return &AzCopyEnvironment{
+		InheritEnvironment:       map[string]bool{"*": true},
+		SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)),
+	}
+}
+
 func (s *SWSyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariationManager) {
 	srcLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local()})
-	dstLoc := ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})
+	dstLoc := ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.BlobFS(), common.ELocation.File()})
 
 	if srcLoc == common.ELocation.Local() && srcLoc == dstLoc {
 		svm.InvalidateScenario()
@@ -55,9 +62,6 @@ func (s *SWSyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariat
 
 	RunAzCopy(svm, AzCopyCommand{
 		Verb: AzCopyVerbSync,
-		Environment: &AzCopyEnvironment{
-			SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
-		},
 		Targets: []ResourceManager{
 			srcRes,
 			dstRes,
@@ -69,6 +73,7 @@ func (s *SWSyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariat
 			},
 			DeleteDestination: pointerTo(deleteDestination),
 		},
+		Environment: getDefaultEnvironment(),
 	})
 
 	ValidateResource[ContainerResourceManager](svm, dstRes, ResourceDefinitionContainer{
@@ -110,9 +115,6 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUpload(svm *ScenarioVariationManager
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
-			Environment: &AzCopyEnvironment{
-				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
-			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -127,6 +129,7 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUpload(svm *ScenarioVariationManager
 				},
 				DeleteDestination: pointerTo(deleteDestination),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	fromTo := common.FromToValue(srcContainer.Location(), dstContainer.Location())
@@ -181,9 +184,6 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUpload_NoChange(svm *ScenarioVariati
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
-			Environment: &AzCopyEnvironment{
-				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
-			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -196,6 +196,7 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUpload_NoChange(svm *ScenarioVariati
 				CopySyncCommonFlags: copySyncFlag,
 				DeleteDestination:   pointerTo(deleteDestination),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	fromTo := common.FromToValue(srcContainer.Location(), dstContainer.Location())
@@ -222,9 +223,6 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUpload_NoChange(svm *ScenarioVariati
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
-			Environment: &AzCopyEnvironment{
-				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
-			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -237,6 +235,7 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUpload_NoChange(svm *ScenarioVariati
 				CopySyncCommonFlags: copySyncFlag,
 				DeleteDestination:   pointerTo(deleteDestination),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcDef.Objects,
@@ -282,9 +281,6 @@ func (s *SWSyncTestSuite) Scenario_NewFileAdditionAtSource_UploadContainer(svm *
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
-			Environment: &AzCopyEnvironment{
-				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
-			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -300,6 +296,7 @@ func (s *SWSyncTestSuite) Scenario_NewFileAdditionAtSource_UploadContainer(svm *
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -333,9 +330,6 @@ func (s *SWSyncTestSuite) Scenario_NewFileAdditionAtSource_UploadContainer(svm *
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
-			Environment: &AzCopyEnvironment{
-				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
-			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainerNew, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -351,6 +345,7 @@ func (s *SWSyncTestSuite) Scenario_NewFileAdditionAtSource_UploadContainer(svm *
 				},
 				DeleteDestination: pointerTo(deleteDestination),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -400,9 +395,6 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFileAtSource(svm *ScenarioVariationMa
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
-			Environment: &AzCopyEnvironment{
-				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
-			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -418,6 +410,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFileAtSource(svm *ScenarioVariationMa
 				},
 				DeleteDestination: pointerTo(deleteDestination),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -459,9 +452,6 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFileAtSource(svm *ScenarioVariationMa
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
-			Environment: &AzCopyEnvironment{
-				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
-			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainerNew, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -477,6 +467,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFileAtSource(svm *ScenarioVariationMa
 				},
 				DeleteDestination: pointerTo(deleteDestination),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -533,9 +524,6 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFolderAtSource(svm *ScenarioVariation
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
-			Environment: &AzCopyEnvironment{
-				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
-			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -550,6 +538,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFolderAtSource(svm *ScenarioVariation
 				},
 				DeleteDestination: pointerTo(deleteDestination),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -591,9 +580,6 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFolderAtSource(svm *ScenarioVariation
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
-			Environment: &AzCopyEnvironment{
-				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
-			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainerNew, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -609,6 +595,7 @@ func (s *SWSyncTestSuite) Scenario_RenameOfFolderAtSource(svm *ScenarioVariation
 				},
 				DeleteDestination: pointerTo(deleteDestination),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -641,7 +628,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFileAndCreateFolderWithSameName(svm *Sc
 			srcObjs[dir] = obj
 		}
 		for i := range 5 {
-			name := dir + "/test" + strconv.Itoa(i) + ".txt"
+			name := dir + "/test" + strconv.Itoa(i)
 			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: fileBodies[i]}
 			srcObjs[name] = obj
 		}
@@ -660,9 +647,6 @@ func (s *SWSyncTestSuite) Scenario_DeleteFileAndCreateFolderWithSameName(svm *Sc
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
-			Environment: &AzCopyEnvironment{
-				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
-			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -678,6 +662,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFileAndCreateFolderWithSameName(svm *Sc
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -686,7 +671,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFileAndCreateFolderWithSameName(svm *Sc
 
 	srcContainerNew := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
 	//Change the sub directory name from dir_file_copy_test/sub_dir_copy_test to dir_file_copy_test/sub_dir_copy_test_new
-	dirsToCreateNew := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test", "dir_file_copy_test/test0.txt"}
+	dirsToCreateNew := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test", "dir_file_copy_test/test0"}
 
 	//Create New source where files are renamed
 	srcObjsNew := make(ObjectResourceMappingFlat)
@@ -696,7 +681,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFileAndCreateFolderWithSameName(svm *Sc
 			srcObjsNew[dir] = obj
 		}
 		for i := 1; i < 5; i++ {
-			name := dir + "/test" + strconv.Itoa(i) + ".txt"
+			name := dir + "/test" + strconv.Itoa(i)
 			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: fileBodies[i]}
 			srcObjsNew[name] = obj
 		}
@@ -713,9 +698,6 @@ func (s *SWSyncTestSuite) Scenario_DeleteFileAndCreateFolderWithSameName(svm *Sc
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
-			Environment: &AzCopyEnvironment{
-				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
-			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainerNew, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -731,35 +713,29 @@ func (s *SWSyncTestSuite) Scenario_DeleteFileAndCreateFolderWithSameName(svm *Sc
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcObjsNew,
 	}, true)
 
-	if dstContainer.Location() == common.ELocation.Blob() || dstContainer.Location() == common.ELocation.BlobFS() {
-		ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
-			Objects: ObjectResourceMappingFlat{
-				// The original file test0.txt should be replaced by the folder
-				"dir_file_copy_test/test0.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(true)},
-				// Files inside the new folder should exist
-				"dir_file_copy_test/test0.txt/inside0.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(true)},
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			// The original file "dir_file_copy_test/test0" should be deleted, and only the folder should remain
+			"dir_file_copy_test/test0/test1": ResourceDefinitionObject{
+				ObjectShouldExist: pointerTo(true),
 			},
-		}, true)
-	} else {
-		ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
-			Objects: ObjectResourceMappingFlat{
-				"dir_file_copy_test/test0.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(false)},
-			},
-		}, false)
-	}
+		},
+	}, true)
+
 }
 
 func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *ScenarioVariationManager) {
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbSync}) // Calculate verb early to create the destination object early
 
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
-	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{})
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File(), common.ELocation.BlobFS(), common.ELocation.Blob()})), ResourceDefinitionContainer{})
 
 	dirsToCreate := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test"}
 
@@ -796,9 +772,6 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
-			Environment: &AzCopyEnvironment{
-				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
-			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -814,6 +787,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 				},
 				DeleteDestination: pointerTo(deleteDestination),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -838,7 +812,6 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 		}
 	}
 
-	//deleted folder sub_dir_copy_test and creating file sub_dir_copy_test
 	name := "dir_file_copy_test/sub_dir_copy_test"
 	obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
 	srcObjsNew[name] = obj
@@ -848,15 +821,15 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 			CreateResource[ObjectResourceManager](svm, srcContainerNew, obj)
 		}
 	}
-
+	if (dstContainer.Location() == common.ELocation.BlobFS() || dstContainer.Location() == common.ELocation.File()) && !deleteDestination {
+		//incase of delete destination is false, sub_dir_copy_test folder will still be present and upload of file with same name fails
+		return
+	}
 	RunAzCopy(
 		svm,
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
-			Environment: &AzCopyEnvironment{
-				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
-			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainerNew, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -872,6 +845,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteFolderAndCreateFileWithSameName(svm *Sc
 				},
 				DeleteDestination: pointerTo(deleteDestination),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -918,9 +892,6 @@ func (s *SWSyncTestSuite) Scenario_TestFollowLinks(svm *ScenarioVariationManager
 		svm,
 		AzCopyCommand{
 			Verb: AzCopyVerbCopy, // sync doesn't support symlinks at this time
-			Environment: &AzCopyEnvironment{
-				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
-			},
 			Targets: []ResourceManager{
 				source, dest,
 			},
@@ -931,6 +902,7 @@ func (s *SWSyncTestSuite) Scenario_TestFollowLinks(svm *ScenarioVariationManager
 				FollowSymlinks: pointerTo(true),
 				AsSubdir:       pointerTo(false),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 	ValidateResource(svm, dest, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
@@ -983,18 +955,18 @@ func (s *SWSyncTestSuite) Scenario_TestFollowLinksFolder(svm *ScenarioVariationM
 	_, _ = RunAzCopy(
 		svm,
 		AzCopyCommand{
-			Verb: AzCopyVerbSync, // sync doesn't support symlinks at this time
-			Environment: &AzCopyEnvironment{
-				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
-			},
+			Verb: AzCopyVerbCopy, // sync doesn't support symlinks at this time
 			Targets: []ResourceManager{
 				source, dest,
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
-					Recursive: pointerTo(false),
+					Recursive: pointerTo(true),
 				},
+				FollowSymlinks: pointerTo(true),
+				AsSubdir:       pointerTo(false),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 	//get the container which is created by the azcopy command inside dest
 	ValidateResource(svm, dest, ResourceDefinitionContainer{
@@ -1050,9 +1022,6 @@ func (s *SWSyncTestSuite) Scenario_FileMetadataModTimeChange(svm *ScenarioVariat
 		svm,
 		AzCopyCommand{
 			Verb: azCopyVerb,
-			Environment: &AzCopyEnvironment{
-				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
-			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(source, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -1069,6 +1038,7 @@ func (s *SWSyncTestSuite) Scenario_FileMetadataModTimeChange(svm *ScenarioVariat
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 	ValidateResource(svm, dest, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
@@ -1094,9 +1064,6 @@ func (s *SWSyncTestSuite) Scenario_FileMetadataModTimeChange(svm *ScenarioVariat
 		svm,
 		AzCopyCommand{
 			Verb: azCopyVerb,
-			Environment: &AzCopyEnvironment{
-				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
-			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(source, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -1112,6 +1079,7 @@ func (s *SWSyncTestSuite) Scenario_FileMetadataModTimeChange(svm *ScenarioVariat
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 	ValidateResource(svm, dest, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
@@ -1167,9 +1135,6 @@ func (s *SWSyncTestSuite) Scenario_FolderMetadataModTimeChange(svm *ScenarioVari
 		svm,
 		AzCopyCommand{
 			Verb: azCopyVerb,
-			Environment: &AzCopyEnvironment{
-				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
-			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(source, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -1186,6 +1151,7 @@ func (s *SWSyncTestSuite) Scenario_FolderMetadataModTimeChange(svm *ScenarioVari
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 	ValidateResource(svm, dest, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
@@ -1210,9 +1176,6 @@ func (s *SWSyncTestSuite) Scenario_FolderMetadataModTimeChange(svm *ScenarioVari
 		svm,
 		AzCopyCommand{
 			Verb: azCopyVerb,
-			Environment: &AzCopyEnvironment{
-				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
-			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(source, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -1228,6 +1191,7 @@ func (s *SWSyncTestSuite) Scenario_FolderMetadataModTimeChange(svm *ScenarioVari
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 	ValidateResource(svm, dest, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
@@ -1277,9 +1241,6 @@ func (s *SWSyncTestSuite) Scenario_AddNonEmptyFolder(svm *ScenarioVariationManag
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
-			Environment: &AzCopyEnvironment{
-				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
-			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -1295,6 +1256,7 @@ func (s *SWSyncTestSuite) Scenario_AddNonEmptyFolder(svm *ScenarioVariationManag
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -1327,9 +1289,6 @@ func (s *SWSyncTestSuite) Scenario_AddNonEmptyFolder(svm *ScenarioVariationManag
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
-			Environment: &AzCopyEnvironment{
-				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
-			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -1345,6 +1304,7 @@ func (s *SWSyncTestSuite) Scenario_AddNonEmptyFolder(svm *ScenarioVariationManag
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -1388,9 +1348,6 @@ func (s *SWSyncTestSuite) Scenario_DeleteNonEmptyFolder(svm *ScenarioVariationMa
 		svm,
 		AzCopyCommand{
 			Verb: azCopyVerb,
-			Environment: &AzCopyEnvironment{
-				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
-			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -1405,6 +1362,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteNonEmptyFolder(svm *ScenarioVariationMa
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -1434,9 +1392,6 @@ func (s *SWSyncTestSuite) Scenario_DeleteNonEmptyFolder(svm *ScenarioVariationMa
 		svm,
 		AzCopyCommand{
 			Verb: azCopyVerb,
-			Environment: &AzCopyEnvironment{
-				SyncOrchestratorTestMode: pointerTo(string(common.SyncOrchTestModeDefault)), // Enable throttling for this test
-			},
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -1451,6 +1406,7 @@ func (s *SWSyncTestSuite) Scenario_DeleteNonEmptyFolder(svm *ScenarioVariationMa
 				},
 				DeleteDestination: pointerTo(true),
 			},
+			Environment: getDefaultEnvironment(),
 		})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
