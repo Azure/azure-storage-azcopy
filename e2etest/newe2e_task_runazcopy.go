@@ -147,7 +147,7 @@ type AzCopyEnvironment struct {
 
 	// SyncOrchestratorTestMode is used to control the sync orchestrator test mode.
 	// Refer to common.SyncOrchTestMode for more details.
-	SyncOrchestratorTestMode *string `env:"AZCOPY_SYNC_ORCHESTRATOR_TEST_MODE,defaultfunc:DefaultSyncOrchestratorTestMode"`
+	SyncOrchestratorTestMode *string `env:"SYNC_ORCHESTRATOR_TEST_MODE,defaultfunc:DefaultSyncOrchestratorTestMode"`
 
 	// InheritEnvironment is a lowercase list of environment variables to always inherit.
 	// Specifying "*" as an entry with the value "true" will act as a wildcard, and inherit all env vars.
