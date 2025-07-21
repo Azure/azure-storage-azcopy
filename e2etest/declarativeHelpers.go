@@ -354,8 +354,7 @@ func (TestFromTo) AllAzureS2S() TestFromTo {
 	result.filter = func(ft common.FromTo) bool {
 		isFromAzure := ft.From() == common.ELocation.BlobFS() ||
 			ft.From() == common.ELocation.Blob() ||
-			ft.From() == common.ELocation.File() ||
-			ft.From() == common.ELocation.FileNFS()
+			ft.From() == common.ELocation.File()
 		return ft.IsS2S() && isFromAzure
 	}
 	return result
@@ -369,7 +368,6 @@ func (TestFromTo) AllRemove() TestFromTo {
 		froms: []common.Location{
 			common.ELocation.Blob(),
 			common.ELocation.File(),
-			common.ELocation.FileNFS(),
 			common.ELocation.BlobFS(),
 		},
 		tos: []common.Location{
@@ -385,14 +383,12 @@ func (TestFromTo) AllSync() TestFromTo {
 		froms: []common.Location{
 			common.ELocation.Blob(),
 			common.ELocation.File(),
-			common.ELocation.FileNFS(),
 			common.ELocation.Local(),
 			common.ELocation.BlobFS(),
 		},
 		tos: []common.Location{
 			common.ELocation.Blob(),
 			common.ELocation.File(),
-			common.ELocation.FileNFS(),
 			common.ELocation.Local(),
 			common.ELocation.BlobFS(),
 		},

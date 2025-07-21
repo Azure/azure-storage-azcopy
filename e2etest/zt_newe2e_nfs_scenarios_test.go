@@ -70,7 +70,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 
 	//TODO: Remove it. For testing purpose
 	//dstContainer := GetAccount(svm, PremiumFileShareAcct).GetService(svm, common.ELocation.File()).GetContainer("aznfs3")
-	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File()}), GetResourceOptions{
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
 	}), ResourceDefinitionContainer{
 		Properties: ContainerProperties{
@@ -191,7 +191,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 
 	sasOpts := GenericAccountSignatureValues{}
 
-	stdOut, _ := RunAzCopy(
+	stdOut, err := RunAzCopy(
 		svm,
 		AzCopyCommand{
 			Verb: azCopyVerb,
@@ -214,6 +214,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 			},
 		})
 	fmt.Println("StdOut:-----------", stdOut)
+	fmt.Println("Errror:-----------", err)
 	//As we cannot set creationTime in linux we will fetch the properties from local and set it to src object properties
 	for objName := range srcObjs {
 		obj := srcObjs[objName]
