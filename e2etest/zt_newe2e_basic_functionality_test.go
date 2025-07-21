@@ -1,6 +1,7 @@
 package e2etest
 
 import (
+	"fmt"
 	"strconv"
 	"time"
 
@@ -62,7 +63,7 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFile(svm *ScenarioVariationMana
 				},
 			},
 		})
-
+	fmt.Println("StdOut:----------------", stdOut)
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body: body,
 	}, true)
