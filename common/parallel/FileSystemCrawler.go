@@ -59,10 +59,10 @@ func CrawlLocalDirectory(ctx context.Context, root string, parallelism int, read
 
 // Walk is similar to filepath.Walk.
 // But note the following difference is how WalkFunc is used:
-// 1. If fileError passed to walkFunc is not nil, then here the filePath passed to that function will usually be ""
-//    (whereas with filepath.Walk it will usually (always?) have a value).
-// 2. If the return value of walkFunc function is not nil, enumeration will always stop, not matter what the type of the error.
-//    (Unlike filepath.WalkFunc, where returning filePath.SkipDir is handled as a special case).
+//  1. If fileError passed to walkFunc is not nil, then here the filePath passed to that function will usually be ""
+//     (whereas with filepath.Walk it will usually (always?) have a value).
+//  2. If the return value of walkFunc function is not nil, enumeration will always stop, not matter what the type of the error.
+//     (Unlike filepath.WalkFunc, where returning filePath.SkipDir is handled as a special case).
 func Walk(appCtx context.Context, root string, parallelism int, parallelStat bool, walkFn filepath.WalkFunc) {
 	var ctx context.Context
 	var cancel context.CancelFunc
@@ -138,7 +138,7 @@ func enumerateOneFileSystemDirectory(dir Directory, enqueueDir func(Directory), 
 
 	// enumerate immediate children
 	for {
-		list, err := r.Readdir(d, 1024) // list it in chunks, so that if we get child dirs early, parallel workers can start working on them
+		list, err := r.Readdir(d, 10240) // list it in chunks, so that if we get child dirs early, parallel workers can start working on them
 		if err == io.EOF {
 			if len(list) > 0 {
 				panic("unexpected non-empty list")
