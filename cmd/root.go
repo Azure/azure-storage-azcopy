@@ -78,11 +78,9 @@ var debugSkipFiles string
 var rootCmd = &cobra.Command{
 	Version: func() string {
 		if !SkipVersionCheck && !isPipeDownload {
-			_, version := beginDetectNewVersion()
-			return version
-		} else {
-			return common.AzcopyVersion
+			beginDetectNewVersion()
 		}
+		return common.AzcopyVersion
 	}(), // will enable the user to see the version info in the standard posix way: --version
 	Use:   "azcopy",
 	Short: rootCmdShortDescription,
@@ -367,7 +365,7 @@ func init() {
 // just give up on it.
 // We spin up the GR here, not in the caller, so that the need to use a separate GC can never be forgotten
 // (if do it synchronously, and can't resolve URL, this blocks caller for ever)
-func beginDetectNewVersion() (chan struct{}, string) {
+func beginDetectNewVersion() chan struct{} {
 	completionChannel := make(chan struct{})
 	go func() {
 		// Step 0: check the Stderr, check local version
@@ -407,7 +405,7 @@ func beginDetectNewVersion() (chan struct{}, string) {
 		close(completionChannel)
 	}()
 
-	return completionChannel, common.AzcopyVersion
+	return completionChannel
 }
 
 func getGitHubLatestRemoteVersionWithURL(apiEndpoint string) (*Version, error) {
