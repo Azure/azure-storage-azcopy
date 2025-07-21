@@ -107,6 +107,8 @@ var JobsAdmin interface {
 
 	// ChangeLogLevel change the log level for specific job.
 	ChangeLogLevel(level common.LogLevel, jobId common.JobID) error
+
+	CurrentConcurrencySettings() ste.ConcurrencySettings
 }
 
 func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64, azcopyJobPlanFolder string, azcopyLogPathFolder string, providePerfAdvice bool) {
@@ -507,6 +509,10 @@ func (ja *jobsAdmin) CloseLog()                             { ja.logger.CloseLog
 
 func (ja *jobsAdmin) CurrentMainPoolSize() int {
 	return int(atomic.LoadInt32(&ja.atomicCurrentMainPoolSize))
+}
+
+func (ja *jobsAdmin) CurrentConcurrencySettings() ste.ConcurrencySettings {
+	return ja.concurrency
 }
 
 func (ja *jobsAdmin) slicePoolPruneLoop() {
