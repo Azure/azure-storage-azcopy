@@ -630,7 +630,9 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 	// fetch a job status and compute throughput if the first part was dispatched
 	if cca.firstPartOrdered() {
 		summary = jobsAdmin.GetJobSummary(cca.jobID)
-		lcm = jobsAdmin.GetJobLCMWrapper(cca.jobID)
+		glcmSwapOnce.Do(func() {
+			glcm = jobsAdmin.GetJobLCMWrapper(cca.jobID)
+		})
 		jobDone = summary.JobStatus.IsJobDone()
 		totalKnownCount = summary.TotalTransfers
 
@@ -647,11 +649,11 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 	// first part not dispatched, and we are still scanning
 	// so a special message is outputted to notice the user that we are not stalling
 	if !cca.scanningComplete() {
-		cca.reportScanningProgress(lcm, throughput)
+		cca.reportScanningProgress(glcm, throughput)
 		return
 	}
 
-	lcm.Progress(func(format common.OutputFormat) string {
+	glcm.Progress(func(format common.OutputFormat) string {
 		if format == common.EOutputFormat.Json() {
 			return cca.getJsonOfSyncJobSummary(summary)
 		}
