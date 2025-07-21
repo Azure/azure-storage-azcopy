@@ -264,7 +264,7 @@ func NewChunkStatusLogger(jobID JobID, cpuMon CPUMonitor, logFileFolder string, 
 	logger := &chunkStatusLogger{
 		counts:         make([]int64, numWaitReasons()),
 		outputEnabled:  enableOutput,
-		unsavedEntries: make(chan *chunkWaitState, 1000000),
+		unsavedEntries: make(chan *chunkWaitState, 100000),
 		flushDone:      make(chan struct{}),
 		cpuMonitor:     cpuMon,
 	}
