@@ -78,7 +78,12 @@ var debugSkipFiles string
 var rootCmd = &cobra.Command{
 	Version: func() string {
 		if !SkipVersionCheck && !isPipeDownload {
-			beginDetectNewVersion()
+			select {
+			case <-beginDetectNewVersion():
+				// noop
+			case <-time.After(time.Second * 8):
+				// don't wait too long
+			}
 		}
 		return common.AzcopyVersion
 	}(), // will enable the user to see the version info in the standard posix way: --version
