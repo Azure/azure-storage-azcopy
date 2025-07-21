@@ -198,37 +198,6 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 	cooked.includeFileAttributes = parsePatterns(raw.includeFileAttributes)
 	cooked.excludeFileAttributes = parsePatterns(raw.excludeFileAttributes)
 
-<<<<<<< HEAD
-	if raw.isNFSCopy {
-		SetNFSFlag(raw.isNFSCopy)
-		// check for unsupported NFS behavior
-		if isUnsupported, err := isUnsupportedPlatformForNFS(cooked.fromTo); isUnsupported {
-			return cooked, err
-		}
-
-		// If we are not preserving original file permissions (raw.preservePermissions == false),
-		// and the operation is a file copy from azure file NFS to local linux (FromTo == FileLocal),
-		// and the current OS is Linux, then we require root privileges to proceed.
-		//
-		// This is because modifying file ownership or permissions on Linux
-		// typically requires elevated privileges. To safely handle permission
-		// changes during the local file operation, we enforce that the process
-		// must be running as root.
-		if !raw.preservePermissions && cooked.fromTo == common.EFromTo.FileLocal() {
-			if err := common.EnsureRunningAsRoot(); err != nil {
-				return cooked, fmt.Errorf("failed to copy source to destination without preserving permissions: operation not permitted. Please retry with root privileges or use the default option (--preserve-permissions=true)")
-			}
-		}
-
-		cooked.isNFSCopy, cooked.preserveInfo, cooked.preservePermissions, err = performNFSSpecificValidation(cooked.fromTo,
-			raw.isNFSCopy, raw.preserveInfo, raw.preservePermissions, raw.preserveSMBInfo, raw.preserveSMBPermissions)
-		if err != nil {
-			return cooked, err
-		}
-		if err = validateSymlinkFlag(raw.followSymlinks, raw.preserveSymlinks); err != nil {
-			return cooked, err
-		}
-=======
 	// NFS/SMB arg processing
 	if cooked.isNFSCopy {
 		cooked.preserveInfo = raw.preserveInfo && areBothLocationsNFSAware(cooked.fromTo)
@@ -238,7 +207,6 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 		cooked.preservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
 			true,
 			cooked.fromTo)
->>>>>>> ee9a4bb995d324d51b74939d978977c7e1e1dc4c
 		if err = cooked.hardlinks.Parse(raw.hardlinks); err != nil {
 			return cooked, err
 		}
@@ -1013,16 +981,12 @@ func init() {
 
 	// Deprecate the old persist-smb-permissions flag
 	_ = syncCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
-<<<<<<< HEAD
-	syncCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default. Preserves ACLs between aware resources (Windows and Azure Files SMB, or Data Lake Storage to Data Lake Storage) and permissions between aware resources(Linux to Azure Files NFS). For accounts that have a hierarchical namespace, your security principal must be the owning user of the target container or it must be assigned the Storage Blob Data Owner role, scoped to the target container, storage account, parent resource group, or subscription. For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
-=======
 	syncCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default. "+
 		"\nPreserves ACLs between aware resources (Windows and Azure Files SMB, or Data Lake Storage to Data Lake Storage) and permissions between aware resources(Linux to Azure Files NFS). "+
 		"\nFor accounts that have a hierarchical namespace, your security principal must be the owning user of the target container or it must be assigned "+
 		"\nthe Storage Blob Data Owner role, scoped to the target container, storage account, parent resource group, or subscription. "+
 		"\nFor downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. "+
 		"\nThis flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
->>>>>>> ee9a4bb995d324d51b74939d978977c7e1e1dc4c
 
 	// Deletes destination blobs with uncommitted blocks when staging block, hidden because we want to preserve default behavior
 	syncCmd.PersistentFlags().BoolVar(&raw.deleteDestinationFileIfNecessary, "delete-destination-file", false, "False by default. Deletes destination blobs, specifically blobs with uncommitted blocks when staging block.")

@@ -390,37 +390,6 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 		glcm.SetOutputFormat(common.EOutputFormat.None())
 	}
 
-<<<<<<< HEAD
-	if raw.isNFSCopy {
-		SetNFSFlag(raw.isNFSCopy)
-		// check for unsupported NFS behavior
-		if isUnsupported, err := isUnsupportedPlatformForNFS(cooked.FromTo); isUnsupported {
-			return cooked, err
-		}
-
-		// If we are not preserving original file permissions (raw.preservePermissions == false),
-		// and the operation is a file copy from azure file NFS to local linux (FromTo == FileLocal),
-		// and the current OS is Linux, then we require root privileges to proceed.
-		//
-		// This is because modifying file ownership or permissions on Linux
-		// typically requires elevated privileges. To safely handle permission
-		// changes during the local file operation, we enforce that the process
-		// must be running as root.
-		if !raw.preservePermissions && cooked.FromTo == common.EFromTo.FileLocal() {
-			if err := common.EnsureRunningAsRoot(); err != nil {
-				return cooked, fmt.Errorf("failed to copy source to destination without preserving permissions: operation not permitted. Please retry with root privileges or use the default option (--preserve-permissions=true)")
-			}
-		}
-
-		cooked.isNFSCopy, cooked.preserveInfo, cooked.preservePermissions, err = performNFSSpecificValidation(cooked.FromTo,
-			raw.isNFSCopy, raw.preserveInfo, raw.preservePermissions, raw.preserveSMBInfo, raw.preserveSMBPermissions)
-		if err != nil {
-			return cooked, err
-		}
-		if err = validateSymlinkFlag(raw.followSymlinks, raw.preserveSymlinks); err != nil {
-			return cooked, err
-		}
-=======
 	if cooked.isNFSCopy {
 		cooked.preserveInfo = raw.preserveInfo && areBothLocationsNFSAware(cooked.FromTo)
 		//TBD: We will be preserving ACLs and ownership info in case of NFS. (UserID,GroupID and FileMode)
@@ -429,7 +398,6 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 		cooked.preservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
 			true,
 			cooked.FromTo)
->>>>>>> ee9a4bb995d324d51b74939d978977c7e1e1dc4c
 		if err = cooked.hardlinks.Parse(raw.hardlinks); err != nil {
 			return cooked, err
 		}
@@ -1824,14 +1792,10 @@ func init() {
 		"\n If true (the default), the file Owner and Group are preserved in downloads. "+
 		"\n If set to false, --preserve-smb-permissions will still preserve ACLs but Owner and Group will be based on the user running AzCopy")
 
-<<<<<<< HEAD
-	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", (runtime.GOOS == "windows"), "Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Windows and Azure Files). On windows, this flag will be set to true by default. If the source or destination is a volume mounted on Linux using SMB protocol, this flag will have to be explicitly set to true. Only the attribute bits supported by Azure Files will be transferred; any others will be ignored. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern). The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
-=======
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", (runtime.GOOS == "windows"), "Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Windows and Azure Files). "+
 		"\n On windows, this flag will be set to true by default. If the source or destination is a volume mounted on Linux using SMB protocol, this flag will have to be explicitly set to true. "+
 		"\n Only the attribute bits supported by Azure Files will be transferred; any others will be ignored. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern). "+
 		"\n The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
->>>>>>> ee9a4bb995d324d51b74939d978977c7e1e1dc4c
 	cpCmd.PersistentFlags().BoolVar(&raw.isNFSCopy, IsNFSProtocolFlag, false, "False by default. Users must specify this flag if they intend to transfer data to or from NFS shares.")
 	//Marking this flag as hidden as we might not support it in the future
 	_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-info")
@@ -1922,9 +1886,6 @@ func init() {
 
 	// Deprecate the old persist-smb-permissions flag
 	_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
-<<<<<<< HEAD
-	cpCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default. Preserves ACLs between aware resources (Windows and Azure Files SMB, or Data Lake Storage to Data Lake Storage) and permissions between aware resources(Linux to Azure Files NFS). For accounts that have a hierarchical namespace, your security principal must be the owning user of the target container or it must be assigned the Storage Blob Data Owner role, scoped to the target container, storage account, parent resource group, or subscription. For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
-=======
 	cpCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default."+
 		" Preserves ACLs between aware resources (Windows and Azure Files SMB, or Data Lake Storage to Data Lake Storage) and "+
 		"\n permissions between aware resources(Linux to Azure Files NFS). \n"+
@@ -1932,7 +1893,6 @@ func init() {
 		"\n it must be assigned the Storage Blob Data Owner role, scoped to the target container, storage account, parent resource group, or subscription."+
 		"\n  For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy."+
 		"\n  This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
->>>>>>> ee9a4bb995d324d51b74939d978977c7e1e1dc4c
 
 	// Deletes destination blobs with uncommitted blocks when staging block, hidden because we want to preserve default behavior
 	cpCmd.PersistentFlags().BoolVar(&raw.deleteDestinationFileIfNecessary, "delete-destination-file", false, "False by default. "+
