@@ -8,7 +8,7 @@ import (
 
 //var InitHooks = map[string]func() TieredError{
 //	"ARM OAuth spinup": nil,
-//	"Account Registry OnStart": AccountRegistryInitHook,
+//	"Account Registry Init": AccountRegistryInitHook,
 //}
 //
 //var CleanupHooks = map[string]func() TieredError{
