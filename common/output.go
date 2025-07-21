@@ -107,6 +107,8 @@ type InitMsgJsonTemplate struct {
 	IsCleanupJob    bool
 }
 
+const cleanUpJobMessage = "Running cleanup job to delete files created during benchmarking"
+
 func GetStandardInitOutputBuilder(ctx JobContext) OutputBuilder {
 	return func(format OutputFormat) string {
 		if format == EOutputFormat.Json() {

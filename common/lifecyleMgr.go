@@ -253,8 +253,6 @@ func (lcm *lifecycleMgr) checkAndTriggerMemoryProfiling() {
 	}
 }
 
-const cleanUpJobMessage = "Running cleanup job to delete files created during benchmarking"
-
 func (lcm *lifecycleMgr) OnStart(ctx JobContext) {
 	o := GetStandardInitOutputBuilder(ctx)
 	lcm.msgQueue <- outputMessage{
