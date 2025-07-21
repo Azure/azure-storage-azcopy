@@ -288,7 +288,7 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 	}
 	glcm.Info(fmt.Sprintf("Data changed: %v, Metadata changed: %v, Type changed: %v, Transfer object: %v",
 		dataChanged, metadataChanged, typeChanged, transferObject))
-	transferObject = true
+
 	if transferObject {
 		return true, f.copyTransferScheduler(sourceObjectInMap)
 	}
