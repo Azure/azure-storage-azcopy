@@ -37,6 +37,14 @@ var DefaultSyncOrchestratorOptions = SyncOrchestratorOptions{
 	optimizeEnumerationByCTime:     false,
 }
 
+var TestDefaultSyncOrchestratorOptions = SyncOrchestratorOptions{
+	valid:                          true,
+	maxDirectoryDirectChildCount:   10_000, // This will not get honored by e2e test framework
+	metaDataOnlySync:               false,
+	lastSuccessfulSyncJobStartTime: time.Time{},
+	optimizeEnumerationByCTime:     false,
+}
+
 // SyncOrchestratorOptions defines the options for the enumerator that are required for the sync operation.
 // It contains various settings and configurations used during the sync process.
 type SyncOrchestratorOptions struct {
@@ -125,6 +133,9 @@ func NewSyncOrchestratorOptions(
 
 // Function to initialize a default SyncEnumeratorOptions struct object
 func NewDefaultSyncOrchestratorOptions() SyncOrchestratorOptions {
+	if common.IsSyncOrchTestModeSet() {
+		return TestDefaultSyncOrchestratorOptions
+	}
 	return DefaultSyncOrchestratorOptions
 }
 
