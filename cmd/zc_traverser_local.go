@@ -500,7 +500,11 @@ func WalkWithSymlinks(
 				}
 				// not a symlink
 				result, err := filepath.Abs(filePath)
+				rStat, err := os.Stat(result)
 
+				if UseSyncOrchestrator && rStat.IsDir() {
+					return nil
+				}
 				if err != nil {
 					err = fmt.Errorf("failed to get absolute path of %s: %w", filePath, err)
 					WarnStdoutAndScanningLog(err.Error())
@@ -508,7 +512,7 @@ func WalkWithSymlinks(
 					return nil
 				}
 
-				if !seenPaths.HasSeen(result) {
+				if !seenPaths.HasSeen(result) || UseSyncOrchestrator {
 					err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
 					// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
 					skipped, err := getProcessingError(err)
@@ -972,7 +976,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 					ErrorChannel:                t.errorChannel,
 					HardlinkHandling:            t.hardlinkHandling,
 					IncrementEnumerationCounter: t.incrementEnumerationCounter,
-					CheckAncestorsForLoops:      false,
+					CheckAncestorsForLoops:      buildmode.IsMover,
 				},
 			))
 		} else {
