@@ -1037,7 +1037,7 @@ extends:
                       title: "AzCopy v$(azcopy_version)"
                       tag: "v$(azcopy_github_tag)"
                       changeLogCompareToRelease: 'lastFullRelease'
-                      changeLogType: 'issueBased'
+                      changeLogType: 'commitBased'
                       isDraft: ${{ parameters.draft }}
                       isPreRelease: ${{ parameters.prerelease }}
                       assets: |
@@ -1048,7 +1048,6 @@ extends:
                         $(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*.zip
                         $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/mariner/*
                       assetUploadMode: replace
-                      addChangeLog: true
 
       - ${{ if eq(parameters.publish_artifacts, true) }}:
           - stage: PublishArtifacts
