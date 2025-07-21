@@ -1759,6 +1759,17 @@ func (p PreservePermissionsOption) IsTruthy() bool {
 	}
 }
 
+func (p PreservePermissionsOption) IsOwner() bool {
+	switch p {
+	case EPreservePermissionsOption.OwnershipAndACLs():
+		return true
+	case EPreservePermissionsOption.ACLsOnly(), EPreservePermissionsOption.None():
+		return false
+	default:
+		panic("unknown permissions option")
+	}
+}
+
 type CpkOptions struct {
 	// Optional flag to encrypt user data with user provided key.
 	// Key is provide in the REST request itself

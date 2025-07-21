@@ -1,6 +1,14 @@
 
 # Change Log
 
+<<<<<<< HEAD
+=======
+## Version 10.30.0-preview.2
+
+### Dependency updates
+1.	Golang 1.24.2 -> 1.24.4 ([#3085](https://github.com/Azure/azure-storage-azcopy/issues/3085))
+
+>>>>>>> ee9a4bb995d324d51b74939d978977c7e1e1dc4c
 ## Version 10.30.0-preview.1 
 
 ### New Feature

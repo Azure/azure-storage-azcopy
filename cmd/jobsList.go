@@ -76,7 +76,9 @@ func init() {
 	jobsCmd.AddCommand(lsCmd)
 
 	lsCmd.PersistentFlags().StringVar(&commandLineInput.withStatus, "with-status", "All",
-		"List the jobs with the specified status. Available values include: All, Cancelled, Failed, InProgress, Completed,"+
+		"List the jobs with the specified status. "+
+			"\n Available values include: "+
+			"\n All, Cancelled, Failed, InProgress, Completed,"+
 			" CompletedWithErrors, CompletedWithFailures, CompletedWithErrorsAndSkipped")
 }
 

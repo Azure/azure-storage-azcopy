@@ -128,40 +128,49 @@ func GetPreserveInfoFlagDefault(cmd *cobra.Command, isNFSCopy bool) bool {
 // Returns:
 // - An error if any validation fails, otherwise nil indicating successful validation.
 func performNFSSpecificValidation(fromTo common.FromTo,
-	isNFSCopy,
-	preserveInfo,
-	preservePermissions,
-	preserveSMBInfo,
-	preserveSMBPermissions bool) (isNFSCopyVal bool, preserveInfoVal bool, preservePermissionsVal common.PreservePermissionsOption, err error) {
+	preservePermissions common.PreservePermissionsOption,
+	preserveInfo bool,
+	symlinkHandling common.SymlinkHandlingType,
+	hardlinkHandling common.HardlinkHandlingType) (err error) {
 
-	if (preserveSMBInfo && runtime.GOOS == "linux") || preserveSMBPermissions {
-		err = errors.New(InvalidFlagsForNFSMsg)
-		return
+	// check for unsupported NFS behavior
+	if isUnsupported, err := isUnsupportedPlatformForNFS(fromTo); isUnsupported {
+		return err
 	}
-	isNFSCopyVal = isNFSCopy
-	preserveInfoVal = preserveInfo && areBothLocationsNFSAware(fromTo)
-	if err = validatePreserveNFSPropertyOption(preserveInfoVal,
+
+	// If we are not preserving original file permissions (raw.preservePermissions == false),
+	// and the operation is a file copy from azure file NFS to local linux (FromTo == FileLocal),
+	// and the current OS is Linux, then we require root privileges to proceed.
+	//
+	// This is because modifying file ownership or permissions on Linux
+	// typically requires elevated privileges. To safely handle permission
+	// changes during the local file operation, we enforce that the process
+	// must be running as root.
+	if !preservePermissions.IsTruthy() && fromTo == common.EFromTo.FileLocal() {
+		if err := common.EnsureRunningAsRoot(); err != nil {
+			return fmt.Errorf("failed to copy source to destination without preserving permissions: operation not permitted. Please retry with root privileges or use the default option (--preserve-permissions=true)")
+		}
+	}
+
+	if err = validatePreserveNFSPropertyOption(preserveInfo,
 		fromTo,
 		PreserveInfoFlag); err != nil {
-		return
+		return err
 	}
-
-	isUserPersistingPermissions := preservePermissions
-	if preserveInfoVal && !isUserPersistingPermissions {
-		glcm.Info(PreserveNFSPermissionsDisabledMsg)
-	}
-	if err = validatePreserveNFSPropertyOption(isUserPersistingPermissions,
+	if err = validatePreserveNFSPropertyOption(preservePermissions.IsTruthy(),
 		fromTo,
 		PreservePermissionsFlag); err != nil {
-		return
+		return err
 	}
-	//TBD: We will be preserving ACLs and ownership info in case of NFS. (UserID,GroupID and FileMode)
-	// Using the same EPreservePermissionsOption that we have today for NFS as well
-	// Please provide the feedback if we should introduce new EPreservePermissionsOption instead.
-	preservePermissionsVal = common.NewPreservePermissionsOption(isUserPersistingPermissions,
-		true,
-		fromTo)
-	return
+
+	if err = validateSymlinkFlag(symlinkHandling == common.ESymlinkHandlingType.Follow(), symlinkHandling == common.ESymlinkHandlingType.Preserve()); err != nil {
+		return err
+	}
+
+	if err = validateHardlinksFlag(hardlinkHandling, fromTo, true); err != nil {
+		return err
+	}
+	return nil
 }
 
 // performSMBSpecificValidation performs validation specific to SMB (Server Message Block) configurations
@@ -178,41 +187,24 @@ func performNFSSpecificValidation(fromTo common.FromTo,
 // - An error if any validation fails, otherwise nil indicating successful validation.
 
 func performSMBSpecificValidation(fromTo common.FromTo,
-	isNFSCopy,
-	preserveInfo,
-	preservePOSIXProperties,
-	preservePermissions,
-	preserveOwner,
-	preserveSMBPermissions bool) (isNFSCopyVal bool, preserveInfoVal, preservePOSIXPropertiesVal bool, preservePermissionsVal common.PreservePermissionsOption, err error) {
+	preservePermissions common.PreservePermissionsOption,
+	preserveInfo bool,
+	preservePOSIXProperties bool) (err error) {
 
-	preserveInfoVal = preserveInfo && areBothLocationsSMBAware(fromTo)
-	if err = validatePreserveSMBPropertyOption(preserveInfoVal,
+	if err = validatePreserveSMBPropertyOption(preserveInfo,
 		fromTo,
 		PreserveInfoFlag); err != nil {
-		return
+		return err
 	}
-
-	preservePOSIXPropertiesVal = preservePOSIXProperties
-	if preservePOSIXPropertiesVal && !areBothLocationsPOSIXAware(fromTo) {
-		err = errors.New(PreservePOSIXPropertiesIncompatibilityMsg)
-		return
+	if preservePOSIXProperties && !areBothLocationsPOSIXAware(fromTo) {
+		return errors.New(PreservePOSIXPropertiesIncompatibilityMsg)
 	}
-
-	isUserPersistingPermissions := preservePermissions || preserveSMBPermissions
-	if preserveInfoVal && !isUserPersistingPermissions {
-		glcm.Info(PreservePermissionsDisabledMsg)
-	}
-
-	if err = validatePreserveSMBPropertyOption(isUserPersistingPermissions,
+	if err = validatePreserveSMBPropertyOption(preservePermissions.IsTruthy(),
 		fromTo,
 		PreservePermissionsFlag); err != nil {
-		return
+		return err
 	}
-
-	preservePermissionsVal = common.NewPreservePermissionsOption(isUserPersistingPermissions,
-		preserveOwner,
-		fromTo)
-	return
+	return nil
 }
 
 // validateSymlinkFlag checks whether the '--follow-symlink' or '--preserve-symlink' flags
