@@ -50,10 +50,8 @@ func (c Client) CleanJobs(opts CleanJobsOptions) (result CleanJobsResult, err er
 		if resp.ErrorMessage != "" {
 			return result, fmt.Errorf("failed to list jobs due to error: %s", resp.ErrorMessage)
 		}
+		result.Jobs = []common.JobID{}
 		for _, job := range resp.JobIDDetails {
-			if result.Jobs == nil {
-				result.Jobs = []common.JobID{}
-			}
 			result.Jobs = append(result.Jobs, job.JobId)
 			count, err := jobsAdmin.RemoveSingleJobFiles(job.JobId)
 			if err != nil {
