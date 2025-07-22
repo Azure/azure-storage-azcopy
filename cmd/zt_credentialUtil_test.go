@@ -62,6 +62,15 @@ func TestCheckAuthSafeForTarget(t *testing.T) {
 		{common.ECredentialType.MDOAuthToken(), common.ELocation.Blob(), "http://myaccount.blob.core.cloudapi.de", "", true},
 		{common.ECredentialType.MDOAuthToken(), common.ELocation.Blob(), "http://myaccount.blob.core.core.usgovcloudapi.net", "", true},
 		{common.ECredentialType.SharedKey(), common.ELocation.BlobFS(), "http://myaccount.dfs.core.windows.net", "", true},
+
+		// Test URLs with port numbers (should pass - this tests the fix for issue #2792)
+		{common.ECredentialType.OAuthToken(), common.ELocation.Blob(), "https://myaccount.blob.core.windows.net:443", "", true},
+		{common.ECredentialType.OAuthToken(), common.ELocation.Blob(), "https://myaccount.blob.core.chinacloudapi.cn:443", "", true},
+		{common.ECredentialType.OAuthToken(), common.ELocation.Blob(), "https://myaccount.blob.core.cloudapi.de:443", "", true},
+		{common.ECredentialType.MDOAuthToken(), common.ELocation.Blob(), "https://myaccount.blob.core.windows.net:443", "", true},
+		{common.ECredentialType.MDOAuthToken(), common.ELocation.Blob(), "https://myaccount.blob.core.usgovcloudapi.net:443", "", true},
+		{common.ECredentialType.SharedKey(), common.ELocation.BlobFS(), "https://myaccount.dfs.core.windows.net:443", "", true},
+
 		{common.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://something.s3.eu-central-1.amazonaws.com", "", true},
 		{common.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://something.s3.cn-north-1.amazonaws.com.cn", "", true},
 		{common.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://s3.eu-central-1.amazonaws.com", "", true},
