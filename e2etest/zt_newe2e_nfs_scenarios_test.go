@@ -68,8 +68,6 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 	preserveProperties := ResolveVariation(svm, []bool{true, false})
 	preservePermissions := ResolveVariation(svm, []bool{true, false})
 
-	//TODO: Remove it. For testing purpose
-	//dstContainer := GetAccount(svm, PremiumFileShareAcct).GetService(svm, common.ELocation.File()).GetContainer("aznfs3")
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
 	}), ResourceDefinitionContainer{
@@ -191,7 +189,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 
 	sasOpts := GenericAccountSignatureValues{}
 
-	stdOut, err := RunAzCopy(
+	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
 			Verb: azCopyVerb,
@@ -213,9 +211,8 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 				},
 			},
 		})
-	fmt.Println("StdOut:-----------", stdOut)
-	fmt.Println("Errror:-----------", err)
-	//As we cannot set creationTime in linux we will fetch the properties from local and set it to src object properties
+
+	// As we cannot set creationTime in linux we will fetch the properties from local and set it to src object properties
 	for objName := range srcObjs {
 		obj := srcObjs[objName]
 		objProp := srcObjRes[objName].GetProperties(svm)
@@ -236,7 +233,6 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 	ValidateSkippedSpecialFileCount(svm, stdOut, 1)
 }
 
-/*
 func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManager) {
 
 	//
@@ -261,9 +257,8 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 	preservePermissions := ResolveVariation(svm, []bool{true})
 
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
-	//srcContainer := GetAccount(svm, PremiumFileShareAcct).GetService(svm, common.ELocation.File()).GetContainer("aznfs3")
 
-	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File()}), GetResourceOptions{
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
 	}), ResourceDefinitionContainer{
 		Properties: ContainerProperties{
@@ -418,13 +413,8 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 	// 	7. Number of hardlinks converted count will be displayed in job's summary
 	//
 
-	// if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
-	// 	svm.InvalidateScenario()
-	// 	return
-	// }
-
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
-	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File()}), GetResourceOptions{
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
 	}), ResourceDefinitionContainer{
 		Properties: ContainerProperties{
@@ -435,7 +425,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 	})
 	//defer deleteShare(svm, dstContainer)
 
-	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File()}), GetResourceOptions{
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
 	}), ResourceDefinitionContainer{
 		Properties: ContainerProperties{
@@ -584,7 +574,7 @@ func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForSMB(svm *ScenarioVar
 	preserveProperties := ResolveVariation(svm, []bool{true, false})
 	preservePermissions := ResolveVariation(svm, []bool{true, false})
 
-	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File()}), GetResourceOptions{
+	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}), GetResourceOptions{
 		PreferredAccount: ResolveVariation(svm, []*string{pointerTo(PremiumFileShareAcct)}),
 	}), ResourceDefinitionContainer{
 		Properties: ContainerProperties{
@@ -657,16 +647,16 @@ func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForSMB(svm *ScenarioVar
 		})
 	} else if srcObj.Location() == common.ELocation.File() {
 		ValidateContainsError(svm, stdOut, []string{
-			"The from share has SMB protocol enabled. To copy from a SMB share, do not use the --nfs flag",
+			"The from share has SMB protocol enabled. To copy from a SMB share, use the appropriate --from-to flag value",
 		})
 	} else if dstObj.Location() == common.ELocation.File() {
 		if azCopyVerb == AzCopyVerbCopy {
 			ValidateContainsError(svm, stdOut, []string{
-				"failed to perform copy command due to error: The to share has SMB protocol enabled. To copy to a SMB share, do not use the --nfs flag",
+				"failed to perform copy command due to error: The to share has SMB protocol enabled. To copy to a SMB share, use the appropriate --from-to flag value",
 			})
 		} else {
 			ValidateContainsError(svm, stdOut, []string{
-				"Cannot perform sync due to error: The to share has SMB protocol enabled. To copy to a SMB share, do not use the --nfs flag",
+				"Cannot perform sync due to error: The to share has SMB protocol enabled. To copy to a SMB share, use the appropriate --from-to flag value",
 			})
 		}
 	}
@@ -687,7 +677,7 @@ func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForNFS(svm *ScenarioVar
 	preserveProperties := ResolveVariation(svm, []bool{true, false})
 	preservePermissions := ResolveVariation(svm, []bool{true, false})
 
-	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File()}), GetResourceOptions{
+	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}), GetResourceOptions{
 		PreferredAccount: ResolveVariation(svm, []*string{pointerTo(PremiumFileShareAcct)}),
 	}), ResourceDefinitionContainer{
 		Properties: ContainerProperties{
@@ -719,13 +709,6 @@ func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForNFS(svm *ScenarioVar
 	}
 	sasOpts := GenericAccountSignatureValues{}
 
-	var fromTo common.FromTo
-	if srcObj.Location() == common.ELocation.Local() {
-		fromTo = common.EFromTo.LocalFileNFS()
-	} else if srcObj.Location() == common.ELocation.File() {
-		fromTo = common.EFromTo.FileNFSFileNFS()
-	}
-
 	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
@@ -740,7 +723,7 @@ func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForNFS(svm *ScenarioVar
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
-					FromTo:              pointerTo(fromTo),
+					//FromTo:              pointerTo(fromTo),
 					PreserveInfo:        pointerTo(preserveProperties),
 					PreservePermissions: pointerTo(preservePermissions),
 				},
@@ -756,15 +739,16 @@ func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForNFS(svm *ScenarioVar
 	}
 	if srcObj.Location() == common.ELocation.File() {
 		ValidateContainsError(svm, stdOut, []string{
-			"The from share has NFS protocol enabled. To copy from a NFS share, please provide the --nfs flag",
+			"The from share has NFS protocol enabled. To copy from a NFS share, use the appropriate --from-to flag value",
 		})
 	} else if dstObj.Location() == common.ELocation.File() {
 		ValidateContainsError(svm, stdOut, []string{
-			"The to share has NFS protocol enabled. To copy to a NFS share, please provide the --nfs flag",
+			"The to share has NFS protocol enabled. To copy to a NFS share, use the appropriate --from-to flag value",
 		})
 	}
 }
 
+/*
 func (s *FilesNFSTestSuite) Scenario_DstShareDoesNotExists(svm *ScenarioVariationManager) {
 
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early

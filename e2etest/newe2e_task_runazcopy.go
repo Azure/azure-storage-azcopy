@@ -496,17 +496,6 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 
 	err = command.Wait()
 
-	// Log stdout and stderr AFTER command finishes:
-	fmt.Println(fmt.Sprintf("AzCopy stdout:\n%s\n", out.String()))
-	fmt.Println(fmt.Sprintf("AzCopy stderr:\n%s\n", stderr.String()))
-
-	outputStr := out.String()
-	if len(outputStr) > 0 && outputStr[0] == '{' {
-		// parse JSON
-	} else {
-		fmt.Printf("Unexpected output (not JSON): %s", outputStr)
-	}
-
 	a.Assert("wait for finalize", common.Iff[Assertion](commandSpec.ShouldFail, Not{IsNil{}}, IsNil{}), err)
 	a.Assert("expected exit code",
 		common.Iff[Assertion](commandSpec.ShouldFail, Not{Equal{}}, Equal{}),
