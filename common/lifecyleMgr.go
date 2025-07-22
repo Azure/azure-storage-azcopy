@@ -49,8 +49,11 @@ var lcm = func() (lcmgr *lifecycleMgr) {
 // create a public interface so that consumers outside of this package can refer to the lifecycle manager
 // but they would not be able to instantiate one
 type LifecycleMgr interface {
-	OnStart(JobContext)                                          // let the user know the job has started and initial information like log location
-	Progress(OutputBuilder)                                      // print on the same line over and over again, not allowed to float up
+	OnStart(JobContext) // let the user know the job has started and initial information like log location
+	// print on the same line over and over again, not allowed to float up
+	OnScanProgress(ScanProgress) // only called during sync jobs, print the progress of scanning source and destination
+	OnTransferProgress(TransferProgress)
+	Progress(OutputBuilder)
 	Exit(OutputBuilder, ExitCode)                                // indicates successful execution exit after printing, allow user to specify exit code
 	Info(string)                                                 // simple print, allowed to float up
 	Warn(string)                                                 // simple print, allowed to float up
@@ -73,6 +76,7 @@ type LifecycleMgr interface {
 	MsgHandlerChannel() <-chan *LCMMsg
 	ReportAllJobPartsDone()
 	SetOutputVerbosity(mode OutputVerbosity)
+	SetLogger(logger ILogger)
 }
 
 func GetLifecycleMgr() LifecycleMgr {
@@ -102,6 +106,7 @@ type lifecycleMgr struct {
 	waitForUserResponse   chan bool
 	msgHandlerChannel     chan *LCMMsg
 	OutputVerbosityType   OutputVerbosity
+	logger                ILogger // logger to use to log progress messages
 }
 
 type userInput struct {
@@ -261,11 +266,31 @@ func (lcm *lifecycleMgr) OnStart(ctx JobContext) {
 	}
 }
 
-func (lcm *lifecycleMgr) Progress(o OutputBuilder) {
-	messageContent := ""
-	if o != nil {
-		messageContent = o(lcm.outputFormat)
+func (lcm *lifecycleMgr) OnScanProgress(progress ScanProgress) {
+
+	if lcm.logger != nil {
+		lcm.logger.Log()
 	}
+
+}
+
+func (lcm *lifecycleMgr) OnTransferProgress(progress TransferProgress) {
+
+}
+
+func (lcm *lifecycleMgr) Progress(builder OutputBuilder) {
+	//builderWrapper := func(format common.OutputFormat) string {
+	//	if format != common.EOutputFormat.Text() {
+	//		j.JobManager.Log(common.LogInfo, builder(common.EOutputFormat.Text()))
+	//		return builder(format)
+	//	} else {
+	//		output := builder(common.EOutputFormat.Text())
+	//		j.JobManager.Log(common.LogInfo, output)
+	//		return output
+	//	}
+	//}
+
+	messageContent := builder(lcm.outputFormat)
 
 	lcm.msgQueue <- outputMessage{
 		msgContent: messageContent,
@@ -694,6 +719,10 @@ func (lcm *lifecycleMgr) ReportAllJobPartsDone() {
 
 func (lcm *lifecycleMgr) SetOutputVerbosity(mode OutputVerbosity) {
 	lcm.OutputVerbosityType = mode
+}
+
+func (lcm *lifecycleMgr) SetLogger(logger ILogger) {
+	lcm.logger = logger
 }
 
 // captures the common logic of exiting if there's an expected error
