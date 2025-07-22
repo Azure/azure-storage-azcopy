@@ -299,30 +299,49 @@ func init() {
 	// replace the word "global" to avoid confusion (e.g. it doesn't affect all instances of AzCopy)
 	rootCmd.SetUsageTemplate(strings.Replace((&cobra.Command{}).UsageTemplate(), "Global Flags", "Flags Applying to All Commands", -1))
 
-	rootCmd.PersistentFlags().Float64Var(&CapMbps, "cap-mbps", 0, "Caps the transfer rate, in megabits per second. Moment-by-moment throughput might vary slightly from the cap. If this option is set to zero, or it is omitted, the throughput isn't capped.")
-	rootCmd.PersistentFlags().StringVar(&outputFormatRaw, "output-type", "text", "Format of the command's output. The choices include: text, json. The default value is 'text'.")
-	rootCmd.PersistentFlags().StringVar(&outputVerbosityRaw, "output-level", "default", "Define the output verbosity. Available levels: essential, quiet.")
-	rootCmd.PersistentFlags().StringVar(&logVerbosityRaw, "log-level", "INFO", "Define the log verbosity for the log file, available levels: DEBUG(detailed trace), INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs). (default 'INFO').")
+	rootCmd.PersistentFlags().Float64Var(&CapMbps, "cap-mbps", 0,
+		"Caps the transfer rate, in megabits per second. "+
+			"\n Moment-by-moment throughput might vary slightly from the cap."+
+			"\n If this option is set to zero, or it is omitted, the throughput isn't capped.")
+	rootCmd.PersistentFlags().StringVar(&outputFormatRaw, "output-type", "text",
+		"Format of the command's output. The choices include: text, json. "+
+			"\n The default value is 'text'.")
+	rootCmd.PersistentFlags().StringVar(&outputVerbosityRaw, "output-level", "default",
+		"Define the output verbosity. Available levels: essential, quiet.")
+	rootCmd.PersistentFlags().StringVar(&logVerbosityRaw, "log-level", "INFO",
+		"Define the log verbosity for the log file, "+
+			"\n available levels: DEBUG(detailed trace), INFO(all requests/responses), WARNING(slow responses),"+
+			"\n ERROR(only failed requests), and NONE(no output logs). (default 'INFO').")
 
-	rootCmd.PersistentFlags().StringVar(&TrustedSuffixes, trustedSuffixesNameAAD, "", "Specifies additional domain suffixes where Azure Active Directory login tokens may be sent.  The default is '"+
-		trustedSuffixesAAD+"'. Any listed here are added to the default. For security, you should only put Microsoft Azure domains here. Separate multiple entries with semi-colons.")
+	rootCmd.PersistentFlags().StringVar(&TrustedSuffixes, trustedSuffixesNameAAD, "",
+		"\nSpecifies additional domain suffixes where Azure Active Directory login tokens may be sent.  \nThe default is '"+
+			trustedSuffixesAAD+"'. \n Any listed here are added to the default. For security, you should only put Microsoft Azure domains here. "+
+			"\n Separate multiple entries with semi-colons.")
 
-	rootCmd.PersistentFlags().BoolVar(&SkipVersionCheck, "skip-version-check", false, "Do not perform the version check at startup. Intended for automation scenarios & airgapped use.")
+	rootCmd.PersistentFlags().BoolVar(&SkipVersionCheck, "skip-version-check", false,
+		"Do not perform the version check at startup. \nIntended for automation scenarios & airgapped use.")
 
-	// Note: this is due to Windows not supporting signals properly, reserved for partner teams
-	rootCmd.PersistentFlags().BoolVar(&cancelFromStdin, "cancel-from-stdin", false, "Used by partner teams to send in `cancel` through stdin to stop a job.")
+	// Note: this is due to Windows not supporting signals properly
+	rootCmd.PersistentFlags().BoolVar(&cancelFromStdin, "cancel-from-stdin", false,
+		"Used by partner teams to send in `cancel` through stdin to stop a job.")
+
+	// special E2E testing flags
+	rootCmd.PersistentFlags().BoolVar(&azcopyAwaitContinue, "await-continue", false,
+		"Used when debugging, to tell AzCopy to await `continue` on stdin before starting any work. "+
+			"\n Assists with debugging AzCopy via attach-to-process")
+	rootCmd.PersistentFlags().BoolVar(&azcopyAwaitAllowOpenFiles, "await-open", false,
+		"Used when debugging, to tell AzCopy to await `open` on stdin, after scanning but before opening the first file. "+
+			"\n Assists with testing cases around file modifications between scanning and usage")
+	rootCmd.PersistentFlags().StringVar(&debugSkipFiles, "debug-skip-files", "",
+		"Used when debugging, to tell AzCopy to cancel the job midway."+
+			"\n List of relative paths to skip in the STE.")
+
+	// reserved for partner teams
 	_ = rootCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
 
-	// special E2E testing flags, debug only
-	rootCmd.PersistentFlags().BoolVar(&azcopyAwaitContinue, "await-continue", false, "Used when debugging, to tell AzCopy to await `continue` on stdin before starting any work. Assists with debugging AzCopy via attach-to-process")
-	_ = rootCmd.PersistentFlags().MarkHidden("await-continue")
-	rootCmd.PersistentFlags().BoolVar(&azcopyAwaitAllowOpenFiles, "await-open", false, "Used when debugging, to tell AzCopy to await `open` on stdin, after scanning but before opening the first file. Assists with testing cases around file modifications between scanning and usage")
-	_ = rootCmd.PersistentFlags().MarkHidden("await-open")
-	rootCmd.PersistentFlags().StringVar(&debugSkipFiles, "debug-skip-files", "", "Used when debugging, to tell AzCopy to cancel the job midway. List of relative paths to skip in the STE.")
-	_ = rootCmd.PersistentFlags().MarkHidden("debug-skip-files")
-
 	// special flags to be used in case of unexpected service errors.
-	rootCmd.PersistentFlags().StringVar(&retryStatusCodes, "retry-status-codes", "", "Comma-separated list of HTTP status codes to retry on. (default '408;429;500;502;503;504')")
+	rootCmd.PersistentFlags().StringVar(&retryStatusCodes, "retry-status-codes", "",
+		"Comma-separated list of HTTP status codes to retry on. (default '408;429;500;502;503;504')")
 	_ = rootCmd.PersistentFlags().MarkHidden("retry-status-codes")
 	rootCmd.PersistentFlags().StringVar(&debugMemoryProfile, "memory-profile", "", "Export pprof memory profile")
 	_ = rootCmd.PersistentFlags().MarkHidden("memory-profile")
