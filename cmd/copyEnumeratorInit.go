@@ -193,8 +193,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				logDstContainerCreateFailureOnce.Do(func() {
 					glcm.Warn("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
 				})
-				common.LogToJobLogWithPrefix(fmt.Sprintf("Failed to create destination container %s. The transfer will continue if the container exists", dstContainerName), common.LogWarning)
-				common.LogToJobLogWithPrefix(fmt.Sprintf("Error %v", err), common.LogDebug)
+				common.LogToJobLogWithPrefix(fmt.Sprintf("Failed attempt to create destination container (this is not blocking): %v", err), common.LogDebug)
 				seenFailedContainers[dstContainerName] = true
 			}
 		} else if cca.FromTo.From().IsRemote() { // if the destination has implicit container names
@@ -490,7 +489,11 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
+	options := createClientOptions(
+		common.LogLevelOverrideLogger{ // override our log level here
+			ILoggerResetable:  common.AzcopyCurrentJobLogger,
+			MinimumLevelToLog: common.Iff(LogLevel == common.ELogLevel.Debug(), common.ELogLevel.Debug(), common.ELogLevel.None()),
+		}, nil, reauthTok)
 
 	sc, err := common.GetServiceClientForLocation(
 		cca.FromTo.To(),
