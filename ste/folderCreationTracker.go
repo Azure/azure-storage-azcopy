@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 )
 
 type FolderCreationTracker common.FolderCreationTracker
@@ -16,19 +17,46 @@ type JPPTCompatibleFolderCreationTracker interface {
 	RegisterPropertiesTransfer(folder string, transferIndex uint32)
 }
 
+// FolderTrackerMode defines the locking strategy for folder creation
+type FolderTrackerMode int
+
+const (
+	FolderTrackerModeGlobalLock FolderTrackerMode = iota // Original global lock approach
+	FolderTrackerModeLockFree                            // Lock-free concurrent approach
+)
+
 func NewFolderCreationTracker(fpo common.FolderPropertyOption, plan *JobPartPlanHeader) FolderCreationTracker {
+	if buildmode.IsMover && plan.FromTo.From() == common.ELocation.Local() &&
+		(plan.FromTo.To() == common.ELocation.File() ||
+			plan.FromTo.To() == common.ELocation.Blob() ||
+			plan.FromTo.To() == common.ELocation.BlobFS()) {
+		return NewFolderCreationTrackerWithMode(fpo, plan, FolderTrackerModeLockFree)
+	}
+	return NewFolderCreationTrackerWithMode(fpo, plan, FolderTrackerModeGlobalLock)
+}
+
+func NewFolderCreationTrackerWithMode(fpo common.FolderPropertyOption, plan *JobPartPlanHeader, mode FolderTrackerMode) FolderCreationTracker {
 	switch fpo {
 	case common.EFolderPropertiesOption.AllFolders(),
 		common.EFolderPropertiesOption.AllFoldersExceptRoot():
-		return &jpptFolderTracker{ // This prevents a dependency cycle. Reviewers: Are we OK with this? Can you think of a better way to do it?
-			plan:                   plan,
-			mu:                     &sync.Mutex{},
-			contents:               make(map[string]uint32),
-			unregisteredButCreated: make(map[string]struct{}),
+		switch mode {
+		case FolderTrackerModeGlobalLock:
+			return &jpptFolderTracker{
+				plan:                   plan,
+				mu:                     &sync.Mutex{},
+				contents:               make(map[string]uint32),
+				unregisteredButCreated: make(map[string]struct{}),
+			}
+		case FolderTrackerModeLockFree:
+			return &jpptFolderTrackerLockFree{
+				plan:                   plan,
+				contents:               &sync.Map{},
+				unregisteredButCreated: &sync.Map{},
+			}
+		default:
+			panic("unknown folder tracker mode")
 		}
 	case common.EFolderPropertiesOption.NoFolders():
-		// can't use simpleFolderTracker here, because when no folders are processed,
-		// then StopTracking will never be called, so we'll just use more and more memory for the map
 		return &nullFolderTracker{}
 	default:
 		panic("unknown folderPropertiesOption")
@@ -38,19 +66,68 @@ func NewFolderCreationTracker(fpo common.FolderPropertyOption, plan *JobPartPlan
 type nullFolderTracker struct{}
 
 func (f *nullFolderTracker) CreateFolder(folder string, doCreation func() error) error {
-	// no-op (the null tracker doesn't track anything)
 	return doCreation()
 }
 
 func (f *nullFolderTracker) ShouldSetProperties(folder string, overwrite common.OverwriteOption, prompter common.Prompter) bool {
-	// There's no way this should ever be called, because we only create the nullTracker if we are
-	// NOT transferring folder info.
 	panic("wrong type of folder tracker has been instantiated. This type does not do any tracking")
 }
 
 func (f *nullFolderTracker) StopTracking(folder string) {
-	// noop (because we don't track anything)
+	// noop
 }
+
+// =============================================================================
+// Shared Utilities Module - Only meaningful repetitions
+// =============================================================================
+
+// shouldSetPropertiesCore implements the complex overwrite logic shared by both implementations
+func shouldSetPropertiesCore(created bool, overwrite common.OverwriteOption, folder string, prompter common.Prompter) bool {
+	switch overwrite {
+	case common.EOverwriteOption.True():
+		return true
+	case common.EOverwriteOption.Prompt(),
+		common.EOverwriteOption.IfSourceNewer(),
+		common.EOverwriteOption.False():
+
+		if overwrite == common.EOverwriteOption.Prompt() && !created {
+			cleanedFolderPath := folder
+			if !strings.HasPrefix(folder, common.EXTENDED_PATH_PREFIX) {
+				if parsedURL, _ := url.Parse(folder); parsedURL.Scheme != "" && parsedURL.Host != "" {
+					parsedURL.RawQuery = ""
+					cleanedFolderPath = parsedURL.String()
+				}
+			}
+			return prompter.ShouldOverwrite(cleanedFolderPath, common.EEntityType.Folder())
+		}
+
+		return created
+	default:
+		panic("unknown overwrite option")
+	}
+}
+
+// buildDebugContents creates debug string for panic messages - used by both implementations
+func buildDebugContentsFromMap(contents map[string]uint32) string {
+	var result strings.Builder
+	for k, v := range contents {
+		result.WriteString(fmt.Sprintf("K: %s V: %d\n", k, v))
+	}
+	return result.String()
+}
+
+func buildDebugContentsFromSyncMap(contents *sync.Map) string {
+	var result strings.Builder
+	contents.Range(func(key, value interface{}) bool {
+		result.WriteString(fmt.Sprintf("K: %s V: %d\n", key.(string), value.(uint32)))
+		return true
+	})
+	return result.String()
+}
+
+// =============================================================================
+// Global Lock Implementation
+// =============================================================================
 
 type jpptFolderTracker struct {
 	plan                   IJobPartPlanHeader
@@ -64,15 +141,13 @@ func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, transferIn
 	defer f.mu.Unlock()
 
 	if folder == common.Dev_Null {
-		return // Never persist to dev-null
+		return
 	}
 
 	f.contents[folder] = transferIndex
 
-	// We created it before it was enumerated-- Let's register that now.
 	if _, ok := f.unregisteredButCreated[folder]; ok {
 		f.plan.Transfer(transferIndex).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
-
 		delete(f.unregisteredButCreated, folder)
 	}
 }
@@ -82,7 +157,7 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 	defer f.mu.Unlock()
 
 	if folder == common.Dev_Null {
-		return nil // Never persist to dev-null
+		return nil
 	}
 
 	if idx, ok := f.contents[folder]; ok &&
@@ -100,11 +175,8 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 	}
 
 	if idx, ok := f.contents[folder]; ok {
-		// overwrite it's transfer status
 		f.plan.Transfer(idx).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
 	} else {
-		// A folder hasn't been hit in traversal yet.
-		// Recording it in memory is OK, because we *cannot* resume a job that hasn't finished traversal.
 		f.unregisteredButCreated[folder] = struct{}{}
 	}
 
@@ -113,50 +185,20 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 
 func (f *jpptFolderTracker) ShouldSetProperties(folder string, overwrite common.OverwriteOption, prompter common.Prompter) bool {
 	if folder == common.Dev_Null {
-		return false // Never persist to dev-null
+		return false
 	}
 
-	switch overwrite {
-	case common.EOverwriteOption.True():
-		return true
-	case common.EOverwriteOption.Prompt(),
-		common.EOverwriteOption.IfSourceNewer(),
-		common.EOverwriteOption.False():
+	f.mu.Lock()
+	defer f.mu.Unlock()
 
-		f.mu.Lock()
-		defer f.mu.Unlock()
-
-		var created bool
-		if idx, ok := f.contents[folder]; ok {
-			created = f.plan.Transfer(idx).TransferStatus() == common.ETransferStatus.FolderCreated()
-		} else {
-			// This should not happen, ever.
-			// Folder property jobs register with the tracker before they start getting processed.
-			panic(common.NewAzCopyLogSanitizer().SanitizeLogMessage("folder " + folder + " was not registered when properties persistence occurred"))
-		}
-
-		// prompt only if we didn't create this folder
-		if overwrite == common.EOverwriteOption.Prompt() && !created {
-			cleanedFolderPath := folder
-
-			// if it's a local Windows path, skip since it doesn't have SAS and won't parse correctly as an URL
-			if !strings.HasPrefix(folder, common.EXTENDED_PATH_PREFIX) {
-				// get rid of SAS before prompting
-				parsedURL, _ := url.Parse(folder)
-
-				// really make sure that it's not a local path
-				if parsedURL.Scheme != "" && parsedURL.Host != "" {
-					parsedURL.RawQuery = ""
-					cleanedFolderPath = parsedURL.String()
-				}
-			}
-			return prompter.ShouldOverwrite(cleanedFolderPath, common.EEntityType.Folder())
-		}
-
-		return created
-	default:
-		panic("unknown overwrite option")
+	var created bool
+	if idx, ok := f.contents[folder]; ok {
+		created = f.plan.Transfer(idx).TransferStatus() == common.ETransferStatus.FolderCreated()
+	} else {
+		panic(common.NewAzCopyLogSanitizer().SanitizeLogMessage("folder " + folder + " was not registered when properties persistence occurred"))
 	}
+
+	return shouldSetPropertiesCore(created, overwrite, folder, prompter)
 }
 
 func (f *jpptFolderTracker) StopTracking(folder string) {
@@ -164,20 +206,99 @@ func (f *jpptFolderTracker) StopTracking(folder string) {
 	defer f.mu.Unlock()
 
 	if folder == common.Dev_Null {
-		return // Not possible to track this
+		return
 	}
 
-	// no-op, because tracking is now handled by jppt, anyway.
 	if _, ok := f.contents[folder]; ok {
 		delete(f.contents, folder)
 	} else {
-		currentContents := ""
+		currentContents := buildDebugContentsFromMap(f.contents)
+		panic(common.NewAzCopyLogSanitizer().SanitizeLogMessage("Folder " + folder + " shouldn't finish tracking until it's been recorded\nCurrent Contents:\n" + currentContents))
+	}
+}
 
-		for k, v := range f.contents {
-			currentContents += fmt.Sprintf("K: %s V: %d\n", k, v)
+// =============================================================================
+// Lock-Free Implementation
+// =============================================================================
+
+type jpptFolderTrackerLockFree struct {
+	plan                   IJobPartPlanHeader
+	contents               *sync.Map // folder path → transfer index
+	unregisteredButCreated *sync.Map // folder path → struct{}
+}
+
+func (f *jpptFolderTrackerLockFree) RegisterPropertiesTransfer(folder string, transferIndex uint32) {
+	if folder == common.Dev_Null {
+		return
+	}
+
+	// Lock-free store
+	f.contents.Store(folder, transferIndex)
+
+	// Check if folder was created before registration
+	if _, wasCreated := f.unregisteredButCreated.LoadAndDelete(folder); wasCreated {
+		f.plan.Transfer(transferIndex).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
+	}
+}
+
+func (f *jpptFolderTrackerLockFree) CreateFolder(folder string, doCreation func() error) error {
+	if folder == common.Dev_Null {
+		return nil
+	}
+
+	// Fast path check (lock-free read)
+	if idx, exists := f.contents.Load(folder); exists {
+		if f.plan.Transfer(idx.(uint32)).TransferStatus() == common.ETransferStatus.FolderCreated() {
+			return nil
 		}
+	}
 
-		// double should never be hit, but *just in case*.
+	// Check unregistered cache (lock-free read)
+	if _, wasCreated := f.unregisteredButCreated.Load(folder); wasCreated {
+		return nil
+	}
+
+	// Perform actual folder creation - multiple threads may execute this concurrently
+	// but storage operations are idempotent, so this is safe
+	err := doCreation()
+	if err != nil {
+		return err
+	}
+
+	// Update status (lock-free operations)
+	if idx, exists := f.contents.Load(folder); exists {
+		f.plan.Transfer(idx.(uint32)).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
+	} else {
+		f.unregisteredButCreated.Store(folder, struct{}{})
+	}
+
+	return nil
+}
+
+func (f *jpptFolderTrackerLockFree) ShouldSetProperties(folder string, overwrite common.OverwriteOption, prompter common.Prompter) bool {
+	if folder == common.Dev_Null {
+		return false
+	}
+
+	// Lock-free read
+	var created bool
+	if idx, exists := f.contents.Load(folder); exists {
+		created = f.plan.Transfer(idx.(uint32)).TransferStatus() == common.ETransferStatus.FolderCreated()
+	} else {
+		panic(common.NewAzCopyLogSanitizer().SanitizeLogMessage("folder " + folder + " was not registered when properties persistence occurred"))
+	}
+
+	return shouldSetPropertiesCore(created, overwrite, folder, prompter)
+}
+
+func (f *jpptFolderTrackerLockFree) StopTracking(folder string) {
+	if folder == common.Dev_Null {
+		return
+	}
+
+	// Lock-free delete
+	if _, exists := f.contents.LoadAndDelete(folder); !exists {
+		currentContents := buildDebugContentsFromSyncMap(f.contents)
 		panic(common.NewAzCopyLogSanitizer().SanitizeLogMessage("Folder " + folder + " shouldn't finish tracking until it's been recorded\nCurrent Contents:\n" + currentContents))
 	}
 }
