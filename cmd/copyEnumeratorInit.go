@@ -190,9 +190,6 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 			// check against seenFailedContainers so we don't spam the job log with initialization failed errors
 			if _, ok := seenFailedContainers[dstContainerName]; err != nil && jobsAdmin.JobsAdmin != nil && !ok {
-				logDstContainerCreateFailureOnce.Do(func() {
-					glcm.Warn("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
-				})
 				common.LogToJobLogWithPrefix(fmt.Sprintf("Failed attempt to create destination container (this is not blocking): %v", err), common.LogDebug)
 				seenFailedContainers[dstContainerName] = true
 			}
