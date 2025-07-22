@@ -32,26 +32,26 @@ import (
 // This is mocked to test the folder creation tracker
 type mockedJPPH struct {
 	folderName []string
-	index	   []int
+	index      []int
 	status     []*JobPartPlanTransfer
-	
 }
 
-func (jpph *mockedJPPH)	CommandString() string { panic("Not implemented") }
-func (jpph *mockedJPPH)	GetRelativeSrcDstStrings(uint32) (string, string) { panic("Not implemented") }
-func (jpph *mockedJPPH)	JobPartStatus() common.JobStatus { panic("Not implemented") }
-func (jpph *mockedJPPH)	JobStatus() common.JobStatus { panic("Not implemented") }
-func (jpph *mockedJPPH)	SetJobPartStatus(common.JobStatus) { panic("Not implemented") }
-func (jpph *mockedJPPH)	SetJobStatus(common.JobStatus) { panic("Not implemented") }
-func (jpph *mockedJPPH)	Transfer(idx uint32) *JobPartPlanTransfer { 
+func (jpph *mockedJPPH) CommandString() string                            { panic("Not implemented") }
+func (jpph *mockedJPPH) GetRelativeSrcDstStrings(uint32) (string, string) { panic("Not implemented") }
+func (jpph *mockedJPPH) JobPartStatus() common.JobStatus                  { panic("Not implemented") }
+func (jpph *mockedJPPH) JobStatus() common.JobStatus                      { panic("Not implemented") }
+func (jpph *mockedJPPH) SetJobPartStatus(common.JobStatus)                { panic("Not implemented") }
+func (jpph *mockedJPPH) SetJobStatus(common.JobStatus)                    { panic("Not implemented") }
+func (jpph *mockedJPPH) Transfer(idx uint32) *JobPartPlanTransfer {
 	return jpph.status[idx]
 }
-func (jpph *mockedJPPH)	TransferSrcDstRelatives(uint32) (string, string) { panic("Not implemented") }
-func (jpph *mockedJPPH)	TransferSrcDstStrings(uint32) (string, string, bool) { panic("Not implemented") }
-func (jpph *mockedJPPH)	TransferSrcPropertiesAndMetadata(uint32) (common.ResourceHTTPHeaders, common.Metadata, blob.BlobType, blob.AccessTier, bool, bool, bool, common.InvalidMetadataHandleOption, common.EntityType, string, string, common.BlobTags) {
+func (jpph *mockedJPPH) TransferSrcDstRelatives(uint32) (string, string) { panic("Not implemented") }
+func (jpph *mockedJPPH) TransferSrcDstStrings(uint32) (string, string, bool) {
 	panic("Not implemented")
 }
-
+func (jpph *mockedJPPH) TransferSrcPropertiesAndMetadata(uint32) (common.ResourceHTTPHeaders, common.Metadata, blob.BlobType, blob.AccessTier, bool, bool, bool, common.InvalidMetadataHandleOption, common.EntityType, string, string, common.BlobTags) {
+	panic("Not implemented")
+}
 
 // This test verifies that when we call dir create for a directory, it is created only once,
 // even if multiple routines request it to be created.
@@ -60,23 +60,23 @@ func TestFolderCreationTracker_directoryCreate(t *testing.T) {
 
 	// create a plan with one registered and one unregistered folder
 	folderReg := "folderReg"
-	folderUnReg  := "folderUnReg"
-
+	folderUnReg := "folderUnReg"
 
 	plan := &mockedJPPH{
 		folderName: []string{folderReg, folderUnReg},
-		index: []int{0, 1},
-		status: []*JobPartPlanTransfer {
-			&JobPartPlanTransfer{atomicTransferStatus: common.ETransferStatus.NotStarted(),},
-			&JobPartPlanTransfer{atomicTransferStatus: common.ETransferStatus.NotStarted(),},
+		index:      []int{0, 1},
+		status: []*JobPartPlanTransfer{
+			&JobPartPlanTransfer{atomicTransferStatus: common.ETransferStatus.NotStarted()},
+			&JobPartPlanTransfer{atomicTransferStatus: common.ETransferStatus.NotStarted()},
 		},
 	}
 
-	fct := &jpptFolderTracker{ 
+	fct := &jpptFolderTracker{
 		plan:                   plan,
 		mu:                     &sync.Mutex{},
 		contents:               make(map[string]uint32),
 		unregisteredButCreated: make(map[string]struct{}),
+		lockFolderCreation:     true, // we want to test the locking behavior
 	}
 
 	// 1. Register folder1
@@ -85,13 +85,13 @@ func TestFolderCreationTracker_directoryCreate(t *testing.T) {
 	// Multiple calls to create folderReg should execute create only once.
 	numOfCreations := int32(0)
 	var wg sync.WaitGroup
-	doCreation := func() error{
+	doCreation := func() error {
 		atomic.AddInt32(&numOfCreations, 1)
 		plan.status[0].atomicTransferStatus = common.ETransferStatus.FolderCreated()
 		return nil
 	}
 
-	ch  := make(chan bool)
+	ch := make(chan bool)
 	for i := 0; i < 50; i++ {
 		wg.Add(1)
 		go func() {
@@ -108,7 +108,7 @@ func TestFolderCreationTracker_directoryCreate(t *testing.T) {
 	// similar test for unregistered folder
 	numOfCreations = 0
 	ch = make(chan bool)
-	doCreation = func() error{
+	doCreation = func() error {
 		atomic.AddInt32(&numOfCreations, 1)
 		plan.status[1].atomicTransferStatus = common.ETransferStatus.FolderCreated()
 		return nil
