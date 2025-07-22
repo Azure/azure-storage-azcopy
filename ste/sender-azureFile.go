@@ -658,7 +658,7 @@ func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, shareCli
 			return err
 		}
 		recorderURL.RawQuery = ""
-		err = t.CreateFolder(recorderURL.String(), func() error {
+		err = t.CreateFolder(ctx, recorderURL.String(), func() error {
 			_, err := currentDirectoryClient.Create(ctx, nil)
 			return err
 		})

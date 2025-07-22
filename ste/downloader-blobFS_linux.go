@@ -5,12 +5,13 @@ package ste
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"golang.org/x/sys/unix"
 	"io"
 	"os"
 	"syscall"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"golang.org/x/sys/unix"
 )
 
 // CreateFile covers the following UNIX properties:
@@ -25,7 +26,7 @@ func (bd *blobFSDownloader) CreateFile(jptm IJobPartTransferMgr, destination str
 
 	unixSIP := sip.(IUNIXPropertyBearingSourceInfoProvider) // Blob may have unix properties.
 
-	err = common.CreateParentDirectoryIfNotExist(destination, t)
+	err = common.CreateParentDirectoryIfNotExist(bd.jptm.Context(), destination, t)
 	if err != nil {
 		return
 	}

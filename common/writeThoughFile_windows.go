@@ -21,6 +21,7 @@
 package common
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -68,7 +69,7 @@ func GetFileInformation(path string) (windows.ByHandleFileInformation, error) {
 	return info, err
 }
 
-func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int64, writeThrough bool, tracker FolderCreationTracker, forceIfReadOnly bool) (*os.File, error) {
+func CreateFileOfSizeWithWriteThroughOption(ctx context.Context, destinationPath string, fileSize int64, writeThrough bool, tracker FolderCreationTracker, forceIfReadOnly bool) (*os.File, error) {
 	const FILE_ATTRIBUTE_READONLY = windows.FILE_ATTRIBUTE_READONLY
 	const FILE_ATTRIBUTE_HIDDEN = windows.FILE_ATTRIBUTE_HIDDEN
 
@@ -119,7 +120,7 @@ func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int
 		}
 	}
 
-	err := CreateParentDirectoryIfNotExist(destinationPath, tracker)
+	err := CreateParentDirectoryIfNotExist(ctx, destinationPath, tracker)
 	if err != nil {
 		return nil, err
 	}

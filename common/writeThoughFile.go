@@ -21,6 +21,7 @@
 package common
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"regexp"
@@ -51,7 +52,7 @@ func isRootPath(s string) bool {
 		strings.EqualFold(shortParentDir, "/")
 }
 
-func CreateParentDirectoryIfNotExist(destinationPath string, tracker FolderCreationTracker) error {
+func CreateParentDirectoryIfNotExist(ctx context.Context, destinationPath string, tracker FolderCreationTracker) error {
 	// If we're pointing at the root of a drive, don't try because it won't work.
 	if isRootPath(destinationPath) {
 		return nil
@@ -67,10 +68,10 @@ func CreateParentDirectoryIfNotExist(destinationPath string, tracker FolderCreat
 	}
 
 	directory := destinationPath[:lastIndex]
-	return CreateDirectoryIfNotExist(directory, tracker)
+	return CreateDirectoryIfNotExist(ctx, directory, tracker)
 }
 
-func CreateDirectoryIfNotExist(directory string, tracker FolderCreationTracker) error {
+func CreateDirectoryIfNotExist(ctx context.Context, directory string, tracker FolderCreationTracker) error {
 	// If we're pointing at the root of a drive, don't try because it won't work.
 	if isRootPath(directory) {
 		return nil
@@ -82,10 +83,10 @@ func CreateDirectoryIfNotExist(directory string, tracker FolderCreationTracker) 
 		// stat errors can be present in write-only scenarios, when the directory isn't present, etc.
 		// as a result, we care more about the mkdir error than the stat error, because that's the tell.
 		// first make sure the parent directory exists but we ignore any error that comes back
-		_ = CreateParentDirectoryIfNotExist(directory, tracker)
+		_ = CreateParentDirectoryIfNotExist(ctx, directory, tracker)
 
 		// then create the directory
-		mkDirErr := tracker.CreateFolder(directory, func() error {
+		mkDirErr := tracker.CreateFolder(ctx, directory, func() error {
 			return os.Mkdir(directory, os.ModePerm)
 		})
 
