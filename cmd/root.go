@@ -66,6 +66,7 @@ var azcopyCurrentJobID common.JobID
 var isPipeDownload bool
 var retryStatusCodes string
 var debugMemoryProfile string
+var azcopyTelemetryValue string
 
 type jobLoggerInfo struct {
 	jobID         common.JobID
@@ -348,6 +349,8 @@ func init() {
 
 	rootCmd.PersistentFlags().BoolVar(&SkipVersionCheck, "skip-version-check", false,
 		"Do not perform the version check at startup. \nIntended for automation scenarios & airgapped use.")
+
+	rootCmd.PersistentFlags().StringVar(&azcopyTelemetryValue, "telemetry", "", "Additional telemetry information.")
 
 	// Note: this is due to Windows not supporting signals properly
 	rootCmd.PersistentFlags().BoolVar(&cancelFromStdin, "cancel-from-stdin", false,
