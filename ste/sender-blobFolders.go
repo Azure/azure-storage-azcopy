@@ -198,7 +198,7 @@ func (b *blobFolderSender) EnsureFolderExists() error {
 		return fmt.Errorf("when getting additional folder properties: %w", err)
 	}
 
-	err = t.CreateFolder(b.DirUrlToString(), func() error {
+	err = t.CreateFolder(b.jptm.Context(), b.DirUrlToString(), func() error {
 		blobTags := b.blobTagsToApply
 		setTags := separateSetTagsRequired(blobTags)
 		if setTags || len(blobTags) == 0 {

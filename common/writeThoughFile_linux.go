@@ -21,6 +21,7 @@
 package common
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"os"
@@ -159,10 +160,10 @@ func GetFileInformation(path string, isNFSCopy bool) (ByHandleFileInformation, e
 	return info, nil
 }
 
-func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int64, writeThrough bool, t FolderCreationTracker, forceIfReadOnly bool) (*os.File, error) {
+func CreateFileOfSizeWithWriteThroughOption(ctx context.Context, destinationPath string, fileSize int64, writeThrough bool, t FolderCreationTracker, forceIfReadOnly bool) (*os.File, error) {
 	// forceIfReadOnly is not used on this OS
 
-	err := CreateParentDirectoryIfNotExist(destinationPath, t)
+	err := CreateParentDirectoryIfNotExist(ctx, destinationPath, t)
 	if err != nil {
 		return nil, err
 	}

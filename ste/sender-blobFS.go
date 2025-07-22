@@ -220,7 +220,7 @@ func (u *blobFSSenderBase) doEnsureDirExists(directoryClient *directory.Client) 
 	// must always do this, regardless of whether we are called in a file-centric code path
 	// or a folder-centric one, since with the parallelism we use, we don't actually
 	// know which will happen first
-	err = u.jptm.GetFolderCreationTracker().CreateFolder(directoryClient.DFSURL(), func() error {
+	err = u.jptm.GetFolderCreationTracker().CreateFolder(u.jptm.Context(), directoryClient.DFSURL(), func() error {
 		_, err := directoryClient.Create(u.jptm.Context(), &directory.CreateOptions{AccessConditions: &directory.AccessConditions{ModifiedAccessConditions: &directory.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETagAny)}}})
 		return err
 	})

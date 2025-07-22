@@ -1,6 +1,7 @@
 package ste
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"strings"
@@ -22,9 +23,9 @@ func NewFolderCreationTracker(fpo common.FolderPropertyOption, plan *JobPartPlan
 		common.EFolderPropertiesOption.AllFoldersExceptRoot():
 		return &jpptFolderTracker{ // This prevents a dependency cycle. Reviewers: Are we OK with this? Can you think of a better way to do it?
 			plan:                   plan,
-			mu:                     &sync.Mutex{},
-			contents:               make(map[string]uint32),
-			unregisteredButCreated: make(map[string]struct{}),
+			contents:               &sync.Map{}, // Lock-free concurrent map
+			unregisteredButCreated: &sync.Map{}, // Lock-free concurrent map
+			folderLocks:            &sync.Map{}, // Per-folder locks
 		}
 	case common.EFolderPropertiesOption.NoFolders():
 		// can't use simpleFolderTracker here, because when no folders are processed,
@@ -37,7 +38,7 @@ func NewFolderCreationTracker(fpo common.FolderPropertyOption, plan *JobPartPlan
 
 type nullFolderTracker struct{}
 
-func (f *nullFolderTracker) CreateFolder(folder string, doCreation func() error) error {
+func (f *nullFolderTracker) CreateFolder(ctx context.Context, folder string, doCreation func() error) error {
 	// no-op (the null tracker doesn't track anything)
 	return doCreation()
 }
@@ -54,58 +55,92 @@ func (f *nullFolderTracker) StopTracking(folder string) {
 
 type jpptFolderTracker struct {
 	plan                   IJobPartPlanHeader
-	mu                     *sync.Mutex
-	contents               map[string]uint32
-	unregisteredButCreated map[string]struct{}
+	contents               *sync.Map // folder path → transfer index
+	unregisteredButCreated *sync.Map // folder path → struct{}
+	folderLocks            *sync.Map // folder path → *sync.Mutex
 }
 
 func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, transferIndex uint32) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
 	if folder == common.Dev_Null {
-		return // Never persist to dev-null
+		return
 	}
 
-	f.contents[folder] = transferIndex
+	// Lock-free store - no global synchronization!
+	f.contents.Store(folder, transferIndex)
 
-	// We created it before it was enumerated-- Let's register that now.
-	if _, ok := f.unregisteredButCreated[folder]; ok {
+	// Check if folder was created before registration (lock-free)
+	if _, wasCreated := f.unregisteredButCreated.LoadAndDelete(folder); wasCreated {
 		f.plan.Transfer(transferIndex).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
-
-		delete(f.unregisteredButCreated, folder)
 	}
 }
 
-func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
+func (f *jpptFolderTracker) CreateFolder(ctx context.Context, folder string, doCreation func() error) error {
 	if folder == common.Dev_Null {
-		return nil // Never persist to dev-null
-	}
-
-	if idx, ok := f.contents[folder]; ok &&
-		f.plan.Transfer(idx).TransferStatus() == (common.ETransferStatus.FolderCreated()) {
 		return nil
 	}
 
-	if _, ok := f.unregisteredButCreated[folder]; ok {
+	// Check cancellation upfront
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	// Get or create per-folder mutex (lock-free operation)
+	folderLockInterface, _ := f.folderLocks.LoadOrStore(folder, &sync.Mutex{})
+	folderLock := folderLockInterface.(*sync.Mutex)
+
+	// Try to acquire lock with timeout/cancellation
+	acquired := make(chan struct{})
+	go func() {
+		folderLock.Lock()
+		close(acquired)
+	}()
+
+	select {
+	case <-acquired:
+		defer folderLock.Unlock()
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	// Check cancellation after acquiring lock
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	// Fast path check (lock-free read)
+	if idx, exists := f.contents.Load(folder); exists {
+		if f.plan.Transfer(idx.(uint32)).TransferStatus() == common.ETransferStatus.FolderCreated() {
+			return nil
+		}
+	}
+
+	// Check unregistered cache (lock-free read)
+	if _, wasCreated := f.unregisteredButCreated.Load(folder); wasCreated {
 		return nil
 	}
 
+	// Final cancellation check before network operation
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	// Perform actual folder creation
 	err := doCreation()
 	if err != nil {
 		return err
 	}
 
-	if idx, ok := f.contents[folder]; ok {
-		// overwrite it's transfer status
-		f.plan.Transfer(idx).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
+	// Update status (lock-free operations)
+	if idx, exists := f.contents.Load(folder); exists {
+		f.plan.Transfer(idx.(uint32)).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
 	} else {
-		// A folder hasn't been hit in traversal yet.
-		// Recording it in memory is OK, because we *cannot* resume a job that hasn't finished traversal.
-		f.unregisteredButCreated[folder] = struct{}{}
+		f.unregisteredButCreated.Store(folder, struct{}{})
 	}
 
 	return nil
@@ -113,7 +148,7 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 
 func (f *jpptFolderTracker) ShouldSetProperties(folder string, overwrite common.OverwriteOption, prompter common.Prompter) bool {
 	if folder == common.Dev_Null {
-		return false // Never persist to dev-null
+		return false
 	}
 
 	switch overwrite {
@@ -123,29 +158,18 @@ func (f *jpptFolderTracker) ShouldSetProperties(folder string, overwrite common.
 		common.EOverwriteOption.IfSourceNewer(),
 		common.EOverwriteOption.False():
 
-		f.mu.Lock()
-		defer f.mu.Unlock()
-
+		// Lock-free read - no global synchronization!
 		var created bool
-		if idx, ok := f.contents[folder]; ok {
-			created = f.plan.Transfer(idx).TransferStatus() == common.ETransferStatus.FolderCreated()
+		if idx, exists := f.contents.Load(folder); exists {
+			created = f.plan.Transfer(idx.(uint32)).TransferStatus() == common.ETransferStatus.FolderCreated()
 		} else {
-			// This should not happen, ever.
-			// Folder property jobs register with the tracker before they start getting processed.
 			panic(common.NewAzCopyLogSanitizer().SanitizeLogMessage("folder " + folder + " was not registered when properties persistence occurred"))
 		}
 
-		// prompt only if we didn't create this folder
 		if overwrite == common.EOverwriteOption.Prompt() && !created {
 			cleanedFolderPath := folder
-
-			// if it's a local Windows path, skip since it doesn't have SAS and won't parse correctly as an URL
 			if !strings.HasPrefix(folder, common.EXTENDED_PATH_PREFIX) {
-				// get rid of SAS before prompting
-				parsedURL, _ := url.Parse(folder)
-
-				// really make sure that it's not a local path
-				if parsedURL.Scheme != "" && parsedURL.Host != "" {
+				if parsedURL, _ := url.Parse(folder); parsedURL.Scheme != "" && parsedURL.Host != "" {
 					parsedURL.RawQuery = ""
 					cleanedFolderPath = parsedURL.String()
 				}
@@ -160,24 +184,22 @@ func (f *jpptFolderTracker) ShouldSetProperties(folder string, overwrite common.
 }
 
 func (f *jpptFolderTracker) StopTracking(folder string) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
 	if folder == common.Dev_Null {
-		return // Not possible to track this
+		return
 	}
 
-	// no-op, because tracking is now handled by jppt, anyway.
-	if _, ok := f.contents[folder]; ok {
-		delete(f.contents, folder)
-	} else {
-		currentContents := ""
+	// Lock-free delete
+	if _, exists := f.contents.LoadAndDelete(folder); !exists {
+		// Debugging: collect current contents
+		var currentContents strings.Builder
+		f.contents.Range(func(key, value interface{}) bool {
+			currentContents.WriteString(fmt.Sprintf("K: %s V: %d\n", key.(string), value.(uint32)))
+			return true
+		})
 
-		for k, v := range f.contents {
-			currentContents += fmt.Sprintf("K: %s V: %d\n", k, v)
-		}
-
-		// double should never be hit, but *just in case*.
-		panic(common.NewAzCopyLogSanitizer().SanitizeLogMessage("Folder " + folder + " shouldn't finish tracking until it's been recorded\nCurrent Contents:\n" + currentContents))
+		panic(common.NewAzCopyLogSanitizer().SanitizeLogMessage("Folder " + folder + " shouldn't finish tracking until it's been recorded\nCurrent Contents:\n" + currentContents.String()))
 	}
+
+	// Clean up per-folder lock to prevent memory leaks
+	f.folderLocks.Delete(folder)
 }

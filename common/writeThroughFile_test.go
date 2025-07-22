@@ -22,13 +22,14 @@ package common_test
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"runtime"
 	"syscall"
 	"testing"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestCreateParentDirectoryIfNotExist(t *testing.T) {
@@ -43,13 +44,13 @@ func TestCreateParentDirectoryIfNotExist(t *testing.T) {
 
 	// when destination path is defined as "/" in linux, the source file becomes the destination path string
 	// AzCopy reaches out of bounds error, returns user friendly error
-	err := common.CreateParentDirectoryIfNotExist(fileName, tracker)
+	err := common.CreateParentDirectoryIfNotExist(t.Context(), fileName, tracker)
 	pathSep := common.DeterminePathSeparator(fileName)
 	a.Errorf(err, "error: Path separator "+pathSep+" not found in destination path. On Linux, this may occur if the destination is the root file, such as '/'. If this is the case, please consider changing your destination path.")
 
 	// in the case where destination file is specified with root "/" and source file name "stuff.txt" in linux,
 	// the system will fail to create the directory
-	err = common.CreateParentDirectoryIfNotExist("/"+fileName, tracker)
+	err = common.CreateParentDirectoryIfNotExist(t.Context(), "/"+fileName, tracker)
 	a.Errorf(err, "mkdir : The system cannot find the path specified.")
 
 	// when relative path provided (i.e., "/stuff.txt", or "stuff.txt") in windows,
@@ -65,7 +66,7 @@ func TestCreateParentDirectoryIfNotExist(t *testing.T) {
 	a.NoError(err)
 
 	fullPath := path + "\\" + fileName
-	err = common.CreateParentDirectoryIfNotExist(fullPath, tracker)
+	err = common.CreateParentDirectoryIfNotExist(t.Context(), fullPath, tracker)
 	a.Nil(err)
 }
 
@@ -82,7 +83,9 @@ func TestCreateFileOfSizeWithWriteThroughOption(t *testing.T) {
 	fpo := common.EFolderPropertiesOption.AllFolders()
 	tracker := ste.NewFolderCreationTracker(fpo, plan)
 
-	_, err := common.CreateFileOfSizeWithWriteThroughOption(destinationPath, 1,
+	_, err := common.CreateFileOfSizeWithWriteThroughOption(
+		t.Context(),
+		destinationPath, 1,
 		false,
 		tracker,
 		false)
@@ -90,8 +93,7 @@ func TestCreateFileOfSizeWithWriteThroughOption(t *testing.T) {
 	if err != nil {
 		a.NotEqual(syscall.EINTR, err)
 		return
-	} 
+	}
 	a.NoError(err, fmt.Sprintf("Error creating file: %v", err))
-	
 
 }

@@ -353,7 +353,7 @@ func createDestinationFile(jptm IJobPartTransferMgr, destination string, size in
 	}
 
 	var dstFile io.WriteCloser
-	dstFile, err = common.CreateFileOfSizeWithWriteThroughOption(destination, size, writeThrough, jptm.GetFolderCreationTracker(), jptm.GetForceIfReadOnly())
+	dstFile, err = common.CreateFileOfSizeWithWriteThroughOption(jptm.Context(), destination, size, writeThrough, jptm.GetFolderCreationTracker(), jptm.GetForceIfReadOnly())
 	if err != nil {
 		return nil, err
 	}
@@ -535,7 +535,7 @@ redoCompletion:
 
 // create an empty file and its parent directories, without any content
 func createEmptyFile(jptm IJobPartTransferMgr, destinationPath string) error {
-	err := common.CreateParentDirectoryIfNotExist(destinationPath, jptm.GetFolderCreationTracker())
+	err := common.CreateParentDirectoryIfNotExist(jptm.Context(), destinationPath, jptm.GetFolderCreationTracker())
 	if err != nil {
 		return err
 	}
