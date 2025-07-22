@@ -108,7 +108,7 @@ func (s3Resolver *S3BucketNameToAzureResourcesResolver) resolveNewBucketNameInte
 		return
 	}
 
-	// Init resolved name as original bucket name
+	// OnStart resolved name as original bucket name
 	resolvedName := orgBucketName
 
 	// 1. Try to replace period with hyphen.
