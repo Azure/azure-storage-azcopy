@@ -85,7 +85,8 @@ func init() {
 	jobsCmd.AddCommand(shJob)
 
 	// filters
-	shJob.PersistentFlags().StringVar(&commandLineInput.OfStatus, "with-status", "", "List only the transfers of job with the specified status. Available values include: All, Started, Success, Failed.")
+	shJob.PersistentFlags().StringVar(&commandLineInput.OfStatus, "with-status", "", "List only the transfers of job with the specified status. "+
+		"\n Available values include: All, Started, Success, Failed.")
 }
 
 // PrintJobTransfers prints the response of listOrder command when list Order command requested the list of specific transfer of an existing job

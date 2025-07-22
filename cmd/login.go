@@ -109,7 +109,10 @@ func init() {
 	rootCmd.AddCommand(lgCmd)
 
 	lgCmd.PersistentFlags().StringVar(&loginCmdArg.tenantID, "tenant-id", "", "The Azure Active Directory tenant ID to use for OAuth device interactive login.")
-	lgCmd.PersistentFlags().StringVar(&loginCmdArg.aadEndpoint, "aad-endpoint", "", "The Azure Active Directory endpoint to use. The default ("+common.DefaultActiveDirectoryEndpoint+") is correct for the public Azure cloud. Set this parameter when authenticating in a national cloud. Not needed for Managed Service Identity")
+	lgCmd.PersistentFlags().StringVar(&loginCmdArg.aadEndpoint, "aad-endpoint", "", "The Azure Active Directory endpoint to use."+
+		"\n The default ("+common.DefaultActiveDirectoryEndpoint+") is correct for the public Azure cloud. "+
+		"\n Set this parameter when authenticating in a national cloud. "+
+		"\n Not needed for Managed Service Identity")
 	lgCmd.PersistentFlags().StringVar(&loginCmdArg.loginType, "login-type", common.EAutoLoginType.Device().String(), "Default value is "+common.EAutoLoginType.Device().String()+". Specify the credential type to access Azure Resource, available values are "+strings.Join(common.ValidAutoLoginTypes(), ", ")+".")
 
 	// Managed Identity flags
@@ -117,12 +120,17 @@ func init() {
 	lgCmd.PersistentFlags().StringVar(&loginCmdArg.identityResourceID, "identity-resource-id", "", "Resource ID of user-assigned identity.")
 	// SPN flags
 	lgCmd.PersistentFlags().StringVar(&loginCmdArg.applicationID, "application-id", "", "Application ID of user-assigned identity. Required for service principal auth.")
-	lgCmd.PersistentFlags().StringVar(&loginCmdArg.certPath, "certificate-path", "", "Path to certificate for SPN authentication. Required for certificate-based service principal auth.")
+	lgCmd.PersistentFlags().StringVar(&loginCmdArg.certPath, "certificate-path", "", "Path to certificate for SPN authentication. "+
+		"\n Required for certificate-based service principal auth.")
 
 	// Deprecate these flags in favor of a new login type flag
-	lgCmd.PersistentFlags().BoolVar(&loginCmdArg.identity, "identity", false, "Deprecated. Please use --login-type=MSI. Log in using virtual machine's identity, also known as managed service identity (MSI).")
+	lgCmd.PersistentFlags().BoolVar(&loginCmdArg.identity, "identity", false, "Deprecated. Please use --login-type=MSI. "+
+		"\nLog in using virtual machine's identity, also known as managed service identity (MSI).")
 	_ = lgCmd.PersistentFlags().MarkHidden("identity")
-	lgCmd.PersistentFlags().BoolVar(&loginCmdArg.servicePrincipal, "service-principal", false, "Deprecated. Please use --login-type=SPN. Log in via Service Principal Name (SPN) by using a certificate or a secret. The client secret or certificate password must be placed in the appropriate environment variable. Type AzCopy env to see names and descriptions of environment variables.")
+	lgCmd.PersistentFlags().BoolVar(&loginCmdArg.servicePrincipal, "service-principal", false, "Deprecated. Please use --login-type=SPN. "+
+		"\nLog in via Service Principal Name (SPN) by using a certificate or a secret. "+
+		"\nThe client secret or certificate password must be placed in the appropriate environment variable. "+
+		"\nType AzCopy env to see names and descriptions of environment variables.")
 	_ = lgCmd.PersistentFlags().MarkHidden("service-principal")
 
 	// Deprecate the identity-object-id flag
