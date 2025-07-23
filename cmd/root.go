@@ -252,9 +252,7 @@ var ErrMultipleProcesses = errors.New(common.ERR_MULTIPLE_PROCESSES)
 func Execute(logPathFolder, jobPlanFolder, appPathFolder string, maxFileAndSocketHandles int, jobID common.JobID) {
 	currPid := os.Getpid()
 	if err := WarnMultipleProcesses(appPathFolder, currPid); err != nil {
-		if errors.Is(err, ErrMultipleProcesses) {
-			glcm.Warn("More than one AzCopy process is running. It is best practice to run a single process per VM.")
-		} else {
+		if !errors.Is(err, ErrMultipleProcesses) {
 			glcm.Error(fmt.Sprintf("error checking number of AzCopy processes: %v", err.Error()))
 		}
 	}

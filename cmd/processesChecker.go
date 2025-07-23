@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"os"
 	"path"
 )
@@ -23,6 +24,7 @@ func WarnMultipleProcesses(directory string, currentPid int) error {
 	}
 	for _, fileName := range dir {
 		if fileName.Name() != currPidFileName {
+			glcm.Warn(common.ERR_MULTIPLE_PROCESSES)
 			return fmt.Errorf("%w", ErrMultipleProcesses)
 		}
 	}
