@@ -76,21 +76,10 @@ var debugSkipFiles string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Version: func() string {
-		if !SkipVersionCheck && !isPipeDownload {
-			select {
-			case <-beginDetectNewVersion():
-				return common.AzcopyVersion
-			case <-time.After(time.Second * 10):
-				// don't wait too long
-				return common.AzcopyVersion
-			}
-		}
-		return common.AzcopyVersion
-	}(), // will enable the user to see the version info in the standard posix way: --version
-	Use:   "azcopy",
-	Short: rootCmdShortDescription,
-	Long:  rootCmdLongDescription,
+	Version: common.AzcopyVersion,
+	Use:     "azcopy",
+	Short:   rootCmdShortDescription,
+	Long:    rootCmdLongDescription,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		glcm.RegisterCloseFunc(func() {
 			if debugMemoryProfile != "" {
@@ -252,6 +241,17 @@ func Initialize(resumeJobID common.JobID, isBench bool) error {
 		common.IncludeAfterFlagName, IncludeAfterDateFilter{}.FormatAsUTC(adjustedTime))
 	jobsAdmin.JobsAdmin.LogToJobLog(startTimeMessage, common.LogInfo)
 
+	// do the version check in background
+	//TODO; stderr copy from main
+	if !SkipVersionCheck && !isPipeDownload {
+		// spawn a routine to fetch and compare the local application's version against the latest version available
+		// if there's a newer version that can be used, then write the suggestion to stderr
+		// however if this takes too long the message won't get printed
+		// Note: this function is necessary for non-help, non-login commands, since they don't reach the corresponding
+		// beginDetectNewVersion call in Execute (below)
+		beginDetectNewVersion()
+	}
+
 	return nil
 
 }
@@ -269,6 +269,16 @@ func InitializeAndExecute() {
 	if err := Execute(); err != nil {
 		glcm.Error(err.Error())
 	} else {
+		if !SkipVersionCheck && !isPipeDownload {
+			// our commands all control their own life explicitly with the lifecycle manager
+			// only commands that don't explicitly exit actually reach this point (e.g. help commands)
+			select {
+			case <-beginDetectNewVersion():
+				// noop
+			case <-time.After(time.Second * 8):
+				// don't wait too long
+			}
+		}
 		glcm.Exit(nil, common.EExitCode.Success())
 	}
 }
