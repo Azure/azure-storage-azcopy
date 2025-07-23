@@ -175,7 +175,9 @@ type rawCopyCmdArgs struct {
 	isNFSCopy bool
 	// Opt-in flag to persist additional properties to Azure Files
 	preserveInfo bool
-	hardlinks    string
+	// Whether to preserve root directory properties and ACLs
+	preserveRootProperties bool
+	hardlinks              string
 }
 
 // this is a global variable so that we can use it in traversal phase
@@ -408,6 +410,9 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 			raw.preserveOwner,
 			cooked.FromTo)
 	}
+
+	// Set preserveRootProperties regardless of NFS or SMB
+	cooked.preserveRootProperties = raw.preserveRootProperties
 
 	// TODO: Figure out this preservePermissinos stuff
 	if cooked.preservePermissions.IsTruthy() && cooked.FromTo.From() == common.ELocation.Blob() {
@@ -711,7 +716,6 @@ type CookedCopyCmdArgs struct {
 
 	// Whether the user wants to preserve the POSIX properties ...
 	preservePOSIXProperties bool
-
 	// Whether to enable Windows special privileges
 	backupMode bool
 
@@ -769,6 +773,8 @@ type CookedCopyCmdArgs struct {
 	deleteDestinationFileIfNecessary bool
 	// Whether the user wants to preserve the properties of a file...
 	preserveInfo bool
+	// Whether to preserve root directory properties and ACLs
+	preserveRootProperties bool
 	// Specifies whether the copy operation is an NFS copy
 	isNFSCopy                     bool
 	hardlinks                     common.HardlinkHandlingType
@@ -1795,7 +1801,7 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.isNFSCopy, IsNFSProtocolFlag, false, "False by default. Users must specify this flag if they intend to transfer data to or from NFS shares.")
 	//Marking this flag as hidden as we might not support it in the future
 	_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-info")
-	cpCmd.PersistentFlags().BoolVar(&raw.preserveInfo, PreserveInfoFlag, false, "Specify this flag if you want to preserve properties during the transfer operation.The previously available flag for SMB (--preserve-smb-info) is now redirected to --preserve-info flag for both SMB and NFS operations. The default value is true for Windows when copying to Azure Files SMB share and for Linux when copying to Azure Files NFS share. ")
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveInfo, PreserveInfoFlag, false, "Specify this flag if you want to preserve properties during the transfer operation.The previously available flag for SMB (--preserve-smb-info) is now redirected to --preserve-info flag for both SMB and NFS operations. The default value is true for Windows when copying to Azure Files SMB share and for Linux when copying to Azure Files NFS share. ")
 
 	cpCmd.PersistentFlags().BoolVar(&raw.preservePOSIXProperties, "preserve-posix-properties", false, "False by default. 'Preserves' property info gleaned from stat or statx into object metadata.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSymlinks, common.PreserveSymlinkFlagName, false, "False by default. If enabled, symlink destinations are preserved as the blob content, rather than uploading the file/folder on the other end of the symlink")
@@ -1898,4 +1904,9 @@ func init() {
 		"Specifies how hardlinks should be handled. "+
 			"\n This flag is only applicable when downloading from an NFS file share, uploading to an NFS share, or performing service-to-service copies involving NFS. \n"+
 			"\n The only supported option is 'follow' (default), which copies hardlinks as regular, independent files at the destination.")
+
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveRootProperties, "preserve-root-properties", false, "False by default. "+
+		"\n Preserve the root directory and its properties (ACLs, timestamps, etc.) from source to destination. "+
+		"\n When enabled, the source root directory name will be preserved in the destination path. "+
+		"\n For example, copying from 'src/myroot/file.txt' will result in 'dest/myroot/file.txt' instead of the default 'dest/file.txt'.")
 }

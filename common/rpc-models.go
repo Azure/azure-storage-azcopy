@@ -166,6 +166,7 @@ type CopyJobPartOrderRequest struct {
 	PreservePermissions            PreservePermissionsOption
 	PreserveInfo                   bool
 	PreservePOSIXProperties        bool
+	PreserveRootProperties         bool // root dir ACLs and props will be transferred to destination root dir
 	S2SGetPropertiesInBackend      bool
 	S2SSourceChangeValidation      bool
 	DestLengthValidation           bool
@@ -173,8 +174,8 @@ type CopyJobPartOrderRequest struct {
 	S2SPreserveBlobTags            bool
 	CpkOptions                     CpkOptions
 	SetPropertiesFlags             SetPropertiesFlags
-	BlobFSRecursiveDelete          bool
 
+	BlobFSRecursiveDelete bool
 	// S2SSourceCredentialType will override CredentialInfo.CredentialType for use on the source.
 	// As a result, CredentialInfo.OAuthTokenInfo may end up being fulfilled even _if_ CredentialInfo.CredentialType is _not_ OAuth.
 	// This may not always be the case (for instance, if we opt to use multiple OAuth tokens). At that point, this will likely be it's own CredentialInfo.
