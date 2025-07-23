@@ -106,7 +106,7 @@ func areBothLocationsSMBAware(fromTo common.FromTo) bool {
 // GetPreserveInfoFlagDefault returns the default value for the 'preserve-info' flag
 // based on the operating system and the copy type (NFS or SMB).
 // The default value is:
-// - true if it's an NFS copy on Linux or an SMB copy on Windows.
+// - true if it's an NFS copy on Linux or share to share copy on windows or mac and an SMB copy on Windows.
 // - false otherwise.
 //
 // This default behavior ensures that file preservation logic is aligned with the OS and copy type.
@@ -114,7 +114,7 @@ func GetPreserveInfoFlagDefault(cmd *cobra.Command, fromTo common.FromTo) bool {
 	// For Linux systems, if it's an NFS copy, we set the default value of preserveInfo to true.
 	// For Windows systems, if it's an SMB copy, we set the default value of preserveInfo to true.
 	// These default values are important to set here for the logic of file preservation based on the system and copy type.
-	return (runtime.GOOS == "linux" && areBothLocationsNFSAware(fromTo)) ||
+	return (areBothLocationsNFSAware(fromTo)) ||
 		(runtime.GOOS == "windows" && areBothLocationsSMBAware(fromTo))
 }
 
