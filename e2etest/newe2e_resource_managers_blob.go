@@ -501,7 +501,9 @@ func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectCon
 		properties.BlobProperties.Type = pointerTo(blob.BlobTypeBlockBlob)
 	case common.EEntityType.Symlink():
 		// body should already be path
-
+		if body == nil {
+			body = NewStringObjectContentContainer(properties.SymlinkedFileName)
+		}
 		// Set symlink meta
 		properties.Metadata = copyMeta()
 		properties.Metadata[common.POSIXSymlinkMeta] = pointerTo("true")
@@ -783,4 +785,11 @@ func (b *BlobObjectResourceManager) Exists() bool {
 	_, err := b.internalClient.GetProperties(ctx, nil)
 
 	return err == nil || !bloberror.HasCode(err, bloberror.BlobNotFound, bloberror.ContainerNotFound, bloberror.ContainerBeingDeleted, bloberror.ResourceNotFound)
+}
+
+func (b *BlobObjectResourceManager) ReadLink(a Asserter) string {
+	reader := b.Download(a)
+	buf, err := io.ReadAll(reader)
+	a.NoError("Read symlink body", err)
+	return string(buf)
 }
