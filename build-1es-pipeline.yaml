@@ -1,12 +1,7 @@
 variables:
-  AZCOPY_GOLANG_VERSION: '1.24.0'
+  AZCOPY_GOLANG_VERSION: '1.24.2'
 
 parameters:
-  - name: publish_to_container
-    displayName: 'Publish To Container'
-    type: boolean
-    default: false
-
   - name: publish_to_m1_container
     displayName: 'Publish To M1 Container'
     type: boolean
@@ -36,12 +31,6 @@ parameters:
     displayName: 'Publish Artifacts to Linux Repos'
     type: boolean
     default: false
-
-  - name: update_version
-    displayName: 'Update Version'
-    type: boolean
-    default: false
-
 # Do not trigger this pipeline automatically
 trigger: none
 pr: none
@@ -761,7 +750,6 @@ extends:
                 displayName: 'Verify exe in zip'
 
       # VerifyArtifacts end here
-
       - stage: UploadToStorage
         dependsOn:
           - AzCopyVersion
@@ -779,8 +767,6 @@ extends:
                 value: '$(System.DefaultWorkingDirectory)/release'
               - name: drop
                 value: '$(System.DefaultWorkingDirectory)/drop'
-              - name: publish_to_container
-                value: ${{ parameters.publish_to_container }}
               - name: publish_to_m1_container
                 value: ${{ parameters.publish_to_m1_container }}
               - name: azcopy_version
@@ -804,7 +790,7 @@ extends:
                   go build -tags "netgo" -o azcopy
                 displayName: 'Build AzCopy'
 
-              # DownloadPipelineArtifacts AFTER checkout since checkout wipes out the DefaultWorkingDirectory
+              # DownloadPipelineArtifact AFTER checkout since checkout wipes out the DefaultWorkingDirectory
               - task: DownloadPipelineArtifact@2
                 inputs:
                   artifactName: azcopy-linux-signed
@@ -876,14 +862,10 @@ extends:
                   scriptLocation: inlineScript
                   inlineScript: |
                     today=$(date +"%Y%m%d")
-                    if [ $(publish_to_container) = "True" ]; then
-                      container_url="https://azcopyvnextrelease.blob.core.windows.net/%24web/releases/release-$(azcopy_version)-$today"
-                    else
-                      container_url="https://azcopyprivatedrops.blob.core.windows.net/%24web/releases/release-$(azcopy_version)-$today"
-                    fi
-                    echo "Artifacts will be uploaded to: $container_url"
+                    container_url="https://azcopyprivatedrops.blob.core.windows.net/%24web/releases/release-$(azcopy_version)-$today"
+                    echo "Artifacts will be uploaded to private drop container: $container_url"
                     AZCOPY_AUTO_LOGIN_TYPE=AzCLI ./azcopy cp "$(release)/*" "$container_url" --recursive --put-md5=true
-                    
+
                     if [ $(publish_to_m1_container) = "True" ]; then
                       m1_container_url="https://azcopyvnextrelease.blob.core.windows.net/%24web/azcopy-m1-drops/azcopy-$(azcopy_version)-$today"
                     AZCOPY_AUTO_LOGIN_TYPE=AzCLI ./azcopy cp "$(input)/azcopy-binaries-mac/azcopy_darwin_m1_arm64" "$m1_container_url" --recursive --put-md5=true
@@ -1024,6 +1006,27 @@ extends:
                       echo "##vso[task.setvariable variable=azcopy_github_tag]$azcopy_github_tag"
                     displayName: 'AzCopy Tag Name'
 
+                  - task : DownloadPipelineArtifact@2
+                    displayName: 'Download Linux, Windows, Mac Build Artifacts'
+                    inputs:
+                      itemPattern: 'azcopy-*-signed/**'
+                      downloadPath: $(Build.ArtifactStagingDirectory)
+
+                  - script: |
+                      sudo ls -lRt $(Build.ArtifactStagingDirectory)
+                    displayName: 'List Artifacts'
+
+                  - script: |
+                      sudo apt-get clean 
+                      sudo apt-get update 
+                      sudo apt-get upgrade -y 
+                      sudo apt-get install -f --fix-missing 
+                      wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
+                      sudo dpkg -i packages-microsoft-prod.deb
+                      sudo apt install apt-transport-https -y 
+                      sudo apt install dotnet-sdk-6.0 -y
+                    displayName: 'Update Dependencies'
+
                   - task: GithubRelease@1
                     inputs:
                       githubConnection: 'azcopy-github-connection'
@@ -1037,13 +1040,19 @@ extends:
                       changeLogType: 'commitBased'
                       isDraft: ${{ parameters.draft }}
                       isPreRelease: ${{ parameters.prerelease }}
+                      assets: |
+                        $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.deb
+                        $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.rpm
+                        $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.tar.gz
+                        $(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*.zip
+                        $(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*.zip
+                        $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/mariner/*
                       assetUploadMode: replace
 
       - ${{ if eq(parameters.publish_artifacts, true) }}:
           - stage: PublishArtifacts
             dependsOn:
               - AzCopyVersion
-              - UploadToStorage
             jobs:
               - job: Job
                 timeoutInMinutes: 120
@@ -1094,7 +1103,7 @@ extends:
                       fi
                     displayName: 'Test PMC installation'
 
-                  # DownloadPipelineArtifacts AFTER checkout since checkout wipes out the DefaultWorkingDirectory
+                  # DownloadPipelineArtifact AFTER checkout since checkout wipes out the DefaultWorkingDirectory
                   - task: DownloadPipelineArtifact@2
                     inputs:
                       artifactName: azcopy-linux-signed
@@ -1190,45 +1199,3 @@ extends:
                       done < <(tail -n +3 ../packages.csv)
                     displayName: 'Publish the repository'
                     workingDirectory: $(signed)
-
-      - ${{ if eq(parameters.update_version, true) }}:
-          - stage: UpdateLatestVersion
-            dependsOn:
-              - AzCopyVersion
-              - UploadToStorage
-            jobs:
-              - job: Job
-                pool:
-                  name: azcopy-pool
-                  image: ubuntu22-1espt
-                  os: linux
-                variables:
-                  - name: azcopy_version
-                    value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
-                steps:
-                  - checkout: self
-                    displayName: 'Checkout repository'
-
-                  - task: GoTool@0
-                    env:
-                      GO111MODULE: 'on'
-                    inputs:
-                      version: $(AZCOPY_GOLANG_VERSION)
-
-                  - script: |
-                      go build -tags "netgo" -o azcopy
-                    displayName: 'Build AzCopy'
-
-                  - task: AzureCLI@2
-                    inputs:
-                      azureSubscription: 'ESRP KeyVault identity'
-                      scriptType: bash
-                      scriptLocation: inlineScript
-                      inlineScript: |
-                        export AZCOPY_AUTO_LOGIN_TYPE=AzCLI
-                        echo "azcopy version: $(azcopy_version)"
-                        #Upload to release version blob file
-                        upload_url="https://azcopyvnextrelease.blob.core.windows.net/%24web/releasemetadata/latest_version.txt"
-                        echo "Version will be uploaded to: $upload_url"
-                        echo $(azcopy_version) | ./azcopy copy "$upload_url" --from-to=PipeBlob --log-level=DEBUG --output-type=text 2>&1 | tee /dev/null
-                        exit ${PIPESTATUS[1]}
