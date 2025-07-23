@@ -730,6 +730,8 @@ func (FromTo) FileNFSFileNFS() FromTo { return FromToValue(ELocation.FileNFS(), 
 func (FromTo) LocalFileSMB() FromTo   { return FromToValue(ELocation.Local(), ELocation.File()) }
 func (FromTo) FileSMBLocal() FromTo   { return FromToValue(ELocation.File(), ELocation.Local()) }
 func (FromTo) FileSMBFileSMB() FromTo { return FromToValue(ELocation.File(), ELocation.File()) }
+func (FromTo) FileSMBFileNFS() FromTo { return FromToValue(ELocation.File(), ELocation.FileNFS()) }
+func (FromTo) FileNFSFileSMB() FromTo { return FromToValue(ELocation.FileNFS(), ELocation.File()) }
 
 // todo: to we really want these?  Starts to look like a bit of a combinatorial explosion
 func (FromTo) BenchmarkBlob() FromTo {

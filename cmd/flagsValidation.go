@@ -149,7 +149,6 @@ func performNFSSpecificValidation(fromTo common.FromTo,
 	// typically requires elevated privileges. To safely handle permission
 	// changes during the local file operation, we enforce that the process
 	// must be running as root.
-	//fmt.Println("-------------FromTo: ", fromTo.String())
 	if !preservePermissions.IsTruthy() && fromTo == common.EFromTo.FileNFSLocal() {
 		if err := common.EnsureRunningAsRoot(); err != nil {
 			return fmt.Errorf("failed to copy source to destination without preserving permissions: operation not permitted. Please retry with root privileges or use the default option (--preserve-permissions=true)")
@@ -271,7 +270,6 @@ func isUnsupportedPlatformForNFS(fromTo common.FromTo) (bool, error) {
 
 func validateShareProtocolCompatibility(
 	ctx context.Context,
-	fromTo common.FromTo,
 	resource common.ResourceString,
 	serviceClient *common.ServiceClient,
 	isSource bool,
@@ -366,22 +364,22 @@ func validateProtocolCompatibility(ctx context.Context, fromTo common.FromTo, sr
 		}
 
 		// Validate both source and destination
-		if err := validateShareProtocolCompatibility(ctx, fromTo, src, srcClient, true, protocol); err != nil {
+		if err := validateShareProtocolCompatibility(ctx, src, srcClient, true, protocol); err != nil {
 			return err
 		}
-		return validateShareProtocolCompatibility(ctx, fromTo, dst, dstClient, false, protocol)
+		return validateShareProtocolCompatibility(ctx, dst, dstClient, false, protocol)
 	}
 
 	// Uploads to File Shares
 	if fromTo.IsUpload() {
 		protocol = getUploadDownloadProtocol(fromTo)
-		return validateShareProtocolCompatibility(ctx, fromTo, dst, dstClient, false, protocol)
+		return validateShareProtocolCompatibility(ctx, dst, dstClient, false, protocol)
 	}
 
 	// Downloads from File Shares
 	if fromTo.IsDownload() {
 		protocol = getUploadDownloadProtocol(fromTo)
-		return validateShareProtocolCompatibility(ctx, fromTo, src, srcClient, true, protocol)
+		return validateShareProtocolCompatibility(ctx, src, srcClient, true, protocol)
 	}
 
 	return nil

@@ -59,6 +59,12 @@ func ValidateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo,
 		userFromTo = common.EFromTo.FileFile()
 	}
 
+	if userFromTo == common.EFromTo.FileSMBFileNFS() || userFromTo == common.EFromTo.FileNFSFileSMB() {
+		glcm.Info("The --from-to value of " + userFromTo.String() +
+			" is not support currently " +
+			"Copy operations between SMB and NFS file shares are not supported yet.")
+	}
+
 	return userFromTo, nil
 }
 
