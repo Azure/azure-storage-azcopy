@@ -80,9 +80,10 @@ var rootCmd = &cobra.Command{
 		if !SkipVersionCheck && !isPipeDownload {
 			select {
 			case <-beginDetectNewVersion():
-				// noop
-			case <-time.After(time.Second * 8):
+				return common.AzcopyVersion
+			case <-time.After(time.Second * 10):
 				// don't wait too long
+				return common.AzcopyVersion
 			}
 		}
 		return common.AzcopyVersion
