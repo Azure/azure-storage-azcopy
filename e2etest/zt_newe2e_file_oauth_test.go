@@ -40,7 +40,7 @@ func (s *FileOAuthTestSuite) Scenario_FileBlobOAuthNoError(svm *ScenarioVariatio
 }
 
 // Test FilePageBlob and FileAppendBlob copy and sync
-func (s *FileOAuthTestSuite) Scenario_AllBlobTypesOAuth(svm *ScenarioVariationManager) {
+func (s *FileOAuthTestSuite) Scenario_CopyFileBlobOAuth(svm *ScenarioVariationManager) {
 	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionObject{})
 	blobTypesSDK := ResolveVariation(svm, []blob.BlobType{blob.BlobTypeAppendBlob, blob.BlobTypePageBlob})
 	dstObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()),
@@ -65,7 +65,7 @@ func (s *FileOAuthTestSuite) Scenario_AllBlobTypesOAuth(svm *ScenarioVariationMa
 
 	RunAzCopy(svm,
 		AzCopyCommand{
-			Verb: ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}),
+			Verb: AzCopyVerbCopy,
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcObj, EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{}),
 				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{})},
@@ -75,6 +75,24 @@ func (s *FileOAuthTestSuite) Scenario_AllBlobTypesOAuth(svm *ScenarioVariationMa
 					FromTo:    pointerTo(common.EFromTo.FileBlob()),
 				},
 				BlobType: pointerTo(blobType),
+			},
+		})
+	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{}, true)
+}
+
+func (s *FileOAuthTestSuite) Scenario_SyncBlobOAuth(svm *ScenarioVariationManager) {
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionObject{})
+	dstObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionObject{})
+
+	RunAzCopy(svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbSync,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcObj, EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{}),
+				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{})},
+			Flags: CopySyncCommonFlags{
+				Recursive: pointerTo(true),
+				FromTo:    pointerTo(common.EFromTo.FileBlob()),
 			},
 		})
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{}, true)
