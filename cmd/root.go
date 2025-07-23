@@ -197,9 +197,6 @@ func Initialize(resumeJobID common.JobID, isBench bool) error {
 	azcopyLogPathFolder, common.AzcopyJobPlanFolder, azcopyAppFolder = initializeFolders()
 	currPid := os.Getpid()
 	WarnMultipleProcesses(azcopyAppFolder, currPid)
-	glcm.RegisterCloseFunc(func() { // Remove pid files after Execute finished - process is no longer active
-		CleanUpPidFile(azcopyAppFolder, currPid)
-	})
 	configureGoMaxProcs()
 
 	// Perform os specific initialization

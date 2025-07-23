@@ -35,51 +35,6 @@ func Test_WarnMultipleProcesses(t *testing.T) {
 	a.Equal(1, len(dirEntry), "Should contain 1 .pid file")
 }
 
-func Test_CleanUpPidFiles(t *testing.T) {
-	// Arrange
-	a := assert.New(t)
-	t.Cleanup(func() {
-		_ = os.RemoveAll("temp1")
-	})
-	err := os.Mkdir("temp1", 0777) // Temp dir to represent .azcopy dir
-	a.NoError(err)
-	pidsDir := path.Join("temp1", "pids")
-	err1 := os.MkdirAll(pidsDir, 0777)
-	a.NoError(err1)
-
-	// Create the pid files
-	pid1path := path.Join(pidsDir, "1.pid")
-	pid1, err := os.Create(pid1path)
-	a.NoError(err, "first pid file should be created")
-
-	pid2path := path.Join(pidsDir, "2.pid")
-	pid2, err := os.Create(pid2path)
-	a.NoError(err, "second pid file should be created")
-
-	// Close files before performing cleanup
-	err = pid1.Close()
-	if err != nil {
-		return
-	}
-	err = pid2.Close()
-	if err != nil {
-		return
-	}
-
-	// Act & Assert
-	CleanUpPidFile("temp1", 1)
-	_, err = os.Stat(pid1path)
-	a.True(os.IsNotExist(err))
-	dir, _ := os.ReadDir(pidsDir)
-	a.Equal(1, len(dir), "expected one PID file remaining")
-
-	CleanUpPidFile("temp1", 2)
-	_, err = os.Stat(pid2path)
-	a.True(os.IsNotExist(err))
-	dir, _ = os.ReadDir(pidsDir)
-	a.Equal(0, len(dir), "expected no PID files remaining")
-}
-
 // Test_MultipleProcessWithMockedLCM validates warn messages are logged when there's multiple AzCopy instances
 func Test_MultipleProcessWithMockedLCM(t *testing.T) {
 	a := assert.New(t)

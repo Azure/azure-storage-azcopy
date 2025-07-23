@@ -18,8 +18,6 @@ func WarnMultipleProcesses(directory string, currentPid int) {
 		if err != nil {
 			return
 		}
-		filePath := path.Join(pidsSubDir, currPidFileName) // E.g "\.azcopy\pids\\XXX.pid"
-
 		f, err := os.Open(pidsSubDir)
 		if err != nil {
 			return
@@ -33,25 +31,18 @@ func WarnMultipleProcesses(directory string, currentPid int) {
 		if len(names) > 1 {
 			glcm.Warn(common.ERR_MULTIPLE_PROCESSES)
 		}
+		pidFilePath := path.Join(pidsSubDir, currPidFileName) // E.g "\.azcopy\pids\\XXX.pid"
 		// Creates .pid file with specific pid
-		file, _ := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-		defer func(file *os.File) {
-			err := file.Close()
+		pidFile, err := os.OpenFile(pidFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if err != nil {
+			return
+		}
+		defer pidFile.Close()
+		glcm.RegisterCloseFunc(func() {
+			err = os.Remove(pidFilePath)
 			if err != nil {
-
+				return
 			}
-		}(file)
+		})
 	}()
-}
-
-// CleanUpPidFile removes the PID files after the AzCopy run has exited. Ensures we only check against
-// active Azcopy instances
-func CleanUpPidFile(directory string, processID int) {
-	currPidFileName := fmt.Sprintf("%d.pid", processID)
-	pidSubDir := path.Join(directory, "pids")
-	pidFilePath := path.Join(pidSubDir, currPidFileName)
-
-	if err := os.Remove(pidFilePath); err != nil {
-		glcm.Error(fmt.Sprintf("%v error removing the %v file after exiting", err, pidFilePath))
-	}
 }
