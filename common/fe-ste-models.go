@@ -31,6 +31,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -55,10 +56,11 @@ const (
 
 	// Since we haven't updated the Go SDKs to handle CPK just yet, we need to detect CPK related errors
 	// and inform the user that we don't support CPK yet.
-	CPK_ERROR_SERVICE_CODE = "BlobUsesCustomerSpecifiedEncryption"
-	BLOB_NOT_FOUND         = "BlobNotFound"
-	FILE_NOT_FOUND         = "The specified file was not found."
-	EINTR_RETRY_COUNT      = 5
+	CPK_ERROR_SERVICE_CODE    = "BlobUsesCustomerSpecifiedEncryption"
+	BLOB_NOT_FOUND            = "BlobNotFound"
+	FILE_NOT_FOUND            = "The specified file was not found."
+	EINTR_RETRY_COUNT         = 5
+	RECOMMENDED_OBJECTS_COUNT = 10000000
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1907,4 +1909,15 @@ func (sht *SymlinkHandlingType) Determine(Follow, Preserve bool) error {
 	}
 
 	return nil
+}
+
+// /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+var oncer = sync.Once{}
+
+func WarnIfTooManyObjects() {
+	oncer.Do(func() {
+		GetLifecycleMgr().Warn(fmt.Sprintf("This job contains more than %d objects, best practice to run less than this.",
+			RECOMMENDED_OBJECTS_COUNT))
+	})
 }
