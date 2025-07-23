@@ -1590,10 +1590,6 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		cca.StripTopDir = true
 	}
 
-	if cca.FromTo.IsS2S() && cca.FromTo.From() == common.ELocation.File() && srcCredInfo.CredentialType.IsAzureOAuth() && cca.FromTo.To() != common.ELocation.File() {
-		glcm.Info("S2S copy from File to Blob/BlobFS authenticated with Azure AD")
-	}
-
 	// Check if destination is system container
 	if cca.FromTo.IsS2S() || cca.FromTo.IsUpload() {
 		dstContainerName, err := GetContainerName(cca.Destination.Value, cca.FromTo.To())

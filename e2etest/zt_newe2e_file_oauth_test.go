@@ -39,7 +39,7 @@ func (s *FileOAuthTestSuite) Scenario_FileBlobOAuthNoError(svm *ScenarioVariatio
 			"S2S sync from Azure File authenticated with Azure AD to Blob/BlobFS is not supported"})
 }
 
-// Test FilePageBlob and FileAppendBlob copies
+// Test FilePageBlob and FileAppendBlob copy and sync
 func (s *FileOAuthTestSuite) Scenario_AllBlobTypesOAuth(svm *ScenarioVariationManager) {
 	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionObject{})
 	blobTypesSDK := ResolveVariation(svm, []blob.BlobType{blob.BlobTypeAppendBlob, blob.BlobTypePageBlob})
@@ -65,7 +65,7 @@ func (s *FileOAuthTestSuite) Scenario_AllBlobTypesOAuth(svm *ScenarioVariationMa
 
 	RunAzCopy(svm,
 		AzCopyCommand{
-			Verb: AzCopyVerbCopy,
+			Verb: ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}),
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcObj, EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{}),
 				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{})},
