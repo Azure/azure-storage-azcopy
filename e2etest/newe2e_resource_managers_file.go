@@ -870,3 +870,8 @@ func (f *FileObjectResourceManager) Exists() bool {
 
 	return err == nil || !fileerror.HasCode(err, fileerror.ParentNotFound, fileerror.ShareNotFound, fileerror.ShareBeingDeleted, fileerror.ResourceNotFound)
 }
+
+func (f *FileObjectResourceManager) ReadLink(a Asserter) string {
+	a.Error("Symlinks are unsupported on Files.")
+	return ""
+}

@@ -292,7 +292,9 @@ func (l *LocalObjectResourceManager) CreateParents(a Asserter) {
 func (l *LocalObjectResourceManager) Create(a Asserter, body ObjectContentContainer, properties ObjectProperties) {
 	a.HelperMarker().Helper()
 	a.AssertNow("Object must be file to have content", Equal{})
-
+	if properties.EntityType != l.entityType {
+		l.entityType = properties.EntityType
+	}
 	l.CreateParents(a)
 
 	if l.entityType == common.EEntityType.File() {
@@ -307,7 +309,9 @@ func (l *LocalObjectResourceManager) Create(a Asserter, body ObjectContentContai
 		a.NoError("Write file", err)
 	} else if l.entityType == common.EEntityType.Folder() {
 		err := os.Mkdir(l.getWorkingPath(), 0775)
-		a.NoError("Mkdir", err)
+		if !os.IsExist(err) {
+			a.NoError("Mkdir", err)
+		}
 	} else if l.entityType == common.EEntityType.Symlink() {
 		err := os.Symlink(filepath.Join(l.container.RootPath, properties.SymlinkedFileName), l.getWorkingPath())
 		a.NoError("Create Symlink", err)
@@ -446,4 +450,11 @@ func (l *LocalObjectResourceManager) Download(a Asserter) io.ReadSeeker {
 func (l *LocalObjectResourceManager) Exists() bool {
 	_, err := os.Stat(l.getWorkingPath())
 	return err == nil
+}
+
+func (l *LocalObjectResourceManager) ReadLink(a Asserter) string {
+	out, err := os.Readlink(l.getWorkingPath())
+	a.NoError("ReadLink", err)
+
+	return out
 }

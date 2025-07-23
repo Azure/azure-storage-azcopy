@@ -375,6 +375,9 @@ func (b *BlobFSPathResourceProvider) Create(a Asserter, body ObjectContentContai
 		})
 		a.NoError("Create directory", err)
 	case common.EEntityType.File(), common.EEntityType.Symlink(): // Symlinks just need an extra metadata tag
+		if b.entityType == common.EEntityType.Symlink() && body == nil {
+			body = NewStringObjectContentContainer(properties.SymlinkedFileName)
+		}
 		_, err := b.getFileClient().Create(ctx, &file.CreateOptions{
 			HTTPHeaders: properties.HTTPHeaders.ToBlobFS(),
 		})
@@ -566,7 +569,8 @@ func (b *BlobFSPathResourceProvider) getBlobClient(a Asserter) *blob.Client {
 
 func (b *BlobFSPathResourceProvider) Download(a Asserter) io.ReadSeeker {
 	a.HelperMarker().Helper()
-	a.Assert("Object type must be file", Equal{}, common.EEntityType.File(), b.entityType)
+	isFileOrSymlink := b.entityType == common.EEntityType.File() || b.entityType == common.EEntityType.Symlink()
+	a.Assert("Object type must be file or symlink", Equal{}, isFileOrSymlink, true)
 
 	resp, err := b.getFileClient().DownloadStream(ctx, nil)
 	a.NoError("Download stream", err)
@@ -584,4 +588,11 @@ func (b *BlobFSPathResourceProvider) Exists() bool {
 	_, err := b.getFileClient().GetProperties(ctx, nil) // under the hood it's just a path, no special restype flag.
 
 	return err == nil || !datalakeerror.HasCode(err, datalakeerror.PathNotFound, datalakeerror.FileSystemNotFound, datalakeerror.FileSystemBeingDeleted, datalakeerror.ResourceNotFound)
+}
+
+func (b *BlobFSPathResourceProvider) ReadLink(a Asserter) string {
+	reader := b.Download(a)
+	buf, err := io.ReadAll(reader)
+	a.NoError("Read symlink body", err)
+	return string(buf)
 }

@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -146,11 +147,49 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 				a.NoError("hash validation body", err)
 
 				a.Assert("bodies differ in hash", Equal{Deep: true}, hex.EncodeToString(objHash.Sum(nil)), hex.EncodeToString(valHash.Sum(nil)))
+			} else if objMan.EntityType() == common.EEntityType.Symlink() {
+				symlinkDest := objDef.SymlinkedFileName
+				if symlinkDest == "" && objDef.Body != nil {
+					buf, err := io.ReadAll(objDef.Body.Reader())
+					a.NoError("Read symlink body", err)
+					symlinkDest = string(buf)
+				}
+
+				if symlinkDest != "" {
+					linkData := objMan.ReadLink(a)
+					a.Assert("Symlink mismatch", Equal{}, symlinkDest, linkData)
+				}
 			}
 
 			// properties
 			ValidateMetadata(a, vProps.Metadata, oProps.Metadata)
-
+			if vProps.Metadata != nil {
+				for k, v := range vProps.Metadata {
+					ov, ok := oProps.Metadata[k]
+					if !ok {
+						a.Assert("Metadata key "+k+"  does not exist in object properties", Equal{})
+					} else {
+						//check if value is equal
+						if strings.Contains(k, "time") || strings.Contains(k, "Time") {
+							if ov != nil {
+								ovTime, err := time.Parse(time.RFC3339, *ov)
+								if err == nil {
+									unixStr := fmt.Sprintf("%d", ovTime.UTC().Unix())
+									ov = &unixStr
+								}
+							}
+							ovNs := *ov
+							vNs := *v
+							ns, _ := strconv.ParseInt(ovNs, 10, 64)
+							sec := ns / 1e9
+							secStr := fmt.Sprintf("%d", sec)
+							if vNs != secStr {
+								a.Assert("Metadata value for key "+k+" does not match.", Equal{}, v, ov)
+							}
+						}
+					}
+				}
+			}
 			// HTTP headers
 			ValidatePropertyPtr(a, "Cache control", vProps.HTTPHeaders.cacheControl, oProps.HTTPHeaders.cacheControl)
 			ValidatePropertyPtr(a, "Content disposition", vProps.HTTPHeaders.contentDisposition, oProps.HTTPHeaders.contentDisposition)

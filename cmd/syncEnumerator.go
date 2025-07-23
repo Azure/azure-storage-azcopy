@@ -47,7 +47,12 @@ type SyncEnumeratorOptions struct {
 }
 
 func NewSyncDefaultEnumeratorOptions() *SyncEnumeratorOptions {
-	defaultSyncOrchOptions := NewDefaultSyncOrchestratorOptions()
+	var defaultSyncOrchOptions SyncOrchestratorOptions
+	if common.IsSyncOrchTestModeSet() {
+		defaultSyncOrchOptions = NewTestSyncOrchestratorOptions()
+	} else {
+		defaultSyncOrchOptions = NewDefaultSyncOrchestratorOptions()
+	}
 	return &SyncEnumeratorOptions{
 		ErrorChannel:    nil,
 		SyncOrchOptions: &defaultSyncOrchOptions,

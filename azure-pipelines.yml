@@ -129,7 +129,12 @@ jobs:
     parameters:
       name: 'New_E2E'
       test_cli_param: '-run "TestNewE2E/.*"'
-      
+    
+  - template: azurePipelineTemplates/run-e2e.yml
+    parameters:
+      name: 'New_E2E_SW'
+      test_cli_param: '-run "TestNewE2E/SWSyncTestSuite/.*" -tags smslidingwindow'
+
   - job: Test_On_Ubuntu
     variables:
       isMutexSet: 'false'

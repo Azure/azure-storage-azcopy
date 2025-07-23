@@ -270,6 +270,7 @@ type ObjectResourceManager interface {
 	// Exists determines if the object in question exists
 	Exists() bool
 	HardlinkedFileName() string
+	ReadLink(a Asserter) string
 }
 
 type ObjectProperties struct {
