@@ -28,6 +28,8 @@ import (
 	"path"
 	"sync/atomic"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 )
 
 // Identifies a chunk. Always create with NewChunkID
@@ -300,7 +302,16 @@ func (csl *chunkStatusLogger) LogChunkStatus(id ChunkID, reason WaitReason) {
 		return
 	}
 
-	csl.unsavedEntries <- &chunkWaitState{ChunkID: id, reason: reason, waitStart: time.Now()}
+	if buildmode.IsMover {
+		// This change done specific to mover to reduce the log verbosity.
+		// We need chunk entries with done entries to verify what all files transferred.
+		// chunk-log file indeed work as success copy-log for us.
+		if reason == EWaitReason.ChunkDone() || reason == EWaitReason.Cancelled() {
+			csl.unsavedEntries <- &chunkWaitState{ChunkID: id, reason: reason, waitStart: time.Now()}
+		}
+	} else {
+		csl.unsavedEntries <- &chunkWaitState{ChunkID: id, reason: reason, waitStart: time.Now()}
+	}
 }
 
 func (csl *chunkStatusLogger) FlushLog() {
