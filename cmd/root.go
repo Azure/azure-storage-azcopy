@@ -241,8 +241,6 @@ func Initialize(resumeJobID common.JobID, isBench bool) error {
 		common.IncludeAfterFlagName, IncludeAfterDateFilter{}.FormatAsUTC(adjustedTime))
 	jobsAdmin.JobsAdmin.LogToJobLog(startTimeMessage, common.LogInfo)
 
-	// do the version check in background
-	//TODO; stderr copy from main
 	if !SkipVersionCheck && !isPipeDownload {
 		// spawn a routine to fetch and compare the local application's version against the latest version available
 		// if there's a newer version that can be used, then write the suggestion to stderr
