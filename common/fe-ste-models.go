@@ -31,6 +31,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -55,10 +56,11 @@ const (
 
 	// Since we haven't updated the Go SDKs to handle CPK just yet, we need to detect CPK related errors
 	// and inform the user that we don't support CPK yet.
-	CPK_ERROR_SERVICE_CODE = "BlobUsesCustomerSpecifiedEncryption"
-	BLOB_NOT_FOUND         = "BlobNotFound"
-	FILE_NOT_FOUND         = "The specified file was not found."
-	EINTR_RETRY_COUNT      = 5
+	CPK_ERROR_SERVICE_CODE    = "BlobUsesCustomerSpecifiedEncryption"
+	BLOB_NOT_FOUND            = "BlobNotFound"
+	FILE_NOT_FOUND            = "The specified file was not found."
+	EINTR_RETRY_COUNT         = 5
+	RECOMMENDED_OBJECTS_COUNT = 10000000
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -191,16 +193,81 @@ func ValidTrailingDotOptions() []string {
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-var EPermanentDeleteOption = PermanentDeleteOption(3) // Default to "None"
+var EBlobTraverserIncludeOption eBlobTraverserIncludeOption
+
+type eBlobTraverserIncludeOption bool
+
+type BlobTraverserIncludeOption uint8
+
+func (eBlobTraverserIncludeOption) Snapshots() BlobTraverserIncludeOption { return 1 }
+func (eBlobTraverserIncludeOption) Versions() BlobTraverserIncludeOption  { return 1 << 1 }
+func (eBlobTraverserIncludeOption) Deleted() BlobTraverserIncludeOption   { return 1 << 2 }
+func (eBlobTraverserIncludeOption) DirStubs() BlobTraverserIncludeOption  { return 1 << 3 } // whether to include blobs that have metadata 'hdi_isfolder = true'
+func (eBlobTraverserIncludeOption) None() BlobTraverserIncludeOption      { return 0 }
+
+func (e eBlobTraverserIncludeOption) FromInputs(pdo PermanentDeleteOption, listVersions, includeDirectoryStubs bool) BlobTraverserIncludeOption {
+	out := e.None()
+
+	if includeDirectoryStubs {
+		out = out.Add(e.DirStubs())
+	}
+
+	if pdo != 0 {
+		out = out.Add(e.Deleted())
+
+		if pdo.Includes(EPermanentDeleteOption.Snapshots()) {
+			out = out.Add(e.Snapshots())
+		}
+
+		if pdo.Includes(EPermanentDeleteOption.Versions()) || listVersions {
+			out = out.Add(e.Versions())
+		}
+
+		return out
+	}
+
+	if listVersions {
+		out = out.Add(e.Versions())
+	}
+
+	return out
+}
+
+func (o BlobTraverserIncludeOption) Add(other BlobTraverserIncludeOption) BlobTraverserIncludeOption {
+	return o | other
+}
+func (o BlobTraverserIncludeOption) Includes(other BlobTraverserIncludeOption) bool {
+	return (o & other) == other
+}
+
+func (o BlobTraverserIncludeOption) Snapshots() bool {
+	return o.Includes(EBlobTraverserIncludeOption.Snapshots())
+}
+func (o BlobTraverserIncludeOption) Versions() bool {
+	return o.Includes(EBlobTraverserIncludeOption.Versions())
+}
+func (o BlobTraverserIncludeOption) Deleted() bool {
+	return o.Includes(EBlobTraverserIncludeOption.Deleted())
+}
+func (o BlobTraverserIncludeOption) DirStubs() bool {
+	return o.Includes(EBlobTraverserIncludeOption.DirStubs())
+}
+
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+var EPermanentDeleteOption = PermanentDeleteOption(0) // Default to "None"
 
 type PermanentDeleteOption uint8
 
-func (PermanentDeleteOption) Snapshots() PermanentDeleteOption { return PermanentDeleteOption(0) }
-func (PermanentDeleteOption) Versions() PermanentDeleteOption  { return PermanentDeleteOption(1) }
-func (PermanentDeleteOption) SnapshotsAndVersions() PermanentDeleteOption {
-	return PermanentDeleteOption(2)
+func (PermanentDeleteOption) Snapshots() PermanentDeleteOption { return PermanentDeleteOption(1) }
+func (PermanentDeleteOption) Versions() PermanentDeleteOption  { return PermanentDeleteOption(1 << 1) }
+func (p PermanentDeleteOption) SnapshotsAndVersions() PermanentDeleteOption {
+	return p.Snapshots() | p.Versions()
 }
-func (PermanentDeleteOption) None() PermanentDeleteOption { return PermanentDeleteOption(3) }
+func (PermanentDeleteOption) None() PermanentDeleteOption { return PermanentDeleteOption(0) }
+
+func (p PermanentDeleteOption) Includes(other PermanentDeleteOption) bool {
+	return (p & other) == other
+}
 
 func (p *PermanentDeleteOption) Parse(s string) error {
 	// allow empty to mean "None"
@@ -1494,6 +1561,43 @@ func (pc *PerfConstraint) Parse(s string) error {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+var EHardlinkHandlingType = HardlinkHandlingType(0)
+
+var DefaultHardlinkHandlingType = EHardlinkHandlingType.Follow()
+
+type HardlinkHandlingType uint8
+
+// Copy means copy the files to the destination as regular files
+func (HardlinkHandlingType) Follow() HardlinkHandlingType {
+	return HardlinkHandlingType(0)
+}
+
+func (pho HardlinkHandlingType) String() string {
+	return enum.StringInt(pho, reflect.TypeOf(pho))
+}
+
+func (pho *HardlinkHandlingType) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(pho), s, true, true)
+	if err == nil {
+		*pho = val.(HardlinkHandlingType)
+	}
+	return err
+}
+
+func (pho HardlinkHandlingType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(pho.String())
+}
+
+func (pho *HardlinkHandlingType) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	return pho.Parse(s)
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 type PerformanceAdvice struct {
 
 	// Code representing the type of the advice
@@ -1580,6 +1684,8 @@ func (EntityType) File() EntityType           { return EntityType(0) }
 func (EntityType) Folder() EntityType         { return EntityType(1) }
 func (EntityType) Symlink() EntityType        { return EntityType(2) }
 func (EntityType) FileProperties() EntityType { return EntityType(3) }
+func (EntityType) Hardlink() EntityType       { return EntityType(4) }
+func (EntityType) Other() EntityType          { return EntityType(5) }
 
 func (e EntityType) String() string {
 	return enum.StringInt(e, reflect.TypeOf(e))
@@ -1649,6 +1755,17 @@ func (p PreservePermissionsOption) IsTruthy() bool {
 		EPreservePermissionsOption.OwnershipAndACLs():
 		return true
 	case EPreservePermissionsOption.None():
+		return false
+	default:
+		panic("unknown permissions option")
+	}
+}
+
+func (p PreservePermissionsOption) IsOwner() bool {
+	switch p {
+	case EPreservePermissionsOption.OwnershipAndACLs():
+		return true
+	case EPreservePermissionsOption.ACLsOnly(), EPreservePermissionsOption.None():
 		return false
 	default:
 		panic("unknown permissions option")
@@ -1792,4 +1909,15 @@ func (sht *SymlinkHandlingType) Determine(Follow, Preserve bool) error {
 	}
 
 	return nil
+}
+
+// /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+var oncer = sync.Once{}
+
+func WarnIfTooManyObjects() {
+	oncer.Do(func() {
+		GetLifecycleMgr().Warn(fmt.Sprintf("This job contains more than %d objects, best practice to run less than this.",
+			RECOMMENDED_OBJECTS_COUNT))
+	})
 }

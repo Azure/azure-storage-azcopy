@@ -182,6 +182,12 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 	// Supply no plan MMF because we don't have one, and AddJobPart will create one on its own.
 	// Add this part to the Job and schedule its transfers
 
+	// Warn if more objects than recommended threshold
+	jm.AddTotalNumFilesProcessed(int64(len(order.Transfers.List)))
+	if jm.GetTotalNumFilesProcessed() > common.RECOMMENDED_OBJECTS_COUNT {
+		common.WarnIfTooManyObjects()
+	}
+
 	args := &ste.AddJobPartArgs{
 		PartNum:           order.PartNum,
 		PlanFile:          jppfn,
@@ -195,11 +201,12 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 
 	// Update jobPart Status with the status Manager
 	jm.SendJobPartCreatedMsg(ste.JobPartCreatedMsg{TotalTransfers: uint32(len(order.Transfers.List)),
-		IsFinalPart:          order.IsFinalPart,
-		TotalBytesEnumerated: order.Transfers.TotalSizeInBytes,
-		FileTransfers:        order.Transfers.FileTransferCount,
-		SymlinkTransfers:     order.Transfers.SymlinkTransferCount,
-		FolderTransfer:       order.Transfers.FolderTransferCount})
+		IsFinalPart:             order.IsFinalPart,
+		TotalBytesEnumerated:    order.Transfers.TotalSizeInBytes,
+		FileTransfers:           order.Transfers.FileTransferCount,
+		SymlinkTransfers:        order.Transfers.SymlinkTransferCount,
+		FolderTransfer:          order.Transfers.FolderTransferCount,
+		HardlinksConvertedCount: order.Transfers.HardlinksConvertedCount})
 
 	return common.CopyJobPartOrderResponse{JobStarted: true}
 }
@@ -520,6 +527,9 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 		jpp := jpm.Plan()
 		js.CompleteJobOrdered = js.CompleteJobOrdered || jpp.IsFinalPart
 		js.TotalTransfers += jpp.NumTransfers
+		if js.TotalTransfers > common.RECOMMENDED_OBJECTS_COUNT {
+			common.WarnIfTooManyObjects()
+		}
 
 		// Iterate through this job part's transfers
 		for t := uint32(0); t < jpp.NumTransfers; t++ {
@@ -534,6 +544,8 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 				js.FolderPropertyTransfers++
 			case common.EEntityType.Symlink():
 				js.SymlinkTransfers++
+			case common.EEntityType.Hardlink():
+				js.HardlinksConvertedCount++
 			}
 
 			// check for all completed transfer to calculate the progress percentage at the end
