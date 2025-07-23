@@ -8,34 +8,34 @@ import (
 )
 
 // WarnMultipleProcesses warns if there are multiple AzCopy processes running
-func WarnMultipleProcesses(directory string, currentPid int) error {
+func WarnMultipleProcesses(directory string, currentPid int) {
 	currPidFileName := fmt.Sprintf("%d.pid", currentPid)
 	// Made subdir to not clog main dir
 	pidsSubDir := path.Join(directory, "pids")
-	if err := os.MkdirAll(pidsSubDir, 0755); err != nil {
-		glcm.Error(fmt.Sprintf("error creating pids dir: %v", err))
+	err := os.MkdirAll(pidsSubDir, 0755)
+	if err != nil {
+		return
 	}
 	filePath := path.Join(pidsSubDir, currPidFileName) // E.g "\.azcopy\pids\\XXX.pid"
 
 	dir, err := os.ReadDir(pidsSubDir)
 	if err != nil {
-		glcm.Error(fmt.Sprintf("error reading dir: %v", err))
-		return err
+		return
 	}
 	for _, fileName := range dir {
 		if fileName.Name() != currPidFileName {
 			glcm.Warn(common.ERR_MULTIPLE_PROCESSES)
-			return fmt.Errorf("%w", ErrMultipleProcesses)
+
 		}
 	}
 	// Creates .pid file with specific pid
-	file, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		glcm.Error(fmt.Sprintf("error creating the .pid file: %v", err))
-		return err
-	}
-	defer file.Close()
-	return nil
+	file, _ := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+
+		}
+	}(file)
 }
 
 // CleanUpPidFile removes the PID files after the AzCopy run has exited. Ensures we only check against

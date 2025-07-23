@@ -21,17 +21,14 @@ func Test_WarnMultipleProcesses(t *testing.T) {
 	}() // Cleanup
 	a.NoError(err)
 
-	err1 := WarnMultipleProcesses("temp", 1)
-	a.NoError(err1)
+	WarnMultipleProcesses("temp", 1)
 
 	pid1 := path.Join(pidsDir, "1.pid")
 	_, err = os.Stat(pid1)
 	a.NoError(err, "first .pid file should exist")
 
 	// Act
-	err2 := WarnMultipleProcesses("temp", 2) // Additional AzCopy process, err message
-	a.EqualError(err2, common.ERR_MULTIPLE_PROCESSES)
-	a.NotNil(err2)
+	WarnMultipleProcesses("temp", 2) // Additional AzCopy process
 
 	dirEntry, _ := os.ReadDir(pidsDir)
 	// Check only one file
@@ -117,11 +114,9 @@ func Test_MultipleProcessWithMockedLCM(t *testing.T) {
 	glcm = &mockLCM
 
 	// Act
-	err = WarnMultipleProcesses(tempDir, 456)
+	WarnMultipleProcesses(tempDir, 456)
 
 	// Assert
-	a.NotNil(err)
-	a.EqualError(err, common.ERR_MULTIPLE_PROCESSES)
 	errorMessages := mockLCM.GatherAllLogs(mockLCM.warnLog) // check mocked LCM warnLogs
 	if errorMessages != nil {
 		a.Equal(common.ERR_MULTIPLE_PROCESSES, errorMessages[0])
