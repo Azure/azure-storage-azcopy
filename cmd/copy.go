@@ -774,16 +774,15 @@ type CookedCopyCmdArgs struct {
 	hardlinks                     common.HardlinkHandlingType
 	atomicSkippedSymlinkCount     uint32
 	atomicSkippedSpecialFileCount uint32
-
-	BlockSizeMB         float64
-	PutBlobSizeMB       float64
-	IncludePathPatterns []string
-	ListOfFiles         string
-	ListOfVersionIDs    string
-	blobTagsMap         common.BlobTags
-	cpkByName           string
-	cpkByValue          bool
-	preserveOwner       bool
+	BlockSizeMB                   float64
+	PutBlobSizeMB                 float64
+	IncludePathPatterns           []string
+	ListOfFiles                   string
+	ListOfVersionIDs              string
+	blobTagsMap                   common.BlobTags
+	cpkByName                     string
+	cpkByValue                    bool
+	preserveOwner                 bool
 }
 
 func (cca *CookedCopyCmdArgs) isRedirection() bool {

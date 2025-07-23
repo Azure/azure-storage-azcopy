@@ -663,10 +663,6 @@ func (s *FileTestSuite) Scenario_SingleFileDownloadNoError(svm *ScenarioVariatio
 		ShouldFail: false,
 	})
 
-	//ValidateResource[ObjectResourceManager](svm, destObj, ResourceDefinitionObject{
-	//	Body: body,
-	//}, true)
-
 	ValidateDoesNotContainError(svm, stdOut, []string{"interrupted system call"})
 }
 
