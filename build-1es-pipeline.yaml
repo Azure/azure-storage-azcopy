@@ -947,20 +947,6 @@ extends:
                       image: azcopycontainers.azurecr.io/azure-azcopy-mariner-x86_64.$(azcopy_docker_version):latest
                       remoteImage: azcopycontainers.azurecr.io/azure-azcopy-mariner-x86_64.$(azcopy_docker_version):latest
                   
-<<<<<<< HEAD
-=======
-                  - task: 1ES.BuildContainerImage@1
-                    inputs:
-                      image: azcopycontainers.azurecr.io/azure-azcopy-mariner-arm64.$(azcopy_docker_version):latest
-                      path: '$(System.DefaultWorkingDirectory)'
-                      dockerfile: docker/DockerfileMarinerArm64
-
-                  - task: 1ES.PushContainerImage@1
-                    inputs:
-                      image: azcopycontainers.azurecr.io/azure-azcopy-mariner-arm64.$(azcopy_docker_version):latest
-                      remoteImage: azcopycontainers.azurecr.io/azure-azcopy-mariner-arm64.$(azcopy_docker_version):latest
-
->>>>>>> 98682776af1339632bf06c70fa51f66d1e7f5cc4
               - job: LinuxARM64
                 pool:
                   name: azcopy-arm-pool
