@@ -414,3 +414,7 @@ func ComputePreserveFlags(cmd *cobra.Command, userFromTo common.FromTo, preserve
 
 	return finalPreserveInfo, finalPreservePermissions
 }
+
+func IsFileEndpoint(loc common.Location) bool {
+	return loc == common.ELocation.File() || loc == common.ELocation.FileNFS()
+}

@@ -38,7 +38,7 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaultsForSetProperties() {
 
 func (cca *CookedCopyCmdArgs) checkIfChangesPossible() error {
 	// tier or tags can't be set on files
-	if cca.FromTo.From() == common.ELocation.File() || cca.FromTo.From() == common.ELocation.FileNFS() {
+	if IsFileEndpoint(cca.FromTo.From()) {
 		if cca.propertiesToTransfer.ShouldTransferTier() {
 			return fmt.Errorf("changing tier is not available for File Storage")
 		}

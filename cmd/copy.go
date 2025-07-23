@@ -1014,9 +1014,8 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// Make AUTO default for Azure Files since Azure Files throttles too easily unless user specified concurrency value
 	if jobsAdmin.JobsAdmin != nil &&
-		((cca.FromTo.From() == common.ELocation.File() || cca.FromTo.From() == common.ELocation.FileNFS()) ||
-			(cca.FromTo.To() == common.ELocation.File() || cca.FromTo.To() == common.ELocation.FileNFS())) &&
-		common.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue()) == "" {
+		(IsFileEndpoint(cca.FromTo.From()) || (IsFileEndpoint(cca.FromTo.To()) &&
+			common.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue()) == "")) {
 		jobsAdmin.JobsAdmin.SetConcurrencySettingsToAuto()
 	}
 
@@ -1108,7 +1107,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, srcReauth)
 	var azureFileSpecificOptions any
-	if cca.FromTo.From() == common.ELocation.File() || cca.FromTo.From() == common.ELocation.FileNFS() {
+	if IsFileEndpoint(cca.FromTo.From()) {
 		azureFileSpecificOptions = &common.FileClientOptions{
 			AllowTrailingDot: cca.trailingDot.IsEnabled(),
 		}
@@ -1126,11 +1125,11 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		return err
 	}
 
-	if cca.FromTo.To() == common.ELocation.File() || cca.FromTo.To() == common.ELocation.FileNFS() {
+	if IsFileEndpoint(cca.FromTo.To()) {
 		azureFileSpecificOptions = &common.FileClientOptions{
 			AllowTrailingDot: cca.trailingDot.IsEnabled(),
 			AllowSourceTrailingDot: cca.trailingDot.IsEnabled() &&
-				(cca.FromTo.From() == common.ELocation.File() || cca.FromTo.From() == common.ELocation.FileNFS()),
+				IsFileEndpoint(cca.FromTo.From()),
 		}
 	}
 
@@ -1175,7 +1174,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	}
 
 	// TODO: Remove this check when FileBlob w/ File OAuth works.
-	if cca.FromTo.IsS2S() && (cca.FromTo.From() == common.ELocation.File() || cca.FromTo.From() == common.ELocation.FileNFS()) &&
+	if cca.FromTo.IsS2S() && (IsFileEndpoint(cca.FromTo.From())) &&
 		srcCredInfo.CredentialType.IsAzureOAuth() && (cca.FromTo.To() != common.ELocation.File() || cca.FromTo.To() != common.ELocation.FileNFS()) {
 		return fmt.Errorf("S2S copy from Azure File authenticated with Azure AD to Blob/BlobFS is not supported")
 	}

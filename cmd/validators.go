@@ -60,8 +60,8 @@ func ValidateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo,
 	}
 
 	if userFromTo == common.EFromTo.FileSMBFileNFS() || userFromTo == common.EFromTo.FileNFSFileSMB() {
-		glcm.Info("The --from-to value of " + userFromTo.String() +
-			" is not support currently " +
+		glcm.Error("The --from-to value of " + userFromTo.String() +
+			" is not supported currently. " +
 			"Copy operations between SMB and NFS file shares are not supported yet.")
 	}
 
@@ -88,9 +88,16 @@ var fromToHelp = func() string {
 		fromTo := enumSymbolValue.(common.FromTo)
 
 		if isSafeToOutput(fromTo.From()) && isSafeToOutput(fromTo.To()) {
-			validFromTos += fromTo.String() + ", "
+			fromtoStr := fromTo.String()
+			if fromTo.String() == common.EFromTo.LocalFile().String() {
+				fromtoStr = "LocalFileSMB"
+			} else if fromTo.String() == common.EFromTo.FileLocal().String() {
+				fromtoStr = "FileSMBLocal"
+			} else if fromTo.String() == common.EFromTo.FileFile().String() {
+				fromtoStr = "FileSMBFileSMB"
+			}
+			validFromTos += fromtoStr + ", "
 		}
-
 		return false
 	})
 
