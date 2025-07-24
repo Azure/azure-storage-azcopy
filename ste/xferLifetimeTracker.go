@@ -201,7 +201,7 @@ func (r *RequestLifetimeTracker) queueWorker() {
 					// Before we say no, what about our current live requests?
 					out := int64(0)
 					for _, v := range r.liveRequestInitiationTimes {
-						if float64(time.Now().Sub(v))/float64(rAvg) > 2 { // At bare minimum, a 40 second request would be pretty concerningly unusual.
+						if float64(time.Since(v))/float64(rAvg) > 2 { // At bare minimum, a 40 second request would be pretty concerningly unusual.
 							out = 1
 							break
 						}
@@ -239,7 +239,6 @@ func (r *RequestLifetimeTracker) queueWorker() {
 
 				atomic.AddInt64(r.atomicSimultaneousLiveRequestCount, -1)
 				delete(r.liveRequestInitiationTimes, act.ID)
-				break
 			default:
 				panic(fmt.Sprintf("unrecognized action %d", act.Action))
 			}

@@ -190,7 +190,7 @@ func (t *autoConcurrencyTuner) worker() {
 			}
 			rateChangeReason = concurrencyReasonHighRequestLifetime
 
-			lastReason = t.setConcurrency(concurrency, rateChangeReason)
+			t.setConcurrency(concurrency, rateChangeReason)
 			exitChannel := make(chan bool, 1)
 			go func() {
 				for {
@@ -209,7 +209,7 @@ func (t *autoConcurrencyTuner) worker() {
 					close(exitChannel)
 					goto escape
 				case ob := <-t.observations:
-					lastSpeed, highCpu = float32(ob.mbps), ob.isHighCpu
+					lastSpeed, _ = float32(ob.mbps), ob.isHighCpu
 					t.setConcurrency(concurrency, rateChangeReason)
 				}
 			}
