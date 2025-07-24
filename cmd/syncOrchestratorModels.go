@@ -31,7 +31,7 @@ import (
 // DefaultSyncOrchestratorOptions provides a default-initialized SyncOrchestratorOptions struct.
 var DefaultSyncOrchestratorOptions = SyncOrchestratorOptions{
 	valid:                          false,
-	maxDirectoryDirectChildCount:   10_000, // This will not get honored by e2e test framework
+	maxDirectoryDirectChildCount:   100_000, // This will not get honored by e2e test framework
 	metaDataOnlySync:               false,
 	lastSuccessfulSyncJobStartTime: time.Time{},
 	optimizeEnumerationByCTime:     false,

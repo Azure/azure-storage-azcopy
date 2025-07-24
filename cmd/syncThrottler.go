@@ -43,7 +43,7 @@ const (
 // --- BEGIN Throttling and Concurrency Configuration ---
 const (
 	absoluteMaxActiveFiles     int64 = 10_000_000 // Absolute max active files, used for dynamic limits
-	maxFilesPerActiveDirectory int64 = 1_000_000  // Max files per active directory
+	maxFilesPerActiveDirectory int64 = 100_000    // Max files per active directory
 
 	// These are static limits as of now. This can be dynamically adjusted later
 	// by the StatsMonitor based on available system resources.
@@ -87,7 +87,7 @@ const (
 // These are configured based on system capabilities and transfer scenarios.
 var (
 	enableDebugLogs    bool = false
-	enableThrottleLogs bool = true
+	enableThrottleLogs bool = false
 	startGoProfiling   bool = false
 
 	// Core concurrency settings
