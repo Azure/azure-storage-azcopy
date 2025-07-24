@@ -250,9 +250,19 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 		return false, nil
 	}
 
-	if metadataChanged {
+	if dataChanged {
+		transferObject = true
+	}
+
+	if !transferObject && !isNFSCopy && metadataChanged {
 		// If this is true, it means that metadataOnlySync is enabled
 		// as this is being set to true only if we have valid orchestrator options
+
+		//if isNFSCopy {
+		// we don't have change time for NFS file share objects, so we cannot transfer metadata only.
+		// metadataChanged will be true since by default NFS file share objects will have current time
+		// as change time and it will not match with source object's change time.
+		//}
 
 		// If metadata has changed for a folder, we consider data changed as well.
 		// If metadata has changed for a symlink, both mtime and ctime will change
@@ -269,10 +279,6 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 			sourceObjectInMap.entityType = common.EEntityType.FileProperties() // Set entity type to FileProperties to indicate metadata transfer.
 			transferObject = true
 		}
-	}
-
-	if dataChanged {
-		transferObject = true
 	}
 
 	if transferObject {

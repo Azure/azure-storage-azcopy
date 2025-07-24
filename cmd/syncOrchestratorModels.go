@@ -30,7 +30,7 @@ import (
 
 // DefaultSyncOrchestratorOptions provides a default-initialized SyncOrchestratorOptions struct.
 var DefaultSyncOrchestratorOptions = SyncOrchestratorOptions{
-	valid:                          false,
+	valid:                          true,
 	maxDirectoryDirectChildCount:   100_000, // This will not get honored by e2e test framework
 	metaDataOnlySync:               false,
 	lastSuccessfulSyncJobStartTime: time.Time{},
@@ -79,8 +79,8 @@ func (s *SyncOrchestratorOptions) validate(from common.Location) error {
 		return errors.New("maxDirectoryDirectChildCount must be greater than 0")
 	}
 
-	if s.lastSuccessfulSyncJobStartTime.IsZero() {
-		return errors.New("lastSuccessfulSyncJobStartTime must be a valid time")
+	if s.optimizeEnumerationByCTime && s.lastSuccessfulSyncJobStartTime.IsZero() {
+		return errors.New("lastSuccessfulSyncJobStartTime must be a valid time for CTime optimization")
 	}
 	// The main limitation in windows OS that prevents us from using the optimizations is its dependendy on posix timestamps.
 	// We can use the optimizations on Windows by disabling the ctime optimization.
