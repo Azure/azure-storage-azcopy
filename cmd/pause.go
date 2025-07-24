@@ -72,7 +72,7 @@ func HandlePauseCommand(jobIdString string) {
 		glcm.Error("invalid jobId string passed. Failed while parsing string to jobId")
 	}
 
-	// TODO : Why isnt the response here used?
+	// TODO : Why isn't the response here used?
 	jobsAdmin.CancelPauseJobOrder(jobID, common.EJobStatus.Paused())
 	glcm.Exit(func(format common.OutputFormat) string {
 		return "Job " + jobID.String() + " paused successfully"
