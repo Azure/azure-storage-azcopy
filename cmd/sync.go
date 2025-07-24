@@ -440,8 +440,9 @@ type cookedSyncCmdArgs struct {
 	atomicSourceFoldersTransferNotRequired uint64
 
 	// defined the failure counters for sync operation through SyncOrchestrator
-	atomicSourceFolderEnumerationFailed      atomic.Uint64
-	atomicDestinationFolderEnumerationFailed atomic.Uint64
+	atomicSourceFolderEnumerationFailed       atomic.Uint64
+	atomicDestinationFolderEnumerationFailed  atomic.Uint64
+	atomicDestinationFolderEnumerationSkipped atomic.Uint64
 
 	// deletion count keeps track of how many extra files from the destination were removed
 	atomicDeletionCount uint32
@@ -594,12 +595,20 @@ func (cca *cookedSyncCmdArgs) IncrementDestinationFolderEnumerationFailed() {
 	cca.atomicDestinationFolderEnumerationFailed.Add(1)
 }
 
+func (cca *cookedSyncCmdArgs) IncrementDestinationFolderEnumerationSkipped() {
+	cca.atomicDestinationFolderEnumerationSkipped.Add(1)
+}
+
 func (cca *cookedSyncCmdArgs) GetSourceFolderEnumerationFailed() uint64 {
 	return cca.atomicSourceFolderEnumerationFailed.Load()
 }
 
 func (cca *cookedSyncCmdArgs) GetDestinationFolderEnumerationFailed() uint64 {
 	return cca.atomicDestinationFolderEnumerationFailed.Load()
+}
+
+func (cca *cookedSyncCmdArgs) GetDestinationFolderEnumerationSkipped() uint64 {
+	return cca.atomicDestinationFolderEnumerationSkipped.Load()
 }
 
 // wraps call to lifecycle manager to wait for the job to complete
@@ -918,30 +927,39 @@ Final Job Status: %v%s%s
 
 func (cca *cookedSyncCmdArgs) GetElaborateOutputMessage(summary common.ListJobSummaryResponse, screenStats string, duration time.Duration) string {
 	return fmt.Sprintf(
-		`
+		`============================================================
 Job %s Summary
-Files Scanned at Source: %v
-Files Scanned at Destination: %v
-Folders Scanned at Source: %v
-Folders Scanned at Destination: %v
-Elapsed Time (Minutes): %v
-Number of Copy Transfers for Files: %v
-Number of Copy Transfers for Folder Properties: %v
-Number of Copy Transfers for Files Properties: %v
-Total Number of Copy Transfers: %v
-Number of Copy Transfers Completed: %v
-Number of Copy Transfers Failed: %v
-Number of Deletions at Destination: %v
-Number of Symbolic Links Skipped: %v
-Number of Special Files Skipped: %v
-Number of Hardlinks Converted: %v
-Number of Files that don't require transfer: %v
-Number of Folders that don't require transfer: %v
-Number of Source Folders that failed during enumeration: %v
-Number of Destination Folders that failed during enumeration: %v
-Total Number of Bytes Transferred: %v
-Total Number of Bytes Enumerated: %v
-Final Job Status: %v%s%s
+============================================================
+Files Scanned at Source: ....................... %12v
+Files Scanned at Destination: .................. %12v
+Folders Scanned at Source: ..................... %12v
+Folders Scanned at Destination: ................ %12v
+Elapsed Time (Minutes): ........................ %12v
+------------------------------------------------------------
+Number of Copy Transfers for Files: ............ %12v
+Number of Copy Transfers for Folder Properties:. %12v
+Number of Copy Transfers for Files Properties:.. %12v
+Total Number of Copy Transfers: ................ %12v
+Number of Copy Transfers Completed: ............ %12v
+Number of Copy Transfers Failed: ............... %12v
+------------------------------------------------------------
+Number of Deletions at Destination: ............ %12v
+Number of Symbolic Links Skipped: .............. %12v
+Number of Special Files Skipped: ............... %12v
+Number of Hardlinks Converted: ................. %12v
+------------------------------------------------------------
+Number of Files Not Requiring Transfer: ........ %12v
+Number of Folders Not Requiring Transfer: ...... %12v
+------------------------------------------------------------
+Source Folders Failed During Enumeration: ...... %12v
+Destination Folders Failed During Enumeration: . %12v
+Destination Folders Skipped (CTime opt): ....... %12v
+------------------------------------------------------------
+Total Number of Bytes Transferred: ............. %12v
+Total Number of Bytes Enumerated: .............. %12v
+------------------------------------------------------------
+Final Job Status: .............................. %12v
+%s%s
 `,
 		summary.JobID.String(),
 		atomic.LoadUint64(&cca.atomicSourceFilesScanned),
@@ -949,22 +967,29 @@ Final Job Status: %v%s%s
 		atomic.LoadUint64(&cca.atomicSourceFoldersScanned),
 		atomic.LoadUint64(&cca.atomicDestinationFoldersScanned),
 		jobsAdmin.ToFixed(duration.Minutes(), 4),
+
 		summary.FileTransfers,
 		summary.FolderPropertyTransfers,
 		summary.FilePropertyTransfers,
 		summary.TotalTransfers,
 		summary.TransfersCompleted,
 		summary.TransfersFailed,
+
 		cca.atomicDeletionCount,
 		summary.SkippedSymlinkCount,
 		summary.SkippedSpecialFileCount,
 		summary.HardlinksConvertedCount,
+
 		atomic.LoadUint64(&cca.atomicSourceFilesTransferNotRequired),
 		atomic.LoadUint64(&cca.atomicSourceFoldersTransferNotRequired),
+
 		cca.atomicSourceFolderEnumerationFailed.Load(),
 		cca.atomicDestinationFolderEnumerationFailed.Load(),
+		cca.atomicDestinationFolderEnumerationSkipped.Load(),
+
 		summary.TotalBytesTransferred,
 		summary.TotalBytesEnumerated,
+
 		summary.JobStatus,
 		screenStats,
 		formatPerfAdvice(summary.PerformanceAdvice))
