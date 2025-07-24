@@ -37,5 +37,4 @@ func InitializeFolders() {
 	if err := os.MkdirAll(AzcopyJobPlanFolder, os.ModeDir|os.ModePerm); err != nil && !os.IsExist(err) {
 		log.Fatalf("Problem making .azcopy directory. Try setting AZCOPY_JOB_PLAN_LOCATION env variable. %v", err)
 	}
-	return
 }
