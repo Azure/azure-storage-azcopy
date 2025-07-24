@@ -339,3 +339,6 @@ venv*
 # go files
 *.mod
 *.sum
+
+# ignore the latest_version.txt
+/latest_version.txt

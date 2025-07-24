@@ -21,12 +21,12 @@
 package cmd
 
 import (
-	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
-	"io"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -35,7 +35,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -72,7 +71,7 @@ var Client azcopy.Client
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Version: common.AzcopyVersion, // will enable the user to see the version info in the standard posix way: --version
+	Version: common.AzcopyVersion,
 	Use:     "azcopy",
 	Short:   rootCmdShortDescription,
 	Long:    rootCmdLongDescription,
@@ -325,8 +324,6 @@ func init() {
 	_ = rootCmd.PersistentFlags().MarkHidden("memory-profile")
 }
 
-const versionMetadataUrl = "https://azcopyvnextrelease.z22.web.core.windows.net/releasemetadata/latest_version.txt"
-
 // always spins up a new goroutine, because sometimes the aka.ms URL can't be reached (e.g. a constrained environment where
 // aka.ms is not resolvable to a reachable IP address). In such cases, this routine will run for ever, and the caller should
 // just give up on it.
@@ -335,7 +332,7 @@ const versionMetadataUrl = "https://azcopyvnextrelease.z22.web.core.windows.net/
 func beginDetectNewVersion() chan struct{} {
 	completionChannel := make(chan struct{})
 	go func() {
-		// step 0: check the Stderr, check local version
+		// Step 0: check the Stderr, check local version
 		_, err := os.Stderr.Stat()
 		if err != nil {
 			return
@@ -352,37 +349,17 @@ func beginDetectNewVersion() chan struct{} {
 		if err == nil {
 			PrintOlderVersion(*cachedVersion, *localVersion)
 		} else {
-			// step 2: initialize pipeline
-			options := createClientOptions(nil, nil, nil)
-
-			// step 3: start download
-			blobClient, err := blob.NewClientWithNoCredential(versionMetadataUrl, &blob.ClientOptions{ClientOptions: options})
+			// Step 2: Gets latest release on GitHub
+			// If the cache version is expired, then we need to make a new API call
+			// checking against latest Github release version
+			gitHubRemoteVersion, err := getGitHubLatestRemoteVersion()
 			if err != nil {
 				return
 			}
+			PrintOlderVersion(*gitHubRemoteVersion, *localVersion)
 
-			downloadBlobResp, err := blobClient.DownloadStream(context.TODO(), nil)
-			if err != nil {
-				return
-			}
-
-			// step 4: read newest version str
-			data := make([]byte, *downloadBlobResp.ContentLength)
-			_, err = downloadBlobResp.Body.Read(data)
-			defer downloadBlobResp.Body.Close()
-			if err != nil && err != io.EOF {
-				return
-			}
-
-			remoteVersion, err := NewVersion(string(data))
-			if err != nil {
-				return
-			}
-
-			PrintOlderVersion(*remoteVersion, *localVersion)
-
-			// step 5: persist remote version in local
-			err = localVersion.CacheRemoteVersion(*remoteVersion, filePath)
+			// Step 3: Persist  GitHub Remote version in local
+			err = localVersion.CacheRemoteVersion(*gitHubRemoteVersion, filePath)
 			if err != nil {
 				return
 			}
@@ -393,4 +370,56 @@ func beginDetectNewVersion() chan struct{} {
 	}()
 
 	return completionChannel
+}
+
+func getGitHubLatestRemoteVersionWithURL(apiEndpoint string) (*Version, error) {
+	transport := &http.Transport{
+		MaxIdleConns:       10,
+		IdleConnTimeout:    30 * time.Second,
+		DisableCompression: true,  // GitHub API responses are small
+		DisableKeepAlives:  false, // Connections are reused
+	}
+
+	client := &http.Client{
+		Timeout:   30 * time.Second,
+		Transport: transport,
+	}
+	// Get Request
+	req, err := http.NewRequest("GET", apiEndpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("error in GitHub GET latest release: %s", resp.Status)
+	}
+
+	var release struct { // JSON response representation
+		TagName string `json:"tag_name"`
+		Name    string `json:"name"`
+	}
+	decoder := json.NewDecoder(resp.Body)
+	err = decoder.Decode(&release)
+	if err != nil {
+		return nil, err
+	}
+	// Remove v prefix in TagName, convert str to Version
+	versionStr := strings.TrimPrefix(release.TagName, "v")
+	return NewVersion(versionStr)
+}
+
+// Uses GitHub REST API to get the latest release version
+func getGitHubLatestRemoteVersion() (*Version, error) {
+	// GitHub REST API endpoint for latest release
+	apiEndpoint := "https://api.github.com/repos/Azure/azure-storage-azcopy/releases/latest"
+	return getGitHubLatestRemoteVersionWithURL(apiEndpoint)
+
 }
