@@ -36,8 +36,6 @@ import (
 var steCtx = context.Background()
 var mu sync.Mutex // Prevent inconsistent state between check and update of TotalBytesTransferred variable
 
-const EMPTY_SAS_STRING = ""
-
 type azCopyConfig struct {
 	MIMETypeMapping map[string]string
 }

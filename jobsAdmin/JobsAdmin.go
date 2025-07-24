@@ -327,7 +327,10 @@ func (ja *jobsAdmin) SuccessfulBytesInActiveFiles() uint64 {
 }
 */
 
-func (ja *jobsAdmin) ResurrectJob(jobId common.JobID, srcServiceClient *common.ServiceClient, dstServiceClient *common.ServiceClient, srcIsOAuth bool) bool {
+func (ja *jobsAdmin) ResurrectJob(jobId common.JobID,
+	srcServiceClient *common.ServiceClient,
+	dstServiceClient *common.ServiceClient,
+	srcIsOAuth bool) bool {
 	// Search the existing plan files for the PartPlans for the given jobId
 	// only the files which are not empty and have JobId has prefix and DataSchemaVersion as Suffix
 	// are include in the result
