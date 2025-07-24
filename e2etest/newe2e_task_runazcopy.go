@@ -79,6 +79,7 @@ const ( // initially supporting a limited set of verbs
 	AzCopyVerbJobsResume  AzCopyVerb = "jobs resume"
 	AzCopyVerbJobsClean   AzCopyVerb = "jobs clean"
 	AzCopyVerbJobsRemove  AzCopyVerb = "jobs remove"
+	AzCopyVerbJobsShow    AzCopyVerb = "jobs show"
 )
 
 type AzCopyTarget struct {
@@ -377,6 +378,8 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 				commandSpec.Flags = JobsRemoveFlags{}
 			case AzCopyVerbJobsList:
 				commandSpec.Flags = JobsListFlags{}
+			case AzCopyVerbJobsShow:
+				commandSpec.Flags = JobsShowFlags{}
 			default:
 				commandSpec.Flags = GlobalFlags{}
 			}
@@ -457,6 +460,13 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 			out = &AzCopyParsedCopySyncRemoveStdout{ // Resume command treated the same as copy/sync/remove
 				JobPlanFolder: *commandSpec.Environment.JobPlanLocation,
 				LogFolder:     *commandSpec.Environment.LogLocation,
+			}
+
+		case commandSpec.Verb == AzCopyVerbJobsShow:
+			if !commandSpec.ShouldFail {
+				out = &AzCopyParsedJobsShowStdout{}
+			} else {
+				out = &AzCopyRawStdout{}
 			}
 
 		// Login status

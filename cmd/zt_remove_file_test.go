@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/stretchr/testify/assert"
 	"net/url"
 	"strings"
@@ -42,7 +43,9 @@ func TestRemoveSingleFile(t *testing.T) {
 
 		// set up interceptor
 		mockedRPC := interceptor{}
-		Rpc = mockedRPC.intercept
+		jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+			return mockedRPC.intercept(order)
+		}
 		mockedRPC.init()
 
 		// construct the raw input to simulate user input
@@ -71,7 +74,9 @@ func TestRemoveFilesUnderShare(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -125,7 +130,9 @@ func TestRemoveFilesUnderDirectory(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -187,7 +194,9 @@ func TestRemoveFilesWithIncludeFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -221,7 +230,9 @@ func TestRemoveFilesWithExcludeFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -261,7 +272,9 @@ func TestRemoveFilesWithIncludeAndExcludeFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -294,7 +307,9 @@ func TestRemoveListOfFilesAndDirectories(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -312,7 +327,7 @@ func TestRemoveListOfFilesAndDirectories(t *testing.T) {
 
 	expectedDeletions := append(
 		scenarioHelper{}.addFoldersToList(filesUnderTopDir, false), // this is a directory in the list of files list, so it will be recursively processed. Don't include root of megadir itself
-		individualFilesList...,                                     // these are individual files in the files list (so not recursively processed)
+		individualFilesList..., // these are individual files in the files list (so not recursively processed)
 	)
 	runCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
@@ -371,7 +386,9 @@ func TestRemoveListOfFilesWithIncludeAndExclude(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -418,7 +435,9 @@ func TestRemoveSingleFileWithFromTo(t *testing.T) {
 
 		// set up interceptor
 		mockedRPC := interceptor{}
-		Rpc = mockedRPC.intercept
+		jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+			return mockedRPC.intercept(order)
+		}
 		mockedRPC.init()
 
 		// construct the raw input to simulate user input
@@ -448,7 +467,9 @@ func TestRemoveFilesUnderShareWithFromTo(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -503,7 +524,9 @@ func TestRemoveFilesUnderDirectoryWithFromTo(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
