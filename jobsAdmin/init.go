@@ -291,6 +291,7 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 		switch jpm.Plan().FromTo {
 		case common.EFromTo.LocalBlob(),
 			common.EFromTo.LocalFile(),
+			common.EFromTo.LocalFileNFS(),
 			common.EFromTo.S3Blob(),
 			common.EFromTo.GCPBlob():
 			if len(req.DestinationSAS) == 0 {
@@ -298,6 +299,7 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 			}
 		case common.EFromTo.BlobLocal(),
 			common.EFromTo.FileLocal(),
+			common.EFromTo.FileNFSLocal(),
 			common.EFromTo.BlobTrash(),
 			common.EFromTo.FileTrash():
 			if len(req.SourceSAS) == 0 {

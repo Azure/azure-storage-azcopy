@@ -23,7 +23,6 @@ package e2etest
 import (
 	"crypto/md5"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"io"
 	"io/fs"
 	"net/url"
@@ -33,6 +32,8 @@ import (
 	"runtime/debug"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
@@ -263,7 +264,7 @@ func (s *scenario) assignSourceAndDest() {
 		switch loc {
 		case common.ELocation.Local():
 			return &resourceLocal{common.Iff[string](s.p.destNull && !isSourceAcc, common.Dev_Null, "")}
-		case common.ELocation.File():
+		case common.ELocation.File(), common.ELocation.FileNFS():
 			return &resourceAzureFileShare{accountType: accType}
 		case common.ELocation.Blob(), common.ELocation.BlobFS():
 			// TODO: handle the multi-container (whole account) scenario
