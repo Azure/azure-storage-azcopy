@@ -96,8 +96,6 @@ var JobsAdmin interface {
 
 	TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint32, fromTo common.FromTo, dir common.TransferDirection, p *ste.PipelineNetworkStats) []common.PerformanceAdvice
 
-	SetConcurrencySettingsToAuto()
-
 	// JobMgrCleanUp do the JobMgr cleanup.
 	JobMgrCleanUp(jobId common.JobID)
 	ListJobs(givenStatus common.JobStatus) common.ListJobsResponse
@@ -197,7 +195,7 @@ func getMaxRamForChunks() int64 {
 
 func (ja *jobsAdmin) createConcurrencyTuner() ste.ConcurrencyTuner {
 	if ja.concurrency.AutoTuneMainPool() {
-		t := ste.NewAutoConcurrencyTuner(ja.concurrency.InitialMainPoolSize, ja.concurrency.MaxMainPoolSize.Value, ja.provideBenchmarkResults)
+		t := ste.NewAutoConcurrencyTuner(ja.concurrency.InitialMainPoolSize, ja.concurrency.MaxMainPoolSize.Value, &ja.atomicCurrentMainPoolSize, ja.provideBenchmarkResults)
 		if !t.RequestCallbackWhenStable(func() { ja.recordTuningCompleted(true) }) {
 			panic("could not register tuning completion callback")
 		}
@@ -443,16 +441,6 @@ func (ja *jobsAdmin) ListJobs(givenStatus common.JobStatus) common.ListJobsRespo
 	}
 
 	return ret
-}
-
-func (ja *jobsAdmin) SetConcurrencySettingsToAuto() {
-	// Setting initial pool size to 4 and max pool size to 3,000
-	ja.concurrency.InitialMainPoolSize = 4
-	ja.concurrency.MaxMainPoolSize = &ste.ConfiguredInt{Value: 3000, IsUserSpecified: false, EnvVarName: common.EEnvironmentVariable.ConcurrencyValue().Name, DefaultSourceDesc: "auto-tuning limit"}
-
-	// recreate the concurrency tuner.
-	// Tuner isn't called until the first job part is scheduled for transfer, so it is safe to update it before that.
-	ja.concurrencyTuner = ja.createConcurrencyTuner()
 }
 
 // TODO: I think something is wrong here: I think delete and cleanup should be merged together.
