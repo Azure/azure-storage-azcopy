@@ -23,12 +23,13 @@ package parallel
 import (
 	"context"
 	"fmt"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 var windowsSystemDirectory = ""
@@ -149,7 +150,7 @@ func doTestParallelEnumerationGetsTheRightFileInfo(parallelStat bool, t *testing
 				// Tuesday, August 27, 2019 5:29:08 AM
 				// PS C:\Program Files\Microsoft SQL Server> (gci | ? Name -eq 90).LastWriteTime  # ask for same info, via different API
 				// Tuesday, August 27, 2019 5:26:53 AM     // and it gives is the creation datetime instead
-				a.True(pInfo.IsDir(), fmt.Sprintf(key+" times are different, which is only OK on directories"))
+				a.True(pInfo.IsDir(), fmt.Sprintf("%s times are different, which is only OK on directories", key))
 			}
 			if !stdInfo.IsDir() {
 				// std Enumeration gives 4096 as size of some directories on Windows, but parallel sizes them as zero
