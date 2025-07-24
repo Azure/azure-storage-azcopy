@@ -814,7 +814,7 @@ func (s *FilesNFSTestSuite) Scenario_DstShareDoesNotExists(svm *ScenarioVariatio
 
 	sasOpts := GenericAccountSignatureValues{}
 
-	stdOut, _ := RunAzCopy(
+	RunAzCopy(
 		svm,
 		AzCopyCommand{
 			Verb: azCopyVerb,
