@@ -284,10 +284,8 @@ func validateShareProtocolCompatibility(
 		direction = "to"
 	}
 
-	shareProtocol, err := getShareProtocolType(ctx, serviceClient, resource, protocol)
-	if err != nil {
-		return err
-	}
+	// We can ignore the error if we fail to get the share properties.
+	shareProtocol, _ := getShareProtocolType(ctx, serviceClient, resource, protocol)
 
 	if shareProtocol == "SMB" && common.IsNFSCopy() {
 		return fmt.Errorf("The %s share has SMB protocol enabled. To copy %s a SMB share, use the appropriate --from-to flag value", direction, direction)
