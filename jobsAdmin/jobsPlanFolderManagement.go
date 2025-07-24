@@ -31,6 +31,45 @@ import (
 	"strings"
 )
 
+// These methods read common.AzcopyJobPlanFolder and common.LogPathFolder to list and remove job plan files and logs.
+
+// ListJobs returns the jobId of all the jobs existing in the current instance of azcopy
+func ListJobs(givenStatus common.JobStatus) common.ListJobsResponse {
+	ret := common.ListJobsResponse{JobIDDetails: []common.JobIDDetails{}}
+	files := func(ext string) []os.FileInfo {
+		var files []os.FileInfo
+		_ = filepath.Walk(common.AzcopyJobPlanFolder, func(path string, fileInfo os.FileInfo, _ error) error {
+			if !fileInfo.IsDir() && strings.HasSuffix(fileInfo.Name(), ext) {
+				files = append(files, fileInfo)
+			}
+			return nil
+		})
+		return files
+	}(fmt.Sprintf(".steV%d", ste.DataSchemaVersion))
+
+	// TODO : sort the file.
+	for f := 0; f < len(files); f++ {
+		planFile := ste.JobPartPlanFileName(files[f].Name())
+		jobID, partNum, err := planFile.Parse()
+		if err != nil || partNum != 0 { // Summary is in 0th JobPart
+			continue
+		}
+
+		mmf := planFile.Map()
+		jpph := mmf.Plan()
+
+		if givenStatus == common.EJobStatus.All() || givenStatus == jpph.JobStatus() {
+			ret.JobIDDetails = append(ret.JobIDDetails,
+				common.JobIDDetails{JobId: jobID, CommandString: jpph.CommandString(),
+					StartTime: jpph.StartTime, JobStatus: jpph.JobStatus()})
+		}
+
+		mmf.Unmap()
+	}
+
+	return ret
+}
+
 // TODO (gapra): Re-evaluate the need for currentJobID.
 
 // BlindDeleteAllJobFiles removes all job plan files and log files in the specified folders.
@@ -108,40 +147,4 @@ func removeFilesWithPredicate(targetFolder string, predicate func(string) bool) 
 	}
 
 	return count, nil
-}
-
-func ListJobs(givenStatus common.JobStatus) common.ListJobsResponse {
-	ret := common.ListJobsResponse{JobIDDetails: []common.JobIDDetails{}}
-	files := func(ext string) []os.FileInfo {
-		var files []os.FileInfo
-		_ = filepath.Walk(common.AzcopyJobPlanFolder, func(path string, fileInfo os.FileInfo, _ error) error {
-			if !fileInfo.IsDir() && strings.HasSuffix(fileInfo.Name(), ext) {
-				files = append(files, fileInfo)
-			}
-			return nil
-		})
-		return files
-	}(fmt.Sprintf(".steV%d", ste.DataSchemaVersion))
-
-	// TODO : sort the file.
-	for f := 0; f < len(files); f++ {
-		planFile := ste.JobPartPlanFileName(files[f].Name())
-		jobID, partNum, err := planFile.Parse()
-		if err != nil || partNum != 0 { // Summary is in 0th JobPart
-			continue
-		}
-
-		mmf := planFile.Map()
-		jpph := mmf.Plan()
-
-		if givenStatus == common.EJobStatus.All() || givenStatus == jpph.JobStatus() {
-			ret.JobIDDetails = append(ret.JobIDDetails,
-				common.JobIDDetails{JobId: jobID, CommandString: jpph.CommandString(),
-					StartTime: jpph.StartTime, JobStatus: jpph.JobStatus()})
-		}
-
-		mmf.Unmap()
-	}
-
-	return ret
 }

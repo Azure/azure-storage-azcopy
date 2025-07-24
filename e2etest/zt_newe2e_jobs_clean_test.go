@@ -16,7 +16,7 @@ func init() {
 type JobsCleanSuite struct{}
 
 // Clean all files/jobs
-func (s *JobsCleanSuite) Scenario_JobsCleanBasic(svm *ScenarioVariationManager) {
+func (s *JobsCleanSuite) Scenario_JobsCleanAll(svm *ScenarioVariationManager) {
 
 	logsDir, err := os.MkdirTemp("", "testLogs")
 	if err != nil {
