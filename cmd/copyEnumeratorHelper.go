@@ -87,9 +87,7 @@ func dispatchFinalPart(e *common.CopyJobPartOrderRequest, cca *CookedCopyCmdArgs
 		return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNum, resp.ErrorMsg)
 	}
 
-	if jobsAdmin.JobsAdmin != nil {
-		jobsAdmin.JobsAdmin.LogToJobLog(FinalPartCreatedMessage, common.LogInfo)
-	}
+	common.LogToJobLogWithPrefix(FinalPartCreatedMessage, common.LogInfo)
 
 	// set the flag on cca, to indicate the enumeration is done
 	cca.isEnumerationComplete = true

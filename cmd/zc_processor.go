@@ -324,9 +324,7 @@ func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err 
 			s.copyJobTemplate.JobID, s.copyJobTemplate.PartNum, resp.ErrorMsg)
 	}
 
-	if jobsAdmin.JobsAdmin != nil {
-		jobsAdmin.JobsAdmin.LogToJobLog(FinalPartCreatedMessage, common.LogInfo)
-	}
+	common.LogToJobLogWithPrefix(FinalPartCreatedMessage, common.LogInfo)
 
 	if s.reportFinalPartDispatched != nil {
 		s.reportFinalPartDispatched()
