@@ -63,8 +63,8 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	// If preserve properties is enabled, but get properties in backend is disabled, turn it on
 	// If source change validation is enabled on files to remote, turn it on (consider a separate flag entirely?)
 	getRemoteProperties := cca.ForceWrite == common.EOverwriteOption.IfSourceNewer() ||
-		(IsFileEndpoint(cca.FromTo.From()) && !cca.FromTo.To().IsRemote()) || // If it's a download, we still need LMT and MD5 from files.
-		(IsFileEndpoint(cca.FromTo.From()) &&
+		(cca.FromTo.From().IsFile() && !cca.FromTo.To().IsRemote()) || // If it's a download, we still need LMT and MD5 from files.
+		(cca.FromTo.From().IsFile() &&
 			cca.FromTo.To().IsRemote() && (cca.s2sSourceChangeValidation || cca.IncludeAfter != nil || cca.IncludeBefore != nil)) || // If S2S from File to *, and sourceChangeValidation is enabled, we get properties so that we have LMTs. Likewise, if we are using includeAfter or includeBefore, which require LMTs.
 		(cca.FromTo.From().IsRemote() && cca.FromTo.To().IsRemote() && cca.s2sPreserveProperties.Value() && !cca.s2sGetPropertiesInBackend) // If S2S and preserve properties AND get properties in backend is on, turn this off, as properties will be obtained in the backend.
 	jobPartOrder.S2SGetPropertiesInBackend = cca.s2sPreserveProperties.Value() && !getRemoteProperties && cca.s2sGetPropertiesInBackend // Infer GetProperties if GetPropertiesInBackend is enabled.

@@ -680,6 +680,10 @@ func (l Location) SupportsHnsACLs() bool {
 	return l == ELocation.Blob() || l == ELocation.BlobFS()
 }
 
+func (l Location) IsFile() bool {
+	return l == ELocation.File() || l == ELocation.FileNFS()
+}
+
 func (l Location) SupportsTrailingDot() bool {
 	if (l == ELocation.File() || l == ELocation.FileNFS()) || (l == ELocation.Local() && runtime.GOOS != "windows") {
 		return true

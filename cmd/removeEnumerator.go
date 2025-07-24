@@ -118,7 +118,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 
 	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
 	var fileClientOptions any
-	if IsFileEndpoint(cca.FromTo.From()) {
+	if cca.FromTo.From().IsFile() {
 		fileClientOptions = &common.FileClientOptions{AllowTrailingDot: cca.trailingDot.IsEnabled()}
 	}
 	targetServiceClient, err := common.GetServiceClientForLocation(

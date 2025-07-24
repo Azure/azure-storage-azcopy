@@ -244,7 +244,7 @@ func validateHardlinksFlag(option common.HardlinkHandlingType, fromTo common.Fro
 		}
 	}
 
-	if option == common.DefaultHardlinkHandlingType {
+	if common.IsNFSCopy() && option == common.DefaultHardlinkHandlingType {
 		glcm.Info("The --hardlinks option is set to 'follow'. Hardlinked files will be copied as a regular file at the destination.")
 	}
 	return nil
@@ -413,8 +413,4 @@ func ComputePreserveFlags(cmd *cobra.Command, userFromTo common.FromTo, preserve
 	}
 
 	return finalPreserveInfo, finalPreservePermissions
-}
-
-func IsFileEndpoint(loc common.Location) bool {
-	return loc == common.ELocation.File() || loc == common.ELocation.FileNFS()
 }
