@@ -72,8 +72,8 @@ func ListJobs(givenStatus common.JobStatus) common.ListJobsResponse {
 
 // TODO (gapra): Re-evaluate the need for currentJobID.
 
-// BlindDeleteAllJobFiles removes all job plan files and log files in the specified folders.
-func BlindDeleteAllJobFiles(currentJobID common.JobID) (int, error) {
+// DeleteAllJobFilesExceptCurrent removes all job plan files and log files in the specified folders.
+func DeleteAllJobFilesExceptCurrent(currentJobID common.JobID) (int, error) {
 	// get rid of the job plan files
 	numPlanFilesRemoved, err := removeFilesWithPredicate(common.AzcopyJobPlanFolder, func(s string) bool {
 		return strings.Contains(s, ".steV")

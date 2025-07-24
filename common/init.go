@@ -21,7 +21,7 @@ func InitializeFolders() {
 	if LogPathFolder == "" {
 		LogPathFolder = azcopyAppPathFolder
 	}
-	if err := os.Mkdir(LogPathFolder, os.ModeDir|os.ModePerm); err != nil && !os.IsExist(err) {
+	if err := os.MkdirAll(LogPathFolder, os.ModeDir|os.ModePerm); err != nil && !os.IsExist(err) {
 		log.Fatalf("Problem making .azcopy directory. Try setting AZCOPY_LOG_LOCATION env variable. %v", err)
 	}
 

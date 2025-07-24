@@ -34,10 +34,14 @@ func (jppfn JobPartPlanFileName) GetJobPartPlanPath() (string, error) {
 	if common.AzcopyJobPlanFolder == "" {
 		panic("invalid state, AzcopyJobPlanFolder should not be an empty string")
 	}
-	p := fmt.Sprintf("%s%s%s", common.AzcopyJobPlanFolder, common.AZCOPY_PATH_SEPARATOR_STRING, fileName)
+	absPlanFolder, err := filepath.Abs(common.AzcopyJobPlanFolder)
+	if err != nil {
+		panic(fmt.Sprintf("failed to resolve AzcopyJobPlanFolder to an absolute path: %v", err))
+	}
+	p := fmt.Sprintf("%s%s%s", absPlanFolder, common.AZCOPY_PATH_SEPARATOR_STRING, fileName)
 	// Resolve the absolute path and ensure it is within the safe directory
 	absPath, err := filepath.Abs(p)
-	if err != nil || !strings.HasPrefix(absPath, common.AzcopyJobPlanFolder) {
+	if err != nil || !strings.HasPrefix(absPath, absPlanFolder) {
 		return "", fmt.Errorf("resolved path is outside the safe directory: %s", absPath)
 	}
 	return absPath, nil

@@ -38,7 +38,10 @@ var AzcopyCurrentJobLogger ILoggerResetable
 
 // TODO: (gapra) I think this should actually be a function on the logger?
 
-// LogToJobLogWithPrefix logs a message with a prefix.
+// LogToJobLogWithPrefix logs a message to the current job logger.
+// It applies a level-based prefix (e.g., "WARN:") for messages with a severity
+// level of LogWarning or higher. This helps distinguish warnings and errors
+// from informational messages in the logs.
 func LogToJobLogWithPrefix(msg string, level LogLevel) {
 	if AzcopyCurrentJobLogger != nil {
 		prefix := ""

@@ -44,7 +44,7 @@ func (c Client) CleanJobs(opts CleanJobsOptions) (result CleanJobsResult, err er
 	status := common.IffNil(opts.WithStatus, common.EJobStatus.All())
 
 	if status == common.EJobStatus.All() {
-		result.Count, err = jobsAdmin.BlindDeleteAllJobFiles(c.CurrentJobID)
+		result.Count, err = jobsAdmin.DeleteAllJobFilesExceptCurrent(c.CurrentJobID)
 	} else {
 		resp := jobsAdmin.ListJobs(status)
 		if resp.ErrorMessage != "" {
