@@ -1174,7 +1174,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	// TODO: Remove this check when FileBlob w/ File OAuth works.
 	if cca.FromTo.IsS2S() && cca.FromTo.From().IsFile() &&
-		srcCredInfo.CredentialType.IsAzureOAuth() && (cca.FromTo.To() != common.ELocation.File() || cca.FromTo.To() != common.ELocation.FileNFS()) {
+		srcCredInfo.CredentialType.IsAzureOAuth() && (cca.FromTo.To() != common.ELocation.File() && cca.FromTo.To() != common.ELocation.FileNFS()) {
 		return fmt.Errorf("S2S copy from Azure File authenticated with Azure AD to Blob/BlobFS is not supported")
 	}
 
