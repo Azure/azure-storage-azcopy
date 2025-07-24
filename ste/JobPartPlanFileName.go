@@ -7,7 +7,6 @@ import (
 	"io"
 	"math"
 	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
@@ -18,39 +17,23 @@ import (
 
 type JobPartPlanFileName string
 
-func (jppfn JobPartPlanFileName) Exists() bool {
-	path, err := jppfn.GetJobPartPlanPath()
-	common.PanicIfErr(err)
-	_, err = os.Stat(path)
+func (jppfn *JobPartPlanFileName) Exists() bool {
+	_, err := os.Stat(jppfn.GetJobPartPlanPath())
 	return err == nil
 }
 
-func (jppfn JobPartPlanFileName) GetJobPartPlanPath() (string, error) {
-	fileName := string(jppfn)
-	// Validate the filename to prevent path traversal
-	if strings.Contains(fileName, "..") || strings.Contains(fileName, "/") || strings.Contains(fileName, "\\") {
-		return "", fmt.Errorf("invalid JobPartPlanFileName: %s", fileName)
+func (jppfn *JobPartPlanFileName) GetJobPartPlanPath() string {
+	if common.AzcopyJobPlanFolder != "" {
+		return fmt.Sprintf("%s%s%s", common.AzcopyJobPlanFolder, common.AZCOPY_PATH_SEPARATOR_STRING, string(*jppfn))
+	} else {
+		return string(*jppfn)
 	}
-	if common.AzcopyJobPlanFolder == "" {
-		panic("invalid state, AzcopyJobPlanFolder should not be an empty string")
-	}
-	absPlanFolder, err := filepath.Abs(common.AzcopyJobPlanFolder)
-	if err != nil {
-		panic(fmt.Sprintf("failed to resolve AzcopyJobPlanFolder to an absolute path: %v", err))
-	}
-	p := fmt.Sprintf("%s%s%s", absPlanFolder, common.AZCOPY_PATH_SEPARATOR_STRING, fileName)
-	// Resolve the absolute path and ensure it is within the safe directory
-	absPath, err := filepath.Abs(p)
-	if err != nil || !strings.HasPrefix(absPath, absPlanFolder) {
-		return "", fmt.Errorf("resolved path is outside the safe directory: %s", absPath)
-	}
-	return absPath, nil
 }
 
 const JobPartPlanFileNameFormat = "%v--%05d.steV%d"
 
 // TODO: This needs testing
-func (jppfn JobPartPlanFileName) Parse() (jobID common.JobID, partNumber common.PartNumber, err error) {
+func (jpfn JobPartPlanFileName) Parse() (jobID common.JobID, partNumber common.PartNumber, err error) {
 	var dataSchemaVersion common.Version
 	// n, err := fmt.Sscanf(string(jpfn), jobPartPlanFileNameFormat, &jobID, &partNumber, &dataSchemaVersion)
 	// if err != nil || n != 3 {
@@ -60,10 +43,10 @@ func (jppfn JobPartPlanFileName) Parse() (jobID common.JobID, partNumber common.
 	//	err = fmt.Errorf("job part Plan file's data schema version ('%d') doesn't match whatthis app requires ('%d')", dataSchemaVersion, DataSchemaVersion)
 	// }
 	// TODO: confirm the alternative approach. fmt.Sscanf not working for reading back string into struct JobId.
-	jpfnSplit := strings.Split(string(jppfn), "--")
+	jpfnSplit := strings.Split(string(jpfn), "--")
 	jobId, err := common.ParseJobID(jpfnSplit[0])
 	if err != nil {
-		err = fmt.Errorf("failed to parse the JobId from JobPartFileName %s. Failed with error %w", string(jppfn), err) //nolint:staticcheck
+		err = fmt.Errorf("failed to parse the JobId from JobPartFileName %s. Failed with error %w", string(jpfn), err) //nolint:staticcheck
 		common.GetLifecycleMgr().Warn(err.Error())
 	}
 	jobID = jobId
@@ -77,15 +60,13 @@ func (jppfn JobPartPlanFileName) Parse() (jobID common.JobID, partNumber common.
 	return
 }
 
-func (jppfn JobPartPlanFileName) Delete() error {
-	return os.Remove(string(jppfn))
+func (jpfn JobPartPlanFileName) Delete() error {
+	return os.Remove(string(jpfn))
 }
 
-func (jppfn JobPartPlanFileName) Map() *JobPartPlanMMF {
-	p, err := jppfn.GetJobPartPlanPath()
-	common.PanicIfErr(err)
+func (jpfn JobPartPlanFileName) Map() *JobPartPlanMMF {
 	// opening the file with given filename
-	file, err := os.OpenFile(p, os.O_RDWR, common.DEFAULT_FILE_PERM)
+	file, err := os.OpenFile(jpfn.GetJobPartPlanPath(), os.O_RDWR, common.DEFAULT_FILE_PERM)
 	common.PanicIfErr(err)
 	// Ensure the file gets closed (although we can continue to use the MMF)
 	defer file.Close()
@@ -98,11 +79,9 @@ func (jppfn JobPartPlanFileName) Map() *JobPartPlanMMF {
 }
 
 // createJobPartPlanFile creates the memory map JobPartPlanHeader using the given JobPartOrder and JobPartPlanBlobData
-func (jppfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
-	p, err := jppfn.GetJobPartPlanPath()
-	common.PanicIfErr(err)
-	if jppfn.Exists() {
-		panic(fmt.Sprint("Duplicate job created. You probably shouldn't ever see this, but if you do, try cleaning out", p))
+func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
+	if jpfn.Exists() {
+		panic(fmt.Sprint("Duplicate job created. You probably shouldn't ever see this, but if you do, try cleaning out", jpfn.GetJobPartPlanPath()))
 	}
 
 	// Validate that the passed-in strings can fit in their respective fields
@@ -163,9 +142,9 @@ func (jppfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 
 	// create the Job Part Plan file
 	// planPathname := planDir + "/" + string(jpfn)
-	file, err := os.Create(p)
+	file, err := os.Create(jpfn.GetJobPartPlanPath())
 	if err != nil {
-		panic(fmt.Errorf("couldn't create job part plan file %q: %w", jppfn, err))
+		panic(fmt.Errorf("couldn't create job part plan file %q: %w", jpfn, err))
 	}
 	defer file.Close()
 
