@@ -1,7 +1,6 @@
 package e2etest
 
 import (
-	"fmt"
 	"os/user"
 	"runtime"
 	"strconv"
@@ -562,7 +561,6 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 		Objects: srcObjs,
 	}, false)
 
-	fmt.Println("StdOut: ", stdOut)
 	ValidateHardlinkedSkippedCount(svm, stdOut, 2)
 }
 
@@ -834,7 +832,7 @@ func (s *FilesNFSTestSuite) Scenario_DstShareDoesNotExists(svm *ScenarioVariatio
 				},
 			},
 		})
-	fmt.Println("StdOut: ", stdOut)
+
 	// Dont validate the root directory in case of sync
 	if azCopyVerb == AzCopyVerbSync {
 		delete(srcObjs, rootDir)
