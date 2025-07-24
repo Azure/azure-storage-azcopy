@@ -100,7 +100,7 @@ func (p *tokenBucketPacer) RequestTrafficAllocation(ctx context.Context, byteCou
 	}
 
 	if targetBytes < byteCount {
-		return errors.New("request size greater than pacer target")
+		return errors.New("request size greater than pacer target. ensure --block-size-mb is smaller than --cap-mbps and retry the transfer")
 	}
 
 	// block until tokens are available
