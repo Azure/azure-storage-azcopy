@@ -116,18 +116,12 @@ func (s *JobsShowSuite) Scenario_JobsShow(svm *ScenarioVariationManager) {
 
 	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{}).
 		GetObject(svm, "test", common.EEntityType.File())
-	sasOpts := GenericAccountSignatureValues{}
 	completed, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
 			Verb: AzCopyVerbCopy,
 			Targets: []ResourceManager{
-				TryApplySpecificAuthType(srcObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
-					SASTokenOptions: sasOpts,
-				}),
-				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
-					SASTokenOptions: sasOpts,
-				}),
+				srcObj, dstObj,
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
