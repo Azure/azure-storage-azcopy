@@ -31,6 +31,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -60,6 +61,12 @@ type fileTraverser struct {
 
 	// skipRootProperties bool // if true, we skip properties of the root directory/file
 	skipRootProperties bool
+
+	// As per https://learn.microsoft.com/en-us/rest/api/storageservices/list-directories-and-files,
+	// the listing of files and directories does not include extended info by default.
+	// To retrieve current property values, use x-ms-file-extended-info: true for a directory
+	// located on a File Share with SMB protocol enabled, or call Get File Properties against the specific file.
+	includeExtendedInfo bool // whether to include extended info in the listing, such as SMB properties
 }
 
 // ErrorFileInfo holds information about files and folders that failed enumeration.
@@ -228,7 +235,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		return path != "" && strings.Trim(path, ".") == ""
 	}
 	// if not pointing to a share, check if we are pointing to a single file
-	if targetURLParts.DirectoryOrFilePath != "" {
+	if !UseSyncOrchestrator && targetURLParts.DirectoryOrFilePath != "" {
 		if invalidBlobOrWindowsName(targetURLParts.DirectoryOrFilePath) {
 			t.writeToErrorChannel(ErrorAzFileInfo{
 				FilePath: targetURLParts.DirectoryOrFilePath,
@@ -325,7 +332,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		var contentProps contentPropsProvider = noContentProps
 		var metadata common.Metadata
 
-		fullProperties, err := f.propertyGetter(t.ctx)
+		fullProperties, err := f.propertyGetter(t.ctx, !t.includeExtendedInfo)
 		if err != nil {
 			return StoredObject{
 				relativePath: relativePath,
@@ -400,9 +407,15 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	// Our rule is that enumerators of folder-aware sources should include the root folder's properties.
 	// So include the root dir/share in the enumeration results, if it exists or is just the share root.
 	// XDM: We are breaking this rule in the case of SyncOrchestrator, because of directory level processing.
-	_, err = directoryClient.GetProperties(t.ctx, nil)
+	_, err = common.WithNetworkRetry(
+		t.ctx,
+		azcopyScanningLogger,
+		"directory properties",
+		func() (directory.GetPropertiesResponse, error) {
+			return directoryClient.GetProperties(t.ctx, nil)
+		})
 	if !t.skipRootProperties && (err == nil || targetURLParts.DirectoryOrFilePath == "") {
-		s, err := convertToStoredObject(newAzFileRootDirectoryEntity(directoryClient, ""))
+		s, err := convertToStoredObject(newAzFileRootDirectoryEntity(directoryClient, nil))
 		if err != nil {
 			return err
 		}
@@ -416,10 +429,29 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	// This func must be threadsafe/goroutine safe
 	enumerateOneDir := func(dir parallel.Directory, enqueueDir func(parallel.Directory), enqueueOutput func(parallel.DirectoryEntry, error)) error {
 		currentDirectoryClient := dir.(*directory.Client)
-		pager := currentDirectoryClient.NewListFilesAndDirectoriesPager(nil)
+
+		var dirListOptions *directory.ListFilesAndDirectoriesOptions = nil
+		if t.includeExtendedInfo {
+			dirListOptions = &directory.ListFilesAndDirectoriesOptions{
+				Include: directory.ListFilesInclude{
+					Timestamps:    true,
+					ETag:          true,
+					PermissionKey: true,
+					Attributes:    true},
+				IncludeExtendedInfo: &t.includeExtendedInfo}
+		}
+		pager := currentDirectoryClient.NewListFilesAndDirectoriesPager(dirListOptions)
+
 		var marker *string
 		for pager.More() {
-			lResp, err := pager.NextPage(t.ctx)
+			lResp, err := common.WithNetworkRetry(
+				t.ctx,
+				azcopyScanningLogger,
+				"directory enumeration",
+				func() (directory.ListFilesAndDirectoriesResponse, error) {
+					return pager.NextPage(t.ctx)
+				})
+
 			if err != nil {
 				return fmt.Errorf("cannot list files due to reason %w", err)
 			}
@@ -449,7 +481,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 						azcopyScanningLogger.Log(common.LogWarning, fmt.Sprintf(trailingDotErrMsg, *dirInfo.Name))
 					}
 				}
-				enqueueOutput(newAzFileSubdirectoryEntity(currentDirectoryClient, *dirInfo.Name), nil)
+				enqueueOutput(newAzFileSubdirectoryEntity(currentDirectoryClient, dirInfo), nil)
 				if t.recursive {
 					// If recursive is turned on, add sub directories to be processed
 					enqueueDir(currentDirectoryClient.NewSubdirectoryClient(*dirInfo.Name))
@@ -509,7 +541,9 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			if !t.trailingDot.IsEnabled() && checkAllDots(relativePath) {
 				glcm.Error(fmt.Sprintf(allDotsErrorMsg, relativePath))
 			}
-			glcm.Info("Failed to scan Directory/File " + relativePath + ". Logging errors in scanning logs.")
+			if !buildmode.IsMover {
+				glcm.Info("Failed to scan Directory/File " + relativePath + ". Logging errors in scanning logs.")
+			}
 
 			if azcopyScanningLogger != nil {
 				azcopyScanningLogger.Log(common.LogWarning, workerError.Error())
@@ -551,6 +585,11 @@ func newFileTraverser(rawURL string, serviceClient *service.Client, ctx context.
 
 	t.skipRootProperties = UseSyncOrchestrator && !t.recursive
 
+	// Set this to true if we are using SyncOrchestrator and getProperties is true
+	// We are disabling it for NFS copy as it needs few properties like LinkCount, FileID
+	// which are not available in the listing operation.
+	t.includeExtendedInfo = UseSyncOrchestrator && t.getProperties && !isNFSCopy
+
 	return
 }
 
@@ -559,7 +598,7 @@ type azfileEntity struct {
 	name           string
 	contentLength  int64
 	url            string
-	propertyGetter func(ctx context.Context) (filePropsProvider, error)
+	propertyGetter func(ctx context.Context, fetchFullProperties bool) (filePropsProvider, error)
 	entityType     common.EntityType
 }
 
@@ -569,33 +608,66 @@ func newAzFileFileEntity(parentDirectoryClient *directory.Client, fileInfo *dire
 		*fileInfo.Name,
 		*fileInfo.Properties.ContentLength,
 		fileClient.URL(),
-		func(ctx context.Context) (filePropsProvider, error) {
-			fileProperties, err := fileClient.GetProperties(ctx, nil)
-			if err != nil {
-				return nil, err
+		func(ctx context.Context, fetchFullProperties bool) (filePropsProvider, error) {
+			if fetchFullProperties {
+				fileProperties, err := common.WithNetworkRetry(
+					ctx,
+					azcopyScanningLogger,
+					"file properties",
+					func() (file.GetPropertiesResponse, error) {
+						return fileClient.GetProperties(ctx, nil)
+					})
+				if err != nil {
+					return nil, err
+				}
+				return shareFilePropertiesAdapter{&fileProperties}, nil
+			} else {
+				// if we are not fetching full properties, we can just return the properties from the listing
+				return shareDirectoryFilePropertiesAdapter{fileInfo.Properties}, nil
 			}
-			return shareFilePropertiesAdapter{&fileProperties}, nil
 		},
 		common.EEntityType.File(),
 	}
 }
 
-func newAzFileSubdirectoryEntity(parentDirectoryClient *directory.Client, dirName string) azfileEntity {
+func newAzFileSubdirectoryEntity(parentDirectoryClient *directory.Client, dirInfo *directory.Directory) azfileEntity {
+	dirName := "" // if dirInfo is nil, it means we are at the root directory
+	if dirInfo != nil {
+		dirName = *dirInfo.Name
+	}
 	directoryClient := parentDirectoryClient.NewSubdirectoryClient(dirName)
-	return newAzFileRootDirectoryEntity(directoryClient, dirName) // now that we have directoryClient, the logic is same as if it was the root
+	return newAzFileRootDirectoryEntity(directoryClient, dirInfo) // now that we have directoryClient, the logic is same as if it was the root
 }
 
-func newAzFileRootDirectoryEntity(directoryClient *directory.Client, name string) azfileEntity {
+func newAzFileRootDirectoryEntity(directoryClient *directory.Client, dirInfo *directory.Directory) azfileEntity {
+	dirName := "" // if dirInfo is nil, it means we are at the root directory
+	var dirProperties *directory.FileProperty = nil
+	if dirInfo != nil {
+		dirName = *dirInfo.Name
+		dirProperties = dirInfo.Properties
+	}
+
 	return azfileEntity{
-		name,
+		dirName,
 		0,
 		directoryClient.URL(),
-		func(ctx context.Context) (filePropsProvider, error) {
-			directoryProperties, err := directoryClient.GetProperties(ctx, nil)
-			if err != nil {
-				return nil, err
+		func(ctx context.Context, fetchFullProperties bool) (filePropsProvider, error) {
+			if fetchFullProperties {
+				directoryProperties, err := common.WithNetworkRetry(
+					ctx,
+					azcopyScanningLogger,
+					"directory properties",
+					func() (directory.GetPropertiesResponse, error) {
+						return directoryClient.GetProperties(ctx, nil)
+					})
+				if err != nil {
+					return nil, err
+				}
+				return shareDirectoryPropertiesAdapter{&directoryProperties}, nil
+			} else {
+				// if we are not fetching full properties, we can just return the properties from the listing
+				return shareDirectoryFilePropertiesAdapter{dirProperties}, nil
 			}
-			return shareDirectoryPropertiesAdapter{&directoryProperties}, nil
 		},
 		common.EEntityType.Folder(),
 	}
