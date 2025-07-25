@@ -62,7 +62,6 @@ func Test_MultipleProcessWithMockedLCM(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
 	mockLCM := mockedLifecycleManager{warnLog: make(chan string, 50)}
 	mockLCM.SetOutputFormat(common.EOutputFormat.Text()) // text format
 	mockedRPC.init()

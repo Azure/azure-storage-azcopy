@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
+	"github.com/Azure/azure-storage-azcopy/v10/testSuite/cmd"
 	"log"
 	"net/http"
 	"os"
@@ -189,7 +190,7 @@ var rootCmd = &cobra.Command{
 
 func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
 	currPid := os.Getpid()
-	WarnMultipleProcesses(getAzCopyAppPath(), currPid)
+	AsyncWarnMultipleProcesses(cmd.GetAzCopyAppPath(), currPid)
 	jobsAdmin.BenchmarkResults = isBench
 	Client, err = azcopy.NewClient(azcopy.ClientOptions{CapMbps: CapMbps})
 	if err != nil {
