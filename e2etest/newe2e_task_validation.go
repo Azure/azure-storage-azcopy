@@ -295,7 +295,7 @@ func ValidateListTextOutput(a Asserter, stdout AzCopyStdout, expectedObjects map
 	}
 
 	for _, line := range stdout.RawStdout() {
-		if line != "" {
+		if line != "" && !strings.HasPrefix(line, "WARN") {
 			// checking summary lines first if they exist
 			if strings.Contains(line, "File count:") {
 				fileCount := strings.Split(line, ":")

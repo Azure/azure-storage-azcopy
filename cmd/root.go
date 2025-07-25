@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
+	"github.com/Azure/azure-storage-azcopy/v10/testSuite/cmd"
 	"log"
 	"net/http"
 	"os"
@@ -188,6 +189,8 @@ var rootCmd = &cobra.Command{
 }
 
 func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
+	currPid := os.Getpid()
+	AsyncWarnMultipleProcesses(cmd.GetAzCopyAppPath(), currPid)
 	jobsAdmin.BenchmarkResults = isBench
 	Client, err = azcopy.NewClient(azcopy.ClientOptions{CapMbps: CapMbps})
 	if err != nil {
@@ -343,7 +346,7 @@ func beginDetectNewVersion() chan struct{} {
 			return
 		}
 
-		// step 1: fetch & validate cached version and if it is updated, return without making API calls
+		// Step 1: Fetch & validate cached version. If it is up to date, we return without making API calls
 		filePath := filepath.Join(common.LogPathFolder, "latest_version.txt")
 		cachedVersion, err := ValidateCachedVersion(filePath) // same as the remote version
 		if err == nil {
