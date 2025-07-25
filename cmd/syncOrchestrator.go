@@ -585,9 +585,11 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 	mainCtx, cancel := context.WithCancel(ctx) // Use mainCtx for operations, cancel to signal shutdown
 	defer cancel()                             // Ensure cancellation happens on exit
 
+	cca.orchestratorCancel = cancel // Store cancel function for later use
+
 	// Initialize semaphore for directory concurrency control
 	if enableThrottling {
-		dirSemaphore = NewDirSemaphore(ctx)
+		dirSemaphore = NewDirSemaphore(mainCtx)
 		defer dirSemaphore.Close()
 	}
 
@@ -808,33 +810,51 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		return err
 	}
 
+	// Ensure proper cleanup in ALL scenarios (success, failure, cancellation)
+	cleanupFunc := func() {
+		// Always shutdown monitoring goroutines
+		WarnStdoutAndScanningLog("Shutting down monitors...")
+		if enableThrottling {
+			semaphoreMonitorWg.Wait()
+		}
+
+		WarnStdoutAndScanningLog(fmt.Sprintf("Orchestrator exiting. Execution time: %v.", time.Since(startTime)))
+	}
+	defer cleanupFunc()
+
 	crawlWg.Add(1) // Add the root directory to the WaitGroup
 
 	// Start parallel crawling with specified concurrency
 	parallel.Crawl(mainCtx, root, syncOneDir, int(crawlParallelism))
 
-	if enableDebugLogs {
-		WarnStdoutAndScanningLog("Crawl completed. Waiting for all directory processors to finish...")
-	}
-	crawlWg.Wait() // Wait for all tasks (root + enqueued via syncOneDir) to complete
-	WarnStdoutAndScanningLog("All sync traversers exited.")
+	// Cancellation-aware wait
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		crawlWg.Wait() // Wait for all goroutines in background
+	}()
 
-	// Finalize the enumerator to complete any remaining operations
-	WarnStdoutAndScanningLog("Finalizing enumerator...")
-	err = enumerator.finalize()
-	if err != nil {
-		WarnStdoutAndScanningLog(fmt.Sprintf("Enumerator finalize failed: %v", err))
-		return err
+	select {
+	case <-done:
+		// All goroutines completed normally
+		WarnStdoutAndScanningLog("All sync traversers exited.")
+
+	case <-mainCtx.Done():
+		// Cancellation occurred
+		WarnStdoutAndScanningLog("Orchestrator cancellation detected.")
+		return nil
 	}
 
-	// Shutdown all monitoring goroutines
-	WarnStdoutAndScanningLog("All operations complete. Shutting down monitors...")
-	cancel() // Signal all goroutines using mainCtx to stop
-
-	if enableThrottling {
-		semaphoreMonitorWg.Wait()
+	// Always try to finalize the enumerator. This will set cancellation complete and dispatch final part
+	WarnStdoutAndScanningLog("Finalizing enumerator.")
+	finalizeErr := enumerator.finalize()
+	if finalizeErr != nil {
+		WarnStdoutAndScanningLog(fmt.Sprintf("Enumerator finalize failed: %v", finalizeErr))
+		// If no previous error, use the finalize error
+		if err == nil {
+			err = finalizeErr
+		}
 	}
-	WarnStdoutAndScanningLog(fmt.Sprintf("Orchestrator exiting. Execution time: %v.", time.Since(startTime)))
 
 	return err
 }
