@@ -336,7 +336,7 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 
 func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
 	// set up the front end scanning logger
-	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, LogLevel, azcopyLogPathFolder, "-scanning")
+	azcopyScanningLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "-scanning")
 	azcopyScanningLogger.OpenLog()
 	glcm.RegisterCloseFunc(func() {
 		azcopyScanningLogger.CloseLog()
@@ -344,7 +344,7 @@ func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
 
 	// if no logging, set this empty so that we don't display the log location
 	if LogLevel == common.LogNone {
-		azcopyLogPathFolder = ""
+		common.LogPathFolder = ""
 	}
 
 	// display a warning message to console and job log file if there is a sync operation being performed from local to file share.
@@ -352,9 +352,8 @@ func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
 	if cooked.fromTo == common.EFromTo.LocalFile() {
 
 		glcm.Warn(LocalToFileShareWarnMsg)
-		if jobsAdmin.JobsAdmin != nil {
-			jobsAdmin.JobsAdmin.LogToJobLog(LocalToFileShareWarnMsg, common.LogWarning)
-		}
+		common.LogToJobLogWithPrefix(LocalToFileShareWarnMsg, common.LogWarning)
+
 		if cooked.dryrunMode {
 			glcm.Dryrun(func(of common.OutputFormat) string {
 				if of == common.EOutputFormat.Json() {
@@ -373,7 +372,7 @@ func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
 	}
 
 	// use the globally generated JobID
-	cooked.jobID = azcopyCurrentJobID
+	cooked.jobID = Client.CurrentJobID
 
 	cooked.blockSize, err = blockSizeInBytes(cooked.blockSizeMB)
 	if err != nil {
@@ -536,8 +535,8 @@ func (cca *cookedSyncCmdArgs) waitUntilJobCompletion(blocking bool) {
 	// print initial message to indicate that the job is starting
 	// Output the log location if log-level is set to other then NONE
 	var logPathFolder string
-	if azcopyLogPathFolder != "" {
-		logPathFolder = fmt.Sprintf("%s%s%s.log", azcopyLogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
+	if common.LogPathFolder != "" {
+		logPathFolder = fmt.Sprintf("%s%s%s.log", common.LogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
 	}
 	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), logPathFolder, false, ""))
 
@@ -629,8 +628,8 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 
 	// fetch a job status and compute throughput if the first part was dispatched
 	if cca.firstPartOrdered() {
-		Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
-		Rpc(common.ERpcCmd.GetJobLCMWrapper(), &cca.jobID, &lcm)
+		summary = jobsAdmin.GetJobSummary(cca.jobID)
+		lcm = jobsAdmin.GetJobLCMWrapper(cca.jobID)
 		jobDone = summary.JobStatus.IsJobDone()
 		totalKnownCount = summary.TotalTransfers
 

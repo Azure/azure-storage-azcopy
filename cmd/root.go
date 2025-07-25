@@ -24,10 +24,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"log"
 	"net/http"
 	"os"
-	"path"
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
@@ -42,7 +42,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var azcopyLogPathFolder string
 var outputFormatRaw string
 var outputVerbosityRaw string
 var logVerbosityRaw string
@@ -61,18 +60,14 @@ var TrustedSuffixes string
 var azcopyAwaitContinue bool
 var azcopyAwaitAllowOpenFiles bool
 var azcopyScanningLogger common.ILoggerResetable
-var azcopyCurrentJobID common.JobID
 var isPipeDownload bool
 var retryStatusCodes string
 var debugMemoryProfile string
 
-type jobLoggerInfo struct {
-	jobID         common.JobID
-	logFileFolder string
-}
-
 // It would be preferable if this was a local variable, since it just gets altered and shot off to the STE
 var debugSkipFiles string
+
+var Client azcopy.Client
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -192,44 +187,40 @@ var rootCmd = &cobra.Command{
 	},
 }
 
-func Initialize(resumeJobID common.JobID, isBench bool) error {
-	azcopyLogPathFolder, common.AzcopyJobPlanFolder = initializeFolders()
-
-	configureGoMaxProcs()
-
-	// Perform os specific initialization
-	azcopyMaxFileAndSocketHandles, err := processOSSpecificInitialization()
+func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
+	jobsAdmin.BenchmarkResults = isBench
+	Client, err = azcopy.NewClient(azcopy.ClientOptions{CapMbps: CapMbps})
 	if err != nil {
-		log.Fatalf("initialization failed: %v", err)
+		return err
 	}
-	jobID := common.NewJobID()
-	azcopyCurrentJobID = jobID
-	loggerInfo := jobLoggerInfo{jobID, azcopyLogPathFolder}
+	Client.CurrentJobID = resumeJobID
+	if Client.CurrentJobID.IsEmpty() {
+		Client.CurrentJobID = common.NewJobID()
+	}
 
 	timeAtPrestart := time.Now()
 	glcm.SetOutputFormat(OutputFormat)
 	glcm.SetOutputVerbosity(OutputLevel)
 
-	if !resumeJobID.IsEmpty() {
-		loggerInfo.jobID = resumeJobID
-	}
-
-	common.AzcopyCurrentJobLogger = common.NewJobLogger(loggerInfo.jobID, LogLevel, loggerInfo.logFileFolder, "")
+	common.AzcopyCurrentJobLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "")
 	common.AzcopyCurrentJobLogger.OpenLog()
 
 	glcm.SetForceLogging()
 
-	// currently, we only automatically do auto-tuning when benchmarking
-	preferToAutoTuneGRs, providePerformanceAdvice := isBench, isBench
+	// For benchmarking, try to autotune if possible, otherwise use the default values
+	if jobsAdmin.JobsAdmin != nil && isBench {
+		envVar := common.EEnvironmentVariable.ConcurrencyValue()
+		userValue := common.GetEnvironmentVariable(envVar)
+		if userValue == "" || userValue == "auto" {
+			jobsAdmin.JobsAdmin.SetConcurrencySettingsToAuto()
+		} else {
+			// Tell user that we can't actually auto tune, because configured value takes precedence
+			// This case happens when benchmarking with a fixed value from the env var
+			glcm.Info(fmt.Sprintf("Cannot auto-tune concurrency because it is fixed by environment variable %s", envVar.Name))
+		}
 
-	// startup of the STE happens here, so that the startup can access the values of command line parameters that are defined for "root" command
-	concurrencySettings := ste.NewConcurrencySettings(azcopyMaxFileAndSocketHandles, preferToAutoTuneGRs)
-	err = jobsAdmin.MainSTE(concurrencySettings, float64(CapMbps), common.AzcopyJobPlanFolder, azcopyLogPathFolder, providePerformanceAdvice)
-	if err != nil {
-		return err
 	}
-	EnumerationParallelism = concurrencySettings.EnumerationPoolSize.Value
-	EnumerationParallelStatFiles = concurrencySettings.ParallelStatFiles.Value
+	EnumerationParallelism, EnumerationParallelStatFiles = jobsAdmin.JobsAdmin.GetConcurrencySettings()
 
 	// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter
 	// Subtract a few seconds, to ensure that this date DEFINITELY falls before the LMT of any file changed while this
@@ -239,7 +230,7 @@ func Initialize(resumeJobID common.JobID, isBench bool) error {
 	startTimeMessage := fmt.Sprintf("ISO 8601 START TIME: to copy files that changed before or after this job started, use the parameter --%s=%s or --%s=%s",
 		common.IncludeBeforeFlagName, IncludeBeforeDateFilter{}.FormatAsUTC(adjustedTime),
 		common.IncludeAfterFlagName, IncludeAfterDateFilter{}.FormatAsUTC(adjustedTime))
-	jobsAdmin.JobsAdmin.LogToJobLog(startTimeMessage, common.LogInfo)
+	common.LogToJobLogWithPrefix(startTimeMessage, common.LogInfo)
 
 	if !SkipVersionCheck && !isPipeDownload {
 		// spawn a routine to fetch and compare the local application's version against the latest version available
@@ -278,47 +269,6 @@ func InitializeAndExecute() {
 			}
 		}
 		glcm.Exit(nil, common.EExitCode.Success())
-	}
-}
-
-func initializeFolders() (azcopyLogPathFolder, azcopyJobPlanFolder string) {
-	azcopyLogPathFolder = common.GetEnvironmentVariable(common.EEnvironmentVariable.LogLocation())     // user specified location for log files
-	azcopyJobPlanFolder = common.GetEnvironmentVariable(common.EEnvironmentVariable.JobPlanLocation()) // user specified location for plan files
-
-	// note: azcopyAppPathFolder is the default location for all AzCopy data (logs, job plans, oauth token on Windows)
-	// but all the above can be put elsewhere as they can become very large
-	azcopyAppPathFolder := getAzCopyAppPath()
-
-	// the user can optionally put the log files somewhere else
-	if azcopyLogPathFolder == "" {
-		azcopyLogPathFolder = azcopyAppPathFolder
-	}
-	if err := os.Mkdir(azcopyLogPathFolder, os.ModeDir|os.ModePerm); err != nil && !os.IsExist(err) {
-		log.Fatalf("Problem making .azcopy directory. Try setting AZCOPY_LOG_LOCATION env variable. %v", err)
-	}
-
-	// the user can optionally put the plan files somewhere else
-	if azcopyJobPlanFolder == "" {
-		// make the app path folder ".azcopy" first so we can make a plans folder in it
-		if err := os.MkdirAll(azcopyAppPathFolder, os.ModeDir); err != nil && !os.IsExist(err) {
-			log.Fatalf("Problem making .azcopy directory. Try setting AZCOPY_JOB_PLAN_LOCATION env variable. %v", err)
-		}
-		azcopyJobPlanFolder = path.Join(azcopyAppPathFolder, "plans")
-	}
-
-	if err := os.MkdirAll(azcopyJobPlanFolder, os.ModeDir|os.ModePerm); err != nil && !os.IsExist(err) {
-		log.Fatalf("Problem making .azcopy directory. Try setting AZCOPY_JOB_PLAN_LOCATION env variable. %v", err)
-	}
-	return
-}
-
-// Ensure we always have more than 1 OS thread running goroutines, since there are issues with having just 1.
-// (E.g. version check doesn't happen at login time, if have only one go proc. Not sure why that happens if have only one
-// proc. Is presumably due to the high CPU usage we see on login if only 1 CPU, even tho can't see any busy-wait in that code)
-func configureGoMaxProcs() {
-	isOnlyOne := runtime.GOMAXPROCS(0) == 1
-	if isOnlyOne {
-		runtime.GOMAXPROCS(2)
 	}
 }
 
@@ -393,8 +343,8 @@ func beginDetectNewVersion() chan struct{} {
 			return
 		}
 
-		// Step 1: Fetch & validate cached version. If it is up to date, we return without making API calls
-		filePath := filepath.Join(azcopyLogPathFolder, "latest_version.txt")
+		// step 1: fetch & validate cached version and if it is updated, return without making API calls
+		filePath := filepath.Join(common.LogPathFolder, "latest_version.txt")
 		cachedVersion, err := ValidateCachedVersion(filePath) // same as the remote version
 		if err == nil {
 			PrintOlderVersion(*cachedVersion, *localVersion)

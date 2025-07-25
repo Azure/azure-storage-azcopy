@@ -1,4 +1,7 @@
-// Copyright © 2017 Microsoft <wastore@microsoft.com>
+//go:build linux || darwin
+// +build linux darwin
+
+// Copyright © 2025 Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,54 +23,14 @@
 
 package common
 
-// TODO : Remove this?
-// GetBlocksRoundedUp returns the number of blocks given size, rounded up
-func GetBlocksRoundedUp(size uint64, blockSize uint64) uint16 {
-	return uint16(size/blockSize) + uint16(Iff((size%blockSize) == 0, 0, 1))
-}
+import (
+	"path"
+)
 
-func FirstOrZero[T any](list []T) T {
-	if len(list) != 0 {
-		return list[0]
-	}
-
-	var zero T
-	return zero
-}
-
-func DerefOrZero[T any](in *T) (out T) {
-	if in != nil {
-		out = *in
-	}
-
-	return
-}
-
-func Iff[T any](test bool, trueVal, falseVal T) T {
-	if test {
-		return trueVal
-	}
-	return falseVal
-}
-
-func IffNil[T any](wanted *T, instead T) T {
-	if wanted == nil {
-		return instead
-	}
-	return *wanted
-}
-
-func IffNotNil[T any](wanted *T, instead T) T {
-	if wanted == nil {
-		return instead
-	}
-
-	return *wanted
-}
-
-func IffNotEmpty(wanted string) *string {
-	if wanted == "" {
-		return nil
-	}
-	return &wanted
+// getAzCopyAppPath returns the path of Azcopy folder in local appdata.
+// Azcopy folder in local appdata contains all the files created by azcopy locally.
+func getAzCopyAppPath() string {
+	localAppData := GetEnvironmentVariable(EEnvironmentVariable.UserDir())
+	azcopyAppDataFolder := path.Join(localAppData, ".azcopy")
+	return azcopyAppDataFolder
 }
