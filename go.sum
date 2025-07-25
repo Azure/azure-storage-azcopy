@@ -37,8 +37,8 @@ github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.2 h1:FwladfywkNirM+FZY
 github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.2/go.mod h1:vv5Ad0RrIoT1lJFdWBZwt4mB1+j+V8DUroixmKDTCdk=
 github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake v1.2.0 h1:gXpwp0sGZz2FY9lVpSdM1rMpsP9PUtevHQyFhGoqHxY=
 github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake v1.2.0/go.mod h1:K+OqH/n5xyCEvbenN5OtZMycqHRCeoHh0whMoRjWYK4=
-github.com/Azure/azure-sdk-for-go/sdk/storage/azfile v1.3.0 h1:VIM+5hiNPIOmFy2Rax2VW+v7C8lbGEzgd25pnOBR0kY=
-github.com/Azure/azure-sdk-for-go/sdk/storage/azfile v1.3.0/go.mod h1:amxdkUcI+5PQTRqJCPqWXf1CBMh/q3YGuFwyqpwAwd4=
+github.com/Azure/azure-sdk-for-go/sdk/storage/azfile v0.0.0-20250313100248-09ad70aa7647 h1:GxVLSBaAfOLtbs4aXBjWDSED38CdisphC+CnvXm3R9w=
+github.com/Azure/azure-sdk-for-go/sdk/storage/azfile v0.0.0-20250313100248-09ad70aa7647/go.mod h1:m383petyfEybpannVxYprLCciZdaL7DMK+BWDTmfiWk=
 github.com/Azure/go-autorest v14.2.0+incompatible h1:V5VMDjClD3GiElqLWO7mz2MxNAK/vTfRHdAubSIPRgs=
 github.com/Azure/go-autorest v14.2.0+incompatible/go.mod h1:r+4oMnoxhatjLLJ6zxSWATqVooLgysK6ZNox3g/xq24=
 github.com/Azure/go-autorest/autorest/date v0.3.0 h1:7gUk1U5M/CQbp9WoqinNzJar+8KY+LPI6wiWrP/myHw=
