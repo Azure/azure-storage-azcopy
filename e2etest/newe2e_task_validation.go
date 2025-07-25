@@ -484,7 +484,7 @@ func ValidateDryRunOutput(a Asserter, output AzCopyStdout, rootSrc ResourceManag
 	}
 }
 
-func ValidateJobsListOutput(a Asserter, stdout AzCopyStdout, expectedJobIDs int) {
+func ValidateJobsListOutput(a Asserter, stdout AzCopyStdout, expectedJobIDs int, expectedJobs []string) {
 	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
 		return
 	}
@@ -492,6 +492,20 @@ func ValidateJobsListOutput(a Asserter, stdout AzCopyStdout, expectedJobIDs int)
 	jobsListStdout, ok := stdout.(*AzCopyParsedJobsListStdout)
 	a.AssertNow("stdout must be AzCopyParsedJobsListStdout", Equal{}, ok, true)
 	a.Assert("No of jobs executed should be equivalent", Equal{}, expectedJobIDs, jobsListStdout.JobsCount)
+
+	// Create a set of actual job IDs for efficient lookup
+	actualJobs := make(map[string]bool)
+	for _, job := range jobsListStdout.Jobs {
+		j := job.JobId.String()
+		actualJobs[j] = true
+	}
+
+	// Check if each expected job is in the actual jobs list
+	for _, expectedJob := range expectedJobs {
+		if _, found := actualJobs[expectedJob]; !found {
+			a.Assert(fmt.Sprintf("expected job with ID %s not found in jobs list", expectedJob), Always{})
+		}
+	}
 }
 
 func ValidateLogFileRetention(a Asserter, logsDir string, expectedLogFileToRetain int) {
