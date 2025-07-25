@@ -56,9 +56,6 @@ const (
 
 	// Performance tuning constants
 	filesPerGBMemory          = 500_000 // Files per GB of memory
-	crawlMultiplierLocal      = 4       // Local to remote multiplier
-	crawlMultiplierS3         = 8       // S3 to blob multiplier
-	crawlMultiplierDefault    = 2       // Default multiplier
 	snapshotRetentionCount    = 50      // Number of snapshots to keep
 	consistencyThreshold      = 10      // Samples needed for consistency
 	adjustmentCooldownMinutes = 2       // Minutes between adjustments
@@ -136,7 +133,7 @@ func initializeTestModeLimits() {
 // initializeLimits initializes the concurrency and memory limits based on system resources
 // and the transfer scenario (FromTo). It sets MaxActiveFiles based on available memory
 // and CrawlParallelism based on CPU cores with scenario-specific multipliers.
-func initializeLimits(fromTo common.FromTo, orchestratorOptions *SyncOrchestratorOptions) {
+func initializeLimits(orchestratorOptions *SyncOrchestratorOptions) {
 
 	if SyncThrottlingTestMode {
 		initializeTestModeLimits()
@@ -152,9 +149,11 @@ func initializeLimits(fromTo common.FromTo, orchestratorOptions *SyncOrchestrato
 	maxActiveFiles = int64(memoryGB) * filesPerGBMemory // Set based on physical memory, 1 million files per GB
 
 	maxDirectoryDirectChildCount := maxFilesPerActiveDirectory // Default max direct children per directory
+	crawlParallelism = int32(EnumerationParallelism)
 
 	if orchestratorOptions != nil && orchestratorOptions.valid && orchestratorOptions.maxDirectoryDirectChildCount > 0 {
 		maxDirectoryDirectChildCount = int64(orchestratorOptions.GetMaxDirectoryDirectChildCount())
+		crawlParallelism = orchestratorOptions.parallelTraversers
 	}
 
 	if maxDirectoryDirectChildCount > maxActiveFiles {
@@ -163,23 +162,6 @@ func initializeLimits(fromTo common.FromTo, orchestratorOptions *SyncOrchestrato
 	}
 
 	maxActivelyEnumeratingDirectories = maxActiveFiles / maxDirectoryDirectChildCount // Ensure at least one directory can be processed
-
-	var multiplier int
-	switch fromTo.From() {
-	case common.ELocation.Local():
-		// Local to remote, use default limits
-		// Parallelism will deal with parallel File I/O operations
-		multiplier = crawlMultiplierLocal
-	case common.ELocation.S3():
-		// S3 to blob, use higher limits
-		// parallelism will deal with API calls
-		multiplier = crawlMultiplierS3
-	default:
-		// Default case, use moderate limits
-		multiplier = crawlMultiplierDefault
-	}
-
-	crawlParallelism = int32(runtime.NumCPU() * multiplier) // Set parallelism based on CPU cores
 	activeFilesLimit.Store(maxActiveFiles)
 	enumeratingDirectoryLimit.Store(maxActivelyEnumeratingDirectories) // Set initial limit for actively enumerating directories
 }

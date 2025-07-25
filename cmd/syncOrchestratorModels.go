@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
 	"runtime"
 	"time"
 
@@ -33,8 +34,9 @@ var DefaultSyncOrchestratorOptions = SyncOrchestratorOptions{
 	valid:                          true,
 	maxDirectoryDirectChildCount:   100_000, // This will not get honored by e2e test framework
 	metaDataOnlySync:               false,
-	lastSuccessfulSyncJobStartTime: time.Time{},
+	lastSuccessfulSyncJobStartTime: time.Now().Add(-10 * time.Minute), // Default to 10 minutes ago
 	optimizeEnumerationByCTime:     false,
+	parallelTraversers:             64,
 }
 
 // SyncOrchestratorOptions defines the options for the enumerator that are required for the sync operation.
@@ -46,6 +48,9 @@ type SyncOrchestratorOptions struct {
 	// This is used to limit the number of direct children that can be enumerated in a directory.
 	// This is useful for performance optimization and to avoid excessive memory usage.
 	maxDirectoryDirectChildCount uint64
+
+	// parallelTraversers is the number of parallel traversers to use for the sync operation.
+	parallelTraversers int32
 
 	//
 	// Sync only file metadata if only metadata has changed and not the file content, else for changed files both file data and metadata are sync’ed.
@@ -77,6 +82,10 @@ func (s *SyncOrchestratorOptions) validate(from common.Location) error {
 
 	if s.maxDirectoryDirectChildCount == 0 {
 		return errors.New("maxDirectoryDirectChildCount must be greater than 0")
+	}
+
+	if s.parallelTraversers <= 0 {
+		return errors.New("parallelTraversers must be greater than 0")
 	}
 
 	if s.optimizeEnumerationByCTime && s.lastSuccessfulSyncJobStartTime.IsZero() {
@@ -113,14 +122,28 @@ func NewSyncOrchestratorOptions(
 	metaDataOnlySync bool,
 	lastSuccessfulSyncJobStartTime time.Time,
 	optimizeEnumerationByCTime bool,
+	parallelTraversers int32,
 ) SyncOrchestratorOptions {
+
 	return SyncOrchestratorOptions{
 		maxDirectoryDirectChildCount:   maxDirectoryDirectChildCount,
 		metaDataOnlySync:               metaDataOnlySync,
 		lastSuccessfulSyncJobStartTime: lastSuccessfulSyncJobStartTime,
 		optimizeEnumerationByCTime:     optimizeEnumerationByCTime,
+		parallelTraversers:             parallelTraversers,
 		valid:                          true,
 	}
+}
+
+func (s *SyncOrchestratorOptions) ToStringMap() map[string]string {
+	m := make(map[string]string)
+	m["valid"] = fmt.Sprintf("%t", s.valid)
+	m["maxDirectoryDirectChildCount"] = fmt.Sprintf("%d", s.maxDirectoryDirectChildCount)
+	m["parallelTraversers"] = fmt.Sprintf("%d", s.parallelTraversers)
+	m["metaDataOnlySync"] = fmt.Sprintf("%t", s.metaDataOnlySync)
+	m["lastSuccessfulSyncJobStartTime"] = s.lastSuccessfulSyncJobStartTime.Format(time.RFC3339)
+	m["optimizeEnumerationByCTime"] = fmt.Sprintf("%t", s.optimizeEnumerationByCTime)
+	return m
 }
 
 // Function to initialize a default SyncEnumeratorOptions struct object
@@ -146,5 +169,6 @@ func NewTestSyncOrchestratorOptions() SyncOrchestratorOptions {
 		lastSuccessfulSyncJobStartTime: customTime,
 		optimizeEnumerationByCTime:     true,
 		valid:                          true,
+		parallelTraversers:             64,
 	}
 }
