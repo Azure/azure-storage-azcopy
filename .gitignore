@@ -23,6 +23,9 @@ vendor/
 ## Ignore the executables
 azcopy*
 
+## Do not ignore azcopy as a library code
+!azcopy/
+
 ## Dep tool
 vendor/
 

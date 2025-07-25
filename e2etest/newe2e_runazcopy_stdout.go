@@ -12,6 +12,7 @@ var _ AzCopyStdout = &AzCopyParsedListStdout{}
 var _ AzCopyStdout = &AzCopyParsedCopySyncRemoveStdout{}
 var _ AzCopyStdout = &AzCopyParsedDryrunStdout{}
 var _ AzCopyStdout = &AzCopyParsedJobsListStdout{}
+var _ AzCopyStdout = &AzCopyParsedJobsShowStdout{}
 
 // ManySubscriberChannel is intended to reproduce the effects of .NET's events.
 // This allows us to *partially* answer the question of how we want to handle testing of prompting in the New E2E framework.
@@ -223,6 +224,7 @@ type AzCopyParsedJobsListStdout struct {
 	AzCopyParsedStdout
 	listenChan chan<- common.JsonOutputTemplate
 	JobsCount  int
+	Jobs       []common.JobIDDetails
 }
 
 func (a *AzCopyParsedJobsListStdout) Write(p []byte) (n int, err error) {
@@ -236,6 +238,7 @@ func (a *AzCopyParsedJobsListStdout) Write(p []byte) (n int, err error) {
 				}
 
 				a.JobsCount = len(tx.JobIDDetails)
+				a.Jobs = tx.JobIDDetails
 			}
 		})
 	}
@@ -299,4 +302,34 @@ func (a *AzCopyInteractiveStdout) Write(p []byte) (n int, err error) {
 
 func (a *AzCopyInteractiveStdout) String() string {
 	return strings.Join(a.RawStdout(), "\n")
+}
+
+type AzCopyParsedJobsShowStdout struct {
+	AzCopyParsedStdout
+	listenChan chan<- common.JsonOutputTemplate
+	transfers  common.ListJobTransfersResponse
+	summary    common.ListJobSummaryResponse
+}
+
+func (a *AzCopyParsedJobsShowStdout) Write(p []byte) (n int, err error) {
+	if a.listenChan == nil {
+		a.listenChan = a.OnParsedLine.SubscribeFunc(func(line common.JsonOutputTemplate) {
+			if line.MessageType == common.EOutputMessageType.ListJobTransfers().String() {
+				var tx common.ListJobTransfersResponse
+				err = json.Unmarshal([]byte(line.MessageContent), &tx)
+				if err != nil {
+					return
+				}
+				a.transfers = tx
+			} else if line.MessageType == common.EOutputMessageType.GetJobSummary().String() {
+				var summary common.ListJobSummaryResponse
+				err = json.Unmarshal([]byte(line.MessageContent), &summary)
+				if err != nil {
+					return
+				}
+				a.summary = summary
+			}
+		})
+	}
+	return a.AzCopyParsedStdout.Write(p)
 }
