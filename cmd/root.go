@@ -195,7 +195,7 @@ var rootCmd = &cobra.Command{
 func Initialize(resumeJobID common.JobID, isBench bool) error {
 	azcopyLogPathFolder, common.AzcopyJobPlanFolder = initializeFolders()
 	currPid := os.Getpid()
-	WarnMultipleProcesses(getAzCopyAppPath(), currPid)
+	AsyncWarnMultipleProcesses(getAzCopyAppPath(), currPid)
 	configureGoMaxProcs()
 
 	// Perform os specific initialization

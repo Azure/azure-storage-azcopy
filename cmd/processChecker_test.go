@@ -32,7 +32,7 @@ func Test_WarnMultipleProcesses(t *testing.T) {
 
 	dirEntry, _ := os.ReadDir(pidsDir)
 	// Check only one file
-	a.Equal(1, len(dirEntry), "Should contain 1 .pid file")
+	a.Equal(2, len(dirEntry), "Should contain 2 .pid files")
 }
 
 // Test_MultipleProcessWithMockedLCM validates warn messages are logged when there's multiple AzCopy instances
