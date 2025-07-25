@@ -91,7 +91,9 @@ func (a *AzCopyParsedStdout) Write(p []byte) (n int, err error) {
 		var out common.JsonOutputTemplate
 		err = json.Unmarshal([]byte(v), &out)
 		if err != nil {
-			return
+			// Instead of failing, skip lines that aren't valid JSON
+			// This handles warning messages from the process checker and other non-JSON output
+			continue
 		}
 
 		a.OnParsedLine.Message(out)
