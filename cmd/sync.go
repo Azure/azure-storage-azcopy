@@ -527,6 +527,9 @@ type cookedSyncCmdArgs struct {
 	cpkByValue    bool
 
 	stripTopDir bool
+
+	// cancellation for sync orchestrator
+	orchestratorCancel context.CancelFunc
 }
 
 func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
@@ -639,6 +642,10 @@ func (cca *cookedSyncCmdArgs) waitUntilJobCompletion(blocking bool) {
 }
 
 func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
+	if cca.orchestratorCancel != nil {
+		cca.orchestratorCancel()
+	}
+
 	// prompt for confirmation, except when enumeration is complete
 	if !cca.isEnumerationComplete {
 		answer := lcm.Prompt("The enumeration (source/destination comparison) is not complete, "+
@@ -654,6 +661,10 @@ func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
 		if answer != common.EResponseOption.Yes() {
 			// user aborted cancel
 			return
+		}
+
+		if UseSyncOrchestrator {
+			cca.LogIncompleteEnumerationOutputMessage()
 		}
 	}
 
@@ -993,6 +1004,35 @@ Final Job Status: .............................. %12v
 		summary.JobStatus,
 		screenStats,
 		formatPerfAdvice(summary.PerformanceAdvice))
+}
+
+func (cca *cookedSyncCmdArgs) LogIncompleteEnumerationOutputMessage() {
+	fmt.Printf(
+		`%s============================================================
+Job Enumeration %s Summary
+============================================================
+Files Scanned at Source: ....................... %12v
+Files Scanned at Destination: .................. %12v
+Folders Scanned at Source: ..................... %12v
+Folders Scanned at Destination: ................ %12v
+Elapsed Time (Minutes): ........................ %12v
+------------------------------------------------------------
+Source Folders Failed During Enumeration: ...... %12v
+Destination Folders Failed During Enumeration: . %12v
+Destination Folders Skipped (CTime opt): ....... %12v
+------------------------------------------------------------
+`,
+		"\n",
+		cca.jobID.String(),
+		atomic.LoadUint64(&cca.atomicSourceFilesScanned),
+		atomic.LoadUint64(&cca.atomicDestinationFilesScanned),
+		atomic.LoadUint64(&cca.atomicSourceFoldersScanned),
+		atomic.LoadUint64(&cca.atomicDestinationFoldersScanned),
+		jobsAdmin.ToFixed(time.Since(cca.jobStartTime).Minutes(), 4),
+
+		cca.atomicSourceFolderEnumerationFailed.Load(),
+		cca.atomicDestinationFolderEnumerationFailed.Load(),
+		cca.atomicDestinationFolderEnumerationSkipped.Load())
 }
 
 func init() {
