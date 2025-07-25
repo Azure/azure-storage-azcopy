@@ -25,19 +25,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/filesystem"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 	"path"
 	"strings"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/filesystem"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
 
-var NothingToRemoveError = errors.New("nothing found to remove")
+var ErrNothingToRemove = errors.New("nothing found to remove")
 
 // provide an enumerator that lists a given resource (Blob, File)
 // and schedule delete transfers to remove them
@@ -53,7 +53,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 		Credential: &cca.credentialInfo,
 
 		ListOfFiles:      cca.ListOfFilesChannel,
-		ListOfVersionIDs: cca.ListOfVersionIDs,
+		ListOfVersionIDs: cca.ListOfVersionIDsChannel,
 
 		CpkOptions: cca.CpkOptions,
 
@@ -66,6 +66,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 		StripTopDir:             cca.StripTopDir,
 
 		ExcludeContainers: cca.excludeContainer,
+		HardlinkHandling:  common.EHardlinkHandlingType.Follow(),
 	})
 
 	// report failure to create traverser
@@ -99,9 +100,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	if !cca.dryrunMode {
 		glcm.Info(message)
 	}
-	if jobsAdmin.JobsAdmin != nil {
-		jobsAdmin.JobsAdmin.LogToJobLog(message, common.LogInfo)
-	}
+	common.LogToJobLogWithPrefix(message, common.LogInfo)
 
 	from := cca.FromTo.From()
 	if !from.SupportsTrailingDot() {
@@ -139,7 +138,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 				return nil
 			} else if err == NothingScheduledError {
 				// No log file needed. Logging begins as a part of awaiting job completion.
-				return NothingToRemoveError
+				return ErrNothingToRemove
 			}
 
 			return err

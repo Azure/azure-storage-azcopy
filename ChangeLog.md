@@ -1,6 +1,21 @@
 
 # Change Log
 
+## Version 10.30.0-preview.2
+
+### Dependency updates
+1.	Golang 1.24.2 -> 1.24.4 ([#3085](https://github.com/Azure/azure-storage-azcopy/issues/3085))
+
+## Version 10.30.0-preview.1 
+
+### New Feature
+1. Azure Files NFS Support via REST API
+   Support for transferring data between local Linux systems and Azure Files NFS using REST.
+
+      a. Transfer from local Linux to Azure Files NFS.
+      b. Transfer from Azure Files NFS to local Linux.
+      c. Transfer between Azure Files NFS shares.
+
 ## Version 10.29.1 
 
 ### Bug Fixes 

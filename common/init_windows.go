@@ -1,4 +1,4 @@
-// Copyright © 2017 Microsoft <wastore@microsoft.com>
+// Copyright © 2025 Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,41 +18,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package main
+package common
 
 import (
-	"github.com/minio/minio-go"
-	"math"
-	"net/http"
 	"path"
 	"strings"
-
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-// ProcessOSSpecificInitialization changes the soft limit for filedescriptor for process
-// return the filedescriptor limit for process. If the function fails with some, it returns
-// the error
-// TODO: this api is implemented for windows as well but not required because Windows
-// does not default to a precise low limit like Linux does
-func ProcessOSSpecificInitialization() (int, error) {
-
-	// this exaggerates what's possible, but is accurate enough for our purposes, in which our goal is simply to apply no specific limit on Windows
-	const effectivelyUnlimited = math.MaxInt32
-
-	return effectivelyUnlimited, nil
-}
-
-// GetAzCopyAppPath returns the path of Azcopy in local appdata.
-func GetAzCopyAppPath() string {
-	userProfile := common.GetEnvironmentVariable(common.EEnvironmentVariable.UserDir())
+// getAzCopyAppPath returns the path of Azcopy in local appdata.
+func getAzCopyAppPath() string {
+	userProfile := GetEnvironmentVariable(EEnvironmentVariable.UserDir())
 	azcopyAppDataFolder := strings.ReplaceAll(path.Join(userProfile, ".azcopy"), "/", `\`)
 
 	return azcopyAppDataFolder
-}
-
-func init() {
-	//Catch everything that uses http.DefaultTransport with ieproxy.GetProxyFunc()
-	http.DefaultTransport.(*http.Transport).Proxy = common.GlobalProxyLookup
-	minio.DefaultTransport.(*http.Transport).Proxy = common.GlobalProxyLookup
 }

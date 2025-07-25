@@ -23,10 +23,11 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"net/url"
 	"strings"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/pkg/errors"
 
@@ -47,6 +48,7 @@ type copyTransferProcessor struct {
 	folderPropertiesOption common.FolderPropertyOption
 	symlinkHandlingType    common.SymlinkHandlingType
 	dryrunMode             bool
+	hardlinkHandlingType   common.HardlinkHandlingType
 }
 
 func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int, source, destination common.ResourceString, reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier, dryrunMode bool) *copyTransferProcessor {
@@ -183,7 +185,7 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 		}
 	}
 
-	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(false, srcRelativePath, dstRelativePath, s.preserveAccessTier, s.folderPropertiesOption, s.symlinkHandlingType)
+	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(false, srcRelativePath, dstRelativePath, s.preserveAccessTier, s.folderPropertiesOption, s.symlinkHandlingType, s.hardlinkHandlingType)
 
 	if s.copyJobTemplate.FromTo.To() == common.ELocation.None() {
 		copyTransfer.BlobTier = s.copyJobTemplate.BlobAttributes.BlockBlobTier.ToAccessTierType()
@@ -298,6 +300,8 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 		s.copyJobTemplate.Transfers.FolderTransferCount++
 	case common.EEntityType.Symlink():
 		s.copyJobTemplate.Transfers.SymlinkTransferCount++
+	case common.EEntityType.Hardlink():
+		s.copyJobTemplate.Transfers.HardlinksConvertedCount++
 	}
 
 	return nil
@@ -320,9 +324,7 @@ func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err 
 			s.copyJobTemplate.JobID, s.copyJobTemplate.PartNum, resp.ErrorMsg)
 	}
 
-	if jobsAdmin.JobsAdmin != nil {
-		jobsAdmin.JobsAdmin.LogToJobLog(FinalPartCreatedMessage, common.LogInfo)
-	}
+	common.LogToJobLogWithPrefix(FinalPartCreatedMessage, common.LogInfo)
 
 	if s.reportFinalPartDispatched != nil {
 		s.reportFinalPartDispatched()
@@ -332,8 +334,7 @@ func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err 
 
 // only test the response on the final dispatch to help diagnose root cause of test failures from 0 transfers
 func (s *copyTransferProcessor) sendPartToSte() common.CopyJobPartOrderResponse {
-	var resp common.CopyJobPartOrderResponse
-	Rpc(common.ERpcCmd.CopyJobPartOrder(), s.copyJobTemplate, &resp)
+	resp := jobsAdmin.ExecuteNewCopyJobPartOrder(*s.copyJobTemplate)
 
 	// if the current part order sent to ste is 0, then alert the progress reporting routine
 	if s.copyJobTemplate.PartNum == 0 && s.reportFirstPartDispatched != nil {

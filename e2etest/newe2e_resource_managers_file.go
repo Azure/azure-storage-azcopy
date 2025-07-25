@@ -3,6 +3,11 @@ package e2etest
 import (
 	"bytes"
 	"fmt"
+	"io"
+	"path"
+	"runtime"
+	"strings"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
@@ -13,10 +18,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"io"
-	"path"
-	"runtime"
-	"strings"
 )
 
 // check that everything complies with interfaces
@@ -373,8 +374,9 @@ type FileObjectResourceManager struct {
 	Service         *FileServiceResourceManager
 	Share           *FileShareResourceManager
 
-	path       string
-	entityType common.EntityType
+	path                     string
+	entityType               common.EntityType
+	hardlinkOriginalFilePath string
 }
 
 func (f *FileObjectResourceManager) DefaultAuthType() ExplicitCredentialTypes {
@@ -438,6 +440,10 @@ func (f *FileObjectResourceManager) ObjectName() string {
 	return f.path
 }
 
+func (f *FileObjectResourceManager) HardlinkedFileName() string {
+	return f.hardlinkOriginalFilePath
+}
+
 func (f *FileObjectResourceManager) PreparePermissions(a Asserter, p *string) *file.Permissions {
 	a.HelperMarker().Helper()
 	if p == nil {
@@ -477,6 +483,19 @@ func (f *FileObjectResourceManager) CreateParents(a Asserter) {
 
 func (f *FileObjectResourceManager) Create(a Asserter, body ObjectContentContainer, props ObjectProperties) {
 	a.HelperMarker().Helper()
+
+	nfsProperties := &file.NFSProperties{}
+
+	if props.FileNFSProperties != nil {
+		nfsProperties.CreationTime = props.FileNFSProperties.FileCreationTime
+		nfsProperties.LastWriteTime = props.FileNFSProperties.FileLastWriteTime
+	}
+	if props.FileNFSPermissions != nil {
+		nfsProperties.Owner = props.FileNFSPermissions.Owner
+		nfsProperties.Group = props.FileNFSPermissions.Group
+		nfsProperties.FileMode = props.FileNFSPermissions.FileMode
+	}
+
 	var attr *file.NTFSFileAttributes
 	if DerefOrZero(props.FileProperties.FileAttributes) != "" {
 		var err error
@@ -491,15 +510,15 @@ func (f *FileObjectResourceManager) Create(a Asserter, body ObjectContentContain
 	switch f.entityType {
 	case common.EEntityType.File():
 		client := f.getFileClient()
+
 		_, err := client.Create(ctx, body.Size(), &file.CreateOptions{
 			SMBProperties: &file.SMBProperties{
 				Attributes:    attr,
 				CreationTime:  props.FileProperties.FileCreationTime,
 				LastWriteTime: props.FileProperties.FileLastWriteTime,
 			},
-			Permissions: perms,
-			HTTPHeaders: props.HTTPHeaders.ToFile(),
-			Metadata:    props.Metadata,
+			Permissions:   perms,
+			NFSProperties: nfsProperties,
 		})
 		a.NoError("Create file", err)
 		err = client.UploadStream(ctx, body.Reader(), &file.UploadStreamOptions{
@@ -514,8 +533,9 @@ func (f *FileObjectResourceManager) Create(a Asserter, body ObjectContentContain
 				CreationTime:  props.FileProperties.FileCreationTime,
 				LastWriteTime: props.FileProperties.FileLastWriteTime,
 			},
-			FilePermissions: perms,
-			Metadata:        props.Metadata,
+			FilePermissions:   perms,
+			Metadata:          props.Metadata,
+			FileNFSProperties: nfsProperties,
 		})
 		// This is fine. Instead let's set properties.
 		if fileerror.HasCode(err, fileerror.ResourceAlreadyExists) {
@@ -525,10 +545,30 @@ func (f *FileObjectResourceManager) Create(a Asserter, body ObjectContentContain
 		}
 
 		a.NoError("Create directory", err)
-	default:
-		a.Error("File Objects only support Files and Folders")
-	}
+	case common.EEntityType.Hardlink():
+		client := f.getFileClient()
 
+		_, err := client.CreateHardLink(ctx, props.HardLinkedFileName, &file.CreateHardLinkOptions{})
+		a.NoError("Create file", err)
+		// fmt.Println("Name", f.ObjectName())
+		// fmt.Println("Resp.LinkCount", *resp.LinkCount)
+		// fmt.Println("Resp.NFSFileType", *resp.NFSFileType)
+	case common.EEntityType.Other():
+		client := f.getFileClient()
+
+		_, err := client.Create(ctx, body.Size(), &file.CreateOptions{
+			NFSProperties: nfsProperties,
+		})
+		a.NoError("Create file", err)
+		err = client.UploadStream(ctx, body.Reader(), &file.UploadStreamOptions{
+			Concurrency: runtime.NumCPU(),
+		})
+		a.NoError("Upload Stream", err)
+	default:
+		a.Error("File Objects only support Files,Folders,Special File and Hardlinks.Currently " + f.entityType.String())
+	}
+	// Reapply the properties after the resource is created, as the Last Write Time of the file will be reset when data is written.
+	f.SetObjectProperties(a, props)
 	TrackResourceCreation(a, f)
 }
 
@@ -540,6 +580,10 @@ func (f *FileObjectResourceManager) Delete(a Asserter) {
 		_, err = f.getFileClient().Delete(ctx, nil)
 	case common.EEntityType.Folder():
 		_, err = f.getDirClient().Delete(ctx, nil)
+	case common.EEntityType.Hardlink():
+		_, err = f.getFileClient().Delete(ctx, nil)
+	case common.EEntityType.Other():
+		_, err = f.getFileClient().Delete(ctx, nil)
 	default:
 		a.Error(fmt.Sprintf("entity type %s is not currently supported", f.entityType))
 	}
@@ -584,6 +628,15 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 				FilePermissions:   permissions,
 				LastModifiedTime:  resp.LastModified,
 			},
+			FileNFSProperties: &FileNFSProperties{
+				FileCreationTime:  resp.FileCreationTime,
+				FileLastWriteTime: resp.FileLastWriteTime,
+			},
+			FileNFSPermissions: &FileNFSPermissions{
+				Owner:    resp.Owner,
+				Group:    resp.Group,
+				FileMode: resp.FileMode,
+			},
 		}
 	case common.EEntityType.File():
 		resp, err := f.getFileClient().GetProperties(ctx, &file.GetPropertiesOptions{})
@@ -616,11 +669,79 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 				FilePermissions:   permissions,
 				LastModifiedTime:  resp.LastModified,
 			},
+			FileNFSProperties: &FileNFSProperties{
+				FileCreationTime:  resp.FileCreationTime,
+				FileLastWriteTime: resp.FileLastWriteTime,
+			},
+			FileNFSPermissions: &FileNFSPermissions{
+				Owner:    resp.Owner,
+				Group:    resp.Group,
+				FileMode: resp.FileMode,
+			},
+		}
+	case common.EEntityType.Symlink():
+		resp, err := f.getFileClient().GetProperties(ctx, &file.GetPropertiesOptions{})
+		a.NoError("Get file properties", err)
+
+		out = ObjectProperties{
+			EntityType: f.entityType,
+			HTTPHeaders: contentHeaders{
+				cacheControl:       resp.CacheControl,
+				contentDisposition: resp.ContentDisposition,
+				contentEncoding:    resp.ContentEncoding,
+				contentLanguage:    resp.ContentLanguage,
+				contentType:        resp.ContentType,
+				contentMD5:         resp.ContentMD5,
+			},
+			Metadata:         resp.Metadata,
+			LastModifiedTime: resp.LastModified,
+			FileNFSProperties: &FileNFSProperties{
+				FileCreationTime:  resp.FileCreationTime,
+				FileLastWriteTime: resp.FileLastWriteTime,
+			},
+			FileNFSPermissions: &FileNFSPermissions{
+				Owner:    resp.Owner,
+				Group:    resp.Group,
+				FileMode: resp.FileMode,
+			},
+		}
+
+	case common.EEntityType.Hardlink():
+		resp, err := f.getFileClient().GetProperties(ctx, &file.GetPropertiesOptions{})
+		a.NoError("Get file properties", err)
+
+		out = ObjectProperties{
+			EntityType: f.entityType,
+			HTTPHeaders: contentHeaders{
+				cacheControl:       resp.CacheControl,
+				contentDisposition: resp.ContentDisposition,
+				contentEncoding:    resp.ContentEncoding,
+				contentLanguage:    resp.ContentLanguage,
+				contentType:        resp.ContentType,
+				contentMD5:         resp.ContentMD5,
+			},
+			Metadata:         resp.Metadata,
+			LastModifiedTime: resp.LastModified,
+			FileProperties: FileProperties{
+				FileAttributes:    resp.FileAttributes,
+				FileCreationTime:  resp.FileCreationTime,
+				FileLastWriteTime: resp.FileLastWriteTime,
+				//FilePermissions:   permissions,
+				LastModifiedTime: resp.LastModified,
+			},
+			FileNFSProperties: &FileNFSProperties{
+				FileCreationTime:  resp.FileCreationTime,
+				FileLastWriteTime: resp.FileLastWriteTime,
+			},
+			FileNFSPermissions: &FileNFSPermissions{
+				Owner:    resp.Owner,
+				Group:    resp.Group,
+				FileMode: resp.FileMode,
+			},
 		}
 	default:
-		a.Error("EntityType must be Folder or File. Currently: " + f.entityType.String())
+		a.Error("EntityType must be Folder,File,Hardlink or Symlink. Currently: " + f.entityType.String())
 	}
-
 	return
 }
 
@@ -658,6 +779,19 @@ func (f *FileObjectResourceManager) SetMetadata(a Asserter, metadata common.Meta
 
 func (f *FileObjectResourceManager) SetObjectProperties(a Asserter, props ObjectProperties) {
 	a.HelperMarker().Helper()
+
+	nfsProperties := &file.NFSProperties{}
+
+	if props.FileNFSProperties != nil {
+		nfsProperties.CreationTime = props.FileNFSProperties.FileCreationTime
+		nfsProperties.LastWriteTime = props.FileNFSProperties.FileLastWriteTime
+	}
+	if props.FileNFSPermissions != nil {
+		nfsProperties.Owner = props.FileNFSPermissions.Owner
+		nfsProperties.Group = props.FileNFSPermissions.Group
+		nfsProperties.FileMode = props.FileNFSPermissions.FileMode
+	}
+
 	var attr *file.NTFSFileAttributes
 	if DerefOrZero(props.FileProperties.FileAttributes) != "" {
 		var err error
@@ -676,8 +810,9 @@ func (f *FileObjectResourceManager) SetObjectProperties(a Asserter, props Object
 				CreationTime:  props.FileProperties.FileCreationTime,
 				LastWriteTime: props.FileProperties.FileLastWriteTime,
 			},
-			Permissions: perms,
-			HTTPHeaders: props.HTTPHeaders.ToFile(),
+			Permissions:   perms,
+			HTTPHeaders:   props.HTTPHeaders.ToFile(),
+			NFSProperties: nfsProperties,
 		})
 		a.NoError("Set file HTTP headers", err)
 
@@ -691,7 +826,8 @@ func (f *FileObjectResourceManager) SetObjectProperties(a Asserter, props Object
 				CreationTime:  props.FileProperties.FileCreationTime,
 				LastWriteTime: props.FileProperties.FileLastWriteTime,
 			},
-			FilePermissions: perms,
+			FilePermissions:   perms,
+			FileNFSProperties: nfsProperties,
 		})
 		a.NoError("Set folder properties", err)
 

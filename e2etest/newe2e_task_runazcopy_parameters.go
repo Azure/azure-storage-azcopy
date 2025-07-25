@@ -301,6 +301,8 @@ type CopySyncCommonFlags struct {
 	CPKByValue              *bool                        `flag:"cpk-by-value"`
 	IncludePattern          *string                      `flag:"include-pattern"`
 	IncludeDirectoryStubs   *bool                        `flag:"include-directory-stub"`
+	NFS                     *bool                        `flag:"nfs"`
+	PreserveInfo            *bool                        `flag:"preserve-info"`
 }
 
 // CopyFlags is a more exclusive struct including flags exclusi
@@ -470,6 +472,26 @@ type LoginStatusFlags struct {
 	Tenant   *bool `flag:"tenant"`
 	Endpoint *bool `flag:"endpoint"`
 	Method   *bool `flag:"method"`
+}
+
+type JobsCleanFlags struct {
+	GlobalFlags
+
+	WithStatus *common.JobStatus `flag:"with-status"`
+}
+
+type JobsRemoveFlags struct {
+	GlobalFlags
+}
+
+type JobsListFlags struct {
+	GlobalFlags
+	WithStatus *common.JobStatus `flag:"with-status"`
+}
+
+type JobsShowFlags struct {
+	GlobalFlags
+	WithStatus *common.TransferStatus `flag:"with-status"`
 }
 
 type WindowsAttribute uint32
