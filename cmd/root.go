@@ -193,10 +193,9 @@ var rootCmd = &cobra.Command{
 }
 
 func Initialize(resumeJobID common.JobID, isBench bool) error {
-	var azcopyAppFolder string
-	azcopyLogPathFolder, common.AzcopyJobPlanFolder, azcopyAppFolder = initializeFolders()
+	azcopyLogPathFolder, common.AzcopyJobPlanFolder = initializeFolders()
 	currPid := os.Getpid()
-	WarnMultipleProcesses(azcopyAppFolder, currPid)
+	WarnMultipleProcesses(getAzCopyAppPath(), currPid)
 	configureGoMaxProcs()
 
 	// Perform os specific initialization
@@ -283,7 +282,7 @@ func InitializeAndExecute() {
 	}
 }
 
-func initializeFolders() (azcopyLogPathFolder, azcopyJobPlanFolder, azcopyAppFolder string) {
+func initializeFolders() (azcopyLogPathFolder, azcopyJobPlanFolder string) {
 	azcopyLogPathFolder = common.GetEnvironmentVariable(common.EEnvironmentVariable.LogLocation())     // user specified location for log files
 	azcopyJobPlanFolder = common.GetEnvironmentVariable(common.EEnvironmentVariable.JobPlanLocation()) // user specified location for plan files
 

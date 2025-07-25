@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"io"
 	"os"
 	"path"
 )
@@ -23,12 +22,8 @@ func WarnMultipleProcesses(directory string, currentPid int) {
 			return
 		}
 		defer f.Close()
-		var names []string
-		names, err = f.Readdirnames(2) // read up to two names
-		if err != nil && err != io.EOF {
-			return
-		}
-		if len(names) > 1 {
+		_, err = f.Readdirnames(1)
+		if err == nil {
 			glcm.Warn(common.ERR_MULTIPLE_PROCESSES)
 		}
 		pidFilePath := path.Join(pidsSubDir, currPidFileName) // E.g "\.azcopy\pids\\XXX.pid"
