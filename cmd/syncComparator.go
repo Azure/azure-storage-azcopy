@@ -250,7 +250,11 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 		return false, nil
 	}
 
-	if metadataChanged {
+	if dataChanged {
+		transferObject = true
+	}
+
+	if !transferObject && metadataChanged {
 		// If this is true, it means that metadataOnlySync is enabled
 		// as this is being set to true only if we have valid orchestrator options
 
@@ -269,10 +273,6 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 			sourceObjectInMap.entityType = common.EEntityType.FileProperties() // Set entity type to FileProperties to indicate metadata transfer.
 			transferObject = true
 		}
-	}
-
-	if dataChanged {
-		transferObject = true
 	}
 
 	if transferObject {
@@ -318,15 +318,32 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 		return dataChanged, metadataChanged, valid
 	}
 
-	if sourceObject.changeTime.IsZero() || destinationObject.changeTime.IsZero() {
-		valid = false
-		return dataChanged, metadataChanged, valid
-	}
+	if !isNFSCopy {
 
-	// Compare change times
-	if sourceObject.changeTime.Compare(destinationObject.changeTime) != 0 {
-		metadataChanged = true
-		return dataChanged, metadataChanged, valid
+		if sourceObject.changeTime.IsZero() || destinationObject.changeTime.IsZero() {
+			valid = false
+			return dataChanged, metadataChanged, valid
+		}
+
+		// Compare change times
+		if sourceObject.changeTime.Compare(destinationObject.changeTime) != 0 {
+			metadataChanged = true
+			return dataChanged, metadataChanged, valid
+		}
+
+	} else {
+
+		// For NFS, we don't have change time for destination object, so we cannot compare it.
+		// We will use last sync time to determine if metadata has changed.
+		if sourceObject.changeTime.IsZero() || f.orchestratorOptions.lastSuccessfulSyncJobStartTime.IsZero() {
+			dataChanged = true
+			return dataChanged, metadataChanged, valid
+		}
+
+		if sourceObject.changeTime.After(f.orchestratorOptions.lastSuccessfulSyncJobStartTime) {
+			metadataChanged = true
+			return dataChanged, metadataChanged, valid
+		}
 	}
 	return dataChanged, metadataChanged, valid
 }
