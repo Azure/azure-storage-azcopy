@@ -254,15 +254,9 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 		transferObject = true
 	}
 
-	if !transferObject && !isNFSCopy && metadataChanged {
+	if !transferObject && metadataChanged {
 		// If this is true, it means that metadataOnlySync is enabled
 		// as this is being set to true only if we have valid orchestrator options
-
-		//if isNFSCopy {
-		// we don't have change time for NFS file share objects, so we cannot transfer metadata only.
-		// metadataChanged will be true since by default NFS file share objects will have current time
-		// as change time and it will not match with source object's change time.
-		//}
 
 		// If metadata has changed for a folder, we consider data changed as well.
 		// If metadata has changed for a symlink, both mtime and ctime will change
@@ -324,15 +318,32 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 		return dataChanged, metadataChanged, valid
 	}
 
-	if sourceObject.changeTime.IsZero() || destinationObject.changeTime.IsZero() {
-		valid = false
-		return dataChanged, metadataChanged, valid
-	}
+	if !isNFSCopy {
 
-	// Compare change times
-	if sourceObject.changeTime.Compare(destinationObject.changeTime) != 0 {
-		metadataChanged = true
-		return dataChanged, metadataChanged, valid
+		if sourceObject.changeTime.IsZero() || destinationObject.changeTime.IsZero() {
+			valid = false
+			return dataChanged, metadataChanged, valid
+		}
+
+		// Compare change times
+		if sourceObject.changeTime.Compare(destinationObject.changeTime) != 0 {
+			metadataChanged = true
+			return dataChanged, metadataChanged, valid
+		}
+
+	} else {
+
+		// For NFS, we don't have change time for destination object, so we cannot compare it.
+		// We will use last sync time to determine if metadata has changed.
+		if sourceObject.changeTime.IsZero() || f.orchestratorOptions.lastSuccessfulSyncJobStartTime.IsZero() {
+			dataChanged = true
+			return dataChanged, metadataChanged, valid
+		}
+
+		if sourceObject.changeTime.After(f.orchestratorOptions.lastSuccessfulSyncJobStartTime) {
+			metadataChanged = true
+			return dataChanged, metadataChanged, valid
+		}
 	}
 	return dataChanged, metadataChanged, valid
 }
