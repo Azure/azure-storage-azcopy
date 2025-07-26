@@ -36,6 +36,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -66,6 +67,8 @@ var azcopyCurrentJobID common.JobID
 var isPipeDownload bool
 var retryStatusCodes string
 var debugMemoryProfile string
+
+var SystemStatsMonitor *common.SystemStatsMonitor
 
 type jobLoggerInfo struct {
 	jobID         common.JobID
@@ -251,8 +254,53 @@ func Initialize(resumeJobID common.JobID, isBench bool) error {
 		beginDetectNewVersion()
 	}
 
+	if buildmode.IsMover {
+		StartSystemStatsMonitorForJob(jobID)
+	}
+
 	return nil
 
+}
+
+func StartSystemStatsMonitorForJob(jobId common.JobID) {
+
+	logger := common.NewJobLogger(jobId, LogLevel.Info(), azcopyLogPathFolder, "-rolling-stats")
+	logger.OpenLog()
+	glcm.RegisterCloseFunc(func() {
+		logger.CloseLog()
+	})
+
+	config := common.StatsMonitorConfig{
+		Interval:     5 * time.Second,
+		MonitorPaths: []string{azcopyLogPathFolder, common.AzcopyJobPlanFolder},
+		Logger:       logger,
+		LogConditions: common.LogConditions{
+			LogInterval: 60 * time.Second,
+		},
+	}
+
+	SystemStatsMonitor, _ = common.NewSystemStatsMonitor(config)
+	SystemStatsMonitor.Start(context.TODO())
+
+	glcm.RegisterCloseFunc(func() {
+		SystemStatsMonitor.Stop()
+	})
+}
+
+// RegisterGlobalCustomStatsCallback registers a custom stats callback with the global SystemStatsMonitor
+// This is a convenience function that works with the global stats monitor instance
+func RegisterGlobalCustomStatsCallback(callback common.CustomStatsCallback) {
+	if SystemStatsMonitor != nil {
+		SystemStatsMonitor.SetCustomStatsCallback(callback)
+	}
+}
+
+// UnregisterGlobalCustomStatsCallback removes the custom stats callback from the global SystemStatsMonitor
+// This is a convenience function that works with the global stats monitor instance
+func UnregisterGlobalCustomStatsCallback() {
+	if SystemStatsMonitor != nil {
+		SystemStatsMonitor.UnregisterCustomStatsCallback()
+	}
 }
 
 // hold a pointer to the global lifecycle controller so that commands could output messages and exit properly

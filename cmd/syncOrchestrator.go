@@ -60,7 +60,7 @@ var (
 
 	// dirSemaphore controls the maximum number of directories processed concurrently
 	// to prevent resource exhaustion during large-scale sync operations.
-	dirSemaphore *DirSemaphore
+	dirSemaphore *ThrottleSemaphore
 
 	// CustomSyncHandler holds the current sync handler implementation.
 	// Defaults to syncOrchestratorHandler but can be customized for different strategies.
@@ -589,7 +589,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 	// Initialize semaphore for directory concurrency control
 	if enableThrottling {
-		dirSemaphore = NewDirSemaphore(mainCtx)
+		dirSemaphore = NewThrottleSemaphore(mainCtx, cca.jobID)
 		defer dirSemaphore.Close()
 	}
 
