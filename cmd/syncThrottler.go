@@ -236,7 +236,7 @@ func NewThrottleSemaphore(parentCtx context.Context, jobID common.JobID) *Thrott
 	// Start semaphore monitoring with context
 	go ds.semaphoreMonitor(ctx)
 
-	RegisterGlobalCustomStatsCallback(getOrchestratorStats)
+	RegisterGlobalCustomStatsCallbackWithID("sm", getOrchestratorStats)
 
 	return ds
 }
@@ -249,7 +249,7 @@ func (ds *ThrottleSemaphore) Close() {
 		ds.cancel()
 	}
 
-	UnregisterGlobalCustomStatsCallback()
+	UnregisterGlobalCustomStatsCallbackWithID("sm")
 }
 
 // AcquireSlot blocks until a semaphore slot is available and throttling conditions allow processing.
@@ -513,9 +513,9 @@ func (ds *ThrottleSemaphore) semaphoreMonitor(ctx context.Context) {
 // indexer size, directory processing counters, and enumeration activity.
 func getOrchestratorStats() map[string]string {
 	return map[string]string{
-		"IndexerSize":            fmt.Sprintf("%d", totalFilesInIndexer.Load()),
-		"ActiveDirectories":      fmt.Sprintf("%d", activeDirectories.Load()),
-		"ProcessedDirectories":   fmt.Sprintf("%d", totalDirectoriesProcessed.Load()),
-		"EnumeratingDirectories": fmt.Sprintf("%d", activeDirectoriesEnumerating.Load()),
+		"Indexer":   fmt.Sprintf("%d", totalFilesInIndexer.Load()),
+		"Active":    fmt.Sprintf("%d", activeDirectories.Load()),
+		"Processed": fmt.Sprintf("%d", totalDirectoriesProcessed.Load()),
+		"Enum":      fmt.Sprintf("%d", activeDirectoriesEnumerating.Load()),
 	}
 }

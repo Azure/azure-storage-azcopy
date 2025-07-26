@@ -275,7 +275,7 @@ func StartSystemStatsMonitorForJob(jobId common.JobID) {
 		MonitorPaths: []string{azcopyLogPathFolder, common.AzcopyJobPlanFolder},
 		Logger:       logger,
 		LogConditions: common.LogConditions{
-			LogInterval: 60 * time.Second,
+			LogInterval: 60 * time.Second, // Regular logging
 		},
 	}
 
@@ -283,23 +283,23 @@ func StartSystemStatsMonitorForJob(jobId common.JobID) {
 	SystemStatsMonitor.Start(context.TODO())
 
 	glcm.RegisterCloseFunc(func() {
+		SystemStatsMonitor.UnregisterAllCustomStatsCallbacks()
 		SystemStatsMonitor.Stop()
 	})
 }
 
-// RegisterGlobalCustomStatsCallback registers a custom stats callback with the global SystemStatsMonitor
-// This is a convenience function that works with the global stats monitor instance
-func RegisterGlobalCustomStatsCallback(callback common.CustomStatsCallback) {
+// RegisterGlobalCustomStatsCallbackWithID registers a custom stats callback with a specific ID
+// This allows multiple callbacks to be registered with the global SystemStatsMonitor
+func RegisterGlobalCustomStatsCallbackWithID(id string, callback common.CustomStatsCallback) {
 	if SystemStatsMonitor != nil {
-		SystemStatsMonitor.SetCustomStatsCallback(callback)
+		SystemStatsMonitor.RegisterCustomStatsCallback(id, callback)
 	}
 }
 
-// UnregisterGlobalCustomStatsCallback removes the custom stats callback from the global SystemStatsMonitor
-// This is a convenience function that works with the global stats monitor instance
-func UnregisterGlobalCustomStatsCallback() {
+// UnregisterGlobalCustomStatsCallbackWithID removes a specific custom stats callback by ID
+func UnregisterGlobalCustomStatsCallbackWithID(id string) {
 	if SystemStatsMonitor != nil {
-		SystemStatsMonitor.UnregisterCustomStatsCallback()
+		SystemStatsMonitor.UnregisterCustomStatsCallback(id)
 	}
 }
 

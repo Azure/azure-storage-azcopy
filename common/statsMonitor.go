@@ -23,6 +23,74 @@ import (
 // Example: map[string]string{"active_transfers": "42", "queued_files": "1234", "error_count": "5"}
 type CustomStatsCallback func() map[string]string
 
+// CustomCallbackManager manages multiple custom stats callbacks
+type CustomCallbackManager struct {
+	callbacks map[string]CustomStatsCallback
+	mutex     sync.RWMutex
+}
+
+// NewCustomCallbackManager creates a new callback manager
+func NewCustomCallbackManager() *CustomCallbackManager {
+	return &CustomCallbackManager{
+		callbacks: make(map[string]CustomStatsCallback),
+	}
+}
+
+// RegisterCallback registers a callback with a unique identifier
+func (m *CustomCallbackManager) RegisterCallback(id string, callback CustomStatsCallback) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	m.callbacks[id] = callback
+}
+
+// UnregisterCallback removes a callback by its identifier
+func (m *CustomCallbackManager) UnregisterCallback(id string) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	delete(m.callbacks, id)
+}
+
+// UnregisterAllCallbacks removes all registered callbacks
+func (m *CustomCallbackManager) UnregisterAllCallbacks() {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	m.callbacks = make(map[string]CustomStatsCallback)
+}
+
+// CollectAllMetrics calls all registered callbacks and combines their results
+func (m *CustomCallbackManager) CollectAllMetrics() map[string]string {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	result := make(map[string]string)
+
+	for callbackID, callback := range m.callbacks {
+		if callback != nil {
+			if metrics := callback(); metrics != nil {
+				for key, value := range metrics {
+					// Prefix metric names with callback ID to avoid conflicts
+					prefixedKey := fmt.Sprintf("%s.%s", callbackID, key)
+					result[prefixedKey] = value
+				}
+			}
+		}
+	}
+
+	return result
+}
+
+// GetCallbackIDs returns a list of all registered callback IDs
+func (m *CustomCallbackManager) GetCallbackIDs() []string {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	ids := make([]string, 0, len(m.callbacks))
+	for id := range m.callbacks {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
 // SystemStatsSnapshot represents a point-in-time view of system metrics
 type SystemStatsSnapshot struct {
 	Timestamp time.Time
@@ -114,8 +182,8 @@ type StatsMonitorConfig struct {
 	// Logger for conditional logging (can be nil)
 	Logger ILoggerResetable
 
-	// Custom stats callback for application-specific metrics (can be nil)
-	CustomStatsCallback CustomStatsCallback
+	// Custom stats callback manager for application-specific metrics (can be nil)
+	CustomCallbackManager *CustomCallbackManager
 
 	// Logging conditions
 	LogConditions LogConditions
@@ -488,10 +556,10 @@ func (m *SystemStatsMonitor) collectGoMetrics(snapshot *SystemStatsSnapshot) {
 	snapshot.GoGCCount = memStats.NumGC
 }
 
-// collectCustomMetrics collects custom application-specific metrics via callback
+// collectCustomMetrics collects custom application-specific metrics via callback manager
 func (m *SystemStatsMonitor) collectCustomMetrics(snapshot *SystemStatsSnapshot) {
-	if m.config.CustomStatsCallback != nil {
-		if customStats := m.config.CustomStatsCallback(); customStats != nil {
+	if m.config.CustomCallbackManager != nil {
+		if customStats := m.config.CustomCallbackManager.CollectAllMetrics(); customStats != nil {
 			// Copy the custom stats into the snapshot
 			for key, value := range customStats {
 				snapshot.CustomMetrics[key] = value
@@ -630,7 +698,7 @@ func (m *SystemStatsMonitor) logSnapshot(snapshot SystemStatsSnapshot, reasons [
 	}
 
 	if len(reasons) > 0 {
-		logMsg += fmt.Sprintf(" [Triggered by: %s]", fmt.Sprintf("%v", reasons))
+		logMsg += fmt.Sprintf(" [%s]", fmt.Sprintf("%v", reasons))
 	}
 
 	m.config.Logger.Log(LogInfo, logMsg)
@@ -680,16 +748,39 @@ func (m *SystemStatsMonitor) GetFormattedSnapshot() string {
 	return result
 }
 
-// SetCustomStatsCallback allows updating the custom stats callback after monitor creation
-// This is thread-safe and the new callback will be used in the next monitoring cycle
-func (m *SystemStatsMonitor) SetCustomStatsCallback(callback CustomStatsCallback) {
-	// We could add a mutex here if needed, but since we're just replacing a function pointer
-	// and Go guarantees atomic pointer writes, this should be safe
-	m.config.CustomStatsCallback = callback
+// RegisterCustomStatsCallback registers a custom stats callback with a unique identifier
+// This allows multiple components to register their own callbacks without conflicts
+func (m *SystemStatsMonitor) RegisterCustomStatsCallback(id string, callback CustomStatsCallback) {
+	if m.config.CustomCallbackManager == nil {
+		m.config.CustomCallbackManager = NewCustomCallbackManager()
+	}
+	m.config.CustomCallbackManager.RegisterCallback(id, callback)
 }
 
-// UnregisterCustomStatsCallback removes the custom stats callback, disabling custom metrics collection
-// This is thread-safe and custom metrics will stop being collected in the next monitoring cycle
-func (m *SystemStatsMonitor) UnregisterCustomStatsCallback() {
-	m.config.CustomStatsCallback = nil
+// UnregisterCustomStatsCallback removes a specific custom stats callback by ID
+func (m *SystemStatsMonitor) UnregisterCustomStatsCallback(id string) {
+	if m.config.CustomCallbackManager != nil {
+		m.config.CustomCallbackManager.UnregisterCallback(id)
+	}
+}
+
+// UnregisterAllCustomStatsCallbacks removes all custom stats callbacks
+func (m *SystemStatsMonitor) UnregisterAllCustomStatsCallbacks() {
+	if m.config.CustomCallbackManager != nil {
+		m.config.CustomCallbackManager.UnregisterAllCallbacks()
+	}
+}
+
+// GetRegisteredCallbackIDs returns a list of all registered callback IDs
+func (m *SystemStatsMonitor) GetRegisteredCallbackIDs() []string {
+	if m.config.CustomCallbackManager != nil {
+		return m.config.CustomCallbackManager.GetCallbackIDs()
+	}
+	return []string{}
+}
+
+// SetCustomStatsCallback is deprecated but kept for backward compatibility
+// Use RegisterCustomStatsCallback instead for multi-callback support
+func (m *SystemStatsMonitor) SetCustomStatsCallback(callback CustomStatsCallback) {
+	m.RegisterCustomStatsCallback("default", callback)
 }
