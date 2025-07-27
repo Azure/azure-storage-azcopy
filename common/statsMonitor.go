@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"sort"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/shirou/gopsutil/v3/cpu"
@@ -17,6 +18,8 @@ import (
 	"github.com/shirou/gopsutil/v3/net"
 	"github.com/shirou/gopsutil/v3/process"
 )
+
+var GlobalSystemStatsMonitor *SystemStatsMonitor
 
 // CustomStatsCallback defines a function type for collecting custom application-specific metrics
 // The callback should return a map of metric names to their values as strings
@@ -132,6 +135,11 @@ type SystemStatsSnapshot struct {
 	DiskWriteMBps float64
 	DiskReadOps   uint64
 	DiskWriteOps  uint64
+
+	// File descriptor metrics
+	OpenFileDescriptors   int64
+	MaxFileDescriptors    int64
+	FileDescriptorPercent float64
 
 	// Process-specific metrics
 	ProcessCPUPercent float64
@@ -352,6 +360,9 @@ func (m *SystemStatsMonitor) collectSnapshot() SystemStatsSnapshot {
 	// Collect disk I/O metrics
 	m.collectDiskIOMetrics(&snapshot)
 
+	// Collect file descriptor metrics
+	m.collectFileDescriptorMetrics(&snapshot)
+
 	// Collect process-specific metrics
 	m.collectProcessMetrics(&snapshot)
 
@@ -524,6 +535,26 @@ func (m *SystemStatsMonitor) collectDiskIOMetrics(snapshot *SystemStatsSnapshot)
 	}
 }
 
+// collectFileDescriptorMetrics collects file descriptor usage metrics
+func (m *SystemStatsMonitor) collectFileDescriptorMetrics(snapshot *SystemStatsSnapshot) {
+	pid := os.Getpid()
+
+	// Count open file descriptors by reading /proc/PID/fd directory
+	fdDir := fmt.Sprintf("/proc/%d/fd", pid)
+	if files, err := os.ReadDir(fdDir); err == nil {
+		snapshot.OpenFileDescriptors = int64(len(files))
+	}
+
+	// Get file descriptor limits using syscall
+	var rlimit syscall.Rlimit
+	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rlimit); err == nil {
+		snapshot.MaxFileDescriptors = int64(rlimit.Cur)
+		if snapshot.MaxFileDescriptors > 0 {
+			snapshot.FileDescriptorPercent = float64(snapshot.OpenFileDescriptors) / float64(snapshot.MaxFileDescriptors) * 100
+		}
+	}
+}
+
 // collectProcessMetrics collects current process metrics
 func (m *SystemStatsMonitor) collectProcessMetrics(snapshot *SystemStatsSnapshot) {
 	if m.currentProcess != nil {
@@ -659,7 +690,7 @@ func (m *SystemStatsMonitor) logSnapshot(snapshot SystemStatsSnapshot, reasons [
 	}
 
 	logMsg := fmt.Sprintf(
-		"CPU:%.1f%% Mem:%.1f%%(%.0fMB) Load:%.2f Folders:[%s] DiskSpace:%.1f%%(%.0fMB free) Net:%.1f/%.1fMB/s DiskIO:%.1f/%.1fMB/s Proc:%.1f%%(%.0fMB,%dth) Go:%dgr/%.0fMB",
+		"CPU:%.1f%% Mem:%.1f%%(%.0fMB) Load:%.2f Folders:[%s] DiskSpace:%.1f%%(%.0fMB free) Net:%.1f/%.1fMB/s DiskIO:%.1f/%.1fMB/s FDs:%d/%d(%.1f%%) Proc:%.1f%%(%.0fMB,%dth) Go:%dgr/%.0fMB",
 		snapshot.CPUPercent,
 		snapshot.MemoryPercent,
 		float64(snapshot.MemoryUsedMB),
@@ -671,6 +702,9 @@ func (m *SystemStatsMonitor) logSnapshot(snapshot SystemStatsSnapshot, reasons [
 		snapshot.NetworkWriteMBps,
 		snapshot.DiskReadMBps,
 		snapshot.DiskWriteMBps,
+		snapshot.OpenFileDescriptors,
+		snapshot.MaxFileDescriptors,
+		snapshot.FileDescriptorPercent,
 		snapshot.ProcessCPUPercent,
 		float64(snapshot.ProcessMemoryMB),
 		snapshot.ProcessThreads,
@@ -726,7 +760,7 @@ func (m *SystemStatsMonitor) GetFormattedSnapshot() string {
 	}
 
 	result := fmt.Sprintf(
-		"[%s] CPU:%.1f%% Load:%.2f Mem:%.1f%%(%.0fMB) Folders:[%s] DiskSpace:%.1f%%(%.0f/%.0fMB) Net:%.1f/%.1fMB/s DiskIO:%.1f/%.1fMB/s Proc:%.1f%%(%.0fMB,%dth) Go:%dgr/%.0fMB GC:%d",
+		"[%s] CPU:%.1f%% Load:%.2f Mem:%.1f%%(%.0fMB) Folders:[%s] DiskSpace:%.1f%%(%.0f/%.0fMB) Net:%.1f/%.1fMB/s DiskIO:%.1f/%.1fMB/s FDs:%d/%d(%.1f%%) Proc:%.1f%%(%.0fMB,%dth) Go:%dgr/%.0fMB GC:%d",
 		snapshot.Timestamp.Format(time.RFC3339),
 		snapshot.CPUPercent,
 		snapshot.LoadAverage1Min,
@@ -737,6 +771,9 @@ func (m *SystemStatsMonitor) GetFormattedSnapshot() string {
 		float64(snapshot.DiskSpaceTotalMB),
 		snapshot.NetworkReadMBps, snapshot.NetworkWriteMBps,
 		snapshot.DiskReadMBps, snapshot.DiskWriteMBps,
+		snapshot.OpenFileDescriptors,
+		snapshot.MaxFileDescriptors,
+		snapshot.FileDescriptorPercent,
 		snapshot.ProcessCPUPercent, float64(snapshot.ProcessMemoryMB), snapshot.ProcessThreads,
 		snapshot.GoRoutinesCount, float64(snapshot.GoMemoryMB), snapshot.GoGCCount,
 	)

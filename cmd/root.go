@@ -68,8 +68,6 @@ var isPipeDownload bool
 var retryStatusCodes string
 var debugMemoryProfile string
 
-var SystemStatsMonitor *common.SystemStatsMonitor
-
 type jobLoggerInfo struct {
 	jobID         common.JobID
 	logFileFolder string
@@ -279,27 +277,28 @@ func StartSystemStatsMonitorForJob(jobId common.JobID) {
 		},
 	}
 
-	SystemStatsMonitor, _ = common.NewSystemStatsMonitor(config)
-	SystemStatsMonitor.Start(context.TODO())
+	common.GlobalSystemStatsMonitor, _ = common.NewSystemStatsMonitor(config)
+
+	common.GlobalSystemStatsMonitor.Start(context.TODO())
 
 	glcm.RegisterCloseFunc(func() {
-		SystemStatsMonitor.UnregisterAllCustomStatsCallbacks()
-		SystemStatsMonitor.Stop()
+		common.GlobalSystemStatsMonitor.UnregisterAllCustomStatsCallbacks()
+		common.GlobalSystemStatsMonitor.Stop()
 	})
 }
 
 // RegisterGlobalCustomStatsCallbackWithID registers a custom stats callback with a specific ID
 // This allows multiple callbacks to be registered with the global SystemStatsMonitor
 func RegisterGlobalCustomStatsCallbackWithID(id string, callback common.CustomStatsCallback) {
-	if SystemStatsMonitor != nil {
-		SystemStatsMonitor.RegisterCustomStatsCallback(id, callback)
+	if common.GlobalSystemStatsMonitor != nil {
+		common.GlobalSystemStatsMonitor.RegisterCustomStatsCallback(id, callback)
 	}
 }
 
 // UnregisterGlobalCustomStatsCallbackWithID removes a specific custom stats callback by ID
 func UnregisterGlobalCustomStatsCallbackWithID(id string) {
-	if SystemStatsMonitor != nil {
-		SystemStatsMonitor.UnregisterCustomStatsCallback(id)
+	if common.GlobalSystemStatsMonitor != nil {
+		common.GlobalSystemStatsMonitor.UnregisterCustomStatsCallback(id)
 	}
 }
 
