@@ -203,12 +203,32 @@ type LogConditions struct {
 	LogInterval time.Duration
 
 	// Conditional logging thresholds
-	CPUThreshold         float64 // Log if CPU > threshold
-	MemoryThreshold      float64 // Log if memory > threshold
-	DiskThreshold        float64 // Log if any monitored disk > threshold
-	LoadThreshold        float64 // Log if load average > threshold
-	NetworkMBpsThreshold float64 // Log if combined network I/O > threshold
-	DiskIOThreshold      float64 // Log if combined disk I/O > threshold
+	CPUThreshold            float64 // Log if CPU > threshold
+	MemoryThreshold         float64 // Log if memory > threshold
+	DiskThreshold           float64 // Log if any monitored disk > threshold
+	LoadThreshold           float64 // Log if load average > threshold
+	NetworkMBpsThreshold    float64 // Log if combined network I/O > threshold
+	DiskIOThreshold         float64 // Log if combined disk I/O > threshold
+	FileDescriptorThreshold float64 // Log if file descriptor usage > threshold (percentage)
+}
+
+// AveragingState tracks accumulated values for averaging fluctuating metrics
+// This provides smoother logging values by averaging CPU, Network I/O, Disk I/O,
+// and File Descriptor metrics between log intervals instead of showing point-in-time spikes
+type AveragingState struct {
+	// Accumulated values since last log
+	cpuSum              float64
+	networkReadMBpsSum  float64
+	networkWriteMBpsSum float64
+	diskReadMBpsSum     float64
+	diskWriteMBpsSum    float64
+	fileDescriptorSum   float64
+
+	// Sample count for averaging
+	sampleCount int
+
+	// Last reset time
+	lastReset time.Time
 }
 
 // SystemStatsMonitor monitors system metrics using gopsutil
@@ -228,6 +248,10 @@ type SystemStatsMonitor struct {
 
 	// Logging state
 	lastLogTime time.Time
+
+	// Averaging state for fluctuating metrics
+	averagingState AveragingState
+	averagingMutex sync.Mutex
 
 	// Process handle for current process
 	currentProcess *process.Process
@@ -266,6 +290,9 @@ func NewSystemStatsMonitor(config StatsMonitorConfig) (*SystemStatsMonitor, erro
 // Start begins monitoring in a background goroutine
 func (m *SystemStatsMonitor) Start(parentCtx context.Context) {
 	m.ctx, m.cancel = context.WithCancel(parentCtx)
+
+	// Log static system information once at startup
+	m.logStaticSystemInfo()
 
 	m.wg.Add(1)
 	go m.monitorLoop()
@@ -311,6 +338,103 @@ func (m *SystemStatsMonitor) GetSnapshot() SystemStatsSnapshot {
 	return snapshot
 }
 
+// logStaticSystemInfo logs static system information once at startup
+func (m *SystemStatsMonitor) logStaticSystemInfo() {
+	if m.config.Logger == nil {
+		return
+	}
+
+	// Collect static system information
+	staticInfo := make([]string, 0)
+
+	// CPU information
+	if cpuInfo, err := cpu.Info(); err == nil && len(cpuInfo) > 0 {
+		staticInfo = append(staticInfo, fmt.Sprintf("CPU: %s (%d cores)", cpuInfo[0].ModelName, len(cpuInfo)))
+	} else {
+		staticInfo = append(staticInfo, fmt.Sprintf("CPU: %d cores", runtime.NumCPU()))
+	}
+
+	// Memory information
+	if vmStat, err := mem.VirtualMemory(); err == nil {
+		staticInfo = append(staticInfo, fmt.Sprintf("Memory: %.1fGB total", float64(vmStat.Total)/(1024*1024*1024)))
+	}
+
+	// File descriptor limits
+	var rlimit syscall.Rlimit
+	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rlimit); err == nil {
+		staticInfo = append(staticInfo, fmt.Sprintf("FD Limit: %d/%d (soft/hard)", rlimit.Cur, rlimit.Max))
+	}
+
+	// Go version and architecture
+	staticInfo = append(staticInfo, fmt.Sprintf("Go: %s %s/%s", runtime.Version(), runtime.GOOS, runtime.GOARCH))
+
+	// Process ID
+	staticInfo = append(staticInfo, fmt.Sprintf("PID: %d", os.Getpid()))
+
+	// Log the static information on multiple lines for better readability
+	m.config.Logger.Log(LogInfo, "=== SYSTEM INFORMATION ===")
+	for _, info := range staticInfo {
+		m.config.Logger.Log(LogInfo, fmt.Sprintf("• %s", info))
+	}
+
+	// Log detailed stats monitoring configuration and methodology
+	m.logStatsMonitoringDetails()
+}
+
+// logStatsMonitoringDetails logs comprehensive information about stats collection methodology
+func (m *SystemStatsMonitor) logStatsMonitoringDetails() {
+	if m.config.Logger == nil {
+		return
+	}
+
+	// Log monitoring configuration
+	configMsg := fmt.Sprintf("Stats Monitoring: Collection interval=%v, Log interval=%v, Monitored paths=%v",
+		m.config.Interval,
+		m.config.LogConditions.LogInterval,
+		m.config.MonitorPaths)
+	m.config.Logger.Log(LogInfo, configMsg)
+
+	// Log threshold configuration
+	thresholdMsg := fmt.Sprintf("Alert Thresholds: CPU=%.1f%%, Memory=%.1f%%, FileDescriptor=%.1f%%, Load=%.2f, NetworkIO=%.1fMB/s, DiskIO=%.1fMB/s",
+		m.config.LogConditions.CPUThreshold,
+		m.config.LogConditions.MemoryThreshold,
+		m.config.LogConditions.FileDescriptorThreshold,
+		m.config.LogConditions.LoadThreshold,
+		m.config.LogConditions.NetworkMBpsThreshold,
+		m.config.LogConditions.DiskIOThreshold)
+	m.config.Logger.Log(LogInfo, thresholdMsg)
+
+	// Log detailed methodology explanation
+	methodologyLines := []string{
+		"=== STATS COLLECTION METHODOLOGY ===",
+		"• COLLECTION: System metrics collected every " + m.config.Interval.String() + " via gopsutil library",
+		"• AVERAGING: CPU, Network I/O, Disk I/O, and File Descriptors are averaged between log intervals to smooth fluctuations",
+		"• POINT-IN-TIME: Memory, Load, Disk Space, Process metrics use latest values (less volatile)",
+		"",
+		"=== METRIC DETAILS ===",
+		"• CPU: System CPU percentage (100ms sample via gopsutil, then averaged)",
+		"• Memory: Virtual memory usage percentage and MB used (via /proc/meminfo)",
+		"• Load: 1/5/15 minute load averages from OS (already time-averaged by kernel)",
+		"• Network I/O: MB/s read/write rates calculated from /proc/net/dev byte counters (averaged)",
+		"• Disk I/O: MB/s read/write rates from /sys/block/*/stat across all disks (averaged)",
+		"• File Descriptors: Count from /proc/PID/fd directory, limits from getrlimit() (averaged)",
+		"• Disk Space: Filesystem usage from statvfs() system call (point-in-time)",
+		"• Process: Current process CPU/memory/threads via /proc/PID/stat (point-in-time)",
+		"• Go Runtime: Goroutines, heap memory, GC count from runtime package (point-in-time)",
+		"• Custom Metrics: Application-specific via registered callback functions",
+		"",
+		"=== LOGGING BEHAVIOR ===",
+		"• Automatic logging every " + fmt.Sprintf("%.0f", m.config.LogConditions.LogInterval.Seconds()) + "s (if configured)",
+		"• Threshold-based alerts when metrics exceed configured limits",
+		"• Averaged metrics prevent false alarms from temporary spikes",
+		"• Log format: CPU:X% Mem:X%(XMB) Load:X.X Net:X.X/X.XMB/s Disk:X.X/X.XMB/s FDs:X(X%) ...",
+	}
+
+	for _, line := range methodologyLines {
+		m.config.Logger.Log(LogInfo, line)
+	}
+}
+
 // monitorLoop is the main monitoring loop
 func (m *SystemStatsMonitor) monitorLoop() {
 	defer m.wg.Done()
@@ -329,6 +453,10 @@ func (m *SystemStatsMonitor) monitorLoop() {
 		case <-ticker.C:
 			snapshot := m.collectSnapshot()
 			m.updateSnapshot(snapshot)
+
+			// Accumulate fluctuating metrics for averaging
+			m.accumulateMetricsForAveraging(snapshot)
+
 			m.checkAndLog(snapshot)
 		}
 	}
@@ -373,6 +501,60 @@ func (m *SystemStatsMonitor) collectSnapshot() SystemStatsSnapshot {
 	m.collectCustomMetrics(&snapshot)
 
 	return snapshot
+}
+
+// accumulateMetricsForAveraging accumulates fluctuating metrics for averaging
+func (m *SystemStatsMonitor) accumulateMetricsForAveraging(snapshot SystemStatsSnapshot) {
+	m.averagingMutex.Lock()
+	defer m.averagingMutex.Unlock()
+
+	// Initialize if first sample or reset
+	if m.averagingState.lastReset.IsZero() {
+		m.averagingState.lastReset = snapshot.Timestamp
+	}
+
+	// Accumulate fluctuating metrics
+	m.averagingState.cpuSum += snapshot.CPUPercent
+	m.averagingState.networkReadMBpsSum += snapshot.NetworkReadMBps
+	m.averagingState.networkWriteMBpsSum += snapshot.NetworkWriteMBps
+	m.averagingState.diskReadMBpsSum += snapshot.DiskReadMBps
+	m.averagingState.diskWriteMBpsSum += snapshot.DiskWriteMBps
+	m.averagingState.fileDescriptorSum += float64(snapshot.OpenFileDescriptors)
+	m.averagingState.sampleCount++
+}
+
+// getAveragedMetrics returns averaged values for fluctuating metrics and resets the accumulator
+func (m *SystemStatsMonitor) getAveragedMetrics() (avgCPU, avgNetRead, avgNetWrite, avgDiskRead, avgDiskWrite, avgFileDescriptors float64) {
+	m.averagingMutex.Lock()
+	defer m.averagingMutex.Unlock()
+
+	// Calculate averages if we have samples
+	if m.averagingState.sampleCount > 0 {
+		avgCPU = m.averagingState.cpuSum / float64(m.averagingState.sampleCount)
+		avgNetRead = m.averagingState.networkReadMBpsSum / float64(m.averagingState.sampleCount)
+		avgNetWrite = m.averagingState.networkWriteMBpsSum / float64(m.averagingState.sampleCount)
+		avgDiskRead = m.averagingState.diskReadMBpsSum / float64(m.averagingState.sampleCount)
+		avgDiskWrite = m.averagingState.diskWriteMBpsSum / float64(m.averagingState.sampleCount)
+		avgFileDescriptors = m.averagingState.fileDescriptorSum / float64(m.averagingState.sampleCount)
+	}
+
+	// Reset accumulator for next interval
+	m.averagingState = AveragingState{
+		lastReset: time.Now(),
+	}
+
+	return
+}
+
+// GetAveragingStats returns current averaging statistics for debugging
+func (m *SystemStatsMonitor) GetAveragingStats() (sampleCount int, duration time.Duration) {
+	m.averagingMutex.Lock()
+	defer m.averagingMutex.Unlock()
+
+	if !m.averagingState.lastReset.IsZero() {
+		duration = time.Since(m.averagingState.lastReset)
+	}
+	return m.averagingState.sampleCount, duration
 }
 
 // collectCPUMetrics collects CPU-related metrics
@@ -623,10 +805,25 @@ func (m *SystemStatsMonitor) checkAndLog(snapshot SystemStatsSnapshot) {
 		}
 	}
 
-	// Check threshold-based logging
-	if m.config.LogConditions.CPUThreshold > 0 && snapshot.CPUPercent > m.config.LogConditions.CPUThreshold {
+	// Get current averaged values for threshold checking
+	avgCPU, avgNetRead, avgNetWrite, avgDiskRead, avgDiskWrite, avgFileDescriptors := func() (float64, float64, float64, float64, float64, float64) {
+		m.averagingMutex.Lock()
+		defer m.averagingMutex.Unlock()
+		if m.averagingState.sampleCount > 0 {
+			return m.averagingState.cpuSum / float64(m.averagingState.sampleCount),
+				m.averagingState.networkReadMBpsSum / float64(m.averagingState.sampleCount),
+				m.averagingState.networkWriteMBpsSum / float64(m.averagingState.sampleCount),
+				m.averagingState.diskReadMBpsSum / float64(m.averagingState.sampleCount),
+				m.averagingState.diskWriteMBpsSum / float64(m.averagingState.sampleCount),
+				m.averagingState.fileDescriptorSum / float64(m.averagingState.sampleCount)
+		}
+		return 0, 0, 0, 0, 0, 0
+	}()
+
+	// Check threshold-based logging (use averaged values for fluctuating metrics)
+	if m.config.LogConditions.CPUThreshold > 0 && avgCPU > m.config.LogConditions.CPUThreshold {
 		shouldLog = true
-		reasons = append(reasons, fmt.Sprintf("CPU=%.1f%%", snapshot.CPUPercent))
+		reasons = append(reasons, fmt.Sprintf("CPU=%.1f%%", avgCPU))
 	}
 
 	if m.config.LogConditions.MemoryThreshold > 0 && snapshot.MemoryPercent > m.config.LogConditions.MemoryThreshold {
@@ -647,18 +844,30 @@ func (m *SystemStatsMonitor) checkAndLog(snapshot SystemStatsSnapshot) {
 		}
 	}
 
-	// Check network I/O threshold
+	// Check file descriptor threshold (use averaged values)
+	if m.config.LogConditions.FileDescriptorThreshold > 0 {
+		// Calculate averaged file descriptor percentage
+		if snapshot.MaxFileDescriptors > 0 {
+			avgFileDescriptorPercent := avgFileDescriptors / float64(snapshot.MaxFileDescriptors) * 100
+			if avgFileDescriptorPercent > m.config.LogConditions.FileDescriptorThreshold {
+				shouldLog = true
+				reasons = append(reasons, fmt.Sprintf("FD=%.1f%%", avgFileDescriptorPercent))
+			}
+		}
+	}
+
+	// Check network I/O threshold (use averaged values)
 	if m.config.LogConditions.NetworkMBpsThreshold > 0 {
-		totalNetworkMBps := snapshot.NetworkReadMBps + snapshot.NetworkWriteMBps
+		totalNetworkMBps := avgNetRead + avgNetWrite
 		if totalNetworkMBps > m.config.LogConditions.NetworkMBpsThreshold {
 			shouldLog = true
 			reasons = append(reasons, fmt.Sprintf("NetworkIO=%.1fMB/s", totalNetworkMBps))
 		}
 	}
 
-	// Check disk I/O threshold
+	// Check disk I/O threshold (use averaged values)
 	if m.config.LogConditions.DiskIOThreshold > 0 {
-		totalDiskMBps := snapshot.DiskReadMBps + snapshot.DiskWriteMBps
+		totalDiskMBps := avgDiskRead + avgDiskWrite
 		if totalDiskMBps > m.config.LogConditions.DiskIOThreshold {
 			shouldLog = true
 			reasons = append(reasons, fmt.Sprintf("DiskIO=%.1fMB/s", totalDiskMBps))
@@ -689,21 +898,23 @@ func (m *SystemStatsMonitor) logSnapshot(snapshot SystemStatsSnapshot, reasons [
 		folderSummary += fmt.Sprintf("%s:%.0fMB", path, float64(metrics.FolderSizeMB))
 	}
 
+	// Get averaged values for fluctuating metrics
+	avgCPU, avgNetRead, avgNetWrite, avgDiskRead, avgDiskWrite, avgFileDescriptors := m.getAveragedMetrics()
+
 	logMsg := fmt.Sprintf(
-		"CPU:%.1f%% Mem:%.1f%%(%.0fMB) Load:%.2f Folders:[%s] DiskSpace:%.1f%%(%.0fMB free) Net:%.1f/%.1fMB/s DiskIO:%.1f/%.1fMB/s FDs:%d/%d(%.1f%%) Proc:%.1f%%(%.0fMB,%dth) Go:%dgr/%.0fMB",
-		snapshot.CPUPercent,
+		"CPU:%.1f%% Mem:%.1f%%(%.0fMB) Load:%.2f Folders:[%s] DiskSpace:%.1f%%(%.0fMB free) Net:%.1f/%.1fMB/s Disk:%.1f/%.1fMB/s FDs:%.0f(%.1f%%) Proc:%.1f%%(%.0fMB,%dth) Go:%d/%.0fMB",
+		avgCPU, // Use averaged CPU instead of snapshot.CPUPercent
 		snapshot.MemoryPercent,
 		float64(snapshot.MemoryUsedMB),
 		snapshot.LoadAverage1Min,
 		folderSummary,
 		snapshot.DiskSpaceUsedPercent,
 		float64(snapshot.DiskSpaceFreeMB),
-		snapshot.NetworkReadMBps,
-		snapshot.NetworkWriteMBps,
-		snapshot.DiskReadMBps,
-		snapshot.DiskWriteMBps,
-		snapshot.OpenFileDescriptors,
-		snapshot.MaxFileDescriptors,
+		avgNetRead,         // Use averaged network read
+		avgNetWrite,        // Use averaged network write
+		avgDiskRead,        // Use averaged disk read
+		avgDiskWrite,       // Use averaged disk write
+		avgFileDescriptors, // Use averaged file descriptors
 		snapshot.FileDescriptorPercent,
 		snapshot.ProcessCPUPercent,
 		float64(snapshot.ProcessMemoryMB),
@@ -760,7 +971,7 @@ func (m *SystemStatsMonitor) GetFormattedSnapshot() string {
 	}
 
 	result := fmt.Sprintf(
-		"[%s] CPU:%.1f%% Load:%.2f Mem:%.1f%%(%.0fMB) Folders:[%s] DiskSpace:%.1f%%(%.0f/%.0fMB) Net:%.1f/%.1fMB/s DiskIO:%.1f/%.1fMB/s FDs:%d/%d(%.1f%%) Proc:%.1f%%(%.0fMB,%dth) Go:%dgr/%.0fMB GC:%d",
+		"[%s] CPU:%.1f%% Load:%.2f Mem:%.1f%%(%.0fMB) Folders:[%s] DiskSpace:%.1f%%(%.0f/%.0fMB) Net:%.1f/%.1fMB/s Disk:%.1f/%.1fMB/s FDs:%d/%d(%.1f%%) Proc:%.1f%%(%.0fMB,%dth) Go:%d/%.0fMB GC:%d",
 		snapshot.Timestamp.Format(time.RFC3339),
 		snapshot.CPUPercent,
 		snapshot.LoadAverage1Min,
@@ -801,6 +1012,14 @@ func (m *SystemStatsMonitor) UnregisterCustomStatsCallback(id string) {
 	}
 }
 
+// IsCustomStatsCallbackRegistered checks if a custom stats callback with the given ID is registered
+func (m *SystemStatsMonitor) IsCustomStatsCallbackRegistered(id string) bool {
+	if m.config.CustomCallbackManager != nil {
+		return m.config.CustomCallbackManager.IsCallbackRegistered(id)
+	}
+	return false
+}
+
 // UnregisterAllCustomStatsCallbacks removes all custom stats callbacks
 func (m *SystemStatsMonitor) UnregisterAllCustomStatsCallbacks() {
 	if m.config.CustomCallbackManager != nil {
@@ -814,6 +1033,14 @@ func (m *SystemStatsMonitor) GetRegisteredCallbackIDs() []string {
 		return m.config.CustomCallbackManager.GetCallbackIDs()
 	}
 	return []string{}
+}
+
+// IsCallbackRegistered checks if a callback with the given ID is registered
+func (m *CustomCallbackManager) IsCallbackRegistered(id string) bool {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+	_, exists := m.callbacks[id]
+	return exists
 }
 
 // SetCustomStatsCallback is deprecated but kept for backward compatibility

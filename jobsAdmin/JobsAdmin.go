@@ -109,42 +109,7 @@ var JobsAdmin interface {
 	ChangeLogLevel(level common.LogLevel, jobId common.JobID) error
 
 	CurrentConcurrencySettings() ste.ConcurrencySettings
-}
-
-// createSTEStatsCallback creates a callback for STE metrics that provides real-time
-// visibility into the Storage Transfer Engine's internal state
-func createSTEStatsCallback() common.CustomStatsCallback {
-	return func() map[string]string {
-		stats := make(map[string]string)
-
-		if JobsAdmin == nil {
-			return stats
-		}
-
-		// Get all job IDs
-		jobIDs := JobsAdmin.JobIDs()
-
-		if len(jobIDs) == 0 {
-			return stats
-		}
-
-		var totalActiveConnections int64
-		var totalFilesProcessed int64
-
-		// Iterate through all jobs to get their metrics
-		for _, jobID := range jobIDs {
-			if jobMgr, exists := JobsAdmin.JobMgr(jobID); exists {
-				// Get active connections for this job
-				totalActiveConnections += jobMgr.ActiveConnections()
-				totalFilesProcessed += jobMgr.GetTotalNumFilesProcessed()
-			}
-		}
-
-		stats["connections"] = fmt.Sprintf("%d", totalActiveConnections)
-		stats["files_processed"] = fmt.Sprintf("%d", totalFilesProcessed)
-
-		return stats
-	}
+	RegisterStatsMonitorIfNotDone() // Register the STE stats monitor callback
 }
 
 func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64, azcopyJobPlanFolder string, azcopyLogPathFolder string, providePerfAdvice bool) {
@@ -196,11 +161,6 @@ func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, 
 	ja.concurrencyTuner = ja.createConcurrencyTuner()
 
 	JobsAdmin = ja
-
-	// Register STE metrics callback with the global stats monitor if available
-	if common.GlobalSystemStatsMonitor != nil {
-		common.GlobalSystemStatsMonitor.RegisterCustomStatsCallback("ste", createSTEStatsCallback())
-	}
 
 	// Spin up slice pool pruner
 	go ja.slicePoolPruneLoop()
@@ -601,6 +561,51 @@ func (ja *jobsAdmin) ChangeLogLevel(level common.LogLevel, jobId common.JobID) e
 	} else {
 		jm.ChangeLogLevel(level)
 		return nil
+	}
+}
+
+// getSTEStats creates a callback for STE metrics that provides real-time
+// visibility into the Storage Transfer Engine's internal state
+func getSTEStats() map[string]string {
+	stats := make(map[string]string)
+
+	if JobsAdmin == nil {
+		return stats
+	}
+
+	// Get all job IDs
+	jobIDs := JobsAdmin.JobIDs()
+
+	if len(jobIDs) == 0 {
+		return stats
+	}
+
+	var totalTransfersQueued int64
+	var totalTransfersCompleted int64
+
+	// Iterate through all jobs to get their metrics
+	for _, jobID := range jobIDs {
+		if jobMgr, exists := JobsAdmin.JobMgr(jobID); exists {
+			totalTransfersQueued += jobMgr.GetTotalNumFilesProcessed()
+
+			jobSummary := jobMgr.ListJobSummary()
+			totalTransfersCompleted += int64(jobSummary.TransfersCompleted) + int64(jobSummary.TransfersFailed) +
+				int64(jobSummary.TransfersSkipped)
+		}
+	}
+
+	stats["active"] = fmt.Sprintf("%d", totalTransfersQueued-totalTransfersCompleted)
+	stats["done"] = fmt.Sprintf("%d", totalTransfersCompleted)
+
+	return stats
+}
+
+func (ja *jobsAdmin) RegisterStatsMonitorIfNotDone() {
+
+	if common.GlobalSystemStatsMonitor != nil &&
+		!common.GlobalSystemStatsMonitor.IsCustomStatsCallbackRegistered("ste") {
+		// Register the callback for STE stats
+		common.GlobalSystemStatsMonitor.RegisterCustomStatsCallback("ste", getSTEStats)
 	}
 }
 
