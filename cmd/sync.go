@@ -830,8 +830,6 @@ func init() {
 
 			raw.preserveInfo, raw.preservePermissions = ComputePreserveFlags(cmd, userFromTo,
 				raw.preserveInfo, raw.preserveSMBInfo, raw.preservePermissions, raw.preserveSMBPermissions)
-			// TODO: Remove. Added for debugging purposes.
-			//fmt.Println(fmt.Sprintf("PreserveInfo: %v, PreservePermissions: %v, NFS: %v", raw.preserveInfo, raw.preservePermissions, common.IsNFSCopy()))
 
 			cooked, err := raw.cook()
 			if err != nil {

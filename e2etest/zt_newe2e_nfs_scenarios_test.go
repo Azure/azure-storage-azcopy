@@ -6,9 +6,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/google/uuid"
 )
 
 func init() {
@@ -739,7 +738,6 @@ func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForNFS(svm *ScenarioVar
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
-					//FromTo:              pointerTo(fromTo),
 					PreserveInfo:        pointerTo(preserveProperties),
 					PreservePermissions: pointerTo(preservePermissions),
 				},

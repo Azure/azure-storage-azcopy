@@ -407,7 +407,6 @@ func ComputePreserveFlags(cmd *cobra.Command, userFromTo common.FromTo, preserve
 
 	if common.IsNFSCopy() && ((preserveSMBInfo && runtime.GOOS == "linux") || preserveSMBPermissions) {
 		glcm.Error(InvalidFlagsForNFSMsg)
-		//return false, false, fmt.Errorf(InvalidFlagsForNFSMsg)
 	}
 
 	return finalPreserveInfo, finalPreservePermissions

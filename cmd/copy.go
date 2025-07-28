@@ -387,7 +387,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 			raw.preserveOwner,
 			cooked.FromTo)
 	}
-	//fmt.Println("IsNFS", common.IsNFSCopy(), "preserveInfo", cooked.preserveInfo, "preservePOSIXProperties", cooked.preservePOSIXProperties, "preservePermissions", cooked.preservePermissions, "hardlinks", cooked.hardlinks)
+
 	// TODO: Figure out this preservePermissinos stuff
 	if cooked.preservePermissions.IsTruthy() && cooked.FromTo.From() == common.ELocation.Blob() {
 		// If a user is trying to persist from Blob storage with ACLs, they probably want directories too, because ACLs only exist in HNS.
@@ -1613,8 +1613,6 @@ func init() {
 
 			raw.preserveInfo, raw.preservePermissions = ComputePreserveFlags(cmd, userFromTo,
 				raw.preserveInfo, raw.preserveSMBInfo, raw.preservePermissions, raw.preserveSMBPermissions)
-			// TODO: Remove. Added for debugging purposes.
-			//fmt.Println(fmt.Sprintf("PreserveInfo: %v, PreservePermissions: %v, NFS: %v, fromTo: %v", raw.preserveInfo, raw.preservePermissions, common.IsNFSCopy(), userFromTo.String()))
 
 			cooked, err := raw.cook()
 			if err != nil {
