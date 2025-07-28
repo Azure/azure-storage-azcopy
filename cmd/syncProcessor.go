@@ -316,7 +316,7 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			defer b.folderManager.RecordChildDeleted(objURL)
 
 			_, err = blobClient.Delete(b.ctx, nil)
-		case common.ELocation.File():
+		case common.ELocation.File(), common.ELocation.FileNFS():
 			fsc, _ := sc.FileServiceClient()
 			fileClient := fsc.NewShareClient(b.containerName).NewRootDirectoryClient().NewFileClient(objectPath)
 
@@ -379,7 +379,7 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 				_, err = blobClient.Delete(b.ctx, nil)
 				return (err == nil)
 			}
-		case common.ELocation.File():
+		case common.ELocation.File(), common.ELocation.FileNFS():
 			fsc, _ := sc.FileServiceClient()
 			dirClient := fsc.NewShareClient(b.containerName).NewDirectoryClient(objectPath)
 			objURL, err = b.getObjectURL(dirClient.URL())

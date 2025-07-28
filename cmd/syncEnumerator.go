@@ -72,7 +72,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 			if entityType == common.EEntityType.File() {
 				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 			}
-			if isNFSCopy {
+			if common.IsNFSCopy() {
 				if entityType == common.EEntityType.Other() {
 					atomic.AddUint32(&cca.atomicSkippedSpecialFileCount, 1)
 				} else if entityType == common.EEntityType.Symlink() {
@@ -248,7 +248,6 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.trailingDot,
 		},
-		IsNFSCopy: cca.isNFSCopy,
 	}
 
 	var srcReauthTok *common.ScopedAuthenticator
@@ -261,7 +260,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 
 	// Create Source Client.
 	var azureFileSpecificOptions any
-	if cca.fromTo.From() == common.ELocation.File() {
+	if cca.fromTo.From() == common.ELocation.File() || cca.fromTo.From() == common.ELocation.FileNFS() {
 		azureFileSpecificOptions = &common.FileClientOptions{
 			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
 		}
@@ -280,7 +279,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	}
 
 	// Create Destination client
-	if cca.fromTo.To() == common.ELocation.File() {
+	if cca.fromTo.To() == common.ELocation.File() || cca.fromTo.To() == common.ELocation.FileNFS() {
 		azureFileSpecificOptions = &common.FileClientOptions{
 			AllowTrailingDot:       cca.trailingDot == common.ETrailingDotOption.Enable(),
 			AllowSourceTrailingDot: (cca.trailingDot == common.ETrailingDotOption.Enable() && cca.fromTo.To() == common.ELocation.File()),
@@ -308,33 +307,9 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		azureFileSpecificOptions,
 	)
 
-	//Protocol compatibility for SMB and NFS
-	// Handles source validation
-	if cca.fromTo.IsS2S() {
-		if cca.fromTo.From() == common.ELocation.File() {
-			if err := validateShareProtocolCompatibility(ctx,
-				cca.fromTo, cca.source, copyJobTemplate.SrcServiceClient, cca.isNFSCopy, true); err != nil {
-				return nil, err
-			}
-		} else if isNFSCopy {
-			return nil, errors.New("NFS copy is not supported for source location " + cca.fromTo.From().String())
-		}
-	}
-
-	// Handle destination validation
-	if (cca.fromTo.IsUpload() || cca.fromTo.IsS2S()) && cca.fromTo.To() == common.ELocation.File() {
-		if err := validateShareProtocolCompatibility(ctx, cca.fromTo,
-			cca.destination,
-			copyJobTemplate.DstServiceClient,
-			cca.isNFSCopy, false); err != nil {
-			return nil, err
-		}
-	} else if cca.fromTo.IsDownload() && cca.fromTo.From() == common.ELocation.File() {
-		if err := validateShareProtocolCompatibility(ctx, cca.fromTo,
-			cca.source, copyJobTemplate.SrcServiceClient,
-			cca.isNFSCopy, true); err != nil {
-			return nil, err
-		}
+	// Check protocol compatibility for File Shares
+	if err := validateProtocolCompatibility(ctx, cca.fromTo, cca.source, cca.destination, copyJobTemplate.SrcServiceClient, copyJobTemplate.DstServiceClient); err != nil {
+		return nil, err
 	}
 
 	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo, copyJobTemplate)
@@ -345,7 +320,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	var finalize func() error
 
 	switch cca.fromTo {
-	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile():
+	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile(), common.EFromTo.LocalFileNFS():
 		// Upload implies transferring from a local disk to a remote resource.
 		// In this scenario, the local disk (source) is scanned/indexed first because it is assumed that local file systems will be faster to enumerate than remote resources
 		// Then the destination is scanned and filtered based on what the destination contains
@@ -391,7 +366,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 			// since only then can we know which local files definitely don't exist remotely
 			var deleteScheduler objectProcessor
 			switch cca.fromTo.To() {
-			case common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS():
+			case common.ELocation.Blob(), common.ELocation.File(), common.ELocation.FileNFS(), common.ELocation.BlobFS():
 				deleter, err := newSyncDeleteProcessor(cca, fpo, copyJobTemplate.DstServiceClient)
 				if err != nil {
 					return err
