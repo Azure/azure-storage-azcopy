@@ -88,6 +88,10 @@ func (a *AzCopyParsedStdout) Write(p []byte) (n int, err error) {
 	n = len(p)
 
 	for _, v := range lines {
+		// Instead of failing, skip WARN messages since they will fail processing due to being invalid JSON.
+		if strings.HasPrefix(v, "WARN") {
+			continue
+		}
 		var out common.JsonOutputTemplate
 		err = json.Unmarshal([]byte(v), &out)
 		if err != nil {
