@@ -22,17 +22,12 @@ package cmd
 
 import (
 	"fmt"
-<<<<<<< HEAD
-=======
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-	"github.com/stretchr/testify/assert"
->>>>>>> f26646d0cb9e0838896334f5133038655680b70d
 	"strings"
 	"testing"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -92,52 +87,6 @@ func TestBlobAccountCopyToFileShareS2S(t *testing.T) {
 	})
 }
 
-<<<<<<< HEAD
-=======
-// TestBlobCopyToFileS2SImplicitDstShare uses a service-level URL on the destination to implicitly create the destination share.
-func TestBlobCopyToFileS2SImplicitDstShare(t *testing.T) {
-	a := assert.New(t)
-	bsc := getBlobServiceClient()
-	fsc := getFileServiceClient()
-
-	// create source container
-	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
-	defer deleteContainer(a, srcContainerClient)
-
-	// prepare a destination container URL to be deleted.
-	dstShareClient := fsc.NewShareClient(srcContainerName)
-	defer deleteShare(a, dstShareClient)
-
-	// create a scenario on the source container
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerClient, "blobFileImplicitDest")
-	a.NotZero(len(fileList)) // Ensure that at least one blob is present
-
-	// initialize the mocked RPC
-	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
-	mockedRPC.init()
-
-	// Create raw arguments
-	srcContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, srcContainerName)
-	dstServiceURLWithSAS := scenarioHelper{}.getRawFileServiceURLWithSAS(a)
-	raw := getDefaultRawCopyInput(srcContainerURLWithSAS.String(), dstServiceURLWithSAS.String())
-	// recursive is enabled by default
-
-	// run the copy, check the container, and check the transfer success.
-	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err) // Check there was no error
-
-		_, err = dstShareClient.GetProperties(ctx, nil)
-		a.Nil(err) // Ensure the destination share exists
-
-		// Ensure the transfers were scheduled
-		validateS2STransfersAreScheduled(a, "/", "/"+srcContainerName+"/", fileList, mockedRPC)
-	})
-}
-
->>>>>>> f26646d0cb9e0838896334f5133038655680b70d
 func TestBlobCopyToFileS2SWithSingleFile(t *testing.T) {
 	a := assert.New(t)
 	bsc := getBlobServiceClient()
