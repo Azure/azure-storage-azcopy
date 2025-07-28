@@ -32,8 +32,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -198,10 +196,8 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	filters = append(filters, buildRegexFilters(cca.excludeRegex, false)...)
 
 	// after making all filters, log any search prefix computed from them
-	if jobsAdmin.JobsAdmin != nil {
-		if prefixFilter := FilterSet(filters).GetEnumerationPreFilter(cca.recursive); prefixFilter != "" {
-			jobsAdmin.JobsAdmin.LogToJobLog("Search prefix, which may be used to optimize scanning, is: "+prefixFilter, common.LogInfo) // "May be used" because we don't know here which enumerators will use it
-		}
+	if prefixFilter := FilterSet(filters).GetEnumerationPreFilter(cca.recursive); prefixFilter != "" {
+		common.LogToJobLogWithPrefix("Search prefix, which may be used to optimize scanning, is: "+prefixFilter, common.LogInfo) // "May be used" because we don't know here which enumerators will use it
 	}
 
 	// decide our folder transfer strategy
@@ -210,9 +206,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	if !cca.dryrunMode {
 		glcm.Info(folderMessage)
 	}
-	if jobsAdmin.JobsAdmin != nil {
-		jobsAdmin.JobsAdmin.LogToJobLog(folderMessage, common.LogInfo)
-	}
+	common.LogToJobLogWithPrefix(folderMessage, common.LogInfo)
 
 	if cca.trailingDot == common.ETrailingDotOption.Enable() && !cca.fromTo.BothSupportTrailingDot() {
 		cca.trailingDot = common.ETrailingDotOption.Disable()

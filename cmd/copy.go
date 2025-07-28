@@ -1192,11 +1192,6 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		cca.StripTopDir = true
 	}
 
-	// TODO: Remove this check when FileBlob w/ File OAuth works.
-	if cca.FromTo.IsS2S() && cca.FromTo.From() == common.ELocation.File() && srcCredInfo.CredentialType.IsAzureOAuth() && cca.FromTo.To() != common.ELocation.File() {
-		return fmt.Errorf("S2S copy from Azure File authenticated with Azure AD to Blob/BlobFS is not supported")
-	}
-
 	// Check if destination is system container
 	if cca.FromTo.IsS2S() || cca.FromTo.IsUpload() {
 		dstContainerName, err := GetContainerName(cca.Destination.Value, cca.FromTo.To())
@@ -1291,8 +1286,8 @@ func (cca *CookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
 	if !cca.dryrunMode {
 		// Output the log location if log-level is set to other then NONE
 		var logPathFolder string
-		if azcopyLogPathFolder != "" {
-			logPathFolder = fmt.Sprintf("%s%s%s.log", azcopyLogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
+		if common.LogPathFolder != "" {
+			logPathFolder = fmt.Sprintf("%s%s%s.log", common.LogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
 		}
 		glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(),
 			logPathFolder,
@@ -1369,10 +1364,9 @@ func (cca *CookedCopyCmdArgs) getSuccessExitCode() common.ExitCode {
 
 func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint32) {
 	// fetch a job status
-	var summary common.ListJobSummaryResponse
-	Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
+	summary := jobsAdmin.GetJobSummary(cca.jobID)
 	glcmSwapOnce.Do(func() {
-		Rpc(common.ERpcCmd.GetJobLCMWrapper(), &cca.jobID, &glcm)
+		glcm = jobsAdmin.GetJobLCMWrapper(cca.jobID)
 	})
 	summary.IsCleanupJob = cca.isCleanupJob // only FE knows this, so we can only set it here
 	cleanupStatusString := fmt.Sprintf("Cleanup %v/%v", summary.TransfersCompleted, summary.TotalTransfers)

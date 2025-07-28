@@ -34,7 +34,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
 
@@ -101,9 +100,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	if !cca.dryrunMode {
 		glcm.Info(message)
 	}
-	if jobsAdmin.JobsAdmin != nil {
-		jobsAdmin.JobsAdmin.LogToJobLog(message, common.LogInfo)
-	}
+	common.LogToJobLogWithPrefix(message, common.LogInfo)
 
 	from := cca.FromTo.From()
 	if !from.SupportsTrailingDot() {

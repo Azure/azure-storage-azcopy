@@ -1,4 +1,4 @@
-// Copyright © 2017 Microsoft <wastore@microsoft.com>
+// Copyright © 2025 Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,56 +18,32 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package common
+package azcopy
 
-// TODO : Remove this?
-// GetBlocksRoundedUp returns the number of blocks given size, rounded up
-func GetBlocksRoundedUp(size uint64, blockSize uint64) uint16 {
-	return uint16(size/blockSize) + uint16(Iff((size%blockSize) == 0, 0, 1))
+import (
+	"errors"
+	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+)
+
+type RemoveJobOptions struct {
+	JobID common.JobID
 }
 
-func FirstOrZero[T any](list []T) T {
-	if len(list) != 0 {
-		return list[0]
-	}
-
-	var zero T
-	return zero
+type RemoveJobResult struct {
+	Count int // Number of files cleaned
 }
 
-func DerefOrZero[T any](in *T) (out T) {
-	if in != nil {
-		out = *in
+// RemoveJob removes a job with the specified JobID.
+func (c Client) RemoveJob(opts RemoveJobOptions) (result RemoveJobResult, err error) {
+	result = RemoveJobResult{}
+	if opts.JobID.IsEmpty() {
+		return result, errors.New("remove job requires the JobID")
 	}
-
-	return
-}
-
-func Iff[T any](test bool, trueVal, falseVal T) T {
-	if test {
-		return trueVal
+	result.Count, err = jobsAdmin.RemoveSingleJobFiles(opts.JobID)
+	if err != nil {
+		return result, fmt.Errorf("failed to remove log and job plan files for job %s due to error: %w", opts.JobID, err)
 	}
-	return falseVal
-}
-
-func IffNil[T any](wanted *T, instead T) T {
-	if wanted == nil {
-		return instead
-	}
-	return *wanted
-}
-
-func IffNotNil[T any](wanted *T, instead T) T {
-	if wanted == nil {
-		return instead
-	}
-
-	return *wanted
-}
-
-func IffNotEmpty(wanted string) *string {
-	if wanted == "" {
-		return nil
-	}
-	return &wanted
+	return result, nil
 }

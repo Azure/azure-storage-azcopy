@@ -22,9 +22,6 @@ import (
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 )
 
-var AzcopyJobPlanFolder string
-var AzcopyCurrentJobLogger ILoggerResetable
-
 // isIPEndpointStyle checks if URL's host is IP, in this case the storage account endpoint will be composed as:
 // http(s)://IP(:port)/storageaccount/container/...
 // As url's Host property, host could be both host or host:port
