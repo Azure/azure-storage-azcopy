@@ -130,6 +130,18 @@ func (m *CustomCallbackManager) RegisterCallbackWithInterval(id string, callback
 func (m *CustomCallbackManager) UnregisterCallback(id string) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
+
+	// Collect final metrics before removing the callback
+	if config, exists := m.callbacks[id]; exists && config != nil && config.Callback != nil {
+		if orderedMetrics := config.Callback(); orderedMetrics != nil {
+			// Update cached data with final metrics
+			config.LastData = make([]CustomStatEntry, len(orderedMetrics))
+			copy(config.LastData, orderedMetrics)
+			// Update last call time
+			config.LastCall = time.Now()
+		}
+	}
+
 	delete(m.callbacks, id)
 }
 
@@ -137,6 +149,21 @@ func (m *CustomCallbackManager) UnregisterCallback(id string) {
 func (m *CustomCallbackManager) UnregisterAllCallbacks() {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
+
+	// Collect final metrics for all callbacks before removing them
+	now := time.Now()
+	for _, config := range m.callbacks {
+		if config != nil && config.Callback != nil {
+			if orderedMetrics := config.Callback(); orderedMetrics != nil {
+				// Update cached data with final metrics
+				config.LastData = make([]CustomStatEntry, len(orderedMetrics))
+				copy(config.LastData, orderedMetrics)
+				// Update last call time
+				config.LastCall = now
+			}
+		}
+	}
+
 	m.callbacks = make(map[string]*CustomCallbackConfig)
 }
 
@@ -1582,6 +1609,23 @@ func (m *SystemStatsMonitor) RegisterCustomStatsCallbackWithInterval(id string, 
 // UnregisterCustomStatsCallback removes a specific custom stats callback by ID
 func (m *SystemStatsMonitor) UnregisterCustomStatsCallback(id string) {
 	if m.config.CustomCallbackManager != nil {
+		// Force a final collection and log the stats before unregistering
+		if m.config.CustomCallbackManager.ForceCollectCallback(id) && m.config.Logger != nil {
+			// Get the current snapshot to include system metrics with the final custom stats
+			snapshot := m.GetSnapshot()
+
+			// Get averaged values for consistent logging format
+			avgCPU, avgNetRead, avgNetWrite, avgDiskRead, avgDiskWrite, avgFileDescriptors := m.getAveragedMetrics()
+
+			// Get fresh ordered custom metrics that include the final collection
+			orderedCustomMetrics := m.config.CustomCallbackManager.CollectAllOrderedMetrics()
+
+			// Force a log entry with the final stats
+			logMsg := m.buildCompactStatsLine(snapshot, avgCPU, avgNetRead, avgNetWrite, avgDiskRead, avgDiskWrite, avgFileDescriptors, orderedCustomMetrics, []string{fmt.Sprintf("final-%s", id)})
+			m.config.Logger.Log(LogInfo, logMsg)
+		}
+
+		// Now unregister the callback
 		m.config.CustomCallbackManager.UnregisterCallback(id)
 	}
 }
@@ -1597,6 +1641,24 @@ func (m *SystemStatsMonitor) IsCustomStatsCallbackRegistered(id string) bool {
 // UnregisterAllCustomStatsCallbacks removes all custom stats callbacks
 func (m *SystemStatsMonitor) UnregisterAllCustomStatsCallbacks() {
 	if m.config.CustomCallbackManager != nil {
+		// Force a final collection of all callbacks and log the stats before unregistering
+		collectedCount := m.config.CustomCallbackManager.ForceCollectAllCallbacks()
+		if collectedCount > 0 && m.config.Logger != nil {
+			// Get the current snapshot to include system metrics with the final custom stats
+			snapshot := m.GetSnapshot()
+
+			// Get averaged values for consistent logging format
+			avgCPU, avgNetRead, avgNetWrite, avgDiskRead, avgDiskWrite, avgFileDescriptors := m.getAveragedMetrics()
+
+			// Get fresh ordered custom metrics that include the final collection
+			orderedCustomMetrics := m.config.CustomCallbackManager.CollectAllOrderedMetrics()
+
+			// Force a log entry with the final stats
+			logMsg := m.buildCompactStatsLine(snapshot, avgCPU, avgNetRead, avgNetWrite, avgDiskRead, avgDiskWrite, avgFileDescriptors, orderedCustomMetrics, []string{fmt.Sprintf("final-all-%d", collectedCount)})
+			m.config.Logger.Log(LogInfo, logMsg)
+		}
+
+		// Now unregister all callbacks
 		m.config.CustomCallbackManager.UnregisterAllCallbacks()
 	}
 }
@@ -1617,10 +1679,105 @@ func (m *SystemStatsMonitor) GetCustomCallbackInfo() map[string]map[string]strin
 	return make(map[string]map[string]string)
 }
 
+// ForceCollectCustomStats forces immediate data collection for a specific custom stats callback
+// This bypasses the normal interval checking and immediately calls the specified callback
+// Returns true if the callback was found and called, false otherwise
+func (m *SystemStatsMonitor) ForceCollectCustomStats(id string) bool {
+	if m.config.CustomCallbackManager != nil {
+		return m.config.CustomCallbackManager.ForceCollectCallback(id)
+	}
+	return false
+}
+
+// ForceCollectAllCustomStats forces immediate data collection for all registered custom stats callbacks
+// This bypasses the normal interval checking and immediately calls all callbacks
+// Returns the number of callbacks that were successfully called
+func (m *SystemStatsMonitor) ForceCollectAllCustomStats() int {
+	if m.config.CustomCallbackManager != nil {
+		return m.config.CustomCallbackManager.ForceCollectAllCallbacks()
+	}
+	return 0
+}
+
+// GetFreshCustomStats forces collection of all custom stats and returns the fresh results
+// This is a convenience method that combines ForceCollectAllCustomStats with getting the results
+func (m *SystemStatsMonitor) GetFreshCustomStats() map[string]string {
+	if m.config.CustomCallbackManager != nil {
+		// Force immediate collection of all callbacks
+		m.config.CustomCallbackManager.ForceCollectAllCallbacks()
+		// Return the fresh results
+		return m.config.CustomCallbackManager.CollectAllMetrics()
+	}
+	return make(map[string]string)
+}
+
+// GetFreshOrderedCustomStats forces collection and returns ordered custom stats
+// This preserves the order specified by each callback
+func (m *SystemStatsMonitor) GetFreshOrderedCustomStats() []CustomStatEntry {
+	if m.config.CustomCallbackManager != nil {
+		// Force immediate collection of all callbacks
+		m.config.CustomCallbackManager.ForceCollectAllCallbacks()
+		// Return the fresh ordered results
+		return m.config.CustomCallbackManager.CollectAllOrderedMetrics()
+	}
+	return make([]CustomStatEntry, 0)
+}
+
 // IsCallbackRegistered checks if a callback with the given ID is registered
 func (m *CustomCallbackManager) IsCallbackRegistered(id string) bool {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 	_, exists := m.callbacks[id]
 	return exists
+}
+
+// ForceCollectCallback forces immediate data collection for a specific callback by ID
+// This bypasses the normal interval checking and immediately calls the callback
+// Returns true if the callback was found and called, false otherwise
+func (m *CustomCallbackManager) ForceCollectCallback(id string) bool {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	config, exists := m.callbacks[id]
+	if !exists || config == nil || config.Callback == nil {
+		return false
+	}
+
+	// Force immediate collection regardless of interval
+	if orderedMetrics := config.Callback(); orderedMetrics != nil {
+		// Update cached data with fresh metrics
+		config.LastData = make([]CustomStatEntry, len(orderedMetrics))
+		copy(config.LastData, orderedMetrics)
+		// Update last call time
+		config.LastCall = time.Now()
+	}
+
+	return true
+}
+
+// ForceCollectAllCallbacks forces immediate data collection for all registered callbacks
+// This bypasses the normal interval checking and immediately calls all callbacks
+// Returns the number of callbacks that were successfully called
+func (m *CustomCallbackManager) ForceCollectAllCallbacks() int {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	collected := 0
+	now := time.Now()
+
+	for _, config := range m.callbacks {
+		if config != nil && config.Callback != nil {
+			// Force immediate collection regardless of interval
+			if orderedMetrics := config.Callback(); orderedMetrics != nil {
+				// Update cached data with fresh metrics
+				config.LastData = make([]CustomStatEntry, len(orderedMetrics))
+				copy(config.LastData, orderedMetrics)
+				// Update last call time
+				config.LastCall = now
+				collected++
+			}
+		}
+	}
+
+	return collected
 }

@@ -316,6 +316,9 @@ func (ja *jobsAdmin) JobMgrCleanUp(jobId common.JobID) {
 	jm, found := ja.JobMgr(jobId)
 
 	if found {
+		// Force collect stats before cleanup.
+		ja.ForceCollectStats()
+
 		/*
 		 * Change log level to Info, so that we can capture these messages in job log file.
 		 * These log messages useful in debuggability and tells till what stage cleanup done.
@@ -581,7 +584,19 @@ func getSTEStats() []common.CustomStatEntry {
 	}
 
 	var totalTransfersQueued int64
-	var totalTransfersCompleted int64
+	var totalTransfersCompleted uint64
+	var totalTransfersFailed uint64
+	var totalTransfersSkipped uint64
+	var totalPartsChannelSize int
+	var totalPartsChannelUsed int
+	var totalNormalTransferChannelSize int
+	var totalNormalTransferChannelUsed int
+	var totalLowTransferChannelSize int
+	var totalLowTransferChannelUsed int
+	var totalNormalChunkChannelSize int
+	var totalNormalChunkChannelUsed int
+	var totalLowChunkChannelSize int
+	var totalLowChunkChannelUsed int
 
 	// Iterate through all jobs to get their metrics
 	for _, jobID := range jobIDs {
@@ -589,14 +604,35 @@ func getSTEStats() []common.CustomStatEntry {
 			totalTransfersQueued += jobMgr.GetTotalNumFilesProcessed()
 
 			jobSummary := jobMgr.ListJobSummary()
-			totalTransfersCompleted += int64(jobSummary.TransfersCompleted) + int64(jobSummary.TransfersFailed) +
-				int64(jobSummary.TransfersSkipped)
+			totalTransfersCompleted += uint64(jobSummary.TransfersCompleted)
+			totalTransfersFailed += uint64(jobSummary.TransfersFailed)
+			totalTransfersSkipped += uint64(jobSummary.TransfersSkipped)
+
+			// Get channel statistics through the interface method
+			channelStats := jobMgr.GetChannelStats()
+			totalPartsChannelSize += channelStats.PartsChannelSize
+			totalPartsChannelUsed += channelStats.PartsChannelUsed
+			totalNormalTransferChannelSize += channelStats.NormalTransferChannelSize
+			totalNormalTransferChannelUsed += channelStats.NormalTransferChannelUsed
+			totalLowTransferChannelSize += channelStats.LowTransferChannelSize
+			totalLowTransferChannelUsed += channelStats.LowTransferChannelUsed
+			totalNormalChunkChannelSize += channelStats.NormalChunkChannelSize
+			totalNormalChunkChannelUsed += channelStats.NormalChunkChannelUsed
+			totalLowChunkChannelSize += channelStats.LowChunkChannelSize
+			totalLowChunkChannelUsed += channelStats.LowChunkChannelUsed
 		}
 	}
 
 	return []common.CustomStatEntry{
-		{Key: "active", Value: fmt.Sprintf("%d", totalTransfersQueued-totalTransfersCompleted)},
+		{Key: "active", Value: fmt.Sprintf("%d", uint64(totalTransfersQueued)-totalTransfersCompleted-totalTransfersFailed-totalTransfersSkipped)},
 		{Key: "done", Value: fmt.Sprintf("%d", totalTransfersCompleted)},
+		{Key: "failed", Value: fmt.Sprintf("%d", totalTransfersFailed)},
+		{Key: "skipped", Value: fmt.Sprintf("%d", totalTransfersSkipped)},
+		{Key: "parts_ch", Value: fmt.Sprintf("%d/%d", totalPartsChannelUsed, totalPartsChannelSize)},
+		{Key: "norm_xfer_ch", Value: fmt.Sprintf("%d/%d", totalNormalTransferChannelUsed, totalNormalTransferChannelSize)},
+		{Key: "low_xfer_ch", Value: fmt.Sprintf("%d/%d", totalLowTransferChannelUsed, totalLowTransferChannelSize)},
+		{Key: "norm_chunk_ch", Value: fmt.Sprintf("%d/%d", totalNormalChunkChannelUsed, totalNormalChunkChannelSize)},
+		{Key: "low_chunk_ch", Value: fmt.Sprintf("%d/%d", totalLowChunkChannelUsed, totalLowChunkChannelSize)},
 	}
 }
 
@@ -607,6 +643,13 @@ func (ja *jobsAdmin) RegisterStatsMonitorIfNotDone() {
 		// Register the callback for STE stats
 		common.GlobalSystemStatsMonitor.RegisterCustomStatsCallback("ste", getSTEStats)
 	}
+}
+
+func (ja *jobsAdmin) ForceCollectStats() bool {
+	if common.GlobalSystemStatsMonitor != nil {
+		return common.GlobalSystemStatsMonitor.ForceCollectCustomStats("ste")
+	}
+	return false
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
