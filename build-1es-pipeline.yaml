@@ -280,13 +280,12 @@ extends:
                   sudo apt-get update
                   sudo apt-get upgrade -y
                   sudo apt-get install -f --fix-missing
-                  # Install Microsoft package repository the CI-safe way (no .deb install)
-                  wget https://packages.microsoft.com/config/ubuntu/22.04/prod.list -O packages-microsoft-prod.list
-                  sudo mv packages-microsoft-prod.list /etc/apt/sources.list.d/
-                  wget https://packages.microsoft.com/keys/microsoft.asc -O- | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/microsoft.gpg > /dev/null
-                  sudo apt install apt-transport-https -y
-                  sudo apt install dotnet-sdk-6.0 -y
                 displayName: "Update dependencies"
+
+              - task: UseDotNet@2
+                inputs:
+                  packageType: 'sdk'
+                  version: '6.0.x'
 
               - script: |
                   mkdir -p $(mariner)
@@ -370,15 +369,12 @@ extends:
                   sudo apt-get update
                   sudo apt-get upgrade -y
                   sudo apt-get install -f --fix-missing
-                  wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
-                  # Install Microsoft package repository the CI-safe way (no .deb install)
-                  wget https://packages.microsoft.com/config/ubuntu/22.04/prod.list -O packages-microsoft-prod.list
-                  sudo mv packages-microsoft-prod.list /etc/apt/sources.list.d/
-                  wget https://packages.microsoft.com/keys/microsoft.asc -O- | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/microsoft.gpg > /dev/null
-                  sudo apt install apt-transport-https -y
-                  sudo apt install dotnet-sdk-6.0 -y
-                  sudo apt-get install -y zip
                 displayName: "Update dependencies"
+
+              - task: UseDotNet@2
+                inputs:
+                  packageType: 'sdk'
+                  version: '6.0.x'
 
               - template: setup/esrp_sign_windows.yml@self
                 parameters:
@@ -481,13 +477,12 @@ extends:
                   sudo apt-get upgrade -y
                   sudo apt-get install unzip -y
                   sudo apt-get install -f --fix-missing
-                  # Install Microsoft package repository the CI-safe way (no .deb install)
-                  wget https://packages.microsoft.com/config/ubuntu/22.04/prod.list -O packages-microsoft-prod.list
-                  sudo mv packages-microsoft-prod.list /etc/apt/sources.list.d/
-                  wget https://packages.microsoft.com/keys/microsoft.asc -O- | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/microsoft.gpg > /dev/null
-                  sudo apt install apt-transport-https -y
-                  sudo apt install dotnet-sdk-6.0 -y
                 displayName: "Update dependencies"
+
+              - task: UseDotNet@2
+                inputs:
+                  packageType: 'sdk'
+                  version: '6.0.x'
 
               - template: setup/esrp_sign_notarize_macos.yml@self
                 parameters:
@@ -1023,19 +1018,6 @@ extends:
                   - script: |
                       sudo ls -lRt $(Build.ArtifactStagingDirectory)
                     displayName: 'List Artifacts'
-
-                  - script: |
-                      sudo apt-get clean 
-                      sudo apt-get update 
-                      sudo apt-get upgrade -y 
-                      sudo apt-get install -f --fix-missing 
-                      # Install Microsoft package repository the CI-safe way (no .deb install)
-                      wget https://packages.microsoft.com/config/ubuntu/22.04/prod.list -O packages-microsoft-prod.list
-                      sudo mv packages-microsoft-prod.list /etc/apt/sources.list.d/
-                      wget https://packages.microsoft.com/keys/microsoft.asc -O- | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/microsoft.gpg > /dev/null
-                      sudo apt install apt-transport-https -y 
-                      sudo apt install dotnet-sdk-6.0 -y
-                    displayName: 'Update Dependencies'
 
                   - task: GithubRelease@1
                     inputs:
