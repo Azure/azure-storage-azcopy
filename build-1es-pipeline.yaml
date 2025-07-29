@@ -208,28 +208,28 @@ extends:
             steps:
               - template: azurePipelineTemplates/build_macos.yml@self
 
-          - job: MacOS_M1
-            timeoutInMinutes: 360
-            pool:
-              name: azcopy-pool
-              image: ubuntu22-1espt
-              os: linux
-            templateContext:
-              outputs:
-                - output: pipelineArtifact
-                  targetPath: $(System.DefaultWorkingDirectory)/unsigned
-                  artifactName: 'azcopy-mac-m1-unsigned'
-                  displayName: 'Upload Mac M1 Unsigned'
+          # - job: MacOS_M1
+          #   timeoutInMinutes: 360
+          #   pool:
+          #     name: azcopy-pool
+          #     image: ubuntu22-1espt
+          #     os: linux
+          #   templateContext:
+          #     outputs:
+          #       - output: pipelineArtifact
+          #         targetPath: $(System.DefaultWorkingDirectory)/unsigned
+          #         artifactName: 'azcopy-mac-m1-unsigned'
+          #         displayName: 'Upload Mac M1 Unsigned'
 
-            variables:
-              - group: AZCOPY_TESTS_VAR
-              - name: unsigned
-                value: $(System.DefaultWorkingDirectory)/unsigned
-              - name: azcopy_version
-                value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
+          #   variables:
+          #     - group: AZCOPY_TESTS_VAR
+          #     - name: unsigned
+          #       value: $(System.DefaultWorkingDirectory)/unsigned
+          #     - name: azcopy_version
+          #       value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
 
-            steps:
-              - template: azurePipelineTemplates/build_macos_m1.yml@self
+          #   steps:
+          #     - template: azurePipelineTemplates/build_macos_m1.yml@self
 
         # BuildArtifacts end here
 
