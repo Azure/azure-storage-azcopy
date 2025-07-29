@@ -275,13 +275,6 @@ extends:
             steps:
               - checkout: none
 
-              - script: |
-                  sudo apt-get clean
-                  sudo apt-get update
-                  sudo apt-get upgrade -y
-                  sudo apt-get install -f --fix-missing
-                displayName: "Update dependencies"
-
               - task: UseDotNet@2
                 inputs:
                   packageType: 'sdk'
@@ -364,13 +357,6 @@ extends:
                 value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
 
             steps:
-              - script: |
-                  sudo apt-get clean
-                  sudo apt-get update
-                  sudo apt-get upgrade -y
-                  sudo apt-get install -f --fix-missing
-                displayName: "Update dependencies"
-
               - task: UseDotNet@2
                 inputs:
                   packageType: 'sdk'
@@ -470,14 +456,6 @@ extends:
 
             steps:
               - checkout: none
-
-              - script: |
-                  sudo apt-get clean
-                  sudo apt-get update
-                  sudo apt-get upgrade -y
-                  sudo apt-get install unzip -y
-                  sudo apt-get install -f --fix-missing
-                displayName: "Update dependencies"
 
               - task: UseDotNet@2
                 inputs:
