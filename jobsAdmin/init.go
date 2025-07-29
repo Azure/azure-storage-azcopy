@@ -178,6 +178,7 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 		ste.InMemoryTransitJobState{
 			CredentialInfo:          order.CredentialInfo,
 			S2SSourceCredentialType: order.S2SSourceCredentialType,
+			Provider:                order.Provider,
 		})
 	// Supply no plan MMF because we don't have one, and AddJobPart will create one on its own.
 	// Add this part to the Job and schedule its transfers
@@ -363,6 +364,7 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 		jm.SetInMemoryTransitJobState(
 			ste.InMemoryTransitJobState{
 				CredentialInfo: req.CredentialInfo,
+				Provider:       req.Provider,
 			})
 
 		// Prevents previous number of failed transfers seeping into a new run

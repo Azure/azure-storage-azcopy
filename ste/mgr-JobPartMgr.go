@@ -16,8 +16,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	azruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/minio/minio-go/pkg/credentials"
 )
 
 var _ IJobPartMgr = &jobPartMgr{}
@@ -354,6 +354,13 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 
 		//build transferInfo after we've set transferIndex
 		jptm.transferInfo = jptm.Info()
+		//populate transfer info with the provider for custom s3 credential provider
+		var credProvider credentials.Provider = nil
+		creds := jobCtx.Value("customS3Creds")
+		if creds != nil {
+			credProvider = creds.(credentials.Provider) //if passed through context, use custom provider
+		}
+		jptm.transferInfo.Provider = credProvider
 		jpm.Log(common.LogDebug, fmt.Sprintf("scheduling JobID=%v, Part#=%d, Transfer#=%d, priority=%v", plan.JobID, plan.PartNum, t, plan.Priority))
 
 		// ===== TEST KNOB
