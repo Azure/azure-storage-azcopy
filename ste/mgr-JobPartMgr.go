@@ -18,6 +18,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 )
 
 var _ IJobPartMgr = &jobPartMgr{}
@@ -387,7 +388,28 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 			}
 		}
 		// ===== TEST KNOB
-		jpm.jobMgr.ScheduleTransfer(jpm.priority, jptm)
+
+		priority := jpm.priority
+
+		if plan.IsNFSCopy && buildmode.IsMover {
+			// For Mover and NFS copy scenario, we are using the priority to define
+			// the order of transfer scheduling. If a child item is added under a folder,
+			// for NFS file transfers, the folder properties get updated. This leads to
+			// a fidelity issue if the folder is scheduled with before the child item.
+			//
+			// The downside of this is that we will wait till the end of the job to upload the
+			// folder properties.
+			//
+			// Keeping it for SMB as well for testing. SMB rest api behavior is different from NFS
+			// in this regard but may change in the future.
+			if jppt.EntityType == common.EEntityType.Folder() {
+				priority = common.EJobPriority.Low()
+			} else {
+				priority = common.EJobPriority.Normal()
+			}
+		}
+
+		jpm.jobMgr.ScheduleTransfer(priority, jptm)
 
 		// This sets the atomic variable atomicAllTransfersScheduled to 1
 		// atomicAllTransfersScheduled variables is used in case of resume job
