@@ -357,6 +357,11 @@ extends:
                 value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
 
             steps:
+              - script: |
+                  sudo apt-get update
+                  sudo apt-get install -y zip
+                displayName: 'Install dependencies'
+
               - task: UseDotNet@2
                 inputs:
                   packageType: 'sdk'
@@ -456,6 +461,11 @@ extends:
 
             steps:
               - checkout: none
+
+              - script: |
+                  sudo apt-get update
+                  sudo apt-get install -y unzip
+                displayName: 'Install dependencies'
 
               - task: UseDotNet@2
                 inputs:
