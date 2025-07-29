@@ -36,10 +36,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-const (
-	SyncThrottlingTestMode = false // Set to true to enable throttling test mode
-)
-
 // --- BEGIN Throttling and Concurrency Configuration ---
 const (
 	absoluteMaxActiveFiles     int64 = 10_000_000 // Absolute max active files, used for dynamic limits
@@ -135,7 +131,7 @@ func initializeTestModeLimits() {
 // and CrawlParallelism based on CPU cores with scenario-specific multipliers.
 func initializeLimits(orchestratorOptions *SyncOrchestratorOptions) {
 
-	if SyncThrottlingTestMode {
+	if common.IsSyncOrchTestModeSet() {
 		initializeTestModeLimits()
 		return
 	}

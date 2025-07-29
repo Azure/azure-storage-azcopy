@@ -93,9 +93,9 @@ func (s *SyncOrchestratorOptions) validate(from common.Location) error {
 	}
 	// The main limitation in windows OS that prevents us from using the optimizations is its dependendy on posix timestamps.
 	// We can use the optimizations on Windows by disabling the ctime optimization.
-	if runtime.GOOS != "linux" {
+	/*if runtime.GOOS != "linux" {
 		return errors.New("sync optimizations using posix timestamps are not supported on non-linux platforms")
-	}
+	}*/
 
 	return nil
 }
