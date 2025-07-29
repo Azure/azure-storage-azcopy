@@ -262,6 +262,12 @@ func Initialize(resumeJobID common.JobID, isBench bool) error {
 
 func StartSystemStatsMonitorForJob(jobId common.JobID) {
 
+	if runtime.GOOS != "linux" {
+		// We don't start the stats monitor on Windows, because few functions are OS specific.
+		// It can be done for Windows and Mac, but it will need more testing.
+		return
+	}
+
 	logger := common.NewJobLogger(jobId, LogLevel.Info(), azcopyLogPathFolder, "-rolling-stats")
 	logger.OpenLog()
 	glcm.RegisterCloseFunc(func() {

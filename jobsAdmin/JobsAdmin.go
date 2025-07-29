@@ -566,8 +566,8 @@ func (ja *jobsAdmin) ChangeLogLevel(level common.LogLevel, jobId common.JobID) e
 
 // getSTEStats creates a callback for STE metrics that provides real-time
 // visibility into the Storage Transfer Engine's internal state
-func getSTEStats() map[string]string {
-	stats := make(map[string]string)
+func getSTEStats() []common.CustomStatEntry {
+	var stats []common.CustomStatEntry
 
 	if JobsAdmin == nil {
 		return stats
@@ -594,10 +594,10 @@ func getSTEStats() map[string]string {
 		}
 	}
 
-	stats["active"] = fmt.Sprintf("%d", totalTransfersQueued-totalTransfersCompleted)
-	stats["done"] = fmt.Sprintf("%d", totalTransfersCompleted)
-
-	return stats
+	return []common.CustomStatEntry{
+		{Key: "active", Value: fmt.Sprintf("%d", totalTransfersQueued-totalTransfersCompleted)},
+		{Key: "done", Value: fmt.Sprintf("%d", totalTransfersCompleted)},
+	}
 }
 
 func (ja *jobsAdmin) RegisterStatsMonitorIfNotDone() {

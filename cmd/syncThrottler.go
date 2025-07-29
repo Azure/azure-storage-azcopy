@@ -93,10 +93,11 @@ var (
 	maxActivelyEnumeratingDirectories int64
 
 	// Counters
-	activeDirectories            atomic.Int64
-	activeDirectoriesEnumerating atomic.Int64 // Number of directories currently being enumerated
-	totalFilesInIndexer          atomic.Int64
-	totalDirectoriesProcessed    atomic.Uint64 // never decremented
+	activeDirectories         atomic.Int64
+	srcDirEnumerating         atomic.Int64 // Number of directories currently being enumerated at source
+	dstDirEnumerating         atomic.Int64 // Number of directories currently being enumerated at destination
+	totalFilesInIndexer       atomic.Int64
+	totalDirectoriesProcessed atomic.Uint64 // never decremented
 
 	// Throttling control flags
 	enableThrottling               bool = true
@@ -233,10 +234,7 @@ func NewThrottleSemaphore(parentCtx context.Context, jobID common.JobID) *Thrott
 		ds.semaphore <- struct{}{}
 	}
 
-	// Start semaphore monitoring with context
-	go ds.semaphoreMonitor(ctx)
-
-	RegisterGlobalCustomStatsCallbackWithID("sm", getOrchestratorStats)
+	RegisterGlobalCustomStatsCallbackWithID("sm", ds.getOrchestratorStats)
 
 	return ds
 }
@@ -244,12 +242,14 @@ func NewThrottleSemaphore(parentCtx context.Context, jobID common.JobID) *Thrott
 // Close gracefully shuts down the ThrottleSemaphore by stopping the stats monitor.
 // This should be called when the semaphore is no longer needed to prevent resource leaks.
 func (ds *ThrottleSemaphore) Close() {
+
+	UnregisterGlobalCustomStatsCallbackWithID("sm")
+
 	// Cancel the context to stop all monitoring goroutines
 	if ds.cancel != nil {
 		ds.cancel()
 	}
-
-	UnregisterGlobalCustomStatsCallbackWithID("sm")
+	WarnStdoutAndScanningLog("Stopping ThrottleSemaphore and releasing resources")
 }
 
 // AcquireSlot blocks until a semaphore slot is available and throttling conditions allow processing.
@@ -346,7 +346,7 @@ func (ds *ThrottleSemaphore) shouldThrottle() bool {
 }
 
 func (ds *ThrottleSemaphore) shouldThrottlingDirectoryEnumeration() bool {
-	currentActivelyEnumerating := activeDirectoriesEnumerating.Load()
+	currentActivelyEnumerating := srcDirEnumerating.Load()
 	enumeratingLimit := enumeratingDirectoryLimit.Load()
 
 	// We want to do simple throttling here without any hysteresis
@@ -467,55 +467,16 @@ func (ds *ThrottleSemaphore) logThrottling(msgFmt string, args ...interface{}) {
 	}
 }
 
-// semaphoreMonitor provides detailed monitoring and logging of semaphore utilization.
-// It runs in a separate goroutine and periodically reports on contention and resource usage.
-// The monitoring helps identify performance bottlenecks and system stress conditions.
-func (ds *ThrottleSemaphore) semaphoreMonitor(ctx context.Context) {
-	ticker := time.NewTicker(time.Duration(throttleLogIntervalSecs) * time.Second) // More frequent monitoring
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			if enableThrottling {
-				waiting := ds.waitingForSemaphore.Load()
-				active := activeDirectories.Load()
-				queued := totalDirectoriesProcessed.Load()
-				files := totalFilesInIndexer.Load()
-				limit := activeFilesLimit.Load()
-
-				// Only log if there's activity or contention
-				if waiting > 5 || active > 5 {
-					if enableThrottleLogs {
-						WarnStdoutAndScanningLog(fmt.Sprintf(
-							"[INFO] Active Dirs: %d | Wait: %d | Total: %d | Active Files: %d/%d",
-							active, waiting, queued, files, limit))
-					}
-				}
-
-				// Alert on high contention
-				if waiting > int32(float64(crawlParallelism)*0.8) {
-					if enableThrottleLogs {
-						WarnStdoutAndScanningLog(fmt.Sprintf(
-							"[WARN] Severe contention: %d directories waiting (exceeds semaphore capacity of %d)",
-							waiting, crawlParallelism))
-					}
-				}
-			}
-		}
-	}
-}
-
 // getOrchestratorStats returns orchestrator-specific metrics for the custom stats callback.
 // It provides real-time visibility into the sync orchestrator's internal state including
 // indexer size, directory processing counters, and enumeration activity.
-func getOrchestratorStats() map[string]string {
-	return map[string]string{
-		"Indexer":   fmt.Sprintf("%d", totalFilesInIndexer.Load()),
-		"Active":    fmt.Sprintf("%d", activeDirectories.Load()),
-		"Processed": fmt.Sprintf("%d", totalDirectoriesProcessed.Load()),
-		"Enum":      fmt.Sprintf("%d", activeDirectoriesEnumerating.Load()),
+func (ds *ThrottleSemaphore) getOrchestratorStats() []common.CustomStatEntry {
+	return []common.CustomStatEntry{
+		{"Waiting", fmt.Sprintf("%d", ds.waitingForSemaphore.Load())},
+		{"Indexer", fmt.Sprintf("%d", totalFilesInIndexer.Load())},
+		{"Active", fmt.Sprintf("%d", activeDirectories.Load())},
+		{"SrcEnum", fmt.Sprintf("%d", srcDirEnumerating.Load())},
+		{"DstEnum", fmt.Sprintf("%d", dstDirEnumerating.Load())},
+		{"Done", fmt.Sprintf("%d", totalDirectoriesProcessed.Load())},
 	}
 }

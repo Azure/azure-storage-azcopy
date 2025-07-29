@@ -1,12 +1,16 @@
 package common
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -21,29 +25,105 @@ import (
 
 var GlobalSystemStatsMonitor *SystemStatsMonitor
 
-// CustomStatsCallback defines a function type for collecting custom application-specific metrics
-// The callback should return a map of metric names to their values as strings
-// Example: map[string]string{"active_transfers": "42", "queued_files": "1234", "error_count": "5"}
-type CustomStatsCallback func() map[string]string
+// Stats collection feature flags - can be modified to enable/disable specific stats
+const (
+	// Core system metrics
+	EnableCPUStats    = true
+	EnableMemoryStats = true
+	EnableLoadStats   = true
 
-// CustomCallbackManager manages multiple custom stats callbacks
+	// Disk and filesystem metrics
+	EnableDiskMetrics    = true
+	EnableDiskSpaceStats = true
+	EnableDiskIOStats    = true
+
+	// Network metrics
+	EnableNetworkIOStats = true
+	EnableSocketStats    = true
+
+	// Process and runtime metrics
+	EnableFileDescriptorStats = true
+	EnableProcessStats        = true
+	EnableGoRuntimeStats      = true
+
+	// Custom metrics
+	EnableCustomStats = true
+
+	// Static system info logging at startup
+	EnableStaticSystemInfo = true
+
+	// Detailed methodology logging
+	EnableMethodologyLogging = true
+)
+
+// CustomStatEntry represents a single key-value pair with preserved order
+type CustomStatEntry struct {
+	Key   string
+	Value string
+}
+
+// CustomStatsCallback defines a function type for collecting custom application-specific metrics
+// with preserved ordering. The callback should return a slice of CustomStatEntry to maintain order.
+//
+// Example usage:
+//
+//	monitor.RegisterCustomStatsCallback("orchestrator", func() []CustomStatEntry {
+//	    return []CustomStatEntry{
+//	        {"Waiting", "42"},      // This will appear first
+//	        {"Active", "15"},       // This will appear second
+//	        {"Indexer", "3"},       // This will appear third
+//	        {"SrcEnum", "1"},       // This will appear fourth
+//	        {"ErrorCount", "0"},    // This will appear last
+//	    }
+//	})
+//
+// This ensures your metrics appear in exactly the order you specify.
+type CustomStatsCallback func() []CustomStatEntry
+
+// CustomCallbackConfig holds configuration for a custom stats callback
+type CustomCallbackConfig struct {
+	Callback CustomStatsCallback // Callback function returning ordered metrics
+	Interval time.Duration       // Collection interval for this callback (0 = use monitor default)
+	LastCall time.Time           // Last time this callback was executed
+	LastData []CustomStatEntry   // Cache last collected data for consistent logging
+}
+
+// CustomCallbackManager manages multiple custom stats callbacks with individual intervals
 type CustomCallbackManager struct {
-	callbacks map[string]CustomStatsCallback
-	mutex     sync.RWMutex
+	callbacks       map[string]*CustomCallbackConfig
+	mutex           sync.RWMutex
+	defaultInterval time.Duration // Default interval from stats monitor
 }
 
 // NewCustomCallbackManager creates a new callback manager
 func NewCustomCallbackManager() *CustomCallbackManager {
 	return &CustomCallbackManager{
-		callbacks: make(map[string]CustomStatsCallback),
+		callbacks: make(map[string]*CustomCallbackConfig),
 	}
 }
 
-// RegisterCallback registers a callback with a unique identifier
-func (m *CustomCallbackManager) RegisterCallback(id string, callback CustomStatsCallback) {
+// SetDefaultInterval sets the default collection interval for callbacks
+func (m *CustomCallbackManager) SetDefaultInterval(interval time.Duration) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	m.callbacks[id] = callback
+	m.defaultInterval = interval
+}
+
+// RegisterCallback registers a callback with a unique identifier using default interval
+func (m *CustomCallbackManager) RegisterCallback(id string, callback CustomStatsCallback) {
+	m.RegisterCallbackWithInterval(id, callback, 0) // 0 = use default interval
+}
+
+// RegisterCallbackWithInterval registers a callback with a unique identifier and custom interval
+func (m *CustomCallbackManager) RegisterCallbackWithInterval(id string, callback CustomStatsCallback, interval time.Duration) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	m.callbacks[id] = &CustomCallbackConfig{
+		Callback: callback,
+		Interval: interval,
+		LastCall: time.Time{},                // Zero time will trigger immediate first call
+		LastData: make([]CustomStatEntry, 0), // Initialize empty cache
+	}
 }
 
 // UnregisterCallback removes a callback by its identifier
@@ -57,25 +137,103 @@ func (m *CustomCallbackManager) UnregisterCallback(id string) {
 func (m *CustomCallbackManager) UnregisterAllCallbacks() {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	m.callbacks = make(map[string]CustomStatsCallback)
+	m.callbacks = make(map[string]*CustomCallbackConfig)
 }
 
-// CollectAllMetrics calls all registered callbacks and combines their results
+// CollectAllMetrics calls registered callbacks based on their intervals and combines their results
+// Always returns the last known data for each callback to ensure consistent logging
 func (m *CustomCallbackManager) CollectAllMetrics() map[string]string {
-	m.mutex.RLock()
-	defer m.mutex.RUnlock()
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 
 	result := make(map[string]string)
+	now := time.Now()
 
-	for callbackID, callback := range m.callbacks {
-		if callback != nil {
-			if metrics := callback(); metrics != nil {
-				for key, value := range metrics {
-					// Prefix metric names with callback ID to avoid conflicts
-					prefixedKey := fmt.Sprintf("%s.%s", callbackID, key)
-					result[prefixedKey] = value
-				}
+	for callbackID, config := range m.callbacks {
+		if config == nil || config.Callback == nil {
+			continue
+		}
+
+		// Determine the effective interval for this callback
+		effectiveInterval := config.Interval
+		if effectiveInterval == 0 {
+			effectiveInterval = m.defaultInterval
+		}
+
+		// Check if it's time to call this callback
+		shouldCall := config.LastCall.IsZero() ||
+			(effectiveInterval > 0 && now.Sub(config.LastCall) >= effectiveInterval)
+
+		if shouldCall {
+			if orderedMetrics := config.Callback(); orderedMetrics != nil {
+				// Update cached data with fresh metrics
+				config.LastData = make([]CustomStatEntry, len(orderedMetrics))
+				copy(config.LastData, orderedMetrics)
+				// Update last call time
+				config.LastCall = now
 			}
+		}
+
+		// Always include the last known data (either fresh or cached)
+		for _, entry := range config.LastData {
+			// Prefix metric names with callback ID to avoid conflicts
+			prefixedKey := fmt.Sprintf("%s.%s", callbackID, entry.Key)
+			result[prefixedKey] = entry.Value
+		}
+	}
+
+	return result
+}
+
+// CollectAllOrderedMetrics calls registered callbacks and returns ordered results
+// This preserves the order for callbacks that specify ordering
+func (m *CustomCallbackManager) CollectAllOrderedMetrics() []CustomStatEntry {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	result := make([]CustomStatEntry, 0)
+	now := time.Now()
+
+	// Sort callback IDs for consistent ordering across different callbacks
+	callbackIDs := make([]string, 0, len(m.callbacks))
+	for id := range m.callbacks {
+		callbackIDs = append(callbackIDs, id)
+	}
+	sort.Strings(callbackIDs)
+
+	for _, callbackID := range callbackIDs {
+		config := m.callbacks[callbackID]
+		if config == nil || config.Callback == nil {
+			continue
+		}
+
+		// Determine the effective interval for this callback
+		effectiveInterval := config.Interval
+		if effectiveInterval == 0 {
+			effectiveInterval = m.defaultInterval
+		}
+
+		// Check if it's time to call this callback
+		shouldCall := config.LastCall.IsZero() ||
+			(effectiveInterval > 0 && now.Sub(config.LastCall) >= effectiveInterval)
+
+		if shouldCall {
+			if orderedMetrics := config.Callback(); orderedMetrics != nil {
+				// Update cached data with fresh metrics
+				config.LastData = make([]CustomStatEntry, len(orderedMetrics))
+				copy(config.LastData, orderedMetrics)
+				// Update last call time
+				config.LastCall = now
+			}
+		}
+
+		// Always include the last known ordered data with prefixed keys
+		for _, entry := range config.LastData {
+			prefixedKey := fmt.Sprintf("%s.%s", callbackID, entry.Key)
+			result = append(result, CustomStatEntry{
+				Key:   prefixedKey,
+				Value: entry.Value,
+			})
 		}
 	}
 
@@ -92,6 +250,30 @@ func (m *CustomCallbackManager) GetCallbackIDs() []string {
 		ids = append(ids, id)
 	}
 	return ids
+}
+
+// GetCallbackInfo returns information about registered callbacks including their intervals
+func (m *CustomCallbackManager) GetCallbackInfo() map[string]map[string]string {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	info := make(map[string]map[string]string)
+	for id, config := range m.callbacks {
+		if config != nil {
+			effectiveInterval := config.Interval
+			if effectiveInterval == 0 {
+				effectiveInterval = m.defaultInterval
+			}
+
+			info[id] = map[string]string{
+				"interval":         effectiveInterval.String(),
+				"custom_interval":  config.Interval.String(),
+				"default_interval": m.defaultInterval.String(),
+				"last_call":        config.LastCall.Format(time.RFC3339),
+			}
+		}
+	}
+	return info
 }
 
 // SystemStatsSnapshot represents a point-in-time view of system metrics
@@ -140,6 +322,11 @@ type SystemStatsSnapshot struct {
 	OpenFileDescriptors   int64
 	MaxFileDescriptors    int64
 	FileDescriptorPercent float64
+
+	// Network socket metrics
+	OpenSockets            int64
+	EstablishedConnections int64
+	TimeWaitConnections    int64
 
 	// Process-specific metrics
 	ProcessCPUPercent float64
@@ -279,6 +466,11 @@ func NewSystemStatsMonitor(config StatsMonitorConfig) (*SystemStatsMonitor, erro
 		}
 	}
 
+	// Set default interval for custom callback manager if it exists
+	if config.CustomCallbackManager != nil {
+		config.CustomCallbackManager.SetDefaultInterval(config.Interval)
+	}
+
 	monitor := &SystemStatsMonitor{
 		config:         config,
 		currentProcess: currentProc,
@@ -292,7 +484,9 @@ func (m *SystemStatsMonitor) Start(parentCtx context.Context) {
 	m.ctx, m.cancel = context.WithCancel(parentCtx)
 
 	// Log static system information once at startup
-	m.logStaticSystemInfo()
+	if EnableStaticSystemInfo {
+		m.logStaticSystemInfo()
+	}
 
 	m.wg.Add(1)
 	go m.monitorLoop()
@@ -365,20 +559,31 @@ func (m *SystemStatsMonitor) logStaticSystemInfo() {
 		staticInfo = append(staticInfo, fmt.Sprintf("FD Limit: %d/%d (soft/hard)", rlimit.Cur, rlimit.Max))
 	}
 
+	// Ephemeral port range
+	if startPort, endPort, err := m.getEphemeralPortRange(); err == nil {
+		staticInfo = append(staticInfo, fmt.Sprintf("Ephemeral Ports: %d-%d [%d]", startPort, endPort, endPort-startPort+1))
+	}
+
 	// Go version and architecture
 	staticInfo = append(staticInfo, fmt.Sprintf("Go: %s %s/%s", runtime.Version(), runtime.GOOS, runtime.GOARCH))
 
 	// Process ID
 	staticInfo = append(staticInfo, fmt.Sprintf("PID: %d", os.Getpid()))
 
+	// Log detailed stats monitoring configuration and methodology
+	if EnableMethodologyLogging {
+		m.logStatsMonitoringDetails()
+	}
+
 	// Log the static information on multiple lines for better readability
+	m.config.Logger.Log(LogInfo, "\n")
 	m.config.Logger.Log(LogInfo, "=== SYSTEM INFORMATION ===")
 	for _, info := range staticInfo {
 		m.config.Logger.Log(LogInfo, fmt.Sprintf("• %s", info))
 	}
 
-	// Log detailed stats monitoring configuration and methodology
-	m.logStatsMonitoringDetails()
+	// Log environment variables after system information and before periodic stats
+	m.logEnvironmentVariables()
 }
 
 // logStatsMonitoringDetails logs comprehensive information about stats collection methodology
@@ -411,6 +616,28 @@ func (m *SystemStatsMonitor) logStatsMonitoringDetails() {
 		"• AVERAGING: CPU, Network I/O, Disk I/O, and File Descriptors are averaged between log intervals to smooth fluctuations",
 		"• POINT-IN-TIME: Memory, Load, Disk Space, Process metrics use latest values (less volatile)",
 		"",
+		"=== ENABLED FEATURES ===",
+	}
+
+	// Add enabled feature information
+	featureStatus := []string{
+		fmt.Sprintf("• CPU Stats: %t", EnableCPUStats),
+		fmt.Sprintf("• Memory Stats: %t", EnableMemoryStats),
+		fmt.Sprintf("• Load Stats: %t", EnableLoadStats),
+		fmt.Sprintf("• Disk Metrics: %t", EnableDiskMetrics),
+		fmt.Sprintf("• Disk Space Stats: %t", EnableDiskSpaceStats),
+		fmt.Sprintf("• Disk I/O Stats: %t", EnableDiskIOStats),
+		fmt.Sprintf("• Network I/O Stats: %t", EnableNetworkIOStats),
+		fmt.Sprintf("• Socket Stats: %t", EnableSocketStats),
+		fmt.Sprintf("• File Descriptor Stats: %t", EnableFileDescriptorStats),
+		fmt.Sprintf("• Process Stats: %t", EnableProcessStats),
+		fmt.Sprintf("• Go Runtime Stats: %t", EnableGoRuntimeStats),
+		fmt.Sprintf("• Custom Stats: %t", EnableCustomStats),
+	}
+	methodologyLines = append(methodologyLines, featureStatus...)
+
+	methodologyLines = append(methodologyLines, []string{
+		"",
 		"=== METRIC DETAILS ===",
 		"• CPU: System CPU percentage (100ms sample via gopsutil, then averaged)",
 		"• Memory: Virtual memory usage percentage and MB used (via /proc/meminfo)",
@@ -418,21 +645,72 @@ func (m *SystemStatsMonitor) logStatsMonitoringDetails() {
 		"• Network I/O: MB/s read/write rates calculated from /proc/net/dev byte counters (averaged)",
 		"• Disk I/O: MB/s read/write rates from /sys/block/*/stat across all disks (averaged)",
 		"• File Descriptors: Count from /proc/PID/fd directory, limits from getrlimit() (averaged)",
+		"• Sockets: Open connections via lsof/ss commands (established, TIME_WAIT states)",
 		"• Disk Space: Filesystem usage from statvfs() system call (point-in-time)",
 		"• Process: Current process CPU/memory/threads via /proc/PID/stat (point-in-time)",
 		"• Go Runtime: Goroutines, heap memory, GC count from runtime package (point-in-time)",
-		"• Custom Metrics: Application-specific via registered callback functions",
+		"• Custom Metrics: Application-specific via registered callback functions (configurable intervals)",
 		"",
 		"=== LOGGING BEHAVIOR ===",
 		"• Automatic logging every " + fmt.Sprintf("%.0f", m.config.LogConditions.LogInterval.Seconds()) + "s (if configured)",
 		"• Threshold-based alerts when metrics exceed configured limits",
 		"• Averaged metrics prevent false alarms from temporary spikes",
-		"• Log format: CPU:X% Mem:X%(XMB) Load:X.X Net:X.X/X.XMB/s Disk:X.X/X.XMB/s FDs:X(X%) ...",
-	}
+		"• Dynamic log format based on enabled features",
+		"• Log format: CPU:X% Mem:X%(XMB) Load:X.X Net:X.X/X.XMB/s Disk:X.X/X.XMB/s FDs:X(X%) Sockets:X(ESTAB:X,TIME-WAIT:X) ...",
+	}...)
 
 	for _, line := range methodologyLines {
 		m.config.Logger.Log(LogInfo, line)
 	}
+}
+
+// logEnvironmentVariables logs relevant AzCopy environment variables and their current values
+func (m *SystemStatsMonitor) logEnvironmentVariables() {
+	if m.config.Logger == nil {
+		return
+	}
+
+	m.config.Logger.Log(LogInfo, "\n")
+	m.config.Logger.Log(LogInfo, "=== ENVIRONMENT VARIABLES ===")
+
+	envVars := []EnvironmentVariable{
+		EEnvironmentVariable.LogLocation(),
+		EEnvironmentVariable.JobPlanLocation(),
+		EEnvironmentVariable.ConcurrencyValue(),
+		EEnvironmentVariable.TransferInitiationPoolSize(),
+		EEnvironmentVariable.EnumerationPoolSize(),
+		EEnvironmentVariable.DisableHierarchicalScanning(),
+		EEnvironmentVariable.ParallelStatFiles(),
+		EEnvironmentVariable.AutoTuneToCpu(),
+		EEnvironmentVariable.UserAgentPrefix(),
+	}
+
+	// Collect set environment variables
+	setVars := make([]string, 0)
+
+	// Check AzCopy-specific environment variables
+	for _, envVar := range envVars {
+		if envVar.Hidden {
+			continue // Skip hidden/secret variables
+		}
+
+		value := GetEnvironmentVariable(envVar)
+		if value != "" {
+			setVars = append(setVars, fmt.Sprintf("%s=%s", envVar.Name, value))
+		}
+	}
+
+	// Log the results
+	if len(setVars) > 0 {
+		m.config.Logger.Log(LogInfo, "• Set Environment Variables:")
+		for _, varInfo := range setVars {
+			m.config.Logger.Log(LogInfo, fmt.Sprintf("  - %s", varInfo))
+		}
+	} else {
+		m.config.Logger.Log(LogInfo, "• No relevant environment variables are set with non-default values")
+	}
+
+	m.config.Logger.Log(LogInfo, "")
 }
 
 // monitorLoop is the main monitoring loop
@@ -445,6 +723,8 @@ func (m *SystemStatsMonitor) monitorLoop() {
 	// Take initial snapshot
 	snapshot := m.collectSnapshot()
 	m.updateSnapshot(snapshot)
+
+	m.config.Logger.Log(LogInfo, "\n")
 
 	for {
 		select {
@@ -471,34 +751,59 @@ func (m *SystemStatsMonitor) collectSnapshot() SystemStatsSnapshot {
 	}
 
 	// Collect CPU metrics
-	m.collectCPUMetrics(&snapshot)
+	if EnableCPUStats || EnableLoadStats {
+		m.collectCPUMetrics(&snapshot)
+	}
 
 	// Collect memory metrics
-	m.collectMemoryMetrics(&snapshot)
+	if EnableMemoryStats {
+		m.collectMemoryMetrics(&snapshot)
+	}
 
 	// Collect disk metrics for monitored paths
-	m.collectDiskMetrics(&snapshot)
+	if EnableDiskMetrics {
+		m.collectDiskMetrics(&snapshot)
+	}
 
 	// Collect disk space metrics for filesystems
-	m.collectDiskSpaceMetrics(&snapshot)
+	if EnableDiskSpaceStats {
+		m.collectDiskSpaceMetrics(&snapshot)
+	}
 
 	// Collect network I/O metrics
-	m.collectNetworkMetrics(&snapshot)
+	if EnableNetworkIOStats {
+		m.collectNetworkMetrics(&snapshot)
+	}
 
 	// Collect disk I/O metrics
-	m.collectDiskIOMetrics(&snapshot)
+	if EnableDiskIOStats {
+		m.collectDiskIOMetrics(&snapshot)
+	}
 
 	// Collect file descriptor metrics
-	m.collectFileDescriptorMetrics(&snapshot)
+	if EnableFileDescriptorStats {
+		m.collectFileDescriptorMetrics(&snapshot)
+	}
+
+	// Collect network socket metrics
+	if EnableSocketStats {
+		m.collectSocketMetrics(&snapshot)
+	}
 
 	// Collect process-specific metrics
-	m.collectProcessMetrics(&snapshot)
+	if EnableProcessStats {
+		m.collectProcessMetrics(&snapshot)
+	}
 
 	// Collect Go runtime metrics
-	m.collectGoMetrics(&snapshot)
+	if EnableGoRuntimeStats {
+		m.collectGoMetrics(&snapshot)
+	}
 
 	// Collect custom application metrics
-	m.collectCustomMetrics(&snapshot)
+	if EnableCustomStats {
+		m.collectCustomMetrics(&snapshot)
+	}
 
 	return snapshot
 }
@@ -513,13 +818,21 @@ func (m *SystemStatsMonitor) accumulateMetricsForAveraging(snapshot SystemStatsS
 		m.averagingState.lastReset = snapshot.Timestamp
 	}
 
-	// Accumulate fluctuating metrics
-	m.averagingState.cpuSum += snapshot.CPUPercent
-	m.averagingState.networkReadMBpsSum += snapshot.NetworkReadMBps
-	m.averagingState.networkWriteMBpsSum += snapshot.NetworkWriteMBps
-	m.averagingState.diskReadMBpsSum += snapshot.DiskReadMBps
-	m.averagingState.diskWriteMBpsSum += snapshot.DiskWriteMBps
-	m.averagingState.fileDescriptorSum += float64(snapshot.OpenFileDescriptors)
+	// Accumulate fluctuating metrics only if enabled
+	if EnableCPUStats {
+		m.averagingState.cpuSum += snapshot.CPUPercent
+	}
+	if EnableNetworkIOStats {
+		m.averagingState.networkReadMBpsSum += snapshot.NetworkReadMBps
+		m.averagingState.networkWriteMBpsSum += snapshot.NetworkWriteMBps
+	}
+	if EnableDiskIOStats {
+		m.averagingState.diskReadMBpsSum += snapshot.DiskReadMBps
+		m.averagingState.diskWriteMBpsSum += snapshot.DiskWriteMBps
+	}
+	if EnableFileDescriptorStats {
+		m.averagingState.fileDescriptorSum += float64(snapshot.OpenFileDescriptors)
+	}
 	m.averagingState.sampleCount++
 }
 
@@ -528,14 +841,22 @@ func (m *SystemStatsMonitor) getAveragedMetrics() (avgCPU, avgNetRead, avgNetWri
 	m.averagingMutex.Lock()
 	defer m.averagingMutex.Unlock()
 
-	// Calculate averages if we have samples
+	// Calculate averages if we have samples, but only for enabled metrics
 	if m.averagingState.sampleCount > 0 {
-		avgCPU = m.averagingState.cpuSum / float64(m.averagingState.sampleCount)
-		avgNetRead = m.averagingState.networkReadMBpsSum / float64(m.averagingState.sampleCount)
-		avgNetWrite = m.averagingState.networkWriteMBpsSum / float64(m.averagingState.sampleCount)
-		avgDiskRead = m.averagingState.diskReadMBpsSum / float64(m.averagingState.sampleCount)
-		avgDiskWrite = m.averagingState.diskWriteMBpsSum / float64(m.averagingState.sampleCount)
-		avgFileDescriptors = m.averagingState.fileDescriptorSum / float64(m.averagingState.sampleCount)
+		if EnableCPUStats {
+			avgCPU = m.averagingState.cpuSum / float64(m.averagingState.sampleCount)
+		}
+		if EnableNetworkIOStats {
+			avgNetRead = m.averagingState.networkReadMBpsSum / float64(m.averagingState.sampleCount)
+			avgNetWrite = m.averagingState.networkWriteMBpsSum / float64(m.averagingState.sampleCount)
+		}
+		if EnableDiskIOStats {
+			avgDiskRead = m.averagingState.diskReadMBpsSum / float64(m.averagingState.sampleCount)
+			avgDiskWrite = m.averagingState.diskWriteMBpsSum / float64(m.averagingState.sampleCount)
+		}
+		if EnableFileDescriptorStats {
+			avgFileDescriptors = m.averagingState.fileDescriptorSum / float64(m.averagingState.sampleCount)
+		}
 	}
 
 	// Reset accumulator for next interval
@@ -560,15 +881,19 @@ func (m *SystemStatsMonitor) GetAveragingStats() (sampleCount int, duration time
 // collectCPUMetrics collects CPU-related metrics
 func (m *SystemStatsMonitor) collectCPUMetrics(snapshot *SystemStatsSnapshot) {
 	// CPU percentage (use shorter interval for responsiveness)
-	if cpuPercents, err := cpu.Percent(100*time.Millisecond, false); err == nil && len(cpuPercents) > 0 {
-		snapshot.CPUPercent = cpuPercents[0]
+	if EnableCPUStats {
+		if cpuPercents, err := cpu.Percent(100*time.Millisecond, false); err == nil && len(cpuPercents) > 0 {
+			snapshot.CPUPercent = cpuPercents[0]
+		}
 	}
 
 	// Load averages
-	if loadStat, err := load.Avg(); err == nil {
-		snapshot.LoadAverage1Min = loadStat.Load1
-		snapshot.LoadAverage5Min = loadStat.Load5
-		snapshot.LoadAverage15Min = loadStat.Load15
+	if EnableLoadStats {
+		if loadStat, err := load.Avg(); err == nil {
+			snapshot.LoadAverage1Min = loadStat.Load1
+			snapshot.LoadAverage5Min = loadStat.Load5
+			snapshot.LoadAverage15Min = loadStat.Load15
+		}
 	}
 }
 
@@ -643,6 +968,58 @@ func (m *SystemStatsMonitor) calculateFolderSize(folderPath string) (uint64, uin
 	})
 
 	return totalSize, fileCount, dirCount, err
+}
+
+// countSocketsByState counts sockets in a specific state using 'ss' command
+func (m *SystemStatsMonitor) countSocketsByState(state string) int64 {
+	cmd := exec.Command("ss", "-tan")
+	out, err := cmd.Output()
+	if err != nil {
+		return 0
+	}
+
+	count := int64(0)
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.Contains(line, state) {
+			count++
+		}
+	}
+	return count
+}
+
+// countOpenSockets counts total open sockets using 'lsof' command
+func (m *SystemStatsMonitor) countOpenSockets() int64 {
+	cmd := exec.Command("lsof", "-i", "-nP")
+	out, err := cmd.Output()
+	if err != nil {
+		return 0
+	}
+	lines := strings.Split(string(out), "\n")
+	count := int64(len(lines) - 1) // subtract header
+	if count < 0 {
+		count = 0
+	}
+	return count
+}
+
+// getEphemeralPortRange reads the ephemeral port range from /proc/sys/net/ipv4/ip_local_port_range
+func (m *SystemStatsMonitor) getEphemeralPortRange() (int, int, error) {
+	data, err := os.ReadFile("/proc/sys/net/ipv4/ip_local_port_range")
+	if err != nil {
+		return 0, 0, err
+	}
+	parts := strings.Fields(string(data))
+	if len(parts) != 2 {
+		return 0, 0, fmt.Errorf("unexpected format")
+	}
+	start, err1 := strconv.Atoi(parts[0])
+	end, err2 := strconv.Atoi(parts[1])
+	if err1 != nil || err2 != nil {
+		return 0, 0, fmt.Errorf("failed to parse port range")
+	}
+	return start, end, nil
 }
 
 // collectNetworkMetrics collects network I/O metrics and calculates rates
@@ -737,6 +1114,18 @@ func (m *SystemStatsMonitor) collectFileDescriptorMetrics(snapshot *SystemStatsS
 	}
 }
 
+// collectSocketMetrics collects network socket usage metrics
+func (m *SystemStatsMonitor) collectSocketMetrics(snapshot *SystemStatsSnapshot) {
+	// Count open sockets (may fail on systems without lsof)
+	snapshot.OpenSockets = m.countOpenSockets()
+
+	// Count established connections (may fail on systems without ss)
+	snapshot.EstablishedConnections = m.countSocketsByState("ESTAB")
+
+	// Count TIME_WAIT connections (may fail on systems without ss)
+	snapshot.TimeWaitConnections = m.countSocketsByState("TIME-WAIT")
+}
+
 // collectProcessMetrics collects current process metrics
 func (m *SystemStatsMonitor) collectProcessMetrics(snapshot *SystemStatsSnapshot) {
 	if m.currentProcess != nil {
@@ -821,23 +1210,23 @@ func (m *SystemStatsMonitor) checkAndLog(snapshot SystemStatsSnapshot) {
 	}()
 
 	// Check threshold-based logging (use averaged values for fluctuating metrics)
-	if m.config.LogConditions.CPUThreshold > 0 && avgCPU > m.config.LogConditions.CPUThreshold {
+	if EnableCPUStats && m.config.LogConditions.CPUThreshold > 0 && avgCPU > m.config.LogConditions.CPUThreshold {
 		shouldLog = true
 		reasons = append(reasons, fmt.Sprintf("CPU=%.1f%%", avgCPU))
 	}
 
-	if m.config.LogConditions.MemoryThreshold > 0 && snapshot.MemoryPercent > m.config.LogConditions.MemoryThreshold {
+	if EnableMemoryStats && m.config.LogConditions.MemoryThreshold > 0 && snapshot.MemoryPercent > m.config.LogConditions.MemoryThreshold {
 		shouldLog = true
 		reasons = append(reasons, fmt.Sprintf("Memory=%.1f%%", snapshot.MemoryPercent))
 	}
 
-	if m.config.LogConditions.LoadThreshold > 0 && snapshot.LoadAverage1Min > m.config.LogConditions.LoadThreshold {
+	if EnableLoadStats && m.config.LogConditions.LoadThreshold > 0 && snapshot.LoadAverage1Min > m.config.LogConditions.LoadThreshold {
 		shouldLog = true
 		reasons = append(reasons, fmt.Sprintf("Load=%.2f", snapshot.LoadAverage1Min))
 	}
 
 	// Check disk thresholds (using disk space metrics for percentage-based thresholds)
-	if m.config.LogConditions.DiskThreshold > 0 {
+	if EnableDiskSpaceStats && m.config.LogConditions.DiskThreshold > 0 {
 		if snapshot.DiskSpaceUsedPercent > m.config.LogConditions.DiskThreshold {
 			shouldLog = true
 			reasons = append(reasons, fmt.Sprintf("Disk=%.1f%%", snapshot.DiskSpaceUsedPercent))
@@ -845,7 +1234,7 @@ func (m *SystemStatsMonitor) checkAndLog(snapshot SystemStatsSnapshot) {
 	}
 
 	// Check file descriptor threshold (use averaged values)
-	if m.config.LogConditions.FileDescriptorThreshold > 0 {
+	if EnableFileDescriptorStats && m.config.LogConditions.FileDescriptorThreshold > 0 {
 		// Calculate averaged file descriptor percentage
 		if snapshot.MaxFileDescriptors > 0 {
 			avgFileDescriptorPercent := avgFileDescriptors / float64(snapshot.MaxFileDescriptors) * 100
@@ -857,7 +1246,7 @@ func (m *SystemStatsMonitor) checkAndLog(snapshot SystemStatsSnapshot) {
 	}
 
 	// Check network I/O threshold (use averaged values)
-	if m.config.LogConditions.NetworkMBpsThreshold > 0 {
+	if EnableNetworkIOStats && m.config.LogConditions.NetworkMBpsThreshold > 0 {
 		totalNetworkMBps := avgNetRead + avgNetWrite
 		if totalNetworkMBps > m.config.LogConditions.NetworkMBpsThreshold {
 			shouldLog = true
@@ -866,7 +1255,7 @@ func (m *SystemStatsMonitor) checkAndLog(snapshot SystemStatsSnapshot) {
 	}
 
 	// Check disk I/O threshold (use averaged values)
-	if m.config.LogConditions.DiskIOThreshold > 0 {
+	if EnableDiskIOStats && m.config.LogConditions.DiskIOThreshold > 0 {
 		totalDiskMBps := avgDiskRead + avgDiskWrite
 		if totalDiskMBps > m.config.LogConditions.DiskIOThreshold {
 			shouldLog = true
@@ -880,64 +1269,254 @@ func (m *SystemStatsMonitor) checkAndLog(snapshot SystemStatsSnapshot) {
 	}
 }
 
-// logSnapshot logs the snapshot with the given reasons
-func (m *SystemStatsMonitor) logSnapshot(snapshot SystemStatsSnapshot, reasons []string) {
-	// Create disk metrics summary (folder sizes) - simplified without file/folder counts
-	folderSummary := ""
-	// Sort the paths for consistent log output
-	paths := make([]string, 0, len(snapshot.DiskMetrics))
-	for path := range snapshot.DiskMetrics {
-		paths = append(paths, path)
-	}
-	sort.Strings(paths)
-	for _, path := range paths {
-		metrics := snapshot.DiskMetrics[path]
-		if folderSummary != "" {
-			folderSummary += "; "
+// getReadableSystemStats returns a multi-line, human-readable system stats summary
+func (m *SystemStatsMonitor) getReadableSystemStats(snapshot SystemStatsSnapshot, avgCPU, avgNetRead, avgNetWrite, avgDiskRead, avgDiskWrite, avgFileDescriptors float64, orderedCustomMetrics []CustomStatEntry) []string {
+	stats := make([]string, 0)
+	stats = append(stats, "=== SYSTEM PERFORMANCE SNAPSHOT ===")
+
+	// Timestamp and triggers
+	triggerInfo := fmt.Sprintf("Timestamp: %s", snapshot.Timestamp.Format("2006-01-02 15:04:05"))
+	stats = append(stats, triggerInfo)
+
+	// CPU and Load metrics
+	if EnableCPUStats || EnableLoadStats {
+		cpuLine := "• CPU Performance:"
+		if EnableCPUStats {
+			cpuLine += fmt.Sprintf(" Usage=%.1f%% (averaged)", avgCPU)
 		}
-		folderSummary += fmt.Sprintf("%s:%.0fMB", path, float64(metrics.FolderSizeMB))
+		if EnableLoadStats {
+			cpuLine += fmt.Sprintf(" Load=%.2f/%.2f/%.2f (1m/5m/15m)",
+				snapshot.LoadAverage1Min, snapshot.LoadAverage5Min, snapshot.LoadAverage15Min)
+		}
+		stats = append(stats, cpuLine)
 	}
 
+	// Memory metrics
+	if EnableMemoryStats {
+		memLine := fmt.Sprintf("• Memory Usage: %.1f%% (%.0f MB used, %.0f MB available, %.0f MB total)",
+			snapshot.MemoryPercent,
+			float64(snapshot.MemoryUsedMB),
+			float64(snapshot.MemoryAvailableMB),
+			float64(snapshot.MemoryTotalMB))
+		if snapshot.SwapPercent > 0 {
+			memLine += fmt.Sprintf(" | Swap: %.1f%% (%.0f MB used)",
+				snapshot.SwapPercent, float64(snapshot.SwapUsedMB))
+		}
+		stats = append(stats, memLine)
+	}
+
+	// Disk space metrics
+	if EnableDiskSpaceStats {
+		diskLine := fmt.Sprintf("• Disk Space: %.1f%% used (%.0f MB free of %.0f MB total)",
+			snapshot.DiskSpaceUsedPercent,
+			float64(snapshot.DiskSpaceFreeMB),
+			float64(snapshot.DiskSpaceTotalMB))
+		stats = append(stats, diskLine)
+	}
+
+	// Folder metrics
+	if EnableDiskMetrics && len(snapshot.DiskMetrics) > 0 {
+		folderLine := "• Monitored Folders:"
+		// Sort paths for consistent output
+		paths := make([]string, 0, len(snapshot.DiskMetrics))
+		for path := range snapshot.DiskMetrics {
+			paths = append(paths, path)
+		}
+		sort.Strings(paths)
+
+		for i, path := range paths {
+			metrics := snapshot.DiskMetrics[path]
+			if i == 0 {
+				folderLine += fmt.Sprintf(" %s=%.0fMB (%d files, %d dirs)",
+					path, float64(metrics.FolderSizeMB), metrics.FileCount, metrics.DirectoryCount)
+			} else {
+				folderLine += fmt.Sprintf(" | %s=%.0fMB (%d files, %d dirs)",
+					path, float64(metrics.FolderSizeMB), metrics.FileCount, metrics.DirectoryCount)
+			}
+		}
+		stats = append(stats, folderLine)
+	}
+
+	// I/O metrics
+	if EnableNetworkIOStats || EnableDiskIOStats {
+		ioLine := "• I/O Performance:"
+		if EnableNetworkIOStats {
+			ioLine += fmt.Sprintf(" Network=%.1f/%.1f MB/s (read/write, averaged)",
+				avgNetRead, avgNetWrite)
+		}
+		if EnableDiskIOStats {
+			if EnableNetworkIOStats {
+				ioLine += " |"
+			}
+			ioLine += fmt.Sprintf(" Disk=%.1f/%.1f MB/s (read/write, averaged)",
+				avgDiskRead, avgDiskWrite)
+		}
+		stats = append(stats, ioLine)
+	}
+
+	// System resources
+	if EnableFileDescriptorStats || EnableSocketStats {
+		resLine := "• System Resources:"
+		if EnableFileDescriptorStats {
+			resLine += fmt.Sprintf(" File Descriptors=%.0f/%.0f (%.1f%% used, averaged)",
+				avgFileDescriptors, float64(snapshot.MaxFileDescriptors), snapshot.FileDescriptorPercent)
+		}
+		if EnableSocketStats {
+			if EnableFileDescriptorStats {
+				resLine += " |"
+			}
+			resLine += fmt.Sprintf(" Sockets=%d total (%d established, %d time-wait)",
+				snapshot.OpenSockets, snapshot.EstablishedConnections, snapshot.TimeWaitConnections)
+		}
+		stats = append(stats, resLine)
+	}
+
+	// Process metrics
+	if EnableProcessStats || EnableGoRuntimeStats {
+		procLine := "• Process Metrics:"
+		if EnableProcessStats {
+			procLine += fmt.Sprintf(" Current Process=%.1f%% CPU, %.0f MB memory, %d threads",
+				snapshot.ProcessCPUPercent, float64(snapshot.ProcessMemoryMB), snapshot.ProcessThreads)
+		}
+		if EnableGoRuntimeStats {
+			if EnableProcessStats {
+				procLine += " |"
+			}
+			procLine += fmt.Sprintf(" Go Runtime=%d goroutines, %.0f MB heap, %d GC cycles",
+				snapshot.GoRoutinesCount, float64(snapshot.GoMemoryMB), snapshot.GoGCCount)
+		}
+		stats = append(stats, procLine)
+	}
+
+	// Custom metrics - use ordered metrics if provided, otherwise fall back to map-based approach
+	if EnableCustomStats {
+		if len(orderedCustomMetrics) > 0 {
+			customLine := "• Custom Application Metrics:"
+			for i, entry := range orderedCustomMetrics {
+				if i == 0 {
+					customLine += fmt.Sprintf(" %s=%s", entry.Key, entry.Value)
+				} else {
+					customLine += fmt.Sprintf(" | %s=%s", entry.Key, entry.Value)
+				}
+			}
+			stats = append(stats, customLine)
+		} else if len(snapshot.CustomMetrics) > 0 {
+			customLine := "• Custom Application Metrics:"
+			// Sort custom metrics by key for consistent output
+			keys := make([]string, 0, len(snapshot.CustomMetrics))
+			for key := range snapshot.CustomMetrics {
+				keys = append(keys, key)
+			}
+			sort.Strings(keys)
+
+			for i, key := range keys {
+				value := snapshot.CustomMetrics[key]
+				if i == 0 {
+					customLine += fmt.Sprintf(" %s=%s", key, value)
+				} else {
+					customLine += fmt.Sprintf(" | %s=%s", key, value)
+				}
+			}
+			stats = append(stats, customLine)
+		}
+	}
+
+	return stats
+}
+
+// logSnapshot logs the snapshot with the given reasons
+func (m *SystemStatsMonitor) logSnapshot(snapshot SystemStatsSnapshot, reasons []string) {
 	// Get averaged values for fluctuating metrics
 	avgCPU, avgNetRead, avgNetWrite, avgDiskRead, avgDiskWrite, avgFileDescriptors := m.getAveragedMetrics()
 
-	logMsg := fmt.Sprintf(
-		"CPU:%.1f%% Mem:%.1f%%(%.0fMB) Load:%.2f Folders:[%s] DiskSpace:%.1f%%(%.0fMB free) Net:%.1f/%.1fMB/s Disk:%.1f/%.1fMB/s FDs:%.0f(%.1f%%) Proc:%.1f%%(%.0fMB,%dth) Go:%d/%.0fMB",
-		avgCPU, // Use averaged CPU instead of snapshot.CPUPercent
-		snapshot.MemoryPercent,
-		float64(snapshot.MemoryUsedMB),
-		snapshot.LoadAverage1Min,
-		folderSummary,
-		snapshot.DiskSpaceUsedPercent,
-		float64(snapshot.DiskSpaceFreeMB),
-		avgNetRead,         // Use averaged network read
-		avgNetWrite,        // Use averaged network write
-		avgDiskRead,        // Use averaged disk read
-		avgDiskWrite,       // Use averaged disk write
-		avgFileDescriptors, // Use averaged file descriptors
-		snapshot.FileDescriptorPercent,
-		snapshot.ProcessCPUPercent,
-		float64(snapshot.ProcessMemoryMB),
-		snapshot.ProcessThreads,
-		snapshot.GoRoutinesCount,
-		float64(snapshot.GoMemoryMB),
-	)
+	// Get ordered custom metrics if available
+	var orderedCustomMetrics []CustomStatEntry
+	if m.config.CustomCallbackManager != nil {
+		orderedCustomMetrics = m.config.CustomCallbackManager.CollectAllOrderedMetrics()
+	}
 
-	// Add custom metrics if available
-	if len(snapshot.CustomMetrics) > 0 {
-		customSummary := ""
-		// Sort custom metrics by key for consistent log output
-		keys := make([]string, 0, len(snapshot.CustomMetrics))
-		for key := range snapshot.CustomMetrics {
-			keys = append(keys, key)
+	// Log only the compact stats line (single line as before)
+	m.config.Logger.Log(LogInfo, m.buildCompactStatsLine(snapshot, avgCPU, avgNetRead, avgNetWrite, avgDiskRead, avgDiskWrite, avgFileDescriptors, orderedCustomMetrics, reasons))
+}
+
+// buildCompactStatsLine builds the original compact stats line for quick reference
+func (m *SystemStatsMonitor) buildCompactStatsLine(snapshot SystemStatsSnapshot, avgCPU, avgNetRead, avgNetWrite, avgDiskRead, avgDiskWrite, avgFileDescriptors float64, orderedCustomMetrics []CustomStatEntry, reasons []string) string {
+	// Create disk metrics summary (folder sizes) - simplified without file/folder counts
+	folderSummary := ""
+	if EnableDiskMetrics {
+		// Sort the paths for consistent log output
+		paths := make([]string, 0, len(snapshot.DiskMetrics))
+		for path := range snapshot.DiskMetrics {
+			paths = append(paths, path)
 		}
-		sort.Strings(keys)
-		for _, key := range keys {
-			value := snapshot.CustomMetrics[key]
+		sort.Strings(paths)
+		for _, path := range paths {
+			metrics := snapshot.DiskMetrics[path]
+			if folderSummary != "" {
+				folderSummary += "; "
+			}
+			folderSummary += fmt.Sprintf("%s:%.0fMB", path, float64(metrics.FolderSizeMB))
+		}
+	}
+
+	// Build log message dynamically based on enabled features
+	logParts := make([]string, 0)
+
+	// CPU and Memory (core metrics)
+	if EnableCPUStats {
+		logParts = append(logParts, fmt.Sprintf("CPU:%.1f%%", avgCPU))
+	}
+	if EnableMemoryStats {
+		logParts = append(logParts, fmt.Sprintf("Mem:%.1f%%(%.0fMB)", snapshot.MemoryPercent, float64(snapshot.MemoryUsedMB)))
+	}
+	if EnableLoadStats {
+		logParts = append(logParts, fmt.Sprintf("Load:%.2f", snapshot.LoadAverage1Min))
+	}
+
+	// Disk metrics
+	if EnableDiskMetrics && folderSummary != "" {
+		logParts = append(logParts, fmt.Sprintf("Dirs:[%s]", folderSummary))
+	}
+	if EnableDiskSpaceStats {
+		logParts = append(logParts, fmt.Sprintf("DiskSpace:%.1f%%(%.0fMB free)", snapshot.DiskSpaceUsedPercent, float64(snapshot.DiskSpaceFreeMB)))
+	}
+
+	// Network and I/O metrics
+	if EnableNetworkIOStats {
+		logParts = append(logParts, fmt.Sprintf("Net:%.1f/%.1fMB/s", avgNetRead, avgNetWrite))
+	}
+	if EnableDiskIOStats {
+		logParts = append(logParts, fmt.Sprintf("Disk:%.1f/%.1fMB/s", avgDiskRead, avgDiskWrite))
+	}
+
+	// File descriptors and sockets
+	if EnableFileDescriptorStats {
+		logParts = append(logParts, fmt.Sprintf("FDs:%.0f(%.1f%%)", avgFileDescriptors, snapshot.FileDescriptorPercent))
+	}
+	if EnableSocketStats {
+		logParts = append(logParts, fmt.Sprintf("Soc:%d(ESTAB:%d,TIME-WAIT:%d)", snapshot.OpenSockets, snapshot.EstablishedConnections, snapshot.TimeWaitConnections))
+	}
+
+	// Process and runtime metrics
+	if EnableProcessStats {
+		logParts = append(logParts, fmt.Sprintf("Proc:%.1f%%(%.0fMB,%dth)", snapshot.ProcessCPUPercent, float64(snapshot.ProcessMemoryMB), snapshot.ProcessThreads))
+	}
+	if EnableGoRuntimeStats {
+		logParts = append(logParts, fmt.Sprintf("Go:%d/%.0fMB", snapshot.GoRoutinesCount, float64(snapshot.GoMemoryMB)))
+	}
+
+	// Join all enabled parts
+	logMsg := strings.Join(logParts, " ")
+
+	// Add custom metrics if available and enabled
+	if EnableCustomStats && len(orderedCustomMetrics) > 0 {
+		customSummary := ""
+		// Use ordered custom metrics to preserve callback-specified order
+		for _, entry := range orderedCustomMetrics {
 			if customSummary != "" {
 				customSummary += ","
 			}
-			customSummary += fmt.Sprintf("%s:%s", key, value)
+			customSummary += fmt.Sprintf("%s:%s", entry.Key, entry.Value)
 		}
 		logMsg += fmt.Sprintf(" Custom:[%s]", customSummary)
 	}
@@ -946,52 +1525,36 @@ func (m *SystemStatsMonitor) logSnapshot(snapshot SystemStatsSnapshot, reasons [
 		logMsg += fmt.Sprintf(" [%s]", fmt.Sprintf("%v", reasons))
 	}
 
-	m.config.Logger.Log(LogInfo, logMsg)
+	return logMsg
 }
 
 // GetFormattedSnapshot returns a human-readable string representation of the current snapshot
 func (m *SystemStatsMonitor) GetFormattedSnapshot() string {
 	snapshot := m.GetSnapshot()
 
-	folderInfo := ""
-	for path, metrics := range snapshot.DiskMetrics {
-		if folderInfo != "" {
-			folderInfo += ", "
-		}
-		folderInfo += fmt.Sprintf("%s: %.0fMB (%d files, %d dirs)",
-			path, float64(metrics.FolderSizeMB), metrics.FileCount, metrics.DirectoryCount)
+	// Get current values (no averaging needed for on-demand snapshot)
+	avgCPU := snapshot.CPUPercent
+	avgNetRead := snapshot.NetworkReadMBps
+	avgNetWrite := snapshot.NetworkWriteMBps
+	avgDiskRead := snapshot.DiskReadMBps
+	avgDiskWrite := snapshot.DiskWriteMBps
+	avgFileDescriptors := float64(snapshot.OpenFileDescriptors)
+
+	// Get ordered custom metrics if available
+	var orderedCustomMetrics []CustomStatEntry
+	if m.config.CustomCallbackManager != nil {
+		orderedCustomMetrics = m.config.CustomCallbackManager.CollectAllOrderedMetrics()
 	}
 
-	customInfo := ""
-	for key, value := range snapshot.CustomMetrics {
-		if customInfo != "" {
-			customInfo += ", "
-		}
-		customInfo += fmt.Sprintf("%s: %s", key, value)
-	}
+	// Get readable stats
+	readableStats := m.getReadableSystemStats(snapshot, avgCPU, avgNetRead, avgNetWrite, avgDiskRead, avgDiskWrite, avgFileDescriptors, orderedCustomMetrics)
 
-	result := fmt.Sprintf(
-		"[%s] CPU:%.1f%% Load:%.2f Mem:%.1f%%(%.0fMB) Folders:[%s] DiskSpace:%.1f%%(%.0f/%.0fMB) Net:%.1f/%.1fMB/s Disk:%.1f/%.1fMB/s FDs:%d/%d(%.1f%%) Proc:%.1f%%(%.0fMB,%dth) Go:%d/%.0fMB GC:%d",
-		snapshot.Timestamp.Format(time.RFC3339),
-		snapshot.CPUPercent,
-		snapshot.LoadAverage1Min,
-		snapshot.MemoryPercent, float64(snapshot.MemoryUsedMB),
-		folderInfo,
-		snapshot.DiskSpaceUsedPercent,
-		float64(snapshot.DiskSpaceFreeMB),
-		float64(snapshot.DiskSpaceTotalMB),
-		snapshot.NetworkReadMBps, snapshot.NetworkWriteMBps,
-		snapshot.DiskReadMBps, snapshot.DiskWriteMBps,
-		snapshot.OpenFileDescriptors,
-		snapshot.MaxFileDescriptors,
-		snapshot.FileDescriptorPercent,
-		snapshot.ProcessCPUPercent, float64(snapshot.ProcessMemoryMB), snapshot.ProcessThreads,
-		snapshot.GoRoutinesCount, float64(snapshot.GoMemoryMB), snapshot.GoGCCount,
-	)
+	// Also include the compact summary for completeness
+	compactSummary := m.buildCompactStatsLine(snapshot, avgCPU, avgNetRead, avgNetWrite, avgDiskRead, avgDiskWrite, avgFileDescriptors, orderedCustomMetrics, nil)
 
-	if customInfo != "" {
-		result += fmt.Sprintf(" Custom:[%s]", customInfo)
-	}
+	// Combine readable stats with compact summary
+	result := strings.Join(readableStats, "\n")
+	result += "\n• " + compactSummary
 
 	return result
 }
@@ -1001,8 +1564,19 @@ func (m *SystemStatsMonitor) GetFormattedSnapshot() string {
 func (m *SystemStatsMonitor) RegisterCustomStatsCallback(id string, callback CustomStatsCallback) {
 	if m.config.CustomCallbackManager == nil {
 		m.config.CustomCallbackManager = NewCustomCallbackManager()
+		m.config.CustomCallbackManager.SetDefaultInterval(m.config.Interval)
 	}
 	m.config.CustomCallbackManager.RegisterCallback(id, callback)
+}
+
+// RegisterCustomStatsCallbackWithInterval registers a custom stats callback with a unique identifier and custom interval
+// This allows callbacks to be collected at different frequencies than the main stats monitor
+func (m *SystemStatsMonitor) RegisterCustomStatsCallbackWithInterval(id string, callback CustomStatsCallback, interval time.Duration) {
+	if m.config.CustomCallbackManager == nil {
+		m.config.CustomCallbackManager = NewCustomCallbackManager()
+		m.config.CustomCallbackManager.SetDefaultInterval(m.config.Interval)
+	}
+	m.config.CustomCallbackManager.RegisterCallbackWithInterval(id, callback, interval)
 }
 
 // UnregisterCustomStatsCallback removes a specific custom stats callback by ID
@@ -1035,16 +1609,18 @@ func (m *SystemStatsMonitor) GetRegisteredCallbackIDs() []string {
 	return []string{}
 }
 
+// GetCustomCallbackInfo returns detailed information about registered callbacks including their intervals
+func (m *SystemStatsMonitor) GetCustomCallbackInfo() map[string]map[string]string {
+	if m.config.CustomCallbackManager != nil {
+		return m.config.CustomCallbackManager.GetCallbackInfo()
+	}
+	return make(map[string]map[string]string)
+}
+
 // IsCallbackRegistered checks if a callback with the given ID is registered
 func (m *CustomCallbackManager) IsCallbackRegistered(id string) bool {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 	_, exists := m.callbacks[id]
 	return exists
-}
-
-// SetCustomStatsCallback is deprecated but kept for backward compatibility
-// Use RegisterCustomStatsCallback instead for multi-callback support
-func (m *SystemStatsMonitor) SetCustomStatsCallback(callback CustomStatsCallback) {
-	m.RegisterCustomStatsCallback("default", callback)
 }
