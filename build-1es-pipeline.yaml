@@ -72,12 +72,12 @@ extends:
                   version: $(AZCOPY_GOLANG_VERSION)
 
               - script: |
-                  go build -tags "netgo" -o azcopy
+                  go build -tags "netgo" -o azcopy_bin
                 displayName: 'Build AzCopy'
 
               - script: |
                   # Run azcopy --version and capture the output
-                  azcopyOutput=$(./azcopy --version)
+                  azcopyOutput=$(./azcopy_bin --version)
                   # Extract the version part
                   if echo "$azcopyOutput" | grep -q "azcopy version"; then
                     version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
