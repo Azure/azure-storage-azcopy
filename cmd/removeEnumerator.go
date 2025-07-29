@@ -34,7 +34,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
 
@@ -54,7 +53,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 		Credential: &cca.credentialInfo,
 
 		ListOfFiles:      cca.ListOfFilesChannel,
-		ListOfVersionIDs: cca.ListOfVersionIDs,
+		ListOfVersionIDs: cca.ListOfVersionIDsChannel,
 
 		CpkOptions: cca.CpkOptions,
 
@@ -101,9 +100,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	if !cca.dryrunMode {
 		glcm.Info(message)
 	}
-	if jobsAdmin.JobsAdmin != nil {
-		jobsAdmin.JobsAdmin.LogToJobLog(message, common.LogInfo)
-	}
+	common.LogToJobLogWithPrefix(message, common.LogInfo)
 
 	from := cca.FromTo.From()
 	if !from.SupportsTrailingDot() {
@@ -118,7 +115,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 
 	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
 	var fileClientOptions any
-	if cca.FromTo.From() == common.ELocation.File() {
+	if cca.FromTo.From().IsFile() {
 		fileClientOptions = &common.FileClientOptions{AllowTrailingDot: cca.trailingDot.IsEnabled()}
 	}
 	targetServiceClient, err := common.GetServiceClientForLocation(

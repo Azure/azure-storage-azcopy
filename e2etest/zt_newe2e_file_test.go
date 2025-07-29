@@ -227,6 +227,7 @@ func (s *FileTestSuite) Scenario_DownloadPreserveLMTFile(svm *ScenarioVariationM
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body: body,
 		ObjectProperties: ObjectProperties{
+
 			LastModifiedTime: srcObjLMT,
 		},
 	}, false)
@@ -663,9 +664,43 @@ func (s *FileTestSuite) Scenario_SingleFileDownloadNoError(svm *ScenarioVariatio
 		ShouldFail: false,
 	})
 
-	//ValidateResource[ObjectResourceManager](svm, destObj, ResourceDefinitionObject{
-	//	Body: body,
-	//}, true)
-
 	ValidateDoesNotContainError(svm, stdOut, []string{"interrupted system call"})
+}
+
+// Scenario_TrailingDotDisabledCorrectError tests that copying an already removed file with trailing dot
+// disabled has the correct error message (404: resource does not exist)
+func (s *FileTestSuite) Scenario_TrailingDotDisabledCorrectError(svm *ScenarioVariationManager) {
+	body := NewRandomObjectContentContainer(0)
+	srcObj := CreateResource[ObjectResourceManager](svm,
+		GetRootResource(svm, common.ELocation.File()),
+		ResourceDefinitionObject{Body: body})
+
+	RunAzCopy(svm,
+		AzCopyCommand{
+			Verb:       AzCopyVerbRemove,
+			Targets:    []ResourceManager{srcObj},
+			ShouldFail: false,
+		})
+
+	ValidateResource[ObjectResourceManager](svm, srcObj, ResourceDefinitionObject{
+		ObjectShouldExist: to.Ptr(false),
+	}, false)
+
+	destContainer := CreateResource[ContainerResourceManager](
+		svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
+
+	stdOut, _ := RunAzCopy(svm,
+		AzCopyCommand{
+			Verb:       AzCopyVerbCopy,
+			Targets:    []ResourceManager{srcObj, destContainer},
+			ShouldFail: true,
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					TrailingDot: pointerTo(common.ETrailingDotOption.Disable()),
+				},
+			},
+		})
+
+	ValidateDoesNotContainError(svm, stdOut, []string{"--trailing-dot=Disable is dangerous here"})
+	ValidateContainsError(svm, stdOut, []string{"resource does not exist"})
 }

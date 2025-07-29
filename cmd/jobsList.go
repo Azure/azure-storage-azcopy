@@ -23,7 +23,8 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"sort"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"strings"
 	"time"
 
@@ -76,54 +77,57 @@ func init() {
 	jobsCmd.AddCommand(lsCmd)
 
 	lsCmd.PersistentFlags().StringVar(&commandLineInput.withStatus, "with-status", "All",
-		"List the jobs with the specified status. Available values include: All, Cancelled, Failed, InProgress, Completed,"+
+		"List the jobs with the specified status. "+
+			"\n Available values include: "+
+			"\n All, Cancelled, Failed, InProgress, Completed,"+
 			" CompletedWithErrors, CompletedWithFailures, CompletedWithErrorsAndSkipped")
 }
 
 // HandleListJobsCommand sends the ListJobs request to transfer engine
 // Print the Jobs in the history of Azcopy
 func HandleListJobsCommand(jobStatus common.JobStatus) error {
-	resp := common.ListJobsResponse{}
-	Rpc(common.ERpcCmd.ListJobs(), jobStatus, &resp)
+	resp, err := Client.ListJobs(azcopy.ListJobsOptions{WithStatus: to.Ptr(jobStatus)})
+	if err != nil {
+		return err
+	}
 	return PrintExistingJobIds(resp)
 }
 
 // PrintExistingJobIds prints the response of listOrder command when listOrder command requested the list of existing jobs
-func PrintExistingJobIds(listJobResponse common.ListJobsResponse) error {
-	if listJobResponse.ErrorMessage != "" {
-		return fmt.Errorf("request failed with following error message: %s", listJobResponse.ErrorMessage)
-	}
-
-	// before displaying the jobs, sort them accordingly so that they are displayed in a consistent way
-	sortJobs(listJobResponse.JobIDDetails)
+func PrintExistingJobIds(listJobResponse azcopy.ListJobsResponse) error {
 
 	glcm.Exit(func(format common.OutputFormat) string {
 		if format == common.EOutputFormat.Json() {
-			jsonOutput, err := json.Marshal(listJobResponse)
+			// Create the response structure using types from the common package.
+			resp := common.ListJobsResponse{
+				JobIDDetails: make([]common.JobIDDetails, len(listJobResponse.Details)),
+			}
+
+			// Convert from azcopy.JobDetail to common.JobIDDetails.
+			for i, d := range listJobResponse.Details {
+				resp.JobIDDetails[i] = common.JobIDDetails{
+					JobId:         d.JobID,
+					CommandString: d.Command,
+					StartTime:     d.StartTime.Unix(),
+					JobStatus:     d.Status,
+				}
+			}
+
+			jsonOutput, err := json.Marshal(resp)
 			common.PanicIfErr(err)
 			return string(jsonOutput)
 		}
 
 		var sb strings.Builder
 		sb.WriteString("Existing Jobs \n")
-		for index := 0; index < len(listJobResponse.JobIDDetails); index++ {
-			jobDetail := listJobResponse.JobIDDetails[index]
+		for _, detail := range listJobResponse.Details {
 			sb.WriteString(fmt.Sprintf("JobId: %s\nStart Time: %s\nStatus: %s\nCommand: %s\n\n",
-				jobDetail.JobId.String(),
-				time.Unix(0, jobDetail.StartTime).Format(time.RFC850),
-				jobDetail.JobStatus,
-				jobDetail.CommandString))
+				detail.JobID.String(),
+				detail.StartTime.Format(time.RFC850),
+				detail.Status,
+				detail.Command))
 		}
 		return sb.String()
 	}, common.EExitCode.Success())
 	return nil
-}
-
-func sortJobs(jobsDetails []common.JobIDDetails) {
-	// sort the jobs so that the latest one is shown first
-	sort.Slice(jobsDetails, func(i, j int) bool {
-		// this function essentially asks whether i should be placed before j
-		// we say yes if the job i is more recent
-		return jobsDetails[i].StartTime > jobsDetails[j].StartTime
-	})
 }

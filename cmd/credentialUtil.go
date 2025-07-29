@@ -35,8 +35,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/minio/minio-go/pkg/s3utils"
@@ -51,7 +49,7 @@ var sharedKeyDeprecationMessage = "*** WARNING *** shared key authentication for
 func warnIfSharedKeyAuthForDatalake() {
 	sharedKeyDeprecation.Do(func() {
 		glcm.Warn(sharedKeyDeprecationMessage)
-		jobsAdmin.JobsAdmin.LogToJobLog(sharedKeyDeprecationMessage, common.LogWarning)
+		common.LogToJobLogWithPrefix(sharedKeyDeprecationMessage, common.LogWarning)
 	})
 }
 
@@ -86,7 +84,7 @@ func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
 func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 	var err error
 	autoOAuth.Do(func() {
-		var lca loginCmdArgs
+		var options LoginOptions
 		autoLoginType := strings.ToLower(common.GetEnvironmentVariable(common.EEnvironmentVariable.AutoLoginType()))
 		if autoLoginType == "" {
 			glcm.Info("Autologin not specified.")
@@ -94,36 +92,43 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 		}
 
 		if tenantID := common.GetEnvironmentVariable(common.EEnvironmentVariable.TenantID()); tenantID != "" {
-			lca.tenantID = tenantID
+			options.TenantID = tenantID
 		}
 
 		if endpoint := common.GetEnvironmentVariable(common.EEnvironmentVariable.AADEndpoint()); endpoint != "" {
-			lca.aadEndpoint = endpoint
+			options.AADEndpoint = endpoint
 		}
 
-		// Fill up lca
-		lca.loginType = autoLoginType
-		switch autoLoginType {
-		case common.EAutoLoginType.SPN().String():
-			lca.applicationID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ApplicationID())
-			lca.certPath = common.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePath())
-			lca.certPass = common.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
-			lca.clientSecret = common.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
-		case common.EAutoLoginType.MSI().String():
-			lca.identityClientID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityClientID())
-			lca.identityObjectID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityObjectID())
-			lca.identityResourceID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityResourceString())
-		case common.EAutoLoginType.Device().String():
-		case common.EAutoLoginType.AzCLI().String():
-		case common.EAutoLoginType.PsCred().String():
-		case common.EAutoLoginType.Workload().String():
+		var loginType common.AutoLoginType
+		err = loginType.Parse(autoLoginType)
+		if err != nil {
+			glcm.Error("Invalid Auto-login type specified: " + autoLoginType)
+			return
+		}
+
+		// Fill up options
+		options.LoginType = loginType
+		switch options.LoginType {
+		case common.EAutoLoginType.SPN():
+			options.ApplicationID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ApplicationID())
+			options.CertificatePath = common.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePath())
+			options.certificatePassword = common.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
+			options.clientSecret = common.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
+		case common.EAutoLoginType.MSI():
+			options.IdentityClientID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityClientID())
+			options.identityObjectID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityObjectID())
+			options.IdentityResourceID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityResourceString())
+		case common.EAutoLoginType.Device():
+		case common.EAutoLoginType.AzCLI():
+		case common.EAutoLoginType.PsCred():
+		case common.EAutoLoginType.Workload():
 		default:
 			glcm.Error("Invalid Auto-login type specified: " + autoLoginType)
 			return
 		}
 
-		lca.persistToken = false
-		if err = lca.process(); err != nil {
+		options.persistToken = false
+		if err = options.process(); err != nil {
 			glcm.Error(fmt.Sprintf("Failed to perform Auto-login: %v.", err.Error()))
 		}
 	})
@@ -331,9 +336,7 @@ func logAuthType(ct common.CredentialType, location common.Location, isSource bo
 	}
 	if _, exists := authMessagesAlreadyLogged.Load(message); !exists {
 		authMessagesAlreadyLogged.Store(message, struct{}{}) // dedup because source is auth'd by both enumerator and STE
-		if jobsAdmin.JobsAdmin != nil {
-			jobsAdmin.JobsAdmin.LogToJobLog(message, common.LogInfo)
-		}
+		common.LogToJobLogWithPrefix(message, common.LogInfo)
 		glcm.Info(message)
 	}
 }
@@ -436,7 +439,7 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 			return
 		}
 
-		if err = checkAuthSafeForTarget(credType, resource.Value, cmdLineExtraSuffixesAAD, location); err != nil {
+		if err = checkAuthSafeForTarget(credType, resource.Value, TrustedSuffixes, location); err != nil {
 			credType = common.ECredentialType.Unknown()
 			public = false
 		}

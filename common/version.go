@@ -1,6 +1,10 @@
 package common
 
+<<<<<<< HEAD
 const AzcopyVersion = "10.30.0~preview.2"
+=======
+const AzcopyVersion = "10.30.0"
+>>>>>>> d555ee723f1e83c232a436f06e27320715994a6b
 const UserAgent = "AzCopy/" + AzcopyVersion
 const S3ImportUserAgent = "S3Import " + UserAgent
 const GCPImportUserAgent = "GCPImport " + UserAgent
