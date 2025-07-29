@@ -280,9 +280,10 @@ extends:
                   sudo apt-get update
                   sudo apt-get upgrade -y
                   sudo apt-get install -f --fix-missing
-                  wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
-                  sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
-                  sudo dpkg -i packages-microsoft-prod.deb
+                  # Install Microsoft package repository the CI-safe way (no .deb install)
+                  wget https://packages.microsoft.com/config/ubuntu/22.04/prod.list -O packages-microsoft-prod.list
+                  sudo mv packages-microsoft-prod.list /etc/apt/sources.list.d/
+                  wget https://packages.microsoft.com/keys/microsoft.asc -O- | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/microsoft.gpg > /dev/null
                   sudo apt install apt-transport-https -y
                   sudo apt install dotnet-sdk-6.0 -y
                 displayName: "Update dependencies"
@@ -370,8 +371,10 @@ extends:
                   sudo apt-get upgrade -y
                   sudo apt-get install -f --fix-missing
                   wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
-                  sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
-                  sudo dpkg -i packages-microsoft-prod.deb
+                  # Install Microsoft package repository the CI-safe way (no .deb install)
+                  wget https://packages.microsoft.com/config/ubuntu/22.04/prod.list -O packages-microsoft-prod.list
+                  sudo mv packages-microsoft-prod.list /etc/apt/sources.list.d/
+                  wget https://packages.microsoft.com/keys/microsoft.asc -O- | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/microsoft.gpg > /dev/null
                   sudo apt install apt-transport-https -y
                   sudo apt install dotnet-sdk-6.0 -y
                   sudo apt-get install -y zip
@@ -478,9 +481,10 @@ extends:
                   sudo apt-get upgrade -y
                   sudo apt-get install unzip -y
                   sudo apt-get install -f --fix-missing
-                  wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
-                  sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
-                  sudo dpkg -i packages-microsoft-prod.deb
+                  # Install Microsoft package repository the CI-safe way (no .deb install)
+                  wget https://packages.microsoft.com/config/ubuntu/22.04/prod.list -O packages-microsoft-prod.list
+                  sudo mv packages-microsoft-prod.list /etc/apt/sources.list.d/
+                  wget https://packages.microsoft.com/keys/microsoft.asc -O- | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/microsoft.gpg > /dev/null
                   sudo apt install apt-transport-https -y
                   sudo apt install dotnet-sdk-6.0 -y
                 displayName: "Update dependencies"
@@ -1025,9 +1029,10 @@ extends:
                       sudo apt-get update 
                       sudo apt-get upgrade -y 
                       sudo apt-get install -f --fix-missing 
-                      wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
-                      sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
-                      sudo dpkg -i packages-microsoft-prod.deb
+                      # Install Microsoft package repository the CI-safe way (no .deb install)
+                      wget https://packages.microsoft.com/config/ubuntu/22.04/prod.list -O packages-microsoft-prod.list
+                      sudo mv packages-microsoft-prod.list /etc/apt/sources.list.d/
+                      wget https://packages.microsoft.com/keys/microsoft.asc -O- | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/microsoft.gpg > /dev/null
                       sudo apt install apt-transport-https -y 
                       sudo apt install dotnet-sdk-6.0 -y
                     displayName: 'Update Dependencies'
