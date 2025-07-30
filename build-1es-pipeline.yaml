@@ -1021,12 +1021,12 @@ extends:
                       isDraft: ${{ parameters.draft }}
                       isPreRelease: ${{ parameters.prerelease }}
                       assets: |
-                        $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.deb
-                        $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.rpm
-                        $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.tar.gz
-                        $(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*.zip
-                        $(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*.zip
-                        $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/mariner/*
+                        $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/*.deb
+                        $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/*.rpm
+                        $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/*.tar.gz
+                        $(Build.ArtifactStagingDirectory)/azcopy-windows-signed/*.zip
+                        $(Build.ArtifactStagingDirectory)/azcopy-mac-signed/*.zip
+                        $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/mariner/*
                       assetUploadMode: replace
 
       - ${{ if eq(parameters.publish_artifacts, true) }}:
