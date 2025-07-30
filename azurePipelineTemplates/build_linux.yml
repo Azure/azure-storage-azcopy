@@ -52,18 +52,34 @@ steps:
       cp $(linux_dir)/azcopy pkgDir/usr/bin/
       cp NOTICE.txt pkgDir/usr/bin/
     displayName: 'Copy required files for packaging'
+
   # using fpm tool for packaging of our binary & performing post-install operations
   # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
   - script: |
-      fpm -s dir -t deb -n azcopy -C pkgDir/ \
+      packageName="azcopy"
+      # If the version string has preview in it then packageName shall be "azcopy-preview"
+      if [[ `$(azcopy_version)` == *"preview"* ]]; then
+        echo "Preview binary package created"
+        packageName="azcopy-preview"
+      fi
+
+      fpm -s dir -t deb -n $packageName -C pkgDir/ \
       -v $(azcopy_version) \
       --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
       --url "https://github.com/Azure/azure-storage-azcopy" \
       --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts"
       mv ./azcopy*.deb $(unsigned)/azcopy-$(azcopy_version).${{ parameters.host_suffix }}.deb
     displayName: 'Make deb Package'
+
   - script: |
-      fpm -s dir -t rpm -n azcopy --rpm-digest sha256 -C pkgDir/ \
+      packageName="azcopy"
+      # If the version string has preview in it then packageName shall be "azcopy-preview"
+      if [[ `$(azcopy_version)` == *"preview"* ]]; then
+        echo "Preview binary package created"
+        packageName="azcopy-preview"
+      fi
+
+      fpm -s dir -t rpm -n $packageName --rpm-digest sha256 -C pkgDir/ \
       -v $(azcopy_version) \
       --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
       --url "https://github.com/Azure/azure-storage-azcopy" \
