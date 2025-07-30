@@ -73,7 +73,7 @@ func TestFolderCreationTracker_directoryCreate(t *testing.T) {
 
 	fct := &jpptFolderTracker{
 		plan:                   plan,
-		mu:                     &sync.Mutex{},
+		mu:                     &sync.RWMutex{},
 		contents:               make(map[string]uint32),
 		unregisteredButCreated: make(map[string]struct{}),
 		lockFolderCreation:     true, // we want to test the locking behavior

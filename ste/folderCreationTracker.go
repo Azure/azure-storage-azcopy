@@ -31,7 +31,7 @@ func NewFolderCreationTrackerInt(fpo common.FolderPropertyOption, plan *JobPartP
 		common.EFolderPropertiesOption.AllFoldersExceptRoot():
 		return &jpptFolderTracker{ // This prevents a dependency cycle. Reviewers: Are we OK with this? Can you think of a better way to do it?
 			plan:                   plan,
-			mu:                     &sync.Mutex{},
+			mu:                     &sync.RWMutex{},
 			contents:               make(map[string]uint32),
 			unregisteredButCreated: make(map[string]struct{}),
 			lockFolderCreation:     lockFolderCreation,
@@ -64,13 +64,21 @@ func (f *nullFolderTracker) StopTracking(folder string) {
 
 type jpptFolderTracker struct {
 	plan                   IJobPartPlanHeader
-	mu                     *sync.Mutex
+	mu                     *sync.RWMutex
 	contents               map[string]uint32
 	unregisteredButCreated map[string]struct{}
 	lockFolderCreation     bool
 }
 
+// Public interface - safe for external callers
 func (f *jpptFolderTracker) IsFolderAlreadyCreated(folder string) bool {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return f.isFolderAlreadyCreatedUnSafe(folder)
+}
+
+func (f *jpptFolderTracker) isFolderAlreadyCreatedUnSafe(folder string) bool {
+
 	if idx, ok := f.contents[folder]; ok &&
 		f.plan.Transfer(idx).TransferStatus() == (common.ETransferStatus.FolderCreated()) {
 		return true
@@ -112,7 +120,7 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 		defer f.mu.Unlock()
 
 		// If the folder was created while we were waiting for the lock, we need to account for that.
-		if f.IsFolderAlreadyCreated(folder) {
+		if f.isFolderAlreadyCreatedUnSafe(folder) {
 			return nil
 		}
 	}
@@ -127,7 +135,7 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 		defer f.mu.Unlock()
 
 		// If the folder was created while we were waiting for the lock, we need to account for that.
-		if f.IsFolderAlreadyCreated(folder) {
+		if f.isFolderAlreadyCreatedUnSafe(folder) {
 			return nil
 		}
 	}
@@ -156,8 +164,8 @@ func (f *jpptFolderTracker) ShouldSetProperties(folder string, overwrite common.
 		common.EOverwriteOption.IfSourceNewer(),
 		common.EOverwriteOption.False():
 
-		f.mu.Lock()
-		defer f.mu.Unlock()
+		f.mu.RLock()
+		defer f.mu.RUnlock()
 
 		var created bool
 		if idx, ok := f.contents[folder]; ok {
