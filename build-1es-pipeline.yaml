@@ -777,7 +777,7 @@ extends:
                   version: $(AZCOPY_GOLANG_VERSION)
 
               - script: |
-                  go build -tags "netgo" -o azcopy
+                  go build -tags "netgo" -o azcopy_bin
                 displayName: 'Build AzCopy'
 
               # DownloadPipelineArtifact AFTER checkout since checkout wipes out the DefaultWorkingDirectory
@@ -854,11 +854,11 @@ extends:
                     today=$(date +"%Y%m%d")
                     container_url="https://azcopyprivatedrops.blob.core.windows.net/%24web/releases/release-$(azcopy_version)-$today"
                     echo "Artifacts will be uploaded to private drop container: $container_url"
-                    AZCOPY_AUTO_LOGIN_TYPE=AzCLI ./azcopy cp "$(release)/*" "$container_url" --recursive --put-md5=true
+                    AZCOPY_AUTO_LOGIN_TYPE=AzCLI ./azcopy_bin cp "$(release)/*" "$container_url" --recursive --put-md5=true
 
                     if [ $(publish_to_m1_container) = "True" ]; then
                       m1_container_url="https://azcopyvnextrelease.blob.core.windows.net/%24web/azcopy-m1-drops/azcopy-$(azcopy_version)-$today"
-                    AZCOPY_AUTO_LOGIN_TYPE=AzCLI ./azcopy cp "$(input)/azcopy-binaries-mac/azcopy_darwin_m1_arm64" "$m1_container_url" --recursive --put-md5=true
+                    AZCOPY_AUTO_LOGIN_TYPE=AzCLI ./azcopy_bin cp "$(input)/azcopy-binaries-mac/azcopy_darwin_m1_arm64" "$m1_container_url" --recursive --put-md5=true
                     fi
       # UploadToStorage ends here
       - ${{ if eq(parameters.publish_docker_image, true) }}:
