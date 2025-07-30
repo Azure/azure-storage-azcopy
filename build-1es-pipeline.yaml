@@ -944,7 +944,7 @@ extends:
                       displayName: "Download Linux ARM64 Binary"
 
                   - script: |
-                      mv azcopy_linux_arm64 azcopy
+                      mv azcopy_linux_arm64 azcopy_bin
                       # (~) to be replaced by (-) if azcopy version contains a tilde as this is not supported in docker image tags
                       azcopy_docker_version=$(echo $(azcopy_version) | sed 's/~/-/')
                       echo "##vso[task.setvariable variable=azcopy_docker_version]$azcopy_docker_version"
