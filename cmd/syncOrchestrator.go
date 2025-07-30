@@ -809,6 +809,8 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 	// Ensure proper cleanup in ALL scenarios (success, failure, cancellation)
 	cleanupFunc := func() {
+		cca.orchestratorCancel = nil
+
 		// Always shutdown monitoring goroutines
 		WarnStdoutAndScanningLog(fmt.Sprintf("Orchestrator exiting. Execution time: %v.", time.Since(startTime)))
 	}

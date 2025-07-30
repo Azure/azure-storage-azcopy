@@ -642,9 +642,6 @@ func (cca *cookedSyncCmdArgs) waitUntilJobCompletion(blocking bool) {
 }
 
 func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
-	if cca.orchestratorCancel != nil {
-		cca.orchestratorCancel()
-	}
 
 	// prompt for confirmation, except when enumeration is complete
 	if !cca.isEnumerationComplete {
@@ -671,6 +668,10 @@ func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
 	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
 	if err != nil {
 		lcm.Error("error occurred while cancelling the job " + cca.jobID.String() + ". Failed with error " + err.Error())
+	}
+
+	if cca.orchestratorCancel != nil {
+		cca.orchestratorCancel()
 	}
 }
 
