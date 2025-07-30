@@ -179,14 +179,37 @@ func (args rawLoginArgs) toOptions() (LoginOptions, error) {
 	}, nil
 }
 
+// loginWithSPNArgs is a type that holds the arguments for login with SPN so we don't need to use environment variables. It also uses certData rather than certPath
+type SPNArgs struct {
+	certData      string
+	applicationId string
+	certPass      string
+	tenantId      string
+	aadEndpoint   string
+}
+
+var loginWithSPNArgs SPNArgs = SPNArgs{}
+
+func SetSPNArgs(certData string, certPass string, applicationId string, tenantId string, aadEndpoint string) {
+	loginWithSPNArgs.certData = certData
+	loginWithSPNArgs.applicationId = applicationId
+	loginWithSPNArgs.certPass = certPass
+	loginWithSPNArgs.tenantId = tenantId
+	loginWithSPNArgs.aadEndpoint = aadEndpoint
+}
+
 func (options LoginOptions) process() error {
 	uotm := GetUserOAuthTokenManagerInstance()
 	// Persist the token to cache, if login fulfilled successfully.
-
 	switch options.LoginType {
 	case common.EAutoLoginType.SPN():
 		if options.CertificatePath != "" {
 			if err := uotm.CertLogin(options.TenantID, options.AADEndpoint, options.CertificatePath, options.certificatePassword, options.ApplicationID, options.persistToken); err != nil {
+				return err
+			}
+			glcm.Info("SPN Auth via cert succeeded.")
+		} else if options.CertificatePath == "" && loginWithSPNArgs.certData != "" {
+			if err := uotm.SpnArgsLogin(loginWithSPNArgs.tenantId, loginWithSPNArgs.aadEndpoint, loginWithSPNArgs.certData, loginWithSPNArgs.certPass, loginWithSPNArgs.applicationId, options.persistToken); err != nil {
 				return err
 			}
 			glcm.Info("SPN Auth via cert succeeded.")
