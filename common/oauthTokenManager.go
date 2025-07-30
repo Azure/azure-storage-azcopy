@@ -36,6 +36,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity/cache"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
@@ -635,6 +636,14 @@ func (credInfo *OAuthTokenInfo) GetManagedIdentityCredential() (azcore.TokenCred
 
 func (credInfo *OAuthTokenInfo) GetClientCertificateCredential() (azcore.TokenCredential, error) {
 	authorityHost, err := getAuthorityURL(credInfo.ActiveDirectoryEndpoint)
+
+	var host string
+	if buildmode.IsMover {
+		host = credInfo.ActiveDirectoryEndpoint
+	} else {
+		host = authorityHost.String()
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -656,7 +665,7 @@ func (credInfo *OAuthTokenInfo) GetClientCertificateCredential() (azcore.TokenCr
 	}
 	tc, err := azidentity.NewClientCertificateCredential(credInfo.Tenant, credInfo.ApplicationID, certs, key, &azidentity.ClientCertificateCredentialOptions{
 		ClientOptions: azcore.ClientOptions{
-			Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: authorityHost.String()},
+			Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: host},
 			Transport: newAzcopyHTTPClient(),
 		},
 		SendCertificateChain: true,
