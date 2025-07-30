@@ -295,14 +295,14 @@ func StartSystemStatsMonitorForJob(jobId common.JobID) {
 
 // RegisterGlobalCustomStatsCallbackWithID registers a custom stats callback with a specific ID
 // This allows multiple callbacks to be registered with the global SystemStatsMonitor
-func RegisterGlobalCustomStatsCallbackWithID(id string, callback common.CustomStatsCallback) {
+func RegisterGlobalCustomStatsCallbackWithID(id common.CustomStatsID, callback common.CustomStatsCallback) {
 	if common.GlobalSystemStatsMonitor != nil {
 		common.GlobalSystemStatsMonitor.RegisterCustomStatsCallback(id, callback)
 	}
 }
 
 // UnregisterGlobalCustomStatsCallbackWithID removes a specific custom stats callback by ID
-func UnregisterGlobalCustomStatsCallbackWithID(id string) {
+func UnregisterGlobalCustomStatsCallbackWithID(id common.CustomStatsID) {
 	if common.GlobalSystemStatsMonitor != nil {
 		common.GlobalSystemStatsMonitor.UnregisterCustomStatsCallback(id)
 	}

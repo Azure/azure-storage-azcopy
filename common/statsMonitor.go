@@ -56,6 +56,23 @@ const (
 	EnableMethodologyLogging = true
 )
 
+// CustomStatsID represents a standardized identifier for custom stats callbacks
+// Consumers must define a new value here to register custom stats
+type CustomStatsID string
+
+const (
+	// CustomStatsIDSTE represents Storage Transfer Engine stats
+	STEId CustomStatsID = "ste"
+
+	// CustomStatsIDOrchestrator represents sync orchestrator stats
+	SyncOrchestratorId CustomStatsID = "so"
+)
+
+// String returns the string representation of the CustomStatsID
+func (id CustomStatsID) String() string {
+	return string(id)
+}
+
 // CustomStatEntry represents a single key-value pair with preserved order
 type CustomStatEntry struct {
 	Key   string
@@ -67,7 +84,7 @@ type CustomStatEntry struct {
 //
 // Example usage:
 //
-//	monitor.RegisterCustomStatsCallback("orchestrator", func() []CustomStatEntry {
+//	monitor.RegisterCustomStatsCallback(CustomStatsIDOrchestrator, func() []CustomStatEntry {
 //	    return []CustomStatEntry{
 //	        {"Waiting", "42"},      // This will appear first
 //	        {"Active", "15"},       // This will appear second
@@ -90,7 +107,7 @@ type CustomCallbackConfig struct {
 
 // CustomCallbackManager manages multiple custom stats callbacks with individual intervals
 type CustomCallbackManager struct {
-	callbacks       map[string]*CustomCallbackConfig
+	callbacks       map[CustomStatsID]*CustomCallbackConfig
 	mutex           sync.RWMutex
 	defaultInterval time.Duration // Default interval from stats monitor
 }
@@ -98,7 +115,7 @@ type CustomCallbackManager struct {
 // NewCustomCallbackManager creates a new callback manager
 func NewCustomCallbackManager() *CustomCallbackManager {
 	return &CustomCallbackManager{
-		callbacks: make(map[string]*CustomCallbackConfig),
+		callbacks: make(map[CustomStatsID]*CustomCallbackConfig),
 	}
 }
 
@@ -110,12 +127,12 @@ func (m *CustomCallbackManager) SetDefaultInterval(interval time.Duration) {
 }
 
 // RegisterCallback registers a callback with a unique identifier using default interval
-func (m *CustomCallbackManager) RegisterCallback(id string, callback CustomStatsCallback) {
+func (m *CustomCallbackManager) RegisterCallback(id CustomStatsID, callback CustomStatsCallback) {
 	m.RegisterCallbackWithInterval(id, callback, 0) // 0 = use default interval
 }
 
 // RegisterCallbackWithInterval registers a callback with a unique identifier and custom interval
-func (m *CustomCallbackManager) RegisterCallbackWithInterval(id string, callback CustomStatsCallback, interval time.Duration) {
+func (m *CustomCallbackManager) RegisterCallbackWithInterval(id CustomStatsID, callback CustomStatsCallback, interval time.Duration) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.callbacks[id] = &CustomCallbackConfig{
@@ -127,7 +144,7 @@ func (m *CustomCallbackManager) RegisterCallbackWithInterval(id string, callback
 }
 
 // UnregisterCallback removes a callback by its identifier
-func (m *CustomCallbackManager) UnregisterCallback(id string) {
+func (m *CustomCallbackManager) UnregisterCallback(id CustomStatsID) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
@@ -164,7 +181,7 @@ func (m *CustomCallbackManager) UnregisterAllCallbacks() {
 		}
 	}
 
-	m.callbacks = make(map[string]*CustomCallbackConfig)
+	m.callbacks = make(map[CustomStatsID]*CustomCallbackConfig)
 }
 
 // CollectAllMetrics calls registered callbacks based on their intervals and combines their results
@@ -222,11 +239,14 @@ func (m *CustomCallbackManager) CollectAllOrderedMetrics() []CustomStatEntry {
 	now := time.Now()
 
 	// Sort callback IDs for consistent ordering across different callbacks
-	callbackIDs := make([]string, 0, len(m.callbacks))
+	callbackIDs := make([]CustomStatsID, 0, len(m.callbacks))
 	for id := range m.callbacks {
 		callbackIDs = append(callbackIDs, id)
 	}
-	sort.Strings(callbackIDs)
+	// Sort by string representation
+	sort.Slice(callbackIDs, func(i, j int) bool {
+		return callbackIDs[i].String() < callbackIDs[j].String()
+	})
 
 	for _, callbackID := range callbackIDs {
 		config := m.callbacks[callbackID]
@@ -267,14 +287,14 @@ func (m *CustomCallbackManager) CollectAllOrderedMetrics() []CustomStatEntry {
 	return result
 }
 
-// GetCallbackIDs returns a list of all registered callback IDs
+// GetCallbackIDs returns a list of all registered callback IDs as strings
 func (m *CustomCallbackManager) GetCallbackIDs() []string {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 
 	ids := make([]string, 0, len(m.callbacks))
 	for id := range m.callbacks {
-		ids = append(ids, id)
+		ids = append(ids, id.String())
 	}
 	return ids
 }
@@ -292,7 +312,7 @@ func (m *CustomCallbackManager) GetCallbackInfo() map[string]map[string]string {
 				effectiveInterval = m.defaultInterval
 			}
 
-			info[id] = map[string]string{
+			info[id.String()] = map[string]string{
 				"interval":         effectiveInterval.String(),
 				"custom_interval":  config.Interval.String(),
 				"default_interval": m.defaultInterval.String(),
@@ -1588,26 +1608,88 @@ func (m *SystemStatsMonitor) GetFormattedSnapshot() string {
 
 // RegisterCustomStatsCallback registers a custom stats callback with a unique identifier
 // This allows multiple components to register their own callbacks without conflicts
-func (m *SystemStatsMonitor) RegisterCustomStatsCallback(id string, callback CustomStatsCallback) {
+func (m *SystemStatsMonitor) RegisterCustomStatsCallback(id CustomStatsID, callback CustomStatsCallback) {
 	if m.config.CustomCallbackManager == nil {
 		m.config.CustomCallbackManager = NewCustomCallbackManager()
 		m.config.CustomCallbackManager.SetDefaultInterval(m.config.Interval)
 	}
 	m.config.CustomCallbackManager.RegisterCallback(id, callback)
+
+	// Log the initial data at registration time
+	if m.config.Logger != nil {
+		if initialData := callback(); len(initialData) > 0 {
+			// Get current system snapshot for logging
+			snapshot := m.GetSnapshot()
+
+			// Add custom metrics to the snapshot
+			for _, entry := range initialData {
+				prefixedKey := fmt.Sprintf("%s.%s", id.String(), entry.Key)
+				snapshot.CustomMetrics[prefixedKey] = entry.Value
+			}
+
+			// Create ordered custom metrics
+			orderedCustomMetrics := make([]CustomStatEntry, len(initialData))
+			for i, entry := range initialData {
+				orderedCustomMetrics[i] = CustomStatEntry{
+					Key:   fmt.Sprintf("%s.%s", id.String(), entry.Key),
+					Value: entry.Value,
+				}
+			}
+
+			// Get current averaged values for consistent logging format
+			avgCPU, avgNetRead, avgNetWrite, avgDiskRead, avgDiskWrite, avgFileDescriptors := m.getAveragedMetrics()
+
+			// Log using regular compact stats line with start trigger
+			reasons := []string{fmt.Sprintf("start-%s", id.String())}
+			logLine := m.buildCompactStatsLine(snapshot, avgCPU, avgNetRead, avgNetWrite, avgDiskRead, avgDiskWrite, avgFileDescriptors, orderedCustomMetrics, reasons)
+			m.config.Logger.Log(LogInfo, logLine)
+		}
+	}
 }
 
 // RegisterCustomStatsCallbackWithInterval registers a custom stats callback with a unique identifier and custom interval
 // This allows callbacks to be collected at different frequencies than the main stats monitor
-func (m *SystemStatsMonitor) RegisterCustomStatsCallbackWithInterval(id string, callback CustomStatsCallback, interval time.Duration) {
+func (m *SystemStatsMonitor) RegisterCustomStatsCallbackWithInterval(id CustomStatsID, callback CustomStatsCallback, interval time.Duration) {
 	if m.config.CustomCallbackManager == nil {
 		m.config.CustomCallbackManager = NewCustomCallbackManager()
 		m.config.CustomCallbackManager.SetDefaultInterval(m.config.Interval)
 	}
 	m.config.CustomCallbackManager.RegisterCallbackWithInterval(id, callback, interval)
+
+	// Log the initial data at registration time
+	if m.config.Logger != nil {
+		if initialData := callback(); len(initialData) > 0 {
+			// Get current system snapshot for logging
+			snapshot := m.GetSnapshot()
+
+			// Add custom metrics to the snapshot
+			for _, entry := range initialData {
+				prefixedKey := fmt.Sprintf("%s.%s", id.String(), entry.Key)
+				snapshot.CustomMetrics[prefixedKey] = entry.Value
+			}
+
+			// Create ordered custom metrics
+			orderedCustomMetrics := make([]CustomStatEntry, len(initialData))
+			for i, entry := range initialData {
+				orderedCustomMetrics[i] = CustomStatEntry{
+					Key:   fmt.Sprintf("%s.%s", id.String(), entry.Key),
+					Value: entry.Value,
+				}
+			}
+
+			// Get current averaged values for consistent logging format
+			avgCPU, avgNetRead, avgNetWrite, avgDiskRead, avgDiskWrite, avgFileDescriptors := m.getAveragedMetrics()
+
+			// Log using regular compact stats line with start trigger
+			reasons := []string{fmt.Sprintf("start-%s", id.String())}
+			logLine := m.buildCompactStatsLine(snapshot, avgCPU, avgNetRead, avgNetWrite, avgDiskRead, avgDiskWrite, avgFileDescriptors, orderedCustomMetrics, reasons)
+			m.config.Logger.Log(LogInfo, logLine)
+		}
+	}
 }
 
 // UnregisterCustomStatsCallback removes a specific custom stats callback by ID
-func (m *SystemStatsMonitor) UnregisterCustomStatsCallback(id string) {
+func (m *SystemStatsMonitor) UnregisterCustomStatsCallback(id CustomStatsID) {
 	if m.config.CustomCallbackManager != nil {
 		// Force a final collection and log the stats before unregistering
 		if m.config.CustomCallbackManager.ForceCollectCallback(id) && m.config.Logger != nil {
@@ -1621,7 +1703,7 @@ func (m *SystemStatsMonitor) UnregisterCustomStatsCallback(id string) {
 			orderedCustomMetrics := m.config.CustomCallbackManager.CollectAllOrderedMetrics()
 
 			// Force a log entry with the final stats
-			logMsg := m.buildCompactStatsLine(snapshot, avgCPU, avgNetRead, avgNetWrite, avgDiskRead, avgDiskWrite, avgFileDescriptors, orderedCustomMetrics, []string{fmt.Sprintf("final-%s", id)})
+			logMsg := m.buildCompactStatsLine(snapshot, avgCPU, avgNetRead, avgNetWrite, avgDiskRead, avgDiskWrite, avgFileDescriptors, orderedCustomMetrics, []string{fmt.Sprintf("stop-%s", id.String())})
 			m.config.Logger.Log(LogInfo, logMsg)
 		}
 
@@ -1631,7 +1713,7 @@ func (m *SystemStatsMonitor) UnregisterCustomStatsCallback(id string) {
 }
 
 // IsCustomStatsCallbackRegistered checks if a custom stats callback with the given ID is registered
-func (m *SystemStatsMonitor) IsCustomStatsCallbackRegistered(id string) bool {
+func (m *SystemStatsMonitor) IsCustomStatsCallbackRegistered(id CustomStatsID) bool {
 	if m.config.CustomCallbackManager != nil {
 		return m.config.CustomCallbackManager.IsCallbackRegistered(id)
 	}
@@ -1682,7 +1764,7 @@ func (m *SystemStatsMonitor) GetCustomCallbackInfo() map[string]map[string]strin
 // ForceCollectCustomStats forces immediate data collection for a specific custom stats callback
 // This bypasses the normal interval checking and immediately calls the specified callback
 // Returns true if the callback was found and called, false otherwise
-func (m *SystemStatsMonitor) ForceCollectCustomStats(id string) bool {
+func (m *SystemStatsMonitor) ForceCollectCustomStats(id CustomStatsID) bool {
 	if m.config.CustomCallbackManager != nil {
 		return m.config.CustomCallbackManager.ForceCollectCallback(id)
 	}
@@ -1723,8 +1805,34 @@ func (m *SystemStatsMonitor) GetFreshOrderedCustomStats() []CustomStatEntry {
 	return make([]CustomStatEntry, 0)
 }
 
+// LogAdhocCustomStats logs a one-time custom stats message with a tag and newlines before and after
+// This is useful for logging important events or state changes outside of regular monitoring intervals
+func (m *SystemStatsMonitor) LogAdhocCustomStats(tag string, entries []CustomStatEntry) {
+	if m.config.Logger == nil || len(entries) == 0 {
+		return
+	}
+
+	// Build the custom stats string in the same format as regular stats
+	customSummary := ""
+	for i, entry := range entries {
+		if i > 0 {
+			customSummary += ","
+		}
+		customSummary += fmt.Sprintf("%s:%s", entry.Key, entry.Value)
+	}
+
+	// Log with tag at the start and newlines before and after for visibility
+	m.config.Logger.Log(LogInfo, "")
+	if tag != "" {
+		m.config.Logger.Log(LogInfo, fmt.Sprintf("%s: [%s]", tag, customSummary))
+	} else {
+		m.config.Logger.Log(LogInfo, fmt.Sprintf("ADHOC: [%s]", customSummary))
+	}
+	m.config.Logger.Log(LogInfo, "")
+}
+
 // IsCallbackRegistered checks if a callback with the given ID is registered
-func (m *CustomCallbackManager) IsCallbackRegistered(id string) bool {
+func (m *CustomCallbackManager) IsCallbackRegistered(id CustomStatsID) bool {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 	_, exists := m.callbacks[id]
@@ -1734,7 +1842,7 @@ func (m *CustomCallbackManager) IsCallbackRegistered(id string) bool {
 // ForceCollectCallback forces immediate data collection for a specific callback by ID
 // This bypasses the normal interval checking and immediately calls the callback
 // Returns true if the callback was found and called, false otherwise
-func (m *CustomCallbackManager) ForceCollectCallback(id string) bool {
+func (m *CustomCallbackManager) ForceCollectCallback(id CustomStatsID) bool {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 

@@ -597,6 +597,10 @@ func getSTEStats() []common.CustomStatEntry {
 	var totalNormalChunkChannelUsed int
 	var totalLowChunkChannelSize int
 	var totalLowChunkChannelUsed int
+	var totalPartsCreatedUsed int
+	var totalPartsCreatedSize int
+	var totalXferDoneUsed int
+	var totalXferDoneSize int
 
 	// Iterate through all jobs to get their metrics
 	for _, jobID := range jobIDs {
@@ -620,6 +624,10 @@ func getSTEStats() []common.CustomStatEntry {
 			totalNormalChunkChannelUsed += channelStats.NormalChunkChannelUsed
 			totalLowChunkChannelSize += channelStats.LowChunkChannelSize
 			totalLowChunkChannelUsed += channelStats.LowChunkChannelUsed
+			totalPartsCreatedUsed += channelStats.PartsCreatedUsed
+			totalPartsCreatedSize += channelStats.PartsCreatedSize
+			totalXferDoneUsed += channelStats.XferDoneUsed
+			totalXferDoneSize += channelStats.XferDoneSize
 		}
 	}
 
@@ -633,6 +641,8 @@ func getSTEStats() []common.CustomStatEntry {
 		{Key: "low_xfer_ch", Value: fmt.Sprintf("%d/%d", totalLowTransferChannelUsed, totalLowTransferChannelSize)},
 		{Key: "norm_chunk_ch", Value: fmt.Sprintf("%d/%d", totalNormalChunkChannelUsed, totalNormalChunkChannelSize)},
 		{Key: "low_chunk_ch", Value: fmt.Sprintf("%d/%d", totalLowChunkChannelUsed, totalLowChunkChannelSize)},
+		// {Key: "parts_cr_ch", Value: fmt.Sprintf("%d/%d", totalPartsCreatedUsed, totalPartsCreatedSize)},
+		// {Key: "xfer_done_ch", Value: fmt.Sprintf("%d/%d", totalXferDoneUsed, totalXferDoneSize)},
 	}
 }
 
@@ -640,14 +650,29 @@ func (ja *jobsAdmin) RegisterStatsMonitorIfNotDone() {
 
 	if common.GlobalSystemStatsMonitor != nil &&
 		!common.GlobalSystemStatsMonitor.IsCustomStatsCallbackRegistered("ste") {
+
+		concurrency := ja.CurrentConcurrencySettings()
+		concurrencySettings := []common.CustomStatEntry{
+			{Key: "InitialMainPoolSize", Value: fmt.Sprintf("%d", concurrency.InitialMainPoolSize)},
+			{Key: "MaxMainPoolSize", Value: fmt.Sprintf("%d", concurrency.MaxMainPoolSize.Value)},
+			{Key: "TransferInitiationPoolSize", Value: fmt.Sprintf("%d", concurrency.TransferInitiationPoolSize.Value)},
+			{Key: "EnumerationPoolSize", Value: fmt.Sprintf("%d", concurrency.EnumerationPoolSize.Value)},
+			{Key: "ParallelStatFiles", Value: fmt.Sprintf("%v", concurrency.ParallelStatFiles.Value)},
+			{Key: "MaxIdleConnections", Value: fmt.Sprintf("%d", concurrency.MaxIdleConnections)},
+			{Key: "MaxOpenDownloadFiles", Value: fmt.Sprintf("%d", concurrency.MaxOpenDownloadFiles)},
+			{Key: "CheckCpuWhenTuning", Value: fmt.Sprintf("%t", concurrency.CheckCpuWhenTuning.Value)},
+			{Key: "AutoTuneMainPool", Value: fmt.Sprintf("%t", concurrency.AutoTuneMainPool())},
+		}
+		common.GlobalSystemStatsMonitor.LogAdhocCustomStats("Concurrency Settings", concurrencySettings)
+
 		// Register the callback for STE stats
-		common.GlobalSystemStatsMonitor.RegisterCustomStatsCallback("ste", getSTEStats)
+		common.GlobalSystemStatsMonitor.RegisterCustomStatsCallback(common.STEId, getSTEStats)
 	}
 }
 
 func (ja *jobsAdmin) ForceCollectStats() bool {
 	if common.GlobalSystemStatsMonitor != nil {
-		return common.GlobalSystemStatsMonitor.ForceCollectCustomStats("ste")
+		return common.GlobalSystemStatsMonitor.ForceCollectCustomStats(common.STEId)
 	}
 	return false
 }

@@ -39,16 +39,20 @@ type PartNumber = common.PartNumber
 
 // ChannelStats represents the current usage statistics for transfer channels
 type ChannelStats struct {
-	PartsChannelUsed               int
-	PartsChannelSize               int
-	NormalTransferChannelUsed      int
-	NormalTransferChannelSize      int
-	LowTransferChannelUsed         int
-	LowTransferChannelSize         int
-	NormalChunkChannelUsed         int
-	NormalChunkChannelSize         int
-	LowChunkChannelUsed            int
-	LowChunkChannelSize            int
+	PartsChannelUsed          int
+	PartsChannelSize          int
+	NormalTransferChannelUsed int
+	NormalTransferChannelSize int
+	LowTransferChannelUsed    int
+	LowTransferChannelSize    int
+	NormalChunkChannelUsed    int
+	NormalChunkChannelSize    int
+	LowChunkChannelUsed       int
+	LowChunkChannelSize       int
+	PartsCreatedUsed          int
+	PartsCreatedSize          int
+	XferDoneUsed              int
+	XferDoneSize              int
 }
 
 // InMemoryTransitJobState defines job state transit in memory, and not in JobPartPlan file.
@@ -238,16 +242,20 @@ func (jm *jobMgr) ChangeLogLevel(level common.LogLevel) {
 // GetChannelStats returns the current usage statistics for all transfer channels
 func (jm *jobMgr) GetChannelStats() ChannelStats {
 	return ChannelStats{
-		PartsChannelUsed:               len(jm.xferChannels.partsChannel),
-		PartsChannelSize:               cap(jm.xferChannels.partsChannel),
-		NormalTransferChannelUsed:      len(jm.xferChannels.normalTransferCh),
-		NormalTransferChannelSize:      cap(jm.xferChannels.normalTransferCh),
-		LowTransferChannelUsed:         len(jm.xferChannels.lowTransferCh),
-		LowTransferChannelSize:         cap(jm.xferChannels.lowTransferCh),
-		NormalChunkChannelUsed:         len(jm.xferChannels.normalChunckCh),
-		NormalChunkChannelSize:         cap(jm.xferChannels.normalChunckCh),
-		LowChunkChannelUsed:            len(jm.xferChannels.lowChunkCh),
-		LowChunkChannelSize:            cap(jm.xferChannels.lowChunkCh),
+		PartsChannelUsed:          len(jm.xferChannels.partsChannel),
+		PartsChannelSize:          cap(jm.xferChannels.partsChannel),
+		NormalTransferChannelUsed: len(jm.xferChannels.normalTransferCh),
+		NormalTransferChannelSize: cap(jm.xferChannels.normalTransferCh),
+		LowTransferChannelUsed:    len(jm.xferChannels.lowTransferCh),
+		LowTransferChannelSize:    cap(jm.xferChannels.lowTransferCh),
+		NormalChunkChannelUsed:    len(jm.xferChannels.normalChunckCh),
+		NormalChunkChannelSize:    cap(jm.xferChannels.normalChunckCh),
+		LowChunkChannelUsed:       len(jm.xferChannels.lowChunkCh),
+		LowChunkChannelSize:       cap(jm.xferChannels.lowChunkCh),
+		PartsCreatedUsed:          len(jm.jstm.partCreated),
+		PartsCreatedSize:          cap(jm.jstm.partCreated),
+		XferDoneUsed:              len(jm.jstm.xferDone),
+		XferDoneSize:              cap(jm.jstm.xferDone),
 	}
 }
 
