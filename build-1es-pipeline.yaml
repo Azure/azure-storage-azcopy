@@ -35,7 +35,7 @@ parameters:
   - name: test_pmc_connection
     displayName: 'Test PMC Connection without Publishing Artifacts to Linux Repos'
     type: boolean
-    default: true
+    default: false
 # Do not trigger this pipeline automatically
 trigger: none
 pr: none
