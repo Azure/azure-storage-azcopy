@@ -21,17 +21,18 @@
 package ste
 
 import (
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // upload related
-const UploadMaxTries = 20
+const UploadMaxTries = 5
 const UploadRetryDelay = time.Second * 1
 const UploadMaxRetryDelay = time.Second * 60
 
