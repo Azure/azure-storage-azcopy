@@ -32,7 +32,7 @@ import (
 )
 
 // upload related
-const UploadMaxTries = 20
+const UploadMaxTries = 5
 const UploadRetryDelay = time.Second * 1
 const UploadMaxRetryDelay = time.Second * 60
 
