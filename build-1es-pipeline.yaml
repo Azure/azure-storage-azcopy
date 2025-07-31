@@ -275,16 +275,10 @@ extends:
             steps:
               - checkout: none
 
-              - script: |
-                  sudo apt-get clean
-                  sudo apt-get update
-                  sudo apt-get upgrade -y
-                  sudo apt-get install -f --fix-missing
-                  wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
-                  sudo dpkg -i packages-microsoft-prod.deb
-                  sudo apt install apt-transport-https -y
-                  sudo apt install dotnet-sdk-6.0 -y
-                displayName: "Update dependencies"
+              - task: UseDotNet@2
+                inputs:
+                  packageType: 'sdk'
+                  version: '6.0.x'
 
               - script: |
                   mkdir -p $(mariner)
@@ -364,16 +358,14 @@ extends:
 
             steps:
               - script: |
-                  sudo apt-get clean
                   sudo apt-get update
-                  sudo apt-get upgrade -y
-                  sudo apt-get install -f --fix-missing
-                  wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
-                  sudo dpkg -i packages-microsoft-prod.deb
-                  sudo apt install apt-transport-https -y
-                  sudo apt install dotnet-sdk-6.0 -y
                   sudo apt-get install -y zip
-                displayName: "Update dependencies"
+                displayName: 'Install dependencies'
+
+              - task: UseDotNet@2
+                inputs:
+                  packageType: 'sdk'
+                  version: '6.0.x'
 
               - template: setup/esrp_sign_windows.yml@self
                 parameters:
@@ -471,16 +463,14 @@ extends:
               - checkout: none
 
               - script: |
-                  sudo apt-get clean
                   sudo apt-get update
-                  sudo apt-get upgrade -y
-                  sudo apt-get install unzip -y
-                  sudo apt-get install -f --fix-missing
-                  wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
-                  sudo dpkg -i packages-microsoft-prod.deb
-                  sudo apt install apt-transport-https -y
-                  sudo apt install dotnet-sdk-6.0 -y
-                displayName: "Update dependencies"
+                  sudo apt-get install -y unzip
+                displayName: 'Install dependencies'
+
+              - task: UseDotNet@2
+                inputs:
+                  packageType: 'sdk'
+                  version: '6.0.x'
 
               - template: setup/esrp_sign_notarize_macos.yml@self
                 parameters:
@@ -787,7 +777,7 @@ extends:
                   version: $(AZCOPY_GOLANG_VERSION)
 
               - script: |
-                  go build -tags "netgo" -o azcopy
+                  go build -tags "netgo" -o azcopy_bin
                 displayName: 'Build AzCopy'
 
               # DownloadPipelineArtifact AFTER checkout since checkout wipes out the DefaultWorkingDirectory
@@ -864,11 +854,11 @@ extends:
                     today=$(date +"%Y%m%d")
                     container_url="https://azcopyprivatedrops.blob.core.windows.net/%24web/releases/release-$(azcopy_version)-$today"
                     echo "Artifacts will be uploaded to private drop container: $container_url"
-                    AZCOPY_AUTO_LOGIN_TYPE=AzCLI ./azcopy cp "$(release)/*" "$container_url" --recursive --put-md5=true
+                    AZCOPY_AUTO_LOGIN_TYPE=AzCLI ./azcopy_bin cp "$(release)/*" "$container_url" --recursive --put-md5=true
 
                     if [ $(publish_to_m1_container) = "True" ]; then
                       m1_container_url="https://azcopyvnextrelease.blob.core.windows.net/%24web/azcopy-m1-drops/azcopy-$(azcopy_version)-$today"
-                    AZCOPY_AUTO_LOGIN_TYPE=AzCLI ./azcopy cp "$(input)/azcopy-binaries-mac/azcopy_darwin_m1_arm64" "$m1_container_url" --recursive --put-md5=true
+                    AZCOPY_AUTO_LOGIN_TYPE=AzCLI ./azcopy_bin cp "$(input)/azcopy-binaries-mac/azcopy_darwin_m1_arm64" "$m1_container_url" --recursive --put-md5=true
                     fi
       # UploadToStorage ends here
       - ${{ if eq(parameters.publish_docker_image, true) }}:
@@ -901,7 +891,7 @@ extends:
                       displayName: "Download Linux AMD64 Binary"
 
                   - script: |
-                      mv azcopy_linux_amd64 azcopy
+                      mv azcopy_linux_amd64 azcopy_bin
                       # (~) to be replaced by (-) if azcopy version contains a tilde as this is not supported in docker image tags
                       azcopy_docker_version=$(echo $(azcopy_version) | sed 's/~/-/')
                       echo "##vso[task.setvariable variable=azcopy_docker_version]$azcopy_docker_version"
@@ -954,7 +944,7 @@ extends:
                       displayName: "Download Linux ARM64 Binary"
 
                   - script: |
-                      mv azcopy_linux_arm64 azcopy
+                      mv azcopy_linux_arm64 azcopy_bin
                       # (~) to be replaced by (-) if azcopy version contains a tilde as this is not supported in docker image tags
                       azcopy_docker_version=$(echo $(azcopy_version) | sed 's/~/-/')
                       echo "##vso[task.setvariable variable=azcopy_docker_version]$azcopy_docker_version"
@@ -1017,17 +1007,6 @@ extends:
                       sudo ls -lRt $(Build.ArtifactStagingDirectory)
                     displayName: 'List Artifacts'
 
-                  - script: |
-                      sudo apt-get clean 
-                      sudo apt-get update 
-                      sudo apt-get upgrade -y 
-                      sudo apt-get install -f --fix-missing 
-                      wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
-                      sudo dpkg -i packages-microsoft-prod.deb
-                      sudo apt install apt-transport-https -y 
-                      sudo apt install dotnet-sdk-6.0 -y
-                    displayName: 'Update Dependencies'
-
                   - task: GithubRelease@1
                     inputs:
                       githubConnection: 'azcopy-github-connection'
@@ -1042,12 +1021,12 @@ extends:
                       isDraft: ${{ parameters.draft }}
                       isPreRelease: ${{ parameters.prerelease }}
                       assets: |
-                        $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.deb
-                        $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.rpm
-                        $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.tar.gz
-                        $(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*.zip
-                        $(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*.zip
-                        $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/mariner/*
+                        $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/*.deb
+                        $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/*.rpm
+                        $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/*.tar.gz
+                        $(Build.ArtifactStagingDirectory)/azcopy-windows-signed/*.zip
+                        $(Build.ArtifactStagingDirectory)/azcopy-mac-signed/*.zip
+                        $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/mariner/*
                       assetUploadMode: replace
 
       - ${{ if eq(parameters.publish_artifacts, true) }}:
