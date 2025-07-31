@@ -134,12 +134,14 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	commandString string, logFileFolder string, tuner ConcurrencyTuner,
 	pacer PacerAdmin, slicePool common.ByteSlicePooler, cacheLimiter common.CacheLimiter, fileCountLimiter common.CacheLimiter,
 	jobLogger common.ILoggerResetable, daemonMode bool) IJobMgr {
-	const channelSize = 20000
+	const channelSize = 100000
 	// PartsChannelSize defines the number of JobParts which can be placed into the
 	// parts channel. Any JobPart which comes from FE and partChannel is full,
 	// has to wait and enumeration of transfer gets blocked till then.
 	// TODO : PartsChannelSize Needs to be discussed and can change.
-	const PartsChannelSize = 1000
+	const PartsChannelSize = 15000
+
+	const statusChannelSize = 5000
 
 	// partsCh is the channel in which all JobParts are put
 	// for scheduling transfers. When the next JobPart order arrives
@@ -160,8 +162,8 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	var jstm jobStatusManager
 	jstm.respChan = make(chan common.ListJobSummaryResponse)
 	jstm.listReq = make(chan struct{})
-	jstm.partCreated = make(chan JobPartCreatedMsg, 100)
-	jstm.xferDone = make(chan xferDoneMsg, 1000)
+	jstm.partCreated = make(chan JobPartCreatedMsg, statusChannelSize/10)
+	jstm.xferDone = make(chan xferDoneMsg, statusChannelSize)
 	jstm.xferDoneDrained = make(chan struct{})
 	jstm.statusMgrDone = make(chan struct{})
 	// Different logger for each job.
@@ -256,55 +258,6 @@ func (jm *jobMgr) GetChannelStats() ChannelStats {
 		PartsCreatedSize:          cap(jm.jstm.partCreated),
 		XferDoneUsed:              len(jm.jstm.xferDone),
 		XferDoneSize:              cap(jm.jstm.xferDone),
-	}
-}
-
-// calculateTransferThreadDelayInMsec checks the chunk channel, if its
-// full then sleep for sometime, so that next it will get ample room to add chunks to
-// chunk channel. It will help in streamline the pipeline as well back pressure the
-// scheduleTransfer thread (which read from the plan file and add job Parts).
-func (jm *jobMgr) calculateTransferThreadDelayInMsec() int {
-	total := cap(jm.xferChannels.normalChunckCh)
-
-	// It's risky to sleep, if channel size is too small.
-	if total <= 1000 {
-		return 0
-	}
-
-	used := len(jm.xferChannels.normalChunckCh)
-	emptyPercent := ((total - used) * 100) / total
-	if emptyPercent < 10 {
-		return 20
-	} else if emptyPercent < 20 {
-		return 10
-	} else {
-		// Don't sleep as we have enough space to fill, and the consumer may not have enough items to process.
-		return 0
-	}
-}
-
-// calculateJobPartThreadDelayInMsec jobPartThread read from plan file and add entries to the
-// transfer threads channel to schedule the transfer. So if finds the transfer threads channel is near full,
-// then it should sleep for sometime.
-func (jm *jobMgr) calculateJobPartThreadDelayInMsec(ch chan<- IJobPartTransferMgr) int {
-	total := cap(ch)
-
-	// It's risky to sleep, if channel size is too small.
-	if total <= 1000 {
-		return 0
-	}
-
-	used := len(ch)
-	emptyPercent := ((total - used) * 100) / total
-	if emptyPercent < 5 {
-		return 50
-	} else if emptyPercent < 10 {
-		return 20
-	} else if emptyPercent < 20 {
-		return 10
-	} else {
-		// Don't sleep as we have enough space to fill, and the consumer may not have enough items to process.
-		return 0
 	}
 }
 
@@ -975,9 +928,12 @@ func (jm *jobMgr) ScheduleTransfer(priority common.JobPriority, jptm IJobPartTra
 		jm.coordinatorChannels.normalTransferCh <- jptm
 
 		// Check the channel "fullness" and decide how much to sleep.
-		sleepTimeInMsec := jm.calculateJobPartThreadDelayInMsec(jm.coordinatorChannels.normalTransferCh)
-		if sleepTimeInMsec > 0 {
-			time.Sleep(time.Duration(sleepTimeInMsec) * time.Millisecond)
+		// This is to prevent frequent sleep-wake cycles that can slow down the transfer process.
+		if ms := common.CalculateChannelBackPressureDelay(
+			len(jm.coordinatorChannels.normalTransferCh),
+			cap(jm.coordinatorChannels.normalTransferCh),
+			common.DefaultProfile); ms > 0 {
+			time.Sleep(time.Duration(ms) * time.Millisecond)
 		}
 	case common.EJobPriority.Low():
 		// jptm.SetChunkChannel(ja.xferChannels.lowChunkCh)
@@ -1003,6 +959,13 @@ func (jm *jobMgr) ScheduleChunk(priority common.JobPriority, chunkFunc chunkFunc
 // its transfers will be scheduled
 func (jm *jobMgr) QueueJobParts(jpm IJobPartMgr) {
 	jm.coordinatorChannels.partsChannel <- jpm
+
+	if ms := common.CalculateChannelBackPressureDelay(
+		len(jm.coordinatorChannels.partsChannel),
+		cap(jm.coordinatorChannels.partsChannel),
+		common.DefaultProfile); ms > 0 {
+		time.Sleep(time.Duration(ms) * time.Millisecond)
+	}
 }
 
 // deleteJobPartsMgrs remove jobPartMgrs from jobPartToJobPartMgr kv.
@@ -1190,9 +1153,12 @@ func (jm *jobMgr) transferProcessor(workerID int) {
 			// TODO fix preceding space
 			jptm.Log(common.LogDebug, fmt.Sprintf("has worker %d which is processing TRANSFER %d", workerID, jptm.(*jobPartTransferMgr).transferIndex))
 			jptm.StartJobXfer()
-			sleepTimeInMsec := jm.calculateTransferThreadDelayInMsec()
-			if sleepTimeInMsec > 0 {
-				time.Sleep(time.Duration(sleepTimeInMsec) * time.Millisecond)
+
+			if ms := common.CalculateChannelBackPressureDelay(
+				len(jm.coordinatorChannels.normalTransferCh),
+				cap(jm.coordinatorChannels.normalTransferCh),
+				common.DefaultProfile); ms > 0 {
+				time.Sleep(time.Duration(ms) * time.Millisecond)
 			}
 		}
 	}
