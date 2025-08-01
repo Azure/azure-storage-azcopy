@@ -1,4 +1,4 @@
-// Copyright © 2017 Microsoft <wastore@microsoft.com>
+// Copyright © 2025 Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,33 +18,37 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package azcopy
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
-
-	"github.com/spf13/cobra"
+	"context"
+	"errors"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-func init() {
-	// logoutCmd represents the logout command
-	logoutCmd := &cobra.Command{
-		Use:        "logout",
-		SuggestFor: []string{"logout"},
-		Short:      logoutCmdShortDescription,
-		Long:       logoutCmdLongDescription,
-		Args: func(cmd *cobra.Command, args []string) error {
-			return nil
-		},
-		RunE: func(cmd *cobra.Command, args []string) error {
-			_, err := Client.Logout(azcopy.LogoutOptions{})
-			if err != nil {
-				return err
-			}
-			glcm.Info("Logout succeeded.")
-			return nil
-		},
-	}
+type GetLoginStatusOptions struct {
+}
 
-	rootCmd.AddCommand(logoutCmd)
+type LoginStatus struct {
+	Valid       bool
+	TenantID    string
+	AADEndpoint string
+	LoginType   common.AutoLoginType
+}
+
+func (c Client) GetLoginStatus(_ GetLoginStatusOptions) (LoginStatus, error) {
+	uotm := GetUserOAuthTokenManagerInstance()
+
+	// Get current token info and refresh it with GetTokenInfo()
+	ctx := context.Background()
+	tokenInfo, err := uotm.GetTokenInfo(ctx)
+	if err != nil || tokenInfo.IsExpired() {
+		return LoginStatus{Valid: false}, errors.New("you are currently not logged in. please login using 'azcopy login'")
+	}
+	return LoginStatus{
+		Valid:       true,
+		TenantID:    tokenInfo.Tenant,
+		AADEndpoint: tokenInfo.ActiveDirectoryEndpoint,
+		LoginType:   tokenInfo.LoginType,
+	}, nil
 }
