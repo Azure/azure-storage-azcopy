@@ -49,8 +49,11 @@ var lcm = func() (lcmgr *lifecycleMgr) {
 // create a public interface so that consumers outside of this package can refer to the lifecycle manager
 // but they would not be able to instantiate one
 type LifecycleMgr interface {
-	OnStart(JobContext)                                          // let the user know the job has started and initial information like log location
-	Progress(OutputBuilder)                                      // print on the same line over and over again, not allowed to float up
+	OnStart(JobContext) // let the user know the job has started and initial information like log location
+	// print on the same line over and over again, not allowed to float up
+	OnScanProgress(ScanProgress) // only called during sync jobs, print the progress of scanning source and destination
+	OnTransferProgress(TransferProgress)
+	Progress(OutputBuilder)
 	Exit(OutputBuilder, ExitCode)                                // indicates successful execution exit after printing, allow user to specify exit code
 	Info(string)                                                 // simple print, allowed to float up
 	Warn(string)                                                 // simple print, allowed to float up
@@ -259,6 +262,14 @@ func (lcm *lifecycleMgr) OnStart(ctx JobContext) {
 		msgContent: o(lcm.outputFormat),
 		msgType:    EOutputMessageType.Init(),
 	}
+}
+
+func (lcm *lifecycleMgr) OnScanProgress(progress ScanProgress) {
+
+}
+
+func (lcm *lifecycleMgr) OnTransferProgress(progress TransferProgress) {
+
 }
 
 func (lcm *lifecycleMgr) Progress(o OutputBuilder) {

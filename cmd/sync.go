@@ -573,35 +573,18 @@ func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
 	}
 }
 
-type scanningProgressJsonTemplate struct {
-	FilesScannedAtSource      uint64
-	FilesScannedAtDestination uint64
-}
-
 func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm common.LifecycleMgr, throughput float64) {
+	scanProgress := common.ScanProgress{
+		Source:             atomic.LoadUint64(&cca.atomicSourceFilesScanned),
+		Destination:        atomic.LoadUint64(&cca.atomicDestinationFilesScanned),
+		TransferThroughput: common.Iff(cca.firstPartOrdered(), &throughput, nil),
+	}
+	// Log to Job Log
+	if common.AzcopyCurrentJobLogger != nil {
+		common.AzcopyCurrentJobLogger.Log(common.LogInfo, common.GetScanProgressOutputBuilder(scanProgress)(common.EOutputFormat.Text()))
+	}
 
-	lcm.Progress(func(format common.OutputFormat) string {
-		srcScanned := atomic.LoadUint64(&cca.atomicSourceFilesScanned)
-		dstScanned := atomic.LoadUint64(&cca.atomicDestinationFilesScanned)
-
-		if format == common.EOutputFormat.Json() {
-			jsonOutputTemplate := scanningProgressJsonTemplate{
-				FilesScannedAtSource:      srcScanned,
-				FilesScannedAtDestination: dstScanned,
-			}
-			outputString, err := json.Marshal(jsonOutputTemplate)
-			common.PanicIfErr(err)
-			return string(outputString)
-		}
-
-		// text output
-		throughputString := ""
-		if cca.firstPartOrdered() {
-			throughputString = fmt.Sprintf(", 2-sec Throughput (Mb/s): %v", jobsAdmin.ToFixed(throughput, 4))
-		}
-		return fmt.Sprintf("%v Files Scanned at Source, %v Files Scanned at Destination%s",
-			srcScanned, dstScanned, throughputString)
-	})
+	lcm.OnScanProgress(scanProgress)
 }
 
 func (cca *cookedSyncCmdArgs) getJsonOfSyncJobSummary(summary common.ListJobSummaryResponse) string {
@@ -658,7 +641,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 			summary.TransfersCompleted,
 			summary.TransfersFailed,
 			summary.TotalTransfers-summary.TransfersCompleted-summary.TransfersFailed,
-			summary.TotalTransfers, perfString, jobsAdmin.ToFixed(throughput, 4), diskString)
+			summary.TotalTransfers, perfString, common.ToFixed(throughput, 4), diskString)
 	})
 
 	if jobDone {
@@ -698,7 +681,7 @@ Final Job Status: %v%s%s
 				summary.JobID.String(),
 				atomic.LoadUint64(&cca.atomicSourceFilesScanned),
 				atomic.LoadUint64(&cca.atomicDestinationFilesScanned),
-				jobsAdmin.ToFixed(duration.Minutes(), 4),
+				common.ToFixed(duration.Minutes(), 4),
 				summary.FileTransfers,
 				summary.FolderPropertyTransfers,
 				summary.TotalTransfers,

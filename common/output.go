@@ -2,6 +2,8 @@ package common
 
 import (
 	"encoding/json"
+	"fmt"
+	"math"
 	"reflect"
 	"strings"
 	"time"
@@ -134,4 +136,43 @@ func GetStandardInitOutputBuilder(ctx JobContext) OutputBuilder {
 		}
 		return sb.String()
 	}
+}
+
+// Ideally this is just ScanProgress, but we probably shouldn't break the json output format
+type scanningProgressJsonTemplate struct {
+	FilesScannedAtSource      uint64
+	FilesScannedAtDestination uint64
+}
+
+func GetScanProgressOutputBuilder(progress ScanProgress) OutputBuilder {
+	return func(format OutputFormat) string {
+		if format == EOutputFormat.Json() {
+			jsonOutputTemplate := scanningProgressJsonTemplate{
+				FilesScannedAtSource:      progress.Source,
+				FilesScannedAtDestination: progress.Destination,
+			}
+			outputString, err := json.Marshal(jsonOutputTemplate)
+			PanicIfErr(err)
+			return string(outputString)
+		}
+
+		// text output
+		throughputString := ""
+		if progress.TransferThroughput != nil {
+			throughputString = fmt.Sprintf(", 2-sec Throughput (Mb/s): %v", ToFixed(*progress.TransferThroughput, 4))
+		}
+		return fmt.Sprintf("%v Files Scanned at Source, %v Files Scanned at Destination%s",
+			progress.Source, progress.Destination, throughputString)
+	}
+}
+
+// round api rounds up the float number after the decimal point.
+func round(num float64) int {
+	return int(num + math.Copysign(0.5, num))
+}
+
+// ToFixed api returns the float number precised up to given decimal places.
+func ToFixed(num float64, precision int) float64 {
+	output := math.Pow(10, float64(precision))
+	return float64(round(num*output)) / output
 }
