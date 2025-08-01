@@ -668,7 +668,8 @@ func (credInfo *OAuthTokenInfo) GetClientCertificateCredential() (azcore.TokenCr
 			Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: host},
 			Transport: newAzcopyHTTPClient(),
 		},
-		SendCertificateChain: true,
+		DisableInstanceDiscovery: IsDiscoveryDisabled,
+		SendCertificateChain:     true,
 	})
 	if err != nil {
 		return nil, err

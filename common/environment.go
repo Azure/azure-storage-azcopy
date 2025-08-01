@@ -52,6 +52,16 @@ func ClearEnvironmentVariable(variable EnvironmentVariable) {
 	_ = os.Setenv(variable.Name, "")
 }
 
+// SetInstanceDiscovery sets the instance discovery flag based on the passed in value else defaults to false.
+var IsDiscoveryDisabled bool = false
+
+func SetInstanceDiscovery(instanceDiscovery bool) {
+	if instanceDiscovery == true { //if hidden env variable has been set to false, we want to turn on
+		IsDiscoveryDisabled = true
+		fmt.Println("Instance discovery is disabled")
+	}
+}
+
 // This array needs to be updated when a new public environment variable is added
 // Things are here, rather than in command line parameters for one of two reasons:
 // 1. They are optional and obscure (e.g. performance tuning parameters) or
