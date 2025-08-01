@@ -171,16 +171,7 @@ type S3CredentialInfo struct {
 	Region   string
 }
 
-type CopyJobPartOrderErrorType string
-
-var ECopyJobPartOrderErrorType CopyJobPartOrderErrorType
-
-func (CopyJobPartOrderErrorType) NoTransfersScheduledErr() CopyJobPartOrderErrorType {
-	return CopyJobPartOrderErrorType("NoTransfersScheduledErr")
-}
-
 type CopyJobPartOrderResponse struct {
-	ErrorMsg   CopyJobPartOrderErrorType
 	JobStarted bool
 }
 
