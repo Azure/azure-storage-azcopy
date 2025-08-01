@@ -21,11 +21,12 @@
 package common
 
 import (
-	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"sync"
+
+	gcpUtils "cloud.google.com/go/storage"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
 	"github.com/minio/minio-go"
 	"github.com/minio/minio-go/pkg/credentials"
@@ -86,6 +87,13 @@ func CreateS3Client(ctx context.Context, credInfo CredentialInfo, option Credent
 	if credInfo.CredentialType == ECredentialType.S3PublicBucket() {
 		cred := credentials.NewStatic("", "", "", credentials.SignatureAnonymous)
 		return minio.NewWithOptions(credInfo.S3CredentialInfo.Endpoint, &minio.Options{Creds: cred, Secure: true, Region: credInfo.S3CredentialInfo.Region})
+	}
+	//support custom credential provider
+	if credInfo.S3CredentialInfo.Provider != nil {
+		fmt.Println("Using custom credentials")
+		creds := credentials.New(credInfo.S3CredentialInfo.Provider)
+		s3Client, err := minio.NewWithCredentials(credInfo.S3CredentialInfo.Endpoint, creds, true, credInfo.S3CredentialInfo.Region)
+		return s3Client, err
 	}
 	// Support access key
 	credential, err := CreateS3Credential(ctx, credInfo, option)

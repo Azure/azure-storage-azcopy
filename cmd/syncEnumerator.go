@@ -33,9 +33,9 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/minio/minio-go/pkg/credentials"
 )
 
 type SyncEnumeratorOptions struct {
@@ -317,6 +317,13 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 			TrailingDot: cca.trailingDot,
 		},
 		IsNFSCopy: cca.isNFSCopy,
+	}
+	//Optional check for custom credential provider
+	var credProvider credentials.Provider = nil
+	creds := ctx.Value(customCreds)
+	if creds != nil {
+		credProvider = creds.(credentials.Provider) //if passed through context, use custom provider
+		copyJobTemplate.Provider = credProvider
 	}
 
 	var srcReauthTok *common.ScopedAuthenticator

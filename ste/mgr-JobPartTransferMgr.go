@@ -17,6 +17,7 @@ import (
 	"net/url"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/minio/minio-go/pkg/credentials"
 )
 
 type IJobPartTransferMgr interface {
@@ -143,6 +144,7 @@ type TransferInfo struct {
 
 	VersionID  string
 	SnapshotID string
+	Provider   credentials.Provider //custom Provider
 	IsNFSCopy  bool
 }
 

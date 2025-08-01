@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/minio/minio-go/pkg/credentials"
 )
 
 var _ IJobMgr = &jobMgr{}
@@ -46,6 +47,7 @@ type InMemoryTransitJobState struct {
 	CredentialInfo common.CredentialInfo
 	// S2SSourceCredentialType can override the CredentialInfo.CredentialType when being used for the source (e.g. Source Info Provider and when using GetS2SSourceBlobTokenCredential)
 	S2SSourceCredentialType common.CredentialType
+	Provider                credentials.Provider
 }
 
 type IJobMgr interface {
@@ -1046,7 +1048,12 @@ func (jm *jobMgr) scheduleJobParts() {
 				go jm.poolSizer()
 				startedPoolSizer = true
 			}
-			jobPart.ScheduleTransfers(jm.Context())
+
+			inMemoryState := jm.getInMemoryTransitJobState()
+			s3provider := inMemoryState.Provider
+			jmctx := jm.Context()
+			ctx := context.WithValue(jmctx, "customS3Creds", s3provider)
+			jobPart.ScheduleTransfers(ctx)
 		}
 	}
 }
