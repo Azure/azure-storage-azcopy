@@ -23,7 +23,7 @@ func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer
 		resp := jobsAdmin.ExecuteNewCopyJobPartOrder(*e)
 
 		if !resp.JobStarted {
-			return fmt.Errorf("copy job part order with JobId %s and part number %d failed to start %s", e.JobID, e.PartNum) // Note: this is not expected in normal AzCopy operation.
+			return fmt.Errorf("copy job part order with JobId %s and part number %d failed to start", e.JobID, e.PartNum) // Note: this is not expected in normal AzCopy operation.
 		}
 		// if the current part order sent to engine is 0, then start fetching the Job Progress summary.
 		if e.PartNum == 0 {
