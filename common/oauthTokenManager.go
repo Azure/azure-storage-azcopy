@@ -36,6 +36,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity/cache"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
@@ -253,6 +254,24 @@ func (uotm *UserOAuthTokenManager) CertLogin(tenantID, activeDirectoryEndpoint, 
 	return uotm.validateAndPersistLogin(oAuthTokenInfo)
 }
 
+// CertLogin non-interactively logs in using a specified certificate, certificate password, and activedirectory endpoint.
+func (uotm *UserOAuthTokenManager) SpnArgsLogin(tenantID, activeDirectoryEndpoint, certData, certPass, applicationID string, persist bool) error {
+	oAuthTokenInfo := &OAuthTokenInfo{
+		LoginType:               EAutoLoginType.SPN(),
+		Tenant:                  tenantID,
+		ActiveDirectoryEndpoint: activeDirectoryEndpoint,
+		ApplicationID:           applicationID,
+		SPNInfo: SPNInfo{
+			Secret:   certPass,
+			CertData: certData,
+			CertPath: "empty",
+		},
+		Persist: persist,
+	}
+
+	return uotm.validateAndPersistLogin(oAuthTokenInfo)
+}
+
 // UserLogin interactively logins in with specified tenantID and activeDirectoryEndpoint, persist indicates whether to
 // cache the token on local disk.
 func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint string, persist bool) error {
@@ -446,6 +465,7 @@ type SPNInfo struct {
 	// Thus, the original secret is needed to refresh.
 	Secret   string `json:"_spn_secret"`
 	CertPath string `json:"_spn_cert_path"`
+	CertData string `json:"_spn_cert_data"`
 }
 
 // Validate validates identity info, at most only one of clientID, objectID or MSI resource ID could be set.
@@ -616,12 +636,28 @@ func (credInfo *OAuthTokenInfo) GetManagedIdentityCredential() (azcore.TokenCred
 
 func (credInfo *OAuthTokenInfo) GetClientCertificateCredential() (azcore.TokenCredential, error) {
 	authorityHost, err := getAuthorityURL(credInfo.ActiveDirectoryEndpoint)
+
+	var host string
+	if buildmode.IsMover {
+		host = credInfo.ActiveDirectoryEndpoint
+	} else {
+		host = authorityHost.String()
+	}
+
 	if err != nil {
 		return nil, err
 	}
-	certData, err := os.ReadFile(credInfo.SPNInfo.CertPath)
-	if err != nil {
-		return nil, err
+	var certData []byte
+	if credInfo.SPNInfo.CertData != "" {
+		certData = []byte(credInfo.SPNInfo.CertData)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		certData, err = os.ReadFile(credInfo.SPNInfo.CertPath)
+		if err != nil {
+			return nil, err
+		}
 	}
 	certs, key, err := azidentity.ParseCertificates(certData, []byte(credInfo.SPNInfo.Secret))
 	if err != nil {
@@ -629,7 +665,7 @@ func (credInfo *OAuthTokenInfo) GetClientCertificateCredential() (azcore.TokenCr
 	}
 	tc, err := azidentity.NewClientCertificateCredential(credInfo.Tenant, credInfo.ApplicationID, certs, key, &azidentity.ClientCertificateCredentialOptions{
 		ClientOptions: azcore.ClientOptions{
-			Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: authorityHost.String()},
+			Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: host},
 			Transport: newAzcopyHTTPClient(),
 		},
 		DisableInstanceDiscovery: IsDiscoveryDisabled,

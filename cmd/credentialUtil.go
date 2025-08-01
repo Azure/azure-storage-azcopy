@@ -35,6 +35,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -456,14 +457,16 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 	}
 
 	if location == common.ELocation.S3() {
-		accessKeyID := common.GetEnvironmentVariable(common.EEnvironmentVariable.AWSAccessKeyID())
-		secretAccessKey := common.GetEnvironmentVariable(common.EEnvironmentVariable.AWSSecretAccessKey())
-		if accessKeyID == "" || secretAccessKey == "" {
-			credType = common.ECredentialType.S3PublicBucket()
-			public = true
-			return
+		//Commenting this block out because checkAuthSafeForTarget has no case to handle public. Copy defaults S3 to access key, so similar functionality should be present for sync
+		if !buildmode.IsMover {
+			accessKeyID := common.GetEnvironmentVariable(common.EEnvironmentVariable.AWSAccessKeyID())
+			secretAccessKey := common.GetEnvironmentVariable(common.EEnvironmentVariable.AWSSecretAccessKey())
+			if accessKeyID == "" || secretAccessKey == "" {
+				credType = common.ECredentialType.S3PublicBucket()
+				public = true
+				return
+			}
 		}
-
 		credType = common.ECredentialType.S3AccessKey()
 		return
 	}
