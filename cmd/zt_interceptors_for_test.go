@@ -38,7 +38,7 @@ func (i *interceptor) intercept(copyRequest common.CopyJobPartOrderRequest) comm
 	if len(i.transfers) != 0 || !copyRequest.IsFinalPart {
 		return common.CopyJobPartOrderResponse{JobStarted: true}
 	} else {
-		return common.CopyJobPartOrderResponse{JobStarted: false, ErrorMsg: common.ECopyJobPartOrderErrorType.NoTransfersScheduledErr()}
+		return common.CopyJobPartOrderResponse{JobStarted: false}
 	}
 }
 
@@ -76,7 +76,7 @@ func (m *mockedLifecycleManager) Progress(o common.OutputBuilder) {
 	default:
 	}
 }
-func (*mockedLifecycleManager) Init(common.OutputBuilder) {}
+func (*mockedLifecycleManager) OnStart(ctx common.JobContext) {}
 func (m *mockedLifecycleManager) Info(msg string) {
 	select {
 	case m.infoLog <- msg:
