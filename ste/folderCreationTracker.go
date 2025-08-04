@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 )
 
 type FolderCreationTracker common.FolderCreationTracker
@@ -17,14 +18,23 @@ type JPPTCompatibleFolderCreationTracker interface {
 }
 
 func NewFolderCreationTracker(fpo common.FolderPropertyOption, plan *JobPartPlanHeader) FolderCreationTracker {
+	skipFolderCreationLock := buildmode.IsMover && plan.FromTo.From() == common.ELocation.Local() &&
+		(plan.FromTo.To() == common.ELocation.File() ||
+			plan.FromTo.To() == common.ELocation.Blob() ||
+			plan.FromTo.To() == common.ELocation.BlobFS())
+	return NewFolderCreationTrackerInt(fpo, plan, !skipFolderCreationLock)
+}
+
+func NewFolderCreationTrackerInt(fpo common.FolderPropertyOption, plan *JobPartPlanHeader, lockFolderCreation bool) FolderCreationTracker {
 	switch fpo {
 	case common.EFolderPropertiesOption.AllFolders(),
 		common.EFolderPropertiesOption.AllFoldersExceptRoot():
 		return &jpptFolderTracker{ // This prevents a dependency cycle. Reviewers: Are we OK with this? Can you think of a better way to do it?
 			plan:                   plan,
-			mu:                     &sync.Mutex{},
+			mu:                     &sync.RWMutex{},
 			contents:               make(map[string]uint32),
 			unregisteredButCreated: make(map[string]struct{}),
+			lockFolderCreation:     lockFolderCreation,
 		}
 	case common.EFolderPropertiesOption.NoFolders():
 		// can't use simpleFolderTracker here, because when no folders are processed,
@@ -54,9 +64,31 @@ func (f *nullFolderTracker) StopTracking(folder string) {
 
 type jpptFolderTracker struct {
 	plan                   IJobPartPlanHeader
-	mu                     *sync.Mutex
+	mu                     *sync.RWMutex
 	contents               map[string]uint32
 	unregisteredButCreated map[string]struct{}
+	lockFolderCreation     bool
+}
+
+// Public interface - safe for external callers
+func (f *jpptFolderTracker) IsFolderAlreadyCreated(folder string) bool {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return f.isFolderAlreadyCreatedUnSafe(folder)
+}
+
+func (f *jpptFolderTracker) isFolderAlreadyCreatedUnSafe(folder string) bool {
+
+	if idx, ok := f.contents[folder]; ok &&
+		f.plan.Transfer(idx).TransferStatus() == (common.ETransferStatus.FolderCreated()) {
+		return true
+	}
+
+	if _, ok := f.unregisteredButCreated[folder]; ok {
+		return true
+	}
+
+	return false
 }
 
 func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, transferIndex uint32) {
@@ -78,25 +110,34 @@ func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, transferIn
 }
 
 func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
 
 	if folder == common.Dev_Null {
 		return nil // Never persist to dev-null
 	}
 
-	if idx, ok := f.contents[folder]; ok &&
-		f.plan.Transfer(idx).TransferStatus() == (common.ETransferStatus.FolderCreated()) {
-		return nil
-	}
+	if f.lockFolderCreation {
+		f.mu.Lock()
+		defer f.mu.Unlock()
 
-	if _, ok := f.unregisteredButCreated[folder]; ok {
-		return nil
+		// If the folder was created while we were waiting for the lock, we need to account for that.
+		if f.isFolderAlreadyCreatedUnSafe(folder) {
+			return nil
+		}
 	}
 
 	err := doCreation()
 	if err != nil {
 		return err
+	}
+
+	if !f.lockFolderCreation {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+
+		// If the folder was created while we were waiting for the lock, we need to account for that.
+		if f.isFolderAlreadyCreatedUnSafe(folder) {
+			return nil
+		}
 	}
 
 	if idx, ok := f.contents[folder]; ok {
@@ -123,8 +164,8 @@ func (f *jpptFolderTracker) ShouldSetProperties(folder string, overwrite common.
 		common.EOverwriteOption.IfSourceNewer(),
 		common.EOverwriteOption.False():
 
-		f.mu.Lock()
-		defer f.mu.Unlock()
+		f.mu.RLock()
+		defer f.mu.RUnlock()
 
 		var created bool
 		if idx, ok := f.contents[folder]; ok {
