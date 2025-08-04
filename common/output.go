@@ -101,31 +101,34 @@ func newJsonOutputTemplate(messageType OutputMessageType, messageContent string,
 		MessageContent: messageContent, PromptDetails: promptDetails}
 }
 
+// Ideally this is just JobContext, but we probably shouldn't break the json output format
 type InitMsgJsonTemplate struct {
 	LogFileLocation string
 	JobID           string
 	IsCleanupJob    bool
 }
 
-func GetStandardInitOutputBuilder(jobID string, logFileLocation string, isCleanupJob bool, cleanupMessage string) OutputBuilder {
+const cleanUpJobMessage = "Running cleanup job to delete files created during benchmarking"
+
+func GetStandardInitOutputBuilder(ctx JobContext) OutputBuilder {
 	return func(format OutputFormat) string {
 		if format == EOutputFormat.Json() {
 			return GetJsonStringFromTemplate(InitMsgJsonTemplate{
-				JobID:           jobID,
-				LogFileLocation: logFileLocation,
-				IsCleanupJob:    isCleanupJob,
+				JobID:           ctx.JobID.String(),
+				LogFileLocation: ctx.LogPath,
+				IsCleanupJob:    ctx.IsCleanup,
 			})
 		}
 
 		var sb strings.Builder
-		if isCleanupJob {
-			cleanupHeader := "(" + cleanupMessage + " with cleanup jobID " + jobID
+		if ctx.IsCleanup {
+			cleanupHeader := "(" + cleanUpJobMessage + " with cleanup jobID " + ctx.JobID.String()
 			sb.WriteString(strings.Repeat("-", len(cleanupHeader)) + "\n")
 			sb.WriteString(cleanupHeader)
 		} else {
-			sb.WriteString("\nJob " + jobID + " has started\n")
-			if logFileLocation != "" {
-				sb.WriteString("Log file is located at: " + logFileLocation)
+			sb.WriteString("\nJob " + ctx.JobID.String() + " has started\n")
+			if ctx.LogPath != "" {
+				sb.WriteString("Log file is located at: " + ctx.LogPath)
 			}
 			sb.WriteString("\n")
 		}

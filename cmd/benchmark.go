@@ -242,7 +242,6 @@ func (raw rawBenchmarkCmdArgs) createCleanupJobArgs(benchmarkDest common.Resourc
 	cooked, err := rc.cook()
 	cooked.jobID = common.NewJobID() // Override the job ID that cook gave us-- That would cause us to fail deletion.
 	cooked.isCleanupJob = true
-	cooked.cleanupJobMessage = "Running cleanup job to delete files created during benchmarking"
 	return &cooked, err
 }
 

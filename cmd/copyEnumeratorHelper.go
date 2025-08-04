@@ -23,7 +23,7 @@ func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer
 		resp := jobsAdmin.ExecuteNewCopyJobPartOrder(*e)
 
 		if !resp.JobStarted {
-			return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNum, resp.ErrorMsg)
+			return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNum, resp.ErrorMsg) // Note: this is not expected in normal AzCopy operation.
 		}
 		// if the current part order sent to engine is 0, then start fetching the Job Progress summary.
 		if e.PartNum == 0 {
@@ -69,13 +69,6 @@ func dispatchFinalPart(e *common.CopyJobPartOrderRequest, cca *CookedCopyCmdArgs
 	resp := jobsAdmin.ExecuteNewCopyJobPartOrder(*e)
 
 	if !resp.JobStarted {
-		// Output the log location if log-level is set to other then NONE
-		var logPathFolder string
-		if common.LogPathFolder != "" {
-			logPathFolder = fmt.Sprintf("%s%s%s.log", common.LogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
-		}
-		glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), logPathFolder, cca.isCleanupJob, cca.cleanupJobMessage))
-
 		if cca.dryrunMode {
 			return nil
 		}
