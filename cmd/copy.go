@@ -1340,14 +1340,14 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 
 		return common.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
 	}
-
+	throughput := computeThroughput()
 	jobType := common.EJobType.Copy()
 	if cca.FromTo.From() == common.ELocation.Benchmark() {
 		jobType = common.EJobType.Benchmark()
 	}
 	transferProgress := common.TransferProgress{
 		ListJobSummaryResponse: summary,
-		Throughput:             computeThroughput(),
+		Throughput:             throughput,
 		ElapsedTime:            duration,
 		JobType:                jobType,
 	}

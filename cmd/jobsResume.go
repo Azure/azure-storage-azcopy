@@ -110,9 +110,10 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 		return common.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
 	}
 
+	throughput := computeThroughput()
 	transferProgress := common.TransferProgress{
 		ListJobSummaryResponse: summary,
-		Throughput:             computeThroughput(),
+		Throughput:             throughput,
 		ElapsedTime:            duration,
 		JobType:                common.EJobType.Resume(),
 	}
