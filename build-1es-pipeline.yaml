@@ -1226,7 +1226,9 @@ extends:
               - job: RemovePackages
                 timeoutInMinutes: 120
                 pool:
-                  vmImage: 'ubuntu-22.04'
+                  name: azcopy-pool
+                  image: ubuntu22-1espt
+                  os: linux
                 variables:
                   - group: AZCOPY_SECRET_VAULT
                 steps:
@@ -1252,7 +1254,7 @@ extends:
                     name: pmcCertificate
                     displayName: 'Download pmc pem file'
                     inputs:
-                      secureFile: 'blobfusebuildvault-blobfuse-release-pmc1-20230911.pem'
+                      secureFile: 'azstorage-devex-kv-blobfuse-release-pmc1-10102025.pem'
 
                   - task: DownloadSecureFile@1
                     name: settings
