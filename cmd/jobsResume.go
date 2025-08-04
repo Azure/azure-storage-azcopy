@@ -114,6 +114,10 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 		ListJobSummaryResponse: summary,
 		Throughput:             computeThroughput(),
 		ElapsedTime:            duration,
+		JobType:                common.EJobType.Resume(),
+	}
+	if common.AzcopyCurrentJobLogger != nil {
+		common.AzcopyCurrentJobLogger.Log(common.LogInfo, common.GetProgressOutputBuilder(transferProgress)(common.EOutputFormat.Text()))
 	}
 	glcm.OnTransferProgress(transferProgress)
 

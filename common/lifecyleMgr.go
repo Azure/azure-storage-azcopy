@@ -53,7 +53,6 @@ type LifecycleMgr interface {
 	// print on the same line over and over again, not allowed to float up
 	OnScanProgress(ScanProgress) // only called during sync jobs, print the progress of scanning source and destination
 	OnTransferProgress(progress TransferProgress)
-	Progress(OutputBuilder)
 	Exit(OutputBuilder, ExitCode)                                // indicates successful execution exit after printing, allow user to specify exit code
 	Info(string)                                                 // simple print, allowed to float up
 	Warn(string)                                                 // simple print, allowed to float up
@@ -272,8 +271,8 @@ func (lcm *lifecycleMgr) OnScanProgress(progress ScanProgress) {
 	}
 }
 
-func (lcm *lifecycleMgr) OnTransferProgress(progress P) {
-	o := GetTransferProgressOutputBuilder(progress)
+func (lcm *lifecycleMgr) OnTransferProgress(progress TransferProgress) {
+	o := GetProgressOutputBuilder(progress)
 	lcm.msgQueue <- outputMessage{
 		msgContent: o(lcm.outputFormat),
 		msgType:    EOutputMessageType.Progress(),

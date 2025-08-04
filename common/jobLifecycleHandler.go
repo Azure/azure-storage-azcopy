@@ -41,12 +41,18 @@ type ScanProgress struct {
 	TransferThroughput *float64 // Throughput (if first part has been ordered)
 }
 
-type EJobType string
+var EJobType = JobType(0)
+
+type JobType uint32
+
+func (JobType) Copy() JobType      { return JobType(0) }
+func (JobType) Sync() JobType      { return JobType(1) }
+func (JobType) Resume() JobType    { return JobType(2) }
+func (JobType) Benchmark() JobType { return JobType(3) }
 
 type TransferProgress struct {
 	ListJobSummaryResponse
 	Throughput  float64
 	ElapsedTime time.Duration
-
-	JobType EJobType
+	JobType     JobType
 }

@@ -198,13 +198,16 @@ func shouldDisplayPerfStates() bool {
 	return GetEnvironmentVariable(EEnvironmentVariable.ShowPerfStates()) != ""
 }
 
-func GetResumeProgressOutputBuilder(progress TransferProgress) OutputBuilder {
+func GetProgressOutputBuilder(progress TransferProgress) OutputBuilder {
 	return func(format OutputFormat) string {
 		if format == EOutputFormat.Json() {
 			jsonOutput, err := json.Marshal(progress.ListJobSummaryResponse)
 			PanicIfErr(err)
 			return string(jsonOutput)
 		} else {
+			if progress.IsCleanupJob {
+				return fmt.Sprintf("Cleanup %v/%v", progress.TransfersCompleted, progress.TotalTransfers)
+			}
 			// if json is not needed, then we generate a message that goes nicely on the same line
 			// display a scanning keyword if the job is not completely ordered
 			var scanningString = " (scanning...)"
@@ -217,7 +220,7 @@ func GetResumeProgressOutputBuilder(progress TransferProgress) OutputBuilder {
 				throughputString = ""
 			}
 			// indicate whether constrained by disk or not
-			perfString, diskString := getPerfDisplayText(progress.PerfStrings, progress.PerfConstraint, progress.ElapsedTime, false)
+			perfString, diskString := getPerfDisplayText(progress.PerfStrings, progress.PerfConstraint, progress.ElapsedTime, progress.JobType == EJobType.Benchmark())
 
 			return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
 				progress.PercentComplete,

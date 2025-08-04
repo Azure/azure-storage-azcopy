@@ -70,13 +70,27 @@ func (m *mockedLifecycleManager) ReportAllJobPartsDone() {
 func (m *mockedLifecycleManager) SetOutputVerbosity(mode common.OutputVerbosity) {
 }
 
+func (m *mockedLifecycleManager) OnScanProgress(progress common.ScanProgress) {
+	o := common.GetScanProgressOutputBuilder(progress)
+	select {
+	case m.progressLog <- o(common.EOutputFormat.Text()):
+	default:
+	}
+}
+func (m *mockedLifecycleManager) OnTransferProgress(progress common.TransferProgress) {
+	o := common.GetProgressOutputBuilder(progress)
+	select {
+	case m.progressLog <- o(common.EOutputFormat.Text()):
+	default:
+	}
+}
 func (m *mockedLifecycleManager) Progress(o common.OutputBuilder) {
 	select {
 	case m.progressLog <- o(common.EOutputFormat.Text()):
 	default:
 	}
 }
-func (*mockedLifecycleManager) OnStart(ctx common.JobContext) {}
+func (*mockedLifecycleManager) OnStart(_ common.JobContext) {}
 func (m *mockedLifecycleManager) Info(msg string) {
 	select {
 	case m.infoLog <- msg:

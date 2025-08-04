@@ -1340,42 +1340,21 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 
 		return common.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
 	}
-	glcm.Progress(func(format common.OutputFormat) string {
-		if format == common.EOutputFormat.Json() {
-			jsonOutput, err := json.Marshal(summary)
-			common.PanicIfErr(err)
-			return string(jsonOutput)
-		} else {
-			// abbreviated output for cleanup jobs
-			if cca.isCleanupJob {
-				return cleanupStatusString
-			}
 
-			// if json is not needed, then we generate a message that goes nicely on the same line
-			// display a scanning keyword if the job is not completely ordered
-			var scanningString = " (scanning...)"
-			if summary.CompleteJobOrdered {
-				scanningString = ""
-			}
-
-			throughput := computeThroughput()
-			throughputString := fmt.Sprintf("2-sec Throughput (Mb/s): %v", common.ToFixed(throughput, 4))
-			if throughput == 0 {
-				// As there would be case when no bits sent from local, e.g. service side copy, when throughput = 0, hide it.
-				throughputString = ""
-			}
-
-			// indicate whether constrained by disk or not
-			isBenchmark := cca.FromTo.From() == common.ELocation.Benchmark()
-			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration, isBenchmark)
-			return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
-				summary.PercentComplete,
-				summary.TransfersCompleted,
-				summary.TransfersFailed,
-				summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed+summary.TransfersSkipped),
-				summary.TransfersSkipped, summary.TotalTransfers, scanningString, perfString, throughputString, diskString)
-		}
-	})
+	jobType := common.EJobType.Copy()
+	if cca.FromTo.From() == common.ELocation.Benchmark() {
+		jobType = common.EJobType.Benchmark()
+	}
+	transferProgress := common.TransferProgress{
+		ListJobSummaryResponse: summary,
+		Throughput:             computeThroughput(),
+		ElapsedTime:            duration,
+		JobType:                jobType,
+	}
+	if common.AzcopyCurrentJobLogger != nil {
+		common.AzcopyCurrentJobLogger.Log(common.LogInfo, common.GetProgressOutputBuilder(transferProgress)(common.EOutputFormat.Text()))
+	}
+	glcm.OnTransferProgress(transferProgress)
 
 	if jobDone {
 		summary.SkippedSymlinkCount = atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)
