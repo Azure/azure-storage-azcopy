@@ -642,10 +642,6 @@ func (cca *cookedSyncCmdArgs) waitUntilJobCompletion(blocking bool) {
 }
 
 func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
-	if cca.orchestratorCancel != nil {
-		cca.orchestratorCancel()
-	}
-
 	// prompt for confirmation, except when enumeration is complete
 	if !cca.isEnumerationComplete {
 		answer := lcm.Prompt("The enumeration (source/destination comparison) is not complete, "+
@@ -665,6 +661,10 @@ func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
 
 		if UseSyncOrchestrator {
 			cca.LogIncompleteEnumerationOutputMessage()
+
+			if cca.orchestratorCancel != nil {
+				cca.orchestratorCancel()
+			}
 		}
 	}
 
