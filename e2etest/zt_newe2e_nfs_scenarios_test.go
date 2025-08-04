@@ -1,7 +1,6 @@
 package e2etest
 
 import (
-	"fmt"
 	"os/user"
 	"runtime"
 	"strconv"
@@ -533,7 +532,6 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 			},
 		})
 
-	fmt.Println("StdOut:----------", stdOut)
 	// Dont validate the root directory in case of sync
 	if azCopyVerb == AzCopyVerbSync {
 		delete(srcObjs, rootDir)
