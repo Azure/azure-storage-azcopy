@@ -999,7 +999,16 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 			for _, entry := range entries {
 				// This won't change. It's purely to hand info off to STE about where the symlink lives.
 				relativePath := entry.Name()
-				fileInfo, _ := entry.Info()
+				fileInfo, err := entry.Info()
+				if err != nil {
+					fmt.Printf("Failed to get file info for %s: %v\n", relativePath, err)
+					writeToErrorChannel(t.errorChannel, ErrorFileInfo{
+						FilePath: common.GenerateFullPath(t.fullPath, relativePath),
+						FileInfo: nil,
+						ErrorMsg: fmt.Errorf("failed to get file info for %s: %w", relativePath, err),
+					})
+					continue // Skip this entry and continue with the next one
+				}
 				entityType = common.EEntityType.File() // Default entity type is file, unless we find out otherwise.
 
 				if fileInfo.Mode()&os.ModeSymlink != 0 {
@@ -1133,7 +1142,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 					}
 				}
 
-				err := processIfPassedFilters(filters,
+				err = processIfPassedFilters(filters,
 					storedObject,
 					hashingProcessor, // hashingProcessor handles the mutex wrapper
 				)
