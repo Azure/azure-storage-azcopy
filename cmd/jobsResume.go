@@ -92,9 +92,6 @@ func (cca *resumeJobController) Cancel(lcm common.LifecycleMgr) {
 func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint32) {
 	// fetch a job status
 	summary := jobsAdmin.GetJobSummary(cca.jobID)
-	glcmSwapOnce.Do(func() {
-		glcm = jobsAdmin.GetJobLCMWrapper(cca.jobID)
-	})
 	jobDone := summary.JobStatus.IsJobDone()
 	totalKnownCount = summary.TotalTransfers
 
@@ -113,37 +110,12 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 		return common.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
 	}
 
-	glcm.Progress(func(format common.OutputFormat) string {
-		if format == common.EOutputFormat.Json() {
-			jsonOutput, err := json.Marshal(summary)
-			common.PanicIfErr(err)
-			return string(jsonOutput)
-		} else {
-			// if json is not needed, then we generate a message that goes nicely on the same line
-			// display a scanning keyword if the job is not completely ordered
-			var scanningString = " (scanning...)"
-			if summary.CompleteJobOrdered {
-				scanningString = ""
-			}
-
-			throughput := computeThroughput()
-			throughputString := fmt.Sprintf("2-sec Throughput (Mb/s): %v", common.ToFixed(throughput, 4))
-			if throughput == 0 {
-				// As there would be case when no bits sent from local, e.g. service side copy, when throughput = 0, hide it.
-				throughputString = ""
-			}
-
-			// indicate whether constrained by disk or not
-			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration, false)
-
-			return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
-				summary.PercentComplete,
-				summary.TransfersCompleted,
-				summary.TransfersFailed,
-				summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed+summary.TransfersSkipped),
-				summary.TransfersSkipped, summary.TotalTransfers, scanningString, perfString, throughputString, diskString)
-		}
-	})
+	transferProgress := common.TransferProgress{
+		ListJobSummaryResponse: summary,
+		Throughput:             computeThroughput(),
+		ElapsedTime:            duration,
+	}
+	glcm.OnTransferProgress(transferProgress)
 
 	if jobDone {
 		exitCode := common.EExitCode.Success()

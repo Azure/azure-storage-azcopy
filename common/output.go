@@ -176,3 +176,56 @@ func ToFixed(num float64, precision int) float64 {
 	output := math.Pow(10, float64(precision))
 	return float64(round(num*output)) / output
 }
+
+// Is disk speed looking like a constraint on throughput?  Ignore the first little-while,
+// to give an (arbitrary) amount of time for things to reach steady-state.
+func getPerfDisplayText(perfDiagnosticStrings []string, constraint PerfConstraint, durationOfJob time.Duration, isBench bool) (perfString string, diskString string) {
+	perfString = ""
+	if shouldDisplayPerfStates() {
+		perfString = "[States: " + strings.Join(perfDiagnosticStrings, ", ") + "], "
+	}
+
+	haveBeenRunningLongEnoughToStabilize := durationOfJob.Seconds() > 30                             // this duration is an arbitrary guesstimate
+	if constraint != EPerfConstraint.Unknown() && haveBeenRunningLongEnoughToStabilize && !isBench { // don't display when benchmarking, because we got some spurious slow "disk" constraint reports there - which would be confusing given there is no disk in release 1 of benchmarking
+		diskString = fmt.Sprintf(" (%s may be limiting speed)", constraint)
+	} else {
+		diskString = ""
+	}
+	return
+}
+
+func shouldDisplayPerfStates() bool {
+	return GetEnvironmentVariable(EEnvironmentVariable.ShowPerfStates()) != ""
+}
+
+func GetResumeProgressOutputBuilder(progress TransferProgress) OutputBuilder {
+	return func(format OutputFormat) string {
+		if format == EOutputFormat.Json() {
+			jsonOutput, err := json.Marshal(progress.ListJobSummaryResponse)
+			PanicIfErr(err)
+			return string(jsonOutput)
+		} else {
+			// if json is not needed, then we generate a message that goes nicely on the same line
+			// display a scanning keyword if the job is not completely ordered
+			var scanningString = " (scanning...)"
+			if progress.CompleteJobOrdered {
+				scanningString = ""
+			}
+			throughputString := fmt.Sprintf("2-sec Throughput (Mb/s): %v", ToFixed(progress.Throughput, 4))
+			if progress.Throughput == 0 {
+				// As there would be case when no bits sent from local, e.g. service side copy, when throughput = 0, hide it.
+				throughputString = ""
+			}
+			// indicate whether constrained by disk or not
+			perfString, diskString := getPerfDisplayText(progress.PerfStrings, progress.PerfConstraint, progress.ElapsedTime, false)
+
+			return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
+				progress.PercentComplete,
+				progress.TransfersCompleted,
+				progress.TransfersFailed,
+				progress.TotalTransfers-(progress.TransfersCompleted+progress.TransfersFailed+progress.TransfersSkipped),
+				progress.TransfersSkipped, progress.TotalTransfers, scanningString, perfString, throughputString, diskString)
+
+		}
+	}
+}

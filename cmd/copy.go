@@ -1320,9 +1320,6 @@ func (cca *CookedCopyCmdArgs) getSuccessExitCode() common.ExitCode {
 func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint32) {
 	// fetch a job status
 	summary := jobsAdmin.GetJobSummary(cca.jobID)
-	glcmSwapOnce.Do(func() {
-		glcm = jobsAdmin.GetJobLCMWrapper(cca.jobID)
-	})
 	summary.IsCleanupJob = cca.isCleanupJob // only FE knows this, so we can only set it here
 	cleanupStatusString := fmt.Sprintf("Cleanup %v/%v", summary.TransfersCompleted, summary.TotalTransfers)
 
@@ -1511,27 +1508,6 @@ Server Busy: %.2f%%`,
 	}
 
 	return
-}
-
-// Is disk speed looking like a constraint on throughput?  Ignore the first little-while,
-// to give an (arbitrary) amount of time for things to reach steady-state.
-func getPerfDisplayText(perfDiagnosticStrings []string, constraint common.PerfConstraint, durationOfJob time.Duration, isBench bool) (perfString string, diskString string) {
-	perfString = ""
-	if shouldDisplayPerfStates() {
-		perfString = "[States: " + strings.Join(perfDiagnosticStrings, ", ") + "], "
-	}
-
-	haveBeenRunningLongEnoughToStabilize := durationOfJob.Seconds() > 30                                    // this duration is an arbitrary guesstimate
-	if constraint != common.EPerfConstraint.Unknown() && haveBeenRunningLongEnoughToStabilize && !isBench { // don't display when benchmarking, because we got some spurious slow "disk" constraint reports there - which would be confusing given there is no disk in release 1 of benchmarking
-		diskString = fmt.Sprintf(" (%s may be limiting speed)", constraint)
-	} else {
-		diskString = ""
-	}
-	return
-}
-
-func shouldDisplayPerfStates() bool {
-	return common.GetEnvironmentVariable(common.EEnvironmentVariable.ShowPerfStates()) != ""
 }
 
 func isStdinPipeIn() (bool, error) {

@@ -20,6 +20,8 @@
 
 package common
 
+import "time"
+
 type JobLifecycleHandler interface {
 	OnStart(ctx JobContext)
 
@@ -39,8 +41,12 @@ type ScanProgress struct {
 	TransferThroughput *float64 // Throughput (if first part has been ordered)
 }
 
+type EJobType string
+
 type TransferProgress struct {
 	ListJobSummaryResponse
-	DeleteTotalTransfers     uint32 `json:",string"` // (only applicable for sync jobs)
-	DeleteTransfersCompleted uint32 `json:",string"` // (only applicable for sync jobs)
+	Throughput  float64
+	ElapsedTime time.Duration
+
+	JobType EJobType
 }
