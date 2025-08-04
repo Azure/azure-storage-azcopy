@@ -635,20 +635,6 @@ func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForSMB(svm *ScenarioVar
 		ValidateContainsError(svm, stdOut, []string{
 			"This functionality is only available on Linux.",
 		})
-	} else if srcObj.Location() == common.ELocation.File() && dstObj.Location() == common.ELocation.FileNFS() {
-		ValidateContainsError(svm, stdOut, []string{
-			"Copy operations between SMB and NFS file shares are not supported yet.",
-		})
-	} else if dstObj.Location() == common.ELocation.File() && srcObj.Location() == common.ELocation.FileNFS() {
-		if azCopyVerb == AzCopyVerbCopy {
-			ValidateContainsError(svm, stdOut, []string{
-				"Copy operations between SMB and NFS file shares are not supported yet",
-			})
-		} else {
-			ValidateContainsError(svm, stdOut, []string{
-				"Copy operations between SMB and NFS file shares are not supported yet",
-			})
-		}
 	}
 }
 

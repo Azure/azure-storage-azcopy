@@ -526,14 +526,29 @@ type NFSFileMeta struct {
 // and logs relevant warnings or metrics.
 //
 // Behavior:
+//
 //   - If the file is a symbolic link:
+//
 //   - Logs a symlink warning
+//
 //   - Increments the skipped symlink counter (if provided)
+//
+//   - Returns (true, nil) to indicate skipping
+//
 //   - If the file is a regular file with multiple hard links:
+//
 //   - Logs a hard link warning
+//
+//   - Returns (false, nil) to allow processing
+//
 //   - If the file is of an unsupported or special type (not regular, symlink, hardlink or directory):
+//
 //   - Logs a warning
+//
 //   - Increments the special file counter (if provided)
+//
+//   - Returns (true, nil) to indicate skipping
+//
 //   - Otherwise (for regular files or directories), it returns (false, nil).
 func evaluateAndLogNFSFileType(ctx context.Context, meta NFSFileMeta, incrementEnumerationCounter enumerationCounterFunc) (skip bool, err error) {
 
