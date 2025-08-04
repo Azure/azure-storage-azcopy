@@ -320,6 +320,7 @@ type RawMoverSyncCmdArgs struct {
 	LocalHashStorageMode    string
 	IsNfsCopy               bool
 	Hardlinks               string
+	IncludeDirectoryStubs   bool
 }
 
 type SyncCmdArgsInput struct {
@@ -360,6 +361,7 @@ func CookRawSyncCmdArgs(args RawMoverSyncCmdArgs) (cookedSyncCmdArgs, error) {
 		localHashStorageMode:    args.LocalHashStorageMode,
 		isNFSCopy:               args.IsNfsCopy,
 		hardlinks:               args.Hardlinks,
+		includeDirectoryStubs:   args.IncludeDirectoryStubs,
 	}
 	return raw.cook()
 }
