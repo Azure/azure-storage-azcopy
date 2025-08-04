@@ -36,6 +36,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -251,8 +252,67 @@ func Initialize(resumeJobID common.JobID, isBench bool) error {
 		beginDetectNewVersion()
 	}
 
+	if buildmode.IsMover {
+		StartSystemStatsMonitorForJob(jobID)
+	}
+
 	return nil
 
+}
+
+func StartSystemStatsMonitorForJob(jobId common.JobID) {
+
+	if runtime.GOOS != "linux" {
+		// We don't start the stats monitor on Windows, because few functions are OS specific.
+		// It can be done for Windows and Mac, but it will need more testing.
+		return
+	}
+
+	logger := common.NewJobLogger(jobId, LogLevel.Info(), azcopyLogPathFolder, "-rolling-stats")
+	logger.OpenLog()
+	glcm.RegisterCloseFunc(func() {
+		logger.CloseLog()
+	})
+
+	config := common.StatsMonitorConfig{
+		Interval:     5 * time.Second,
+		MonitorPaths: []string{azcopyLogPathFolder, common.AzcopyJobPlanFolder},
+		Logger:       logger,
+		LogConditions: common.LogConditions{
+			LogInterval: 60 * time.Second, // Regular logging
+		},
+	}
+
+	common.GlobalSystemStatsMonitor, _ = common.NewSystemStatsMonitor(config)
+
+	common.GlobalSystemStatsMonitor.Start(context.TODO())
+
+	glcm.RegisterCloseFunc(func() {
+		common.GlobalSystemStatsMonitor.UnregisterAllCustomStatsCallbacks()
+		common.GlobalSystemStatsMonitor.Stop()
+	})
+}
+
+// RegisterGlobalCustomStatsCallback registers a custom stats callback with a specific ID
+// This allows multiple callbacks to be registered with the global SystemStatsMonitor
+func RegisterGlobalCustomStatsCallback(id common.CustomStatsID, callback common.CustomStatsCallback) {
+	if common.GlobalSystemStatsMonitor != nil {
+		common.GlobalSystemStatsMonitor.RegisterCustomStatsCallback(id, callback)
+	}
+}
+
+// UnregisterGlobalCustomStatsCallback removes a specific custom stats callback by ID
+func UnregisterGlobalCustomStatsCallback(id common.CustomStatsID) {
+	if common.GlobalSystemStatsMonitor != nil {
+		common.GlobalSystemStatsMonitor.UnregisterCustomStatsCallback(id)
+	}
+}
+
+// ForceCollectGlobalCustomStats forces the collection of custom stats for a specific ID
+func ForceCollectGlobalCustomStats(id common.CustomStatsID) {
+	if common.GlobalSystemStatsMonitor != nil {
+		common.GlobalSystemStatsMonitor.ForceCollectCustomStats(id)
+	}
 }
 
 // hold a pointer to the global lifecycle controller so that commands could output messages and exit properly

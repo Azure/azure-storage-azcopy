@@ -109,6 +109,7 @@ var JobsAdmin interface {
 	ChangeLogLevel(level common.LogLevel, jobId common.JobID) error
 
 	CurrentConcurrencySettings() ste.ConcurrencySettings
+	RegisterStatsMonitorIfNotDone() // Register the STE stats monitor callback
 }
 
 func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64, azcopyJobPlanFolder string, azcopyLogPathFolder string, providePerfAdvice bool) {
@@ -315,6 +316,9 @@ func (ja *jobsAdmin) JobMgrCleanUp(jobId common.JobID) {
 	jm, found := ja.JobMgr(jobId)
 
 	if found {
+		// Force collect stats before cleanup.
+		ja.ForceCollectStats()
+
 		/*
 		 * Change log level to Info, so that we can capture these messages in job log file.
 		 * These log messages useful in debuggability and tells till what stage cleanup done.
@@ -561,6 +565,116 @@ func (ja *jobsAdmin) ChangeLogLevel(level common.LogLevel, jobId common.JobID) e
 		jm.ChangeLogLevel(level)
 		return nil
 	}
+}
+
+// getSTEStats creates a callback for STE metrics that provides real-time
+// visibility into the Storage Transfer Engine's internal state
+func getSTEStats() []common.CustomStatEntry {
+	var stats []common.CustomStatEntry
+
+	if JobsAdmin == nil {
+		return stats
+	}
+
+	// Get all job IDs
+	jobIDs := JobsAdmin.JobIDs()
+
+	if len(jobIDs) == 0 {
+		return stats
+	}
+
+	var totalTransfersQueued int64
+	var totalTransfersCompleted uint64
+	var totalTransfersFailed uint64
+	var totalTransfersSkipped uint64
+	var totalPartsChannelSize int
+	var totalPartsChannelUsed int
+	var totalNormalTransferChannelSize int
+	var totalNormalTransferChannelUsed int
+	var totalLowTransferChannelSize int
+	var totalLowTransferChannelUsed int
+	var totalNormalChunkChannelSize int
+	var totalNormalChunkChannelUsed int
+	var totalLowChunkChannelSize int
+	var totalLowChunkChannelUsed int
+	var totalPartsCreatedUsed int
+	var totalPartsCreatedSize int
+	var totalXferDoneUsed int
+	var totalXferDoneSize int
+
+	// Iterate through all jobs to get their metrics
+	for _, jobID := range jobIDs {
+		if jobMgr, exists := JobsAdmin.JobMgr(jobID); exists {
+			totalTransfersQueued += jobMgr.GetTotalNumFilesProcessed()
+
+			jobSummary := jobMgr.ListJobSummary()
+			totalTransfersCompleted += uint64(jobSummary.TransfersCompleted)
+			totalTransfersFailed += uint64(jobSummary.TransfersFailed)
+			totalTransfersSkipped += uint64(jobSummary.TransfersSkipped)
+
+			// Get channel statistics through the interface method
+			channelStats := jobMgr.GetChannelStats()
+			totalPartsChannelSize += channelStats.PartsChannelSize
+			totalPartsChannelUsed += channelStats.PartsChannelUsed
+			totalNormalTransferChannelSize += channelStats.NormalTransferChannelSize
+			totalNormalTransferChannelUsed += channelStats.NormalTransferChannelUsed
+			totalLowTransferChannelSize += channelStats.LowTransferChannelSize
+			totalLowTransferChannelUsed += channelStats.LowTransferChannelUsed
+			totalNormalChunkChannelSize += channelStats.NormalChunkChannelSize
+			totalNormalChunkChannelUsed += channelStats.NormalChunkChannelUsed
+			totalLowChunkChannelSize += channelStats.LowChunkChannelSize
+			totalLowChunkChannelUsed += channelStats.LowChunkChannelUsed
+			totalPartsCreatedUsed += channelStats.PartsCreatedUsed
+			totalPartsCreatedSize += channelStats.PartsCreatedSize
+			totalXferDoneUsed += channelStats.XferDoneUsed
+			totalXferDoneSize += channelStats.XferDoneSize
+		}
+	}
+
+	return []common.CustomStatEntry{
+		{Key: "active", Value: fmt.Sprintf("%d", uint64(totalTransfersQueued)-totalTransfersCompleted-totalTransfersFailed-totalTransfersSkipped)},
+		{Key: "done", Value: fmt.Sprintf("%d", totalTransfersCompleted)},
+		{Key: "failed", Value: fmt.Sprintf("%d", totalTransfersFailed)},
+		{Key: "skipped", Value: fmt.Sprintf("%d", totalTransfersSkipped)},
+		{Key: "parts_ch", Value: fmt.Sprintf("%d/%d", totalPartsChannelUsed, totalPartsChannelSize)},
+		{Key: "norm_xfer_ch", Value: fmt.Sprintf("%d/%d", totalNormalTransferChannelUsed, totalNormalTransferChannelSize)},
+		{Key: "low_xfer_ch", Value: fmt.Sprintf("%d/%d", totalLowTransferChannelUsed, totalLowTransferChannelSize)},
+		{Key: "norm_chunk_ch", Value: fmt.Sprintf("%d/%d", totalNormalChunkChannelUsed, totalNormalChunkChannelSize)},
+		{Key: "low_chunk_ch", Value: fmt.Sprintf("%d/%d", totalLowChunkChannelUsed, totalLowChunkChannelSize)},
+		// {Key: "parts_cr_ch", Value: fmt.Sprintf("%d/%d", totalPartsCreatedUsed, totalPartsCreatedSize)},
+		// {Key: "xfer_done_ch", Value: fmt.Sprintf("%d/%d", totalXferDoneUsed, totalXferDoneSize)},
+	}
+}
+
+func (ja *jobsAdmin) RegisterStatsMonitorIfNotDone() {
+
+	if common.GlobalSystemStatsMonitor != nil &&
+		!common.GlobalSystemStatsMonitor.IsCustomStatsCallbackRegistered("ste") {
+
+		concurrency := ja.CurrentConcurrencySettings()
+		concurrencySettings := []common.CustomStatEntry{
+			{Key: "InitialMainPoolSize", Value: fmt.Sprintf("%d", concurrency.InitialMainPoolSize)},
+			{Key: "MaxMainPoolSize", Value: fmt.Sprintf("%d", concurrency.MaxMainPoolSize.Value)},
+			{Key: "TransferInitiationPoolSize", Value: fmt.Sprintf("%d", concurrency.TransferInitiationPoolSize.Value)},
+			{Key: "EnumerationPoolSize", Value: fmt.Sprintf("%d", concurrency.EnumerationPoolSize.Value)},
+			{Key: "ParallelStatFiles", Value: fmt.Sprintf("%v", concurrency.ParallelStatFiles.Value)},
+			{Key: "MaxIdleConnections", Value: fmt.Sprintf("%d", concurrency.MaxIdleConnections)},
+			{Key: "MaxOpenDownloadFiles", Value: fmt.Sprintf("%d", concurrency.MaxOpenDownloadFiles)},
+			{Key: "CheckCpuWhenTuning", Value: fmt.Sprintf("%t", concurrency.CheckCpuWhenTuning.Value)},
+			{Key: "AutoTuneMainPool", Value: fmt.Sprintf("%t", concurrency.AutoTuneMainPool())},
+		}
+		common.GlobalSystemStatsMonitor.LogAdhocCustomStats("Concurrency Settings", concurrencySettings)
+
+		// Register the callback for STE stats
+		common.GlobalSystemStatsMonitor.RegisterCustomStatsCallback(common.STEId, getSTEStats)
+	}
+}
+
+func (ja *jobsAdmin) ForceCollectStats() bool {
+	if common.GlobalSystemStatsMonitor != nil {
+		return common.GlobalSystemStatsMonitor.ForceCollectCustomStats(common.STEId)
+	}
+	return false
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

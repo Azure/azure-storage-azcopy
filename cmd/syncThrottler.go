@@ -89,10 +89,11 @@ var (
 	maxActivelyEnumeratingDirectories int64
 
 	// Counters
-	activeDirectories            atomic.Int64
-	activeDirectoriesEnumerating atomic.Int64 // Number of directories currently being enumerated
-	totalFilesInIndexer          atomic.Int64
-	totalDirectoriesProcessed    atomic.Uint64 // never decremented
+	activeDirectories         atomic.Int64
+	srcDirEnumerating         atomic.Int64 // Number of directories currently being enumerated at source
+	dstDirEnumerating         atomic.Int64 // Number of directories currently being enumerated at destination
+	totalFilesInIndexer       atomic.Int64
+	totalDirectoriesProcessed atomic.Uint64 // never decremented
 
 	// Throttling control flags
 	enableThrottling               bool = true
@@ -177,19 +178,19 @@ func GetNumCPU() int32 {
 	return int32(numCores)
 }
 
-// DirSemaphore manages directory processing concurrency using a semaphore pattern.
+// ThrottleSemaphore manages directory processing concurrency using a semaphore pattern.
 // It controls how many directories can be processed simultaneously and includes
 // throttling logic based on file indexer size and system resource usage.
-type DirSemaphore struct {
+type ThrottleSemaphore struct {
 	// Semaphore for directory processing
-	dirSemaphore chan struct{}
+	semaphore chan struct{}
 
 	waitingForSemaphore atomic.Int32
 
 	// Monitoring
 	lastLogTime time.Time
 
-	statsMonitor *StatsMonitor
+	statsMonitor *common.SystemStatsMonitor
 
 	// Hysteresis state tracking
 	isThrottling       bool         // Current throttling state
@@ -205,17 +206,17 @@ type DirSemaphore struct {
 	cancel context.CancelFunc
 }
 
-// NewDirSemaphore creates and initializes a new DirSemaphore with pre-filled tokens
+// NewThrottleSemaphore creates and initializes a new ThrottleSemaphore with pre-filled tokens
 // and starts the associated stats monitor for dynamic throttling adjustments.
-func NewDirSemaphore(parentCtx context.Context) *DirSemaphore {
+func NewThrottleSemaphore(parentCtx context.Context, jobID common.JobID) *ThrottleSemaphore {
 	// Create child context for this semaphore
 	ctx, cancel := context.WithCancel(parentCtx)
 
-	ds := &DirSemaphore{
-		dirSemaphore: make(chan struct{}, crawlParallelism),
-		lastLogTime:  time.Now(),
-		ctx:          ctx,
-		cancel:       cancel,
+	ds := &ThrottleSemaphore{
+		semaphore:   make(chan struct{}, crawlParallelism),
+		lastLogTime: time.Now(),
+		ctx:         ctx,
+		cancel:      cancel,
 
 		// Initialize hysteresis state
 		isThrottling:            false,
@@ -226,34 +227,32 @@ func NewDirSemaphore(parentCtx context.Context) *DirSemaphore {
 
 	// Pre-fill semaphore with tokens
 	for i := int32(0); i < crawlParallelism; i++ {
-		ds.dirSemaphore <- struct{}{}
+		ds.semaphore <- struct{}{}
 	}
 
-	ds.statsMonitor = NewStatsMonitor()
-	ds.statsMonitor.Start(ctx) // Pass context to stats monitor
-
-	// Start semaphore monitoring with context
-	go ds.semaphoreMonitor(ctx)
+	RegisterGlobalCustomStatsCallback(common.SyncOrchestratorId, ds.getOrchestratorStats)
 
 	return ds
 }
 
-// Close gracefully shuts down the DirSemaphore by stopping the stats monitor.
+// Close gracefully shuts down the ThrottleSemaphore by stopping the stats monitor.
 // This should be called when the semaphore is no longer needed to prevent resource leaks.
-func (ds *DirSemaphore) Close() {
+func (ds *ThrottleSemaphore) Close() {
+
+	ForceCollectGlobalCustomStats(common.SyncOrchestratorId)
+	UnregisterGlobalCustomStatsCallback(common.SyncOrchestratorId)
+
 	// Cancel the context to stop all monitoring goroutines
 	if ds.cancel != nil {
 		ds.cancel()
 	}
-
-	// Stop the stats monitor
-	ds.statsMonitor.Stop()
+	WarnStdoutAndScanningLog("Stopping ThrottleSemaphore and releasing resources")
 }
 
 // AcquireSlot blocks until a semaphore slot is available and throttling conditions allow processing.
 // It implements context-aware cancellation and respects throttling limits to prevent system overload.
 // Returns an error if the context is cancelled during acquisition.
-func (ds *DirSemaphore) AcquireSlot(ctx context.Context) error {
+func (ds *ThrottleSemaphore) AcquireSlot(ctx context.Context) error {
 	// This blocks until semaphore is available AND throttling allows it
 	ds.waitingForSemaphore.Add(1)
 	defer ds.waitingForSemaphore.Add(-1)
@@ -261,11 +260,11 @@ func (ds *DirSemaphore) AcquireSlot(ctx context.Context) error {
 	for {
 		select {
 
-		case <-ds.dirSemaphore:
+		case <-ds.semaphore:
 			// Got semaphore token
 			if ds.shouldThrottle() {
 				// Should throttle - put token back and wait
-				ds.dirSemaphore <- struct{}{}
+				ds.semaphore <- struct{}{}
 
 				// Cancellation-aware sleep
 				select {
@@ -294,14 +293,14 @@ func (ds *DirSemaphore) AcquireSlot(ctx context.Context) error {
 
 // ReleaseSlot returns a semaphore token and decrements the active directory counter.
 // This should be called when directory processing is complete to allow other operations to proceed.
-func (ds *DirSemaphore) ReleaseSlot() {
-	ds.dirSemaphore <- struct{}{} // Put token back
-	activeDirectories.Add(-1)     // Decrement active directory count
+func (ds *ThrottleSemaphore) ReleaseSlot() {
+	ds.semaphore <- struct{}{} // Put token back
+	activeDirectories.Add(-1)  // Decrement active directory count
 }
 
 // shouldThrottle determines whether directory processing should be throttled with hysteresis
 // to prevent oscillating behavior between throttled and non-throttled states.
-func (ds *DirSemaphore) shouldThrottle() bool {
+func (ds *ThrottleSemaphore) shouldThrottle() bool {
 	ds.throttleStateMutex.Lock()
 	defer ds.throttleStateMutex.Unlock()
 
@@ -343,8 +342,8 @@ func (ds *DirSemaphore) shouldThrottle() bool {
 	return ds.isThrottling
 }
 
-func (ds *DirSemaphore) shouldThrottlingDirectoryEnumeration() bool {
-	currentActivelyEnumerating := activeDirectoriesEnumerating.Load()
+func (ds *ThrottleSemaphore) shouldThrottlingDirectoryEnumeration() bool {
+	currentActivelyEnumerating := srcDirEnumerating.Load()
 	enumeratingLimit := enumeratingDirectoryLimit.Load()
 
 	// We want to do simple throttling here without any hysteresis
@@ -360,7 +359,7 @@ func (ds *DirSemaphore) shouldThrottlingDirectoryEnumeration() bool {
 }
 
 // shouldThrottleBasedOnFiles applies hysteresis to file indexer throttling
-func (ds *DirSemaphore) shouldThrottleBasedOnFiles() bool {
+func (ds *ThrottleSemaphore) shouldThrottleBasedOnFiles() bool {
 	currentFiles := totalFilesInIndexer.Load()
 	activeFilesLimit := activeFilesLimit.Load()
 
@@ -391,7 +390,7 @@ func (ds *DirSemaphore) shouldThrottleBasedOnFiles() bool {
 }
 
 // shouldThrottleBasedOnMemory applies hysteresis to memory pressure throttling
-func (ds *DirSemaphore) shouldThrottleBasedOnMemory() bool {
+func (ds *ThrottleSemaphore) shouldThrottleBasedOnMemory() bool {
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
 
@@ -423,7 +422,7 @@ func (ds *DirSemaphore) shouldThrottleBasedOnMemory() bool {
 }
 
 // shouldThrottleBasedOnGoroutines applies hysteresis to goroutine throttling
-func (ds *DirSemaphore) shouldThrottleBasedOnGoroutines() bool {
+func (ds *ThrottleSemaphore) shouldThrottleBasedOnGoroutines() bool {
 	currentGoroutines := int64(runtime.NumGoroutine())
 
 	// Calculate usage percentage
@@ -452,7 +451,7 @@ func (ds *DirSemaphore) shouldThrottleBasedOnGoroutines() bool {
 	return false
 }
 
-func (ds *DirSemaphore) logThrottling(msgFmt string, args ...interface{}) {
+func (ds *ThrottleSemaphore) logThrottling(msgFmt string, args ...interface{}) {
 
 	if !enableThrottleLogs {
 		return
@@ -465,235 +464,16 @@ func (ds *DirSemaphore) logThrottling(msgFmt string, args ...interface{}) {
 	}
 }
 
-// semaphoreMonitor provides detailed monitoring and logging of semaphore utilization.
-// It runs in a separate goroutine and periodically reports on contention and resource usage.
-// The monitoring helps identify performance bottlenecks and system stress conditions.
-func (ds *DirSemaphore) semaphoreMonitor(ctx context.Context) {
-	ticker := time.NewTicker(time.Duration(throttleLogIntervalSecs) * time.Second) // More frequent monitoring
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			if enableThrottling {
-				waiting := ds.waitingForSemaphore.Load()
-				active := activeDirectories.Load()
-				queued := totalDirectoriesProcessed.Load()
-				files := totalFilesInIndexer.Load()
-				limit := activeFilesLimit.Load()
-
-				// Only log if there's activity or contention
-				if waiting > 5 || active > 5 {
-					if enableThrottleLogs {
-						WarnStdoutAndScanningLog(fmt.Sprintf(
-							"[INFO] Active Dirs: %d | Wait: %d | Total: %d | Active Files: %d/%d",
-							active, waiting, queued, files, limit))
-					}
-				}
-
-				// Alert on high contention
-				if waiting > int32(float64(crawlParallelism)*0.8) {
-					if enableThrottleLogs {
-						WarnStdoutAndScanningLog(fmt.Sprintf(
-							"[WARN] Severe contention: %d directories waiting (exceeds semaphore capacity of %d)",
-							waiting, crawlParallelism))
-					}
-				}
-			}
-		}
+// getOrchestratorStats returns orchestrator-specific metrics for the custom stats callback.
+// It provides real-time visibility into the sync orchestrator's internal state including
+// indexer size, directory processing counters, and enumeration activity.
+func (ds *ThrottleSemaphore) getOrchestratorStats() []common.CustomStatEntry {
+	return []common.CustomStatEntry{
+		{"Waiting", fmt.Sprintf("%d", ds.waitingForSemaphore.Load())},
+		{"Indexer", fmt.Sprintf("%d", totalFilesInIndexer.Load())},
+		{"Active", fmt.Sprintf("%d", activeDirectories.Load())},
+		{"SrcEnum", fmt.Sprintf("%d", srcDirEnumerating.Load())},
+		{"DstEnum", fmt.Sprintf("%d", dstDirEnumerating.Load())},
+		{"Done", fmt.Sprintf("%d", totalDirectoriesProcessed.Load())},
 	}
-}
-
-// StatsState represents different operational states of the system based on resource utilization.
-// These states drive dynamic adjustments to concurrency limits and throttling behavior.
-type StatsState int
-
-const (
-	StateOptimal       StatsState = iota // 80-100%
-	StateUnderutilized                   // < 60% - increase directories
-	StateCritical                        // > 120% - decrease directories
-	StateAboveOptimal                    // 100-120% - slight decrease
-	StateBelowOptimal                    // 60-80% - slight increase
-)
-
-// StatsSnapshot captures a point-in-time view of system performance metrics.
-// These snapshots are used for trend analysis and dynamic limit adjustments.
-type StatsSnapshot struct {
-	Timestamp              time.Time
-	IndexerSize            int64
-	ActiveDirectories      int64
-	ProcessedDirectories   int64
-	EnumeratingDirectories int64
-	MemoryUsageMB          uint64
-	UtilizationPercent     float64
-}
-
-// StatsMonitor analyzes system performance over time and dynamically adjusts
-// concurrency limits to maintain optimal throughput while preventing resource exhaustion.
-// It implements a feedback control system with configurable thresholds and cooldown periods.
-type StatsMonitor struct {
-	// Target configuration
-	targetIndexerSize      int64 // Target
-	optimalRangeMin        int64 // 80% of target
-	optimalRangeMax        int64 // 100% of target
-	criticalThreshold      int64 // 120% of target - must reduce
-	underutilizedThreshold int64 // 60% of target - can increase
-
-	// Analysis parameters
-	consistencyThreshold int           // Number of consecutive samples needed
-	adjustmentCooldown   time.Duration // Minimum time between adjustments
-	lastAdjustmentTime   time.Time
-
-	// Context for cancellation
-	ctx    context.Context
-	cancel context.CancelFunc
-
-	// Rest of the fields...
-	snapshots          []StatsSnapshot
-	snapshotMutex      sync.RWMutex
-	maxSnapshots       int32 // Max number of snapshots to keep
-	monitoringInterval time.Duration
-	stopMonitoring     chan struct{}
-	monitoringWG       sync.WaitGroup
-}
-
-// NewStatsMonitor creates and configures a new StatsMonitor with target thresholds
-// based on the maximum active files limit. It sets up analysis parameters including
-// consistency requirements and adjustment cooldown periods.
-func NewStatsMonitor() *StatsMonitor {
-	targetSize := int64(maxActiveFiles)
-
-	return &StatsMonitor{
-		// Target thresholds
-		targetIndexerSize:      targetSize,
-		optimalRangeMin:        targetSize * 80 / 100,
-		optimalRangeMax:        targetSize,
-		criticalThreshold:      targetSize * 120 / 100,
-		underutilizedThreshold: targetSize * 60 / 100,
-
-		// Analysis parameters
-		consistencyThreshold: consistencyThreshold,                    // Need 10 consecutive samples
-		adjustmentCooldown:   time.Minute * adjustmentCooldownMinutes, // Wait 2 minutes between adjustments
-
-		// Monitoring
-		snapshots:          make([]StatsSnapshot, 0, 50),
-		maxSnapshots:       50,
-		monitoringInterval: time.Minute * 15,
-		stopMonitoring:     make(chan struct{}),
-	}
-}
-
-// Start begins the monitoring loop in a separate goroutine.
-// It starts periodic sampling and analysis of system performance metrics
-// to enable dynamic throttling adjustments.
-func (sm *StatsMonitor) Start(parentCtx context.Context) {
-	// Create child context
-	sm.ctx, sm.cancel = context.WithCancel(parentCtx)
-
-	sm.monitoringWG.Add(1)
-	go sm.monitoringLoop()
-
-	glcm.Info(fmt.Sprintf(
-		"Started monitoring for active throttling (Active files limit: %d, Enumerating directories limit: %d, Crawl parallelism: %d)",
-		activeFilesLimit.Load(),
-		enumeratingDirectoryLimit.Load(),
-		crawlParallelism))
-}
-
-// Stop gracefully shuts down the monitoring loop and waits for completion.
-// This should be called during cleanup to prevent goroutine leaks.
-func (sm *StatsMonitor) Stop() {
-	// Cancel context
-	if sm.cancel != nil {
-		sm.cancel()
-	}
-
-	close(sm.stopMonitoring)
-	sm.monitoringWG.Wait()
-}
-
-// monitoringLoop is the main monitoring routine that runs periodically to:
-// 1. Take performance snapshots
-// 2. Analyze trends and system state
-// 3. Calculate and apply optimal limit adjustments
-// It runs until the stop signal is received.
-func (sm *StatsMonitor) monitoringLoop() {
-	defer sm.monitoringWG.Done()
-
-	ticker := time.NewTicker(sm.monitoringInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-sm.ctx.Done():
-			// Context cancelled - shutdown gracefully
-			return
-
-		case <-ticker.C:
-			// Check if context is still valid before processing
-			if sm.ctx.Err() != nil {
-				return
-			}
-
-			snapshot := sm.takeSnapshot()
-			sm.logSnapshot(snapshot)
-		}
-	}
-}
-
-// takeSnapshot captures current system performance metrics including:
-// - File indexer size and active directory count
-// - Memory usage statistics
-// - Utilization percentage relative to target
-// Returns a StatsSnapshot for trend analysis.
-func (sm *StatsMonitor) takeSnapshot() StatsSnapshot {
-	var memStats runtime.MemStats
-	runtime.ReadMemStats(&memStats)
-
-	currentIndexerSize := totalFilesInIndexer.Load()
-	activeDirs := activeDirectories.Load()
-	enumeratingDirs := activeDirectoriesEnumerating.Load()
-	processedDirs := totalDirectoriesProcessed.Load()
-
-	// Calculate utilization percentage
-	utilizationPercent := float64(currentIndexerSize) / float64(sm.targetIndexerSize) * 100
-
-	return StatsSnapshot{
-		Timestamp:              time.Now(),
-		IndexerSize:            currentIndexerSize,
-		ActiveDirectories:      activeDirs,
-		ProcessedDirectories:   int64(processedDirs),
-		EnumeratingDirectories: enumeratingDirs,
-		MemoryUsageMB:          memStats.HeapInuse / mbToBytesMultiplier,
-		UtilizationPercent:     utilizationPercent,
-	}
-}
-
-// logSnapshot logs the performance snapshot using glcm.Info and adds it to the monitoring history.
-// It maintains a sliding window of recent snapshots by removing old entries
-// when the maximum snapshot count is exceeded.
-
-func (sm *StatsMonitor) addSnapshot(snapshot StatsSnapshot) {
-	sm.snapshotMutex.Lock()
-	defer sm.snapshotMutex.Unlock()
-
-	sm.snapshots = append(sm.snapshots, snapshot)
-
-	if len(sm.snapshots) > int(sm.maxSnapshots) {
-		sm.snapshots = sm.snapshots[1:]
-	}
-}
-
-func (sm *StatsMonitor) logSnapshot(snapshot StatsSnapshot) {
-	// Log the snapshot information
-	glcm.Info(fmt.Sprintf("Performance Snapshot - Timestamp: %s, IndexerSize: %d, ActiveDirs: %d, ProcessedDirs: %d, EnumeratingDirs: %d, MemoryUsageMB: %d, UtilizationPercent: %.2f%%",
-		snapshot.Timestamp.UTC(),
-		snapshot.IndexerSize,
-		snapshot.ActiveDirectories,
-		snapshot.ProcessedDirectories,
-		snapshot.EnumeratingDirectories,
-		snapshot.MemoryUsageMB,
-		snapshot.UtilizationPercent))
 }

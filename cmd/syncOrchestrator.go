@@ -60,7 +60,7 @@ var (
 
 	// dirSemaphore controls the maximum number of directories processed concurrently
 	// to prevent resource exhaustion during large-scale sync operations.
-	dirSemaphore *DirSemaphore
+	dirSemaphore *ThrottleSemaphore
 
 	// CustomSyncHandler holds the current sync handler implementation.
 	// Defaults to syncOrchestratorHandler but can be customized for different strategies.
@@ -589,18 +589,8 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 	// Initialize semaphore for directory concurrency control
 	if enableThrottling {
-		dirSemaphore = NewDirSemaphore(mainCtx)
+		dirSemaphore = NewThrottleSemaphore(mainCtx, cca.jobID)
 		defer dirSemaphore.Close()
-	}
-
-	// Start dedicated semaphore monitor for resource tracking
-	semaphoreMonitorWg := sync.WaitGroup{}
-	if enableThrottling {
-		semaphoreMonitorWg.Add(1)
-		go func() {
-			defer semaphoreMonitorWg.Done()
-			dirSemaphore.semaphoreMonitor(mainCtx)
-		}()
 	}
 
 	var crawlWg sync.WaitGroup // WaitGroup for all directory processing tasks
@@ -623,7 +613,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			defer dirSemaphore.ReleaseSlot()
 		}
 
-		activeDirectoriesEnumerating.Add(1) // Increment active directory count
+		srcDirEnumerating.Add(1) // Increment active directory count
 
 		// Build source and destination paths for current directory
 		sync_src := []string{cca.source.Value, dir.(StoredObject).relativePath}
@@ -688,6 +678,8 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 		// Traverse source location and collect files/directories
 		err = pt.Traverse(noPreProccessor, stra.processor, enumerator.filters)
+		srcDirEnumerating.Add(-1) // Decrement active directory count
+
 		if err != nil {
 			errMsg = fmt.Sprintf("primary traversal failed for dir %s : %s\n", pt_src.Value, err)
 			WarnStdoutAndScanningLog(errMsg)
@@ -700,7 +692,6 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			cca.IncrementSourceFolderEnumerationFailed()
 			return err
 		}
-		activeDirectoriesEnumerating.Add(-1) // Decrement active directory count
 
 		traverseDestination := true // Flag to control whether we traverse the destination
 
@@ -746,8 +737,12 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		}
 
 		if traverseDestination {
+			dstDirEnumerating.Add(1) // Increment active destination directory count
+
 			// Traverse destination location for comparison
 			err = st.Traverse(noPreProccessor, stra.customComparator, enumerator.filters)
+			dstDirEnumerating.Add(-1) // Decrement active destination directory count
+
 			if err != nil {
 				// Only report unexpected errors (404s are normal for new files)
 				if !IsExpectedErrorForTargetDuringSync(err) {
@@ -761,12 +756,14 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 					})
 
 					cca.IncrementDestinationFolderEnumerationFailed()
+
 					return err
 				}
 			}
 
 			// Complete processing for this directory and schedule transfers
 			err = stra.Finalize(true) // true indicates we want to schedule transfers
+
 			if err != nil {
 				errMsg = fmt.Sprintf("Sync finalize failed for source dir %s.\n", pt_src.Value)
 				WarnStdoutAndScanningLog(errMsg)
@@ -813,11 +810,6 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 	// Ensure proper cleanup in ALL scenarios (success, failure, cancellation)
 	cleanupFunc := func() {
 		// Always shutdown monitoring goroutines
-		WarnStdoutAndScanningLog("Shutting down monitors...")
-		if enableThrottling {
-			semaphoreMonitorWg.Wait()
-		}
-
 		WarnStdoutAndScanningLog(fmt.Sprintf("Orchestrator exiting. Execution time: %v.", time.Since(startTime)))
 	}
 	defer cleanupFunc()

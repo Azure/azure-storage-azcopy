@@ -164,6 +164,7 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 	jppfn := JobsAdmin.NewJobPartPlanFileName(order.JobID, order.PartNum)
 	jppfn.Create(order)                                                                  // Convert the order to a plan file
 	jm := JobsAdmin.JobMgrEnsureExists(order.JobID, order.LogLevel, order.CommandString) // Get a this job part's job manager (create it if it doesn't exist)
+	JobsAdmin.RegisterStatsMonitorIfNotDone()
 
 	if len(order.Transfers.List) == 0 && order.IsFinalPart {
 		/*
