@@ -305,8 +305,10 @@ func (l *LocalObjectResourceManager) Create(a Asserter, body ObjectContentContai
 			a.NoError("Close file", err)
 		}(f)
 
-		_, err = io.Copy(f, body.Reader())
-		a.NoError("Write file", err)
+		if body != nil {
+			_, err = io.Copy(f, body.Reader())
+			a.NoError("Write file", err)
+		}
 	} else if l.entityType == common.EEntityType.Folder() {
 		err := os.Mkdir(l.getWorkingPath(), 0775)
 		a.NoError("Mkdir", err)
