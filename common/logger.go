@@ -34,6 +34,24 @@ import (
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 )
 
+var AzcopyCurrentJobLogger ILoggerResetable
+
+// TODO: (gapra) I think this should actually be a function on the logger?
+
+// LogToJobLogWithPrefix logs a message to the current job logger.
+// It applies a level-based prefix (e.g., "WARN:") for messages with a severity
+// level of LogWarning or higher. This helps distinguish warnings and errors
+// from informational messages in the logs.
+func LogToJobLogWithPrefix(msg string, level LogLevel) {
+	if AzcopyCurrentJobLogger != nil {
+		prefix := ""
+		if level <= LogWarning {
+			prefix = fmt.Sprintf("%s: ", level) // so readers can find serious ones, but information ones still look uncluttered without INFO:
+		}
+		AzcopyCurrentJobLogger.Log(level, prefix+msg)
+	}
+}
+
 type ILogger interface {
 	ShouldLog(level LogLevel) bool
 	Log(level LogLevel, msg string)

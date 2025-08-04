@@ -21,6 +21,8 @@
 package cmd
 
 import (
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/stretchr/testify/assert"
 	"io/fs"
 	"os"
@@ -50,7 +52,9 @@ func TestSyncUploadWithExcludeAttrFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
@@ -84,7 +88,9 @@ func TestSyncUploadWithIncludeAttrFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
@@ -121,7 +127,9 @@ func TestSyncUploadWithIncludeAndIncludeAttrFlags(t *testing.T) {
 	defer deleteContainer(a, cc)
 
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
@@ -159,7 +167,9 @@ func TestSyncUploadWithExcludeAndExcludeAttrFlags(t *testing.T) {
 	defer deleteContainer(a, cc)
 
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
@@ -193,7 +203,9 @@ func TestSyncDownloadWithDeleteDestinationOnCaseInsensitiveFS(t *testing.T) {
 	scenarioHelper{}.generateLocalFilesFromList(a, dstDirName, fileList)
 
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)

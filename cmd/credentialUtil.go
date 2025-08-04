@@ -35,8 +35,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/minio/minio-go/pkg/s3utils"
@@ -51,7 +49,7 @@ var sharedKeyDeprecationMessage = "*** WARNING *** shared key authentication for
 func warnIfSharedKeyAuthForDatalake() {
 	sharedKeyDeprecation.Do(func() {
 		glcm.Warn(sharedKeyDeprecationMessage)
-		jobsAdmin.JobsAdmin.LogToJobLog(sharedKeyDeprecationMessage, common.LogWarning)
+		common.LogToJobLogWithPrefix(sharedKeyDeprecationMessage, common.LogWarning)
 	})
 }
 
@@ -243,7 +241,7 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 		common.ECredentialType.MDOAuthToken(),
 		common.ECredentialType.SharedKey():
 		// Files doesn't currently support OAuth, but it's a valid azure endpoint anyway, so it'll pass the check.
-		if resourceType != common.ELocation.Blob() && resourceType != common.ELocation.BlobFS() && resourceType != common.ELocation.File() {
+		if resourceType != common.ELocation.Blob() && resourceType != common.ELocation.BlobFS() && resourceType != common.ELocation.File() && resourceType != common.ELocation.FileNFS() {
 			// There may be a reason for files->blob to specify this.
 			if resourceType == common.ELocation.Local() {
 				return nil
@@ -338,9 +336,7 @@ func logAuthType(ct common.CredentialType, location common.Location, isSource bo
 	}
 	if _, exists := authMessagesAlreadyLogged.Load(message); !exists {
 		authMessagesAlreadyLogged.Store(message, struct{}{}) // dedup because source is auth'd by both enumerator and STE
-		if jobsAdmin.JobsAdmin != nil {
-			jobsAdmin.JobsAdmin.LogToJobLog(message, common.LogInfo)
-		}
+		common.LogToJobLogWithPrefix(message, common.LogInfo)
 		glcm.Info(message)
 	}
 }
