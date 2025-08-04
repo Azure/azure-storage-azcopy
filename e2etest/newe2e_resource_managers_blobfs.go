@@ -377,6 +377,8 @@ func (b *BlobFSPathResourceProvider) Create(a Asserter, body ObjectContentContai
 	case common.EEntityType.File(), common.EEntityType.Symlink(): // Symlinks just need an extra metadata tag
 		if b.entityType == common.EEntityType.Symlink() && body == nil {
 			body = NewStringObjectContentContainer(properties.SymlinkedFileName)
+		} else if body == nil {
+			body = NewZeroObjectContentContainer(0)
 		}
 
 		_, err := b.getFileClient().Create(ctx, &file.CreateOptions{

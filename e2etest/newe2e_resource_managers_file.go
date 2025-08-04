@@ -510,6 +510,10 @@ func (f *FileObjectResourceManager) Create(a Asserter, body ObjectContentContain
 
 	switch f.entityType {
 	case common.EEntityType.File():
+		if body == nil {
+			body = NewZeroObjectContentContainer(0)
+		}
+
 		client := f.getFileClient()
 
 		_, err := client.Create(ctx, body.Size(), &file.CreateOptions{
@@ -555,6 +559,10 @@ func (f *FileObjectResourceManager) Create(a Asserter, body ObjectContentContain
 		// fmt.Println("Resp.LinkCount", *resp.LinkCount)
 		// fmt.Println("Resp.NFSFileType", *resp.NFSFileType)
 	case common.EEntityType.Other():
+		if body == nil {
+			body = NewZeroObjectContentContainer(0)
+		}
+
 		client := f.getFileClient()
 
 		_, err := client.Create(ctx, body.Size(), &file.CreateOptions{
