@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/minio/minio-go/pkg/credentials"
 )
 
@@ -54,6 +55,65 @@ type ChannelStats struct {
 	PartsCreatedSize          int
 	XferDoneUsed              int
 	XferDoneSize              int
+}
+
+// ChannelSizeConfig holds channel size configurations
+type ChannelSizeConfig struct {
+
+	// PartsChannelSize defines the number of JobParts which can be placed into the
+	// parts channel. Any JobPart which comes from FE and partChannel is full,
+	// has to wait and enumeration of transfer gets blocked till then.
+	// TODO : PartsChannelSize Needs to be discussed and can change.
+	PartsChannelSize int
+
+	// TransferChannelSize defines the buffer size for normal and low priority transfer channels
+	// that queue individual transfer operations. Higher values improve throughput by reducing
+	// blocking when many transfers are being initiated simultaneously.
+	TransferChannelSize int
+
+	// ChunkChannelSize defines the buffer size for normal and low priority chunk channels
+	// that queue chunk processing functions. Larger buffers help maintain steady throughput
+	// by allowing chunk processors to stay busy even during transfer spikes.
+	ChunkChannelSize int
+
+	// PartCreatedChannelSize defines the buffer size for the channel that receives
+	// job part creation notifications. Used for status tracking and coordination
+	// between different components of the transfer engine.
+	PartCreatedChannelSize int
+
+	// XferDoneChannelSize defines the buffer size for the channel that receives
+	// transfer completion notifications. Critical for accurate progress reporting
+	// and final job status determination. Higher values prevent blocking on completion.
+	XferDoneChannelSize int
+
+	// CloseTransferChannelSize defines the buffer size for the channel used to signal
+	// transfer processor goroutines to shut down cleanly. Sized to accommodate
+	// the maximum number of transfer processors that may need to be stopped.
+	CloseTransferChannelSize int
+}
+
+// GetChannelSizeConfig returns channel size configuration based on build mode
+func GetChannelSizeConfig() ChannelSizeConfig {
+	if buildmode.IsMover {
+		return ChannelSizeConfig{
+			PartsChannelSize:         1000,
+			TransferChannelSize:      20000,
+			ChunkChannelSize:         20000,
+			PartCreatedChannelSize:   100,
+			XferDoneChannelSize:      1000,
+			CloseTransferChannelSize: 100,
+		}
+	}
+
+	// Default build uses standard channel sizes
+	return ChannelSizeConfig{
+		PartsChannelSize:         10000,
+		TransferChannelSize:      100000,
+		ChunkChannelSize:         100000,
+		PartCreatedChannelSize:   100,
+		XferDoneChannelSize:      1000,
+		CloseTransferChannelSize: 100,
+	}
 }
 
 // InMemoryTransitJobState defines job state transit in memory, and not in JobPartPlan file.
@@ -136,12 +196,8 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	commandString string, logFileFolder string, tuner ConcurrencyTuner,
 	pacer PacerAdmin, slicePool common.ByteSlicePooler, cacheLimiter common.CacheLimiter, fileCountLimiter common.CacheLimiter,
 	jobLogger common.ILoggerResetable, daemonMode bool) IJobMgr {
-	const channelSize = 100000
-	// PartsChannelSize defines the number of JobParts which can be placed into the
-	// parts channel. Any JobPart which comes from FE and partChannel is full,
-	// has to wait and enumeration of transfer gets blocked till then.
-	// TODO : PartsChannelSize Needs to be discussed and can change.
-	const PartsChannelSize = 10000
+
+	config := GetChannelSizeConfig()
 
 	// partsCh is the channel in which all JobParts are put
 	// for scheduling transfers. When the next JobPart order arrives
@@ -149,10 +205,10 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	// puts the JobPartMgr in partchannel
 	// from which each part is picked up one by one
 	// and transfers of that JobPart are scheduled
-	partsCh := make(chan IJobPartMgr, PartsChannelSize)
+	partsCh := make(chan IJobPartMgr, config.PartsChannelSize)
 	// Create normal & low transfer/chunk channels
-	normalTransferCh, normalChunkCh := make(chan IJobPartTransferMgr, channelSize), make(chan chunkFunc, channelSize)
-	lowTransferCh, lowChunkCh := make(chan IJobPartTransferMgr, channelSize), make(chan chunkFunc, channelSize)
+	normalTransferCh, normalChunkCh := make(chan IJobPartTransferMgr, config.TransferChannelSize), make(chan chunkFunc, config.ChunkChannelSize)
+	lowTransferCh, lowChunkCh := make(chan IJobPartTransferMgr, config.TransferChannelSize), make(chan chunkFunc, config.ChunkChannelSize)
 
 	// atomicAllTransfersScheduled is set to 1 since this api is also called when new job part is ordered.
 	enableChunkLogOutput := level == common.LogDebug
@@ -162,8 +218,8 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	var jstm jobStatusManager
 	jstm.respChan = make(chan common.ListJobSummaryResponse)
 	jstm.listReq = make(chan struct{})
-	jstm.partCreated = make(chan JobPartCreatedMsg, 100)
-	jstm.xferDone = make(chan xferDoneMsg, 1000)
+	jstm.partCreated = make(chan JobPartCreatedMsg, config.PartCreatedChannelSize)
+	jstm.xferDone = make(chan xferDoneMsg, config.XferDoneChannelSize)
 	jstm.xferDoneDrained = make(chan struct{})
 	jstm.statusMgrDone = make(chan struct{})
 	// Different logger for each job.
@@ -193,7 +249,7 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 			lowTransferCh:    lowTransferCh,
 			normalChunckCh:   normalChunkCh,
 			lowChunkCh:       lowChunkCh,
-			closeTransferCh:  make(chan struct{}, 100),
+			closeTransferCh:  make(chan struct{}, config.CloseTransferChannelSize),
 			scheduleCloseCh:  make(chan struct{}, 1),
 		},
 		poolSizingChannels: poolSizingChannels{ // all deliberately unbuffered, because pool sizer routine works in lock-step with these - processing them as they happen, never catching up on populated buffer later
