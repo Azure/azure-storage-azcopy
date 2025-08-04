@@ -624,22 +624,18 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 		cca.reportScanningProgress(glcm, throughput)
 		return
 	}
-
-	glcm.Progress(func(format common.OutputFormat) string {
-		if format == common.EOutputFormat.Json() {
-			return cca.getJsonOfSyncJobSummary(summary)
-		}
-
-		// indicate whether constrained by disk or not
-		perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration, false)
-
-		return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (Mb/s): %v%s",
-			summary.PercentComplete,
-			summary.TransfersCompleted,
-			summary.TransfersFailed,
-			summary.TotalTransfers-summary.TransfersCompleted-summary.TransfersFailed,
-			summary.TotalTransfers, perfString, common.ToFixed(throughput, 4), diskString)
-	})
+	transferProgress := common.TransferProgress{
+		ListJobSummaryResponse:   summary,
+		DeleteTotalTransfers:     cca.getDeletionCount(),
+		DeleteTransfersCompleted: cca.getDeletionCount(),
+		Throughput:               throughput,
+		ElapsedTime:              duration,
+		JobType:                  common.EJobType.Sync(),
+	}
+	if common.AzcopyCurrentJobLogger != nil {
+		common.AzcopyCurrentJobLogger.Log(common.LogInfo, common.GetProgressOutputBuilder(transferProgress)(common.EOutputFormat.Text()))
+	}
+	glcm.OnTransferProgress(transferProgress)
 
 	if jobDone {
 		exitCode := common.EExitCode.Success()

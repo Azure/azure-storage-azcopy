@@ -201,9 +201,18 @@ func shouldDisplayPerfStates() bool {
 func GetProgressOutputBuilder(progress TransferProgress) OutputBuilder {
 	return func(format OutputFormat) string {
 		if format == EOutputFormat.Json() {
-			jsonOutput, err := json.Marshal(progress.ListJobSummaryResponse)
-			PanicIfErr(err)
-			return string(jsonOutput)
+			if progress.JobType == EJobType.Sync() {
+				wrapped := ListSyncJobSummaryResponse{ListJobSummaryResponse: progress.ListJobSummaryResponse}
+				wrapped.DeleteTotalTransfers = progress.DeleteTotalTransfers
+				wrapped.DeleteTransfersCompleted = progress.DeleteTransfersCompleted
+				jsonOutput, err := json.Marshal(wrapped)
+				PanicIfErr(err)
+				return string(jsonOutput)
+			} else {
+				jsonOutput, err := json.Marshal(progress.ListJobSummaryResponse)
+				PanicIfErr(err)
+				return string(jsonOutput)
+			}
 		} else {
 			if progress.IsCleanupJob {
 				return fmt.Sprintf("Cleanup %v/%v", progress.TransfersCompleted, progress.TotalTransfers)
@@ -222,13 +231,29 @@ func GetProgressOutputBuilder(progress TransferProgress) OutputBuilder {
 			// indicate whether constrained by disk or not
 			perfString, diskString := getPerfDisplayText(progress.PerfStrings, progress.PerfConstraint, progress.ElapsedTime, progress.JobType == EJobType.Benchmark())
 
-			return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
-				progress.PercentComplete,
-				progress.TransfersCompleted,
-				progress.TransfersFailed,
-				progress.TotalTransfers-(progress.TransfersCompleted+progress.TransfersFailed+progress.TransfersSkipped),
-				progress.TransfersSkipped, progress.TotalTransfers, scanningString, perfString, throughputString, diskString)
-
+			if progress.JobType == EJobType.Sync() {
+				return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Total%s, %s%s",
+					progress.PercentComplete,
+					progress.TransfersCompleted,
+					progress.TransfersFailed,
+					progress.TotalTransfers-progress.TransfersCompleted-progress.TransfersFailed,
+					progress.TotalTransfers,
+					perfString,
+					throughputString,
+					diskString)
+			} else {
+				return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
+					progress.PercentComplete,
+					progress.TransfersCompleted,
+					progress.TransfersFailed,
+					progress.TotalTransfers-(progress.TransfersCompleted+progress.TransfersFailed+progress.TransfersSkipped),
+					progress.TransfersSkipped,
+					progress.TotalTransfers,
+					scanningString,
+					perfString,
+					throughputString,
+					diskString)
+			}
 		}
 	}
 }

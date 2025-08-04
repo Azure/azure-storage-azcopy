@@ -52,7 +52,9 @@ func (JobType) Benchmark() JobType { return JobType(3) }
 
 type TransferProgress struct {
 	ListJobSummaryResponse
-	Throughput  float64
-	ElapsedTime time.Duration
-	JobType     JobType
+	DeleteTotalTransfers     uint32 // (only applicable for sync jobs) total transfers that were scheduled for deletion during the sync job
+	DeleteTransfersCompleted uint32 // (only applicable for sync jobs) total transfers that were deleted during the sync job
+	Throughput               float64
+	ElapsedTime              time.Duration
+	JobType                  JobType
 }
