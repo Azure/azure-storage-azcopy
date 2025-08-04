@@ -317,8 +317,7 @@ func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err 
 	resp = s.sendPartToSte()
 
 	if !resp.JobStarted {
-		return false, fmt.Errorf("copy job part order with JobId %s and part number %d failed to start",
-			s.copyJobTemplate.JobID, s.copyJobTemplate.PartNum) // Note: this is not expected in normal AzCopy operation.
+		return false, NothingScheduledError
 	}
 
 	common.LogToJobLogWithPrefix(FinalPartCreatedMessage, common.LogInfo)
