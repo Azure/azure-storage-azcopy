@@ -109,6 +109,10 @@ func (cooked *CookedCopyCmdArgs) SetIsNfsCopy(isNfsCopy bool) {
 	cooked.isNFSCopy = isNfsCopy
 }
 
+func (cooked *CookedCopyCmdArgs) SetHardlinks(hardlinkHandlingType common.HardlinkHandlingType) {
+	cooked.hardlinks = hardlinkHandlingType
+}
+
 // ============================================================================
 // End CookedCopyCmdArgs - Property Setters
 // ============================================================================
@@ -315,6 +319,8 @@ type RawMoverSyncCmdArgs struct {
 	CompareHash             string
 	LocalHashStorageMode    string
 	IsNfsCopy               bool
+	Hardlinks               string
+	IncludeDirectoryStubs   bool
 }
 
 type SyncCmdArgsInput struct {
@@ -332,6 +338,8 @@ type SyncCmdArgsInput struct {
 	Md5ValidationOption     string
 	CompareHash             string
 	LocalHashStorageMode    string
+	IsNfsCopy               bool
+	Hardlinks               string
 }
 
 func CookRawSyncCmdArgs(args RawMoverSyncCmdArgs) (cookedSyncCmdArgs, error) {
@@ -352,6 +360,8 @@ func CookRawSyncCmdArgs(args RawMoverSyncCmdArgs) (cookedSyncCmdArgs, error) {
 		compareHash:             args.CompareHash,
 		localHashStorageMode:    args.LocalHashStorageMode,
 		isNFSCopy:               args.IsNfsCopy,
+		hardlinks:               args.Hardlinks,
+		includeDirectoryStubs:   args.IncludeDirectoryStubs,
 	}
 	return raw.cook()
 }
