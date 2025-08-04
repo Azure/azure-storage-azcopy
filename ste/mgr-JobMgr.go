@@ -982,6 +982,15 @@ func (jm *jobMgr) ScheduleTransfer(priority common.JobPriority, jptm IJobPartTra
 	case common.EJobPriority.Normal():
 		// jptm.SetChunkChannel(ja.xferChannels.normalChunckCh)
 		jm.coordinatorChannels.normalTransferCh <- jptm
+
+		// Check the channel "fullness" and decide how much to sleep.
+		// This is to prevent frequent sleep-wake cycles that can slow down the transfer process.
+		if ms := common.CalculateChannelBackPressureDelay(
+			len(jm.coordinatorChannels.normalTransferCh),
+			cap(jm.coordinatorChannels.normalTransferCh),
+			common.DefaultProfile); ms > 0 {
+			time.Sleep(time.Duration(ms) * time.Millisecond)
+		}
 	case common.EJobPriority.Low():
 		// jptm.SetChunkChannel(ja.xferChannels.lowChunkCh)
 		jm.coordinatorChannels.lowTransferCh <- jptm
@@ -1006,6 +1015,13 @@ func (jm *jobMgr) ScheduleChunk(priority common.JobPriority, chunkFunc chunkFunc
 // its transfers will be scheduled
 func (jm *jobMgr) QueueJobParts(jpm IJobPartMgr) {
 	jm.coordinatorChannels.partsChannel <- jpm
+
+	if ms := common.CalculateChannelBackPressureDelay(
+		len(jm.coordinatorChannels.partsChannel),
+		cap(jm.coordinatorChannels.partsChannel),
+		common.DefaultProfile); ms > 0 {
+		time.Sleep(time.Duration(ms) * time.Millisecond)
+	}
 }
 
 // deleteJobPartsMgrs remove jobPartMgrs from jobPartToJobPartMgr kv.
@@ -1198,6 +1214,13 @@ func (jm *jobMgr) transferProcessor(workerID int) {
 			// TODO fix preceding space
 			jptm.Log(common.LogDebug, fmt.Sprintf("has worker %d which is processing TRANSFER %d", workerID, jptm.(*jobPartTransferMgr).transferIndex))
 			jptm.StartJobXfer()
+
+			if ms := common.CalculateChannelBackPressureDelay(
+				len(jm.coordinatorChannels.normalTransferCh),
+				cap(jm.coordinatorChannels.normalTransferCh),
+				common.DefaultProfile); ms > 0 {
+				time.Sleep(time.Duration(ms) * time.Millisecond)
+			}
 		}
 	}
 
