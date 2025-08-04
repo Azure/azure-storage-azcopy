@@ -279,9 +279,8 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 		resp := s.sendPartToSte()
 
 		// TODO: If we ever do launch errors outside of the final "no transfers" error, make them output nicer things here.
-		if !resp.JobStarted {
-			return fmt.Errorf("copy job part order with JobId %s and part number %d failed to start",
-				s.copyJobTemplate.JobID, s.copyJobTemplate.PartNum) // Note: this is not expected in normal AzCopy operation.
+		if resp.ErrorMsg != "" {
+			return errors.New(string(resp.ErrorMsg))
 		}
 
 		// reset the transfers buffer
@@ -317,8 +316,12 @@ func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err 
 	resp = s.sendPartToSte()
 
 	if !resp.JobStarted {
-		return false, fmt.Errorf("copy job part order with JobId %s and part number %d failed to start",
-			s.copyJobTemplate.JobID, s.copyJobTemplate.PartNum) // Note: this is not expected in normal AzCopy operation.
+		if resp.ErrorMsg == common.ECopyJobPartOrderErrorType.NoTransfersScheduledErr() {
+			return false, NothingScheduledError
+		}
+
+		return false, fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s",
+			s.copyJobTemplate.JobID, s.copyJobTemplate.PartNum, resp.ErrorMsg)
 	}
 
 	common.LogToJobLogWithPrefix(FinalPartCreatedMessage, common.LogInfo)

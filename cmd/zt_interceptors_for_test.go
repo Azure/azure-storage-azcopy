@@ -38,7 +38,7 @@ func (i *interceptor) intercept(copyRequest common.CopyJobPartOrderRequest) comm
 	if len(i.transfers) != 0 || !copyRequest.IsFinalPart {
 		return common.CopyJobPartOrderResponse{JobStarted: true}
 	} else {
-		return common.CopyJobPartOrderResponse{JobStarted: false}
+		return common.CopyJobPartOrderResponse{JobStarted: false, ErrorMsg: common.ECopyJobPartOrderErrorType.NoTransfersScheduledErr()}
 	}
 }
 
