@@ -56,7 +56,6 @@ func TestVersionCommand(t *testing.T) {
 		t.Log("Invalid output " + string(output))
 		t.FailNow()
 	}
-
 	//first line should contain the version similar to "azcopy version 10.22.0"
 	if lines[0] != azcopyVersionString {
 		t.Log("Invalid version string: " + lines[0])

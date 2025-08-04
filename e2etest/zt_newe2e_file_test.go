@@ -227,6 +227,7 @@ func (s *FileTestSuite) Scenario_DownloadPreserveLMTFile(svm *ScenarioVariationM
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body: body,
 		ObjectProperties: ObjectProperties{
+
 			LastModifiedTime: srcObjLMT,
 		},
 	}, false)
@@ -662,10 +663,6 @@ func (s *FileTestSuite) Scenario_SingleFileDownloadNoError(svm *ScenarioVariatio
 		Targets:    []ResourceManager{srcObj, destObj},
 		ShouldFail: false,
 	})
-
-	//ValidateResource[ObjectResourceManager](svm, destObj, ResourceDefinitionObject{
-	//	Body: body,
-	//}, true)
 
 	ValidateDoesNotContainError(svm, stdOut, []string{"interrupted system call"})
 }

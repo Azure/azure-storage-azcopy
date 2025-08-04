@@ -18,46 +18,30 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package azcopy
 
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/stretchr/testify/assert"
-	"testing"
-	"time"
+	"github.com/minio/minio-go"
+	"math"
+	"net/http"
 )
 
-func TestSortJobs(t *testing.T) {
-	a := assert.New(t)
-	// setup
-	job2 := common.JobIDDetails{
-		JobId:         common.NewJobID(),
-		StartTime:     time.Now().UnixNano(),
-		CommandString: "dummy2",
-	}
+// processOSSpecificInitialization changes the soft limit for filedescriptor for process
+// return the filedescriptor limit for process. If the function fails with some, it returns
+// the error
+// TODO: this api is implemented for windows as well but not required because Windows
+// does not default to a precise low limit like Linux does
+func processOSSpecificInitialization() (int, error) {
 
-	// sleep for a bit so that the time stamp is different
-	time.Sleep(time.Millisecond)
-	job1 := common.JobIDDetails{
-		JobId:         common.NewJobID(),
-		StartTime:     time.Now().UnixNano(),
-		CommandString: "dummy1",
-	}
+	// this exaggerates what's possible, but is accurate enough for our purposes, in which our goal is simply to apply no specific limit on Windows
+	const effectivelyUnlimited = math.MaxInt32
 
-	// sleep for a bit so that the time stamp is different
-	time.Sleep(time.Millisecond)
-	job0 := common.JobIDDetails{
-		JobId:         common.NewJobID(),
-		StartTime:     time.Now().UnixNano(),
-		CommandString: "dummy0",
-	}
-	jobsList := []common.JobIDDetails{job2, job1, job0}
+	return effectivelyUnlimited, nil
+}
 
-	// act
-	sortJobs(jobsList)
-
-	// verify
-	a.Equal(job0, jobsList[0])
-	a.Equal(job1, jobsList[1])
-	a.Equal(job2, jobsList[2])
+func init() {
+	//Catch everything that uses http.DefaultTransport with ieproxy.GetProxyFunc()
+	http.DefaultTransport.(*http.Transport).Proxy = common.GlobalProxyLookup
+	minio.DefaultTransport.(*http.Transport).Proxy = common.GlobalProxyLookup
 }
