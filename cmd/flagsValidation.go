@@ -295,7 +295,7 @@ func validateShareProtocolCompatibility(
 		return fmt.Errorf("The %s share has NFS protocol enabled. To copy %s a NFS share, use the appropriate --from-to flag value", direction, direction)
 	}
 
-	return protocol, nil
+	return nil
 }
 
 // getShareProtocolType returns "SMB", "NFS", or "UNKNOWN" based on the share's enabled protocols.
