@@ -238,8 +238,9 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			return fmt.Errorf("cannot list objects, %v", objectInfo.Err)
 		}
 
-		if objectInfo.StorageClass == "" {
+		if objectInfo.StorageClass == "" && !t.includeDirectoryOrPrefix {
 			// Directories are the only objects without storage classes.
+			// Skip directories if not using sync orchestrator
 			continue
 		}
 
@@ -254,12 +255,6 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 		objectName := objectPath[len(objectPath)-1]
 		var storedObject StoredObject
 		if objectInfo.StorageClass == "" {
-
-			// Directories are the only objects without storage classes.
-			if !t.includeDirectoryOrPrefix {
-				// Skip directories if not using sync orchestrator
-				continue
-			}
 
 			// For sync orchestrator, we need to treat directories as objects.
 			storedObject = newStoredObject(
@@ -311,10 +306,6 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 				t.s3URLParts.BucketName)
 		}
 
-		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter(storedObject.entityType)
-		}
-
 		err = processIfPassedFilters(filters,
 			storedObject,
 			processor)
@@ -347,7 +338,8 @@ func newS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTrave
 		// This can be adopted by default but keeping it scoped to Mover flow for now.
 
 		if t.getProperties {
-			WarnStdoutAndScanningLog("getProperties is being changed to false for S3 traverser for performance improvement.")
+			// Skipping logging to reduce noise in the logs.
+			// WarnStdoutAndScanningLog("getProperties is being changed to false for S3 traverser for performance improvement.")
 		}
 
 		t.getProperties = false
