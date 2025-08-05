@@ -2,7 +2,9 @@ package e2etest
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"strconv"
@@ -19,6 +21,16 @@ const (
 
 func UploadMemoryProfile(a Asserter, profilePath string, runCount uint) {
 	if GlobalConfig.E2EFrameworkSpecialConfig.SkipTelemetry {
+		return
+	}
+
+	if _, err := os.Stat(profilePath); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			a.Log("no pprof data generated")
+			return
+		}
+
+		a.NoError("profile cannot be accessed", err)
 		return
 	}
 
