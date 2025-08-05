@@ -26,7 +26,14 @@ type JobLifecycleHandler interface {
 	OnStart(ctx JobContext)
 
 	OnScanProgress(progress ScanProgress) // only called during sync jobs
+
 	OnTransferProgress(progress TransferProgress)
+
+	OnComplete(message string, code ExitCode)
+}
+
+type JobSummary struct {
+	Code ExitCode
 }
 
 type JobContext struct {
