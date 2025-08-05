@@ -76,30 +76,8 @@ func TestFolderCreationTracker_directoryCreate(t *testing.T) {
 		atomic.AddInt32(&numOfCreations, 1)
 		return nil
 	}
-
 	ch := make(chan bool)
-	for i := 0; i < 50; i++ {
-		wg.Add(1)
-		go func() {
-			<-ch
-			err := fct.CreateFolder(folderReg, doCreation)
-			assert.NoError(t, err)
-			wg.Done()
-		}()
-	}
-	close(ch) // this will cause all above go rotuines to start creating folder
 
-	wg.Wait()
-	a.Equal(int32(1), numOfCreations)
-	a.Equal(common.ETransferStatus.FolderCreated(), plan.transfers[regIdx].atomicTransferStatus)
-
-	// similar test for unregistered folder
-	numOfCreations = 0
-	ch = make(chan bool)
-	doCreation = func() error {
-		atomic.AddInt32(&numOfCreations, 1)
-		return nil
-	}
 	for i := 0; i < 50; i++ {
 		wg.Add(1)
 		go func() {
@@ -114,8 +92,33 @@ func TestFolderCreationTracker_directoryCreate(t *testing.T) {
 	wg.Wait()
 	a.Equal(int32(1), numOfCreations)
 	a.Equal(common.ETransferStatus.NotStarted(), plan.transfers[unregIdx].atomicTransferStatus) // validate that no state was written
+	a.Equal(common.ETransferStatus.NotStarted(), plan.transfers[regIdx].atomicTransferStatus)   // validate that the overlap bug didn't occur
 
 	// register the new folder, validate state persistence
 	fct.RegisterPropertiesTransfer(folderUnReg, unregIdx.partNum, unregIdx.transferIndex)
 	a.Equal(common.ETransferStatus.FolderCreated(), plan.transfers[unregIdx].atomicTransferStatus)
+	a.Equal(common.ETransferStatus.NotStarted(), plan.transfers[regIdx].atomicTransferStatus) // validate that the overlap bug didn't occur
+
+	// now test the prereg folder and validate the write occurs on creation
+	numOfCreations = 0
+	ch = make(chan bool)
+	doCreation = func() error {
+		atomic.AddInt32(&numOfCreations, 1)
+		return nil
+	}
+
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func() {
+			<-ch
+			err := fct.CreateFolder(folderReg, doCreation)
+			assert.NoError(t, err)
+			wg.Done()
+		}()
+	}
+	close(ch) // this will cause all above go rotuines to start creating folder
+
+	wg.Wait()
+	a.Equal(int32(1), numOfCreations)
+	a.Equal(common.ETransferStatus.FolderCreated(), plan.transfers[regIdx].atomicTransferStatus)
 }
