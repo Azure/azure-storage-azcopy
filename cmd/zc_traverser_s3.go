@@ -361,30 +361,16 @@ func newS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTrave
 
 	if err != nil {
 		return
-	} else {
-		t.s3URLParts = s3URLPartsExtension{s3URLParts}
 	}
+
+	t.s3URLParts = s3URLPartsExtension{s3URLParts}
 
 	showS3UrlTypeWarning(s3URLParts)
 
-	//Optional check for custom credential provider
-	var credProvider credentials.Provider = nil
-	creds := ctx.Value(customCreds)
-	if creds != nil {
-		credProvider = creds.(credentials.Provider) //if passed through context, use custom provider
+	t.s3Client, err = GetS3TraverserGlobalClientManager().GetS3Client(ctx, s3URLParts, *opts.Credential)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get S3 client from global manager: %w", err)
 	}
-
-	t.s3Client, err = common.CreateS3Client(t.ctx, common.CredentialInfo{
-		CredentialType: opts.Credential.CredentialType,
-		S3CredentialInfo: common.S3CredentialInfo{
-			Endpoint: t.s3URLParts.Endpoint,
-			Region:   t.s3URLParts.Region,
-			Provider: credProvider, //will pass nil in most cases, but if provider is implemented and passed explicitly, it will be used
-
-		},
-	}, common.CredentialOpOptions{
-		LogError: glcm.Error,
-	}, azcopyScanningLogger)
 
 	return
 }
@@ -404,3 +390,55 @@ func showS3UrlTypeWarning(s3URLParts common.S3URLParts) {
 }
 
 var s3UrlWarningOncer = &sync.Once{}
+
+// Global S3 client manager for reusing clients across operations
+// This is particularly useful for sync orchestrator which creates many traversers for different path prefixes
+// This allows us to avoid creating a new S3 client for each traverser, improving performance and reducing resource usage.
+// This is a singleton instance, so it can be shared across multiple traversers.
+// It uses sync.Once to ensure that the client is created only once, even if multiple traversers are created concurrently.
+var s3TraverserGlobalClientManager = &S3ClientManager{}
+
+type S3ClientManager struct {
+	client *minio.Client
+	once   sync.Once
+	err    error
+}
+
+func (m *S3ClientManager) GetS3Client(ctx context.Context, s3URLParts common.S3URLParts, credInfo common.CredentialInfo) (*minio.Client, error) {
+	m.once.Do(func() {
+		// XDM: Do we need retry here?
+		m.client, m.err = CreateSharedS3Client(ctx, s3URLParts, credInfo.CredentialType)
+	})
+	return m.client, m.err
+}
+
+// GetS3TraverserGlobalClientManager returns the global S3 client manager instance
+// This is particularly useful for sync orchestrator which creates many traversers for different path prefixes
+// This allows us to avoid creating a new S3 client for each traverser, improving performance and reducing resource usage.
+// This is a singleton instance, so it can be shared across multiple traversers.
+// It uses sync.Once to ensure that the client is created only once, even if multiple traversers are created concurrently.
+func GetS3TraverserGlobalClientManager() *S3ClientManager {
+	return s3TraverserGlobalClientManager
+}
+
+// CreateSharedS3Client creates a shared S3 client that can be reused across multiple traversers
+// This is particularly useful for sync orchestrator which creates many traversers for different path prefixes
+func CreateSharedS3Client(ctx context.Context, s3URLParts common.S3URLParts, credentialType common.CredentialType) (*minio.Client, error) {
+	//Optional check for custom credential provider
+	var credProvider credentials.Provider = nil
+	creds := ctx.Value(customCreds)
+	if creds != nil {
+		credProvider = creds.(credentials.Provider) //if passed through context, use custom provider
+	}
+
+	return common.CreateS3Client(ctx, common.CredentialInfo{
+		CredentialType: credentialType,
+		S3CredentialInfo: common.S3CredentialInfo{
+			Endpoint: s3URLParts.Endpoint,
+			Region:   s3URLParts.Region,
+			Provider: credProvider,
+		},
+	}, common.CredentialOpOptions{
+		LogError: glcm.Error,
+	}, azcopyScanningLogger)
+}
