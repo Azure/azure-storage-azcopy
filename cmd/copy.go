@@ -22,7 +22,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -1321,7 +1320,6 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 	// fetch a job status
 	summary := jobsAdmin.GetJobSummary(cca.jobID)
 	summary.IsCleanupJob = cca.isCleanupJob // only FE knows this, so we can only set it here
-	cleanupStatusString := fmt.Sprintf("Cleanup %v/%v", summary.TransfersCompleted, summary.TotalTransfers)
 
 	jobDone := summary.JobStatus.IsJobDone()
 	totalKnownCount = summary.TotalTransfers
@@ -1365,125 +1363,28 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 			exitCode = common.EExitCode.Error()
 		}
 
-		builder := func(format common.OutputFormat) string {
-			if format == common.EOutputFormat.Json() {
-				jsonOutput, err := json.Marshal(summary)
-				common.PanicIfErr(err)
-				return string(jsonOutput)
-			} else {
-				screenStats, logStats := formatExtraStats(cca.FromTo, summary.AverageIOPS, summary.AverageE2EMilliseconds, summary.NetworkErrorPercentage, summary.ServerBusyPercentage)
+		jobSummary := common.JobSummary{
+			ExitCode:               exitCode,
+			ListJobSummaryResponse: summary,
+			JobType:                common.EJobType.Copy(),
+		}
 
-				output := fmt.Sprintf(
-					`
-
-Job %s summary
-Elapsed Time (Minutes): %v
-Number of File Transfers: %v
-Number of Folder Property Transfers: %v
-Number of Symlink Transfers: %v
-Total Number of Transfers: %v
-Number of File Transfers Completed: %v
-Number of Folder Transfers Completed: %v
-Number of File Transfers Failed: %v
-Number of Folder Transfers Failed: %v
-Number of File Transfers Skipped: %v
-Number of Folder Transfers Skipped: %v
-Number of Symbolic Links Skipped: %v
-Number of Hardlinks Converted: %v
-Number of Special Files Skipped: %v
-Total Number of Bytes Transferred: %v
-Final Job Status: %v%s%s
-`,
-					summary.JobID.String(),
-					common.ToFixed(duration.Minutes(), 4),
-					summary.FileTransfers,
-					summary.FolderPropertyTransfers,
-					summary.SymlinkTransfers,
-					summary.TotalTransfers,
-					summary.TransfersCompleted-summary.FoldersCompleted,
-					summary.FoldersCompleted,
-					summary.TransfersFailed-summary.FoldersFailed,
-					summary.FoldersFailed,
-					summary.TransfersSkipped-summary.FoldersSkipped,
-					summary.FoldersSkipped,
-					summary.SkippedSymlinkCount,
-					summary.HardlinksConvertedCount,
-					summary.SkippedSpecialFileCount,
-					summary.TotalBytesTransferred,
-					summary.JobStatus,
-					screenStats,
-					formatPerfAdvice(summary.PerformanceAdvice))
-
-				// abbreviated output for cleanup jobs
-				if cca.isCleanupJob {
-					output = fmt.Sprintf("%s: %s)", cleanupStatusString, summary.JobStatus)
-				}
-
-				// log to job log
-				jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
-				if exists {
-					// Passing this as LogError ensures the stats are always logged.
-					jobMan.Log(common.LogError, logStats+"\n"+output)
-				}
-				return output
-			}
+		_, logStats := common.FormatExtraStats(jobSummary.JobType, summary.AverageIOPS, summary.AverageE2EMilliseconds, summary.NetworkErrorPercentage, summary.ServerBusyPercentage)
+		// log to job log
+		jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
+		if exists {
+			// Passing this as LogError ensures the stats are always logged.
+			jobMan.Log(common.LogError, logStats+"\n"+common.GetJobSummaryOutputBuilder(jobSummary)(common.EOutputFormat.Text()))
 		}
 
 		if cca.hasFollowup() {
-			lcm.Exit(builder, common.EExitCode.NoExit()) // leave the app running to process the followup
+			jobSummary.ExitCode = common.EExitCode.NoExit()
+			lcm.OnComplete(jobSummary)
 			cca.launchFollowup(exitCode)
 			lcm.SurrenderControl() // the followup job will run on its own goroutines
 		} else {
-			lcm.Exit(builder, exitCode)
+			lcm.OnComplete(jobSummary)
 		}
-	}
-
-	return
-}
-
-func formatPerfAdvice(advice []common.PerformanceAdvice) string {
-	if len(advice) == 0 {
-		return ""
-	}
-	b := strings.Builder{}
-	b.WriteString("\n\n") // two newlines to separate the perf results from everything else
-	b.WriteString("Performance benchmark results: \n")
-	b.WriteString("Note: " + common.BenchmarkPreviewNotice + "\n")
-	for _, a := range advice {
-		b.WriteString("\n")
-		pri := "Main"
-		if !a.PriorityAdvice {
-			pri = "Additional"
-		}
-		b.WriteString(pri + " Result:\n")
-		b.WriteString("  Code:   " + a.Code + "\n")
-		b.WriteString("  Desc:   " + a.Title + "\n")
-		b.WriteString("  Reason: " + a.Reason + "\n")
-	}
-	b.WriteString("\n")
-	b.WriteString(common.BenchmarkFinalDisclaimer)
-	if runtime.GOOS == "linux" {
-		b.WriteString(common.BenchmarkLinuxExtraDisclaimer)
-	}
-	return b.String()
-}
-
-// format extra stats to include in the log.  If benchmarking, also output them on screen (but not to screen in normal
-// usage because too cluttered)
-func formatExtraStats(fromTo common.FromTo, avgIOPS int, avgE2EMilliseconds int, networkErrorPercent float32, serverBusyPercent float32) (screenStats, logStats string) {
-	logStats = fmt.Sprintf(
-		`
-
-Diagnostic stats:
-IOPS: %v
-End-to-end ms per request: %v
-Network Errors: %.2f%%
-Server Busy: %.2f%%`,
-		avgIOPS, avgE2EMilliseconds, networkErrorPercent, serverBusyPercent)
-
-	if fromTo.From() == common.ELocation.Benchmark() {
-		screenStats = logStats
-		logStats = "" // since will display in the screen stats, and they get logged too
 	}
 
 	return

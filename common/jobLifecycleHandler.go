@@ -29,11 +29,21 @@ type JobLifecycleHandler interface {
 
 	OnTransferProgress(progress TransferProgress)
 
-	OnComplete(message string, code ExitCode)
+	OnComplete(summary JobSummary)
 }
 
 type JobSummary struct {
-	Code ExitCode
+	ExitCode ExitCode
+
+	ListJobSummaryResponse
+
+	DeleteTotalTransfers     uint32 // (only applicable for sync jobs) total transfers that were scheduled for deletion during the sync job
+	DeleteTransfersCompleted uint32 // (only applicable for sync jobs) total transfers that were deleted during the sync job
+	SourceFilesScanned       uint64 // (only applicable for sync jobs)
+	DestinationFilesScanned  uint64 // (only applicable for sync jobs)
+
+	ElapsedTime time.Duration
+	JobType     JobType
 }
 
 type JobContext struct {

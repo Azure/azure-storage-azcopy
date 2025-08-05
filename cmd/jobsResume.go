@@ -22,7 +22,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -123,51 +122,18 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 	glcm.OnTransferProgress(transferProgress)
 
 	if jobDone {
+		// TODO (gapra): Why doesnt resume use the same logic as copy for exit code? if summary.TransfersFailed > 0 || summary.JobStatus == common.EJobStatus.Cancelled() || summary.JobStatus == common.EJobStatus.Cancelling() {
 		exitCode := common.EExitCode.Success()
 		if summary.TransfersFailed > 0 {
 			exitCode = common.EExitCode.Error()
 		}
-
-		lcm.Exit(func(format common.OutputFormat) string {
-			if format == common.EOutputFormat.Json() {
-				jsonOutput, err := json.Marshal(summary)
-				common.PanicIfErr(err)
-				return string(jsonOutput)
-			} else {
-				return fmt.Sprintf(
-					`
-
-Job %s summary
-Elapsed Time (Minutes): %v
-Number of File Transfers: %v
-Number of Folder Property Transfers: %v
-Number of Symlink Transfers: %v
-Total Number of Transfers: %v
-Number of File Transfers Completed: %v
-Number of Folder Transfers Completed: %v
-Number of File Transfers Failed: %v
-Number of Folder Transfers Failed: %v
-Number of File Transfers Skipped: %v
-Number of Folder Transfers Skipped: %v
-Total Number of Bytes Transferred: %v
-Final Job Status: %v
-`,
-					summary.JobID.String(),
-					common.ToFixed(duration.Minutes(), 4),
-					summary.FileTransfers,
-					summary.FolderPropertyTransfers,
-					summary.SymlinkTransfers,
-					summary.TotalTransfers,
-					summary.TransfersCompleted-summary.FoldersCompleted,
-					summary.FoldersCompleted,
-					summary.TransfersFailed-summary.FoldersFailed,
-					summary.FoldersFailed,
-					summary.TransfersSkipped-summary.FoldersSkipped,
-					summary.FoldersSkipped,
-					summary.TotalBytesTransferred,
-					summary.JobStatus)
-			}
-		}, exitCode)
+		jobSummary := common.JobSummary{
+			ExitCode:               exitCode,
+			ListJobSummaryResponse: summary,
+			ElapsedTime:            duration,
+			JobType:                common.EJobType.Resume(),
+		}
+		lcm.OnComplete(jobSummary)
 	}
 
 	return
@@ -203,7 +169,6 @@ func init() {
 			if err != nil {
 				glcm.Error(fmt.Sprintf("failed to perform resume command due to error: %s", err.Error()))
 			}
-			glcm.Exit(nil, common.EExitCode.Success())
 		},
 	}
 

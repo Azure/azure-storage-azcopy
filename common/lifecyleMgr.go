@@ -50,6 +50,8 @@ var lcm = func() (lcmgr *lifecycleMgr) {
 // but they would not be able to instantiate one
 type LifecycleMgr interface {
 	JobLifecycleHandler
+	// TODO (gapra) : For copy, sync, resume - we use the OnComplete method to support AzCopy as a library.
+	// I honestly don't think we need this in an ideal simple implementation of AzCopy, but it is used in the code and will take some rework and testing to fully remove.
 	Exit(OutputBuilder, ExitCode)                                // indicates successful execution exit after printing, allow user to specify exit code
 	Info(string)                                                 // simple print, allowed to float up
 	Warn(string)                                                 // simple print, allowed to float up
@@ -272,6 +274,11 @@ func (lcm *lifecycleMgr) OnTransferProgress(progress TransferProgress) {
 		msgContent: o(lcm.outputFormat),
 		msgType:    EOutputMessageType.Progress(),
 	}
+}
+
+func (lcm *lifecycleMgr) OnComplete(summary JobSummary) {
+	o := GetJobSummaryOutputBuilder(summary)
+	lcm.Exit(o, summary.ExitCode)
 }
 
 func (lcm *lifecycleMgr) Info(msg string) {
