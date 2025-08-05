@@ -13,17 +13,24 @@ type FolderCreationTracker common.FolderCreationTracker
 
 type JPPTCompatibleFolderCreationTracker interface {
 	FolderCreationTracker
-	RegisterPropertiesTransfer(folder string, transferIndex uint32)
+	RegisterPropertiesTransfer(folder string, partNum PartNumber, transferIndex uint32)
 }
 
-func NewFolderCreationTracker(fpo common.FolderPropertyOption, plan *JobPartPlanHeader) FolderCreationTracker {
+func NewFolderCreationTracker(fpo common.FolderPropertyOption, jobMgr IJobMgr) FolderCreationTracker {
 	switch fpo {
 	case common.EFolderPropertiesOption.AllFolders(),
 		common.EFolderPropertiesOption.AllFoldersExceptRoot():
 		return &jpptFolderTracker{ // This prevents a dependency cycle. Reviewers: Are we OK with this? Can you think of a better way to do it?
-			plan:                   plan,
+			fetchTransfer: func(index jpptFolderIndex) *JobPartPlanTransfer {
+				mgr, ok := jobMgr.JobPartMgr(index.partNum)
+				if !ok {
+					panic(fmt.Errorf("sanity check: failed to fetch job part manager %d", index.partNum))
+				}
+
+				return mgr.Plan().Transfer(index.transferIndex)
+			},
 			mu:                     &sync.Mutex{},
-			contents:               make(map[string]uint32),
+			contents:               make(map[string]jpptFolderIndex),
 			unregisteredButCreated: make(map[string]struct{}),
 		}
 	case common.EFolderPropertiesOption.NoFolders():
@@ -53,13 +60,19 @@ func (f *nullFolderTracker) StopTracking(folder string) {
 }
 
 type jpptFolderTracker struct {
-	plan                   IJobPartPlanHeader
+	// fetchTransfer is used instead of a IJobMgr reference to support testing
+	fetchTransfer          func(index jpptFolderIndex) *JobPartPlanTransfer
 	mu                     *sync.Mutex
-	contents               map[string]uint32
+	contents               map[string]jpptFolderIndex
 	unregisteredButCreated map[string]struct{}
 }
 
-func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, transferIndex uint32) {
+type jpptFolderIndex struct {
+	partNum       PartNumber
+	transferIndex uint32
+}
+
+func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, partNum PartNumber, transferIndex uint32) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -67,11 +80,14 @@ func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, transferIn
 		return // Never persist to dev-null
 	}
 
-	f.contents[folder] = transferIndex
+	f.contents[folder] = jpptFolderIndex{
+		partNum:       partNum,
+		transferIndex: transferIndex,
+	}
 
 	// We created it before it was enumerated-- Let's register that now.
 	if _, ok := f.unregisteredButCreated[folder]; ok {
-		f.plan.Transfer(transferIndex).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
+		f.fetchTransfer(jpptFolderIndex{partNum: partNum, transferIndex: transferIndex}).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
 
 		delete(f.unregisteredButCreated, folder)
 	}
@@ -86,7 +102,7 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 	}
 
 	if idx, ok := f.contents[folder]; ok &&
-		f.plan.Transfer(idx).TransferStatus() == (common.ETransferStatus.FolderCreated()) {
+		f.fetchTransfer(idx).TransferStatus() == (common.ETransferStatus.FolderCreated()) {
 		return nil
 	}
 
@@ -101,7 +117,7 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 
 	if idx, ok := f.contents[folder]; ok {
 		// overwrite it's transfer status
-		f.plan.Transfer(idx).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
+		f.fetchTransfer(idx).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
 	} else {
 		// A folder hasn't been hit in traversal yet.
 		// Recording it in memory is OK, because we *cannot* resume a job that hasn't finished traversal.
@@ -128,7 +144,7 @@ func (f *jpptFolderTracker) ShouldSetProperties(folder string, overwrite common.
 
 		var created bool
 		if idx, ok := f.contents[folder]; ok {
-			created = f.plan.Transfer(idx).TransferStatus() == common.ETransferStatus.FolderCreated()
+			created = f.fetchTransfer(idx).TransferStatus() == common.ETransferStatus.FolderCreated()
 		} else {
 			// This should not happen, ever.
 			// Folder property jobs register with the tracker before they start getting processed.
