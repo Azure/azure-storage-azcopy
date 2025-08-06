@@ -32,18 +32,11 @@ parameters:
     type: boolean
     default: false
 
-<<<<<<< HEAD
   - name: remove_packages
     displayName: 'Remove Linux Packages'
     type: string
     default: ''
 
-=======
-  - name: test_pmc_connection
-    displayName: 'Test PMC Connection without Publishing Artifacts to Linux Repos'
-    type: boolean
-    default: false
->>>>>>> 2d0ac54f0a6b9620e692ed3f724a33990421c0dd
 # Do not trigger this pipeline automatically
 trigger: none
 pr: none
@@ -178,48 +171,48 @@ extends:
                   host_architecture: 'arm64'
                   host_suffix: 'arm64'
 
-          - job: Windows
-            timeoutInMinutes: 120
-            pool:
-              name: azcopy-pool
-              image: windows2022-1espt
-              os: windows
-            # If the pipeline publishes artifacts, use `templateContext` to define the artifacts.
-            # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
-            templateContext:
-              outputs:
-                - output: pipelineArtifact
-                  targetPath: $(System.DefaultWorkingDirectory)\binaries
-                  artifactName: 'azcopy-windows-unsigned'
-                  displayName: 'Upload Windows Unsigned'
-            variables:
-              - name: binaries
-                value: '$(System.DefaultWorkingDirectory)\binaries'
+          # - job: Windows
+          #   timeoutInMinutes: 120
+          #   pool:
+          #     name: azcopy-pool
+          #     image: windows2022-1espt
+          #     os: windows
+          #   # If the pipeline publishes artifacts, use `templateContext` to define the artifacts.
+          #   # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
+          #   templateContext:
+          #     outputs:
+          #       - output: pipelineArtifact
+          #         targetPath: $(System.DefaultWorkingDirectory)\binaries
+          #         artifactName: 'azcopy-windows-unsigned'
+          #         displayName: 'Upload Windows Unsigned'
+          #   variables:
+          #     - name: binaries
+          #       value: '$(System.DefaultWorkingDirectory)\binaries'
 
-            steps:
-              - template: azurePipelineTemplates/build_windows.yml@self
+          #   steps:
+          #     - template: azurePipelineTemplates/build_windows.yml@self
 
-          - job: MacOS
-            timeoutInMinutes: 360
-            pool:
-              name: Azure Pipelines
-              image: macos-latest
-              os: macOS
-            templateContext:
-              outputs:
-                - output: pipelineArtifact
-                  targetPath: $(System.DefaultWorkingDirectory)/unsigned
-                  artifactName: 'azcopy-mac-unsigned'
-                  displayName: 'Upload Mac Unsigned'
+          # - job: MacOS
+          #   timeoutInMinutes: 360
+          #   pool:
+          #     name: Azure Pipelines
+          #     image: macos-latest
+          #     os: macOS
+          #   templateContext:
+          #     outputs:
+          #       - output: pipelineArtifact
+          #         targetPath: $(System.DefaultWorkingDirectory)/unsigned
+          #         artifactName: 'azcopy-mac-unsigned'
+          #         displayName: 'Upload Mac Unsigned'
 
-            variables:
-              - name: unsigned
-                value: $(System.DefaultWorkingDirectory)/unsigned
-              - name: azcopy_version
-                value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
+          #   variables:
+          #     - name: unsigned
+          #       value: $(System.DefaultWorkingDirectory)/unsigned
+          #     - name: azcopy_version
+          #       value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
 
-            steps:
-              - template: azurePipelineTemplates/build_macos.yml@self
+          #   steps:
+          #     - template: azurePipelineTemplates/build_macos.yml@self
 
           # - job: MacOS_M1
           #   timeoutInMinutes: 360
@@ -291,7 +284,7 @@ extends:
               - task: UseDotNet@2
                 inputs:
                   packageType: 'sdk'
-                  version: '9.0.x'
+                  version: '6.0.x'
 
               - script: |
                   mkdir -p $(mariner)
@@ -335,104 +328,104 @@ extends:
                   mv $(mariner)/* $(signed)/mariner
                 displayName: 'Make Artifacts executable'
 
-          - job: Windows
-            timeoutInMinutes: 120
-            pool:
-              name: azcopy-pool
-              image: ubuntu22-1espt
-              os: linux
+          # - job: Windows
+          #   timeoutInMinutes: 120
+          #   pool:
+          #     name: azcopy-pool
+          #     image: ubuntu22-1espt
+          #     os: linux
 
-            templateContext:
-              inputs:
-                - input: pipelineArtifact
-                  artifactName: azcopy-windows-unsigned
-                  targetPath: $(System.DefaultWorkingDirectory)/windows
-                  displayName: 'Download Windows Unsigned'
-              outputs:
-                - output: pipelineArtifact
-                  targetPath: $(System.DefaultWorkingDirectory)/signed
-                  artifactName: 'azcopy-windows-signed'
-                  displayName: 'Upload Windows Signed'
-                - output: pipelineArtifact
-                  targetPath: $(System.DefaultWorkingDirectory)/binaries
-                  artifactName: 'azcopy-binaries-windows'
-                  displayName: 'Upload Windows Binaries'
+          #   templateContext:
+          #     inputs:
+          #       - input: pipelineArtifact
+          #         artifactName: azcopy-windows-unsigned
+          #         targetPath: $(System.DefaultWorkingDirectory)/windows
+          #         displayName: 'Download Windows Unsigned'
+          #     outputs:
+          #       - output: pipelineArtifact
+          #         targetPath: $(System.DefaultWorkingDirectory)/signed
+          #         artifactName: 'azcopy-windows-signed'
+          #         displayName: 'Upload Windows Signed'
+          #       - output: pipelineArtifact
+          #         targetPath: $(System.DefaultWorkingDirectory)/binaries
+          #         artifactName: 'azcopy-binaries-windows'
+          #         displayName: 'Upload Windows Binaries'
 
-            variables:
-              - group: AZCOPY_SECRET_VAULT
-              - name: windows
-                value: '$(System.DefaultWorkingDirectory)/windows'
-              - name: signed
-                value: '$(System.DefaultWorkingDirectory)/signed'
-              - name: binaries
-                value: '$(System.DefaultWorkingDirectory)/binaries'
-              - name: azcopy_version
-                value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
+          #   variables:
+          #     - group: AZCOPY_SECRET_VAULT
+          #     - name: windows
+          #       value: '$(System.DefaultWorkingDirectory)/windows'
+          #     - name: signed
+          #       value: '$(System.DefaultWorkingDirectory)/signed'
+          #     - name: binaries
+          #       value: '$(System.DefaultWorkingDirectory)/binaries'
+          #     - name: azcopy_version
+          #       value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
 
-            steps:
-              - script: |
-                  sudo apt-get update
-                  sudo apt-get install -y zip
-                displayName: 'Install dependencies'
+          #   steps:
+          #     - script: |
+          #         sudo apt-get update
+          #         sudo apt-get install -y zip
+          #       displayName: 'Install dependencies'
 
-              - task: UseDotNet@2
-                inputs:
-                  packageType: 'sdk'
-                  version: '9.0.x'
+          #     - task: UseDotNet@2
+          #       inputs:
+          #         packageType: 'sdk'
+          #         version: '6.0.x'
 
-              - template: setup/esrp_sign_windows.yml@self
-                parameters:
-                  FolderPath: $(windows)
-                  ESRP_AZCOPY_WIN_KEY_CODE: $(ESRP_AZCOPY_WIN_KEY_CODE)
-                  Pattern: 'azcopy_windows*'
+          #     - template: setup/esrp_sign_windows.yml@self
+          #       parameters:
+          #         FolderPath: $(windows)
+          #         ESRP_AZCOPY_WIN_KEY_CODE: $(ESRP_AZCOPY_WIN_KEY_CODE)
+          #         Pattern: 'azcopy_windows*'
 
-              - script: |
-                  mkdir -p $(binaries)
-                  mkdir -p $(signed)
-                  chmod 755 $(windows)/*
-                  rm -rf $(windows)/*.md
-                displayName: 'Make Artifacts executable'
+          #     - script: |
+          #         mkdir -p $(binaries)
+          #         mkdir -p $(signed)
+          #         chmod 755 $(windows)/*
+          #         rm -rf $(windows)/*.md
+          #       displayName: 'Make Artifacts executable'
 
-              - script: |
-                  windows_amd64="$(System.DefaultWorkingDirectory)/azcopy_windows_amd64_$(azcopy_version)"
-                  echo "##vso[task.setvariable variable=windows_amd64]$windows_amd64"
-                  windows_arm64="$(System.DefaultWorkingDirectory)/azcopy_windows_arm64_$(azcopy_version)"
-                  echo "##vso[task.setvariable variable=windows_arm64]$windows_arm64"
-                  windows_386="$(System.DefaultWorkingDirectory)/azcopy_windows_386_$(azcopy_version)"
-                  echo "##vso[task.setvariable variable=windows_386]$windows_386"
-                  mkdir -p $windows_amd64
-                  mkdir -p $windows_arm64
-                  mkdir -p $windows_386
-                displayName: 'Create required directories'
+          #     - script: |
+          #         windows_amd64="$(System.DefaultWorkingDirectory)/azcopy_windows_amd64_$(azcopy_version)"
+          #         echo "##vso[task.setvariable variable=windows_amd64]$windows_amd64"
+          #         windows_arm64="$(System.DefaultWorkingDirectory)/azcopy_windows_arm64_$(azcopy_version)"
+          #         echo "##vso[task.setvariable variable=windows_arm64]$windows_arm64"
+          #         windows_386="$(System.DefaultWorkingDirectory)/azcopy_windows_386_$(azcopy_version)"
+          #         echo "##vso[task.setvariable variable=windows_386]$windows_386"
+          #         mkdir -p $windows_amd64
+          #         mkdir -p $windows_arm64
+          #         mkdir -p $windows_386
+          #       displayName: 'Create required directories'
 
-              - script: |
-                  cp $(windows)/* $(System.DefaultWorkingDirectory)/binaries
-                  rm -rf $(windows)/azcopy_windows_v7_arm.exe
-                  mv $(windows)/azcopy_windows_amd64.exe $(windows_amd64)/azcopy.exe
-                  cp NOTICE.txt $(windows_amd64)
-                  mv $(windows)/azcopy_windows_arm64.exe $(windows_arm64)/azcopy.exe
-                  cp NOTICE.txt $(windows_arm64)
-                  mv $(windows)/azcopy_windows_386.exe $(windows_386)/azcopy.exe
-                  cp NOTICE.txt $(windows_386)
-                displayName: 'Copy required files'
+          #     - script: |
+          #         cp $(windows)/* $(System.DefaultWorkingDirectory)/binaries
+          #         rm -rf $(windows)/azcopy_windows_v7_arm.exe
+          #         mv $(windows)/azcopy_windows_amd64.exe $(windows_amd64)/azcopy.exe
+          #         cp NOTICE.txt $(windows_amd64)
+          #         mv $(windows)/azcopy_windows_arm64.exe $(windows_arm64)/azcopy.exe
+          #         cp NOTICE.txt $(windows_arm64)
+          #         mv $(windows)/azcopy_windows_386.exe $(windows_386)/azcopy.exe
+          #         cp NOTICE.txt $(windows_386)
+          #       displayName: 'Copy required files'
 
-              - task: ArchiveFiles@2
-                displayName: 'Archive Windows 64 bit AMD Build'
-                inputs:
-                  rootFolderOrFile: '$(windows_amd64)'
-                  archiveFile: '$(signed)/azcopy_windows_amd64_$(azcopy_version).zip'
+          #     - task: ArchiveFiles@2
+          #       displayName: 'Archive Windows 64 bit AMD Build'
+          #       inputs:
+          #         rootFolderOrFile: '$(windows_amd64)'
+          #         archiveFile: '$(signed)/azcopy_windows_amd64_$(azcopy_version).zip'
 
-              - task: ArchiveFiles@2
-                displayName: 'Archive Windows 64 bit ARM Build'
-                inputs:
-                  rootFolderOrFile: '$(windows_arm64)'
-                  archiveFile: '$(signed)/azcopy_windows_arm64_$(azcopy_version).zip'
+          #     - task: ArchiveFiles@2
+          #       displayName: 'Archive Windows 64 bit ARM Build'
+          #       inputs:
+          #         rootFolderOrFile: '$(windows_arm64)'
+          #         archiveFile: '$(signed)/azcopy_windows_arm64_$(azcopy_version).zip'
 
-              - task: ArchiveFiles@2
-                displayName: 'Archive Windows 32 bit Build'
-                inputs:
-                  rootFolderOrFile: '$(windows_386)'
-                  archiveFile: '$(signed)/azcopy_windows_386_$(azcopy_version).zip'
+          #     - task: ArchiveFiles@2
+          #       displayName: 'Archive Windows 32 bit Build'
+          #       inputs:
+          #         rootFolderOrFile: '$(windows_386)'
+          #         archiveFile: '$(signed)/azcopy_windows_386_$(azcopy_version).zip'
 
           # - job: Mac
           #   timeoutInMinutes: 120
@@ -480,17 +473,10 @@ extends:
               #     sudo apt-get install -y unzip
               #   displayName: 'Install dependencies'
 
-<<<<<<< HEAD
               # - task: UseDotNet@2
               #   inputs:
               #     packageType: 'sdk'
               #     version: '6.0.x'
-=======
-              - task: UseDotNet@2
-                inputs:
-                  packageType: 'sdk'
-                  version: '9.0.x'
->>>>>>> 2d0ac54f0a6b9620e692ed3f724a33990421c0dd
 
           #     - template: setup/esrp_sign_notarize_macos.yml@self
           #       parameters:
@@ -1099,19 +1085,13 @@ extends:
                     inputs:
                       secureFile: 'settings.toml'
 
-                  - task: AzureCLI@2
+                  - script: |
+                      pmc --version
+                      pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo list --limit 1
+                      if [ $? -ne 0 ]; then
+                        exit 1
+                      fi
                     displayName: 'Test PMC installation'
-                    inputs:
-                      addSpnToEnvironment: true
-                      azureSubscription: 'azcopy-release'
-                      scriptType: bash
-                      scriptLocation: inlineScript
-                      inlineScript: |
-                        pmc --version
-                        pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" repo list --limit 1
-                        if [ $? -ne 0 ]; then
-                          exit 1
-                        fi
 
                   # DownloadPipelineArtifact AFTER checkout since checkout wipes out the DefaultWorkingDirectory
                   - task: DownloadPipelineArtifact@2
@@ -1147,7 +1127,6 @@ extends:
                     displayName: 'Remove manifest'
 
                   - script: |
-<<<<<<< HEAD
                       azcopyBinaryName="azcopy"
 
                       # Check if the AzCopy version contains "preview"
@@ -1209,72 +1188,30 @@ extends:
                         is_preview="true"
                         echo "##vso[task.setvariable variable=is_preview]$is_preview"
                       fi
-=======
-                      ls -lRt $(signed)
-                    displayName: 'List artifacts'
 
-                  - ${{ if eq(parameters.test_pmc_connection, false) }}:
-                    - task: AzureCLI@2
-                      displayName: 'Upload files'
-                      inputs:
-                        addSpnToEnvironment: true
-                        azureSubscription: 'azcopy-release'
-                        scriptType: bash
-                        scriptLocation: inlineScript
-                        inlineScript: |
-                          pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" package upload signed
->>>>>>> 2d0ac54f0a6b9620e692ed3f724a33990421c0dd
-
-                  - ${{ if eq(parameters.test_pmc_connection, false) }}:
-                    - task: AzureCLI@2
-                      displayName: 'Add uploaded packages to repository'
-                      inputs:
-                        addSpnToEnvironment: true
-                        azureSubscription: 'azcopy-release'
-                        scriptType: bash
-                        scriptLocation: inlineScript
-                        inlineScript: |
-                          azcopyAmdDeb=`pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload azcopy*.x86_64.deb`
-                          echo "Azcopy AMD DEB ID: $azcopyAmdDeb"
-                          
-                          azcopyAmdRpmFile=$(ls azcopy-* | grep -vE 'cm2\.x86_64\.rpm|arm64\.deb|x86_64\.deb|arm64\.rpm')
-                          azcopyAmdRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azcopyAmdRpmFile)
-                          echo "Azcopy AMD RPM ID: $azcopyAmdRpm"
-                          
-                          azcopyArmDeb=`pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload azcopy*.arm64.deb`
-                          echo "Azcopy ARM DEB ID: $azcopyArmDeb"
-                          
-                          azcopyArmRpmFile=$(ls azcopy* | grep -vE 'cm2\.arm64\.rpm|arm64\.deb|x86_64\.deb|x86_64\.rpm')
-                          azcopyArmRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azcopyArmRpmFile)
-                          echo "Azcopy ARM RPM $azcopyArmRpmFile"
-                          echo "Azcopy ARM RPM ID: $azcopyArmRpm"
-                          
-                          # Find the Mariner RPM file and upload
-                          marinerAmdRpmFile=$(ls azcopy-* | grep 'cm2\.x86_64\.rpm')
-                          marinerAmdRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $marinerAmdRpmFile)
-                          echo "Azcopy mariner AMD RPM $marinerAmdRpmFile"
-                          echo "Azcopy mariner AMD RPM ID: $marinerAmdRpm"
-                          
-                          marinerAarchRpmFile=$(ls azcopy-* | grep 'cm2\.arm64\.rpm')
-                          marinerAarchRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $marinerAarchRpmFile)
-                          echo "Azcopy mariner ARM RPM: $marinerAarchRpmFile"
-                          echo "Azcopy mariner ARM RPM ID: $marinerAarchRpm"
-                          
-                          is_preview="false"
-                          echo "##vso[task.setvariable variable=is_preview]$is_preview"
-                          if [[ $marinerAmdRpmFile == *"preview"* ]]; then
-                            is_preview="true"
-                            echo "##vso[task.setvariable variable=is_preview]$is_preview"
+                      while IFS=, read -r distro archetype repoName releaseName; do
+                        # If the package is preview, publish to mariner preview package
+                        if [[ $distro == *"Mariner-"* ]]; then
+                          if [ $is_preview = "true" ]; then
+                            repoName=$(echo $repoName | sed 's/prod/preview/')
                           fi
-    
-                          while IFS=, read -r distro archetype repoName releaseName; do
-                            # If the package is preview, publish to mariner preview package
-                            if [[ $distro == *"Mariner-"* ]]; then
-                              if [ $is_preview = "true" ]; then
-                                repoName=$(echo $repoName | sed 's/prod/preview/')
-                              fi
+                        fi
+                        echo "Uploading packages for $distro"
+                        echo "Repo Name: $repoName"
+                        pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!archetype} $repoName $releaseName
+                      done < <(tail -n +3 ../packages.csv)
+                    displayName: 'Add uploaded packages to repository'
+                    workingDirectory: $(signed)
+
+                  - script: |
+                      while IFS=, read -r distro archetype repoName releaseName; do
+                        if [[ $archetype == *"Arm"* ]]; then
+                          echo "Skipping for ARM type on $distro"
+                        else
+                          if [[ $distro == *"Mariner-"* ]]; then
+                            if [ "$(is_preview)" = "true" ]; then
+                              repoName=$(echo $repoName | sed 's/prod/preview/')
                             fi
-<<<<<<< HEAD
                           fi
                           echo "Repo Name: $repoName"
                           pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo publish $repoName
@@ -1364,34 +1301,3 @@ extends:
                           done
                       done
                     displayName: 'Remove rpm packages from the repository'
-=======
-                            echo "Uploading packages for $distro"
-                            echo "Repo Name: $repoName"
-                            pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" repo package update --add-packages ${!archetype} $repoName $releaseName
-                          done < <(tail -n +3 ../packages.csv)
-                      workingDirectory: $(signed)
-
-                  - ${{ if eq(parameters.test_pmc_connection, false) }}:
-                      - task: AzureCLI@2
-                        displayName: 'Publish the repository'
-                        inputs:
-                          addSpnToEnvironment: true
-                          azureSubscription: 'azcopy-release'
-                          scriptType: bash
-                          scriptLocation: inlineScript
-                          inlineScript: |
-                            while IFS=, read -r distro archetype repoName releaseName; do
-                              if [[ $archetype == *"Arm"* ]]; then
-                                echo "Skipping for ARM type on $distro"
-                              else
-                                if [[ $distro == *"Mariner-"* ]]; then
-                                  if [ "$(is_preview)" = "true" ]; then
-                                    repoName=$(echo $repoName | sed 's/prod/preview/')
-                                  fi
-                                fi
-                                echo "Repo Name: $repoName"
-                                pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" repo publish $repoName
-                              fi
-                            done < <(tail -n +3 ../packages.csv)
-                        workingDirectory: $(signed)
->>>>>>> 2d0ac54f0a6b9620e692ed3f724a33990421c0dd
