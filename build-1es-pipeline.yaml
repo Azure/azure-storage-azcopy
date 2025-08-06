@@ -1146,6 +1146,7 @@ extends:
                         azureSubscription: 'azcopy-release'
                         scriptType: bash
                         scriptLocation: inlineScript
+                        workingDirectory: $(signed)
                         inlineScript: |
                           azcopyAmdDeb=`pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload azcopy*.x86_64.deb`
                           echo "Azcopy AMD DEB ID: $azcopyAmdDeb"
@@ -1191,7 +1192,6 @@ extends:
                             echo "Repo Name: $repoName"
                             pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" repo package update --add-packages ${!archetype} $repoName $releaseName
                           done < <(tail -n +3 ../packages.csv)
-                      workingDirectory: $(signed)
 
                   - ${{ if eq(parameters.test_pmc_connection, false) }}:
                       - task: AzureCLI@2
@@ -1201,6 +1201,7 @@ extends:
                           azureSubscription: 'azcopy-release'
                           scriptType: bash
                           scriptLocation: inlineScript
+                          workingDirectory: $(signed)
                           inlineScript: |
                             while IFS=, read -r distro archetype repoName releaseName; do
                               if [[ $archetype == *"Arm"* ]]; then
@@ -1215,4 +1216,3 @@ extends:
                                 pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" repo publish $repoName
                               fi
                             done < <(tail -n +3 ../packages.csv)
-                        workingDirectory: $(signed)
