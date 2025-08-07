@@ -155,7 +155,10 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 	case common.EFromTo.BlobLocal(), common.EFromTo.FileLocal(), common.EFromTo.BlobFSLocal(), common.EFromTo.FileNFSLocal():
 		cooked.source, err = SplitResourceString(raw.src, cooked.fromTo.From())
 		common.PanicIfErr(err)
-	case common.EFromTo.BlobBlob(), common.EFromTo.FileFile(), common.EFromTo.FileNFSFileNFS(), common.EFromTo.BlobFile(), common.EFromTo.FileBlob(), common.EFromTo.BlobFSBlobFS(), common.EFromTo.BlobFSBlob(), common.EFromTo.BlobFSFile(), common.EFromTo.BlobBlobFS(), common.EFromTo.FileBlobFS():
+	case common.EFromTo.BlobBlob(), common.EFromTo.FileFile(), common.EFromTo.FileNFSFileNFS(),
+		common.EFromTo.BlobFile(), common.EFromTo.FileBlob(), common.EFromTo.BlobFSBlobFS(),
+		common.EFromTo.BlobFSBlob(), common.EFromTo.BlobFSFile(), common.EFromTo.BlobBlobFS(),
+		common.EFromTo.FileBlobFS(), common.EFromTo.FileNFSFileSMB(), common.EFromTo.FileSMBFileNFS():
 		cooked.destination, err = SplitResourceString(raw.dst, cooked.fromTo.To())
 		common.PanicIfErr(err)
 		cooked.source, err = SplitResourceString(raw.src, cooked.fromTo.From())
