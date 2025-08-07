@@ -1039,7 +1039,7 @@ extends:
           - stage: PublishArtifacts
             dependsOn:
               - AzCopyVersion
-              # - VerifyArtifacts
+              - VerifyArtifacts
             jobs:
               - job: Job
                 timeoutInMinutes: 120
