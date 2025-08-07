@@ -241,7 +241,7 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 		common.ECredentialType.MDOAuthToken(),
 		common.ECredentialType.SharedKey():
 		// Files doesn't currently support OAuth, but it's a valid azure endpoint anyway, so it'll pass the check.
-		if resourceType != common.ELocation.Blob() && resourceType != common.ELocation.BlobFS() && resourceType != common.ELocation.File() {
+		if resourceType != common.ELocation.Blob() && resourceType != common.ELocation.BlobFS() && resourceType != common.ELocation.File() && resourceType != common.ELocation.FileNFS() {
 			// There may be a reason for files->blob to specify this.
 			if resourceType == common.ELocation.Local() {
 				return nil
