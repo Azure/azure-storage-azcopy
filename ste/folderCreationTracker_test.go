@@ -29,11 +29,11 @@ import (
 )
 
 type mockedJobPlan struct {
-	transfers map[jpptFolderIndex]*JobPartPlanTransfer
+	transfers map[JpptFolderIndex]*JobPartPlanTransfer
 }
 
-func (plan *mockedJobPlan) getFetchTransfer(t *testing.T) func(index jpptFolderIndex) *JobPartPlanTransfer {
-	return func(index jpptFolderIndex) *JobPartPlanTransfer {
+func (plan *mockedJobPlan) getFetchTransfer(t *testing.T) func(index JpptFolderIndex) *JobPartPlanTransfer {
+	return func(index JpptFolderIndex) *JobPartPlanTransfer {
 		tx, ok := plan.transfers[index]
 		assert.Truef(t, ok, "plan file lookup missed: %v", index)
 
@@ -48,12 +48,12 @@ func TestFolderCreationTracker_directoryCreate(t *testing.T) {
 
 	// create a plan with one registered and one unregistered folder
 	folderReg := "folderReg"
-	regIdx := jpptFolderIndex{0, 1}
+	regIdx := JpptFolderIndex{0, 1}
 	folderUnReg := "folderUnReg"
-	unregIdx := jpptFolderIndex{1, 1} // cheap validation of job part overlap
+	unregIdx := JpptFolderIndex{1, 1} // cheap validation of job part overlap
 
 	plan := &mockedJobPlan{
-		transfers: map[jpptFolderIndex]*JobPartPlanTransfer{
+		transfers: map[JpptFolderIndex]*JobPartPlanTransfer{
 			regIdx:   {atomicTransferStatus: common.ETransferStatus.NotStarted()},
 			unregIdx: {atomicTransferStatus: common.ETransferStatus.NotStarted()},
 		},
@@ -62,12 +62,12 @@ func TestFolderCreationTracker_directoryCreate(t *testing.T) {
 	fct := &jpptFolderTracker{
 		fetchTransfer:          plan.getFetchTransfer(t),
 		mu:                     &sync.Mutex{},
-		contents:               make(map[string]jpptFolderIndex),
+		contents:               make(map[string]JpptFolderIndex),
 		unregisteredButCreated: make(map[string]struct{}),
 	}
 
 	// 1. Register folder1
-	fct.RegisterPropertiesTransfer(folderReg, regIdx.partNum, regIdx.transferIndex)
+	fct.RegisterPropertiesTransfer(folderReg, regIdx.PartNum, regIdx.TransferIndex)
 
 	// Multiple calls to create folderReg should execute create only once.
 	numOfCreations := int32(0)
@@ -95,7 +95,7 @@ func TestFolderCreationTracker_directoryCreate(t *testing.T) {
 	a.Equal(common.ETransferStatus.NotStarted(), plan.transfers[regIdx].atomicTransferStatus)   // validate that the overlap bug didn't occur
 
 	// register the new folder, validate state persistence
-	fct.RegisterPropertiesTransfer(folderUnReg, unregIdx.partNum, unregIdx.transferIndex)
+	fct.RegisterPropertiesTransfer(folderUnReg, unregIdx.PartNum, unregIdx.TransferIndex)
 	a.Equal(common.ETransferStatus.FolderCreated(), plan.transfers[unregIdx].atomicTransferStatus)
 	a.Equal(common.ETransferStatus.NotStarted(), plan.transfers[regIdx].atomicTransferStatus) // validate that the overlap bug didn't occur
 

@@ -16,21 +16,29 @@ type JPPTCompatibleFolderCreationTracker interface {
 	RegisterPropertiesTransfer(folder string, partNum PartNumber, transferIndex uint32)
 }
 
-func NewFolderCreationTracker(fpo common.FolderPropertyOption, jobMgr IJobMgr) FolderCreationTracker {
+type TransferFetcher = func(index JpptFolderIndex) *JobPartPlanTransfer
+
+func NewTransferFetcher(jobMgr IJobMgr) TransferFetcher {
+	return func(index JpptFolderIndex) *JobPartPlanTransfer {
+		mgr, ok := jobMgr.JobPartMgr(index.PartNum)
+		if !ok {
+			panic(fmt.Errorf("sanity check: failed to fetch job part manager %d", index.PartNum))
+		}
+
+		return mgr.Plan().Transfer(index.TransferIndex)
+	}
+}
+
+// NewFolderCreationTracker creates a folder creation tracker taking in a TransferFetcher (typically created by NewTransferFetcher)
+// A TransferFetcher is used in place of an IJobMgr to make testing easier to implement.
+func NewFolderCreationTracker(fpo common.FolderPropertyOption, fetcher TransferFetcher) FolderCreationTracker {
 	switch fpo {
 	case common.EFolderPropertiesOption.AllFolders(),
 		common.EFolderPropertiesOption.AllFoldersExceptRoot():
 		return &jpptFolderTracker{ // This prevents a dependency cycle. Reviewers: Are we OK with this? Can you think of a better way to do it?
-			fetchTransfer: func(index jpptFolderIndex) *JobPartPlanTransfer {
-				mgr, ok := jobMgr.JobPartMgr(index.partNum)
-				if !ok {
-					panic(fmt.Errorf("sanity check: failed to fetch job part manager %d", index.partNum))
-				}
-
-				return mgr.Plan().Transfer(index.transferIndex)
-			},
+			fetchTransfer:          fetcher,
 			mu:                     &sync.Mutex{},
-			contents:               make(map[string]jpptFolderIndex),
+			contents:               make(map[string]JpptFolderIndex),
 			unregisteredButCreated: make(map[string]struct{}),
 		}
 	case common.EFolderPropertiesOption.NoFolders():
@@ -61,15 +69,15 @@ func (f *nullFolderTracker) StopTracking(folder string) {
 
 type jpptFolderTracker struct {
 	// fetchTransfer is used instead of a IJobMgr reference to support testing
-	fetchTransfer          func(index jpptFolderIndex) *JobPartPlanTransfer
+	fetchTransfer          func(index JpptFolderIndex) *JobPartPlanTransfer
 	mu                     *sync.Mutex
-	contents               map[string]jpptFolderIndex
+	contents               map[string]JpptFolderIndex
 	unregisteredButCreated map[string]struct{}
 }
 
-type jpptFolderIndex struct {
-	partNum       PartNumber
-	transferIndex uint32
+type JpptFolderIndex struct {
+	PartNum       PartNumber
+	TransferIndex uint32
 }
 
 func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, partNum PartNumber, transferIndex uint32) {
@@ -80,14 +88,14 @@ func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, partNum Pa
 		return // Never persist to dev-null
 	}
 
-	f.contents[folder] = jpptFolderIndex{
-		partNum:       partNum,
-		transferIndex: transferIndex,
+	f.contents[folder] = JpptFolderIndex{
+		PartNum:       partNum,
+		TransferIndex: transferIndex,
 	}
 
 	// We created it before it was enumerated-- Let's register that now.
 	if _, ok := f.unregisteredButCreated[folder]; ok {
-		f.fetchTransfer(jpptFolderIndex{partNum: partNum, transferIndex: transferIndex}).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
+		f.fetchTransfer(JpptFolderIndex{PartNum: partNum, TransferIndex: transferIndex}).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
 
 		delete(f.unregisteredButCreated, folder)
 	}
