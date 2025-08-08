@@ -65,10 +65,11 @@ var (
 	// CustomSyncHandler holds the current sync handler implementation.
 	// Defaults to syncOrchestratorHandler but can be customized for different strategies.
 	CustomSyncHandler CustomSyncHandlerFunc = syncOrchestratorHandler
-	// expectedErrors contains error messages that are considered normal during sync operations.
+	// notFoundErrors contains error messages that are considered normal during sync operations.
 	// These errors don't cause the sync to fail (e.g., 404 responses from target locations).
-	expectedErrors []string = []string{
-		"RESPONSE 404",
+	notFoundErrors []string = []string{
+		"ParentNotFound",
+		"BlobNotFound",
 	}
 
 	orchestratorOptions *SyncOrchestratorOptions
@@ -85,6 +86,8 @@ type minimalStoredObject struct {
 	// at the time of initialization of the SyncTraverser. This is an optimization that we will consider
 	// later.
 	changeTime time.Time // Change time of the object
+
+	isPresentAtDestination bool // Indicates if the object is present at the secondary location
 }
 
 // GetCustomSyncHandlerInfo returns a description of the current sync handler implementation.
@@ -152,16 +155,16 @@ func (e SyncOrchErrorInfo) Location() common.Location {
 // END - Implementing methods defined in TraverserErrorItemInfo
 // /////////////////////////////////////////////////////////////////////////
 
-func IsExpectedErrorForTargetDuringSync(err error) bool {
-	isExpectedError := false
-	for _, expectedErr := range expectedErrors {
-		if strings.Contains(err.Error(), expectedErr) {
-			isExpectedError = true
+func IsDestinationNotFoundDuringSync(err error) bool {
+	isNotFoundError := false
+	for _, notFoundErr := range notFoundErrors {
+		if strings.Contains(err.Error(), notFoundErr) {
+			isNotFoundError = true
 			break
 		}
 	}
 
-	return isExpectedError
+	return isNotFoundError
 }
 
 func writeSyncErrToChannel(errorChannel chan<- TraverserErrorItemInfo, err SyncOrchErrorInfo) {
@@ -175,28 +178,16 @@ func writeSyncErrToChannel(errorChannel chan<- TraverserErrorItemInfo, err SyncO
 	}
 }
 
-func getRootStoredObjectLocal(path string) (StoredObject, error) {
-	fi, err := os.Stat(path)
+func validateLocalRoot(path string) error {
+	_, err := os.Stat(path)
 	if err != nil {
-		return StoredObject{}, err
+		return err
 	}
 
-	root := newStoredObject(
-		nil,
-		fi.Name(),
-		"",
-		common.EEntityType.Folder(),
-		time.Time{},
-		0,
-		noContentProps,
-		noBlobProps,
-		noMetadata,
-		"")
-
-	return root, nil
+	return nil
 }
 
-// getRootStoredObjectS3 returns the root object for the sync orchestrator based on the S3 source path.
+// validateS3Root returns the root object for the sync orchestrator based on the S3 source path.
 // It parses the S3 URL and determines the entity type (file or folder) based on the URL structure.
 //
 // Parameters:
@@ -205,36 +196,22 @@ func getRootStoredObjectLocal(path string) (StoredObject, error) {
 // Returns:
 // - StoredObject: The root StoredObject for the given S3 source path.
 // - error: An error if parsing the URL or creating the StoredObject fails.
-func getRootStoredObjectS3(sourcePath string) (StoredObject, error) {
+func validateS3Root(sourcePath string) error {
 
 	parsedURL, err := url.Parse(sourcePath)
 	if err != nil {
-		return StoredObject{}, err
+		return err
 	}
 
-	s3UrlParts, err := common.NewS3URLParts(*parsedURL)
+	_, err = common.NewS3URLParts(*parsedURL)
 	if err != nil {
-		return StoredObject{}, err
+		return err
 	}
 
-	var searchPrefix string = strings.Join([]string{s3UrlParts.BucketName, s3UrlParts.ObjectKey}, common.AZCOPY_PATH_SEPARATOR_STRING)
-
-	root := newStoredObject(
-		nil,
-		searchPrefix,
-		"",
-		common.EEntityType.Folder(),
-		time.Time{},
-		0,
-		noContentProps,
-		noBlobProps,
-		nil,
-		s3UrlParts.BucketName)
-
-	return root, nil
+	return nil
 }
 
-// GetRootStoredObject returns the root object for the sync orchestrator
+// validateAndGetRootObject returns the root object for the sync orchestrator
 // based on the source path and fromTo configuration. This determines the starting
 // point for sync enumeration operations.
 //
@@ -243,19 +220,29 @@ func getRootStoredObjectS3(sourcePath string) (StoredObject, error) {
 // - fromTo: Specifies the source and destination location types
 //
 // Returns:
-// - StoredObject: Root object containing path and entity type information
 // - error: Error if the source type is unsupported or path processing fails
-func GetRootStoredObject(path string, fromTo common.FromTo) (StoredObject, error) {
+func validateAndGetRootObject(path string, fromTo common.FromTo) (minimalStoredObject, error) {
 
 	glcm.Info(fmt.Sprintf("Getting root object for path = %s\n", path))
+	var err error
 
 	switch fromTo.From() {
 	case common.ELocation.Local():
-		return getRootStoredObjectLocal(path)
+		err = validateLocalRoot(path)
 	case common.ELocation.S3():
-		return getRootStoredObjectS3(path)
+		err = validateS3Root(path)
 	default:
-		return StoredObject{}, fmt.Errorf("sync orchestrator is not supported for %s source", fromTo.From().String())
+		err = fmt.Errorf("sync orchestrator is not supported for %s source", fromTo.From().String())
+	}
+
+	if err == nil {
+		return minimalStoredObject{
+			relativePath:           "",
+			changeTime:             time.Time{},
+			isPresentAtDestination: true,
+		}, nil
+	} else {
+		return minimalStoredObject{}, err
 	}
 }
 
@@ -323,10 +310,10 @@ func (st *SyncTraverser) customComparator(so StoredObject) error {
 	return err
 }
 
-// Finalize completes the processing of the current directory by scheduling
+// finalize completes the processing of the current directory by scheduling
 // transfers for all discovered files and cleaning up the indexer.
 // This method is called after both source and destination traversals are complete.
-func (st *SyncTraverser) Finalize(scheduleTransfer bool) error {
+func (st *SyncTraverser) finalize(scheduleTransfer bool) error {
 
 	// Build the directory prefix for matching child objects
 	var dirPrefix string
@@ -356,7 +343,7 @@ func (st *SyncTraverser) Finalize(scheduleTransfer bool) error {
 
 	// Process collected items
 	for _, path := range itemsToProcess {
-		err := st.FinalizeChild(path, scheduleTransfer)
+		err := st.finalizeChild(path, scheduleTransfer)
 		if err != nil {
 			return err
 		}
@@ -443,11 +430,11 @@ func (st *SyncTraverser) hasAnyChildChangedSinceLastSync() (bool, uint32) {
 	return foundOneChanged, childCount - uint32(len(st.sub_dirs))
 }
 
-// FinalizeChild processes a single child object (file or directory) by scheduling it for transfer.
+// finalizeChild processes a single child object (file or directory) by scheduling it for transfer.
 // It retrieves the stored object from the indexer and schedules it for transfer.
 // If the object is a directory, it will be processed after all files in that directory are finalized.
 // This method is called after the traversal is complete for each child object.
-func (st *SyncTraverser) FinalizeChild(child string, scheduleTransfer bool) error {
+func (st *SyncTraverser) finalizeChild(child string, scheduleTransfer bool) error {
 	syncMutex.Lock()
 	// Get pointer to the stored object from indexer
 	storedObject, exists := st.enumerator.objectIndexer.indexMap[child]
@@ -616,8 +603,8 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		srcDirEnumerating.Add(1) // Increment active directory count
 
 		// Build source and destination paths for current directory
-		sync_src := []string{cca.source.Value, dir.(StoredObject).relativePath}
-		sync_dst := []string{cca.destination.Value, dir.(StoredObject).relativePath}
+		sync_src := []string{cca.source.Value, dir.(minimalStoredObject).relativePath}
+		sync_dst := []string{cca.destination.Value, dir.(minimalStoredObject).relativePath}
 
 		pt_src := cca.source
 		st_src := cca.destination
@@ -648,7 +635,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			WarnStdoutAndScanningLog(errMsg)
 			writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
 				DirPath:           pt_src.Value,
-				DirName:           dir.(StoredObject).relativePath,
+				DirName:           dir.(minimalStoredObject).relativePath,
 				ErrorMsg:          errors.New(errMsg),
 				TraverserLocation: cca.fromTo.From(),
 			})
@@ -666,7 +653,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			WarnStdoutAndScanningLog(errMsg)
 			writeSyncErrToChannel(stt.options.ErrorChannel, SyncOrchErrorInfo{
 				DirPath:           st_src.Value,
-				DirName:           dir.(StoredObject).relativePath,
+				DirName:           dir.(minimalStoredObject).relativePath,
 				ErrorMsg:          errors.New(errMsg),
 				TraverserLocation: cca.fromTo.To(),
 			})
@@ -674,7 +661,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		}
 
 		// Create sync traverser for this directory
-		stra := newSyncTraverser(enumerator, dir.(StoredObject).relativePath, enumerator.objectComparator)
+		stra := newSyncTraverser(enumerator, dir.(minimalStoredObject).relativePath, enumerator.objectComparator)
 
 		// Traverse source location and collect files/directories
 		err = pt.Traverse(noPreProccessor, stra.processor, enumerator.filters)
@@ -685,7 +672,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			WarnStdoutAndScanningLog(errMsg)
 			writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
 				DirPath:           pt_src.Value,
-				DirName:           dir.(StoredObject).relativePath,
+				DirName:           dir.(minimalStoredObject).relativePath,
 				ErrorMsg:          errors.New(errMsg),
 				TraverserLocation: cca.fromTo.From(),
 			})
@@ -693,10 +680,17 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			return err
 		}
 
-		traverseDestination := true // Flag to control whether we traverse the destination
+		// Flag to control whether we traverse the destination
+		traverseDestination := true
+
+		// Flag to check if destination exists
+		// We will use the parent directory flag as the seed value to avoid redundant checks
+		isDestinationPresent := dir.(minimalStoredObject).isPresentAtDestination
+		finalize := true // Flag to control whether we finalize
 
 		// Before proceeding, check if we need to enumerate the destination
-		if stra.shouldTrySkippingTargetTraversal(dir.(StoredObject).changeTime, cca.deleteDestination) {
+		if isDestinationPresent &&
+			stra.shouldTrySkippingTargetTraversal(dir.(minimalStoredObject).changeTime, cca.deleteDestination) {
 			// It is safe to use change time comparison to determine if the destination needs enumeration,
 			// Enumerate all child objects of this directory in the indexer and check all of their change times.
 			// If any of them is after the last successful sync, we need to enumerate the destination.
@@ -706,13 +700,13 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			// fmt.Printf("Checking if destination enumeration for dir %s can be skipped.\n", st_src.Value)
 
 			if changed, fileCount := stra.hasAnyChildChangedSinceLastSync(); !changed {
-				err = stra.Finalize(false) // false indicates we do not want to schedule transfers yet
+				err = stra.finalize(false) // false indicates we do not want to schedule transfers yet
 				if err != nil {
 					errMsg = fmt.Sprintf("Sync finalize to skip target enumeration failed for source dir %s.\n", pt_src.Value)
 					WarnStdoutAndScanningLog(errMsg)
 					writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
 						DirPath:           pt_src.Value,
-						DirName:           dir.(StoredObject).relativePath,
+						DirName:           dir.(minimalStoredObject).relativePath,
 						ErrorMsg:          errors.New(errMsg),
 						TraverserLocation: cca.fromTo.From(),
 					})
@@ -722,6 +716,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 				// For debugging:
 				// fmt.Printf("Skipping destination enumeration for dir %s.\n", st_src.Value)
 				traverseDestination = false // No need to traverse destination if we are skipping it
+				finalize = false            // No need to finalize as we are not scheduling transfers
 
 				for range fileCount {
 					// We can increment the count of not transferred files as well
@@ -732,11 +727,11 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 					ptt.options.IncrementNotTransferred(common.EEntityType.Folder())
 				}
 
-				cca.IncrementDestinationFolderEnumerationSkipped()
+				dstDirEnumerationSkippedBasedOnCTime.Add(1) // Increment skipped count based on ctime optimization
 			}
 		}
 
-		if traverseDestination {
+		if isDestinationPresent && traverseDestination {
 			dstDirEnumerating.Add(1) // Increment active destination directory count
 
 			// Traverse destination location for comparison
@@ -745,12 +740,14 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 			if err != nil {
 				// Only report unexpected errors (404s are normal for new files)
-				if !IsExpectedErrorForTargetDuringSync(err) {
+				if IsDestinationNotFoundDuringSync(err) {
+					isDestinationPresent = false // Destination not found
+				} else {
 					errMsg = fmt.Sprintf("Secondary traversal failed for dir %s = %s\n", st_src.Value, err)
 					WarnStdoutAndScanningLog(errMsg)
 					writeSyncErrToChannel(stt.options.ErrorChannel, SyncOrchErrorInfo{
 						DirPath:           st_src.Value,
-						DirName:           dir.(StoredObject).relativePath,
+						DirName:           dir.(minimalStoredObject).relativePath,
 						ErrorMsg:          errors.New(errMsg),
 						TraverserLocation: cca.fromTo.To(),
 					})
@@ -760,16 +757,21 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 					return err
 				}
 			}
+		} else {
+			cca.IncrementDestinationFolderEnumerationSkipped()
+		}
+
+		if finalize {
 
 			// Complete processing for this directory and schedule transfers
-			err = stra.Finalize(true) // true indicates we want to schedule transfers
+			err = stra.finalize(true) // true indicates we want to schedule transfers
 
 			if err != nil {
 				errMsg = fmt.Sprintf("Sync finalize failed for source dir %s.\n", pt_src.Value)
 				WarnStdoutAndScanningLog(errMsg)
 				writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
 					DirPath:           pt_src.Value,
-					DirName:           dir.(StoredObject).relativePath,
+					DirName:           dir.(minimalStoredObject).relativePath,
 					ErrorMsg:          errors.New(errMsg),
 					TraverserLocation: cca.fromTo.From(),
 				})
@@ -780,10 +782,10 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		// Enqueue discovered subdirectories for processing
 		for _, sub_dir := range stra.sub_dirs {
 			crawlWg.Add(1) // IMPORTANT: Add to WaitGroup *before* enqueuing
-			enqueueDir(StoredObject{
-				relativePath: sub_dir.relativePath,
-				entityType:   common.EEntityType.Folder(),
-				changeTime:   sub_dir.changeTime,
+			enqueueDir(minimalStoredObject{
+				relativePath:           sub_dir.relativePath,
+				changeTime:             sub_dir.changeTime,
+				isPresentAtDestination: isDestinationPresent,
 			})
 		}
 
@@ -793,15 +795,21 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 	// verify that the traversers are targeting the same type of resources
 	// Sync orchestrator supports only directory to directory sync. The similarity has
 	// already been checked in InitEnumerator. Here we check if it is directory or not.
-	srcIsDir, _ := enumerator.primaryTraverser.IsDirectory(true)
+	srcIsDir, err := enumerator.primaryTraverser.IsDirectory(true)
+
+	if err != nil {
+		WarnStdoutAndScanningLog(fmt.Sprintf("Failed to check if source is a directory. Err: %s", err))
+		return err
+	}
 
 	if !srcIsDir {
+		err = fmt.Errorf("source is not recognized as a directory")
 		WarnStdoutAndScanningLog(fmt.Sprintf("Source is not recognized as a directory. Err: %s", err))
 		return err
 	}
 
 	// Get the root object to start synchronization
-	root, err := GetRootStoredObject(cca.source.Value, cca.fromTo)
+	root, err := validateAndGetRootObject(cca.source.Value, cca.fromTo)
 	if err != nil {
 		WarnStdoutAndScanningLog(fmt.Sprintf("Root object creation failed: %s", err))
 		return err
