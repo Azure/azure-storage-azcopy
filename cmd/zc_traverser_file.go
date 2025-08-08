@@ -29,6 +29,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
@@ -428,6 +429,8 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		}
 	}
 
+	var parentNotFoundError error
+
 	// Define how to enumerate its contents
 	// This func must be threadsafe/goroutine safe
 	enumerateOneDir := func(dir parallel.Directory, enqueueDir func(parallel.Directory), enqueueOutput func(parallel.DirectoryEntry, error)) error {
@@ -456,6 +459,9 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				})
 
 			if err != nil {
+				if fileerror.HasCode(err, fileerror.ParentNotFound) {
+					parentNotFoundError = err
+				}
 				return fmt.Errorf("cannot list files due to reason %w", err)
 			}
 			for _, fileInfo := range lResp.Segment.Files {
@@ -570,6 +576,10 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	}
 
 	cancelWorkers()
+
+	if parentNotFoundError != nil {
+		return parentNotFoundError
+	}
 	return
 }
 
