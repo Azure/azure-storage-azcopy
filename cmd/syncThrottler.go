@@ -95,6 +95,8 @@ var (
 	totalFilesInIndexer       atomic.Int64
 	totalDirectoriesProcessed atomic.Uint64 // never decremented
 
+	dstDirEnumerationSkippedBasedOnCTime atomic.Uint32
+
 	// Throttling control flags
 	enableThrottling               bool = true
 	enableEnumerationThrottling    bool = true // Throttle directory enumeration to prevent deadlocks
@@ -468,12 +470,23 @@ func (ds *ThrottleSemaphore) logThrottling(msgFmt string, args ...interface{}) {
 // It provides real-time visibility into the sync orchestrator's internal state including
 // indexer size, directory processing counters, and enumeration activity.
 func (ds *ThrottleSemaphore) getOrchestratorStats() []common.CustomStatEntry {
-	return []common.CustomStatEntry{
-		{"Waiting", fmt.Sprintf("%d", ds.waitingForSemaphore.Load())},
+	stats := []common.CustomStatEntry{
 		{"Indexer", fmt.Sprintf("%d", totalFilesInIndexer.Load())},
 		{"Active", fmt.Sprintf("%d", activeDirectories.Load())},
 		{"SrcEnum", fmt.Sprintf("%d", srcDirEnumerating.Load())},
 		{"DstEnum", fmt.Sprintf("%d", dstDirEnumerating.Load())},
 		{"Done", fmt.Sprintf("%d", totalDirectoriesProcessed.Load())},
 	}
+
+	waiting := ds.waitingForSemaphore.Load()
+	if waiting != 0 {
+		stats = append([]common.CustomStatEntry{{"Waiting", fmt.Sprintf("%d", waiting)}}, stats...)
+	}
+
+	ctimeSkip := dstDirEnumerationSkippedBasedOnCTime.Load()
+	if ctimeSkip != 0 {
+		stats = append(stats, common.CustomStatEntry{"CTimeSkip", fmt.Sprintf("%d", ctimeSkip)})
+	}
+
+	return stats
 }

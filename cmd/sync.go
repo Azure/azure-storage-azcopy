@@ -948,8 +948,8 @@ Folders Scanned at Destination: ................ %12v
 Elapsed Time (Minutes): ........................ %12v
 ------------------------------------------------------------
 Number of Copy Transfers for Files: ............ %12v
-Number of Copy Transfers for Folder Properties:. %12v
-Number of Copy Transfers for Files Properties:.. %12v
+Number of Copy Transfers for Folder Properties:  %12v
+Number of Copy Transfers for Files Properties:   %12v
 Total Number of Copy Transfers: ................ %12v
 Number of Copy Transfers Completed: ............ %12v
 Number of Copy Transfers Failed: ............... %12v
@@ -964,7 +964,7 @@ Number of Folders Not Requiring Transfer: ...... %12v
 ------------------------------------------------------------
 Source Folders Failed During Enumeration: ...... %12v
 Destination Folders Failed During Enumeration: . %12v
-Destination Folders Skipped (CTime opt): ....... %12v
+Destination Folders Skipped During Enumeration: %13v
 ------------------------------------------------------------
 Total Number of Bytes Transferred: ............. %12v
 Total Number of Bytes Enumerated: .............. %12v
@@ -1019,7 +1019,7 @@ Elapsed Time (Minutes): ........................ %12v
 ------------------------------------------------------------
 Source Folders Failed During Enumeration: ...... %12v
 Destination Folders Failed During Enumeration: . %12v
-Destination Folders Skipped (CTime opt): ....... %12v
+Destination Folders Skipped During Enumeration: %13v
 ------------------------------------------------------------
 `,
 		"\n",
