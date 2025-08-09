@@ -133,6 +133,26 @@ type Transfers struct {
 	FilePropertyTransferCount uint32
 }
 
+// Clone creates a deep copy of the Transfers struct to avoid pointer reference issues
+func (t *Transfers) Clone() Transfers {
+	clone := Transfers{
+		TotalSizeInBytes:          t.TotalSizeInBytes,
+		FileTransferCount:         t.FileTransferCount,
+		FolderTransferCount:       t.FolderTransferCount,
+		SymlinkTransferCount:      t.SymlinkTransferCount,
+		HardlinksConvertedCount:   t.HardlinksConvertedCount,
+		FilePropertyTransferCount: t.FilePropertyTransferCount,
+	}
+
+	// Deep copy the slice of CopyTransfer
+	if t.List != nil {
+		clone.List = make([]CopyTransfer, len(t.List))
+		copy(clone.List, t.List) // Shallow copy for basic fields (usually sufficient)
+	}
+
+	return clone
+}
+
 // This struct represents the job info (a single part) to be sent to the storage engine
 type CopyJobPartOrderRequest struct {
 	Version             Version         // version of azcopy
@@ -183,6 +203,8 @@ type CopyJobPartOrderRequest struct {
 	FileAttributes          FileTransferAttributes
 	Provider                credentials.Provider //credential provider implementation for custom credential management
 	IsNFSCopy               bool
+	JobProcessingMode       JobProcessingMode // Defines how job parts should be processed (Mixed or FolderAfterFiles)
+	JobPartType             JobPartType       // Type of transfers this job part contains
 }
 
 // CredentialInfo contains essential credential info which need be transited between modules,

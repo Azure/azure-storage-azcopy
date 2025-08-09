@@ -53,10 +53,19 @@ type copyTransferProcessor struct {
 
 	//XDM: This is only essential when sync is through syncOrchestrator
 	syncTransferMutex sync.Mutex // mutex to synchronize access to the transfer scheduler
+
+	// Separate tracking for files and folders based on processing mode
+	processingMode common.JobProcessingMode
+	dispatcher     syncJobPartDispatcher
+}
+
+type syncJobPartDispatcher struct {
+	PendingTransfers       common.Transfers
+	PendingFolderTransfers common.Transfers
 }
 
 func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int, source, destination common.ResourceString, reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier, dryrunMode bool) *copyTransferProcessor {
-	return &copyTransferProcessor{
+	processor := &copyTransferProcessor{
 		numOfTransfersPerPart:     numOfTransfersPerPart,
 		copyJobTemplate:           copyJobTemplate,
 		source:                    source,
@@ -67,7 +76,11 @@ func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, n
 		folderPropertiesOption:    copyJobTemplate.Fpo,
 		symlinkHandlingType:       copyJobTemplate.SymlinkHandlingType,
 		dryrunMode:                dryrunMode,
+		processingMode:            copyJobTemplate.JobProcessingMode,
+		dispatcher:                syncJobPartDispatcher{},
 	}
+
+	return processor
 }
 
 type DryrunTransfer struct {
@@ -284,35 +297,85 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 		defer s.syncTransferMutex.Unlock()
 	}
 
-	if len(s.copyJobTemplate.Transfers.List) == s.numOfTransfersPerPart {
-		resp := s.sendPartToSte()
-
-		// TODO: If we ever do launch errors outside of the final "no transfers" error, make them output nicer things here.
-		if resp.ErrorMsg != "" {
-			return errors.New(string(resp.ErrorMsg))
-		}
-
-		// reset the transfers buffer
-		s.copyJobTemplate.Transfers = common.Transfers{}
-		s.copyJobTemplate.PartNum++
-	}
+	s.dispatchPartIfReady()
 
 	// only append the transfer after we've checked and dispatched a part
 	// so that there is at least one transfer for the final part
-	s.copyJobTemplate.Transfers.List = append(s.copyJobTemplate.Transfers.List, copyTransfer)
-	s.copyJobTemplate.Transfers.TotalSizeInBytes += uint64(copyTransfer.SourceSize)
+	s.appendTransfer(copyTransfer)
 
-	switch copyTransfer.EntityType {
-	case common.EEntityType.File():
-		s.copyJobTemplate.Transfers.FileTransferCount++
-	case common.EEntityType.Folder():
-		s.copyJobTemplate.Transfers.FolderTransferCount++
-	case common.EEntityType.Symlink():
-		s.copyJobTemplate.Transfers.SymlinkTransferCount++
-	case common.EEntityType.Hardlink():
-		s.copyJobTemplate.Transfers.HardlinksConvertedCount++
-	case common.EEntityType.FileProperties():
-		s.copyJobTemplate.Transfers.FilePropertyTransferCount++
+	return nil
+}
+
+func (s *copyTransferProcessor) readyForDispatch() bool {
+	return (len(s.dispatcher.PendingTransfers.List) == s.numOfTransfersPerPart) ||
+		(len(s.dispatcher.PendingFolderTransfers.List) == s.numOfTransfersPerPart)
+}
+
+func (s *copyTransferProcessor) dispatchPartIfReady() error {
+	if !s.readyForDispatch() {
+		return nil
+	}
+
+	var err error
+	if len(s.dispatcher.PendingTransfers.List) == s.numOfTransfersPerPart {
+		s.copyJobTemplate.Transfers = s.dispatcher.PendingTransfers.Clone()
+		err = s.dispatchPart()
+		if err != nil {
+			return err
+		}
+		s.dispatcher.PendingTransfers = common.Transfers{}
+	}
+
+	if len(s.dispatcher.PendingFolderTransfers.List) == s.numOfTransfersPerPart {
+		s.copyJobTemplate.Transfers = s.dispatcher.PendingFolderTransfers.Clone()
+		err = s.dispatchPart()
+		if err != nil {
+			return err
+		}
+		s.dispatcher.PendingFolderTransfers = common.Transfers{}
+	}
+
+	return err
+}
+
+func (s *copyTransferProcessor) dispatchPart() error {
+	resp := s.sendPartToSte()
+
+	// TODO: If we ever do launch errors outside of the final "no transfers" error, make them output nicer things here.
+	if resp.ErrorMsg != "" {
+		return errors.New(string(resp.ErrorMsg))
+	}
+
+	// reset the transfers buffer
+	s.copyJobTemplate.Transfers = common.Transfers{}
+	s.copyJobTemplate.PartNum++
+
+	return nil
+}
+
+func (s *copyTransferProcessor) appendTransfer(copyTransfer common.CopyTransfer) error {
+
+	if s.processingMode == common.EJobProcessingMode.FolderAfterFiles() &&
+		copyTransfer.EntityType == common.EEntityType.Folder() {
+		s.dispatcher.PendingFolderTransfers.List = append(s.dispatcher.PendingFolderTransfers.List, copyTransfer)
+		s.dispatcher.PendingFolderTransfers.TotalSizeInBytes += uint64(copyTransfer.SourceSize)
+		s.dispatcher.PendingFolderTransfers.FolderTransferCount++
+	} else {
+		s.dispatcher.PendingTransfers.List = append(s.dispatcher.PendingTransfers.List, copyTransfer)
+		s.dispatcher.PendingTransfers.TotalSizeInBytes += uint64(copyTransfer.SourceSize)
+
+		switch copyTransfer.EntityType {
+		case common.EEntityType.File():
+			s.dispatcher.PendingTransfers.FileTransferCount++
+		case common.EEntityType.Folder():
+			s.dispatcher.PendingTransfers.FolderTransferCount++
+		case common.EEntityType.Symlink():
+			s.dispatcher.PendingTransfers.SymlinkTransferCount++
+		case common.EEntityType.Hardlink():
+			s.dispatcher.PendingTransfers.HardlinksConvertedCount++
+		case common.EEntityType.FileProperties():
+			s.dispatcher.PendingTransfers.FilePropertyTransferCount++
+		}
 	}
 
 	return nil
@@ -322,6 +385,32 @@ var NothingScheduledError = errors.New("no transfers were scheduled because no f
 var FinalPartCreatedMessage = "Final job part has been created"
 
 func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err error) {
+	// Handle separate batch mode with remaining file and folder batches
+	if s.processingMode == common.EJobProcessingMode.FolderAfterFiles() {
+		if len(s.dispatcher.PendingTransfers.List) > 0 && len(s.dispatcher.PendingFolderTransfers.List) > 0 {
+			// if there are both kinds of transfers pending, first do the file transfers
+			s.copyJobTemplate.Transfers = s.dispatcher.PendingTransfers.Clone()
+			err = s.dispatchPart()
+			if err != nil {
+				return false, fmt.Errorf("failed to send final file job part with job Id %s and part number %d: %s",
+					s.copyJobTemplate.JobID, s.copyJobTemplate.PartNum, err.Error())
+			}
+			s.dispatcher.PendingTransfers = common.Transfers{}
+		}
+
+		// Either file or folder transfers are pending. Whatever is pending will be the final part.
+		if len(s.dispatcher.PendingTransfers.List) > 0 {
+			s.copyJobTemplate.Transfers = s.dispatcher.PendingTransfers.Clone()
+		} else if len(s.dispatcher.PendingFolderTransfers.List) > 0 {
+			s.copyJobTemplate.Transfers = s.dispatcher.PendingFolderTransfers.Clone()
+		}
+	} else {
+		if len(s.dispatcher.PendingTransfers.List) > 0 {
+			s.copyJobTemplate.Transfers = s.dispatcher.PendingTransfers.Clone()
+		}
+	}
+
+	// Original logic for non-NFS mode
 	var resp common.CopyJobPartOrderResponse
 	s.copyJobTemplate.IsFinalPart = true
 	resp = s.sendPartToSte()

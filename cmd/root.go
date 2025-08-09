@@ -515,3 +515,11 @@ func beginDetectNewVersion() chan struct{} {
 
 	return completionChannel
 }
+
+func GetJobProcessingMode() common.JobProcessingMode {
+	if buildmode.IsMover {
+		return common.EJobProcessingMode.FolderAfterFiles()
+	} else {
+		return common.EJobProcessingMode.Mixed()
+	}
+}

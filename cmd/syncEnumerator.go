@@ -316,8 +316,11 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.trailingDot,
 		},
-		IsNFSCopy: cca.isNFSCopy,
+		IsNFSCopy:         cca.isNFSCopy,
+		JobPartType:       common.EJobPartType.Mixed(),
+		JobProcessingMode: GetJobProcessingMode(),
 	}
+
 	//Optional check for custom credential provider
 	var credProvider credentials.Provider = nil
 	creds := ctx.Value(customCreds)

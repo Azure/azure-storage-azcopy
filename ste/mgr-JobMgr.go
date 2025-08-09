@@ -447,6 +447,11 @@ type jobMgr struct {
 	jstm                *jobStatusManager
 
 	isDaemon bool /* is it running as service */
+
+	// For FolderAfterFiles processing mode
+	folderPartsMutex     sync.Mutex
+	queuedFolderParts    []queuedFolderPart
+	allFilePartsComplete bool
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -805,6 +810,9 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 				close(partProgressInfo.completionChan)
 			}
 
+			// Check if we can process queued folder parts after this part completes
+			jm.checkAndProcessFolderParts()
+
 			// If the last part is still awaited or other parts all still not complete,
 			// JobPart 0 status is not changed (unless we are cancelling)
 			haveFinalPart = atomic.LoadInt32(&jm.atomicFinalPartOrderedIndicator) == 1
@@ -970,6 +978,12 @@ type poolSizingChannels struct {
 	done                chan struct{}
 }
 
+// queuedFolderPart represents a minimal structure for queued folder job parts
+type queuedFolderPart struct {
+	partNum  common.PartNumber   // Part number for identification
+	planFile JobPartPlanFileName // Access to plan file for transfers
+}
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /* These functions are to integrate above into JobManager */
 
@@ -1014,13 +1028,82 @@ func (jm *jobMgr) ScheduleChunk(priority common.JobPriority, chunkFunc chunkFunc
 // from where this JobPartMgr will be picked by a routine and
 // its transfers will be scheduled
 func (jm *jobMgr) QueueJobParts(jpm IJobPartMgr) {
-	jm.coordinatorChannels.partsChannel <- jpm
+	plan := jpm.Plan()
 
-	if ms := common.CalculateChannelBackPressureDelay(
-		len(jm.coordinatorChannels.partsChannel),
-		cap(jm.coordinatorChannels.partsChannel),
-		common.DefaultProfile); ms > 0 {
-		time.Sleep(time.Duration(ms) * time.Millisecond)
+	// Check if this job uses folder-after-files processing mode
+	if plan.JobProcessingMode == common.EJobProcessingMode.FolderAfterFiles() &&
+		plan.JobPartType == common.EJobPartType.Folders() {
+		// Queue folder part structure for later processing
+		jm.folderPartsMutex.Lock()
+		queuedPart := queuedFolderPart{
+			partNum:  plan.PartNum,
+			planFile: jpm.(*jobPartMgr).filename,
+		}
+		jm.queuedFolderParts = append(jm.queuedFolderParts, queuedPart)
+		jm.folderPartsMutex.Unlock()
+
+		jm.Log(common.LogInfo, fmt.Sprintf("Queued folder job part %d for later processing", plan.PartNum))
+
+	} else {
+
+		// Default mixed processing OR file parts in FolderAfterFiles mode - send immediately
+		jm.coordinatorChannels.partsChannel <- jpm
+
+		if ms := common.CalculateChannelBackPressureDelay(
+			len(jm.coordinatorChannels.partsChannel),
+			cap(jm.coordinatorChannels.partsChannel),
+			common.DefaultProfile); ms > 0 {
+			time.Sleep(time.Duration(ms) * time.Millisecond)
+		}
+	}
+}
+
+// checkAndProcessFolderParts checks if all file parts are complete and processes queued folder parts
+func (jm *jobMgr) checkAndProcessFolderParts() {
+
+	jm.folderPartsMutex.Lock()
+	defer jm.folderPartsMutex.Unlock()
+
+	// If no folder parts are queued, nothing to do
+	if len(jm.queuedFolderParts) == 0 {
+		return
+	}
+
+	// Check if all file/mixed parts are complete
+	allFilePartsComplete := true
+	jm.jobPartMgrs.Iterate(true, func(k common.PartNumber, v IJobPartMgr) {
+		plan := v.Plan()
+		// Only check file/mixed parts (not folders)
+		if plan.JobPartType != common.EJobPartType.Folders() {
+			status := plan.JobPartStatus()
+			if !status.IsJobDone() {
+				allFilePartsComplete = false
+			}
+		}
+	})
+
+	if allFilePartsComplete {
+		jm.Log(common.LogInfo, fmt.Sprintf("All file parts complete, processing %d queued folder parts", len(jm.queuedFolderParts)))
+
+		// Process all queued folder parts by reconstructing JobPartMgr from minimal structure
+		for _, queuedPart := range jm.queuedFolderParts {
+			// Look up the existing JobPartMgr for this part number
+			if folderPartMgr, found := jm.jobPartMgrs.Get(queuedPart.partNum); found {
+				jm.coordinatorChannels.partsChannel <- folderPartMgr
+
+				if ms := common.CalculateChannelBackPressureDelay(
+					len(jm.coordinatorChannels.partsChannel),
+					cap(jm.coordinatorChannels.partsChannel),
+					common.DefaultProfile); ms > 0 {
+					time.Sleep(time.Duration(ms) * time.Millisecond)
+				}
+			} else {
+				jm.Log(common.LogError, fmt.Sprintf("Failed to find JobPartMgr for queued folder part %d", queuedPart.partNum))
+			}
+		}
+
+		// Clear the queue
+		jm.queuedFolderParts = nil
 	}
 }
 

@@ -29,6 +29,10 @@ func NewFolderCreationTrackerInt(fpo common.FolderPropertyOption, plan *JobPartP
 	switch fpo {
 	case common.EFolderPropertiesOption.AllFolders(),
 		common.EFolderPropertiesOption.AllFoldersExceptRoot():
+
+		if plan.JobProcessingMode == common.EJobProcessingMode.FolderAfterFiles() {
+			return &noOpFolderTracker{}
+		}
 		return &jpptFolderTracker{ // This prevents a dependency cycle. Reviewers: Are we OK with this? Can you think of a better way to do it?
 			plan:                   plan,
 			mu:                     &sync.RWMutex{},
@@ -59,6 +63,20 @@ func (f *nullFolderTracker) ShouldSetProperties(folder string, overwrite common.
 }
 
 func (f *nullFolderTracker) StopTracking(folder string) {
+	// noop (because we don't track anything)
+}
+
+type noOpFolderTracker struct{}
+
+func (f *noOpFolderTracker) CreateFolder(folder string, doCreation func() error) error {
+	return doCreation()
+}
+
+func (f *noOpFolderTracker) ShouldSetProperties(folder string, overwrite common.OverwriteOption, prompter common.Prompter) bool {
+	return true
+}
+
+func (f *noOpFolderTracker) StopTracking(folder string) {
 	// noop (because we don't track anything)
 }
 
