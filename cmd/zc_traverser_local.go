@@ -277,6 +277,8 @@ type WalkWithSymlinksOptions struct {
 	// destination.
 	// Both approaches has their pros and cons. True scenario aligns with Mover scenario.
 	CheckAncestorsForLoops bool
+
+	Recursive bool
 }
 
 // WalkWithSymlinks is a symlinks-aware, parallelized, version of filePath.Walk.
@@ -477,7 +479,6 @@ func WalkWithSymlinks(
 					// deduped to break cycles.  For now, we are living with the inconsistency. The alternative would be to "burn" more
 					// RAM by putting filepaths into seenDirs too, but that could be a non-trivial amount of RAM in big directories trees).
 					targetFi := symlinkTargetFileInfo{rStat, fileInfo.Name()}
-
 					err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), targetFi, fileError)
 					_, err = getProcessingError(err)
 					if err != nil {
@@ -502,9 +503,10 @@ func WalkWithSymlinks(
 				result, err := filepath.Abs(filePath)
 				rStat, err := os.Stat(result)
 
-				if UseSyncOrchestrator && rStat.IsDir() {
+				if !options.Recursive && rStat.IsDir() {
 					return nil
 				}
+
 				if err != nil {
 					err = fmt.Errorf("failed to get absolute path of %s: %w", filePath, err)
 					WarnStdoutAndScanningLog(err.Error())
@@ -512,7 +514,7 @@ func WalkWithSymlinks(
 					return nil
 				}
 
-				if !seenPaths.HasSeen(result) || UseSyncOrchestrator {
+				if !seenPaths.HasSeen(result) || options.CheckAncestorsForLoops {
 					err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
 					// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
 					skipped, err := getProcessingError(err)
@@ -977,6 +979,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 					HardlinkHandling:            t.hardlinkHandling,
 					IncrementEnumerationCounter: t.incrementEnumerationCounter,
 					CheckAncestorsForLoops:      buildmode.IsMover,
+					Recursive:                   t.recursive,
 				},
 			))
 		} else {
@@ -1081,6 +1084,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 										HardlinkHandling:            t.hardlinkHandling,
 										IncrementEnumerationCounter: t.incrementEnumerationCounter,
 										CheckAncestorsForLoops:      buildmode.IsMover,
+										Recursive:                   t.recursive,
 									}))
 								continue
 							}
