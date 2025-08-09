@@ -281,6 +281,11 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	}
 	common.LogToJobLogWithPrefix(message, common.LogInfo)
 
+	dispatcher := copyJobPartDispatcher{
+		PendingTransfers:       common.Transfers{},
+		PendingFolderTransfers: common.Transfers{},
+	}
+
 	processor := func(object StoredObject) error {
 		// Start by resolving the name and creating the container
 		if object.ContainerName != "" {
@@ -360,12 +365,12 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		}
 
 		if shouldSendToSte {
-			return addTransfer(&jobPartOrder, transfer, cca)
+			return dispatcher.addTransfer(&jobPartOrder, transfer, cca)
 		}
 		return nil
 	}
 	finalizer := func() error {
-		return dispatchFinalPart(&jobPartOrder, cca)
+		return dispatcher.dispatchFinalPart(&jobPartOrder, cca)
 	}
 
 	return NewCopyEnumerator(traverser, filters, processor, finalizer), nil

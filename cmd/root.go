@@ -488,3 +488,11 @@ func getGitHubLatestRemoteVersion() (*Version, error) {
 	return getGitHubLatestRemoteVersionWithURL(apiEndpoint)
 
 }
+
+func GetJobProcessingMode() common.JobProcessingMode {
+	if buildmode.IsMover {
+		return common.EJobProcessingMode.FolderAfterFiles()
+	} else {
+		return common.EJobProcessingMode.Mixed()
+	}
+}

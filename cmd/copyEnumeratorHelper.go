@@ -11,47 +11,76 @@ import (
 var EnumerationParallelism = 1
 var EnumerationParallelStatFiles = false
 
+type copyJobPartDispatcher struct {
+	PendingTransfers       common.Transfers
+	PendingFolderTransfers common.Transfers
+}
+
+func (d *copyJobPartDispatcher) readyForDispatch() bool {
+	return (len(d.PendingTransfers.List) == NumOfFilesPerDispatchJobPart) ||
+		(len(d.PendingFolderTransfers.List) == NumOfFilesPerDispatchJobPart)
+}
+
+func (d *copyJobPartDispatcher) appendTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer) error {
+
+	if e.JobProcessingMode == common.EJobProcessingMode.FolderAfterFiles() &&
+		transfer.EntityType == common.EEntityType.Folder() {
+		d.PendingFolderTransfers.List = append(d.PendingFolderTransfers.List, transfer)
+		d.PendingFolderTransfers.TotalSizeInBytes += uint64(transfer.SourceSize)
+		d.PendingFolderTransfers.FolderTransferCount++
+	} else {
+		d.PendingTransfers.List = append(d.PendingTransfers.List, transfer)
+		d.PendingTransfers.TotalSizeInBytes += uint64(transfer.SourceSize)
+		switch transfer.EntityType {
+		case common.EEntityType.File():
+			d.PendingTransfers.FileTransferCount++
+		case common.EEntityType.Folder():
+			d.PendingTransfers.FolderTransferCount++
+		case common.EEntityType.Symlink():
+			d.PendingTransfers.SymlinkTransferCount++
+		case common.EEntityType.Hardlink():
+			d.PendingTransfers.HardlinksConvertedCount++
+		case common.EEntityType.FileProperties():
+			d.PendingTransfers.FilePropertyTransferCount++
+		}
+	}
+
+	return nil
+}
+
 // addTransfer accepts a new transfer, if the threshold is reached, dispatch a job part order.
-func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer, cca *CookedCopyCmdArgs) error {
+func (d *copyJobPartDispatcher) addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer, cca *CookedCopyCmdArgs) error {
 	// Source and destination paths are and should be relative paths.
 
-	// dispatch the transfers once the number reaches NumOfFilesPerDispatchJobPart
-	// we do this so that in the case of large transfer, the transfer engine can get started
-	// while the frontend is still gathering more transfers
-	if len(e.Transfers.List) == NumOfFilesPerDispatchJobPart {
-		shuffleTransfers(e.Transfers.List)
-		resp := jobsAdmin.ExecuteNewCopyJobPartOrder(*e)
+	if d.readyForDispatch() {
 
-		if !resp.JobStarted {
-			return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNum, resp.ErrorMsg)
+		if e.JobProcessingMode == common.EJobProcessingMode.FolderAfterFiles() {
+			if len(d.PendingTransfers.List) == NumOfFilesPerDispatchJobPart {
+				e.Transfers = d.PendingTransfers.Clone()
+				e.JobPartType = common.EJobPartType.Files()
+				d.dispatchPart(e, cca)
+				d.PendingTransfers = common.Transfers{}
+			}
+
+			if len(d.PendingFolderTransfers.List) == NumOfFilesPerDispatchJobPart {
+				e.Transfers = d.PendingFolderTransfers.Clone()
+				e.JobPartType = common.EJobPartType.Folders()
+				d.dispatchPart(e, cca)
+				d.PendingFolderTransfers = common.Transfers{}
+			}
+		} else {
+			if len(d.PendingTransfers.List) == NumOfFilesPerDispatchJobPart {
+				e.Transfers = d.PendingTransfers.Clone()
+				e.JobPartType = common.EJobPartType.Mixed()
+				d.dispatchPart(e, cca)
+				d.PendingTransfers = common.Transfers{}
+			}
 		}
-		// if the current part order sent to engine is 0, then start fetching the Job Progress summary.
-		if e.PartNum == 0 {
-			cca.waitUntilJobCompletion(false)
-		}
-		e.Transfers = common.Transfers{}
-		e.PartNum++
 	}
 
 	// only append the transfer after we've checked and dispatched a part
 	// so that there is at least one transfer for the final part
-	{
-		// Should this block be a function?
-		e.Transfers.List = append(e.Transfers.List, transfer)
-		e.Transfers.TotalSizeInBytes += uint64(transfer.SourceSize)
-		switch transfer.EntityType {
-		case common.EEntityType.File():
-			e.Transfers.FileTransferCount++
-		case common.EEntityType.Folder():
-			e.Transfers.FolderTransferCount++
-		case common.EEntityType.Symlink():
-			e.Transfers.SymlinkTransferCount++
-		case common.EEntityType.Hardlink():
-			e.Transfers.HardlinksConvertedCount++
-		case common.EEntityType.FileProperties():
-			e.Transfers.FilePropertyTransferCount++
-		}
-	}
+	d.appendTransfer(e, transfer)
 
 	return nil
 }
@@ -59,14 +88,60 @@ func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer
 // this function shuffles the transfers before they are dispatched
 // this is done to avoid hitting the same partition continuously in an append only pattern
 // TODO this should probably be removed after the high throughput block blob feature is implemented on the service side
-func shuffleTransfers(transfers []common.CopyTransfer) {
+func (d *copyJobPartDispatcher) shuffleTransfers(transfers []common.CopyTransfer) {
 	rand.Shuffle(len(transfers), func(i, j int) { transfers[i], transfers[j] = transfers[j], transfers[i] })
+}
+
+// dispatch the transfers once the number reaches NumOfFilesPerDispatchJobPart
+// we do this so that in the case of large transfer, the transfer engine can get started
+// while the frontend is still gathering more transfers
+func (d *copyJobPartDispatcher) dispatchPart(e *common.CopyJobPartOrderRequest, cca *CookedCopyCmdArgs) error {
+	d.shuffleTransfers(e.Transfers.List)
+	resp := jobsAdmin.ExecuteNewCopyJobPartOrder(*e)
+
+	if !resp.JobStarted {
+		return fmt.Errorf(
+			"copy job part order with JobId %s, part number %d, transfer type %s, and transfer count %d failed because %s",
+			e.JobID, e.PartNum, e.JobPartType, len(e.Transfers.List), resp.ErrorMsg)
+	}
+	// if the current part order sent to engine is 0, then start fetching the Job Progress summary.
+	if e.PartNum == 0 {
+		cca.waitUntilJobCompletion(false)
+	}
+	e.Transfers = common.Transfers{}
+	e.PartNum++
+	return nil
 }
 
 // we need to send a last part with isFinalPart set to true, along with whatever transfers that still haven't been sent
 // dispatchFinalPart sends a last part with isFinalPart set to true, along with whatever transfers that still haven't been sent.
-func dispatchFinalPart(e *common.CopyJobPartOrderRequest, cca *CookedCopyCmdArgs) error {
-	shuffleTransfers(e.Transfers.List)
+func (d *copyJobPartDispatcher) dispatchFinalPart(e *common.CopyJobPartOrderRequest, cca *CookedCopyCmdArgs) error {
+
+	if e.JobProcessingMode == common.EJobProcessingMode.FolderAfterFiles() {
+		if len(d.PendingTransfers.List) > 0 && len(d.PendingFolderTransfers.List) > 0 {
+			// if there are both kinds of transfers pending, first do the file transfers
+			e.Transfers = d.PendingTransfers.Clone()
+			e.JobPartType = common.EJobPartType.Files()
+			d.dispatchPart(e, cca)
+			d.PendingTransfers = common.Transfers{}
+		}
+
+		// Either file or folder transfers are pending. Whatever is pending will be the final part.
+		if len(d.PendingTransfers.List) > 0 {
+			e.Transfers = d.PendingTransfers.Clone()
+			e.JobPartType = common.EJobPartType.Files()
+		} else if len(d.PendingFolderTransfers.List) > 0 {
+			e.Transfers = d.PendingFolderTransfers.Clone()
+			e.JobPartType = common.EJobPartType.Folders()
+		}
+	} else {
+		if len(d.PendingTransfers.List) > 0 {
+			e.Transfers = d.PendingTransfers.Clone()
+			e.JobPartType = common.EJobPartType.Mixed()
+		}
+	}
+
+	d.shuffleTransfers(e.Transfers.List)
 	e.IsFinalPart = true
 	resp := jobsAdmin.ExecuteNewCopyJobPartOrder(*e)
 
@@ -86,7 +161,9 @@ func dispatchFinalPart(e *common.CopyJobPartOrderRequest, cca *CookedCopyCmdArgs
 			return NothingScheduledError
 		}
 
-		return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNum, resp.ErrorMsg)
+		return fmt.Errorf(
+			"copy job part order with JobId %s, part number %d, transfer type %s, and transfer count %d failed because %s",
+			e.JobID, e.PartNum, e.JobPartType, len(e.Transfers.List), resp.ErrorMsg)
 	}
 
 	common.LogToJobLogWithPrefix(FinalPartCreatedMessage, common.LogInfo)
