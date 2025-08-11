@@ -99,4 +99,4 @@ require (
 
 replace github.com/Azure/azure-sdk-for-go/sdk/storage/azfile => github.com/Azure/azure-sdk-for-go/sdk/storage/azfile v0.0.0-20250313100248-09ad70aa7647
 
-go 1.24.4
+go 1.24.6
