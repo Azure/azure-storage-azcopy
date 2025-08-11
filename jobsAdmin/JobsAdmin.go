@@ -182,7 +182,8 @@ func getMaxRamForChunks() int64 {
 
 func (ja *jobsAdmin) createConcurrencyTuner() ste.ConcurrencyTuner {
 	if ja.concurrency.AutoTuneMainPool() {
-		t := ste.NewAutoConcurrencyTuner(ja.concurrency.InitialMainPoolSize, ja.concurrency.MaxMainPoolSize.Value, BenchmarkResults)
+		t := ste.NewAutoConcurrencyTuner(ja.concurrency.InitialMainPoolSize, ja.concurrency.MaxMainPoolSize.Value, &ja.atomicCurrentMainPoolSize, ja.provideBenchmarkResults)
+
 		if !t.RequestCallbackWhenStable(func() { ja.recordTuningCompleted(true) }) {
 			panic("could not register tuning completion callback")
 		}
@@ -376,6 +377,42 @@ func (ja *jobsAdmin) ResurrectJob(jobId common.JobID,
 	jm.ResurrectSummary(js)
 
 	return true
+}
+
+func (ja *jobsAdmin) ListJobs(givenStatus common.JobStatus) common.ListJobsResponse {
+	ret := common.ListJobsResponse{JobIDDetails: []common.JobIDDetails{}}
+	files := func(ext string) []os.FileInfo {
+		var files []os.FileInfo
+		_ = filepath.Walk(ja.planDir, func(path string, fileInfo os.FileInfo, _ error) error {
+			if !fileInfo.IsDir() && strings.HasSuffix(fileInfo.Name(), ext) {
+				files = append(files, fileInfo)
+			}
+			return nil
+		})
+		return files
+	}(fmt.Sprintf(".steV%d", ste.DataSchemaVersion))
+
+	// TODO : sort the file.
+	for f := 0; f < len(files); f++ {
+		planFile := ste.JobPartPlanFileName(files[f].Name())
+		jobID, partNum, err := planFile.Parse()
+		if err != nil || partNum != 0 { // Summary is in 0th JobPart
+			continue
+		}
+
+		mmf := planFile.Map()
+		jpph := mmf.Plan()
+
+		if givenStatus == common.EJobStatus.All() || givenStatus == jpph.JobStatus() {
+			ret.JobIDDetails = append(ret.JobIDDetails,
+				common.JobIDDetails{JobId: jobID, CommandString: jpph.CommandString(),
+					StartTime: jpph.StartTime, JobStatus: jpph.JobStatus()})
+		}
+
+		mmf.Unmap()
+	}
+
+	return ret
 }
 
 func (ja *jobsAdmin) SetConcurrencySettingsToAuto() {

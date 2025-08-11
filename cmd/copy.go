@@ -1011,12 +1011,6 @@ func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.
 // dispatches the job order (in parts) to the storage engine
 func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	// Make AUTO default for Azure Files since Azure Files throttles too easily unless user specified concurrency value
-	if jobsAdmin.JobsAdmin != nil &&
-		(cca.FromTo.From().IsFile() || (cca.FromTo.To().IsFile() &&
-			common.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue()) == "")) {
-		jobsAdmin.JobsAdmin.SetConcurrencySettingsToAuto()
-	}
 
 	if err := common.VerifyIsURLResolvable(cca.Source.Value); cca.FromTo.From().IsRemote() && err != nil {
 		return fmt.Errorf("failed to resolve source: %w", err)
