@@ -298,6 +298,10 @@ func (cooked *cookedSyncCmdArgs) GetDeletionCount() uint32 {
 	return cooked.getDeletionCount()
 }
 
+func (cooked *cookedSyncCmdArgs) SetStripTopDir(stripTopDir bool) {
+	cooked.stripTopDir = stripTopDir
+}
+
 func (cooked *cookedSyncCmdArgs) SetJobId(jobID common.JobID) {
 	cooked.jobID = jobID
 }
