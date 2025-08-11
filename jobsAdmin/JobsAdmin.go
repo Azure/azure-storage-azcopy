@@ -78,30 +78,23 @@ var JobsAdmin interface {
 	// AddJobPartMgr associates the specified JobPartMgr with the Jobs Administrator
 	//AddJobPartMgr(appContext context.Context, planFile JobPartPlanFileName) IJobPartMgr
 	/*ScheduleTransfer(jptm IJobPartTransferMgr)*/
-	ResurrectJob(jobId common.JobID, sourceSAS string, destinationSAS string, srcServiceClient *common.ServiceClient, dstServiceClient *common.ServiceClient, srcIsOAuth bool) bool
-
-	// AppPathFolder returns the Azcopy application path folder.
-	// JobPartPlanFile will be created inside this folder.
-	AppPathFolder() string
+	ResurrectJob(jobId common.JobID, srcServiceClient *common.ServiceClient, dstServiceClient *common.ServiceClient, srcIsOAuth bool) bool
 
 	// returns the current value of bytesOverWire.
 	BytesOverWire() int64
 
-	LogToJobLog(msg string, level common.LogLevel)
-
 	//DeleteJob(jobID common.JobID)
-	common.ILoggerCloser
-
-	CurrentMainPoolSize() int
 
 	TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint32, fromTo common.FromTo, dir common.TransferDirection, p *ste.PipelineNetworkStats) []common.PerformanceAdvice
 
+	SetConcurrencySettingsToAuto()
+	GetConcurrencySettings() (int, bool)
+
 	// JobMgrCleanUp do the JobMgr cleanup.
 	JobMgrCleanUp(jobId common.JobID)
-	ListJobs(givenStatus common.JobStatus) common.ListJobsResponse
 }
 
-func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64, azcopyJobPlanFolder string, azcopyLogPathFolder string, providePerfAdvice bool) {
+func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64) {
 	if JobsAdmin != nil {
 		panic("initJobsAdmin was already called once")
 	}
@@ -122,25 +115,19 @@ func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, 
 	pacer := ste.NewTokenBucketPacer(targetRateInBytesPerSec, unusedExpectedCoarseRequestByteCount)
 	// Note: as at July 2019, we don't currently have a shutdown method/event on JobsAdmin where this pacer
 	// could be shut down. But, it's global anyway, so we just leave it running until application exit.
-
 	ja := &jobsAdmin{
-		concurrency:             concurrency,
-		logger:                  common.AzcopyCurrentJobLogger,
-		jobIDToJobMgr:           newJobIDToJobMgr(),
-		logDir:                  azcopyLogPathFolder,
-		planDir:                 azcopyJobPlanFolder,
-		pacer:                   pacer,
-		slicePool:               common.NewMultiSizeSlicePool(common.MaxBlockBlobBlockSize),
-		cacheLimiter:            common.NewCacheLimiter(maxRamBytesToUse),
-		fileCountLimiter:        common.NewCacheLimiter(int64(concurrency.MaxOpenDownloadFiles)),
-		cpuMonitor:              cpuMon,
-		appCtx:                  appCtx,
-		commandLineMbpsCap:      targetRateInMegaBitsPerSec,
-		provideBenchmarkResults: providePerfAdvice,
+		concurrency:        concurrency,
+		jobIDToJobMgr:      newJobIDToJobMgr(),
+		pacer:              pacer,
+		slicePool:          common.NewMultiSizeSlicePool(common.MaxBlockBlobBlockSize),
+		cacheLimiter:       common.NewCacheLimiter(maxRamBytesToUse),
+		fileCountLimiter:   common.NewCacheLimiter(int64(concurrency.MaxOpenDownloadFiles)),
+		cpuMonitor:         cpuMon,
+		appCtx:             appCtx,
+		commandLineMbpsCap: targetRateInMegaBitsPerSec,
 	}
 	// create new context with the defaultService api version set as value to serviceAPIVersionOverride in the app context.
 	ja.appCtx = context.WithValue(ja.appCtx, ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	ja.jobLogger = common.AzcopyCurrentJobLogger
 
 	// create concurrency tuner...
 	// ... but don't spin up the main pool. That is done when
@@ -196,6 +183,7 @@ func getMaxRamForChunks() int64 {
 func (ja *jobsAdmin) createConcurrencyTuner() ste.ConcurrencyTuner {
 	if ja.concurrency.AutoTuneMainPool() {
 		t := ste.NewAutoConcurrencyTuner(ja.concurrency.InitialMainPoolSize, ja.concurrency.MaxMainPoolSize.Value, &ja.atomicCurrentMainPoolSize, ja.provideBenchmarkResults)
+
 		if !t.RequestCallbackWhenStable(func() { ja.recordTuningCompleted(true) }) {
 			panic("could not register tuning completion callback")
 		}
@@ -213,55 +201,47 @@ func (ja *jobsAdmin) recordTuningCompleted(showOutput bool) {
 
 	if showOutput {
 		msg := "Automatic concurrency tuning completed."
-		if ja.provideBenchmarkResults {
+		if BenchmarkResults {
 			msg += " Recording of performance stats will begin now."
 		}
 		common.GetLifecycleMgr().Info("")
 		common.GetLifecycleMgr().Info(msg)
-		if ja.provideBenchmarkResults {
+		if BenchmarkResults {
 			common.GetLifecycleMgr().Info("")
 			common.GetLifecycleMgr().Info("*** After a minute or two, you may cancel the job with CTRL-C to trigger early analysis of the stats. ***")
 			common.GetLifecycleMgr().Info("*** You do not need to wait for whole job to finish.                                                  ***")
 		}
 		common.GetLifecycleMgr().Info("")
-		ja.LogToJobLog(msg, common.LogInfo)
+		common.LogToJobLogWithPrefix(msg, common.LogInfo)
 	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+var BenchmarkResults = false
 
 // There will be only 1 instance of the jobsAdmin type.
 // The coordinator uses this to manage all the running jobs and their job parts.
 type jobsAdmin struct {
 	atomicBytesTransferredWhileTuning int64
 	atomicTuningEndSeconds            int64
-	atomicCurrentMainPoolSize         int32 // align 64 bit integers for 32 bit arch
 	concurrency                       ste.ConcurrencySettings
-	logger                            common.ILoggerCloser
 	jobIDToJobMgr                     jobIDToJobMgr // Thread-safe map from each JobID to its JobInfo
 	// Other global state can be stored in more fields here...
-	logDir                  string // Where log files are stored
-	planDir                 string // Initialize to directory where Job Part Plans are stored
-	appCtx                  context.Context
-	pacer                   ste.PacerAdmin
-	slicePool               common.ByteSlicePooler
-	cacheLimiter            common.CacheLimiter
-	fileCountLimiter        common.CacheLimiter
-	concurrencyTuner        ste.ConcurrencyTuner
-	commandLineMbpsCap      float64
-	provideBenchmarkResults bool
-	cpuMonitor              common.CPUMonitor
-	jobLogger               common.ILoggerResetable
+	appCtx             context.Context
+	pacer              ste.PacerAdmin
+	slicePool          common.ByteSlicePooler
+	cacheLimiter       common.CacheLimiter
+	fileCountLimiter   common.CacheLimiter
+	concurrencyTuner   ste.ConcurrencyTuner
+	commandLineMbpsCap float64
+	cpuMonitor         common.CPUMonitor
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func (ja *jobsAdmin) NewJobPartPlanFileName(jobID common.JobID, partNumber common.PartNumber) ste.JobPartPlanFileName {
 	return ste.JobPartPlanFileName(fmt.Sprintf(ste.JobPartPlanFileNameFormat, jobID.String(), partNumber, ste.DataSchemaVersion))
-}
-
-func (ja *jobsAdmin) FileExtension() string {
-	return fmt.Sprintf(".strV%05d", ste.DataSchemaVersion)
 }
 
 // JobIDDetails returns point-in-time list of JobIDDetails
@@ -278,12 +258,6 @@ func (ja *jobsAdmin) JobMgr(jobID common.JobID) (ste.IJobMgr, bool) {
 	return ja.jobIDToJobMgr.Get(jobID)
 }
 
-// AppPathFolder returns the Azcopy application path folder.
-// JobPartPlanFile will be created inside this folder.
-func (ja *jobsAdmin) AppPathFolder() string {
-	return ja.planDir
-}
-
 // JobMgrEnsureExists returns the specified JobID's IJobMgr if it exists or creates it if it doesn't already exit
 // If it does exist, then the appCtx argument is ignored.
 func (ja *jobsAdmin) JobMgrEnsureExists(jobID common.JobID,
@@ -292,7 +266,7 @@ func (ja *jobsAdmin) JobMgrEnsureExists(jobID common.JobID,
 	return ja.jobIDToJobMgr.EnsureExists(jobID,
 		func() ste.IJobMgr {
 			// Return existing or new IJobMgr to caller
-			return ste.NewJobMgr(ja.concurrency, jobID, ja.appCtx, ja.cpuMonitor, level, commandString, ja.logDir, ja.concurrencyTuner, ja.pacer, ja.slicePool, ja.cacheLimiter, ja.fileCountLimiter, ja.jobLogger, false)
+			return ste.NewJobMgr(ja.concurrency, jobID, ja.appCtx, ja.cpuMonitor, level, commandString, ja.concurrencyTuner, ja.pacer, ja.slicePool, ja.cacheLimiter, ja.fileCountLimiter, common.AzcopyCurrentJobLogger, false)
 		})
 }
 
@@ -355,8 +329,6 @@ func (ja *jobsAdmin) SuccessfulBytesInActiveFiles() uint64 {
 */
 
 func (ja *jobsAdmin) ResurrectJob(jobId common.JobID,
-	sourceSAS string,
-	destinationSAS string,
 	srcServiceClient *common.ServiceClient,
 	dstServiceClient *common.ServiceClient,
 	srcIsOAuth bool) bool {
@@ -365,7 +337,7 @@ func (ja *jobsAdmin) ResurrectJob(jobId common.JobID,
 	// are include in the result
 	files := func(prefix, ext string) []os.FileInfo {
 		var files []os.FileInfo
-		_ = filepath.Walk(ja.planDir, func(path string, fileInfo os.FileInfo, _ error) error {
+		_ = filepath.Walk(common.AzcopyJobPlanFolder, func(path string, fileInfo os.FileInfo, _ error) error {
 			if !fileInfo.IsDir() && fileInfo.Size() != 0 && strings.HasPrefix(fileInfo.Name(), prefix) && strings.HasSuffix(fileInfo.Name(), ext) {
 				files = append(files, fileInfo)
 			}
@@ -443,6 +415,21 @@ func (ja *jobsAdmin) ListJobs(givenStatus common.JobStatus) common.ListJobsRespo
 	return ret
 }
 
+func (ja *jobsAdmin) SetConcurrencySettingsToAuto() {
+	// Setting initial pool size to 4 and max pool size to 3,000
+	ja.concurrency.InitialMainPoolSize = 4
+	ja.concurrency.MaxMainPoolSize = &ste.ConfiguredInt{Value: 3000, IsUserSpecified: false, EnvVarName: common.EEnvironmentVariable.ConcurrencyValue().Name, DefaultSourceDesc: "auto-tuning limit"}
+
+	// recreate the concurrency tuner.
+	// Tuner isn't called until the first job part is scheduled for transfer, so it is safe to update it before that.
+	ja.concurrencyTuner = ja.createConcurrencyTuner()
+}
+
+func (ja *jobsAdmin) GetConcurrencySettings() (int, bool) {
+	// return a copy of the concurrency settings, so that caller cannot modify the original
+	return ja.concurrency.EnumerationPoolSize.Value, ja.concurrency.ParallelStatFiles.Value
+}
+
 // TODO: I think something is wrong here: I think delete and cleanup should be merged together.
 // DeleteJobInfo api deletes an entry of given JobId the JobsInfo
 // TODO: add the clean up logic for all Jobparts.
@@ -482,15 +469,6 @@ func (ja *jobsAdmin) DeleteJob(jobID common.JobID) {
 	ja.DeleteJob(jobID)
 }
 */
-func (ja *jobsAdmin) ShouldLog(level common.LogLevel) bool  { return ja.logger.ShouldLog(level) }
-func (ja *jobsAdmin) Log(level common.LogLevel, msg string) { ja.logger.Log(level, msg) }
-func (ja *jobsAdmin) Panic(err error)                       { ja.logger.Panic(err) }
-func (ja *jobsAdmin) CloseLog()                             { ja.logger.CloseLog() }
-
-func (ja *jobsAdmin) CurrentMainPoolSize() int {
-	return int(atomic.LoadInt32(&ja.atomicCurrentMainPoolSize))
-}
-
 func (ja *jobsAdmin) slicePoolPruneLoop() {
 	// if something in the pool has been unused for this long, we probably don't need it
 	const pruneInterval = 5 * time.Second
@@ -508,21 +486,10 @@ func (ja *jobsAdmin) slicePoolPruneLoop() {
 	}
 }
 
-// TODO: review or replace (or confirm to leave as is?)  Originally, JobAdmin couldn't use individual job logs because there could
-// be several concurrent jobs running. That's not the case any more, so this is safe now, but it doesn't quite fit with the
-// architecture around it.
-func (ja *jobsAdmin) LogToJobLog(msg string, level common.LogLevel) {
-	prefix := ""
-	if level <= common.LogWarning {
-		prefix = fmt.Sprintf("%s: ", common.LogLevel(level)) // so readers can find serious ones, but information ones still look uncluttered without INFO:
-	}
-	ja.jobLogger.Log(level, prefix+msg)
-}
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func (ja *jobsAdmin) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint32, fromTo common.FromTo, dir common.TransferDirection, p *ste.PipelineNetworkStats) []common.PerformanceAdvice {
-	if !ja.provideBenchmarkResults {
+	if !BenchmarkResults {
 		return make([]common.PerformanceAdvice, 0)
 	}
 
