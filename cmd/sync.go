@@ -684,6 +684,8 @@ func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm common.LifecycleMgr, th
 	lcm.Progress(func(format common.OutputFormat) string {
 		srcScanned := atomic.LoadUint64(&cca.atomicSourceFilesScanned)
 		dstScanned := atomic.LoadUint64(&cca.atomicDestinationFilesScanned)
+		srcDirsScanned := atomic.LoadUint64(&cca.atomicSourceFoldersScanned)
+		dstDirsScanned := atomic.LoadUint64(&cca.atomicDestinationFoldersScanned)
 
 		if format == common.EOutputFormat.Json() {
 			jsonOutputTemplate := scanningProgressJsonTemplate{
@@ -698,10 +700,10 @@ func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm common.LifecycleMgr, th
 		// text output
 		throughputString := ""
 		if cca.firstPartOrdered() {
-			throughputString = fmt.Sprintf(", 2-sec Throughput (Mb/s): %v", jobsAdmin.ToFixed(throughput, 4))
+			throughputString = fmt.Sprintf(" 2-sec Throughput (Mb/s): %v", jobsAdmin.ToFixed(throughput, 4))
 		}
-		return fmt.Sprintf("%v Files Scanned at Source, %v Files Scanned at Destination%s",
-			srcScanned, dstScanned, throughputString)
+		return fmt.Sprintf("Source scanning: %v Files, %v Folders. Destination scanning: %v Files, %v Folders. %s",
+			srcScanned, srcDirsScanned, dstScanned, dstDirsScanned, throughputString)
 	})
 }
 
