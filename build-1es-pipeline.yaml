@@ -31,6 +31,11 @@ parameters:
     displayName: 'Publish Artifacts to Linux Repos'
     type: boolean
     default: false
+
+  - name: test_pmc_connection
+    displayName: 'Test PMC Connection without Publishing Artifacts to Linux Repos'
+    type: boolean
+    default: false
 # Do not trigger this pipeline automatically
 trigger: none
 pr: none
@@ -278,7 +283,7 @@ extends:
               - task: UseDotNet@2
                 inputs:
                   packageType: 'sdk'
-                  version: '6.0.x'
+                  version: '9.0.x'
 
               - script: |
                   mkdir -p $(mariner)
@@ -365,7 +370,7 @@ extends:
               - task: UseDotNet@2
                 inputs:
                   packageType: 'sdk'
-                  version: '6.0.x'
+                  version: '9.0.x'
 
               - template: setup/esrp_sign_windows.yml@self
                 parameters:
@@ -470,7 +475,7 @@ extends:
               - task: UseDotNet@2
                 inputs:
                   packageType: 'sdk'
-                  version: '6.0.x'
+                  version: '9.0.x'
 
               - template: setup/esrp_sign_notarize_macos.yml@self
                 parameters:
@@ -1076,13 +1081,19 @@ extends:
                     inputs:
                       secureFile: 'settings.toml'
 
-                  - script: |
-                      pmc --version
-                      pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo list --limit 1
-                      if [ $? -ne 0 ]; then
-                        exit 1
-                      fi
+                  - task: AzureCLI@2
                     displayName: 'Test PMC installation'
+                    inputs:
+                      addSpnToEnvironment: true
+                      azureSubscription: 'azcopy-release'
+                      scriptType: bash
+                      scriptLocation: inlineScript
+                      inlineScript: |
+                        pmc --version
+                        pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" repo list --limit 1
+                        if [ $? -ne 0 ]; then
+                          exit 1
+                        fi
 
                   # DownloadPipelineArtifact AFTER checkout since checkout wipes out the DefaultWorkingDirectory
                   - task: DownloadPipelineArtifact@2
@@ -1113,70 +1124,95 @@ extends:
                     displayName: 'Remove manifest'
 
                   - script: |
-                      pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package upload signed
-                    displayName: 'Upload files'
+                      ls -lRt $(signed)
+                    displayName: 'List artifacts'
 
-                  - script: |
-                      azcopyAmdDeb=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy*.x86_64.deb`
-                      echo "Azcopy AMD DEB ID: $azcopyAmdDeb"
-                      
-                      azcopyAmdRpmFile=$(ls azcopy-* | grep -vE 'cm2\.x86_64\.rpm|arm64\.deb|x86_64\.deb|arm64\.rpm')
-                      azcopyAmdRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $azcopyAmdRpmFile)
-                      echo "Azcopy AMD RPM ID: $azcopyAmdRpm"
-                      
-                      azcopyArmDeb=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy*.arm64.deb`
-                      echo "Azcopy ARM DEB ID: $azcopyArmDeb"
-                      
-                      azcopyArmRpmFile=$(ls azcopy* | grep -vE 'cm2\.arm64\.rpm|arm64\.deb|x86_64\.deb|x86_64\.rpm')
-                      azcopyArmRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $azcopyArmRpmFile)
-                      echo "Azcopy ARM RPM $azcopyArmRpmFile"
-                      echo "Azcopy ARM RPM ID: $azcopyArmRpm"
-                      
-                      # Find the Mariner RPM file and upload
-                      marinerAmdRpmFile=$(ls azcopy-* | grep 'cm2\.x86_64\.rpm')
-                      marinerAmdRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $marinerAmdRpmFile)
-                      echo "Azcopy mariner AMD RPM $marinerAmdRpmFile"
-                      echo "Azcopy mariner AMD RPM ID: $marinerAmdRpm"
-                      
-                      marinerAarchRpmFile=$(ls azcopy-* | grep 'cm2\.arm64\.rpm')
-                      marinerAarchRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $marinerAarchRpmFile)
-                      echo "Azcopy mariner ARM RPM: $marinerAarchRpmFile"
-                      echo "Azcopy mariner ARM RPM ID: $marinerAarchRpm"
-                      
-                      is_preview="false"
-                      echo "##vso[task.setvariable variable=is_preview]$is_preview"
-                      if [[ $marinerAmdRpmFile == *"preview"* ]]; then
-                        is_preview="true"
-                        echo "##vso[task.setvariable variable=is_preview]$is_preview"
-                      fi
+                  - ${{ if eq(parameters.test_pmc_connection, false) }}:
+                    - task: AzureCLI@2
+                      displayName: 'Upload files'
+                      inputs:
+                        addSpnToEnvironment: true
+                        azureSubscription: 'azcopy-release'
+                        scriptType: bash
+                        scriptLocation: inlineScript
+                        inlineScript: |
+                          pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" package upload signed
 
-                      while IFS=, read -r distro archetype repoName releaseName; do
-                        # If the package is preview, publish to mariner preview package
-                        if [[ $distro == *"Mariner-"* ]]; then
-                          if [ $is_preview = "true" ]; then
-                            repoName=$(echo $repoName | sed 's/prod/preview/')
+                  - ${{ if eq(parameters.test_pmc_connection, false) }}:
+                    - task: AzureCLI@2
+                      displayName: 'Add uploaded packages to repository'
+                      inputs:
+                        addSpnToEnvironment: true
+                        azureSubscription: 'azcopy-release'
+                        scriptType: bash
+                        scriptLocation: inlineScript
+                        workingDirectory: $(signed)
+                        inlineScript: |
+                          azcopyAmdDeb=`pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload azcopy*.x86_64.deb`
+                          echo "Azcopy AMD DEB ID: $azcopyAmdDeb"
+                          
+                          azcopyAmdRpmFile=$(ls azcopy-* | grep -vE 'cm2\.x86_64\.rpm|arm64\.deb|x86_64\.deb|arm64\.rpm')
+                          azcopyAmdRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azcopyAmdRpmFile)
+                          echo "Azcopy AMD RPM ID: $azcopyAmdRpm"
+                          
+                          azcopyArmDeb=`pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload azcopy*.arm64.deb`
+                          echo "Azcopy ARM DEB ID: $azcopyArmDeb"
+                          
+                          azcopyArmRpmFile=$(ls azcopy* | grep -vE 'cm2\.arm64\.rpm|arm64\.deb|x86_64\.deb|x86_64\.rpm')
+                          azcopyArmRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azcopyArmRpmFile)
+                          echo "Azcopy ARM RPM $azcopyArmRpmFile"
+                          echo "Azcopy ARM RPM ID: $azcopyArmRpm"
+                          
+                          # Find the Mariner RPM file and upload
+                          marinerAmdRpmFile=$(ls azcopy-* | grep 'cm2\.x86_64\.rpm')
+                          marinerAmdRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $marinerAmdRpmFile)
+                          echo "Azcopy mariner AMD RPM $marinerAmdRpmFile"
+                          echo "Azcopy mariner AMD RPM ID: $marinerAmdRpm"
+                          
+                          marinerAarchRpmFile=$(ls azcopy-* | grep 'cm2\.arm64\.rpm')
+                          marinerAarchRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $marinerAarchRpmFile)
+                          echo "Azcopy mariner ARM RPM: $marinerAarchRpmFile"
+                          echo "Azcopy mariner ARM RPM ID: $marinerAarchRpm"
+                          
+                          is_preview="false"
+                          echo "##vso[task.setvariable variable=is_preview]$is_preview"
+                          if [[ $marinerAmdRpmFile == *"preview"* ]]; then
+                            is_preview="true"
+                            echo "##vso[task.setvariable variable=is_preview]$is_preview"
                           fi
-                        fi
-                        echo "Uploading packages for $distro"
-                        echo "Repo Name: $repoName"
-                        pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!archetype} $repoName $releaseName
-                      done < <(tail -n +3 ../packages.csv)
-                    displayName: 'Add uploaded packages to repository'
-                    workingDirectory: $(signed)
-
-                  - script: |
-                      while IFS=, read -r distro archetype repoName releaseName; do
-                        if [[ $archetype == *"Arm"* ]]; then
-                          echo "Skipping for ARM type on $distro"
-                        else
-                          if [[ $distro == *"Mariner-"* ]]; then
-                            if [ "$(is_preview)" = "true" ]; then
-                              repoName=$(echo $repoName | sed 's/prod/preview/')
+    
+                          while IFS=, read -r distro archetype repoName releaseName; do
+                            # If the package is preview, publish to mariner preview package
+                            if [[ $distro == *"Mariner-"* ]]; then
+                              if [ $is_preview = "true" ]; then
+                                repoName=$(echo $repoName | sed 's/prod/preview/')
+                              fi
                             fi
-                          fi
-                          echo "Repo Name: $repoName"
-                          pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo publish $repoName
-                        fi
-                      done < <(tail -n +3 ../packages.csv)
-                    displayName: 'Publish the repository'
-                    workingDirectory: $(signed)
+                            echo "Uploading packages for $distro"
+                            echo "Repo Name: $repoName"
+                            pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" repo package update --add-packages ${!archetype} $repoName $releaseName
+                          done < <(tail -n +3 ../packages.csv)
+
+                  - ${{ if eq(parameters.test_pmc_connection, false) }}:
+                      - task: AzureCLI@2
+                        displayName: 'Publish the repository'
+                        inputs:
+                          addSpnToEnvironment: true
+                          azureSubscription: 'azcopy-release'
+                          scriptType: bash
+                          scriptLocation: inlineScript
+                          workingDirectory: $(signed)
+                          inlineScript: |
+                            while IFS=, read -r distro archetype repoName releaseName; do
+                              if [[ $archetype == *"Arm"* ]]; then
+                                echo "Skipping for ARM type on $distro"
+                              else
+                                if [[ $distro == *"Mariner-"* ]]; then
+                                  if [ "$(is_preview)" = "true" ]; then
+                                    repoName=$(echo $repoName | sed 's/prod/preview/')
+                                  fi
+                                fi
+                                echo "Repo Name: $repoName"
+                                pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" repo publish $repoName
+                              fi
+                            done < <(tail -n +3 ../packages.csv)

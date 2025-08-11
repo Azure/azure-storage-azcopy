@@ -7,14 +7,16 @@ steps:
 - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
   displayName: 'Sign Windows executable'
   inputs:
-    ConnectedServiceName: 'ESRP KeyVault identity'
-    AppRegistrationClientId: '77acb45d-e931-4568-9bfc-d0607bdf3759'
-    AppRegistrationTenantId: '72f988bf-86f1-41af-91ab-2d7cd011db47'
-    AuthAKVName: 'azcopy-esrp-kv'
-    AuthCertName: 'azcopy-auth'
-    AuthSignCertName: 'azcopy-sign-test'
+    ConnectedServiceName: 'azcopy-release'
+    AppRegistrationClientId: $(ESRP_V5_APP_REGISTRATION_CLIENT_ID)
+    AppRegistrationTenantId: $(ESRP_V5_APP_REGISTRATION_TENANT_ID)
+    AuthAKVName: $(ESRP_V5_KEY_VAULT_NAME)
+    AuthCertName: $(ESRP_V5_AUTH_CERT_NAME)
+    AuthSignCertName: $(ESRP_V5_SIGN_CERT_NAME)
     FolderPath: ${{ parameters.FolderPath }}
     Pattern: ${{ parameters.Pattern }}
+    ServiceEndpointUrl: 'https://api.esrp.microsoft.com/api/v2'
+    MaxConcurrency: 25
     signConfigType: inlineSignParams
     inlineOperation: |
       [
