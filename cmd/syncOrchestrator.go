@@ -54,10 +54,6 @@ var (
 	// When true, uses the sliding window approach for directory synchronization.
 	UseSyncOrchestrator bool = true
 
-	// syncMutex provides thread-safe access to shared resources during sync operations.
-	// Protects concurrent access to indexer operations and file counting.
-	syncMutex sync.Mutex
-
 	// dirSemaphore controls the maximum number of directories processed concurrently
 	// to prevent resource exhaustion during large-scale sync operations.
 	dirSemaphore *ThrottleSemaphore
@@ -273,10 +269,11 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 	so.relativePath = buildChildPath(st.dir, so.relativePath)
 
 	// Thread-safe storage in the indexer first
-	syncMutex.Lock()
+	st.enumerator.objectIndexer.rwMutex.Lock()
 	err := st.enumerator.objectIndexer.store(so)
+	st.enumerator.objectIndexer.rwMutex.Unlock()
+
 	if err != nil {
-		syncMutex.Unlock()
 		return err
 	}
 
@@ -291,7 +288,6 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 			changeTime:   so.changeTime,
 		})
 	}
-	syncMutex.Unlock()
 
 	return nil
 }
@@ -302,12 +298,7 @@ func (st *SyncTraverser) customComparator(so StoredObject) error {
 	// Build full path for destination object
 	so.relativePath = buildChildPath(st.dir, so.relativePath)
 
-	// Thread-safe comparison processing
-	syncMutex.Lock()
-	err := st.comparator(so)
-	syncMutex.Unlock()
-
-	return err
+	return st.comparator(so)
 }
 
 // finalize completes the processing of the current directory by scheduling
@@ -326,8 +317,9 @@ func (st *SyncTraverser) finalize(scheduleTransfer bool) error {
 		dirPrefix = st.dir + common.AZCOPY_PATH_SEPARATOR_STRING
 	}
 
-	// Update final file count for throttling
-	syncMutex.Lock()
+	// Use exclusive lock for the entire operation to prevent concurrent iteration and modification
+	st.enumerator.objectIndexer.rwMutex.RLock()
+
 	if enableThrottling {
 		totalFilesInIndexer.Store(int64(len(st.enumerator.objectIndexer.indexMap))) // Set accurate count
 	}
@@ -339,9 +331,9 @@ func (st *SyncTraverser) finalize(scheduleTransfer bool) error {
 			itemsToProcess = append(itemsToProcess, path)
 		}
 	}
-	syncMutex.Unlock()
+	st.enumerator.objectIndexer.rwMutex.RUnlock()
 
-	// Process collected items
+	// Process collected items while still holding the lock to prevent concurrent access
 	for _, path := range itemsToProcess {
 		err := st.finalizeChild(path, scheduleTransfer)
 		if err != nil {
@@ -406,7 +398,7 @@ func (st *SyncTraverser) hasAnyChildChangedSinceLastSync() (bool, uint32) {
 	// This is purely for incrementing the metrics with a computation cost
 	childCount := uint32(0)
 
-	syncMutex.Lock()
+	st.enumerator.objectIndexer.rwMutex.RLock()
 	// Collect items to process (we need to collect first to avoid modifying map while iterating)
 	for path := range st.enumerator.objectIndexer.indexMap {
 		if st.belongsToCurrentDirectory(path, dirPrefix) {
@@ -426,7 +418,7 @@ func (st *SyncTraverser) hasAnyChildChangedSinceLastSync() (bool, uint32) {
 			}
 		}
 	}
-	syncMutex.Unlock()
+	st.enumerator.objectIndexer.rwMutex.RUnlock()
 	return foundOneChanged, childCount - uint32(len(st.sub_dirs))
 }
 
@@ -435,10 +427,10 @@ func (st *SyncTraverser) hasAnyChildChangedSinceLastSync() (bool, uint32) {
 // If the object is a directory, it will be processed after all files in that directory are finalized.
 // This method is called after the traversal is complete for each child object.
 func (st *SyncTraverser) finalizeChild(child string, scheduleTransfer bool) error {
-	syncMutex.Lock()
+	st.enumerator.objectIndexer.rwMutex.RLock()
 	// Get pointer to the stored object from indexer
 	storedObject, exists := st.enumerator.objectIndexer.indexMap[child]
-	syncMutex.Unlock()
+	st.enumerator.objectIndexer.rwMutex.RUnlock()
 
 	if exists {
 		// Schedule the file/directory for transfer using the pointer
@@ -450,13 +442,13 @@ func (st *SyncTraverser) finalizeChild(child string, scheduleTransfer bool) erro
 		}
 
 		// Remove from indexer to free memory
-		syncMutex.Lock()
+		st.enumerator.objectIndexer.rwMutex.Lock()
 		delete(st.enumerator.objectIndexer.indexMap, child)
+		st.enumerator.objectIndexer.rwMutex.Unlock()
 
 		if enableThrottling {
 			totalFilesInIndexer.Add(-1) // Decrement the count after processing
 		}
-		syncMutex.Unlock()
 	}
 
 	return nil
