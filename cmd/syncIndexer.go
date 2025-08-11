@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"strings"
+	"sync"
 )
 
 // the objectIndexer is essential for the generic sync enumerator to work
@@ -37,6 +38,10 @@ type objectIndexer struct {
 	// Apple File System (APFS) can be configured to be case-sensitive or case-insensitive.
 	// So for such locations, the key in the indexMap will be lowercase to avoid infinite syncing.
 	isDestinationCaseInsensitive bool
+
+	// rwMutex is used to synchronize access to the indexMap
+	// XDM: this is exclusively used in SyncOrchestrator as of 08-2025
+	rwMutex sync.RWMutex
 }
 
 func newObjectIndexer() *objectIndexer {
