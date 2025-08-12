@@ -66,8 +66,8 @@ func (cca cookedCancelCmdArgs) process() error {
 			glcm.Info(err.Error())
 		}
 		PrintJobProgressSummary(common.ListJobSummaryResponse(*resp))
-	}
-	if err != nil {
+		return nil
+	} else if err != nil {
 		return err
 	}
 	return nil
