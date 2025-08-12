@@ -142,11 +142,11 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 			}
 		}()
 
-		processed, _ := f.processIfNecessaryWithOrchestrator(sourceObjectInMap, destinationObject)
+		// processed, _ := f.processIfNecessaryWithOrchestrator(sourceObjectInMap, destinationObject)
 
-		if processed {
-			return nil
-		}
+		// if processed {
+		// 	return nil
+		// }
 
 		if f.disableComparison {
 			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, false)
