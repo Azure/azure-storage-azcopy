@@ -215,7 +215,7 @@ func normalizeSAS(sas string) string {
 	return sas
 }
 
-func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
+func getSourceAndDestinationServiceClients(
 	ctx context.Context,
 	source common.ResourceString,
 	destination common.ResourceString,
@@ -325,9 +325,6 @@ func (rca resumeCmdArgs) process() error {
 	rca.SourceSAS = normalizeSAS(rca.SourceSAS)
 	rca.DestinationSAS = normalizeSAS(rca.DestinationSAS)
 
-	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	// Initialize credential info.
-	credentialInfo := common.CredentialInfo{}
 	// TODO: Replace context with root context
 	srcResourceString, err := SplitResourceString(jobDetails.Source, jobDetails.FromTo.From())
 	if err != nil {
@@ -340,6 +337,9 @@ func (rca resumeCmdArgs) process() error {
 	}
 	dstResourceString.SAS = rca.DestinationSAS
 
+	// Initialize credential info.
+	credentialInfo := common.CredentialInfo{}
+	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// we should stop using credentiaLInfo and use the clients instead. But before we fix
 	// that there will be repeated calls to get Credential type for correctness.
 	if credentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
@@ -350,7 +350,7 @@ func (rca resumeCmdArgs) process() error {
 		return err
 	}
 
-	srcServiceClient, dstServiceClient, err := rca.getSourceAndDestinationServiceClients(
+	srcServiceClient, dstServiceClient, err := getSourceAndDestinationServiceClients(
 		ctx,
 		srcResourceString,
 		dstResourceString,
