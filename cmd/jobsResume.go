@@ -139,6 +139,17 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 	return
 }
 
+func parseTransfers(arg string) map[string]int {
+	transfersMap := make(map[string]int)
+	for i, t := range strings.Split(arg, ";") {
+		if t == "" {
+			continue // skip empty entries from misplaced ';'
+		}
+		transfersMap[t] = i
+	}
+	return transfersMap
+}
+
 func init() {
 	commandLineArgs := resumeCmdArgs{}
 
@@ -165,38 +176,8 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			includeTransfer := make(map[string]int)
-			excludeTransfer := make(map[string]int)
-
-			// If the transfer has been provided with the include, parse the transfer list.
-			if len(commandLineArgs.includeTransfer) > 0 {
-				// Split the Include Transfer using ';'
-				transfers := strings.Split(commandLineArgs.includeTransfer, ";")
-				for index := range transfers {
-					if len(transfers[index]) == 0 {
-						// If the transfer provided is empty
-						// skip the transfer
-						// This is to handle the misplaced ';'
-						continue
-					}
-					includeTransfer[transfers[index]] = index
-				}
-			}
-			// If the transfer has been provided with the exclude, parse the transfer list.
-			if len(commandLineArgs.excludeTransfer) > 0 {
-				// Split the Exclude Transfer using ';'
-				transfers := strings.Split(commandLineArgs.excludeTransfer, ";")
-				for index := range transfers {
-					if len(transfers[index]) == 0 {
-						// If the transfer provided is empty
-						// skip the transfer
-						// This is to handle the misplaced ';'
-						continue
-					}
-					excludeTransfer[transfers[index]] = index
-				}
-			}
-
+			includeTransfer := parseTransfers(commandLineArgs.includeTransfer)
+			excludeTransfer := parseTransfers(commandLineArgs.excludeTransfer)
 			if len(includeTransfer) > 0 || len(excludeTransfer) > 0 {
 				panic("List of transfers is obsolete.")
 			}
@@ -226,22 +207,21 @@ type resumeCmdArgs struct {
 	DestinationSAS string
 }
 
+// normalizeSAS ensures the SAS token starts with "?" if non-empty.
+func normalizeSAS(sas string) string {
+	if sas != "" && sas[0] != '?' {
+		return "?" + sas
+	}
+	return sas
+}
+
 func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 	ctx context.Context,
-	fromTo common.FromTo,
 	source common.ResourceString,
 	destination common.ResourceString,
+	jobDetails common.GetJobDetailsResponse,
 ) (*common.ServiceClient, *common.ServiceClient, error) {
-	if len(rca.SourceSAS) > 0 && rca.SourceSAS[0] != '?' {
-		rca.SourceSAS = "?" + rca.SourceSAS
-	}
-	if len(rca.DestinationSAS) > 0 && rca.DestinationSAS[0] != '?' {
-		rca.DestinationSAS = "?" + rca.DestinationSAS
-	}
-
-	source.SAS = rca.SourceSAS
-	destination.SAS = rca.DestinationSAS
-
+	fromTo := jobDetails.FromTo
 	srcCredType, _, err := getCredentialTypeForLocation(ctx,
 		fromTo.From(),
 		source,
@@ -280,24 +260,14 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
 		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
-	jobID, err := common.ParseJobID(rca.jobID)
-	if err != nil {
-		// Error for invalid JobId format
-		return nil, nil, fmt.Errorf("error parsing the jobId %s. Failed with error %w", rca.jobID, err)
-	}
 
 	// But we don't want to supply a reauth token if we're not using OAuth. That could cause problems if say, a SAS is invalid.
 	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, common.Iff(srcCredType.IsAzureOAuth(), reauthTok, nil))
-	// Get job details from the STE
-	getJobDetailsResponse := jobsAdmin.GetJobDetails(common.GetJobDetailsRequest{JobID: jobID})
-	if getJobDetailsResponse.ErrorMsg != "" {
-		glcm.Error(getJobDetailsResponse.ErrorMsg)
-	}
 
 	var fileSrcClientOptions any
 	if fromTo.From() == common.ELocation.File() || fromTo.From() == common.ELocation.FileNFS() {
 		fileSrcClientOptions = &common.FileClientOptions{
-			AllowTrailingDot: getJobDetailsResponse.TrailingDot.IsEnabled(), //Access the trailingDot option of the job
+			AllowTrailingDot: jobDetails.TrailingDot.IsEnabled(), //Access the trailingDot option of the job
 		}
 	}
 	srcServiceClient, err := common.GetServiceClientForLocation(fromTo.From(), source, srcCredType, tc, &options, fileSrcClientOptions)
@@ -313,8 +283,8 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 	var fileClientOptions any
 	if fromTo.To() == common.ELocation.File() || fromTo.To() == common.ELocation.FileNFS() {
 		fileClientOptions = &common.FileClientOptions{
-			AllowSourceTrailingDot: getJobDetailsResponse.TrailingDot.IsEnabled() && fromTo.From() == common.ELocation.File(),
-			AllowTrailingDot:       getJobDetailsResponse.TrailingDot.IsEnabled(),
+			AllowSourceTrailingDot: jobDetails.TrailingDot.IsEnabled() && fromTo.From() == common.ELocation.File(),
+			AllowTrailingDot:       jobDetails.TrailingDot.IsEnabled(),
 		}
 	}
 	dstServiceClient, err := common.GetServiceClientForLocation(fromTo.To(), destination, dstCredType, tc, &options, fileClientOptions)
@@ -340,33 +310,40 @@ func (rca resumeCmdArgs) process() error {
 	}
 
 	// Get fromTo info, so we can decide what's the proper credential type to use.
-	getJobFromToResponse := jobsAdmin.GetJobDetails(common.GetJobDetailsRequest{JobID: jobID})
-	if getJobFromToResponse.ErrorMsg != "" {
-		glcm.Error(getJobFromToResponse.ErrorMsg)
+	jobDetails := jobsAdmin.GetJobDetails(common.GetJobDetailsRequest{JobID: jobID})
+	if jobDetails.ErrorMsg != "" {
+		glcm.Error(jobDetails.ErrorMsg)
 	}
 
-	if getJobFromToResponse.FromTo.From() == common.ELocation.Benchmark() ||
-		getJobFromToResponse.FromTo.To() == common.ELocation.Benchmark() {
+	if jobDetails.FromTo.From() == common.ELocation.Benchmark() ||
+		jobDetails.FromTo.To() == common.ELocation.Benchmark() {
 		// Doesn't make sense to resume a benchmark job.
 		// It's not tested, and wouldn't report progress correctly and wouldn't clean up after itself properly
 		return errors.New("resuming benchmark jobs is not supported")
 	}
 
+	rca.SourceSAS = normalizeSAS(rca.SourceSAS)
+	rca.DestinationSAS = normalizeSAS(rca.DestinationSAS)
+
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// Initialize credential info.
 	credentialInfo := common.CredentialInfo{}
 	// TODO: Replace context with root context
-	srcResourceString, err := SplitResourceString(getJobFromToResponse.Source, getJobFromToResponse.FromTo.From())
-	_ = err // todo
+	srcResourceString, err := SplitResourceString(jobDetails.Source, jobDetails.FromTo.From())
+	if err != nil {
+		return fmt.Errorf("error parsing source resource string: %w", err)
+	}
 	srcResourceString.SAS = rca.SourceSAS
-	dstResourceString, err := SplitResourceString(getJobFromToResponse.Destination, getJobFromToResponse.FromTo.To())
-	_ = err // todo
+	dstResourceString, err := SplitResourceString(jobDetails.Destination, jobDetails.FromTo.To())
+	if err != nil {
+		return fmt.Errorf("error parsing destination resource string: %w", err)
+	}
 	dstResourceString.SAS = rca.DestinationSAS
 
 	// we should stop using credentiaLInfo and use the clients instead. But before we fix
 	// that there will be repeated calls to get Credential type for correctness.
 	if credentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
-		fromTo:      getJobFromToResponse.FromTo,
+		fromTo:      jobDetails.FromTo,
 		source:      srcResourceString,
 		destination: dstResourceString,
 	}, common.CpkOptions{}); err != nil {
@@ -374,9 +351,10 @@ func (rca resumeCmdArgs) process() error {
 	}
 
 	srcServiceClient, dstServiceClient, err := rca.getSourceAndDestinationServiceClients(
-		ctx, getJobFromToResponse.FromTo,
+		ctx,
 		srcResourceString,
 		dstResourceString,
+		jobDetails,
 	)
 	if err != nil {
 		return errors.New("could not create service clients " + err.Error())

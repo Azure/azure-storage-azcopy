@@ -20,7 +20,10 @@
 
 package azcopy
 
-import "github.com/Azure/azure-storage-azcopy/v10/common"
+import (
+	"errors"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+)
 
 type ResumeJobOptions struct {
 	JobID common.JobID
@@ -32,5 +35,9 @@ type ResumeJobOptions struct {
 // ResumeJob resumes a job with the specified JobID.
 func (c Client) ResumeJob(opts ResumeJobOptions) (err error) {
 
+	if opts.JobID.IsEmpty() {
+		return errors.New("resume job requires the JobID")
+	}
+	// TODO (gapra): Implement the logic to resume a job.
 	return nil
 }
