@@ -25,7 +25,6 @@ import (
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/spf13/cobra"
 )
 
@@ -55,18 +54,21 @@ type cookedCancelCmdArgs struct {
 // handles the cancel command
 // dispatches the cancel Job order to the storage engine
 func (cca cookedCancelCmdArgs) process() error {
-	cancelJobResponse := jobsAdmin.CancelPauseJobOrder(cca.jobID, common.EJobStatus.Cancelling())
-	if !cancelJobResponse.CancelledPauseResumed {
-		if cca.ignoreCompletedJobError && cancelJobResponse.JobStatus == common.EJobStatus.Completed() {
-			glcm.Info(cancelJobResponse.ErrorMsg)
-			resp, err := Client.GetJobSummary(azcopy.GetJobSummaryOptions{JobID: cca.jobID})
-			if err != nil {
-				return err
-			}
-			PrintJobProgressSummary(common.ListJobSummaryResponse(resp))
-			return nil
+	opts := azcopy.CancelJobOptions{
+		JobID:                  cca.jobID,
+		IgnoreErrorIfCompleted: cca.ignoreCompletedJobError,
+	}
+	resp, err := Client.CancelJob(opts)
+	// Response if not nil if the job completed successfully and the user wants to ignore completed job errors
+	if resp != nil {
+		// Error is set to the cancel job response error
+		if err != nil {
+			glcm.Info(err.Error())
 		}
-		return errors.New(cancelJobResponse.ErrorMsg)
+		PrintJobProgressSummary(common.ListJobSummaryResponse(*resp))
+	}
+	if err != nil {
+		return err
 	}
 	return nil
 }
