@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 
@@ -411,14 +412,19 @@ func IsSystemContainer(containerName string) bool {
 	return false
 }
 
-// this is a global variable so that we can use it in traversal phase
-var isNFSCopy bool
+var (
+	isNFSCopy bool
+	setOnce   sync.Once
+)
 
-func SetNFSFlag(isNFS bool) {
-	// SetNFSFlag sets the global isNFSCopy variable to the given value
-	isNFSCopy = isNFS
+// SetIsNFSCopy sets the flag only once for the process lifetime
+func SetIsNFSCopy(fromTo FromTo) {
+	setOnce.Do(func() {
+		isNFSCopy = fromTo.From() == ELocation.FileNFS() || fromTo.To() == ELocation.FileNFS()
+	})
 }
 
+// IsNFSCopy retrieves the flag
 func IsNFSCopy() bool {
 	return isNFSCopy
 }

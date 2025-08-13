@@ -30,24 +30,40 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var nfsPermPreserveXfers = map[common.FromTo]bool{
+	common.EFromTo.LocalFileNFS():   true,
+	common.EFromTo.FileNFSLocal():   true,
+	common.EFromTo.FileNFSFileNFS(): true,
+	common.EFromTo.FileNFSFileSMB(): true,
+	common.EFromTo.FileSMBFileNFS(): true,
+}
+
 func validatePreserveNFSPropertyOption(toPreserve bool, fromTo common.FromTo, flagName string) error {
 	// preserverInfo will be true by default for NFS-aware locations unless specified false.
-	// 1. Upload (Windows/Linux -> Azure File)
-	// 2. Download (Azure File -> Windows/Linux)
+	// 1. Upload (Linux -> Azure File)
+	// 2. Download (Azure File -> Linux)
 	// 3. S2S (Azure File -> Azure File)
-	// TODO: More combination checks to be added later
-	if toPreserve && !(fromTo == common.EFromTo.LocalFileNFS() ||
-		fromTo == common.EFromTo.FileNFSLocal() ||
-		fromTo == common.EFromTo.FileNFSFileNFS()) {
-		return fmt.Errorf("%s is set but the job is not between %s-aware resources", flagName, common.Iff(flagName == PreserveInfoFlag, "permission", "NFS"))
-	}
 
-	if toPreserve && (fromTo.IsUpload() || fromTo.IsDownload()) &&
-		runtime.GOOS != "windows" && runtime.GOOS != "linux" {
-		return fmt.Errorf("%s is set but persistence for up/downloads is supported only in Windows and Linux", flagName)
+	if toPreserve {
+		// The user cannot preserve permissions between SMB->NFS or NFS->SMB transfers.
+		if flagName == PreservePermissionsFlag && (fromTo == common.EFromTo.FileNFSFileSMB() || fromTo == common.EFromTo.FileSMBFileNFS()) {
+			return fmt.Errorf("--preserve-permissions flag is not supported for cross-protocol transfers (e.g., SMB<->NFS, NFS<->SMB). Please remove this flag and try again.")
+		} else if !nfsPermPreserveXfers[fromTo] {
+			return fmt.Errorf("%s is set but the job is not between %s-aware resources", flagName, common.Iff(flagName == PreserveInfoFlag, "permission", "NFS"))
+		} else if (fromTo.IsUpload() || fromTo.IsDownload()) && runtime.GOOS != "linux" {
+			return fmt.Errorf("%s is set but persistence for up/downloads is supported only in Linux", flagName)
+		}
 	}
-
 	return nil
+}
+
+var smbPermPreserveXfers = map[common.FromTo]bool{
+	common.EFromTo.LocalFile():      true,
+	common.EFromTo.FileLocal():      true,
+	common.EFromTo.FileFile():       true,
+	common.EFromTo.LocalFileSMB():   true,
+	common.EFromTo.FileSMBLocal():   true,
+	common.EFromTo.FileSMBFileSMB(): true,
 }
 
 func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, flagName string) error {
@@ -55,21 +71,19 @@ func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, fl
 	// 1. Upload (Windows/Linux -> Azure File)
 	// 2. Download (Azure File -> Windows/Linux)
 	// 3. S2S (Azure File -> Azure File)
-	if toPreserve && flagName == PreservePermissionsFlag &&
-		(fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFSBlob() || fromTo == common.EFromTo.BlobBlobFS() || fromTo == common.EFromTo.BlobFSBlobFS()) {
-		// the user probably knows what they're doing if they're trying to persist permissions between blob-type endpoints.
-		return nil
-	} else if toPreserve && !(fromTo == common.EFromTo.LocalFile() ||
-		fromTo == common.EFromTo.FileLocal() ||
-		fromTo == common.EFromTo.FileFile()) {
-		return fmt.Errorf("%s is set but the job is not between %s-aware resources", flagName, common.Iff(flagName == PreservePermissionsFlag, "permission", "SMB"))
+	if toPreserve {
+		if flagName == PreservePermissionsFlag &&
+			(fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFSBlob() ||
+				fromTo == common.EFromTo.BlobBlobFS() || fromTo == common.EFromTo.BlobFSBlobFS()) {
+			// the user probably knows what they're doing if they're trying to persist permissions between blob-type endpoints.
+			return nil
+		} else if !smbPermPreserveXfers[fromTo] {
+			return fmt.Errorf("%s is set but the job is not between %s-aware resources", flagName, common.Iff(flagName == PreservePermissionsFlag, "permission", "SMB"))
+		} else if (fromTo.IsUpload() || fromTo.IsDownload()) &&
+			runtime.GOOS != "windows" && runtime.GOOS != "linux" {
+			return fmt.Errorf("%s is set but persistence for up/downloads is supported only in Windows and Linux", flagName)
+		}
 	}
-
-	if toPreserve && (fromTo.IsUpload() || fromTo.IsDownload()) &&
-		runtime.GOOS != "windows" && runtime.GOOS != "linux" {
-		return fmt.Errorf("%s is set but persistence for up/downloads is supported only in Windows and Linux", flagName)
-	}
-
 	return nil
 }
 
@@ -77,12 +91,19 @@ func areBothLocationsNFSAware(fromTo common.FromTo) bool {
 	// 1. Upload (Linux -> Azure File)
 	// 2. Download (Azure File -> Linux)
 	// 3. S2S (Azure File -> Azure File) (Works on Windows,Linux,Mac)
+
+	var s2sNFSXfers = map[common.FromTo]bool{
+		common.EFromTo.FileNFSFileNFS(): true,
+		common.EFromTo.FileNFSFileSMB(): true,
+		common.EFromTo.FileSMBFileNFS(): true,
+	}
+
 	if (runtime.GOOS == "linux") &&
 		(fromTo == common.EFromTo.LocalFileNFS() || fromTo == common.EFromTo.FileNFSLocal()) {
-		common.SetNFSFlag(true)
+		common.SetIsNFSCopy(fromTo)
 		return true
-	} else if fromTo == common.EFromTo.FileNFSFileNFS() {
-		common.SetNFSFlag(true)
+	} else if s2sNFSXfers[fromTo] {
+		common.SetIsNFSCopy(fromTo)
 		return true
 	} else {
 		return false
@@ -134,7 +155,7 @@ func performNFSSpecificValidation(fromTo common.FromTo,
 	preservePermissions common.PreservePermissionsOption,
 	preserveInfo bool,
 	symlinkHandling common.SymlinkHandlingType,
-	hardlinkHandling common.HardlinkHandlingType) (err error) {
+	hardlinkHandling *common.HardlinkHandlingType) (err error) {
 
 	// check for unsupported NFS behavior
 	if isUnsupported, err := isUnsupportedPlatformForNFS(fromTo); isUnsupported {
@@ -170,7 +191,7 @@ func performNFSSpecificValidation(fromTo common.FromTo,
 		return err
 	}
 
-	if err = validateHardlinksFlag(hardlinkHandling, fromTo); err != nil {
+	if err = validateAndAdjustHardlinksFlag(hardlinkHandling, fromTo); err != nil {
 		return err
 	}
 	return nil
@@ -193,7 +214,7 @@ func performSMBSpecificValidation(fromTo common.FromTo,
 	preservePermissions common.PreservePermissionsOption,
 	preserveInfo bool,
 	preservePOSIXProperties bool,
-	hardlinkHandling common.HardlinkHandlingType) (err error) {
+	hardlinkHandling *common.HardlinkHandlingType) (err error) {
 
 	if err = validatePreserveSMBPropertyOption(preserveInfo,
 		fromTo,
@@ -208,7 +229,7 @@ func performSMBSpecificValidation(fromTo common.FromTo,
 		PreservePermissionsFlag); err != nil {
 		return err
 	}
-	if err = validateHardlinksFlag(hardlinkHandling, fromTo); err != nil {
+	if err = validateAndAdjustHardlinksFlag(hardlinkHandling, fromTo); err != nil {
 		return err
 	}
 	return nil
@@ -230,23 +251,62 @@ func validateSymlinkFlag(followSymlinks, preserveSymlinks bool) error {
 	return nil
 }
 
-func validateHardlinksFlag(option common.HardlinkHandlingType, fromTo common.FromTo) error {
+// validateAndAdjustHardlinksFlag validates and adjusts the --hardlinks option based on OS,
+// transfer direction (upload, download, S2S), and source/destination types (NFS, SMB, local).
+// Returns an error if the configuration is unsupported.
+func validateAndAdjustHardlinksFlag(option *common.HardlinkHandlingType, fromTo common.FromTo) error {
+	if !common.IsNFSCopy() {
+		return nil
+	}
 
-	// Validate for Download: Only allowed when downloading from an NFS share to a Linux filesystem
-	if common.IsNFSCopy() {
-		if runtime.GOOS == "linux" && fromTo.IsDownload() && (fromTo.From() != common.ELocation.FileNFS()) {
-			return fmt.Errorf("The --hardlinks option, when downloading, is only supported from a NFS file share to a Linux filesystem.")
+	// NFS↔SMB special case: force skip
+	if (fromTo == common.EFromTo.FileNFSFileSMB() || fromTo == common.EFromTo.FileSMBFileNFS()) &&
+		*option != common.SkipHardlinkHandlingType {
+		return fmt.Errorf(
+			"For NFS↔SMB transfers, '--hardlinks' must be set to 'skip'. " +
+				"Hardlinked files are not supported between NFS and SMB and will always be skipped. " +
+				"Please re-run with '--hardlinks=skip'.",
+		)
+	}
+
+	// OS check: hardlinks handling only supported on Linux in case of upload and download
+	if runtime.GOOS != "linux" && !fromTo.IsS2S() {
+		return fmt.Errorf("The --hardlinks option is only supported on Linux.")
+	}
+
+	switch {
+	case fromTo.IsDownload():
+		// Must be NFS → Local Linux
+		if fromTo.From() != common.ELocation.FileNFS() {
+			return fmt.Errorf("For downloads, '--hardlinks' is only supported from an NFS file share to a Linux filesystem.")
 		}
 
-		// Validate for Upload or S2S: Only allowed when uploading *to* a local file system
-		if runtime.GOOS == "linux" && (fromTo.IsUpload() || fromTo.IsS2S()) && (fromTo.To() != common.ELocation.FileNFS()) {
-			return fmt.Errorf("The --hardlinks option, when uploading, is only supported from a NFS file share to a Linux filesystem or between NFS file shares.")
+	case fromTo.IsUpload():
+		// Must be Local Linux → NFS
+		if fromTo.To() != common.ELocation.FileNFS() {
+			return fmt.Errorf("For uploads, '--hardlinks' is only supported from a Linux filesystem to an NFS file share.")
+		}
+
+	case fromTo.IsS2S():
+		// Allowed: NFS↔NFS, NFS→SMB, SMB→NFS
+		validPairs := map[common.FromTo]bool{
+			common.EFromTo.FileNFSFileNFS(): true,
+			common.EFromTo.FileNFSFileSMB(): true,
+			common.EFromTo.FileSMBFileNFS(): true,
+		}
+		if !validPairs[fromTo] {
+			return fmt.Errorf("For S2S transfers, '--hardlinks' is only supported for NFS<->NFS, NFS->SMB, and SMB->NFS.")
 		}
 	}
 
-	if common.IsNFSCopy() && option == common.DefaultHardlinkHandlingType {
-		glcm.Info("The --hardlinks option is set to 'follow'. Hardlinked files will be copied as a regular file at the destination.")
+	// Info messages
+	switch *option {
+	case common.SkipHardlinkHandlingType:
+		glcm.Info("The --hardlinks option is set to 'skip'. Hardlinked files will be skipped.")
+	case common.DefaultHardlinkHandlingType:
+		glcm.Info("The --hardlinks option is set to 'follow'. Hardlinked files will be copied as regular files.")
 	}
+
 	return nil
 }
 
@@ -274,6 +334,7 @@ func validateShareProtocolCompatibility(
 	serviceClient *common.ServiceClient,
 	isSource bool,
 	protocol string,
+	fromTo common.FromTo,
 ) error {
 	if protocol == "" {
 		return nil
@@ -287,14 +348,23 @@ func validateShareProtocolCompatibility(
 	// We can ignore the error if we fail to get the share properties.
 	shareProtocol, _ := getShareProtocolType(ctx, serviceClient, resource, protocol)
 
-	if shareProtocol == "SMB" && common.IsNFSCopy() {
-		return fmt.Errorf("The %s share has SMB protocol enabled. To copy %s a SMB share, use the appropriate --from-to flag value", direction, direction)
+	if shareProtocol == "SMB" {
+		if isSource && fromTo.From() != common.ELocation.File() {
+			return fmt.Errorf("The %s share has SMB protocol enabled. To copy %s a SMB share, use the appropriate --from-to flag value", direction, direction)
+		}
+		if !isSource && fromTo.To() != common.ELocation.File() {
+			return fmt.Errorf("The %s share has SMB protocol enabled. To copy %s a SMB share, use the appropriate --from-to flag value", direction, direction)
+		}
 	}
 
-	if shareProtocol == "NFS" && !common.IsNFSCopy() {
-		return fmt.Errorf("The %s share has NFS protocol enabled. To copy %s a NFS share, use the appropriate --from-to flag value", direction, direction)
+	if shareProtocol == "NFS" {
+		if isSource && fromTo.From() != common.ELocation.FileNFS() {
+			return fmt.Errorf("The %s share has NFS protocol enabled. To copy %s a NFS share, use the appropriate --from-to flag value", direction, direction)
+		}
+		if !isSource && fromTo.To() != common.ELocation.FileNFS() {
+			return fmt.Errorf("The %s share has NFS protocol enabled. To copy %s a NFS share, use the appropriate --from-to flag value", direction, direction)
+		}
 	}
-
 	return nil
 }
 
@@ -346,38 +416,38 @@ func validateProtocolCompatibility(ctx context.Context, fromTo common.FromTo, sr
 		}
 	}
 
-	var protocol string
+	var srcProtocol, dstProtocol string
 
 	// S2S Transfers
 	if fromTo.IsS2S() {
 		switch fromTo {
 		case common.EFromTo.FileFile():
-			protocol = "SMB"
+			srcProtocol, dstProtocol = "SMB", "SMB"
 		case common.EFromTo.FileNFSFileNFS():
-			protocol = "NFS"
-		default:
-			if common.IsNFSCopy() {
-				return errors.New("NFS copy is not supported for cross-protocol transfers, i.e., Files SMB to Files NFS or vice versa")
-			}
+			srcProtocol, dstProtocol = "NFS", "NFS"
+		case common.EFromTo.FileNFSFileSMB():
+			srcProtocol, dstProtocol = "NFS", "SMB"
+		case common.EFromTo.FileSMBFileNFS():
+			srcProtocol, dstProtocol = "SMB", "NFS"
 		}
 
 		// Validate both source and destination
-		if err := validateShareProtocolCompatibility(ctx, src, srcClient, true, protocol); err != nil {
+		if err := validateShareProtocolCompatibility(ctx, src, srcClient, true, srcProtocol, fromTo); err != nil {
 			return err
 		}
-		return validateShareProtocolCompatibility(ctx, dst, dstClient, false, protocol)
+		return validateShareProtocolCompatibility(ctx, dst, dstClient, false, dstProtocol, fromTo)
 	}
 
 	// Uploads to File Shares
 	if fromTo.IsUpload() {
-		protocol = getUploadDownloadProtocol(fromTo)
-		return validateShareProtocolCompatibility(ctx, dst, dstClient, false, protocol)
+		dstProtocol = getUploadDownloadProtocol(fromTo)
+		return validateShareProtocolCompatibility(ctx, dst, dstClient, false, dstProtocol, fromTo)
 	}
 
 	// Downloads from File Shares
 	if fromTo.IsDownload() {
-		protocol = getUploadDownloadProtocol(fromTo)
-		return validateShareProtocolCompatibility(ctx, src, srcClient, true, protocol)
+		srcProtocol = getUploadDownloadProtocol(fromTo)
+		return validateShareProtocolCompatibility(ctx, src, srcClient, true, srcProtocol, fromTo)
 	}
 
 	return nil

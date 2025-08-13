@@ -1582,12 +1582,18 @@ func (pc *PerfConstraint) Parse(s string) error {
 var EHardlinkHandlingType = HardlinkHandlingType(0)
 
 var DefaultHardlinkHandlingType = EHardlinkHandlingType.Follow()
+var SkipHardlinkHandlingType = EHardlinkHandlingType.Skip()
 
 type HardlinkHandlingType uint8
 
-// Copy means copy the files to the destination as regular files
+// Follow means copy the files to the destination as regular files
 func (HardlinkHandlingType) Follow() HardlinkHandlingType {
 	return HardlinkHandlingType(0)
+}
+
+// Skip means skip the hardlinks and do not copy them to the destination
+func (HardlinkHandlingType) Skip() HardlinkHandlingType {
+	return HardlinkHandlingType(1)
 }
 
 func (pho HardlinkHandlingType) String() string {

@@ -287,6 +287,7 @@ type ListJobSummaryResponse struct {
 	IsCleanupJob            bool
 	SkippedSymlinkCount     uint32 `json:",string"`
 	HardlinksConvertedCount uint32 `json:",string"`
+	SkippedHardlinkCount    uint32 `json:",string"` // Skipped hardlinks count is only applicable for NFS transfers
 	SkippedSpecialFileCount uint32 `json:",string"`
 }
 
