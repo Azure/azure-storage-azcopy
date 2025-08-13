@@ -339,9 +339,11 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			return err
 		}
 		if s != nil {
-			err = processStoredObject(s.(StoredObject))
-			if err != nil {
-				return err
+			if obj, ok := s.(StoredObject); ok {
+				err = processStoredObject(obj)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
