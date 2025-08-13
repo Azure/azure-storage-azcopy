@@ -115,7 +115,7 @@ func (raw rawListCmdArgs) parseProperties() []validProperty {
 
 func (raw rawListCmdArgs) cook() (cookedListCmdArgs, error) {
 	// set up the front end scanning logger
-	azcopyScanningLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "-scanning")
+	azcopyScanningLogger = common.NewJobLogger(Client.CurrentJobID, Client.GetLogLevel(), common.LogPathFolder, "-scanning")
 	azcopyScanningLogger.OpenLog()
 	glcm.RegisterCloseFunc(func() {
 		azcopyScanningLogger.CloseLog()
@@ -131,7 +131,7 @@ func (raw rawListCmdArgs) cook() (cookedListCmdArgs, error) {
 	// Only support listing for Azure locations
 	switch cooked.location {
 	case common.ELocation.Blob():
-	case common.ELocation.File(),common.ELocation.FileNFS():
+	case common.ELocation.File(), common.ELocation.FileNFS():
 	case common.ELocation.BlobFS():
 		break
 	default:

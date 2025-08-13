@@ -352,10 +352,6 @@ func (IncludeAfterDateFilter) ParseISO8601(s string, chooseEarliest bool) (time.
 	return parseISO8601(s, chooseEarliest)
 }
 
-func (IncludeAfterDateFilter) FormatAsUTC(t time.Time) string {
-	return formatAsUTC(t)
-}
-
 // IncludeBeforeDateFilter includes files with Last Modified Times <= the specified Threshold
 // Used for copy, but doesn't make conceptual sense for sync
 type IncludeBeforeDateFilter struct {
@@ -384,10 +380,6 @@ func (f *IncludeBeforeDateFilter) DoesPass(storedObject StoredObject) bool {
 
 func (_ IncludeBeforeDateFilter) ParseISO8601(s string, chooseEarliest bool) (time.Time, error) {
 	return parseISO8601(s, chooseEarliest)
-}
-
-func (_ IncludeBeforeDateFilter) FormatAsUTC(t time.Time) string {
-	return formatAsUTC(t)
 }
 
 type permDeleteFilter struct {
@@ -477,9 +469,4 @@ func parseISO8601(s string, chooseEarliest bool) (time.Time, error) {
 	err = fmt.Errorf("could not parse date/time '%s'. Expecting ISO8601 format, with 4 digit year and 2-digits for all other elements. Error hint: %w",
 		s, err)
 	return time.Time{}, err
-}
-
-// formatAsUTC is inverse of parseISO8601 (and always uses the most detailed format)
-func formatAsUTC(t time.Time) string {
-	return t.UTC().Format(time.RFC3339)
 }
