@@ -80,8 +80,8 @@ type syncDestinationComparator struct {
 	// Function to increment files/folders not transferred as a result of no change since last sync.
 	incrementNotTransferred func(common.EntityType)
 
-	orchestratorOptions *SyncOrchestratorOptions
-	useIndexerLock      bool
+	orchestratorOptions    *SyncOrchestratorOptions
+	useOrchestratorOptions bool
 }
 
 func newSyncDestinationComparator(
@@ -94,7 +94,7 @@ func newSyncDestinationComparator(
 	deleteDestination common.DeleteDestination,
 	incrementNotTransferred func(common.EntityType),
 	orchestratorOptions *SyncOrchestratorOptions) *syncDestinationComparator {
-	return &syncDestinationComparator{
+	comp := &syncDestinationComparator{
 		sourceIndex:             i,
 		copyTransferScheduler:   copyScheduler,
 		destinationCleaner:      cleaner,
@@ -104,8 +104,12 @@ func newSyncDestinationComparator(
 		deleteDestination:       deleteDestination,
 		incrementNotTransferred: incrementNotTransferred,
 		orchestratorOptions:     orchestratorOptions,
-		useIndexerLock:          UseSyncOrchestrator,
 	}
+
+	comp.useOrchestratorOptions = UseSyncOrchestrator && IsSyncOrchestratorOptionsValid(orchestratorOptions) &&
+		orchestratorOptions.fromTo.From() == common.ELocation.Local()
+
+	return comp
 }
 
 // it will only schedule transfers for destination objects that are present in the indexer but stale compared to the entry in the map
@@ -117,7 +121,7 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 	var sourceObjectInMap StoredObject
 	var present bool
 
-	if f.useIndexerLock {
+	if f.sourceIndex.accessUnderLock {
 		f.sourceIndex.rwMutex.RLock()
 		sourceObjectInMap, present = f.sourceIndex.indexMap[destinationObject.relativePath]
 		f.sourceIndex.rwMutex.RUnlock()
@@ -133,7 +137,7 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 	// if the destinationObject is present at source and stale, we transfer the up-to-date version from source
 	if present {
 		defer func() {
-			if f.useIndexerLock {
+			if f.sourceIndex.accessUnderLock {
 				f.sourceIndex.rwMutex.Lock()
 				delete(f.sourceIndex.indexMap, destinationObject.relativePath)
 				f.sourceIndex.rwMutex.Unlock()
@@ -142,11 +146,12 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 			}
 		}()
 
-		// processed, _ := f.processIfNecessaryWithOrchestrator(sourceObjectInMap, destinationObject)
-
-		// if processed {
-		// 	return nil
-		// }
+		if f.useOrchestratorOptions {
+			processed, _ := f.processIfNecessaryWithOrchestrator(sourceObjectInMap, destinationObject)
+			if processed {
+				return nil
+			}
+		}
 
 		if f.disableComparison {
 			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, false)
@@ -207,10 +212,6 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 	sourceObjectInMap StoredObject,
 	destinationObject StoredObject) (bool, error) {
 
-	if !UseSyncOrchestrator {
-		return false, nil
-	}
-
 	if sourceObjectInMap.entityType == common.EEntityType.Hardlink() ||
 		sourceObjectInMap.entityType == common.EEntityType.Other() {
 		// As of now, for hardlinks and special files at source, fallback to the default behavior
@@ -260,14 +261,7 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 		return true, f.copyTransferScheduler(sourceObjectInMap)
 	}
 
-	dataChanged, metadataChanged := false, false
-	if f.orchestratorOptions != nil && f.orchestratorOptions.valid {
-		// Use optimized comparison logic using source and target timestamps and sizes
-		dataChanged, metadataChanged = f.compareSourceAndDestinationObject(sourceObjectInMap, destinationObject)
-	} else {
-		// This would fallback to default AzCopy logic
-		return false, fmt.Errorf("cannot use sync orchestrator options for comparison %s", sourceObjectInMap.relativePath)
-	}
+	dataChanged, metadataChanged := f.compareSourceAndDestinationObject(sourceObjectInMap, destinationObject)
 
 	if dataChanged {
 		return true, f.copyTransferScheduler(sourceObjectInMap)
