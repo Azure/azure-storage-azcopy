@@ -75,6 +75,10 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		enumeratorOptions = NewSyncDefaultEnumeratorOptions()
 	}
 
+	if enumeratorOptions.SyncOrchOptions.valid {
+		enumeratorOptions.SyncOrchOptions.fromTo = cca.fromTo
+	}
+
 	srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source, true, cca.cpkOptions)
 
 	if err != nil {

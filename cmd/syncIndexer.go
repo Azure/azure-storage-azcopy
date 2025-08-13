@@ -23,6 +23,8 @@ package cmd
 import (
 	"strings"
 	"sync"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 )
 
 // the objectIndexer is essential for the generic sync enumerator to work
@@ -41,11 +43,20 @@ type objectIndexer struct {
 
 	// rwMutex is used to synchronize access to the indexMap
 	// XDM: this is exclusively used in SyncOrchestrator as of 08-2025
-	rwMutex sync.RWMutex
+	rwMutex         sync.RWMutex
+	accessUnderLock bool
 }
 
 func newObjectIndexer() *objectIndexer {
-	return &objectIndexer{indexMap: make(map[string]StoredObject)}
+	indexer := &objectIndexer{
+		indexMap: make(map[string]StoredObject),
+	}
+
+	if UseSyncOrchestrator && buildmode.IsMover {
+		indexer.accessUnderLock = true
+	}
+
+	return indexer
 }
 
 // process the given stored object by indexing it using its relative path
