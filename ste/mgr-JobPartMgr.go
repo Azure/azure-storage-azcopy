@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"mime"
+	"net"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -80,14 +81,21 @@ type IJobPartMgr interface {
 // 'ulimit -Hn' is low).
 func NewAzcopyHTTPClient(maxIdleConns int) *http.Client {
 	const concurrentDialsPerCpu = 10 // exact value doesn't matter too much, but too low will be too slow, and too high will reduce the beneficial effect on thread count
+
 	return &http.Client{
 		Transport: &http.Transport{
-			Proxy:                  common.GlobalProxyLookup,
+			Proxy: common.GlobalProxyLookup,
+			DialContext: (&net.Dialer{
+				Timeout:   15 * time.Second, // Shorter connection timeout for faster failover on network issues
+				KeepAlive: 30 * time.Second,
+				DualStack: true,
+			}).DialContext,
 			MaxConnsPerHost:        concurrentDialsPerCpu * runtime.NumCPU(),
 			MaxIdleConns:           0, // No limit
 			MaxIdleConnsPerHost:    maxIdleConns,
 			IdleConnTimeout:        180 * time.Second,
 			TLSHandshakeTimeout:    10 * time.Second,
+			ResponseHeaderTimeout:  60 * time.Second, // Timeout for reading response headers
 			ExpectContinueTimeout:  1 * time.Second,
 			DisableKeepAlives:      false,
 			DisableCompression:     true, // must disable the auto-decompression of gzipped files, and just download the gzipped version. See https://github.com/Azure/azure-storage-azcopy/issues/374
