@@ -21,15 +21,21 @@
 package azcopy
 
 import (
+	"log"
+	"runtime"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"log"
-	"runtime"
 )
 
 type Client struct {
 	CurrentJobID common.JobID // TODO (gapra): In future this should only be set when there is a current job running. On complete, this should be cleared. It can also behave as something we can check to see if a current job is running
+	logLevel     common.LogLevel
+
+	// TODO (gapra) Make these fields private once moving everything to library
+	EnumerationParallelism       int
+	EnumerationParallelStatFiles bool
 }
 
 type ClientOptions struct {
@@ -37,7 +43,9 @@ type ClientOptions struct {
 }
 
 func NewClient(opts ClientOptions) (Client, error) {
-	c := Client{}
+	c := Client{
+		logLevel: common.ELogLevel.Info(), // Default: Info
+	}
 	common.InitializeFolders()
 	configureGoMaxProcs()
 	// Perform os specific initialization
@@ -52,6 +60,26 @@ func NewClient(opts ClientOptions) (Client, error) {
 		return c, err
 	}
 	return c, nil
+}
+
+func (c *Client) SetLogLevel(level *common.LogLevel) {
+	if level == nil {
+		c.logLevel = common.ELogLevel.Info() // Default to Info if no level is provided
+	} else {
+		c.logLevel = *level
+	}
+}
+
+func (c Client) GetLogLevel() common.LogLevel {
+	return c.logLevel
+}
+
+func (c Client) GetEnumerationParallelism() int {
+	return c.EnumerationParallelism
+}
+
+func (c Client) ParallelStatFilesDuringEnumeration() bool {
+	return c.EnumerationParallelStatFiles
 }
 
 // Ensure we always have more than 1 OS thread running goroutines, since there are issues with having just 1.
