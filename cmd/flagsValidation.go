@@ -47,7 +47,7 @@ func validatePreserveNFSPropertyOption(toPreserve bool, fromTo common.FromTo, fl
 	if toPreserve {
 		// The user cannot preserve permissions between SMB->NFS or NFS->SMB transfers.
 		if flagName == PreservePermissionsFlag && (fromTo == common.EFromTo.FileNFSFileSMB() || fromTo == common.EFromTo.FileSMBFileNFS()) {
-			return errors.New("Preserving cross platform permissions not supported")
+			return fmt.Errorf("--preserve-permissions flag is not supported for cross-protocol transfers (e.g., SMB<->NFS, NFS<->SMB). Please remove this flag and try again.")
 		} else if !nfsPermPreserveXfers[fromTo] {
 			return fmt.Errorf("%s is set but the job is not between %s-aware resources", flagName, common.Iff(flagName == PreserveInfoFlag, "permission", "NFS"))
 		} else if (fromTo.IsUpload() || fromTo.IsDownload()) &&
@@ -92,7 +92,8 @@ func areBothLocationsNFSAware(fromTo common.FromTo) bool {
 		(fromTo == common.EFromTo.LocalFileNFS() || fromTo == common.EFromTo.FileNFSLocal()) {
 		common.SetNFSFlag(true)
 		return true
-	} else if fromTo == common.EFromTo.FileNFSFileNFS() || fromTo == common.EFromTo.FileSMBFileNFS() || fromTo == common.EFromTo.FileNFSFileNFS() {
+	} else if fromTo == common.EFromTo.FileNFSFileNFS() || fromTo == common.EFromTo.FileSMBFileNFS() ||
+		fromTo == common.EFromTo.FileNFSFileNFS() || fromTo == common.EFromTo.FileNFSFileSMB() {
 		common.SetNFSFlag(true)
 		return true
 	} else {
@@ -145,7 +146,7 @@ func performNFSSpecificValidation(fromTo common.FromTo,
 	preservePermissions common.PreservePermissionsOption,
 	preserveInfo bool,
 	symlinkHandling common.SymlinkHandlingType,
-	hardlinkHandling common.HardlinkHandlingType) (err error) {
+	hardlinkHandling *common.HardlinkHandlingType) (err error) {
 
 	// check for unsupported NFS behavior
 	if isUnsupported, err := isUnsupportedPlatformForNFS(fromTo); isUnsupported {
@@ -181,7 +182,7 @@ func performNFSSpecificValidation(fromTo common.FromTo,
 		return err
 	}
 
-	if err = validateHardlinksFlag(hardlinkHandling, fromTo); err != nil {
+	if err = validateAndAdjustHardlinksFlag(hardlinkHandling, fromTo); err != nil {
 		return err
 	}
 	return nil
@@ -204,7 +205,7 @@ func performSMBSpecificValidation(fromTo common.FromTo,
 	preservePermissions common.PreservePermissionsOption,
 	preserveInfo bool,
 	preservePOSIXProperties bool,
-	hardlinkHandling common.HardlinkHandlingType) (err error) {
+	hardlinkHandling *common.HardlinkHandlingType) (err error) {
 
 	if err = validatePreserveSMBPropertyOption(preserveInfo,
 		fromTo,
@@ -219,7 +220,7 @@ func performSMBSpecificValidation(fromTo common.FromTo,
 		PreservePermissionsFlag); err != nil {
 		return err
 	}
-	if err = validateHardlinksFlag(hardlinkHandling, fromTo); err != nil {
+	if err = validateAndAdjustHardlinksFlag(hardlinkHandling, fromTo); err != nil {
 		return err
 	}
 	return nil
@@ -241,23 +242,62 @@ func validateSymlinkFlag(followSymlinks, preserveSymlinks bool) error {
 	return nil
 }
 
-func validateHardlinksFlag(option common.HardlinkHandlingType, fromTo common.FromTo) error {
+// validateAndAdjustHardlinksFlag validates and adjusts the --hardlinks option based on OS,
+// transfer direction (upload, download, S2S), and source/destination types (NFS, SMB, local).
+// Returns an error if the configuration is unsupported.
+func validateAndAdjustHardlinksFlag(option *common.HardlinkHandlingType, fromTo common.FromTo) error {
+	if !common.IsNFSCopy() {
+		return nil
+	}
 
-	// Validate for Download: Only allowed when downloading from an NFS share to a Linux filesystem
-	if common.IsNFSCopy() {
-		if runtime.GOOS == "linux" && fromTo.IsDownload() && (fromTo.From() != common.ELocation.FileNFS()) {
-			return fmt.Errorf("The --hardlinks option, when downloading, is only supported from a NFS file share to a Linux filesystem.")
+	// NFS↔SMB special case: force skip
+	if (fromTo == common.EFromTo.FileNFSFileSMB() || fromTo == common.EFromTo.FileSMBFileNFS()) &&
+		*option != common.SkipHardlinkHandlingType {
+		return fmt.Errorf(
+			"For NFS↔SMB transfers, '--hardlinks' must be set to 'skip'. " +
+				"Hardlinked files are not supported between NFS and SMB and will always be skipped. " +
+				"Please re-run with '--hardlinks=skip'.",
+		)
+	}
+
+	// OS check: hardlinks handling only supported on Linux
+	if runtime.GOOS != "linux" && !fromTo.IsS2S() {
+		return fmt.Errorf("The --hardlinks option is only supported on Linux.")
+	}
+
+	switch {
+	case fromTo.IsDownload():
+		// Must be NFS → Local Linux
+		if fromTo.From() != common.ELocation.FileNFS() {
+			return fmt.Errorf("For downloads, '--hardlinks' is only supported from an NFS file share to a Linux filesystem.")
 		}
 
-		// Validate for Upload or S2S: Only allowed when uploading *to* a local file system
-		if runtime.GOOS == "linux" && (fromTo.IsUpload() || fromTo.IsS2S()) && (fromTo.To() != common.ELocation.FileNFS()) {
-			return fmt.Errorf("The --hardlinks option, when uploading, is only supported from a NFS file share to a Linux filesystem or between NFS file shares.")
+	case fromTo.IsUpload():
+		// Must be Local Linux → NFS
+		if fromTo.To() != common.ELocation.FileNFS() {
+			return fmt.Errorf("For uploads, '--hardlinks' is only supported from a Linux filesystem to an NFS file share.")
+		}
+
+	case fromTo.IsS2S():
+		// Allowed: NFS↔NFS, NFS→SMB, SMB→NFS
+		validPairs := map[common.FromTo]bool{
+			common.EFromTo.FileNFSFileNFS(): true,
+			common.EFromTo.FileNFSFileSMB(): true,
+			common.EFromTo.FileSMBFileNFS(): true,
+		}
+		if !validPairs[fromTo] {
+			return fmt.Errorf("For S2S transfers, '--hardlinks' is only supported for NFS↔NFS, NFS→SMB, and SMB→NFS.")
 		}
 	}
 
-	if common.IsNFSCopy() && option == common.DefaultHardlinkHandlingType {
-		glcm.Info("The --hardlinks option is set to 'follow'. Hardlinked files will be copied as a regular file at the destination.")
+	// Info messages
+	switch *option {
+	case common.SkipHardlinkHandlingType:
+		glcm.Info("The --hardlinks option is set to 'skip'. Hardlinked files will be skipped.")
+	case common.DefaultHardlinkHandlingType:
+		glcm.Info("The --hardlinks option is set to 'follow'. Hardlinked files will be copied as regular files.")
 	}
+
 	return nil
 }
 

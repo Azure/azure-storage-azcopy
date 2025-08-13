@@ -68,7 +68,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		DestResourceType: &dest,
 
 		Credential: &srcCredInfo,
-		IncrementEnumeration: func(entityType common.EntityType) {
+		IncrementEnumeration: func(entityType common.EntityType, symlinkOption common.SymlinkHandlingType, hardlinkHandling common.HardlinkHandlingType) {
 			if entityType == common.EEntityType.File() {
 				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 			}
@@ -77,6 +77,13 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 					atomic.AddUint32(&cca.atomicSkippedSpecialFileCount, 1)
 				} else if entityType == common.EEntityType.Symlink() {
 					atomic.AddUint32(&cca.atomicSkippedSymlinkCount, 1)
+				} else if entityType == common.EEntityType.Hardlink() {
+					switch hardlinkHandling {
+					case common.SkipHardlinkHandlingType:
+						atomic.AddUint32(&cca.atomicSkippedHardlinkCount, 1)
+					case common.DefaultHardlinkHandlingType:
+						atomic.AddUint32(&cca.atomicHardlinkConvertedCount, 1)
+					}
 				}
 			}
 		},
@@ -92,6 +99,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		IncludeDirectoryStubs:   includeDirStubs,
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
 		HardlinkHandling:        cca.hardlinks,
+		SymlinkHandling:         cca.symlinkHandling,
 	})
 
 	if err != nil {
@@ -110,7 +118,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
 	destinationTraverser, err := InitResourceTraverser(cca.destination, cca.fromTo.To(), ctx, InitResourceTraverserOptions{
 		Credential: &dstCredInfo,
-		IncrementEnumeration: func(entityType common.EntityType) {
+		IncrementEnumeration: func(entityType common.EntityType, symlinkOption common.SymlinkHandlingType, hardlinkHandling common.HardlinkHandlingType) {
 			if entityType == common.EEntityType.File() {
 				atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
 			}

@@ -290,13 +290,13 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 	if common.IsNFSCopy() {
 		if err := performNFSSpecificValidation(
 			cooked.fromTo, cooked.preservePermissions, cooked.preserveInfo,
-			cooked.symlinkHandling, cooked.hardlinks); err != nil {
+			cooked.symlinkHandling, &cooked.hardlinks); err != nil {
 			return err
 		}
 	} else {
 		if err := performSMBSpecificValidation(
 			cooked.fromTo, cooked.preservePermissions, cooked.preserveInfo,
-			cooked.preservePOSIXProperties, cooked.hardlinks); err != nil {
+			cooked.preservePOSIXProperties, &cooked.hardlinks); err != nil {
 			return err
 		}
 	}
@@ -489,6 +489,8 @@ type cookedSyncCmdArgs struct {
 	hardlinks                        common.HardlinkHandlingType
 	atomicSkippedSymlinkCount        uint32
 	atomicSkippedSpecialFileCount    uint32
+	atomicSkippedHardlinkCount       uint32
+	atomicHardlinkConvertedCount     uint32
 
 	blockSizeMB   float64
 	putBlobSizeMB float64
@@ -670,6 +672,8 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 
 		summary.SkippedSymlinkCount = atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)
 		summary.SkippedSpecialFileCount = atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount)
+		summary.SkippedHardlinkCount = atomic.LoadUint32(&cca.atomicSkippedHardlinkCount)
+		summary.HardlinksConvertedCount = atomic.LoadUint32(&cca.atomicHardlinkConvertedCount)
 
 		lcm.Exit(func(format common.OutputFormat) string {
 			if format == common.EOutputFormat.Json() {
@@ -692,6 +696,7 @@ Number of Deletions at Destination: %v
 Number of Symbolic Links Skipped: %v
 Number of Special Files Skipped: %v
 Number of Hardlinks Converted: %v
+Number of Hardlinks Skipped: %v
 Total Number of Bytes Transferred: %v
 Total Number of Bytes Enumerated: %v
 Final Job Status: %v%s%s
@@ -709,6 +714,7 @@ Final Job Status: %v%s%s
 				summary.SkippedSymlinkCount,
 				summary.SkippedSpecialFileCount,
 				summary.HardlinksConvertedCount,
+				summary.SkippedHardlinkCount,
 				summary.TotalBytesTransferred,
 				summary.TotalBytesEnumerated,
 				summary.JobStatus,

@@ -283,9 +283,9 @@ func WalkWithSymlinks(appCtx context.Context,
 				if symlinkHandling.None() {
 					if common.IsNFSCopy() {
 						if incrementEnumerationCounter != nil {
-							incrementEnumerationCounter(common.EEntityType.Symlink())
+							incrementEnumerationCounter(common.EEntityType.Symlink(), symlinkHandling, hardlinkHandling)
 						}
-						logNFSLinkWarning(fileInfo.Name(), "", true)
+						logNFSLinkWarning(fileInfo.Name(), "", true, hardlinkHandling)
 					}
 					return nil // skip it
 				}
@@ -368,7 +368,7 @@ func WalkWithSymlinks(appCtx context.Context,
 					if !IsRegularFile(fileInfo) && !fileInfo.IsDir() {
 						// We don't want to process other non-regular files here.
 						if incrementEnumerationCounter != nil {
-							incrementEnumerationCounter(common.EEntityType.Other())
+							incrementEnumerationCounter(common.EEntityType.Other(), common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
 						}
 						logSpecialFileWarning(fileInfo.Name())
 						return nil
@@ -682,7 +682,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				entityType = common.EEntityType.Symlink()
 				logSpecialFileWarning(singleFileInfo.Name())
 				if t.incrementEnumerationCounter != nil {
-					t.incrementEnumerationCounter(entityType)
+					t.incrementEnumerationCounter(entityType, t.symlinkHandling, t.hardlinkHandling)
 				}
 				return nil
 			} else if IsHardlink(singleFileInfo) {
@@ -694,14 +694,14 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				entityType = common.EEntityType.Other()
 				logSpecialFileWarning(singleFileInfo.Name())
 				if t.incrementEnumerationCounter != nil {
-					t.incrementEnumerationCounter(entityType)
+					t.incrementEnumerationCounter(entityType, t.symlinkHandling, t.hardlinkHandling)
 				}
 				return nil
 			}
 		}
 
 		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter(entityType)
+			t.incrementEnumerationCounter(entityType, t.symlinkHandling, t.hardlinkHandling)
 		}
 
 		err := processIfPassedFilters(filters,
@@ -761,7 +761,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				}
 
 				if t.incrementEnumerationCounter != nil {
-					t.incrementEnumerationCounter(entityType)
+					t.incrementEnumerationCounter(entityType, t.symlinkHandling, t.hardlinkHandling)
 				}
 
 				// This is an exception to the rule. We don't strip the error here, because WalkWithSymlinks catches it.
@@ -804,7 +804,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				if fileInfo.Mode()&os.ModeSymlink != 0 {
 					if t.symlinkHandling.None() {
 						if common.IsNFSCopy() && t.incrementEnumerationCounter != nil {
-							t.incrementEnumerationCounter(common.EEntityType.Symlink())
+							t.incrementEnumerationCounter(common.EEntityType.Symlink(), t.symlinkHandling, t.hardlinkHandling)
 						}
 						continue
 					} else if t.symlinkHandling.Preserve() { // Mark the entity type as a symlink.
@@ -841,7 +841,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 					} else if !IsRegularFile(fileInfo) {
 						entityType = common.EEntityType.Other()
 						if t.incrementEnumerationCounter != nil {
-							t.incrementEnumerationCounter(entityType)
+							t.incrementEnumerationCounter(entityType, t.symlinkHandling, t.hardlinkHandling)
 						}
 						continue
 					}
@@ -853,7 +853,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				}
 
 				if t.incrementEnumerationCounter != nil {
-					t.incrementEnumerationCounter(common.EEntityType.File())
+					t.incrementEnumerationCounter(common.EEntityType.File(), t.symlinkHandling, t.hardlinkHandling)
 				}
 
 				err := processIfPassedFilters(filters,
@@ -941,7 +941,7 @@ func logSpecialFileWarning(fileName string) {
 // logNFSLinkWarning logs a warning for either a symbolic link or a hard link in an NFS share.
 // - For symlinks: inodeNo should be empty.
 // - For hard links: inodeNo should be the file's inode number.
-func logNFSLinkWarning(fileName, inodeNo string, isSymlink bool) {
+func logNFSLinkWarning(fileName, inodeNo string, isSymlink bool, hardlinkHandling common.HardlinkHandlingType) {
 	if common.AzcopyCurrentJobLogger == nil {
 		return
 	}
@@ -949,8 +949,10 @@ func logNFSLinkWarning(fileName, inodeNo string, isSymlink bool) {
 	var message string
 	if isSymlink {
 		message = fmt.Sprintf("File '%s' at the source is a symbolic link and will be skipped and not copied", fileName)
-	} else {
-		message = fmt.Sprintf("File '%s' with inode '%s' at the source is a hard link, but is copied as a full file", fileName, inodeNo)
+	} else if hardlinkHandling == common.EHardlinkHandlingType.Skip() {
+		message = fmt.Sprintf("File '%s' with inode '%s' at the source is a hard link, but will be skipped", fileName, inodeNo)
+	} else if hardlinkHandling == common.EHardlinkHandlingType.Follow() {
+		message = fmt.Sprintf("File '%s' with inode '%s' at the source is a hard link, but will copied as a full file", fileName, inodeNo)
 	}
 
 	common.AzcopyCurrentJobLogger.Log(common.LogWarning, message)
