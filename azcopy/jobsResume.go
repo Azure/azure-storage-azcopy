@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 )
 
 type ResumeJobOptions struct {
@@ -36,7 +37,7 @@ type ResumeJobOptions struct {
 }
 
 // ResumeJob resumes a job with the specified JobID.
-func (c Client) ResumeJob(opts ResumeJobOptions) (err error) {
+func (c *Client) ResumeJob(opts ResumeJobOptions) (err error) {
 
 	if opts.JobID.IsEmpty() {
 		return errors.New("resume job requires the JobID")
@@ -55,6 +56,47 @@ func (c Client) ResumeJob(opts ResumeJobOptions) (err error) {
 		common.IncludeBeforeFlagName, FormatAsUTC(adjustedTime),
 		common.IncludeAfterFlagName, FormatAsUTC(adjustedTime))
 	common.LogToJobLogWithPrefix(startTimeMessage, common.LogInfo)
+
+	// if no logging, set this empty so that we don't display the log location
+	if c.GetLogLevel() == common.LogNone {
+		common.LogPathFolder = ""
+	}
+
+	// Get fromTo info, so we can decide what's the proper credential type to use.
+	jobDetails := jobsAdmin.GetJobDetails(common.GetJobDetailsRequest{JobID: opts.JobID})
+	if jobDetails.ErrorMsg != "" {
+		return errors.New(jobDetails.ErrorMsg)
+	}
+
+	if jobDetails.FromTo.From() == common.ELocation.Benchmark() ||
+		jobDetails.FromTo.To() == common.ELocation.Benchmark() {
+		// Doesn't make sense to resume a benchmark job.
+		// It's not tested, and wouldn't report progress correctly and wouldn't clean up after itself properly
+		return errors.New("resuming benchmark jobs is not supported")
+	}
+
+	sourceSAS := normalizeSAS(opts.SourceSAS)
+	destinationSAS := normalizeSAS(opts.DestinationSAS)
+
+	srcResourceString, err := SplitResourceString(jobDetails.Source, jobDetails.FromTo.From())
+	if err != nil {
+		return fmt.Errorf("error parsing source resource string: %w", err)
+	}
+	srcResourceString.SAS = sourceSAS
+	dstResourceString, err := SplitResourceString(jobDetails.Destination, jobDetails.FromTo.To())
+	if err != nil {
+		return fmt.Errorf("error parsing destination resource string: %w", err)
+	}
+	dstResourceString.SAS = destinationSAS
+
 	// TODO (gapra): Implement the logic to resume a job.
 	return nil
+}
+
+// normalizeSAS ensures the SAS token starts with "?" if non-empty.
+func normalizeSAS(sas string) string {
+	if sas != "" && sas[0] != '?' {
+		return "?" + sas
+	}
+	return sas
 }

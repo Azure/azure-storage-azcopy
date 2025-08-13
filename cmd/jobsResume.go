@@ -30,9 +30,9 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/spf13/cobra"
 )
 
@@ -208,14 +208,6 @@ type resumeCmdArgs struct {
 	DestinationSAS string
 }
 
-// normalizeSAS ensures the SAS token starts with "?" if non-empty.
-func normalizeSAS(sas string) string {
-	if sas != "" && sas[0] != '?' {
-		return "?" + sas
-	}
-	return sas
-}
-
 func getSourceAndDestinationServiceClients(
 	ctx context.Context,
 	source common.ResourceString,
@@ -310,38 +302,7 @@ func (rca resumeCmdArgs) process() error {
 		return err
 	}
 
-	// if no logging, set this empty so that we don't display the log location
-	if Client.GetLogLevel() == common.LogNone {
-		common.LogPathFolder = ""
-	}
-
-	// Get fromTo info, so we can decide what's the proper credential type to use.
-	jobDetails := jobsAdmin.GetJobDetails(common.GetJobDetailsRequest{JobID: jobID})
-	if jobDetails.ErrorMsg != "" {
-		glcm.Error(jobDetails.ErrorMsg)
-	}
-
-	if jobDetails.FromTo.From() == common.ELocation.Benchmark() ||
-		jobDetails.FromTo.To() == common.ELocation.Benchmark() {
-		// Doesn't make sense to resume a benchmark job.
-		// It's not tested, and wouldn't report progress correctly and wouldn't clean up after itself properly
-		return errors.New("resuming benchmark jobs is not supported")
-	}
-
-	rca.SourceSAS = normalizeSAS(rca.SourceSAS)
-	rca.DestinationSAS = normalizeSAS(rca.DestinationSAS)
-
 	// TODO: Replace context with root context
-	srcResourceString, err := SplitResourceString(jobDetails.Source, jobDetails.FromTo.From())
-	if err != nil {
-		return fmt.Errorf("error parsing source resource string: %w", err)
-	}
-	srcResourceString.SAS = rca.SourceSAS
-	dstResourceString, err := SplitResourceString(jobDetails.Destination, jobDetails.FromTo.To())
-	if err != nil {
-		return fmt.Errorf("error parsing destination resource string: %w", err)
-	}
-	dstResourceString.SAS = rca.DestinationSAS
 
 	// Initialize credential info.
 	credentialInfo := common.CredentialInfo{}
