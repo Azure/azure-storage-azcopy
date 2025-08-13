@@ -100,10 +100,10 @@ func areBothLocationsNFSAware(fromTo common.FromTo) bool {
 
 	if (runtime.GOOS == "linux") &&
 		(fromTo == common.EFromTo.LocalFileNFS() || fromTo == common.EFromTo.FileNFSLocal()) {
-		common.SetNFSFlag(true)
+		common.SetIsNFSCopy(fromTo)
 		return true
 	} else if s2sNFSXfers[fromTo] {
-		common.SetNFSFlag(true)
+		common.SetIsNFSCopy(fromTo)
 		return true
 	} else {
 		return false
