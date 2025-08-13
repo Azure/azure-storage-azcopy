@@ -63,6 +63,8 @@ type SyncOrchestratorOptions struct {
 
 	// Optimize the enumeration by comparing ctime values of source objects with lastSuccessfulSyncJobStartTime
 	optimizeEnumerationByCTime bool
+
+	fromTo common.FromTo
 }
 
 func (s *SyncOrchestratorOptions) validate(from common.Location) error {
