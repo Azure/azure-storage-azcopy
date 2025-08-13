@@ -47,7 +47,6 @@ func (c *Client) ResumeJob(opts ResumeJobOptions) (err error) {
 	common.AzcopyCurrentJobLogger = common.NewJobLogger(c.CurrentJobID, c.logLevel, common.LogPathFolder, "")
 	common.AzcopyCurrentJobLogger.OpenLog()
 
-	c.EnumerationParallelism, c.EnumerationParallelStatFiles = jobsAdmin.JobsAdmin.GetConcurrencySettings()
 	// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter
 	// Subtract a few seconds, to ensure that this date DEFINITELY falls before the LMT of any file changed while this
 	// job is running. I.e. using this later with --include-after is _guaranteed_ to pick up all files that changed during
