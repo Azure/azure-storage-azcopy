@@ -49,7 +49,7 @@ var lcm = func() (lcmgr *lifecycleMgr) {
 // create a public interface so that consumers outside of this package can refer to the lifecycle manager
 // but they would not be able to instantiate one
 type LifecycleMgr interface {
-	Init(OutputBuilder)                                          // let the user know the job has started and initial information like log location
+	OnStart(JobContext)                                          // let the user know the job has started and initial information like log location
 	Progress(OutputBuilder)                                      // print on the same line over and over again, not allowed to float up
 	Exit(OutputBuilder, ExitCode)                                // indicates successful execution exit after printing, allow user to specify exit code
 	Info(string)                                                 // simple print, allowed to float up
@@ -74,6 +74,8 @@ type LifecycleMgr interface {
 	ReportAllJobPartsDone()
 	SetOutputVerbosity(mode OutputVerbosity)
 }
+
+var _ JobLifecycleHandler = &lifecycleMgr{}
 
 func GetLifecycleMgr() LifecycleMgr {
 	return lcm
@@ -251,7 +253,8 @@ func (lcm *lifecycleMgr) checkAndTriggerMemoryProfiling() {
 	}
 }
 
-func (lcm *lifecycleMgr) Init(o OutputBuilder) {
+func (lcm *lifecycleMgr) OnStart(ctx JobContext) {
+	o := GetStandardInitOutputBuilder(ctx)
 	lcm.msgQueue <- outputMessage{
 		msgContent: o(lcm.outputFormat),
 		msgType:    EOutputMessageType.Init(),

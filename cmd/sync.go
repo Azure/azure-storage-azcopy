@@ -532,7 +532,7 @@ func (cca *cookedSyncCmdArgs) waitUntilJobCompletion(blocking bool) {
 	if common.LogPathFolder != "" {
 		logPathFolder = fmt.Sprintf("%s%s%s.log", common.LogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
 	}
-	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), logPathFolder, false, ""))
+	glcm.OnStart(common.JobContext{JobID: cca.jobID, LogPath: logPathFolder})
 
 	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()

@@ -171,6 +171,7 @@ type S3CredentialInfo struct {
 	Region   string
 }
 
+// TODO: (gapra) This is only used by the tests, so is this really necessary?
 type CopyJobPartOrderErrorType string
 
 var ECopyJobPartOrderErrorType CopyJobPartOrderErrorType
