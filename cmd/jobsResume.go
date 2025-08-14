@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"strings"
 	"time"
 
@@ -227,7 +228,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 
 	var tc azcore.TokenCredential
 	if srcCredType.IsAzureOAuth() || dstCredType.IsAzureOAuth() {
-		uotm := GetUserOAuthTokenManagerInstance()
+		uotm := azcopy.GetUserOAuthTokenManagerInstance()
 		// Get token from env var or cache.
 		tokenInfo, err := uotm.GetTokenInfo(ctx)
 		if err != nil {

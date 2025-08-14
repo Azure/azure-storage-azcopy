@@ -26,6 +26,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"strconv"
 	"strings"
 	"time"
@@ -131,7 +132,7 @@ func (raw rawListCmdArgs) cook() (cookedListCmdArgs, error) {
 	// Only support listing for Azure locations
 	switch cooked.location {
 	case common.ELocation.Blob():
-	case common.ELocation.File(),common.ELocation.FileNFS():
+	case common.ELocation.File(), common.ELocation.FileNFS():
 	case common.ELocation.BlobFS():
 		break
 	default:
@@ -242,7 +243,7 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 	if credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cooked.location, source, true, common.CpkOptions{}); err != nil {
 		return fmt.Errorf("failed to obtain credential info: %s", err.Error())
 	} else if credentialInfo.CredentialType.IsAzureOAuth() {
-		uotm := GetUserOAuthTokenManagerInstance()
+		uotm := azcopy.GetUserOAuthTokenManagerInstance()
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return err
 		} else {
