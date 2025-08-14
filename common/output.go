@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"runtime"
 	"strings"
 	"time"
 
@@ -201,17 +202,20 @@ func shouldDisplayPerfStates() bool {
 func GetProgressOutputBuilder(progress TransferProgress) OutputBuilder {
 	return func(format OutputFormat) string {
 		if format == EOutputFormat.Json() {
-			if progress.JobType == EJobType.Sync() {
+			switch progress.JobType {
+			case EJobType.Copy(), EJobType.Resume(), EJobType.Benchmark():
+				jsonOutput, err := json.Marshal(progress.ListJobSummaryResponse)
+				PanicIfErr(err)
+				return string(jsonOutput)
+			case EJobType.Sync():
 				wrapped := ListSyncJobSummaryResponse{ListJobSummaryResponse: progress.ListJobSummaryResponse}
 				wrapped.DeleteTotalTransfers = progress.DeleteTotalTransfers
 				wrapped.DeleteTransfersCompleted = progress.DeleteTransfersCompleted
 				jsonOutput, err := json.Marshal(wrapped)
 				PanicIfErr(err)
 				return string(jsonOutput)
-			} else {
-				jsonOutput, err := json.Marshal(progress.ListJobSummaryResponse)
-				PanicIfErr(err)
-				return string(jsonOutput)
+			default:
+				return ""
 			}
 		} else {
 			if progress.IsCleanupJob {
@@ -231,17 +235,8 @@ func GetProgressOutputBuilder(progress TransferProgress) OutputBuilder {
 			// indicate whether constrained by disk or not
 			perfString, diskString := getPerfDisplayText(progress.PerfStrings, progress.PerfConstraint, progress.ElapsedTime, progress.JobType == EJobType.Benchmark())
 
-			if progress.JobType == EJobType.Sync() {
-				return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Total%s, %s%s",
-					progress.PercentComplete,
-					progress.TransfersCompleted,
-					progress.TransfersFailed,
-					progress.TotalTransfers-progress.TransfersCompleted-progress.TransfersFailed,
-					progress.TotalTransfers,
-					perfString,
-					throughputString,
-					diskString)
-			} else {
+			switch progress.JobType {
+			case EJobType.Copy(), EJobType.Resume(), EJobType.Benchmark():
 				return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
 					progress.PercentComplete,
 					progress.TransfersCompleted,
@@ -253,6 +248,218 @@ func GetProgressOutputBuilder(progress TransferProgress) OutputBuilder {
 					perfString,
 					throughputString,
 					diskString)
+			case EJobType.Sync():
+				return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Total%s, %s%s",
+					progress.PercentComplete,
+					progress.TransfersCompleted,
+					progress.TransfersFailed,
+					progress.TotalTransfers-progress.TransfersCompleted-progress.TransfersFailed,
+					progress.TotalTransfers,
+					perfString,
+					throughputString,
+					diskString)
+			default:
+				return ""
+			}
+		}
+	}
+}
+
+func formatPerfAdvice(advice []PerformanceAdvice) string {
+	if len(advice) == 0 {
+		return ""
+	}
+	b := strings.Builder{}
+	b.WriteString("\n\n") // two newlines to separate the perf results from everything else
+	b.WriteString("Performance benchmark results: \n")
+	b.WriteString("Note: " + BenchmarkPreviewNotice + "\n")
+	for _, a := range advice {
+		b.WriteString("\n")
+		pri := "Main"
+		if !a.PriorityAdvice {
+			pri = "Additional"
+		}
+		b.WriteString(pri + " Result:\n")
+		b.WriteString("  Code:   " + a.Code + "\n")
+		b.WriteString("  Desc:   " + a.Title + "\n")
+		b.WriteString("  Reason: " + a.Reason + "\n")
+	}
+	b.WriteString("\n")
+	b.WriteString(BenchmarkFinalDisclaimer)
+	if runtime.GOOS == "linux" {
+		b.WriteString(BenchmarkLinuxExtraDisclaimer)
+	}
+	return b.String()
+}
+
+// format extra stats to include in the log.  If benchmarking, also output them on screen (but not to screen in normal
+// usage because too cluttered)
+func FormatExtraStats(jobType JobType, avgIOPS int, avgE2EMilliseconds int, networkErrorPercent float32, serverBusyPercent float32) (screenStats, logStats string) {
+	logStats = fmt.Sprintf(
+		`
+
+Diagnostic stats:
+IOPS: %v
+End-to-end ms per request: %v
+Network Errors: %.2f%%
+Server Busy: %.2f%%`,
+		avgIOPS, avgE2EMilliseconds, networkErrorPercent, serverBusyPercent)
+
+	if jobType == EJobType.Benchmark() {
+		screenStats = logStats
+		logStats = "" // since will display in the screen stats, and they get logged too
+	}
+
+	return
+}
+
+func GetJobSummaryOutputBuilder(summary JobSummary) OutputBuilder {
+	return func(format OutputFormat) string {
+		if format == EOutputFormat.Json() {
+			switch summary.JobType {
+			case EJobType.Copy(), EJobType.Resume(), EJobType.Benchmark():
+				jsonOutput, err := json.Marshal(summary.ListJobSummaryResponse)
+				PanicIfErr(err)
+				return string(jsonOutput)
+			case EJobType.Sync():
+				wrapped := ListSyncJobSummaryResponse{ListJobSummaryResponse: summary.ListJobSummaryResponse}
+				wrapped.DeleteTotalTransfers = summary.DeleteTotalTransfers
+				wrapped.DeleteTransfersCompleted = summary.DeleteTransfersCompleted
+				jsonOutput, err := json.Marshal(wrapped)
+				PanicIfErr(err)
+				return string(jsonOutput)
+			default:
+				return ""
+			}
+		} else {
+			switch summary.JobType {
+			case EJobType.Copy(), EJobType.Benchmark():
+				screenStats, _ := FormatExtraStats(summary.JobType, summary.AverageIOPS, summary.AverageE2EMilliseconds, summary.NetworkErrorPercentage, summary.ServerBusyPercentage)
+
+				output := fmt.Sprintf(
+					`
+
+Job %s summary
+Elapsed Time (Minutes): %v
+Number of File Transfers: %v
+Number of Folder Property Transfers: %v
+Number of Symlink Transfers: %v
+Total Number of Transfers: %v
+Number of File Transfers Completed: %v
+Number of Folder Transfers Completed: %v
+Number of File Transfers Failed: %v
+Number of Folder Transfers Failed: %v
+Number of File Transfers Skipped: %v
+Number of Folder Transfers Skipped: %v
+Number of Symbolic Links Skipped: %v
+Number of Hardlinks Converted: %v
+Number of Special Files Skipped: %v
+Total Number of Bytes Transferred: %v
+Final Job Status: %v%s%s
+`,
+					summary.JobID.String(),
+					ToFixed(summary.ElapsedTime.Minutes(), 4),
+					summary.FileTransfers,
+					summary.FolderPropertyTransfers,
+					summary.SymlinkTransfers,
+					summary.TotalTransfers,
+					summary.TransfersCompleted-summary.FoldersCompleted,
+					summary.FoldersCompleted,
+					summary.TransfersFailed-summary.FoldersFailed,
+					summary.FoldersFailed,
+					summary.TransfersSkipped-summary.FoldersSkipped,
+					summary.FoldersSkipped,
+					summary.SkippedSymlinkCount,
+					summary.HardlinksConvertedCount,
+					summary.SkippedSpecialFileCount,
+					summary.TotalBytesTransferred,
+					summary.JobStatus,
+					screenStats,
+					formatPerfAdvice(summary.PerformanceAdvice))
+
+				// abbreviated output for cleanup jobs
+				if summary.IsCleanupJob {
+					cleanupStatusString := fmt.Sprintf("Cleanup %v/%v", summary.TransfersCompleted, summary.TotalTransfers)
+					output = fmt.Sprintf("%s: %s)", cleanupStatusString, summary.JobStatus)
+				}
+				return output
+			case EJobType.Resume():
+				return fmt.Sprintf(
+					`
+
+Job %s summary
+Elapsed Time (Minutes): %v
+Number of File Transfers: %v
+Number of Folder Property Transfers: %v
+Number of Symlink Transfers: %v
+Total Number of Transfers: %v
+Number of File Transfers Completed: %v
+Number of Folder Transfers Completed: %v
+Number of File Transfers Failed: %v
+Number of Folder Transfers Failed: %v
+Number of File Transfers Skipped: %v
+Number of Folder Transfers Skipped: %v
+Total Number of Bytes Transferred: %v
+Final Job Status: %v
+`,
+					summary.JobID.String(),
+					ToFixed(summary.ElapsedTime.Minutes(), 4),
+					summary.FileTransfers,
+					summary.FolderPropertyTransfers,
+					summary.SymlinkTransfers,
+					summary.TotalTransfers,
+					summary.TransfersCompleted-summary.FoldersCompleted,
+					summary.FoldersCompleted,
+					summary.TransfersFailed-summary.FoldersFailed,
+					summary.FoldersFailed,
+					summary.TransfersSkipped-summary.FoldersSkipped,
+					summary.FoldersSkipped,
+					summary.TotalBytesTransferred,
+					summary.JobStatus)
+			case EJobType.Sync():
+				screenStats, _ := FormatExtraStats(summary.JobType, summary.AverageIOPS, summary.AverageE2EMilliseconds, summary.NetworkErrorPercentage, summary.ServerBusyPercentage)
+
+				output := fmt.Sprintf(
+					`
+Job %s Summary
+Files Scanned at Source: %v
+Files Scanned at Destination: %v
+Elapsed Time (Minutes): %v
+Number of Copy Transfers for Files: %v
+Number of Copy Transfers for Folder Properties: %v 
+Total Number of Copy Transfers: %v
+Number of Copy Transfers Completed: %v
+Number of Copy Transfers Failed: %v
+Number of Deletions at Destination: %v
+Number of Symbolic Links Skipped: %v
+Number of Special Files Skipped: %v
+Number of Hardlinks Converted: %v
+Total Number of Bytes Transferred: %v
+Total Number of Bytes Enumerated: %v
+Final Job Status: %v%s%s
+`,
+					summary.JobID.String(),
+					summary.SourceFilesScanned,
+					summary.DestinationFilesScanned,
+					ToFixed(summary.ElapsedTime.Minutes(), 4),
+					summary.FileTransfers,
+					summary.FolderPropertyTransfers,
+					summary.TotalTransfers,
+					summary.TransfersCompleted,
+					summary.TransfersFailed,
+					summary.DeleteTransfersCompleted,
+					summary.SkippedSymlinkCount,
+					summary.SkippedSpecialFileCount,
+					summary.HardlinksConvertedCount,
+					summary.TotalBytesTransferred,
+					summary.TotalBytesEnumerated,
+					summary.JobStatus,
+					screenStats,
+					formatPerfAdvice(summary.PerformanceAdvice))
+
+				return output
+			default:
+				return ""
 			}
 		}
 	}

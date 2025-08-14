@@ -66,9 +66,7 @@ func init() {
 			}
 
 			err = HandleListJobsCommand(withStatus)
-			if err == nil {
-				glcm.Exit(nil, common.EExitCode.Success())
-			} else {
+			if err != nil {
 				glcm.Error(fmt.Sprintf("failed to perform jobs list command due to error: %s", err.Error()))
 			}
 		},

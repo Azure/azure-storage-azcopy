@@ -639,65 +639,30 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 	glcm.OnTransferProgress(transferProgress)
 
 	if jobDone {
+
 		exitCode := common.EExitCode.Success()
 		if summary.TransfersFailed > 0 || summary.JobStatus == common.EJobStatus.Cancelled() || summary.JobStatus == common.EJobStatus.Cancelling() {
 			exitCode = common.EExitCode.Error()
 		}
-
 		summary.SkippedSymlinkCount = atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)
 		summary.SkippedSpecialFileCount = atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount)
 
-		lcm.Exit(func(format common.OutputFormat) string {
-			if format == common.EOutputFormat.Json() {
-				return cca.getJsonOfSyncJobSummary(summary)
-			}
-			screenStats, logStats := formatExtraStats(cca.fromTo, summary.AverageIOPS, summary.AverageE2EMilliseconds, summary.NetworkErrorPercentage, summary.ServerBusyPercentage)
+		jobSummary := common.JobSummary{
+			ExitCode:                 exitCode,
+			ListJobSummaryResponse:   summary,
+			DeleteTotalTransfers:     cca.getDeletionCount(),
+			DeleteTransfersCompleted: cca.getDeletionCount(),
+			ElapsedTime:              duration,
+			SourceFilesScanned:       atomic.LoadUint64(&cca.atomicSourceFilesScanned),
+			DestinationFilesScanned:  atomic.LoadUint64(&cca.atomicDestinationFilesScanned),
+		}
+		lcm.OnComplete(jobSummary)
 
-			output := fmt.Sprintf(
-				`
-Job %s Summary
-Files Scanned at Source: %v
-Files Scanned at Destination: %v
-Elapsed Time (Minutes): %v
-Number of Copy Transfers for Files: %v
-Number of Copy Transfers for Folder Properties: %v 
-Total Number of Copy Transfers: %v
-Number of Copy Transfers Completed: %v
-Number of Copy Transfers Failed: %v
-Number of Deletions at Destination: %v
-Number of Symbolic Links Skipped: %v
-Number of Special Files Skipped: %v
-Number of Hardlinks Converted: %v
-Total Number of Bytes Transferred: %v
-Total Number of Bytes Enumerated: %v
-Final Job Status: %v%s%s
-`,
-				summary.JobID.String(),
-				atomic.LoadUint64(&cca.atomicSourceFilesScanned),
-				atomic.LoadUint64(&cca.atomicDestinationFilesScanned),
-				common.ToFixed(duration.Minutes(), 4),
-				summary.FileTransfers,
-				summary.FolderPropertyTransfers,
-				summary.TotalTransfers,
-				summary.TransfersCompleted,
-				summary.TransfersFailed,
-				cca.atomicDeletionCount,
-				summary.SkippedSymlinkCount,
-				summary.SkippedSpecialFileCount,
-				summary.HardlinksConvertedCount,
-				summary.TotalBytesTransferred,
-				summary.TotalBytesEnumerated,
-				summary.JobStatus,
-				screenStats,
-				formatPerfAdvice(summary.PerformanceAdvice))
-
-			jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
-			if exists {
-				jobMan.Log(common.LogInfo, logStats+"\n"+output)
-			}
-
-			return output
-		}, exitCode)
+		jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
+		if exists {
+			_, logStats := common.FormatExtraStats(common.EJobType.Sync(), summary.AverageIOPS, summary.AverageE2EMilliseconds, summary.NetworkErrorPercentage, summary.ServerBusyPercentage)
+			jobMan.Log(common.LogInfo, logStats+"\n"+common.GetJobSummaryOutputBuilder(jobSummary)(common.EOutputFormat.Text()))
+		}
 	}
 
 	return

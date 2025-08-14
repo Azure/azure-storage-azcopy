@@ -399,25 +399,20 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 }
 
 func IsDestinationCaseInsensitive(fromTo common.FromTo) bool {
-	if fromTo.IsDownload() && runtime.GOOS == "windows" {
-		return true
-	} else {
-		return false
-	}
-
+	return fromTo.IsDownload() && runtime.GOOS == "windows"
 }
 
 func quitIfInSync(transferJobInitiated, anyDestinationFileDeleted bool, cca *cookedSyncCmdArgs) {
-	if !transferJobInitiated && !anyDestinationFileDeleted {
+	if !transferJobInitiated {
 		cca.reportScanningProgress(glcm, 0)
-		glcm.Exit(func(format common.OutputFormat) string {
-			return "The source and destination are already in sync."
-		}, common.EExitCode.Success())
-	} else if !transferJobInitiated && anyDestinationFileDeleted {
-		// some files were deleted but no transfer scheduled
-		cca.reportScanningProgress(glcm, 0)
-		glcm.Exit(func(format common.OutputFormat) string {
-			return "The source and destination are now in sync."
-		}, common.EExitCode.Success())
+		if anyDestinationFileDeleted {
+			glcm.Exit(func(format common.OutputFormat) string {
+				return "The source and destination are now in sync."
+			}, common.EExitCode.Success())
+		} else {
+			glcm.Exit(func(format common.OutputFormat) string {
+				return "The source and destination are already in sync."
+			}, common.EExitCode.Success())
+		}
 	}
 }

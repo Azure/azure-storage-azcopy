@@ -47,12 +47,11 @@ func init() {
 			if len(args) != 1 {
 				return errors.New("this command only requires jobId")
 			}
-			commandLineInput = (args[0])
+			commandLineInput = args[0]
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
 			HandlePauseCommand(commandLineInput)
-			glcm.Exit(nil, common.EExitCode.Success())
 		},
 		// hide features not relevant to BFS
 		// TODO remove after preview release
