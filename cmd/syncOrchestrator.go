@@ -571,7 +571,7 @@ func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator,
 // 3. Discover subdirectories and queue them for processing
 // 4. Use semaphores to limit concurrent directory processing
 // 5. Schedule transfers after comparison is complete
-func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ctx context.Context) (err error) {
+func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ctx context.Context) error {
 	startTime := time.Now()
 	mainCtx, cancel := context.WithCancel(ctx) // Use mainCtx for operations, cancel to signal shutdown
 	defer cancel()                             // Ensure cancellation happens on exit
@@ -603,11 +603,13 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		// Track that this directory entered the processing queue
 		defer totalDirectoriesProcessed.Add(1)
 
+		var err error
+
 		// Acquire semaphore slot to limit concurrent directory processing
 		if enableThrottling {
 			err = semaphore.AcquireSourceSlot(mainCtx)
 			if err != nil {
-				azcopyScanningLogger.Log(common.LogError, fmt.Sprintf("Failed to acquire source slot for dir '%s': %s", dir.(minimalStoredObject).relativePath, err))
+				WarnStdoutAndScanningLog(fmt.Sprintf("Failed to acquire source slot for dir '%s': %s", dir.(minimalStoredObject).relativePath, err))
 				return err
 			}
 		}
@@ -644,7 +646,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			ptt.options)
 		if err != nil {
 			errMsg = fmt.Sprintf("Creating source traverser failed for dir %s: %s", pt_src.Value, err)
-			azcopyScanningLogger.Log(common.LogError, errMsg)
+			WarnStdoutAndScanningLog(errMsg)
 			writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
 				DirPath:           pt_src.Value,
 				DirName:           dir.(minimalStoredObject).relativePath,
@@ -662,7 +664,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			stt.options)
 		if err != nil {
 			errMsg = fmt.Sprintf("Creating target traverser failed for dir %s: %s\n", st_src.Value, err)
-			azcopyScanningLogger.Log(common.LogError, errMsg)
+			WarnStdoutAndScanningLog(errMsg)
 			writeSyncErrToChannel(stt.options.ErrorChannel, SyncOrchErrorInfo{
 				DirPath:           st_src.Value,
 				DirName:           dir.(minimalStoredObject).relativePath,
@@ -691,7 +693,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 		if err != nil {
 			errMsg = fmt.Sprintf("primary traversal failed for dir %s : %s\n", pt_src.Value, err)
-			azcopyScanningLogger.Log(common.LogError, errMsg)
+			WarnStdoutAndScanningLog(errMsg)
 			writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
 				DirPath:           pt_src.Value,
 				DirName:           dir.(minimalStoredObject).relativePath,
@@ -725,7 +727,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 				err = stra.finalize(false) // false indicates we do not want to schedule transfers yet
 				if err != nil {
 					errMsg = fmt.Sprintf("Sync finalize to skip target enumeration failed for source dir %s.\n", pt_src.Value)
-					azcopyScanningLogger.Log(common.LogError, errMsg)
+					WarnStdoutAndScanningLog(errMsg)
 					writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
 						DirPath:           pt_src.Value,
 						DirName:           dir.(minimalStoredObject).relativePath,
@@ -759,7 +761,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 				err = semaphore.AcquireTargetSlot(mainCtx)
 				if err != nil {
 					errMsg = fmt.Sprintf("Failed to acquire target slot for dir %s: %s", st_src.Value, err)
-					azcopyScanningLogger.Log(common.LogError, errMsg)
+					WarnStdoutAndScanningLog(errMsg)
 					// Release destination directory count since we're bailing out
 					dstDirEnumerating.Add(-1)
 					return err
@@ -782,7 +784,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 			if err != nil {
 				errMsg = fmt.Sprintf("Secondary traversal failed for dir %s = %s\n", st_src.Value, err)
-				azcopyScanningLogger.Log(common.LogError, errMsg)
+				WarnStdoutAndScanningLog(errMsg)
 				// Only report unexpected errors (404s are normal for new files)
 				if IsDestinationNotFoundDuringSync(err) {
 					isDestinationPresent = false // Destination not found
@@ -799,7 +801,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 					err = stra.finalize(false) // false indicates we do not want to schedule transfers yet
 					if err != nil {
 						errMsg = fmt.Sprintf("Failed to cleanup indexer object due to target traversal failure - %s. There may be unintended transfers.\n", pt_src.Value)
-						azcopyScanningLogger.Log(common.LogError, errMsg)
+						WarnStdoutAndScanningLog(errMsg)
 						writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
 							DirPath:           pt_src.Value,
 							DirName:           dir.(minimalStoredObject).relativePath,
@@ -825,7 +827,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 			if err != nil {
 				errMsg = fmt.Sprintf("Sync finalize failed for source dir %s.\n", pt_src.Value)
-				azcopyScanningLogger.Log(common.LogError, errMsg)
+				WarnStdoutAndScanningLog(errMsg)
 				writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
 					DirPath:           pt_src.Value,
 					DirName:           dir.(minimalStoredObject).relativePath,
@@ -888,14 +890,22 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		return nil
 	}
 
+	srcIsDir := false
+	var err error
+
 	// verify that the traversers are targeting the same type of resources
 	// Sync orchestrator supports only directory to directory sync. The similarity has
 	// already been checked in InitEnumerator. Here we check if it is directory or not.
-	srcIsDir, err := enumerator.primaryTraverser.IsDirectory(true)
+	if cca.fromTo.From() != common.ELocation.S3() {
+		srcIsDir, err = enumerator.primaryTraverser.IsDirectory(true)
 
-	if err != nil {
-		WarnStdoutAndScanningLog(fmt.Sprintf("Failed to check if source is a directory. Err: %s", err))
-		return err
+		if err != nil {
+			WarnStdoutAndScanningLog(fmt.Sprintf("Failed to check if source is a directory. Err: %s", err))
+			return err
+		}
+	} else {
+		// XDM: s3Traverser.IsDirectory is failing for valid directories, skipping the check for S3
+		srcIsDir = true
 	}
 
 	if !srcIsDir {
