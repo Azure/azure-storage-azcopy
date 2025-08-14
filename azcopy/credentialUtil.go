@@ -63,8 +63,6 @@ func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
 	return currentUserOAuthTokenManager
 }
 
-
-
 var stashedEnvCredType = ""
 
 // GetCredTypeFromEnvVar tries to get credential type from environment variable defined by envVarCredentialType.
@@ -205,4 +203,38 @@ func oAuthTokenExists() (oauthTokenExists bool) {
 	}
 
 	return
+}
 
+type rawFromToInfo struct {
+	fromTo              common.FromTo
+	source, destination common.ResourceString
+}
+
+// getCredentialType checks user provided info, and gets the proper credential type
+// for current command.
+// TODO: consider replace with calls to getCredentialInfoForLocation
+// (right now, we have tweaked this to be a wrapper for that function, but really should remove this one totally)
+func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common.CpkOptions) (credType common.CredentialType, err error) {
+
+	switch {
+	case raw.fromTo.To().IsRemote():
+		// we authenticate to the destination. Source is assumed to be SAS, or public, or a local resource
+		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.To(), raw.destination, false, common.CpkOptions{})
+	case raw.fromTo == common.EFromTo.BlobTrash() ||
+		raw.fromTo == common.EFromTo.BlobFSTrash() ||
+		raw.fromTo == common.EFromTo.FileTrash():
+		// For to Trash direction, use source as resource URL
+		// Also, by setting isSource=false we inform getCredentialTypeForLocation() that resource
+		// being deleted cannot be public.
+		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.From(), raw.source, false, cpkOptions)
+	case raw.fromTo.From().IsRemote() && raw.fromTo.To().IsLocal():
+		// we authenticate to the source.
+		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.From(), raw.source, true, cpkOptions)
+	default:
+		credType = common.ECredentialType.Anonymous()
+		// Log the FromTo types which getCredentialType hasn't solved, in case of miss-use.
+		glcm.Info(fmt.Sprintf("Use anonymous credential by default for from-to '%v'", raw.fromTo))
+	}
+
+	return
+}
