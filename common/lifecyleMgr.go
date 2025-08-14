@@ -8,7 +8,6 @@ import (
 	"os/signal"
 	"runtime"
 	"runtime/pprof"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -66,8 +65,6 @@ type LifecycleMgr interface {
 	E2EAwaitAllowOpenFiles()                  // used by E2E tests
 	E2EEnableAwaitAllowOpenFiles(enable bool) // used by E2E tests
 	RegisterCloseFunc(func())
-	SetForceLogging()
-	IsForceLoggingDisabled() bool
 	MsgHandlerChannel() <-chan *LCMMsg
 	ReportAllJobPartsDone()
 	SetOutputVerbosity(mode OutputVerbosity)
@@ -94,7 +91,6 @@ type lifecycleMgr struct {
 	e2eAllowAwaitContinue bool           // allow the user to send 'continue' from stdin to start the current job
 	e2eAllowAwaitOpen     bool           // allow the user to send 'open' from stdin to allow the opening of the first file
 	closeFunc             func()         // used to close logs before exiting
-	disableSyslog         bool
 	waitForUserResponse   chan bool
 	msgHandlerChannel     chan *LCMMsg
 	OutputVerbosityType   OutputVerbosity
@@ -672,21 +668,6 @@ func (lcm *lifecycleMgr) E2EEnableAwaitAllowOpenFiles(enable bool) {
 	} else {
 		close(lcm.e2eAllowOpenChannel) // so that E2EAwaitAllowOpenFiles will instantly return every time
 	}
-}
-
-// Fetching `AZCOPY_DISABLE_SYSLOG` from the environment variables and
-// setting `disableSyslog` flag in LifeCycleManager to avoid Env Vars Lookup redundantly
-func (lcm *lifecycleMgr) SetForceLogging() {
-	disableSyslog, err := strconv.ParseBool(GetEnvironmentVariable(EEnvironmentVariable.DisableSyslog()))
-	if err != nil {
-		// By default, we'll retain the current behaviour. i.e. To log in Syslog/WindowsEventLog if not specified by the user
-		disableSyslog = false
-	}
-	lcm.disableSyslog = disableSyslog
-}
-
-func (lcm *lifecycleMgr) IsForceLoggingDisabled() bool {
-	return lcm.disableSyslog
 }
 
 func (lcm *lifecycleMgr) MsgHandlerChannel() <-chan *LCMMsg {

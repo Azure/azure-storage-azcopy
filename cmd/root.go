@@ -208,8 +208,6 @@ func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
 	common.AzcopyCurrentJobLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "")
 	common.AzcopyCurrentJobLogger.OpenLog()
 
-	glcm.SetForceLogging()
-
 	// For benchmarking, try to autotune if possible, otherwise use the default values
 	if jobsAdmin.JobsAdmin != nil && isBench {
 		envVar := common.EEnvironmentVariable.ConcurrencyValue()
