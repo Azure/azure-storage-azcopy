@@ -205,3 +205,86 @@ func (s *RemoveSuite) Scenario_RemoveFileWithOnlyDotsEnabled(svm *ScenarioVariat
 	svm.Assert("One file should be removed", Equal{}, len(fileMap), 4)
 
 }
+
+func (s *RemoveSuite) Scenario_RemoveFilesWithExcludePath(svm *ScenarioVariationManager) {
+	src := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()),
+		ResourceDefinitionContainer{})
+
+	fullList := []string{
+		"file1.txt",
+		"file2.pdf",
+		"myfoldertoexclude/file3.json",
+		"myfoldertoexclude/subfolder/file4.txt",
+		"anotherfolder/file5.txt",
+		"anotherfolder/subfolder/file6.txt",
+		"rootfile.txt",
+		"sub/myfoldertoexclude/file1.txt",
+	}
+	// create objs in different paths to test exclude-path functionality
+	for i := range len(fullList) {
+		obj := src.GetObject(svm, fullList[i], common.EEntityType.File())
+		obj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
+	}
+
+	// the files remaining
+	expectedList := []string{
+		"myfoldertoexclude/file3.json",
+		"myfoldertoexclude/subfolder/file4.txt",
+		"sub/myfoldertoexclude/file1.txt",
+	}
+
+	stdOut, _ := RunAzCopy(svm,
+		AzCopyCommand{
+			Verb:    AzCopyVerbRemove,
+			Targets: []ResourceManager{src},
+			Flags: RemoveFlags{
+				Recursive:   pointerTo(true),
+				ExcludePath: pointerTo("myfoldertoexclude"),
+			},
+		})
+
+	fileMap := make(map[string]ObjectProperties)
+	fileMap = src.ListObjects(svm, "", true)
+	svm.Assert("Only necessary files should be removed", Equal{}, len(fileMap)-1, len(expectedList))
+	ValidateResource[ContainerResourceManager](svm, src, ResourceDefinitionContainer{}, true)
+	ValidateDoesNotContainError(svm, stdOut, []string{"unknown flag: --exclude-path"})
+}
+
+func (s *RemoveSuite) Scenario_RemoveBlobsWithExcludePath(svm *ScenarioVariationManager) {
+	src := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()),
+		ResourceDefinitionContainer{})
+
+	fullList := []string{
+		"myfolder/subfolder1/blob1.json",
+		"myfolder/subfolder2/blob2.json",
+		"myfoldertoexclude/blob4.jpg",
+		"myfoldertoexclude/blob5.jpg",
+	}
+	// create objs in different paths to test exclude-path functionality
+	for i := range len(fullList) {
+		obj := src.GetObject(svm, fullList[i], common.EEntityType.File())
+		obj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
+	}
+
+	// the files remaining
+	expectedList := []string{
+		"/myfolder/myfoldertoexclude/blob3.json",
+		"myfoldertoexclude/blob4.jpg",
+	}
+
+	stdOut, _ := RunAzCopy(svm,
+		AzCopyCommand{
+			Verb:    AzCopyVerbRemove,
+			Targets: []ResourceManager{src},
+			Flags: RemoveFlags{
+				Recursive:   pointerTo(true),
+				ExcludePath: pointerTo("myfoldertoexclude"),
+			},
+		})
+
+	fileMap := make(map[string]ObjectProperties)
+	fileMap = src.ListObjects(svm, "", true)
+	svm.Assert("Only necessary files should be removed", Equal{}, len(fileMap)-1, len(expectedList))
+	ValidateResource[ContainerResourceManager](svm, src, ResourceDefinitionContainer{}, true)
+	ValidateDoesNotContainError(svm, stdOut, []string{"unknown flag: --exclude-path"})
+}
