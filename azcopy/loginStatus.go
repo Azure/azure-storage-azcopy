@@ -23,7 +23,9 @@ package azcopy
 import (
 	"context"
 	"errors"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
 
 type GetLoginStatusOptions struct {
@@ -40,7 +42,7 @@ func (c Client) GetLoginStatus(_ GetLoginStatusOptions) (LoginStatus, error) {
 	uotm := GetUserOAuthTokenManagerInstance()
 
 	// Get current token info and refresh it with GetTokenInfo()
-	ctx := context.Background()
+	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	tokenInfo, err := uotm.GetTokenInfo(ctx)
 	if err != nil || tokenInfo.IsExpired() {
 		return LoginStatus{Valid: false}, errors.New("you are currently not logged in. please login using 'azcopy login'")

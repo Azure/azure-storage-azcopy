@@ -26,11 +26,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
+
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
@@ -106,7 +107,7 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 
 		options.PersistToken = false
 		if err = RunLogin(options); err != nil {
-			glcm.Error(fmt.Sprintf("Failed to perform Auto-login: %v.", err.Error()))
+			glcm.Error(fmt.Sprintf("Failed to perform Auto-login: %v.", err))
 		}
 	})
 
