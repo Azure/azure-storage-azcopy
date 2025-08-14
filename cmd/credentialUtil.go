@@ -31,6 +31,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -53,30 +55,6 @@ func warnIfSharedKeyAuthForDatalake() {
 	})
 }
 
-// only one UserOAuthTokenManager should exists in azcopy-v2 process in cmd(FE) module for current user.
-// (given appAppPathFolder is mapped to current user)
-var currentUserOAuthTokenManager *common.UserOAuthTokenManager
-
-// GetUserOAuthTokenManagerInstance gets or creates OAuthTokenManager for current user.
-// Note: Currently, only support to have TokenManager for one user mapping to one tenantID.
-func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
-	once.Do(func() {
-		if common.AzcopyJobPlanFolder == "" {
-			panic("invalid state, AzcopyJobPlanFolder should not be an empty string")
-		}
-		cacheName := common.GetEnvironmentVariable(common.EEnvironmentVariable.LoginCacheName())
-
-		currentUserOAuthTokenManager = common.NewUserOAuthTokenManagerInstance(common.CredCacheOptions{
-			DPAPIFilePath: common.AzcopyJobPlanFolder,
-			KeyName:       common.Iff(cacheName != "", cacheName, oauthLoginSessionCacheKeyName),
-			ServiceName:   oauthLoginSessionCacheServiceName,
-			AccountName:   common.Iff(cacheName != "", cacheName, oauthLoginSessionCacheAccountName),
-		})
-	})
-
-	return currentUserOAuthTokenManager
-}
-
 /*
  * GetInstanceOAuthTokenInfo returns OAuth token, obtained by auto-login,
  * for current instance of AzCopy.
@@ -84,7 +62,7 @@ func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
 func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 	var err error
 	autoOAuth.Do(func() {
-		var options LoginOptions
+		var options azcopy.LoginOptions
 		autoLoginType := strings.ToLower(common.GetEnvironmentVariable(common.EEnvironmentVariable.AutoLoginType()))
 		if autoLoginType == "" {
 			glcm.Info("Autologin not specified.")
@@ -112,11 +90,11 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 		case common.EAutoLoginType.SPN():
 			options.ApplicationID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ApplicationID())
 			options.CertificatePath = common.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePath())
-			options.certificatePassword = common.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
-			options.clientSecret = common.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
+			options.CertificatePassword = common.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
+			options.ClientSecret = common.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
 		case common.EAutoLoginType.MSI():
 			options.IdentityClientID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityClientID())
-			options.identityObjectID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityObjectID())
+			options.IdentityObjectID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityObjectID())
 			options.IdentityResourceID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityResourceString())
 		case common.EAutoLoginType.Device():
 		case common.EAutoLoginType.AzCLI():
@@ -127,9 +105,9 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 			return
 		}
 
-		options.persistToken = false
-		if err = options.process(); err != nil {
-			glcm.Error(fmt.Sprintf("Failed to perform Auto-login: %v.", err.Error()))
+		options.PersistToken = false
+		if err = RunLogin(options); err != nil {
+			glcm.Error(fmt.Sprintf("Failed to perform Auto-login: %v.", err))
 		}
 	})
 
@@ -137,7 +115,7 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 		return nil, err
 	}
 
-	return GetUserOAuthTokenManagerInstance(), nil
+	return azcopy.GetUserOAuthTokenManagerInstance(), nil
 }
 
 var announceOAuthTokenOnce sync.Once
@@ -528,7 +506,7 @@ func GetCredentialInfoForLocation(ctx context.Context, location common.Location,
 
 	// flesh out the rest of the fields, for those types that require it
 	if credInfo.CredentialType.IsAzureOAuth() {
-		uotm := GetUserOAuthTokenManagerInstance()
+		uotm := azcopy.GetUserOAuthTokenManagerInstance()
 
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return credInfo, false, err
