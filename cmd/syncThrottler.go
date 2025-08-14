@@ -38,23 +38,19 @@ import (
 
 // --- BEGIN Throttling and Concurrency Configuration ---
 const (
-	absoluteMaxActiveFiles     int64 = 10_000_000 // Absolute max active files, used for dynamic limits
-	maxFilesPerActiveDirectory int64 = 1_000_000  // Max files per active directory
+	defaultMaxDirectoryChildCount int64 = 100_000 // Max files per active directory
 
 	// These are static limits as of now. This can be dynamically adjusted later
 	// by the StatsMonitor based on available system resources.
-	maxActiveGoRoutines   int64 = 50_000 // Max active goroutines, used for dynamic limits
-	maxMemoryUsagePercent int32 = 80     // Max memory usage percentage, used for dynamic limits
+	maxActiveGoRoutines      int64   = 50_000 // Max active goroutines, used for dynamic limits
+	maxMemoryUsageMultiplier float64 = 0.7    // Max memory usage percentage, used for dynamic limits
 
 	throttleLogIntervalSecs       int           = 60 * 60                               // How often to log during throttling
 	semaphoreThrottleWaitInterval time.Duration = time.Duration(time.Millisecond * 100) // How often to check semaphore after throttle limit is hit
 	semaphoreWaitInterval         time.Duration = time.Duration(time.Millisecond * 50)  // How often to check semaphore status
 
 	// Performance tuning constants
-	filesPerGBMemory          = 500_000 // Files per GB of memory
-	snapshotRetentionCount    = 50      // Number of snapshots to keep
-	consistencyThreshold      = 10      // Samples needed for consistency
-	adjustmentCooldownMinutes = 2       // Minutes between adjustments
+	filesPerGBMemory = 1_000_000 // Files per GB of memory
 
 	// Hysteresis percentages to prevent oscillation
 	throttleEngageThreshold  = 100 // Engage throttling at 100% of limit
@@ -69,6 +65,9 @@ const (
 	// Defaults
 	defaultPhysicalMemoryGB uint64 = 8 // Default physical memory in GB, used if sysinfo fails
 	defaultNumCores         int32  = 4 // Default number of CPU cores, used if runtime.NumCPU() fails
+
+	// Traversal concurrency settings
+	defaultTargetSlotRatio float64 = 0.25 // Target slots = 25% of source slots by default
 
 	directorySizeBuffer = 1024
 
@@ -88,6 +87,9 @@ var (
 	maxActiveFiles                    int64
 	maxActivelyEnumeratingDirectories int64
 
+	// Traversal concurrency settings
+	targetSlotRatio float64 = defaultTargetSlotRatio // Configurable ratio for target slots
+
 	// Counters
 	activeDirectories         atomic.Int64
 	srcDirEnumerating         atomic.Int64 // Number of directories currently being enumerated at source
@@ -99,7 +101,6 @@ var (
 
 	// Throttling control flags
 	enableThrottling               bool = true
-	enableEnumerationThrottling    bool = true // Throttle directory enumeration to prevent deadlocks
 	enableFileBasedThrottling      bool = false
 	enableMemoryBasedThrottling    bool = true
 	enableGoroutineBasedThrottling bool = true
@@ -119,7 +120,6 @@ func initializeTestModeLimits() {
 	startGoProfiling = false
 
 	enableThrottling = true
-	enableEnumerationThrottling = true // Throttle directory enumeration to prevent deadlocks
 	enableFileBasedThrottling = false
 	enableMemoryBasedThrottling = false
 	enableGoroutineBasedThrottling = false
@@ -141,13 +141,14 @@ func initializeLimits(orchestratorOptions *SyncOrchestratorOptions) {
 
 	memory, err := common.GetTotalPhysicalMemory()
 	if err != nil {
-		glcm.Warn(fmt.Sprintf("Failed to get total physical memory: %v", err))
+		glcm.Warn(fmt.Sprintf("Failed to get total physical memory: %v. Using default - 8GB", err))
 		memory = int64(defaultPhysicalMemoryGB)
 	}
-	memoryGB := memory / gbToBytesMultiplier            // Convert to GB
-	maxActiveFiles = int64(memoryGB) * filesPerGBMemory // Set based on physical memory, 1 million files per GB
 
-	maxDirectoryDirectChildCount := maxFilesPerActiveDirectory // Default max direct children per directory
+	memoryGB := memory / gbToBytesMultiplier                                              // Convert to GB
+	maxActiveFiles = int64(float64(memoryGB)*maxMemoryUsageMultiplier) * filesPerGBMemory // Set based on physical memory, 1 million files per GB
+
+	maxDirectoryDirectChildCount := defaultMaxDirectoryChildCount
 	crawlParallelism = int32(EnumerationParallelism)
 
 	if orchestratorOptions != nil && orchestratorOptions.valid && orchestratorOptions.maxDirectoryDirectChildCount > 0 {
@@ -156,9 +157,23 @@ func initializeLimits(orchestratorOptions *SyncOrchestratorOptions) {
 	}
 
 	if maxDirectoryDirectChildCount > maxActiveFiles {
-		glcm.Warn(fmt.Sprintf("Max directory direct child count (%d) exceeds max active files (%d), adjusting to prevent deadlock", maxDirectoryDirectChildCount, maxActiveFiles))
+		glcm.Warn(fmt.Sprintf("Max directory direct child count (%d) exceeds max active files (%d), adjusting to prevent OOM", maxDirectoryDirectChildCount, maxActiveFiles))
 		maxDirectoryDirectChildCount = maxActiveFiles // Prevent deadlock by ensuring at least one directory can be processed
 	}
+
+	// Validate if the crawl parallelism is within acceptable limits
+	// We need to check how many directories can be enumerated in parallel based on system memory
+	safeParallelismLimit := GetSafeParallelismLimit(maxActiveFiles, maxDirectoryDirectChildCount, orchestratorOptions.fromTo)
+	if crawlParallelism > safeParallelismLimit {
+		glcm.Warn(fmt.Sprintf("Crawl parallelism (%d) exceeds safe limit (%d), adjusting to prevent OOM", crawlParallelism, safeParallelismLimit))
+		crawlParallelism = safeParallelismLimit
+	}
+
+	WarnStdoutAndScanningLog(fmt.Sprintf(
+		"Crawl parallelism = %d, Indexer capacity = %d, Max child count = %d",
+		crawlParallelism,
+		maxActiveFiles,
+		maxDirectoryDirectChildCount))
 
 	maxActivelyEnumeratingDirectories = maxActiveFiles / maxDirectoryDirectChildCount // Ensure at least one directory can be processed
 	activeFilesLimit.Store(maxActiveFiles)
@@ -166,6 +181,19 @@ func initializeLimits(orchestratorOptions *SyncOrchestratorOptions) {
 }
 
 // --- END Throttling and Concurrency Configuration ---
+
+func GetSafeParallelismLimit(maxActiveFiles, maxChildCount int64, fromTo common.FromTo) int32 {
+	limit := int32(max(maxActiveFiles/maxChildCount, 1))
+
+	switch fromTo {
+	case common.EFromTo.LocalBlob(), common.EFromTo.LocalBlobFS(), common.EFromTo.LocalFile():
+		return min(limit, 48)
+	case common.EFromTo.S3Blob():
+		return min(limit, 64)
+	default:
+		return min(limit, 48)
+	}
+}
 
 // GetNumCPU returns the number of logical CPU cores available on the system.
 // It uses runtime.NumCPU() and falls back to a default value if the call fails.
@@ -184,10 +212,15 @@ func GetNumCPU() int32 {
 // It controls how many directories can be processed simultaneously and includes
 // throttling logic based on file indexer size and system resource usage.
 type ThrottleSemaphore struct {
-	// Semaphore for directory processing
+	// Separate semaphores for source and target traversals
+	sourceSemaphore chan struct{}
+	targetSemaphore chan struct{}
+
+	// Legacy semaphore for backward compatibility
 	semaphore chan struct{}
 
-	waitingForSemaphore atomic.Int32
+	waitingForSourceSemaphore atomic.Int32
+	waitingForTargetSemaphore atomic.Int32
 
 	// Monitoring
 	lastLogTime time.Time
@@ -214,11 +247,19 @@ func NewThrottleSemaphore(parentCtx context.Context, jobID common.JobID) *Thrott
 	// Create child context for this semaphore
 	ctx, cancel := context.WithCancel(parentCtx)
 
+	// Calculate target semaphore capacity (25% of source capacity by default, configurable)
+	sourceCapacity := crawlParallelism
+	targetCapacity := int32(float64(sourceCapacity) * targetSlotRatio)
+	if targetCapacity < 1 {
+		targetCapacity = 1 // Ensure at least 1 slot for target
+	}
+
 	ds := &ThrottleSemaphore{
-		semaphore:   make(chan struct{}, crawlParallelism),
-		lastLogTime: time.Now(),
-		ctx:         ctx,
-		cancel:      cancel,
+		sourceSemaphore: make(chan struct{}, sourceCapacity),
+		targetSemaphore: make(chan struct{}, targetCapacity),
+		lastLogTime:     time.Now(),
+		ctx:             ctx,
+		cancel:          cancel,
 
 		// Initialize hysteresis state
 		isThrottling:            false,
@@ -227,9 +268,14 @@ func NewThrottleSemaphore(parentCtx context.Context, jobID common.JobID) *Thrott
 		goroutineThrottleActive: false,
 	}
 
-	// Pre-fill semaphore with tokens
-	for i := int32(0); i < crawlParallelism; i++ {
-		ds.semaphore <- struct{}{}
+	// Pre-fill source semaphore with tokens
+	for i := int32(0); i < sourceCapacity; i++ {
+		ds.sourceSemaphore <- struct{}{}
+	}
+
+	// Pre-fill target semaphore with tokens
+	for i := int32(0); i < targetCapacity; i++ {
+		ds.targetSemaphore <- struct{}{}
 	}
 
 	RegisterGlobalCustomStatsCallback(common.SyncOrchestratorId, ds.getOrchestratorStats)
@@ -251,22 +297,20 @@ func (ds *ThrottleSemaphore) Close() {
 	WarnStdoutAndScanningLog("Stopping ThrottleSemaphore and releasing resources")
 }
 
-// AcquireSlot blocks until a semaphore slot is available and throttling conditions allow processing.
-// It implements context-aware cancellation and respects throttling limits to prevent system overload.
+// AcquireSourceSlot blocks until a source traversal slot is available and throttling conditions allow processing.
+// Source slots have higher capacity (same as crawlParallelism) to allow faster source traversal.
 // Returns an error if the context is cancelled during acquisition.
-func (ds *ThrottleSemaphore) AcquireSlot(ctx context.Context) error {
-	// This blocks until semaphore is available AND throttling allows it
-	ds.waitingForSemaphore.Add(1)
-	defer ds.waitingForSemaphore.Add(-1)
+func (ds *ThrottleSemaphore) AcquireSourceSlot(ctx context.Context) error {
+	ds.waitingForSourceSemaphore.Add(1)
+	defer ds.waitingForSourceSemaphore.Add(-1)
 
 	for {
 		select {
-
-		case <-ds.semaphore:
-			// Got semaphore token
+		case <-ds.sourceSemaphore:
+			// Got source semaphore token
 			if ds.shouldThrottle() {
 				// Should throttle - put token back and wait
-				ds.semaphore <- struct{}{}
+				ds.sourceSemaphore <- struct{}{}
 
 				// Cancellation-aware sleep
 				select {
@@ -277,12 +321,12 @@ func (ds *ThrottleSemaphore) AcquireSlot(ctx context.Context) error {
 				}
 			}
 
-			// Track active directory processors
-			activeDirectories.Add(1)
+			// Track active source directory processors
+			// Note: Not incrementing activeDirectories here as it's handled at directory level
 			return nil
 
 		default:
-			// No semaphore available - wait
+			// No source semaphore available - wait
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -293,11 +337,56 @@ func (ds *ThrottleSemaphore) AcquireSlot(ctx context.Context) error {
 	}
 }
 
-// ReleaseSlot returns a semaphore token and decrements the active directory counter.
-// This should be called when directory processing is complete to allow other operations to proceed.
-func (ds *ThrottleSemaphore) ReleaseSlot() {
-	ds.semaphore <- struct{}{} // Put token back
-	activeDirectories.Add(-1)  // Decrement active directory count
+// AcquireTargetSlot blocks until a target traversal slot is available and throttling conditions allow processing.
+// Target slots have lower capacity (configurable percentage of source capacity) to limit slower target operations.
+// Returns an error if the context is cancelled during acquisition.
+func (ds *ThrottleSemaphore) AcquireTargetSlot(ctx context.Context) error {
+	ds.waitingForTargetSemaphore.Add(1)
+	defer ds.waitingForTargetSemaphore.Add(-1)
+
+	for {
+		select {
+		case <-ds.targetSemaphore:
+			// Got target semaphore token
+			if ds.shouldThrottle() {
+				// Should throttle - put token back and wait
+				ds.targetSemaphore <- struct{}{}
+
+				// Cancellation-aware sleep
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(semaphoreThrottleWaitInterval):
+					continue
+				}
+			}
+
+			// Track active target directory processors
+			// Note: Not incrementing activeDirectories here as it's handled at directory level
+			return nil
+
+		default:
+			// No target semaphore available - wait
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(semaphoreWaitInterval):
+				continue
+			}
+		}
+	}
+}
+
+// ReleaseSourceSlot returns a source semaphore token.
+// This should be called when source traversal is complete.
+func (ds *ThrottleSemaphore) ReleaseSourceSlot() {
+	ds.sourceSemaphore <- struct{}{} // Put source token back
+}
+
+// ReleaseTargetSlot returns a target semaphore token.
+// This should be called when target traversal is complete.
+func (ds *ThrottleSemaphore) ReleaseTargetSlot() {
+	ds.targetSemaphore <- struct{}{} // Put target token back
 }
 
 // shouldThrottle determines whether directory processing should be throttled with hysteresis
@@ -307,22 +396,17 @@ func (ds *ThrottleSemaphore) shouldThrottle() bool {
 	defer ds.throttleStateMutex.Unlock()
 
 	// Check each resource with hysteresis
-	enumerationThrottling := enableEnumerationThrottling && ds.shouldThrottlingDirectoryEnumeration()
 	fileThrottle := enableFileBasedThrottling && ds.shouldThrottleBasedOnFiles()
 	memoryThrottle := enableMemoryBasedThrottling && ds.shouldThrottleBasedOnMemory()
 	goroutineThrottle := enableGoroutineBasedThrottling && ds.shouldThrottleBasedOnGoroutines()
 
 	// Update overall throttling state
 	previousState := ds.isThrottling
-	ds.isThrottling = enumerationThrottling || fileThrottle || memoryThrottle || goroutineThrottle
+	ds.isThrottling = fileThrottle || memoryThrottle || goroutineThrottle
 
 	// Log state changes
 	if enableThrottleLogs && (previousState != ds.isThrottling) {
 		var reasons []string
-
-		if enumerationThrottling {
-			reasons = append(reasons, "DIRECTORY ENUMERATION")
-		}
 
 		if fileThrottle {
 			reasons = append(reasons, "FILES")
@@ -342,22 +426,6 @@ func (ds *ThrottleSemaphore) shouldThrottle() bool {
 	}
 
 	return ds.isThrottling
-}
-
-func (ds *ThrottleSemaphore) shouldThrottlingDirectoryEnumeration() bool {
-	currentActivelyEnumerating := srcDirEnumerating.Load()
-	enumeratingLimit := enumeratingDirectoryLimit.Load()
-
-	// We want to do simple throttling here without any hysteresis
-	if currentActivelyEnumerating >= enumeratingLimit {
-		if enableThrottleLogs {
-			glcm.Info(fmt.Sprintf("DIRECTORY ENUMERATION THROTTLED: %d directories actively enumerating (limit: %d)",
-				currentActivelyEnumerating, enumeratingLimit))
-		}
-		return true // Throttle if we hit the limit
-	}
-
-	return false // No throttling needed
 }
 
 // shouldThrottleBasedOnFiles applies hysteresis to file indexer throttling
@@ -471,21 +539,26 @@ func (ds *ThrottleSemaphore) logThrottling(msgFmt string, args ...interface{}) {
 // indexer size, directory processing counters, and enumeration activity.
 func (ds *ThrottleSemaphore) getOrchestratorStats() []common.CustomStatEntry {
 	stats := []common.CustomStatEntry{
-		{"Indexer", fmt.Sprintf("%d", totalFilesInIndexer.Load())},
-		{"Active", fmt.Sprintf("%d", activeDirectories.Load())},
-		{"SrcEnum", fmt.Sprintf("%d", srcDirEnumerating.Load())},
-		{"DstEnum", fmt.Sprintf("%d", dstDirEnumerating.Load())},
-		{"Done", fmt.Sprintf("%d", totalDirectoriesProcessed.Load())},
+		{Key: "Indexer", Value: fmt.Sprintf("%d", totalFilesInIndexer.Load())},
+		{Key: "Active", Value: fmt.Sprintf("%d", activeDirectories.Load())},
+		{Key: "SrcEnum", Value: fmt.Sprintf("%d", srcDirEnumerating.Load())},
+		{Key: "DstEnum", Value: fmt.Sprintf("%d", dstDirEnumerating.Load())},
+		{Key: "Done", Value: fmt.Sprintf("%d", totalDirectoriesProcessed.Load())},
 	}
 
-	waiting := ds.waitingForSemaphore.Load()
-	if waiting != 0 {
-		stats = append([]common.CustomStatEntry{{"Waiting", fmt.Sprintf("%d", waiting)}}, stats...)
+	waitingSource := ds.waitingForSourceSemaphore.Load()
+	if waitingSource != 0 {
+		stats = append(stats, common.CustomStatEntry{Key: "WaitSrc", Value: fmt.Sprintf("%d", waitingSource)})
+	}
+
+	waitingTarget := ds.waitingForTargetSemaphore.Load()
+	if waitingTarget != 0 {
+		stats = append(stats, common.CustomStatEntry{Key: "WaitTgt", Value: fmt.Sprintf("%d", waitingTarget)})
 	}
 
 	ctimeSkip := dstDirEnumerationSkippedBasedOnCTime.Load()
 	if ctimeSkip != 0 {
-		stats = append(stats, common.CustomStatEntry{"CTimeSkip", fmt.Sprintf("%d", ctimeSkip)})
+		stats = append(stats, common.CustomStatEntry{Key: "CTimeSkip", Value: fmt.Sprintf("%d", ctimeSkip)})
 	}
 
 	return stats
