@@ -1,4 +1,4 @@
-// Copyright © 2017 Microsoft <wastore@microsoft.com>
+// Copyright © 2025 Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,33 +18,20 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package azcopy
 
-import (
-	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
+import "fmt"
 
-	"github.com/spf13/cobra"
-)
+type LogoutOptions struct {
+}
 
-func init() {
-	// logoutCmd represents the logout command
-	logoutCmd := &cobra.Command{
-		Use:        "logout",
-		SuggestFor: []string{"logout"},
-		Short:      logoutCmdShortDescription,
-		Long:       logoutCmdLongDescription,
-		Args: func(cmd *cobra.Command, args []string) error {
-			return nil
-		},
-		RunE: func(cmd *cobra.Command, args []string) error {
-			_, err := Client.Logout(azcopy.LogoutOptions{})
-			if err != nil {
-				return err
-			}
-			glcm.Info("Logout succeeded.")
-			return nil
-		},
+type LogoutResponse struct {
+}
+
+func (c Client) Logout(_ LogoutOptions) (LogoutResponse, error) {
+	uotm := GetUserOAuthTokenManagerInstance()
+	if err := uotm.RemoveCachedToken(); err != nil {
+		return LogoutResponse{}, fmt.Errorf("failed to perform logout command, %v", err)
 	}
-
-	rootCmd.AddCommand(logoutCmd)
+	return LogoutResponse{}, nil
 }
