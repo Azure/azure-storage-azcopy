@@ -684,6 +684,8 @@ func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm common.LifecycleMgr, th
 	lcm.Progress(func(format common.OutputFormat) string {
 		srcScanned := atomic.LoadUint64(&cca.atomicSourceFilesScanned)
 		dstScanned := atomic.LoadUint64(&cca.atomicDestinationFilesScanned)
+		srcDirsScanned := atomic.LoadUint64(&cca.atomicSourceFoldersScanned)
+		dstDirsScanned := atomic.LoadUint64(&cca.atomicDestinationFoldersScanned)
 
 		if format == common.EOutputFormat.Json() {
 			jsonOutputTemplate := scanningProgressJsonTemplate{
@@ -698,10 +700,10 @@ func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm common.LifecycleMgr, th
 		// text output
 		throughputString := ""
 		if cca.firstPartOrdered() {
-			throughputString = fmt.Sprintf(", 2-sec Throughput (Mb/s): %v", jobsAdmin.ToFixed(throughput, 4))
+			throughputString = fmt.Sprintf(" 2-sec Throughput (Mb/s): %v", jobsAdmin.ToFixed(throughput, 4))
 		}
-		return fmt.Sprintf("%v Files Scanned at Source, %v Files Scanned at Destination%s",
-			srcScanned, dstScanned, throughputString)
+		return fmt.Sprintf("Source scanning: %v Files, %v Folders. Destination scanning: %v Files, %v Folders. %s",
+			srcScanned, srcDirsScanned, dstScanned, dstDirsScanned, throughputString)
 	})
 }
 
@@ -948,8 +950,8 @@ Folders Scanned at Destination: ................ %12v
 Elapsed Time (Minutes): ........................ %12v
 ------------------------------------------------------------
 Number of Copy Transfers for Files: ............ %12v
-Number of Copy Transfers for Folder Properties:. %12v
-Number of Copy Transfers for Files Properties:.. %12v
+Number of Copy Transfers for Folder Properties:  %12v
+Number of Copy Transfers for Files Properties:   %12v
 Total Number of Copy Transfers: ................ %12v
 Number of Copy Transfers Completed: ............ %12v
 Number of Copy Transfers Failed: ............... %12v
@@ -964,7 +966,7 @@ Number of Folders Not Requiring Transfer: ...... %12v
 ------------------------------------------------------------
 Source Folders Failed During Enumeration: ...... %12v
 Destination Folders Failed During Enumeration: . %12v
-Destination Folders Skipped (CTime opt): ....... %12v
+Destination Folders Skipped During Enumeration: %13v
 ------------------------------------------------------------
 Total Number of Bytes Transferred: ............. %12v
 Total Number of Bytes Enumerated: .............. %12v
@@ -1019,7 +1021,7 @@ Elapsed Time (Minutes): ........................ %12v
 ------------------------------------------------------------
 Source Folders Failed During Enumeration: ...... %12v
 Destination Folders Failed During Enumeration: . %12v
-Destination Folders Skipped (CTime opt): ....... %12v
+Destination Folders Skipped During Enumeration: %13v
 ------------------------------------------------------------
 `,
 		"\n",

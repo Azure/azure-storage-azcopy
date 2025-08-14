@@ -113,6 +113,27 @@ func (cooked *CookedCopyCmdArgs) SetHardlinks(hardlinkHandlingType common.Hardli
 	cooked.hardlinks = hardlinkHandlingType
 }
 
+// Service-to-Service (S2S) transfer options
+func (cooked *CookedCopyCmdArgs) SetS2sPreserveProperties(value bool) {
+	cooked.s2sPreserveProperties.value = value
+}
+
+func (cooked *CookedCopyCmdArgs) SetS2sPreserveAccessTier(value bool) {
+	cooked.s2sPreserveAccessTier.value = value
+}
+
+func (cooked *CookedCopyCmdArgs) SetS2sInvalidMetadataHandleOption(value common.InvalidMetadataHandleOption) {
+	cooked.s2sInvalidMetadataHandleOption = value
+}
+
+func (cooked *CookedCopyCmdArgs) SetS2sSourceChangeValidation(value bool) {
+	cooked.s2sSourceChangeValidation = value
+}
+
+func (cooked *CookedCopyCmdArgs) SetS2sGetPropertiesInBackend(value bool) {
+	cooked.s2sGetPropertiesInBackend = value
+}
+
 // ============================================================================
 // End CookedCopyCmdArgs - Property Setters
 // ============================================================================
@@ -275,6 +296,10 @@ func (cooked *cookedSyncCmdArgs) ScanningComplete() bool {
 
 func (cooked *cookedSyncCmdArgs) GetDeletionCount() uint32 {
 	return cooked.getDeletionCount()
+}
+
+func (cooked *cookedSyncCmdArgs) SetStripTopDir(stripTopDir bool) {
+	cooked.stripTopDir = stripTopDir
 }
 
 func (cooked *cookedSyncCmdArgs) SetJobId(jobID common.JobID) {

@@ -80,7 +80,8 @@ type syncDestinationComparator struct {
 	// Function to increment files/folders not transferred as a result of no change since last sync.
 	incrementNotTransferred func(common.EntityType)
 
-	orchestratorOptions *SyncOrchestratorOptions
+	orchestratorOptions    *SyncOrchestratorOptions
+	useOrchestratorOptions bool
 }
 
 func newSyncDestinationComparator(
@@ -93,7 +94,7 @@ func newSyncDestinationComparator(
 	deleteDestination common.DeleteDestination,
 	incrementNotTransferred func(common.EntityType),
 	orchestratorOptions *SyncOrchestratorOptions) *syncDestinationComparator {
-	return &syncDestinationComparator{
+	comp := &syncDestinationComparator{
 		sourceIndex:             i,
 		copyTransferScheduler:   copyScheduler,
 		destinationCleaner:      cleaner,
@@ -104,6 +105,11 @@ func newSyncDestinationComparator(
 		incrementNotTransferred: incrementNotTransferred,
 		orchestratorOptions:     orchestratorOptions,
 	}
+
+	comp.useOrchestratorOptions = UseSyncOrchestrator && IsSyncOrchestratorOptionsValid(orchestratorOptions) &&
+		orchestratorOptions.fromTo.From() == common.ELocation.Local()
+
+	return comp
 }
 
 // it will only schedule transfers for destination objects that are present in the indexer but stale compared to the entry in the map
@@ -112,7 +118,17 @@ func newSyncDestinationComparator(
 // if file x from the destination exists at the source, then we'd only transfer it if it is considered stale compared to its counterpart at the source
 // if file x does not exist at the source, then it is considered extra, and will be deleted
 func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredObject) error {
-	sourceObjectInMap, present := f.sourceIndex.indexMap[destinationObject.relativePath]
+	var sourceObjectInMap StoredObject
+	var present bool
+
+	if f.sourceIndex.accessUnderLock {
+		f.sourceIndex.rwMutex.RLock()
+		sourceObjectInMap, present = f.sourceIndex.indexMap[destinationObject.relativePath]
+		f.sourceIndex.rwMutex.RUnlock()
+	} else {
+		sourceObjectInMap, present = f.sourceIndex.indexMap[destinationObject.relativePath]
+	}
+
 	if !present && f.sourceIndex.isDestinationCaseInsensitive {
 		lcRelativePath := strings.ToLower(destinationObject.relativePath)
 		sourceObjectInMap, present = f.sourceIndex.indexMap[lcRelativePath]
@@ -120,12 +136,21 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 
 	// if the destinationObject is present at source and stale, we transfer the up-to-date version from source
 	if present {
-		defer delete(f.sourceIndex.indexMap, destinationObject.relativePath)
+		defer func() {
+			if f.sourceIndex.accessUnderLock {
+				f.sourceIndex.rwMutex.Lock()
+				delete(f.sourceIndex.indexMap, destinationObject.relativePath)
+				f.sourceIndex.rwMutex.Unlock()
+			} else {
+				delete(f.sourceIndex.indexMap, destinationObject.relativePath)
+			}
+		}()
 
-		processed, _ := f.processIfNecessaryWithOrchestrator(sourceObjectInMap, destinationObject)
-
-		if processed {
-			return nil
+		if f.useOrchestratorOptions {
+			processed, _ := f.processIfNecessaryWithOrchestrator(sourceObjectInMap, destinationObject)
+			if processed {
+				return nil
+			}
 		}
 
 		if f.disableComparison {
@@ -187,74 +212,62 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 	sourceObjectInMap StoredObject,
 	destinationObject StoredObject) (bool, error) {
 
-	if !UseSyncOrchestrator {
-		return false, nil
-	}
-
-	typeChanged, dataChanged, metadataChanged, valid, transferObject := false, false, false, true, false
-	if sourceObjectInMap.entityType != destinationObject.entityType {
-		// This entity type compararison is necessary for SyncOrchestrator as we have the visibility
-		// of a deleted object in the source only once during the directory non-recusrive enumeration.
-		// The default flow keeps all the objects in the memory and has the complete view of the source
-		// to do the proper deletion.
-		// Sync orchestator needs to take care of deletion of folder recursively the first chance it gets.
-		typeChanged = true
-	}
-
-	if !typeChanged && f.orchestratorOptions != nil && f.orchestratorOptions.valid {
-		// Use optimized comparison logic using source and target timestamps and sizes
-		dataChanged, metadataChanged, valid = f.compareSourceAndDestinationObject(sourceObjectInMap, destinationObject)
-	}
-
-	if !valid {
-		return false, fmt.Errorf("invalid comparison between source and destination objects for %s", sourceObjectInMap.relativePath)
-	}
-
-	if typeChanged && destinationObject.entityType == common.EEntityType.Folder() {
-		// If the destination object is a folder and the source object type has changed,
-		// we need to handle it based on the deleteDestination option.
-		// STE would do the proper deletion of non-folder destination objects but not folders.
-		// If the destination object is a folder, STE will delete it only if its empty which
-		// may not be the case always. here we handle the recursive deletion of the destination folder
-
-		// if the entity type has changed, we will not be able to transfer the file
-		// unless the destination folder is deleted first
-		// XDM: Does destination support different entity type with same name?
-		if f.deleteDestination == common.EDeleteDestination.True() {
-			err := f.destinationCleaner(destinationObject)
-			if err != nil {
-				syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonEntityTypeChangedFailedDelete, false)
-				if f.incrementNotTransferred != nil {
-					// XDM:maybe we should have a different counter for skipped transfers
-					f.incrementNotTransferred(sourceObjectInMap.entityType)
-				}
-				return true, nil
-			}
-		} else if f.deleteDestination == common.EDeleteDestination.False() {
-			// If deleteDestination is set to false, we cannot transfer the file
-			// because the destination object is not compatible with the source object.
-
-			// Its better to let STE handle the behavior
-		} else if f.deleteDestination == common.EDeleteDestination.Prompt() {
-			// Ideally, we should let the default behavior handle this case as well.
-			// But for now, we will panic as this should not happen for sync orchestrator compare.
-			panic("unsupported delete destination option for sync orchestrator compare " + f.deleteDestination.String())
-		}
-
-		transferObject = true
-	}
-
 	if sourceObjectInMap.entityType == common.EEntityType.Hardlink() ||
 		sourceObjectInMap.entityType == common.EEntityType.Other() {
 		// As of now, for hardlinks and special files at source, fallback to the default behavior
 		return false, nil
 	}
 
-	if dataChanged {
-		transferObject = true
+	if sourceObjectInMap.entityType != destinationObject.entityType {
+		if destinationObject.entityType == common.EEntityType.Folder() {
+			// This entity type compararison is necessary for SyncOrchestrator as we have the visibility
+			// of a deleted object in the source only once during the directory non-recusrive enumeration.
+			// The default flow keeps all the objects in the memory and has the complete view of the source
+			// to do the proper deletion.
+			// Sync orchestator needs to take care of deletion of folder recursively the first chance it gets.
+
+			// If the destination object is a folder and the source object type has changed,
+			// we need to handle it based on the deleteDestination option.
+			// STE would do the proper deletion of non-folder destination objects but not folders.
+			// If the destination object is a folder, STE will delete it only if its empty which
+			// may not be the case always. here we handle the recursive deletion of the destination folder
+
+			// if the entity type has changed, we will not be able to transfer the file
+			// unless the destination folder is deleted first
+			// XDM: Does destination support different entity type with same name?
+			if f.deleteDestination == common.EDeleteDestination.True() {
+				err := f.destinationCleaner(destinationObject)
+				if err != nil {
+					syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonEntityTypeChangedFailedDelete, false)
+					if f.incrementNotTransferred != nil {
+						// XDM:maybe we should have a different counter for skipped transfers
+						f.incrementNotTransferred(sourceObjectInMap.entityType)
+					}
+					return true, nil
+				}
+			} else if f.deleteDestination == common.EDeleteDestination.False() {
+				// If deleteDestination is set to false, we cannot transfer the file
+				// because the destination object is not compatible with the source object.
+
+				// Its better to let STE handle the behavior
+			} else if f.deleteDestination == common.EDeleteDestination.Prompt() {
+				// Ideally, we should let the default behavior handle this case as well.
+				// But for now, we will panic as this should not happen for sync orchestrator compare.
+				panic("unsupported delete destination option for sync orchestrator compare " + f.deleteDestination.String())
+			}
+		}
+
+		// if its files, STE would do the right thing here and deletes the file at destination
+		return true, f.copyTransferScheduler(sourceObjectInMap)
 	}
 
-	if !transferObject && metadataChanged {
+	dataChanged, metadataChanged := f.compareSourceAndDestinationObject(sourceObjectInMap, destinationObject)
+
+	if dataChanged {
+		return true, f.copyTransferScheduler(sourceObjectInMap)
+	}
+
+	if metadataChanged {
 		// If this is true, it means that metadataOnlySync is enabled
 		// as this is being set to true only if we have valid orchestrator options
 
@@ -262,7 +275,7 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 		// If metadata has changed for a symlink, both mtime and ctime will change
 		// so data change will take care of it.
 		if sourceObjectInMap.entityType == common.EEntityType.Folder() {
-			transferObject = true
+			return true, f.copyTransferScheduler(sourceObjectInMap)
 		}
 
 		if sourceObjectInMap.entityType == common.EEntityType.File() {
@@ -271,18 +284,15 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 			// XDM: Do we check symlinks/hardlinks/other entity type here?
 			sourceObjectInMap.size = 0                                         // Set size to 0 to indicate that we are not transferring data, only metadata.
 			sourceObjectInMap.entityType = common.EEntityType.FileProperties() // Set entity type to FileProperties to indicate metadata transfer.
-			transferObject = true
+			return true, f.copyTransferScheduler(sourceObjectInMap)
 		}
-	}
-
-	if transferObject {
-		return true, f.copyTransferScheduler(sourceObjectInMap)
 	}
 
 	// Data, metadata or entity type are unchanged, so we skip the transfer.
 	if f.incrementNotTransferred != nil {
 		f.incrementNotTransferred(sourceObjectInMap.entityType)
 	}
+
 	syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonNoChangeInLWTorCT, false)
 	return true, nil
 }
@@ -291,61 +301,57 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 	sourceObject StoredObject,
 	destinationObject StoredObject,
-) (dataChanged, metadataChanged, valid bool) {
+) (dataChanged, metadataChanged bool) {
 
 	// Check if data has changed by comparing size and modification time
-	dataChanged = false
-	metadataChanged = false
-	valid = true
 
-	if sourceObject.entityType != common.EEntityType.Folder() {
+	if sourceObject.entityType != common.EEntityType.Folder() &&
+		sourceObject.size != destinationObject.size {
 		// Compare file sizes first
 		// XDM NOTE: Do we really need to compare sizes here if we are already comparing LWT?
-		if sourceObject.size != destinationObject.size {
-			dataChanged = true
-			return dataChanged, metadataChanged, valid
-		}
+		return true, false
 	}
 
 	if sourceObject.lastWriteTime.IsZero() || destinationObject.lastWriteTime.IsZero() {
-		valid = false
-		return dataChanged, metadataChanged, valid
+		// assume it changed as we can't compare
+		return true, true
 	}
 
 	// Compare last write times
 	if sourceObject.lastWriteTime.Compare(destinationObject.lastWriteTime) != 0 {
-		dataChanged = true
-		return dataChanged, metadataChanged, valid
+		return true, true
 	}
 
-	if !isNFSCopy {
+	if f.orchestratorOptions.optimizeEnumerationByCTime && !f.orchestratorOptions.lastSuccessfulSyncJobStartTime.IsZero() {
 
-		if sourceObject.changeTime.IsZero() || destinationObject.changeTime.IsZero() {
-			valid = false
-			return dataChanged, metadataChanged, valid
-		}
-
-		// Compare change times
-		if sourceObject.changeTime.Compare(destinationObject.changeTime) != 0 {
-			metadataChanged = true
-			return dataChanged, metadataChanged, valid
+		// For NFS sources (optimizeEnumerationByCTime is true only for NFS sources, set by XDM),
+		// we want to use the optimization if it's available,
+		// We will use last sync time to determine if metadata has changed.
+		if sourceObject.changeTime.IsZero() || sourceObject.changeTime.After(f.orchestratorOptions.lastSuccessfulSyncJobStartTime) {
+			// can't compare, assume metadata change
+			return false, true
 		}
 
 	} else {
 
-		// For NFS, we don't have change time for destination object, so we cannot compare it.
-		// We will use last sync time to determine if metadata has changed.
-		if sourceObject.changeTime.IsZero() || f.orchestratorOptions.lastSuccessfulSyncJobStartTime.IsZero() {
-			dataChanged = true
-			return dataChanged, metadataChanged, valid
+		if isNFSCopy {
+			// For NFS file share target, we can't rely on target change time
+			// assuming the metadata has changed
+			return false, true
 		}
 
-		if sourceObject.changeTime.After(f.orchestratorOptions.lastSuccessfulSyncJobStartTime) {
-			metadataChanged = true
-			return dataChanged, metadataChanged, valid
+		if sourceObject.changeTime.IsZero() || destinationObject.changeTime.IsZero() {
+			return false, true
 		}
+
+		// Compare change times
+		if sourceObject.changeTime.Compare(destinationObject.changeTime) != 0 {
+			return false, true
+		}
+
 	}
-	return dataChanged, metadataChanged, valid
+	// if we reached here, its safe assume that we did valid comparisons and neither data or metadata has changed
+	return false, false
 }
 
 // with the help of an objectIndexer containing the destination objects
