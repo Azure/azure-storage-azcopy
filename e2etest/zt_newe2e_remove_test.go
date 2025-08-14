@@ -250,6 +250,7 @@ func (s *RemoveSuite) Scenario_RemoveFilesWithExcludePath(svm *ScenarioVariation
 	ValidateDoesNotContainError(svm, stdOut, []string{"unknown flag: --exclude-path"})
 }
 
+// test files are not removed when exclude path is specified
 func (s *RemoveSuite) Scenario_RemoveBlobsWithExcludePath(svm *ScenarioVariationManager) {
 	src := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()),
 		ResourceDefinitionContainer{})
