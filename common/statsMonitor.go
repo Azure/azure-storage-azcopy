@@ -66,6 +66,9 @@ const (
 
 	// CustomStatsIDOrchestrator represents sync orchestrator stats
 	SyncOrchestratorId CustomStatsID = "so"
+
+	// CustomStatsIDTreeCrawler represents TreeCrawler stats
+	TreeCrawlerId CustomStatsID = "tc"
 )
 
 // String returns the string representation of the CustomStatsID

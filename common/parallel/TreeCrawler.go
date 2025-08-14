@@ -22,8 +22,17 @@ package parallel
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+)
+
+// Global tracking of active crawlers for stats monitoring
+var (
+	activeCrawlersMutex sync.RWMutex
+	activeCrawlers      = make(map[*crawler]bool)
 )
 
 type crawler struct {
@@ -35,6 +44,72 @@ type crawler struct {
 	unstartedDirs      []Directory // not a channel, because channels have length limits, and those get in our way
 	dirInProgressCount int64
 	lastAutoShutdown   time.Time
+}
+
+// GetQueueLength returns the current number of unstarted directories in the queue
+// This is thread-safe and used for monitoring/stats
+func (c *crawler) GetQueueLength() int {
+	c.cond.L.Lock()
+	defer c.cond.L.Unlock()
+	return len(c.unstartedDirs)
+}
+
+// GetDirInProgressCount returns the current number of directories being processed
+// This is thread-safe and used for monitoring/stats
+func (c *crawler) GetDirInProgressCount() int64 {
+	c.cond.L.Lock()
+	defer c.cond.L.Unlock()
+	return c.dirInProgressCount
+}
+
+// registerActiveCrawler adds a crawler to the global tracking for stats monitoring
+func registerActiveCrawler(c *crawler) {
+	activeCrawlersMutex.Lock()
+	defer activeCrawlersMutex.Unlock()
+	activeCrawlers[c] = true
+}
+
+// unregisterActiveCrawler removes a crawler from the global tracking
+func unregisterActiveCrawler(c *crawler) {
+	activeCrawlersMutex.Lock()
+	defer activeCrawlersMutex.Unlock()
+	delete(activeCrawlers, c)
+}
+
+// getTreeCrawlerStats returns current TreeCrawler statistics
+func getTreeCrawlerStats() []common.CustomStatEntry {
+	activeCrawlersMutex.RLock()
+	defer activeCrawlersMutex.RUnlock()
+
+	totalQueueLength := 0
+	totalInProgress := int64(0)
+	crawlerCount := 0
+
+	for crawler := range activeCrawlers {
+		totalQueueLength += crawler.GetQueueLength()
+		totalInProgress += crawler.GetDirInProgressCount()
+		crawlerCount++
+	}
+
+	if crawlerCount == 0 {
+		return []common.CustomStatEntry{
+			{Key: "Crawlers", Value: "0"},
+			{Key: "Queued", Value: "0"},
+			{Key: "InProgress", Value: "0"},
+		}
+	}
+
+	// Format large numbers with k suffix for readability
+	queuedStr := fmt.Sprintf("%d", totalQueueLength)
+	if totalQueueLength >= 1000 {
+		queuedStr = fmt.Sprintf("%dk", totalQueueLength/1000)
+	}
+
+	return []common.CustomStatEntry{
+		{Key: "Crawlers", Value: fmt.Sprintf("%d", crawlerCount)},
+		{Key: "Queued", Value: queuedStr},
+		{Key: "InProgress", Value: fmt.Sprintf("%d", totalInProgress)},
+	}
 }
 
 type Directory interface{}
@@ -62,11 +137,23 @@ func Crawl(ctx context.Context, root Directory, worker EnumerateOneDirFunc, para
 		parallelism:   parallelism,
 		cond:          sync.NewCond(&sync.Mutex{}),
 	}
+
+	// Register this crawler for stats monitoring
+	registerActiveCrawler(c)
+
+	// Register TreeCrawler stats callback if not already done and global monitor exists
+	if common.GlobalSystemStatsMonitor != nil && !common.GlobalSystemStatsMonitor.IsCustomStatsCallbackRegistered(common.TreeCrawlerId) {
+		common.GlobalSystemStatsMonitor.RegisterCustomStatsCallback(common.TreeCrawlerId, getTreeCrawlerStats)
+	}
+
 	go c.start(ctx, root)
 	return c.output
 }
 
 func (c *crawler) start(ctx context.Context, root Directory) {
+	// Ensure we unregister this crawler when done
+	defer unregisterActiveCrawler(c)
+
 	done := make(chan struct{})
 	heartbeat := func() {
 		for {
