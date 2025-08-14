@@ -1138,8 +1138,8 @@ extends:
 
                       # If it's a preview version, rename all matching files
                       if [[ $azcopyBinaryName == *"preview"* ]]; then
-                        for f in $(signed)/azcopy_*; do
-                          newName="${f/azcopy_/azcopy-preview_}"
+                        for f in $(signed)/azcopy-*; do
+                          newName="${f/azcopy-/azcopy-preview_}"
                           echo "Renaming $f to $newName"
                           mv -v "$f" "$newName"
                         done
