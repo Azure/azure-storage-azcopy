@@ -90,7 +90,7 @@ func (m *mockedLifecycleManager) Progress(o common.OutputBuilder) {
 	default:
 	}
 }
-func (*mockedLifecycleManager) OnStart(_ common.JobContext) {}
+func (*mockedLifecycleManager) OnStart(ctx common.JobContext) {}
 func (m *mockedLifecycleManager) Info(msg string) {
 	select {
 	case m.infoLog <- msg:
