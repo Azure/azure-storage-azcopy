@@ -174,6 +174,8 @@ type rawCopyCmdArgs struct {
 	// Opt-in flag to persist additional properties to Azure Files
 	preserveInfo bool
 	hardlinks    string
+	// whether to preserve root dir props and ACLs
+	preserveRootProperties bool
 }
 
 // blockSizeInBytes converts a FLOATING POINT number of MiB, to a number of bytes
@@ -387,6 +389,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 			raw.preserveOwner,
 			cooked.FromTo)
 	}
+	cooked.preserveRootProperties = raw.preserveRootProperties // Set flag regardless of protocol used
 
 	// TODO: Figure out this preservePermissinos stuff
 	if cooked.preservePermissions.IsTruthy() && cooked.FromTo.From() == common.ELocation.Blob() {
@@ -760,6 +763,9 @@ type CookedCopyCmdArgs struct {
 	cpkByName                     string
 	cpkByValue                    bool
 	preserveOwner                 bool
+
+	// Whether user wants to preserve root dir props and ACLs
+	preserveRootProperties bool
 }
 
 func (cca *CookedCopyCmdArgs) isRedirection() bool {
@@ -1930,6 +1936,11 @@ func init() {
 			"\n Azure Blob storage an option to provide an encryption key on a per-request basis. "+
 			"\n Provided key and its hash will be fetched from environment variables"+
 			"(CPK_ENCRYPTION_KEY and CPK_ENCRYPTION_KEY_SHA256 must be set).")
+
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveRootProperties, "preserve-root-properties", false, "False by default. "+
+		"\n Preserve the root directory and its properties (ACLs, timestamps, etc.) from source to destination. "+
+		"\n When enabled, the source root directory name will be preserved in the destination path. "+
+		"\n For example, copying from 'src/myroot/file.txt' will result in 'dest/myroot/file.txt' instead of the default 'dest/file.txt'.")
 
 	// permanently hidden
 	// Hide the list-of-files flag since it is implemented only for Storage Explorer.

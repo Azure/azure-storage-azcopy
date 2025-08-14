@@ -303,6 +303,7 @@ type CopySyncCommonFlags struct {
 	IncludeDirectoryStubs   *bool                        `flag:"include-directory-stub"`
 	NFS                     *bool                        `flag:"nfs"`
 	PreserveInfo            *bool                        `flag:"preserve-info"`
+	PreserveRootPermissions *bool                        `flag:"preserve-root-permissions"`
 }
 
 // CopyFlags is a more exclusive struct including flags exclusi

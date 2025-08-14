@@ -69,6 +69,7 @@ type rawSyncCmdArgs struct {
 	preservePOSIXProperties bool
 	followSymlinks          bool
 	preserveSymlinks        bool
+	preserveRootProperties  bool
 	backupMode              bool
 	putMd5                  bool
 	md5ValidationOption     string
@@ -136,6 +137,7 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 		deleteDestinationFileIfNecessary: raw.deleteDestinationFileIfNecessary,
 		includeDirectoryStubs:            raw.includeDirectoryStubs,
 		includeRoot:                      raw.includeRoot,
+		preserveRootProperties:           raw.preserveRootProperties,
 	}
 	err = cooked.trailingDot.Parse(raw.trailingDot)
 	if err != nil {
@@ -436,6 +438,7 @@ type cookedSyncCmdArgs struct {
 	preservePermissions     common.PreservePermissionsOption
 	preserveInfo            bool
 	preservePOSIXProperties bool
+	preserveRootProperties  bool
 	putMd5                  bool
 	md5ValidationOption     common.HashValidationOption
 	blockSize               int64
@@ -1031,4 +1034,9 @@ func init() {
 		"Follow by default. Preserve hardlinks for NFS resources. "+
 			"\n This flag is only applicable when the source is Azure NFS file share or the destination is NFS file share. "+
 			"\n Available options: skip, preserve, follow (default 'follow').")
+
+	syncCmd.PersistentFlags().BoolVar(&raw.preserveRootProperties, "preserve-root-properties", false, "False by default. "+
+		"\n Preserve the root directory and its properties (ACLs, timestamps, etc.) from source to destination. "+
+		"\n When enabled, the source root directory name will be preserved in the destination path. "+
+		"\n For example, copying from 'src/myroot/file.txt' will result in 'dest/myroot/file.txt' instead of the default 'dest/file.txt'.")
 }
