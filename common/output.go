@@ -161,7 +161,7 @@ func GetScanProgressOutputBuilder(progress ScanProgress) OutputBuilder {
 		if progress.TransferThroughput != nil {
 			throughputString = fmt.Sprintf(", 2-sec Throughput (Mb/s): %v", ToFixed(*progress.TransferThroughput, 4))
 		}
-		return fmt.Sprintf("%v Files Scanned at Source, %v Files Scanned at Destination%s",
+		return fmt.Sprintf("%v Files Scanned at Source, %v Files Scanned at Destination %s",
 			progress.Source, progress.Destination, throughputString)
 	}
 }
