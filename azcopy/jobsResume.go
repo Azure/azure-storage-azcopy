@@ -21,12 +21,15 @@
 package azcopy
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
 
 type ResumeJobOptions struct {
@@ -89,6 +92,29 @@ func (c *Client) ResumeJob(opts ResumeJobOptions) (err error) {
 	}
 	dstResourceString.SAS = destinationSAS
 
+	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+
+	srcServiceClient, dstServiceClient, err := getSourceAndDestinationServiceClients(
+		ctx,
+		srcResourceString,
+		dstResourceString,
+		jobDetails,
+	)
+	if err != nil {
+		return errors.New("could not create service clients " + err.Error())
+	}
+
+	credentialInfo := common.CredentialInfo{}
+	// we should stop using credentiaLInfo and use the clients instead. But before we fix
+	// that there will be repeated calls to get Credential type for correctness.
+	if credentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
+		fromTo:      jobDetails.FromTo,
+		source:      srcResourceString,
+		destination: dstResourceString,
+	}, common.CpkOptions{}); err != nil {
+		return err
+	}
+
 	// TODO (gapra): Implement the logic to resume a job.
 	return nil
 }
@@ -99,4 +125,83 @@ func normalizeSAS(sas string) string {
 		return "?" + sas
 	}
 	return sas
+}
+
+func getSourceAndDestinationServiceClients(
+	ctx context.Context,
+	source common.ResourceString,
+	destination common.ResourceString,
+	jobDetails common.GetJobDetailsResponse,
+) (*common.ServiceClient, *common.ServiceClient, error) {
+	fromTo := jobDetails.FromTo
+	srcCredType, _, err := getCredentialTypeForLocation(ctx,
+		fromTo.From(),
+		source,
+		true,
+		common.CpkOptions{})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	dstCredType, _, err := getCredentialTypeForLocation(ctx,
+		fromTo.To(),
+		destination,
+		false,
+		common.CpkOptions{})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var tc azcore.TokenCredential
+	if srcCredType.IsAzureOAuth() || dstCredType.IsAzureOAuth() {
+		uotm := GetUserOAuthTokenManagerInstance()
+		// Get token from env var or cache.
+		tokenInfo, err := uotm.GetTokenInfo(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		tc, err = tokenInfo.GetTokenCredential()
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	var reauthTok *common.ScopedAuthenticator
+	if at, ok := tc.(common.AuthenticateToken); ok { // We don't need two different tokens here since it gets passed in just the same either way.
+		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
+		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+	}
+
+	// But we don't want to supply a reauth token if we're not using OAuth. That could cause problems if say, a SAS is invalid.
+	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, common.Iff(srcCredType.IsAzureOAuth(), reauthTok, nil))
+
+	var fileSrcClientOptions any
+	if fromTo.From() == common.ELocation.File() || fromTo.From() == common.ELocation.FileNFS() {
+		fileSrcClientOptions = &common.FileClientOptions{
+			AllowTrailingDot: jobDetails.TrailingDot.IsEnabled(), //Access the trailingDot option of the job
+		}
+	}
+	srcServiceClient, err := common.GetServiceClientForLocation(fromTo.From(), source, srcCredType, tc, &options, fileSrcClientOptions)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var srcCred *common.ScopedToken
+	if fromTo.IsS2S() && srcCredType.IsAzureOAuth() {
+		srcCred = common.NewScopedCredential(tc, srcCredType)
+	}
+	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred, common.Iff(dstCredType.IsAzureOAuth(), reauthTok, nil))
+	var fileClientOptions any
+	if fromTo.To() == common.ELocation.File() || fromTo.To() == common.ELocation.FileNFS() {
+		fileClientOptions = &common.FileClientOptions{
+			AllowSourceTrailingDot: jobDetails.TrailingDot.IsEnabled() && fromTo.From() == common.ELocation.File(),
+			AllowTrailingDot:       jobDetails.TrailingDot.IsEnabled(),
+		}
+	}
+	dstServiceClient, err := common.GetServiceClientForLocation(fromTo.To(), destination, dstCredType, tc, &options, fileClientOptions)
+	if err != nil {
+		return nil, nil, err
+	}
+	return srcServiceClient, dstServiceClient, nil
 }
