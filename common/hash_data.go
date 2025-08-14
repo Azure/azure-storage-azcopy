@@ -25,7 +25,7 @@ var hashDataFailureLogOnce = &sync.Once{}
 
 func LogHashStorageFailure() {
 	hashDataFailureLogOnce.Do(func() {
-		lcm.Info("One or more hash storage operations (read/write) have failed. Check the scanning log for details.")
+		lcm.OnInfo("One or more hash storage operations (read/write) have failed. Check the scanning log for details.")
 	})
 }
 

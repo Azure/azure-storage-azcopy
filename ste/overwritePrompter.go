@@ -63,7 +63,7 @@ func (o *overwritePrompter) promptForConfirmation(objectPath string, objectType 
 			"Do you wish to overwrite its properties?", objectPath)
 	}
 
-	answer := common.GetLifecycleMgr().Prompt(question,
+	answer := common.GetLifecycleMgr().OnPrompt(question,
 		common.PromptDetails{
 			PromptType:   common.EPromptType.Overwrite(),
 			PromptTarget: objectPath,
@@ -76,15 +76,15 @@ func (o *overwritePrompter) promptForConfirmation(objectPath string, objectType 
 
 	switch answer {
 	case common.EResponseOption.Yes():
-		common.GetLifecycleMgr().Info(fmt.Sprintf("Confirmed. %s will be overwritten.", objectPath))
+		common.GetLifecycleMgr().OnInfo(fmt.Sprintf("Confirmed. %s will be overwritten.", objectPath))
 		return true
 	case common.EResponseOption.YesForAll():
-		common.GetLifecycleMgr().Info(fmt.Sprintf("Confirmed. All future %s conflicts will be overwritten.", strings.ToLower(objectType.String())))
+		common.GetLifecycleMgr().OnInfo(fmt.Sprintf("Confirmed. All future %s conflicts will be overwritten.", strings.ToLower(objectType.String())))
 		o.shouldPromptUser[objectType] = false
 		o.savedResponse[objectType] = true
 		return true
 	case common.EResponseOption.No():
-		common.GetLifecycleMgr().Info(fmt.Sprintf("%s will be skipped", objectPath))
+		common.GetLifecycleMgr().OnInfo(fmt.Sprintf("%s will be skipped", objectPath))
 		return false
 	case common.EResponseOption.NoForAll():
 		name := strings.ToLower(objectType.String())
@@ -92,12 +92,12 @@ func (o *overwritePrompter) promptForConfirmation(objectPath string, objectType 
 			name += " properties"
 		}
 
-		common.GetLifecycleMgr().Info(fmt.Sprintf("No %s will be overwritten from now onwards.", name))
+		common.GetLifecycleMgr().OnInfo(fmt.Sprintf("No %s will be overwritten from now onwards.", name))
 		o.shouldPromptUser[objectType] = false
 		o.savedResponse[objectType] = false
 		return false
 	default:
-		common.GetLifecycleMgr().Info(fmt.Sprintf("Unrecognizable answer, skipping %s.", objectPath))
+		common.GetLifecycleMgr().OnInfo(fmt.Sprintf("Unrecognizable answer, skipping %s.", objectPath))
 		return false
 	}
 }

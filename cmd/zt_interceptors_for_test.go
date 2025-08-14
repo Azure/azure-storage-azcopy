@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"fmt"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -84,20 +85,14 @@ func (m *mockedLifecycleManager) OnTransferProgress(progress common.TransferProg
 	default:
 	}
 }
-func (m *mockedLifecycleManager) Progress(o common.OutputBuilder) {
-	select {
-	case m.progressLog <- o(common.EOutputFormat.Text()):
-	default:
-	}
-}
 func (*mockedLifecycleManager) OnStart(ctx common.JobContext) {}
-func (m *mockedLifecycleManager) Info(msg string) {
+func (m *mockedLifecycleManager) OnInfo(msg string) {
 	select {
 	case m.infoLog <- msg:
 	default:
 	}
 }
-func (m *mockedLifecycleManager) Warn(msg string) {
+func (m *mockedLifecycleManager) OnWarning(msg string) {
 	select {
 	case m.warnLog <- msg:
 	default:
@@ -115,7 +110,7 @@ func (m *mockedLifecycleManager) Output(o common.OutputBuilder, e common.OutputM
 	default:
 	}
 }
-func (*mockedLifecycleManager) Prompt(message string, details common.PromptDetails) common.ResponseOption {
+func (*mockedLifecycleManager) OnPrompt(message string, details common.PromptDetails) common.ResponseOption {
 	return common.EResponseOption.Default()
 }
 func (m *mockedLifecycleManager) Exit(o common.OutputBuilder, e common.ExitCode) {

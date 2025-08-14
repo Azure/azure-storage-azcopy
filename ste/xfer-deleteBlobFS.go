@@ -27,7 +27,7 @@ func DeleteHNSResource(jptm IJobPartTransferMgr, pacer pacer) {
 
 	logBlobFSDeleteWarnOnce.Do(func() {
 		jptm.Log(common.LogWarning, blobFSDeleteWarning)
-		common.GetLifecycleMgr().Info(blobFSDeleteWarning)
+		common.GetLifecycleMgr().OnInfo(blobFSDeleteWarning)
 	})
 
 	// schedule the transfer as a chunk, so it will run on the main goroutine pool

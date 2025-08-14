@@ -1935,7 +1935,7 @@ var oncer = sync.Once{}
 
 func WarnIfTooManyObjects() {
 	oncer.Do(func() {
-		GetLifecycleMgr().Warn(fmt.Sprintf("This job contains more than %d objects, best practice to run less than this.",
+		GetLifecycleMgr().OnWarning(fmt.Sprintf("This job contains more than %d objects, best practice to run less than this.",
 			RECOMMENDED_OBJECTS_COUNT))
 	})
 }

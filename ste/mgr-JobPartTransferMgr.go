@@ -844,7 +844,7 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 
 		if serviceCode == common.CPK_ERROR_SERVICE_CODE {
 			cpkAccessFailureLogGLCM.Do(func() {
-				common.GetLifecycleMgr().Info("One or more transfers have failed because AzCopy currently does not support blobs encrypted with customer provided keys (CPK). " +
+				common.GetLifecycleMgr().OnInfo("One or more transfers have failed because AzCopy currently does not support blobs encrypted with customer provided keys (CPK). " +
 					"If you wish to access CPK-encrypted blobs, we recommend using one of the Azure Storage SDKs to do so.")
 			})
 		}
@@ -861,9 +861,9 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 			// quit right away, since without proper authentication no work can be done
 			// display a clear message
 			if strings.Contains(descriptionOfWhereErrorOccurred, "tags") {
-				common.GetLifecycleMgr().Info(fmt.Sprintf("Authorization failed during an attempt to set tags, please ensure you have the appropriate Tags permission %s", err.Error()))
+				common.GetLifecycleMgr().OnInfo(fmt.Sprintf("Authorization failed during an attempt to set tags, please ensure you have the appropriate Tags permission %s", err.Error()))
 			} else {
-				common.GetLifecycleMgr().Info(fmt.Sprintf("Authentication failed, it is either not correct, or expired, or does not have the correct permission %s", err.Error()))
+				common.GetLifecycleMgr().OnInfo(fmt.Sprintf("Authentication failed, it is either not correct, or expired, or does not have the correct permission %s", err.Error()))
 			}
 
 			if fileerror.HasCode(err, "ShareSizeLimitReached") {
@@ -926,7 +926,7 @@ func (jptm *jobPartTransferMgr) LogAtLevelForCurrentTransfer(level common.LogLev
 
 func (jptm *jobPartTransferMgr) logTransferError(errorCode transferErrorCode, source, destination, errorMsg string, status int) {
 	// order of log elements here is mirrored, in subset, in LogForCurrentTransfer
-	info := jptm.Info() // TODO we are getting a lot of Info calls and its (presumably) not well-optimized.  Profile that?
+	info := jptm.Info() // TODO we are getting a lot of OnInfo calls and its (presumably) not well-optimized.  Profile that?
 	msg := fmt.Sprintf("%v: %v", errorCode, info.entityTypeLogIndicator()) + common.URLStringExtension(source).RedactSecretQueryParamForLogging() +
 		fmt.Sprintf(" : %03d : %s\n   Dst: ", status, errorMsg) + common.URLStringExtension(destination).RedactSecretQueryParamForLogging()
 	jptm.Log(common.LogError, msg)

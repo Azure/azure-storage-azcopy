@@ -24,7 +24,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"io"
 	"math"
 	"net/url"
@@ -35,6 +34,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -526,7 +527,7 @@ func validatePutMd5(putMd5 bool, fromTo common.FromTo) error {
 	// In case of S2S transfers, log info message to inform the users that MD5 check doesn't work for S2S Transfers.
 	// This is because we cannot calculate MD5 hash of the data stored at a remote locations.
 	if putMd5 && fromTo.IsS2S() {
-		glcm.Info(" --put-md5 flag to check data consistency between source and destination is not applicable for S2S Transfers (i.e. When both the source and the destination are remote). AzCopy cannot compute MD5 hash of data stored at remote location.")
+		glcm.OnInfo(" --put-md5 flag to check data consistency between source and destination is not applicable for S2S Transfers (i.e. When both the source and the destination are remote). AzCopy cannot compute MD5 hash of data stored at remote location.")
 	}
 	return nil
 }
@@ -986,7 +987,7 @@ func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.
 	}
 
 	if cca.Source.SAS != "" && cca.FromTo.IsS2S() && jpo.CredentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
-		glcm.Info("Authentication: If the source and destination accounts are in the same AAD tenant & the user/spn/msi has appropriate permissions on both, the source SAS token is not required and OAuth can be used round-trip.")
+		glcm.OnInfo("Authentication: If the source and destination accounts are in the same AAD tenant & the user/spn/msi has appropriate permissions on both, the source SAS token is not required and OAuth can be used round-trip.")
 	}
 
 	if cca.FromTo.IsS2S() {
@@ -1268,7 +1269,7 @@ func (cca *CookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
 func (cca *CookedCopyCmdArgs) Cancel(lcm common.LifecycleMgr) {
 	// prompt for confirmation, except when enumeration is complete
 	if !cca.isEnumerationComplete {
-		answer := lcm.Prompt("The source enumeration is not complete, "+
+		answer := lcm.OnPrompt("The source enumeration is not complete, "+
 			"cancelling the job at this point means it cannot be resumed.",
 			common.PromptDetails{
 				PromptType: common.EPromptType.Cancel(),
@@ -1300,7 +1301,7 @@ func (cca *CookedCopyCmdArgs) launchFollowup(priorJobExitCode common.ExitCode) {
 		cca.followupJobArgs.priorJobExitCode = &priorJobExitCode
 		err := cca.followupJobArgs.process()
 		if err == ErrNothingToRemove {
-			glcm.Info("Cleanup completed (nothing needed to be deleted)")
+			glcm.OnInfo("Cleanup completed (nothing needed to be deleted)")
 			glcm.Exit(nil, common.EExitCode.Success())
 		} else if err != nil {
 			glcm.Error("failed to perform followup/cleanup job due to error: " + err.Error())
@@ -1471,7 +1472,7 @@ func init() {
 			if err != nil {
 				glcm.Error("failed to parse user input due to error: " + err.Error())
 			}
-			glcm.Info("Scanning...")
+			glcm.OnInfo("Scanning...")
 
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()

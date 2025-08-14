@@ -22,7 +22,7 @@ func anyToRemote_symlink(jptm IJobPartTransferMgr, info *TransferInfo, pacer pac
 		return
 	}
 	if srcInfoProvider.EntityType() != common.EEntityType.Symlink() {
-		panic("configuration error. Source Info Provider does not have symlink entity type")
+		panic("configuration error. Source OnInfo Provider does not have symlink entity type")
 	}
 	symSIP, ok := srcInfoProvider.(ISymlinkBearingSourceInfoProvider)
 	if !ok {

@@ -90,7 +90,7 @@ func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
 	// Supply no plan MMF because we don't have one, and AddJobPart will create one on its own.
 	// Add this part to the Job and schedule its transfers
 
-	// Warn if more objects than recommended threshold
+	// OnWarning if more objects than recommended threshold
 	jm.AddTotalNumFilesProcessed(int64(len(order.Transfers.List)))
 	if jm.GetTotalNumFilesProcessed() > common.RECOMMENDED_OBJECTS_COUNT {
 		common.WarnIfTooManyObjects()

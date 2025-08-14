@@ -433,7 +433,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			if !t.trailingDot.IsEnabled() && checkAllDots(relativePath) {
 				glcm.Error(fmt.Sprintf(allDotsErrorMsg, relativePath))
 			}
-			glcm.Info("Failed to scan Directory/File " + relativePath + ". Logging errors in scanning logs.")
+			glcm.OnInfo("Failed to scan Directory/File " + relativePath + ". Logging errors in scanning logs.")
 
 			if azcopyScanningLogger != nil {
 				azcopyScanningLogger.Log(common.LogWarning, workerError.Error())

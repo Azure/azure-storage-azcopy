@@ -44,7 +44,7 @@ var lgCmd = &cobra.Command{
 		// Login type consolidation to allow backward compatibility.
 		// Commenting the warning message till we decide on when to deprecate these options
 		// if lca.servicePrincipal || lca.identity {
-		// 	glcm.Warn("The flags --service-principal and --identity will be deprecated in a future release. Please use --login-type=SPN or --login-type=MSI instead.")
+		// 	glcm.OnWarning("The flags --service-principal and --identity will be deprecated in a future release. Please use --login-type=SPN or --login-type=MSI instead.")
 		// }
 		if (loginCmdArg.servicePrincipal || loginCmdArg.identity) && cmd.Flag("login-type").Changed {
 			return errors.New("you cannot set --service-principal or --identity in conjunction with --login-type. please use --login-type only")
@@ -119,7 +119,7 @@ type rawLoginArgs struct {
 
 	loginType string
 
-	// Info of VM's user assigned identity, client or object ids of the service identity are required if
+	// OnInfo of VM's user assigned identity, client or object ids of the service identity are required if
 	// your VM has multiple user-assigned managed identities.
 	// https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/how-to-use-vm-token#get-a-token-using-go
 	identityClientID   string
@@ -141,7 +141,7 @@ func (args rawLoginArgs) toOptions() (azcopy.LoginOptions, error) {
 	clientSecret := common.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
 
 	if certificatePassword != "" || clientSecret != "" {
-		glcm.Info(environmentVariableNotice)
+		glcm.OnInfo(environmentVariableNotice)
 	}
 	return azcopy.LoginOptions{
 		TenantID:            args.tenantID,
@@ -167,20 +167,20 @@ func RunLogin(options azcopy.LoginOptions) error {
 	switch options.LoginType {
 	case common.EAutoLoginType.SPN():
 		if options.CertificatePath != "" {
-			glcm.Info("SPN Auth via cert succeeded.")
+			glcm.OnInfo("SPN Auth via cert succeeded.")
 		} else {
-			glcm.Info("SPN Auth via secret succeeded.")
+			glcm.OnInfo("SPN Auth via secret succeeded.")
 		}
 	case common.EAutoLoginType.MSI():
-		glcm.Info("Login with identity succeeded.")
+		glcm.OnInfo("Login with identity succeeded.")
 	case common.EAutoLoginType.AzCLI():
-		glcm.Info("Login with AzCliCreds succeeded")
+		glcm.OnInfo("Login with AzCliCreds succeeded")
 	case common.EAutoLoginType.PsCred():
-		glcm.Info("Login with Powershell context succeeded")
+		glcm.OnInfo("Login with Powershell context succeeded")
 	case common.EAutoLoginType.Workload():
-		glcm.Info("Login with Workload Identity succeeded")
+		glcm.OnInfo("Login with Workload Identity succeeded")
 	default:
-		glcm.Info("Login succeeded.")
+		glcm.OnInfo("Login succeeded.")
 	}
 
 	return nil

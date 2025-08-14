@@ -47,7 +47,7 @@ func syncComparatorLog(fileName, status, skipReason string, stdout bool) {
 	}
 
 	if stdout {
-		glcm.Info(out)
+		glcm.OnInfo(out)
 	}
 }
 

@@ -104,7 +104,7 @@ func init() {
 			// We support DFS by using blob end-point of the account. We replace dfs by blob in src and dst
 			if src := InferArgumentLocation(raw.src); src == common.ELocation.BlobFS() {
 				raw.src = strings.Replace(raw.src, ".dfs", ".blob", 1)
-				glcm.Info("Switching to use blob endpoint on source account.")
+				glcm.OnInfo("Switching to use blob endpoint on source account.")
 			}
 
 			srcLocationType := InferArgumentLocation(raw.src)

@@ -84,7 +84,7 @@ func init() {
 			}
 
 			if cooked.permanentDeleteOption != common.EPermanentDeleteOption.None() {
-				glcm.Info("Permanent delete is a PREVIEW feature and soft-deleted snapshots/versions will be deleted PERMANENTLY. Please proceed with caution.")
+				glcm.OnInfo("Permanent delete is a PREVIEW feature and soft-deleted snapshots/versions will be deleted PERMANENTLY. Please proceed with caution.")
 			}
 
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()

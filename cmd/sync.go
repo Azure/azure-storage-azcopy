@@ -349,7 +349,7 @@ func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
 	// Reference : https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-files#synchronize-files
 	if cooked.fromTo == common.EFromTo.LocalFile() {
 
-		glcm.Warn(LocalToFileShareWarnMsg)
+		glcm.OnWarning(LocalToFileShareWarnMsg)
 		common.LogToJobLogWithPrefix(LocalToFileShareWarnMsg, common.LogWarning)
 
 		if cooked.dryrunMode {
@@ -389,7 +389,7 @@ func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
 	// We only support transfer from source encrypted by user key when user wishes to download.
 	// Due to service limitation, S2S transfer is not supported for source encrypted by user key.
 	if cooked.fromTo.IsDownload() && (cooked.cpkOptions.CpkScopeInfo != "" || cooked.cpkOptions.CpkInfo) {
-		glcm.Info("Client Provided Key for encryption/decryption is provided for download scenario. " +
+		glcm.OnInfo("Client Provided Key for encryption/decryption is provided for download scenario. " +
 			"Assuming source is encrypted.")
 		cooked.cpkOptions.IsSourceEncrypted = true
 	}
@@ -552,7 +552,7 @@ func (cca *cookedSyncCmdArgs) waitUntilJobCompletion(blocking bool) {
 func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
 	// prompt for confirmation, except when enumeration is complete
 	if !cca.isEnumerationComplete {
-		answer := lcm.Prompt("The enumeration (source/destination comparison) is not complete, "+
+		answer := lcm.OnPrompt("The enumeration (source/destination comparison) is not complete, "+
 			"cancelling the job at this point means it cannot be resumed.",
 			common.PromptDetails{
 				PromptType: common.EPromptType.Cancel(),

@@ -26,7 +26,7 @@ func init() {
 		switch mode {
 		case EHashStorageMode.XAttr():
 			// Checking the root directory of the source isn't technically correct, as a filesystem could be mounted under the source.
-			lcm.Info("XAttr hash storage mode is selected. This assumes all files indexed on the source are on filesystem(s) that support user_xattr.")
+			lcm.OnInfo("XAttr hash storage mode is selected. This assumes all files indexed on the source are on filesystem(s) that support user_xattr.")
 			return &XAttrHashDataAdapter{dataBasePath: dataPath}, nil
 		default: // fall back to OS-agnostic behaviors
 			return osAgnosticBehavior(hashPath, dataPath, mode)
@@ -55,7 +55,7 @@ retry:
 	sz, err := unix.Getxattr(metaFile, strings.TrimPrefix(AzCopyHashDataStream, "."), buf) // MacOS doesn't take well to the dot(?)
 	if err != nil {
 		if err == unix.ERANGE { // But just in case, let's safeguard against it and re-call with a larger buffer.
-			buf = make([]byte, len(buf) * 2)
+			buf = make([]byte, len(buf)*2)
 			goto retry
 		}
 

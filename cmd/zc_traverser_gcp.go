@@ -57,7 +57,7 @@ func (t *gcpTraverser) Traverse(preprocessor objectMorpher, processor objectProc
 
 		attrs, err := t.gcpClient.Bucket(t.gcpURLParts.BucketName).Object(t.gcpURLParts.ObjectKey).Attrs(t.ctx)
 		if err == nil {
-			glcm.Info(fmt.Sprintf("Bucket: %v, Object: %v, Type: %v\n", attrs.Bucket, attrs.Name, attrs.ContentType))
+			glcm.OnInfo(fmt.Sprintf("Bucket: %v, Object: %v, Type: %v\n", attrs.Bucket, attrs.Name, attrs.ContentType))
 			gie := common.GCPObjectInfoExtension{ObjectInfo: *attrs}
 			storedObject := newStoredObject(
 				preprocessor,

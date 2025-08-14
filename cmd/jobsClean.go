@@ -92,10 +92,10 @@ func handleCleanJobsCommand(givenStatus common.JobStatus) error {
 	}
 
 	if givenStatus == common.EJobStatus.All() {
-		glcm.Info(fmt.Sprintf("Removed %v files.", result.Count))
+		glcm.OnInfo(fmt.Sprintf("Removed %v files.", result.Count))
 	} else {
 		for _, job := range result.Jobs {
-			glcm.Info(fmt.Sprintf("Removing files for job %s", job))
+			glcm.OnInfo(fmt.Sprintf("Removing files for job %s", job))
 		}
 	}
 	return nil

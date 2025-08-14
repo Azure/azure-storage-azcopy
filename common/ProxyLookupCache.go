@@ -141,7 +141,7 @@ func (c *proxyLookupCache) getProxy(req *http.Request) (*url.URL, error) {
 		if value.err == nil && value.url != nil {
 			// print out a friendly message to let the cx know we've detected a proxy
 			// only do it when we first cached the result so that the message is not printed for every request
-			GetLifecycleMgr().Info(fmt.Sprintf("Proxy detected: %s -> %s", key.String(), value.url.String()))
+			GetLifecycleMgr().OnInfo(fmt.Sprintf("Proxy detected: %s -> %s", key.String(), value.url.String()))
 		}
 
 		go c.endlessTimedRefresh(key, req)
@@ -183,7 +183,7 @@ func (c *proxyLookupCache) endlessTimedRefresh(key url.URL, representativeFullRe
 			// 1. the old value had an error and new value doesn't
 			// 2. the proxy url has changed
 			if oldValue.err != nil || oldValue.url == nil || oldValue.url.String() != newValue.url.String() {
-				GetLifecycleMgr().Info(fmt.Sprintf("Proxy detected: %s -> %s", key.String(), newValue.url.String()))
+				GetLifecycleMgr().OnInfo(fmt.Sprintf("Proxy detected: %s -> %s", key.String(), newValue.url.String()))
 			}
 		}
 	}

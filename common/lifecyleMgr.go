@@ -52,22 +52,19 @@ type LifecycleMgr interface {
 	JobLifecycleHandler
 	// TODO (gapra) : For copy, sync, resume - we use the OnComplete method to support AzCopy as a library.
 	// I honestly don't think we need this in an ideal simple implementation of AzCopy, but it is used in the code and will take some rework and testing to fully remove.
-	Exit(OutputBuilder, ExitCode)                                // indicates successful execution exit after printing, allow user to specify exit code
-	Info(string)                                                 // simple print, allowed to float up
-	Warn(string)                                                 // simple print, allowed to float up
-	Dryrun(OutputBuilder)                                        // print files for dry run mode
-	Output(OutputBuilder, OutputMessageType)                     // print output for list
-	Error(string)                                                // indicates fatal error, exit after printing, exit code is always Failed (1)
-	Prompt(message string, details PromptDetails) ResponseOption // ask the user a question(after erasing the progress), then return the response
-	SurrenderControl()                                           // give up control, this should never return
-	InitiateProgressReporting(WorkController)                    // start writing progress with another routine
-	AllowReinitiateProgressReporting()                           // allow re-initiation of progress reporting for followup job
-	SetOutputFormat(OutputFormat)                                // change the output format of the entire application
-	EnableInputWatcher()                                         // depending on the command, we may allow user to give input through Stdin
-	EnableCancelFromStdIn()                                      // allow user to send in `cancel` to stop the job
-	E2EAwaitContinue()                                           // used by E2E tests
-	E2EAwaitAllowOpenFiles()                                     // used by E2E tests
-	E2EEnableAwaitAllowOpenFiles(enable bool)                    // used by E2E tests
+	Exit(OutputBuilder, ExitCode)             // indicates successful execution exit after printing, allow user to specify exit code
+	Dryrun(OutputBuilder)                     // print files for dry run mode
+	Output(OutputBuilder, OutputMessageType)  // print custom output message types
+	Error(string)                             // indicates fatal error, exit after printing, exit code is always Failed (1)
+	SurrenderControl()                        // give up control, this should never return
+	InitiateProgressReporting(WorkController) // start writing progress with another routine
+	AllowReinitiateProgressReporting()        // allow re-initiation of progress reporting for followup job
+	SetOutputFormat(OutputFormat)             // change the output format of the entire application
+	EnableInputWatcher()                      // depending on the command, we may allow user to give input through Stdin
+	EnableCancelFromStdIn()                   // allow user to send in `cancel` to stop the job
+	E2EAwaitContinue()                        // used by E2E tests
+	E2EAwaitAllowOpenFiles()                  // used by E2E tests
+	E2EEnableAwaitAllowOpenFiles(enable bool) // used by E2E tests
 	RegisterCloseFunc(func())
 	SetForceLogging()
 	IsForceLoggingDisabled() bool
@@ -154,10 +151,10 @@ func (lcm *lifecycleMgr) watchInputs() {
 		} else if lcm.e2eAllowAwaitOpen && strings.EqualFold(msg, "open") {
 			close(lcm.e2eAllowOpenChannel)
 		} else if err := json.Unmarshal([]byte(msg), &req); err == nil { //json string
-			lcm.Info(fmt.Sprintf("Received request for %s with timeStamp %s", req.MsgType, req.TimeStamp.String()))
+			lcm.OnInfo(fmt.Sprintf("Received request for %s with timeStamp %s", req.MsgType, req.TimeStamp.String()))
 			var msgType LCMMsgType
 			if err := msgType.Parse(req.MsgType); err != nil {
-				lcm.Info(fmt.Sprintf("Discarding incorrect message: %s.", req.MsgType))
+				lcm.OnInfo(fmt.Sprintf("Discarding incorrect message: %s.", req.MsgType))
 				continue
 			}
 
@@ -174,7 +171,7 @@ func (lcm *lifecycleMgr) watchInputs() {
 				lcm.Response(*m.Resp)
 			}
 		} else {
-			lcm.Info("Discarding incorrectly formatted input message")
+			lcm.OnInfo("Discarding incorrectly formatted input message")
 		}
 	}
 }
@@ -214,7 +211,7 @@ func (lcm *lifecycleMgr) checkAndStartCPUProfiling() {
 	// For more details, please refer to https://golang.org/pkg/runtime/pprof/
 	cpuProfilePath := GetEnvironmentVariable(EEnvironmentVariable.ProfileCPU())
 	if cpuProfilePath != "" {
-		lcm.Info(fmt.Sprintf("pprof start CPU profiling, and saving profiling data to: %q", cpuProfilePath))
+		lcm.OnInfo(fmt.Sprintf("pprof start CPU profiling, and saving profiling data to: %q", cpuProfilePath))
 		f, err := os.Create(cpuProfilePath)
 		if err != nil {
 			lcm.Error(fmt.Sprintf("Fail to create file for CPU profiling, %v", err))
@@ -237,7 +234,7 @@ func (lcm *lifecycleMgr) checkAndTriggerMemoryProfiling() {
 	// For more details, please refer to https://golang.org/pkg/runtime/pprof/
 	memProfilePath := GetEnvironmentVariable(EEnvironmentVariable.ProfileMemory())
 	if memProfilePath != "" {
-		lcm.Info(fmt.Sprintf("pprof start memory profiling, and saving profiling data to: %q", memProfilePath))
+		lcm.OnInfo(fmt.Sprintf("pprof start memory profiling, and saving profiling data to: %q", memProfilePath))
 		f, err := os.Create(memProfilePath)
 		if err != nil {
 			lcm.Error(fmt.Sprintf("Fail to create file for memory profiling, %v", err))
@@ -247,7 +244,7 @@ func (lcm *lifecycleMgr) checkAndTriggerMemoryProfiling() {
 			lcm.Error(fmt.Sprintf("Fail to start memory profiling, %v", err))
 		}
 		if err := f.Close(); err != nil {
-			lcm.Info(fmt.Sprintf("Fail to close memory profiling file, %v", err))
+			lcm.OnInfo(fmt.Sprintf("Fail to close memory profiling file, %v", err))
 		}
 	}
 }
@@ -281,9 +278,9 @@ func (lcm *lifecycleMgr) OnComplete(summary JobSummary) {
 	lcm.Exit(o, summary.ExitCode)
 }
 
-func (lcm *lifecycleMgr) Info(msg string) {
+func (lcm *lifecycleMgr) OnInfo(msg string) {
 
-	msg = lcm.logSanitizer.SanitizeLogMessage(msg) // sometimes error-like text comes through Info, before the final "we've failed, please stop now" signal comes to Error. So we sanitize in both places.
+	msg = lcm.logSanitizer.SanitizeLogMessage(msg) // sometimes error-like text comes through OnInfo, before the final "we've failed, please stop now" signal comes to Error. So we sanitize in both places.
 
 	infoMsg := fmt.Sprintf("INFO: %v", msg)
 
@@ -293,9 +290,9 @@ func (lcm *lifecycleMgr) Info(msg string) {
 	}
 }
 
-func (lcm *lifecycleMgr) Warn(msg string) {
+func (lcm *lifecycleMgr) OnWarning(msg string) {
 
-	msg = lcm.logSanitizer.SanitizeLogMessage(msg) // sometimes error-like text comes through Info, before the final "we've failed, please stop now" signal comes to Error. So we sanitize in both places.
+	msg = lcm.logSanitizer.SanitizeLogMessage(msg) // sometimes error-like text comes through OnWarning, before the final "we've failed, please stop now" signal comes to Error. So we sanitize in both places.
 
 	infoMsg := fmt.Sprintf("WARN: %v", msg)
 
@@ -305,7 +302,7 @@ func (lcm *lifecycleMgr) Warn(msg string) {
 	}
 }
 
-func (lcm *lifecycleMgr) Prompt(message string, details PromptDetails) ResponseOption {
+func (lcm *lifecycleMgr) OnPrompt(message string, details PromptDetails) ResponseOption {
 
 	expectedInputChannel := make(chan string, 1)
 	lcm.msgQueue <- outputMessage{
@@ -331,7 +328,7 @@ func (lcm *lifecycleMgr) Prompt(message string, details PromptDetails) ResponseO
 		}
 	}
 
-	// nothing matched our options, assume default behavior (up to whoever that called Prompt)
+	// nothing matched our options, assume default behavior (up to whoever that called OnPrompt)
 	// we don't re-prompt the user since this makes the integration with Stg Exp more complex
 	return EResponseOption.Default()
 }
@@ -560,7 +557,7 @@ func (lcm *lifecycleMgr) processTextOutput(msgToOutput outputMessage) {
 		// read the response to the prompt and send it back through the channel
 		msgToOutput.inputChannel <- lcm.getInputAfterTime(questionTime)
 	default:
-		// Init, Info, Dryrun, Response, ListSummary, ListObject, and any other new message types will use default
+		// Init, OnInfo, Dryrun, Response, ListSummary, ListObject, and any other new message types will use default
 		if lcm.progressCache != "" { // a progress status is already on the last line
 			// print the info from the beginning on current line
 			fmt.Print("\r")
@@ -612,7 +609,7 @@ func (lcm *lifecycleMgr) InitiateProgressReporting(jc WorkController) {
 
 		doCancel := func() {
 			cancelCalled = true
-			lcm.Info("Cancellation requested. Beginning clean shutdown...")
+			lcm.OnInfo("Cancellation requested. Beginning clean shutdown...")
 			jc.Cancel(lcm)
 		}
 
@@ -637,7 +634,7 @@ func (lcm *lifecycleMgr) InitiateProgressReporting(jc WorkController) {
 				// its going to be a long job anyway, so no need to report so often
 				wait = 2 * time.Minute
 				if oldCount < progressFrequencyThreshold {
-					lcm.Info(fmt.Sprintf("Reducing progress output frequency to %v, because there are over %d files", wait, progressFrequencyThreshold))
+					lcm.OnInfo(fmt.Sprintf("Reducing progress output frequency to %v, because there are over %d files", wait, progressFrequencyThreshold))
 				}
 			}
 

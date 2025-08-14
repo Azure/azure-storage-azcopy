@@ -99,7 +99,7 @@ func ParseSizeString(s string, name string) (int64, error) {
 // choices in its raw args
 func (raw rawBenchmarkCmdArgs) cook() (CookedCopyCmdArgs, error) {
 
-	glcm.Info(common.BenchmarkPreviewNotice)
+	glcm.OnInfo(common.BenchmarkPreviewNotice)
 
 	dummyCooked := CookedCopyCmdArgs{}
 	virtualDir := "benchmark-" + Client.CurrentJobID.String() // create unique directory name, so we won't overwrite anything
@@ -161,9 +161,9 @@ func (raw rawBenchmarkCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	}
 
 	if downloadMode {
-		glcm.Info(fmt.Sprintf("Benchmarking downloads from %s.", cooked.Source.Value))
+		glcm.OnInfo(fmt.Sprintf("Benchmarking downloads from %s.", cooked.Source.Value))
 	} else {
-		glcm.Info(fmt.Sprintf("Benchmarking uploads to %s.", cooked.Destination.Value))
+		glcm.OnInfo(fmt.Sprintf("Benchmarking uploads to %s.", cooked.Destination.Value))
 	}
 
 	if !downloadMode && raw.deleteTestData {
@@ -318,7 +318,7 @@ func init() {
 				glcm.Error("failed to parse user input due to error: " + err.Error())
 			}
 
-			glcm.Info("Scanning...")
+			glcm.OnInfo("Scanning...")
 
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()

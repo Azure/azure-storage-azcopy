@@ -124,7 +124,7 @@ func (tbfsc TestBlobFSCommand) verifyRemoteFile() {
 	}
 	fInfo, err := f.Stat()
 	if err != nil {
-		fmt.Println("error getting the file Info of opened file ", tbfsc.Object, " failed with error ", err.Error())
+		fmt.Println("error getting the file OnInfo of opened file ", tbfsc.Object, " failed with error ", err.Error())
 		os.Exit(1)
 	}
 	defer f.Close()
@@ -209,7 +209,7 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 		fmt.Printf("error creating client. failed with error %s\n", err.Error())
 		os.Exit(1)
 	}
-	// Get the object Info and If the object is not a directory
+	// Get the object OnInfo and If the object is not a directory
 	// validation fails since validation has two be done between directories
 	// local and remote
 	objectInfo, err := os.Stat(tbfsc.Object)

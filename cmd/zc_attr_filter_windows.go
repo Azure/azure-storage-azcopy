@@ -59,7 +59,7 @@ func (f *attrFilter) DoesPass(storedObject StoredObject) bool {
 	// If it fails to get file attributes,
 	// let the filter pass
 	if err != nil {
-		glcm.Info(fmt.Sprintf("Skipping file attribute filter for file %s due to error: %s",
+		glcm.OnInfo(fmt.Sprintf("Skipping file attribute filter for file %s due to error: %s",
 			storedObject.relativePath, err))
 		return true
 	}

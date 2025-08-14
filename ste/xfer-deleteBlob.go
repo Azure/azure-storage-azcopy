@@ -42,7 +42,7 @@ func doDeleteBlob(jptm IJobPartTransferMgr) {
 			jptm.LogError(info.Source, "DELETE ERROR ", err)
 		} else if status == common.ETransferStatus.SkippedBlobHasSnapshots() {
 			explainedSkippedRemoveOnce.Do(func() {
-				common.GetLifecycleMgr().Info("Blobs with snapshots are skipped. Please specify the --delete-snapshots flag for alternative behaviors.")
+				common.GetLifecycleMgr().OnInfo("Blobs with snapshots are skipped. Please specify the --delete-snapshots flag for alternative behaviors.")
 			})
 
 			// log at error level so that it's clear why the transfer was skipped even when the log level is set to error

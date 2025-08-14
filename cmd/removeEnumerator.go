@@ -96,9 +96,9 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	// deletion, because that would not handle folders that were empty at the start of the job).
 	// isHNStoHNS is IGNORED here, because BlobFS locations don't take this route currently.
 	fpo, message := NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, false, false, false, false, cca.IncludeDirectoryStubs)
-	// do not print Info message if in dry run mode
+	// do not print OnInfo message if in dry run mode
 	if !cca.dryrunMode {
-		glcm.Info(message)
+		glcm.OnInfo(message)
 	}
 	common.LogToJobLogWithPrefix(message, common.LogInfo)
 

@@ -29,7 +29,7 @@ func (a *HiddenFileDataAdapter) getHashPath(relativePath string) string {
 	// Try to create the directory
 	err := os.Mkdir(filepath.Join(basePath, dir), 0775)
 	if err != nil && !os.IsExist(err) {
-		lcm.Warn("Failed to create hash data directory")
+		lcm.OnWarning("Failed to create hash data directory")
 	}
 
 	return filepath.Join(basePath, dir, fName)

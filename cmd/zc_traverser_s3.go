@@ -229,7 +229,7 @@ func newS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTrave
 func showS3UrlTypeWarning(s3URLParts common.S3URLParts) {
 	if strings.EqualFold(s3URLParts.Host, "s3.amazonaws.com") {
 		s3UrlWarningOncer.Do(func() {
-			glcm.Info("Instead of transferring from the 's3.amazonaws.com' URL, in this version of AzCopy we recommend you " +
+			glcm.OnInfo("Instead of transferring from the 's3.amazonaws.com' URL, in this version of AzCopy we recommend you " +
 				"use a region-specific endpoint to transfer from one specific region. E.g. s3.us-east-1.amazonaws.com or a virtual-hosted reference to a single bucket.")
 		})
 	}

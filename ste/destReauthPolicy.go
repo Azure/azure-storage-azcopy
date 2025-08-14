@@ -76,7 +76,7 @@ retry:
 			if m.TryLock() { // Fetch the lock and try until we get auth.
 				for {
 					if ctx.Value(destReauthDebugNoPrompt) == nil {
-						_ = common.GetLifecycleMgr().Prompt("Authentication is required to continue the job. Reauthorize and continue?", common.PromptDetails{
+						_ = common.GetLifecycleMgr().OnPrompt("Authentication is required to continue the job. Reauthorize and continue?", common.PromptDetails{
 							PromptType: common.EPromptType.Reauth(),
 							ResponseOptions: []common.ResponseOption{
 								common.EResponseOption.Yes(),
@@ -102,7 +102,7 @@ retry:
 							default: // If it was them, we don't care.
 							}
 						} else {
-							common.GetLifecycleMgr().Info(fmt.Sprintf("Authentication failed, awaiting input to continue: %s", err))
+							common.GetLifecycleMgr().OnInfo(fmt.Sprintf("Authentication failed, awaiting input to continue: %s", err))
 						}
 
 						time.Sleep(time.Second * 5)

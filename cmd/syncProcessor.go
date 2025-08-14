@@ -112,7 +112,7 @@ func (d *interactiveDeleteProcessor) removeImmediately(object StoredObject) (err
 	err = d.deleter(object)
 	if err != nil {
 		msg := fmt.Sprintf("error %s deleting the object %s", err.Error(), object.relativePath)
-		glcm.Info(msg + "; check the scanning log file for more details")
+		glcm.OnInfo(msg + "; check the scanning log file for more details")
 		if azcopyScanningLogger != nil {
 			azcopyScanningLogger.Log(common.LogError, msg+": "+err.Error())
 		}
@@ -125,7 +125,7 @@ func (d *interactiveDeleteProcessor) removeImmediately(object StoredObject) (err
 }
 
 func (d *interactiveDeleteProcessor) promptForConfirmation(object StoredObject) (shouldDelete bool, keepPrompting bool) {
-	answer := glcm.Prompt(fmt.Sprintf("The %s '%s' does not exist at the source. "+
+	answer := glcm.OnPrompt(fmt.Sprintf("The %s '%s' does not exist at the source. "+
 		"Do you wish to delete it from the destination(%s)?",
 		d.objectTypeToDisplay, object.relativePath, d.objectLocationToDisplay),
 		common.PromptDetails{
@@ -144,16 +144,16 @@ func (d *interactiveDeleteProcessor) promptForConfirmation(object StoredObject) 
 		// print nothing, since the deleter is expected to log the message when the delete happens
 		return true, true
 	case common.EResponseOption.YesForAll():
-		glcm.Info(fmt.Sprintf("Confirmed. All the extra %ss will be deleted.", d.objectTypeToDisplay))
+		glcm.OnInfo(fmt.Sprintf("Confirmed. All the extra %ss will be deleted.", d.objectTypeToDisplay))
 		return true, false
 	case common.EResponseOption.No():
-		glcm.Info(fmt.Sprintf("Keeping extra %s: %s", d.objectTypeToDisplay, object.relativePath))
+		glcm.OnInfo(fmt.Sprintf("Keeping extra %s: %s", d.objectTypeToDisplay, object.relativePath))
 		return false, true
 	case common.EResponseOption.NoForAll():
-		glcm.Info("No deletions will happen from now onwards.")
+		glcm.OnInfo("No deletions will happen from now onwards.")
 		return false, false
 	default:
-		glcm.Info(fmt.Sprintf("Unrecognizable answer, keeping extra %s: %s.", d.objectTypeToDisplay, object.relativePath))
+		glcm.OnInfo(fmt.Sprintf("Unrecognizable answer, keeping extra %s: %s.", d.objectTypeToDisplay, object.relativePath))
 		return false, true
 	}
 }
@@ -198,7 +198,7 @@ func (l *localFileDeleter) deleteFile(object StoredObject) error {
 
 	if object.entityType == common.EEntityType.File() {
 		msg := "Deleting extra file: " + object.relativePath
-		glcm.Info(msg)
+		glcm.OnInfo(msg)
 		if azcopyScanningLogger != nil {
 			azcopyScanningLogger.Log(common.LogInfo, msg)
 		}
@@ -207,7 +207,7 @@ func (l *localFileDeleter) deleteFile(object StoredObject) error {
 		return err
 	} else if object.entityType == common.EEntityType.Folder() && l.fpo != common.EFolderPropertiesOption.NoFolders() {
 		msg := "Deleting extra folder: " + object.relativePath
-		glcm.Info(msg)
+		glcm.OnInfo(msg)
 		if azcopyScanningLogger != nil {
 			azcopyScanningLogger.Log(common.LogInfo, msg)
 		}
@@ -295,7 +295,7 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 	if object.entityType == common.EEntityType.File() {
 		// TODO: use b.targetLocation.String() in the next line, instead of "object", if we can make it come out as string
 		msg := "Deleting extra object: " + object.relativePath
-		glcm.Info(msg)
+		glcm.OnInfo(msg)
 		if azcopyScanningLogger != nil {
 			azcopyScanningLogger.Log(common.LogInfo, msg)
 		}
@@ -348,7 +348,7 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 
 		if err != nil {
 			msg := fmt.Sprintf("error %s deleting the object %s", err.Error(), object.relativePath)
-			glcm.Info(msg + "; check the scanning log file for more details")
+			glcm.OnInfo(msg + "; check the scanning log file for more details")
 			if azcopyScanningLogger != nil {
 				azcopyScanningLogger.Log(common.LogError, msg+": "+err.Error())
 			}

@@ -141,7 +141,7 @@ func inferFromTo(src, dst string) common.FromTo {
 	// Try to infer the 1st argument
 	srcLocation := InferArgumentLocation(src)
 	if srcLocation == srcLocation.Unknown() {
-		glcm.Info("Cannot infer source location of " +
+		glcm.OnInfo("Cannot infer source location of " +
 			common.URLStringExtension(src).RedactSecretQueryParamForLogging() +
 			". Please specify the --from-to switch. " + fromToHelpText)
 		return common.EFromTo.Unknown()
@@ -149,7 +149,7 @@ func inferFromTo(src, dst string) common.FromTo {
 
 	dstLocation := InferArgumentLocation(dst)
 	if dstLocation == dstLocation.Unknown() {
-		glcm.Info("Cannot infer destination location of " +
+		glcm.OnInfo("Cannot infer destination location of " +
 			common.URLStringExtension(dst).RedactSecretQueryParamForLogging() +
 			". Please specify the --from-to switch. " + fromToHelpText)
 		return common.EFromTo.Unknown()
@@ -173,10 +173,10 @@ func inferFromTo(src, dst string) common.FromTo {
 		return out
 	}
 
-	glcm.Info("The parameters you supplied were " +
+	glcm.OnInfo("The parameters you supplied were " +
 		"Source: '" + common.URLStringExtension(src).RedactSecretQueryParamForLogging() + "' of type " + srcLocation.String() +
 		", and Destination: '" + common.URLStringExtension(dst).RedactSecretQueryParamForLogging() + "' of type " + dstLocation.String())
-	glcm.Info("Based on the parameters supplied, a valid source-destination combination could not " +
+	glcm.OnInfo("Based on the parameters supplied, a valid source-destination combination could not " +
 		"automatically be found. Please check the parameters you supplied.  If they are correct, please " +
 		"specify an exact source and destination type using the --from-to switch. " + fromToHelpText)
 

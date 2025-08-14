@@ -82,9 +82,9 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 	filters = append(filters, includeSoftDelete...)
 
 	fpo, message := NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, false, false, false, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.IncludeDirectoryStubs)
-	// do not print Info message if in dry run mode
+	// do not print OnInfo message if in dry run mode
 	if !cca.dryrunMode {
-		glcm.Info(message)
+		glcm.OnInfo(message)
 	}
 	common.LogToJobLogWithPrefix(message, common.LogInfo)
 

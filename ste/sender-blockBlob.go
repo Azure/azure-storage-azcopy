@@ -90,7 +90,7 @@ func getVerifiedChunkParams(transferInfo *TransferInfo, memLimit int64, strictMe
 			toGiB(common.MinParallelChunkCountThreshold*chunkSize),
 			common.EEnvironmentVariable.BufferGB().Name)
 
-		lowMemoryLimitAdvice.Do(func() { glcm.Info(msg) })
+		lowMemoryLimitAdvice.Do(func() { glcm.OnInfo(msg) })
 	}
 
 	if chunkSize >= memLimit {

@@ -61,7 +61,7 @@ func init() {
 		Run: func(cmd *cobra.Command, args []string) {
 			logText := func(format string, a ...any) {
 				if OutputFormat == common.EOutputFormat.None() || OutputFormat == common.EOutputFormat.Text() {
-					glcm.Info(fmt.Sprintf(format, a...))
+					glcm.OnInfo(fmt.Sprintf(format, a...))
 				}
 			}
 			status, _ := RunLoginStatus()

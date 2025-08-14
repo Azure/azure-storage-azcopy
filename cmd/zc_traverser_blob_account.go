@@ -103,7 +103,7 @@ func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 	// listContainers will return the cached container list if containers have already been listed by this traverser.
 	cList, skippedContainers, err := t.getListContainers()
 	if len(skippedContainers) > 0 {
-		glcm.Info("Skipped container(s): " + strings.Join(skippedContainers, ", "))
+		glcm.OnInfo("Skipped container(s): " + strings.Join(skippedContainers, ", "))
 	}
 
 	if err != nil {

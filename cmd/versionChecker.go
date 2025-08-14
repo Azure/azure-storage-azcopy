@@ -158,6 +158,6 @@ func PrintOlderVersion(newest Version, local Version) {
 		executableName := executablePathSegments[len(executablePathSegments)-1]
 
 		// output in info mode instead of stderr, as it was crashing CI jobs of some people
-		glcm.Info(executableName + " " + local.original + ": A newer version " + newest.original + " is available to download\n")
+		glcm.OnInfo(executableName + " " + local.original + ": A newer version " + newest.original + " is available to download\n")
 	}
 }

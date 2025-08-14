@@ -245,7 +245,7 @@ func validateHardlinksFlag(option common.HardlinkHandlingType, fromTo common.Fro
 	}
 
 	if common.IsNFSCopy() && option == common.DefaultHardlinkHandlingType {
-		glcm.Info("The --hardlinks option is set to 'follow'. Hardlinked files will be copied as a regular file at the destination.")
+		glcm.OnInfo("The --hardlinks option is set to 'follow'. Hardlinked files will be copied as a regular file at the destination.")
 	}
 	return nil
 }
@@ -321,7 +321,7 @@ func getShareProtocolType(
 	shareClient := fileServiceClient.NewShareClient(shareName)
 	properties, err := shareClient.GetProperties(ctx, nil)
 	if err != nil {
-		glcm.Info(fmt.Sprintf("Warning: Failed to fetch share properties for '%s'. Assuming the share uses '%s' protocol based on --from-to flag.", shareName, givenValue))
+		glcm.OnInfo(fmt.Sprintf("Warning: Failed to fetch share properties for '%s'. Assuming the share uses '%s' protocol based on --from-to flag.", shareName, givenValue))
 		return givenValue, err
 	}
 

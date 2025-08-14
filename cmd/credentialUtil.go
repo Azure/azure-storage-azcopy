@@ -50,7 +50,7 @@ var sharedKeyDeprecationMessage = "*** WARNING *** shared key authentication for
 
 func warnIfSharedKeyAuthForDatalake() {
 	sharedKeyDeprecation.Do(func() {
-		glcm.Warn(sharedKeyDeprecationMessage)
+		glcm.OnWarning(sharedKeyDeprecationMessage)
 		common.LogToJobLogWithPrefix(sharedKeyDeprecationMessage, common.LogWarning)
 	})
 }
@@ -65,7 +65,7 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 		var options azcopy.LoginOptions
 		autoLoginType := strings.ToLower(common.GetEnvironmentVariable(common.EEnvironmentVariable.AutoLoginType()))
 		if autoLoginType == "" {
-			glcm.Info("Autologin not specified.")
+			glcm.OnInfo("Autologin not specified.")
 			return
 		}
 
@@ -126,7 +126,7 @@ func oAuthTokenExists() (oauthTokenExists bool) {
 	if common.EnvVarOAuthTokenInfoExists() {
 		announceOAuthTokenOnce.Do(
 			func() {
-				glcm.Info(fmt.Sprintf("%v is set.", common.EnvVarOAuthTokenInfo)) // Log the case when env var is set, as it's rare case.
+				glcm.OnInfo(fmt.Sprintf("%v is set.", common.EnvVarOAuthTokenInfo)) // Log the case when env var is set, as it's rare case.
 			},
 		)
 		oauthTokenExists = true
@@ -143,7 +143,7 @@ func oAuthTokenExists() (oauthTokenExists bool) {
 	} else if err != nil { //nolint:staticcheck
 		// Log the error if fail to get cached token, as these are unhandled errors, and should not influence the logic flow.
 		// Uncomment for debugging.
-		// glcm.Info(fmt.Sprintf("No cached token found, %v", err))
+		// glcm.OnInfo(fmt.Sprintf("No cached token found, %v", err))
 	}
 
 	return
@@ -315,7 +315,7 @@ func logAuthType(ct common.CredentialType, location common.Location, isSource bo
 	if _, exists := authMessagesAlreadyLogged.Load(message); !exists {
 		authMessagesAlreadyLogged.Store(message, struct{}{}) // dedup because source is auth'd by both enumerator and STE
 		common.LogToJobLogWithPrefix(message, common.LogInfo)
-		glcm.Info(message)
+		glcm.OnInfo(message)
 	}
 }
 
@@ -541,7 +541,7 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 	default:
 		credType = common.ECredentialType.Anonymous()
 		// Log the FromTo types which getCredentialType hasn't solved, in case of miss-use.
-		glcm.Info(fmt.Sprintf("Use anonymous credential by default for from-to '%v'", raw.fromTo))
+		glcm.OnInfo(fmt.Sprintf("Use anonymous credential by default for from-to '%v'", raw.fromTo))
 	}
 
 	return

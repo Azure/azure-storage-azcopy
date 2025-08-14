@@ -44,7 +44,7 @@ type PartNumber = common.PartNumber
 // This can be optimized if FE would no more be another module vs STE module.
 type InMemoryTransitJobState struct {
 	CredentialInfo common.CredentialInfo
-	// S2SSourceCredentialType can override the CredentialInfo.CredentialType when being used for the source (e.g. Source Info Provider and when using GetS2SSourceBlobTokenCredential)
+	// S2SSourceCredentialType can override the CredentialInfo.CredentialType when being used for the source (e.g. Source OnInfo Provider and when using GetS2SSourceBlobTokenCredential)
 	S2SSourceCredentialType common.CredentialType
 }
 
@@ -929,7 +929,7 @@ func (jm *jobMgr) poolSizer() {
 			return
 		default:
 			msg := fmt.Sprintf("Trying %d concurrent connections (%s)", targetConcurrency, reason)
-			common.GetLifecycleMgr().Info(msg)
+			common.GetLifecycleMgr().OnInfo(msg)
 			jm.Log(common.LogWarning, msg)
 		}
 	}

@@ -342,7 +342,7 @@ var httpsRecommendationOnce sync.Once
 func recommendHttpsIfNecessary(url url.URL) {
 	if strings.EqualFold(url.Scheme, "http") {
 		httpsRecommendationOnce.Do(func() {
-			glcm.Info(httpsRecommendedNotice)
+			glcm.OnInfo(httpsRecommendedNotice)
 		})
 	}
 }
@@ -827,7 +827,7 @@ func NewCopyEnumerator(traverser ResourceTraverser, filters []ObjectFilter, obje
 }
 
 func WarnStdoutAndScanningLog(toLog string) {
-	glcm.Info(toLog)
+	glcm.OnInfo(toLog)
 	if azcopyScanningLogger != nil {
 		// ste.JobsAdmin.LogToJobLog(toLog, pipeline.LogWarning)
 		azcopyScanningLogger.Log(common.LogWarning, toLog)

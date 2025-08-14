@@ -153,23 +153,23 @@ func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 		// We only support transfer from source encrypted by user key when user wishes to download.
 		// Due to service limitation, S2S transfer is not supported for source encrypted by user key.
 		if cooked.FromTo.IsDownload() || cooked.FromTo.IsDelete() {
-			glcm.Info("Client Provided Key (CPK) for encryption/decryption is provided for download or delete scenario. " +
+			glcm.OnInfo("Client Provided Key (CPK) for encryption/decryption is provided for download or delete scenario. " +
 				"Assuming source is encrypted.")
 			cooked.CpkOptions.IsSourceEncrypted = true
 		}
 
 		// TODO: Remove these warnings once service starts supporting it
 		if cooked.blockBlobTier != common.EBlockBlobTier.None() || cooked.pageBlobTier != common.EPageBlobTier.None() {
-			glcm.Info("Tier is provided by user explicitly. Ignoring it because Azure Service currently does" +
+			glcm.OnInfo("Tier is provided by user explicitly. Ignoring it because Azure Service currently does" +
 				" not support setting tier when client provided keys are involved.")
 		}
 	}
 
 	if cooked.preserveInfo && !cooked.preservePermissions.IsTruthy() {
 		if common.IsNFSCopy() {
-			glcm.Info(PreserveNFSPermissionsDisabledMsg)
+			glcm.OnInfo(PreserveNFSPermissionsDisabledMsg)
 		} else {
-			glcm.Info(PreservePermissionsDisabledMsg)
+			glcm.OnInfo(PreservePermissionsDisabledMsg)
 		}
 	}
 

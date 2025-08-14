@@ -44,7 +44,7 @@ func anyToRemote_folder(jptm IJobPartTransferMgr, info *TransferInfo, pacer pace
 		return
 	}
 	if srcInfoProvider.EntityType() != common.EEntityType.Folder() {
-		panic("configuration error. Source Info Provider does not have Folder entity type")
+		panic("configuration error. Source OnInfo Provider does not have Folder entity type")
 	}
 
 	baseSender, err := senderFactory(jptm, info.Destination, pacer, srcInfoProvider)

@@ -34,7 +34,7 @@ var envCmd = &cobra.Command{
 				val = "REDACTED"
 			}
 
-			glcm.Info(fmt.Sprintf("Name: %s\nCurrent Value: %s\nDescription: %s\n",
+			glcm.OnInfo(fmt.Sprintf("Name: %s\nCurrent Value: %s\nDescription: %s\n",
 				env.Name, val, env.Description))
 		}
 

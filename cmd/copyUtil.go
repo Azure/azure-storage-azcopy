@@ -114,7 +114,7 @@ func warnIfAnyHasWildcard(oncer *sync.Once, paramName string, value []string) {
 func warnIfHasWildcard(oncer *sync.Once, paramName string, value string) {
 	if strings.Contains(value, "*") || strings.Contains(value, "?") {
 		oncer.Do(func() {
-			glcm.Warn(fmt.Sprintf("*** Warning *** The %s parameter does not support wildcards. The wildcard "+
+			glcm.OnWarning(fmt.Sprintf("*** Warning *** The %s parameter does not support wildcards. The wildcard "+
 				"character provided will be interpreted literally and will not have any wildcard effect. To use wildcards "+
 				"(in filenames only, not paths) use include-pattern or exclude-pattern", paramName))
 		})

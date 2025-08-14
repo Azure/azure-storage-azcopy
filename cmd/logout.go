@@ -41,7 +41,7 @@ func init() {
 			if err != nil {
 				return err
 			}
-			glcm.Info("Logout succeeded.")
+			glcm.OnInfo("Logout succeeded.")
 			return nil
 		},
 	}

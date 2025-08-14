@@ -203,14 +203,14 @@ func (ja *jobsAdmin) recordTuningCompleted(showOutput bool) {
 		if BenchmarkResults {
 			msg += " Recording of performance stats will begin now."
 		}
-		common.GetLifecycleMgr().Info("")
-		common.GetLifecycleMgr().Info(msg)
+		common.GetLifecycleMgr().OnInfo("")
+		common.GetLifecycleMgr().OnInfo(msg)
 		if BenchmarkResults {
-			common.GetLifecycleMgr().Info("")
-			common.GetLifecycleMgr().Info("*** After a minute or two, you may cancel the job with CTRL-C to trigger early analysis of the stats. ***")
-			common.GetLifecycleMgr().Info("*** You do not need to wait for whole job to finish.                                                  ***")
+			common.GetLifecycleMgr().OnInfo("")
+			common.GetLifecycleMgr().OnInfo("*** After a minute or two, you may cancel the job with CTRL-C to trigger early analysis of the stats. ***")
+			common.GetLifecycleMgr().OnInfo("*** You do not need to wait for whole job to finish.                                                  ***")
 		}
-		common.GetLifecycleMgr().Info("")
+		common.GetLifecycleMgr().OnInfo("")
 		common.LogToJobLogWithPrefix(msg, common.LogInfo)
 	}
 }
@@ -279,7 +279,7 @@ func (ja *jobsAdmin) JobMgrCleanUp(jobId common.JobID) {
 
 	if found {
 		/*
-		 * Change log level to Info, so that we can capture these messages in job log file.
+		 * Change log level to OnInfo, so that we can capture these messages in job log file.
 		 * These log messages useful in debuggability and tells till what stage cleanup done.
 		 */
 		jm.Log(common.LogInfo, "JobMgrCleanUp Enter")

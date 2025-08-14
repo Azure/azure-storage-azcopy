@@ -23,7 +23,7 @@ func WarnMultipleProcesses(directory string, currentPid int) {
 	defer f.Close()
 	_, err = f.Readdirnames(1)
 	if err == nil {
-		glcm.Warn(common.ERR_MULTIPLE_PROCESSES)
+		glcm.OnWarning(common.ERR_MULTIPLE_PROCESSES)
 	}
 	pidFilePath := path.Join(pidsSubDir, currPidFileName) // E.g "\.azcopy\pids\\XXX.pid"
 	// Creates .pid file with specific pid

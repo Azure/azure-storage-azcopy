@@ -163,7 +163,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 			bUrlParts, _ := blob.ParseURL(bt.rawURL)                                 // it should totally have succeeded by now anyway
 			_, err = sc.NewContainerClient(bUrlParts.ContainerName).Create(ctx, nil) // If it doesn't work out, this will surely bubble up later anyway. It won't be long.
 			if err != nil {
-				glcm.Warn(fmt.Sprintf("Failed to create the missing destination container: %v", err))
+				glcm.OnWarning(fmt.Sprintf("Failed to create the missing destination container: %v", err))
 			}
 			// At this point, we'll let the destination be written to with the original resource type.
 		}
@@ -204,7 +204,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	// sync always acts like stripTopDir=true, but if we intend to persist the root, we must tell NewFolderPropertyOption stripTopDir=false.
 	fpo, folderMessage := NewFolderPropertyOption(cca.fromTo, cca.recursive, !cca.includeRoot, filters, cca.preserveInfo, cca.preservePermissions.IsTruthy(), false, strings.EqualFold(cca.destination.Value, common.Dev_Null), cca.includeDirectoryStubs)
 	if !cca.dryrunMode {
-		glcm.Info(folderMessage)
+		glcm.OnInfo(folderMessage)
 	}
 	common.LogToJobLogWithPrefix(folderMessage, common.LogInfo)
 

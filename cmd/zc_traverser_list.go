@@ -56,7 +56,7 @@ func (l *listTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		//   2. a directory entity that needs to be scanned
 		childTraverser, err := l.childTraverserGenerator(childPath)
 		if err != nil {
-			glcm.Info(fmt.Sprintf("Skipping %s due to error %s", childPath, err))
+			glcm.OnInfo(fmt.Sprintf("Skipping %s due to error %s", childPath, err))
 			continue
 		}
 		// listTraverser will only ever execute on the source
@@ -82,7 +82,7 @@ func (l *listTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 		err = childTraverser.Traverse(preProcessorForThisChild, processor, filters)
 		if err != nil {
-			glcm.Info(fmt.Sprintf("Skipping %s as it cannot be scanned due to error: %s", childPath, err))
+			glcm.OnInfo(fmt.Sprintf("Skipping %s as it cannot be scanned due to error: %s", childPath, err))
 		}
 	}
 

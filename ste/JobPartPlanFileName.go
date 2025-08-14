@@ -47,7 +47,7 @@ func (jpfn JobPartPlanFileName) Parse() (jobID common.JobID, partNumber common.P
 	jobId, err := common.ParseJobID(jpfnSplit[0])
 	if err != nil {
 		err = fmt.Errorf("failed to parse the JobId from JobPartFileName %s. Failed with error %w", string(jpfn), err) //nolint:staticcheck
-		common.GetLifecycleMgr().Warn(err.Error())
+		common.GetLifecycleMgr().OnWarning(err.Error())
 	}
 	jobID = jobId
 	n, err := fmt.Sscanf(jpfnSplit[1], "%05d.steV%d", &partNumber, &dataSchemaVersion)
@@ -149,7 +149,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	defer file.Close()
 
 	// If block size from the front-end is set to 0
-	// store the block-size as 0. While getting the transfer Info
+	// store the block-size as 0. While getting the transfer OnInfo
 	// auto correction logic will apply. If the block-size stored is not 0
 	// it means that user provided some block-size and  auto-correct will not
 	// apply.

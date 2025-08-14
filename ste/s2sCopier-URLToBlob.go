@@ -54,7 +54,7 @@ func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, pacer pace
 		destination = bURLParts.String()
 
 		LogBlobConversionOnce.Do(func() {
-			common.GetLifecycleMgr().Info("Switching to blob endpoint to write to destination account. There are some limitations when writing between blob/dfs endpoints. " +
+			common.GetLifecycleMgr().OnInfo("Switching to blob endpoint to write to destination account. There are some limitations when writing between blob/dfs endpoints. " +
 				"Please refer to https://learn.microsoft.com/en-us/azure/storage/blobs/data-lake-storage-known-issues#blob-storage-apis")
 		})
 	}

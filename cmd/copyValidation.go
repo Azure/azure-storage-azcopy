@@ -50,7 +50,7 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 	}
 
 	if cooked.FromTo.To() == common.ELocation.None() && strings.EqualFold(cooked.metadata, common.MetadataAndBlobTagsClearFlag) { // in case of Blob, BlobFS and Files
-		glcm.Warn("*** WARNING *** Metadata will be cleared because of input --metadata=clear ")
+		glcm.OnWarning("*** WARNING *** Metadata will be cleared because of input --metadata=clear ")
 	}
 	if err = validateMetadataString(cooked.metadata); err != nil {
 		return err
@@ -60,7 +60,7 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 		return errors.New("blob tags can only be set when transferring to blob storage")
 	}
 	if cooked.FromTo.To() == common.ELocation.None() && strings.EqualFold(cooked.blobTags, common.MetadataAndBlobTagsClearFlag) { // in case of Blob and BlobFS
-		glcm.Warn("*** WARNING *** BlobTags will be cleared because of input --blob-tags=clear ")
+		glcm.OnWarning("*** WARNING *** BlobTags will be cleared because of input --blob-tags=clear ")
 	}
 
 	cooked.blobTagsMap = common.ToCommonBlobTagsMap(cooked.blobTags)

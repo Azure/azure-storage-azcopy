@@ -24,8 +24,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
-	"github.com/Azure/azure-storage-azcopy/v10/testSuite/cmd"
 	"log"
 	"net/http"
 	"os"
@@ -34,6 +32,9 @@ import (
 	"runtime/pprof"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
+	"github.com/Azure/azure-storage-azcopy/v10/testSuite/cmd"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
@@ -163,9 +164,9 @@ var rootCmd = &cobra.Command{
 			for _, a := range args {
 				a = strings.ToLower(a)
 				if strings.HasPrefix(a, "'http") { // note the single quote
-					glcm.Info("")
-					glcm.Info("*** When running from CMD, surround URLs with double quotes. Only using single quotes from PowerShell. ***")
-					glcm.Info("")
+					glcm.OnInfo("")
+					glcm.OnInfo("*** When running from CMD, surround URLs with double quotes. Only using single quotes from PowerShell. ***")
+					glcm.OnInfo("")
 					break
 				}
 			}
@@ -218,7 +219,7 @@ func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
 		} else {
 			// Tell user that we can't actually auto tune, because configured value takes precedence
 			// This case happens when benchmarking with a fixed value from the env var
-			glcm.Info(fmt.Sprintf("Cannot auto-tune concurrency because it is fixed by environment variable %s", envVar.Name))
+			glcm.OnInfo(fmt.Sprintf("Cannot auto-tune concurrency because it is fixed by environment variable %s", envVar.Name))
 		}
 
 	}

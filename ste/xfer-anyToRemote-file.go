@@ -73,7 +73,7 @@ func prepareDestAccountInfo(client IBlobClient, jptm IJobPartTransferMgr, ctx co
 			} else {
 				tierSetPossibleFail = true
 				glcm := common.GetLifecycleMgr()
-				glcm.Info("Transfers could fail because AzCopy could not verify if the destination supports tiers.")
+				glcm.OnInfo("Transfers could fail because AzCopy could not verify if the destination supports tiers.")
 				destAccountSKU = "failget"
 				destAccountKind = "failget"
 			}
@@ -153,7 +153,7 @@ func ValidateTier(jptm IJobPartTransferMgr, blobTier *blob.AccessTier, client IB
 		} else if !performQuietly {
 			tierNotAllowedFailure.Do(func() {
 				glcm := common.GetLifecycleMgr()
-				glcm.Info("Destination could not accommodate the tier " + string(*blobTier) + ". Going ahead with the default tier. In case of service to service transfer, consider setting the flag --s2s-preserve-access-tier=false.")
+				glcm.OnInfo("Destination could not accommodate the tier " + string(*blobTier) + ". Going ahead with the default tier. In case of service to service transfer, consider setting the flag --s2s-preserve-access-tier=false.")
 			})
 		}
 		return false
@@ -245,7 +245,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 	//
 	// NOTE: In future phases, when hardlinks are handled differently, this logic may need to be updated.
 	if srcInfoProvider.EntityType() != common.EEntityType.File() && srcInfoProvider.EntityType() != common.EEntityType.Hardlink() {
-		panic("configuration error. Source Info Provider does not have File entity type")
+		panic("configuration error. Source OnInfo Provider does not have File entity type")
 	}
 
 	s, err := senderFactory(jptm, info.Destination, pacer, srcInfoProvider)
@@ -571,7 +571,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 			checkLengthFailureOnReadOnlyDst.Do(func() {
 				var glcm = common.GetLifecycleMgr()
 				msg := "Could not read destination length. If the destination is write-only, use --check-length=false on the command line."
-				glcm.Info(msg)
+				glcm.OnInfo(msg)
 				if jptm.ShouldLog(common.LogError) {
 					jptm.Log(common.LogError, msg)
 				}

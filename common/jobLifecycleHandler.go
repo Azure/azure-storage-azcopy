@@ -30,6 +30,11 @@ type JobLifecycleHandler interface {
 	OnTransferProgress(progress TransferProgress)
 
 	OnComplete(summary JobSummary)
+
+	// Optional methods that can be implemented by users of AzCopy as a library. Default implementation is a no-op.
+	OnInfo(string)
+	OnWarning(string)
+	OnPrompt(message string, details PromptDetails) ResponseOption // ask the user a question(after erasing the progress), then return the response
 }
 
 type JobSummary struct {

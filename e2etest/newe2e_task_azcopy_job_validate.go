@@ -24,7 +24,7 @@ type ExpectedPlanFile struct {
 	Fpo                            *common.FolderPropertyOption        `validate:"Folder Property Option,Fpo"`
 	LogLevel                       *common.LogLevel                    `validate:"Log Level,LogLevel"`
 	PreservePermissions            *common.PreservePermissionsOption   `validate:"Preserve Permissions,PreservePermissions"`
-	PreserveSMBInfo                *bool                               `validate:"Preserve SMB Info,PreserveSMBInfo"`
+	PreserveSMBInfo                *bool                               `validate:"Preserve SMB OnInfo,PreserveSMBInfo"`
 	PreservePOSIXProperties        *bool                               `validate:"Preserve POSIX Properties,PreservePOSIXProperties"`
 	S2SGetPropertiesInBackend      *bool                               `validate:"S2S Get Properties in Backend,S2SGetPropertiesInBackend"`
 	S2SSourceChangeValidation      *bool                               `validate:"S2S Source Change Validation,S2SSourceChangeValidation"`
@@ -235,7 +235,7 @@ func (e *ExpectedPlanFile) Validate(a Asserter, header *ste.JobPartPlanHeader) {
 
 	if e.BlobData.CpkScopeInfo != nil {
 		CpkScopeStr := string(header.DstBlobData.CpkScopeInfo[:header.DstBlobData.CpkScopeInfoLength])
-		a.Assert("CPK Scope Info differs in header", Equal{Deep: true}, *e.BlobData.CpkScopeInfo, CpkScopeStr)
+		a.Assert("CPK Scope OnInfo differs in header", Equal{Deep: true}, *e.BlobData.CpkScopeInfo, CpkScopeStr)
 	}
 }
 
