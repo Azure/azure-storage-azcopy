@@ -115,6 +115,20 @@ func (c *Client) ResumeJob(opts ResumeJobOptions) (err error) {
 		return err
 	}
 
+	// Send resume job request.
+	resumeJobResponse := jobsAdmin.ResumeJobOrder(common.ResumeJobRequest{
+		JobID:            opts.JobID,
+		SourceSAS:        sourceSAS,
+		DestinationSAS:   destinationSAS,
+		SrcServiceClient: srcServiceClient,
+		DstServiceClient: dstServiceClient,
+		CredentialInfo:   credentialInfo,
+	})
+
+	if !resumeJobResponse.CancelledPauseResumed {
+		return errors.New(resumeJobResponse.ErrorMsg)
+	}
+
 	// TODO (gapra): Implement the logic to resume a job.
 	return nil
 }

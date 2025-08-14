@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"strings"
 	"time"
 
@@ -224,20 +225,6 @@ func (rca resumeCmdArgs) process() error {
 	}
 
 	// TODO: Replace context with root context
-
-	// Send resume job request.
-	resumeJobResponse := jobsAdmin.ResumeJobOrder(common.ResumeJobRequest{
-		JobID:            jobID,
-		SourceSAS:        rca.SourceSAS,
-		DestinationSAS:   rca.DestinationSAS,
-		SrcServiceClient: srcServiceClient,
-		DstServiceClient: dstServiceClient,
-		CredentialInfo:   credentialInfo,
-	})
-
-	if !resumeJobResponse.CancelledPauseResumed {
-		glcm.Error(resumeJobResponse.ErrorMsg)
-	}
 
 	controller := resumeJobController{jobID: jobID}
 	controller.waitUntilJobCompletion(true)
