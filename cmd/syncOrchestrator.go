@@ -231,7 +231,7 @@ func validateS3Root(sourcePath string) error {
 // - error: Error if the source type is unsupported or path processing fails
 func validateAndGetRootObject(path string, fromTo common.FromTo) (minimalStoredObject, error) {
 
-	glcm.Info(fmt.Sprintf("Getting root object for path = %s\n", path))
+	WarnStdoutAndScanningLog(fmt.Sprintf("Getting root object for path = %s\n", path))
 	var err error
 
 	switch fromTo.From() {
@@ -855,7 +855,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 		// Log consolidated timing information for this directory
 		// Only log if target traversal took more than 1 second (to reduce noise)
-		if azcopyScanningLogger != nil && timingStats.targetTraversalTime > time.Second {
+		if timingStats.targetTraversalTime > time.Second {
 			dirPath := dir.(minimalStoredObject).relativePath
 			if dirPath == "" {
 				dirPath = "ROOT"
@@ -883,7 +883,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 				finalizeTimeStr = "SKIPPED"
 			}
 
-			azcopyScanningLogger.Log(common.LogError, fmt.Sprintf("Directory: %s | Source: %s | Target: %s | Finalize: %s",
+			WarnStdoutAndScanningLog(fmt.Sprintf("Directory: %s | Source: %s | Target: %s | Finalize: %s",
 				dirPath, sourceTimeStr, targetTimeStr, finalizeTimeStr))
 		}
 
@@ -974,9 +974,7 @@ func logMeanTimingStatistics(totalExecutionTime time.Duration) {
 	defer timingStatsMutex.RUnlock()
 
 	if len(directoryTimingStats) == 0 {
-		if azcopyScanningLogger != nil {
-			azcopyScanningLogger.Log(common.LogError, "No timing statistics available - no directories processed")
-		}
+		WarnStdoutAndScanningLog("No timing statistics available - no directories processed")
 		return
 	}
 
@@ -998,34 +996,33 @@ func logMeanTimingStatistics(totalExecutionTime time.Duration) {
 		}
 	}
 
-	if azcopyScanningLogger != nil {
-		azcopyScanningLogger.Log(common.LogError, "===== TIMING SUMMARY =====")
-		azcopyScanningLogger.Log(common.LogError, fmt.Sprintf("Total execution time: %v", totalExecutionTime))
-		azcopyScanningLogger.Log(common.LogError, fmt.Sprintf("Total directories processed: %d", len(directoryTimingStats)))
+	WarnStdoutAndScanningLog("===== TIMING SUMMARY =====")
+	WarnStdoutAndScanningLog(fmt.Sprintf("Total execution time: %v", totalExecutionTime))
+	WarnStdoutAndScanningLog(fmt.Sprintf("Total directories processed: %d", len(directoryTimingStats)))
 
-		if sourceTraversalCount > 0 {
-			meanSourceTime := totalSourceTraversalTime / time.Duration(sourceTraversalCount)
-			azcopyScanningLogger.Log(common.LogError, fmt.Sprintf("Mean source traversal time: %v (across %d directories)",
-				meanSourceTime, sourceTraversalCount))
-		}
-
-		if targetTraversalCount > 0 {
-			meanTargetTime := totalTargetTraversalTime / time.Duration(targetTraversalCount)
-			azcopyScanningLogger.Log(common.LogError, fmt.Sprintf("Mean target traversal time: %v (across %d directories)",
-				meanTargetTime, targetTraversalCount))
-		}
-
-		if finalizeCount > 0 {
-			meanFinalizeTime := totalFinalizeTime / time.Duration(finalizeCount)
-			azcopyScanningLogger.Log(common.LogError, fmt.Sprintf("Mean finalize time: %v (across %d directories)",
-				meanFinalizeTime, finalizeCount))
-		}
-
-		// Log total time spent in each phase
-		azcopyScanningLogger.Log(common.LogError, fmt.Sprintf("Total time in source traversal: %v", totalSourceTraversalTime))
-		azcopyScanningLogger.Log(common.LogError, fmt.Sprintf("Total time in target traversal: %v", totalTargetTraversalTime))
-		azcopyScanningLogger.Log(common.LogError, fmt.Sprintf("Total time in finalize: %v", totalFinalizeTime))
-
-		azcopyScanningLogger.Log(common.LogError, "===========================")
+	if sourceTraversalCount > 0 {
+		meanSourceTime := totalSourceTraversalTime / time.Duration(sourceTraversalCount)
+		WarnStdoutAndScanningLog(fmt.Sprintf("Mean source traversal time: %v (across %d directories)",
+			meanSourceTime, sourceTraversalCount))
 	}
+
+	if targetTraversalCount > 0 {
+		meanTargetTime := totalTargetTraversalTime / time.Duration(targetTraversalCount)
+		WarnStdoutAndScanningLog(fmt.Sprintf("Mean target traversal time: %v (across %d directories)",
+			meanTargetTime, targetTraversalCount))
+	}
+
+	if finalizeCount > 0 {
+		meanFinalizeTime := totalFinalizeTime / time.Duration(finalizeCount)
+		WarnStdoutAndScanningLog(fmt.Sprintf("Mean finalize time: %v (across %d directories)",
+			meanFinalizeTime, finalizeCount))
+	}
+
+	// Log total time spent in each phase
+	WarnStdoutAndScanningLog(fmt.Sprintf("Total time in source traversal: %v", totalSourceTraversalTime))
+	WarnStdoutAndScanningLog(fmt.Sprintf("Total time in target traversal: %v", totalTargetTraversalTime))
+	WarnStdoutAndScanningLog(fmt.Sprintf("Total time in finalize: %v", totalFinalizeTime))
+
+	WarnStdoutAndScanningLog("===========================")
+
 }
