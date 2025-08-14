@@ -124,11 +124,11 @@ type HandleInfo struct {
 }
 
 func (hi HandleInfo) FileCreationTime() time.Time {
-	return time.Unix(0, hi.CreationTime.Nanoseconds())
+	return common.WinFiletimeToTime(&hi.CreationTime)
 }
 
 func (hi HandleInfo) FileLastWriteTime() time.Time {
-	return time.Unix(0, hi.LastWriteTime.Nanoseconds())
+	return common.WinFiletimeToTime(&hi.LastWriteTime)
 }
 
 func (hi HandleInfo) FileChangeTime() time.Time {

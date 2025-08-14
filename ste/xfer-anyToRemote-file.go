@@ -337,7 +337,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 			jptm.ReportTransferDone()
 			return
 		}
-		if !lmt.Equal(jptm.LastModifiedTime()) {
+		if common.ToWindowsEpoch(lmt) != jptm.LastModifiedEpochTime() {
 			jptm.LogSendError(info.Source, info.Destination, "File modified since transfer scheduled", 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.ReportTransferDone()
@@ -544,12 +544,16 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", err)
 			}
 
-			if !lmt.Equal(jptm.LastModifiedTime()) {
+			if common.ToWindowsEpoch(lmt) != jptm.LastModifiedEpochTime() {
 				// **** Note that this check is ESSENTIAL and not just for the obvious reason of not wanting to upload
 				//      corrupt or inconsistent data. It's also essential to the integrity of our MD5 hashes.
 				common.DocumentationForDependencyOnChangeDetection() // <-- read the documentation here ***
 
-				jptm.Log(common.LogError, fmt.Sprintf("Source Modified during transfer. Enumeration %v, current %v", jptm.LastModifiedTime(), lmt))
+				jptm.Log(common.LogError,
+					fmt.Sprintf("Source Modified during transfer. Enumeration %v, epoch: %d, current %v",
+						jptm.LastModifiedTime(),
+						jptm.LastModifiedEpochTime(),
+						lmt))
 				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", errors.New("source modified during transfer"))
 			}
 		}
