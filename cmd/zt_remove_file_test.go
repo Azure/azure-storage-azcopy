@@ -290,6 +290,57 @@ func TestRemoveFilesWithIncludeAndExcludeFlag(t *testing.T) {
 	})
 }
 
+// exclude-path flag limits the scope of the delete for files
+func TestRemoveFilesWithExcludePathFlag(t *testing.T) {
+	a := assert.New(t)
+	fsc := getFileServiceClient()
+
+	// set up the share with numerous files
+	shareClient, shareName := createNewShare(a, fsc)
+	defer deleteShare(a, shareClient)
+
+	// create files in different paths to test exclude-path functionality
+	fileList := []string{
+		"file1.txt",
+		"file2.pdf", 
+		"myfoldertoexclude/file3.json",
+		"myfoldertoexclude/subfolder/file4.txt",
+		"anotherfolder/file5.txt",
+		"anotherfolder/subfolder/file6.txt",
+		"rootfile.txt",
+	}
+
+	// the expected list should exclude files in "myfoldertoexclude"
+	expectedList := []string{
+		"file1.txt",
+		"file2.pdf",
+		"anotherfolder/file5.txt", 
+		"anotherfolder/subfolder/file6.txt",
+		"rootfile.txt",
+	}
+
+	scenarioHelper{}.generateShareFilesFromList(a, shareClient, fsc, fileList)
+	excludePathString := "myfoldertoexclude"
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(a, shareName)
+	raw := getDefaultRemoveRawInput(rawShareURLWithSAS.String())
+	raw.excludePath = excludePathString
+	raw.recursive = true
+
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
+		validateRemoveTransfersAreScheduled(a, true, expectedList, mockedRPC)
+	})
+}
+
 // note: list-of-files flag is used
 func TestRemoveListOfFilesAndDirectories(t *testing.T) {
 	a := assert.New(t)
