@@ -38,8 +38,6 @@ type requestPriorityPolicy struct {
 	priorityData *int
 }
 
-type requestPriorityOverride struct{}
-
 // NewRequestPriorityPolicy creates a new requestPriorityPolicy, which should be placed before a NewVersionPolicy.
 func NewRequestPriorityPolicy() policy.Policy {
 	return requestPriorityPolicy{priorityData: &GlobalRequestPriority}
