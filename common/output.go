@@ -2,6 +2,8 @@ package common
 
 import (
 	"encoding/json"
+	"fmt"
+	"math"
 	"reflect"
 	"strings"
 	"time"
@@ -133,5 +135,125 @@ func GetStandardInitOutputBuilder(ctx JobContext) OutputBuilder {
 			sb.WriteString("\n")
 		}
 		return sb.String()
+	}
+}
+
+// Ideally this is just ScanProgress, but we probably shouldn't break the json output format
+type scanningProgressJsonTemplate struct {
+	FilesScannedAtSource      uint64
+	FilesScannedAtDestination uint64
+}
+
+func GetScanProgressOutputBuilder(progress ScanProgress) OutputBuilder {
+	return func(format OutputFormat) string {
+		if format == EOutputFormat.Json() {
+			jsonOutputTemplate := scanningProgressJsonTemplate{
+				FilesScannedAtSource:      progress.Source,
+				FilesScannedAtDestination: progress.Destination,
+			}
+			outputString, err := json.Marshal(jsonOutputTemplate)
+			PanicIfErr(err)
+			return string(outputString)
+		}
+
+		// text output
+		throughputString := ""
+		if progress.TransferThroughput != nil {
+			throughputString = fmt.Sprintf(", 2-sec Throughput (Mb/s): %v", ToFixed(*progress.TransferThroughput, 4))
+		}
+		return fmt.Sprintf("%v Files Scanned at Source, %v Files Scanned at Destination %s",
+			progress.Source, progress.Destination, throughputString)
+	}
+}
+
+// round api rounds up the float number after the decimal point.
+func round(num float64) int {
+	return int(num + math.Copysign(0.5, num))
+}
+
+// ToFixed api returns the float number precised up to given decimal places.
+func ToFixed(num float64, precision int) float64 {
+	output := math.Pow(10, float64(precision))
+	return float64(round(num*output)) / output
+}
+
+// Is disk speed looking like a constraint on throughput?  Ignore the first little-while,
+// to give an (arbitrary) amount of time for things to reach steady-state.
+func getPerfDisplayText(perfDiagnosticStrings []string, constraint PerfConstraint, durationOfJob time.Duration, isBench bool) (perfString string, diskString string) {
+	perfString = ""
+	if shouldDisplayPerfStates() {
+		perfString = "[States: " + strings.Join(perfDiagnosticStrings, ", ") + "], "
+	}
+
+	haveBeenRunningLongEnoughToStabilize := durationOfJob.Seconds() > 30                             // this duration is an arbitrary guesstimate
+	if constraint != EPerfConstraint.Unknown() && haveBeenRunningLongEnoughToStabilize && !isBench { // don't display when benchmarking, because we got some spurious slow "disk" constraint reports there - which would be confusing given there is no disk in release 1 of benchmarking
+		diskString = fmt.Sprintf(" (%s may be limiting speed)", constraint)
+	} else {
+		diskString = ""
+	}
+	return
+}
+
+func shouldDisplayPerfStates() bool {
+	return GetEnvironmentVariable(EEnvironmentVariable.ShowPerfStates()) != ""
+}
+
+func GetProgressOutputBuilder(progress TransferProgress) OutputBuilder {
+	return func(format OutputFormat) string {
+		if format == EOutputFormat.Json() {
+			if progress.JobType == EJobType.Sync() {
+				wrapped := ListSyncJobSummaryResponse{ListJobSummaryResponse: progress.ListJobSummaryResponse}
+				wrapped.DeleteTotalTransfers = progress.DeleteTotalTransfers
+				wrapped.DeleteTransfersCompleted = progress.DeleteTransfersCompleted
+				jsonOutput, err := json.Marshal(wrapped)
+				PanicIfErr(err)
+				return string(jsonOutput)
+			} else {
+				jsonOutput, err := json.Marshal(progress.ListJobSummaryResponse)
+				PanicIfErr(err)
+				return string(jsonOutput)
+			}
+		} else {
+			if progress.IsCleanupJob {
+				return fmt.Sprintf("Cleanup %v/%v", progress.TransfersCompleted, progress.TotalTransfers)
+			}
+			// if json is not needed, then we generate a message that goes nicely on the same line
+			// display a scanning keyword if the job is not completely ordered
+			var scanningString = " (scanning...)"
+			if progress.CompleteJobOrdered {
+				scanningString = ""
+			}
+			throughputString := fmt.Sprintf("2-sec Throughput (Mb/s): %v", ToFixed(progress.Throughput, 4))
+			if progress.Throughput == 0 {
+				// As there would be case when no bits sent from local, e.g. service side copy, when throughput = 0, hide it.
+				throughputString = ""
+			}
+			// indicate whether constrained by disk or not
+			perfString, diskString := getPerfDisplayText(progress.PerfStrings, progress.PerfConstraint, progress.ElapsedTime, progress.JobType == EJobType.Benchmark())
+
+			if progress.JobType == EJobType.Sync() {
+				return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Total%s, %s%s",
+					progress.PercentComplete,
+					progress.TransfersCompleted,
+					progress.TransfersFailed,
+					progress.TotalTransfers-progress.TransfersCompleted-progress.TransfersFailed,
+					progress.TotalTransfers,
+					perfString,
+					throughputString,
+					diskString)
+			} else {
+				return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
+					progress.PercentComplete,
+					progress.TransfersCompleted,
+					progress.TransfersFailed,
+					progress.TotalTransfers-(progress.TransfersCompleted+progress.TransfersFailed+progress.TransfersSkipped),
+					progress.TransfersSkipped,
+					progress.TotalTransfers,
+					scanningString,
+					perfString,
+					throughputString,
+					diskString)
+			}
+		}
 	}
 }

@@ -24,7 +24,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"os"
 	"sync"
 	"time"
@@ -38,17 +37,6 @@ var mu sync.Mutex // Prevent inconsistent state between check and update of Tota
 
 type azCopyConfig struct {
 	MIMETypeMapping map[string]string
-}
-
-// round api rounds up the float number after the decimal point.
-func round(num float64) int {
-	return int(num + math.Copysign(0.5, num))
-}
-
-// ToFixed api returns the float number precised up to given decimal places.
-func ToFixed(num float64, precision int) float64 {
-	output := math.Pow(10, float64(precision))
-	return float64(round(num*output)) / output
 }
 
 // MainSTE initializes the Storage Transfer Engine
@@ -628,20 +616,6 @@ func ListJobTransfers(r common.ListJobTransfersRequest) common.ListJobTransfersR
 		}
 	}
 	return ljt
-}
-
-func GetJobLCMWrapper(jobID common.JobID) common.LifecycleMgr {
-	jobmgr, found := JobsAdmin.JobMgr(jobID)
-	lcm := common.GetLifecycleMgr()
-
-	if !found {
-		return lcm
-	}
-
-	return ste.JobLogLCMWrapper{
-		JobManager:   jobmgr,
-		LifecycleMgr: lcm,
-	}
 }
 
 // GetJobDetails api returns the job FromTo info.

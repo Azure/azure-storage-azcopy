@@ -1321,9 +1321,6 @@ func (cca *CookedCopyCmdArgs) getSuccessExitCode() common.ExitCode {
 func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint32) {
 	// fetch a job status
 	summary := jobsAdmin.GetJobSummary(cca.jobID)
-	glcmSwapOnce.Do(func() {
-		glcm = jobsAdmin.GetJobLCMWrapper(cca.jobID)
-	})
 	summary.IsCleanupJob = cca.isCleanupJob // only FE knows this, so we can only set it here
 	cleanupStatusString := fmt.Sprintf("Cleanup %v/%v", summary.TransfersCompleted, summary.TotalTransfers)
 
@@ -1344,42 +1341,21 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 
 		return common.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
 	}
-	glcm.Progress(func(format common.OutputFormat) string {
-		if format == common.EOutputFormat.Json() {
-			jsonOutput, err := json.Marshal(summary)
-			common.PanicIfErr(err)
-			return string(jsonOutput)
-		} else {
-			// abbreviated output for cleanup jobs
-			if cca.isCleanupJob {
-				return cleanupStatusString
-			}
-
-			// if json is not needed, then we generate a message that goes nicely on the same line
-			// display a scanning keyword if the job is not completely ordered
-			var scanningString = " (scanning...)"
-			if summary.CompleteJobOrdered {
-				scanningString = ""
-			}
-
-			throughput := computeThroughput()
-			throughputString := fmt.Sprintf("2-sec Throughput (Mb/s): %v", jobsAdmin.ToFixed(throughput, 4))
-			if throughput == 0 {
-				// As there would be case when no bits sent from local, e.g. service side copy, when throughput = 0, hide it.
-				throughputString = ""
-			}
-
-			// indicate whether constrained by disk or not
-			isBenchmark := cca.FromTo.From() == common.ELocation.Benchmark()
-			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration, isBenchmark)
-			return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
-				summary.PercentComplete,
-				summary.TransfersCompleted,
-				summary.TransfersFailed,
-				summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed+summary.TransfersSkipped),
-				summary.TransfersSkipped, summary.TotalTransfers, scanningString, perfString, throughputString, diskString)
-		}
-	})
+	throughput := computeThroughput()
+	jobType := common.EJobType.Copy()
+	if cca.FromTo.From() == common.ELocation.Benchmark() {
+		jobType = common.EJobType.Benchmark()
+	}
+	transferProgress := common.TransferProgress{
+		ListJobSummaryResponse: summary,
+		Throughput:             throughput,
+		ElapsedTime:            duration,
+		JobType:                jobType,
+	}
+	if common.AzcopyCurrentJobLogger != nil {
+		common.AzcopyCurrentJobLogger.Log(common.LogInfo, common.GetProgressOutputBuilder(transferProgress)(common.EOutputFormat.Text()))
+	}
+	glcm.OnTransferProgress(transferProgress)
 
 	if jobDone {
 		summary.SkippedSymlinkCount = atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)
@@ -1420,7 +1396,7 @@ Total Number of Bytes Transferred: %v
 Final Job Status: %v%s%s
 `,
 					summary.JobID.String(),
-					jobsAdmin.ToFixed(duration.Minutes(), 4),
+					common.ToFixed(duration.Minutes(), 4),
 					summary.FileTransfers,
 					summary.FolderPropertyTransfers,
 					summary.SymlinkTransfers,
@@ -1512,27 +1488,6 @@ Server Busy: %.2f%%`,
 	}
 
 	return
-}
-
-// Is disk speed looking like a constraint on throughput?  Ignore the first little-while,
-// to give an (arbitrary) amount of time for things to reach steady-state.
-func getPerfDisplayText(perfDiagnosticStrings []string, constraint common.PerfConstraint, durationOfJob time.Duration, isBench bool) (perfString string, diskString string) {
-	perfString = ""
-	if shouldDisplayPerfStates() {
-		perfString = "[States: " + strings.Join(perfDiagnosticStrings, ", ") + "], "
-	}
-
-	haveBeenRunningLongEnoughToStabilize := durationOfJob.Seconds() > 30                                    // this duration is an arbitrary guesstimate
-	if constraint != common.EPerfConstraint.Unknown() && haveBeenRunningLongEnoughToStabilize && !isBench { // don't display when benchmarking, because we got some spurious slow "disk" constraint reports there - which would be confusing given there is no disk in release 1 of benchmarking
-		diskString = fmt.Sprintf(" (%s may be limiting speed)", constraint)
-	} else {
-		diskString = ""
-	}
-	return
-}
-
-func shouldDisplayPerfStates() bool {
-	return common.GetEnvironmentVariable(common.EEnvironmentVariable.ShowPerfStates()) != ""
 }
 
 func isStdinPipeIn() (bool, error) {
