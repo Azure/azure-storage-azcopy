@@ -208,22 +208,13 @@ type resumeCmdArgs struct {
 	DestinationSAS string
 }
 
-func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
+func getSourceAndDestinationServiceClients(
 	ctx context.Context,
-	fromTo common.FromTo,
+	jobDetails common.GetJobDetailsResponse,
 	source common.ResourceString,
 	destination common.ResourceString,
 ) (*common.ServiceClient, *common.ServiceClient, error) {
-	if len(rca.SourceSAS) > 0 && rca.SourceSAS[0] != '?' {
-		rca.SourceSAS = "?" + rca.SourceSAS
-	}
-	if len(rca.DestinationSAS) > 0 && rca.DestinationSAS[0] != '?' {
-		rca.DestinationSAS = "?" + rca.DestinationSAS
-	}
-
-	source.SAS = rca.SourceSAS
-	destination.SAS = rca.DestinationSAS
-
+	fromTo := jobDetails.FromTo
 	srcCredType, _, err := getCredentialTypeForLocation(ctx,
 		fromTo.From(),
 		source,
@@ -262,24 +253,13 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
 		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
-	jobID, err := common.ParseJobID(rca.jobID)
-	if err != nil {
-		// OnError for invalid JobId format
-		return nil, nil, fmt.Errorf("error parsing the jobId %s. Failed with error %w", rca.jobID, err)
-	}
-
 	// But we don't want to supply a reauth token if we're not using OAuth. That could cause problems if say, a SAS is invalid.
 	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, common.Iff(srcCredType.IsAzureOAuth(), reauthTok, nil))
-	// Get job details from the STE
-	getJobDetailsResponse := jobsAdmin.GetJobDetails(common.GetJobDetailsRequest{JobID: jobID})
-	if getJobDetailsResponse.ErrorMsg != "" {
-		glcm.OnError(getJobDetailsResponse.ErrorMsg)
-	}
 
 	var fileSrcClientOptions any
 	if fromTo.From() == common.ELocation.File() || fromTo.From() == common.ELocation.FileNFS() {
 		fileSrcClientOptions = &common.FileClientOptions{
-			AllowTrailingDot: getJobDetailsResponse.TrailingDot.IsEnabled(), //Access the trailingDot option of the job
+			AllowTrailingDot: jobDetails.TrailingDot.IsEnabled(), //Access the trailingDot option of the job
 		}
 	}
 	srcServiceClient, err := common.GetServiceClientForLocation(fromTo.From(), source, srcCredType, tc, &options, fileSrcClientOptions)
@@ -295,8 +275,8 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 	var fileClientOptions any
 	if fromTo.To() == common.ELocation.File() || fromTo.To() == common.ELocation.FileNFS() {
 		fileClientOptions = &common.FileClientOptions{
-			AllowSourceTrailingDot: getJobDetailsResponse.TrailingDot.IsEnabled() && fromTo.From() == common.ELocation.File(),
-			AllowTrailingDot:       getJobDetailsResponse.TrailingDot.IsEnabled(),
+			AllowSourceTrailingDot: jobDetails.TrailingDot.IsEnabled() && fromTo.From() == common.ELocation.File(),
+			AllowTrailingDot:       jobDetails.TrailingDot.IsEnabled(),
 		}
 	}
 	dstServiceClient, err := common.GetServiceClientForLocation(fromTo.To(), destination, dstCredType, tc, &options, fileClientOptions)
@@ -304,6 +284,14 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		return nil, nil, err
 	}
 	return srcServiceClient, dstServiceClient, nil
+}
+
+// normalizeSAS ensures the SAS token starts with "?" if non-empty.
+func normalizeSAS(sas string) string {
+	if sas != "" && sas[0] != '?' {
+		return "?" + sas
+	}
+	return sas
 }
 
 // processes the resume command,
@@ -322,41 +310,47 @@ func (rca resumeCmdArgs) process() error {
 	}
 
 	// Get fromTo info, so we can decide what's the proper credential type to use.
-	getJobFromToResponse := jobsAdmin.GetJobDetails(common.GetJobDetailsRequest{JobID: jobID})
-	if getJobFromToResponse.ErrorMsg != "" {
-		glcm.OnError(getJobFromToResponse.ErrorMsg)
+	jobDetails := jobsAdmin.GetJobDetails(common.GetJobDetailsRequest{JobID: jobID})
+	if jobDetails.ErrorMsg != "" {
+		glcm.OnError(jobDetails.ErrorMsg)
 	}
 
-	if getJobFromToResponse.FromTo.From() == common.ELocation.Benchmark() ||
-		getJobFromToResponse.FromTo.To() == common.ELocation.Benchmark() {
+	if jobDetails.FromTo.From() == common.ELocation.Benchmark() ||
+		jobDetails.FromTo.To() == common.ELocation.Benchmark() {
 		// Doesn't make sense to resume a benchmark job.
 		// It's not tested, and wouldn't report progress correctly and wouldn't clean up after itself properly
 		return errors.New("resuming benchmark jobs is not supported")
 	}
+	rca.SourceSAS = normalizeSAS(rca.SourceSAS)
+	rca.DestinationSAS = normalizeSAS(rca.DestinationSAS)
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// Initialize credential info.
 	credentialInfo := common.CredentialInfo{}
 	// TODO: Replace context with root context
-	srcResourceString, err := SplitResourceString(getJobFromToResponse.Source, getJobFromToResponse.FromTo.From())
-	_ = err // todo
+	srcResourceString, err := SplitResourceString(jobDetails.Source, jobDetails.FromTo.From())
+	if err != nil {
+		return fmt.Errorf("error parsing source resource string: %w", err)
+	}
 	srcResourceString.SAS = rca.SourceSAS
-	dstResourceString, err := SplitResourceString(getJobFromToResponse.Destination, getJobFromToResponse.FromTo.To())
-	_ = err // todo
+	dstResourceString, err := SplitResourceString(jobDetails.Destination, jobDetails.FromTo.To())
+	if err != nil {
+		return fmt.Errorf("error parsing destination resource string: %w", err)
+	}
 	dstResourceString.SAS = rca.DestinationSAS
 
 	// we should stop using credentiaLInfo and use the clients instead. But before we fix
 	// that there will be repeated calls to get Credential type for correctness.
 	if credentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
-		fromTo:      getJobFromToResponse.FromTo,
+		fromTo:      jobDetails.FromTo,
 		source:      srcResourceString,
 		destination: dstResourceString,
 	}, common.CpkOptions{}); err != nil {
 		return err
 	}
 
-	srcServiceClient, dstServiceClient, err := rca.getSourceAndDestinationServiceClients(
-		ctx, getJobFromToResponse.FromTo,
+	srcServiceClient, dstServiceClient, err := getSourceAndDestinationServiceClients(
+		ctx, jobDetails,
 		srcResourceString,
 		dstResourceString,
 	)
