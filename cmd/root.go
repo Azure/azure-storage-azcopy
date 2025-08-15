@@ -24,8 +24,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
-	"github.com/Azure/azure-storage-azcopy/v10/testSuite/cmd"
 	"log"
 	"net/http"
 	"os"
@@ -34,6 +32,9 @@ import (
 	"runtime/pprof"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
+	"github.com/Azure/azure-storage-azcopy/v10/testSuite/cmd"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
@@ -200,14 +201,22 @@ func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
 		Client.CurrentJobID = common.NewJobID()
 	}
 
+	// Run MessagHandler to process messages from Input Watcher
+	if jobsAdmin.JobsAdmin != nil {
+		go jobsAdmin.JobsAdmin.MessageHandler(glcm.MsgHandlerChannel())
+	}
+
 	timeAtPrestart := time.Now()
 	glcm.SetOutputFormat(OutputFormat)
 	glcm.SetOutputVerbosity(OutputLevel)
 
 	common.AzcopyCurrentJobLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "")
 	common.AzcopyCurrentJobLogger.OpenLog()
-
-	glcm.SetForceLogging()
+	glcm.RegisterCloseFunc(func() {
+		if common.AzcopyCurrentJobLogger != nil {
+			common.AzcopyCurrentJobLogger.CloseLog()
+		}
+	})
 
 	// For benchmarking, try to autotune if possible, otherwise use the default values
 	if jobsAdmin.JobsAdmin != nil && isBench {

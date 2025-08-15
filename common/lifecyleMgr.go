@@ -8,7 +8,6 @@ import (
 	"os/signal"
 	"runtime"
 	"runtime/pprof"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -52,25 +51,19 @@ type LifecycleMgr interface {
 	JobLifecycleHandler
 	// TODO (gapra) : For copy, sync, resume - we use the OnComplete method to support AzCopy as a library.
 	// I honestly don't think we need this in an ideal simple implementation of AzCopy, but it is used in the code and will take some rework and testing to fully remove.
-	Exit(OutputBuilder, ExitCode)                                // indicates successful execution exit after printing, allow user to specify exit code
-	Info(string)                                                 // simple print, allowed to float up
-	Warn(string)                                                 // simple print, allowed to float up
-	Dryrun(OutputBuilder)                                        // print files for dry run mode
-	Output(OutputBuilder, OutputMessageType)                     // print output for list
-	Error(string)                                                // indicates fatal error, exit after printing, exit code is always Failed (1)
-	Prompt(message string, details PromptDetails) ResponseOption // ask the user a question(after erasing the progress), then return the response
-	SurrenderControl()                                           // give up control, this should never return
-	InitiateProgressReporting(WorkController)                    // start writing progress with another routine
-	AllowReinitiateProgressReporting()                           // allow re-initiation of progress reporting for followup job
-	SetOutputFormat(OutputFormat)                                // change the output format of the entire application
-	EnableInputWatcher()                                         // depending on the command, we may allow user to give input through Stdin
-	EnableCancelFromStdIn()                                      // allow user to send in `cancel` to stop the job
-	E2EAwaitContinue()                                           // used by E2E tests
-	E2EAwaitAllowOpenFiles()                                     // used by E2E tests
-	E2EEnableAwaitAllowOpenFiles(enable bool)                    // used by E2E tests
+	Exit(OutputBuilder, ExitCode)             // indicates successful execution exit after printing, allow user to specify exit code
+	Dryrun(OutputBuilder)                     // print files for dry run mode
+	Output(OutputBuilder, OutputMessageType)  // print output for list
+	SurrenderControl()                        // give up control, this should never return
+	InitiateProgressReporting(WorkController) // start writing progress with another routine
+	AllowReinitiateProgressReporting()        // allow re-initiation of progress reporting for followup job
+	SetOutputFormat(OutputFormat)             // change the output format of the entire application
+	EnableInputWatcher()                      // depending on the command, we may allow user to give input through Stdin
+	EnableCancelFromStdIn()                   // allow user to send in `cancel` to stop the job
+	E2EAwaitContinue()                        // used by E2E tests
+	E2EAwaitAllowOpenFiles()                  // used by E2E tests
+	E2EEnableAwaitAllowOpenFiles(enable bool) // used by E2E tests
 	RegisterCloseFunc(func())
-	SetForceLogging()
-	IsForceLoggingDisabled() bool
 	MsgHandlerChannel() <-chan *LCMMsg
 	ReportAllJobPartsDone()
 	SetOutputVerbosity(mode OutputVerbosity)
@@ -97,7 +90,6 @@ type lifecycleMgr struct {
 	e2eAllowAwaitContinue bool           // allow the user to send 'continue' from stdin to start the current job
 	e2eAllowAwaitOpen     bool           // allow the user to send 'open' from stdin to allow the opening of the first file
 	closeFunc             func()         // used to close logs before exiting
-	disableSyslog         bool
 	waitForUserResponse   chan bool
 	msgHandlerChannel     chan *LCMMsg
 	OutputVerbosityType   OutputVerbosity
@@ -401,10 +393,6 @@ func (lcm *lifecycleMgr) Exit(o OutputBuilder, applicationExitCode ExitCode) {
 		exitCode:   applicationExitCode,
 	}
 
-	if AzcopyCurrentJobLogger != nil && applicationExitCode != EExitCode.NoExit() {
-		AzcopyCurrentJobLogger.CloseLog()
-	}
-
 	if applicationExitCode != EExitCode.NoExit() {
 		// stall forever until the success message is printed and program exits
 		lcm.SurrenderControl()
@@ -675,21 +663,6 @@ func (lcm *lifecycleMgr) E2EEnableAwaitAllowOpenFiles(enable bool) {
 	} else {
 		close(lcm.e2eAllowOpenChannel) // so that E2EAwaitAllowOpenFiles will instantly return every time
 	}
-}
-
-// Fetching `AZCOPY_DISABLE_SYSLOG` from the environment variables and
-// setting `disableSyslog` flag in LifeCycleManager to avoid Env Vars Lookup redundantly
-func (lcm *lifecycleMgr) SetForceLogging() {
-	disableSyslog, err := strconv.ParseBool(GetEnvironmentVariable(EEnvironmentVariable.DisableSyslog()))
-	if err != nil {
-		// By default, we'll retain the current behaviour. i.e. To log in Syslog/WindowsEventLog if not specified by the user
-		disableSyslog = false
-	}
-	lcm.disableSyslog = disableSyslog
-}
-
-func (lcm *lifecycleMgr) IsForceLoggingDisabled() bool {
-	return lcm.disableSyslog
 }
 
 func (lcm *lifecycleMgr) MsgHandlerChannel() <-chan *LCMMsg {

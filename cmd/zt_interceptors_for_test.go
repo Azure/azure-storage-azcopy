@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"fmt"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -144,12 +145,6 @@ func (m *mockedLifecycleManager) SetOutputFormat(format common.OutputFormat) {
 }
 func (*mockedLifecycleManager) EnableInputWatcher()    {}
 func (*mockedLifecycleManager) EnableCancelFromStdIn() {}
-
-func (*mockedLifecycleManager) SetForceLogging() {}
-
-func (*mockedLifecycleManager) IsForceLoggingDisabled() bool {
-	return false
-}
 
 func (*mockedLifecycleManager) E2EAwaitContinue() {
 	// not implemented in mocked version
