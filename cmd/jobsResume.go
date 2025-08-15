@@ -301,7 +301,7 @@ func (rca resumeCmdArgs) process() error {
 	}
 
 	// if no logging, set this empty so that we don't display the log location
-	if LogLevel == common.LogNone {
+	if Client.GetLogLevel() == common.LogNone {
 		common.LogPathFolder = ""
 	}
 

@@ -49,7 +49,6 @@ var logVerbosityRaw string
 var cancelFromStdin bool
 var OutputFormat common.OutputFormat
 var OutputLevel common.OutputVerbosity
-var LogLevel common.LogLevel
 var CapMbps float64
 var SkipVersionCheck bool
 
@@ -212,7 +211,7 @@ func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
 	glcm.SetOutputFormat(OutputFormat)
 	glcm.SetOutputVerbosity(OutputLevel)
 
-	common.AzcopyCurrentJobLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "")
+	common.AzcopyCurrentJobLogger = common.NewJobLogger(Client.CurrentJobID, Client.GetLogLevel(), common.LogPathFolder, "")
 	common.AzcopyCurrentJobLogger.OpenLog()
 	glcm.RegisterCloseFunc(func() {
 		common.AzcopyCurrentJobLogger.CloseLog()

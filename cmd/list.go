@@ -26,10 +26,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -116,7 +117,7 @@ func (raw rawListCmdArgs) parseProperties() []validProperty {
 
 func (raw rawListCmdArgs) cook() (cookedListCmdArgs, error) {
 	// set up the front end scanning logger
-	azcopyScanningLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "-scanning")
+	azcopyScanningLogger = common.NewJobLogger(Client.CurrentJobID, Client.GetLogLevel(), common.LogPathFolder, "-scanning")
 	azcopyScanningLogger.OpenLog()
 	glcm.RegisterCloseFunc(func() {
 		azcopyScanningLogger.CloseLog()
