@@ -41,6 +41,13 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 )
 
+// TimingStats holds timing information for directory processing steps
+type TimingStats struct {
+	sourceTraversalTime time.Duration
+	targetTraversalTime time.Duration
+	finalizeTime        time.Duration
+}
+
 // CustomSyncHandlerFunc defines the signature for custom sync handlers that process
 // synchronization operations between source and destination locations.
 type CustomSyncHandlerFunc func(cca *cookedSyncCmdArgs, enumerator *syncEnumerator, ctx context.Context) error
@@ -50,6 +57,11 @@ type CustomSyncHandlerFunc func(cca *cookedSyncCmdArgs, enumerator *syncEnumerat
 type CustomCounterIncrementer func(entry fs.DirEntry, t *localTraverser) error
 
 var (
+	// directoryTimingStats collects timing data for each processed directory
+	directoryTimingStats []TimingStats
+	// timingStatsMutex protects access to directoryTimingStats
+	timingStatsMutex sync.RWMutex
+
 	// UseSyncOrchestrator controls whether the sync orchestrator functionality is enabled.
 	// When true, uses the sliding window approach for directory synchronization.
 	UseSyncOrchestrator bool = true
@@ -572,6 +584,11 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 	cca.orchestratorCancel = cancel // Store cancel function for later use
 
+	// Initialize timing statistics collection
+	timingStatsMutex.Lock()
+	directoryTimingStats = make([]TimingStats, 0)
+	timingStatsMutex.Unlock()
+
 	// Initialize semaphore for directory concurrency control
 	if enableThrottling {
 		semaphore = NewThrottleSemaphore(mainCtx, cca.jobID)
@@ -676,7 +693,13 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		// Create sync traverser for this directory
 		stra := newSyncTraverser(enumerator, dir.(minimalStoredObject).relativePath, enumerator.objectComparator)
 
+		// Initialize timing stats for this directory
+		timingStats := TimingStats{}
+
+		// Traverse source location and collect files/directories
+		sourceTraversalStart := time.Now()
 		err = pt.Traverse(noPreProccessor, stra.processor, enumerator.filters)
+		timingStats.sourceTraversalTime = time.Since(sourceTraversalStart)
 		srcDirEnumerating.Add(-1) // Decrement active directory count
 
 		// Release source slot after source traversal is complete
@@ -763,7 +786,10 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 			dstDirEnumerating.Add(1) // Increment active destination directory count
 
+			// Traverse destination location for comparison
+			targetTraversalStart := time.Now()
 			err = st.Traverse(noPreProccessor, stra.customComparator, enumerator.filters)
+			timingStats.targetTraversalTime = time.Since(targetTraversalStart)
 
 			dstDirEnumerating.Add(-1) // Decrement active destination directory count
 
@@ -811,7 +837,9 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		if finalize {
 
 			// Complete processing for this directory and schedule transfers
+			finalizeStart := time.Now()
 			err = stra.finalize(true) // true indicates we want to schedule transfers
+			timingStats.finalizeTime = time.Since(finalizeStart)
 
 			if err != nil {
 				errMsg = fmt.Sprintf("Sync finalize failed for source dir %s.\n", pt_src.Value)
@@ -835,6 +863,48 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 				isPresentAtDestination: isDestinationPresent,
 			})
 		}
+
+		// Store timing stats for this directory
+		timingStatsMutex.Lock()
+		directoryTimingStats = append(directoryTimingStats, timingStats)
+		timingStatsMutex.Unlock()
+
+		// Log consolidated timing information for this directory
+		// Only log if target traversal took more than 1 second (to reduce noise)
+		if timingStats.targetTraversalTime > time.Second {
+			dirPath := dir.(minimalStoredObject).relativePath
+			if dirPath == "" {
+				dirPath = "ROOT"
+			}
+
+			sourceTimeStr := timingStats.sourceTraversalTime.String()
+
+			var targetTimeStr string
+			if timingStats.targetTraversalTime > 0 {
+				targetTimeStr = timingStats.targetTraversalTime.String()
+			} else if !traverseDestination {
+				if !isDestinationPresent {
+					targetTimeStr = "SKIPPED(no-dest)"
+				} else {
+					targetTimeStr = "SKIPPED(ctime-opt)"
+				}
+			} else {
+				targetTimeStr = "SKIPPED"
+			}
+
+			var finalizeTimeStr string
+			if timingStats.finalizeTime > 0 {
+				finalizeTimeStr = timingStats.finalizeTime.String()
+			} else {
+				finalizeTimeStr = "SKIPPED"
+			}
+
+			syncOrchestratorLog(
+				common.LogError,
+				fmt.Sprintf("Directory: %s | Source: %s | Target: %s | Finalize: %s",
+					dirPath, sourceTimeStr, targetTimeStr, finalizeTimeStr))
+		}
+
 		return nil
 	}
 
@@ -915,6 +985,9 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		}
 	}
 
+	// Calculate and log mean timing statistics
+	logMeanTimingStatistics(time.Since(startTime))
+
 	return err
 }
 
@@ -958,4 +1031,63 @@ func syncOrchestratorLog(level common.LogLevel, toLog string, logToConsole ...bo
 			glcm.Info(toLog)
 		}
 	}
+}
+
+// logMeanTimingStatistics calculates and logs the mean timing statistics across all processed directories
+func logMeanTimingStatistics(totalExecutionTime time.Duration) {
+	timingStatsMutex.RLock()
+	defer timingStatsMutex.RUnlock()
+
+	if len(directoryTimingStats) == 0 {
+		syncOrchestratorLog(common.LogError, "No timing statistics available - no directories processed")
+		return
+	}
+
+	var totalSourceTraversalTime, totalTargetTraversalTime, totalFinalizeTime time.Duration
+	sourceTraversalCount, targetTraversalCount, finalizeCount := 0, 0, 0
+
+	for _, stats := range directoryTimingStats {
+		if stats.sourceTraversalTime > 0 {
+			totalSourceTraversalTime += stats.sourceTraversalTime
+			sourceTraversalCount++
+		}
+		if stats.targetTraversalTime > 0 {
+			totalTargetTraversalTime += stats.targetTraversalTime
+			targetTraversalCount++
+		}
+		if stats.finalizeTime > 0 {
+			totalFinalizeTime += stats.finalizeTime
+			finalizeCount++
+		}
+	}
+
+	syncOrchestratorLog(common.LogError, "===== TIMING SUMMARY =====")
+	syncOrchestratorLog(common.LogError, fmt.Sprintf("Total execution time: %v", totalExecutionTime))
+	syncOrchestratorLog(common.LogError, fmt.Sprintf("Total directories processed: %d", len(directoryTimingStats)))
+
+	if sourceTraversalCount > 0 {
+		meanSourceTime := totalSourceTraversalTime / time.Duration(sourceTraversalCount)
+		syncOrchestratorLog(common.LogError, fmt.Sprintf("Mean source traversal time: %v (across %d directories)",
+			meanSourceTime, sourceTraversalCount))
+	}
+
+	if targetTraversalCount > 0 {
+		meanTargetTime := totalTargetTraversalTime / time.Duration(targetTraversalCount)
+		syncOrchestratorLog(common.LogError, fmt.Sprintf("Mean target traversal time: %v (across %d directories)",
+			meanTargetTime, targetTraversalCount))
+	}
+
+	if finalizeCount > 0 {
+		meanFinalizeTime := totalFinalizeTime / time.Duration(finalizeCount)
+		syncOrchestratorLog(common.LogError, fmt.Sprintf("Mean finalize time: %v (across %d directories)",
+			meanFinalizeTime, finalizeCount))
+	}
+
+	// Log total time spent in each phase
+	syncOrchestratorLog(common.LogError, fmt.Sprintf("Total time in source traversal: %v", totalSourceTraversalTime))
+	syncOrchestratorLog(common.LogError, fmt.Sprintf("Total time in target traversal: %v", totalTargetTraversalTime))
+	syncOrchestratorLog(common.LogError, fmt.Sprintf("Total time in finalize: %v", totalFinalizeTime))
+
+	syncOrchestratorLog(common.LogError, "===========================")
+
 }
