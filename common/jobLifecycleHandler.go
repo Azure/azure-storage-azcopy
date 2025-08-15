@@ -30,6 +30,14 @@ type JobLifecycleHandler interface {
 	OnTransferProgress(progress TransferProgress)
 
 	OnComplete(summary JobSummary)
+
+	// TODO (gapra): Rename these variables at the end. Choosing not to at the moment to limit the scope of changes.
+	Error(string)
+
+	// Optional for AzCopy as a library users
+	Prompt(message string, details PromptDetails) ResponseOption
+	Info(string)
+	Warn(string)
 }
 
 type JobSummary struct {
