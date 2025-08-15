@@ -50,9 +50,7 @@ var lcm = func() (lcmgr *lifecycleMgr) {
 type LifecycleMgr interface {
 	// AzCopy core methods
 	JobLifecycleHandler
-	Error(string)                             // indicates fatal error, exit after printing, exit code is always Failed (1)
-	InitiateProgressReporting(WorkController) // start writing progress with another routine
-	AllowReinitiateProgressReporting()        // allow re-initiation of progress reporting for followup job
+	Error(string) // indicates fatal error, exit after printing, exit code is always Failed (1)
 	RegisterCloseFunc(func())
 	E2EAwaitAllowOpenFiles() // used by E2E tests (no-op for AzCopy as a library)
 
@@ -63,6 +61,8 @@ type LifecycleMgr interface {
 	Dryrun(OutputBuilder)                     // print files for dry run mode
 	Output(OutputBuilder, OutputMessageType)  // print custom output message types
 	SurrenderControl()                        // give up control, this should never return
+	InitiateProgressReporting(WorkController) // start writing progress with another routine
+	AllowReinitiateProgressReporting()        // allow re-initiation of progress reporting for followup job
 	SetOutputFormat(OutputFormat)             // change the output format of the entire application
 	EnableInputWatcher()                      // depending on the command, we may allow user to give input through Stdin
 	EnableCancelFromStdIn()                   // allow user to send in `cancel` to stop the job
