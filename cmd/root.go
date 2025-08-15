@@ -49,7 +49,6 @@ var logVerbosityRaw string
 var cancelFromStdin bool
 var OutputFormat common.OutputFormat
 var OutputLevel common.OutputVerbosity
-var LogLevel common.LogLevel
 var CapMbps float64
 var SkipVersionCheck bool
 
@@ -119,11 +118,6 @@ var rootCmd = &cobra.Command{
 		}
 
 		err = OutputLevel.Parse(outputVerbosityRaw)
-		if err != nil {
-			return err
-		}
-
-		err = LogLevel.Parse(logVerbosityRaw)
 		if err != nil {
 			return err
 		}
@@ -205,12 +199,18 @@ func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
 	if jobsAdmin.JobsAdmin != nil {
 		go jobsAdmin.JobsAdmin.MessageHandler(glcm.MsgHandlerChannel())
 	}
+	var logLevel common.LogLevel
+	err = logLevel.Parse(logVerbosityRaw)
+	if err != nil {
+		return err
+	}
+	Client.SetLogLevel(&logLevel)
 
 	timeAtPrestart := time.Now()
 	glcm.SetOutputFormat(OutputFormat)
 	glcm.SetOutputVerbosity(OutputLevel)
 
-	common.AzcopyCurrentJobLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "")
+	common.AzcopyCurrentJobLogger = common.NewJobLogger(Client.CurrentJobID, Client.GetLogLevel(), common.LogPathFolder, "")
 	common.AzcopyCurrentJobLogger.OpenLog()
 	glcm.RegisterCloseFunc(func() {
 		if common.AzcopyCurrentJobLogger != nil {

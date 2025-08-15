@@ -335,14 +335,14 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 
 func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
 	// set up the front end scanning logger
-	azcopyScanningLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "-scanning")
+	azcopyScanningLogger = common.NewJobLogger(Client.CurrentJobID, Client.GetLogLevel(), common.LogPathFolder, "-scanning")
 	azcopyScanningLogger.OpenLog()
 	glcm.RegisterCloseFunc(func() {
 		azcopyScanningLogger.CloseLog()
 	})
 
 	// if no logging, set this empty so that we don't display the log location
-	if LogLevel == common.LogNone {
+	if Client.GetLogLevel() == common.LogNone {
 		common.LogPathFolder = ""
 	}
 

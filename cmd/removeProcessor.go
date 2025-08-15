@@ -39,7 +39,7 @@ func newRemoveTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPart in
 		SrcServiceClient:      targetServiceClient,
 
 		// flags
-		LogLevel:       LogLevel,
+		LogLevel:       Client.GetLogLevel(),
 		BlobAttributes: common.BlobTransferAttributes{DeleteSnapshotsOption: cca.deleteSnapshotsOption, PermanentDeleteOption: cca.permanentDeleteOption},
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.trailingDot,

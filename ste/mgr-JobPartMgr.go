@@ -243,12 +243,6 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		return
 	}
 
-	// get the list of include / exclude transfers
-	includeTransfer, excludeTransfer := jpm.jobMgr.IncludeExclude()
-	if len(includeTransfer) > 0 || len(excludeTransfer) > 0 {
-		panic("List of transfers is obsolete.")
-	}
-
 	// *** Open the job part: process any job part plan-setting used by all transfers ***
 	dstData := plan.DstBlobData
 
