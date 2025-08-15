@@ -123,11 +123,6 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 
-		err = LogLevel.Parse(logVerbosityRaw)
-		if err != nil {
-			return err
-		}
-
 		// If the command is for resuming a job with a specific JobID,
 		// use the provided JobID to resume the job; otherwise, create a new JobID.
 		var resumeJobID common.JobID
@@ -205,6 +200,12 @@ func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
 	if jobsAdmin.JobsAdmin != nil {
 		go jobsAdmin.JobsAdmin.MessageHandler(glcm.MsgHandlerChannel())
 	}
+	var logLevel common.LogLevel
+	err = logLevel.Parse(logVerbosityRaw)
+	if err != nil {
+		return err
+	}
+	Client.SetLogLevel(&logLevel)
 
 	timeAtPrestart := time.Now()
 	glcm.SetOutputFormat(OutputFormat)
