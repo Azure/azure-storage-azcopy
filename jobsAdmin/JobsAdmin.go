@@ -92,6 +92,7 @@ var JobsAdmin interface {
 
 	// JobMgrCleanUp do the JobMgr cleanup.
 	JobMgrCleanUp(jobId common.JobID)
+	MessageHandler(inputChan <-chan *common.LCMMsg)
 }
 
 func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64) {
@@ -140,9 +141,6 @@ func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, 
 
 	// Spin up slice pool pruner
 	go ja.slicePoolPruneLoop()
-
-	go ja.messageHandler(common.GetLifecycleMgr().MsgHandlerChannel())
-
 }
 
 // Decide on a max amount of RAM we are willing to use. This functions as a cap, and prevents excessive usage.
@@ -484,7 +482,7 @@ func (ja *jobsAdmin) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint3
 	return a.GetAdvice()
 }
 
-func (ja *jobsAdmin) messageHandler(inputChan <-chan *common.LCMMsg) {
+func (ja *jobsAdmin) MessageHandler(inputChan <-chan *common.LCMMsg) {
 	toBitsPerSec := func(megaBitsPerSec int64) int64 {
 		return megaBitsPerSec * 1000 * 1000 / 8
 	}

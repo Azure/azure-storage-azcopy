@@ -48,23 +48,26 @@ var lcm = func() (lcmgr *lifecycleMgr) {
 // create a public interface so that consumers outside of this package can refer to the lifecycle manager
 // but they would not be able to instantiate one
 type LifecycleMgr interface {
+	// AzCopy core methods
 	JobLifecycleHandler
+	Error(string)                             // indicates fatal error, exit after printing, exit code is always Failed (1)
+	InitiateProgressReporting(WorkController) // start writing progress with another routine
+	AllowReinitiateProgressReporting()        // allow re-initiation of progress reporting for followup job
+	RegisterCloseFunc(func())
+	E2EAwaitAllowOpenFiles() // used by E2E tests (no-op for AzCopy as a library)
+
+	// AzCopy CLI only methods
 	// TODO (gapra) : For copy, sync, resume - we use the OnComplete method to support AzCopy as a library.
 	// I honestly don't think we need this in an ideal simple implementation of AzCopy, but it is used in the code and will take some rework and testing to fully remove.
 	Exit(OutputBuilder, ExitCode)             // indicates successful execution exit after printing, allow user to specify exit code
 	Dryrun(OutputBuilder)                     // print files for dry run mode
 	Output(OutputBuilder, OutputMessageType)  // print custom output message types
-	Error(string)                             // indicates fatal error, exit after printing, exit code is always Failed (1)
 	SurrenderControl()                        // give up control, this should never return
-	InitiateProgressReporting(WorkController) // start writing progress with another routine
-	AllowReinitiateProgressReporting()        // allow re-initiation of progress reporting for followup job
 	SetOutputFormat(OutputFormat)             // change the output format of the entire application
 	EnableInputWatcher()                      // depending on the command, we may allow user to give input through Stdin
 	EnableCancelFromStdIn()                   // allow user to send in `cancel` to stop the job
 	E2EAwaitContinue()                        // used by E2E tests
-	E2EAwaitAllowOpenFiles()                  // used by E2E tests
 	E2EEnableAwaitAllowOpenFiles(enable bool) // used by E2E tests
-	RegisterCloseFunc(func())
 	MsgHandlerChannel() <-chan *LCMMsg
 	ReportAllJobPartsDone()
 	SetOutputVerbosity(mode OutputVerbosity)

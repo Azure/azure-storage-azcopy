@@ -1256,13 +1256,12 @@ func (cca *CookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
 	cca.intervalStartTime = time.Now()
 	cca.intervalBytesTransferred = 0
 
-	// hand over control to the lifecycle manager if blocking
+	glcm.InitiateProgressReporting(cca)
 	if blocking {
-		glcm.InitiateProgressReporting(cca)
+		// blocking, hand over control to the lifecycle manager
 		glcm.SurrenderControl()
 	} else {
 		// non-blocking, return after spawning a go routine to watch the job
-		glcm.InitiateProgressReporting(cca)
 	}
 }
 

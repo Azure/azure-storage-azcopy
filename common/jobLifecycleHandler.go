@@ -31,7 +31,7 @@ type JobLifecycleHandler interface {
 
 	OnComplete(summary JobSummary)
 
-	// Optional methods that can be implemented by users of AzCopy as a library. Default implementation is a no-op.
+	// Optional methods that can be implemented by users of AzCopy as a library. Default implementation is a no-op, or returning the default response.
 	OnInfo(string)
 	OnWarning(string)
 	OnPrompt(message string, details PromptDetails) ResponseOption // ask the user a question(after erasing the progress), then return the response

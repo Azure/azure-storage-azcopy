@@ -193,8 +193,13 @@ func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
 	AsyncWarnMultipleProcesses(cmd.GetAzCopyAppPath(), currPid)
 	jobsAdmin.BenchmarkResults = isBench
 	Client, err = azcopy.NewClient(azcopy.ClientOptions{CapMbps: CapMbps})
+
 	if err != nil {
 		return err
+	}
+	// Run MessagHandler to process messages from Input Watcher
+	if jobsAdmin.JobsAdmin != nil {
+		go jobsAdmin.JobsAdmin.MessageHandler(glcm.MsgHandlerChannel())
 	}
 	Client.CurrentJobID = resumeJobID
 	if Client.CurrentJobID.IsEmpty() {
