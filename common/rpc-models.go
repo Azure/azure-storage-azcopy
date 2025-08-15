@@ -309,8 +309,6 @@ type ResumeJobRequest struct {
 	DestinationSAS   string
 	SrcServiceClient *ServiceClient
 	DstServiceClient *ServiceClient
-	IncludeTransfer  map[string]int
-	ExcludeTransfer  map[string]int
 	CredentialInfo   CredentialInfo
 }
 

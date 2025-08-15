@@ -55,8 +55,6 @@ type IJobMgr interface {
 	// If existingPlanMMF is nil, a new MMF is opened.
 	AddJobPart(args *AddJobPartArgs) IJobPartMgr
 
-	SetIncludeExclude(map[string]int, map[string]int)
-	IncludeExclude() (map[string]int, map[string]int)
 	ResumeTransfers(appCtx context.Context)
 	ResetFailedTransfersCount()
 	AllTransfersScheduled() bool
@@ -149,7 +147,7 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 		jobLogger.OpenLog()
 	}
 
-	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), include: map[string]int{}, exclude: map[string]int{},
+	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(),
 		httpClient:           NewAzcopyHTTPClient(concurrency.MaxIdleConnections),
 		logger:               jobLogger,
 		chunkStatusLogger:    common.NewChunkStatusLogger(jobID, cpuMon, common.LogPathFolder, enableChunkLogOutput),
@@ -312,10 +310,6 @@ type jobMgr struct {
 	// throughput  common.CountPerSecond // TODO: Set LastCheckedTime to now
 
 	inMemoryTransitJobState InMemoryTransitJobState
-	// list of transfer mentioned to include only then while resuming the job
-	include map[string]int
-	// list of transfer mentioned to exclude while resuming the job
-	exclude map[string]int
 
 	// only a single instance of the prompter is needed for all transfers
 	overwritePrompter *overwritePrompter
@@ -576,18 +570,6 @@ func (jm *jobMgr) HttpClient() *http.Client {
 
 func (jm *jobMgr) PipelineNetworkStats() *PipelineNetworkStats {
 	return jm.pipelineNetworkStats
-}
-
-// SetIncludeExclude sets the include / exclude list of transfers
-// supplied with resume command to include or exclude mentioned transfers
-func (jm *jobMgr) SetIncludeExclude(include, exclude map[string]int) {
-	jm.include = include
-	jm.exclude = exclude
-}
-
-// Returns the list of transfer mentioned to include / exclude
-func (jm *jobMgr) IncludeExclude() (map[string]int, map[string]int) {
-	return jm.include, jm.exclude
 }
 
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
