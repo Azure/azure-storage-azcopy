@@ -157,7 +157,7 @@ func getMaxRamForChunks() int64 {
 	if overrideString != "" {
 		overrideValue, err := strconv.ParseFloat(overrideString, 64)
 		if err != nil {
-			common.GetLifecycleMgr().Error(fmt.Sprintf("Cannot parse environment variable %s, due to error %s", envVar.Name, err))
+			common.GetLifecycleMgr().OnError(fmt.Sprintf("Cannot parse environment variable %s, due to error %s", envVar.Name, err))
 		} else {
 			return int64(overrideValue * 1024 * 1024 * 1024)
 		}

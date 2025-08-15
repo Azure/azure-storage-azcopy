@@ -129,9 +129,9 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 
 		if !jobInitiated {
 			if cca.isCleanupJob {
-				glcm.Error("Cleanup completed (nothing needed to be deleted)")
+				glcm.OnError("Cleanup completed (nothing needed to be deleted)")
 			} else {
-				glcm.Error("Nothing to delete. Please verify that recursive flag is set properly if targeting a directory.")
+				glcm.OnError("Nothing to delete. Please verify that recursive flag is set properly if targeting a directory.")
 			}
 		}
 

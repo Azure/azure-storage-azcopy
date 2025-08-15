@@ -68,7 +68,7 @@ func HandlePauseCommand(jobIdString string) {
 	jobID, err := common.ParseJobID(jobIdString)
 	if err != nil {
 		// If parsing gives an error, hence it is not a valid JobId format
-		glcm.Error("invalid jobId string passed. Failed while parsing string to jobId")
+		glcm.OnError("invalid jobId string passed. Failed while parsing string to jobId")
 	}
 
 	// TODO : Why isn't the response here used?

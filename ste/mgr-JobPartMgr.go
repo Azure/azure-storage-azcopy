@@ -631,7 +631,7 @@ func (jpm *jobPartMgr) Close() {
 
 	// TODO: Delete file?
 	/*if err := os.Remove(jpm.planFile.Name()); err != nil {
-		jpm.Panic(fmt.Errorf("error removing Job Part Plan file %s. Error=%v", jpm.planFile.Name(), err))
+		jpm.Panic(fmt.Errorf("error removing Job Part Plan file %s. OnError=%v", jpm.planFile.Name(), err))
 	}*/
 }
 

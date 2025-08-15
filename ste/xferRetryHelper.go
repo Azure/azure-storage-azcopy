@@ -95,13 +95,13 @@ func getErrorCodes(resp *http.Response) []string {
 	var errorCodes []string
 	if resp.Header["x-ms-error-code"] != nil { //nolint:staticcheck
 		errorCodes = append(errorCodes, resp.Header["x-ms-error-code"][0]) //nolint:staticcheck
-	} else if resp.Header["X-Ms-Error-Code"] != nil { //nolint:staticcheck
-		errorCodes = append(errorCodes, resp.Header["X-Ms-Error-Code"][0]) //nolint:staticcheck
+	} else if resp.Header["X-Ms-OnError-Code"] != nil { //nolint:staticcheck
+		errorCodes = append(errorCodes, resp.Header["X-Ms-OnError-Code"][0]) //nolint:staticcheck
 	}
 	if resp.Header["x-ms-copy-source-error-code"] != nil { //nolint:staticcheck
 		errorCodes = append(errorCodes, resp.Header["x-ms-copy-source-error-code"][0]) //nolint:staticcheck
-	} else if resp.Header["X-Ms-Copy-Source-Error-Code"] != nil { //nolint:staticcheck
-		errorCodes = append(errorCodes, resp.Header["X-Ms-Copy-Source-Error-Code"][0]) //nolint:staticcheck
+	} else if resp.Header["X-Ms-Copy-Source-OnError-Code"] != nil { //nolint:staticcheck
+		errorCodes = append(errorCodes, resp.Header["X-Ms-Copy-Source-OnError-Code"][0]) //nolint:staticcheck
 	}
 	return errorCodes
 }

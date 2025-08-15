@@ -36,7 +36,7 @@ func remoteToLocal_symlink(jptm IJobPartTransferMgr, pacer pacer, df downloaderF
 			}
 
 			if !shouldOverwrite {
-				// logging as Warning so that it turns up even in compact logs, and because previously we use Error here
+				// logging as Warning so that it turns up even in compact logs, and because previously we use OnError here
 				jptm.LogAtLevelForCurrentTransfer(common.LogWarning, "File already exists, so will be skipped")
 				jptm.SetStatus(common.ETransferStatus.SkippedEntityAlreadyExists())
 				jptm.ReportTransferDone()

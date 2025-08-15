@@ -52,7 +52,7 @@ func (o OutputMessageType) String() string {
 type outputMessage struct {
 	msgContent    string
 	msgType       OutputMessageType
-	exitCode      ExitCode      // only for when the application is meant to exit after printing (i.e. Error or Final)
+	exitCode      ExitCode      // only for when the application is meant to exit after printing (i.e. OnError or Final)
 	inputChannel  chan<- string // support getting a response from the user
 	promptDetails PromptDetails
 }

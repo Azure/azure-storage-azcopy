@@ -264,7 +264,7 @@ var Execute func() error = rootCmd.Execute
 
 func InitializeAndExecute() {
 	if err := Execute(); err != nil {
-		glcm.Error(err.Error())
+		glcm.OnError(err.Error())
 	} else {
 		if !SkipVersionCheck && !isPipeDownload {
 			// our commands all control their own life explicitly with the lifecycle manager

@@ -1,3 +1,4 @@
+//go:build linux
 // +build linux
 
 // Copyright © Microsoft <wastore@microsoft.com>
@@ -34,7 +35,7 @@ var loadClfsCmd = &cobra.Command{
 	Hidden: true,
 	Run: func(cmd *cobra.Command, args []string) {
 		// in case the user has been running this command as part of their automated workflow, fail it so that they notice the deprecation
-		glcm.Error(`CLFSLoad was a tool that could pre-stage a POSIX filesystem tree in Azure Blob, in a format that AvereOS can read and present as POSIX.
+		glcm.OnError(`CLFSLoad was a tool that could pre-stage a POSIX filesystem tree in Azure Blob, in a format that AvereOS can read and present as POSIX.
 Since the tool has been deprecated, the only remaining access-point is through the NFSv3 service that AvereOS presents, and thus any data copying activities would be performed no differently than copying data to/from a network share.
 `)
 	},

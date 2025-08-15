@@ -155,7 +155,7 @@ func newS3ServiceTraverser(rawURL *url.URL, ctx context.Context, opts InitResour
 			Endpoint: t.s3URL.Endpoint,
 		},
 	}, common.CredentialOpOptions{
-		LogError: glcm.Error,
+		LogError: glcm.OnError,
 	}, azcopyScanningLogger)
 	return
 }

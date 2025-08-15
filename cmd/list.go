@@ -189,14 +189,14 @@ func init() {
 		Run: func(cmd *cobra.Command, args []string) {
 			cooked, err := raw.cook()
 			if err != nil {
-				glcm.Error("failed to parse user input due to error: " + err.Error())
+				glcm.OnError("failed to parse user input due to error: " + err.Error())
 				return
 			}
 			err = cooked.handleListContainerCommand()
 			if err == nil {
 				glcm.Exit(nil, common.EExitCode.Success())
 			} else {
-				glcm.Error(err.Error() + getErrorCodeUrl(err))
+				glcm.OnError(err.Error() + getErrorCodeUrl(err))
 			}
 		},
 	}

@@ -140,14 +140,14 @@ func init() {
 			}
 
 			if err != nil {
-				glcm.Error("failed to parse user input due to error: " + err.Error())
+				glcm.OnError("failed to parse user input due to error: " + err.Error())
 			}
 
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 
 			if err != nil {
-				glcm.Error("failed to perform set-properties command due to error: " + err.Error())
+				glcm.OnError("failed to perform set-properties command due to error: " + err.Error())
 			}
 
 			if cooked.dryrunMode {

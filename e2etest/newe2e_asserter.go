@@ -149,7 +149,7 @@ func (ta *FrameworkAsserter) NoError(comment string, err error, failNow ...bool)
 	ta.t.Helper()
 
 	if err != nil {
-		ta.t.Logf("Error was not nil (%s): %v", comment, err)
+		ta.t.Logf("OnError was not nil (%s): %v", comment, err)
 
 		if FirstOrZero(failNow) {
 			ta.t.FailNow()

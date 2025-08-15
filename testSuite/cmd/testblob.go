@@ -578,7 +578,7 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 	mmap.Unmap()
 	err = file.Close()
 	if err != nil {
-		fmt.Printf("error closing the file %s and failed with error %s. Error could be while validating the blob.\n", file.Name(), err.Error())
+		fmt.Printf("error closing the file %s and failed with error %s. OnError could be while validating the blob.\n", file.Name(), err.Error())
 		os.Exit(1)
 	}
 

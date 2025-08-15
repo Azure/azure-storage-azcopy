@@ -50,7 +50,6 @@ var lcm = func() (lcmgr *lifecycleMgr) {
 type LifecycleMgr interface {
 	// AzCopy core methods
 	JobLifecycleHandler
-	Error(string) // indicates fatal error, exit after printing, exit code is always Failed (1)
 	RegisterCloseFunc(func())
 	E2EAwaitAllowOpenFiles() // used by E2E tests (no-op for AzCopy as a library)
 
@@ -213,10 +212,10 @@ func (lcm *lifecycleMgr) checkAndStartCPUProfiling() {
 		lcm.OnInfo(fmt.Sprintf("pprof start CPU profiling, and saving profiling data to: %q", cpuProfilePath))
 		f, err := os.Create(cpuProfilePath)
 		if err != nil {
-			lcm.Error(fmt.Sprintf("Fail to create file for CPU profiling, %v", err))
+			lcm.OnError(fmt.Sprintf("Fail to create file for CPU profiling, %v", err))
 		}
 		if err := pprof.StartCPUProfile(f); err != nil {
-			lcm.Error(fmt.Sprintf("Fail to start CPU profiling, %v", err))
+			lcm.OnError(fmt.Sprintf("Fail to start CPU profiling, %v", err))
 		}
 	}
 }
@@ -236,11 +235,11 @@ func (lcm *lifecycleMgr) checkAndTriggerMemoryProfiling() {
 		lcm.OnInfo(fmt.Sprintf("pprof start memory profiling, and saving profiling data to: %q", memProfilePath))
 		f, err := os.Create(memProfilePath)
 		if err != nil {
-			lcm.Error(fmt.Sprintf("Fail to create file for memory profiling, %v", err))
+			lcm.OnError(fmt.Sprintf("Fail to create file for memory profiling, %v", err))
 		}
 		runtime.GC()
 		if err := pprof.WriteHeapProfile(f); err != nil {
-			lcm.Error(fmt.Sprintf("Fail to start memory profiling, %v", err))
+			lcm.OnError(fmt.Sprintf("Fail to start memory profiling, %v", err))
 		}
 		if err := f.Close(); err != nil {
 			lcm.OnInfo(fmt.Sprintf("Fail to close memory profiling file, %v", err))
@@ -279,7 +278,7 @@ func (lcm *lifecycleMgr) OnComplete(summary JobSummary) {
 
 func (lcm *lifecycleMgr) OnInfo(msg string) {
 
-	msg = lcm.logSanitizer.SanitizeLogMessage(msg) // sometimes error-like text comes through OnInfo, before the final "we've failed, please stop now" signal comes to Error. So we sanitize in both places.
+	msg = lcm.logSanitizer.SanitizeLogMessage(msg) // sometimes error-like text comes through OnInfo, before the final "we've failed, please stop now" signal comes to OnError. So we sanitize in both places.
 
 	infoMsg := fmt.Sprintf("INFO: %v", msg)
 
@@ -291,7 +290,7 @@ func (lcm *lifecycleMgr) OnInfo(msg string) {
 
 func (lcm *lifecycleMgr) OnWarning(msg string) {
 
-	msg = lcm.logSanitizer.SanitizeLogMessage(msg) // sometimes error-like text comes through OnWarning, before the final "we've failed, please stop now" signal comes to Error. So we sanitize in both places.
+	msg = lcm.logSanitizer.SanitizeLogMessage(msg) // sometimes error-like text comes through OnWarning, before the final "we've failed, please stop now" signal comes to OnError. So we sanitize in both places.
 
 	infoMsg := fmt.Sprintf("WARN: %v", msg)
 
@@ -357,7 +356,7 @@ func (lcm *lifecycleMgr) Output(o OutputBuilder, msgType OutputMessageType) {
 }
 
 // TODO minor: consider merging with Exit
-func (lcm *lifecycleMgr) Error(msg string) {
+func (lcm *lifecycleMgr) OnError(msg string) {
 
 	msg = lcm.logSanitizer.SanitizeLogMessage(msg)
 

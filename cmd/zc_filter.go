@@ -474,7 +474,7 @@ func parseISO8601(s string, chooseEarliest bool) (time.Time, error) {
 
 	// Nothing worked. Get fresh error from first format, and supplement it with additional hints.
 	_, err = time.ParseInLocation(formats[0], s, loc)
-	err = fmt.Errorf("could not parse date/time '%s'. Expecting ISO8601 format, with 4 digit year and 2-digits for all other elements. Error hint: %w",
+	err = fmt.Errorf("could not parse date/time '%s'. Expecting ISO8601 format, with 4 digit year and 2-digits for all other elements. OnError hint: %w",
 		s, err)
 	return time.Time{}, err
 }

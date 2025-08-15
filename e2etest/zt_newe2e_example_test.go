@@ -18,7 +18,7 @@ func (s *ExampleSuite) SetupSuite(a Asserter) {
 
 func (s *ExampleSuite) TeardownSuite(a Asserter) {
 	//a.Log("Teardown logging!")
-	//a.Error("Oops!")
+	//a.OnError("Oops!")
 }
 
 func (s *ExampleSuite) Scenario_SingleFileCopySyncS2S(svm *ScenarioVariationManager) {

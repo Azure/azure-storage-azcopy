@@ -84,7 +84,7 @@ func (cca *resumeJobController) waitUntilJobCompletion(blocking bool) {
 func (cca *resumeJobController) Cancel(lcm common.LifecycleMgr) {
 	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
 	if err != nil {
-		lcm.Error("error occurred while cancelling the job " + cca.jobID.String() + ". Failed with error " + err.Error())
+		lcm.OnError("error occurred while cancelling the job " + cca.jobID.String() + ". Failed with error " + err.Error())
 	}
 }
 
@@ -168,7 +168,7 @@ func init() {
 		Run: func(cmd *cobra.Command, args []string) {
 			err := resumeCmdArgs.process()
 			if err != nil {
-				glcm.Error(fmt.Sprintf("failed to perform resume command due to error: %s", err.Error()))
+				glcm.OnError(fmt.Sprintf("failed to perform resume command due to error: %s", err.Error()))
 			}
 		},
 	}
@@ -248,7 +248,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 	}
 	jobID, err := common.ParseJobID(rca.jobID)
 	if err != nil {
-		// Error for invalid JobId format
+		// OnError for invalid JobId format
 		return nil, nil, fmt.Errorf("error parsing the jobId %s. Failed with error %w", rca.jobID, err)
 	}
 
@@ -257,7 +257,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 	// Get job details from the STE
 	getJobDetailsResponse := jobsAdmin.GetJobDetails(common.GetJobDetailsRequest{JobID: jobID})
 	if getJobDetailsResponse.ErrorMsg != "" {
-		glcm.Error(getJobDetailsResponse.ErrorMsg)
+		glcm.OnError(getJobDetailsResponse.ErrorMsg)
 	}
 
 	var fileSrcClientOptions any
@@ -340,7 +340,7 @@ func (rca resumeCmdArgs) process() error {
 	// Get fromTo info, so we can decide what's the proper credential type to use.
 	getJobFromToResponse := jobsAdmin.GetJobDetails(common.GetJobDetailsRequest{JobID: jobID})
 	if getJobFromToResponse.ErrorMsg != "" {
-		glcm.Error(getJobFromToResponse.ErrorMsg)
+		glcm.OnError(getJobFromToResponse.ErrorMsg)
 	}
 
 	if getJobFromToResponse.FromTo.From() == common.ELocation.Benchmark() ||
@@ -392,7 +392,7 @@ func (rca resumeCmdArgs) process() error {
 	})
 
 	if !resumeJobResponse.CancelledPauseResumed {
-		glcm.Error(resumeJobResponse.ErrorMsg)
+		glcm.OnError(resumeJobResponse.ErrorMsg)
 	}
 
 	controller := resumeJobController{jobID: jobID}

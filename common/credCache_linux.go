@@ -115,7 +115,7 @@ func (c *CredCache) hasCachedTokenInternal() (bool, error) {
 	}
 	_, err = keyring.Search(c.keyName)
 	// TODO: better logging what's cause for token caching failure
-	// e.g. Error message: "required key not available"
+	// e.g. OnError message: "required key not available"
 	// the source library could be updated to use keyctl_search
 	if err != nil {
 		return false, err

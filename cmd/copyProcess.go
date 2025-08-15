@@ -87,7 +87,7 @@ func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 						jsonStartNoBrace := strings.TrimPrefix(jsonStart, "{")
 						isJson := cleanedLine == jsonStart || firstLineIsCurlyBrace && cleanedLine == jsonStartNoBrace
 						if isJson {
-							glcm.Error("The format for list-of-files has changed. The old JSON format is no longer supported")
+							glcm.OnError("The format for list-of-files has changed. The old JSON format is no longer supported")
 						}
 					}
 					headerLineNum++

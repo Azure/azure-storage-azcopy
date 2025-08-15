@@ -56,7 +56,7 @@ func init() {
 			withStatus := common.EJobStatus
 			err := withStatus.Parse(commandLineInput.withStatus)
 			if err != nil {
-				glcm.Error(fmt.Sprintf("Failed to parse --with-status due to error: %s.", err))
+				glcm.OnError(fmt.Sprintf("Failed to parse --with-status due to error: %s.", err))
 			}
 
 			err = handleCleanJobsCommand(withStatus)
@@ -71,7 +71,7 @@ func init() {
 					}, common.EExitCode.Success())
 				}
 			} else {
-				glcm.Error(fmt.Sprintf("Failed to remove log/plan files due to error: %s.", err))
+				glcm.OnError(fmt.Sprintf("Failed to remove log/plan files due to error: %s.", err))
 			}
 		},
 	}

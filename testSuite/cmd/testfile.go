@@ -255,7 +255,7 @@ func verifySingleFileUpload(testFileCmd TestFileCommand) {
 	// memory mapping the resource on local path.
 	mmap, err := NewMMF(localFile, false, 0, fileInfo.Size())
 	if err != nil {
-		fmt.Println("error mapping the destination localFile: ", localFile, " localFile size: ", fileInfo.Size(), " Error: ", err.Error())
+		fmt.Println("error mapping the destination localFile: ", localFile, " localFile size: ", fileInfo.Size(), " OnError: ", err.Error())
 		os.Exit(1)
 	}
 

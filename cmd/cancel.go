@@ -94,12 +94,12 @@ func init() {
 		Run: func(cmd *cobra.Command, args []string) {
 			cooked, err := raw.cook()
 			if err != nil {
-				glcm.Error("failed to parse user input due to error " + err.Error())
+				glcm.OnError("failed to parse user input due to error " + err.Error())
 			}
 
 			err = cooked.process()
 			if err != nil {
-				glcm.Error("failed to perform cancel command due to error " + err.Error())
+				glcm.OnError("failed to perform cancel command due to error " + err.Error())
 			}
 			glcm.Exit(nil, common.EExitCode.Success())
 		},

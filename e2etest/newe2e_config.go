@@ -330,7 +330,7 @@ func ParseEnvTag(tag string) EnvTag {
 	return out
 }
 
-// ========== Config Reader Error Definition ==========
+// ========== Config Reader OnError Definition ==========
 
 type ConfigReaderError struct {
 	StructName      string
@@ -342,7 +342,7 @@ type ConfigReaderError struct {
 func (c *ConfigReaderError) WrangleAsError() error {
 	// Go does some weird stuff with types here.
 	/*
-		Error is an interface, and a pointer to ConfigReaderError satisfies that interface.
+		OnError is an interface, and a pointer to ConfigReaderError satisfies that interface.
 		So, when passing nil ConfigReaderError, it becomes *ConfigReaderError(<nil>),
 		and is not actually nil (because the error interface interprets this as a fulfilled interface)
 
@@ -615,7 +615,7 @@ func LoadConfigHook(a Asserter) {
 //	MissingParams []string
 //}
 //
-//func (c ConfigMissingParameters) Error() string {
+//func (c ConfigMissingParameters) OnError() string {
 //	return fmt.Sprintf("the following config entries were missing or invalid: %s", strings.Join(c.MissingParams, ", "))
 //}
 //

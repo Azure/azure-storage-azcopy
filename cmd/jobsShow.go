@@ -61,7 +61,7 @@ func init() {
 			if commandLineInput.OfStatus == "" {
 				resp, err := Client.GetJobSummary(azcopy.GetJobSummaryOptions{JobID: commandLineInput.JobID})
 				if err != nil {
-					glcm.Error(err.Error())
+					glcm.OnError(err.Error())
 				}
 				PrintJobProgressSummary(common.ListJobSummaryResponse(resp))
 			} else {
@@ -70,11 +70,11 @@ func init() {
 				var status common.TransferStatus
 				err := status.Parse(commandLineInput.OfStatus)
 				if err != nil {
-					glcm.Error(fmt.Sprintf("cannot parse the given Transfer Status %s", commandLineInput.OfStatus))
+					glcm.OnError(fmt.Sprintf("cannot parse the given Transfer Status %s", commandLineInput.OfStatus))
 				}
 				resp, err := Client.ListJobTransfers(azcopy.ListJobTransfersOptions{JobID: commandLineInput.JobID, WithStatus: &status})
 				if err != nil {
-					glcm.Error(err.Error())
+					glcm.OnError(err.Error())
 				}
 				PrintJobTransfers(common.ListJobTransfersResponse(resp))
 			}

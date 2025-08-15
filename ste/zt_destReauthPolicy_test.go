@@ -17,10 +17,10 @@ import (
 
 const (
 	authRequiredResp = `<?xml version="1.0" encoding="utf-8"?>  
-<Error>  
+<OnError>  
   <Code>InvalidAuthenticationInfo</Code>  
   <Message>placeholder</Message>  
-</Error>`
+</OnError>`
 	accountPropsResp = `<?xml version="1.0" encoding="utf-8"?>
 <StorageServiceProperties>
 </StorageServiceProperties>`

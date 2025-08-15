@@ -123,7 +123,7 @@ func doDeleteFile(jptm IJobPartTransferMgr) {
 			if respErr.StatusCode == http.StatusForbidden {
 				errMsg := fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error())
 				jptm.Log(common.LogError, errMsg)
-				common.GetLifecycleMgr().Error(errMsg)
+				common.GetLifecycleMgr().OnError(errMsg)
 			}
 		}
 		transferDone(common.ETransferStatus.Failed(), err)
@@ -168,7 +168,7 @@ func doDeleteFolder(ctx context.Context, folder string, jptm IJobPartTransferMgr
 		}
 	}
 	logger.Log(common.LogInfo,
-		fmt.Sprintf("Folder not deleted due to error. Will retry if this job deletes more files from it. Folder name: %s Error: %s", loggableName, err),
+		fmt.Sprintf("Folder not deleted due to error. Will retry if this job deletes more files from it. Folder name: %s OnError: %s", loggableName, err),
 	)
 	return false
 }

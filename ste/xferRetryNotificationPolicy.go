@@ -72,7 +72,7 @@ func (r *retryNotificationPolicy) Do(req *policy.Request) (*http.Response, error
 			}
 		}
 		if timeout, ok := req.Raw().Context().Value(timeoutNotifyContextKey).(*bool); ok {
-			if response.StatusCode == http.StatusInternalServerError && ((response.Header["x-ms-error-code"] != nil && response.Header["x-ms-error-code"][0] == "OperationTimedOut") || (response.Header["X-Ms-Error-Code"] != nil && response.Header["X-Ms-Error-Code"][0] == "OperationTimedOut")) { //nolint:staticcheck
+			if response.StatusCode == http.StatusInternalServerError && ((response.Header["x-ms-error-code"] != nil && response.Header["x-ms-error-code"][0] == "OperationTimedOut") || (response.Header["X-Ms-OnError-Code"] != nil && response.Header["X-Ms-OnError-Code"][0] == "OperationTimedOut")) { //nolint:staticcheck
 				*timeout = true
 			}
 		}

@@ -19,7 +19,7 @@ type FilesNFSTestSuite struct{}
 func GetCurrentUIDAndGID(a Asserter) (uid, gid string) {
 	// Get the current user information
 	currentUser, err := user.Current()
-	a.NoError("Error retrieving current user:", err)
+	a.NoError("OnError retrieving current user:", err)
 
 	uid = currentUser.Uid
 	gid = currentUser.Gid

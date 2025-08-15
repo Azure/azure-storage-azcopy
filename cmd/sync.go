@@ -570,7 +570,7 @@ func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
 
 	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
 	if err != nil {
-		lcm.Error("error occurred while cancelling the job " + cca.jobID.String() + ". Failed with error " + err.Error())
+		lcm.OnError("error occurred while cancelling the job " + cca.jobID.String() + ". Failed with error " + err.Error())
 	}
 }
 
@@ -769,7 +769,7 @@ func init() {
 			// We infer FromTo and validate it here since it is critical to a lot of other options parsing below.
 			userFromTo, err := ValidateFromTo(raw.src, raw.dst, raw.fromTo)
 			if err != nil {
-				glcm.Error("failed to parse --from-to user input due to error: " + err.Error())
+				glcm.OnError("failed to parse --from-to user input due to error: " + err.Error())
 			}
 
 			raw.preserveInfo, raw.preservePermissions = ComputePreserveFlags(cmd, userFromTo,
@@ -777,13 +777,13 @@ func init() {
 
 			cooked, err := raw.cook()
 			if err != nil {
-				glcm.Error("error parsing the input given by the user. Failed with error " + err.Error() + getErrorCodeUrl(err))
+				glcm.OnError("error parsing the input given by the user. Failed with error " + err.Error() + getErrorCodeUrl(err))
 			}
 
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
-				glcm.Error("Cannot perform sync due to error: " + err.Error() + getErrorCodeUrl(err))
+				glcm.OnError("Cannot perform sync due to error: " + err.Error() + getErrorCodeUrl(err))
 			}
 			if cooked.dryrunMode {
 				glcm.Exit(nil, common.EExitCode.Success())

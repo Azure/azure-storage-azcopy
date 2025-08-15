@@ -237,7 +237,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 							glcm.OnWarning("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
 						})
 						common.LogToJobLogWithPrefix(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail).", bucketName), common.LogWarning)
-						common.LogToJobLogWithPrefix(fmt.Sprintf("Error %v", err), common.LogDebug)
+						common.LogToJobLogWithPrefix(fmt.Sprintf("OnError %v", err), common.LogDebug)
 						seenFailedContainers[bucketName] = true
 					}
 				}
@@ -263,7 +263,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 							glcm.OnWarning("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
 						})
 						common.LogToJobLogWithPrefix(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail).", resName), common.LogWarning)
-						common.LogToJobLogWithPrefix(fmt.Sprintf("Error %v", err), common.LogDebug)
+						common.LogToJobLogWithPrefix(fmt.Sprintf("OnError %v", err), common.LogDebug)
 						seenFailedContainers[dstContainerName] = true
 					}
 				}

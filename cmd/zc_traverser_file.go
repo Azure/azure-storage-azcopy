@@ -176,7 +176,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		// The dot is stripped and the file is seen as a directory; incorrectly removing all other files within the parent dir/
 		// with Disable, "..." is seen as "dir/..." folder and other child files of dir would be wrongly deleted.
 		if !t.trailingDot.IsEnabled() && checkAllDots(getObjectNameOnly(targetURLParts.DirectoryOrFilePath)) {
-			glcm.Error(fmt.Sprintf(allDotsErrorMsg, getObjectNameOnly(targetURLParts.DirectoryOrFilePath)))
+			glcm.OnError(fmt.Sprintf(allDotsErrorMsg, getObjectNameOnly(targetURLParts.DirectoryOrFilePath)))
 
 		}
 
@@ -357,7 +357,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 						azcopyScanningLogger.Log(common.LogWarning, fmt.Sprintf(trailingDotErrMsg, *fileInfo.Name))
 					}
 					if !t.trailingDot.IsEnabled() && checkAllDots(*fileInfo.Name) {
-						glcm.Error(fmt.Sprintf(allDotsErrorMsg, *fileInfo.Name))
+						glcm.OnError(fmt.Sprintf(allDotsErrorMsg, *fileInfo.Name))
 					}
 				}
 				enqueueOutput(newAzFileFileEntity(currentDirectoryClient, fileInfo), nil)
@@ -431,7 +431,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				relativePath = item.(StoredObject).relativePath
 			}
 			if !t.trailingDot.IsEnabled() && checkAllDots(relativePath) {
-				glcm.Error(fmt.Sprintf(allDotsErrorMsg, relativePath))
+				glcm.OnError(fmt.Sprintf(allDotsErrorMsg, relativePath))
 			}
 			glcm.OnInfo("Failed to scan Directory/File " + relativePath + ". Logging errors in scanning logs.")
 

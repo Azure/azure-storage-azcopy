@@ -209,7 +209,7 @@ func (c *CredCache) loadTokenInternal() (*OAuthTokenInfo, error) {
 func handleGenericKeyChainSecError(err error) error {
 	if err == keychain.ErrorInteractionNotAllowed {
 		return fmt.Errorf(
-			"if you are using SSH, please run 'security unlock-keychain' to unlock default(login) keychain from SSH first, and then re-run your azcopy command. (Error details: %v)", err)
+			"if you are using SSH, please run 'security unlock-keychain' to unlock default(login) keychain from SSH first, and then re-run your azcopy command. (OnError details: %v)", err)
 	}
 
 	return err

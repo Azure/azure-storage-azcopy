@@ -1286,7 +1286,7 @@ func (cca *CookedCopyCmdArgs) Cancel(lcm common.LifecycleMgr) {
 
 	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
 	if err != nil {
-		lcm.Error("error occurred while cancelling the job " + cca.jobID.String() + ": " + err.Error())
+		lcm.OnError("error occurred while cancelling the job " + cca.jobID.String() + ": " + err.Error())
 	}
 }
 
@@ -1303,7 +1303,7 @@ func (cca *CookedCopyCmdArgs) launchFollowup(priorJobExitCode common.ExitCode) {
 			glcm.OnInfo("Cleanup completed (nothing needed to be deleted)")
 			glcm.Exit(nil, common.EExitCode.Success())
 		} else if err != nil {
-			glcm.Error("failed to perform followup/cleanup job due to error: " + err.Error())
+			glcm.OnError("failed to perform followup/cleanup job due to error: " + err.Error())
 		}
 		glcm.SurrenderControl()
 	}()
@@ -1461,7 +1461,7 @@ func init() {
 			// We infer FromTo and validate it here since it is critical to a lot of other options parsing below.
 			userFromTo, err := ValidateFromTo(raw.src, raw.dst, raw.fromTo)
 			if err != nil {
-				glcm.Error("failed to parse --from-to user input due to error: " + err.Error())
+				glcm.OnError("failed to parse --from-to user input due to error: " + err.Error())
 			}
 
 			raw.preserveInfo, raw.preservePermissions = ComputePreserveFlags(cmd, userFromTo,
@@ -1469,14 +1469,14 @@ func init() {
 
 			cooked, err := raw.cook()
 			if err != nil {
-				glcm.Error("failed to parse user input due to error: " + err.Error())
+				glcm.OnError("failed to parse user input due to error: " + err.Error())
 			}
 			glcm.OnInfo("Scanning...")
 
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
-				glcm.Error("failed to perform copy command due to error: " + err.Error() + getErrorCodeUrl(err))
+				glcm.OnError("failed to perform copy command due to error: " + err.Error() + getErrorCodeUrl(err))
 			}
 
 			if cooked.dryrunMode {

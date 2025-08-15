@@ -90,8 +90,7 @@ func TestCreateFileOfSizeWithWriteThroughOption(t *testing.T) {
 	if err != nil {
 		a.NotEqual(syscall.EINTR, err)
 		return
-	} 
-	a.NoError(err, fmt.Sprintf("Error creating file: %v", err))
-	
+	}
+	a.NoError(err, fmt.Sprintf("OnError creating file: %v", err))
 
 }

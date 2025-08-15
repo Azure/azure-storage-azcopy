@@ -294,7 +294,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 			}
 
 			if !shouldOverwrite {
-				// logging as Warning so that it turns up even in compact logs, and because previously we use Error here
+				// logging as Warning so that it turns up even in compact logs, and because previously we use OnError here
 				jptm.LogAtLevelForCurrentTransfer(common.LogWarning, "File already exists, so will be skipped")
 				jptm.SetStatus(common.ETransferStatus.SkippedEntityAlreadyExists())
 				jptm.ReportTransferDone()
@@ -359,7 +359,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 	}
 
 	// *****
-	// Error-handling rules change here.
+	// OnError-handling rules change here.
 	// ABOVE this point, we end the transfer using the code as shown above
 	// BELOW this point, this routine always schedules the expected number
 	// of chunks, even if it has seen a failure, and the

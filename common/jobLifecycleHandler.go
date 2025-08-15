@@ -31,6 +31,8 @@ type JobLifecycleHandler interface {
 
 	OnComplete(summary JobSummary)
 
+	OnError(string) // fatal error
+
 	// Optional methods that can be implemented by users of AzCopy as a library. Default implementation is a no-op, or returning the default response.
 	OnInfo(string)
 	OnWarning(string)

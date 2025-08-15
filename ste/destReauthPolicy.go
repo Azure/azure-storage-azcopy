@@ -18,8 +18,8 @@ import (
 /*
 RESPONSE Status: 401 Server failed to authenticate the request. Please refer to the information in the www-authenticate header.
 Www-Authenticate: Bearer authorization_uri=https://login.microsoftonline.com/72f988bf-86f1-41af-91ab-2d7cd011db47/oauth2/authorize resource_id=https://storage.azure.com
-X-Ms-Error-Code: InvalidAuthenticationInfo
-<?xml version="1.0" encoding="utf-8"?> <Error><Code>InvalidAuthenticationInfo</Code><Message>Server failed to authenticate the request. Please refer to the information in the www-authenticate header. </Message><AuthenticationErrorDetail>Lifetime validation failed. The token is expired.</AuthenticationErrorDetail>
+X-Ms-OnError-Code: InvalidAuthenticationInfo
+<?xml version="1.0" encoding="utf-8"?> <OnError><Code>InvalidAuthenticationInfo</Code><Message>Server failed to authenticate the request. Please refer to the information in the www-authenticate header. </Message><AuthenticationErrorDetail>Lifetime validation failed. The token is expired.</AuthenticationErrorDetail>
 */
 
 type destReauthPolicy struct {

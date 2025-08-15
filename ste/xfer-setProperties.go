@@ -221,7 +221,7 @@ func errorHandlerForXferSetProperties(err error, jptm IJobPartTransferMgr, trans
 		// User can resume the job if completely ordered with a new sas.
 		errMsg := fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error())
 		jptm.Log(common.LogError, errMsg)
-		common.GetLifecycleMgr().Error(errMsg)
+		common.GetLifecycleMgr().OnError(errMsg)
 		// TODO : Migrate on azfile
 	}
 

@@ -190,7 +190,7 @@ func NewBlobReadLogFunc(logger ILogger, fullUrl string) func(int32, error, blob.
 			retryMessage = "Will NOT retry"
 		}
 		logger.Log(LogInfo, fmt.Sprintf(
-			"Error reading body of reply. Next try (if any) will be %s%d. %s. Error: %s. Offset: %d  Count: %d URL: %s",
+			"OnError reading body of reply. Next try (if any) will be %s%d. %s. OnError: %s. Offset: %d  Count: %d URL: %s",
 			TryEquals, // so that retry wording for body-read retries is similar to that for URL-hitting retries
 
 			// We log the number of the NEXT try, not the failure just done, so that users searching the log for "Try=2"
@@ -216,7 +216,7 @@ func NewFileReadLogFunc(logger ILogger, fullUrl string) func(int32, error, share
 			retryMessage = "Will NOT retry"
 		}
 		logger.Log(LogInfo, fmt.Sprintf(
-			"Error reading body of reply. Next try (if any) will be %s%d. %s. Error: %s. Offset: %d  Count: %d URL: %s",
+			"OnError reading body of reply. Next try (if any) will be %s%d. %s. OnError: %s. Offset: %d  Count: %d URL: %s",
 			TryEquals, // so that retry wording for body-read retries is similar to that for URL-hitting retries
 
 			// We log the number of the NEXT try, not the failure just done, so that users searching the log for "Try=2"
@@ -242,7 +242,7 @@ func NewDatalakeReadLogFunc(logger ILogger, fullUrl string) func(int32, error, d
 			retryMessage = "Will NOT retry"
 		}
 		logger.Log(LogInfo, fmt.Sprintf(
-			"Error reading body of reply. Next try (if any) will be %s%d. %s. Error: %s. Offset: %d  Count: %d URL: %s",
+			"OnError reading body of reply. Next try (if any) will be %s%d. %s. OnError: %s. Offset: %d  Count: %d URL: %s",
 			TryEquals, // so that retry wording for body-read retries is similar to that for URL-hitting retries
 
 			// We log the number of the NEXT try, not the failure just done, so that users searching the log for "Try=2"

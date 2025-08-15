@@ -190,7 +190,7 @@ func GetCpkInfo(cpkInfo bool) *blob.CPKInfo {
 
 	glcm := GetLifecycleMgr()
 	if encryptionKey == "" || encryptionKeySHA256 == "" {
-		glcm.Error("fatal: failed to fetch cpk encryption key (" + EEnvironmentVariable.CPKEncryptionKey().Name +
+		glcm.OnError("fatal: failed to fetch cpk encryption key (" + EEnvironmentVariable.CPKEncryptionKey().Name +
 			") or hash (" + EEnvironmentVariable.CPKEncryptionKeySHA256().Name + ") from environment variables")
 	}
 

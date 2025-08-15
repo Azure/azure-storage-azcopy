@@ -415,7 +415,7 @@ func (ExitCode) Error() ExitCode   { return ExitCode(1) }
 
 // note: if AzCopy exits due to a panic, we don't directly control what the exit code will be. The Go runtime seems to be
 // hard-coded to give an exit code of 2 in that case, but there is discussion of changing it to 1, so it may become
-// impossible to tell from exit code alone whether AzCopy panic or return EExitCode.Error.
+// impossible to tell from exit code alone whether AzCopy panic or return EExitCode.OnError.
 // See https://groups.google.com/forum/#!topic/golang-nuts/u9NgKibJsKI
 // However, fortunately, in the panic case, stderr will get the panic message;
 // whereas AFAIK we never write to stderr in normal execution of AzCopy.  So that's a suggested way to differentiate when needed.

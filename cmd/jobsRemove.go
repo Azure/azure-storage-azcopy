@@ -61,7 +61,7 @@ func init() {
 					return fmt.Sprintf("Successfully removed log and job plan files for job %s.", commandLineInput.JobID)
 				}, common.EExitCode.Success())
 			} else {
-				glcm.Error(err.Error())
+				glcm.OnError(err.Error())
 			}
 		},
 	}

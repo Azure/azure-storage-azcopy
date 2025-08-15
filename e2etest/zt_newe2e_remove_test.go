@@ -20,7 +20,7 @@ func (s *RemoveSuite) SetupSuite(a Asserter) {
 
 func (s *RemoveSuite) TeardownSuite(a Asserter) {
 	//a.Log("Teardown logging!")
-	//a.Error("Oops!")
+	//a.OnError("Oops!")
 }
 
 func (s *RemoveSuite) Scenario_SingleFileRemoveBlobFSEncodedPath(svm *ScenarioVariationManager) {

@@ -58,7 +58,7 @@ package e2etest
 //        Preserve names (special chars, escaping etc)
 //        Managed disks (our special case logic or uploading managed disks)
 //        Logging
-//		  Error handing (e.g. deleting files that fail part way through) and Resume
+//		  OnError handing (e.g. deleting files that fail part way through) and Resume
 //		Refactor (maybe):
 //        The e2etest package into a set of packages - e.g. separate the test framework from the tests?  But, do we really need this?
 //

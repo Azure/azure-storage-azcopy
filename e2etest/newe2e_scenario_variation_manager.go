@@ -139,7 +139,7 @@ func (svm *ScenarioVariationManager) NoError(comment string, err error, failNow 
 
 	//svm.AssertNow(comment, IsNil{}, err)
 	if err != nil {
-		svm.t.Logf("Error was not nil (%s): %v", comment, err)
+		svm.t.Logf("OnError was not nil (%s): %v", comment, err)
 		svm.isInvalid = true // Flip the failed flag
 
 		if failFast {
@@ -193,7 +193,7 @@ func (svm *ScenarioVariationManager) Error(reason string) {
 
 	svm.t.Helper()
 	svm.isInvalid = true
-	svm.t.Log("Error: " + reason)
+	svm.t.Log("OnError: " + reason)
 	svm.t.FailNow()
 }
 
@@ -422,7 +422,7 @@ func (s *ScenarioVariationManagerCleanupAsserter) NoError(comment string, err er
 
 	//svm.AssertNow(comment, IsNil{}, err)
 	if err != nil {
-		s.Log("Error was not nil (%s): %v", comment, err)
+		s.Log("OnError was not nil (%s): %v", comment, err)
 		s.svm.isInvalid = true // Flip the failed flag
 
 		s.svm.t.Fail()

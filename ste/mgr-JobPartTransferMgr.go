@@ -867,7 +867,7 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 			}
 
 			if fileerror.HasCode(err, "ShareSizeLimitReached") {
-				common.GetLifecycleMgr().Error("Increase the file share quota and call Resume command.")
+				common.GetLifecycleMgr().OnError("Increase the file share quota and call Resume command.")
 			}
 
 			// and use the normal cancelling mechanism so that we can exit in a clean and controlled way
@@ -878,7 +878,7 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 			//     from "application cancelled itself after an auth failure".  The former should probably be reported as
 			//     Cancelled, so we can't just make a sweeping change to reporting both as Failed.
 			//     For now, let's live with it being reported as cancelled, since that's still better than not reporting any
-			//     status at all, which is what it did previously (when we called glcm.Error here)
+			//     status at all, which is what it did previously (when we called glcm.OnError here)
 		}
 	}
 	// TODO: right now the convention re cancellation seems to be that if you cancel, you MUST both call cancel AND
@@ -944,7 +944,7 @@ func (jptm *jobPartTransferMgr) LogS2SCopyError(source, destination, errorMsg st
 	jptm.logTransferError(transferErrorCodeCopyFailed, source, destination, errorMsg, status)
 }
 
-// TODO: Log*Error need be further refactored with a separate workitem.
+// TODO: Log*OnError need be further refactored with a separate workitem.
 func (jptm *jobPartTransferMgr) LogSendError(source, destination, errorMsg string, status int) {
 	isUpload, isCopy := jptm.TempJudgeUploadOrCopy()
 

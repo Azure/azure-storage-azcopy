@@ -852,7 +852,7 @@ func passedFilters(filters []ObjectFilter, storedObject StoredObject) bool {
 		for _, filter := range filters {
 			msg, supported := filter.DoesSupportThisOS()
 			if !supported {
-				glcm.Error(msg)
+				glcm.OnError(msg)
 			}
 
 			if filter.AppliesOnlyToFiles() && (storedObject.entityType != common.EEntityType.File() && storedObject.entityType != common.EEntityType.Hardlink()) {

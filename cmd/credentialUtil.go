@@ -80,7 +80,7 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 		var loginType common.AutoLoginType
 		err = loginType.Parse(autoLoginType)
 		if err != nil {
-			glcm.Error("Invalid Auto-login type specified: " + autoLoginType)
+			glcm.OnError("Invalid Auto-login type specified: " + autoLoginType)
 			return
 		}
 
@@ -101,13 +101,13 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 		case common.EAutoLoginType.PsCred():
 		case common.EAutoLoginType.Workload():
 		default:
-			glcm.Error("Invalid Auto-login type specified: " + autoLoginType)
+			glcm.OnError("Invalid Auto-login type specified: " + autoLoginType)
 			return
 		}
 
 		options.PersistToken = false
 		if err = RunLogin(options); err != nil {
-			glcm.Error(fmt.Sprintf("Failed to perform Auto-login: %v.", err))
+			glcm.OnError(fmt.Sprintf("Failed to perform Auto-login: %v.", err))
 		}
 	})
 

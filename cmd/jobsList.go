@@ -62,12 +62,12 @@ func init() {
 			withStatus := common.EJobStatus
 			err := withStatus.Parse(commandLineInput.withStatus)
 			if err != nil {
-				glcm.Error(fmt.Sprintf("Failed to parse --with-status due to error: %s.", err))
+				glcm.OnError(fmt.Sprintf("Failed to parse --with-status due to error: %s.", err))
 			}
 
 			err = HandleListJobsCommand(withStatus)
 			if err != nil {
-				glcm.Error(fmt.Sprintf("failed to perform jobs list command due to error: %s", err.Error()))
+				glcm.OnError(fmt.Sprintf("failed to perform jobs list command due to error: %s", err.Error()))
 			}
 		},
 	}

@@ -81,14 +81,14 @@ var errorBodyRemovalRegex = regexp.MustCompile("RequestId:.*?</Message>")
 
 func formatBody(rawBody string) string {
 	//Turn something like this:
-	//    <?xml version="1.0" encoding="utf-8"?><Error><Code>ServerBusy</Code><Message>Ingress is over the account limit.
+	//    <?xml version="1.0" encoding="utf-8"?><OnError><Code>ServerBusy</Code><Message>Ingress is over the account limit.
 	//    RequestId:99909524-001e-006f-1fb1-67ad25000000
-	//    Time:2019-01-01T01:00:00.000000Z</Message><Foo>bar</Foo></Error>
+	//    Time:2019-01-01T01:00:00.000000Z</Message><Foo>bar</Foo></OnError>
 	// into something a little less verbose, like this:
 	//    <Code>ServerBusy</Code><Message>Ingress is over the account limit. </Message><Foo>bar</Foo>
-	const start = `<?xml version="1.0" encoding="utf-8"?><Error>`
+	const start = `<?xml version="1.0" encoding="utf-8"?><OnError>`
 	b := strings.Replace(rawBody, start, "", -1)
-	b = strings.Replace(b, "</Error>", "", -1)
+	b = strings.Replace(b, "</OnError>", "", -1)
 	b = strings.Replace(b, "\n", " ", -1)
 	b = errorBodyRemovalRegex.ReplaceAllString(b, "</Message>") // strip out the RequestID and Time, which we log separately in the headers
 	return b
@@ -180,7 +180,7 @@ func (p logPolicy) Do(req *policy.Request) (*http.Response, error) {
 	if err == nil { // We got a response from the service
 		sc := response.StatusCode
 		if ((sc >= 400 && sc <= 499) && sc != http.StatusNotFound && sc != http.StatusConflict && sc != http.StatusPreconditionFailed && sc != http.StatusRequestedRangeNotSatisfiable) || (sc >= 500 && sc <= 599) {
-			logLevel, forceLog, httpError = common.LogError, !p.LogOptions.RequestLogOptions.SyslogDisabled, true // Promote to Error any 4xx (except those listed is an error) or any 5xx
+			logLevel, forceLog, httpError = common.LogError, !p.LogOptions.RequestLogOptions.SyslogDisabled, true // Promote to OnError any 4xx (except those listed is an error) or any 5xx
 		} else if sc == http.StatusNotFound || sc == http.StatusConflict || sc == http.StatusPreconditionFailed || sc == http.StatusRequestedRangeNotSatisfiable {
 			httpError = true
 		}
@@ -191,7 +191,7 @@ func (p logPolicy) Do(req *policy.Request) (*http.Response, error) {
 		// that's is visible by cancelled status shown in end-of-log summary.
 		logLevel, forceLog = common.LogDebug, false
 	} else {
-		// This error did not get an HTTP response from the service; upgrade the severity to Error
+		// This error did not get an HTTP response from the service; upgrade the severity to OnError
 		logLevel, forceLog = common.LogError, !p.LogOptions.RequestLogOptions.SyslogDisabled
 	}
 

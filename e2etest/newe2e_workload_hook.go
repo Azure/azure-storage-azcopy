@@ -20,12 +20,12 @@ func WorkloadIdentitySetup(a Asserter) {
 	// Write the token to a temporary file
 	// Create a temporary file to store the token
 	file, err := os.CreateTemp("", "azure_federated_token.txt")
-	a.AssertNow("Error creating temporary file", IsNil{}, err)
+	a.AssertNow("OnError creating temporary file", IsNil{}, err)
 	defer file.Close()
 
 	// Write the token to the temporary file
 	_, err = file.WriteString(token)
-	a.AssertNow("Error writing to temporary file", IsNil{}, err)
+	a.AssertNow("OnError writing to temporary file", IsNil{}, err)
 
 	tc, err := azidentity.NewWorkloadIdentityCredential(&azidentity.WorkloadIdentityCredentialOptions{
 		TenantID:      workloadInfo.TenantId,

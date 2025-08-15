@@ -540,7 +540,7 @@ func (jm *jobMgr) setFinalPartOrdered(partNum PartNumber, isFinalPart bool) {
 			// TODO: do we really need to to Resurrect the job twice?
 		} else {
 			// But we do object if any other part clears the flag, since that wouldn't make sense.
-			panic("Error: another job part was scheduled after the final part")
+			panic("OnError: another job part was scheduled after the final part")
 		}
 
 	}

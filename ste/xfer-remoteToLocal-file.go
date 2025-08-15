@@ -95,7 +95,7 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, pacer pacer, df downloaderFact
 			}
 
 			if !shouldOverwrite {
-				// logging as Warning so that it turns up even in compact logs, and because previously we use Error here
+				// logging as Warning so that it turns up even in compact logs, and because previously we use OnError here
 				jptm.LogAtLevelForCurrentTransfer(common.LogWarning, "File already exists, so will be skipped")
 				jptm.SetStatus(common.ETransferStatus.SkippedEntityAlreadyExists())
 				jptm.ReportTransferDone()
@@ -131,7 +131,7 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, pacer pacer, df downloaderFact
 	var dstFile io.WriteCloser
 	if ctdl, ok := dl.(creationTimeDownloader); info.Destination != os.DevNull && ok { // ctdl never needs to handle devnull
 		failFileCreation := func(err error) {
-			jptm.LogDownloadError(info.Source, info.Destination, "File Creation Error "+err.Error(), 0)
+			jptm.LogDownloadError(info.Source, info.Destination, "File Creation OnError "+err.Error(), 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			// use standard epilogue for consistency, but force release of file count (without an actual file) if necessary
 			epilogueWithCleanupDownload(jptm, dl, nil, nil)
@@ -216,7 +216,7 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, pacer pacer, df downloaderFact
 		// step 4c: normal file creation when source has content
 
 		failFileCreation := func(err error) {
-			jptm.LogDownloadError(info.Source, info.Destination, "File Creation Error "+err.Error(), 0)
+			jptm.LogDownloadError(info.Source, info.Destination, "File Creation OnError "+err.Error(), 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			// use standard epilogue for consistency, but force release of file count (without an actual file) if necessary
 			epilogueWithCleanupDownload(jptm, dl, nil, nil)
@@ -255,7 +255,7 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, pacer pacer, df downloaderFact
 	/*
 		dstFileInfo, err := dstFile.Stat()
 		if err != nil || (dstFileInfo.Size() != blobSize) {
-			jptm.LogDownloadError(info.Source, info.Destination, "File Creation Error "+err.Error(), 0)
+			jptm.LogDownloadError(info.Source, info.Destination, "File Creation OnError "+err.OnError(), 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			// Since the transfer failed, the file created above should be deleted
 			// If there was an error while opening / creating the file, delete will fail.
@@ -395,7 +395,7 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 		}
 		if closeErr != nil {
 			jptm.FailActiveDownload("Closing file", closeErr)
-			jptm.LogAtLevelForCurrentTransfer(common.LogInfo, "Error closing file: "+closeErr.Error()) // log this way so that this line will be logged even if transfer is already failed
+			jptm.LogAtLevelForCurrentTransfer(common.LogInfo, "OnError closing file: "+closeErr.Error()) // log this way so that this line will be logged even if transfer is already failed
 		}
 
 		// Check MD5 (but only if file was fully flushed and saved - else no point and may not have actualAsSaved hash anyway)
@@ -562,7 +562,7 @@ func tryDeleteFile(info *TransferInfo, jptm IJobPartTransferMgr) {
 	err := deleteFile(info.getDownloadPath())
 	if err != nil {
 		// If there was an error deleting the file, log the error
-		jptm.LogError(info.Destination, "Delete File Error ", err)
+		jptm.LogError(info.Destination, "Delete File OnError ", err)
 	}
 }
 

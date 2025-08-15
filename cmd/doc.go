@@ -43,19 +43,19 @@ var docCmd = &cobra.Command{
 		if err != nil && os.IsNotExist(err) {
 			// create the output location if it does not exist yet
 			if err = os.MkdirAll(docCmdInput.outputLocation, os.ModePerm); err != nil {
-				glcm.Error("Unable to create output location due to error: " + err.Error())
+				glcm.OnError("Unable to create output location due to error: " + err.Error())
 			}
 		} else if err != nil {
-			glcm.Error("Cannot access the output location due to error: " + err.Error())
+			glcm.OnError("Cannot access the output location due to error: " + err.Error())
 		} else if !f.IsDir() {
-			glcm.Error("The output location is invalid as it is pointing to a file.")
+			glcm.OnError("The output location is invalid as it is pointing to a file.")
 		}
 
 		// dump the entire command tree's doc into the folder
 		// it will include this command too, which is intended
 		err = doc.GenMarkdownTree(rootCmd, docCmdInput.outputLocation)
 		if err != nil {
-			glcm.Error(fmt.Sprintf("Cannot generate doc due to error %s, please contact the dev team.", err))
+			glcm.OnError(fmt.Sprintf("Cannot generate doc due to error %s, please contact the dev team.", err))
 		}
 	},
 }

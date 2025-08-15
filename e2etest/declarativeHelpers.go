@@ -115,7 +115,7 @@ func (a *testingAsserter) AssertNoErr(err error, comment ...string) {
 	if err != nil {
 		a.t.Helper() // exclude this method from the logged callstack
 		redactedErr := sanitizer.SanitizeLogMessage(err.Error())
-		a.t.Logf("Error %s%s", redactedErr, a.formatComments(comment))
+		a.t.Logf("OnError %s%s", redactedErr, a.formatComments(comment))
 		a.t.Fail()
 	}
 }

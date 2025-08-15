@@ -130,7 +130,7 @@ func (a *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider
 
 	ctl, err := sddl.GetControl(sd)
 	if err != nil {
-		return fmt.Errorf("Error getting control bits: %w", err)
+		return fmt.Errorf("OnError getting control bits: %w", err)
 	}
 
 	var securityInfoFlags sddl.SECURITY_INFORMATION = sddl.DACL_SECURITY_INFORMATION
@@ -259,7 +259,7 @@ func (*azureFilesDownloader) PutNFSProperties(sip INFSPropertyBearingSourceInfoP
 	// Use syscall.Utimes to set modification times
 	err = syscall.Utimes(txInfo.Destination, tv)
 	if err != nil {
-		return fmt.Errorf("Failed to set lastModifiedTime for %s. Error: %w", txInfo.Destination, err)
+		return fmt.Errorf("Failed to set lastModifiedTime for %s. OnError: %w", txInfo.Destination, err)
 	}
 	return nil
 }

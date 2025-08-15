@@ -315,7 +315,7 @@ func init() {
 			var cooked CookedCopyCmdArgs // benchmark args cook into copy args
 			cooked, err := raw.cook()
 			if err != nil {
-				glcm.Error("failed to parse user input due to error: " + err.Error())
+				glcm.OnError("failed to parse user input due to error: " + err.Error())
 			}
 
 			glcm.OnInfo("Scanning...")
@@ -323,7 +323,7 @@ func init() {
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
-				glcm.Error("failed to perform benchmark command due to error: " + err.Error())
+				glcm.OnError("failed to perform benchmark command due to error: " + err.Error())
 			}
 
 			glcm.SurrenderControl()

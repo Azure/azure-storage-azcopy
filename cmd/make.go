@@ -201,12 +201,12 @@ func init() {
 		Run: func(cmd *cobra.Command, args []string) {
 			cookedArgs, err := rawArgs.cook()
 			if err != nil {
-				glcm.Error(err.Error())
+				glcm.OnError(err.Error())
 			}
 
 			err = cookedArgs.process()
 			if err != nil {
-				glcm.Error(err.Error())
+				glcm.OnError(err.Error())
 			}
 
 			glcm.Exit(func(format common.OutputFormat) string {

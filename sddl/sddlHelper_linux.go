@@ -757,7 +757,7 @@ func stringToSid(sidString string) ([]byte, error) {
 				// SID.Revision.
 				revision, err := strconv.ParseUint(token, 10, 8)
 				if err != nil {
-					return nil, fmt.Errorf("stringToSid: Error parsing Revision: %v", err)
+					return nil, fmt.Errorf("stringToSid: OnError parsing Revision: %v", err)
 				}
 				if revision != SID_REVISION {
 					return nil, fmt.Errorf("stringToSid: Invalid SID Revision %d", revision)
@@ -769,7 +769,7 @@ func stringToSid(sidString string) ([]byte, error) {
 				// SID.IdentifierAuthority.
 				authority, err := strconv.ParseUint(token, 10, 32)
 				if err != nil {
-					return nil, fmt.Errorf("stringToSid: Error parsing IdentifierAuthority: %v", err)
+					return nil, fmt.Errorf("stringToSid: OnError parsing IdentifierAuthority: %v", err)
 				}
 				authorityHigh := uint16(authority >> 32)
 				authorityLow := uint32(authority & 0xFFFFFFFF)
@@ -873,6 +873,7 @@ func aceRightsToString(aceRights uint32) string {
 
 // Does the aceType correspond to an object ACE?
 // We don't support object ACEs.
+//
 //nolint:deadcode,unused
 func isObjectAce(aceType byte) bool {
 	switch aceType {

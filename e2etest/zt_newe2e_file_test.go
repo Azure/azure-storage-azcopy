@@ -597,7 +597,7 @@ func (s *FileTestSuite) Scenario_UploadFilesWithQuota(svm *ScenarioVariationMana
 		Environment: env,
 	})
 
-	// Error catchers for full file share
+	// OnError catchers for full file share
 	ValidateContainsError(svm, stdOut, []string{"Increase the file share quota and call Resume command."})
 
 	fileMap := shareResource.ListObjects(svm, "", true)

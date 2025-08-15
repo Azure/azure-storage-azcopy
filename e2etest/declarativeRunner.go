@@ -204,7 +204,7 @@ func RunScenarios(
 
 	logErr := logTestSummary(suiteName, testName, operations.includes(eOperation.Copy()), operations.includes(eOperation.Sync()), testFromTo, len(scenarios))
 	if logErr != nil {
-		t.Errorf("Error logging to test summary file: %s", logErr)
+		t.Errorf("OnError logging to test summary file: %s", logErr)
 	}
 
 	// run them in parallel if not debugging, but sequentially (for easier debugging) if a debugger is attached
