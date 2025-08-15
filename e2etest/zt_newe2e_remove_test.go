@@ -245,14 +245,15 @@ func (s *RemoveSuite) Scenario_RemoveFilesWithExcludePath(svm *ScenarioVariation
 
 	fileMap := make(map[string]ObjectProperties)
 	fileMap = src.ListObjects(svm, "", true)
-	svm.Assert("Only necessary files should be removed", Equal{}, len(fileMap)-1, len(expectedList))
+	svm.Assert("Only necessary files should be removed",
+		Equal{}, len(fileMap)-1, len(expectedList)) // Minus 1 to remove the directory
 	ValidateResource[ContainerResourceManager](svm, src, ResourceDefinitionContainer{}, true)
 	ValidateDoesNotContainError(svm, stdOut, []string{"unknown flag: --exclude-path"})
 }
 
 // test files are not removed when exclude path is specified
 func (s *RemoveSuite) Scenario_RemoveBlobsWithExcludePath(svm *ScenarioVariationManager) {
-	src := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()),
+	src := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()),
 		ResourceDefinitionContainer{})
 
 	fullList := []string{
@@ -269,8 +270,8 @@ func (s *RemoveSuite) Scenario_RemoveBlobsWithExcludePath(svm *ScenarioVariation
 
 	// the files remaining
 	expectedList := []string{
-		"/myfolder/myfoldertoexclude/blob3.json",
 		"myfoldertoexclude/blob4.jpg",
+		"myfoldertoexclude/blob5.jpg",
 	}
 
 	stdOut, _ := RunAzCopy(svm,
@@ -285,7 +286,7 @@ func (s *RemoveSuite) Scenario_RemoveBlobsWithExcludePath(svm *ScenarioVariation
 
 	fileMap := make(map[string]ObjectProperties)
 	fileMap = src.ListObjects(svm, "", true)
-	svm.Assert("Only necessary files should be removed", Equal{}, len(fileMap)-1, len(expectedList))
+	svm.Assert("Only necessary files should be removed", Equal{}, len(fileMap), len(expectedList))
 	ValidateResource[ContainerResourceManager](svm, src, ResourceDefinitionContainer{}, true)
 	ValidateDoesNotContainError(svm, stdOut, []string{"unknown flag: --exclude-path"})
 }
