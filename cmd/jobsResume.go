@@ -140,6 +140,17 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 	return
 }
 
+func parseTransfers(arg string) map[string]int {
+	transfersMap := make(map[string]int)
+	for i, t := range strings.Split(arg, ";") {
+		if t == "" {
+			continue // skip empty entries from misplaced ';'
+		}
+		transfersMap[t] = i
+	}
+	return transfersMap
+}
+
 func init() {
 	resumeCmdArgs := resumeCmdArgs{}
 
@@ -166,6 +177,11 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
+			includeTransfer := parseTransfers(resumeCmdArgs.includeTransfer)
+			excludeTransfer := parseTransfers(resumeCmdArgs.excludeTransfer)
+			if len(includeTransfer) > 0 || len(excludeTransfer) > 0 {
+				panic("List of transfers is obsolete.")
+			}
 			err := resumeCmdArgs.process()
 			if err != nil {
 				glcm.OnError(fmt.Sprintf("failed to perform resume command due to error: %s", err.Error()))
@@ -305,38 +321,6 @@ func (rca resumeCmdArgs) process() error {
 		common.LogPathFolder = ""
 	}
 
-	includeTransfer := make(map[string]int)
-	excludeTransfer := make(map[string]int)
-
-	// If the transfer has been provided with the include, parse the transfer list.
-	if len(rca.includeTransfer) > 0 {
-		// Split the Include Transfer using ';'
-		transfers := strings.Split(rca.includeTransfer, ";")
-		for index := range transfers {
-			if len(transfers[index]) == 0 {
-				// If the transfer provided is empty
-				// skip the transfer
-				// This is to handle the misplaced ';'
-				continue
-			}
-			includeTransfer[transfers[index]] = index
-		}
-	}
-	// If the transfer has been provided with the exclude, parse the transfer list.
-	if len(rca.excludeTransfer) > 0 {
-		// Split the Exclude Transfer using ';'
-		transfers := strings.Split(rca.excludeTransfer, ";")
-		for index := range transfers {
-			if len(transfers[index]) == 0 {
-				// If the transfer provided is empty
-				// skip the transfer
-				// This is to handle the misplaced ';'
-				continue
-			}
-			excludeTransfer[transfers[index]] = index
-		}
-	}
-
 	// Get fromTo info, so we can decide what's the proper credential type to use.
 	getJobFromToResponse := jobsAdmin.GetJobDetails(common.GetJobDetailsRequest{JobID: jobID})
 	if getJobFromToResponse.ErrorMsg != "" {
@@ -387,8 +371,6 @@ func (rca resumeCmdArgs) process() error {
 		SrcServiceClient: srcServiceClient,
 		DstServiceClient: dstServiceClient,
 		CredentialInfo:   credentialInfo,
-		IncludeTransfer:  includeTransfer,
-		ExcludeTransfer:  excludeTransfer,
 	})
 
 	if !resumeJobResponse.CancelledPauseResumed {
