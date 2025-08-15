@@ -141,7 +141,9 @@ func initializeLimits(orchestratorOptions *SyncOrchestratorOptions) {
 
 	memory, err := common.GetTotalPhysicalMemory()
 	if err != nil {
-		glcm.Warn(fmt.Sprintf("Failed to get total physical memory: %v. Using default - 8GB", err))
+		syncOrchestratorLog(
+			common.LogWarning,
+			fmt.Sprintf("Failed to get total physical memory: %v. Using default - 8GB", err))
 		memory = int64(defaultPhysicalMemoryGB)
 	}
 
@@ -157,7 +159,9 @@ func initializeLimits(orchestratorOptions *SyncOrchestratorOptions) {
 	}
 
 	if maxDirectoryDirectChildCount > maxActiveFiles {
-		glcm.Warn(fmt.Sprintf("Max directory direct child count (%d) exceeds max active files (%d), adjusting to prevent OOM", maxDirectoryDirectChildCount, maxActiveFiles))
+		syncOrchestratorLog(
+			common.LogWarning,
+			fmt.Sprintf("Max directory direct child count (%d) exceeds max active files (%d), adjusting to prevent OOM", maxDirectoryDirectChildCount, maxActiveFiles))
 		maxDirectoryDirectChildCount = maxActiveFiles // Prevent deadlock by ensuring at least one directory can be processed
 	}
 
@@ -165,11 +169,14 @@ func initializeLimits(orchestratorOptions *SyncOrchestratorOptions) {
 	// We need to check how many directories can be enumerated in parallel based on system memory
 	safeParallelismLimit := GetSafeParallelismLimit(maxActiveFiles, maxDirectoryDirectChildCount, orchestratorOptions.fromTo)
 	if crawlParallelism > safeParallelismLimit {
-		glcm.Warn(fmt.Sprintf("Crawl parallelism (%d) exceeds safe limit (%d), adjusting to prevent OOM", crawlParallelism, safeParallelismLimit))
+		syncOrchestratorLog(
+			common.LogWarning,
+			fmt.Sprintf("Crawl parallelism (%d) exceeds safe limit (%d), adjusting to prevent OOM", crawlParallelism, safeParallelismLimit),
+			true)
 		crawlParallelism = safeParallelismLimit
 	}
 
-	WarnStdoutAndScanningLog(fmt.Sprintf(
+	syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
 		"Crawl parallelism = %d, Indexer capacity = %d, Max child count = %d",
 		crawlParallelism,
 		maxActiveFiles,
@@ -204,7 +211,7 @@ func GetNumCPU() int32 {
 		// Fallback to default if NumCPU fails
 		numCores = int(defaultNumCores)
 	}
-	glcm.Info(fmt.Sprintf("Number of CPU cores: %d", numCores))
+	syncOrchestratorLog(common.LogInfo, fmt.Sprintf("Number of CPU cores: %d", numCores))
 	return int32(numCores)
 }
 
@@ -294,7 +301,7 @@ func (ds *ThrottleSemaphore) Close() {
 	if ds.cancel != nil {
 		ds.cancel()
 	}
-	WarnStdoutAndScanningLog("Stopping ThrottleSemaphore and releasing resources")
+	syncOrchestratorLog(common.LogInfo, "Stopping ThrottleSemaphore and releasing resources")
 }
 
 // AcquireSourceSlot blocks until a source traversal slot is available and throttling conditions allow processing.
@@ -419,9 +426,9 @@ func (ds *ThrottleSemaphore) shouldThrottle() bool {
 		}
 
 		if ds.isThrottling {
-			glcm.Info(fmt.Sprintf("THROTTLE ENGAGED: %s", strings.Join(reasons, ", ")))
+			syncOrchestratorLog(common.LogWarning, fmt.Sprintf("THROTTLE ENGAGED: %s", strings.Join(reasons, ", ")))
 		} else {
-			glcm.Info("THROTTLE RELEASED: All resources below release thresholds")
+			syncOrchestratorLog(common.LogInfo, "THROTTLE RELEASED: All resources below release thresholds")
 		}
 	}
 
@@ -529,7 +536,7 @@ func (ds *ThrottleSemaphore) logThrottling(msgFmt string, args ...interface{}) {
 
 	now := time.Now()
 	if now.Sub(ds.lastLogTime) > time.Duration(throttleLogIntervalSecs)*time.Second {
-		glcm.Info(msgFmt)
+		syncOrchestratorLog(common.LogWarning, msgFmt)
 		ds.lastLogTime = now
 	}
 }
