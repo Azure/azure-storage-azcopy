@@ -373,8 +373,9 @@ func (cca *cookedSyncCmdArgs) SetCredentialInfo(ctx context.Context) error {
 func InitializeAzCopyFolders(
 	logPathFolder,
 	jobPlanFolder,
-	appPathFolder string) (azcopyLogPathFolder, azcopyJobPlanFolder string) {
-	return initializeFolders(logPathFolder, jobPlanFolder, appPathFolder)
+	appPathFolder string) (string, string) {
+	azcopyLogPathFolder, common.AzcopyJobPlanFolder = initializeFolders(logPathFolder, jobPlanFolder, appPathFolder)
+	return azcopyLogPathFolder, common.AzcopyJobPlanFolder
 }
 
 // ToStringMap returns a map representation of cookedSyncCmdArgs
@@ -880,6 +881,10 @@ func (cooked *CookedCopyCmdArgs) ToString() string {
 	sort.Strings(parts)
 
 	return fmt.Sprintf("CookedCopyCmdArgs{%s}", strings.Join(parts, ", "))
+}
+
+func SetJobId(jobId common.JobID) {
+	azcopyCurrentJobID = jobId
 }
 
 // ============================================================================
