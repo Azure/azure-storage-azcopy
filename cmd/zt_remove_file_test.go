@@ -302,7 +302,7 @@ func TestRemoveFilesWithExcludePathFlag(t *testing.T) {
 	// create files in different paths to test exclude-path functionality
 	fileList := []string{
 		"file1.txt",
-		"file2.pdf", 
+		"file2.pdf",
 		"myfoldertoexclude/file3.json",
 		"myfoldertoexclude/subfolder/file4.txt",
 		"anotherfolder/file5.txt",
@@ -312,9 +312,12 @@ func TestRemoveFilesWithExcludePathFlag(t *testing.T) {
 
 	// the expected list should exclude files in "myfoldertoexclude"
 	expectedList := []string{
+		//"",               // root folder
+		//"/anotherfolder", // top level folder
+		//"anotherfolder/subfolder",
 		"file1.txt",
 		"file2.pdf",
-		"anotherfolder/file5.txt", 
+		"anotherfolder/file5.txt",
 		"anotherfolder/subfolder/file6.txt",
 		"rootfile.txt",
 	}
@@ -335,9 +338,13 @@ func TestRemoveFilesWithExcludePathFlag(t *testing.T) {
 	raw.excludePath = excludePathString
 	raw.recursive = true
 
+	// mockedRpc also contains folders to be removed, so add them in
+	includeRootInTransfers := true
+	expectedRemovalsList := scenarioHelper{}.addFoldersToList(expectedList, includeRootInTransfers)
+
 	runCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateRemoveTransfersAreScheduled(a, true, expectedList, mockedRPC)
+		validateRemoveTransfersAreScheduled(a, true, expectedRemovalsList, mockedRPC)
 	})
 }
 
