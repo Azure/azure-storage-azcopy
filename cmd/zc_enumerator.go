@@ -878,15 +878,23 @@ func NewCopyEnumerator(traverser ResourceTraverser, filters []ObjectFilter, obje
 
 func WarnStdoutAndScanningLog(toLog string) {
 
+	level := common.LogWarning
 	if buildmode.IsMover {
-		toLog = "[AzCopy] " + toLog
-	}
+		// For XDM, we want to log all warning as errors
+		level = common.LogError
 
-	glcm.Info(toLog)
+		// only log to glcm if azcopyScanningLogger is not initialized
+		if azcopyScanningLogger == nil {
+			glcm.Warn("[AzCopy] " + toLog)
+		}
+
+	} else {
+		glcm.Info(toLog)
+	}
 
 	if azcopyScanningLogger != nil {
 		// ste.JobsAdmin.LogToJobLog(toLog, pipeline.LogWarning)
-		azcopyScanningLogger.Log(common.LogWarning, toLog)
+		azcopyScanningLogger.Log(level, toLog)
 	}
 }
 

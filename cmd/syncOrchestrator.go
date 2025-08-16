@@ -170,7 +170,9 @@ func writeSyncErrToChannel(errorChannel chan<- TraverserErrorItemInfo, err SyncO
 		case errorChannel <- err:
 		default:
 			// Channel might be full, log the error instead
-			WarnStdoutAndScanningLog(fmt.Sprintf("Failed to send error to channel: %v", err.ErrorMessage()))
+			syncOrchestratorLog(
+				common.LogError,
+				fmt.Sprintf("Failed to send error to channel: %v", err.ErrorMessage()))
 		}
 	}
 }
@@ -220,7 +222,9 @@ func validateS3Root(sourcePath string) error {
 // - error: Error if the source type is unsupported or path processing fails
 func validateAndGetRootObject(path string, fromTo common.FromTo) (minimalStoredObject, error) {
 
-	glcm.Info(fmt.Sprintf("Getting root object for path = %s\n", path))
+	syncOrchestratorLog(
+		common.LogInfo,
+		fmt.Sprintf("Getting root object for path = %s\n", path))
 	var err error
 
 	switch fromTo.From() {
@@ -537,13 +541,14 @@ func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator,
 	if startGoProfiling {
 		// Start the profiling server for performance monitoring
 		go func() {
-			WarnStdoutAndScanningLog("Listening to port 6060..\n")
+			syncOrchestratorLog(common.LogInfo, "Listening to port 6060..\n")
 			http.ListenAndServe("localhost:6060", nil)
 		}()
 	}
 
 	err := validate(cca, enumerator.orchestratorOptions) // Validate the command arguments for sync orchestrator
 	if err != nil {
+		syncOrchestratorLog(common.LogPanic, err.Error())
 		return err
 	}
 
@@ -576,6 +581,14 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		defer semaphore.Close()
 	}
 
+	// Log the orchestrator start with key configuration values
+	syncOrchestratorLog(
+		common.LogInfo,
+		fmt.Sprintf("Starting sync orchestrator - Source: %s, Destination: %s, options: %v",
+			cca.source.Value,
+			cca.destination.Value,
+			orchestratorOptions.ToStringMap()))
+
 	var crawlWg sync.WaitGroup // WaitGroup for all directory processing tasks
 
 	// syncOneDir processes a single directory by creating source and destination traversers,
@@ -596,7 +609,9 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		if enableThrottling {
 			err = semaphore.AcquireSourceSlot(mainCtx)
 			if err != nil {
-				azcopyScanningLogger.Log(common.LogError, fmt.Sprintf("Failed to acquire source slot for dir '%s': %s", dir.(minimalStoredObject).relativePath, err))
+				syncOrchestratorLog(
+					common.LogError,
+					fmt.Sprintf("Failed to acquire source slot for dir '%s': %s", dir.(minimalStoredObject).relativePath, err))
 				return err
 			}
 		}
@@ -633,7 +648,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			ptt.options)
 		if err != nil {
 			errMsg = fmt.Sprintf("Creating source traverser failed for dir %s: %s", pt_src.Value, err)
-			azcopyScanningLogger.Log(common.LogError, errMsg)
+			syncOrchestratorLog(common.LogError, errMsg)
 			writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
 				DirPath:           pt_src.Value,
 				DirName:           dir.(minimalStoredObject).relativePath,
@@ -651,7 +666,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			stt.options)
 		if err != nil {
 			errMsg = fmt.Sprintf("Creating target traverser failed for dir %s: %s\n", st_src.Value, err)
-			azcopyScanningLogger.Log(common.LogError, errMsg)
+			syncOrchestratorLog(common.LogError, errMsg)
 			writeSyncErrToChannel(stt.options.ErrorChannel, SyncOrchErrorInfo{
 				DirPath:           st_src.Value,
 				DirName:           dir.(minimalStoredObject).relativePath,
@@ -664,7 +679,6 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		// Create sync traverser for this directory
 		stra := newSyncTraverser(enumerator, dir.(minimalStoredObject).relativePath, enumerator.objectComparator)
 
-		// Traverse source location and collect files/directories
 		err = pt.Traverse(noPreProccessor, stra.processor, enumerator.filters)
 		srcDirEnumerating.Add(-1) // Decrement active directory count
 
@@ -675,7 +689,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 		if err != nil {
 			errMsg = fmt.Sprintf("primary traversal failed for dir %s : %s\n", pt_src.Value, err)
-			azcopyScanningLogger.Log(common.LogError, errMsg)
+			syncOrchestratorLog(common.LogError, errMsg)
 			writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
 				DirPath:           pt_src.Value,
 				DirName:           dir.(minimalStoredObject).relativePath,
@@ -709,7 +723,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 				err = stra.finalize(false) // false indicates we do not want to schedule transfers yet
 				if err != nil {
 					errMsg = fmt.Sprintf("Sync finalize to skip target enumeration failed for source dir %s.\n", pt_src.Value)
-					azcopyScanningLogger.Log(common.LogError, errMsg)
+					syncOrchestratorLog(common.LogError, errMsg)
 					writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
 						DirPath:           pt_src.Value,
 						DirName:           dir.(minimalStoredObject).relativePath,
@@ -743,7 +757,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 				err = semaphore.AcquireTargetSlot(mainCtx)
 				if err != nil {
 					errMsg = fmt.Sprintf("Failed to acquire target slot for dir %s: %s", st_src.Value, err)
-					azcopyScanningLogger.Log(common.LogError, errMsg)
+					syncOrchestratorLog(common.LogError, errMsg)
 					// Release destination directory count since we're bailing out
 					dstDirEnumerating.Add(-1)
 					return err
@@ -752,7 +766,6 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 			dstDirEnumerating.Add(1) // Increment active destination directory count
 
-			// Traverse destination location for comparison
 			err = st.Traverse(noPreProccessor, stra.customComparator, enumerator.filters)
 
 			dstDirEnumerating.Add(-1) // Decrement active destination directory count
@@ -764,7 +777,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 			if err != nil {
 				errMsg = fmt.Sprintf("Secondary traversal failed for dir %s = %s\n", st_src.Value, err)
-				azcopyScanningLogger.Log(common.LogError, errMsg)
+				syncOrchestratorLog(common.LogError, errMsg)
 				// Only report unexpected errors (404s are normal for new files)
 				if IsDestinationNotFoundDuringSync(err) {
 					isDestinationPresent = false // Destination not found
@@ -781,7 +794,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 					err = stra.finalize(false) // false indicates we do not want to schedule transfers yet
 					if err != nil {
 						errMsg = fmt.Sprintf("Failed to cleanup indexer object due to target traversal failure - %s. There may be unintended transfers.\n", pt_src.Value)
-						azcopyScanningLogger.Log(common.LogError, errMsg)
+						syncOrchestratorLog(common.LogError, errMsg)
 						writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
 							DirPath:           pt_src.Value,
 							DirName:           dir.(minimalStoredObject).relativePath,
@@ -805,7 +818,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 			if err != nil {
 				errMsg = fmt.Sprintf("Sync finalize failed for source dir %s.\n", pt_src.Value)
-				azcopyScanningLogger.Log(common.LogError, errMsg)
+				syncOrchestratorLog(common.LogError, errMsg)
 				writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
 					DirPath:           pt_src.Value,
 					DirName:           dir.(minimalStoredObject).relativePath,
@@ -825,7 +838,6 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 				isPresentAtDestination: isDestinationPresent,
 			})
 		}
-
 		return nil
 	}
 
@@ -839,37 +851,43 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		srcIsDir, err = enumerator.primaryTraverser.IsDirectory(true)
 
 		if err != nil {
-			WarnStdoutAndScanningLog(fmt.Sprintf("Failed to check if source is a directory. Err: %s", err))
+			syncOrchestratorLog(
+				common.LogError,
+				fmt.Sprintf("Failed to check if source is a directory. Err: %s", err))
 			return err
 		}
 	} else {
 		// XDM: s3Traverser.IsDirectory is failing for valid directories, skipping the check for S3
 		srcIsDir = true
-		WarnStdoutAndScanningLog(fmt.Sprintf("Assuming source - %s is a directory for S3", cca.source.Value))
+		syncOrchestratorLog(
+			common.LogWarning,
+			fmt.Sprintf("Assuming source - %s is a directory for S3", cca.source.Value), true)
 	}
 
 	if err != nil {
-		WarnStdoutAndScanningLog(fmt.Sprintf("Failed to check if source is a directory. Err: %s", err))
+		syncOrchestratorLog(
+			common.LogPanic,
+			fmt.Sprintf("Failed to check if source is a directory. Err: %s", err))
 		return err
 	}
 
 	if !srcIsDir {
 		err = fmt.Errorf("source is not recognized as a directory")
-		WarnStdoutAndScanningLog(fmt.Sprintf("Source is not recognized as a directory. Err: %s", err))
+		syncOrchestratorLog(common.LogPanic, fmt.Sprintf("Source is not recognized as a directory. Err: %s", err))
 		return err
 	}
 
 	// Get the root object to start synchronization
 	root, err := validateAndGetRootObject(cca.source.Value, cca.fromTo)
 	if err != nil {
-		WarnStdoutAndScanningLog(fmt.Sprintf("Root object creation failed: %s", err))
+		syncOrchestratorLog(common.LogPanic, fmt.Sprintf("Root object creation failed: %s", err))
 		return err
 	}
 
 	// Ensure proper cleanup in ALL scenarios (success, failure, cancellation)
 	cleanupFunc := func() {
 		// Always shutdown monitoring goroutines
-		WarnStdoutAndScanningLog(fmt.Sprintf("Orchestrator exiting. Execution time: %v.", time.Since(startTime)))
+		syncOrchestratorLog(common.LogInfo, fmt.Sprintf("Orchestrator exiting. Execution time: %v.", time.Since(startTime)), true)
 	}
 	defer cleanupFunc()
 
@@ -888,19 +906,19 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 	select {
 	case <-done:
 		// All goroutines completed normally
-		WarnStdoutAndScanningLog("All sync traversers exited.")
+		syncOrchestratorLog(common.LogInfo, "All sync traversers exited.")
 
 	case <-mainCtx.Done():
 		// Cancellation occurred
-		WarnStdoutAndScanningLog("Orchestrator cancellation detected.")
+		syncOrchestratorLog(common.LogInfo, "Orchestrator cancellation detected.")
 		return nil
 	}
 
 	// Always try to finalize the enumerator. This will set cancellation complete and dispatch final part
-	WarnStdoutAndScanningLog("Finalizing enumerator.")
+	syncOrchestratorLog(common.LogInfo, "Finalizing enumerator.")
 	finalizeErr := enumerator.finalize()
 	if finalizeErr != nil {
-		WarnStdoutAndScanningLog(fmt.Sprintf("Enumerator finalize failed: %v", finalizeErr))
+		syncOrchestratorLog(common.LogPanic, fmt.Sprintf("Enumerator finalize failed: %v", finalizeErr))
 		// If no previous error, use the finalize error
 		if err == nil {
 			err = finalizeErr
@@ -908,4 +926,46 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 	}
 
 	return err
+}
+
+// custom logging function for the sync orchestrator
+func syncOrchestratorLog(level common.LogLevel, toLog string, logToConsole ...bool) {
+	var prefix string
+	switch level {
+	case common.LogError:
+		prefix = "[ERROR] "
+	case common.LogPanic:
+		prefix = "[PANIC] "
+	case common.LogInfo:
+		prefix = "[INFO] "
+	case common.LogDebug:
+		prefix = "[DEBUG] "
+	case common.LogWarning:
+		prefix = "[WARNING] "
+	default:
+		prefix = "[INFO] "
+	}
+	toLog = prefix + toLog
+
+	shouldLogToConsole := false
+	if len(logToConsole) > 0 {
+		shouldLogToConsole = logToConsole[0]
+	}
+
+	if azcopyScanningLogger != nil {
+		// XDM: Log all messages at the error level as that is the log level set by Mover
+		azcopyScanningLogger.Log(common.LogError, toLog)
+	}
+
+	if azcopyScanningLogger == nil || shouldLogToConsole {
+		toLog = "[AzCopy] " + toLog
+		switch level {
+		case common.LogError, common.LogPanic, common.LogWarning:
+			glcm.Warn(toLog)
+		case common.LogInfo:
+			glcm.Info(toLog)
+		default:
+			glcm.Info(toLog)
+		}
+	}
 }
