@@ -332,7 +332,10 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		var contentProps contentPropsProvider = noContentProps
 		var metadata common.Metadata
 
-		fullProperties, err := f.propertyGetter(t.ctx, !t.includeExtendedInfo)
+		// When includeExtendedInfo is true, we already have the properties from the listing API
+		// so we don't need to fetch full properties (which would make individual API calls)
+		needsFullPropertiesFetch := !t.includeExtendedInfo && t.getProperties
+		fullProperties, err := f.propertyGetter(t.ctx, needsFullPropertiesFetch)
 		if err != nil {
 			return StoredObject{
 				relativePath: relativePath,
@@ -428,6 +431,8 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		}
 	}
 
+	listErrPrefix := "cannot list files due to reason"
+
 	// Define how to enumerate its contents
 	// This func must be threadsafe/goroutine safe
 	enumerateOneDir := func(dir parallel.Directory, enqueueDir func(parallel.Directory), enqueueOutput func(parallel.DirectoryEntry, error)) error {
@@ -438,9 +443,9 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			dirListOptions = &directory.ListFilesAndDirectoriesOptions{
 				Include: directory.ListFilesInclude{
 					Timestamps:    true,
-					ETag:          true,
-					PermissionKey: true,
-					Attributes:    true},
+					ETag:          false,
+					PermissionKey: false,
+					Attributes:    false},
 				IncludeExtendedInfo: &t.includeExtendedInfo}
 		}
 		pager := currentDirectoryClient.NewListFilesAndDirectoriesPager(dirListOptions)
@@ -456,7 +461,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				})
 
 			if err != nil {
-				return fmt.Errorf("cannot list files due to reason %w", err)
+				return fmt.Errorf("%s %w", listErrPrefix, err)
 			}
 			for _, fileInfo := range lResp.Segment.Files {
 				if invalidBlobOrWindowsName(*fileInfo.Name) {
@@ -529,6 +534,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	parallelism := EnumerationParallelism // for Azure Files we'll run two pools of this size, one for crawl and one for transform
 
 	workerContext, cancelWorkers := context.WithCancel(t.ctx)
+	defer cancelWorkers()
 
 	cCrawled := parallel.Crawl(workerContext, directoryClient, enumerateOneDir, parallelism)
 
@@ -549,9 +555,14 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			}
 
 			if azcopyScanningLogger != nil {
-				azcopyScanningLogger.Log(common.LogWarning, workerError.Error())
+				azcopyScanningLogger.Log(common.LogError, workerError.Error())
 			}
 			t.writeToErrorChannel(ErrorAzFileInfo{Error: workerError})
+
+			// In non-recursive mode, only fail on directory enumeration errors, not property errors
+			if !t.recursive && strings.Contains(workerError.Error(), listErrPrefix) {
+				return workerError
+			}
 			continue
 		}
 
@@ -569,7 +580,6 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		}
 	}
 
-	cancelWorkers()
 	return
 }
 
