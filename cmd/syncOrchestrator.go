@@ -54,10 +54,6 @@ var (
 	// When true, uses the sliding window approach for directory synchronization.
 	UseSyncOrchestrator bool = true
 
-	// syncMutex provides thread-safe access to shared resources during sync operations.
-	// Protects concurrent access to indexer operations and file counting.
-	syncMutex sync.Mutex
-
 	// dirSemaphore controls the maximum number of directories processed concurrently
 	// to prevent resource exhaustion during large-scale sync operations.
 	dirSemaphore *ThrottleSemaphore
@@ -70,6 +66,7 @@ var (
 	notFoundErrors []string = []string{
 		"ParentNotFound",
 		"BlobNotFound",
+		"ResourceNotFound",
 	}
 
 	orchestratorOptions *SyncOrchestratorOptions
@@ -273,10 +270,11 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 	so.relativePath = buildChildPath(st.dir, so.relativePath)
 
 	// Thread-safe storage in the indexer first
-	syncMutex.Lock()
+	st.enumerator.objectIndexer.rwMutex.Lock()
 	err := st.enumerator.objectIndexer.store(so)
+	st.enumerator.objectIndexer.rwMutex.Unlock()
+
 	if err != nil {
-		syncMutex.Unlock()
 		return err
 	}
 
@@ -291,7 +289,6 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 			changeTime:   so.changeTime,
 		})
 	}
-	syncMutex.Unlock()
 
 	return nil
 }
@@ -302,12 +299,8 @@ func (st *SyncTraverser) customComparator(so StoredObject) error {
 	// Build full path for destination object
 	so.relativePath = buildChildPath(st.dir, so.relativePath)
 
-	// Thread-safe comparison processing
-	syncMutex.Lock()
-	err := st.comparator(so)
-	syncMutex.Unlock()
-
-	return err
+	// comparison and deletion from indexer will happen under the lock
+	return st.comparator(so)
 }
 
 // finalize completes the processing of the current directory by scheduling
@@ -326,8 +319,9 @@ func (st *SyncTraverser) finalize(scheduleTransfer bool) error {
 		dirPrefix = st.dir + common.AZCOPY_PATH_SEPARATOR_STRING
 	}
 
-	// Update final file count for throttling
-	syncMutex.Lock()
+	// Use exclusive lock for the entire operation to prevent concurrent iteration and modification
+	st.enumerator.objectIndexer.rwMutex.RLock()
+
 	if enableThrottling {
 		totalFilesInIndexer.Store(int64(len(st.enumerator.objectIndexer.indexMap))) // Set accurate count
 	}
@@ -339,9 +333,9 @@ func (st *SyncTraverser) finalize(scheduleTransfer bool) error {
 			itemsToProcess = append(itemsToProcess, path)
 		}
 	}
-	syncMutex.Unlock()
+	st.enumerator.objectIndexer.rwMutex.RUnlock()
 
-	// Process collected items
+	// Process collected items while still holding the lock to prevent concurrent access
 	for _, path := range itemsToProcess {
 		err := st.finalizeChild(path, scheduleTransfer)
 		if err != nil {
@@ -406,7 +400,7 @@ func (st *SyncTraverser) hasAnyChildChangedSinceLastSync() (bool, uint32) {
 	// This is purely for incrementing the metrics with a computation cost
 	childCount := uint32(0)
 
-	syncMutex.Lock()
+	st.enumerator.objectIndexer.rwMutex.RLock()
 	// Collect items to process (we need to collect first to avoid modifying map while iterating)
 	for path := range st.enumerator.objectIndexer.indexMap {
 		if st.belongsToCurrentDirectory(path, dirPrefix) {
@@ -426,7 +420,7 @@ func (st *SyncTraverser) hasAnyChildChangedSinceLastSync() (bool, uint32) {
 			}
 		}
 	}
-	syncMutex.Unlock()
+	st.enumerator.objectIndexer.rwMutex.RUnlock()
 	return foundOneChanged, childCount - uint32(len(st.sub_dirs))
 }
 
@@ -435,10 +429,10 @@ func (st *SyncTraverser) hasAnyChildChangedSinceLastSync() (bool, uint32) {
 // If the object is a directory, it will be processed after all files in that directory are finalized.
 // This method is called after the traversal is complete for each child object.
 func (st *SyncTraverser) finalizeChild(child string, scheduleTransfer bool) error {
-	syncMutex.Lock()
+	st.enumerator.objectIndexer.rwMutex.RLock()
 	// Get pointer to the stored object from indexer
 	storedObject, exists := st.enumerator.objectIndexer.indexMap[child]
-	syncMutex.Unlock()
+	st.enumerator.objectIndexer.rwMutex.RUnlock()
 
 	if exists {
 		// Schedule the file/directory for transfer using the pointer
@@ -450,13 +444,13 @@ func (st *SyncTraverser) finalizeChild(child string, scheduleTransfer bool) erro
 		}
 
 		// Remove from indexer to free memory
-		syncMutex.Lock()
+		st.enumerator.objectIndexer.rwMutex.Lock()
 		delete(st.enumerator.objectIndexer.indexMap, child)
+		st.enumerator.objectIndexer.rwMutex.Unlock()
 
 		if enableThrottling {
 			totalFilesInIndexer.Add(-1) // Decrement the count after processing
 		}
-		syncMutex.Unlock()
 	}
 
 	return nil
@@ -526,6 +520,10 @@ func validate(cca *cookedSyncCmdArgs, orchestratorOptions *SyncOrchestratorOptio
 		return errors.New("sync orchestrator does not support recursive traversal. Use --recursive=false.")
 	}
 
+	if orchestratorOptions == nil {
+		return errors.New("orchestrator options are required for sync orchestrator")
+	}
+
 	if orchestratorOptions != nil && orchestratorOptions.valid {
 		return orchestratorOptions.validate(cca.fromTo.From())
 	}
@@ -549,9 +547,7 @@ func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator,
 		return err
 	}
 
-	if enumerator.orchestratorOptions != nil {
-		orchestratorOptions = enumerator.orchestratorOptions
-	}
+	orchestratorOptions = enumerator.orchestratorOptions
 
 	// Initialize resource limits based on source/destination types
 	initializeLimits(orchestratorOptions)
@@ -567,7 +563,7 @@ func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator,
 // 3. Discover subdirectories and queue them for processing
 // 4. Use semaphores to limit concurrent directory processing
 // 5. Schedule transfers after comparison is complete
-func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ctx context.Context) (err error) {
+func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ctx context.Context) error {
 	startTime := time.Now()
 	mainCtx, cancel := context.WithCancel(ctx) // Use mainCtx for operations, cancel to signal shutdown
 	defer cancel()                             // Ensure cancellation happens on exit
@@ -593,6 +589,8 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 		// Track that this directory entered the processing queue
 		defer totalDirectoriesProcessed.Add(1)
+
+		var err error
 
 		// Acquire semaphore slot to limit concurrent directory processing
 		if enableThrottling {
@@ -792,10 +790,24 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		return nil
 	}
 
+	srcIsDir := false
+	var err error
+
 	// verify that the traversers are targeting the same type of resources
 	// Sync orchestrator supports only directory to directory sync. The similarity has
 	// already been checked in InitEnumerator. Here we check if it is directory or not.
-	srcIsDir, err := enumerator.primaryTraverser.IsDirectory(true)
+	if cca.fromTo.From() != common.ELocation.S3() {
+		srcIsDir, err = enumerator.primaryTraverser.IsDirectory(true)
+
+		if err != nil {
+			WarnStdoutAndScanningLog(fmt.Sprintf("Failed to check if source is a directory. Err: %s", err))
+			return err
+		}
+	} else {
+		// XDM: s3Traverser.IsDirectory is failing for valid directories, skipping the check for S3
+		srcIsDir = true
+		WarnStdoutAndScanningLog(fmt.Sprintf("Assuming source - %s is a directory for S3", cca.source.Value))
+	}
 
 	if err != nil {
 		WarnStdoutAndScanningLog(fmt.Sprintf("Failed to check if source is a directory. Err: %s", err))

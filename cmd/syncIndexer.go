@@ -22,6 +22,9 @@ package cmd
 
 import (
 	"strings"
+	"sync"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 )
 
 // the objectIndexer is essential for the generic sync enumerator to work
@@ -37,10 +40,25 @@ type objectIndexer struct {
 	// Apple File System (APFS) can be configured to be case-sensitive or case-insensitive.
 	// So for such locations, the key in the indexMap will be lowercase to avoid infinite syncing.
 	isDestinationCaseInsensitive bool
+
+	// rwMutex is used to synchronize access to the indexMap
+	// XDM: this is exclusively used in SyncOrchestrator as of 08-2025
+	rwMutex sync.RWMutex
+
+	// if this is true, access the indexer with the rwMutex lock
+	accessUnderLock bool
 }
 
 func newObjectIndexer() *objectIndexer {
-	return &objectIndexer{indexMap: make(map[string]StoredObject)}
+	indexer := &objectIndexer{
+		indexMap: make(map[string]StoredObject),
+	}
+
+	if UseSyncOrchestrator && buildmode.IsMover {
+		indexer.accessUnderLock = true
+	}
+
+	return indexer
 }
 
 // process the given stored object by indexing it using its relative path
