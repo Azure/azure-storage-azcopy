@@ -1133,7 +1133,7 @@ extends:
 
                       # If it's a preview version, rename all matching files
                       if [[ $azcopyBinaryName == *"preview"* ]]; then
-                        for f in $(signed)/azcopy-*; do
+                        for f in $(signed)/azcopy-10*; do
                           newName="${f/azcopy-/azcopy-preview_}"
                           echo "Renaming $f to $newName"
                           mv -v "$f" "$newName"
@@ -1148,8 +1148,8 @@ extends:
 
                   - script: |
                       
-                      azcopyPreviewAmdDeb=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy-preview*.x86_64.deb`
-                      echo "Azcopy AMD Preview DEB ID: $azcopyPreviewAmdDeb"
+                      # azcopyPreviewAmdDeb=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy-preview*.x86_64.deb`
+                      # echo "Azcopy AMD Preview DEB ID: $azcopyPreviewAmdDeb"
 
                       azcopyAmdDeb=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy*.x86_64.deb`
                       echo "Azcopy AMD DEB ID: $azcopyAmdDeb"
