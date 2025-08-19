@@ -39,7 +39,7 @@ type LoginStatus struct {
 }
 
 func (c Client) GetLoginStatus(_ GetLoginStatusOptions) (LoginStatus, error) {
-	uotm := GetUserOAuthTokenManagerInstance()
+	uotm := c.GetUserOAuthTokenManagerInstance()
 
 	// Get current token info and refresh it with GetTokenInfo()
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
