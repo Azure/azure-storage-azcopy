@@ -128,6 +128,7 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 		if summary.TransfersFailed > 0 {
 			exitCode = common.EExitCode.Error()
 		}
+
 		jobSummary := common.JobSummary{
 			ExitCode:               exitCode,
 			ListJobSummaryResponse: summary,
