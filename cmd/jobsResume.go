@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"strings"
 	"time"
 
@@ -127,6 +128,7 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 		if summary.TransfersFailed > 0 {
 			exitCode = common.EExitCode.Error()
 		}
+
 		jobSummary := common.JobSummary{
 			ExitCode:               exitCode,
 			ListJobSummaryResponse: summary,
@@ -242,7 +244,7 @@ func getSourceAndDestinationServiceClients(
 
 	var tc azcore.TokenCredential
 	if srcCredType.IsAzureOAuth() || dstCredType.IsAzureOAuth() {
-		uotm := GetUserOAuthTokenManagerInstance()
+		uotm := azcopy.GetUserOAuthTokenManagerInstance()
 		// Get token from env var or cache.
 		tokenInfo, err := uotm.GetTokenInfo(ctx)
 		if err != nil {

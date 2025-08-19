@@ -22,29 +22,12 @@ package cmd
 
 import (
 	"errors"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
 )
-
-type LoginOptions struct {
-	TenantID    string
-	AADEndpoint string
-	LoginType   common.AutoLoginType
-
-	IdentityClientID   string
-	IdentityResourceID string
-
-	ApplicationID   string
-	CertificatePath string
-
-	certificatePassword string
-	clientSecret        string
-	persistToken        bool
-
-	identityObjectID string
-}
 
 var loginCmdArg = rawLoginArgs{tenantID: common.DefaultTenantID}
 
@@ -89,19 +72,6 @@ var lgCmd = &cobra.Command{
 		}
 		return nil
 	},
-}
-
-func RunLogin(args LoginOptions) error {
-	args.certificatePassword = common.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
-	args.clientSecret = common.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
-	args.persistToken = true
-
-	if args.certificatePassword != "" || args.clientSecret != "" {
-		glcm.Info(environmentVariableNotice)
-	}
-
-	return args.process()
-
 }
 
 func init() {
@@ -161,71 +131,55 @@ type rawLoginArgs struct {
 	certPath      string
 }
 
-func (args rawLoginArgs) toOptions() (LoginOptions, error) {
+func (args rawLoginArgs) toOptions() (azcopy.LoginOptions, error) {
 	var loginType common.AutoLoginType
 	err := loginType.Parse(loginCmdArg.loginType)
 	if err != nil {
-		return LoginOptions{}, err
+		return azcopy.LoginOptions{}, err
 	}
-	return LoginOptions{
-		TenantID:           args.tenantID,
-		AADEndpoint:        args.aadEndpoint,
-		LoginType:          loginType,
-		IdentityClientID:   args.identityClientID,
-		identityObjectID:   args.identityObjectID,
-		IdentityResourceID: args.identityResourceID,
-		ApplicationID:      args.applicationID,
-		CertificatePath:    args.certPath,
+	certificatePassword := common.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
+	clientSecret := common.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
+
+	if certificatePassword != "" || clientSecret != "" {
+		glcm.Info(environmentVariableNotice)
+	}
+	return azcopy.LoginOptions{
+		TenantID:            args.tenantID,
+		AADEndpoint:         args.aadEndpoint,
+		LoginType:           loginType,
+		IdentityClientID:    args.identityClientID,
+		IdentityObjectID:    args.identityObjectID,
+		IdentityResourceID:  args.identityResourceID,
+		ApplicationID:       args.applicationID,
+		CertificatePath:     args.certPath,
+		PersistToken:        true,
+		CertificatePassword: certificatePassword,
+		ClientSecret:        clientSecret,
 	}, nil
 }
 
-func (options LoginOptions) process() error {
-	uotm := GetUserOAuthTokenManagerInstance()
-	// Persist the token to cache, if login fulfilled successfully.
+func RunLogin(options azcopy.LoginOptions) error {
+	_, err := Client.Login(options)
+	if err != nil {
+		return err
+	}
 
 	switch options.LoginType {
 	case common.EAutoLoginType.SPN():
 		if options.CertificatePath != "" {
-			if err := uotm.CertLogin(options.TenantID, options.AADEndpoint, options.CertificatePath, options.certificatePassword, options.ApplicationID, options.persistToken); err != nil {
-				return err
-			}
 			glcm.Info("SPN Auth via cert succeeded.")
 		} else {
-			if err := uotm.SecretLogin(options.TenantID, options.AADEndpoint, options.clientSecret, options.ApplicationID, options.persistToken); err != nil {
-				return err
-			}
 			glcm.Info("SPN Auth via secret succeeded.")
 		}
 	case common.EAutoLoginType.MSI():
-		if err := uotm.MSILogin(common.IdentityInfo{
-			ClientID: options.IdentityClientID,
-			ObjectID: options.identityObjectID,
-			MSIResID: options.IdentityResourceID,
-		}, options.persistToken); err != nil {
-			return err
-		}
-		// For MSI login, info success message to user.
 		glcm.Info("Login with identity succeeded.")
 	case common.EAutoLoginType.AzCLI():
-		if err := uotm.AzCliLogin(options.TenantID, options.persistToken); err != nil {
-			return err
-		}
 		glcm.Info("Login with AzCliCreds succeeded")
 	case common.EAutoLoginType.PsCred():
-		if err := uotm.PSContextToken(options.TenantID, options.persistToken); err != nil {
-			return err
-		}
 		glcm.Info("Login with Powershell context succeeded")
 	case common.EAutoLoginType.Workload():
-		if err := uotm.WorkloadIdentityLogin(options.persistToken); err != nil {
-			return err
-		}
 		glcm.Info("Login with Workload Identity succeeded")
 	default:
-		if err := uotm.UserLogin(options.TenantID, options.AADEndpoint, options.persistToken); err != nil {
-			return err
-		}
-		// User fulfills login in browser, and there would be message in browser indicating whether login fulfilled successfully.
 		glcm.Info("Login succeeded.")
 	}
 
