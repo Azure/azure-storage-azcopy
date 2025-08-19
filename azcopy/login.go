@@ -44,7 +44,7 @@ type LoginOptions struct {
 type LoginResponse struct {
 }
 
-func (c Client) Login(opts LoginOptions) (LoginResponse, error) {
+func (c *Client) Login(opts LoginOptions) (LoginResponse, error) {
 	resp := LoginResponse{}
 	uotm := GetUserOAuthTokenManagerInstance()
 

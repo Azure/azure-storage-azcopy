@@ -38,7 +38,7 @@ type LoginStatus struct {
 	LoginType   common.AutoLoginType
 }
 
-func (c Client) GetLoginStatus(_ GetLoginStatusOptions) (LoginStatus, error) {
+func (c *Client) GetLoginStatus(_ GetLoginStatusOptions) (LoginStatus, error) {
 	uotm := GetUserOAuthTokenManagerInstance()
 
 	// Get current token info and refresh it with GetTokenInfo()

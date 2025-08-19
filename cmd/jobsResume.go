@@ -326,6 +326,11 @@ func (rca resumeCmdArgs) process() error {
 		return fmt.Errorf("error parsing the jobId %s. Failed with error %w", rca.jobID, err)
 	}
 
+	err = Client.ResumeJob(azcopy.ResumeJobOptions{JobID: jobID, SourceSAS: rca.SourceSAS, DestinationSAS: rca.DestinationSAS})
+	if err != nil {
+		return err
+	}
+
 	// if no logging, set this empty so that we don't display the log location
 	if Client.GetLogLevel() == common.LogNone {
 		common.LogPathFolder = ""

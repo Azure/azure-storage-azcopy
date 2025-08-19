@@ -23,6 +23,7 @@ package azcopy
 import (
 	"log"
 	"runtime"
+	"sync"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
@@ -30,15 +31,17 @@ import (
 )
 
 type Client struct {
+	mu           sync.Mutex   // protects currentJob
 	CurrentJobID common.JobID // TODO (gapra): In future this should only be set when there is a current job running. On complete, this should be cleared. It can also behave as something we can check to see if a current job is running
-	logLevel     common.LogLevel
+
+	logLevel common.LogLevel
 }
 
 type ClientOptions struct {
 	CapMbps float64
 }
 
-func NewClient(opts ClientOptions) (Client, error) {
+func NewClient(opts ClientOptions) (*Client, error) {
 	c := Client{
 		logLevel: common.ELogLevel.Info(), // Default: Info
 	}
@@ -53,9 +56,9 @@ func NewClient(opts ClientOptions) (Client, error) {
 	concurrencySettings := ste.NewConcurrencySettings(azcopyMaxFileAndSocketHandles)
 	err = jobsAdmin.MainSTE(concurrencySettings, opts.CapMbps)
 	if err != nil {
-		return c, err
+		return &c, err
 	}
-	return c, nil
+	return &c, nil
 }
 
 func (c *Client) SetLogLevel(level *common.LogLevel) {
@@ -66,7 +69,7 @@ func (c *Client) SetLogLevel(level *common.LogLevel) {
 	}
 }
 
-func (c Client) GetLogLevel() common.LogLevel {
+func (c *Client) GetLogLevel() common.LogLevel {
 	return c.logLevel
 }
 

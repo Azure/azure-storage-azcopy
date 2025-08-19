@@ -23,6 +23,7 @@ package azcopy
 import (
 	"errors"
 	"fmt"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 )
@@ -35,7 +36,7 @@ type GetJobSummaryOptions struct {
 
 type JobSummaryResponse common.ListJobSummaryResponse
 
-func (c Client) GetJobSummary(opts GetJobSummaryOptions) (result JobSummaryResponse, err error) {
+func (c *Client) GetJobSummary(opts GetJobSummaryOptions) (result JobSummaryResponse, err error) {
 	if opts.JobID.IsEmpty() {
 		return JobSummaryResponse{}, errors.New("get job statistics requires the JobID")
 	}
@@ -56,7 +57,7 @@ type ListJobTransfersOptions struct {
 type ListJobTransfersResponse common.ListJobTransfersResponse
 
 // ListJobTransfers lists the transfers for a job with the specified JobID and given transfer status.
-func (c Client) ListJobTransfers(opts ListJobTransfersOptions) (result ListJobTransfersResponse, err error) {
+func (c *Client) ListJobTransfers(opts ListJobTransfersOptions) (result ListJobTransfersResponse, err error) {
 	if opts.JobID.IsEmpty() {
 		return result, errors.New("list job transfers requires the JobID")
 	}
