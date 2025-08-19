@@ -30,8 +30,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
-
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
@@ -244,7 +242,7 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 	if credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cooked.location, source, true, common.CpkOptions{}); err != nil {
 		return fmt.Errorf("failed to obtain credential info: %s", err.Error())
 	} else if credentialInfo.CredentialType.IsAzureOAuth() {
-		uotm := azcopy.GetUserOAuthTokenManagerInstance()
+		uotm := Client.GetUserOAuthTokenManagerInstance()
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return err
 		} else {

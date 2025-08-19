@@ -43,7 +43,7 @@ func GetCredentialInfoForLocation(ctx context.Context, location common.Location,
 
 	// flesh out the rest of the fields, for those types that require it
 	if credInfo.CredentialType.IsAzureOAuth() {
-		uotm := azcopy.GetUserOAuthTokenManagerInstance()
+		uotm := Client.GetUserOAuthTokenManagerInstance()
 
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return credInfo, false, err
