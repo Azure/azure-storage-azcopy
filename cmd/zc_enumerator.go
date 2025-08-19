@@ -36,6 +36,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
@@ -404,7 +405,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 
 	// Clean up the resource if it's a local path
 	if resourceLocation == common.ELocation.Local() {
-		resource = common.ResourceString{Value: cleanLocalPath(resource.ValueLocal())}
+		resource = common.ResourceString{Value: azcopy.CleanLocalPath(resource.ValueLocal())}
 	}
 
 	// Feed list of files channel into new list traverser
@@ -457,7 +458,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 
 			opts.ListOfFiles = globChan
 
-			baseResource := resource.CloneWithValue(cleanLocalPath(basePath))
+			baseResource := resource.CloneWithValue(azcopy.CleanLocalPath(basePath))
 			output = newListTraverser(baseResource, resourceLocation, ctx, opts)
 		} else {
 			output, _ = newLocalTraverser(resource.ValueLocal(), ctx, opts)
@@ -491,7 +492,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 		blobURLParts.Snapshot = ""
 		blobURLParts.VersionID = ""
 
-		res, err := SplitResourceString(blobURLParts.String(), common.ELocation.Blob())
+		res, err := azcopy.SplitResourceString(blobURLParts.String(), common.ELocation.Blob())
 		if err != nil {
 			return nil, err
 		}
@@ -544,7 +545,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 		} else {
 			resLoc = common.ELocation.FileNFS()
 		}
-		res, err := SplitResourceString(fileURLParts.String(), resLoc)
+		res, err := azcopy.SplitResourceString(fileURLParts.String(), resLoc)
 		if err != nil {
 			return nil, err
 		}
@@ -587,7 +588,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 		blobURLParts.Snapshot = ""
 		blobURLParts.VersionID = ""
 
-		res, err := SplitResourceString(blobURLParts.String(), common.ELocation.Blob())
+		res, err := azcopy.SplitResourceString(blobURLParts.String(), common.ELocation.Blob())
 		if err != nil {
 			return nil, err
 		}

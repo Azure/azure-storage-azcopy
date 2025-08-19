@@ -256,7 +256,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	}
 	// Strip the SAS from the source and destination whenever there is SAS exists in URL.
 	// Note: SAS could exists in source of S2S copy, even if the credential type is OAuth for destination.
-	cooked.Destination, err = SplitResourceString(tempDest, cooked.FromTo.To())
+	cooked.Destination, err = azcopy.SplitResourceString(tempDest, cooked.FromTo.To())
 	if err != nil {
 		return cooked, err
 	}
@@ -271,7 +271,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 			return cooked, err
 		}
 	}
-	cooked.Source, err = SplitResourceString(tempSrc, cooked.FromTo.From())
+	cooked.Source, err = azcopy.SplitResourceString(tempSrc, cooked.FromTo.From())
 	if err != nil {
 		return cooked, err
 	}

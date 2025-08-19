@@ -226,7 +226,7 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 
 	var credentialInfo common.CredentialInfo
 
-	source, err := SplitResourceString(cooked.sourcePath, cooked.location)
+	source, err := azcopy.SplitResourceString(cooked.sourcePath, cooked.location)
 	if err != nil {
 		return err
 	}

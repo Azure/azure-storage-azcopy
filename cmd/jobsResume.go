@@ -21,7 +21,6 @@
 package cmd
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -29,11 +28,9 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/spf13/cobra"
 )
 
@@ -208,114 +205,6 @@ type resumeCmdArgs struct {
 	DestinationSAS string
 }
 
-func getSourceAndDestinationServiceClients(
-	ctx context.Context,
-	jobDetails common.GetJobDetailsResponse,
-	source common.ResourceString,
-	destination common.ResourceString,
-) (*common.ServiceClient, *common.ServiceClient, error) {
-	fromTo := jobDetails.FromTo
-	srcCredType, isSrcPublic, err := getCredentialTypeForLocation(ctx,
-		fromTo.From(),
-		source,
-		true,
-		common.CpkOptions{})
-	if err != nil {
-		return nil, nil, err
-	}
-
-	var errorMsg = ""
-
-	// For an Azure source, if there is no SAS, the cred type is Anonymous and the resource is not Azure public blob, tell the user they need to pass a new SAS.
-	if fromTo.From().IsAzure() && srcCredType == common.ECredentialType.Anonymous() && source.SAS == "" {
-		if !(fromTo.From() == common.ELocation.Blob() && isSrcPublic) {
-			errorMsg += "source-sas"
-		}
-	}
-
-	dstCredType, isDstPublic, err := getCredentialTypeForLocation(ctx,
-		fromTo.To(),
-		destination,
-		false,
-		common.CpkOptions{})
-	if err != nil {
-		return nil, nil, err
-	}
-
-	if fromTo.To().IsAzure() && dstCredType == common.ECredentialType.Anonymous() && destination.SAS == "" {
-		if !(fromTo.To() == common.ELocation.Blob() && isDstPublic) {
-			if errorMsg == "" {
-				errorMsg = "destination-sas"
-			} else {
-				errorMsg += " and destination-sas"
-			}
-		}
-	}
-	if errorMsg != "" {
-		return nil, nil, fmt.Errorf("the %s switch must be provided to resume the job", errorMsg)
-	}
-
-	var tc azcore.TokenCredential
-	if srcCredType.IsAzureOAuth() || dstCredType.IsAzureOAuth() {
-		uotm := azcopy.GetUserOAuthTokenManagerInstance()
-		// Get token from env var or cache.
-		tokenInfo, err := uotm.GetTokenInfo(ctx)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		tc, err = tokenInfo.GetTokenCredential()
-		if err != nil {
-			return nil, nil, err
-		}
-	}
-
-	var reauthTok *common.ScopedAuthenticator
-	if at, ok := tc.(common.AuthenticateToken); ok { // We don't need two different tokens here since it gets passed in just the same either way.
-		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
-	}
-	// But we don't want to supply a reauth token if we're not using OAuth. That could cause problems if say, a SAS is invalid.
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, common.Iff(srcCredType.IsAzureOAuth(), reauthTok, nil))
-
-	var fileSrcClientOptions any
-	if fromTo.From() == common.ELocation.File() || fromTo.From() == common.ELocation.FileNFS() {
-		fileSrcClientOptions = &common.FileClientOptions{
-			AllowTrailingDot: jobDetails.TrailingDot.IsEnabled(), //Access the trailingDot option of the job
-		}
-	}
-	srcServiceClient, err := common.GetServiceClientForLocation(fromTo.From(), source, srcCredType, tc, &options, fileSrcClientOptions)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	var srcCred *common.ScopedToken
-	if fromTo.IsS2S() && srcCredType.IsAzureOAuth() {
-		srcCred = common.NewScopedCredential(tc, srcCredType)
-	}
-	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred, common.Iff(dstCredType.IsAzureOAuth(), reauthTok, nil))
-	var fileClientOptions any
-	if fromTo.To() == common.ELocation.File() || fromTo.To() == common.ELocation.FileNFS() {
-		fileClientOptions = &common.FileClientOptions{
-			AllowSourceTrailingDot: jobDetails.TrailingDot.IsEnabled() && fromTo.From() == common.ELocation.File(),
-			AllowTrailingDot:       jobDetails.TrailingDot.IsEnabled(),
-		}
-	}
-	dstServiceClient, err := common.GetServiceClientForLocation(fromTo.To(), destination, dstCredType, tc, &options, fileClientOptions)
-	if err != nil {
-		return nil, nil, err
-	}
-	return srcServiceClient, dstServiceClient, nil
-}
-
-// normalizeSAS ensures the SAS token starts with "?" if non-empty.
-func normalizeSAS(sas string) string {
-	if sas != "" && sas[0] != '?' {
-		return "?" + sas
-	}
-	return sas
-}
-
 // processes the resume command,
 // dispatches the resume Job order to the storage engine.
 func (rca resumeCmdArgs) process() error {
@@ -329,60 +218,6 @@ func (rca resumeCmdArgs) process() error {
 	err = Client.ResumeJob(azcopy.ResumeJobOptions{JobID: jobID, SourceSAS: rca.SourceSAS, DestinationSAS: rca.DestinationSAS})
 	if err != nil {
 		return err
-	}
-
-	// if no logging, set this empty so that we don't display the log location
-	if Client.GetLogLevel() == common.LogNone {
-		common.LogPathFolder = ""
-	}
-
-	// Get fromTo info, so we can decide what's the proper credential type to use.
-	jobDetails := jobsAdmin.GetJobDetails(common.GetJobDetailsRequest{JobID: jobID})
-	if jobDetails.ErrorMsg != "" {
-		glcm.Error(jobDetails.ErrorMsg)
-	}
-
-	if jobDetails.FromTo.From() == common.ELocation.Benchmark() ||
-		jobDetails.FromTo.To() == common.ELocation.Benchmark() {
-		// Doesn't make sense to resume a benchmark job.
-		// It's not tested, and wouldn't report progress correctly and wouldn't clean up after itself properly
-		return errors.New("resuming benchmark jobs is not supported")
-	}
-	rca.SourceSAS = normalizeSAS(rca.SourceSAS)
-	rca.DestinationSAS = normalizeSAS(rca.DestinationSAS)
-
-	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	// TODO: Replace context with root context
-	srcResourceString, err := SplitResourceString(jobDetails.Source, jobDetails.FromTo.From())
-	if err != nil {
-		return fmt.Errorf("error parsing source resource string: %w", err)
-	}
-	srcResourceString.SAS = rca.SourceSAS
-	dstResourceString, err := SplitResourceString(jobDetails.Destination, jobDetails.FromTo.To())
-	if err != nil {
-		return fmt.Errorf("error parsing destination resource string: %w", err)
-	}
-	dstResourceString.SAS = rca.DestinationSAS
-
-	srcServiceClient, dstServiceClient, err := getSourceAndDestinationServiceClients(
-		ctx, jobDetails,
-		srcResourceString,
-		dstResourceString,
-	)
-	if err != nil {
-		return fmt.Errorf("cannot resume job with JobId %s, could not create service clients %v", jobID, err.Error())
-	}
-	// Send resume job request.
-	resumeJobResponse := jobsAdmin.ResumeJobOrder(common.ResumeJobRequest{
-		JobID:            jobID,
-		SourceSAS:        rca.SourceSAS,
-		DestinationSAS:   rca.DestinationSAS,
-		SrcServiceClient: srcServiceClient,
-		DstServiceClient: dstServiceClient,
-	})
-
-	if !resumeJobResponse.CancelledPauseResumed {
-		glcm.Error(resumeJobResponse.ErrorMsg)
 	}
 
 	controller := resumeJobController{jobID: jobID}
