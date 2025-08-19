@@ -37,17 +37,6 @@ var _ IJobMgr = &jobMgr{}
 
 type PartNumber = common.PartNumber
 
-// InMemoryTransitJobState defines job state transit in memory, and not in JobPartPlan file.
-// Note: InMemoryTransitJobState should only be set when request come from cmd(FE) module to STE module.
-// In memory CredentialInfo is currently maintained per job in STE, as FE could have many-to-one relationship with STE,
-// i.e. different jobs could have different OAuth tokens requested from FE, and these jobs can run at same time in STE.
-// This can be optimized if FE would no more be another module vs STE module.
-type InMemoryTransitJobState struct {
-	CredentialInfo common.CredentialInfo
-	// S2SSourceCredentialType can override the CredentialInfo.CredentialType when being used for the source (e.g. Source Info Provider and when using GetS2SSourceBlobTokenCredential)
-	S2SSourceCredentialType common.CredentialType
-}
-
 type IJobMgr interface {
 	JobID() common.JobID
 	JobPartMgr(partNum PartNumber) (IJobPartMgr, bool)
@@ -76,7 +65,6 @@ type IJobMgr interface {
 	GetPerfInfo() (displayStrings []string, constraint common.PerfConstraint)
 	// Close()
 	ChunkStatusLogger() common.ChunkStatusLogger
-	HttpClient() *http.Client
 	PipelineNetworkStats() *PipelineNetworkStats
 	getOverwritePrompter() *overwritePrompter
 	common.ILoggerCloser
@@ -146,7 +134,6 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	}
 
 	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(),
-		httpClient:           NewAzcopyHTTPClient(concurrency.MaxIdleConnections),
 		logger:               jobLogger,
 		chunkStatusLogger:    common.NewChunkStatusLogger(jobID, cpuMon, common.LogPathFolder, enableChunkLogOutput),
 		concurrency:          concurrency,
@@ -294,10 +281,6 @@ type jobMgr struct {
 	cancel                          context.CancelFunc
 	pipelineNetworkStats            *PipelineNetworkStats
 
-	// Share the same HTTP Client across all job parts, so that the we maximize reuse of
-	// its internal connection pool
-	httpClient *http.Client
-
 	jobPartMgrs jobPartToJobPartMgr // The map of part #s to JobPartMgrs
 
 	// reportCancelCh to close the report thread.
@@ -306,8 +289,6 @@ type jobMgr struct {
 	// partsDone keep the count of completed part of the Job.
 	partsDone uint32
 	// throughput  common.CountPerSecond // TODO: Set LastCheckedTime to now
-
-	inMemoryTransitJobState InMemoryTransitJobState
 
 	// only a single instance of the prompter is needed for all transfers
 	overwritePrompter *overwritePrompter
@@ -410,10 +391,6 @@ type AddJobPartArgs struct {
 	PartNum         PartNumber
 	PlanFile        JobPartPlanFileName
 	ExistingPlanMMF *JobPartPlanMMF
-
-	// this is required in S2S transfers authenticating to src
-	// via oAuth
-	SourceTokenCred *string
 
 	// These clients are valid if this fits the FromTo. i.e if
 	// we're uploading
@@ -559,10 +536,6 @@ func (jm *jobMgr) setDirection(fromTo common.FromTo) {
 // can't do this at time of constructing the jobManager, because it doesn't know fromTo at that time
 func (jm *jobMgr) getExclusiveDestinationMap(partNum PartNumber, fromTo common.FromTo) *common.ExclusiveStringMap {
 	return jm.initState.exclusiveDestinationMapHolder.Load().(*common.ExclusiveStringMap)
-}
-
-func (jm *jobMgr) HttpClient() *http.Client {
-	return jm.httpClient
 }
 
 func (jm *jobMgr) PipelineNetworkStats() *PipelineNetworkStats {
