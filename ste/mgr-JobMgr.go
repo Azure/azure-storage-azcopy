@@ -54,7 +54,6 @@ type IJobMgr interface {
 	// Throughput() XferThroughput
 	// If existingPlanMMF is nil, a new MMF is opened.
 	AddJobPart(args *AddJobPartArgs) IJobPartMgr
-
 	ResumeTransfers(appCtx context.Context)
 	ResetFailedTransfersCount()
 	AllTransfersScheduled() bool
