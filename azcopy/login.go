@@ -73,3 +73,7 @@ func (c *Client) Login(opts LoginOptions) (LoginResponse, error) {
 		// User fulfills login in browser, and there would be message in browser indicating whether login fulfilled successfully.
 	}
 }
+
+func (c *Client) AutoLogin() (LoginResponse, error) {
+	opts := LoginOptions{}
+}
