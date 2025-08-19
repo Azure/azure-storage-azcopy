@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	datalake "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 )
 
 // ResourceString represents a source or dest string, that can have
@@ -117,10 +116,6 @@ type CopyJobPartOrderRequest struct {
 	DestinationRoot  ResourceString
 	SrcServiceClient *ServiceClient
 	DstServiceClient *ServiceClient
-
-	//These clients are required only in S2S transfers from/to datalake
-	SrcDatalakeClient *datalake.Client
-	DstDatalakeClient *datalake.Client
 
 	Transfers      Transfers
 	LogLevel       LogLevel
@@ -303,7 +298,6 @@ type ResumeJobRequest struct {
 	DestinationSAS   string
 	SrcServiceClient *ServiceClient
 	DstServiceClient *ServiceClient
-	CredentialInfo   CredentialInfo
 }
 
 // represents the Details and details of a single transfer
