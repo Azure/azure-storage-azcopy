@@ -22,28 +22,21 @@ package azcopy
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 )
 
-type RemoveJobOptions struct {
+type ResumeJobOptions struct {
+	SourceSAS      string
+	DestinationSAS string
 }
 
-type RemoveJobResult struct {
-	Count int // Number of files cleaned
-}
+// ResumeJob resumes a job with the specified JobID.
+func (c Client) ResumeJob(jobID common.JobID, opts ResumeJobOptions) (err error) {
 
-// RemoveJob removes a job with the specified JobID.
-func (c Client) RemoveJob(jobID common.JobID, opts RemoveJobOptions) (result RemoveJobResult, err error) {
-	result = RemoveJobResult{}
 	if jobID.IsEmpty() {
-		return result, errors.New("remove job requires the JobID")
+		return errors.New("resume job requires the JobID")
 	}
-	result.Count, err = jobsAdmin.RemoveSingleJobFiles(jobID)
-	if err != nil {
-		return result, fmt.Errorf("failed to remove log and job plan files for job %s due to error: %w", jobID, err)
-	}
-	return result, nil
+	// TODO (gapra): Implement the logic to resume a job.
+	return nil
 }
