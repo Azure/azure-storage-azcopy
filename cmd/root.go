@@ -51,7 +51,6 @@ var OutputFormat common.OutputFormat
 var OutputLevel common.OutputVerbosity
 var LogLevel common.LogLevel
 var CapMbps float64
-var SkipVersionCheck bool
 
 // It's not pretty that this one is read directly by credential util.
 // But doing otherwise required us passing it around in many places, even though really
@@ -64,6 +63,7 @@ var azcopyScanningLogger common.ILoggerResetable
 var isPipeDownload bool
 var retryStatusCodes string
 var debugMemoryProfile string
+var checkAzCopyUpdates bool
 
 // It would be preferable if this was a local variable, since it just gets altered and shot off to the STE
 var debugSkipFiles string
@@ -72,7 +72,7 @@ var Client azcopy.Client
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Version: common.AzcopyVersion,
+	Version: common.AzcopyVersion, // will enable the user to see the version info in the standard posix way: --version
 	Use:     "azcopy",
 	Short:   rootCmdShortDescription,
 	Long:    rootCmdLongDescription,
@@ -186,6 +186,20 @@ var rootCmd = &cobra.Command{
 
 		return Initialize(resumeJobID, isBench)
 	},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Version checking is done explicitly when the user sets flag
+		if checkAzCopyUpdates && !isPipeDownload {
+			select {
+			// Either wait till this routine completes or timeout and do not print if it exceeds 8s
+			// Spawn a routine to fetch & compare the local application's version against the latest version available
+			case <-beginDetectNewVersion():
+				// noop
+			case <-time.After(time.Second * 8):
+				// don't wait too long
+			}
+		}
+		return nil
+	},
 }
 
 func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
@@ -235,15 +249,6 @@ func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
 		common.IncludeAfterFlagName, IncludeAfterDateFilter{}.FormatAsUTC(adjustedTime))
 	common.LogToJobLogWithPrefix(startTimeMessage, common.LogInfo)
 
-	if !SkipVersionCheck && !isPipeDownload {
-		// spawn a routine to fetch and compare the local application's version against the latest version available
-		// if there's a newer version that can be used, then write the suggestion to stderr
-		// however if this takes too long the message won't get printed
-		// Note: this function is necessary for non-help, non-login commands, since they don't reach the corresponding
-		// beginDetectNewVersion call in Execute (below)
-		beginDetectNewVersion()
-	}
-
 	return nil
 
 }
@@ -261,16 +266,6 @@ func InitializeAndExecute() {
 	if err := Execute(); err != nil {
 		glcm.Error(err.Error())
 	} else {
-		if !SkipVersionCheck && !isPipeDownload {
-			// our commands all control their own life explicitly with the lifecycle manager
-			// only commands that don't explicitly exit actually reach this point (e.g. help commands)
-			select {
-			case <-beginDetectNewVersion():
-				// noop
-			case <-time.After(time.Second * 8):
-				// don't wait too long
-			}
-		}
 		glcm.Exit(nil, common.EExitCode.Success())
 	}
 }
@@ -298,9 +293,6 @@ func init() {
 			trustedSuffixesAAD+"'. \n Any listed here are added to the default. For security, you should only put Microsoft Azure domains here. "+
 			"\n Separate multiple entries with semi-colons.")
 
-	rootCmd.PersistentFlags().BoolVar(&SkipVersionCheck, "skip-version-check", false,
-		"Do not perform the version check at startup. \nIntended for automation scenarios & airgapped use.")
-
 	// Note: this is due to Windows not supporting signals properly
 	rootCmd.PersistentFlags().BoolVar(&cancelFromStdin, "cancel-from-stdin", false,
 		"Used by partner teams to send in `cancel` through stdin to stop a job.")
@@ -325,6 +317,8 @@ func init() {
 	_ = rootCmd.PersistentFlags().MarkHidden("retry-status-codes")
 	rootCmd.PersistentFlags().StringVar(&debugMemoryProfile, "memory-profile", "", "Export pprof memory profile")
 	_ = rootCmd.PersistentFlags().MarkHidden("memory-profile")
+	rootCmd.PersistentFlags().BoolVar(&checkAzCopyUpdates, "check-version", false,
+		"Check current AzCopy version for a newer version available.")
 }
 
 // always spins up a new goroutine, because sometimes the aka.ms URL can't be reached (e.g. a constrained environment where
