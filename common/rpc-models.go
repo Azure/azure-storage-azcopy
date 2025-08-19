@@ -309,7 +309,6 @@ type ResumeJobRequest struct {
 	DestinationSAS   string
 	SrcServiceClient *ServiceClient
 	DstServiceClient *ServiceClient
-	CredentialInfo   CredentialInfo
 }
 
 // represents the Details and details of a single transfer
