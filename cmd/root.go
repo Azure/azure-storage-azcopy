@@ -66,7 +66,7 @@ var debugMemoryProfile string
 // It would be preferable if this was a local variable, since it just gets altered and shot off to the STE
 var debugSkipFiles string
 
-var Client azcopy.Client
+var Client *azcopy.Client
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
