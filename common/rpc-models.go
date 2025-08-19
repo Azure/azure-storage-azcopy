@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	datalake "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 )
 
 // ResourceString represents a source or dest string, that can have
@@ -118,10 +117,6 @@ type CopyJobPartOrderRequest struct {
 	SrcServiceClient *ServiceClient
 	DstServiceClient *ServiceClient
 
-	//These clients are required only in S2S transfers from/to datalake
-	SrcDatalakeClient *datalake.Client
-	DstDatalakeClient *datalake.Client
-
 	Transfers      Transfers
 	LogLevel       LogLevel
 	BlobAttributes BlobTransferAttributes
@@ -154,12 +149,6 @@ type CredentialInfo struct {
 	OAuthTokenInfo    OAuthTokenInfo
 	S3CredentialInfo  S3CredentialInfo
 	GCPCredentialInfo GCPCredentialInfo
-}
-
-func (c CredentialInfo) WithType(credentialType CredentialType) CredentialInfo {
-	// c is a clone, so this is OK
-	c.CredentialType = credentialType
-	return c
 }
 
 type GCPCredentialInfo struct {
