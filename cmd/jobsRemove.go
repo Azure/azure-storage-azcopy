@@ -23,6 +23,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
@@ -55,7 +56,7 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			_, err := Client.RemoveJob(azcopy.RemoveJobOptions{JobID: commandLineInput.JobID})
+			_, err := Client.RemoveJob(commandLineInput.JobID, azcopy.RemoveJobOptions{})
 			if err == nil {
 				glcm.Exit(func(format common.OutputFormat) string {
 					return fmt.Sprintf("Successfully removed log and job plan files for job %s.", commandLineInput.JobID)

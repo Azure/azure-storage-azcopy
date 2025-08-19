@@ -22,9 +22,10 @@ package azcopy
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
+
+	"errors"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -33,23 +34,23 @@ import (
 )
 
 type ResumeJobOptions struct {
-	JobID          common.JobID
 	SourceSAS      string
 	DestinationSAS string
 }
 
 // ResumeJob resumes a job with the specified JobID.
-func (c *Client) ResumeJob(opts ResumeJobOptions) (err error) {
+
+func (c *Client) ResumeJob(jobID common.JobID, opts ResumeJobOptions) (err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if !c.CurrentJobID.IsEmpty() {
 		return errors.New("a job is already running")
 	}
-	if opts.JobID.IsEmpty() {
+	if jobID.IsEmpty() {
 		return errors.New("resume job requires the JobID")
 	}
 
-	c.CurrentJobID = opts.JobID
+	c.CurrentJobID = jobID
 	timeAtPrestart := time.Now()
 	common.AzcopyCurrentJobLogger = common.NewJobLogger(c.CurrentJobID, c.logLevel, common.LogPathFolder, "")
 	common.AzcopyCurrentJobLogger.OpenLog()
@@ -71,7 +72,7 @@ func (c *Client) ResumeJob(opts ResumeJobOptions) (err error) {
 	}
 
 	// Get fromTo info, so we can decide what's the proper credential type to use.
-	jobDetails := jobsAdmin.GetJobDetails(common.GetJobDetailsRequest{JobID: opts.JobID})
+	jobDetails := jobsAdmin.GetJobDetails(common.GetJobDetailsRequest{JobID: jobID})
 	if jobDetails.ErrorMsg != "" {
 		return errors.New(jobDetails.ErrorMsg)
 	}
@@ -109,7 +110,7 @@ func (c *Client) ResumeJob(opts ResumeJobOptions) (err error) {
 	}
 	// Send resume job request.
 	resumeJobResponse := jobsAdmin.ResumeJobOrder(common.ResumeJobRequest{
-		JobID:            opts.JobID,
+		JobID:            jobID,
 		SourceSAS:        sourceSAS,
 		DestinationSAS:   destinationSAS,
 		SrcServiceClient: srcServiceClient,
