@@ -115,7 +115,7 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 		return nil, err
 	}
 
-	return azcopy.GetUserOAuthTokenManagerInstance(), nil
+	return Client.GetOAuthTokenManager(), nil
 }
 
 var announceOAuthTokenOnce sync.Once
@@ -506,7 +506,7 @@ func GetCredentialInfoForLocation(ctx context.Context, location common.Location,
 
 	// flesh out the rest of the fields, for those types that require it
 	if credInfo.CredentialType.IsAzureOAuth() {
-		uotm := azcopy.GetUserOAuthTokenManagerInstance()
+		uotm := Client.GetOAuthTokenManager()
 
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return credInfo, false, err

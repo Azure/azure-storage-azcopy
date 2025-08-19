@@ -156,12 +156,6 @@ type CredentialInfo struct {
 	GCPCredentialInfo GCPCredentialInfo
 }
 
-func (c CredentialInfo) WithType(credentialType CredentialType) CredentialInfo {
-	// c is a clone, so this is OK
-	c.CredentialType = credentialType
-	return c
-}
-
 type GCPCredentialInfo struct {
 }
 

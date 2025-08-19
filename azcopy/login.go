@@ -46,7 +46,7 @@ type LoginResponse struct {
 
 func (c Client) Login(opts LoginOptions) (LoginResponse, error) {
 	resp := LoginResponse{}
-	uotm := GetUserOAuthTokenManagerInstance()
+	uotm := c.GetOAuthTokenManager()
 
 	// Persist the token to cache, if login fulfilled successfully.
 	switch opts.LoginType {
