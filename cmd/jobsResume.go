@@ -126,6 +126,7 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 		if summary.TransfersFailed > 0 {
 			exitCode = common.EExitCode.Error()
 		}
+
 		jobSummary := common.JobSummary{
 			ExitCode:               exitCode,
 			ListJobSummaryResponse: summary,
@@ -150,7 +151,7 @@ func parseTransfers(arg string) map[string]int {
 }
 
 func init() {
-	resumeCmdArgs := resumeCmdArgs{}
+	commandLineArgs := resumeCmdArgs{}
 
 	// resumeCmd represents the resume command
 	resumeCmd := &cobra.Command{
@@ -166,7 +167,7 @@ func init() {
 			if len(args) != 1 {
 				return errors.New("this command requires jobId to be passed as argument")
 			}
-			resumeCmdArgs.jobID = args[0]
+			commandLineArgs.jobID = args[0]
 
 			glcm.EnableInputWatcher()
 			if cancelFromStdin {
@@ -175,12 +176,12 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			includeTransfer := parseTransfers(resumeCmdArgs.includeTransfer)
-			excludeTransfer := parseTransfers(resumeCmdArgs.excludeTransfer)
+			includeTransfer := parseTransfers(commandLineArgs.includeTransfer)
+			excludeTransfer := parseTransfers(commandLineArgs.excludeTransfer)
 			if len(includeTransfer) > 0 || len(excludeTransfer) > 0 {
 				panic("List of transfers is obsolete.")
 			}
-			err := resumeCmdArgs.process()
+			err := commandLineArgs.process()
 			if err != nil {
 				glcm.Error(fmt.Sprintf("failed to perform resume command due to error: %s", err.Error()))
 			}
@@ -188,13 +189,13 @@ func init() {
 	}
 
 	jobsCmd.AddCommand(resumeCmd)
-	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.includeTransfer, "include", "", "Filter: Include only these failed transfer(s) when resuming the job. "+
+	resumeCmd.PersistentFlags().StringVar(&commandLineArgs.includeTransfer, "include", "", "Filter: Include only these failed transfer(s) when resuming the job. "+
 		"Files should be separated by ';'.")
-	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.excludeTransfer, "exclude", "", "Filter: Exclude these failed transfer(s) when resuming the job. "+
+	resumeCmd.PersistentFlags().StringVar(&commandLineArgs.excludeTransfer, "exclude", "", "Filter: Exclude these failed transfer(s) when resuming the job. "+
 		"Files should be separated by ';'.")
 	// oauth options
-	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.SourceSAS, "source-sas", "", "Source SAS token of the source for a given Job ID.")
-	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.DestinationSAS, "destination-sas", "", "Destination SAS token of the destination for a given Job ID.")
+	resumeCmd.PersistentFlags().StringVar(&commandLineArgs.SourceSAS, "source-sas", "", "Source SAS token of the source for a given Job ID.")
+	resumeCmd.PersistentFlags().StringVar(&commandLineArgs.DestinationSAS, "destination-sas", "", "Destination SAS token of the destination for a given Job ID.")
 }
 
 type resumeCmdArgs struct {
