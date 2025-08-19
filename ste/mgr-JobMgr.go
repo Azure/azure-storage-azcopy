@@ -23,7 +23,6 @@ package ste
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"runtime"
 	"strings"
 	"sync"
