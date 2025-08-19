@@ -35,7 +35,7 @@ type GetJobSummaryOptions struct {
 
 type JobSummaryResponse common.ListJobSummaryResponse
 
-func (c Client) GetJobSummary(jobID common.JobID, opts GetJobSummaryOptions) (result JobSummaryResponse, err error) {
+func (c *Client) GetJobSummary(jobID common.JobID, opts GetJobSummaryOptions) (result JobSummaryResponse, err error) {
 	if jobID.IsEmpty() {
 		return JobSummaryResponse{}, errors.New("get job statistics requires the JobID")
 	}
@@ -55,7 +55,7 @@ type ListJobTransfersOptions struct {
 type ListJobTransfersResponse common.ListJobTransfersResponse
 
 // ListJobTransfers lists the transfers for a job with the specified JobID and given transfer status.
-func (c Client) ListJobTransfers(jobID common.JobID, opts ListJobTransfersOptions) (result ListJobTransfersResponse, err error) {
+func (c *Client) ListJobTransfers(jobID common.JobID, opts ListJobTransfersOptions) (result ListJobTransfersResponse, err error) {
 	if jobID.IsEmpty() {
 		return result, errors.New("list job transfers requires the JobID")
 	}
