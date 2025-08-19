@@ -51,11 +51,6 @@ var OutputLevel common.OutputVerbosity
 var CapMbps float64
 var SkipVersionCheck bool
 
-// It's not pretty that this one is read directly by credential util.
-// But doing otherwise required us passing it around in many places, even though really
-// it can be thought of as an "ambient" property. That's the (weak?) justification for implementing
-// it as a global
-var TrustedSuffixes string
 var azcopyAwaitContinue bool
 var azcopyAwaitAllowOpenFiles bool
 var azcopyScanningLogger common.ILoggerResetable
@@ -284,9 +279,9 @@ func init() {
 			"\n available levels: DEBUG(detailed trace), INFO(all requests/responses), WARNING(slow responses),"+
 			"\n ERROR(only failed requests), and NONE(no output logs). (default 'INFO').")
 
-	rootCmd.PersistentFlags().StringVar(&TrustedSuffixes, trustedSuffixesNameAAD, "",
+	rootCmd.PersistentFlags().StringVar(&azcopy.TrustedSuffixes, azcopy.TrustedSuffixesNameAAD, "",
 		"\nSpecifies additional domain suffixes where Azure Active Directory login tokens may be sent.  \nThe default is '"+
-			trustedSuffixesAAD+"'. \n Any listed here are added to the default. For security, you should only put Microsoft Azure domains here. "+
+			azcopy.TrustedSuffixesAAD+"'. \n Any listed here are added to the default. For security, you should only put Microsoft Azure domains here. "+
 			"\n Separate multiple entries with semi-colons.")
 
 	rootCmd.PersistentFlags().BoolVar(&SkipVersionCheck, "skip-version-check", false,

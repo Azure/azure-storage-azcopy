@@ -61,8 +61,6 @@ const (
 	oauthLoginSessionCacheKeyName     = "AzCopyOAuthTokenCache"
 	oauthLoginSessionCacheServiceName = "AzCopyV10"
 	oauthLoginSessionCacheAccountName = "AzCopyOAuthTokenCache"
-	trustedSuffixesNameAAD            = "trusted-microsoft-suffixes"
-	trustedSuffixesAAD                = "*.core.windows.net;*.core.chinacloudapi.cn;*.core.cloudapi.de;*.core.usgovcloudapi.net;*.storage.azure.net"
 )
 
 const MAX_SYMLINKS_TO_FOLLOW = 40

@@ -105,7 +105,7 @@ func (c *Client) ResumeJob(opts ResumeJobOptions) (err error) {
 		dstResourceString,
 	)
 	if err != nil {
-		return fmt.Errorf("cannot resume job with JobId %s, could not create service clients %v", jobID, err.Error())
+		return fmt.Errorf("cannot resume job with JobId %s, could not create service clients %v", opts.JobID, err.Error())
 	}
 	// Send resume job request.
 	resumeJobResponse := jobsAdmin.ResumeJobOrder(common.ResumeJobRequest{

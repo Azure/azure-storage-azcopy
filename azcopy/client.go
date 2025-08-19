@@ -30,6 +30,12 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
 
+// It's not pretty that this one is read directly by credential util.
+// But doing otherwise required us passing it around in many places, even though really
+// it can be thought of as an "ambient" property. That's the (weak?) justification for implementing
+// it as a global
+var TrustedSuffixes string
+
 type Client struct {
 	mu           sync.Mutex   // protects currentJob
 	CurrentJobID common.JobID // TODO (gapra): In future this should only be set when there is a current job running. On complete, this should be cleared. It can also behave as something we can check to see if a current job is running
