@@ -75,8 +75,6 @@ type IJobMgr interface {
 	ActiveConnections() int64
 	GetPerfInfo() (displayStrings []string, constraint common.PerfConstraint)
 	// Close()
-	getInMemoryTransitJobState() InMemoryTransitJobState      // get in memory transit job state saved in this job.
-	SetInMemoryTransitJobState(state InMemoryTransitJobState) // set in memory transit job state saved in this job.
 	ChunkStatusLogger() common.ChunkStatusLogger
 	HttpClient() *http.Client
 	PipelineNetworkStats() *PipelineNetworkStats
@@ -493,7 +491,6 @@ func (jm *jobMgr) AddJobOrder(order common.CopyJobPartOrderRequest) IJobPartMgr 
 		slicePool:        jm.slicePool,
 		cacheLimiter:     jm.cacheLimiter,
 		fileCountLimiter: jm.fileCountLimiter,
-		credInfo:         order.CredentialInfo,
 		srcIsOAuth:       order.S2SSourceCredentialType.IsAzureOAuth(),
 	}
 	jpm.planMMF = jpm.filename.Map()
@@ -731,16 +728,6 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 			}
 		}
 	}
-}
-
-func (jm *jobMgr) getInMemoryTransitJobState() InMemoryTransitJobState {
-	return jm.inMemoryTransitJobState
-}
-
-// Note: InMemoryTransitJobState should only be set when request come from cmd(FE) module to STE module.
-// And the state should no more be changed inside STE module.
-func (jm *jobMgr) SetInMemoryTransitJobState(state InMemoryTransitJobState) {
-	jm.inMemoryTransitJobState = state
 }
 
 func (jm *jobMgr) Context() context.Context { return jm.ctx }

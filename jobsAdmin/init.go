@@ -81,12 +81,6 @@ func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
 		 */
 		jm.Log(common.LogWarning, "No transfers were scheduled.")
 	}
-	// Get credential info from RPC request order, and set in InMemoryTransitJobState.
-	jm.SetInMemoryTransitJobState(
-		ste.InMemoryTransitJobState{
-			CredentialInfo:          order.CredentialInfo,
-			S2SSourceCredentialType: order.S2SSourceCredentialType,
-		})
 	// Supply no plan MMF because we don't have one, and AddJobPart will create one on its own.
 	// Add this part to the Job and schedule its transfers
 
@@ -265,11 +259,6 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 		// go func() {
 		// Navigate through transfers and schedule them independently
 		// This is done to avoid FE to get blocked until all the transfers have been scheduled
-		// Get credential info from RPC request, and set in InMemoryTransitJobState.
-		jm.SetInMemoryTransitJobState(
-			ste.InMemoryTransitJobState{
-				CredentialInfo: req.CredentialInfo,
-			})
 
 		// Prevents previous number of failed transfers seeping into a new run
 		jm.ResetFailedTransfersCount()
