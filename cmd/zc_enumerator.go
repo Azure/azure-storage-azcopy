@@ -432,7 +432,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 		}
 	}
 
-	options := createClientOptions(azcopyScanningLogger, nil, reauthTok)
+	options := azcopy.CreateClientOptions(azcopyScanningLogger, nil, reauthTok)
 
 	switch resourceLocation {
 	case common.ELocation.Local():

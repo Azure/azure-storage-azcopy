@@ -109,15 +109,15 @@ func (c *Client) ResumeJob(opts ResumeJobOptions) (err error) {
 	}
 	// Send resume job request.
 	resumeJobResponse := jobsAdmin.ResumeJobOrder(common.ResumeJobRequest{
-		JobID:            jobID,
-		SourceSAS:        rca.SourceSAS,
-		DestinationSAS:   rca.DestinationSAS,
+		JobID:            opts.JobID,
+		SourceSAS:        sourceSAS,
+		DestinationSAS:   destinationSAS,
 		SrcServiceClient: srcServiceClient,
 		DstServiceClient: dstServiceClient,
 	})
 
 	if !resumeJobResponse.CancelledPauseResumed {
-		glcm.Error(resumeJobResponse.ErrorMsg)
+		return errors.New(resumeJobResponse.ErrorMsg)
 	}
 
 	return nil
@@ -199,7 +199,7 @@ func getSourceAndDestinationServiceClients(
 		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
 	// But we don't want to supply a reauth token if we're not using OAuth. That could cause problems if say, a SAS is invalid.
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, common.Iff(srcCredType.IsAzureOAuth(), reauthTok, nil))
+	options := CreateClientOptions(common.AzcopyCurrentJobLogger, nil, common.Iff(srcCredType.IsAzureOAuth(), reauthTok, nil))
 
 	var fileSrcClientOptions any
 	if fromTo.From() == common.ELocation.File() || fromTo.From() == common.ELocation.FileNFS() {
@@ -216,7 +216,7 @@ func getSourceAndDestinationServiceClients(
 	if fromTo.IsS2S() && srcCredType.IsAzureOAuth() {
 		srcCred = common.NewScopedCredential(tc, srcCredType)
 	}
-	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred, common.Iff(dstCredType.IsAzureOAuth(), reauthTok, nil))
+	options = CreateClientOptions(common.AzcopyCurrentJobLogger, srcCred, common.Iff(dstCredType.IsAzureOAuth(), reauthTok, nil))
 	var fileClientOptions any
 	if fromTo.To() == common.ELocation.File() || fromTo.To() == common.ELocation.FileNFS() {
 		fileClientOptions = &common.FileClientOptions{

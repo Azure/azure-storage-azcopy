@@ -825,7 +825,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 
 	// step 1: create client options
 	// note: dstCred is nil, as we could not reauth effectively because stdout is a pipe.
-	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(azcopyScanningLogger, nil, nil)}
+	options := &blockblob.ClientOptions{ClientOptions: azcopy.CreateClientOptions(azcopyScanningLogger, nil, nil)}
 
 	// step 2: parse source url
 	u, err := blobResource.FullURL()
@@ -909,7 +909,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 
 	// step 0: initialize pipeline
 	// Reauthentication is theoretically possible here, since stdin is blocked.
-	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)}
+	options := &blockblob.ClientOptions{ClientOptions: azcopy.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)}
 
 	// step 1: parse destination url
 	u, err := blobResource.FullURL()
@@ -1104,7 +1104,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		srcReauth = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, srcReauth)
+	options := azcopy.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, srcReauth)
 	var azureFileSpecificOptions any
 	if cca.FromTo.From().IsFile() {
 		azureFileSpecificOptions = &common.FileClientOptions{
@@ -1142,7 +1142,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	if cca.FromTo.IsS2S() && srcCredInfo.CredentialType.IsAzureOAuth() {
 		srcCred = common.NewScopedCredential(srcCredInfo.OAuthTokenInfo.TokenCredential, srcCredInfo.CredentialType)
 	}
-	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred, dstReauthTok)
+	options = azcopy.CreateClientOptions(common.AzcopyCurrentJobLogger, srcCred, dstReauthTok)
 	jobPartOrder.DstServiceClient, err = common.GetServiceClientForLocation(
 		cca.FromTo.To(),
 		cca.Destination,

@@ -113,7 +113,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
+	options := azcopy.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
 	var fileClientOptions any
 	if cca.FromTo.From().IsFile() {
 		fileClientOptions = &common.FileClientOptions{AllowTrailingDot: cca.trailingDot.IsEnabled()}
@@ -171,7 +171,7 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
+	options := azcopy.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
 
 	targetServiceClient, err := common.GetServiceClientForLocation(cca.FromTo.From(), cca.Source, cca.credentialInfo.CredentialType, cca.credentialInfo.OAuthTokenInfo.TokenCredential, &options, nil)
 	if err != nil {

@@ -99,7 +99,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 	}
 
 	// Note : trailing dot is only applicable to file operations anyway, so setting this to false
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
+	options := azcopy.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
 	resourceURL := cookedArgs.resourceURL.String()
 	cred := credentialInfo.OAuthTokenInfo.TokenCredential
 

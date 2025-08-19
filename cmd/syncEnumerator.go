@@ -256,7 +256,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		srcReauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, srcReauthTok)
+	options := azcopy.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, srcReauthTok)
 
 	// Create Source Client.
 	var azureFileSpecificOptions any
@@ -297,7 +297,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		srcTokenCred = common.NewScopedCredential(srcCredInfo.OAuthTokenInfo.TokenCredential, srcCredInfo.CredentialType)
 	}
 
-	options = createClientOptions(common.AzcopyCurrentJobLogger, srcTokenCred, dstReauthTok)
+	options = azcopy.CreateClientOptions(common.AzcopyCurrentJobLogger, srcTokenCred, dstReauthTok)
 	copyJobTemplate.DstServiceClient, err = common.GetServiceClientForLocation(
 		cca.fromTo.To(),
 		cca.destination,
