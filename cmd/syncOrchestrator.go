@@ -37,6 +37,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 )
@@ -234,6 +235,46 @@ func getRootStoredObjectS3(sourcePath string) (StoredObject, error) {
 	return root, nil
 }
 
+// getRootStoredObjectBlob returns the root object for the sync orchestrator based on an Azure Blob Storage source path.
+// It parses the Blob URL and determines the entity type (file or folder) based on the URL structure.
+//
+// Parameters:
+// - sourcePath: The Blob source path as a string.
+//
+// Returns:
+// - StoredObject: The root StoredObject for the given Blob source path.
+// - error: An error if parsing the URL or creating the StoredObject fails.
+func getRootStoredObjectBlob(sourcePath string) (StoredObject, error) {
+
+	blobURLParts, err := blob.ParseURL(sourcePath)
+	if err != nil {
+		return StoredObject{}, err
+	}
+
+	// Build a relative path that uniquely identifies the subtree we will enumerate.
+	// Use container name + blob name (if supplied).
+	var searchPrefix string
+	if blobURLParts.BlobName != "" {
+		searchPrefix = strings.Join([]string{blobURLParts.ContainerName, blobURLParts.BlobName}, common.AZCOPY_PATH_SEPARATOR_STRING)
+	} else {
+		searchPrefix = blobURLParts.ContainerName
+	}
+
+	root := newStoredObject(
+		nil,
+		searchPrefix,
+		"",
+		common.EEntityType.Folder(),
+		time.Time{},
+		0,
+		noContentProps,
+		noBlobProps,
+		nil,
+		blobURLParts.ContainerName)
+
+	return root, nil
+}
+
 // GetRootStoredObject returns the root object for the sync orchestrator
 // based on the source path and fromTo configuration. This determines the starting
 // point for sync enumeration operations.
@@ -254,6 +295,8 @@ func GetRootStoredObject(path string, fromTo common.FromTo) (StoredObject, error
 		return getRootStoredObjectLocal(path)
 	case common.ELocation.S3():
 		return getRootStoredObjectS3(path)
+	case common.ELocation.Blob():
+		return getRootStoredObjectBlob(path)
 	default:
 		return StoredObject{}, fmt.Errorf("sync orchestrator is not supported for %s source", fromTo.From().String())
 	}
@@ -523,7 +566,7 @@ func newSyncTraverser(enumerator *syncEnumerator, dir string, comparator objectP
 
 func validate(cca *cookedSyncCmdArgs, orchestratorOptions *SyncOrchestratorOptions) error {
 	switch cca.fromTo {
-	case common.EFromTo.LocalBlob(), common.EFromTo.LocalBlobFS(), common.EFromTo.LocalFile(), common.EFromTo.S3Blob():
+	case common.EFromTo.LocalBlob(), common.EFromTo.LocalBlobFS(), common.EFromTo.LocalFile(), common.EFromTo.S3Blob(), common.EFromTo.BlobBlob():
 		// sync orchestrator is supported for these types
 	default:
 		return fmt.Errorf(
@@ -531,7 +574,8 @@ func validate(cca *cookedSyncCmdArgs, orchestratorOptions *SyncOrchestratorOptio
 				"\t- Local->Blob\n" +
 				"\t- Local->BlobFS\n" +
 				"\t- Local->File\n" +
-				"\t- S3->Blob",
+				"\t- S3->Blob\n" +
+				"\t- Blob->Blob",
 		)
 	}
 
