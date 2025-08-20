@@ -209,11 +209,19 @@ type resumeCmdArgs struct {
 	DestinationSAS string
 }
 
+// normalizeSAS ensures the SAS token starts with "?" if non-empty.
+func normalizeSAS(sas string) string {
+	if sas != "" && sas[0] != '?' {
+		return "?" + sas
+	}
+	return sas
+}
+
 func getSourceAndDestinationServiceClients(
 	ctx context.Context,
-	jobDetails common.GetJobDetailsResponse,
 	source common.ResourceString,
 	destination common.ResourceString,
+	jobDetails common.GetJobDetailsResponse,
 ) (*common.ServiceClient, *common.ServiceClient, error) {
 	fromTo := jobDetails.FromTo
 	srcCredType, isSrcPublic, err := getCredentialTypeForLocation(ctx,
@@ -309,14 +317,6 @@ func getSourceAndDestinationServiceClients(
 	return srcServiceClient, dstServiceClient, nil
 }
 
-// normalizeSAS ensures the SAS token starts with "?" if non-empty.
-func normalizeSAS(sas string) string {
-	if sas != "" && sas[0] != '?' {
-		return "?" + sas
-	}
-	return sas
-}
-
 // processes the resume command,
 // dispatches the resume Job order to the storage engine.
 func (rca resumeCmdArgs) process() error {
@@ -361,9 +361,10 @@ func (rca resumeCmdArgs) process() error {
 	dstResourceString.SAS = rca.DestinationSAS
 
 	srcServiceClient, dstServiceClient, err := getSourceAndDestinationServiceClients(
-		ctx, jobDetails,
+		ctx,
 		srcResourceString,
 		dstResourceString,
+		jobDetails,
 	)
 	if err != nil {
 		return fmt.Errorf("cannot resume job with JobId %s, could not create service clients %v", jobID, err.Error())
