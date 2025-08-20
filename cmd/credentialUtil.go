@@ -31,8 +31,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
-
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -60,62 +58,9 @@ func warnIfSharedKeyAuthForDatalake() {
  * for current instance of AzCopy.
  */
 func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
-	var err error
-	autoOAuth.Do(func() {
-		var options azcopy.LoginOptions
-		autoLoginType := strings.ToLower(common.GetEnvironmentVariable(common.EEnvironmentVariable.AutoLoginType()))
-		if autoLoginType == "" {
-			glcm.Info("Autologin not specified.")
-			return
-		}
-
-		if tenantID := common.GetEnvironmentVariable(common.EEnvironmentVariable.TenantID()); tenantID != "" {
-			options.TenantID = tenantID
-		}
-
-		if endpoint := common.GetEnvironmentVariable(common.EEnvironmentVariable.AADEndpoint()); endpoint != "" {
-			options.AADEndpoint = endpoint
-		}
-
-		var loginType common.AutoLoginType
-		err = loginType.Parse(autoLoginType)
-		if err != nil {
-			glcm.Error("Invalid Auto-login type specified: " + autoLoginType)
-			return
-		}
-
-		// Fill up options
-		options.LoginType = loginType
-		switch options.LoginType {
-		case common.EAutoLoginType.SPN():
-			options.ApplicationID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ApplicationID())
-			options.CertificatePath = common.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePath())
-			options.CertificatePassword = common.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
-			options.ClientSecret = common.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
-		case common.EAutoLoginType.MSI():
-			options.IdentityClientID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityClientID())
-			options.IdentityObjectID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityObjectID())
-			options.IdentityResourceID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityResourceString())
-		case common.EAutoLoginType.Device():
-		case common.EAutoLoginType.AzCLI():
-		case common.EAutoLoginType.PsCred():
-		case common.EAutoLoginType.Workload():
-		default:
-			glcm.Error("Invalid Auto-login type specified: " + autoLoginType)
-			return
-		}
-
-		options.PersistToken = false
-		if err = RunLogin(options); err != nil {
-			glcm.Error(fmt.Sprintf("Failed to perform Auto-login: %v.", err))
-		}
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	return Client.GetUserOAuthTokenManagerInstance(), nil
+	uotm := Client.GetUserOAuthTokenManagerInstance()
+	_, err := uotm.AutoLogin(&autoOAuth)
+	return uotm, err
 }
 
 var announceOAuthTokenOnce sync.Once
@@ -134,6 +79,7 @@ func oAuthTokenExists() (oauthTokenExists bool) {
 
 	uotm, err := GetOAuthTokenManagerInstance()
 	if err != nil {
+		glcm.Error(err.Error())
 		oauthTokenExists = false
 		return
 	}

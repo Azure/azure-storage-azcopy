@@ -83,7 +83,7 @@ func (c *Client) SetLogLevel(level *common.LogLevel) {
 	}
 }
 
-func (c Client) GetLogLevel() common.LogLevel {
+func (c *Client) GetLogLevel() common.LogLevel {
 	return c.logLevel
 }
 
