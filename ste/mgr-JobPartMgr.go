@@ -156,9 +156,7 @@ type jobPartMgr struct {
 	srcServiceClient *common.ServiceClient
 	dstServiceClient *common.ServiceClient
 
-	credInfo   common.CredentialInfo
 	srcIsOAuth bool // true if source is authenticated via oauth
-	credOption *common.CredentialOpOptions
 	// When the part is schedule to run (inprogress), the below fields are used
 	planMMF *JobPartPlanMMF // This Job part plan's MMF
 
@@ -296,8 +294,6 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 
 	jpm.priority = plan.Priority
 
-	jpm.clientInfo()
-
 	// *** Schedule this job part's transfers ***
 	for t := uint32(0); t < plan.NumTransfers; t++ {
 		jppt := plan.Transfer(t)
@@ -403,24 +399,6 @@ func (jpm *jobPartMgr) ScheduleChunks(chunkFunc chunkFunc) {
 
 func (jpm *jobPartMgr) RescheduleTransfer(jptm IJobPartTransferMgr) {
 	jpm.jobMgr.ScheduleTransfer(jpm.priority, jptm)
-}
-
-func (jpm *jobPartMgr) clientInfo() {
-	jobState := jpm.jobMgr.getInMemoryTransitJobState()
-
-	// Destination credential
-	if jpm.credInfo.CredentialType == common.ECredentialType.Unknown() {
-		jpm.credInfo = jobState.CredentialInfo
-	}
-
-	jpm.credOption = &common.CredentialOpOptions{
-		LogInfo:  func(str string) { jpm.Log(common.LogInfo, str) },
-		LogError: func(str string) { jpm.Log(common.LogError, str) },
-		Panic:    jpm.Panic,
-		CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
-		Cancel:   jpm.jobMgr.Cancel,
-	}
-
 }
 
 func (jpm *jobPartMgr) SlicePool() common.ByteSlicePooler {

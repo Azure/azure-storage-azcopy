@@ -1,14 +1,15 @@
 package ste
 
 import (
-	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"crypto/md5"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"golang.org/x/oauth2/google"
 	"io"
 	"os"
+
+	gcpUtils "cloud.google.com/go/storage"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"golang.org/x/oauth2/google"
 
 	"net/url"
 	"time"
@@ -50,11 +51,6 @@ func newGCPSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, er
 		common.CredentialInfo{
 			CredentialType:    common.ECredentialType.GoogleAppCredentials(),
 			GCPCredentialInfo: common.GCPCredentialInfo{},
-		},
-		common.CredentialOpOptions{
-			LogInfo:  func(str string) { p.jptm.Log(common.LogInfo, str) },
-			LogError: func(str string) { p.jptm.Log(common.LogError, str) },
-			Panic:    func(err error) { panic(err) },
 		})
 	if err != nil {
 		return nil, err
