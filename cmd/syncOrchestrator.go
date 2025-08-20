@@ -37,6 +37,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 )
@@ -219,6 +220,14 @@ func validateS3Root(sourcePath string) error {
 	return nil
 }
 
+func validateBlobRoot(sourcePath string) error {
+	_, err := blob.ParseURL(sourcePath)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // validateAndGetRootObject returns the root object for the sync orchestrator
 // based on the source path and fromTo configuration. This determines the starting
 // point for sync enumeration operations.
@@ -239,6 +248,8 @@ func validateAndGetRootObject(path string, fromTo common.FromTo) (minimalStoredO
 		err = validateLocalRoot(path)
 	case common.ELocation.S3():
 		err = validateS3Root(path)
+	case common.ELocation.Blob():
+		err = validateBlobRoot(path)
 	default:
 		err = fmt.Errorf("sync orchestrator is not supported for %s source", fromTo.From().String())
 	}
@@ -514,7 +525,7 @@ func newSyncTraverser(enumerator *syncEnumerator, dir string, comparator objectP
 
 func validate(cca *cookedSyncCmdArgs, orchestratorOptions *SyncOrchestratorOptions) error {
 	switch cca.fromTo {
-	case common.EFromTo.LocalBlob(), common.EFromTo.LocalBlobFS(), common.EFromTo.LocalFile(), common.EFromTo.S3Blob():
+	case common.EFromTo.LocalBlob(), common.EFromTo.LocalBlobFS(), common.EFromTo.LocalFile(), common.EFromTo.S3Blob(), common.EFromTo.BlobBlob():
 		// sync orchestrator is supported for these types
 	default:
 		return fmt.Errorf(
@@ -522,7 +533,8 @@ func validate(cca *cookedSyncCmdArgs, orchestratorOptions *SyncOrchestratorOptio
 				"\t- Local->Blob\n" +
 				"\t- Local->BlobFS\n" +
 				"\t- Local->File\n" +
-				"\t- S3->Blob",
+				"\t- S3->Blob\n" +
+				"\t- Blob->Blob",
 		)
 	}
 
