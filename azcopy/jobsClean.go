@@ -22,6 +22,7 @@ package azcopy
 
 import (
 	"fmt"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 )
@@ -39,7 +40,7 @@ type CleanJobsResult struct {
 // CleanJobs removes jobs with a specified status.
 // If WithStatus is All, it cleans all jobs and returns the count of jobs cleaned.
 // If WithStatus is not All, it cleans jobs with that status and returns the count of jobs cleaned and list of job IDs cleaned.
-func (c Client) CleanJobs(opts CleanJobsOptions) (result CleanJobsResult, err error) {
+func (c *Client) CleanJobs(opts CleanJobsOptions) (result CleanJobsResult, err error) {
 	result = CleanJobsResult{}
 	status := common.IffNil(opts.WithStatus, common.EJobStatus.All())
 

@@ -32,7 +32,7 @@ type ResumeJobOptions struct {
 }
 
 // ResumeJob resumes a job with the specified JobID.
-func (c Client) ResumeJob(jobID common.JobID, opts ResumeJobOptions) (err error) {
+func (c *Client) ResumeJob(jobID common.JobID, opts ResumeJobOptions) (err error) {
 
 	if jobID.IsEmpty() {
 		return errors.New("resume job requires the JobID")

@@ -38,8 +38,8 @@ type LoginStatus struct {
 	LoginType   common.AutoLoginType
 }
 
-func (c Client) GetLoginStatus(_ GetLoginStatusOptions) (LoginStatus, error) {
-	uotm := GetUserOAuthTokenManagerInstance()
+func (c *Client) GetLoginStatus(_ GetLoginStatusOptions) (LoginStatus, error) {
+	uotm := c.GetUserOAuthTokenManagerInstance()
 
 	// Get current token info and refresh it with GetTokenInfo()
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
