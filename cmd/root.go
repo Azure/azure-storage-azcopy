@@ -76,6 +76,7 @@ var rootCmd = &cobra.Command{
 	Use:     "azcopy",
 	Short:   rootCmdShortDescription,
 	Long:    rootCmdLongDescription,
+	// PersistentPreRunE hook will not run on just `azcopy` without any subcommand
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		glcm.RegisterCloseFunc(func() {
 			if debugMemoryProfile != "" {
@@ -264,6 +265,12 @@ func InitializeAndExecute() {
 		if !SkipVersionCheck && !isPipeDownload {
 			// our commands all control their own life explicitly with the lifecycle manager
 			// only commands that don't explicitly exit actually reach this point (e.g. help commands)
+
+			// We initialize folders here because in some commands (--help, --version)
+			// it does not reach the Initialize in the rootCmd.
+			// With this, there is a log location path for the latest_version.txt file to write to
+			// instead of writing to the user's current directory
+			common.InitializeFolders()
 			select {
 			case <-beginDetectNewVersion():
 				// noop
