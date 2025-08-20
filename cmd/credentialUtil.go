@@ -369,8 +369,7 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 			var oAuthTokenExists bool
 			oAuthTokenExists, err = Client.GetUserOAuthTokenManagerInstance().OAuthTokenExists(&announceOAuthTokenOnce, &autoOAuth)
 			if err != nil {
-				glcm.Error(err.Error())
-				return
+				return common.ECredentialType.Unknown(), false, err
 			}
 			if !oAuthTokenExists {
 				return common.ECredentialType.Unknown(), false,
@@ -390,8 +389,7 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 	var oAuthTokenExists bool
 	oAuthTokenExists, err = Client.GetUserOAuthTokenManagerInstance().OAuthTokenExists(&announceOAuthTokenOnce, &autoOAuth)
 	if err != nil {
-		glcm.Error(err.Error())
-		return
+		return common.ECredentialType.Unknown(), false, err
 	}
 	if oAuthTokenExists {
 		credType = common.ECredentialType.OAuthToken()
@@ -421,6 +419,11 @@ func GetCredentialInfoForLocation(ctx context.Context, location common.Location,
 	// get the type
 	credInfo.CredentialType, isPublic, err = getCredentialTypeForLocation(ctx, location, resource, isSource, cpkOptions)
 
+	if err != nil {
+		glcm.Error(err.Error())
+		return
+	}
+
 	// flesh out the rest of the fields, for those types that require it
 	if credInfo.CredentialType.IsAzureOAuth() {
 		uotm := Client.GetUserOAuthTokenManagerInstance()
@@ -445,6 +448,10 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 	case raw.fromTo.To().IsRemote():
 		// we authenticate to the destination. Source is assumed to be SAS, or public, or a local resource
 		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.To(), raw.destination, false, common.CpkOptions{})
+		if err != nil {
+			glcm.Error(err.Error())
+			return
+		}
 	case raw.fromTo == common.EFromTo.BlobTrash() ||
 		raw.fromTo == common.EFromTo.BlobFSTrash() ||
 		raw.fromTo == common.EFromTo.FileTrash():
@@ -452,9 +459,17 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 		// Also, by setting isSource=false we inform getCredentialTypeForLocation() that resource
 		// being deleted cannot be public.
 		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.From(), raw.source, false, cpkOptions)
+		if err != nil {
+			glcm.Error(err.Error())
+			return
+		}
 	case raw.fromTo.From().IsRemote() && raw.fromTo.To().IsLocal():
 		// we authenticate to the source.
 		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.From(), raw.source, true, cpkOptions)
+		if err != nil {
+			glcm.Error(err.Error())
+			return
+		}
 	default:
 		credType = common.ECredentialType.Anonymous()
 		// Log the FromTo types which getCredentialType hasn't solved, in case of miss-use.
