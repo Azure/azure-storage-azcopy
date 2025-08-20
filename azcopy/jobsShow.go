@@ -35,7 +35,7 @@ type GetJobSummaryOptions struct {
 
 type JobSummaryResponse common.ListJobSummaryResponse
 
-func (c Client) GetJobSummary(jobID common.JobID, opts GetJobSummaryOptions) (result JobSummaryResponse, err error) {
+func (c *Client) GetJobSummary(jobID common.JobID, opts GetJobSummaryOptions) (result JobSummaryResponse, err error) {
 	if jobID.IsEmpty() {
 		return JobSummaryResponse{}, errors.New("get job statistics requires the JobID")
 	}
