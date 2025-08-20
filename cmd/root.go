@@ -265,12 +265,6 @@ func InitializeAndExecute() {
 		if !SkipVersionCheck && !isPipeDownload {
 			// our commands all control their own life explicitly with the lifecycle manager
 			// only commands that don't explicitly exit actually reach this point (e.g. help commands)
-
-			// We initialize folders here because in some commands (--help, --version)
-			// it does not reach the Initialize in the rootCmd.
-			// With this, there is a log location path for the latest_version.txt file to write to
-			// instead of writing to the user's current directory
-			common.InitializeFolders()
 			select {
 			case <-beginDetectNewVersion():
 				// noop
@@ -353,6 +347,11 @@ func beginDetectNewVersion() chan struct{} {
 			return
 		}
 
+		// In the unlikely chance log path folder is empty, make sure we don't write to user's current directory
+		if common.LogPathFolder == "" {
+			// With this, latest_version.txt is written to app dir
+			common.InitializeFolders()
+		}
 		// Step 1: Fetch & validate cached version. If it is up to date, we return without making API calls
 		filePath := filepath.Join(common.LogPathFolder, "latest_version.txt")
 		cachedVersion, err := ValidateCachedVersion(filePath) // same as the remote version
