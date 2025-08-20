@@ -20,7 +20,9 @@
 
 package common
 
-import "time"
+import (
+	"time"
+)
 
 type JobLifecycleHandler interface {
 	OnStart(ctx JobContext)
@@ -34,10 +36,15 @@ type JobLifecycleHandler interface {
 	// TODO (gapra): Rename these variables at the end. Choosing not to at the moment to limit the scope of changes.
 	Error(string)
 
+	RegisterCloseFunc(func())
+
 	// Optional for AzCopy as a library users
 	Prompt(message string, details PromptDetails) ResponseOption
 	Info(string)
 	Warn(string)
+
+	// no-op for AzCopy as a library users
+	E2EAwaitAllowOpenFiles() // used by E2E tests
 }
 
 type JobSummary struct {

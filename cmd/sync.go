@@ -580,7 +580,7 @@ func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm common.LifecycleMgr, th
 	}
 	// Log to Job Log
 	if common.AzcopyCurrentJobLogger != nil {
-		common.AzcopyCurrentJobLogger.Log(common.LogInfo, common.GetScanProgressOutputBuilder(scanProgress)(common.EOutputFormat.Text()))
+		common.AzcopyCurrentJobLogger.Log(common.LogInfo, GetScanProgressOutputBuilder(scanProgress)(common.EOutputFormat.Text()))
 	}
 
 	lcm.OnScanProgress(scanProgress)
@@ -632,7 +632,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 		JobType:                  common.EJobType.Sync(),
 	}
 	if common.AzcopyCurrentJobLogger != nil {
-		common.AzcopyCurrentJobLogger.Log(common.LogInfo, common.GetProgressOutputBuilder(transferProgress)(common.EOutputFormat.Text()))
+		common.AzcopyCurrentJobLogger.Log(common.LogInfo, GetProgressOutputBuilder(transferProgress)(common.EOutputFormat.Text()))
 	}
 	glcm.OnTransferProgress(transferProgress)
 
@@ -658,8 +658,8 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 
 		jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
 		if exists {
-			_, logStats := common.FormatExtraStats(common.EJobType.Sync(), summary.AverageIOPS, summary.AverageE2EMilliseconds, summary.NetworkErrorPercentage, summary.ServerBusyPercentage)
-			jobMan.Log(common.LogInfo, logStats+"\n"+common.GetJobSummaryOutputBuilder(jobSummary)(common.EOutputFormat.Text()))
+			_, logStats := FormatExtraStats(common.EJobType.Sync(), summary.AverageIOPS, summary.AverageE2EMilliseconds, summary.NetworkErrorPercentage, summary.ServerBusyPercentage)
+			jobMan.Log(common.LogInfo, logStats+"\n"+GetJobSummaryOutputBuilder(jobSummary)(common.EOutputFormat.Text()))
 		}
 	}
 

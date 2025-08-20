@@ -76,6 +76,8 @@ var rootCmd = &cobra.Command{
 	Short:   rootCmdShortDescription,
 	Long:    rootCmdLongDescription,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		common.SetJobLifecycleHandler(glcm)
+
 		glcm.RegisterCloseFunc(func() {
 			if debugMemoryProfile != "" {
 				memProfDir := filepath.Dir(debugMemoryProfile)
@@ -256,8 +258,40 @@ func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
 
 }
 
+// Only used by main.go
+func GetLifecycleMgr() common.LifecycleMgr {
+	return glcm
+}
+
 // hold a pointer to the global lifecycle controller so that commands could output messages and exit properly
-var glcm = common.GetLifecycleMgr()
+var glcm common.LifecycleMgr = func() (lcmgr *lifecycleMgr) {
+	lcmgr = &lifecycleMgr{
+		msgQueue:             make(chan outputMessage, 1000),
+		progressCache:        "",
+		cancelChannel:        make(chan os.Signal, 1),
+		e2eContinueChannel:   make(chan struct{}),
+		e2eAllowOpenChannel:  make(chan struct{}),
+		outputFormat:         common.EOutputFormat.Text(), // output text by default
+		logSanitizer:         common.NewAzCopyLogSanitizer(),
+		inputQueue:           make(chan userInput, 1000),
+		allowCancelFromStdIn: false,
+		allowWatchInput:      false,
+		closeFunc:            func() {}, // noop since we have nothing to do by default
+		waitForUserResponse:  make(chan bool),
+		msgHandlerChannel:    make(chan *common.LCMMsg),
+	}
+
+	// kick off the single routine that processes output
+	go lcmgr.processOutputMessage()
+
+	// and process input
+	go lcmgr.watchInputs()
+
+	// Check if need to do CPU profiling, and do CPU profiling accordingly when azcopy life start.
+	lcmgr.checkAndStartCPUProfiling()
+
+	return
+}()
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.

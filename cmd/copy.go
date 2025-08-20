@@ -1349,7 +1349,7 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 		JobType:                jobType,
 	}
 	if common.AzcopyCurrentJobLogger != nil {
-		common.AzcopyCurrentJobLogger.Log(common.LogInfo, common.GetProgressOutputBuilder(transferProgress)(common.EOutputFormat.Text()))
+		common.AzcopyCurrentJobLogger.Log(common.LogInfo, GetProgressOutputBuilder(transferProgress)(common.EOutputFormat.Text()))
 	}
 	glcm.OnTransferProgress(transferProgress)
 
@@ -1368,12 +1368,12 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 			JobType:                common.EJobType.Copy(),
 		}
 
-		_, logStats := common.FormatExtraStats(jobSummary.JobType, summary.AverageIOPS, summary.AverageE2EMilliseconds, summary.NetworkErrorPercentage, summary.ServerBusyPercentage)
+		_, logStats := FormatExtraStats(jobSummary.JobType, summary.AverageIOPS, summary.AverageE2EMilliseconds, summary.NetworkErrorPercentage, summary.ServerBusyPercentage)
 		// log to job log
 		jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
 		if exists {
 			// Passing this as LogError ensures the stats are always logged.
-			jobMan.Log(common.LogError, logStats+"\n"+common.GetJobSummaryOutputBuilder(jobSummary)(common.EOutputFormat.Text()))
+			jobMan.Log(common.LogError, logStats+"\n"+GetJobSummaryOutputBuilder(jobSummary)(common.EOutputFormat.Text()))
 		}
 
 		if cca.hasFollowup() {

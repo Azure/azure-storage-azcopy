@@ -66,6 +66,11 @@ func (m *LCMMsg) Reply() {
 	m.respChan <- true
 }
 
+func (m *LCMMsg) WaitForResponse() {
+	//wait till the message is completed
+	<-m.respChan
+}
+
 ////////////////////////////////////////////////////////////////////////////////////
 
 /* PerfAdjustment message. */
