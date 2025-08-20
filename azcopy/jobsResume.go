@@ -40,7 +40,7 @@ type ResumeJobOptions struct {
 
 // ResumeJob resumes a job with the specified JobID.
 
-func (c *Client) ResumeJob(jobID common.JobID, opts ResumeJobOptions) (err error) {
+func (c *Client) ResumeJob(jobID common.JobID, handler common.JobLifecycleHandler, opts ResumeJobOptions) (err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if !c.CurrentJobID.IsEmpty() {
@@ -51,6 +51,7 @@ func (c *Client) ResumeJob(jobID common.JobID, opts ResumeJobOptions) (err error
 	}
 
 	c.CurrentJobID = jobID
+	c.handler = handler
 	timeAtPrestart := time.Now()
 	common.AzcopyCurrentJobLogger = common.NewJobLogger(c.CurrentJobID, c.logLevel, common.LogPathFolder, "")
 	common.AzcopyCurrentJobLogger.OpenLog()
@@ -100,13 +101,13 @@ func (c *Client) ResumeJob(jobID common.JobID, opts ResumeJobOptions) (err error
 	}
 	dstResourceString.SAS = destinationSAS
 
-	srcServiceClient, dstServiceClient, err := getSourceAndDestinationServiceClients(
+	srcServiceClient, dstServiceClient, err := c.getSourceAndDestinationServiceClients(
 		ctx, jobDetails,
 		srcResourceString,
 		dstResourceString,
 	)
 	if err != nil {
-		return fmt.Errorf("cannot resume job with JobId %s, could not create service clients %v", opts.JobID, err.Error())
+		return fmt.Errorf("cannot resume job with JobId %s, could not create service clients %v", jobID, err.Error())
 	}
 	// Send resume job request.
 	resumeJobResponse := jobsAdmin.ResumeJobOrder(common.ResumeJobRequest{
@@ -132,14 +133,14 @@ func normalizeSAS(sas string) string {
 	return sas
 }
 
-func getSourceAndDestinationServiceClients(
+func (c *Client) getSourceAndDestinationServiceClients(
 	ctx context.Context,
 	jobDetails common.GetJobDetailsResponse,
 	source common.ResourceString,
 	destination common.ResourceString,
 ) (*common.ServiceClient, *common.ServiceClient, error) {
 	fromTo := jobDetails.FromTo
-	srcCredType, isSrcPublic, err := getCredentialTypeForLocation(ctx,
+	srcCredType, isSrcPublic, err := c.GetCredentialTypeForLocation(ctx,
 		fromTo.From(),
 		source,
 		true,
@@ -157,7 +158,7 @@ func getSourceAndDestinationServiceClients(
 		}
 	}
 
-	dstCredType, isDstPublic, err := getCredentialTypeForLocation(ctx,
+	dstCredType, isDstPublic, err := c.GetCredentialTypeForLocation(ctx,
 		fromTo.To(),
 		destination,
 		false,
@@ -181,7 +182,7 @@ func getSourceAndDestinationServiceClients(
 
 	var tc azcore.TokenCredential
 	if srcCredType.IsAzureOAuth() || dstCredType.IsAzureOAuth() {
-		uotm := azcopy.GetUserOAuthTokenManagerInstance()
+		uotm := c.GetUserOAuthTokenManagerInstance()
 		// Get token from env var or cache.
 		tokenInfo, err := uotm.GetTokenInfo(ctx)
 		if err != nil {

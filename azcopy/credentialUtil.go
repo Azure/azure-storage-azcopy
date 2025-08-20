@@ -45,110 +45,13 @@ const (
 	TrustedSuffixesAAD                = "*.core.windows.net;*.core.chinacloudapi.cn;*.core.cloudapi.de;*.core.usgovcloudapi.net;*.storage.azure.net"
 )
 
-var autoOAuth sync.Once
-
-var sharedKeyDeprecation sync.Once
 var sharedKeyDeprecationMessage = "*** WARNING *** shared key authentication for datalake is deprecated and will be removed in a future release. Please use shared access signature (SAS) or OAuth for authentication."
 
-func warnIfSharedKeyAuthForDatalake() {
-	sharedKeyDeprecation.Do(func() {
-		glcm.Warn(sharedKeyDeprecationMessage)
+func (c *Client) warnIfSharedKeyAuthForDatalake() {
+	c.sharedKeyDeprecation.Do(func() {
+		c.handler.Warn(sharedKeyDeprecationMessage)
 		common.LogToJobLogWithPrefix(sharedKeyDeprecationMessage, common.LogWarning)
 	})
-}
-
-/*
- * GetInstanceOAuthTokenInfo returns OAuth token, obtained by auto-login,
- * for current instance of AzCopy.
- */
-func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
-	var err error
-	autoOAuth.Do(func() {
-		var options LoginOptions
-		autoLoginType := strings.ToLower(common.GetEnvironmentVariable(common.EEnvironmentVariable.AutoLoginType()))
-		if autoLoginType == "" {
-			glcm.Info("Autologin not specified.")
-			return
-		}
-
-		if tenantID := common.GetEnvironmentVariable(common.EEnvironmentVariable.TenantID()); tenantID != "" {
-			options.TenantID = tenantID
-		}
-
-		if endpoint := common.GetEnvironmentVariable(common.EEnvironmentVariable.AADEndpoint()); endpoint != "" {
-			options.AADEndpoint = endpoint
-		}
-
-		var loginType common.AutoLoginType
-		err = loginType.Parse(autoLoginType)
-		if err != nil {
-			glcm.Error("Invalid Auto-login type specified: " + autoLoginType)
-			return
-		}
-
-		// Fill up options
-		options.LoginType = loginType
-		switch options.LoginType {
-		case common.EAutoLoginType.SPN():
-			options.ApplicationID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ApplicationID())
-			options.CertificatePath = common.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePath())
-			options.CertificatePassword = common.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
-			options.ClientSecret = common.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
-		case common.EAutoLoginType.MSI():
-			options.IdentityClientID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityClientID())
-			options.IdentityObjectID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityObjectID())
-			options.IdentityResourceID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityResourceString())
-		case common.EAutoLoginType.Device():
-		case common.EAutoLoginType.AzCLI():
-		case common.EAutoLoginType.PsCred():
-		case common.EAutoLoginType.Workload():
-		default:
-			glcm.Error("Invalid Auto-login type specified: " + autoLoginType)
-			return
-		}
-
-		options.PersistToken = false
-		if err = RunLogin(options); err != nil {
-			glcm.Error(fmt.Sprintf("Failed to perform Auto-login: %v.", err))
-		}
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	return GetUserOAuthTokenManagerInstance(), nil
-}
-
-var announceOAuthTokenOnce sync.Once
-
-func oAuthTokenExists() (oauthTokenExists bool) {
-	// Note: Environment variable for OAuth token should only be used in testing, or the case user clearly now how to protect
-	// the tokens
-	if common.EnvVarOAuthTokenInfoExists() {
-		announceOAuthTokenOnce.Do(
-			func() {
-				glcm.Info(fmt.Sprintf("%v is set.", common.EnvVarOAuthTokenInfo)) // Log the case when env var is set, as it's rare case.
-			},
-		)
-		oauthTokenExists = true
-	}
-
-	uotm, err := GetOAuthTokenManagerInstance()
-	if err != nil {
-		oauthTokenExists = false
-		return
-	}
-
-	if hasCachedToken, err := uotm.HasCachedToken(); hasCachedToken {
-		oauthTokenExists = true
-	} else if err != nil { //nolint:staticcheck
-		// Log the error if fail to get cached token, as these are unhandled errors, and should not influence the logic flow.
-		// Uncomment for debugging.
-		// glcm.Info(fmt.Sprintf("No cached token found, %v", err))
-	}
-
-	return
 }
 
 var stashedEnvCredType = ""
@@ -286,7 +189,7 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 	return nil
 }
 
-func logAuthType(ct common.CredentialType, location common.Location, isSource bool) {
+func (c *Client) logAuthType(ct common.CredentialType, location common.Location, isSource bool) {
 	if location == common.ELocation.Unknown() {
 		return // nothing to log
 	} else if location.IsLocal() {
@@ -312,7 +215,7 @@ func logAuthType(ct common.CredentialType, location common.Location, isSource bo
 	if _, exists := authMessagesAlreadyLogged.Load(message); !exists {
 		authMessagesAlreadyLogged.Store(message, struct{}{}) // dedup because source is auth'd by both enumerator and STE
 		common.LogToJobLogWithPrefix(message, common.LogInfo)
-		glcm.Info(message)
+		c.handler.Info(message)
 	}
 }
 
@@ -391,11 +294,11 @@ func mdAccountNeedsOAuth(ctx context.Context, blobResourceURL string, cpkOptions
 	return false
 }
 
-func GetCredentialTypeForLocation(ctx context.Context, location common.Location, resource common.ResourceString, isSource bool, cpkOptions common.CpkOptions) (credType common.CredentialType, isPublic bool, err error) {
-	return doGetCredentialTypeForLocation(ctx, location, resource, isSource, GetCredTypeFromEnvVar, cpkOptions)
+func (c *Client) GetCredentialTypeForLocation(ctx context.Context, location common.Location, resource common.ResourceString, isSource bool, cpkOptions common.CpkOptions) (credType common.CredentialType, isPublic bool, err error) {
+	return c.doGetCredentialTypeForLocation(ctx, location, resource, isSource, GetCredTypeFromEnvVar, cpkOptions)
 }
 
-func doGetCredentialTypeForLocation(ctx context.Context, location common.Location, resource common.ResourceString, isSource bool, getForcedCredType func() common.CredentialType, cpkOptions common.CpkOptions) (credType common.CredentialType, public bool, err error) {
+func (c *Client) doGetCredentialTypeForLocation(ctx context.Context, location common.Location, resource common.ResourceString, isSource bool, getForcedCredType func() common.CredentialType, cpkOptions common.CpkOptions) (credType common.CredentialType, public bool, err error) {
 	public = false
 	err = nil
 
@@ -405,7 +308,7 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 	}
 
 	defer func() {
-		logAuthType(credType, location, isSource)
+		c.logAuthType(credType, location, isSource)
 	}()
 
 	// caution: If auth-type is unsafe, below defer statement will change the return value credType
@@ -458,7 +361,7 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 		}
 
 		if strings.HasPrefix(uri.Host, "md-") && mdAccountNeedsOAuth(ctx, uri.String(), cpkOptions) {
-			if !oAuthTokenExists() {
+			if !c.oauthTokenManager.OAuthTokenExists() {
 				return common.ECredentialType.Unknown(), false,
 					common.NewAzError(common.EAzError.LoginCredMissing(), "No SAS token or OAuth token is present and the resource is not public")
 			}
@@ -473,7 +376,7 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 		return
 	}
 
-	if oAuthTokenExists() {
+	if c.oauthTokenManager.OAuthTokenExists() {
 		credType = common.ECredentialType.OAuthToken()
 		return
 	}
@@ -485,7 +388,7 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 		key := common.GetEnvironmentVariable(common.EEnvironmentVariable.AccountKey())
 		if name != "" && key != "" { // TODO: To remove, use for internal testing, SharedKey should not be supported from commandline
 			credType = common.ECredentialType.SharedKey()
-			warnIfSharedKeyAuthForDatalake()
+			c.warnIfSharedKeyAuthForDatalake()
 		}
 	}
 

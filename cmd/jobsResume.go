@@ -215,7 +215,7 @@ func (rca resumeCmdArgs) process() error {
 		return fmt.Errorf("error parsing the jobId %s. Failed with error %w", rca.jobID, err)
 	}
 
-	err = Client.ResumeJob(jobID, azcopy.ResumeJobOptions{SourceSAS: rca.SourceSAS, DestinationSAS: rca.DestinationSAS})
+	err = Client.ResumeJob(jobID, glcm, azcopy.ResumeJobOptions{SourceSAS: rca.SourceSAS, DestinationSAS: rca.DestinationSAS})
 	if err != nil {
 		return err
 	}
