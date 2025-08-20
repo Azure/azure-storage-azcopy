@@ -96,7 +96,7 @@ func newAzcopyHTTPClient() *http.Client {
 				Timeout:   10 * time.Second,
 				KeepAlive: 10 * time.Second,
 				DualStack: true,
-			}).Dial, /*Context*/
+			}).Dial,                   /*Context*/
 			MaxIdleConns:           0, // No limit
 			MaxIdleConnsPerHost:    1000,
 			IdleConnTimeout:        180 * time.Second,
@@ -276,7 +276,7 @@ func (uotm *UserOAuthTokenManager) AutoLogin(autoOAuth *sync.Once) (LoginRespons
 		var loginType AutoLoginType
 		err = loginType.Parse(autoLoginType)
 		if err != nil {
-			err = fmt.Errorf("Invalid Auto-login type specified: %s" + autoLoginType)
+			err = fmt.Errorf("Invalid Auto-login type specified: %s", autoLoginType)
 			return
 		}
 
@@ -297,7 +297,7 @@ func (uotm *UserOAuthTokenManager) AutoLogin(autoOAuth *sync.Once) (LoginRespons
 		case EAutoLoginType.PsCred():
 		case EAutoLoginType.Workload():
 		default:
-			err = fmt.Errorf("Invalid Auto-login type specified: %s" + autoLoginType)
+			err = fmt.Errorf("Invalid Auto-login type specified: %s", autoLoginType)
 			return
 		}
 
