@@ -40,7 +40,6 @@ import (
 	"github.com/minio/minio-go/pkg/s3utils"
 )
 
-var once sync.Once
 var autoOAuth sync.Once
 
 var sharedKeyDeprecation sync.Once
@@ -53,47 +52,7 @@ func warnIfSharedKeyAuthForDatalake() {
 	})
 }
 
-/*
- * GetInstanceOAuthTokenInfo returns OAuth token, obtained by auto-login,
- * for current instance of AzCopy.
- */
-func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
-	uotm := Client.GetUserOAuthTokenManagerInstance()
-	_, err := uotm.AutoLogin(&autoOAuth)
-	return uotm, err
-}
-
 var announceOAuthTokenOnce sync.Once
-
-func oAuthTokenExists() (oauthTokenExists bool) {
-	// Note: Environment variable for OAuth token should only be used in testing, or the case user clearly now how to protect
-	// the tokens
-	if common.EnvVarOAuthTokenInfoExists() {
-		announceOAuthTokenOnce.Do(
-			func() {
-				glcm.Info(fmt.Sprintf("%v is set.", common.EnvVarOAuthTokenInfo)) // Log the case when env var is set, as it's rare case.
-			},
-		)
-		oauthTokenExists = true
-	}
-
-	uotm, err := GetOAuthTokenManagerInstance()
-	if err != nil {
-		glcm.Error(err.Error())
-		oauthTokenExists = false
-		return
-	}
-
-	if hasCachedToken, err := uotm.HasCachedToken(); hasCachedToken {
-		oauthTokenExists = true
-	} else if err != nil { //nolint:staticcheck
-		// Log the error if fail to get cached token, as these are unhandled errors, and should not influence the logic flow.
-		// Uncomment for debugging.
-		// glcm.Info(fmt.Sprintf("No cached token found, %v", err))
-	}
-
-	return
-}
 
 var stashedEnvCredType = ""
 
@@ -407,7 +366,13 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 		}
 
 		if strings.HasPrefix(uri.Host, "md-") && mdAccountNeedsOAuth(ctx, uri.String(), cpkOptions) {
-			if !oAuthTokenExists() {
+			var oAuthTokenExists bool
+			oAuthTokenExists, err = Client.GetUserOAuthTokenManagerInstance().OAuthTokenExists(&announceOAuthTokenOnce, &autoOAuth)
+			if err != nil {
+				glcm.Error(err.Error())
+				return
+			}
+			if !oAuthTokenExists {
 				return common.ECredentialType.Unknown(), false,
 					common.NewAzError(common.EAzError.LoginCredMissing(), "No SAS token or OAuth token is present and the resource is not public")
 			}
@@ -422,7 +387,13 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 		return
 	}
 
-	if oAuthTokenExists() {
+	var oAuthTokenExists bool
+	oAuthTokenExists, err = Client.GetUserOAuthTokenManagerInstance().OAuthTokenExists(&announceOAuthTokenOnce, &autoOAuth)
+	if err != nil {
+		glcm.Error(err.Error())
+		return
+	}
+	if oAuthTokenExists {
 		credType = common.ECredentialType.OAuthToken()
 		return
 	}

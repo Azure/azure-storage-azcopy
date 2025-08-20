@@ -96,7 +96,7 @@ func newAzcopyHTTPClient() *http.Client {
 				Timeout:   10 * time.Second,
 				KeepAlive: 10 * time.Second,
 				DualStack: true,
-			}).Dial,                   /*Context*/
+			}).Dial, /*Context*/
 			MaxIdleConns:           0, // No limit
 			MaxIdleConnsPerHost:    1000,
 			IdleConnTimeout:        180 * time.Second,
@@ -109,6 +109,35 @@ func newAzcopyHTTPClient() *http.Client {
 			// ExpectContinueTimeout:  time.Duration{},
 		},
 	}
+}
+
+func (uotm *UserOAuthTokenManager) OAuthTokenExists(announceOAuthTokenOnce, autoOAuth *sync.Once) (oauthTokenExists bool, err error) {
+	// Note: Environment variable for OAuth token should only be used in testing, or the case user clearly now how to protect
+	// the tokens
+	if EnvVarOAuthTokenInfoExists() {
+		announceOAuthTokenOnce.Do(
+			func() {
+				lcm.Info(fmt.Sprintf("%v is set.", EnvVarOAuthTokenInfo)) // Log the case when env var is set, as it's rare case.
+			},
+		)
+		oauthTokenExists = true
+	}
+
+	_, err = uotm.AutoLogin(autoOAuth)
+	if err != nil {
+		oauthTokenExists = false
+		return
+	}
+
+	if hasCachedToken, err := uotm.HasCachedToken(); hasCachedToken {
+		oauthTokenExists = true
+	} else if err != nil { //nolint:staticcheck
+		// Log the error if fail to get cached token, as these are unhandled errors, and should not influence the logic flow.
+		// Uncomment for debugging.
+		// glcm.Info(fmt.Sprintf("No cached token found, %v", err))
+	}
+
+	return
 }
 
 // GetTokenInfo gets token info, it follows rule:
