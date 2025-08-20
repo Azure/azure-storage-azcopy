@@ -76,8 +76,6 @@ var rootCmd = &cobra.Command{
 	Short:   rootCmdShortDescription,
 	Long:    rootCmdLongDescription,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		common.SetJobLifecycleHandler(glcm)
-
 		glcm.RegisterCloseFunc(func() {
 			if debugMemoryProfile != "" {
 				memProfDir := filepath.Dir(debugMemoryProfile)
@@ -317,6 +315,7 @@ func InitializeAndExecute() {
 }
 
 func init() {
+	common.SetJobLifecycleHandler(glcm)
 	// replace the word "global" to avoid confusion (e.g. it doesn't affect all instances of AzCopy)
 	rootCmd.SetUsageTemplate(strings.Replace((&cobra.Command{}).UsageTemplate(), "Global Flags", "Flags Applying to All Commands", -1))
 
