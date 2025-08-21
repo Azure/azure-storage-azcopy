@@ -108,7 +108,7 @@ func TestCheckAuthSafeForTargetIsCalledWhenGettingAuthType(t *testing.T) {
 	// Call our core cred type getter function, in a way that will fail the safety check, and assert
 	// that it really does fail.
 	// This checks that our safety check is hooked into the main logic
-	_, _, err = doGetCredentialTypeForLocation(context.Background(), common.ELocation.Blob(), res, true, mockGetCredTypeFromEnvVar, common.CpkOptions{})
+	_, _, err = doGetCredentialTypeForLocation(context.Background(), common.ELocation.Blob(), res, true, mockGetCredTypeFromEnvVar, nil, common.CpkOptions{})
 	a.NotNil(err)
 	a.True(strings.Contains(err.Error(), "If this URL is in fact an Azure service, you can enable Azure authentication to notblob.example.com."))
 }
@@ -125,7 +125,7 @@ func TestCheckAuthSafeForTargetIsCalledWhenGettingAuthTypeMDOAuth(t *testing.T) 
 	// Call our core cred type getter function, in a way that will fail the safety check, and assert
 	// that it really does fail.
 	// This checks that our safety check is hooked into the main logic
-	_, _, err = doGetCredentialTypeForLocation(context.Background(), common.ELocation.Blob(), res, true, mockGetCredTypeFromEnvVar, common.CpkOptions{})
+	_, _, err = doGetCredentialTypeForLocation(context.Background(), common.ELocation.Blob(), res, true, mockGetCredTypeFromEnvVar, nil, common.CpkOptions{})
 	a.NotNil(err)
 	a.True(strings.Contains(err.Error(), "If this URL is in fact an Azure service, you can enable Azure authentication to notblob.example.com."))
 }

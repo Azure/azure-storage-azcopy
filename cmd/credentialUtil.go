@@ -299,11 +299,11 @@ func mdAccountNeedsOAuth(ctx context.Context, blobResourceURL string, cpkOptions
 	return false
 }
 
-func getCredentialTypeForLocation(ctx context.Context, location common.Location, resource common.ResourceString, isSource bool, cpkOptions common.CpkOptions) (credType common.CredentialType, isPublic bool, err error) {
-	return doGetCredentialTypeForLocation(ctx, location, resource, isSource, GetCredTypeFromEnvVar, cpkOptions)
+func getCredentialTypeForLocation(ctx context.Context, location common.Location, resource common.ResourceString, isSource bool, uotm *common.UserOAuthTokenManager, cpkOptions common.CpkOptions) (credType common.CredentialType, isPublic bool, err error) {
+	return doGetCredentialTypeForLocation(ctx, location, resource, isSource, GetCredTypeFromEnvVar, uotm, cpkOptions)
 }
 
-func doGetCredentialTypeForLocation(ctx context.Context, location common.Location, resource common.ResourceString, isSource bool, getForcedCredType func() common.CredentialType, cpkOptions common.CpkOptions) (credType common.CredentialType, public bool, err error) {
+func doGetCredentialTypeForLocation(ctx context.Context, location common.Location, resource common.ResourceString, isSource bool, getForcedCredType func() common.CredentialType, uotm *common.UserOAuthTokenManager, cpkOptions common.CpkOptions) (credType common.CredentialType, public bool, err error) {
 	public = false
 	err = nil
 
@@ -367,7 +367,7 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 
 		if strings.HasPrefix(uri.Host, "md-") && mdAccountNeedsOAuth(ctx, uri.String(), cpkOptions) {
 			var oAuthTokenExists bool
-			oAuthTokenExists, err = Client.GetUserOAuthTokenManagerInstance().OAuthTokenExists(&announceOAuthTokenOnce, &autoOAuth)
+			oAuthTokenExists, err = uotm.OAuthTokenExists(&announceOAuthTokenOnce, &autoOAuth)
 			if err != nil {
 				return common.ECredentialType.Unknown(), false, err
 			}
@@ -387,7 +387,7 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 	}
 
 	var oAuthTokenExists bool
-	oAuthTokenExists, err = Client.GetUserOAuthTokenManagerInstance().OAuthTokenExists(&announceOAuthTokenOnce, &autoOAuth)
+	oAuthTokenExists, err = uotm.OAuthTokenExists(&announceOAuthTokenOnce, &autoOAuth)
 	if err != nil {
 		return common.ECredentialType.Unknown(), false, err
 	}
@@ -414,10 +414,10 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 	return
 }
 
-func GetCredentialInfoForLocation(ctx context.Context, location common.Location, resource common.ResourceString, isSource bool, cpkOptions common.CpkOptions) (credInfo common.CredentialInfo, isPublic bool, err error) {
+func GetCredentialInfoForLocation(ctx context.Context, location common.Location, resource common.ResourceString, isSource bool, uotm *common.UserOAuthTokenManager, cpkOptions common.CpkOptions) (credInfo common.CredentialInfo, isPublic bool, err error) {
 
 	// get the type
-	credInfo.CredentialType, isPublic, err = getCredentialTypeForLocation(ctx, location, resource, isSource, cpkOptions)
+	credInfo.CredentialType, isPublic, err = getCredentialTypeForLocation(ctx, location, resource, isSource, uotm, cpkOptions)
 
 	if err != nil {
 		glcm.Error(err.Error())
@@ -426,8 +426,6 @@ func GetCredentialInfoForLocation(ctx context.Context, location common.Location,
 
 	// flesh out the rest of the fields, for those types that require it
 	if credInfo.CredentialType.IsAzureOAuth() {
-		uotm := Client.GetUserOAuthTokenManagerInstance()
-
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return credInfo, false, err
 		} else {
@@ -442,12 +440,12 @@ func GetCredentialInfoForLocation(ctx context.Context, location common.Location,
 // for current command.
 // TODO: consider replace with calls to getCredentialInfoForLocation
 // (right now, we have tweaked this to be a wrapper for that function, but really should remove this one totally)
-func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common.CpkOptions) (credType common.CredentialType, err error) {
+func getCredentialType(ctx context.Context, raw rawFromToInfo, uotm *common.UserOAuthTokenManager, cpkOptions common.CpkOptions) (credType common.CredentialType, err error) {
 
 	switch {
 	case raw.fromTo.To().IsRemote():
 		// we authenticate to the destination. Source is assumed to be SAS, or public, or a local resource
-		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.To(), raw.destination, false, common.CpkOptions{})
+		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.To(), raw.destination, false, uotm, common.CpkOptions{})
 		if err != nil {
 			glcm.Error(err.Error())
 			return
@@ -458,14 +456,14 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 		// For to Trash direction, use source as resource URL
 		// Also, by setting isSource=false we inform getCredentialTypeForLocation() that resource
 		// being deleted cannot be public.
-		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.From(), raw.source, false, cpkOptions)
+		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.From(), raw.source, false, uotm, cpkOptions)
 		if err != nil {
 			glcm.Error(err.Error())
 			return
 		}
 	case raw.fromTo.From().IsRemote() && raw.fromTo.To().IsLocal():
 		// we authenticate to the source.
-		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.From(), raw.source, true, cpkOptions)
+		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.From(), raw.source, true, uotm, cpkOptions)
 		if err != nil {
 			glcm.Error(err.Error())
 			return
