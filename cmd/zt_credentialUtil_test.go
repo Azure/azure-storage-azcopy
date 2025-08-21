@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
@@ -102,7 +103,7 @@ func TestCheckAuthSafeForTargetIsCalledWhenGettingAuthType(t *testing.T) {
 		return common.ECredentialType.OAuthToken() // force it to OAuth, which is the case we want to test
 	}
 
-	res, err := SplitResourceString("http://notblob.example.com", common.ELocation.Blob())
+	res, err := azcopy.SplitResourceString("http://notblob.example.com", common.ELocation.Blob())
 	a.NoError(err)
 
 	// Call our core cred type getter function, in a way that will fail the safety check, and assert
@@ -119,7 +120,7 @@ func TestCheckAuthSafeForTargetIsCalledWhenGettingAuthTypeMDOAuth(t *testing.T) 
 		return common.ECredentialType.MDOAuthToken() // force it to OAuth, which is the case we want to test
 	}
 
-	res, err := SplitResourceString("http://notblob.example.com", common.ELocation.Blob())
+	res, err := azcopy.SplitResourceString("http://notblob.example.com", common.ELocation.Blob())
 	a.NoError(err)
 
 	// Call our core cred type getter function, in a way that will fail the safety check, and assert

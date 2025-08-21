@@ -38,6 +38,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
@@ -254,7 +255,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	}
 	// Strip the SAS from the source and destination whenever there is SAS exists in URL.
 	// Note: SAS could exists in source of S2S copy, even if the credential type is OAuth for destination.
-	cooked.Destination, err = SplitResourceString(tempDest, cooked.FromTo.To())
+	cooked.Destination, err = azcopy.SplitResourceString(tempDest, cooked.FromTo.To())
 	if err != nil {
 		return cooked, err
 	}
@@ -269,7 +270,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 			return cooked, err
 		}
 	}
-	cooked.Source, err = SplitResourceString(tempSrc, cooked.FromTo.From())
+	cooked.Source, err = azcopy.SplitResourceString(tempSrc, cooked.FromTo.From())
 	if err != nil {
 		return cooked, err
 	}
@@ -823,7 +824,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 
 	// step 1: create client options
 	// note: dstCred is nil, as we could not reauth effectively because stdout is a pipe.
-	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(azcopyScanningLogger, nil, nil)}
+	options := &blockblob.ClientOptions{ClientOptions: azcopy.CreateClientOptions(azcopyScanningLogger, nil, nil)}
 
 	// step 2: parse source url
 	u, err := blobResource.FullURL()
@@ -907,7 +908,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 
 	// step 0: initialize pipeline
 	// Reauthentication is theoretically possible here, since stdin is blocked.
-	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)}
+	options := &blockblob.ClientOptions{ClientOptions: azcopy.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)}
 
 	// step 1: parse destination url
 	u, err := blobResource.FullURL()
@@ -1102,7 +1103,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		srcReauth = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, srcReauth)
+	options := azcopy.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, srcReauth)
 	var azureFileSpecificOptions any
 	if cca.FromTo.From().IsFile() {
 		azureFileSpecificOptions = &common.FileClientOptions{
@@ -1140,7 +1141,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	if cca.FromTo.IsS2S() && srcCredInfo.CredentialType.IsAzureOAuth() {
 		srcCred = common.NewScopedCredential(srcCredInfo.OAuthTokenInfo.TokenCredential, srcCredInfo.CredentialType)
 	}
-	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred, dstReauthTok)
+	options = azcopy.CreateClientOptions(common.AzcopyCurrentJobLogger, srcCred, dstReauthTok)
 	jobPartOrder.DstServiceClient, err = common.GetServiceClientForLocation(
 		cca.FromTo.To(),
 		cca.Destination,
