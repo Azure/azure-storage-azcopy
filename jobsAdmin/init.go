@@ -332,6 +332,8 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 }
 
 // GetJobSummary api returns the job progress summary of an active job
+// jobID - the ID of the job to retrieve the summary for
+// reset parameter (optional, default true) controls whether failed/skipped transfer lists are reset after retrieval
 /*
 * Return following Properties in Job Progress Summary
 * CompleteJobOrdered - determines whether final part of job has been ordered or not
@@ -342,7 +344,12 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 * PercentageProgress - job progress reported in terms of percentage
 * FailedTransfers - list of transfer after last checkpoint timestamp that failed.
  */
-func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
+func GetJobSummary(jobID common.JobID, reset ...bool) common.ListJobSummaryResponse {
+	resetLists := true // default value
+	if len(reset) > 0 {
+		resetLists = reset[0]
+	}
+
 	// getJobPartMapFromJobPartInfoMap gives the map of partNo to JobPartPlanInfo Pointer for a given JobId
 	jm, found := JobsAdmin.JobMgr(jobID)
 	if !found {
@@ -359,7 +366,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 		jm, _ = JobsAdmin.JobMgr(jobID)
 	}
 
-	js := jm.ListJobSummary()
+	js := jm.ListJobSummary(resetLists)
 	js.Timestamp = time.Now().UTC()
 	js.JobID = jm.JobID()
 	js.ErrorMsg = ""

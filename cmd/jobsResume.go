@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -90,8 +91,14 @@ func (cca *resumeJobController) Cancel(lcm common.LifecycleMgr) {
 
 // TODO: can we combine this with the copy one (and the sync one?)
 func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint32) {
+
+	// When we do GetJobSummary, the transfers list objects are cleared.
+	// This is a problem for other client consumers like XDM
+	// XDM: Skipping the reset if it is mover
+	resetTransferLists := !buildmode.IsMover
+
 	// fetch a job status
-	summary := jobsAdmin.GetJobSummary(cca.jobID)
+	summary := jobsAdmin.GetJobSummary(cca.jobID, resetTransferLists)
 	glcmSwapOnce.Do(func() {
 		glcm = jobsAdmin.GetJobLCMWrapper(cca.jobID)
 	})

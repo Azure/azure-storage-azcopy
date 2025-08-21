@@ -40,6 +40,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/spf13/cobra"
@@ -1322,8 +1323,14 @@ func (cca *CookedCopyCmdArgs) getSuccessExitCode() common.ExitCode {
 }
 
 func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint32) {
+
+	// When we do GetJobSummary, the transfers list objects are cleared.
+	// This is a problem for other client consumers like XDM
+	// XDM: Skipping the reset if it is mover
+	resetTransferLists := !buildmode.IsMover
+
 	// fetch a job status
-	summary := jobsAdmin.GetJobSummary(cca.jobID)
+	summary := jobsAdmin.GetJobSummary(cca.jobID, resetTransferLists)
 	glcmSwapOnce.Do(func() {
 		glcm = jobsAdmin.GetJobLCMWrapper(cca.jobID)
 	})

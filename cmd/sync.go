@@ -714,7 +714,13 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 
 	// fetch a job status and compute throughput if the first part was dispatched
 	if cca.firstPartOrdered() {
-		summary = jobsAdmin.GetJobSummary(cca.jobID)
+
+		// When we do GetJobSummary, the transfers list objects are cleared.
+		// This is a problem for other client consumers like XDM
+		// XDM: Skipping the reset if it is mover
+		resetTransferLists := !buildmode.IsMover
+
+		summary = jobsAdmin.GetJobSummary(cca.jobID, resetTransferLists)
 		lcm = jobsAdmin.GetJobLCMWrapper(cca.jobID)
 		jobDone = summary.JobStatus.IsJobDone()
 		totalKnownCount = summary.TotalTransfers

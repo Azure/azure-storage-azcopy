@@ -525,7 +525,7 @@ func getSTEStats() []common.CustomStatEntry {
 		if jobMgr, exists := JobsAdmin.JobMgr(jobID); exists {
 			totalTransfersQueued += jobMgr.GetTotalNumFilesProcessed()
 
-			jobSummary := jobMgr.ListJobSummary()
+			jobSummary := jobMgr.ListJobSummary(false)
 			totalTransfersCompleted += uint64(jobSummary.TransfersCompleted)
 			totalTransfersFailed += uint64(jobSummary.TransfersFailed)
 			totalTransfersSkipped += uint64(jobSummary.TransfersSkipped)

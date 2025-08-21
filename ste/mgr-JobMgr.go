@@ -168,7 +168,7 @@ type IJobMgr interface {
 	/* Status related functions */
 	SendJobPartCreatedMsg(msg JobPartCreatedMsg)
 	SendXferDoneMsg(msg xferDoneMsg)
-	ListJobSummary() common.ListJobSummaryResponse
+	ListJobSummary(reset ...bool) common.ListJobSummaryResponse
 	ResurrectSummary(js common.ListJobSummaryResponse)
 
 	/* Ported from jobsAdmin() */
