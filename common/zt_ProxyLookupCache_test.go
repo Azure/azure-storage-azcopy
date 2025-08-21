@@ -21,15 +21,52 @@
 package common
 
 import (
-	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/url"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
+// Needed so UT don't panic when they try to use the lifecycle manager
+type mockedLifecycleManager struct {
+}
+
+func (m mockedLifecycleManager) OnStart(ctx JobContext) {
+}
+
+func (m mockedLifecycleManager) OnScanProgress(progress ScanProgress) {
+}
+
+func (m mockedLifecycleManager) OnTransferProgress(progress TransferProgress) {
+}
+
+func (m mockedLifecycleManager) OnComplete(summary JobSummary) {
+}
+
+func (m mockedLifecycleManager) Error(s string) {
+}
+
+func (m mockedLifecycleManager) RegisterCloseFunc(f func()) {
+}
+
+func (m mockedLifecycleManager) Prompt(message string, details PromptDetails) ResponseOption {
+	return EResponseOption.Default()
+}
+
+func (m mockedLifecycleManager) Info(s string) {
+}
+
+func (m mockedLifecycleManager) Warn(s string) {
+}
+
+func (m mockedLifecycleManager) E2EAwaitAllowOpenFiles() {
+}
+
 func TestCacheIsUsed(t *testing.T) {
+	lcm = mockedLifecycleManager{} // avoid panic in tests that use the lifecycle manager
 	a := assert.New(t)
 	fakeMu := &sync.Mutex{} // avoids race condition in test code
 	var fakeResult *url.URL
@@ -93,6 +130,7 @@ func TestCacheIsUsed(t *testing.T) {
 }
 
 func TestCacheEntriesGetRefreshed(t *testing.T) {
+	lcm = mockedLifecycleManager{} // avoid panic in tests that use the lifecycle manager
 	a := assert.New(t)
 	fakeMu := &sync.Mutex{} // avoids race condition in test code
 	var fakeResult *url.URL
@@ -134,6 +172,7 @@ func TestCacheEntriesGetRefreshed(t *testing.T) {
 }
 
 func TestUseOfLookupMethodHasTimout(t *testing.T) {
+	lcm = mockedLifecycleManager{} // avoid panic in tests that use the lifecycle manager
 	a := assert.New(t)
 	pc := &proxyLookupCache{
 		m:             &sync.Map{},
