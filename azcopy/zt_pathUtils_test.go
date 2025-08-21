@@ -18,12 +18,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package azcopy
 
 import (
 	"testing"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
 	chk "gopkg.in/check.v1"
@@ -57,16 +56,8 @@ func TestStripQueryFromSaslessUrl(t *testing.T) {
 		if t.isRemote {
 			loc = common.ELocation.File()
 		}
-		m, q := azcopy.splitQueryFromSaslessResource(t.full, loc)
+		m, q := splitQueryFromSaslessResource(t.full, loc)
 		a.Equal(t.expectedMain, m)
 		a.Equal(t.expectedQuery, q)
 	}
-}
-
-func TestToReversedString(t *testing.T) {
-	a := assert.New(t)
-	traverser := &benchmarkTraverser{}
-	a.Equal("1", traverser.toReversedString(1))
-	a.Equal("01", traverser.toReversedString(10))
-	a.Equal("54321", traverser.toReversedString(12345))
 }
