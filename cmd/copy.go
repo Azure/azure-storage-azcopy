@@ -325,7 +325,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	if raw.includeBefore != "" {
 		// must set chooseEarliest = false, so that if there's an ambiguous local date, the latest will be returned
 		// (since that's safest for includeBefore.  Better to choose the later time and do more work, than the earlier one and fail to pick up a changed file
-		parsedIncludeBefore, err := IncludeBeforeDateFilter{}.ParseISO8601(raw.includeBefore, false)
+		parsedIncludeBefore, err := azcopy.ParseISO8601(raw.includeBefore, false)
 		if err != nil {
 			return cooked, err
 		}
@@ -335,7 +335,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	if raw.includeAfter != "" {
 		// must set chooseEarliest = true, so that if there's an ambiguous local date, the earliest will be returned
 		// (since that's safest for includeAfter.  Better to choose the earlier time and do more work, than the later one and fail to pick up a changed file
-		parsedIncludeAfter, err := IncludeAfterDateFilter{}.ParseISO8601(raw.includeAfter, true)
+		parsedIncludeAfter, err := azcopy.ParseISO8601(raw.includeAfter, true)
 		if err != nil {
 			return cooked, err
 		}
