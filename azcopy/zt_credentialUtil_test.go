@@ -32,11 +32,47 @@ import (
 	chk "gopkg.in/check.v1"
 )
 
+// Needed so UT don't panic when they try to use the lifecycle manager
+type mockedLifecycleManager struct {
+}
+
+func (m mockedLifecycleManager) OnStart(ctx common.JobContext) {
+}
+
+func (m mockedLifecycleManager) OnScanProgress(progress common.ScanProgress) {
+}
+
+func (m mockedLifecycleManager) OnTransferProgress(progress common.TransferProgress) {
+}
+
+func (m mockedLifecycleManager) OnComplete(summary common.JobSummary) {
+}
+
+func (m mockedLifecycleManager) Error(s string) {
+}
+
+func (m mockedLifecycleManager) RegisterCloseFunc(f func()) {
+}
+
+func (m mockedLifecycleManager) Prompt(message string, details common.PromptDetails) common.ResponseOption {
+	return common.EResponseOption.Default()
+}
+
+func (m mockedLifecycleManager) Info(s string) {
+}
+
+func (m mockedLifecycleManager) Warn(s string) {
+}
+
+func (m mockedLifecycleManager) E2EAwaitAllowOpenFiles() {
+}
+
 type credentialUtilSuite struct{}
 
 var _ = chk.Suite(&credentialUtilSuite{})
 
 func TestCheckAuthSafeForTarget(t *testing.T) {
+	common.SetJobLifecycleHandler(mockedLifecycleManager{})
 	a := assert.New(t)
 	tests := []struct {
 		ct               common.CredentialType
@@ -94,6 +130,7 @@ func TestCheckAuthSafeForTarget(t *testing.T) {
 }
 
 func TestCheckAuthSafeForTargetIsCalledWhenGettingAuthType(t *testing.T) {
+	common.SetJobLifecycleHandler(mockedLifecycleManager{})
 	common.AzcopyJobPlanFolder = os.TempDir()
 	a := assert.New(t)
 	mockGetCredTypeFromEnvVar := func() common.CredentialType {
@@ -112,6 +149,7 @@ func TestCheckAuthSafeForTargetIsCalledWhenGettingAuthType(t *testing.T) {
 }
 
 func TestCheckAuthSafeForTargetIsCalledWhenGettingAuthTypeMDOAuth(t *testing.T) {
+	common.SetJobLifecycleHandler(mockedLifecycleManager{})
 	a := assert.New(t)
 	mockGetCredTypeFromEnvVar := func() common.CredentialType {
 		return common.ECredentialType.MDOAuthToken() // force it to OAuth, which is the case we want to test
@@ -133,6 +171,7 @@ func TestCheckAuthSafeForTargetIsCalledWhenGettingAuthTypeMDOAuth(t *testing.T) 
  * Two cases are considered, a blob is public or a container is public.
  */
 func TestIsPublic(t *testing.T) {
+	common.SetJobLifecycleHandler(mockedLifecycleManager{})
 	// TODO: Migrate this test to mocked UT.
 	t.Skip("Public access is sometimes turned off due to organization policy. This test should ideally be migrated to a mocked UT.")
 
