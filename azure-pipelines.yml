@@ -173,7 +173,6 @@ jobs:
           directory: 'azcopy'
           coverage_name: 'azcopy'
       - template: azurePipelineTemplates/run-ut.yml
-      - template: azurePipelineTemplates/run-ut.yml
         parameters:
           directory: 'cmd'
           coverage_name: 'cmd'
