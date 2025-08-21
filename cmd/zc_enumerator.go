@@ -555,7 +555,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 		} else {
 			output = newBlobTraverser(r, bsc, ctx, opts)
 		}
-	case common.ELocation.File():
+	case common.ELocation.File(), common.ELocation.FileNFS():
 		// TODO (last service migration) : Remove dependency on URLs.
 		resourceURL, err := resource.FullURL()
 		if err != nil {
@@ -578,13 +578,18 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 		fileOptions := &common.FileClientOptions{
 			AllowTrailingDot: opts.TrailingDotOption.IsEnabled(),
 		}
-
-		res, err := SplitResourceString(fileURLParts.String(), common.ELocation.File())
+		var resLoc common.Location
+		if resourceLocation == common.ELocation.File() {
+			resLoc = common.ELocation.File()
+		} else {
+			resLoc = common.ELocation.FileNFS()
+		}
+		res, err := SplitResourceString(fileURLParts.String(), resLoc)
 		if err != nil {
 			return nil, err
 		}
 
-		c, err := common.GetServiceClientForLocation(common.ELocation.File(), res, opts.Credential.CredentialType, opts.Credential.OAuthTokenInfo.TokenCredential, &options, fileOptions)
+		c, err := common.GetServiceClientForLocation(resLoc, res, opts.Credential.CredentialType, opts.Credential.OAuthTokenInfo.TokenCredential, &options, fileOptions)
 		if err != nil {
 			return nil, err
 		}

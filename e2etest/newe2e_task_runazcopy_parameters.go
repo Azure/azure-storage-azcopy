@@ -474,6 +474,26 @@ type LoginStatusFlags struct {
 	Method   *bool `flag:"method"`
 }
 
+type JobsCleanFlags struct {
+	GlobalFlags
+
+	WithStatus *common.JobStatus `flag:"with-status"`
+}
+
+type JobsRemoveFlags struct {
+	GlobalFlags
+}
+
+type JobsListFlags struct {
+	GlobalFlags
+	WithStatus *common.JobStatus `flag:"with-status"`
+}
+
+type JobsShowFlags struct {
+	GlobalFlags
+	WithStatus *common.TransferStatus `flag:"with-status"`
+}
+
 type WindowsAttribute uint32
 
 const (

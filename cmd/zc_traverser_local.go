@@ -363,7 +363,7 @@ func WalkWithSymlinks(
 				}
 
 				if options.SymlinkHandling.None() {
-					if isNFSCopy {
+					if common.IsNFSCopy() {
 						if options.IncrementEnumerationCounter != nil {
 							options.IncrementEnumerationCounter(common.EEntityType.Symlink())
 						}
@@ -488,7 +488,7 @@ func WalkWithSymlinks(
 				}
 				return nil
 			} else {
-				if isNFSCopy {
+				if common.IsNFSCopy() {
 					LogHardLinkIfDefaultPolicy(fileInfo, options.HardlinkHandling)
 					if !IsRegularFile(fileInfo) && !fileInfo.IsDir() {
 						// We don't want to process other non-regular files here.
@@ -863,7 +863,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	if isSingleFile {
 
 		entityType := common.EEntityType.File()
-		if isNFSCopy {
+		if common.IsNFSCopy() {
 			if IsSymbolicLink(singleFileInfo) {
 				entityType = common.EEntityType.Symlink()
 				logSpecialFileWarning(singleFileInfo.Name())
@@ -933,7 +933,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 			}
 
 			// NFS Handling
-			if isNFSCopy {
+			if common.IsNFSCopy() {
 				if IsHardlink(fileInfo) {
 					entityType = common.EEntityType.Hardlink()
 				}
@@ -1018,7 +1018,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 
 					if t.symlinkHandling.None() {
 						// If we are not following symlinks, we skip them.
-						if isNFSCopy && t.incrementEnumerationCounter != nil {
+						if common.IsNFSCopy() && t.incrementEnumerationCounter != nil {
 							t.incrementEnumerationCounter(common.EEntityType.Symlink())
 						}
 						continue
@@ -1092,7 +1092,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				}
 
 				// NFS handling
-				if isNFSCopy && !entry.IsDir() {
+				if common.IsNFSCopy() && !entry.IsDir() {
 					if IsHardlink(fileInfo) {
 						entityType = common.EEntityType.Hardlink()
 					} else if !IsRegularFile(fileInfo) {

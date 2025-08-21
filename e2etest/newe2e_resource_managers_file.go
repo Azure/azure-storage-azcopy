@@ -49,6 +49,7 @@ func fileStripSAS(uri string) string {
 type FileServiceResourceManager struct {
 	InternalAccount *AzureAccountResourceManager
 	InternalClient  *service.Client
+	Llocation       common.Location
 }
 
 func (s *FileServiceResourceManager) DefaultAuthType() ExplicitCredentialTypes {
@@ -76,7 +77,7 @@ func (s *FileServiceResourceManager) Parent() ResourceManager {
 }
 
 func (s *FileServiceResourceManager) Location() common.Location {
-	return common.ELocation.File()
+	return s.Llocation
 }
 
 func (s *FileServiceResourceManager) Level() cmd.LocationLevel {
