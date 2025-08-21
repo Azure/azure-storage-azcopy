@@ -170,6 +170,11 @@ jobs:
         name: 'Acquire_the_distributed_mutex'
       - template: azurePipelineTemplates/run-ut.yml
         parameters:
+          directory: 'azcopy'
+          coverage_name: 'azcopy'
+      - template: azurePipelineTemplates/run-ut.yml
+      - template: azurePipelineTemplates/run-ut.yml
+        parameters:
           directory: 'cmd'
           coverage_name: 'cmd'
       - template: azurePipelineTemplates/run-ut.yml
