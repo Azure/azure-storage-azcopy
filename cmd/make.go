@@ -86,7 +86,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 		return fmt.Errorf("failed to resolve target: %w", err)
 	}
 
-	credentialInfo, _, err := GetCredentialInfoForLocation(ctx, cookedArgs.resourceLocation, resourceStringParts, false, common.CpkOptions{})
+	credentialInfo, _, err := GetCredentialInfoForLocation(ctx, cookedArgs.resourceLocation, resourceStringParts, false, Client.GetUserOAuthTokenManagerInstance(), common.CpkOptions{})
 	if err != nil {
 		return err
 	}

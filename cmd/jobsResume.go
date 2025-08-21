@@ -222,11 +222,7 @@ func getSourceAndDestinationServiceClients(
 	jobDetails common.GetJobDetailsResponse,
 ) (*common.ServiceClient, *common.ServiceClient, error) {
 	fromTo := jobDetails.FromTo
-	srcCredType, isSrcPublic, err := getCredentialTypeForLocation(ctx,
-		fromTo.From(),
-		source,
-		true,
-		common.CpkOptions{})
+	srcCredType, isSrcPublic, err := getCredentialTypeForLocation(ctx, fromTo.From(), source, true, Client.GetUserOAuthTokenManagerInstance(), common.CpkOptions{})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -240,11 +236,7 @@ func getSourceAndDestinationServiceClients(
 		}
 	}
 
-	dstCredType, isDstPublic, err := getCredentialTypeForLocation(ctx,
-		fromTo.To(),
-		destination,
-		false,
-		common.CpkOptions{})
+	dstCredType, isDstPublic, err := getCredentialTypeForLocation(ctx, fromTo.To(), destination, false, Client.GetUserOAuthTokenManagerInstance(), common.CpkOptions{})
 	if err != nil {
 		return nil, nil, err
 	}
