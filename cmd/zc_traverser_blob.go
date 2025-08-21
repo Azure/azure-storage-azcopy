@@ -617,7 +617,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 		// In case of sync orchestrator, we want to let the orchestrator know that the prefix was not found
 		// for a flat blob destination. This will help in optimizing the sync process by avoiding redundant
 		// target traversals.
-		return fmt.Errorf("blob %s not found in destination. Err %s", t.rawURL, common.BLOB_NOT_FOUND)
+		return fmt.Errorf("blob %s not found in destination. Err %s", t.rawURL, bloberror.BlobNotFound)
 	}
 
 	return nil

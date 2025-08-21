@@ -335,7 +335,7 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 		return false, false
 	}
 
-	if isNFSCopy {
+	if common.IsNFSCopy() {
 		// We can't rely on ChangeTime for NFS file share target
 		// It is set to the time of migration for the objects
 		// In this case, we try to use last successful job start time, if its available.

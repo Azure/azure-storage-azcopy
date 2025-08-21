@@ -601,7 +601,7 @@ func newFileTraverser(rawURL string, serviceClient *service.Client, ctx context.
 	// Set this to true if we are using SyncOrchestrator and getProperties is true
 	// We are disabling it for NFS copy as it needs few properties like LinkCount, FileID
 	// which are not available in the listing operation.
-	t.includeExtendedInfo = UseSyncOrchestrator && t.getProperties && !isNFSCopy
+	t.includeExtendedInfo = UseSyncOrchestrator && t.getProperties && !common.IsNFSCopy()
 
 	return
 }

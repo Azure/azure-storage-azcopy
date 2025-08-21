@@ -73,10 +73,6 @@ func (cooked *CookedCopyCmdArgs) Hardlinks() common.HardlinkHandlingType {
 	return cooked.hardlinks
 }
 
-func (cooked *CookedCopyCmdArgs) IsNfsCopy() bool {
-	return cooked.isNFSCopy
-}
-
 // ============================================================================
 // End CookedCopyCmdArgs - Property Getters
 // ============================================================================
@@ -103,10 +99,6 @@ func (cooked *CookedCopyCmdArgs) SetPreserveInfo(preserveInfo bool) {
 
 func (cooked *CookedCopyCmdArgs) SetPermanentDeleteOption(permanentDeleteOptionStr string) error {
 	return cooked.permanentDeleteOption.Parse(permanentDeleteOptionStr)
-}
-
-func (cooked *CookedCopyCmdArgs) SetIsNfsCopy(isNfsCopy bool) {
-	cooked.isNFSCopy = isNfsCopy
 }
 
 func (cooked *CookedCopyCmdArgs) SetHardlinks(hardlinkHandlingType common.HardlinkHandlingType) {
@@ -318,7 +310,6 @@ type RawMoverSyncCmdArgs struct {
 	Md5ValidationOption     string
 	CompareHash             string
 	LocalHashStorageMode    string
-	IsNfsCopy               bool
 	Hardlinks               string
 	IncludeDirectoryStubs   bool
 }
@@ -338,7 +329,6 @@ type SyncCmdArgsInput struct {
 	Md5ValidationOption     string
 	CompareHash             string
 	LocalHashStorageMode    string
-	IsNfsCopy               bool
 	Hardlinks               string
 }
 
@@ -359,7 +349,6 @@ func CookRawSyncCmdArgs(args RawMoverSyncCmdArgs) (cookedSyncCmdArgs, error) {
 		md5ValidationOption:     args.Md5ValidationOption,
 		compareHash:             args.CompareHash,
 		localHashStorageMode:    args.LocalHashStorageMode,
-		isNFSCopy:               args.IsNfsCopy,
 		hardlinks:               args.Hardlinks,
 		includeDirectoryStubs:   args.IncludeDirectoryStubs,
 	}
@@ -368,14 +357,6 @@ func CookRawSyncCmdArgs(args RawMoverSyncCmdArgs) (cookedSyncCmdArgs, error) {
 
 func (cca *cookedSyncCmdArgs) SetCredentialInfo(ctx context.Context) error {
 	return cca.setCredentialInfo(ctx)
-}
-
-func InitializeAzCopyFolders(
-	logPathFolder,
-	jobPlanFolder,
-	appPathFolder string) (string, string) {
-	azcopyLogPathFolder, common.AzcopyJobPlanFolder = initializeFolders(logPathFolder, jobPlanFolder, appPathFolder)
-	return azcopyLogPathFolder, common.AzcopyJobPlanFolder
 }
 
 // ToStringMap returns a map representation of cookedSyncCmdArgs
@@ -434,9 +415,6 @@ func (cooked *cookedSyncCmdArgs) ToStringMap() map[string]string {
 	}
 	if cooked.backupMode {
 		result["backupMode"] = "true"
-	}
-	if cooked.isNFSCopy {
-		result["isNFSCopy"] = "true"
 	}
 	if cooked.putMd5 {
 		result["putMd5"] = "true"
@@ -680,9 +658,6 @@ func (cooked *CookedCopyCmdArgs) ToStringMap() map[string]string {
 	if cooked.preserveInfo {
 		result["preserveInfo"] = "true"
 	}
-	if cooked.isNFSCopy {
-		result["isNFSCopy"] = "true"
-	}
 	if cooked.preserveOwner {
 		result["preserveOwner"] = "true"
 	}
@@ -881,10 +856,6 @@ func (cooked *CookedCopyCmdArgs) ToString() string {
 	sort.Strings(parts)
 
 	return fmt.Sprintf("CookedCopyCmdArgs{%s}", strings.Join(parts, ", "))
-}
-
-func SetJobId(jobId common.JobID) {
-	azcopyCurrentJobID = jobId
 }
 
 // ============================================================================

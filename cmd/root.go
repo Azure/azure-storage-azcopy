@@ -248,14 +248,14 @@ func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
 	}
 
 	if buildmode.IsMover {
-		StartSystemStatsMonitorForJob(jobID)
+		StartSystemStatsMonitorForJob()
 	}
 
 	return nil
 
 }
 
-func StartSystemStatsMonitorForJob(jobId common.JobID) {
+func StartSystemStatsMonitorForJob() {
 
 	if runtime.GOOS != "linux" {
 		// We don't start the stats monitor on Windows, because few functions are OS specific.
@@ -263,7 +263,7 @@ func StartSystemStatsMonitorForJob(jobId common.JobID) {
 		return
 	}
 
-	logger := common.NewJobLogger(jobId, LogLevel.Info(), azcopyLogPathFolder, "-rolling-stats")
+	logger := common.NewJobLogger(Client.CurrentJobID, LogLevel.Info(), common.LogPathFolder, "-rolling-stats")
 	logger.OpenLog()
 	glcm.RegisterCloseFunc(func() {
 		logger.CloseLog()
@@ -271,7 +271,7 @@ func StartSystemStatsMonitorForJob(jobId common.JobID) {
 
 	config := common.StatsMonitorConfig{
 		Interval:     5 * time.Second,
-		MonitorPaths: []string{azcopyLogPathFolder, common.AzcopyJobPlanFolder},
+		MonitorPaths: []string{common.LogPathFolder, common.AzcopyJobPlanFolder},
 		Logger:       logger,
 		LogConditions: common.LogConditions{
 			LogInterval: 60 * time.Second, // Regular logging

@@ -243,8 +243,8 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 	// So when we uploaded the ranges, we've unintentionally changed the last-write-time.
 	// This will ensure that the last-write-time is set to the minimum time and epilogue
 	// will set the last-write-time to the correct value.
-	// XDM: Need to confirm before enabling this change for NFS.
-	if !u.jptm.Info().IsNFSCopy && u.jptm.Info().PreserveInfo && creationProperties.LastWriteTime != nil {
+	// XDM: Need to confirm this change for NFS.
+	if u.jptm.Info().PreserveInfo && creationProperties.LastWriteTime != nil {
 		minimalLwt := time.Unix(0, 0)
 		creationProperties.LastWriteTime = &minimalLwt
 	}
