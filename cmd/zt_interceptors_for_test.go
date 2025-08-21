@@ -72,14 +72,14 @@ func (m *mockedLifecycleManager) SetOutputVerbosity(mode common.OutputVerbosity)
 }
 
 func (m *mockedLifecycleManager) OnScanProgress(progress common.ScanProgress) {
-	o := common.GetScanProgressOutputBuilder(progress)
+	o := GetScanProgressOutputBuilder(progress)
 	select {
 	case m.progressLog <- o(common.EOutputFormat.Text()):
 	default:
 	}
 }
 func (m *mockedLifecycleManager) OnTransferProgress(progress common.TransferProgress) {
-	o := common.GetProgressOutputBuilder(progress)
+	o := GetProgressOutputBuilder(progress)
 	select {
 	case m.progressLog <- o(common.EOutputFormat.Text()):
 	default:
@@ -127,7 +127,7 @@ func (m *mockedLifecycleManager) Exit(o common.OutputBuilder, e common.ExitCode)
 }
 
 func (m *mockedLifecycleManager) OnComplete(summary common.JobSummary) {
-	o := common.GetJobSummaryOutputBuilder(summary)
+	o := GetJobSummaryOutputBuilder(summary)
 	m.Exit(o, summary.ExitCode)
 }
 func (m *mockedLifecycleManager) Error(msg string) {
