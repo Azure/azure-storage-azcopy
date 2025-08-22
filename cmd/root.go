@@ -279,6 +279,9 @@ func init() {
 	// replace the word "global" to avoid confusion (e.g. it doesn't affect all instances of AzCopy)
 	rootCmd.SetUsageTemplate(strings.Replace((&cobra.Command{}).UsageTemplate(), "Global Flags", "Flags Applying to All Commands", -1))
 
+	rootCmd.PersistentFlags().IntVar(&ste.GlobalRequestPriority, RequestPriorityFlag, -1, "Specify a request priority for Azure Storage to utilize in throttling from 0-7; priority is inverted, where 0 is the highest priority, and 7 is the lowest priority. The default is 3.")
+	_ = rootCmd.PersistentFlags().MarkHidden(RequestPriorityFlag) // hide the request priority flag until official release
+
 	rootCmd.PersistentFlags().Float64Var(&CapMbps, "cap-mbps", 0,
 		"Caps the transfer rate, in megabits per second. "+
 			"\n Moment-by-moment throughput might vary slightly from the cap."+
