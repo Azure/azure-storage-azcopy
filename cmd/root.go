@@ -263,6 +263,12 @@ func InitializeAndExecute() {
 		glcm.Error(err.Error())
 	} else {
 		if !SkipVersionCheck && !isPipeDownload {
+			// In the unlikely chance log path folder is empty, make sure we don't write to user's current directory
+			if common.LogPathFolder == "" {
+				// With this, latest_version.txt is written to app dir
+				common.InitializeFolders()
+			}
+
 			// our commands all control their own life explicitly with the lifecycle manager
 			// only commands that don't explicitly exit actually reach this point (e.g. help commands)
 			select {
@@ -345,12 +351,6 @@ func beginDetectNewVersion() chan struct{} {
 		localVersion, err := NewVersion(common.AzcopyVersion)
 		if err != nil {
 			return
-		}
-
-		// In the unlikely chance log path folder is empty, make sure we don't write to user's current directory
-		if common.LogPathFolder == "" {
-			// With this, latest_version.txt is written to app dir
-			common.InitializeFolders()
 		}
 		// Step 1: Fetch & validate cached version. If it is up to date, we return without making API calls
 		filePath := filepath.Join(common.LogPathFolder, "latest_version.txt")
