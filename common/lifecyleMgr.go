@@ -1,5 +1,8 @@
 package common
 
+// lcm is the lifecycle manager for the AzCopy client. This needs to be reset per copy/sync/resume job for AzCopy as a library users.
+// It is a bit of an anti pattern to have a global variable like this, but it is necessary to minimize code changes
+// while implementing AzCopy as a library.
 var lcm JobLifecycleHandler
 
 // SetJobLifecycleHandler allows AzCopy CLI and AzCopy as a library to set a custom JobLifecycleHandler

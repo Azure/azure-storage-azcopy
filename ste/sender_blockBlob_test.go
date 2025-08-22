@@ -32,6 +32,7 @@ import (
 )
 
 func TestGetVerifiedChunkParams(t *testing.T) {
+	common.SetJobLifecycleHandler(common.MockedJobLifecycleHandler{})
 	a := assert.New(t)
 	// Mock required params
 	transferInfo := &TransferInfo{

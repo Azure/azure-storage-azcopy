@@ -30,6 +30,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -150,15 +151,15 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 	case common.EFromTo.Unknown():
 		return cooked, fmt.Errorf("unable to infer the source '%s' / destination '%s'. ", raw.src, raw.dst)
 	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile(), common.EFromTo.LocalBlobFS(), common.EFromTo.LocalFileNFS():
-		cooked.destination, err = SplitResourceString(raw.dst, cooked.fromTo.To())
+		cooked.destination, err = azcopy.SplitResourceString(raw.dst, cooked.fromTo.To())
 		common.PanicIfErr(err)
 	case common.EFromTo.BlobLocal(), common.EFromTo.FileLocal(), common.EFromTo.BlobFSLocal(), common.EFromTo.FileNFSLocal():
-		cooked.source, err = SplitResourceString(raw.src, cooked.fromTo.From())
+		cooked.source, err = azcopy.SplitResourceString(raw.src, cooked.fromTo.From())
 		common.PanicIfErr(err)
 	case common.EFromTo.BlobBlob(), common.EFromTo.FileFile(), common.EFromTo.FileNFSFileNFS(), common.EFromTo.BlobFile(), common.EFromTo.FileBlob(), common.EFromTo.BlobFSBlobFS(), common.EFromTo.BlobFSBlob(), common.EFromTo.BlobFSFile(), common.EFromTo.BlobBlobFS(), common.EFromTo.FileBlobFS():
-		cooked.destination, err = SplitResourceString(raw.dst, cooked.fromTo.To())
+		cooked.destination, err = azcopy.SplitResourceString(raw.dst, cooked.fromTo.To())
 		common.PanicIfErr(err)
-		cooked.source, err = SplitResourceString(raw.src, cooked.fromTo.From())
+		cooked.source, err = azcopy.SplitResourceString(raw.src, cooked.fromTo.From())
 		common.PanicIfErr(err)
 	default:
 		return cooked, fmt.Errorf("source '%s' / destination '%s' combination '%s' not supported for sync command ", raw.src, raw.dst, cooked.fromTo)
@@ -166,9 +167,9 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 
 	// Do this check separately so we don't end up with a bunch of code duplication when new src/dstn are added
 	if cooked.fromTo.From() == common.ELocation.Local() {
-		cooked.source = common.ResourceString{Value: common.ToExtendedPath(cleanLocalPath(raw.src))}
+		cooked.source = common.ResourceString{Value: common.ToExtendedPath(azcopy.CleanLocalPath(raw.src))}
 	} else if cooked.fromTo.To() == common.ELocation.Local() {
-		cooked.destination = common.ResourceString{Value: common.ToExtendedPath(cleanLocalPath(raw.dst))}
+		cooked.destination = common.ResourceString{Value: common.ToExtendedPath(azcopy.CleanLocalPath(raw.dst))}
 	}
 
 	if err = cooked.symlinkHandling.Determine(raw.followSymlinks, raw.preserveSymlinks); err != nil {
@@ -684,12 +685,12 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 
 	// Verifies credential type and initializes credential info.
 	// Note that this is for the destination.
-	cca.credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination, false, cca.cpkOptions)
+	cca.credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination, false, Client.GetUserOAuthTokenManagerInstance(), cca.cpkOptions)
 	if err != nil {
 		return err
 	}
 
-	srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source, true, cca.cpkOptions)
+	srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source, true, Client.GetUserOAuthTokenManagerInstance(), cca.cpkOptions)
 	if err != nil {
 		return err
 	}
