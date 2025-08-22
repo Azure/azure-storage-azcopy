@@ -96,10 +96,11 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		PreserveBlobTags:        cca.S2sPreserveBlobTags,
 		StripTopDir:             cca.StripTopDir,
 		HardlinkHandling:        cca.hardlinks,
+		FromTo:                  cca.FromTo,
 
 		ExcludeContainers: cca.excludeContainer,
 		IncrementEnumeration: func(entityType common.EntityType, symlinkOption common.SymlinkHandlingType, hardlinkHandling common.HardlinkHandlingType) {
-			if common.IsNFSCopy() {
+			if common.IsNFSCopy(cca.FromTo) {
 				if entityType == common.EEntityType.Other() {
 					atomic.AddUint32(&cca.atomicSkippedSpecialFileCount, 1)
 				} else if entityType == common.EEntityType.Symlink() {
@@ -405,6 +406,7 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx con
 
 		ExcludeContainers: cca.excludeContainer,
 		HardlinkHandling:  cca.hardlinks,
+		FromTo:            cca.FromTo,
 	})
 
 	if err != nil {

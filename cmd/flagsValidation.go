@@ -100,10 +100,8 @@ func areBothLocationsNFSAware(fromTo common.FromTo) bool {
 
 	if (runtime.GOOS == "linux") &&
 		(fromTo == common.EFromTo.LocalFileNFS() || fromTo == common.EFromTo.FileNFSLocal()) {
-		common.SetIsNFSCopy(fromTo)
 		return true
 	} else if s2sNFSXfers[fromTo] {
-		common.SetIsNFSCopy(fromTo)
 		return true
 	} else {
 		return false
@@ -255,7 +253,7 @@ func validateSymlinkFlag(followSymlinks, preserveSymlinks bool) error {
 // transfer direction (upload, download, S2S), and source/destination types (NFS, SMB, local).
 // Returns an error if the configuration is unsupported.
 func validateAndAdjustHardlinksFlag(option *common.HardlinkHandlingType, fromTo common.FromTo) error {
-	if !common.IsNFSCopy() {
+	if !common.IsNFSCopy(fromTo) {
 		return nil
 	}
 
@@ -333,12 +331,9 @@ func validateShareProtocolCompatibility(
 	resource common.ResourceString,
 	serviceClient *common.ServiceClient,
 	isSource bool,
-	protocol string,
+	protocol common.Location,
 	fromTo common.FromTo,
 ) error {
-	if protocol == "" {
-		return nil
-	}
 
 	direction := "from"
 	if !isSource {
@@ -348,7 +343,7 @@ func validateShareProtocolCompatibility(
 	// We can ignore the error if we fail to get the share properties.
 	shareProtocol, _ := getShareProtocolType(ctx, serviceClient, resource, protocol)
 
-	if shareProtocol == "SMB" {
+	if shareProtocol == common.ELocation.File() {
 		if isSource && fromTo.From() != common.ELocation.File() {
 			return fmt.Errorf("The %s share has SMB protocol enabled. To copy %s a SMB share, use the appropriate --from-to flag value", direction, direction)
 		}
@@ -357,7 +352,7 @@ func validateShareProtocolCompatibility(
 		}
 	}
 
-	if shareProtocol == "NFS" {
+	if shareProtocol == common.ELocation.FileNFS() {
 		if isSource && fromTo.From() != common.ELocation.FileNFS() {
 			return fmt.Errorf("The %s share has NFS protocol enabled. To copy %s a NFS share, use the appropriate --from-to flag value", direction, direction)
 		}
@@ -374,18 +369,18 @@ func getShareProtocolType(
 	ctx context.Context,
 	serviceClient *common.ServiceClient,
 	resource common.ResourceString,
-	givenValue string,
-) (string, error) {
+	givenValue common.Location,
+) (common.Location, error) {
 
 	fileURLParts, err := file.ParseURL(resource.Value)
 	if err != nil {
-		return "UNKNOWN", fmt.Errorf("failed to parse resource URL: %w", err)
+		return common.ELocation.Unknown(), fmt.Errorf("failed to parse resource URL: %w", err)
 	}
 	shareName := fileURLParts.ShareName
 
 	fileServiceClient, err := serviceClient.FileServiceClient()
 	if err != nil {
-		return "UNKNOWN", fmt.Errorf("failed to create file service client: %w", err)
+		return common.ELocation.Unknown(), fmt.Errorf("failed to create file service client: %w", err)
 	}
 
 	shareClient := fileServiceClient.NewShareClient(shareName)
@@ -395,40 +390,40 @@ func getShareProtocolType(
 		return givenValue, err
 	}
 
-	if properties.EnabledProtocols == nil {
-		return "SMB", nil // Default assumption
+	if properties.EnabledProtocols == nil || *properties.EnabledProtocols == "SMB" {
+		return common.ELocation.File(), nil // Default assumption
 	}
 
-	return *properties.EnabledProtocols, nil
+	return common.ELocation.FileNFS(), nil
 }
 
 // Protocol compatibility validation for SMB and NFS transfers
 func validateProtocolCompatibility(ctx context.Context, fromTo common.FromTo, src, dst common.ResourceString, srcClient, dstClient *common.ServiceClient) error {
 
-	getUploadDownloadProtocol := func(fromTo common.FromTo) string {
+	getUploadDownloadProtocol := func(fromTo common.FromTo) common.Location {
 		switch fromTo {
 		case common.EFromTo.LocalFile(), common.EFromTo.FileLocal():
-			return "SMB"
+			return common.ELocation.File()
 		case common.EFromTo.LocalFileNFS(), common.EFromTo.FileNFSLocal():
-			return "NFS"
+			return common.ELocation.FileNFS()
 		default:
-			return ""
+			return common.ELocation.Unknown()
 		}
 	}
 
-	var srcProtocol, dstProtocol string
+	var srcProtocol, dstProtocol common.Location
 
 	// S2S Transfers
 	if fromTo.IsS2S() {
 		switch fromTo {
 		case common.EFromTo.FileFile():
-			srcProtocol, dstProtocol = "SMB", "SMB"
+			srcProtocol, dstProtocol = common.ELocation.File(), common.ELocation.File()
 		case common.EFromTo.FileNFSFileNFS():
-			srcProtocol, dstProtocol = "NFS", "NFS"
+			srcProtocol, dstProtocol = common.ELocation.FileNFS(), common.ELocation.FileNFS()
 		case common.EFromTo.FileNFSFileSMB():
-			srcProtocol, dstProtocol = "NFS", "SMB"
+			srcProtocol, dstProtocol = common.ELocation.FileNFS(), common.ELocation.File()
 		case common.EFromTo.FileSMBFileNFS():
-			srcProtocol, dstProtocol = "SMB", "NFS"
+			srcProtocol, dstProtocol = common.ELocation.File(), common.ELocation.FileNFS()
 		}
 
 		// Validate both source and destination
@@ -471,11 +466,11 @@ func ComputePreserveFlags(cmd *cobra.Command, userFromTo common.FromTo, preserve
 
 	// Final preservePermissions logic
 	finalPreservePermissions := preservePermissions
-	if !common.IsNFSCopy() {
+	if !common.IsNFSCopy(userFromTo) {
 		finalPreservePermissions = preservePermissions || preserveSMBPermissions
 	}
 
-	if common.IsNFSCopy() && ((preserveSMBInfo && runtime.GOOS == "linux") || preserveSMBPermissions) {
+	if common.IsNFSCopy(userFromTo) && ((preserveSMBInfo && runtime.GOOS == "linux") || preserveSMBPermissions) {
 		glcm.Error(InvalidFlagsForNFSMsg)
 	}
 

@@ -91,7 +91,7 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 		}
 	}
 
-	if common.IsNFSCopy() {
+	if common.IsNFSCopy(cooked.FromTo) {
 		if err := performNFSSpecificValidation(
 			cooked.FromTo, cooked.preservePermissions, cooked.preserveInfo,
 			cooked.SymlinkHandling, &cooked.hardlinks); err != nil {

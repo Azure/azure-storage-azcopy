@@ -56,6 +56,7 @@ type localTraverser struct {
 	// receives fullPath entries and manages hashing of files lacking metadata.
 	hashTargetChannel chan string
 	hardlinkHandling  common.HardlinkHandlingType
+	fromTo            common.FromTo
 }
 
 func (t *localTraverser) IsDirectory(bool) (bool, error) {
@@ -209,7 +210,8 @@ func WalkWithSymlinks(appCtx context.Context,
 	symlinkHandling common.SymlinkHandlingType,
 	errorChannel chan<- ErrorFileInfo,
 	hardlinkHandling common.HardlinkHandlingType,
-	incrementEnumerationCounter enumerationCounterFunc) (err error) {
+	incrementEnumerationCounter enumerationCounterFunc,
+	fromTo common.FromTo) (err error) {
 
 	// We want to re-queue symlinks up in their evaluated form because filepath.Walk doesn't evaluate them for us.
 	// So, what is the plan of attack?
@@ -281,7 +283,7 @@ func WalkWithSymlinks(appCtx context.Context,
 				}
 
 				if symlinkHandling.None() {
-					if common.IsNFSCopy() {
+					if common.IsNFSCopy(fromTo) {
 						if incrementEnumerationCounter != nil {
 							incrementEnumerationCounter(common.EEntityType.Symlink(), symlinkHandling, hardlinkHandling)
 						}
@@ -363,7 +365,7 @@ func WalkWithSymlinks(appCtx context.Context,
 				}
 				return nil
 			} else {
-				if common.IsNFSCopy() {
+				if common.IsNFSCopy(fromTo) {
 					LogHardLinkIfDefaultPolicy(fileInfo, hardlinkHandling)
 					if !IsRegularFile(fileInfo) && !fileInfo.IsDir() {
 						// We don't want to process other non-regular files here.
@@ -677,7 +679,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	if isSingleFile {
 
 		entityType := common.EEntityType.File()
-		if common.IsNFSCopy() {
+		if common.IsNFSCopy(t.fromTo) {
 			if IsSymbolicLink(singleFileInfo) {
 				entityType = common.EEntityType.Symlink()
 				logSpecialFileWarning(singleFileInfo.Name())
@@ -748,7 +750,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				}
 
 				// NFS Handling
-				if common.IsNFSCopy() {
+				if common.IsNFSCopy(t.fromTo) {
 					if IsHardlink(fileInfo) {
 						entityType = common.EEntityType.Hardlink()
 					}
@@ -783,7 +785,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 			}
 
 			// note: Walk includes root, so no need here to separately create StoredObject for root (as we do for other folder-aware sources)
-			return finalizer(WalkWithSymlinks(t.appCtx, t.fullPath, processFile, t.symlinkHandling, t.errorChannel, t.hardlinkHandling, t.incrementEnumerationCounter))
+			return finalizer(WalkWithSymlinks(t.appCtx, t.fullPath, processFile, t.symlinkHandling, t.errorChannel, t.hardlinkHandling, t.incrementEnumerationCounter, t.fromTo))
 		} else {
 			// if recursive is off, we only need to scan the files immediately under the fullPath
 			// We don't transfer any directory properties here, not even the root. (Because the root's
@@ -803,7 +805,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				fileInfo, _ := entry.Info()
 				if fileInfo.Mode()&os.ModeSymlink != 0 {
 					if t.symlinkHandling.None() {
-						if common.IsNFSCopy() && t.incrementEnumerationCounter != nil {
+						if common.IsNFSCopy(t.fromTo) && t.incrementEnumerationCounter != nil {
 							t.incrementEnumerationCounter(common.EEntityType.Symlink(), t.symlinkHandling, t.hardlinkHandling)
 						}
 						continue
@@ -835,7 +837,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 					}
 				}
 				// NFS handling
-				if common.IsNFSCopy() {
+				if common.IsNFSCopy(t.fromTo) {
 					if IsHardlink(fileInfo) {
 						entityType = common.EEntityType.Hardlink()
 					} else if !IsRegularFile(fileInfo) {
@@ -903,6 +905,7 @@ func newLocalTraverser(fullPath string, ctx context.Context, opts InitResourceTr
 		hashAdapter:                 hashAdapter,
 		stripTopDir:                 opts.StripTopDir,
 		hardlinkHandling:            opts.HardlinkHandling,
+		fromTo:                      opts.FromTo,
 	}
 	return &traverser, nil
 }

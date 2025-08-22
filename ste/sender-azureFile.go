@@ -194,7 +194,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		Metadata:    u.metadataToApply,
 	}
 
-	if common.IsNFSCopy() {
+	if common.IsNFSCopy(jptm.FromTo()) {
 
 		stage, err := u.addNFSPropertiesToHeaders(info)
 		if err != nil {
@@ -434,7 +434,7 @@ func (u *azureFileSenderBase) Epilogue() {
 	//      So when we uploaded the ranges, we've unintentionally changed the last-write-time.
 	if u.jptm.IsLive() && u.jptm.Info().PreserveInfo {
 		// This is an extra round trip, but we can live with that for these relatively rare cases
-		if common.IsNFSCopy() {
+		if common.IsNFSCopy(u.jptm.FromTo()) {
 			_, err := u.getFileClient().SetHTTPHeaders(u.ctx, &file.SetHTTPHeadersOptions{
 				HTTPHeaders: &u.headersToApply,
 				NFSProperties: &file.NFSProperties{
@@ -499,7 +499,7 @@ func (u *azureFileSenderBase) SetFolderProperties() (err error) {
 	info := u.jptm.Info()
 
 	setPropertiesOptions := &directory.SetPropertiesOptions{}
-	if common.IsNFSCopy() {
+	if common.IsNFSCopy(u.jptm.FromTo()) {
 
 		_, err = u.addNFSPropertiesToHeaders(info)
 		if err != nil {

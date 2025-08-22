@@ -166,7 +166,7 @@ func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 	}
 
 	if cooked.preserveInfo && !cooked.preservePermissions.IsTruthy() {
-		if common.IsNFSCopy() {
+		if common.IsNFSCopy(cooked.FromTo) {
 			glcm.Info(PreserveNFSPermissionsDisabledMsg)
 		} else {
 			glcm.Info(PreservePermissionsDisabledMsg)

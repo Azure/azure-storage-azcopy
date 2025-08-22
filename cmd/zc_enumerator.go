@@ -379,6 +379,7 @@ type InitResourceTraverserOptions struct {
 	ExcludeContainers []string // Blob account
 	ListVersions      bool     // Blob
 	HardlinkHandling  common.HardlinkHandlingType
+	FromTo            common.FromTo
 }
 
 func (o *InitResourceTraverserOptions) PerformChecks() error {

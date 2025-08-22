@@ -72,7 +72,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 			if entityType == common.EEntityType.File() {
 				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 			}
-			if common.IsNFSCopy() {
+			if common.IsNFSCopy(cca.fromTo) {
 				if entityType == common.EEntityType.Other() {
 					atomic.AddUint32(&cca.atomicSkippedSpecialFileCount, 1)
 				} else if entityType == common.EEntityType.Symlink() {
@@ -100,6 +100,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
 		HardlinkHandling:        cca.hardlinks,
 		SymlinkHandling:         cca.symlinkHandling,
+		FromTo:                  cca.fromTo,
 	})
 
 	if err != nil {
@@ -135,6 +136,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		IncludeDirectoryStubs:   includeDirStubs,
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
 		HardlinkHandling:        common.EHardlinkHandlingType.Follow(),
+		FromTo:                  cca.fromTo,
 	})
 	if err != nil {
 		return nil, err
