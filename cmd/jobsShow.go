@@ -23,8 +23,9 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 
 	"encoding/json"
 
@@ -59,7 +60,7 @@ func init() {
 		},
 		Run: func(cmd *cobra.Command, args []string) {
 			if commandLineInput.OfStatus == "" {
-				resp, err := Client.GetJobSummary(azcopy.GetJobSummaryOptions{JobID: commandLineInput.JobID})
+				resp, err := Client.GetJobSummary(commandLineInput.JobID, azcopy.GetJobSummaryOptions{})
 				if err != nil {
 					glcm.Error(err.Error())
 				}
@@ -72,7 +73,7 @@ func init() {
 				if err != nil {
 					glcm.Error(fmt.Sprintf("cannot parse the given Transfer Status %s", commandLineInput.OfStatus))
 				}
-				resp, err := Client.ListJobTransfers(azcopy.ListJobTransfersOptions{JobID: commandLineInput.JobID, WithStatus: &status})
+				resp, err := Client.ListJobTransfers(commandLineInput.JobID, azcopy.ListJobTransfersOptions{WithStatus: &status})
 				if err != nil {
 					glcm.Error(err.Error())
 				}
