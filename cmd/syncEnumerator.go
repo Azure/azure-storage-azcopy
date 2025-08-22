@@ -132,7 +132,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		Recursive:               cca.recursive,
 		GetPropertiesInFrontend: true,
 		IncludeDirectoryStubs:   includeDirStubs,
-		PreserveBlobTags:        cca.s2sPreserveBlobTags,
+		PreserveBlobTags:        cca.S2sPreserveBlobTags,
 		HardlinkHandling:        cca.hardlinks,
 		IncrementNotTransferred: func(entityType common.EntityType) {
 			if entityType == common.EEntityType.File() {
@@ -181,7 +181,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		Recursive:               cca.recursive,
 		GetPropertiesInFrontend: true,
 		IncludeDirectoryStubs:   includeDirStubs,
-		PreserveBlobTags:        cca.s2sPreserveBlobTags,
+		PreserveBlobTags:        cca.S2sPreserveBlobTags,
 		HardlinkHandling:        common.EHardlinkHandlingType.Follow(),
 	}
 	dstTraverserTemplate := ResourceTraverserTemplate{
@@ -314,7 +314,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		S2SGetPropertiesInBackend:      true,
 		S2SInvalidMetadataHandleOption: common.EInvalidMetadataHandleOption.RenameIfInvalid(),
 		CpkOptions:                     cca.cpkOptions,
-		S2SPreserveBlobTags:            cca.s2sPreserveBlobTags,
+		S2SPreserveBlobTags:            cca.S2sPreserveBlobTags,
 
 		S2SSourceCredentialType: cca.s2sSourceCredentialType,
 		FileAttributes: common.FileTransferAttributes{

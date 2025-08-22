@@ -133,7 +133,7 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 		backupMode:                       raw.backupMode,
 		isNFSCopy:                        raw.isNFSCopy,
 		putMd5:                           raw.putMd5,
-		s2sPreserveBlobTags:              raw.s2sPreserveBlobTags,
+		S2sPreserveBlobTags:              raw.s2sPreserveBlobTags,
 		cpkByName:                        raw.cpkScopeInfo,
 		cpkByValue:                       raw.cpkInfo,
 		mirrorMode:                       raw.mirrorMode,
@@ -249,7 +249,7 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 	}
 
 	if cooked.fromTo.IsS2S() {
-		cooked.preserveAccessTier = raw.s2sPreserveAccessTier
+		cooked.PreserveAccessTier = raw.s2sPreserveAccessTier
 	}
 
 	cooked.includeRegex = parsePatterns(raw.includeRegex)
@@ -321,7 +321,7 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 
 	// Check if user has provided `s2s-preserve-blob-tags` flag.
 	// If yes, we have to ensure that both source and destination must be blob storage.
-	if cooked.s2sPreserveBlobTags && (cooked.fromTo.From() != common.ELocation.Blob() || cooked.fromTo.To() != common.ELocation.Blob()) {
+	if cooked.S2sPreserveBlobTags && (cooked.fromTo.From() != common.ELocation.Blob() || cooked.fromTo.To() != common.ELocation.Blob()) {
 		return fmt.Errorf("either source or destination is not a blob storage. " +
 			"blob index tags is a property of blobs only therefore both source and destination must be blob storage")
 	}
@@ -504,9 +504,9 @@ type cookedSyncCmdArgs struct {
 	// otherwise the user is prompted to make a decision
 	deleteDestination common.DeleteDestination
 
-	preserveAccessTier bool
+	PreserveAccessTier bool
 	// To specify whether user wants to preserve the blob index tags during service to service transfer.
-	s2sPreserveBlobTags bool
+	S2sPreserveBlobTags bool
 
 	cpkOptions common.CpkOptions
 
