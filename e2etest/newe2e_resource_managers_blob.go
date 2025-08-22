@@ -475,6 +475,7 @@ type BlobObjectCreateOptions struct {
 
 func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectContentContainer, properties ObjectProperties, options *BlobObjectCreateOptions) {
 	a.HelperMarker().Helper()
+
 	opts := DerefOrZero(options)
 	blobProps := properties.BlobProperties
 
@@ -500,7 +501,9 @@ func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectCon
 		// Override blob type
 		properties.BlobProperties.Type = pointerTo(blob.BlobTypeBlockBlob)
 	case common.EEntityType.Symlink():
-		// body should already be path
+		if body == nil {
+			body = NewStringObjectContentContainer(properties.SymlinkedFileName)
+		}
 
 		// Set symlink meta
 		properties.Metadata = copyMeta()
@@ -513,6 +516,10 @@ func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectCon
 
 	switch DerefOrZero(blobProps.Type) {
 	case "", blob.BlobTypeBlockBlob:
+		if body == nil {
+			body = NewZeroObjectContentContainer(0)
+		}
+
 		blockSize := DerefOrDefault(opts.BlockSize, common.DefaultBlockBlobBlockSize)
 		bodySize := body.Size()
 
@@ -535,6 +542,10 @@ func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectCon
 		})
 		a.NoError("Block blob upload", err)
 	case blob.BlobTypePageBlob:
+		if body == nil {
+			body = NewZeroObjectContentContainer(0)
+		}
+
 		// TODO : Investigate bug in multistep uploader for PageBlob. (WI 28334208)
 		client := b.Container.InternalClient.NewPageBlobClient(b.Path)
 		blockSize := DerefOrDefault(opts.BlockSize, common.DefaultPageBlobChunkSize)
@@ -581,6 +592,10 @@ func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectCon
 			blockIndex++
 		}
 	case blob.BlobTypeAppendBlob:
+		if body == nil {
+			body = NewZeroObjectContentContainer(0)
+		}
+
 		// TODO : Investigate bug in multistep uploader for AppendBlob. (WI 28334208)
 		blockSize := DerefOrDefault(opts.BlockSize, common.DefaultBlockBlobBlockSize)
 		size := body.Size()
@@ -777,6 +792,13 @@ func (b *BlobObjectResourceManager) Download(a Asserter) io.ReadSeeker {
 	}
 
 	return bytes.NewReader(buf.Bytes())
+}
+
+func (b *BlobObjectResourceManager) ReadLink(a Asserter) string {
+	reader := b.Download(a)
+	buf, err := io.ReadAll(reader)
+	a.NoError("Read symlink body", err)
+	return string(buf)
 }
 
 func (b *BlobObjectResourceManager) Exists() bool {
