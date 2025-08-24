@@ -177,7 +177,8 @@ func TestConcurrencyTuner__HighBandwidthWorkaround_StaysHighIfSeesRetries(t *tes
 }
 
 func runTest(a *assert.Assertions, steps []tunerStep, maxConcurrency int, isBenchmarking bool, simulateRetries bool) {
-	t := NewAutoConcurrencyTuner(4, maxConcurrency, isBenchmarking)
+	var atomicCurrentMainPoolSize int32
+	t := NewAutoConcurrencyTuner(4, maxConcurrency, &atomicCurrentMainPoolSize, isBenchmarking)
 	observedMbps := -1 // there's no observation at first
 	observedHighCpu := false
 
