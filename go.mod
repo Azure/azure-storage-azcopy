@@ -1,5 +1,7 @@
 module github.com/Azure/azure-storage-azcopy/v10
 
+replace github.com/Azure/azure-sdk-for-go/sdk/storage/azblob => github.com/mawhite-msft/azure-sdk-for-go/sdk/storage/azblob v0.0.0-20240614172713-ee454601024f
+
 require (
 	cloud.google.com/go/storage v1.45.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.2
