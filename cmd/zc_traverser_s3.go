@@ -79,7 +79,28 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 		return strings.HasSuffix(objectKey, ".") ||
 			strings.Contains(objectKey, "./")
 	}
+
+	const (
+		storageClassKey  = "X-Amz-Storage-Class"
+		deepArchiveClass = "DEEP_ARCHIVE"
+	)
+
+	invalidAwsStorageClass := func(minioObject minio.ObjectInfo) bool {
+		/* S3 object's storage class "DEEP_ARCHIVE" is invalid.
+		   Because S3 Glacier Archive objects cannot be copied to Azure Storage.
+		*/
+		storageClasses, ok := minioObject.Metadata[storageClassKey]
+		if !ok || len(storageClasses) == 0 {
+			return false
+		}
+
+		storageClass := storageClasses[0]
+
+		return storageClass == deepArchiveClass
+	}
+
 	invalidNameErrorMsg := "Skipping S3 object %s, as it is not a valid Blob name. Rename the object and retry the transfer"
+	invalidAwsStorageClassMsg := "Skipping S3 object %s, as it is not a valid AWS storage class: %s"
 	// Check if resource is a single object.
 	if t.s3URLParts.IsObjectSyntactically() && !t.s3URLParts.IsDirectorySyntactically() && !t.s3URLParts.IsBucketSyntactically() {
 		objectPath := strings.Split(t.s3URLParts.ObjectKey, "/")
@@ -89,6 +110,12 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 		if invalidAzureBlobName(t.s3URLParts.ObjectKey) {
 			WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, t.s3URLParts.ObjectKey))
 			return common.EAzError.InvalidBlobName()
+		}
+
+		if invalidAwsStorageClass(oi) {
+
+			WarnStdoutAndScanningLog(fmt.Sprintf(invalidAwsStorageClassMsg, t.s3URLParts.ObjectKey, deepArchiveClass))
+			return common.EAzError.InvalidAWSStorageClass()
 		}
 
 		// If we actually got object properties, process them.
