@@ -263,7 +263,9 @@ func InitializeAndExecute() {
 		glcm.Error(err.Error())
 	} else {
 		if !SkipVersionCheck && !isPipeDownload {
-			// In the unlikely chance log path folder is empty, make sure we don't write to user's current directory
+			// In commands like azcopy --version and azcopy --help, they do not reach Initialize() in the PersistentPreRunE
+			// So we set the log path folder here.
+			// This ensures we sure we don't write to user's current directory
 			if common.LogPathFolder == "" {
 				// With this, latest_version.txt is written to app dir
 				common.InitializeFolders()
