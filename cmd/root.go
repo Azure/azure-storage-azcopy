@@ -211,19 +211,9 @@ func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
 
 	glcm.SetForceLogging()
 
-	// For benchmarking, try to autotune if possible, otherwise use the default values
-	if jobsAdmin.JobsAdmin != nil && isBench {
-		envVar := common.EEnvironmentVariable.ConcurrencyValue()
-		userValue := common.GetEnvironmentVariable(envVar)
-		if userValue == "" || userValue == "auto" {
-			jobsAdmin.JobsAdmin.SetConcurrencySettingsToAuto()
-		} else {
-			// Tell user that we can't actually auto tune, because configured value takes precedence
-			// This case happens when benchmarking with a fixed value from the env var
-			glcm.Info(fmt.Sprintf("Cannot auto-tune concurrency because it is fixed by environment variable %s", envVar.Name))
-		}
+	// currently, we only automatically do auto-tuning when benchmarking
+	preferToAutoTuneGRs, providePerformanceAdvice := true, isBench
 
-	}
 	EnumerationParallelism, EnumerationParallelStatFiles = jobsAdmin.JobsAdmin.GetConcurrencySettings()
 
 	// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter

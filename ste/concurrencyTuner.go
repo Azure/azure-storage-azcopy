@@ -23,6 +23,7 @@ package ste
 import (
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 type ConcurrencyTuner interface {
@@ -70,6 +71,9 @@ type autoConcurrencyTuner struct {
 		value  int
 		reason string
 	}
+	// atomicCurrentConcurrency should never be written to, it is a read only reference to the job manager
+	atomicCurrentConcurrency *int32
+
 	initialConcurrency  int
 	maxConcurrency      int
 	callbacksWhenStable chan func()
@@ -79,7 +83,7 @@ type autoConcurrencyTuner struct {
 	isBenchmarking      bool
 }
 
-func NewAutoConcurrencyTuner(initial, max int, isBenchmarking bool) ConcurrencyTuner {
+func NewAutoConcurrencyTuner(initial, max int, atomicCurrentConcurrency *int32, isBenchmarking bool) ConcurrencyTuner {
 	t := &autoConcurrencyTuner{
 		observations: make(chan struct {
 			mbps      int
@@ -89,11 +93,12 @@ func NewAutoConcurrencyTuner(initial, max int, isBenchmarking bool) ConcurrencyT
 			value  int
 			reason string
 		}),
-		initialConcurrency:  initial,
-		maxConcurrency:      max,
-		callbacksWhenStable: make(chan func(), 1000),
-		lockFinal:           sync.Mutex{},
-		isBenchmarking:      isBenchmarking,
+		initialConcurrency:       initial,
+		maxConcurrency:           max,
+		callbacksWhenStable:      make(chan func(), 1000),
+		lockFinal:                sync.Mutex{},
+		isBenchmarking:           isBenchmarking,
+		atomicCurrentConcurrency: atomicCurrentConcurrency,
 	}
 	go t.worker()
 	return t
@@ -125,15 +130,16 @@ func (t *autoConcurrencyTuner) recordRetry() {
 }
 
 const (
-	ConcurrencyReasonNone          = ""
-	ConcurrencyReasonTunerDisabled = "tuner disabled" // used as the final (non-finished) state for null tuner
-	concurrencyReasonInitial       = "initial starting point"
-	concurrencyReasonSeeking       = "seeking optimum"
-	concurrencyReasonBackoff       = "backing off"
-	concurrencyReasonHitMax        = "hit max concurrency limit"
-	concurrencyReasonHighCpu       = "at optimum, but may be limited by CPU"
-	concurrencyReasonAtOptimum     = "at optimum"
-	concurrencyReasonFinished      = "tuning already finished (or never started)"
+	ConcurrencyReasonNone                = ""
+	ConcurrencyReasonTunerDisabled       = "tuner disabled" // used as the final (non-finished) state for null tuner
+	concurrencyReasonInitial             = "initial starting point"
+	concurrencyReasonSeeking             = "seeking optimum"
+	concurrencyReasonBackoff             = "backing off"
+	concurrencyReasonHitMax              = "hit max concurrency limit"
+	concurrencyReasonHighCpu             = "at optimum, but may be limited by CPU"
+	concurrencyReasonAtOptimum           = "at optimum"
+	concurrencyReasonFinished            = "tuning already finished (or never started)"
+	concurrencyReasonHighRequestLifetime = "atypical request lifetime"
 )
 
 func (t *autoConcurrencyTuner) worker() {
@@ -143,6 +149,7 @@ func (t *autoConcurrencyTuner) worker() {
 	const slowdownFactor = 5
 	const minMulitplier = 1.19 // really this is 1.2, but use a little less to make the floating point comparisons robust
 	const fudgeFactor = 0.2
+	const requestLifetimeBackoffMultiplier = 0.5 // Aggressively back off
 
 	multiplier := float32(boostedMultiplier)
 	concurrency := float32(t.initialConcurrency)
@@ -154,6 +161,8 @@ func (t *autoConcurrencyTuner) worker() {
 	dontBackoffRegardless := false
 	multiplierReductionCount := 0
 	lastReason := ConcurrencyReasonNone
+
+	requestLifetimeTracker := GetRequestLifetimeTracker()
 
 	// get initial baseline throughput
 	lastSpeed, _ := t.getCurrentSpeed()
@@ -172,10 +181,46 @@ func (t *autoConcurrencyTuner) worker() {
 			rateChangeReason = concurrencyReasonHitMax
 		}
 
+		var desiredNewSpeed float32
+		if requestLifetimeTracker.UnusualRequestLifetime() {
+			// We're seeing extremely high request lifetimes start popping up. Let's scale down a bit, and see if that helps our case. We'll need to wait for the next bucket, and try again.
+			concurrency = concurrency * requestLifetimeBackoffMultiplier
+			if concurrency <= 4 { // 4 should be bare minimum
+				concurrency = 4
+			}
+			rateChangeReason = concurrencyReasonHighRequestLifetime
+
+			t.setConcurrency(concurrency, rateChangeReason)
+			exitChannel := make(chan bool, 1)
+			go func() {
+				for {
+					if requestLifetimeTracker.SimultaneousLiveRequests() < int64(concurrency) {
+						exitChannel <- true
+						return
+					}
+
+					time.Sleep(requestBucketLifetime) // Sleep for the duration of the tracking window to give us time to scale down.
+				}
+			}()
+
+			for {
+				select {
+				case <-exitChannel:
+					close(exitChannel)
+					goto escape
+				case ob := <-t.observations:
+					lastSpeed, _ = float32(ob.mbps), ob.isHighCpu
+					t.setConcurrency(concurrency, rateChangeReason)
+				}
+			}
+		escape:
+			continue
+		}
+
 		// compute increase
 		concurrency = concurrency * multiplier
-		desiredSpeedIncrease := lastSpeed * (multiplier - 1) * fudgeFactor // we'd like it to speed up linearly, but we'll accept a _lot_ less, according to fudge factor in the interests of finding best possible speed
-		desiredNewSpeed := lastSpeed + desiredSpeedIncrease
+		desiredSpeedIncrease := lastSpeed * (multiplier - 1) * fudgeFactor // we'd like it to speed up linearly, but we'll accept a _lot_ less, according to fudge factor in the interests of finding the best possible speed
+		desiredNewSpeed = lastSpeed + desiredSpeedIncrease
 
 		// action the increase and measure its effect
 		lastReason = t.setConcurrency(concurrency, rateChangeReason)
