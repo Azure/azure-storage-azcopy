@@ -508,7 +508,11 @@ func newSyncTraverser(enumerator *syncEnumerator, dir string, comparator objectP
 
 func validate(cca *cookedSyncCmdArgs, orchestratorOptions *SyncOrchestratorOptions) error {
 	switch cca.fromTo {
-	case common.EFromTo.LocalBlob(), common.EFromTo.LocalBlobFS(), common.EFromTo.LocalFile(), common.EFromTo.S3Blob():
+	case common.EFromTo.LocalBlob(), common.EFromTo.LocalBlobFS():
+		// sync orchestrator is supported for these types
+	case common.EFromTo.LocalFile(), common.EFromTo.LocalFileSMB(), common.EFromTo.LocalFileNFS():
+		// sync orchestrator is supported for these types
+	case common.EFromTo.S3Blob():
 		// sync orchestrator is supported for these types
 	default:
 		return fmt.Errorf(
@@ -516,6 +520,8 @@ func validate(cca *cookedSyncCmdArgs, orchestratorOptions *SyncOrchestratorOptio
 				"\t- Local->Blob\n" +
 				"\t- Local->BlobFS\n" +
 				"\t- Local->File\n" +
+				"\t- Local->FileSMB\n" +
+				"\t- Local->FileNFS\n" +
 				"\t- S3->Blob",
 		)
 	}
