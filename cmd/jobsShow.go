@@ -78,7 +78,6 @@ func init() {
 				}
 				PrintJobTransfers(common.ListJobTransfersResponse(resp))
 			}
-			glcm.Exit(nil, common.EExitCode.Success())
 		},
 	}
 

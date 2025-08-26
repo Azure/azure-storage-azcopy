@@ -124,6 +124,11 @@ func (m *mockedLifecycleManager) Exit(o common.OutputBuilder, e common.ExitCode)
 	default:
 	}
 }
+
+func (m *mockedLifecycleManager) OnComplete(summary common.JobSummary) {
+	o := common.GetJobSummaryOutputBuilder(summary)
+	m.Exit(o, summary.ExitCode)
+}
 func (m *mockedLifecycleManager) Error(msg string) {
 	select {
 	case m.errorLog <- msg:
