@@ -301,7 +301,7 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 	case common.EEntityType.Symlink():
 		s.copyJobTemplate.Transfers.SymlinkTransferCount++
 	case common.EEntityType.Hardlink():
-		s.copyJobTemplate.Transfers.HardlinksConvertedCount++
+		//s.copyJobTemplate.Transfers.HardlinksConvertedCount++
 	}
 
 	return nil

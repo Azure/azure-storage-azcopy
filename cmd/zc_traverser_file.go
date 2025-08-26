@@ -222,13 +222,12 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				if *fileProperties.LinkCount > int64(1) {
 					storedObject.entityType = common.EEntityType.Hardlink()
 				}
+			} else if t.incrementEnumerationCounter != nil {
+				t.incrementEnumerationCounter(storedObject.entityType, t.symlinkHandling, t.hardlinkHandling)
 			}
 
 			storedObject.smbLastModifiedTime = *fileProperties.FileLastWriteTime
 
-			if t.incrementEnumerationCounter != nil {
-				t.incrementEnumerationCounter(storedObject.entityType, t.symlinkHandling, t.hardlinkHandling)
-			}
 			err := processIfPassedFilters(filters, storedObject, processor)
 			_, err = getProcessingError(err)
 
@@ -282,6 +281,8 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			if fullProperties.LinkCount() > int64(1) {
 				f.entityType = common.EEntityType.Hardlink()
 			}
+		} else if f.entityType == common.EEntityType.File() && t.incrementEnumerationCounter != nil {
+			t.incrementEnumerationCounter(f.entityType, t.symlinkHandling, t.hardlinkHandling)
 		}
 
 		// Only get the properties if we're told to
@@ -316,9 +317,6 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	}
 
 	processStoredObject := func(s StoredObject) error {
-		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter(s.entityType, t.symlinkHandling, t.hardlinkHandling)
-		}
 		err := processIfPassedFilters(filters, s, processor)
 		_, err = getProcessingError(err)
 		return err
