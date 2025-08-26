@@ -24,9 +24,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
@@ -71,13 +72,12 @@ func (cca *resumeJobController) waitUntilJobCompletion(blocking bool) {
 	cca.intervalStartTime = time.Now()
 	cca.intervalBytesTransferred = 0
 
-	// hand over control to the lifecycle manager if blocking
+	glcm.InitiateProgressReporting(cca)
 	if blocking {
-		glcm.InitiateProgressReporting(cca)
+		// blocking, hand over control to the lifecycle manager
 		glcm.SurrenderControl()
 	} else {
 		// non-blocking, return after spawning a go routine to watch the job
-		glcm.InitiateProgressReporting(cca)
 	}
 }
 
@@ -307,7 +307,7 @@ func (rca resumeCmdArgs) process() error {
 	}
 
 	// if no logging, set this empty so that we don't display the log location
-	if LogLevel == common.LogNone {
+	if Client.GetLogLevel() == common.LogNone {
 		common.LogPathFolder = ""
 	}
 

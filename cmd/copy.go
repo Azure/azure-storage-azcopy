@@ -24,7 +24,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"io"
 	"math"
 	"net/url"
@@ -35,6 +34,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -1061,7 +1062,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		ForceIfReadOnly:     cca.ForceIfReadOnly,
 		AutoDecompress:      cca.autoDecompress,
 		Priority:            common.EJobPriority.Normal(),
-		LogLevel:            LogLevel,
+		LogLevel:            Client.GetLogLevel(),
 		ExcludeBlobType:     cca.excludeBlobType,
 		SymlinkHandlingType: cca.SymlinkHandling,
 		BlobAttributes: common.BlobTransferAttributes{
@@ -1255,13 +1256,12 @@ func (cca *CookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
 	cca.intervalStartTime = time.Now()
 	cca.intervalBytesTransferred = 0
 
-	// hand over control to the lifecycle manager if blocking
+	glcm.InitiateProgressReporting(cca)
 	if blocking {
-		glcm.InitiateProgressReporting(cca)
+		// blocking, hand over control to the lifecycle manager
 		glcm.SurrenderControl()
 	} else {
 		// non-blocking, return after spawning a go routine to watch the job
-		glcm.InitiateProgressReporting(cca)
 	}
 }
 
