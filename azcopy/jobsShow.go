@@ -42,7 +42,7 @@ func (c Client) GetJobSummary(jobID common.JobID, opts GetJobSummaryOptions) (re
 	resp := jobsAdmin.GetJobSummary(jobID)
 
 	if resp.ErrorMsg != "" {
-		return JobSummaryResponse(resp), fmt.Errorf("failed to get job summary for job %s due to error: %s", jobID, resp.ErrorMsg)
+		return JobSummaryResponse{}, fmt.Errorf("failed to get job summary for job %s due to error: %s", jobID, resp.ErrorMsg)
 	}
 
 	return JobSummaryResponse(resp), nil
@@ -64,7 +64,7 @@ func (c Client) ListJobTransfers(jobID common.JobID, opts ListJobTransfersOption
 	resp := jobsAdmin.ListJobTransfers(common.ListJobTransfersRequest{JobID: jobID, OfStatus: status})
 
 	if resp.ErrorMsg != "" {
-		return ListJobTransfersResponse(resp), fmt.Errorf("failed to list transfers for job %s due to error: %s", jobID, resp.ErrorMsg)
+		return ListJobTransfersResponse{}, fmt.Errorf("failed to list transfers for job %s due to error: %s", jobID, resp.ErrorMsg)
 	}
 	return ListJobTransfersResponse(resp), nil
 }
