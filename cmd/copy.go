@@ -35,6 +35,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
@@ -992,7 +994,7 @@ func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.
 		jpo.S2SSourceCredentialType = srcCredInfo.CredentialType
 
 		if jpo.S2SSourceCredentialType.IsAzureOAuth() {
-			uotm := Client.GetUserOAuthTokenManagerInstance()
+			uotm := azcopy.GetUserOAuthTokenManagerInstance()
 			// get token from env var or cache
 			if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 				return srcCredInfo, err
@@ -1042,7 +1044,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
 	// the info will be transferred to STE.
 	if cca.credentialInfo.CredentialType.IsAzureOAuth() {
-		uotm := Client.GetUserOAuthTokenManagerInstance()
+		uotm := azcopy.GetUserOAuthTokenManagerInstance()
 		// Get token from env var or cache.
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return err

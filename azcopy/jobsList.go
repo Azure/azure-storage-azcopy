@@ -22,11 +22,10 @@ package azcopy
 
 import (
 	"fmt"
-	"sort"
-	"time"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"sort"
+	"time"
 )
 
 type ListJobsOptions struct {
@@ -44,7 +43,7 @@ type ListJobsResponse struct {
 	Details []JobDetail
 }
 
-func (c *Client) ListJobs(opts ListJobsOptions) (result ListJobsResponse, err error) {
+func (c Client) ListJobs(opts ListJobsOptions) (result ListJobsResponse, err error) {
 	status := common.IffNil(opts.WithStatus, common.EJobStatus.All())
 
 	resp := jobsAdmin.ListJobs(status)
