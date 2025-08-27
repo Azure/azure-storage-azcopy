@@ -381,7 +381,7 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx con
 		return false
 	}
 
-	if dstCredInfo, _, err = GetCredentialInfoForLocation(ctx, cca.FromTo.To(), cca.Destination, false, cca.CpkOptions); err != nil {
+	if dstCredInfo, _, err = GetCredentialInfoForLocation(ctx, cca.FromTo.To(), cca.Destination, false, Client.GetUserOAuthTokenManagerInstance(), cca.CpkOptions); err != nil {
 		return false
 	}
 
@@ -491,7 +491,7 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 	// 3minutes is enough time to list properties of a container, and create new if it does not exist.
 	ctx, cancel := context.WithTimeout(parentCtx, time.Minute*3)
 	defer cancel()
-	if dstCredInfo, _, err = GetCredentialInfoForLocation(ctx, cca.FromTo.To(), cca.Destination, false, cca.CpkOptions); err != nil {
+	if dstCredInfo, _, err = GetCredentialInfoForLocation(ctx, cca.FromTo.To(), cca.Destination, false, Client.GetUserOAuthTokenManagerInstance(), cca.CpkOptions); err != nil {
 		return err
 	}
 

@@ -221,11 +221,13 @@ func getSourceAndDestinationServiceClients(
 	destination common.ResourceString,
 	jobDetails common.GetJobDetailsResponse,
 ) (*common.ServiceClient, *common.ServiceClient, error) {
+	uotm := Client.GetUserOAuthTokenManagerInstance()
 	fromTo := jobDetails.FromTo
 	srcCredType, isSrcPublic, err := getCredentialTypeForLocation(ctx,
 		fromTo.From(),
 		source,
 		true,
+		uotm,
 		common.CpkOptions{})
 	if err != nil {
 		return nil, nil, err
@@ -244,6 +246,7 @@ func getSourceAndDestinationServiceClients(
 		fromTo.To(),
 		destination,
 		false,
+		uotm,
 		common.CpkOptions{})
 	if err != nil {
 		return nil, nil, err
@@ -264,7 +267,6 @@ func getSourceAndDestinationServiceClients(
 
 	var tc azcore.TokenCredential
 	if srcCredType.IsAzureOAuth() || dstCredType.IsAzureOAuth() {
-		uotm := Client.GetUserOAuthTokenManagerInstance()
 		// Get token from env var or cache.
 		tokenInfo, err := uotm.GetTokenInfo(ctx)
 		if err != nil {

@@ -39,7 +39,8 @@ import (
 
 func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *syncEnumerator, err error) {
 
-	srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source, true, cca.cpkOptions)
+	uotm := Client.GetUserOAuthTokenManagerInstance()
+	srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source, true, uotm, cca.cpkOptions)
 
 	if err != nil {
 		return nil, err
@@ -99,7 +100,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	}
 
 	// Because we can't trust cca.credinfo, given that it's for the overall job, not the individual traversers, we get cred info again here.
-	dstCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination, false, cca.cpkOptions)
+	dstCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination, false, uotm, cca.cpkOptions)
 
 	if err != nil {
 		return nil, err
