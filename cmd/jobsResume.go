@@ -27,8 +27,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
-
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
