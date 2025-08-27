@@ -29,6 +29,18 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
 
+const (
+	oauthLoginSessionCacheKeyName     = "AzCopyOAuthTokenCache"
+	oauthLoginSessionCacheServiceName = "AzCopyV10"
+	oauthLoginSessionCacheAccountName = "AzCopyOAuthTokenCache"
+)
+
+// It's not pretty that this one is read directly by credential util.
+// But doing otherwise required us passing it around in many places, even though really
+// it can be thought of as an "ambient" property. That's the (weak?) justification for implementing
+// it as a global
+var TrustedSuffixes string
+
 type Client struct {
 	CurrentJobID common.JobID // TODO (gapra): In future this should only be set when there is a current job running. On complete, this should be cleared. It can also behave as something we can check to see if a current job is running
 	logLevel     common.LogLevel
@@ -37,10 +49,12 @@ type Client struct {
 }
 
 type ClientOptions struct {
-	CapMbps float64
+	CapMbps         float64
+	TrustedSuffixes string
 }
 
 func NewClient(opts ClientOptions) (Client, error) {
+	TrustedSuffixes = opts.TrustedSuffixes
 	c := Client{
 		logLevel: common.ELogLevel.Info(), // Default: Info
 	}

@@ -36,6 +36,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
@@ -404,7 +405,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 
 	// Clean up the resource if it's a local path
 	if resourceLocation == common.ELocation.Local() {
-		resource = common.ResourceString{Value: cleanLocalPath(resource.ValueLocal())}
+		resource = common.ResourceString{Value: common.CleanLocalPath(resource.ValueLocal())}
 	}
 
 	// Feed list of files channel into new list traverser
@@ -431,7 +432,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 		}
 	}
 
-	options := createClientOptions(azcopyScanningLogger, nil, reauthTok)
+	options := azcopy.CreateClientOptions(azcopyScanningLogger, nil, reauthTok)
 
 	switch resourceLocation {
 	case common.ELocation.Local():
@@ -457,7 +458,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 
 			opts.ListOfFiles = globChan
 
-			baseResource := resource.CloneWithValue(cleanLocalPath(basePath))
+			baseResource := resource.CloneWithValue(common.CleanLocalPath(basePath))
 			output = newListTraverser(baseResource, resourceLocation, ctx, opts)
 		} else {
 			output, _ = newLocalTraverser(resource.ValueLocal(), ctx, opts)

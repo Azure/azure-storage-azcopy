@@ -21,6 +21,7 @@
 package cmd
 
 import (
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
 	"testing"
@@ -31,7 +32,7 @@ func newLocalRes(path string) common.ResourceString {
 }
 
 func newRemoteRes(url string) common.ResourceString {
-	r, err := SplitResourceString(url, common.ELocation.Blob())
+	r, err := azcopy.SplitResourceString(url, common.ELocation.Blob())
 	if err != nil {
 		panic("can't parse resource string")
 	}
