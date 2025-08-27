@@ -492,7 +492,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 		blobURLParts.Snapshot = ""
 		blobURLParts.VersionID = ""
 
-		res, err := SplitResourceString(blobURLParts.String(), common.ELocation.Blob())
+		res, err := azcopy.SplitResourceString(blobURLParts.String(), common.ELocation.Blob())
 		if err != nil {
 			return nil, err
 		}
@@ -545,7 +545,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 		} else {
 			resLoc = common.ELocation.FileNFS()
 		}
-		res, err := SplitResourceString(fileURLParts.String(), resLoc)
+		res, err := azcopy.SplitResourceString(fileURLParts.String(), resLoc)
 		if err != nil {
 			return nil, err
 		}
@@ -588,7 +588,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 		blobURLParts.Snapshot = ""
 		blobURLParts.VersionID = ""
 
-		res, err := SplitResourceString(blobURLParts.String(), common.ELocation.Blob())
+		res, err := azcopy.SplitResourceString(blobURLParts.String(), common.ELocation.Blob())
 		if err != nil {
 			return nil, err
 		}

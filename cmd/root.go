@@ -22,7 +22,6 @@ package cmd
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -122,20 +121,6 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 
-		// If the command is for resuming a job with a specific JobID,
-		// use the provided JobID to resume the job; otherwise, create a new JobID.
-		var resumeJobID common.JobID
-		if cmd.Use == "resume [jobID]" {
-			// If no argument is passed then it is not valid
-			if len(args) != 1 {
-				return errors.New("this command requires jobId to be passed as argument")
-			}
-			resumeJobID, err = common.ParseJobID(args[0])
-			if err != nil {
-				return err
-			}
-		}
-
 		// Check if we are downloading to Pipe so we can bypass version check and not write it to stdout, customer is
 		// only expecting blob data in stdout
 		var fromToFlagValue string
@@ -177,12 +162,15 @@ var rootCmd = &cobra.Command{
 		}
 
 		isBench := cmd.Use == "bench [destination]"
+		isMigratedToLibrary := cmd.Use == "resume [jobID]"
 
-		return Initialize(resumeJobID, isBench)
+		return Initialize(isMigratedToLibrary, isBench)
 	},
 }
 
-func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
+func Initialize(isMigratedToLibrary, isBench bool) (err error) {
+	glcm.SetOutputFormat(OutputFormat)
+	glcm.SetOutputVerbosity(OutputLevel)
 	currPid := os.Getpid()
 	AsyncWarnMultipleProcesses(cmd.GetAzCopyAppPath(), currPid)
 	jobsAdmin.BenchmarkResults = isBench
@@ -190,9 +178,28 @@ func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
 	if err != nil {
 		return err
 	}
-	Client.CurrentJobID = resumeJobID
-	if Client.CurrentJobID.IsEmpty() {
+
+	if !isMigratedToLibrary {
 		Client.CurrentJobID = common.NewJobID()
+		timeAtPrestart := time.Now()
+		common.AzcopyCurrentJobLogger = common.NewJobLogger(Client.CurrentJobID, Client.GetLogLevel(), common.LogPathFolder, "")
+		common.AzcopyCurrentJobLogger.OpenLog()
+		glcm.RegisterCloseFunc(func() {
+			if common.AzcopyCurrentJobLogger != nil {
+				common.AzcopyCurrentJobLogger.CloseLog()
+			}
+		})
+
+		// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter
+		// Subtract a few seconds, to ensure that this date DEFINITELY falls before the LMT of any file changed while this
+		// job is running. I.e. using this later with --include-after is _guaranteed_ to pick up all files that changed during
+		// or after this job
+		adjustedTime := timeAtPrestart.Add(-5 * time.Second)
+		startTimeMessage := fmt.Sprintf("ISO 8601 START TIME: to copy files that changed before or after this job started, use the parameter --%s=%s or --%s=%s",
+			common.IncludeBeforeFlagName, azcopy.FormatAsUTC(adjustedTime),
+			common.IncludeAfterFlagName, azcopy.FormatAsUTC(adjustedTime))
+		common.LogToJobLogWithPrefix(startTimeMessage, common.LogInfo)
+
 	}
 
 	// Run MessagHandler to process messages from Input Watcher
@@ -205,18 +212,6 @@ func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
 		return err
 	}
 	Client.SetLogLevel(&logLevel)
-
-	timeAtPrestart := time.Now()
-	glcm.SetOutputFormat(OutputFormat)
-	glcm.SetOutputVerbosity(OutputLevel)
-
-	common.AzcopyCurrentJobLogger = common.NewJobLogger(Client.CurrentJobID, Client.GetLogLevel(), common.LogPathFolder, "")
-	common.AzcopyCurrentJobLogger.OpenLog()
-	glcm.RegisterCloseFunc(func() {
-		if common.AzcopyCurrentJobLogger != nil {
-			common.AzcopyCurrentJobLogger.CloseLog()
-		}
-	})
 
 	// For benchmarking, try to autotune if possible, otherwise use the default values
 	if jobsAdmin.JobsAdmin != nil && isBench {
@@ -232,16 +227,6 @@ func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
 
 	}
 	EnumerationParallelism, EnumerationParallelStatFiles = jobsAdmin.JobsAdmin.GetConcurrencySettings()
-
-	// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter
-	// Subtract a few seconds, to ensure that this date DEFINITELY falls before the LMT of any file changed while this
-	// job is running. I.e. using this later with --include-after is _guaranteed_ to pick up all files that changed during
-	// or after this job
-	adjustedTime := timeAtPrestart.Add(-5 * time.Second)
-	startTimeMessage := fmt.Sprintf("ISO 8601 START TIME: to copy files that changed before or after this job started, use the parameter --%s=%s or --%s=%s",
-		common.IncludeBeforeFlagName, IncludeBeforeDateFilter{}.FormatAsUTC(adjustedTime),
-		common.IncludeAfterFlagName, IncludeAfterDateFilter{}.FormatAsUTC(adjustedTime))
-	common.LogToJobLogWithPrefix(startTimeMessage, common.LogInfo)
 
 	if !SkipVersionCheck && !isPipeDownload {
 		// spawn a routine to fetch and compare the local application's version against the latest version available
