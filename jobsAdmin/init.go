@@ -81,12 +81,6 @@ func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
 		 */
 		jm.Log(common.LogWarning, "No transfers were scheduled.")
 	}
-	// Get credential info from RPC request order, and set in InMemoryTransitJobState.
-	jm.SetInMemoryTransitJobState(
-		ste.InMemoryTransitJobState{
-			CredentialInfo:          order.CredentialInfo,
-			S2SSourceCredentialType: order.S2SSourceCredentialType,
-		})
 	// Supply no plan MMF because we don't have one, and AddJobPart will create one on its own.
 	// Add this part to the Job and schedule its transfers
 
@@ -192,59 +186,6 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 		}
 	}
 
-	// If the credential type is is Anonymous, to resume the Job destinationSAS / sourceSAS needs to be provided
-	// Depending on the FromType, sourceSAS or destinationSAS is checked.
-	if req.CredentialInfo.CredentialType == common.ECredentialType.Anonymous() {
-		var errorMsg = ""
-		switch jpm.Plan().FromTo {
-		case common.EFromTo.LocalBlob(),
-			common.EFromTo.LocalFile(),
-			common.EFromTo.LocalFileNFS(),
-			common.EFromTo.S3Blob(),
-			common.EFromTo.GCPBlob():
-			if len(req.DestinationSAS) == 0 {
-				errorMsg = "The destination-sas switch must be provided to resume the job"
-			}
-		case common.EFromTo.BlobLocal(),
-			common.EFromTo.FileLocal(),
-			common.EFromTo.FileNFSLocal(),
-			common.EFromTo.BlobTrash(),
-			common.EFromTo.FileTrash():
-			if len(req.SourceSAS) == 0 {
-				plan := jpm.Plan()
-				if plan.FromTo.From() == common.ELocation.Blob() {
-					src := string(plan.SourceRoot[:plan.SourceRootLength])
-					if common.IsSourcePublicBlob(src, steCtx) {
-						break
-					}
-				}
-
-				errorMsg = "The source-sas switch must be provided to resume the job"
-			}
-		case common.EFromTo.BlobBlob(),
-			common.EFromTo.FileBlob():
-			if len(req.SourceSAS) == 0 ||
-				len(req.DestinationSAS) == 0 {
-
-				plan := jpm.Plan()
-				if plan.FromTo.From() == common.ELocation.Blob() && len(req.DestinationSAS) != 0 {
-					src := string(plan.SourceRoot[:plan.SourceRootLength])
-					if common.IsSourcePublicBlob(src, steCtx) {
-						break
-					}
-				}
-
-				errorMsg = "Both the source-sas and destination-sas switches must be provided to resume the job"
-			}
-		}
-		if len(errorMsg) != 0 {
-			return common.CancelPauseResumeResponse{
-				CancelledPauseResumed: false,
-				ErrorMsg:              fmt.Sprintf("cannot resume job with JobId %s. %s", req.JobID, errorMsg),
-			}
-		}
-	}
-
 	jpp0 := jpm.Plan()
 	switch jpp0.JobStatus() {
 	// Cannot resume a Job which is in Cancelling state
@@ -262,14 +203,8 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 		common.EJobStatus.CompletedWithErrorsAndSkipped(),
 		common.EJobStatus.Cancelled(),
 		common.EJobStatus.Paused():
-		// go func() {
 		// Navigate through transfers and schedule them independently
 		// This is done to avoid FE to get blocked until all the transfers have been scheduled
-		// Get credential info from RPC request, and set in InMemoryTransitJobState.
-		jm.SetInMemoryTransitJobState(
-			ste.InMemoryTransitJobState{
-				CredentialInfo: req.CredentialInfo,
-			})
 
 		// Prevents previous number of failed transfers seeping into a new run
 		jm.ResetFailedTransfersCount()

@@ -224,7 +224,7 @@ func getSourceAndDestinationServiceClients(
 	jobDetails common.GetJobDetailsResponse,
 ) (*common.ServiceClient, *common.ServiceClient, error) {
 	fromTo := jobDetails.FromTo
-	srcCredType, _, err := getCredentialTypeForLocation(ctx,
+	srcCredType, isSrcPublic, err := getCredentialTypeForLocation(ctx,
 		fromTo.From(),
 		source,
 		true,
@@ -233,7 +233,16 @@ func getSourceAndDestinationServiceClients(
 		return nil, nil, err
 	}
 
-	dstCredType, _, err := getCredentialTypeForLocation(ctx,
+	var errorMsg = ""
+
+	// For an Azure source, if there is no SAS, the cred type is Anonymous and the resource is not Azure public blob, tell the user they need to pass a new SAS.
+	if fromTo.From().IsAzure() && srcCredType == common.ECredentialType.Anonymous() && source.SAS == "" {
+		if !(fromTo.From() == common.ELocation.Blob() && isSrcPublic) {
+			errorMsg += "source-sas"
+		}
+	}
+
+	dstCredType, isDstPublic, err := getCredentialTypeForLocation(ctx,
 		fromTo.To(),
 		destination,
 		false,
@@ -242,9 +251,22 @@ func getSourceAndDestinationServiceClients(
 		return nil, nil, err
 	}
 
+	if fromTo.To().IsAzure() && dstCredType == common.ECredentialType.Anonymous() && destination.SAS == "" {
+		if !(fromTo.To() == common.ELocation.Blob() && isDstPublic) {
+			if errorMsg == "" {
+				errorMsg = "destination-sas"
+			} else {
+				errorMsg += " and destination-sas"
+			}
+		}
+	}
+	if errorMsg != "" {
+		return nil, nil, fmt.Errorf("the %s switch must be provided to resume the job", errorMsg)
+	}
+
 	var tc azcore.TokenCredential
 	if srcCredType.IsAzureOAuth() || dstCredType.IsAzureOAuth() {
-		uotm := azcopy.GetUserOAuthTokenManagerInstance()
+		uotm := Client.GetUserOAuthTokenManagerInstance()
 		// Get token from env var or cache.
 		tokenInfo, err := uotm.GetTokenInfo(ctx)
 		if err != nil {
@@ -262,7 +284,6 @@ func getSourceAndDestinationServiceClients(
 		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
 		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
-
 	// But we don't want to supply a reauth token if we're not using OAuth. That could cause problems if say, a SAS is invalid.
 	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, common.Iff(srcCredType.IsAzureOAuth(), reauthTok, nil))
 
@@ -323,10 +344,10 @@ func (rca resumeCmdArgs) process() error {
 		// It's not tested, and wouldn't report progress correctly and wouldn't clean up after itself properly
 		return errors.New("resuming benchmark jobs is not supported")
 	}
-
 	rca.SourceSAS = normalizeSAS(rca.SourceSAS)
 	rca.DestinationSAS = normalizeSAS(rca.DestinationSAS)
 
+	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// TODO: Replace context with root context
 	srcResourceString, err := SplitResourceString(jobDetails.Source, jobDetails.FromTo.From())
 	if err != nil {
@@ -339,19 +360,6 @@ func (rca resumeCmdArgs) process() error {
 	}
 	dstResourceString.SAS = rca.DestinationSAS
 
-	// Initialize credential info.
-	credentialInfo := common.CredentialInfo{}
-	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	// we should stop using credentiaLInfo and use the clients instead. But before we fix
-	// that there will be repeated calls to get Credential type for correctness.
-	if credentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
-		fromTo:      jobDetails.FromTo,
-		source:      srcResourceString,
-		destination: dstResourceString,
-	}, common.CpkOptions{}); err != nil {
-		return err
-	}
-
 	srcServiceClient, dstServiceClient, err := getSourceAndDestinationServiceClients(
 		ctx,
 		srcResourceString,
@@ -359,7 +367,7 @@ func (rca resumeCmdArgs) process() error {
 		jobDetails,
 	)
 	if err != nil {
-		return errors.New("could not create service clients " + err.Error())
+		return fmt.Errorf("cannot resume job with JobId %s, could not create service clients %v", jobID, err.Error())
 	}
 	// Send resume job request.
 	resumeJobResponse := jobsAdmin.ResumeJobOrder(common.ResumeJobRequest{
@@ -368,7 +376,6 @@ func (rca resumeCmdArgs) process() error {
 		DestinationSAS:   rca.DestinationSAS,
 		SrcServiceClient: srcServiceClient,
 		DstServiceClient: dstServiceClient,
-		CredentialInfo:   credentialInfo,
 	})
 
 	if !resumeJobResponse.CancelledPauseResumed {

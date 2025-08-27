@@ -295,10 +295,6 @@ func (t *testJobPartTransferManager) S2SSourceClientOptions() azcore.ClientOptio
 	return NewClientOptions(retryOptions, telemetryOptions, httpClient, LogOptions{}, nil, nil)
 }
 
-func (t *testJobPartTransferManager) CredentialOpOptions() *common.CredentialOpOptions {
-	return nil
-}
-
 func (t *testJobPartTransferManager) FailActiveUpload(where string, err error) {
 	panic("implement me")
 }
