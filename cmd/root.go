@@ -186,8 +186,7 @@ var rootCmd = &cobra.Command{
 		isBench := cmd.Use == "bench [destination]"
 
 		// We only care to warn about multiple AzCopy processes for commands sent to STE
-		sentToSte := []string{"copy", "sync", "bench [destination]", "list", "resume [jobID]", "remove [resourceURL]",
-			"show [jobID]", "cancel", "set-properties [source]"}
+		sentToSte := []string{"copy", "sync", "bench [destination]", "resume [jobID]", "remove [resourceURL]", "set-properties [source]"}
 		var shouldWarn bool
 		for _, currCmd := range sentToSte {
 			if cmd.Use == currCmd {

@@ -62,7 +62,7 @@ func Test_MultipleProcessWithMockedLCM(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	mockLCM := mockedLifecycleManager{warnLog: make(chan string, 50)}
+	mockLCM := mockedLifecycleManager{infoLog: make(chan string, 50)}
 	mockLCM.SetOutputFormat(common.EOutputFormat.Text()) // text format
 	mockedRPC.init()
 	glcm = &mockLCM
@@ -71,7 +71,7 @@ func Test_MultipleProcessWithMockedLCM(t *testing.T) {
 	WarnMultipleProcesses(tempDir, 456)
 
 	// Assert
-	errorMessages := mockLCM.GatherAllLogs(mockLCM.warnLog) // check mocked LCM warnLogs
+	errorMessages := mockLCM.GatherAllLogs(mockLCM.infoLog) // check mocked LCM infoLogs
 	if errorMessages != nil {
 		a.Equal(common.ERR_MULTIPLE_PROCESSES, errorMessages[0])
 	}

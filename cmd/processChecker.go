@@ -82,7 +82,7 @@ func WarnMultipleProcesses(directory string, currentPid int) {
 	// Check if there is more than one pid file
 	_, err = f.Readdirnames(1)
 	if err == nil { // nil check works here, there will be EOF err if only one file
-		glcm.Warn(common.ERR_MULTIPLE_PROCESSES)
+		glcm.Info(common.ERR_MULTIPLE_PROCESSES)
 	}
 	pidFilePath := path.Join(pidsSubDir, currPidFileName) // E.g "\.azcopy\pids\\XXX.pid"
 	// Creates .pid file with specific pid
