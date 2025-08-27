@@ -68,7 +68,7 @@ func WarnMultipleProcesses(directory string, currentPid int) {
 	if err != nil {
 		return
 	}
-	err = cleanupStalePidFiles(pidsSubDir, currentPid) // Clean up inactive PID files
+	cleanupStalePidFiles(pidsSubDir, currentPid) // Clean up inactive PID files
 	f, err := os.Open(pidsSubDir)
 	if err != nil {
 		return
