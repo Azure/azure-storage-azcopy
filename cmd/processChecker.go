@@ -68,15 +68,20 @@ func WarnMultipleProcesses(directory string, currentPid int) {
 	if err != nil {
 		return
 	}
-	cleanupStalePidFiles(pidsSubDir, currentPid) // Clean up inactive PID files
+	err = cleanupStalePidFiles(pidsSubDir, currentPid) // First, clean up inactive PID files
+	if err != nil {
+		return
+	}
+
 	f, err := os.Open(pidsSubDir)
 	if err != nil {
 		return
 	}
 	defer f.Close()
+
 	// Check if there is more than one pid file
 	_, err = f.Readdirnames(1)
-	if err == nil { // EOF err if there is only one file
+	if err == nil { // nil check works here, there will be EOF err if only one file
 		glcm.Warn(common.ERR_MULTIPLE_PROCESSES)
 	}
 	pidFilePath := path.Join(pidsSubDir, currPidFileName) // E.g "\.azcopy\pids\\XXX.pid"
@@ -86,6 +91,7 @@ func WarnMultipleProcesses(directory string, currentPid int) {
 		return
 	}
 	defer pidFile.Close()
+
 	glcm.RegisterCloseFunc(func() { // Should also handle scenarios not exit cleanly
 		err = os.Remove(pidFilePath)
 		if err != nil {
