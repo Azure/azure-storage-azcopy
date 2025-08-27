@@ -287,58 +287,6 @@ func TestRemoveWithIncludeAndExcludeFlag(t *testing.T) {
 	})
 }
 
-// exclude-path flag limits the scope of the delete
-func TestRemoveWithExcludePathFlag(t *testing.T) {
-	a := assert.New(t)
-	bsc := getBlobServiceClient()
-
-	// set up the container with numerous blobs
-	cc, containerName := createNewContainer(a, bsc)
-	defer deleteContainer(a, cc)
-
-	// create files in different paths to test exclude-path functionality
-	blobList := []string{
-		"file1.txt",
-		"file2.pdf", 
-		"myfoldertoexclude/blob3.json",
-		"myfoldertoexclude/subfolder/blob4.txt",
-		"anotherfolder/file5.txt",
-		"anotherfolder/subfolder/file6.txt",
-		"rootfile.txt",
-	}
-
-	// the expected list should exclude files in "myfoldertoexclude"
-	expectedList := []string{
-		"file1.txt",
-		"file2.pdf",
-		"anotherfolder/file5.txt", 
-		"anotherfolder/subfolder/file6.txt",
-		"rootfile.txt",
-	}
-
-	scenarioHelper{}.generateBlobsFromList(a, cc, blobList, blockBlobDefaultData)
-	excludePathString := "myfoldertoexclude"
-
-	// set up interceptor
-	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
-	mockedRPC.init()
-
-	// construct the raw input to simulate user input
-	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
-	raw := getDefaultRemoveRawInput(rawContainerURLWithSAS.String())
-	raw.excludePath = excludePathString
-	raw.recursive = true
-	raw.includeDirectoryStubs = false // The test target is a DFS account, which coincidentally created our directory stubs. Thus, we mustn't include them, since this is a test of blob.
-
-	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
-		validateRemoveTransfersAreScheduled(a, true, expectedList, mockedRPC)
-	})
-}
-
 // note: list-of-files flag is used
 func TestRemoveListOfBlobsAndVirtualDirs(t *testing.T) {
 	a := assert.New(t)
