@@ -13,7 +13,7 @@ type FileOAuthTestSuite struct{}
 
 // Scenario_FileBlobOAuthNoError tests S2S FileBlob (default BlockBlob) copies using OAuth are successful
 func (s *FileOAuthTestSuite) Scenario_FileBlobOAuthNoError(svm *ScenarioVariationManager) {
-	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.FileSMB()), ResourceDefinitionContainer{})
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
 
 	verb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbSync, AzCopyVerbCopy})
@@ -41,7 +41,7 @@ func (s *FileOAuthTestSuite) Scenario_FileBlobOAuthNoError(svm *ScenarioVariatio
 
 // Test FilePageBlob and FileAppendBlob copy and sync
 func (s *FileOAuthTestSuite) Scenario_CopyFileBlobOAuth(svm *ScenarioVariationManager) {
-	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionObject{})
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.FileSMB()), ResourceDefinitionObject{})
 	blobTypesSDK := ResolveVariation(svm, []blob.BlobType{blob.BlobTypeAppendBlob, blob.BlobTypePageBlob})
 	dstObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()),
 		ResourceDefinitionObject{
@@ -81,7 +81,7 @@ func (s *FileOAuthTestSuite) Scenario_CopyFileBlobOAuth(svm *ScenarioVariationMa
 }
 
 func (s *FileOAuthTestSuite) Scenario_SyncBlobOAuth(svm *ScenarioVariationManager) {
-	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionObject{})
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.FileSMB()), ResourceDefinitionObject{})
 	dstObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionObject{})
 
 	RunAzCopy(svm,

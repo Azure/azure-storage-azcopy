@@ -427,7 +427,7 @@ func TestBasic_CopyRemoveContainer(t *testing.T) {
 		useAllTos: true,
 		froms: []common.Location{
 			common.ELocation.Blob(), // If you have a container-level SAS and a HNS account, you can't delete the container. HNS should not be included here.
-			common.ELocation.File(),
+			common.ELocation.FileSMB(),
 		},
 		tos: []common.Location{
 			common.ELocation.Unknown(),
@@ -944,14 +944,14 @@ func TestBasic_SyncLMTSwitch_PreferServiceLMT(t *testing.T) {
 				// re-create dotransfer on the destination before the source to allow an overwrite.
 				// create the files endpoint with an LMT in the future.
 				fromTo := h.FromTo()
-				if fromTo.To() == common.ELocation.File() {
+				if fromTo.To() == common.ELocation.FileSMB() {
 					// if we're ignoring the SMB LMT, then the service LMT will still indicate the file is old, rather than new.
 					h.CreateFile(f("dotransfer", with{lastWriteTime: time.Now().Add(time.Second * 60)}), false)
 				} else {
 					h.CreateFile(f("dotransfer"), false)
 				}
 				time.Sleep(time.Second * 5)
-				if fromTo.From() == common.ELocation.File() {
+				if fromTo.From() == common.ELocation.FileSMB() {
 					// if we're ignoring the SMB LMT, then the service LMT will indicate the destination is older, not newer.
 					h.CreateFile(f("dotransfer", with{lastWriteTime: time.Now().Add(-time.Second * 60)}), true)
 				} else {

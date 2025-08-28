@@ -17,7 +17,7 @@ type ListSuite struct{}
 
 func (s *ListSuite) Scenario_ListBasic(svm *ScenarioVariationManager) {
 	srcService := GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(),
-		common.ELocation.File()}))
+		common.ELocation.FileSMB()}))
 
 	svm.InsertVariationSeparator(":")
 	body := NewRandomObjectContentContainer(SizeFromString("1K"))
@@ -63,7 +63,7 @@ func (s *ListSuite) Scenario_ListHierarchy(svm *ScenarioVariationManager) {
 		loc  common.Location
 	}{
 		{PrimaryStandardAcct, common.ELocation.Blob()},
-		{PrimaryStandardAcct, common.ELocation.File()},
+		{PrimaryStandardAcct, common.ELocation.FileSMB()},
 		{PrimaryHNSAcct, common.ELocation.BlobFS()},
 	})
 
@@ -691,7 +691,7 @@ func (s *ListSuite) Scenario_ListWithVersions(svm *ScenarioVariationManager) {
 
 func (s *ListSuite) Scenario_ListHierarchyTrailingDot(svm *ScenarioVariationManager) {
 	acct := GetAccount(svm, PrimaryStandardAcct)
-	srcService := acct.GetService(svm, common.ELocation.File())
+	srcService := acct.GetService(svm, common.ELocation.FileSMB())
 
 	svm.InsertVariationSeparator(":")
 	srcContainer := CreateResource[ContainerResourceManager](svm, srcService, ResourceDefinitionContainer{})
@@ -749,7 +749,7 @@ func (s *ListSuite) Scenario_ListHierarchyTrailingDot(svm *ScenarioVariationMana
 
 func (s *ListSuite) Scenario_ListHierarchyTrailingDotDisable(svm *ScenarioVariationManager) {
 	acct := GetAccount(svm, PrimaryStandardAcct)
-	srcService := acct.GetService(svm, common.ELocation.File())
+	srcService := acct.GetService(svm, common.ELocation.FileSMB())
 
 	svm.InsertVariationSeparator(":")
 	srcContainer := CreateResource[ContainerResourceManager](svm, srcService, ResourceDefinitionContainer{})

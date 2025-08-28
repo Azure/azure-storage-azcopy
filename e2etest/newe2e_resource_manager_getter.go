@@ -30,7 +30,7 @@ func GetRootResource(a Asserter, location common.Location, varOpts ...GetResourc
 		defaultacct = PrimaryHNSAcct
 
 		fallthrough // Continue to grab the account
-	case common.ELocation.Blob(), common.ELocation.File(), common.ELocation.FileNFS():
+	case common.ELocation.Blob(), common.ELocation.FileSMB(), common.ELocation.FileNFS():
 		acct := GetAccount(a, DerefOrDefault(opts.PreferredAccount, defaultacct))
 		return acct.GetService(a, location)
 	default:

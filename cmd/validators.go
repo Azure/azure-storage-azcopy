@@ -222,7 +222,7 @@ func InferArgumentLocation(arg string) common.Location {
 			case strings.Contains(host, ".blob"):
 				return common.ELocation.Blob()
 			case strings.Contains(host, ".file"):
-				return common.ELocation.File()
+				return common.ELocation.FileSMB()
 			case strings.Contains(host, ".dfs"):
 				return common.ELocation.BlobFS()
 			case strings.Contains(host, benchmarkSourceHost):

@@ -31,15 +31,15 @@ func (a *OAuthAccountResourceManager) AvailableServices() []common.Location {
 	return []common.Location{
 		common.ELocation.Blob(),
 		common.ELocation.BlobFS(),
-		common.ELocation.File(),
+		common.ELocation.FileSMB(),
 	}
 }
 
 func (a *OAuthAccountResourceManager) GetService(asserter e2etest.Asserter, location common.Location) e2etest.ServiceResourceManager {
 	var serviceSuffix = map[common.Location]string{
-		common.ELocation.Blob():   ".blob.core.windows.net",
-		common.ELocation.File():   ".file.core.windows.net",
-		common.ELocation.BlobFS(): ".dfs.core.windows.net",
+		common.ELocation.Blob():    ".blob.core.windows.net",
+		common.ELocation.FileSMB(): ".file.core.windows.net",
+		common.ELocation.BlobFS():  ".dfs.core.windows.net",
 	}
 
 	uri := fmt.Sprint("https://%s%s/", a.accountName, serviceSuffix)
@@ -59,7 +59,7 @@ func (a *OAuthAccountResourceManager) GetService(asserter e2etest.Asserter, loca
 			InternalAccount: nil,
 			InternalClient:  c,
 		}
-	case common.ELocation.File():
+	case common.ELocation.FileSMB():
 		c, err := fileservice.NewClient(uri, a.cred, &fileservice.ClientOptions{
 			ClientOptions: a.serviceClientOptions,
 		})
