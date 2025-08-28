@@ -138,39 +138,54 @@ var defaultAzdTokenProvider PSTokenProvider = func(ctx context.Context, opts pol
 	}
 
 	// We're going to get broken on this in Az 14.0 and Az.Accounts 5.0, so we may as well fix it now.
-	cmd += " -AsSecureString | Foreach-Object {[PSCustomObject]@{Token= $($_.Token | ConvertFrom-SecureString -AsPlainText); ExpiresOn = $_.ExpiresOn}} | ConvertTo-Json"
+	cmdWithSecureString := cmd + " -AsSecureString | Foreach-Object {[PSCustomObject]@{Token= $($_.Token | ConvertFrom-SecureString -AsPlainText); ExpiresOn = $_.ExpiresOn}} | ConvertTo-Json"
 
-retry:
-	cliCmd := exec.CommandContext(ctx, "pwsh", "-Command", cmd)
+	// We keep track of last executed command for error msg
+	lastExecutedCmd := cmdWithSecureString
+
+	cliCmd := exec.CommandContext(ctx, "pwsh", "-Command", cmdWithSecureString)
 	cliCmd.Env = os.Environ()
 	var stderr bytes.Buffer
 	cliCmd.Stderr = &stderr
 
 	output, err := cliCmd.Output()
 	if err != nil {
+		// Ensure backwards compat for Az.Accounts older than 5.0.0
+		if strings.Contains(stderr.String(), "A parameter cannot be found that matches parameter name 'AsSecureString'") {
+			stderr.Reset()
+
+			// Build fallback command without -AsSecureString
+			var fallbackCmd string
+			if opts.TenantID != "" {
+				tenantID := fmt.Sprintf(" -TenantId \"%s\"", opts.TenantID)
+				fallbackCmd = "Get-AzAccessToken -ResourceUrl https://storage.azure.com" + tenantID + " | ConvertTo-Json"
+			} else {
+				fallbackCmd = "Get-AzAccessToken -ResourceUrl https://storage.azure.com | ConvertTo-Json"
+			}
+			lastExecutedCmd = fallbackCmd
+
+			// Retry with the fallback command
+			cliCmd = exec.CommandContext(ctx, "pwsh", "-Command", fallbackCmd)
+			cliCmd.Env = os.Environ()
+			cliCmd.Stderr = &stderr
+
+			output, err = cliCmd.Output()
+			msg := stderr.String()
+			if msg == "" {
+				msg = err.Error()
+			}
+			return nil, errors.New(credNamePSContext + msg)
+		}
 		msg := stderr.String()
 		if msg == "" {
 			msg = err.Error()
 		}
-
-		// Ensure backwards compat for Az.Accounts older than 5.0.0
-		if strings.Contains(string(output), "A parameter cannot be found that matches parameter name 'AsSecureString'") {
-			fmt.Printf("The error string is %v", string(output))
-			fmt.Println("entered if")
-			tenantID := opts.TenantID
-			if tenantID != "" {
-				tenantID += " -TenantId" + tenantID
-				cmd = "Get-AzAccessToken -ResourceUrl https://storage.azure.com" + tenantID + " | ConvertTo-Json"
-			}
-			goto retry
-		}
-		//return nil, errors.New(credNamePSContext + msg)
-		return nil, nil
+		return nil, errors.New(credNamePSContext + msg)
 	}
 
 	output = []byte(r.FindString(string(output)))
 	if string(output) == "" {
-		invalidTokenMsg := " Invalid output received while retrieving token with Powershell. Run command \"" + cmd + "\"" +
+		invalidTokenMsg := " Invalid output received while retrieving token with Powershell. Run command \"" + lastExecutedCmd + "\"" +
 			" on powershell and verify that the output is indeed a valid token."
 		return nil, errors.New(credNamePSContext + invalidTokenMsg)
 	}
