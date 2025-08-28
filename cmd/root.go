@@ -76,6 +76,7 @@ var rootCmd = &cobra.Command{
 	Use:     "azcopy",
 	Short:   rootCmdShortDescription,
 	Long:    rootCmdLongDescription,
+	// PersistentPreRunE hook will not run on just `azcopy` without any subcommand
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		glcm.RegisterCloseFunc(func() {
 			if debugMemoryProfile != "" {
@@ -262,6 +263,14 @@ func InitializeAndExecute() {
 		glcm.Error(err.Error())
 	} else {
 		if !SkipVersionCheck && !isPipeDownload {
+			// In commands like azcopy --version and azcopy --help, they do not reach Initialize() in the PersistentPreRunE
+			// So we set the log path folder here.
+			// This ensures we sure we don't write to user's current directory
+			if common.LogPathFolder == "" {
+				// With this, latest_version.txt is written to app dir
+				common.InitializeFolders()
+			}
+
 			// our commands all control their own life explicitly with the lifecycle manager
 			// only commands that don't explicitly exit actually reach this point (e.g. help commands)
 			select {
@@ -345,7 +354,6 @@ func beginDetectNewVersion() chan struct{} {
 		if err != nil {
 			return
 		}
-
 		// Step 1: Fetch & validate cached version. If it is up to date, we return without making API calls
 		filePath := filepath.Join(common.LogPathFolder, "latest_version.txt")
 		cachedVersion, err := ValidateCachedVersion(filePath) // same as the remote version
