@@ -23,8 +23,9 @@ package cmd
 import (
 	"context"
 	"fmt"
-	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"strings"
+
+	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 )
 
 // Enumerates an entire blob account, looking into each matching container as it goes
@@ -121,6 +122,7 @@ func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 			IncludeDirectoryStubs: t.opts.IncludeDirectoryStubs,
 			PreserveBlobTags:      t.opts.PreserveBlobTags,
 			PreservePermissions:   t.opts.PreservePermissions,
+			FromTo:                t.opts.FromTo,
 		}, t.blobOpts...)
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))

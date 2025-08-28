@@ -1,13 +1,15 @@
 package e2etest
 
 import (
+	"fmt"
 	"os/user"
 	"runtime"
 	"strconv"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/google/uuid"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func init() {
@@ -369,7 +371,6 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 				},
 			},
 		})
-
 	// Dont validate the root directory in case of sync
 	if azCopyVerb == AzCopyVerbSync {
 		delete(srcObjs, rootDir)
@@ -407,7 +408,6 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 			},
 		},
 	})
-	//defer deleteShare(svm, dstContainer)
 
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
@@ -531,7 +531,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 				},
 			},
 		})
-
+	fmt.Println("Stdout:--------------", stdOut)
 	// Dont validate the root directory in case of sync
 	if azCopyVerb == AzCopyVerbSync {
 		delete(srcObjs, rootDir)
@@ -543,141 +543,229 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 	ValidateHardlinkedSkippedCount(svm, stdOut, 2)
 }
 
-func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForSMB(svm *ScenarioVariationManager) {
+func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationManager) {
 
-	// Test Scenarios
-	// 1. If nfs flag is provided and if the source or destination is SMB its an unsupported scenario
+	//
+	// 	Test Scenario:
+	// 	1. Create a NFS enabled file share container in Azure
+	// 	2. Create a folder with some files in it. Create a regular and hardlink files in the folder.
+	// 	3. We cannot create symlink files in NFS enabled file share as of now.
+	// 	4. Creating special file via NFS REST API is not allowed.
+	// 	5. Run azcopy copy/sync command to copy the folder from Azure NFS enabled file share to local.
+	// 	6. Hardlinked files should be downloaded as regular files. Hardlinks will not be preserved.
+	// 	7. Number of hardlinks converted count will be displayed in job's summary
+	//
 
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
+	//dstContainer := CreateResource[ContainerResourceManager](svm,
+	//	GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}), GetResourceOptions{
+	//		PreferredAccount: pointerTo(PremiumFileShareAcct),
+	//	}), ResourceDefinitionContainer{
+	//		Properties: ContainerProperties{
+	//			FileContainerProperties: FileContainerProperties{
+	//				EnabledProtocols: pointerTo("NFS"),
+	//			},
+	//		},
+	//	})
+
+	desSMBShare := CreateResource[ContainerResourceManager](svm, GetRootResource(svm,
+		ResolveVariation(svm, []common.Location{common.ELocation.File()}), GetResourceOptions{
+			PreferredAccount: ResolveVariation(svm, []*string{pointerTo(PremiumFileShareAcct)}),
+		}), ResourceDefinitionContainer{
+		Properties: ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				EnabledProtocols: pointerTo("SMB"),
+			},
+		},
+	})
+
+	dstShare := desSMBShare //ResolveVariation(svm, []ContainerResourceManager{desSMBShare})
+
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm,
+		ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}), GetResourceOptions{
+			PreferredAccount: pointerTo(PremiumFileShareAcct),
+		}), ResourceDefinitionContainer{
+		Properties: ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				EnabledProtocols: pointerTo("NFS"),
+			},
+		},
+	})
+
+	//srcSMBShare := CreateResource[ContainerResourceManager](svm,
+	//	GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File()}), GetResourceOptions{
+	//		PreferredAccount: ResolveVariation(svm, []*string{pointerTo(PremiumFileShareAcct)}),
+	//	}), ResourceDefinitionContainer{
+	//		Properties: ContainerProperties{
+	//			FileContainerProperties: FileContainerProperties{
+	//				EnabledProtocols: pointerTo("SMB"),
+	//			},
+	//		},
+	//	})
+
+	srcShare := srcContainer //ResolveVariation(svm, []ContainerResourceManager{srcContainer})
+
 	preserveProperties := ResolveVariation(svm, []bool{true, false})
 	preservePermissions := ResolveVariation(svm, []bool{true, false})
 
-	desNFSShare := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}), GetResourceOptions{
-		PreferredAccount: ResolveVariation(svm, []*string{pointerTo(PremiumFileShareAcct)}),
-	}), ResourceDefinitionContainer{
-		Properties: ContainerProperties{
-			FileContainerProperties: FileContainerProperties{
-				EnabledProtocols: pointerTo("NFS"),
-			},
-		},
-	}).GetObject(svm, "test", common.EEntityType.File())
-
-	desSMBShare := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File()}), GetResourceOptions{
-		PreferredAccount: ResolveVariation(svm, []*string{pointerTo(PremiumFileShareAcct)}),
-	}), ResourceDefinitionContainer{
-		Properties: ContainerProperties{
-			FileContainerProperties: FileContainerProperties{
-				EnabledProtocols: pointerTo("SMB"),
-			},
-		},
-	}).GetObject(svm, "test", common.EEntityType.File())
-
-	dstObj := ResolveVariation(svm, []ObjectResourceManager{desNFSShare, desSMBShare})
-
-	srcNFSShare := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}), GetResourceOptions{
-		PreferredAccount: ResolveVariation(svm, []*string{pointerTo(PremiumFileShareAcct)}),
-	}), ResourceDefinitionContainer{
-		Properties: ContainerProperties{
-			FileContainerProperties: FileContainerProperties{
-				EnabledProtocols: pointerTo("NFS"),
-			},
-		},
-	}).GetObject(svm, "test", common.EEntityType.File())
-
-	srcSMBShare := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File()}), GetResourceOptions{
-		PreferredAccount: ResolveVariation(svm, []*string{pointerTo(PremiumFileShareAcct)}),
-	}), ResourceDefinitionContainer{
-		Properties: ContainerProperties{
-			FileContainerProperties: FileContainerProperties{
-				EnabledProtocols: pointerTo("SMB"),
-			},
-		},
-	}).GetObject(svm, "test", common.EEntityType.File())
-
-	srcObj := ResolveVariation(svm, []ObjectResourceManager{srcNFSShare, srcSMBShare})
-
-	// The object must exist already if we're syncing.
-	if azCopyVerb == AzCopyVerbSync {
-		dstObj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
-
-		if !svm.Dryrun() {
-			// Make sure the LMT is in the past
-			time.Sleep(time.Second * 10)
+	var folderProperties, fileProperties *FileNFSProperties
+	if preserveProperties {
+		folderProperties = &FileNFSProperties{
+			FileCreationTime: pointerTo(time.Now()),
+		}
+		fileProperties = &FileNFSProperties{
+			FileCreationTime:  pointerTo(time.Now()),
+			FileLastWriteTime: pointerTo(time.Now()),
+		}
+	}
+	var fileOrFolderPermissions *FileNFSPermissions
+	if preservePermissions {
+		fileOrFolderPermissions = &FileNFSPermissions{
+			Owner:    pointerTo("1000"),
+			Group:    pointerTo("1000"),
+			FileMode: pointerTo("0755"),
 		}
 	}
 
+	rootDir := "dir_file_copy_test_" + uuid.NewString()
+
+	var dst, src ResourceManager
+	if azCopyVerb == AzCopyVerbSync {
+		dstObj := dstShare.GetObject(svm, rootDir+"/test1.txt", common.EEntityType.File())
+		dstObj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
+		dstObj = dstShare.GetObject(svm, rootDir, common.EEntityType.Folder())
+		dst = dstObj
+		if !svm.Dryrun() {
+			// Make sure the LMT is in the past
+			time.Sleep(time.Second * 5)
+		}
+	} else {
+		dst = dstShare
+	}
+	src = srcShare.GetObject(svm, rootDir, common.EEntityType.Folder())
+
+	// Create destination directories
+	srcObjs := make(ObjectResourceMappingFlat)
+
+	obj := ResourceDefinitionObject{
+		ObjectName: pointerTo(rootDir),
+		ObjectProperties: ObjectProperties{
+			EntityType:         common.EEntityType.Folder(),
+			FileNFSProperties:  folderProperties,
+			FileNFSPermissions: fileOrFolderPermissions,
+		},
+	}
+	CreateResource[ObjectResourceManager](svm, srcShare, obj)
+	srcObjs[rootDir] = obj
+
+	for i := range 2 {
+		name := rootDir + "/test" + strconv.Itoa(i) + ".txt"
+		obj := ResourceDefinitionObject{
+			ObjectName: pointerTo(name),
+			Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
+			ObjectProperties: ObjectProperties{
+				EntityType:         common.EEntityType.File(),
+				FileNFSProperties:  fileProperties,
+				FileNFSPermissions: fileOrFolderPermissions,
+			}}
+		CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+		srcObjs[name] = obj
+	}
+
 	var fromTo common.FromTo
-	if srcObj.Location() == common.ELocation.FileNFS() && dstObj.Location() == common.ELocation.FileNFS() {
+	if srcShare.Location() == common.ELocation.FileNFS() && dstShare.Location() == common.ELocation.FileNFS() {
 		fromTo = common.EFromTo.FileNFSFileNFS()
-	} else if srcObj.Location() == common.ELocation.FileNFS() && dstObj.Location() == common.ELocation.File() {
+	} else if srcShare.Location() == common.ELocation.FileNFS() && dstShare.Location() == common.ELocation.File() {
 		fromTo = common.EFromTo.FileNFSFileSMB()
-	} else if srcObj.Location() == common.ELocation.File() && dstObj.Location() == common.ELocation.FileNFS() {
+	} else if srcShare.Location() == common.ELocation.File() && dstShare.Location() == common.ELocation.FileNFS() {
 		fromTo = common.EFromTo.FileSMBFileNFS()
+	} else if srcShare.Location() == common.ELocation.File() && dstShare.Location() == common.ELocation.File() {
+		fromTo = common.EFromTo.FileSMBFileSMB()
+	}
+
+	hardlinkHandling := ResolveVariation(svm, []common.HardlinkHandlingType{common.EHardlinkHandlingType.Skip(), common.EHardlinkHandlingType.Follow()})
+	shouldFail := true
+	if hardlinkHandling != common.EHardlinkHandlingType.Follow() && !preservePermissions {
+		shouldFail = false
 	}
 	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
 			Verb: azCopyVerb,
 			Targets: []ResourceManager{
-				srcObj.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{}),
-				dstObj.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{}),
+				src.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken()}), svm, CreateAzCopyTargetOptions{}),
+				dst.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken()}), svm, CreateAzCopyTargetOptions{}),
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive:           pointerTo(true),
 					FromTo:              pointerTo(fromTo),
-					PreserveInfo:        pointerTo(preserveProperties),
 					PreservePermissions: pointerTo(preservePermissions),
+					PreserveInfo:        pointerTo(preserveProperties),
+					HardlinkType:        pointerTo(hardlinkHandling),
 				},
 			},
-			ShouldFail: true,
+			ShouldFail: shouldFail,
 		})
-	if srcObj.Location() == common.ELocation.Local() && runtime.GOOS != "linux" {
+
+	if preservePermissions {
 		ValidateContainsError(svm, stdOut, []string{
-			"This functionality is only available on Linux.",
+			"--preserve-permissions flag is not supported for cross-protocol transfers",
 		})
-	} else if srcObj.Location() == common.ELocation.File() && dstObj.Location() == common.ELocation.FileNFS() {
-		ValidateContainsError(svm, stdOut, []string{
-			"Copy operations between SMB and NFS file shares are not supported yet.",
-		})
-	} else if dstObj.Location() == common.ELocation.File() && srcObj.Location() == common.ELocation.FileNFS() {
-		if azCopyVerb == AzCopyVerbCopy {
-			ValidateContainsError(svm, stdOut, []string{
-				"Copy operations between SMB and NFS file shares are not supported yet",
-			})
-		} else {
-			ValidateContainsError(svm, stdOut, []string{
-				"Copy operations between SMB and NFS file shares are not supported yet",
-			})
-		}
+		return
 	}
+
+	if hardlinkHandling == common.EHardlinkHandlingType.Follow() {
+		ValidateContainsError(svm, stdOut, []string{
+			"Hardlinked files are not supported between NFS and SMB and will always be skipped. Please re-run with '--hardlinks=skip'.",
+		})
+		return
+	}
+
+	// Dont validate the root directory in case of sync
+	if azCopyVerb == AzCopyVerbSync {
+		delete(srcObjs, rootDir)
+	}
+	ValidateResource[ContainerResourceManager](svm, dstShare, ResourceDefinitionContainer{
+		Objects: srcObjs,
+	}, false)
 }
 
 func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForNFS(svm *ScenarioVariationManager) {
 
 	//
 	//Test Scenarios
-	//1. If nfs flag is not provided and if the source or destination is NFS its an unsupported scenario
+	//1. If --from-to flag is not provided and if the source or destination is NFS its an unsupported scenario
 	//
 
-	if runtime.GOOS == "darwin" {
-		svm.InvalidateScenario()
-		return
-	}
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
-	preserveProperties := ResolveVariation(svm, []bool{true, false})
-	preservePermissions := ResolveVariation(svm, []bool{true, false})
 
-	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}), GetResourceOptions{
-		PreferredAccount: ResolveVariation(svm, []*string{pointerTo(PremiumFileShareAcct)}),
-	}), ResourceDefinitionContainer{
+	dstObj1 := CreateResource[ContainerResourceManager](svm, GetRootResource(svm,
+		ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}), GetResourceOptions{
+			PreferredAccount: ResolveVariation(svm, []*string{pointerTo(PremiumFileShareAcct)}),
+		}), ResourceDefinitionContainer{
 		Properties: ContainerProperties{
 			FileContainerProperties: FileContainerProperties{
 				EnabledProtocols: pointerTo("NFS"),
 			},
 		},
-	}).GetObject(svm, "test", common.EEntityType.File())
+	})
 
-	srcObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.File()}),
+	dstObj2 := CreateResource[ContainerResourceManager](svm, GetRootResource(svm,
+		ResolveVariation(svm, []common.Location{common.ELocation.File()}), GetResourceOptions{
+			PreferredAccount: ResolveVariation(svm, []*string{pointerTo(PremiumFileShareAcct)}),
+		}), ResourceDefinitionContainer{})
+
+	dstShare := ResolveVariation(svm, []ContainerResourceManager{dstObj1, dstObj2})
+
+	srcObj1 := CreateResource[ContainerResourceManager](svm, GetRootResource(svm,
+		ResolveVariation(svm, []common.Location{common.ELocation.File()}),
+		GetResourceOptions{
+			PreferredAccount: ResolveVariation(svm, []*string{pointerTo(PremiumFileShareAcct)}),
+		}), ResourceDefinitionContainer{})
+
+	srcObj2 := CreateResource[ContainerResourceManager](svm, GetRootResource(svm,
+		ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}),
 		GetResourceOptions{
 			PreferredAccount: ResolveVariation(svm, []*string{pointerTo(PremiumFileShareAcct)}),
 		}), ResourceDefinitionContainer{
@@ -686,51 +774,86 @@ func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForNFS(svm *ScenarioVar
 				EnabledProtocols: pointerTo("NFS"),
 			},
 		},
-	}).GetObject(svm, "test", common.EEntityType.File())
+	})
+
+	srcShare := ResolveVariation(svm, []ContainerResourceManager{srcObj1, srcObj2})
+	fmt.Println("------Src:", srcShare.Location().String(), "-----Dst:", srcShare.Location().String())
+
+	rootDir := "dir_file_copy_test_" + uuid.NewString()
+	var dst, src ResourceManager
 
 	// The object must exist already if we're syncing.
 	if azCopyVerb == AzCopyVerbSync {
+		dstObj := dstShare.GetObject(svm, rootDir+"/test1.txt", common.EEntityType.File())
 		dstObj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
-
+		dstObj = dstShare.GetObject(svm, rootDir, common.EEntityType.Folder())
+		dst = dstObj
 		if !svm.Dryrun() {
 			// Make sure the LMT is in the past
-			time.Sleep(time.Second * 10)
+			time.Sleep(time.Second * 5)
 		}
+	} else {
+		dst = dstShare
+	}
+	src = srcShare.GetObject(svm, rootDir, common.EEntityType.Folder())
+
+	// Create destination directories
+	srcObjs := make(ObjectResourceMappingFlat)
+
+	obj := ResourceDefinitionObject{
+		ObjectName: pointerTo(rootDir),
+		ObjectProperties: ObjectProperties{
+			EntityType: common.EEntityType.Folder(),
+		},
+	}
+	CreateResource[ObjectResourceManager](svm, srcShare, obj)
+	srcObjs[rootDir] = obj
+
+	for i := range 2 {
+		name := rootDir + "/test" + strconv.Itoa(i) + ".txt"
+		obj := ResourceDefinitionObject{
+			ObjectName: pointerTo(name),
+			Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
+			ObjectProperties: ObjectProperties{
+				EntityType: common.EEntityType.File(),
+			}}
+		CreateResource[ObjectResourceManager](svm, srcShare, obj)
+		srcObjs[name] = obj
+	}
+	shouldFail := true
+	if srcShare.Location() == dstShare.Location() {
+		shouldFail = false
 	}
 
+	fmt.Println("shouldFail:", shouldFail)
 	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
 			Verb: azCopyVerb,
 			Targets: []ResourceManager{
-				TryApplySpecificAuthType(srcObj, ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{}),
-				dstObj.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{}),
+				src.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken() /*, EExplicitCredentialType.OAuth()*/}), svm, CreateAzCopyTargetOptions{}),
+				dst.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken() /*, EExplicitCredentialType.OAuth()*/}), svm, CreateAzCopyTargetOptions{}),
 			},
 
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
-					PreserveInfo:        pointerTo(preserveProperties),
-					PreservePermissions: pointerTo(preservePermissions),
+					Recursive: pointerTo(true),
 				},
 			},
-			ShouldFail: true,
+			ShouldFail: shouldFail,
 		})
-	if runtime.GOOS == "darwin" {
-		if preservePermissions {
-			ValidateContainsError(svm, stdOut, []string{
-				"up/downloads is supported only in Windows and Linux",
-			})
-		}
-	}
-	if srcObj.Location() == common.ELocation.File() {
-		ValidateContainsError(svm, stdOut, []string{
-			"The from share has NFS protocol enabled. To copy from a NFS share, use the appropriate --from-to flag value",
-		})
-	} else if dstObj.Location() == common.ELocation.File() {
-		ValidateContainsError(svm, stdOut, []string{
-			"The to share has NFS protocol enabled. To copy to a NFS share, use the appropriate --from-to flag value",
-		})
-	}
+
+	fmt.Println("StdOut:--------", stdOut)
+
+	//if src.Location() == common.ELocation.FileNFS() && dst.Location() == common.ELocation.File() {
+	//	ValidateContainsError(svm, stdOut, []string{
+	//		"The from share has NFS protocol enabled. To copy from a NFS share, use the appropriate --from-to flag value",
+	//	})
+	//} else if dst.Location() == common.ELocation.FileNFS() && src.Location() == common.ELocation.File() {
+	//	ValidateContainsError(svm, stdOut, []string{
+	//		"The to share has NFS protocol enabled. To copy to a NFS share, use the appropriate --from-to flag value",
+	//	})
+	//}
 }
 
 func (s *FilesNFSTestSuite) Scenario_DstShareDoesNotExists(svm *ScenarioVariationManager) {

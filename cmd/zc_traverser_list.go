@@ -130,6 +130,7 @@ func newListTraverser(resource common.ResourceString, resourceLocation common.Lo
 			GetPropertiesInFrontend: options.GetPropertiesInFrontend,
 			IncludeDirectoryStubs:   options.IncludeDirectoryStubs,
 			PreserveBlobTags:        options.PreserveBlobTags,
+			FromTo:                  options.FromTo,
 		})
 		if err != nil {
 			return nil, err
