@@ -724,11 +724,11 @@ func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForNFS(svm *ScenarioVar
 	}
 	if srcObj.Location() == common.ELocation.FileSMB() {
 		ValidateContainsError(svm, stdOut, []string{
-			"The from share has NFS protocol enabled. To copy from a NFS share, use the appropriate --from-to flag value",
+			"The source share has NFS protocol enabled. To copy from a NFS share, use the appropriate --from-to flag value",
 		})
 	} else if dstObj.Location() == common.ELocation.FileSMB() {
 		ValidateContainsError(svm, stdOut, []string{
-			"The to share has NFS protocol enabled. To copy to a NFS share, use the appropriate --from-to flag value",
+			"The destination share has NFS protocol enabled. To copy to a NFS share, use the appropriate --from-to flag value",
 		})
 	}
 }
