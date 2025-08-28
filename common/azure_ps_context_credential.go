@@ -141,12 +141,13 @@ var defaultAzdTokenProvider PSTokenProvider = func(ctx context.Context, opts pol
 	cmdWithSecureString := cmd + " -AsSecureString | Foreach-Object {[PSCustomObject]@{Token= $($_.Token | ConvertFrom-SecureString -AsPlainText); ExpiresOn = $_.ExpiresOn}} | ConvertTo-Json"
 
 	// We keep track of last executed command for error msg
-	lastExecutedCmd := cmdWithSecureString
+	var lastExecutedCmd = cmdWithSecureString
 
 	cliCmd := exec.CommandContext(ctx, "pwsh", "-Command", cmdWithSecureString)
 	cliCmd.Env = os.Environ()
 	var stderr bytes.Buffer
 	cliCmd.Stderr = &stderr
+	var output []uint8
 
 	output, err := cliCmd.Output()
 	if err != nil {
