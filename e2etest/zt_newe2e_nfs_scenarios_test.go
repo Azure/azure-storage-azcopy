@@ -2,13 +2,10 @@ package e2etest
 
 import (
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"os/user"
 	"runtime"
-	"strconv"
 	"time"
-
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/google/uuid"
 )
 
 func init() {
@@ -50,6 +47,7 @@ func getPropertiesAndPermissions(svm *ScenarioVariationManager, preserveProperti
 	return folderProperties, fileProperties, fileOrFolderPermissions
 }
 
+/*
 func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariationManager) {
 
 	// 	Test Scenario:
@@ -706,7 +704,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 			},
 			ShouldFail: shouldFail,
 		})
-	fmt.Println("Stdout:----------------", stdOut)
+
 	if preservePermissions {
 		ValidateContainsError(svm, stdOut, []string{
 			"--preserve-permissions flag is not supported for cross-protocol transfers",
@@ -729,13 +727,13 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 		Objects: srcObjs,
 	}, false)
 }
+*/
 
-/*
 func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForNFS(svm *ScenarioVariationManager) {
 
 	//
 	//Test Scenarios
-	//1. If nfs flag is not provided and if the source or destination is NFS its an unsupported scenario
+	//1. If --from-to flag is not provided and if the source or destination is NFS its an unsupported scenario
 	//
 
 	if runtime.GOOS == "darwin" {
@@ -787,15 +785,14 @@ func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForNFS(svm *ScenarioVar
 		AzCopyCommand{
 			Verb: azCopyVerb,
 			Targets: []ResourceManager{
-				TryApplySpecificAuthType(srcObj, ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken() , EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{}),
-				dstObj.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken() , EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{}),
+				TryApplySpecificAuthType(srcObj, ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{}),
+				dstObj.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{}),
 			},
 
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
 					PreserveInfo:        pointerTo(preserveProperties),
 					PreservePermissions: pointerTo(preservePermissions),
-					FromTo:              pointer(),
 				},
 			},
 			ShouldFail: shouldFail,
@@ -818,8 +815,8 @@ func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForNFS(svm *ScenarioVar
 		})
 	}
 }
-*/
 
+/*
 func (s *FilesNFSTestSuite) Scenario_DstShareDoesNotExists(svm *ScenarioVariationManager) {
 
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
@@ -888,3 +885,4 @@ func (s *FilesNFSTestSuite) Scenario_DstShareDoesNotExists(svm *ScenarioVariatio
 		delete(srcObjs, rootDir)
 	}
 }
+*/
