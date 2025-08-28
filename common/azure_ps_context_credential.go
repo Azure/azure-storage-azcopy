@@ -141,17 +141,16 @@ var defaultAzdTokenProvider PSTokenProvider = func(ctx context.Context, opts pol
 	cmdWithSecureString := cmd + " -AsSecureString | Foreach-Object {[PSCustomObject]@{Token= $($_.Token | ConvertFrom-SecureString -AsPlainText); ExpiresOn = $_.ExpiresOn}} | ConvertTo-Json"
 
 	// We keep track of last executed command for error msg
-	var lastExecutedCmd = cmdWithSecureString
+	lastExecutedCmd := cmdWithSecureString
 
 	cliCmd := exec.CommandContext(ctx, "pwsh", "-Command", cmdWithSecureString)
 	cliCmd.Env = os.Environ()
 	var stderr bytes.Buffer
 	cliCmd.Stderr = &stderr
 	var output []uint8
-
 	output, err := cliCmd.Output()
 	if err != nil {
-		// Ensure backwards compat for Az.Accounts older than 5.0.0
+		// Retry command to ensure backwards compat for Az.Accounts older than 5.0.0
 		if strings.Contains(stderr.String(), "A parameter cannot be found that matches parameter name 'AsSecureString'") {
 			stderr.Reset()
 
@@ -163,25 +162,29 @@ var defaultAzdTokenProvider PSTokenProvider = func(ctx context.Context, opts pol
 			} else {
 				fallbackCmd = "Get-AzAccessToken -ResourceUrl https://storage.azure.com | ConvertTo-Json"
 			}
-			lastExecutedCmd = fallbackCmd
 
 			// Retry with the fallback command
 			cliCmd = exec.CommandContext(ctx, "pwsh", "-Command", fallbackCmd)
+			lastExecutedCmd = fallbackCmd
 			cliCmd.Env = os.Environ()
 			cliCmd.Stderr = &stderr
 
 			output, err = cliCmd.Output()
+			if err != nil {
+				msg := stderr.String()
+				if msg == "" {
+					msg = err.Error()
+				}
+				return nil, errors.New(credNamePSContext + msg)
+			}
+
+		} else { // For other errors, we don't retry but log as usual
 			msg := stderr.String()
 			if msg == "" {
 				msg = err.Error()
 			}
 			return nil, errors.New(credNamePSContext + msg)
 		}
-		msg := stderr.String()
-		if msg == "" {
-			msg = err.Error()
-		}
-		return nil, errors.New(credNamePSContext + msg)
 	}
 
 	output = []byte(r.FindString(string(output)))
