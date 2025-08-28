@@ -3,15 +3,16 @@ package e2etest
 import (
 	"bytes"
 	"encoding/base64"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
-	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/google/uuid"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/google/uuid"
 )
 
 type SyncTestSuite struct{}
@@ -59,7 +60,7 @@ func (s *SyncTestSuite) Scenario_TestSyncHashStorageModes(a *ScenarioVariationMa
 	// We'll use Blob and Files as a target for the destination.
 	md5 := dupeBody.MD5()
 	dest := CreateResource[ContainerResourceManager](a,
-		GetRootResource(a, ResolveVariation(a, []common.Location{common.ELocation.Blob(), common.ELocation.File()})),
+		GetRootResource(a, ResolveVariation(a, []common.Location{common.ELocation.Blob(), common.ELocation.FileSMB()})),
 		ResourceDefinitionContainer{
 			Objects: ObjectResourceMappingFlat{
 				// Object to overwrite
@@ -138,8 +139,8 @@ func (s *SyncTestSuite) Scenario_TestSyncHashStorageModes(a *ScenarioVariationMa
 }
 
 func (s *SyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariationManager) {
-	srcLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})
-	dstLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})
+	srcLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.FileSMB(), common.ELocation.BlobFS()})
+	dstLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.FileSMB(), common.ELocation.BlobFS()})
 
 	if srcLoc == common.ELocation.Local() && srcLoc == dstLoc {
 		svm.InvalidateScenario()

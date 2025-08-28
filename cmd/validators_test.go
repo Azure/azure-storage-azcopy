@@ -19,7 +19,7 @@ func TestValidateArgumentLocation(t *testing.T) {
 	}{
 		// User does not specify location
 		{"https://test.blob.core.windows.net/container1", "", common.ELocation.Blob(), ""},
-		{"https://test.file.core.windows.net/container1", "", common.ELocation.File(), ""},
+		{"https://test.file.core.windows.net/container1", "", common.ELocation.FileSMB(), ""},
 		{"https://test.dfs.core.windows.net/container1", "", common.ELocation.BlobFS(), ""},
 		{"https://s3.amazonaws.com/bucket", "", common.ELocation.S3(), ""},
 		{"https://storage.cloud.google.com/bucket", "", common.ELocation.GCP(), ""},
@@ -27,7 +27,7 @@ func TestValidateArgumentLocation(t *testing.T) {
 		{"http://127.0.0.1:10000/devstoreaccount1/container1", "", common.ELocation.Unknown(), "the inferred location could not be identified, or is currently not supported"},
 
 		// User specifies location
-		{"https://privateendpoint.com/container1", "FILE", common.ELocation.File(), ""},
+		{"https://privateendpoint.com/container1", "FILESmb", common.ELocation.FileSMB(), ""},
 		{"http://127.0.0.1:10000/devstoreaccount1/container1", "BloB", common.ELocation.Blob(), ""},
 		{"https://test.file.core.windows.net/container1", "blobfs", common.ELocation.BlobFS(), ""}, // Tests that the endpoint does not really matter
 		{"https://privateendpoint.com/container1", "random", common.ELocation.Unknown(), "invalid --location value specified"},
@@ -51,7 +51,7 @@ func TestInferArgumentLocation(t *testing.T) {
 		expectedLocation common.Location
 	}{
 		{"https://test.blob.core.windows.net/container8", common.ELocation.Blob()},
-		{"https://test.file.core.windows.net/container23", common.ELocation.File()},
+		{"https://test.file.core.windows.net/container23", common.ELocation.FileSMB()},
 		{"https://test.dfs.core.windows.net/container45", common.ELocation.BlobFS()},
 		{"https://s3.amazonaws.com/bucket", common.ELocation.S3()},
 		{"https://storage.cloud.google.com/bucket", common.ELocation.GCP()},
@@ -63,5 +63,5 @@ func TestInferArgumentLocation(t *testing.T) {
 	for _, v := range test {
 		loc := InferArgumentLocation(v.src)
 		a.Equal(v.expectedLocation, loc)
-  }
+	}
 }

@@ -515,7 +515,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 		} else {
 			output = newBlobTraverser(r, bsc, ctx, opts)
 		}
-	case common.ELocation.File(), common.ELocation.FileNFS():
+	case common.ELocation.FileSMB(), common.ELocation.FileNFS():
 		// TODO (last service migration) : Remove dependency on URLs.
 		resourceURL, err := resource.FullURL()
 		if err != nil {
@@ -539,8 +539,8 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 			AllowTrailingDot: opts.TrailingDotOption.IsEnabled(),
 		}
 		var resLoc common.Location
-		if resourceLocation == common.ELocation.File() {
-			resLoc = common.ELocation.File()
+		if resourceLocation == common.ELocation.FileSMB() {
+			resLoc = common.ELocation.FileSMB()
 		} else {
 			resLoc = common.ELocation.FileNFS()
 		}

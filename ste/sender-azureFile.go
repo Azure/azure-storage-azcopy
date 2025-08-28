@@ -283,7 +283,7 @@ func (u *azureFileSenderBase) addNFSPropertiesToHeaders(info *TransferInfo) (sta
 		}
 		// TODO: commenting out for now. If required will add it later.
 		// fromTo := u.jptm.FromTo()
-		// if fromTo.From() == common.ELocation.File() { // Files SDK can panic when the service hands it something unexpected!
+		// if fromTo.From() == common.ELocation.FileSMB() { // Files SDK can panic when the service hands it something unexpected!
 		// 	defer func() { // recover from potential panics and output raw properties for debug purposes
 		// 		if panicerr := recover(); panicerr != nil {
 		// 			stage = "Reading SMB properties"
@@ -397,7 +397,7 @@ func (u *azureFileSenderBase) addSMBPropertiesToHeaders(info *TransferInfo) (sta
 		}
 
 		fromTo := u.jptm.FromTo()
-		if fromTo.From() == common.ELocation.File() { // Files SDK can panic when the service hands it something unexpected!
+		if fromTo.From() == common.ELocation.FileSMB() { // Files SDK can panic when the service hands it something unexpected!
 			defer func() { // recover from potential panics and output raw properties for debug purposes
 				if panicerr := recover(); panicerr != nil {
 					stage = "Reading SMB properties"

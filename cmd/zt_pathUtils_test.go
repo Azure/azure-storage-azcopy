@@ -21,10 +21,11 @@
 package cmd
 
 import (
+	"testing"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
 	chk "gopkg.in/check.v1"
-	"testing"
 )
 
 type pathUtilsSuite struct{}
@@ -53,7 +54,7 @@ func TestStripQueryFromSaslessUrl(t *testing.T) {
 	for _, t := range tests {
 		loc := common.ELocation.Local()
 		if t.isRemote {
-			loc = common.ELocation.File()
+			loc = common.ELocation.FileSMB()
 		}
 		m, q := splitQueryFromSaslessResource(t.full, loc)
 		a.Equal(t.expectedMain, m)

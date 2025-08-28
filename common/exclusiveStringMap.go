@@ -21,9 +21,10 @@
 package common
 
 import (
-	"github.com/pkg/errors"
 	"strings"
 	"sync"
+
+	"github.com/pkg/errors"
 )
 
 type ExclusiveStringMap struct {
@@ -36,7 +37,7 @@ func NewExclusiveStringMap(fromTo FromTo, goos string) *ExclusiveStringMap {
 
 	caseInsenstiveDownload := fromTo.IsDownload() &&
 		(strings.EqualFold(goos, "windows") || strings.EqualFold(goos, "darwin")) // download to case insensitive OS
-	caseSensitiveToRemote := fromTo.To() == ELocation.File() // upload to Windows-like cloud file system
+	caseSensitiveToRemote := fromTo.To() == ELocation.FileSMB() // upload to Windows-like cloud file system
 	insensitive := caseInsenstiveDownload || caseSensitiveToRemote
 	sensitive := !insensitive
 

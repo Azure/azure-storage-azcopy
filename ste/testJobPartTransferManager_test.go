@@ -52,7 +52,7 @@ func (t *testJobPartTransferManager) Info() *TransferInfo {
 func (t *testJobPartTransferManager) SrcServiceClient() *common.ServiceClient {
 	options := t.S2SSourceClientOptions()
 	var azureFileSpecificOptions any
-	if t.fromTo.From() == common.ELocation.File() {
+	if t.fromTo.From() == common.ELocation.FileSMB() {
 		azureFileSpecificOptions = &common.FileClientOptions{
 			AllowTrailingDot: true,
 		}
@@ -72,7 +72,7 @@ func (t *testJobPartTransferManager) SrcServiceClient() *common.ServiceClient {
 func (t *testJobPartTransferManager) DstServiceClient() *common.ServiceClient {
 	options := t.ClientOptions()
 	var azureFileSpecificOptions any
-	if t.fromTo.To() == common.ELocation.File() {
+	if t.fromTo.To() == common.ELocation.FileSMB() {
 		azureFileSpecificOptions = &common.FileClientOptions{
 			AllowTrailingDot:       true,
 			AllowSourceTrailingDot: true,
@@ -91,7 +91,7 @@ func (t *testJobPartTransferManager) DstServiceClient() *common.ServiceClient {
 }
 
 func (t *testJobPartTransferManager) SourceTrailingDot() *common.TrailingDotOption {
-	if (t.fromTo.IsS2S() || t.fromTo.IsDownload()) && (t.fromTo.From() == common.ELocation.File()) {
+	if (t.fromTo.IsS2S() || t.fromTo.IsDownload()) && (t.fromTo.From() == common.ELocation.FileSMB()) {
 		return to.Ptr(common.ETrailingDotOption.Enable())
 	}
 	return nil

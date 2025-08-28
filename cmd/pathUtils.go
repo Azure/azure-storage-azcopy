@@ -58,7 +58,7 @@ func DetermineLocationLevel(location string, locationType common.Location, sourc
 		return ELocationLevel.Object(), nil // we always benchmark to a subfolder, not the container root
 
 	case common.ELocation.Blob(),
-		common.ELocation.File(),
+		common.ELocation.FileSMB(),
 		common.ELocation.FileNFS(),
 		common.ELocation.BlobFS(),
 		common.ELocation.S3(),
@@ -125,7 +125,7 @@ func GetResourceRoot(resource string, location common.Location) (resourceBase st
 		return bURLParts.String(), nil
 
 	//noinspection GoNilness
-	case common.ELocation.File(), common.ELocation.FileNFS():
+	case common.ELocation.FileSMB(), common.ELocation.FileNFS():
 		fURLParts, err := filesas.ParseURL(resource)
 		if err != nil {
 			return resource, err
@@ -251,7 +251,7 @@ func splitAuthTokenFromResource(resource string, location common.Location) (reso
 		bURLParts.SAS = blobsas.QueryParameters{} // clear the SAS token and drop the raw, base URL
 		resourceBase = bURLParts.String()
 		return
-	case common.ELocation.File(), common.ELocation.FileNFS():
+	case common.ELocation.FileSMB(), common.ELocation.FileNFS():
 		var fURLParts filesas.URLParts
 		fURLParts, err = filesas.ParseURL(resource)
 		if err != nil {
@@ -325,7 +325,7 @@ func GetAccountRoot(resource common.ResourceString, location common.Location) (s
 	case common.ELocation.Local():
 		panic("attempted to get account root on local location")
 	case common.ELocation.Blob(),
-		common.ELocation.File(),
+		common.ELocation.FileSMB(),
 		common.ELocation.FileNFS(),
 		common.ELocation.BlobFS():
 		baseURL, err := resource.String()
@@ -355,7 +355,7 @@ func GetContainerName(path string, location common.Location) (string, error) {
 	case common.ELocation.Local():
 		panic("attempted to get container name on local location")
 	case common.ELocation.Blob(),
-		common.ELocation.File(),
+		common.ELocation.FileSMB(),
 		common.ELocation.FileNFS(),
 		common.ELocation.BlobFS():
 		bURLParts, err := blobsas.ParseURL(path)

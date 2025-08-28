@@ -14,7 +14,7 @@ func init() {
 type S2STestSuite struct{}
 
 func (s *S2STestSuite) Scenario_BlobDestinationSizes(svm *ScenarioVariationManager) {
-	src := ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})
+	src := ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.FileSMB()})
 	dst := common.ELocation.Blob()
 	size := ResolveVariation(svm, []int64{0, common.KiloByte, 63 * common.MegaByte})
 	fileName := "test_copy.txt"
@@ -45,7 +45,7 @@ func (s *S2STestSuite) Scenario_BlobDestinationSizes(svm *ScenarioVariationManag
 
 func (s *S2STestSuite) Scenario_BlobFile1KB(svm *ScenarioVariationManager) {
 	src := common.ELocation.Blob()
-	dst := common.ELocation.File()
+	dst := common.ELocation.FileSMB()
 	size := common.KiloByte
 	fileName := "test_copy.txt"
 	body := NewRandomObjectContentContainer(int64(size))
@@ -110,7 +110,7 @@ func (s *S2STestSuite) Scenario_SingleFileCopyBlobTypeVariations(svm *ScenarioVa
 func (s *S2STestSuite) Scenario_SingleFilePropertyMetadata(svm *ScenarioVariationManager) {
 	fileName := "single_file_propertyandmetadata.txt"
 
-	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{})
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.FileSMB()})), ResourceDefinitionContainer{})
 	srcObj := srcContainer.GetObject(svm, fileName, common.EEntityType.File())
 	srcBody := NewRandomObjectContentContainer(0)
 	srcProps := ObjectProperties{
@@ -125,7 +125,7 @@ func (s *S2STestSuite) Scenario_SingleFilePropertyMetadata(svm *ScenarioVariatio
 	}
 	srcObj.Create(svm, srcBody, srcProps)
 
-	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{})
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.FileSMB()})), ResourceDefinitionContainer{})
 	dstObj := dstContainer.GetObject(svm, fileName, common.EEntityType.File())
 
 	RunAzCopy(svm, AzCopyCommand{
@@ -283,7 +283,7 @@ func (s *S2STestSuite) Scenario_OverwriteSingleFile(svm *ScenarioVariationManage
 	dstBody := NewRandomObjectContentContainer(2 * common.KiloByte)
 
 	// TODO : Add S3 to source
-	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{})
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.FileSMB()})), ResourceDefinitionContainer{})
 	srcObj := srcContainer.GetObject(svm, srcFileName, common.EEntityType.File())
 	srcObj.Create(svm, srcBody, ObjectProperties{})
 
@@ -314,7 +314,7 @@ func (s *S2STestSuite) Scenario_NonOverwriteSingleFile(svm *ScenarioVariationMan
 	dstBody := NewRandomObjectContentContainer(2 * common.KiloByte)
 
 	// TODO : Add S3 to source
-	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{})
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.FileSMB()})), ResourceDefinitionContainer{})
 	srcObj := srcContainer.GetObject(svm, srcFileName, common.EEntityType.File())
 	srcObj.Create(svm, srcBody, ObjectProperties{})
 
@@ -371,7 +371,7 @@ func (s *S2STestSuite) Scenario_S2SContainerSingleFilePropertyAndMetadata(svm *S
 	preserveProperty := ResolveVariation(svm, []bool{true, false})
 	fileName := "s2scontainer_propertyandmetadata.txt"
 	// Scale up from service to object
-	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{})
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.FileSMB()})), ResourceDefinitionContainer{})
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
 
 	srcObj := srcContainer.GetObject(svm, fileName, common.EEntityType.File())
@@ -422,7 +422,7 @@ func (s *S2STestSuite) Scenario_S2SContainerSingleFileStripTopDir(svm *ScenarioV
 	recursive := ResolveVariation(svm, []bool{true, false})
 	fileName := "copy_strip_top_dir_file.txt"
 	// Scale up from service to object
-	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{})
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.FileSMB()})), ResourceDefinitionContainer{})
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
 
 	srcObj := srcContainer.GetObject(svm, fileName, common.EEntityType.File())
@@ -460,7 +460,7 @@ func (s *S2STestSuite) Scenario_S2SContainerSingleFileStripTopDir(svm *ScenarioV
 
 func (s *S2STestSuite) Scenario_S2SDirectoryMultipleFiles(svm *ScenarioVariationManager) {
 	// Scale up from service to object
-	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{})
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.FileSMB()})), ResourceDefinitionContainer{})
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
 
 	dirsToCreate := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test"}
@@ -513,7 +513,7 @@ func (s *S2STestSuite) Scenario_S2SDirectoryMultipleFiles(svm *ScenarioVariation
 
 func (s *S2STestSuite) Scenario_S2SDirectoryMultipleFilesStripTopDirRecursive(svm *ScenarioVariationManager) {
 	// Scale up from service to object
-	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{})
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.FileSMB()})), ResourceDefinitionContainer{})
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
 
 	dirsToCreate := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test"}
@@ -568,7 +568,7 @@ func (s *S2STestSuite) Scenario_S2SDirectoryMultipleFilesStripTopDirRecursive(sv
 
 func (s *S2STestSuite) Scenario_S2SDirectoryMultipleFilesStripTopDirNonRecursive(svm *ScenarioVariationManager) {
 	// Scale up from service to object
-	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{})
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.FileSMB()})), ResourceDefinitionContainer{})
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
 
 	dirsToCreate := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test"}

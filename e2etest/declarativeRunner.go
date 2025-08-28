@@ -35,7 +35,7 @@ import (
 
 var validCredTypesPerLocation = map[common.Location][]common.CredentialType{
 	common.ELocation.Unknown(): {common.ECredentialType.Unknown(), common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()}, // Delete!
-	common.ELocation.File():    {common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()},
+	common.ELocation.FileSMB(): {common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()},
 	common.ELocation.Blob():    {common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken(), common.ECredentialType.MDOAuthToken()},
 	common.ELocation.BlobFS():  {common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()}, // todo: currently, account key auth isn't even supported in e2e tests.
 	common.ELocation.Local():   {common.ECredentialType.Anonymous()},

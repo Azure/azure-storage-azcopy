@@ -26,7 +26,7 @@ func (s *FileTestSuite) Scenario_SingleFileUploadDifferentSizes(svm *ScenarioVar
 		GetObject(svm, fileName, common.EEntityType.File())
 	srcObj.Create(svm, body, ObjectProperties{})
 
-	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{}).
+	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.FileSMB()), ResourceDefinitionContainer{}).
 		GetObject(svm, fileName, common.EEntityType.File())
 
 	RunAzCopy(svm, AzCopyCommand{
@@ -52,7 +52,7 @@ func (s *FileTestSuite) Scenario_CompleteSparseFileUpload(svm *ScenarioVariation
 		ObjectName: pointerTo(name),
 		Body:       body,
 	})
-	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{}).
+	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.FileSMB()), ResourceDefinitionContainer{}).
 		GetObject(svm, name, common.EEntityType.File())
 
 	RunAzCopy(
@@ -99,7 +99,7 @@ func (s *FileTestSuite) Scenario_PartialSparseFileUpload(svm *ScenarioVariationM
 		ObjectName: pointerTo(name),
 		Body:       body,
 	})
-	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{}).
+	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.FileSMB()), ResourceDefinitionContainer{}).
 		GetObject(svm, name, common.EEntityType.File())
 
 	RunAzCopy(
@@ -141,7 +141,7 @@ func (s *FileTestSuite) Scenario_GuessMimeType(svm *ScenarioVariationManager) {
 		GetObject(svm, fileName, common.EEntityType.File())
 	srcObj.Create(svm, body, ObjectProperties{})
 
-	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{}).
+	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.FileSMB()), ResourceDefinitionContainer{}).
 		GetObject(svm, fileName, common.EEntityType.File())
 
 	RunAzCopy(svm, AzCopyCommand{
@@ -173,7 +173,7 @@ func (s *FileTestSuite) Scenario_UploadFileProperties(svm *ScenarioVariationMana
 		GetObject(svm, fileName, common.EEntityType.File()) // awkward capitalization to see if AzCopy catches it.
 	srcObj.Create(svm, body, ObjectProperties{})
 
-	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{}).
+	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.FileSMB()), ResourceDefinitionContainer{}).
 		GetObject(svm, fileName, common.EEntityType.File())
 
 	metadata := common.Metadata{"Author": pointerTo("gapra"), "Viewport": pointerTo("width"), "Description": pointerTo("test file")}
@@ -209,7 +209,7 @@ func (s *FileTestSuite) Scenario_UploadFileProperties(svm *ScenarioVariationMana
 func (s *FileTestSuite) Scenario_DownloadPreserveLMTFile(svm *ScenarioVariationManager) {
 	body := NewZeroObjectContentContainer(0)
 	name := "test_upload_preserve_last_mtime"
-	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionObject{ObjectName: pointerTo(name), Body: body})
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.FileSMB()), ResourceDefinitionObject{ObjectName: pointerTo(name), Body: body})
 	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).GetObject(svm, name, common.EEntityType.File())
 
 	srcObjLMT := srcObj.GetProperties(svm).LastModifiedTime
@@ -236,7 +236,7 @@ func (s *FileTestSuite) Scenario_DownloadPreserveLMTFile(svm *ScenarioVariationM
 func (s *FileTestSuite) Scenario_Download63MBFile(svm *ScenarioVariationManager) {
 	body := NewRandomObjectContentContainer(63 * common.MegaByte)
 	name := "test_63mb"
-	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionObject{ObjectName: pointerTo(name), Body: body})
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.FileSMB()), ResourceDefinitionObject{ObjectName: pointerTo(name), Body: body})
 	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).GetObject(svm, name, common.EEntityType.File())
 
 	RunAzCopy(
@@ -259,7 +259,7 @@ func (s *FileTestSuite) Scenario_Download63MBFile(svm *ScenarioVariationManager)
 func (s *FileTestSuite) Scenario_UploadDirectory(svm *ScenarioVariationManager) {
 	// Scale up from service to object
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
-	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.FileSMB()), ResourceDefinitionContainer{})
 
 	dirsToCreate := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test"}
 
@@ -315,7 +315,7 @@ func (s *FileTestSuite) Scenario_UploadDirectory(svm *ScenarioVariationManager) 
 
 func (s *FileTestSuite) Scenario_DownloadDirectory(svm *ScenarioVariationManager) {
 	// Scale up from service to object
-	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.FileSMB()), ResourceDefinitionContainer{})
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
 
 	dirsToCreate := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test"}
@@ -379,7 +379,7 @@ func (s *FileTestSuite) Scenario_SingleFileUploadWildcard(svm *ScenarioVariation
 	srcObj := srcContainer.GetObject(svm, fileName, common.EEntityType.File())
 	srcObj.Create(svm, body, ObjectProperties{})
 
-	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.FileSMB()), ResourceDefinitionContainer{})
 	dstObj := dstContainer.GetObject(svm, fileName, common.EEntityType.File())
 
 	RunAzCopy(svm, AzCopyCommand{
@@ -406,7 +406,7 @@ func (s *FileTestSuite) Scenario_AllFileUploadWildcard(svm *ScenarioVariationMan
 	srcObj := srcContainer.GetObject(svm, fileName, common.EEntityType.File())
 	srcObj.Create(svm, body, ObjectProperties{})
 
-	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.FileSMB()), ResourceDefinitionContainer{})
 
 	RunAzCopy(svm, AzCopyCommand{
 		Verb: AzCopyVerbCopy,
@@ -431,7 +431,7 @@ func (s *FileTestSuite) Scenario_AllFileDownloadWildcard(svm *ScenarioVariationM
 	fileName := fmt.Sprintf("test_file_upload_%dB_fullname", size)
 	body := NewRandomObjectContentContainer(int64(size))
 
-	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.FileSMB()), ResourceDefinitionContainer{})
 	srcObj := srcContainer.GetObject(svm, fileName, common.EEntityType.File())
 	srcObj.Create(svm, body, ObjectProperties{})
 
@@ -464,7 +464,7 @@ func (s *FileTestSuite) Scenario_SeveralFileUploadWildcard(svm *ScenarioVariatio
 	srcObj := srcContainer.GetObject(svm, fileName, common.EEntityType.File())
 	srcObj.Create(svm, body, ObjectProperties{})
 
-	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.FileSMB()), ResourceDefinitionContainer{})
 
 	RunAzCopy(svm, AzCopyCommand{
 		Verb: AzCopyVerbCopy,
@@ -489,7 +489,7 @@ func (s *FileTestSuite) Scenario_SeveralFileDownloadWildcard(svm *ScenarioVariat
 	fileName := fmt.Sprintf("test_file_upload_%dB_fullname", size)
 	body := NewRandomObjectContentContainer(int64(size))
 
-	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.FileSMB()), ResourceDefinitionContainer{})
 	srcObj := srcContainer.GetObject(svm, fileName, common.EEntityType.File())
 	srcObj.Create(svm, body, ObjectProperties{})
 
@@ -520,9 +520,9 @@ func (s *FileTestSuite) Scenario_CopyTrailingDotUnsafeDestination(svm *ScenarioV
 	body := NewRandomObjectContentContainer(0)
 
 	name := "test."
-	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File(), common.ELocation.Local()})),
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.FileSMB(), common.ELocation.Local()})),
 		ResourceDefinitionObject{ObjectName: pointerTo(name), Body: body})
-	dstObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.File()})),
+	dstObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.FileSMB()})),
 		ResourceDefinitionObject{ObjectName: pointerTo("test"), Body: body})
 
 	if srcObj.Location() == dstObj.Location() {
@@ -558,7 +558,7 @@ func (s *FileTestSuite) Scenario_UploadFilesWithQuota(svm *ScenarioVariationMana
 	}
 
 	quotaGB := int32(1) // 1 GB quota
-	shareResource := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{
+	shareResource := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.FileSMB()), ResourceDefinitionContainer{
 		Properties: ContainerProperties{
 			FileContainerProperties: FileContainerProperties{
 				Quota: &quotaGB},
@@ -652,7 +652,7 @@ func (s *FileTestSuite) Scenario_UploadFilesWithQuota(svm *ScenarioVariationMana
 func (s *FileTestSuite) Scenario_SingleFileDownloadNoError(svm *ScenarioVariationManager) {
 	body := NewRandomObjectContentContainer(0)
 	srcObj := CreateResource[ObjectResourceManager](svm,
-		GetRootResource(svm, common.ELocation.File()),
+		GetRootResource(svm, common.ELocation.FileSMB()),
 		ResourceDefinitionObject{Body: body})
 	destObj := CreateResource[ObjectResourceManager](svm,
 		GetRootResource(svm, common.ELocation.Local()),
@@ -672,7 +672,7 @@ func (s *FileTestSuite) Scenario_SingleFileDownloadNoError(svm *ScenarioVariatio
 func (s *FileTestSuite) Scenario_TrailingDotDisabledCorrectError(svm *ScenarioVariationManager) {
 	body := NewRandomObjectContentContainer(0)
 	srcObj := CreateResource[ObjectResourceManager](svm,
-		GetRootResource(svm, common.ELocation.File()),
+		GetRootResource(svm, common.ELocation.FileSMB()),
 		ResourceDefinitionObject{Body: body})
 
 	RunAzCopy(svm,
@@ -687,7 +687,7 @@ func (s *FileTestSuite) Scenario_TrailingDotDisabledCorrectError(svm *ScenarioVa
 	}, false)
 
 	destContainer := CreateResource[ContainerResourceManager](
-		svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
+		svm, GetRootResource(svm, common.ELocation.FileSMB()), ResourceDefinitionContainer{})
 
 	stdOut, _ := RunAzCopy(svm,
 		AzCopyCommand{

@@ -15,7 +15,7 @@ func (s *AutoDetectBlobTypeTestSuite) Scenario_AutoInferDetectBlobTypeVHD(svm *S
 	fileName := "myVHD.vHd" // awkward capitalization to see if AzCopy catches it.
 	body := NewRandomObjectContentContainer(4 * common.MegaByte)
 
-	srcObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.File(), common.ELocation.Blob()})), ResourceDefinitionContainer{}).
+	srcObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.FileSMB(), common.ELocation.Blob()})), ResourceDefinitionContainer{}).
 		GetObject(svm, fileName, common.EEntityType.File())
 	srcObj.Create(svm, body, ObjectProperties{})
 

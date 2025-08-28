@@ -23,6 +23,15 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/url"
+	"os"
+	"path"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
@@ -39,14 +48,6 @@ import (
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/stretchr/testify/assert"
-	"io"
-	"net/url"
-	"os"
-	"path"
-	"path/filepath"
-	"runtime"
-	"strings"
-	"time"
 
 	gcpUtils "cloud.google.com/go/storage"
 	"github.com/minio/minio-go"
@@ -1022,7 +1023,7 @@ func getDefaultSetPropertiesRawInput(src string, params transferParams) rawCopyC
 		fromTo = common.EFromTo.BlobNone()
 	case common.ELocation.BlobFS():
 		fromTo = common.EFromTo.BlobFSNone()
-	case common.ELocation.File():
+	case common.ELocation.FileSMB():
 		fromTo = common.EFromTo.FileNone()
 	default:
 		panic(fmt.Sprintf("invalid source type %s to delete. azcopy support removing blobs/files/adls gen2", srcLocationType.String()))

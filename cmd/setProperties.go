@@ -114,7 +114,7 @@ func init() {
 					raw.fromTo = common.EFromTo.BlobNone().String()
 				case common.ELocation.BlobFS():
 					raw.fromTo = common.EFromTo.BlobFSNone().String()
-				case common.ELocation.File(), common.ELocation.FileNFS():
+				case common.ELocation.FileSMB(), common.ELocation.FileNFS():
 					raw.fromTo = common.EFromTo.FileNone().String()
 				default:
 					return fmt.Errorf("invalid source type %s. azcopy supports set-properties of blobs/files/adls gen2", srcLocationType.String())

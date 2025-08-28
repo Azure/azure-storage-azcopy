@@ -112,7 +112,7 @@ func (s *RemoveSuite) Scenario_RemoveVirtualDirectory(svm *ScenarioVariationMana
 // remove with trailing dot flag disabled does not delete any files until trailing dot is enabled
 func (s *RemoveSuite) Scenario_RemoveFileWithOnlyDotsTrailingDotDisabled(svm *ScenarioVariationManager) {
 	// File Share
-	fileShare := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()),
+	fileShare := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.FileSMB()),
 		ResourceDefinitionContainer{})
 
 	// File to remove with multiple dots
@@ -153,7 +153,7 @@ func (s *RemoveSuite) Scenario_RemoveFileWithOnlyDotsTrailingDotDisabled(svm *Sc
 // with trailing dot flag enabled correctly deletes only that file
 func (s *RemoveSuite) Scenario_RemoveFileWithOnlyDotsEnabled(svm *ScenarioVariationManager) {
 	// File Share
-	fileShare := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()),
+	fileShare := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.FileSMB()),
 		ResourceDefinitionContainer{})
 
 	// Create parent directory to replicate scenario

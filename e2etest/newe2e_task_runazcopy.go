@@ -155,9 +155,10 @@ type AzCopyEnvironment struct {
 
 	// These fields should almost never be intentionally set by a test writer unless the author really knows what they're doing,
 	// as the fields are automatically controlled.
-	ParentContext *AzCopyEnvironmentContext
-	EnvironmentId *uint
-	RunCount      *uint
+	ParentContext         *AzCopyEnvironmentContext
+	EnvironmentId         *uint
+	RunCount              *uint
+	AzureConcurrencyValue *string `env:"AZURE_CONCURRENCY_VALUE"`
 }
 
 func (env *AzCopyEnvironment) InheritEnvVar(name string) {
@@ -491,7 +492,7 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 			out = &AzCopyRawStdout{}
 		}
 	}
-
+	fmt.Println("Concurrency Val:---", common.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue()))
 	stderr := &bytes.Buffer{}
 	command := exec.Cmd{
 		Path: GlobalConfig.AzCopyExecutableConfig.ExecutablePath,

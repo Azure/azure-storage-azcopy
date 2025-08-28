@@ -375,6 +375,12 @@ func (b *BlobFSPathResourceProvider) Create(a Asserter, body ObjectContentContai
 		})
 		a.NoError("Create directory", err)
 	case common.EEntityType.File(), common.EEntityType.Symlink(): // Symlinks just need an extra metadata tag
+		if b.entityType == common.EEntityType.Symlink() && body == nil {
+			body = NewStringObjectContentContainer(properties.SymlinkedFileName)
+		} else if body == nil {
+			body = NewZeroObjectContentContainer(0)
+		}
+
 		_, err := b.getFileClient().Create(ctx, &file.CreateOptions{
 			HTTPHeaders: properties.HTTPHeaders.ToBlobFS(),
 		})
@@ -566,7 +572,8 @@ func (b *BlobFSPathResourceProvider) getBlobClient(a Asserter) *blob.Client {
 
 func (b *BlobFSPathResourceProvider) Download(a Asserter) io.ReadSeeker {
 	a.HelperMarker().Helper()
-	a.Assert("Object type must be file", Equal{}, common.EEntityType.File(), b.entityType)
+	isFileOrSymlink := b.entityType == common.EEntityType.File() || b.entityType == common.EEntityType.Symlink()
+	a.Assert("Object type must be file or symlink", Equal{}, isFileOrSymlink, true)
 
 	resp, err := b.getFileClient().DownloadStream(ctx, nil)
 	a.NoError("Download stream", err)
@@ -578,6 +585,13 @@ func (b *BlobFSPathResourceProvider) Download(a Asserter) io.ReadSeeker {
 	}
 
 	return bytes.NewReader(buf.Bytes())
+}
+
+func (b *BlobFSPathResourceProvider) ReadLink(a Asserter) string {
+	reader := b.Download(a)
+	buf, err := io.ReadAll(reader)
+	a.NoError("Read symlink body", err)
+	return string(buf)
 }
 
 func (b *BlobFSPathResourceProvider) Exists() bool {

@@ -540,7 +540,7 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 			return nil
 		}
 		return err
-	case common.ELocation.File(), common.ELocation.FileNFS():
+	case common.ELocation.FileSMB(), common.ELocation.FileNFS():
 		fsc, _ := sc.FileServiceClient()
 		sc := fsc.NewShareClient(containerName)
 
@@ -614,7 +614,7 @@ func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool
 
 	// If downloading on Windows or uploading to files, encode unsafe characters.
 	if (loc == common.ELocation.Local() && !source && runtime.GOOS == "windows") ||
-		(!source && (loc == common.ELocation.File() || loc == common.ELocation.FileNFS())) {
+		(!source && (loc == common.ELocation.FileSMB() || loc == common.ELocation.FileNFS())) {
 		// invalidChars := `<>\/:"|?*` + string(0x00)
 
 		for k, c := range encodedInvalidCharacters {
@@ -625,7 +625,7 @@ func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool
 
 		// If uploading from Windows or downloading from files, decode unsafe chars if user enables decoding
 	} else if ((!source && fromTo.From() == common.ELocation.Local() && runtime.GOOS == "windows") ||
-		(!source && (fromTo.From() == common.ELocation.File() || fromTo.From() == common.ELocation.FileNFS()))) && !disableAutoDecoding {
+		(!source && (fromTo.From() == common.ELocation.FileSMB() || fromTo.From() == common.ELocation.FileNFS()))) && !disableAutoDecoding {
 
 		for encoded, c := range reverseEncodedChars {
 			for k, p := range pathParts {
