@@ -42,7 +42,10 @@ type azCopyConfig struct {
 // MainSTE initializes the Storage Transfer Engine
 func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64) error {
 	// Initialize the JobsAdmin, resurrect Job plan files
-	initJobsAdmin(steCtx, concurrency, targetRateInMegaBitsPerSec)
+	err := initJobsAdmin(steCtx, concurrency, targetRateInMegaBitsPerSec)
+	if err != nil {
+		return err
+	}
 	// TODO: We may want to list listen first and terminate if there is already an instance listening
 
 	// if we've a custom mime map
@@ -70,8 +73,8 @@ var ExecuteNewCopyJobPartOrder =
 func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
 	// Get the file name for this Job Part's Plan
 	jppfn := JobsAdmin.NewJobPartPlanFileName(order.JobID, order.PartNum)
-	jppfn.Create(order)                                                                  // Convert the order to a plan file
-	jm := JobsAdmin.JobMgrEnsureExists(order.JobID, order.LogLevel, order.CommandString) // Get a this job part's job manager (create it if it doesn't exist)
+	jppfn.Create(order)                                                                                         // Convert the order to a plan file
+	jm := JobsAdmin.JobMgrEnsureExists(order.JobID, order.LogLevel, order.CommandString, order.JobErrorHandler) // Get a this job part's job manager (create it if it doesn't exist)
 
 	if len(order.Transfers.List) == 0 && order.IsFinalPart {
 		/*
@@ -120,12 +123,12 @@ func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
     * If a job is already paused, it cannot be paused again
 */
 
-func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) common.CancelPauseResumeResponse {
+func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus, jobErrorHandler common.JobErrorHandler) common.CancelPauseResumeResponse {
 	jm, found := JobsAdmin.JobMgr(jobID) // Find Job being paused/canceled
 	if !found {
 		// If the Job is not found, search for Job Plan files in the existing plan file
 		// and resurrect the job
-		if !JobsAdmin.ResurrectJob(jobID, nil, nil, false) {
+		if !JobsAdmin.ResurrectJob(jobID, nil, nil, false, jobErrorHandler) {
 			return common.CancelPauseResumeResponse{
 				CancelledPauseResumed: false,
 				ErrorMsg:              fmt.Sprintf("no active job with JobId %s exists", jobID.String()),
@@ -137,16 +140,9 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 }
 
 func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeResponse {
-	// Strip '?' if present as first character of the source sas / destination sas
-	if len(req.SourceSAS) > 0 && req.SourceSAS[0] == '?' {
-		req.SourceSAS = req.SourceSAS[1:]
-	}
-	if len(req.DestinationSAS) > 0 && req.DestinationSAS[0] == '?' {
-		req.DestinationSAS = req.DestinationSAS[1:]
-	}
 	// Always search the plan files in Azcopy folder,
 	// and resurrect the Job with provided credentials, to ensure SAS and etc get updated.
-	if !JobsAdmin.ResurrectJob(req.JobID, req.SrcServiceClient, req.DstServiceClient, false) {
+	if !JobsAdmin.ResurrectJob(req.JobID, req.SrcServiceClient, req.DstServiceClient, false, req.JobErrorHandler) {
 		return common.CancelPauseResumeResponse{
 			CancelledPauseResumed: false,
 			ErrorMsg:              fmt.Sprintf("no job with JobId %v exists", req.JobID),
@@ -264,7 +260,11 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 		// Job with JobId does not exists
 		// Search the plan files in Azcopy folder
 		// and resurrect the Job
-		if !JobsAdmin.ResurrectJob(jobID, nil, nil, false) {
+		// Is the jobErrorHandler needed here? I don't think the rest of this method runs any of the STE code that would generate errors
+		if !JobsAdmin.ResurrectJob(jobID, nil, nil, false, func(err string) {
+			// log to job log
+			common.GetLifecycleMgr().Warn("WARNING: we don't expect errors to be hit during GetJobSummary for job " + jobID.String() + ". err: " + err)
+		}) {
 			return common.ListJobSummaryResponse{
 				ErrorMsg: fmt.Sprintf("no job with JobId %v exists", jobID),
 			}
@@ -503,7 +503,9 @@ func ListJobTransfers(r common.ListJobTransfersRequest) common.ListJobTransfersR
 		// Job with JobId does not exists
 		// Search the plan files in Azcopy folder
 		// and resurrect the Job
-		if !JobsAdmin.ResurrectJob(r.JobID, nil, nil, false) {
+		if !JobsAdmin.ResurrectJob(r.JobID, nil, nil, false, func(err string) {
+			common.GetLifecycleMgr().Warn("WARNING: we don't expect errors to be hit during ListJobTransfers for job " + r.JobID.String() + ". err: " + err)
+		}) {
 			return common.ListJobTransfersResponse{
 				ErrorMsg: fmt.Sprintf("no job with JobId %v exists", r.JobID),
 			}
@@ -557,7 +559,10 @@ func GetJobDetails(r common.GetJobDetailsRequest) common.GetJobDetailsResponse {
 	if !found {
 		// Job with JobId does not exists.
 		// Search the plan files in Azcopy folder and resurrect the Job.
-		if !JobsAdmin.ResurrectJob(r.JobID, nil, nil, false) {
+		if !JobsAdmin.ResurrectJob(r.JobID, nil, nil, false, func(err string) {
+			// log to job log
+			common.GetLifecycleMgr().Warn("WARNING: we don't expect errors to be hit during GetJobDetails for job " + r.JobID.String() + ". err: " + err)
+		}) {
 			return common.GetJobDetailsResponse{
 				ErrorMsg: fmt.Sprintf("Job with JobID %v does not exist or is invalid", r.JobID),
 			}

@@ -101,7 +101,7 @@ func doDeleteBlob(jptm IJobPartTransferMgr) {
 			if respErr.StatusCode == http.StatusForbidden {
 				errMsg := fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error())
 				jptm.Log(common.LogError, errMsg)
-				common.GetLifecycleMgr().Error(errMsg)
+				jptm.GetJobErrorHandler()(errMsg)
 			}
 		}
 		// in all other cases, make the transfer as failed

@@ -71,6 +71,7 @@ type IJobPartMgr interface {
 	SendXferDoneMsg(msg xferDoneMsg)
 	PropertiesToTransfer() common.SetPropertiesFlags
 	ResetFailedTransfersCount() // Resets number of failed transfers after a job is resumed
+	GetJobErrorHandler() common.JobErrorHandler
 }
 
 // NewAzcopyHTTPClient creates a new HTTP client.
@@ -657,3 +658,7 @@ func (jpm *jobPartMgr) ResetFailedTransfersCount() {
 // func (jppi *jobPartPlanInfo) setNumberOfTransfersDone(val uint32) {
 //	atomic.StoreUint32(&jPartPlanInfo.numberOfTransfersDone_doNotUse, val)
 // }
+
+func (jpm *jobPartMgr) GetJobErrorHandler() common.JobErrorHandler {
+	return jpm.jobMgr.GetJobErrorHandler()
+}

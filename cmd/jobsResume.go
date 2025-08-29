@@ -21,121 +21,122 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"os"
+	"os/signal"
 	"strings"
-	"time"
+	"syscall"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
 )
 
-// TODO the behavior of the resume command should be double-checked
-// TODO figure out how to merge resume job with copy
-// TODO the progress reporting code is almost the same as the copy command, the copy-paste should be avoided
-type resumeJobController struct {
-	// generated
-	jobID common.JobID
-
-	// variables used to calculate progress
-	// intervalStartTime holds the last time value when the progress summary was fetched
-	// the value of this variable is used to calculate the throughput
-	// it gets updated every time the progress summary is fetched
-	intervalStartTime        time.Time
-	intervalBytesTransferred uint64
-
-	// used to calculate job summary
-	jobStartTime time.Time
-}
-
-// wraps call to lifecycle manager to wait for the job to complete
-// if blocking is specified to true, then this method will never return
-// if blocking is specified to false, then another goroutine spawns and wait out the job
-func (cca *resumeJobController) waitUntilJobCompletion(blocking bool) {
-	// print initial message to indicate that the job is starting
-	// Output the log location if log-level is set to other then NONE
-	var logPathFolder string
-	if common.LogPathFolder != "" {
-		logPathFolder = fmt.Sprintf("%s%s%s.log", common.LogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
-	}
-	glcm.OnStart(common.JobContext{JobID: cca.jobID, LogPath: logPathFolder})
-
-	// initialize the times necessary to track progress
-	cca.jobStartTime = time.Now()
-	cca.intervalStartTime = time.Now()
-	cca.intervalBytesTransferred = 0
-
-	glcm.InitiateProgressReporting(cca)
-	if blocking {
-		// blocking, hand over control to the lifecycle manager
-		glcm.SurrenderControl()
-	} else {
-		// non-blocking, return after spawning a go routine to watch the job
-	}
-}
-
-func (cca *resumeJobController) Cancel(lcm common.LifecycleMgr) {
-	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
-	if err != nil {
-		lcm.Error("error occurred while cancelling the job " + cca.jobID.String() + ". Failed with error " + err.Error())
-	}
-}
-
-// TODO: can we combine this with the copy one (and the sync one?)
-func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint32) {
-	// fetch a job status
-	summary := jobsAdmin.GetJobSummary(cca.jobID)
-	jobDone := summary.JobStatus.IsJobDone()
-	totalKnownCount = summary.TotalTransfers
-
-	// if json is not desired, and job is done, then we generate a special end message to conclude the job
-	duration := time.Since(cca.jobStartTime) // report the total run time of the job
-
-	var computeThroughput = func() float64 {
-		// compute the average throughput for the last time interval
-		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) / float64(base10Mega))
-		timeElapsed := time.Since(cca.intervalStartTime).Seconds()
-
-		// reset the interval timer and byte count
-		cca.intervalStartTime = time.Now()
-		cca.intervalBytesTransferred = summary.BytesOverWire
-
-		return common.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
-	}
-
-	throughput := computeThroughput()
-	transferProgress := common.TransferProgress{
-		ListJobSummaryResponse: summary,
-		Throughput:             throughput,
-		ElapsedTime:            duration,
-		JobType:                common.EJobType.Resume(),
-	}
-	if common.AzcopyCurrentJobLogger != nil {
-		common.AzcopyCurrentJobLogger.Log(common.LogInfo, common.GetProgressOutputBuilder(transferProgress)(common.EOutputFormat.Text()))
-	}
-	glcm.OnTransferProgress(transferProgress)
-
-	if jobDone {
-		// TODO (gapra): Why doesnt resume use the same logic as copy for exit code? if summary.TransfersFailed > 0 || summary.JobStatus == common.EJobStatus.Cancelled() || summary.JobStatus == common.EJobStatus.Cancelling() {
-		exitCode := common.EExitCode.Success()
-		if summary.TransfersFailed > 0 {
-			exitCode = common.EExitCode.Error()
-		}
-
-		jobSummary := common.JobSummary{
-			ExitCode:               exitCode,
-			ListJobSummaryResponse: summary,
-			ElapsedTime:            duration,
-			JobType:                common.EJobType.Resume(),
-		}
-		lcm.OnComplete(jobSummary)
-	}
-
-	return
-}
+//// TODO the behavior of the resume command should be double-checked
+//// TODO figure out how to merge resume job with copy
+//// TODO the progress reporting code is almost the same as the copy command, the copy-paste should be avoided
+//type resumeJobController struct {
+//	// generated
+//	jobID common.JobID
+//
+//	// variables used to calculate progress
+//	// intervalStartTime holds the last time value when the progress summary was fetched
+//	// the value of this variable is used to calculate the throughput
+//	// it gets updated every time the progress summary is fetched
+//	intervalStartTime        time.Time
+//	intervalBytesTransferred uint64
+//
+//	// used to calculate job summary
+//	jobStartTime time.Time
+//}
+//
+//// wraps call to lifecycle manager to wait for the job to complete
+//// if blocking is specified to true, then this method will never return
+//// if blocking is specified to false, then another goroutine spawns and wait out the job
+//func (cca *resumeJobController) waitUntilJobCompletion(blocking bool) {
+//	// print initial message to indicate that the job is starting
+//	// Output the log location if log-level is set to other then NONE
+//	var logPathFolder string
+//	if common.LogPathFolder != "" {
+//		logPathFolder = fmt.Sprintf("%s%s%s.log", common.LogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
+//	}
+//	glcm.OnStart(common.JobContext{JobID: cca.jobID, LogPath: logPathFolder})
+//
+//	// initialize the times necessary to track progress
+//	cca.jobStartTime = time.Now()
+//	cca.intervalStartTime = time.Now()
+//	cca.intervalBytesTransferred = 0
+//
+//	glcm.InitiateProgressReporting(cca)
+//	if blocking {
+//		// blocking, hand over control to the lifecycle manager
+//		glcm.SurrenderControl()
+//	} else {
+//		// non-blocking, return after spawning a go routine to watch the job
+//	}
+//}
+//
+//func (cca *resumeJobController) Cancel(lcm LifecycleMgr) {
+//	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
+//	if err != nil {
+//		lcm.Error("error occurred while cancelling the job " + cca.jobID.String() + ". Failed with error " + err.Error())
+//	}
+//}
+//
+//// TODO: can we combine this with the copy one (and the sync one?)
+//func (cca *resumeJobController) ReportProgressOrExit(lcm LifecycleMgr) (totalKnownCount uint32) {
+//	// fetch a job status
+//	summary := jobsAdmin.GetJobSummary(cca.jobID)
+//	jobDone := summary.JobStatus.IsJobDone()
+//	totalKnownCount = summary.TotalTransfers
+//
+//	// if json is not desired, and job is done, then we generate a special end message to conclude the job
+//	duration := time.Since(cca.jobStartTime) // report the total run time of the job
+//
+//	var computeThroughput = func() float64 {
+//		// compute the average throughput for the last time interval
+//		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) / float64(common.Base10Mega))
+//		timeElapsed := time.Since(cca.intervalStartTime).Seconds()
+//
+//		// reset the interval timer and byte count
+//		cca.intervalStartTime = time.Now()
+//		cca.intervalBytesTransferred = summary.BytesOverWire
+//
+//		return common.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
+//	}
+//
+//	throughput := computeThroughput()
+//	transferProgress := common.TransferProgress{
+//		ListJobSummaryResponse: summary,
+//		Throughput:             throughput,
+//		ElapsedTime:            duration,
+//		JobType:                common.EJobType.Resume(),
+//	}
+//	if common.AzcopyCurrentJobLogger != nil {
+//		common.AzcopyCurrentJobLogger.Log(common.LogInfo, common.GetProgressOutputBuilder(transferProgress)(common.EOutputFormat.Text()))
+//	}
+//	glcm.OnTransferProgress(transferProgress)
+//
+//	if jobDone {
+//		// TODO (gapra): Why doesnt resume use the same logic as copy for exit code? if summary.TransfersFailed > 0 || summary.JobStatus == common.EJobStatus.Cancelled() || summary.JobStatus == common.EJobStatus.Cancelling() {
+//		exitCode := common.EExitCode.Success()
+//		if summary.TransfersFailed > 0 {
+//			exitCode = common.EExitCode.Error()
+//		}
+//
+//		jobSummary := common.JobSummary{
+//			ExitCode:               exitCode,
+//			ListJobSummaryResponse: summary,
+//			ElapsedTime:            duration,
+//			JobType:                common.EJobType.Resume(),
+//		}
+//		lcm.OnComplete(jobSummary)
+//	}
+//
+//	return
+//}
 
 func parseTransfers(arg string) map[string]int {
 	transfersMap := make(map[string]int)
@@ -192,8 +193,8 @@ func init() {
 	resumeCmd.PersistentFlags().StringVar(&commandLineArgs.excludeTransfer, "exclude", "", "Filter: Exclude these failed transfer(s) when resuming the job. "+
 		"Files should be separated by ';'.")
 	// oauth options
-	resumeCmd.PersistentFlags().StringVar(&commandLineArgs.SourceSAS, "source-sas", "", "Source SAS token of the source for a given Job ID.")
-	resumeCmd.PersistentFlags().StringVar(&commandLineArgs.DestinationSAS, "destination-sas", "", "Destination SAS token of the destination for a given Job ID.")
+	resumeCmd.PersistentFlags().StringVar(&commandLineArgs.SourceSAS, "source-sas", "", "Source SAS token of the source for a given JobLifecycle ID.")
+	resumeCmd.PersistentFlags().StringVar(&commandLineArgs.DestinationSAS, "destination-sas", "", "Destination SAS token of the destination for a given JobLifecycle ID.")
 }
 
 type resumeCmdArgs struct {
@@ -203,6 +204,22 @@ type resumeCmdArgs struct {
 
 	SourceSAS      string
 	DestinationSAS string
+}
+
+type CLIResumeHandler struct {
+}
+
+func (C CLIResumeHandler) OnStart(ctx common.JobContext) {
+	glcm.OnStart(ctx)
+}
+
+func (C CLIResumeHandler) OnTransferProgress(progress azcopy.ResumeJobProgress) {
+	glcm.OnTransferProgress(common.TransferProgress{
+		ListJobSummaryResponse: progress.ListJobSummaryResponse,
+		Throughput:             progress.Throughput,
+		ElapsedTime:            progress.ElapsedTime,
+		JobType:                common.EJobType.Resume(),
+	})
 }
 
 // processes the resume command,
@@ -217,11 +234,38 @@ func (rca resumeCmdArgs) process() error {
 	opts := azcopy.ResumeJobOptions{
 		SourceSAS:      rca.SourceSAS,
 		DestinationSAS: rca.DestinationSAS,
+		Handler:        CLIResumeHandler{},
 	}
-	err = Client.ResumeJob(jobID, opts)
+	var resp azcopy.ResumeJobResult
+	// Create a context that can be cancelled by Ctrl-C
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	controller := resumeJobController{jobID: jobID}
-	controller.waitUntilJobCompletion(true)
+	// Set up signal handling for graceful cancellation
+	go func() {
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+		<-sigChan
+		cancel()
+	}()
+
+	resp, err = Client.ResumeJob(ctx, jobID, opts)
+	if err != nil {
+		return fmt.Errorf("error resuming job %s. Failed with error %w", jobID, err)
+	}
+
+	exitCode := common.EExitCode.Success()
+	if resp.TransfersFailed > 0 {
+		exitCode = common.EExitCode.Error()
+	}
+
+	jobSummary := common.JobSummary{
+		ExitCode:               exitCode,
+		ListJobSummaryResponse: resp.ListJobSummaryResponse,
+		ElapsedTime:            resp.ElapsedTime,
+		JobType:                common.EJobType.Resume(),
+	}
+	glcm.OnComplete(jobSummary)
 
 	return nil
 }

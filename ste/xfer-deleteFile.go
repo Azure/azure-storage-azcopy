@@ -123,7 +123,7 @@ func doDeleteFile(jptm IJobPartTransferMgr) {
 			if respErr.StatusCode == http.StatusForbidden {
 				errMsg := fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error())
 				jptm.Log(common.LogError, errMsg)
-				common.GetLifecycleMgr().Error(errMsg)
+				jptm.GetJobErrorHandler()(errMsg)
 			}
 		}
 		transferDone(common.ETransferStatus.Failed(), err)

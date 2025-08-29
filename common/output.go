@@ -49,17 +49,17 @@ func (o OutputMessageType) String() string {
 }
 
 // defines the output and how it should be handled
-type outputMessage struct {
-	msgContent    string
-	msgType       OutputMessageType
-	exitCode      ExitCode      // only for when the application is meant to exit after printing (i.e. Error or Final)
-	inputChannel  chan<- string // support getting a response from the user
-	promptDetails PromptDetails
+type OutputMessage struct {
+	MsgContent    string
+	MsgType       OutputMessageType
+	ExitCode      ExitCode      // only for when the application is meant to exit after printing (i.e. Error or Final)
+	InputChannel  chan<- string // support getting a response from the user
+	PromptDetails PromptDetails
 }
 
-func (m outputMessage) shouldExitProcess() bool {
-	return m.msgType == EOutputMessageType.Error() ||
-		(m.msgType == EOutputMessageType.EndOfJob() && !(m.exitCode == EExitCode.NoExit()))
+func (m OutputMessage) ShouldExitProcess() bool {
+	return m.MsgType == EOutputMessageType.Error() ||
+		(m.MsgType == EOutputMessageType.EndOfJob() && !(m.ExitCode == EExitCode.NoExit()))
 }
 
 // used for output types that are not simple strings, such as progress and init
@@ -97,11 +97,6 @@ type JsonOutputTemplate struct {
 	MessageType    string
 	MessageContent string // a simple string for INFO and ERROR, a serialized JSON for INIT, PROGRESS, EXIT
 	PromptDetails  PromptDetails
-}
-
-func newJsonOutputTemplate(messageType OutputMessageType, messageContent string, promptDetails PromptDetails) *JsonOutputTemplate {
-	return &JsonOutputTemplate{TimeStamp: time.Now(), MessageType: messageType.String(),
-		MessageContent: messageContent, PromptDetails: promptDetails}
 }
 
 // Ideally this is just JobContext, but we probably shouldn't break the json output format
@@ -317,7 +312,7 @@ func GetJobSummaryOutputBuilder(summary JobSummary) OutputBuilder {
 	return func(format OutputFormat) string {
 		if format == EOutputFormat.Json() {
 			switch summary.JobType {
-			case EJobType.Copy(), EJobType.Resume(), EJobType.Benchmark():
+			case EJobType.Copy(), EJobType.Resume(), EJobType.Benchmark(), EJobType.Cancel():
 				jsonOutput, err := json.Marshal(summary.ListJobSummaryResponse)
 				PanicIfErr(err)
 				return string(jsonOutput)
@@ -383,6 +378,40 @@ Final Job Status: %v%s%s
 					output = fmt.Sprintf("%s: %s)", cleanupStatusString, summary.JobStatus)
 				}
 				return output
+
+			case EJobType.Cancel():
+				return fmt.Sprintf(
+					`
+Job %s summary
+Number of File Transfers: %v
+Number of Folder Property Transfers: %v
+Number of Symlink Transfers: %v
+Total Number of Transfers: %v
+Number of File Transfers Completed: %v
+Number of Folder Transfers Completed: %v
+Number of File Transfers Failed: %v
+Number of Folder Transfers Failed: %v
+Number of File Transfers Skipped: %v
+Number of Folder Transfers Skipped: %v
+Total Number of Bytes Transferred: %v
+Percent Complete (approx): %.1f
+Final Job Status: %v
+`,
+					summary.JobID.String(),
+					summary.FileTransfers,
+					summary.FolderPropertyTransfers,
+					summary.SymlinkTransfers,
+					summary.TotalTransfers,
+					summary.TransfersCompleted-summary.FoldersCompleted,
+					summary.FoldersCompleted,
+					summary.TransfersFailed-summary.FoldersFailed,
+					summary.FoldersFailed,
+					summary.TransfersSkipped-summary.FoldersSkipped,
+					summary.FoldersSkipped,
+					summary.TotalBytesTransferred,
+					summary.PercentComplete, // noted as approx in the format string because won't include in-flight files if this Show command is run from a different process
+					summary.JobStatus,
+				)
 			case EJobType.Resume():
 				return fmt.Sprintf(
 					`
