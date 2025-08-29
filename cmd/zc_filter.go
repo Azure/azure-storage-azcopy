@@ -21,7 +21,6 @@
 package cmd
 
 import (
-	"fmt"
 	"path"
 	"regexp"
 	"strings"
@@ -348,14 +347,6 @@ func (f *IncludeAfterDateFilter) DoesPass(storedObject StoredObject) bool {
 		storedObject.lastModifiedTime.Equal(f.Threshold) // >= is easier for users to understand than >
 }
 
-func (IncludeAfterDateFilter) ParseISO8601(s string, chooseEarliest bool) (time.Time, error) {
-	return parseISO8601(s, chooseEarliest)
-}
-
-func (IncludeAfterDateFilter) FormatAsUTC(t time.Time) string {
-	return formatAsUTC(t)
-}
-
 // IncludeBeforeDateFilter includes files with Last Modified Times <= the specified Threshold
 // Used for copy, but doesn't make conceptual sense for sync
 type IncludeBeforeDateFilter struct {
@@ -380,14 +371,6 @@ func (f *IncludeBeforeDateFilter) DoesPass(storedObject StoredObject) bool {
 
 	return storedObject.lastModifiedTime.Before(f.Threshold) ||
 		storedObject.lastModifiedTime.Equal(f.Threshold) // <= is easier for users to understand than <
-}
-
-func (_ IncludeBeforeDateFilter) ParseISO8601(s string, chooseEarliest bool) (time.Time, error) {
-	return parseISO8601(s, chooseEarliest)
-}
-
-func (_ IncludeBeforeDateFilter) FormatAsUTC(t time.Time) string {
-	return formatAsUTC(t)
 }
 
 type permDeleteFilter struct {
@@ -425,61 +408,4 @@ func buildIncludeSoftDeleted(permanentDeleteOption common.PermanentDeleteOption)
 		filters = append(filters, &permDeleteFilter{deleteSnapshots: true, deleteVersions: true})
 	}
 	return filters
-}
-
-// parseISO8601 parses ISO 8601 dates. This routine is needed because GoLang's time.Parse* routines require all expected
-// elements to be present.  I.e. you can't specify just a date, and have the time default to 00:00. But ISO 8601 requires
-// that and, for usability, that's what we want.  (So that users can omit the whole time, or at least the seconds portion of it, if they wish)
-func parseISO8601(s string, chooseEarliest bool) (time.Time, error) {
-
-	// list of ISO-8601 Go-lang formats in descending order of completeness
-	formats := []string{
-		ISO8601,                     // Support AzFile's more accurate format
-		"2006-01-02T15:04:05Z07:00", // equal to time.RFC3339, which in Go parsing is basically "ISO 8601 with nothing optional"
-		"2006-01-02T15:04:05",       // no timezone
-		"2006-01-02T15:04",          // no seconds
-		"2006-01-02T15",             // no minutes
-		"2006-01-02",                // no time
-		// we don't want to support the no day, or no month options. They are too vague for our purposes
-	}
-
-	loc, err := time.LoadLocation("Local")
-	if err != nil {
-		return time.Time{}, err
-	}
-
-	// Try from most precise to least
-	// (If user has some OTHER format, with extra chars we don't expect an any format, all will fail)
-	for _, f := range formats {
-		t, err := time.ParseInLocation(f, s, loc)
-		if err == nil {
-			if t.Location() == loc {
-				// if we are working in local time, then detect the case where the time falls in the repeated hour
-				// at then end of daylight saving, and resolve it according to chooseEarliest
-				const localNoTimezone = "2006-01-02T15:04:05"
-				var possibleLocalDuplicate time.Time
-				if chooseEarliest {
-					possibleLocalDuplicate = t.Add(-time.Hour) // test an hour earlier, and favour it, if it's the same local time
-				} else {
-					possibleLocalDuplicate = t.Add(time.Hour) // test an hour later, and favour it, if it's the same local time
-				}
-				isSameLocalTime := possibleLocalDuplicate.Format(localNoTimezone) == t.Format(localNoTimezone)
-				if isSameLocalTime {
-					return possibleLocalDuplicate, nil
-				}
-			}
-			return t, nil
-		}
-	}
-
-	// Nothing worked. Get fresh error from first format, and supplement it with additional hints.
-	_, err = time.ParseInLocation(formats[0], s, loc)
-	err = fmt.Errorf("could not parse date/time '%s'. Expecting ISO8601 format, with 4 digit year and 2-digits for all other elements. Error hint: %w",
-		s, err)
-	return time.Time{}, err
-}
-
-// formatAsUTC is inverse of parseISO8601 (and always uses the most detailed format)
-func formatAsUTC(t time.Time) string {
-	return t.UTC().Format(time.RFC3339)
 }

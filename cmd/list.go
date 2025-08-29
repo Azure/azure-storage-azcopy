@@ -33,6 +33,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 
 	"github.com/spf13/cobra"
 
@@ -224,7 +225,7 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 
 	var credentialInfo common.CredentialInfo
 
-	source, err := SplitResourceString(cooked.sourcePath, cooked.location)
+	source, err := azcopy.SplitResourceString(cooked.sourcePath, cooked.location)
 	if err != nil {
 		return err
 	}

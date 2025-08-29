@@ -245,8 +245,8 @@ func WalkWithSymlinks(appCtx context.Context,
 				writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: fileError})
 				return nil
 			}
-			computedRelativePath := strings.TrimPrefix(cleanLocalPath(filePath), cleanLocalPath(queueItem.fullPath))
-			computedRelativePath = cleanLocalPath(common.GenerateFullPath(queueItem.relativeBase, computedRelativePath))
+			computedRelativePath := strings.TrimPrefix(common.CleanLocalPath(filePath), common.CleanLocalPath(queueItem.fullPath))
+			computedRelativePath = common.CleanLocalPath(common.GenerateFullPath(queueItem.relativeBase, computedRelativePath))
 			computedRelativePath = strings.TrimPrefix(computedRelativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 
 			if computedRelativePath == "." {
@@ -754,7 +754,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 					}
 				}
 
-				relPath := strings.TrimPrefix(strings.TrimPrefix(cleanLocalPath(filePath), cleanLocalPath(t.fullPath)), common.DeterminePathSeparator(t.fullPath))
+				relPath := strings.TrimPrefix(strings.TrimPrefix(common.CleanLocalPath(filePath), common.CleanLocalPath(t.fullPath)), common.DeterminePathSeparator(t.fullPath))
 				if t.symlinkHandling.None() && fileInfo.Mode()&os.ModeSymlink != 0 {
 					WarnStdoutAndScanningLog(fmt.Sprintf("Skipping over symlink at %s because symlinks are not handled (--follow-symlinks or --preserve-symlinks)", common.GenerateFullPath(t.fullPath, relPath)))
 					return nil
@@ -893,7 +893,7 @@ func newLocalTraverser(fullPath string, ctx context.Context, opts InitResourceTr
 	}
 
 	traverser := localTraverser{
-		fullPath:                    cleanLocalPath(fullPath),
+		fullPath:                    common.CleanLocalPath(fullPath),
 		recursive:                   opts.Recursive,
 		symlinkHandling:             opts.SymlinkHandling,
 		appCtx:                      ctx,
@@ -905,28 +905,6 @@ func newLocalTraverser(fullPath string, ctx context.Context, opts InitResourceTr
 		hardlinkHandling:            opts.HardlinkHandling,
 	}
 	return &traverser, nil
-}
-
-func cleanLocalPath(localPath string) string {
-	localPathSeparator := common.DeterminePathSeparator(localPath)
-	// path.Clean only likes /, and will only handle /. So, we consolidate it to /.
-	// it will do absolutely nothing with \.
-	normalizedPath := path.Clean(strings.ReplaceAll(localPath, localPathSeparator, common.AZCOPY_PATH_SEPARATOR_STRING))
-	// return normalizedPath path separator.
-	normalizedPath = strings.ReplaceAll(normalizedPath, common.AZCOPY_PATH_SEPARATOR_STRING, localPathSeparator)
-
-	// path.Clean steals the first / from the // or \\ prefix.
-	if strings.HasPrefix(localPath, `\\`) || strings.HasPrefix(localPath, `//`) {
-		// return the \ we stole from the UNC/extended path.
-		normalizedPath = localPathSeparator + normalizedPath
-	}
-
-	// path.Clean steals the last / from C:\, C:/, and does not add one for C:
-	if common.RootDriveRegex.MatchString(strings.ReplaceAll(common.ToShortPath(normalizedPath), common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING)) {
-		normalizedPath += common.OS_PATH_SEPARATOR
-	}
-
-	return normalizedPath
 }
 
 func logSpecialFileWarning(fileName string) {

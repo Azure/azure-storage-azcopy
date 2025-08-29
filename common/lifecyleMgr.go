@@ -15,6 +15,10 @@ import (
 	"unicode"
 )
 
+// TODO: (gapra) Move this to cmd package.
+// lcm is the lifecycle manager for the AzCopy client. This needs to be reset per copy/sync/resume job for AzCopy as a library users.
+// It is a bit of an anti pattern to have a global variable like this, but it is necessary to minimize code changes
+// while implementing AzCopy as a library.
 // only one instance of the formatter should exist
 var lcm = func() (lcmgr *lifecycleMgr) {
 	lcmgr = &lifecycleMgr{

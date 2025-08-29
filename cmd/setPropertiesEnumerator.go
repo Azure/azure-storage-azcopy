@@ -25,6 +25,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
@@ -94,7 +95,7 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
+	options := azcopy.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
 	var fileClientOptions any
 	if cca.FromTo.From().IsFile() {
 		fileClientOptions = &common.FileClientOptions{AllowTrailingDot: cca.trailingDot.IsEnabled()}
