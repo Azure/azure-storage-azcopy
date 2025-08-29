@@ -1377,6 +1377,7 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm LifecycleMgr) (totalKnown
 			jobSummary.ExitCode = common.EExitCode.NoExit()
 			lcm.OnComplete(jobSummary)
 			cca.launchFollowup(exitCode)
+			lcm.SurrenderControl()
 		} else {
 			lcm.OnComplete(jobSummary)
 		}
