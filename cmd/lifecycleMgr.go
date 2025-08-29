@@ -65,7 +65,7 @@ type WorkController interface {
 // It is a bit of an anti pattern to have a global variable like this, but it is necessary to minimize code changes
 // while implementing AzCopy as a library.
 // only one instance of the formatter should exist
-var glcm = func() (lcmgr *lifecycleMgr) {
+var glcm LifecycleMgr = func() (lcmgr *lifecycleMgr) {
 	lcmgr = &lifecycleMgr{
 		msgQueue:             make(chan common.OutputMessage, 1000),
 		progressCache:        "",

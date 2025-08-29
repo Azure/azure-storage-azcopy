@@ -41,6 +41,11 @@ type testJobPartTransferManager struct {
 	status     common.TransferStatus
 }
 
+func (t *testJobPartTransferManager) GetJobErrorHandler() common.JobErrorHandler {
+	// TODO: actually implement me if ever wanting to test error handling
+	return func(err string) {}
+}
+
 func (t *testJobPartTransferManager) DeleteDestinationFileIfNecessary() bool {
 	return t.jobPartMgr.DeleteDestinationFileIfNecessary()
 }

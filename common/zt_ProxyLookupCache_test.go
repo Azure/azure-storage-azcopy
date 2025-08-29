@@ -21,15 +21,17 @@
 package common
 
 import (
-	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/url"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestCacheIsUsed(t *testing.T) {
+	SetOutputHandler(NewDefaultOutputHandler())
 	a := assert.New(t)
 	fakeMu := &sync.Mutex{} // avoids race condition in test code
 	var fakeResult *url.URL
