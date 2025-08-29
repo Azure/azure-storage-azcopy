@@ -1090,6 +1090,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.trailingDot,
 		},
+		JobErrorHandler: glcm.Error,
 	}
 
 	srcCredInfo, err := cca.getSrcCredential(ctx, &jobPartOrder)
@@ -1238,7 +1239,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 // wraps call to lifecycle manager to wait for the job to complete
 // if blocking is specified to true, then this method will never return
 // if blocking is specified to false, then another goroutine spawns and wait out the job
-func (cca *CookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
+func (cca *CookedCopyCmdArgs) waitUntilJobCompletion() {
 	// print initial message to indicate that the job is starting
 	// if on dry run mode do not want to print message since no  job is being done
 	if !cca.dryrunMode {
@@ -1256,15 +1257,10 @@ func (cca *CookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
 	cca.intervalBytesTransferred = 0
 
 	glcm.InitiateProgressReporting(cca)
-	if blocking {
-		// blocking, hand over control to the lifecycle manager
-		glcm.SurrenderControl()
-	} else {
-		// non-blocking, return after spawning a go routine to watch the job
-	}
+	// non-blocking, return after spawning a go routine to watch the job
 }
 
-func (cca *CookedCopyCmdArgs) Cancel(lcm common.LifecycleMgr) {
+func (cca *CookedCopyCmdArgs) Cancel(lcm LifecycleMgr) {
 	// prompt for confirmation, except when enumeration is complete
 	if !cca.isEnumerationComplete {
 		answer := lcm.Prompt("The source enumeration is not complete, "+
@@ -1316,7 +1312,7 @@ func (cca *CookedCopyCmdArgs) getSuccessExitCode() common.ExitCode {
 	}
 }
 
-func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint32) {
+func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm LifecycleMgr) (totalKnownCount uint32) {
 	// fetch a job status
 	summary := jobsAdmin.GetJobSummary(cca.jobID)
 	summary.IsCleanupJob = cca.isCleanupJob // only FE knows this, so we can only set it here
@@ -1329,7 +1325,7 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 
 	var computeThroughput = func() float64 {
 		// compute the average throughput for the last time interval
-		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) / float64(base10Mega))
+		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) / float64(common.Base10Mega))
 		timeElapsed := time.Since(cca.intervalStartTime).Seconds()
 
 		// reset the interval timer and byte count
@@ -1381,7 +1377,6 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 			jobSummary.ExitCode = common.EExitCode.NoExit()
 			lcm.OnComplete(jobSummary)
 			cca.launchFollowup(exitCode)
-			lcm.SurrenderControl() // the followup job will run on its own goroutines
 		} else {
 			lcm.OnComplete(jobSummary)
 		}

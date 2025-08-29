@@ -22,22 +22,26 @@ package common
 
 import "time"
 
-type JobLifecycleHandler interface {
-	OnStart(ctx JobContext)
+// JobOutputHandler contains callbacks
+// This is effectively an interface, but we use a struct of function pointers instead of a true interface to
+// easily allow AzCopy library to provide default no-op implementations. Moreover, when initiating a JobLifecycleMgr,
+// we need to inject extra Error logic to the implementation, which is easier to do with a function pointer.
+type JobOutputHandler struct {
+	Prompt                 func(message string, details PromptDetails) ResponseOption
+	Info                   func(string)
+	Warn                   func(string)
+	E2EAwaitAllowOpenFiles func()
+}
 
-	OnScanProgress(progress ScanProgress) // only called during sync jobs
+type JobErrorHandler func(err string)
 
-	OnTransferProgress(progress TransferProgress)
-
-	OnComplete(summary JobSummary)
-
-	// TODO (gapra): Rename these variables at the end. Choosing not to at the moment to limit the scope of changes.
-	Error(string)
-
-	// Optional for AzCopy as a library users
-	Prompt(message string, details PromptDetails) ResponseOption
-	Info(string)
-	Warn(string)
+func NewDefaultOutputHandler() *JobOutputHandler {
+	return &JobOutputHandler{
+		Prompt:                 func(message string, details PromptDetails) ResponseOption { return EResponseOption.Default() },
+		Info:                   func(string) {},
+		Warn:                   func(string) {},
+		E2EAwaitAllowOpenFiles: func() {},
+	}
 }
 
 type JobSummary struct {
@@ -74,6 +78,7 @@ func (JobType) Copy() JobType      { return JobType(0) }
 func (JobType) Sync() JobType      { return JobType(1) }
 func (JobType) Resume() JobType    { return JobType(2) }
 func (JobType) Benchmark() JobType { return JobType(3) }
+func (JobType) Cancel() JobType    { return JobType(4) }
 
 type TransferProgress struct {
 	ListJobSummaryResponse

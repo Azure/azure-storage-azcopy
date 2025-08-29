@@ -250,6 +250,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.trailingDot,
 		},
+		JobErrorHandler: glcm.Error,
 	}
 
 	var srcReauthTok *common.ScopedAuthenticator

@@ -44,11 +44,12 @@ func newRemoveTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPart in
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.trailingDot,
 		},
+		JobErrorHandler: glcm.Error,
 	}
 
 	reportFirstPart := func(jobStarted bool) {
 		if jobStarted {
-			cca.waitUntilJobCompletion(false)
+			cca.waitUntilJobCompletion()
 		}
 	}
 	reportFinalPart := func() { cca.isEnumerationComplete = true }
