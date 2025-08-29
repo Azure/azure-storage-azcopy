@@ -684,12 +684,13 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 
 	// Verifies credential type and initializes credential info.
 	// Note that this is for the destination.
-	cca.credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination, false, cca.cpkOptions)
+	uotm := Client.GetUserOAuthTokenManagerInstance()
+	cca.credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination, false, uotm, cca.cpkOptions)
 	if err != nil {
 		return err
 	}
 
-	srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source, true, cca.cpkOptions)
+	srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source, true, uotm, cca.cpkOptions)
 	if err != nil {
 		return err
 	}
@@ -704,7 +705,6 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
 	// the info will be transferred to STE.
 	if cca.credentialInfo.CredentialType.IsAzureOAuth() || srcCredInfo.CredentialType.IsAzureOAuth() {
-		uotm := Client.GetUserOAuthTokenManagerInstance()
 		// Get token from env var or cache.
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return err
