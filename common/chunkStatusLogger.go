@@ -113,7 +113,7 @@ type WaitReason struct {
 // We use just the first letters of these when displaying perf states as we run (if enabled)
 // so try to keep the first letters unique (except for Done and Cancelled, which are not displayed, and so may duplicate the first letter of something else)
 func (WaitReason) Nothing() WaitReason              { return WaitReason{0, "Nothing"} }            // not waiting for anything
-func (WaitReason) CreateLocalFile() WaitReason      { return WaitReason{1, "CreateLocalFile"} }    // creating the local file
+func (WaitReason) CreateLocalFileSMB() WaitReason   { return WaitReason{1, "CreateLocalFile"} }    // creating the local file
 func (WaitReason) RAMToSchedule() WaitReason        { return WaitReason{2, "RAM"} }                // waiting for enough RAM to schedule the chunk
 func (WaitReason) WorkerGR() WaitReason             { return WaitReason{3, "Worker"} }             // waiting for a goroutine to start running our chunkfunc
 func (WaitReason) FilePacer() WaitReason            { return WaitReason{4, "FilePacer"} }          // waiting until the file-level pacer says its OK to process another chunk
@@ -181,7 +181,7 @@ var uploadWaitReasons = []WaitReason{
 // See comment on uploadWaitReasons for rationale.
 var downloadWaitReasons = []WaitReason{
 	// Done by the transfer initiation function (i.e. chunkfunc creation loop)
-	EWaitReason.CreateLocalFile(),
+	EWaitReason.CreateLocalFileSMB(),
 	EWaitReason.RAMToSchedule(),
 
 	// Waiting for a work Goroutine to pick up the chunkfunc and execute it.

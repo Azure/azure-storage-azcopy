@@ -739,7 +739,7 @@ func NewFolderPropertyOption(fromTo common.FromTo, recursive, stripTopDir bool, 
 	}
 
 	bothFolderAware := (fromTo.AreBothFolderAware() || preservePosixProperties || preservePermissions || includeDirectoryStubs) && !isDstNull
-	isRemoveFromFolderAware := fromTo == common.EFromTo.FileTrash()
+	isRemoveFromFolderAware := fromTo == common.EFromTo.FileSMBTrash()
 	if bothFolderAware || isRemoveFromFolderAware {
 		if !recursive {
 			return common.EFolderPropertiesOption.NoFolders(), // doesn't make sense to move folders when not recursive. E.g. if invoked with /* and WITHOUT recursive

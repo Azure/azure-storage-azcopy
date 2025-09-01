@@ -59,9 +59,9 @@ func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, fl
 		(fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFSBlob() || fromTo == common.EFromTo.BlobBlobFS() || fromTo == common.EFromTo.BlobFSBlobFS()) {
 		// the user probably knows what they're doing if they're trying to persist permissions between blob-type endpoints.
 		return nil
-	} else if toPreserve && !(fromTo == common.EFromTo.LocalFile() ||
-		fromTo == common.EFromTo.FileLocal() ||
-		fromTo == common.EFromTo.FileFile()) {
+	} else if toPreserve && !(fromTo == common.EFromTo.LocalFileSMB() ||
+		fromTo == common.EFromTo.FileSMBLocal() ||
+		fromTo == common.EFromTo.FileSMBFileSMB()) {
 		return fmt.Errorf("%s is set but the job is not between %s-aware resources", flagName, common.Iff(flagName == PreservePermissionsFlag, "permission", "SMB"))
 	}
 
@@ -94,9 +94,9 @@ func areBothLocationsSMBAware(fromTo common.FromTo) bool {
 	// 2. Download (Azure File -> Windows/Linux)
 	// 3. S2S (Azure File -> Azure File)
 	if (runtime.GOOS == "windows" || runtime.GOOS == "linux") &&
-		(fromTo == common.EFromTo.LocalFile() || fromTo == common.EFromTo.FileLocal()) {
+		(fromTo == common.EFromTo.LocalFileSMB() || fromTo == common.EFromTo.FileSMBLocal()) {
 		return true
-	} else if fromTo == common.EFromTo.FileFile() {
+	} else if fromTo == common.EFromTo.FileSMBFileSMB() {
 		return true
 	} else {
 		return false
@@ -337,7 +337,7 @@ func validateProtocolCompatibility(ctx context.Context, fromTo common.FromTo, sr
 
 	getUploadDownloadProtocol := func(fromTo common.FromTo) string {
 		switch fromTo {
-		case common.EFromTo.LocalFile(), common.EFromTo.FileLocal():
+		case common.EFromTo.LocalFileSMB(), common.EFromTo.FileSMBLocal():
 			return "SMB"
 		case common.EFromTo.LocalFileNFS(), common.EFromTo.FileNFSLocal():
 			return "NFS"
@@ -351,7 +351,7 @@ func validateProtocolCompatibility(ctx context.Context, fromTo common.FromTo, sr
 	// S2S Transfers
 	if fromTo.IsS2S() {
 		switch fromTo {
-		case common.EFromTo.FileFile():
+		case common.EFromTo.FileSMBFileSMB():
 			protocol = "SMB"
 		case common.EFromTo.FileNFSFileNFS():
 			protocol = "NFS"

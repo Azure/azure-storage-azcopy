@@ -28,7 +28,7 @@ func (s *FileOAuthTestSuite) Scenario_FileBlobOAuthNoError(svm *ScenarioVariatio
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
 					Recursive: pointerTo(true),
-					FromTo:    pointerTo(common.EFromTo.FileBlob()),
+					FromTo:    pointerTo(common.EFromTo.FileSMBBlob()),
 				},
 			},
 		})
@@ -72,7 +72,7 @@ func (s *FileOAuthTestSuite) Scenario_CopyFileBlobOAuth(svm *ScenarioVariationMa
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
 					Recursive: pointerTo(true),
-					FromTo:    pointerTo(common.EFromTo.FileBlob()),
+					FromTo:    pointerTo(common.EFromTo.FileSMBBlob()),
 				},
 				BlobType: pointerTo(blobType),
 			},
@@ -92,7 +92,7 @@ func (s *FileOAuthTestSuite) Scenario_SyncBlobOAuth(svm *ScenarioVariationManage
 				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{})},
 			Flags: CopySyncCommonFlags{
 				Recursive: pointerTo(true),
-				FromTo:    pointerTo(common.EFromTo.FileBlob()),
+				FromTo:    pointerTo(common.EFromTo.FileSMBBlob()),
 			},
 		})
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{}, true)

@@ -320,7 +320,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	var finalize func() error
 
 	switch cca.fromTo {
-	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile(), common.EFromTo.LocalFileNFS():
+	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFileSMB(), common.EFromTo.LocalFileNFS():
 		// Upload implies transferring from a local disk to a remote resource.
 		// In this scenario, the local disk (source) is scanned/indexed first because it is assumed that local file systems will be faster to enumerate than remote resources
 		// Then the destination is scanned and filtered based on what the destination contains

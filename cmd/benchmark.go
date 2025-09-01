@@ -230,7 +230,7 @@ func (raw rawBenchmarkCmdArgs) createCleanupJobArgs(benchmarkDest common.Resourc
 	case common.ELocation.Blob():
 		rc.fromTo = common.EFromTo.BlobTrash().String()
 	case common.ELocation.FileSMB(), common.ELocation.FileNFS():
-		rc.fromTo = common.EFromTo.FileTrash().String()
+		rc.fromTo = common.EFromTo.FileSMBTrash().String()
 	case common.ELocation.BlobFS():
 		rc.fromTo = common.EFromTo.BlobFSTrash().String()
 	default:

@@ -210,7 +210,7 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 		var errorMsg = ""
 		switch jpm.Plan().FromTo {
 		case common.EFromTo.LocalBlob(),
-			common.EFromTo.LocalFile(),
+			common.EFromTo.LocalFileSMB(),
 			common.EFromTo.LocalFileNFS(),
 			common.EFromTo.S3Blob(),
 			common.EFromTo.GCPBlob():
@@ -218,10 +218,10 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 				errorMsg = "The destination-sas switch must be provided to resume the job"
 			}
 		case common.EFromTo.BlobLocal(),
-			common.EFromTo.FileLocal(),
+			common.EFromTo.FileSMBLocal(),
 			common.EFromTo.FileNFSLocal(),
 			common.EFromTo.BlobTrash(),
-			common.EFromTo.FileTrash():
+			common.EFromTo.FileSMBTrash():
 			if len(req.SourceSAS) == 0 {
 				plan := jpm.Plan()
 				if plan.FromTo.From() == common.ELocation.Blob() {
@@ -234,7 +234,7 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 				errorMsg = "The source-sas switch must be provided to resume the job"
 			}
 		case common.EFromTo.BlobBlob(),
-			common.EFromTo.FileBlob():
+			common.EFromTo.FileSMBBlob():
 			if len(req.SourceSAS) == 0 ||
 				len(req.DestinationSAS) == 0 {
 

@@ -134,7 +134,7 @@ func (s *RemoveSuite) Scenario_RemoveFileWithOnlyDotsTrailingDotDisabled(svm *Sc
 			Flags: RemoveFlags{
 				TrailingDot: pointerTo(common.ETrailingDotOption.Disable()),
 				Recursive:   pointerTo(true),
-				FromTo:      pointerTo(common.EFromTo.FileTrash()),
+				FromTo:      pointerTo(common.EFromTo.FileSMBTrash()),
 				GlobalFlags: GlobalFlags{
 					OutputType: pointerTo(common.EOutputFormat.Text()),
 				},
@@ -190,7 +190,7 @@ func (s *RemoveSuite) Scenario_RemoveFileWithOnlyDotsEnabled(svm *ScenarioVariat
 			Flags: RemoveFlags{
 				TrailingDot: pointerTo(common.ETrailingDotOption.Enable()),
 				Recursive:   pointerTo(true),
-				FromTo:      pointerTo(common.EFromTo.FileTrash()),
+				FromTo:      pointerTo(common.EFromTo.FileSMBTrash()),
 			},
 		})
 

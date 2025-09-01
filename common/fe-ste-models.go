@@ -705,7 +705,7 @@ func (FromTo) Unknown() FromTo { return FromTo(0) }
 func (FromTo) LocalBlob() FromTo      { return FromToValue(ELocation.Local(), ELocation.Blob()) }
 func (FromTo) LocalFile() FromTo      { return FromToValue(ELocation.Local(), ELocation.FileSMB()) }
 func (FromTo) BlobLocal() FromTo      { return FromToValue(ELocation.Blob(), ELocation.Local()) }
-func (FromTo) FileLocal() FromTo      { return FromToValue(ELocation.FileSMB(), ELocation.Local()) }
+func (FromTo) FileSMBLocal() FromTo   { return FromToValue(ELocation.FileSMB(), ELocation.Local()) }
 func (FromTo) BlobPipe() FromTo       { return FromToValue(ELocation.Blob(), ELocation.Pipe()) }
 func (FromTo) PipeBlob() FromTo       { return FromToValue(ELocation.Pipe(), ELocation.Blob()) }
 func (FromTo) FilePipe() FromTo       { return FromToValue(ELocation.FileSMB(), ELocation.Pipe()) }
@@ -726,8 +726,8 @@ func (FromTo) BlobBlobFS() FromTo     { return FromToValue(ELocation.Blob(), ELo
 func (FromTo) FileBlobFS() FromTo     { return FromToValue(ELocation.FileSMB(), ELocation.BlobFS()) }
 func (FromTo) FileSMBBlobFS() FromTo  { return FromToValue(ELocation.FileSMB(), ELocation.BlobFS()) }
 func (FromTo) BlobBlob() FromTo       { return FromToValue(ELocation.Blob(), ELocation.Blob()) }
-func (FromTo) FileBlob() FromTo       { return FromToValue(ELocation.FileSMB(), ELocation.Blob()) }
 func (FromTo) FileSMBBlob() FromTo    { return FromToValue(ELocation.FileSMB(), ELocation.Blob()) }
+func (FromTo) FileBlob() FromTo       { return FromToValue(ELocation.FileSMB(), ELocation.Blob()) }
 func (FromTo) BlobFile() FromTo       { return FromToValue(ELocation.Blob(), ELocation.FileSMB()) }
 func (FromTo) BlobFileSMB() FromTo    { return FromToValue(ELocation.Blob(), ELocation.FileSMB()) }
 func (FromTo) FileFile() FromTo       { return FromToValue(ELocation.FileSMB(), ELocation.FileSMB()) }
@@ -735,12 +735,12 @@ func (FromTo) S3Blob() FromTo         { return FromToValue(ELocation.S3(), ELoca
 func (FromTo) GCPBlob() FromTo        { return FromToValue(ELocation.GCP(), ELocation.Blob()) }
 func (FromTo) BlobNone() FromTo       { return FromToValue(ELocation.Blob(), ELocation.None()) }
 func (FromTo) BlobFSNone() FromTo     { return FromToValue(ELocation.BlobFS(), ELocation.None()) }
-func (FromTo) FileNone() FromTo       { return FromToValue(ELocation.FileSMB(), ELocation.None()) }
+func (FromTo) FileSMBNone() FromTo    { return FromToValue(ELocation.FileSMB(), ELocation.None()) }
 func (FromTo) LocalFileNFS() FromTo   { return FromToValue(ELocation.Local(), ELocation.FileNFS()) }
 func (FromTo) FileNFSLocal() FromTo   { return FromToValue(ELocation.FileNFS(), ELocation.Local()) }
 func (FromTo) FileNFSFileNFS() FromTo { return FromToValue(ELocation.FileNFS(), ELocation.FileNFS()) }
 func (FromTo) LocalFileSMB() FromTo   { return FromToValue(ELocation.Local(), ELocation.FileSMB()) }
-func (FromTo) FileSMBLocal() FromTo   { return FromToValue(ELocation.FileSMB(), ELocation.Local()) }
+func (FromTo) FileLocal() FromTo      { return FromToValue(ELocation.FileSMB(), ELocation.Local()) }
 func (FromTo) FileSMBFileSMB() FromTo { return FromToValue(ELocation.FileSMB(), ELocation.FileSMB()) }
 func (FromTo) FileSMBFileNFS() FromTo { return FromToValue(ELocation.FileSMB(), ELocation.FileNFS()) }
 func (FromTo) FileNFSFileSMB() FromTo { return FromToValue(ELocation.FileNFS(), ELocation.FileSMB()) }
@@ -821,7 +821,7 @@ func (ft FromTo) BothSupportTrailingDot() bool {
 }
 
 func (ft FromTo) IsPropertyOnlyTransfer() bool {
-	return ft == EFromTo.BlobNone() || ft == EFromTo.BlobFSNone() || ft == EFromTo.FileNone()
+	return ft == EFromTo.BlobNone() || ft == EFromTo.BlobFSNone() || ft == EFromTo.FileSMBNone()
 }
 
 // TODO: deletes are not covered by the above Is* routines

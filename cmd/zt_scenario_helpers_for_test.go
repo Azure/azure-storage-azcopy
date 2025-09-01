@@ -994,7 +994,7 @@ func getDefaultRemoveRawInput(src string) rawCopyCmdArgs {
 	srcURL, _ := url.Parse(src)
 
 	if strings.Contains(srcURL.Host, "file") {
-		fromTo = common.EFromTo.FileTrash()
+		fromTo = common.EFromTo.FileSMBTrash()
 	} else if strings.Contains(srcURL.Host, "dfs") {
 		fromTo = common.EFromTo.BlobFSTrash()
 	}
@@ -1024,14 +1024,14 @@ func getDefaultSetPropertiesRawInput(src string, params transferParams) rawCopyC
 	case common.ELocation.BlobFS():
 		fromTo = common.EFromTo.BlobFSNone()
 	case common.ELocation.FileSMB():
-		fromTo = common.EFromTo.FileNone()
+		fromTo = common.EFromTo.FileSMBNone()
 	default:
 		panic(fmt.Sprintf("invalid source type %s to delete. azcopy support removing blobs/files/adls gen2", srcLocationType.String()))
 
 	}
 
 	if strings.Contains(srcURL.Host, "file") {
-		fromTo = common.EFromTo.FileNone()
+		fromTo = common.EFromTo.FileSMBNone()
 	} else if strings.Contains(srcURL.Host, "dfs") {
 		fromTo = common.EFromTo.BlobFSNone()
 	}

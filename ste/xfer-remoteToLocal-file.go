@@ -164,7 +164,7 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, pacer pacer, df downloaderFact
 		// We create the file to a temporary location with name .azcopy-<jobID>-<actualName> and then move it
 		// to correct name.
 		pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
-		jptm.LogChunkStatus(pseudoId, common.EWaitReason.CreateLocalFile())
+		jptm.LogChunkStatus(pseudoId, common.EWaitReason.CreateLocalFileSMB())
 		var needChunks bool
 		dstFile, needChunks, err = ctdl.CreateFile(jptm, info.getDownloadPath(), size, writeThrough, jptm.GetFolderCreationTracker())
 		jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone()) // normal setting to done doesn't apply to these pseudo ids
@@ -239,7 +239,7 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, pacer pacer, df downloaderFact
 			// We create the file to a temporary location with name .azcopy-<jobID>-<actualName> and then move it
 			// to correct name.
 			pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
-			jptm.LogChunkStatus(pseudoId, common.EWaitReason.CreateLocalFile())
+			jptm.LogChunkStatus(pseudoId, common.EWaitReason.CreateLocalFileSMB())
 			dstFile, err = createDestinationFile(jptm, info.getDownloadPath(), fileSize, writeThrough)
 			jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone()) // normal setting to done doesn't apply to these pseudo ids
 			if err != nil {
