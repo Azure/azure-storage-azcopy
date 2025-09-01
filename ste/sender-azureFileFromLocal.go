@@ -21,7 +21,9 @@
 package ste
 
 import (
+	"context"
 	"fmt"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -89,11 +91,21 @@ func (u *azureFileUploader) Epilogue() {
 
 			u.headersToApply.ContentMD5 = md5Hash
 			_, err := u.getFileClient().SetHTTPHeaders(u.ctx, &file.SetHTTPHeadersOptions{
-				HTTPHeaders: &u.headersToApply,
-				Permissions: &u.permissionsToApply,
+				HTTPHeaders:   &u.headersToApply,
+				Permissions:   &u.permissionsToApply,
 				SMBProperties: &u.smbPropertiesToApply,
 			})
 			return err
 		})
 	}
+}
+
+func (u *azureFileUploader) SendSymlink(ctx context.Context, linkData string) error {
+	_, err := u.getFileClient().CreateSymbolicLink(ctx, linkData, nil)
+	if err != nil {
+		u.jptm.FailActiveUpload("Creating symlink", err)
+		return fmt.Errorf("failed to create symlink: %w", err)
+	}
+	u.jptm.Log(common.LogDebug, fmt.Sprintf("Created symlink with data: %s", linkData))
+	return nil
 }

@@ -39,6 +39,7 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
 
 type localTraverser struct {
@@ -199,6 +200,20 @@ func writeToErrorChannel(errorChannel chan<- ErrorFileInfo, err ErrorFileInfo) {
 	}
 }
 
+func recordSymlink(symlinkPath string) {
+	targetPath, err := os.Readlink(symlinkPath)
+	if err != nil {
+		// TODO: handle error
+		fmt.Println("Error reading symlink:", err)
+	} else {
+		fmt.Println("Symlink points to:", targetPath)
+	}
+
+	// Record the symlink and its resolved target in the global map
+	fmt.Println("Recording symlink:", symlinkPath, "->", targetPath)
+	ste.AddSymlink(symlinkPath, targetPath)
+}
+
 // WalkWithSymlinks is a symlinks-aware, parallelized, version of filePath.Walk.
 // Separate this from the traverser for two purposes:
 // 1) Cleaner code
@@ -260,23 +275,30 @@ func WalkWithSymlinks(appCtx context.Context,
 			}
 			if fileInfo.Mode()&os.ModeSymlink != 0 {
 				if symlinkHandling.Preserve() {
-					// Handle it like it's not a symlink
-					result, err := filepath.Abs(filePath)
 
-					if err != nil {
-						WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get absolute path of %s: %s", filePath, err))
+					// For NFS transfers, record the symlink for deferred creation.
+					// This ensures symlinks are created only after all target files and directories exist,
+					// preventing broken links due to missing targets at the time of creation.
+					if isNFSCopy {
+						HandleSymlinkForNFS(fileInfo, symlinkHandling, incrementEnumerationCounter)
 						return nil
+					} else {
+						// // Handle it like it's not a symlink
+						result, err := filepath.Abs(filePath)
+						if err != nil {
+							WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get absolute path of %s: %s", filePath, err))
+							return nil
+						}
+
+						err = walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
+						// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
+						skipped, err := getProcessingError(err)
+
+						// If the file was skipped, don't record it.
+						if !skipped {
+							seenPaths.Record(common.ToExtendedPath(result))
+						}
 					}
-
-					err = walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
-					// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
-					skipped, err := getProcessingError(err)
-
-					// If the file was skipped, don't record it.
-					if !skipped {
-						seenPaths.Record(common.ToExtendedPath(result))
-					}
-
 					return err
 				}
 
@@ -680,19 +702,25 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 		if common.IsNFSCopy() {
 			if IsSymbolicLink(singleFileInfo) {
 				entityType = common.EEntityType.Symlink()
-				logSpecialFileWarning(singleFileInfo.Name())
-				if t.incrementEnumerationCounter != nil {
-					t.incrementEnumerationCounter(entityType)
+				HandleSymlinkForNFS(singleFileInfo, t.symlinkHandling, t.incrementEnumerationCounter)
+
+				// Skip the symlink if handling is set to 'None'
+				if t.symlinkHandling.None() {
+					return nil
 				}
-				return nil
-			} else if IsHardlink(singleFileInfo) {
+
+			case IsHardlink(singleFileInfo):
 				entityType = common.EEntityType.Hardlink()
 				LogHardLinkIfDefaultPolicy(singleFileInfo, t.hardlinkHandling)
-			} else if IsRegularFile(singleFileInfo) {
+
+			case IsRegularFile(singleFileInfo):
 				entityType = common.EEntityType.File()
-			} else {
+
+			default:
+				// Handle special or unsupported file types
 				entityType = common.EEntityType.Other()
-				logSpecialFileWarning(singleFileInfo.Name())
+				logSpecialFileWarning(name)
+
 				if t.incrementEnumerationCounter != nil {
 					t.incrementEnumerationCounter(entityType)
 				}
