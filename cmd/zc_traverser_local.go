@@ -303,8 +303,11 @@ func WalkWithSymlinks(appCtx context.Context,
 				}
 
 				if symlinkHandling.None() {
-					if isNFSCopy {
-						HandleSymlinkForNFS(fileInfo, symlinkHandling, incrementEnumerationCounter)
+					if common.IsNFSCopy() {
+						if incrementEnumerationCounter != nil {
+							incrementEnumerationCounter(common.EEntityType.Symlink())
+						}
+						logNFSLinkWarning(fileInfo.Name(), "", true)
 					}
 					return nil // skip it
 				}
@@ -382,7 +385,7 @@ func WalkWithSymlinks(appCtx context.Context,
 				}
 				return nil
 			} else {
-				if isNFSCopy {
+				if common.IsNFSCopy() {
 					LogHardLinkIfDefaultPolicy(fileInfo, hardlinkHandling)
 					if !IsRegularFile(fileInfo) && !fileInfo.IsDir() {
 						// We don't want to process other non-regular files here.
@@ -696,12 +699,8 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	if isSingleFile {
 
 		entityType := common.EEntityType.File()
-		// Handle NFS specific logic
-		if isNFSCopy {
-			name := singleFileInfo.Name()
-
-			switch {
-			case IsSymbolicLink(singleFileInfo):
+		if common.IsNFSCopy() {
+			if IsSymbolicLink(singleFileInfo) {
 				entityType = common.EEntityType.Symlink()
 				HandleSymlinkForNFS(singleFileInfo, t.symlinkHandling, t.incrementEnumerationCounter)
 
@@ -777,7 +776,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				}
 
 				// NFS Handling
-				if isNFSCopy {
+				if common.IsNFSCopy() {
 					if IsHardlink(fileInfo) {
 						entityType = common.EEntityType.Hardlink()
 					}
@@ -832,7 +831,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				fileInfo, _ := entry.Info()
 				if fileInfo.Mode()&os.ModeSymlink != 0 {
 					if t.symlinkHandling.None() {
-						if isNFSCopy && t.incrementEnumerationCounter != nil {
+						if common.IsNFSCopy() && t.incrementEnumerationCounter != nil {
 							t.incrementEnumerationCounter(common.EEntityType.Symlink())
 						}
 						continue
@@ -864,7 +863,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 					}
 				}
 				// NFS handling
-				if isNFSCopy {
+				if common.IsNFSCopy() {
 					if IsHardlink(fileInfo) {
 						entityType = common.EEntityType.Hardlink()
 					} else if !IsRegularFile(fileInfo) {

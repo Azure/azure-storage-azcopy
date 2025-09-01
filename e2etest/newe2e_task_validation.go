@@ -114,7 +114,7 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 				ValidatePropertyPtr(a, "Public access", vProps.BlobContainerProperties.Access, cProps.BlobContainerProperties.Access)
 			}
 
-			if manager.Location() == common.ELocation.File() {
+			if manager.Location() == common.ELocation.File() || manager.Location() == common.ELocation.FileNFS() {
 				ValidatePropertyPtr(a, "Enabled protocols", vProps.FileContainerProperties.EnabledProtocols, cProps.FileContainerProperties.EnabledProtocols)
 				ValidatePropertyPtr(a, "RootSquash", vProps.FileContainerProperties.RootSquash, cProps.FileContainerProperties.RootSquash)
 				ValidatePropertyPtr(a, "AccessTier", vProps.FileContainerProperties.AccessTier, cProps.FileContainerProperties.AccessTier)
@@ -164,7 +164,7 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 				ValidateTags(a, vProps.BlobProperties.Tags, oProps.BlobProperties.Tags)
 				ValidatePropertyPtr(a, "Block blob access tier", vProps.BlobProperties.BlockBlobAccessTier, oProps.BlobProperties.BlockBlobAccessTier)
 				ValidatePropertyPtr(a, "Page blob access tier", vProps.BlobProperties.PageBlobAccessTier, oProps.BlobProperties.PageBlobAccessTier)
-			case common.ELocation.File():
+			case common.ELocation.File(), common.ELocation.FileNFS():
 				ValidatePropertyPtr(a, "Attributes", vProps.FileProperties.FileAttributes, oProps.FileProperties.FileAttributes)
 				ValidatePropertyPtr(a, "Creation time", vProps.FileProperties.FileCreationTime, oProps.FileProperties.FileCreationTime)
 				ValidatePropertyPtr(a, "Last write time", vProps.FileProperties.FileLastWriteTime, oProps.FileProperties.FileLastWriteTime)
@@ -295,7 +295,7 @@ func ValidateListTextOutput(a Asserter, stdout AzCopyStdout, expectedObjects map
 	}
 
 	for _, line := range stdout.RawStdout() {
-		if line != "" {
+		if line != "" && !strings.HasPrefix(line, "WARN") {
 			// checking summary lines first if they exist
 			if strings.Contains(line, "File count:") {
 				fileCount := strings.Split(line, ":")
@@ -484,7 +484,7 @@ func ValidateDryRunOutput(a Asserter, output AzCopyStdout, rootSrc ResourceManag
 	}
 }
 
-func ValidateJobsListOutput(a Asserter, stdout AzCopyStdout, expectedJobIDs int) {
+func ValidateJobsListOutput(a Asserter, stdout AzCopyStdout, expectedJobIDs int, expectedJobs []string) {
 	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
 		return
 	}
@@ -492,6 +492,20 @@ func ValidateJobsListOutput(a Asserter, stdout AzCopyStdout, expectedJobIDs int)
 	jobsListStdout, ok := stdout.(*AzCopyParsedJobsListStdout)
 	a.AssertNow("stdout must be AzCopyParsedJobsListStdout", Equal{}, ok, true)
 	a.Assert("No of jobs executed should be equivalent", Equal{}, expectedJobIDs, jobsListStdout.JobsCount)
+
+	// Create a set of actual job IDs for efficient lookup
+	actualJobs := make(map[string]bool)
+	for _, job := range jobsListStdout.Jobs {
+		j := job.JobId.String()
+		actualJobs[j] = true
+	}
+
+	// Check if each expected job is in the actual jobs list
+	for _, expectedJob := range expectedJobs {
+		if _, found := actualJobs[expectedJob]; !found {
+			a.Assert(fmt.Sprintf("expected job with ID %s not found in jobs list", expectedJob), Always{})
+		}
+	}
 }
 
 func ValidateLogFileRetention(a Asserter, logsDir string, expectedLogFileToRetain int) {
