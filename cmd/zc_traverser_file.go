@@ -160,7 +160,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 	// We stop remove operations if file/dir name is only dots
 	checkAllDots := func(path string) bool {
-		return strings.Trim(path, ".") == ""
+		return path != "" && strings.Trim(path, ".") == ""
 	}
 	// if not pointing to a share, check if we are pointing to a single file
 	if targetURLParts.DirectoryOrFilePath != "" {
@@ -203,7 +203,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				targetURLParts.ShareName,
 			)
 			// NFS handling for different file types
-			if isNFSCopy {
+			if common.IsNFSCopy() {
 				if skip, err := evaluateAndLogNFSFileType(t.ctx, NFSFileMeta{
 					Name:        storedObject.name,
 					NFSFileType: *fileProperties.NFSFileType,
@@ -262,7 +262,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		// Check if the file is a symlink and should be skipped in case of NFS
 		// We don't want to skip the file if we are not using NFS
 		// Check if the file is a hard link and should be logged with proper message in case of NFS
-		if isNFSCopy {
+		if common.IsNFSCopy() {
 			if skip, err := evaluateAndLogNFSFileType(t.ctx, NFSFileMeta{
 				Name:        f.name,
 				NFSFileType: file.NFSFileType(fullProperties.NFSFileType()),

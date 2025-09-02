@@ -433,6 +433,7 @@ type RemoveFlags struct {
 	TrailingDot     *common.TrailingDotOption     `flag:"trailing-dot"`
 	CPKByName       *string                       `flag:"cpk-by-name"`
 	CPKByValue      *bool                         `flag:"cpk-by-value"`
+	ExcludePath     *string                       `flag:"exclude-path"`
 }
 
 func (r RemoveFlags) SerializeListingFile(in any, scenarioAsserter ScenarioAsserter, ctx context.Context) {
@@ -472,6 +473,26 @@ type LoginStatusFlags struct {
 	Tenant   *bool `flag:"tenant"`
 	Endpoint *bool `flag:"endpoint"`
 	Method   *bool `flag:"method"`
+}
+
+type JobsCleanFlags struct {
+	GlobalFlags
+
+	WithStatus *common.JobStatus `flag:"with-status"`
+}
+
+type JobsRemoveFlags struct {
+	GlobalFlags
+}
+
+type JobsListFlags struct {
+	GlobalFlags
+	WithStatus *common.JobStatus `flag:"with-status"`
+}
+
+type JobsShowFlags struct {
+	GlobalFlags
+	WithStatus *common.TransferStatus `flag:"with-status"`
 }
 
 type WindowsAttribute uint32

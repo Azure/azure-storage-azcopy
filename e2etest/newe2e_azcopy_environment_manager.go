@@ -127,6 +127,7 @@ func (envCtx *AzCopyEnvironmentContext) RegisterEnvironment(env *AzCopyEnvironme
 
 	env.EnvironmentId = pointerTo(uint(len(envCtx.Environments)))
 	env.ParentContext = envCtx
+	envCtx.Environments = append(envCtx.Environments, env)
 
 	return rc
 }
@@ -164,6 +165,7 @@ func (envCtx *AzCopyEnvironmentContext) DoCleanup(a Asserter) {
 		for _, logUpload := range envCtx.LogUploads {
 			env := envCtx.Environments[logUpload.EnvironmentID]
 			envUploadDir := envCtx.GetEnvUploadPath(env)
+			_ = os.MkdirAll(envUploadDir, 0770)
 
 			if len(logUpload.Stdout) > 0 {
 				logFile, err := os.Create(filepath.Join(envUploadDir, fmt.Sprintf(StdoutFmt, logUpload.RunID)))
@@ -209,6 +211,13 @@ func (env *AzCopyEnvironment) DoCleanup(a Asserter) {
 
 	// DRY
 	CopyDir := func(source, dest string) error {
+		if _, err := os.Stat(source); err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return nil
+			}
+
+		}
+
 		err := os.MkdirAll(dest, os.ModePerm|os.ModeDir)
 		if err != nil && !errors.Is(err, os.ErrExist) {
 			return fmt.Errorf("failed to create dest directory: %w", err)
