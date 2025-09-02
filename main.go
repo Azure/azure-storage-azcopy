@@ -21,13 +21,14 @@
 package main
 
 import (
+	"os"
+
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"os"
 )
 
 // get the lifecycle manager to print messages
-var glcm = common.GetLifecycleMgr()
+var glcm = cmd.GetLifecycleMgr()
 
 func main() {
 	if len(os.Args) == 1 {

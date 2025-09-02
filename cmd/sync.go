@@ -525,7 +525,7 @@ func (cca *cookedSyncCmdArgs) scanningComplete() bool {
 // wraps call to lifecycle manager to wait for the job to complete
 // if blocking is specified to true, then this method will never return
 // if blocking is specified to false, then another goroutine spawns and wait out the job
-func (cca *cookedSyncCmdArgs) waitUntilJobCompletion(blocking bool) {
+func (cca *cookedSyncCmdArgs) waitUntilJobCompletion() {
 	// print initial message to indicate that the job is starting
 	// Output the log location if log-level is set to other then NONE
 	var logPathFolder string
@@ -540,15 +540,11 @@ func (cca *cookedSyncCmdArgs) waitUntilJobCompletion(blocking bool) {
 	cca.intervalBytesTransferred = 0
 
 	glcm.InitiateProgressReporting(cca)
-	if blocking {
-		// blocking, hand over control to the lifecycle manager
-		glcm.SurrenderControl()
-	} else {
-		// non-blocking, return after spawning a go routine to watch the job
-	}
+	// non-blocking, return after spawning a go routine to watch the job
+
 }
 
-func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
+func (cca *cookedSyncCmdArgs) Cancel(lcm LifecycleMgr) {
 	// prompt for confirmation, except when enumeration is complete
 	if !cca.isEnumerationComplete {
 		answer := lcm.Prompt("The enumeration (source/destination comparison) is not complete, "+
@@ -573,7 +569,7 @@ func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
 	}
 }
 
-func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm common.LifecycleMgr, throughput float64) {
+func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm LifecycleMgr, throughput float64) {
 	scanProgress := common.ScanProgress{
 		Source:             atomic.LoadUint64(&cca.atomicSourceFilesScanned),
 		Destination:        atomic.LoadUint64(&cca.atomicDestinationFilesScanned),
@@ -596,7 +592,7 @@ func (cca *cookedSyncCmdArgs) getJsonOfSyncJobSummary(summary common.ListJobSumm
 	return string(jsonOutput)
 }
 
-func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint32) {
+func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm LifecycleMgr) (totalKnownCount uint32) {
 	duration := time.Since(cca.jobStartTime) // report the total run time of the job
 	var summary common.ListJobSummaryResponse
 	var throughput float64
@@ -609,7 +605,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 		totalKnownCount = summary.TotalTransfers
 
 		// compute the average throughput for the last time interval
-		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) * 8 / float64(base10Mega))
+		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) * 8 / float64(common.Base10Mega))
 		timeElapsed := time.Since(cca.intervalStartTime).Seconds()
 		throughput = common.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0)
 
@@ -732,7 +728,7 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 
 	// trigger the progress reporting
 	if !cca.dryrunMode {
-		cca.waitUntilJobCompletion(false)
+		cca.waitUntilJobCompletion()
 	}
 
 	// trigger the enumeration

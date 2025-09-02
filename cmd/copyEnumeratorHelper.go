@@ -27,7 +27,7 @@ func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer
 		}
 		// if the current part order sent to engine is 0, then start fetching the Job Progress summary.
 		if e.PartNum == 0 {
-			cca.waitUntilJobCompletion(false)
+			cca.waitUntilJobCompletion()
 		}
 		e.Transfers = common.Transfers{}
 		e.PartNum++
@@ -87,7 +87,7 @@ func dispatchFinalPart(e *common.CopyJobPartOrderRequest, cca *CookedCopyCmdArgs
 
 	// if the current part order sent to engine is 0, then start fetching the Job Progress summary.
 	if e.PartNum == 0 {
-		cca.waitUntilJobCompletion(false)
+		cca.waitUntilJobCompletion()
 	}
 	return nil
 }

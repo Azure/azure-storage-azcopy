@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"errors"
+
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -72,7 +73,7 @@ func HandlePauseCommand(jobIdString string) {
 	}
 
 	// TODO : Why isn't the response here used?
-	jobsAdmin.CancelPauseJobOrder(jobID, common.EJobStatus.Paused())
+	jobsAdmin.CancelPauseJobOrder(jobID, common.EJobStatus.Paused(), glcm.Error)
 	glcm.Exit(func(format common.OutputFormat) string {
 		return "Job " + jobID.String() + " paused successfully"
 	}, common.EExitCode.Success())
