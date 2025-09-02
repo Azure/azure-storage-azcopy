@@ -39,7 +39,6 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
 
 type localTraverser struct {
@@ -203,20 +202,6 @@ func writeToErrorChannel(errorChannel chan<- ErrorFileInfo, err ErrorFileInfo) {
 	}
 }
 
-func recordSymlink(symlinkPath string) {
-	targetPath, err := os.Readlink(symlinkPath)
-	if err != nil {
-		// TODO: handle error
-		fmt.Println("Error reading symlink:", err)
-	} else {
-		fmt.Println("Symlink points to:", targetPath)
-	}
-
-	// Record the symlink and its resolved target in the global map
-	fmt.Println("Recording symlink:", symlinkPath, "->", targetPath)
-	ste.AddSymlink(symlinkPath, targetPath)
-}
-
 // WalkWithSymlinks is a symlinks-aware, parallelized, version of filePath.Walk.
 // Separate this from the traverser for two purposes:
 // 1) Cleaner code
@@ -279,29 +264,24 @@ func WalkWithSymlinks(appCtx context.Context,
 				if fileInfo.Mode()&os.ModeSymlink != 0 {
 					if symlinkHandling.Preserve() {
 
-						if common.IsNFSCopy() {
-							HandleSymlinkForNFS(fileInfo, symlinkHandling, incrementEnumerationCounter)
-						} else {
+						// Handle it like it's not a symlink
+						result, err := filepath.Abs(filePath)
 
-							// Handle it like it's not a symlink
-							result, err := filepath.Abs(filePath)
-
-							if err != nil {
-								WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get absolute path of %s: %s", filePath, err))
-								return nil
-							}
-
-							err = walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
-							// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
-							skipped, err := getProcessingError(err)
-
-							// If the file was skipped, don't record it.
-							if !skipped {
-								seenPaths.Record(common.ToExtendedPath(result))
-							}
-
-							return err
+						if err != nil {
+							WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get absolute path of %s: %s", filePath, err))
+							return nil
 						}
+
+						err = walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
+						// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
+						skipped, err := getProcessingError(err)
+
+						// If the file was skipped, don't record it.
+						if !skipped {
+							seenPaths.Record(common.ToExtendedPath(result))
+						}
+
+						return err
 
 					}
 

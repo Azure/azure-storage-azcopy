@@ -58,7 +58,6 @@ func HandleSymlinkForNFS(singleFileInfo os.FileInfo, symlinkHandlingType common.
 			incrementEnumerationCounter(common.EEntityType.Symlink())
 		}
 	} else if symlinkHandlingType.Preserve() {
-		// Record the symlink for later processing
-		recordSymlink(singleFileInfo.Name())
+		//TODO
 	}
 }
