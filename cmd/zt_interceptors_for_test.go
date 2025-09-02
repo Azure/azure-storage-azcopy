@@ -136,10 +136,10 @@ func (m *mockedLifecycleManager) Error(msg string) {
 	default:
 	}
 }
-func (*mockedLifecycleManager) SurrenderControl()                               {}
-func (*mockedLifecycleManager) RegisterCloseFunc(func())                        {}
-func (mockedLifecycleManager) AllowReinitiateProgressReporting()                {}
-func (*mockedLifecycleManager) InitiateProgressReporting(common.WorkController) {}
+func (*mockedLifecycleManager) SurrenderControl()                        {}
+func (*mockedLifecycleManager) RegisterCloseFunc(func())                 {}
+func (mockedLifecycleManager) AllowReinitiateProgressReporting()         {}
+func (*mockedLifecycleManager) InitiateProgressReporting(WorkController) {}
 func (m *mockedLifecycleManager) SetOutputFormat(format common.OutputFormat) {
 	m.outputFormat = format
 }

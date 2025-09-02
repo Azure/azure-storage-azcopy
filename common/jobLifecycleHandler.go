@@ -22,24 +22,7 @@ package common
 
 import "time"
 
-type JobLifecycleHandler interface {
-	OnStart(ctx JobContext)
-
-	OnScanProgress(progress ScanProgress) // only called during sync jobs
-
-	OnTransferProgress(progress TransferProgress)
-
-	OnComplete(summary JobSummary)
-
-	// TODO (gapra): Rename these variables at the end. Choosing not to at the moment to limit the scope of changes.
-	Error(string)
-
-	// Optional for AzCopy as a library users
-	Prompt(message string, details PromptDetails) ResponseOption
-	Info(string)
-	Warn(string)
-}
-
+// TODO: (gapra) This code might only be used in cmd. If so, move it there.
 type JobSummary struct {
 	ExitCode ExitCode
 

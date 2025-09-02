@@ -33,8 +33,9 @@ import (
 )
 
 type ResumeJobOptions struct {
-	SourceSAS      string
-	DestinationSAS string
+	SourceSAS       string
+	DestinationSAS  string
+	JobErrorHandler common.JobErrorHandler // this is just temporary until the next PR where we move the job controller to this package
 }
 
 // ResumeJob resumes a job with the specified JobID.
@@ -47,11 +48,12 @@ func (c *Client) ResumeJob(jobID common.JobID, opts ResumeJobOptions) (err error
 
 	common.AzcopyCurrentJobLogger = common.NewJobLogger(c.CurrentJobID, c.GetLogLevel(), common.LogPathFolder, "")
 	common.AzcopyCurrentJobLogger.OpenLog()
-	common.GetLifecycleMgr().RegisterCloseFunc(func() {
-		if common.AzcopyCurrentJobLogger != nil {
-			common.AzcopyCurrentJobLogger.CloseLog()
-		}
-	})
+	// TODO : set glcm, register close func
+	//common.GetLifecycleMgr().RegisterCloseFunc(func() {
+	//	if common.AzcopyCurrentJobLogger != nil {
+	//		common.AzcopyCurrentJobLogger.CloseLog()
+	//	}
+	//})
 	// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter
 	// Subtract a few seconds, to ensure that this date DEFINITELY falls before the LMT of any file changed while this
 	// job is running. I.e. using this later with --include-after is _guaranteed_ to pick up all files that changed during
@@ -61,8 +63,6 @@ func (c *Client) ResumeJob(jobID common.JobID, opts ResumeJobOptions) (err error
 		common.IncludeBeforeFlagName, FormatAsUTC(adjustedTime),
 		common.IncludeAfterFlagName, FormatAsUTC(adjustedTime))
 	common.LogToJobLogWithPrefix(startTimeMessage, common.LogInfo)
-
-	// TODO : resume init, set glcm
 
 	// if no logging, set this empty so that we don't display the log location
 	if c.GetLogLevel() == common.LogNone {
@@ -115,6 +115,7 @@ func (c *Client) ResumeJob(jobID common.JobID, opts ResumeJobOptions) (err error
 		DestinationSAS:   destinationSAS,
 		SrcServiceClient: srcServiceClient,
 		DstServiceClient: dstServiceClient,
+		JobErrorHandler:  opts.JobErrorHandler, // TODO : (gapra) : pass a proper error handler - this is to come in the next PR.
 	})
 
 	if !resumeJobResponse.CancelledPauseResumed {

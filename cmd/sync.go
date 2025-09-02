@@ -548,7 +548,7 @@ func (cca *cookedSyncCmdArgs) waitUntilJobCompletion(blocking bool) {
 	}
 }
 
-func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
+func (cca *cookedSyncCmdArgs) Cancel(lcm LifecycleMgr) {
 	// prompt for confirmation, except when enumeration is complete
 	if !cca.isEnumerationComplete {
 		answer := lcm.Prompt("The enumeration (source/destination comparison) is not complete, "+
@@ -573,7 +573,7 @@ func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
 	}
 }
 
-func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm common.LifecycleMgr, throughput float64) {
+func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm LifecycleMgr, throughput float64) {
 	scanProgress := common.ScanProgress{
 		Source:             atomic.LoadUint64(&cca.atomicSourceFilesScanned),
 		Destination:        atomic.LoadUint64(&cca.atomicDestinationFilesScanned),
@@ -596,7 +596,7 @@ func (cca *cookedSyncCmdArgs) getJsonOfSyncJobSummary(summary common.ListJobSumm
 	return string(jsonOutput)
 }
 
-func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint32) {
+func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm LifecycleMgr) (totalKnownCount uint32) {
 	duration := time.Since(cca.jobStartTime) // report the total run time of the job
 	var summary common.ListJobSummaryResponse
 	var throughput float64
