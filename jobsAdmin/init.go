@@ -267,7 +267,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 		// Job with JobId does not exists
 		// Search the plan files in Azcopy folder
 		// and resurrect the Job
-		if !JobsAdmin.ResurrectJob(jobID, nil, nil, false, warnJobErrorHandler{jobID: jobID}) {
+		if !JobsAdmin.ResurrectJob(jobID, nil, nil, false, warnJobErrorHandler{jobID: jobID, methodName: "GetJobSummary"}) {
 			return common.ListJobSummaryResponse{
 				ErrorMsg: fmt.Sprintf("no job with JobId %v exists", jobID),
 			}
@@ -506,7 +506,7 @@ func ListJobTransfers(r common.ListJobTransfersRequest) common.ListJobTransfersR
 		// Job with JobId does not exists
 		// Search the plan files in Azcopy folder
 		// and resurrect the Job
-		if !JobsAdmin.ResurrectJob(r.JobID, nil, nil, false, warnJobErrorHandler{jobID: r.JobID}) {
+		if !JobsAdmin.ResurrectJob(r.JobID, nil, nil, false, warnJobErrorHandler{jobID: r.JobID, methodName: "ListJobTransfers"}) {
 			return common.ListJobTransfersResponse{
 				ErrorMsg: fmt.Sprintf("no job with JobId %v exists", r.JobID),
 			}
@@ -560,7 +560,7 @@ func GetJobDetails(r common.GetJobDetailsRequest) common.GetJobDetailsResponse {
 	if !found {
 		// Job with JobId does not exists.
 		// Search the plan files in Azcopy folder and resurrect the Job.
-		if !JobsAdmin.ResurrectJob(r.JobID, nil, nil, false, warnJobErrorHandler{jobID: r.JobID}) {
+		if !JobsAdmin.ResurrectJob(r.JobID, nil, nil, false, warnJobErrorHandler{jobID: r.JobID, methodName: "GetJobDetails"}) {
 			return common.GetJobDetailsResponse{
 				ErrorMsg: fmt.Sprintf("Job with JobID %v does not exist or is invalid", r.JobID),
 			}
@@ -594,9 +594,10 @@ func GetJobDetails(r common.GetJobDetailsRequest) common.GetJobDetailsResponse {
 }
 
 type warnJobErrorHandler struct {
-	jobID common.JobID
+	jobID      common.JobID
+	methodName string
 }
 
 func (w warnJobErrorHandler) Error(err string) {
-	common.GetLifecycleMgr().Warn("WARNING: we don't expect errors to be hit during GetJobDetails for job " + w.jobID.String() + ". error: " + err)
+	common.GetLifecycleMgr().Warn("WARNING: we don't expect errors to be hit during " + w.methodName + " for job " + w.jobID.String() + ". error: " + err)
 }
