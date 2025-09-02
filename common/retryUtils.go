@@ -21,11 +21,11 @@ type NetworkRetryConfig struct {
 // Default retry configuration
 func DefaultNetworkRetryConfig() NetworkRetryConfig {
 	return NetworkRetryConfig{
-		MaxRetries:        10,                // Maximum number of retry attempts
-		InitialDelay:      2 * time.Second,   // Initial delay before first retry
-		MaxDelay:          120 * time.Second, // Maximum delay between retries
-		BackoffMultiplier: 2.0,               // Exponential backoff multiplier
-		Enabled:           true,              // Retry enabled by default
+		MaxRetries:        5,                // Maximum number of retry attempts
+		InitialDelay:      1 * time.Second,  // Initial delay before first retry
+		MaxDelay:          30 * time.Second, // Maximum delay between retries
+		BackoffMultiplier: 2.0,              // Exponential backoff multiplier
+		Enabled:           true,             // Retry enabled by default
 	}
 }
 

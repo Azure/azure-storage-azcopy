@@ -90,6 +90,9 @@ func CreateS3Client(ctx context.Context, credInfo CredentialInfo, option Credent
 	}
 	//support custom credential provider
 	if credInfo.S3CredentialInfo.Provider != nil {
+		if logger == nil {
+			fmt.Println("Logger is nil")
+		}
 		fmt.Println("Using custom credentials")
 		creds := credentials.New(credInfo.S3CredentialInfo.Provider)
 		s3Client, err := minio.NewWithCredentials(credInfo.S3CredentialInfo.Endpoint, creds, true, credInfo.S3CredentialInfo.Region)
