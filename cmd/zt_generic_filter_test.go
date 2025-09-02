@@ -23,10 +23,12 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"github.com/stretchr/testify/assert"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
+	"github.com/stretchr/testify/assert"
 
 	chk "gopkg.in/check.v1"
 )
@@ -111,7 +113,7 @@ func TestDateParsingForIncludeAfter(t *testing.T) {
 	loc, _ := time.LoadLocation("Local")
 
 	for _, x := range examples {
-		t, err := IncludeAfterDateFilter{}.ParseISO8601(x.input, true)
+		t, err := azcopy.ParseISO8601(x.input, true)
 		if x.expectedErrorContents == "" {
 			a.Nil(err, x.input)
 			//fmt.Printf("%v -> %v\n", x.input, t)
@@ -152,14 +154,14 @@ func TestDateParsingForIncludeAfter_IsSafeAtDaylightSavingsTransition(t *testing
 	fmt.Println("Testing end of daylight saving at " + dateString + " local time")
 
 	// ask for the earliest of the two ambiguous times
-	parsed, err := IncludeAfterDateFilter{}.ParseISO8601(dateString, true) // we use chooseEarliest=true for includeAfter
+	parsed, err := azcopy.ParseISO8601(dateString, true) // we use chooseEarliest=true for includeAfter
 	a.Nil(err)
 	fmt.Printf("For chooseEarliest = true, the times are parsed %v, utcEarly %v, utcLate %v \n", parsed, utcEarlyVersion, utcLateVersion)
 	a.True(parsed.Equal(utcEarlyVersion))
 	a.False(parsed.Equal(utcLateVersion))
 
 	// ask for the latest of the two ambiguous times
-	parsed, err = IncludeAfterDateFilter{}.ParseISO8601(dateString, false) // we test the false case in this test too, just for completeness
+	parsed, err = azcopy.ParseISO8601(dateString, false) // we test the false case in this test too, just for completeness
 	a.Nil(err)
 	fmt.Printf("For chooseEarliest = false, the times are parsed %v, utcEarly %v, utcLate %v \n", parsed, utcEarlyVersion, utcLateVersion)
 	a.False(parsed.UTC().Equal(utcEarlyVersion))

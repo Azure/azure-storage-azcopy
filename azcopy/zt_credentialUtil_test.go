@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package azcopy
 
 import (
 	"context"
@@ -138,8 +138,8 @@ func TestIsPublic(t *testing.T) {
 
 	//a := assert.New(t)
 	//ctx, _ := context.WithTimeout(context.TODO(), 5*time.Minute)
-	//bsc := getBlobServiceClient()
-	//ctr, _ := getContainerClient(a, bsc)
+	//bsc := cmd.getBlobServiceClient()
+	//ctr, _ := cmd.getContainerClient(a, bsc)
 	//defer ctr.Delete(ctx, nil)
 	//
 	//publicAccess := container.PublicAccessTypeContainer
@@ -149,17 +149,17 @@ func TestIsPublic(t *testing.T) {
 	//a.Nil(err)
 	//
 	//// verify that container is public
-	//a.True(isPublic(ctx, ctr.URL(), common.CpkOptions{}))
+	//a.True(cmd.isPublic(ctx, ctr.URL(), common.CpkOptions{}))
 	//
 	//publicAccess = container.PublicAccessTypeBlob
 	//_, err = ctr.SetAccessPolicy(ctx, &container.SetAccessPolicyOptions{Access: &publicAccess})
 	//a.Nil(err)
 	//
 	//// Verify that blob is public.
-	//bb, _ := getBlockBlobClient(a, ctr, "")
+	//bb, _ := cmd.getBlockBlobClient(a, ctr, "")
 	//_, err = bb.UploadBuffer(ctx, []byte("I'm a block blob."), nil)
 	//a.Nil(err)
 	//
-	//a.True(isPublic(ctx, bb.URL(), common.CpkOptions{}))
+	//a.True(cmd.isPublic(ctx, bb.URL(), common.CpkOptions{}))
 
 }
