@@ -30,6 +30,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -724,6 +725,14 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 					jm.Log(common.LogInfo, fmt.Sprintf("%s %s successfully completed, cancelled or paused", partDescription, jm.jobID.String()))
 				}
 
+				if jobStatus == common.EJobStatus.InProgress() && partDescription == "all parts of entire Job" {
+					if common.IsNFSCopy() {
+						if err := jm.waitForSymlinkCopy(); err != nil {
+							jm.Log(common.LogError, fmt.Sprintf("Failed to wait for symlink copy: %v", err))
+						}
+					}
+				}
+
 				switch part0Plan.JobStatus() {
 				case common.EJobStatus.Cancelling():
 					part0Plan.SetJobStatus(common.EJobStatus.Cancelled())
@@ -753,6 +762,75 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 
 func (jm *jobMgr) getInMemoryTransitJobState() InMemoryTransitJobState {
 	return jm.inMemoryTransitJobState
+}
+
+// symlink map to record the symlinks to be created at the end of the job
+var (
+	symlinkMap   = make(map[string]string) // symlink path -> resolved target path
+	symlinkMapMu sync.Mutex                // mutex to protect concurrent access
+)
+
+func GetSymlinkMap() map[string]string {
+	symlinkMapMu.Lock()
+	defer symlinkMapMu.Unlock()
+	// Return a copy of the symlink map to avoid concurrent modification issues
+	copiedMap := make(map[string]string, len(symlinkMap))
+	for k, v := range symlinkMap {
+		copiedMap[k] = v
+	}
+	return copiedMap
+}
+
+func AddSymlink(symlinkPath, targetPath string) {
+	symlinkMapMu.Lock()
+	defer symlinkMapMu.Unlock()
+	// Add or update the symlink path and its target
+	symlinkMap[symlinkPath] = targetPath
+}
+
+func (jm *jobMgr) waitForSymlinkCopy() error {
+	jobPart0Mgr, ok := jm.jobPartMgrs.Get(0)
+	if !ok {
+		jm.Panic(fmt.Errorf("Failed to find Job %v, Part #0", jm.jobID))
+	}
+
+	_, dst, _ := jobPart0Mgr.Plan().TransferSrcDstStrings(0)
+	fromTo := jobPart0Mgr.Plan().FromTo
+
+	switch fromTo.To() {
+	case common.ELocation.FileNFS():
+		serviceClient, err := jobPart0Mgr.DstServiceClient().FileServiceClient()
+		if err != nil {
+			return err
+		}
+
+		fileURLParts, err := file.ParseURL(dst)
+		if err != nil {
+			return fmt.Errorf("error parsing URL %w", err)
+		}
+
+		shareClient := serviceClient.NewShareClient(fileURLParts.ShareName)
+		if fileURLParts.ShareSnapshot != "" {
+			shareClient, err = shareClient.WithSnapshot(fileURLParts.ShareSnapshot)
+		}
+
+		fileClient := shareClient.NewRootDirectoryClient().NewFileClient(fileURLParts.DirectoryOrFilePath)
+
+		ctx := context.Background()
+		for symlinkPath := range GetSymlinkMap() {
+			_, err = fileClient.CreateSymbolicLink(ctx, symlinkPath, nil)
+			if err != nil {
+				jm.Log(common.LogDebug, fmt.Sprintf("Creating symlink %s failed: %v", symlinkPath, err))
+				return fmt.Errorf("failed to create symlink: %w", err)
+			}
+
+			jm.Log(common.LogDebug, fmt.Sprintf("Created symlink with data: %s", symlinkPath))
+		}
+
+	default:
+		jm.Log(common.LogDebug, "Symlink creation is only supported for NFS destination")
+	}
+	return nil
 }
 
 // Note: InMemoryTransitJobState should only be set when request come from cmd(FE) module to STE module.

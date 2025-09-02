@@ -22,6 +22,7 @@ package ste
 
 import (
 	"fmt"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -89,11 +90,22 @@ func (u *azureFileUploader) Epilogue() {
 
 			u.headersToApply.ContentMD5 = md5Hash
 			_, err := u.getFileClient().SetHTTPHeaders(u.ctx, &file.SetHTTPHeadersOptions{
-				HTTPHeaders: &u.headersToApply,
-				Permissions: &u.permissionsToApply,
+				HTTPHeaders:   &u.headersToApply,
+				Permissions:   &u.permissionsToApply,
 				SMBProperties: &u.smbPropertiesToApply,
 			})
 			return err
 		})
 	}
+}
+
+// SendSymlink creates a symbolic link on Azure Files NFS with the given link data.
+func (u *azureFileUploader) SendSymlink(linkData string) error {
+	_, err := u.getFileClient().CreateSymbolicLink(u.ctx, linkData, nil)
+	if err != nil {
+		u.jptm.FailActiveUpload("Creating symlink", err)
+		return fmt.Errorf("failed to create symlink: %w", err)
+	}
+	u.jptm.Log(common.LogDebug, fmt.Sprintf("Created symlink with data: %s", linkData))
+	return nil
 }
