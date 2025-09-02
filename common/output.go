@@ -70,6 +70,14 @@ func (PromptType) DeleteDestination() PromptType { return PromptType("DeleteDest
 // -------------------------------------- JSON templates -------------------------------------- //
 // used to help formatting of JSON outputs
 
+// defines the general output template when the format is set to json
+type JsonOutputTemplate struct {
+	TimeStamp      time.Time
+	MessageType    string
+	MessageContent string // a simple string for INFO and ERROR, a serialized JSON for INIT, PROGRESS, EXIT
+	PromptDetails  PromptDetails
+}
+
 func GetJsonStringFromTemplate(template interface{}) string {
 	jsonOutput, err := json.Marshal(template)
 	PanicIfErr(err)

@@ -726,15 +726,7 @@ func (m outputMessage) shouldExitProcess() bool {
 		(m.msgType == common.EOutputMessageType.EndOfJob() && !(m.exitCode == common.EExitCode.NoExit()))
 }
 
-// defines the general output template when the format is set to json
-type JsonOutputTemplate struct {
-	TimeStamp      time.Time
-	MessageType    string
-	MessageContent string // a simple string for INFO and ERROR, a serialized JSON for INIT, PROGRESS, EXIT
-	PromptDetails  common.PromptDetails
-}
-
-func newJsonOutputTemplate(messageType common.OutputMessageType, messageContent string, promptDetails common.PromptDetails) *JsonOutputTemplate {
-	return &JsonOutputTemplate{TimeStamp: time.Now(), MessageType: messageType.String(),
+func newJsonOutputTemplate(messageType common.OutputMessageType, messageContent string, promptDetails common.PromptDetails) *common.JsonOutputTemplate {
+	return &common.JsonOutputTemplate{TimeStamp: time.Now(), MessageType: messageType.String(),
 		MessageContent: messageContent, PromptDetails: promptDetails}
 }
