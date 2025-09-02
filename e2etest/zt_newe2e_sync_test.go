@@ -548,3 +548,11 @@ func (s *SyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationMan
 		Objects: srcMap,
 	}, false)
 }
+
+// TODO WIP
+//func (s *SyncTestSuite) Scenario_TestSyncPreserveRootProps(svm *ScenarioVariationManager) {
+//	srcObj := CreateResource[ContainerResourceManager]()
+//	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm,
+//		ResolveVariation(svm, []common.Location{ common.ELocation.Blob(), common.ELocation.BlobFS(), common.ELocation.File()})),
+//		ResourceDefinitionContainer{}).GetObject(svm, "dir/root/file1", common.EEntityType.Folder())
+//}
