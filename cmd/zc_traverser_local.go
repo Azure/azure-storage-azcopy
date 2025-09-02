@@ -58,9 +58,6 @@ type localTraverser struct {
 	hardlinkHandling  common.HardlinkHandlingType
 }
 
-type symlinkTransferDetails struct {
-}
-
 func (t *localTraverser) IsDirectory(bool) (bool, error) {
 	if strings.HasSuffix(t.fullPath, "/") {
 		return true, nil
@@ -230,7 +227,6 @@ func WalkWithSymlinks(appCtx context.Context,
 
 	walkQueue := []walkItem{{fullPath: fullPath, relativeBase: ""}}
 
-	// Initialize seen paths recorder
 	// do NOT put fullPath: true into the map at this time, because we want to match the semantics of filepath.Walk, where the walkfunc is called for the root
 	// When following symlinks, our current implementation tracks folders and files.  Which may consume GB's of RAM when there are 10s of millions of files.
 	var seenPaths seenPathsRecorder = &nullSeenPathsRecorder{} // uses no RAM
@@ -243,182 +239,177 @@ func WalkWithSymlinks(appCtx context.Context,
 		walkQueue = walkQueue[1:]
 		// walk contents of this queueItem in parallel
 		// (for simplicity of coding, we don't parallelize across multiple queueItems)
-		parallel.Walk(appCtx,
-			queueItem.fullPath,
-			EnumerationParallelism,
-			EnumerationParallelStatFiles,
-			func(filePath string, fileInfo os.FileInfo, fileError error) error {
+		parallel.Walk(appCtx, queueItem.fullPath, EnumerationParallelism, EnumerationParallelStatFiles, func(filePath string, fileInfo os.FileInfo, fileError error) error {
+			if fileError != nil {
+				WarnStdoutAndScanningLog(fmt.Sprintf("Accessing '%s' failed with error: %s", filePath, fileError.Error()))
+				writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: fileError})
+				return nil
+			}
+			computedRelativePath := strings.TrimPrefix(cleanLocalPath(filePath), cleanLocalPath(queueItem.fullPath))
+			computedRelativePath = cleanLocalPath(common.GenerateFullPath(queueItem.relativeBase, computedRelativePath))
+			computedRelativePath = strings.TrimPrefix(computedRelativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 
-				if fileError != nil {
-					return handleFileError(filePath, fileInfo, fileError, errorChannel)
-				}
+			if computedRelativePath == "." {
+				computedRelativePath = ""
+			}
 
-				computedRelativePath := getComputedRelativePath(queueItem.fullPath, queueItem.relativeBase, filePath)
-
-				if fileInfo == nil {
-					err := fmt.Errorf("fileInfo is nil for file %s", filePath)
-					WarnStdoutAndScanningLog(err.Error())
-					return nil
-				}
-
-				if fileInfo.Mode()&os.ModeSymlink != 0 {
-					if symlinkHandling.Preserve() {
-
-						// Handle it like it's not a symlink
-						result, err := filepath.Abs(filePath)
-
-						if err != nil {
-							WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get absolute path of %s: %s", filePath, err))
-							return nil
-						}
-
-						err = walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
-						// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
-						skipped, err := getProcessingError(err)
-
-						// If the file was skipped, don't record it.
-						if !skipped {
-							seenPaths.Record(common.ToExtendedPath(result))
-						}
-
-						return err
-
-					}
-
-					if symlinkHandling.None() {
-						if common.IsNFSCopy() {
-							if incrementEnumerationCounter != nil {
-								incrementEnumerationCounter(common.EEntityType.Symlink())
-							}
-							logNFSLinkWarning(fileInfo.Name(), "", true)
-						}
-						return nil // skip it
-					}
-
-					/*
-					 * There is one case where symlink can point to outside of sharepoint(symlink is absolute path). In that case
-					 * we need to throw error. Its very unlikely same file or folder present on the agent side.
-					 * In that case it anywaythrow the error.
-					 *
-					 * TODO: Need to handle this case.
-					 */
-					result, err := UnfurlSymlinks(filePath)
-
-					if err != nil {
-						err = fmt.Errorf("failed to resolve symlink %s: %w", filePath, err)
-						return handleFileError(filePath, fileInfo, err, errorChannel)
-					}
-
-					result, err = filepath.Abs(result)
-					if err != nil {
-						err = fmt.Errorf("failed to get absolute path of symlink result %s: %w", filePath, err)
-						return handleFileError(filePath, fileInfo, err, errorChannel)
-					}
-
-					slPath, err := filepath.Abs(filePath)
-					if err != nil {
-						err = fmt.Errorf("failed to get absolute path of %s: %w", filePath, err)
-						return handleFileError(filePath, fileInfo, err, errorChannel)
-					}
-
-					rStat, err := os.Stat(result)
-					if err != nil {
-						err = fmt.Errorf("failed to get properties of symlink target at %s: %w", result, err)
-						return handleFileError(filePath, fileInfo, err, errorChannel)
-					}
-
-					if rStat.IsDir() {
-						if !seenPaths.HasSeen(result) {
-							err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), symlinkTargetFileInfo{rStat, fileInfo.Name()}, fileError)
-							// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
-							skipped, err := getProcessingError(err)
-
-							if !skipped { // Don't go any deeper (or record it) if we skipped it.
-								seenPaths.Record(common.ToExtendedPath(result))
-								seenPaths.Record(common.ToExtendedPath(slPath)) // Note we've seen the symlink as well. We shouldn't ever have issues if we _don't_ do this because we'll just catch it by symlink result
-								walkQueue = append(walkQueue, walkItem{
-									fullPath:     result,
-									relativeBase: computedRelativePath,
-								})
-							}
-							// enumerate the FOLDER now (since its presence in seenDirs will prevent its properties getting enumerated later)
-							return err
-						} else {
-							WarnStdoutAndScanningLog(fmt.Sprintf("Ignored already linked directory pointed at %s (link at %s)", result, common.GenerateFullPath(fullPath, computedRelativePath)))
-						}
-					} else {
-						// It's a symlink to a file and we handle cyclic symlinks.
-						// (this does create the inconsistency that if there are two symlinks to the same file we will process it twice,
-						// but if there are two symlinks to the same directory we will process it only once. Because only directories are
-						// deduped to break cycles.  For now, we are living with the inconsistency. The alternative would be to "burn" more
-						// RAM by putting filepaths into seenDirs too, but that could be a non-trivial amount of RAM in big directories trees).
-						targetFi := symlinkTargetFileInfo{rStat, fileInfo.Name()}
-
-						err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), targetFi, fileError)
-						_, err = getProcessingError(err)
-						return err
-					}
-					return nil
-				} else {
-					if common.IsNFSCopy() {
-						LogHardLinkIfDefaultPolicy(fileInfo, hardlinkHandling)
-						if !IsRegularFile(fileInfo) && !fileInfo.IsDir() {
-							// We don't want to process other non-regular files here.
-							if incrementEnumerationCounter != nil {
-								incrementEnumerationCounter(common.EEntityType.Other())
-							}
-							logSpecialFileWarning(fileInfo.Name())
-							return nil
-						}
-					}
-					// not a symlink
+			if fileInfo == nil {
+				err := fmt.Errorf("fileInfo is nil for file %s", filePath)
+				WarnStdoutAndScanningLog(err.Error())
+				return nil
+			}
+			if fileInfo.Mode()&os.ModeSymlink != 0 {
+				if symlinkHandling.Preserve() {
+					// Handle it like it's not a symlink
 					result, err := filepath.Abs(filePath)
 
 					if err != nil {
-						err = fmt.Errorf("failed to get absolute path of %s: %w", filePath, err)
-						WarnStdoutAndScanningLog(err.Error())
-						writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+						WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get absolute path of %s: %s", filePath, err))
 						return nil
 					}
 
+					err = walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
+					// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
+					skipped, err := getProcessingError(err)
+
+					// If the file was skipped, don't record it.
+					if !skipped {
+						seenPaths.Record(common.ToExtendedPath(result))
+					}
+
+					return err
+				}
+
+				if symlinkHandling.None() {
+					if common.IsNFSCopy() {
+						if incrementEnumerationCounter != nil {
+							incrementEnumerationCounter(common.EEntityType.Symlink())
+						}
+						logNFSLinkWarning(fileInfo.Name(), "", true)
+					}
+					return nil // skip it
+				}
+
+				/*
+				 * There is one case where symlink can point to outside of sharepoint(symlink is absolute path). In that case
+				 * we need to throw error. Its very unlikely same file or folder present on the agent side.
+				 * In that case it anywaythrow the error.
+				 *
+				 * TODO: Need to handle this case.
+				 */
+				result, err := UnfurlSymlinks(filePath)
+
+				if err != nil {
+					err = fmt.Errorf("failed to resolve symlink %s: %w", filePath, err)
+					WarnStdoutAndScanningLog(err.Error())
+					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+					return nil
+				}
+
+				result, err = filepath.Abs(result)
+				if err != nil {
+					err = fmt.Errorf("failed to get absolute path of symlink result %s: %w", filePath, err)
+					WarnStdoutAndScanningLog(err.Error())
+					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+					return nil
+				}
+
+				slPath, err := filepath.Abs(filePath)
+				if err != nil {
+					err = fmt.Errorf("failed to get absolute path of %s: %w", filePath, err)
+					WarnStdoutAndScanningLog(err.Error())
+					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+					return nil
+				}
+
+				rStat, err := os.Stat(result)
+				if err != nil {
+					err = fmt.Errorf("failed to get properties of symlink target at %s: %w", result, err)
+					WarnStdoutAndScanningLog(err.Error())
+					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+					return nil
+				}
+
+				if rStat.IsDir() {
 					if !seenPaths.HasSeen(result) {
-						err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
+						err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), symlinkTargetFileInfo{rStat, fileInfo.Name()}, fileError)
 						// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
 						skipped, err := getProcessingError(err)
 
-						// If the file was skipped, don't record it.
-						if !skipped {
+						if !skipped { // Don't go any deeper (or record it) if we skipped it.
 							seenPaths.Record(common.ToExtendedPath(result))
+							seenPaths.Record(common.ToExtendedPath(slPath)) // Note we've seen the symlink as well. We shouldn't ever have issues if we _don't_ do this because we'll just catch it by symlink result
+							walkQueue = append(walkQueue, walkItem{
+								fullPath:     result,
+								relativeBase: computedRelativePath,
+							})
 						}
-
+						// enumerate the FOLDER now (since its presence in seenDirs will prevent its properties getting enumerated later)
 						return err
 					} else {
-						if fileInfo.IsDir() {
-							// We can't output a warning here (and versions 10.3.x never did)
-							// because we'll hit this for the directory that is the direct (root) target of any symlink, so any warning here would be a red herring.
-							// In theory there might be cases when a warning here would be correct - but they are rare and too hard to identify in our code
-						} else {
-							WarnStdoutAndScanningLog(fmt.Sprintf("Ignored already seen file located at %s (found at %s)", filePath, common.GenerateFullPath(fullPath, computedRelativePath)))
+						WarnStdoutAndScanningLog(fmt.Sprintf("Ignored already linked directory pointed at %s (link at %s)", result, common.GenerateFullPath(fullPath, computedRelativePath)))
+					}
+				} else {
+					// It's a symlink to a file and we handle cyclic symlinks.
+					// (this does create the inconsistency that if there are two symlinks to the same file we will process it twice,
+					// but if there are two symlinks to the same directory we will process it only once. Because only directories are
+					// deduped to break cycles.  For now, we are living with the inconsistency. The alternative would be to "burn" more
+					// RAM by putting filepaths into seenDirs too, but that could be a non-trivial amount of RAM in big directories trees).
+					targetFi := symlinkTargetFileInfo{rStat, fileInfo.Name()}
+
+					err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), targetFi, fileError)
+					_, err = getProcessingError(err)
+					return err
+				}
+				return nil
+			} else {
+				if common.IsNFSCopy() {
+					LogHardLinkIfDefaultPolicy(fileInfo, hardlinkHandling)
+					if !IsRegularFile(fileInfo) && !fileInfo.IsDir() {
+						// We don't want to process other non-regular files here.
+						if incrementEnumerationCounter != nil {
+							incrementEnumerationCounter(common.EEntityType.Other())
 						}
+						logSpecialFileWarning(fileInfo.Name())
 						return nil
 					}
 				}
-			})
+				// not a symlink
+				result, err := filepath.Abs(filePath)
+
+				if err != nil {
+					err = fmt.Errorf("failed to get absolute path of %s: %w", filePath, err)
+					WarnStdoutAndScanningLog(err.Error())
+					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+					return nil
+				}
+
+				if !seenPaths.HasSeen(result) {
+					err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
+					// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
+					skipped, err := getProcessingError(err)
+
+					// If the file was skipped, don't record it.
+					if !skipped {
+						seenPaths.Record(common.ToExtendedPath(result))
+					}
+
+					return err
+				} else {
+					if fileInfo.IsDir() {
+						// We can't output a warning here (and versions 10.3.x never did)
+						// because we'll hit this for the directory that is the direct (root) target of any symlink, so any warning here would be a red herring.
+						// In theory there might be cases when a warning here would be correct - but they are rare and too hard to identify in our code
+					} else {
+						WarnStdoutAndScanningLog(fmt.Sprintf("Ignored already seen file located at %s (found at %s)", filePath, common.GenerateFullPath(fullPath, computedRelativePath)))
+					}
+					return nil
+				}
+			}
+		})
 	}
 
 	return
-}
-
-func getComputedRelativePath(basePath, relativeBase, currentPath string) string {
-	computed := strings.TrimPrefix(cleanLocalPath(currentPath), cleanLocalPath(basePath))
-	computed = cleanLocalPath(common.GenerateFullPath(relativeBase, computed))
-	return strings.TrimPrefix(computed, common.AZCOPY_PATH_SEPARATOR_STRING)
-}
-
-func handleFileError(filePath string, fileInfo os.FileInfo, fileErr error, errorChannel chan<- ErrorFileInfo) error {
-	WarnStdoutAndScanningLog(fmt.Sprintf("Accessing '%s' failed: %v", filePath, fileErr))
-	writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: fileErr})
-	return nil
 }
 
 func (t *localTraverser) GetHashData(relPath string) (*common.SyncHashData, error) {
@@ -689,7 +680,10 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 		if common.IsNFSCopy() {
 			if IsSymbolicLink(singleFileInfo) {
 				entityType = common.EEntityType.Symlink()
-				HandleSymlinkForNFS(singleFileInfo, t.symlinkHandling, t.incrementEnumerationCounter)
+				logSpecialFileWarning(singleFileInfo.Name())
+				if t.incrementEnumerationCounter != nil {
+					t.incrementEnumerationCounter(entityType)
+				}
 				return nil
 			} else if IsHardlink(singleFileInfo) {
 				entityType = common.EEntityType.Hardlink()
