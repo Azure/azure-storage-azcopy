@@ -11,18 +11,21 @@ import (
 	"syscall"
 )
 
-// isProcessRunning checks if a process with the given PID is running
+// isProcessRunning checks if a process with the given PID is running.
+// It is part of the cleanup of pids dir
+// This will ensure we only warn about multiple *active* processes and not just the presence of pid file.
 func isProcessRunning(pid int) bool {
-	// In Unix, this can falsely return a Process for pid even when it does not exist
-	// We perform a signal check to test
 	process, err := os.FindProcess(pid)
 	if err != nil {
 		return false
 	}
 	if runtime.GOOS == "windows" {
-		return true
+		return true // If it passes err handling above, the process is active.
 	}
 	// In Unix, we need to check whether the process actually exists
+	// os.FindProcess falsely returns a Process for pid even when it does not exist
+	// We perform a signal check to test
+	// https://go.dev/pkg/os/?m=all,old#FindProcess
 	err = process.Signal(syscall.Signal(0))
 	return err == nil
 }
@@ -31,6 +34,7 @@ func isProcessRunning(pid int) bool {
 func cleanupStalePidFiles(pidsSubDir string, currentPid int) error {
 	f, err := os.Open(pidsSubDir)
 	if err != nil {
+		glcm.Error("failed to open pids dir" + err.Error())
 		return err
 	}
 	defer f.Close()
@@ -46,7 +50,11 @@ func cleanupStalePidFiles(pidsSubDir string, currentPid int) error {
 		pid, err := strconv.Atoi(pidStr)
 		if err != nil {
 			// Not a valid PID, remove the file
-			os.Remove(path.Join(pidsSubDir, fileName))
+			err := os.Remove(path.Join(pidsSubDir, fileName))
+			if err != nil {
+				glcm.Error("failed to remove invalid pid file" + err.Error())
+				return err
+			}
 			continue
 		}
 		if pid == currentPid { // Skip current process
@@ -54,7 +62,11 @@ func cleanupStalePidFiles(pidsSubDir string, currentPid int) error {
 		}
 		if !isProcessRunning(pid) {
 			// Process is not running, remove the stale PID file
-			os.Remove(path.Join(pidsSubDir, fileName))
+			err := os.Remove(path.Join(pidsSubDir, fileName))
+			if err != nil {
+				glcm.Error("failed to remove stale pid file" + err.Error())
+				return err
+			}
 		}
 	}
 	return nil
@@ -66,15 +78,18 @@ func WarnMultipleProcesses(directory string, currentPid int) {
 	pidsSubDir := path.Join(directory, "pids") // Made subdir to not clog main dir
 	err := os.MkdirAll(pidsSubDir, 0755)
 	if err != nil {
+		glcm.Error("failed to make pids dir" + err.Error())
 		return
 	}
 	err = cleanupStalePidFiles(pidsSubDir, currentPid) // First, clean up inactive PID files
 	if err != nil {
+		glcm.Error("failed to clean up pids" + err.Error())
 		return
 	}
 
 	f, err := os.Open(pidsSubDir)
 	if err != nil {
+		glcm.Error("failed to open pid subdir" + err.Error())
 		return
 	}
 	defer f.Close()
@@ -82,12 +97,13 @@ func WarnMultipleProcesses(directory string, currentPid int) {
 	// Check if there is more than one pid file
 	_, err = f.Readdirnames(1)
 	if err == nil { // nil check works here, there will be EOF err if only one file
-		glcm.Info(common.ERR_MULTIPLE_PROCESSES)
+		glcm.Info(common.WARN_MULTIPLE_PROCESSES)
 	}
 	pidFilePath := path.Join(pidsSubDir, currPidFileName) // E.g "\.azcopy\pids\\XXX.pid"
 	// Creates .pid file with specific pid
 	pidFile, err := os.OpenFile(pidFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
+		glcm.Error("failed to create pid file" + err.Error())
 		return
 	}
 	defer pidFile.Close()
