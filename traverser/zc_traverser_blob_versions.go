@@ -93,7 +93,7 @@ func (t *blobVersionsTraverser) Traverse(preprocessor objectMorpher, processor O
 			panic("isBlob should never be set if getting properties is an error")
 		}
 
-		blobPropsAdapter := blobPropertiesResponseAdapter{blobProperties}
+		blobPropsAdapter := BlobPropertiesResponseAdapter{blobProperties}
 		blobURLParts.VersionID = versionID
 		storedObject := NewStoredObject(
 			preprocessor,

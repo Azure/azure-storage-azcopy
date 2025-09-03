@@ -109,7 +109,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor ObjectProce
 				oi.LastModified,
 				oi.Size,
 				&oie,
-				noBlobProps,
+				NoBlobProps,
 				oie.NewCommonMetadata(),
 				t.s3URLParts.BucketName)
 
@@ -181,7 +181,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor ObjectProce
 			objectInfo.LastModified,
 			objectInfo.Size,
 			&oie,
-			noBlobProps,
+			NoBlobProps,
 			oie.NewCommonMetadata(),
 			t.s3URLParts.BucketName)
 

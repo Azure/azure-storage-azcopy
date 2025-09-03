@@ -246,7 +246,7 @@ func (t *BlobTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			relPath = "\x00" // Because the ste will trim the / suffix from our source, or we may not already have it.
 		}
 
-		blobPropsAdapter := blobPropertiesResponseAdapter{blobProperties}
+		blobPropsAdapter := BlobPropertiesResponseAdapter{blobProperties}
 		storedObject := NewStoredObject(
 			preprocessor,
 			getObjectNameOnly(blobName),
@@ -295,7 +295,7 @@ func (t *BlobTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			time.Now(),
 			0,
 			NoContentProps,
-			noBlobProps,
+			NoBlobProps,
 			common.Metadata{},
 			blobURLParts.ContainerName,
 		)
@@ -377,7 +377,7 @@ func (t *BlobTraverser) parallelList(containerClient *container.Client, containe
 								goto skipDirAdd // We shouldn't add a blob that isn't a folder as a folder. You either have the folder metadata, or you don't.
 							}
 
-							pbPropAdapter := blobPropertiesResponseAdapter{&pResp}
+							pbPropAdapter := BlobPropertiesResponseAdapter{&pResp}
 							folderRelativePath := strings.TrimPrefix(dName, searchPrefix)
 
 							storedObject := NewStoredObject(

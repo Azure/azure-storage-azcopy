@@ -609,8 +609,8 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 						fi.ModTime(),
 						fi.Size(),
 						NoContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
-						noBlobProps,
-						noMetadata,
+						NoBlobProps,
+						NoMetadata,
 						"", // Local has no such thing as containers
 					),
 					processor, // the original processor is wrapped in the mutex processor.
@@ -715,8 +715,8 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 				singleFileInfo.ModTime(),
 				singleFileInfo.Size(),
 				NoContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
-				noBlobProps,
-				noMetadata,
+				NoBlobProps,
+				NoMetadata,
 				"", // Local has no such thing as containers
 			),
 			hashingProcessor, // hashingProcessor handles the mutex wrapper
@@ -776,8 +776,8 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 						fileInfo.ModTime(), // get this for both files and folders, since sync needs it for both.
 						fileInfo.Size(),
 						NoContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
-						noBlobProps,
-						noMetadata,
+						NoBlobProps,
+						NoMetadata,
 						"", // Local has no such thing as containers
 					),
 					hashingProcessor, // hashingProcessor handles the mutex wrapper
@@ -867,8 +867,8 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 						fileInfo.ModTime(),
 						fileInfo.Size(),
 						NoContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
-						noBlobProps,
-						noMetadata,
+						NoBlobProps,
+						NoMetadata,
 						"", // Local has no such thing as containers
 					),
 					hashingProcessor, // hashingProcessor handles the mutex wrapper

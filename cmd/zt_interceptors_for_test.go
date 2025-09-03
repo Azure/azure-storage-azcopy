@@ -185,7 +185,7 @@ func (d *dummyProcessor) process(storedObject traverser.StoredObject) (err error
 func (d *dummyProcessor) countFilesOnly() int {
 	n := 0
 	for _, x := range d.record {
-		if x.entityType == common.EEntityType.File() {
+		if x.EntityType == common.EEntityType.File() {
 			n++
 		}
 	}

@@ -362,7 +362,7 @@ func TestManagedDiskProperties(t *testing.T) {
 	a.Nil(prop.LastModified)
 	a.NotNil(prop.ContentLength) // note:content length will never be nil as the service calculates the size of the blob and stores it in this header
 
-	propAdapter := traverser.blobPropertiesResponseAdapter{GetPropertiesResponse: &prop}
+	propAdapter := traverser.BlobPropertiesResponseAdapter{GetPropertiesResponse: &prop}
 	a.Equal(propAdapter.LastModified(), time.Time{})
 	a.NotNil(prop.ContentLength) // see note from above
 }

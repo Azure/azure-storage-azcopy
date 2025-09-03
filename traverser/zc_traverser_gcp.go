@@ -67,7 +67,7 @@ func (t *gcpTraverser) Traverse(preprocessor objectMorpher, processor ObjectProc
 				attrs.Updated,
 				attrs.Size,
 				&gie,
-				noBlobProps,
+				NoBlobProps,
 				gie.NewCommonMetadata(),
 				t.gcpURLParts.BucketName)
 			err = ProcessIfPassedFilters(filters, storedObject,
@@ -126,7 +126,7 @@ func (t *gcpTraverser) Traverse(preprocessor objectMorpher, processor ObjectProc
 				attrs.Updated,
 				attrs.Size,
 				&oie,
-				noBlobProps,
+				NoBlobProps,
 				oie.NewCommonMetadata(),
 				t.gcpURLParts.BucketName)
 

@@ -199,7 +199,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 				*fileProperties.LastModified,
 				*fileProperties.ContentLength,
 				shareFilePropertiesAdapter{fileProperties},
-				noBlobProps,
+				NoBlobProps,
 				fileProperties.Metadata,
 				targetURLParts.ShareName,
 			)
@@ -298,7 +298,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			lmt,
 			size,
 			contentProps,
-			noBlobProps,
+			NoBlobProps,
 			metadata,
 			targetURLParts.ShareName,
 		)

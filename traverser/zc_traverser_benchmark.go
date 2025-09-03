@@ -136,8 +136,8 @@ func (t *benchmarkTraverser) Traverse(preprocessor objectMorpher, processor Obje
 			common.BenchmarkLmt,
 			t.bytesPerFile,
 			NoContentProps,
-			noBlobProps,
-			noMetadata,
+			NoBlobProps,
+			NoMetadata,
 			""), processor)
 		_, err = GetProcessingError(err)
 		if err != nil {
