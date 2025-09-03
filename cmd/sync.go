@@ -609,7 +609,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm LifecycleMgr) (totalKnown
 		totalKnownCount = summary.TotalTransfers
 
 		// compute the average throughput for the last time interval
-		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) * 8 / float64(base10Mega))
+		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) * 8 / float64(common.Base10Mega))
 		timeElapsed := time.Since(cca.intervalStartTime).Seconds()
 		throughput = common.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0)
 

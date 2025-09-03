@@ -33,27 +33,38 @@ import (
 )
 
 type ResumeJobOptions struct {
-	SourceSAS       string
-	DestinationSAS  string
-	JobErrorHandler common.JobErrorHandler // this is just temporary until the next PR where we move the job controller to this package
+	SourceSAS      string
+	DestinationSAS string
+	Handler        ResumeJobHandler
+}
+
+type ResumeJobProgress struct {
+	common.ListJobSummaryResponse
+	Throughput  float64
+	ElapsedTime time.Duration
+}
+
+type ResumeJobHandler interface {
+	OnStart(ctx common.JobContext)
+	OnTransferProgress(progress ResumeJobProgress)
+}
+
+type ResumeJobResult struct {
+	common.ListJobSummaryResponse
+	ElapsedTime time.Duration
 }
 
 // ResumeJob resumes a job with the specified JobID.
-func (c *Client) ResumeJob(jobID common.JobID, opts ResumeJobOptions) (err error) {
+func (c *Client) ResumeJob(ctx context.Context, jobID common.JobID, opts ResumeJobOptions) (result ResumeJobResult, err error) {
 	if jobID.IsEmpty() {
-		return errors.New("resume job requires the JobID")
+		return ResumeJobResult{}, errors.New("resume job requires the JobID")
 	}
 	c.CurrentJobID = jobID
 	timeAtPrestart := time.Now()
 
 	common.AzcopyCurrentJobLogger = common.NewJobLogger(c.CurrentJobID, c.GetLogLevel(), common.LogPathFolder, "")
 	common.AzcopyCurrentJobLogger.OpenLog()
-	// TODO : set glcm, register close func
-	//common.GetLifecycleMgr().RegisterCloseFunc(func() {
-	//	if common.AzcopyCurrentJobLogger != nil {
-	//		common.AzcopyCurrentJobLogger.CloseLog()
-	//	}
-	//})
+	defer common.AzcopyCurrentJobLogger.CloseLog()
 	// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter
 	// Subtract a few seconds, to ensure that this date DEFINITELY falls before the LMT of any file changed while this
 	// job is running. I.e. using this later with --include-after is _guaranteed_ to pick up all files that changed during
@@ -72,13 +83,13 @@ func (c *Client) ResumeJob(jobID common.JobID, opts ResumeJobOptions) (err error
 	// Get fromTo info, so we can decide what's the proper credential type to use.
 	jobDetails := jobsAdmin.GetJobDetails(common.GetJobDetailsRequest{JobID: jobID})
 	if jobDetails.ErrorMsg != "" {
-		return errors.New(jobDetails.ErrorMsg)
+		return ResumeJobResult{}, errors.New(jobDetails.ErrorMsg)
 	}
 	if jobDetails.FromTo.From() == common.ELocation.Benchmark() ||
 		jobDetails.FromTo.To() == common.ELocation.Benchmark() {
 		// Doesn't make sense to resume a benchmark job.
 		// It's not tested, and wouldn't report progress correctly and wouldn't clean up after itself properly
-		return errors.New("resuming benchmark jobs is not supported")
+		return ResumeJobResult{}, errors.New("resuming benchmark jobs is not supported")
 	}
 
 	sourceSAS := normalizeSAS(opts.SourceSAS)
@@ -86,17 +97,17 @@ func (c *Client) ResumeJob(jobID common.JobID, opts ResumeJobOptions) (err error
 
 	srcResourceString, err := SplitResourceString(jobDetails.Source, jobDetails.FromTo.From())
 	if err != nil {
-		return fmt.Errorf("error parsing source resource string: %w", err)
+		return ResumeJobResult{}, fmt.Errorf("error parsing source resource string: %w", err)
 	}
 	srcResourceString.SAS = sourceSAS
 	dstResourceString, err := SplitResourceString(jobDetails.Destination, jobDetails.FromTo.To())
 	if err != nil {
-		return fmt.Errorf("error parsing destination resource string: %w", err)
+		return ResumeJobResult{}, fmt.Errorf("error parsing destination resource string: %w", err)
 	}
 	dstResourceString.SAS = destinationSAS
 
 	// TODO: Replace context with root context
-	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+	ctx = context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	srcServiceClient, dstServiceClient, err := getSourceAndDestinationServiceClients(
 		ctx,
 		srcResourceString,
@@ -105,8 +116,20 @@ func (c *Client) ResumeJob(jobID common.JobID, opts ResumeJobOptions) (err error
 		c.GetUserOAuthTokenManagerInstance(),
 	)
 	if err != nil {
-		return fmt.Errorf("cannot resume job with JobId %s, could not create service clients %v", jobID, err.Error())
+		return ResumeJobResult{}, fmt.Errorf("cannot resume job with JobId %s, could not create service clients %v", jobID, err.Error())
 	}
+
+	// AzCopy CLI sets this globally before calling ResumeJob.
+	// If in library mode, this will not be set and we will use the user-provided handler.
+	// Note: It is not ideal that this is a global, but keeping it this way for now to avoid a larger refactor than this already is.
+	resumeHandler := common.GetLifecycleMgr()
+	if resumeHandler == nil {
+		resumeHandler = common.NewJobUIHooks()
+		common.SetUIHooks(resumeHandler)
+	}
+
+	mgr := NewJobLifecycleManager(resumeHandler)
+	rpt := newResumeProgressTracker(jobID, opts.Handler)
 
 	// Send resume job request.
 	resumeJobResponse := jobsAdmin.ResumeJobOrder(common.ResumeJobRequest{
@@ -115,13 +138,26 @@ func (c *Client) ResumeJob(jobID common.JobID, opts ResumeJobOptions) (err error
 		DestinationSAS:   destinationSAS,
 		SrcServiceClient: srcServiceClient,
 		DstServiceClient: dstServiceClient,
-		JobErrorHandler:  opts.JobErrorHandler, // TODO : (gapra) : pass a proper error handler - this is to come in the next PR.
+		JobErrorHandler:  mgr,
 	})
 
 	if !resumeJobResponse.CancelledPauseResumed {
-		return errors.New(resumeJobResponse.ErrorMsg)
+		return ResumeJobResult{}, errors.New(resumeJobResponse.ErrorMsg)
 	}
-	return nil
+	mgr.InitiateProgressReporting(ctx, rpt)
+
+	err = mgr.Wait()
+	if err != nil {
+		return ResumeJobResult{}, err
+	}
+
+	// Get final job summary
+	finalSummary := jobsAdmin.GetJobSummary(jobID)
+
+	return ResumeJobResult{
+		ListJobSummaryResponse: finalSummary,
+		ElapsedTime:            rpt.GetElapsedTime(),
+	}, nil
 }
 
 // normalizeSAS ensures the SAS token starts with "?" if non-empty.
@@ -233,3 +269,86 @@ func getSourceAndDestinationServiceClients(
 	}
 	return srcServiceClient, dstServiceClient, nil
 }
+
+type resumeProgressTracker struct {
+	jobID   common.JobID
+	handler ResumeJobHandler
+
+	// variables used to calculate progress
+	// intervalStartTime holds the last time value when the progress summary was fetched
+	// the value of this variable is used to calculate the throughput
+	// it gets updated every time the progress summary is fetched
+	intervalStartTime        time.Time
+	intervalBytesTransferred uint64
+
+	// used to calculate job summary
+	jobStartTime time.Time
+}
+
+func newResumeProgressTracker(jobID common.JobID, handler ResumeJobHandler) *resumeProgressTracker {
+	return &resumeProgressTracker{
+		jobID:   jobID,
+		handler: handler,
+	}
+}
+
+func (r *resumeProgressTracker) Start() {
+	// initialize the times necessary to track progress
+	r.jobStartTime = time.Now()
+	r.intervalStartTime = time.Now()
+	r.intervalBytesTransferred = 0
+
+	var logPathFolder string
+	if common.LogPathFolder != "" {
+		logPathFolder = fmt.Sprintf("%s%s%s.log", common.LogPathFolder, common.OS_PATH_SEPARATOR, r.jobID)
+	}
+	r.handler.OnStart(common.JobContext{JobID: r.jobID, LogPath: logPathFolder})
+}
+
+func (r *resumeProgressTracker) CheckProgress() (uint32, bool) {
+	summary := jobsAdmin.GetJobSummary(r.jobID)
+	jobDone := summary.JobStatus.IsJobDone()
+	totalKnownCount := summary.TotalTransfers
+	duration := time.Since(r.jobStartTime)
+	var computeThroughput = func() float64 {
+		// compute the average throughput for the last time interval
+		bytesInMb := float64(float64(summary.BytesOverWire-r.intervalBytesTransferred) / float64(common.Base10Mega))
+		timeElapsed := time.Since(r.intervalStartTime).Seconds()
+
+		// reset the interval timer and byte count
+		r.intervalStartTime = time.Now()
+		r.intervalBytesTransferred = summary.BytesOverWire
+
+		return common.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
+	}
+	throughput := computeThroughput()
+	transferProgress := common.TransferProgress{
+		ListJobSummaryResponse: summary,
+		Throughput:             throughput,
+		ElapsedTime:            duration,
+		JobType:                common.EJobType.Resume(),
+	}
+	if common.AzcopyCurrentJobLogger != nil {
+		common.AzcopyCurrentJobLogger.Log(common.LogInfo, common.GetProgressOutputBuilder(transferProgress)(common.EOutputFormat.Text()))
+	}
+	r.handler.OnTransferProgress(ResumeJobProgress{
+		ListJobSummaryResponse: summary,
+		Throughput:             throughput,
+		ElapsedTime:            duration,
+	})
+	return totalKnownCount, jobDone
+}
+
+func (r *resumeProgressTracker) CompletedEnumeration() bool {
+	return true // resume does not enumerate, so this is always true
+}
+
+func (r *resumeProgressTracker) GetJobID() common.JobID {
+	return r.jobID
+}
+
+func (r *resumeProgressTracker) GetElapsedTime() time.Duration {
+	return time.Since(r.jobStartTime)
+}
+
+var _ JobProgressTracker = &resumeProgressTracker{}
