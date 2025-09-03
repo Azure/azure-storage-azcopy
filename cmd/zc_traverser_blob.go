@@ -290,6 +290,10 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		} else if respErr.StatusCode == 403 { // Some nature of auth error-- Whatever the user is pointing at, they don't have access to, regardless of whether it's a file or a dir stub.
 			t.writeToBlobErrorChannel(errorBlobInfo)
 			return fmt.Errorf("cannot list files due to reason %s", respErr)
+		} else if UseSyncOrchestrator && t.isDFS && respErr.StatusCode == 404 {
+			// If we're using the sync orchestrator and we get a 404, it means the blob doesn't exist
+			// in the destination. We need to explicitly return the error.
+			return fmt.Errorf("blob %s not found in destination. Err %s", blobName, respErr)
 		}
 	}
 
@@ -406,6 +410,9 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 func (t *blobTraverser) parallelList(containerClient *container.Client, containerName string, searchPrefix string,
 	extraSearchPrefix string, preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
+
+	emptyPrefix := true
+
 	// Define how to enumerate its contents
 	// This func must be thread safe/goroutine safe
 	enumerateOneDir := func(dir parallel.Directory, enqueueDir func(parallel.Directory), enqueueOutput func(parallel.DirectoryEntry, error)) error {
@@ -421,6 +428,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 			if err != nil {
 				return fmt.Errorf("cannot list files due to reason %s", err)
 			}
+			emptyPrefix = emptyPrefix && len(lResp.Segment.BlobPrefixes) == 0 && len(lResp.Segment.BlobItems) == 0
 			// queue up the sub virtual directories if recursive is true or if enqueueDirorPrefix is true
 			if t.recursive || t.includeDirectoryOrPrefix {
 				for _, virtualDir := range lResp.Segment.BlobPrefixes {
@@ -603,6 +611,13 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 				Error:                processErr})
 			return processErr
 		}
+	}
+
+	if UseSyncOrchestrator && !t.isDFS && emptyPrefix {
+		// In case of sync orchestrator, we want to let the orchestrator know that the prefix was not found
+		// for a flat blob destination. This will help in optimizing the sync process by avoiding redundant
+		// target traversals.
+		return fmt.Errorf("blob %s not found in destination. Err %s", t.rawURL, bloberror.BlobNotFound)
 	}
 
 	return nil

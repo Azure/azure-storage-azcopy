@@ -42,6 +42,7 @@ var validCredTypesPerLocation = map[common.Location][]common.CredentialType{
 	common.ELocation.Pipe():    {common.ECredentialType.Anonymous()},
 	common.ELocation.S3():      {common.ECredentialType.S3AccessKey()},
 	common.ELocation.GCP():     {common.ECredentialType.GoogleAppCredentials()},
+	common.ELocation.FileNFS(): {common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()},
 }
 
 var allCredentialTypes []common.CredentialType = nil

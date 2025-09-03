@@ -24,6 +24,7 @@ import (
 	"context"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/stretchr/testify/assert"
 	"os"
 	"path/filepath"
@@ -55,7 +56,9 @@ func TestOverwritePosixProperties(t *testing.T) {
 	scenarioHelper{}.generateLocalFilesFromList(a, dirPath, files)
 
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	rawBlobURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
@@ -91,7 +94,7 @@ func TestOverwritePosixProperties(t *testing.T) {
 
 	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
 		Include: container.ListBlobsInclude{Metadata: true, Tags: true},
-		Prefix: to.Ptr(filepath.Base(dirPath)),
+		Prefix:  to.Ptr(filepath.Base(dirPath)),
 	})
 	listBlob, err := pager.NextPage(context.TODO())
 

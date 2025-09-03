@@ -363,7 +363,7 @@ func WalkWithSymlinks(
 				}
 
 				if options.SymlinkHandling.None() {
-					if isNFSCopy {
+					if common.IsNFSCopy() {
 						if options.IncrementEnumerationCounter != nil {
 							options.IncrementEnumerationCounter(common.EEntityType.Symlink())
 						}
@@ -488,7 +488,7 @@ func WalkWithSymlinks(
 				}
 				return nil
 			} else {
-				if isNFSCopy {
+				if common.IsNFSCopy() {
 					LogHardLinkIfDefaultPolicy(fileInfo, options.HardlinkHandling)
 					if !IsRegularFile(fileInfo) && !fileInfo.IsDir() {
 						// We don't want to process other non-regular files here.
@@ -863,7 +863,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	if isSingleFile {
 
 		entityType := common.EEntityType.File()
-		if isNFSCopy {
+		if common.IsNFSCopy() {
 			if IsSymbolicLink(singleFileInfo) {
 				entityType = common.EEntityType.Symlink()
 				logSpecialFileWarning(singleFileInfo.Name())
@@ -933,7 +933,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 			}
 
 			// NFS Handling
-			if isNFSCopy {
+			if common.IsNFSCopy() {
 				if IsHardlink(fileInfo) {
 					entityType = common.EEntityType.Hardlink()
 				}
@@ -1003,12 +1003,12 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				// This won't change. It's purely to hand info off to STE about where the symlink lives.
 				relativePath := entry.Name()
 				fileInfo, err := entry.Info()
+				path := common.GenerateFullPath(t.fullPath, relativePath)
 				if err != nil {
-					fmt.Printf("Failed to get file info for %s: %v\n", relativePath, err)
 					writeToErrorChannel(t.errorChannel, ErrorFileInfo{
-						FilePath: common.GenerateFullPath(t.fullPath, relativePath),
+						FilePath: path,
 						FileInfo: nil,
-						ErrorMsg: fmt.Errorf("failed to get file info for %s: %w", relativePath, err),
+						ErrorMsg: fmt.Errorf("failed to get file info for %s: %w", path, err),
 					})
 					continue // Skip this entry and continue with the next one
 				}
@@ -1018,7 +1018,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 
 					if t.symlinkHandling.None() {
 						// If we are not following symlinks, we skip them.
-						if isNFSCopy && t.incrementEnumerationCounter != nil {
+						if common.IsNFSCopy() && t.incrementEnumerationCounter != nil {
 							t.incrementEnumerationCounter(common.EEntityType.Symlink())
 						}
 						continue
@@ -1028,17 +1028,16 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 
 					} else if t.symlinkHandling.Follow() {
 						// Because this only goes one layer deep, we can just append the filename to fullPath and resolve with it.
-						symlinkPath := common.GenerateFullPath(t.fullPath, entry.Name())
 						// Evaluate the symlink
-						result, err := UnfurlSymlinks(symlinkPath)
+						result, err := UnfurlSymlinks(path)
 
 						if err != nil {
 							writeToErrorChannel(t.errorChannel, ErrorFileInfo{
-								FilePath: symlinkPath,
+								FilePath: path,
 								FileInfo: fileInfo,
-								ErrorMsg: fmt.Errorf("failed to resolve symlink %s: %w", symlinkPath, err),
+								ErrorMsg: fmt.Errorf("failed to resolve symlink %s: %w", path, err),
 							})
-							return err
+							continue
 						}
 
 						// Resolve the absolute file path of the symlink
@@ -1046,11 +1045,11 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 
 						if err != nil {
 							writeToErrorChannel(t.errorChannel, ErrorFileInfo{
-								FilePath: symlinkPath,
+								FilePath: path,
 								FileInfo: fileInfo,
-								ErrorMsg: fmt.Errorf("failed to get absolute path of symlink result %s: %w", symlinkPath, err),
+								ErrorMsg: fmt.Errorf("failed to get absolute path of symlink result %s: %w", path, err),
 							})
-							return err
+							continue
 						}
 
 						// Replace the current FileInfo with
@@ -1058,11 +1057,11 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 
 						if err != nil {
 							writeToErrorChannel(t.errorChannel, ErrorFileInfo{
-								FilePath: symlinkPath,
+								FilePath: path,
 								FileInfo: nil,
-								ErrorMsg: fmt.Errorf("failed to get file info for symlink result %s: %w", symlinkPath, err),
+								ErrorMsg: fmt.Errorf("failed to get file info for symlink result %s: %w", path, err),
 							})
-							return err
+							continue
 						}
 
 						if t.includeDirectoryOrPrefix {
@@ -1072,7 +1071,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 								if ok {
 									err := errors.New("symlink caused cyclic loop")
 									writeToErrorChannel(t.errorChannel, ErrorFileInfo{FilePath: path, FileInfo: fileInfo, ErrorMsg: err})
-									return nil
+									continue
 								}
 								finalizer(WalkWithSymlinks(
 									t.appCtx,
@@ -1093,7 +1092,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				}
 
 				// NFS handling
-				if isNFSCopy && !entry.IsDir() {
+				if common.IsNFSCopy() && !entry.IsDir() {
 					if IsHardlink(fileInfo) {
 						entityType = common.EEntityType.Hardlink()
 					} else if !IsRegularFile(fileInfo) {
@@ -1131,14 +1130,17 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				)
 
 				if t.getExtendedProperties {
-					extendedProp, err := common.GetExtendedProperties(
-						common.GenerateFullPath(t.fullPath, relativePath),
-						storedObject.entityType)
+					extendedProp, err := common.GetExtendedProperties(path, storedObject.entityType)
 					if err != nil {
 						// What do we here?
 						// During enumeration, we can check for Zero time and skip any optimization.
 						// The upload layer will fetch the properties again.
-						WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get extended properties for %s: %s", t.fullPath, err.Error()))
+						writeToErrorChannel(t.errorChannel,
+							ErrorFileInfo{
+								FilePath: path,
+								FileInfo: fileInfo,
+								ErrorMsg: fmt.Errorf("failed to get extended properties for %s: %s", path, err.Error())})
+						continue
 					} else {
 						storedObject.updateTimestamps(
 							extendedProp.GetLastWriteTime(),

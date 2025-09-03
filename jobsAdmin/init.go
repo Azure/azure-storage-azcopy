@@ -24,9 +24,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"math"
-	"net/http"
 	"os"
 	"sync"
 	"time"
@@ -37,8 +35,6 @@ import (
 
 var steCtx = context.Background()
 var mu sync.Mutex // Prevent inconsistent state between check and update of TotalBytesTransferred variable
-
-const EMPTY_SAS_STRING = ""
 
 type azCopyConfig struct {
 	MIMETypeMapping map[string]string
@@ -56,9 +52,9 @@ func ToFixed(num float64, precision int) float64 {
 }
 
 // MainSTE initializes the Storage Transfer Engine
-func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64, azcopyJobPlanFolder, azcopyLogPathFolder string, providePerfAdvice bool) error {
+func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64) error {
 	// Initialize the JobsAdmin, resurrect Job plan files
-	initJobsAdmin(steCtx, concurrency, targetRateInMegaBitsPerSec, azcopyJobPlanFolder, azcopyLogPathFolder, providePerfAdvice)
+	initJobsAdmin(steCtx, concurrency, targetRateInMegaBitsPerSec)
 	// TODO: We may want to list listen first and terminate if there is already an instance listening
 
 	// if we've a custom mime map
@@ -76,90 +72,14 @@ func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec flo
 
 		ste.EnvironmentMimeMap = config.MIMETypeMapping
 	}
-
-	deserialize := func(request *http.Request, v interface{}) {
-		// TODO: Check the HTTP verb here?
-		// reading the entire request body and closing the request body
-		body, err := io.ReadAll(request.Body)
-		request.Body.Close()
-		if err != nil {
-			JobsAdmin.Panic(fmt.Errorf("error deserializing HTTP request"))
-		}
-		_ = json.Unmarshal(body, v)
-	}
-	serialize := func(v interface{}, response http.ResponseWriter) {
-		payload, err := json.Marshal(response)
-		if err != nil {
-			JobsAdmin.Panic(fmt.Errorf("error serializing HTTP response"))
-		}
-		// sending successful response back to front end
-		response.WriteHeader(http.StatusAccepted)
-		_, _ = response.Write(payload)
-	}
-	http.HandleFunc(common.ERpcCmd.CopyJobPartOrder().Pattern(),
-		func(writer http.ResponseWriter, request *http.Request) {
-			var payload common.CopyJobPartOrderRequest
-			deserialize(request, &payload)
-			serialize(ExecuteNewCopyJobPartOrder(payload), writer)
-		})
-	http.HandleFunc(common.ERpcCmd.ListJobs().Pattern(),
-		func(writer http.ResponseWriter, request *http.Request) {
-			// var payload common.ListRequest
-			// deserialize(request, &payload)
-			serialize(ListJobs(common.EJobStatus.All()), writer)
-		})
-	http.HandleFunc(common.ERpcCmd.ListJobSummary().Pattern(),
-		func(writer http.ResponseWriter, request *http.Request) {
-			var payload common.JobID
-			deserialize(request, &payload)
-			serialize(GetJobSummary(payload), writer)
-		})
-	http.HandleFunc(common.ERpcCmd.ListJobTransfers().Pattern(),
-		func(writer http.ResponseWriter, request *http.Request) {
-			var payload common.ListJobTransfersRequest
-			deserialize(request, &payload)
-			serialize(ListJobTransfers(payload), writer) // TODO: make struct
-		})
-	/*
-		http.HandleFunc(common.ERpcCmd.CancelJob().Pattern(),
-			func(writer http.ResponseWriter, request *http.Request) {
-				var payload common.JobID
-				deserialize(request, &payload)
-				serialize(CancelPauseJobOrder(payload, common.EJobStatus.Cancelling()), writer)
-			})
-		http.HandleFunc(common.ERpcCmd.PauseJob().Pattern(),
-			func(writer http.ResponseWriter, request *http.Request) {
-				var payload common.JobID
-				deserialize(request, &payload)
-				serialize(CancelPauseJobOrder(payload, common.EJobStatus.Paused()), writer)
-			})
-	*/
-	http.HandleFunc(common.ERpcCmd.ResumeJob().Pattern(),
-		func(writer http.ResponseWriter, request *http.Request) {
-			var payload common.ResumeJobRequest
-			deserialize(request, &payload)
-			serialize(ResumeJobOrder(payload), writer)
-		})
-
-	http.HandleFunc(common.ERpcCmd.GetJobDetails().Pattern(),
-		func(writer http.ResponseWriter, request *http.Request) {
-			var payload common.GetJobDetailsRequest
-			deserialize(request, &payload)
-			serialize(GetJobDetails(payload), writer)
-		})
-
-	// Listen for front-end requests
-	// if err := http.ListenAndServe("localhost:1337", nil); err != nil {
-	//	fmt.Print("Server already initialized")
-	//	return err
-	// }
 	return nil // TODO: don't return (like normal main)
 }
 
 // /////////////////////////////////////////////////////////////////////////////
 
+var ExecuteNewCopyJobPartOrder =
 // ExecuteNewCopyJobPartOrder api executes a new job part order
-func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
 	// Get the file name for this Job Part's Plan
 	jppfn := JobsAdmin.NewJobPartPlanFileName(order.JobID, order.PartNum)
 	jppfn.Create(order)                                                                  // Convert the order to a plan file
@@ -227,7 +147,7 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 	if !found {
 		// If the Job is not found, search for Job Plan files in the existing plan file
 		// and resurrect the job
-		if !JobsAdmin.ResurrectJob(jobID, EMPTY_SAS_STRING, EMPTY_SAS_STRING, nil, nil, false) {
+		if !JobsAdmin.ResurrectJob(jobID, nil, nil, false) {
 			return common.CancelPauseResumeResponse{
 				CancelledPauseResumed: false,
 				ErrorMsg:              fmt.Sprintf("no active job with JobId %s exists", jobID.String()),
@@ -248,7 +168,7 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 	}
 	// Always search the plan files in Azcopy folder,
 	// and resurrect the Job with provided credentials, to ensure SAS and etc get updated.
-	if !JobsAdmin.ResurrectJob(req.JobID, req.SourceSAS, req.DestinationSAS, req.SrcServiceClient, req.DstServiceClient, false) {
+	if !JobsAdmin.ResurrectJob(req.JobID, req.SrcServiceClient, req.DstServiceClient, false) {
 		return common.CancelPauseResumeResponse{
 			CancelledPauseResumed: false,
 			ErrorMsg:              fmt.Sprintf("no job with JobId %v exists", req.JobID),
@@ -295,6 +215,7 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 		switch jpm.Plan().FromTo {
 		case common.EFromTo.LocalBlob(),
 			common.EFromTo.LocalFile(),
+			common.EFromTo.LocalFileNFS(),
 			common.EFromTo.S3Blob(),
 			common.EFromTo.GCPBlob():
 			if len(req.DestinationSAS) == 0 {
@@ -302,6 +223,7 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 			}
 		case common.EFromTo.BlobLocal(),
 			common.EFromTo.FileLocal(),
+			common.EFromTo.FileNFSLocal(),
 			common.EFromTo.BlobTrash(),
 			common.EFromTo.FileTrash():
 			if len(req.SourceSAS) == 0 {
@@ -410,6 +332,8 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 }
 
 // GetJobSummary api returns the job progress summary of an active job
+// jobID - the ID of the job to retrieve the summary for
+// reset parameter (optional, default true) controls whether failed/skipped transfer lists are reset after retrieval
 /*
 * Return following Properties in Job Progress Summary
 * CompleteJobOrdered - determines whether final part of job has been ordered or not
@@ -420,14 +344,19 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 * PercentageProgress - job progress reported in terms of percentage
 * FailedTransfers - list of transfer after last checkpoint timestamp that failed.
  */
-func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
+func GetJobSummary(jobID common.JobID, reset ...bool) common.ListJobSummaryResponse {
+	resetLists := true // default value
+	if len(reset) > 0 {
+		resetLists = reset[0]
+	}
+
 	// getJobPartMapFromJobPartInfoMap gives the map of partNo to JobPartPlanInfo Pointer for a given JobId
 	jm, found := JobsAdmin.JobMgr(jobID)
 	if !found {
 		// Job with JobId does not exists
 		// Search the plan files in Azcopy folder
 		// and resurrect the Job
-		if !JobsAdmin.ResurrectJob(jobID, EMPTY_SAS_STRING, EMPTY_SAS_STRING, nil, nil, false) {
+		if !JobsAdmin.ResurrectJob(jobID, nil, nil, false) {
 			return common.ListJobSummaryResponse{
 				ErrorMsg: fmt.Sprintf("no job with JobId %v exists", jobID),
 			}
@@ -437,7 +366,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 		jm, _ = JobsAdmin.JobMgr(jobID)
 	}
 
-	js := jm.ListJobSummary()
+	js := jm.ListJobSummary(resetLists)
 	js.Timestamp = time.Now().UTC()
 	js.JobID = jm.JobID()
 	js.ErrorMsg = ""
@@ -670,7 +599,7 @@ func ListJobTransfers(r common.ListJobTransfersRequest) common.ListJobTransfersR
 		// Job with JobId does not exists
 		// Search the plan files in Azcopy folder
 		// and resurrect the Job
-		if !JobsAdmin.ResurrectJob(r.JobID, EMPTY_SAS_STRING, EMPTY_SAS_STRING, nil, nil, false) {
+		if !JobsAdmin.ResurrectJob(r.JobID, nil, nil, false) {
 			return common.ListJobTransfersResponse{
 				ErrorMsg: fmt.Sprintf("no job with JobId %v exists", r.JobID),
 			}
@@ -732,18 +661,13 @@ func GetJobLCMWrapper(jobID common.JobID) common.LifecycleMgr {
 	}
 }
 
-// ListJobs returns the jobId of all the jobs existing in the current instance of azcopy
-func ListJobs(givenStatus common.JobStatus) common.ListJobsResponse {
-	return JobsAdmin.ListJobs(givenStatus)
-}
-
 // GetJobDetails api returns the job FromTo info.
 func GetJobDetails(r common.GetJobDetailsRequest) common.GetJobDetailsResponse {
 	jm, found := JobsAdmin.JobMgr(r.JobID)
 	if !found {
 		// Job with JobId does not exists.
 		// Search the plan files in Azcopy folder and resurrect the Job.
-		if !JobsAdmin.ResurrectJob(r.JobID, EMPTY_SAS_STRING, EMPTY_SAS_STRING, nil, nil, false) {
+		if !JobsAdmin.ResurrectJob(r.JobID, nil, nil, false) {
 			return common.GetJobDetailsResponse{
 				ErrorMsg: fmt.Sprintf("Job with JobID %v does not exist or is invalid", r.JobID),
 			}
