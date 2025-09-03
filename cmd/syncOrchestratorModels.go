@@ -75,7 +75,7 @@ func (s *SyncOrchestratorOptions) validate(from common.Location) error {
 		return errors.New("sync orchestrator options should only be used when UseSyncOrchestrator is true")
 	}
 
-	if from != common.ELocation.Local() {
+	if from != common.ELocation.Local() && from != common.ELocation.S3() {
 		return errors.New("sync optimizations using timestamps should only be used for local to remote syncs")
 	}
 
@@ -90,11 +90,6 @@ func (s *SyncOrchestratorOptions) validate(from common.Location) error {
 	if s.optimizeEnumerationByCTime && s.lastSuccessfulSyncJobStartTime.IsZero() {
 		return errors.New("lastSuccessfulSyncJobStartTime must be a valid time for CTime optimization")
 	}
-	// The main limitation in windows OS that prevents us from using the optimizations is its dependendy on posix timestamps.
-	// We can use the optimizations on Windows by disabling the ctime optimization.
-	/*if runtime.GOOS != "linux" {
-		return errors.New("sync optimizations using posix timestamps are not supported on non-linux platforms")
-	}*/
 
 	return nil
 }
