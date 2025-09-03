@@ -214,15 +214,12 @@ func performSMBSpecificValidation(fromTo common.FromTo,
 	return nil
 }
 
-// validateSymlinkFlag checks whether the '--follow-symlink' or '--preserve-symlink' flags
-// are set for an NFS copy operation. Since symlink support is not available for NFS,
-// the function returns an error if either flag is enabled.
-// By default, symlink files will be skipped during NFS copy.
+// validateSymlinkFlag ensures symlink-related flags are not used for NFS.
+// Returns an error if both are set; symlinks are skipped by default.
 func validateSymlinkFlag(followSymlinks, preserveSymlinks bool) error {
 
-	if followSymlinks {
-		return fmt.Errorf("The '--follow-symlink' flag is not supported for NFS copy. Symlink files will be skipped by default.")
-
+	if followSymlinks && preserveSymlinks {
+		return fmt.Errorf("The '--follow-symlinks' and '--preserve-symlinks' flags cannot be used together.")
 	}
 	return nil
 }

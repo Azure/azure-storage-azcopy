@@ -114,11 +114,12 @@ func (u *azureFileUploader) SendSymlink(linkData string) error {
 		}
 
 		// retrying symlink creation
-		_, err := u.getFileClient().CreateSymbolicLink(u.ctx, linkData, nil)
-		if err != nil {
-			u.jptm.FailActiveUpload("Creating symlink", err)
-			return fmt.Errorf("failed to create symlink: %w", err)
-		}
+		_, err = u.getFileClient().CreateSymbolicLink(u.ctx, linkData, nil)
+	}
+
+	if err != nil {
+		u.jptm.FailActiveUpload("Creating symlink", err)
+		return fmt.Errorf("failed to create symlink: %w", err)
 	}
 
 	u.jptm.Log(common.LogDebug, fmt.Sprintf("Created symlink with data: %s", linkData))
