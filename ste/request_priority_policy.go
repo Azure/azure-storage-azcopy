@@ -13,7 +13,7 @@ import (
 
 var (
 	requestPriorityDate = func() date.Date {
-		out, err := date.ParseDate(requestPriorityDateString) // todo: might not be correct date
+		out, err := date.ParseDate(requestPriorityDateString)
 		if err != nil {
 			panic("request priority service date didn't parse: " + err.Error())
 		}
@@ -24,12 +24,16 @@ var (
 	requestPriorityLogOnce = &sync.Once{}
 
 	// GlobalRequestPriority at risk of becoming yet another angle in which temporary solutions become very permanent
-	// attempts to avoid the current issue of context usage. Context usage will get fixed up in a follow-up PR, but
+	// attempts to avoid the current issue of context usage. Context usage will get fixed up in a follow-up PR (PBI # 34685770), but
 	// to save me (Adele) from going bonkers, I'm going to push this out with a jank solution to begin.
-	GlobalRequestPriority int = -1
+	GlobalRequestPriority = -1
 )
 
 const (
+	// requestPriorityDateString is potentially incorrect at this time.
+	//	We'll need to revisit and replace this when we know for sure.
+	// requestPriorityDateString is the minimum service version to support x-ms-request-priority, and the request will
+	//	automatically be upgraded to that version if needed.
 	requestPriorityDateString = "2026-04-06"
 	XMsRequestPriority        = "x-ms-request-priority"
 )
@@ -57,6 +61,9 @@ func (r requestPriorityPolicy) Do(req *policy.Request) (*http.Response, error) {
 	var stgDate date.Date // fetch whatever service version we can get
 	if strVal, OK := req.Raw().Context().Value(ServiceAPIVersionOverride).(string); OK && tryParse(strVal, &stgDate) {
 	} else if strVal = req.Raw().Header.Get(XMsVersion); strVal != "" && tryParse(strVal, &stgDate) {
+		// no-op for the if statement's side effects
+	} else {
+		stgDate = date.Date{} // reset the date just in case
 	}
 
 	if stgDate.Before(requestPriorityDate.Time) {
