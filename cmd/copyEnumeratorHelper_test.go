@@ -21,10 +21,12 @@
 package cmd
 
 import (
+	"testing"
+
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func newLocalRes(path string) common.ResourceString {
@@ -47,10 +49,10 @@ func TestRelativePath(t *testing.T) {
 		Destination: newLocalRes("y/z/"),
 	}
 
-	object := StoredObject{
-		name:         "c.txt",
-		entityType:   1,
-		relativePath: "c.txt",
+	object := traverser.StoredObject{
+		Name:         "c.txt",
+		EntityType:   1,
+		RelativePath: "c.txt",
 	}
 
 	// execute

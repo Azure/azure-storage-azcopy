@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 	"github.com/stretchr/testify/assert"
 
 	chk "gopkg.in/check.v1"
@@ -46,14 +47,14 @@ func TestIncludeFilter(t *testing.T) {
 	// test the positive cases
 	filesToPass := []string{"bla.pdf", "fancy.jpeg", "socool.jpeg.pdf", "exactName"}
 	for _, file := range filesToPass {
-		passed := includeFilter.DoesPass(StoredObject{name: file})
+		passed := includeFilter.DoesPass(traverser.StoredObject{Name: file})
 		a.True(passed)
 	}
 
 	// test the negative cases
 	filesNotToPass := []string{"bla.pdff", "fancyjpeg", "socool.jpeg.pdf.wut", "eexactName"}
 	for _, file := range filesNotToPass {
-		passed := includeFilter.DoesPass(StoredObject{name: file})
+		passed := includeFilter.DoesPass(traverser.StoredObject{Name: file})
 		a.False(passed)
 	}
 }
@@ -68,7 +69,7 @@ func TestExcludeFilter(t *testing.T) {
 	filesToPass := []string{"bla.pdfe", "fancy.jjpeg", "socool.png", "eexactName"}
 	for _, file := range filesToPass {
 		dummyProcessor := &dummyProcessor{}
-		err := processIfPassedFilters(excludeFilterList, StoredObject{name: file}, dummyProcessor.process)
+		err := traverser.ProcessIfPassedFilters(excludeFilterList, traverser.StoredObject{Name: file}, dummyProcessor.process)
 		a.Nil(err)
 		a.Equal(1, len(dummyProcessor.record))
 	}
@@ -77,8 +78,8 @@ func TestExcludeFilter(t *testing.T) {
 	filesToNotPass := []string{"bla.pdf", "fancy.jpeg", "socool.jpeg.pdf", "exactName"}
 	for _, file := range filesToNotPass {
 		dummyProcessor := &dummyProcessor{}
-		err := processIfPassedFilters(excludeFilterList, StoredObject{name: file}, dummyProcessor.process)
-		a.Equal(ignoredError, err)
+		err := traverser.ProcessIfPassedFilters(excludeFilterList, traverser.StoredObject{Name: file}, dummyProcessor.process)
+		a.Equal(traverser.IgnoredError, err)
 		a.Zero(len(dummyProcessor.record))
 	}
 }

@@ -27,6 +27,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 	"github.com/JeffreyRichter/enum/enum"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -211,7 +212,7 @@ func InferArgumentLocation(arg string) common.Location {
 	if arg == pipeLocation {
 		return common.ELocation.Pipe()
 	}
-	if startsWith(arg, "http") {
+	if traverser.StartsWith(arg, "http") {
 		// Let's try to parse the argument as a URL
 		u, err := url.Parse(arg)
 		// NOTE: sometimes, a local path can also be parsed as a url. To avoid thinking it's a URL, check Scheme, Host, and Path
@@ -225,7 +226,7 @@ func InferArgumentLocation(arg string) common.Location {
 				return common.ELocation.File()
 			case strings.Contains(host, ".dfs"):
 				return common.ELocation.BlobFS()
-			case strings.Contains(host, benchmarkSourceHost):
+			case strings.Contains(host, traverser.BenchmarkSourceHost):
 				return common.ELocation.Benchmark()
 				// enable targeting an emulator/stack
 			case IPv4Regex.MatchString(host):

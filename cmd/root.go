@@ -34,6 +34,7 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/testSuite/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
@@ -58,7 +59,6 @@ var SkipVersionCheck bool
 var TrustedSuffixes string
 var azcopyAwaitContinue bool
 var azcopyAwaitAllowOpenFiles bool
-var azcopyScanningLogger common.ILoggerResetable
 var isPipeDownload bool
 var retryStatusCodes string
 var debugMemoryProfile string
@@ -226,7 +226,7 @@ func Initialize(isMigratedToLibrary, isBench bool) (err error) {
 		}
 
 	}
-	EnumerationParallelism, EnumerationParallelStatFiles = jobsAdmin.JobsAdmin.GetConcurrencySettings()
+	traverser.EnumerationParallelism, traverser.EnumerationParallelStatFiles = jobsAdmin.JobsAdmin.GetConcurrencySettings()
 
 	if !SkipVersionCheck && !isPipeDownload {
 		// spawn a routine to fetch and compare the local application's version against the latest version available
