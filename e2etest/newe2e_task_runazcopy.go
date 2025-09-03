@@ -158,7 +158,7 @@ type AzCopyEnvironment struct {
 	ParentContext          *AzCopyEnvironmentContext
 	EnvironmentId          *uint
 	RunCount               *uint
-	AzcopyConcurrencyValue *string `env:"AZURE_CONCURRENCY_VALUE"`
+	AzcopyConcurrencyValue *string `env:"AZCOPY_CONCURRENCY_VALUE"`
 }
 
 func (env *AzCopyEnvironment) InheritEnvVar(name string) {
