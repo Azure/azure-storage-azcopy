@@ -34,7 +34,7 @@ func isProcessRunning(pid int) bool {
 func cleanupStalePidFiles(pidsSubDir string, currentPid int) error {
 	f, err := os.Open(pidsSubDir)
 	if err != nil {
-		glcm.Error("failed to open pids dir" + err.Error())
+		glcm.Info("failed to open pids dir" + err.Error())
 		return err
 	}
 	defer f.Close()
@@ -50,11 +50,7 @@ func cleanupStalePidFiles(pidsSubDir string, currentPid int) error {
 		pid, err := strconv.Atoi(pidStr)
 		if err != nil {
 			// Not a valid PID, remove the file
-			err := os.Remove(path.Join(pidsSubDir, fileName))
-			if err != nil {
-				glcm.Error("failed to remove invalid pid file" + err.Error())
-				return err
-			}
+			os.Remove(path.Join(pidsSubDir, fileName))
 			continue
 		}
 		if pid == currentPid { // Skip current process
@@ -64,7 +60,7 @@ func cleanupStalePidFiles(pidsSubDir string, currentPid int) error {
 			// Process is not running, remove the stale PID file
 			err := os.Remove(path.Join(pidsSubDir, fileName))
 			if err != nil {
-				glcm.Error("failed to remove stale pid file" + err.Error())
+				glcm.Info("failed to remove stale pid file" + err.Error())
 				return err
 			}
 		}
@@ -78,18 +74,18 @@ func WarnMultipleProcesses(directory string, currentPid int) {
 	pidsSubDir := path.Join(directory, "pids") // Made subdir to not clog main dir
 	err := os.MkdirAll(pidsSubDir, 0755)
 	if err != nil {
-		glcm.Error("failed to make pids dir" + err.Error())
+		glcm.Info("failed to make pids dir" + err.Error())
 		return
 	}
 	err = cleanupStalePidFiles(pidsSubDir, currentPid) // First, clean up inactive PID files
 	if err != nil {
-		glcm.Error("failed to clean up pids" + err.Error())
+		glcm.Info("failed to clean up pids" + err.Error())
 		return
 	}
 
 	f, err := os.Open(pidsSubDir)
 	if err != nil {
-		glcm.Error("failed to open pid subdir" + err.Error())
+		glcm.Info("failed to open pid subdir" + err.Error())
 		return
 	}
 	defer f.Close()
@@ -103,7 +99,7 @@ func WarnMultipleProcesses(directory string, currentPid int) {
 	// Creates .pid file with specific pid
 	pidFile, err := os.OpenFile(pidFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
-		glcm.Error("failed to create pid file" + err.Error())
+		glcm.Info("failed to create pid file" + err.Error())
 		return
 	}
 	defer pidFile.Close()
@@ -117,6 +113,7 @@ func WarnMultipleProcesses(directory string, currentPid int) {
 }
 
 // AsyncWarnMultipleProcesses warns if there are multiple AzCopy processes running
+// We log errors with info because this warning check should not be show-stopping
 func AsyncWarnMultipleProcesses(directory string, currentPid int) {
 	go func() {
 		WarnMultipleProcesses(directory, currentPid)
