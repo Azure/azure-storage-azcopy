@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package traverser
 
 import (
 	"context"
@@ -76,7 +76,7 @@ func (t *fileAccountTraverser) listContainers() ([]string, error) {
 	}
 }
 
-func (t *fileAccountTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
+func (t *fileAccountTraverser) Traverse(preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) error {
 	// listContainers will return the cached share list if shares have already been listed by this traverser.
 	shareList, err := t.listContainers()
 
@@ -86,7 +86,7 @@ func (t *fileAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 
 	for _, v := range shareList {
 		shareURL := t.serviceClient.NewShareClient(v).URL()
-		shareTraverser := newFileTraverser(shareURL, t.serviceClient, t.ctx, InitResourceTraverserOptions{
+		shareTraverser := NewFileTraverser(shareURL, t.serviceClient, t.ctx, InitResourceTraverserOptions{
 			DestResourceType:        t.opts.DestResourceType,
 			Recursive:               true,
 			GetPropertiesInFrontend: t.opts.GetPropertiesInFrontend,
@@ -108,7 +108,7 @@ func (t *fileAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 	return nil
 }
 
-func newFileAccountTraverser(serviceClient *service.Client, shareName string, ctx context.Context, opts InitResourceTraverserOptions) (t *fileAccountTraverser) {
+func NewFileAccountTraverser(serviceClient *service.Client, shareName string, ctx context.Context, opts InitResourceTraverserOptions) (t *fileAccountTraverser) {
 	t = &fileAccountTraverser{
 		opts: opts,
 

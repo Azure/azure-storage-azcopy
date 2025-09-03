@@ -1,7 +1,7 @@
 //go:build !windows
 // +build !windows
 
-package cmd
+package traverser
 
 import (
 	"os"

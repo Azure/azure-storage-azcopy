@@ -1,4 +1,4 @@
-package cmd
+package traverser
 
 import (
 	"context"
@@ -40,11 +40,11 @@ func (t *gcpTraverser) IsDirectory(isSource bool) (bool, error) {
 	return false, nil
 }
 
-func (t *gcpTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
+func (t *gcpTraverser) Traverse(preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) error {
 	p := processor
 	processor = func(storedObject StoredObject) error {
 		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter(storedObject.entityType)
+			t.incrementEnumerationCounter(storedObject.EntityType)
 		}
 
 		return p(storedObject)
@@ -57,9 +57,9 @@ func (t *gcpTraverser) Traverse(preprocessor objectMorpher, processor objectProc
 
 		attrs, err := t.gcpClient.Bucket(t.gcpURLParts.BucketName).Object(t.gcpURLParts.ObjectKey).Attrs(t.ctx)
 		if err == nil {
-			glcm.Info(fmt.Sprintf("Bucket: %v, Object: %v, Type: %v\n", attrs.Bucket, attrs.Name, attrs.ContentType))
+			common.GetLifecycleMgr().Info(fmt.Sprintf("Bucket: %v, Object: %v, Type: %v\n", attrs.Bucket, attrs.Name, attrs.ContentType))
 			gie := common.GCPObjectInfoExtension{ObjectInfo: *attrs}
-			storedObject := newStoredObject(
+			storedObject := NewStoredObject(
 				preprocessor,
 				objectName,
 				"",
@@ -70,7 +70,7 @@ func (t *gcpTraverser) Traverse(preprocessor objectMorpher, processor objectProc
 				noBlobProps,
 				gie.NewCommonMetadata(),
 				t.gcpURLParts.BucketName)
-			err = processIfPassedFilters(filters, storedObject,
+			err = ProcessIfPassedFilters(filters, storedObject,
 				processor)
 			if err != nil {
 				return err
@@ -118,7 +118,7 @@ func (t *gcpTraverser) Traverse(preprocessor objectMorpher, processor objectProc
 				oie = common.GCPObjectInfoExtension{ObjectInfo: *oi}
 			}
 
-			storedObject := newStoredObject(
+			storedObject := NewStoredObject(
 				preprocessor,
 				objectName,
 				relativePath,
@@ -130,10 +130,10 @@ func (t *gcpTraverser) Traverse(preprocessor objectMorpher, processor objectProc
 				oie.NewCommonMetadata(),
 				t.gcpURLParts.BucketName)
 
-			err = processIfPassedFilters(filters,
+			err = ProcessIfPassedFilters(filters,
 				storedObject,
 				processor)
-			_, err = getProcessingError(err)
+			_, err = GetProcessingError(err)
 			if err != nil {
 				return err
 			}
@@ -141,7 +141,7 @@ func (t *gcpTraverser) Traverse(preprocessor objectMorpher, processor objectProc
 	}
 }
 
-func newGCPTraverser(rawURL *url.URL, ctx context.Context, opts InitResourceTraverserOptions) (*gcpTraverser, error) {
+func NewGCPTraverser(rawURL *url.URL, ctx context.Context, opts InitResourceTraverserOptions) (*gcpTraverser, error) {
 	t := &gcpTraverser{
 		rawURL:                      rawURL,
 		ctx:                         ctx,

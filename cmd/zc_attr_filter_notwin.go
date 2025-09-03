@@ -1,3 +1,4 @@
+//go:build !windows
 // +build !windows
 
 // Copyright © Microsoft <wastore@microsoft.com>
@@ -22,6 +23,8 @@
 
 package cmd
 
+import "github.com/Azure/azure-storage-azcopy/v10/traverser"
+
 type attrFilter struct{}
 
 func (f *attrFilter) DoesSupportThisOS() (msg string, supported bool) {
@@ -34,14 +37,14 @@ func (f *attrFilter) AppliesOnlyToFiles() bool {
 	return true
 }
 
-func (f *attrFilter) DoesPass(storedObject StoredObject) bool {
+func (f *attrFilter) DoesPass(storedObject traverser.StoredObject) bool {
 	// ignore this option on Unix systems
 	return true
 }
 
-func buildAttrFilters(attributes []string, fullPath string, resultIfMatch bool) []ObjectFilter {
+func buildAttrFilters(attributes []string, fullPath string, resultIfMatch bool) []traverser.ObjectFilter {
 	// ignore this option on Unix systems
-	filters := make([]ObjectFilter, 0)
+	filters := make([]traverser.ObjectFilter, 0)
 	if len(attributes) > 0 {
 		filters = append(filters, &attrFilter{})
 	}

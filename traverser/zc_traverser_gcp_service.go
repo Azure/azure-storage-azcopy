@@ -1,13 +1,14 @@
-package cmd
+package traverser
 
 import (
-	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"google.golang.org/api/iterator"
 	"net/url"
 	"strings"
+
+	gcpUtils "cloud.google.com/go/storage"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"google.golang.org/api/iterator"
 )
 
 type gcpServiceTraverser struct {
@@ -59,7 +60,7 @@ func (t *gcpServiceTraverser) listContainers() ([]string, error) {
 	}
 }
 
-func (t *gcpServiceTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
+func (t *gcpServiceTraverser) Traverse(preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) error {
 	bucketList, err := t.listContainers()
 
 	if err != nil {
@@ -70,7 +71,7 @@ func (t *gcpServiceTraverser) Traverse(preprocessor objectMorpher, processor obj
 		tmpGCPURL := t.gcpURL
 		tmpGCPURL.BucketName = v
 		urlResult := tmpGCPURL.URL()
-		bucketTraverser, err := newGCPTraverser(&urlResult, t.ctx, InitResourceTraverserOptions{
+		bucketTraverser, err := NewGCPTraverser(&urlResult, t.ctx, InitResourceTraverserOptions{
 			Recursive:               true,
 			Credential:              t.opts.Credential,
 			GetPropertiesInFrontend: t.opts.GetPropertiesInFrontend,
@@ -96,7 +97,7 @@ func (t *gcpServiceTraverser) Traverse(preprocessor objectMorpher, processor obj
 	return nil
 }
 
-func newGCPServiceTraverser(rawURL *url.URL, ctx context.Context, opts InitResourceTraverserOptions) (*gcpServiceTraverser, error) {
+func NewGCPServiceTraverser(rawURL *url.URL, ctx context.Context, opts InitResourceTraverserOptions) (*gcpServiceTraverser, error) {
 	projectID = common.GetEnvironmentVariable(common.EEnvironmentVariable.GoogleCloudProject())
 	t := &gcpServiceTraverser{
 		opts: opts,

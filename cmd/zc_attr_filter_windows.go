@@ -26,6 +26,7 @@ import (
 	"syscall"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 )
 
 type attrFilter struct {
@@ -44,13 +45,13 @@ func (f *attrFilter) AppliesOnlyToFiles() bool {
 	return true // keep this filter consistent with include-pattern
 }
 
-func (f *attrFilter) DoesPass(storedObject StoredObject) bool {
+func (f *attrFilter) DoesPass(storedObject traverser.StoredObject) bool {
 	fileName := ""
 	if !strings.Contains(f.filePath, "*") {
-		fileName = common.GenerateFullPath(f.filePath, storedObject.relativePath)
+		fileName = common.GenerateFullPath(f.filePath, storedObject.RelativePath)
 	} else {
-		basePath := getPathBeforeFirstWildcard(f.filePath)
-		fileName = common.GenerateFullPath(basePath, storedObject.relativePath)
+		basePath := traverser.GetPathBeforeFirstWildcard(f.filePath)
+		fileName = common.GenerateFullPath(basePath, storedObject.RelativePath)
 	}
 
 	lpFileName, _ := syscall.UTF16PtrFromString(fileName)
@@ -60,7 +61,7 @@ func (f *attrFilter) DoesPass(storedObject StoredObject) bool {
 	// let the filter pass
 	if err != nil {
 		glcm.Info(fmt.Sprintf("Skipping file attribute filter for file %s due to error: %s",
-			storedObject.relativePath, err))
+			storedObject.RelativePath, err))
 		return true
 	}
 
@@ -122,9 +123,9 @@ var WindowsAttributesByName = map[string]WindowsAttribute{
 	"E": WindowsAttributeEncryptedFile,
 }
 
-func buildAttrFilters(attributes []string, fullPath string, isIncludeFilter bool) []ObjectFilter {
+func buildAttrFilters(attributes []string, fullPath string, isIncludeFilter bool) []traverser.ObjectFilter {
 	var fileAttributes WindowsAttribute
-	filters := make([]ObjectFilter, 0)
+	filters := make([]traverser.ObjectFilter, 0)
 
 	for _, attribute := range attributes {
 		fileAttributes |= WindowsAttributesByName[strings.ToUpper(attribute)]

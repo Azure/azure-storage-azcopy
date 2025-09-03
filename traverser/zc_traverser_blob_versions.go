@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package traverser
 
 import (
 	"context"
@@ -41,7 +41,7 @@ type blobVersionsTraverser struct {
 }
 
 func (t *blobVersionsTraverser) IsDirectory(isSource bool) (bool, error) {
-	isDirDirect := copyHandlerUtil{}.urlIsContainerOrVirtualDirectory(t.rawURL)
+	isDirDirect := CopyHandlerUtil{}.urlIsContainerOrVirtualDirectory(t.rawURL)
 
 	// Skip the single blob check if we're checking a destination.
 	// This is an individual exception for blob because blob supports virtual directories and blobs sharing the same name.
@@ -75,7 +75,7 @@ func (t *blobVersionsTraverser) getBlobProperties(versionID string) (*blob.GetPr
 	return &props, err
 }
 
-func (t *blobVersionsTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
+func (t *blobVersionsTraverser) Traverse(preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) (err error) {
 	blobURLParts, err := blob.ParseURL(t.rawURL)
 	if err != nil {
 		return err
@@ -95,7 +95,7 @@ func (t *blobVersionsTraverser) Traverse(preprocessor objectMorpher, processor o
 
 		blobPropsAdapter := blobPropertiesResponseAdapter{blobProperties}
 		blobURLParts.VersionID = versionID
-		storedObject := newStoredObject(
+		storedObject := NewStoredObject(
 			preprocessor,
 			getObjectNameOnly(strings.TrimSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)),
 			"",
@@ -107,13 +107,13 @@ func (t *blobVersionsTraverser) Traverse(preprocessor objectMorpher, processor o
 			blobPropsAdapter.Metadata,
 			blobURLParts.ContainerName,
 		)
-		storedObject.blobVersionID = versionID
+		storedObject.BlobVersionID = versionID
 
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter(common.EEntityType.File())
 		}
 
-		err = processIfPassedFilters(filters, storedObject, processor)
+		err = ProcessIfPassedFilters(filters, storedObject, processor)
 		if err != nil {
 			return err
 		}

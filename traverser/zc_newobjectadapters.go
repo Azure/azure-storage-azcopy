@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package traverser
 
 import (
 	"time"
@@ -31,7 +31,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-var noContentProps = emptyPropertiesAdapter{}
+var NoContentProps = emptyPropertiesAdapter{}
 var noBlobProps = emptyPropertiesAdapter{}
 var noMetadata common.Metadata = nil
 
