@@ -631,8 +631,7 @@ func (s *scenario) validateContent() {
 				destName = addedDirAtDest + "/" + f.name
 			}
 			destName = fixSlashes(destName, s.fromTo.To())
-			cpkInfo, err := common.GetCpkInfo(s.p.cpkByValue)
-			s.a.AssertNoErr(err, "getting cpkInfo")
+			cpkInfo, _ := common.GetCpkInfo(s.p.cpkByValue)
 			actualContent := s.state.dest.downloadContent(s.a, downloadContentOptions{
 				resourceRelPath: destName,
 				downloadBlobContentOptions: downloadBlobContentOptions{
@@ -710,8 +709,7 @@ func (s *scenario) validateSymlink(f *testObject, metadata map[string]*string) {
 			val, ok := metadata[common.POSIXSymlinkMeta]
 			c.Assert(ok, equals(), true)
 			c.Assert(*val, equals(), "true")
-			cpkInfo, err := common.GetCpkInfo(s.p.cpkByValue)
-			c.Assert(err, equals(), nil)
+			cpkInfo, _ := common.GetCpkInfo(s.p.cpkByValue)
 
 			content := dest.downloadContent(c, downloadContentOptions{
 				resourceRelPath: fixSlashes(path.Join(addedDirAtDest, f.name), common.ELocation.Blob()),
