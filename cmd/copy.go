@@ -844,8 +844,12 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 
 	// step 3: start download
 
+	cpkInfo, err := cca.CpkOptions.GetCPKInfo()
+	if err != nil {
+		return err
+	}
 	blobStream, err := blobClient.DownloadStream(ctx, &blob.DownloadStreamOptions{
-		CPKInfo:      cca.CpkOptions.GetCPKInfo(),
+		CPKInfo:      cpkInfo,
 		CPKScopeInfo: cca.CpkOptions.GetCPKScopeInfo(),
 	})
 	if err != nil {
@@ -940,6 +944,10 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	if cca.blockBlobTier != common.EBlockBlobTier.None() {
 		bbAccessTier = to.Ptr(blob.AccessTier(cca.blockBlobTier.String()))
 	}
+	cpkInfo, err := cca.CpkOptions.GetCPKInfo()
+	if err != nil {
+		return err
+	}
 	_, err = blockBlobClient.UploadStream(ctx, os.Stdin, &blockblob.UploadStreamOptions{
 		BlockSize:   blockSize,
 		Concurrency: pipingUploadParallelism,
@@ -953,7 +961,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 			BlobCacheControl:       common.IffNotEmpty(cca.cacheControl),
 		},
 		AccessTier:   bbAccessTier,
-		CPKInfo:      cca.CpkOptions.GetCPKInfo(),
+		CPKInfo:      cpkInfo,
 		CPKScopeInfo: cca.CpkOptions.GetCPKScopeInfo(),
 	})
 
@@ -1090,6 +1098,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.trailingDot,
 		},
+		JobErrorHandler: glcm,
 	}
 
 	srcCredInfo, err := cca.getSrcCredential(ctx, &jobPartOrder)
@@ -1264,7 +1273,7 @@ func (cca *CookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
 	}
 }
 
-func (cca *CookedCopyCmdArgs) Cancel(lcm common.LifecycleMgr) {
+func (cca *CookedCopyCmdArgs) Cancel(lcm LifecycleMgr) {
 	// prompt for confirmation, except when enumeration is complete
 	if !cca.isEnumerationComplete {
 		answer := lcm.Prompt("The source enumeration is not complete, "+
@@ -1316,7 +1325,7 @@ func (cca *CookedCopyCmdArgs) getSuccessExitCode() common.ExitCode {
 	}
 }
 
-func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint32) {
+func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm LifecycleMgr) (totalKnownCount uint32) {
 	// fetch a job status
 	summary := jobsAdmin.GetJobSummary(cca.jobID)
 	summary.IsCleanupJob = cca.isCleanupJob // only FE knows this, so we can only set it here

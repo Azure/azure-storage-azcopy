@@ -73,12 +73,12 @@ var JobsAdmin interface {
 
 	// JobMgr returns the specified JobID's JobMgr
 	JobMgr(jobID common.JobID) (ste.IJobMgr, bool)
-	JobMgrEnsureExists(jobID common.JobID, level common.LogLevel, commandString string) ste.IJobMgr
+	JobMgrEnsureExists(jobID common.JobID, level common.LogLevel, commandString string, jobErrorHandler common.JobErrorHandler) ste.IJobMgr
 
 	// AddJobPartMgr associates the specified JobPartMgr with the Jobs Administrator
 	//AddJobPartMgr(appContext context.Context, planFile JobPartPlanFileName) IJobPartMgr
 	/*ScheduleTransfer(jptm IJobPartTransferMgr)*/
-	ResurrectJob(jobId common.JobID, srcServiceClient *common.ServiceClient, dstServiceClient *common.ServiceClient, srcIsOAuth bool) bool
+	ResurrectJob(jobId common.JobID, srcServiceClient *common.ServiceClient, dstServiceClient *common.ServiceClient, srcIsOAuth bool, jobErrorHandler common.JobErrorHandler) bool
 
 	// returns the current value of bytesOverWire.
 	BytesOverWire() int64
@@ -95,7 +95,7 @@ var JobsAdmin interface {
 	MessageHandler(inputChan <-chan *common.LCMMsg)
 }
 
-func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64) {
+func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64) error {
 	if JobsAdmin != nil {
 		panic("initJobsAdmin was already called once")
 	}
@@ -108,7 +108,10 @@ func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, 
 		cpuMon = common.NewCalibratedCpuUsageMonitor()
 	}
 
-	maxRamBytesToUse := getMaxRamForChunks()
+	maxRamBytesToUse, err := getMaxRamForChunks()
+	if err != nil {
+		return err
+	}
 
 	// use the "networking mega" (based on powers of 10, not powers of 2, since that's what mega means in networking context)
 	targetRateInBytesPerSec := int64(targetRateInMegaBitsPerSec * 1000 * 1000 / 8)
@@ -142,6 +145,7 @@ func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, 
 	// Spin up slice pool pruner
 	go ja.slicePoolPruneLoop()
 
+	return nil
 }
 
 // Decide on a max amount of RAM we are willing to use. This functions as a cap, and prevents excessive usage.
@@ -150,7 +154,7 @@ func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, 
 // currently-unused, reusable slices, that is not tracked by cacheLimiter.
 // Also, block sizes that are not powers of two result in extra usage over and above this limit. (E.g. 100 MB blocks each
 // count 100 MB towards this limit, but actually consume 128 MB)
-func getMaxRamForChunks() int64 {
+func getMaxRamForChunks() (int64, error) {
 
 	// return the user-specified override value, if any
 	envVar := common.EEnvironmentVariable.BufferGB()
@@ -158,9 +162,9 @@ func getMaxRamForChunks() int64 {
 	if overrideString != "" {
 		overrideValue, err := strconv.ParseFloat(overrideString, 64)
 		if err != nil {
-			common.GetLifecycleMgr().Error(fmt.Sprintf("Cannot parse environment variable %s, due to error %s", envVar.Name, err))
+			return 0, fmt.Errorf("cannot parse environment variable %s, due to error %s", envVar.Name, err)
 		} else {
-			return int64(overrideValue * 1024 * 1024 * 1024)
+			return int64(overrideValue * 1024 * 1024 * 1024), nil
 		}
 	}
 
@@ -176,7 +180,7 @@ func getMaxRamForChunks() int64 {
 		gbToUse = maxTotalGB // cap it.
 	}
 	maxRamBytesToUse := int64(gbToUse * 1024 * 1024 * 1024)
-	return maxRamBytesToUse
+	return maxRamBytesToUse, nil
 }
 
 func (ja *jobsAdmin) createConcurrencyTuner() ste.ConcurrencyTuner {
@@ -259,12 +263,12 @@ func (ja *jobsAdmin) JobMgr(jobID common.JobID) (ste.IJobMgr, bool) {
 // JobMgrEnsureExists returns the specified JobID's IJobMgr if it exists or creates it if it doesn't already exit
 // If it does exist, then the appCtx argument is ignored.
 func (ja *jobsAdmin) JobMgrEnsureExists(jobID common.JobID,
-	level common.LogLevel, commandString string) ste.IJobMgr {
+	level common.LogLevel, commandString string, jobErrorHandler common.JobErrorHandler) ste.IJobMgr {
 
 	return ja.jobIDToJobMgr.EnsureExists(jobID,
 		func() ste.IJobMgr {
 			// Return existing or new IJobMgr to caller
-			return ste.NewJobMgr(ja.concurrency, jobID, ja.appCtx, ja.cpuMonitor, level, commandString, ja.concurrencyTuner, ja.pacer, ja.slicePool, ja.cacheLimiter, ja.fileCountLimiter, common.AzcopyCurrentJobLogger, false)
+			return ste.NewJobMgr(ja.concurrency, jobID, ja.appCtx, ja.cpuMonitor, level, commandString, ja.concurrencyTuner, ja.pacer, ja.slicePool, ja.cacheLimiter, ja.fileCountLimiter, common.AzcopyCurrentJobLogger, false, jobErrorHandler)
 		})
 }
 
@@ -329,7 +333,7 @@ func (ja *jobsAdmin) SuccessfulBytesInActiveFiles() uint64 {
 func (ja *jobsAdmin) ResurrectJob(jobId common.JobID,
 	srcServiceClient *common.ServiceClient,
 	dstServiceClient *common.ServiceClient,
-	srcIsOAuth bool) bool {
+	srcIsOAuth bool, jobErrorHandler common.JobErrorHandler) bool {
 	// Search the existing plan files for the PartPlans for the given jobId
 	// only the files which are not empty and have JobId has prefix and DataSchemaVersion as Suffix
 	// are include in the result
@@ -356,7 +360,7 @@ func (ja *jobsAdmin) ResurrectJob(jobId common.JobID,
 			continue
 		}
 		mmf := planFile.Map()
-		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "")
+		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "", jobErrorHandler)
 		args := &ste.AddJobPartArgs{
 			PartNum:           partNum,
 			PlanFile:          planFile,

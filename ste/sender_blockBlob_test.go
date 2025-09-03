@@ -32,6 +32,8 @@ import (
 )
 
 func TestGetVerifiedChunkParams(t *testing.T) {
+	common.SetUIHooks(common.NewJobUIHooks())
+
 	a := assert.New(t)
 	// Mock required params
 	transferInfo := &TransferInfo{

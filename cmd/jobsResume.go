@@ -77,7 +77,7 @@ func (cca *resumeJobController) waitUntilJobCompletion(blocking bool) {
 	}
 }
 
-func (cca *resumeJobController) Cancel(lcm common.LifecycleMgr) {
+func (cca *resumeJobController) Cancel(lcm LifecycleMgr) {
 	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
 	if err != nil {
 		lcm.Error("error occurred while cancelling the job " + cca.jobID.String() + ". Failed with error " + err.Error())
@@ -85,7 +85,7 @@ func (cca *resumeJobController) Cancel(lcm common.LifecycleMgr) {
 }
 
 // TODO: can we combine this with the copy one (and the sync one?)
-func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint32) {
+func (cca *resumeJobController) ReportProgressOrExit(lcm LifecycleMgr) (totalKnownCount uint32) {
 	// fetch a job status
 	summary := jobsAdmin.GetJobSummary(cca.jobID)
 	jobDone := summary.JobStatus.IsJobDone()
@@ -215,8 +215,9 @@ func (rca resumeCmdArgs) process() error {
 		return fmt.Errorf("error parsing the jobId %s. Failed with error %w", rca.jobID, err)
 	}
 	opts := azcopy.ResumeJobOptions{
-		SourceSAS:      rca.SourceSAS,
-		DestinationSAS: rca.DestinationSAS,
+		SourceSAS:       rca.SourceSAS,
+		DestinationSAS:  rca.DestinationSAS,
+		JobErrorHandler: glcm,
 	}
 	err = Client.ResumeJob(jobID, opts)
 

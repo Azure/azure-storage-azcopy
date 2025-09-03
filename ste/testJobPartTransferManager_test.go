@@ -31,6 +31,13 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
+type noopJobErrorHandler struct {
+}
+
+func (j *noopJobErrorHandler) Error(_ string) {
+	// no-op
+}
+
 var _ IJobPartTransferMgr = &testJobPartTransferManager{}
 
 type testJobPartTransferManager struct {
@@ -39,6 +46,11 @@ type testJobPartTransferManager struct {
 	jobPartMgr jobPartMgr
 	ctx        context.Context
 	status     common.TransferStatus
+}
+
+func (t *testJobPartTransferManager) GetJobErrorHandler() common.JobErrorHandler {
+	// TODO: actually implement me if ever wanting to test error handling
+	return &noopJobErrorHandler{}
 }
 
 func (t *testJobPartTransferManager) DeleteDestinationFileIfNecessary() bool {

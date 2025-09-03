@@ -27,7 +27,7 @@ import (
 )
 
 // get the lifecycle manager to print messages
-var glcm = common.GetLifecycleMgr()
+var glcm = cmd.GetLifecycleMgr()
 
 func main() {
 	if len(os.Args) == 1 {
