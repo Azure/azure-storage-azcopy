@@ -2,10 +2,9 @@ package e2etest
 
 import (
 	"encoding/json"
-	"strings"
-
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"strings"
 )
 
 var _ AzCopyStdout = &AzCopyParsedStdout{}

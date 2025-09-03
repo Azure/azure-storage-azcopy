@@ -415,7 +415,6 @@ func (s *BasicFunctionalitySuite) Scenario_Copy_EmptySASErrorCodes(svm *Scenario
 }
 
 // Test of Copy to UnsafeDestinations (Windows Local dest)
-
 func (s *BasicFunctionalitySuite) Scenario_CopyUnSafeDest(svm *ScenarioVariationManager) {
 	azCopyVerb := AzCopyVerbCopy
 
