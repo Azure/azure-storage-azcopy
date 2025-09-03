@@ -36,7 +36,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
-	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
@@ -435,7 +434,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 		}
 	}
 
-	options := azcopy.CreateClientOptions(common.AzcopyScanningLogger, nil, reauthTok)
+	options := CreateClientOptions(common.AzcopyScanningLogger, nil, reauthTok)
 
 	switch resourceLocation {
 	case common.ELocation.Local():
@@ -495,7 +494,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 		blobURLParts.Snapshot = ""
 		blobURLParts.VersionID = ""
 
-		res, err := azcopy.SplitResourceString(blobURLParts.String(), common.ELocation.Blob())
+		res, err := SplitResourceString(blobURLParts.String(), common.ELocation.Blob())
 		if err != nil {
 			return nil, err
 		}
@@ -548,7 +547,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 		} else {
 			resLoc = common.ELocation.FileNFS()
 		}
-		res, err := azcopy.SplitResourceString(fileURLParts.String(), resLoc)
+		res, err := SplitResourceString(fileURLParts.String(), resLoc)
 		if err != nil {
 			return nil, err
 		}
@@ -591,7 +590,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 		blobURLParts.Snapshot = ""
 		blobURLParts.VersionID = ""
 
-		res, err := azcopy.SplitResourceString(blobURLParts.String(), common.ELocation.Blob())
+		res, err := SplitResourceString(blobURLParts.String(), common.ELocation.Blob())
 		if err != nil {
 			return nil, err
 		}

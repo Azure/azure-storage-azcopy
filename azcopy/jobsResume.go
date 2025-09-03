@@ -30,6 +30,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 )
 
 type ResumeJobOptions struct {
@@ -95,12 +96,12 @@ func (c *Client) ResumeJob(ctx context.Context, jobID common.JobID, opts ResumeJ
 	sourceSAS := normalizeSAS(opts.SourceSAS)
 	destinationSAS := normalizeSAS(opts.DestinationSAS)
 
-	srcResourceString, err := SplitResourceString(jobDetails.Source, jobDetails.FromTo.From())
+	srcResourceString, err := traverser.SplitResourceString(jobDetails.Source, jobDetails.FromTo.From())
 	if err != nil {
 		return ResumeJobResult{}, fmt.Errorf("error parsing source resource string: %w", err)
 	}
 	srcResourceString.SAS = sourceSAS
-	dstResourceString, err := SplitResourceString(jobDetails.Destination, jobDetails.FromTo.To())
+	dstResourceString, err := traverser.SplitResourceString(jobDetails.Destination, jobDetails.FromTo.To())
 	if err != nil {
 		return ResumeJobResult{}, fmt.Errorf("error parsing destination resource string: %w", err)
 	}
@@ -238,7 +239,7 @@ func getSourceAndDestinationServiceClients(
 		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
 	// But we don't want to supply a reauth token if we're not using OAuth. That could cause problems if say, a SAS is invalid.
-	options := CreateClientOptions(common.AzcopyCurrentJobLogger, nil, common.Iff(srcCredType.IsAzureOAuth(), reauthTok, nil))
+	options := traverser.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, common.Iff(srcCredType.IsAzureOAuth(), reauthTok, nil))
 
 	var fileSrcClientOptions any
 	if fromTo.From() == common.ELocation.File() || fromTo.From() == common.ELocation.FileNFS() {
@@ -255,7 +256,7 @@ func getSourceAndDestinationServiceClients(
 	if fromTo.IsS2S() && srcCredType.IsAzureOAuth() {
 		srcCred = common.NewScopedCredential(tc, srcCredType)
 	}
-	options = CreateClientOptions(common.AzcopyCurrentJobLogger, srcCred, common.Iff(dstCredType.IsAzureOAuth(), reauthTok, nil))
+	options = traverser.CreateClientOptions(common.AzcopyCurrentJobLogger, srcCred, common.Iff(dstCredType.IsAzureOAuth(), reauthTok, nil))
 	var fileClientOptions any
 	if fromTo.To() == common.ELocation.File() || fromTo.To() == common.ELocation.FileNFS() {
 		fileClientOptions = &common.FileClientOptions{

@@ -27,7 +27,7 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
-	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
@@ -78,7 +78,7 @@ type cookedMakeCmdArgs struct {
 func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	resourceStringParts, err := azcopy.SplitResourceString(cookedArgs.resourceURL.String(), cookedArgs.resourceLocation)
+	resourceStringParts, err := traverser.SplitResourceString(cookedArgs.resourceURL.String(), cookedArgs.resourceLocation)
 	if err != nil {
 		return err
 	}
@@ -99,7 +99,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 	}
 
 	// Note : trailing dot is only applicable to file operations anyway, so setting this to false
-	options := azcopy.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
+	options := traverser.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
 	resourceURL := cookedArgs.resourceURL.String()
 	cred := credentialInfo.OAuthTokenInfo.TokenCredential
 

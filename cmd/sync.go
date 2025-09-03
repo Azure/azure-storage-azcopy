@@ -30,8 +30,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
@@ -151,15 +151,15 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 	case common.EFromTo.Unknown():
 		return cooked, fmt.Errorf("unable to infer the source '%s' / destination '%s'. ", raw.src, raw.dst)
 	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile(), common.EFromTo.LocalBlobFS(), common.EFromTo.LocalFileNFS():
-		cooked.destination, err = azcopy.SplitResourceString(raw.dst, cooked.fromTo.To())
+		cooked.destination, err = traverser.SplitResourceString(raw.dst, cooked.fromTo.To())
 		common.PanicIfErr(err)
 	case common.EFromTo.BlobLocal(), common.EFromTo.FileLocal(), common.EFromTo.BlobFSLocal(), common.EFromTo.FileNFSLocal():
-		cooked.source, err = azcopy.SplitResourceString(raw.src, cooked.fromTo.From())
+		cooked.source, err = traverser.SplitResourceString(raw.src, cooked.fromTo.From())
 		common.PanicIfErr(err)
 	case common.EFromTo.BlobBlob(), common.EFromTo.FileFile(), common.EFromTo.FileNFSFileNFS(), common.EFromTo.BlobFile(), common.EFromTo.FileBlob(), common.EFromTo.BlobFSBlobFS(), common.EFromTo.BlobFSBlob(), common.EFromTo.BlobFSFile(), common.EFromTo.BlobBlobFS(), common.EFromTo.FileBlobFS():
-		cooked.destination, err = azcopy.SplitResourceString(raw.dst, cooked.fromTo.To())
+		cooked.destination, err = traverser.SplitResourceString(raw.dst, cooked.fromTo.To())
 		common.PanicIfErr(err)
-		cooked.source, err = azcopy.SplitResourceString(raw.src, cooked.fromTo.From())
+		cooked.source, err = traverser.SplitResourceString(raw.src, cooked.fromTo.From())
 		common.PanicIfErr(err)
 	default:
 		return cooked, fmt.Errorf("source '%s' / destination '%s' combination '%s' not supported for sync command ", raw.src, raw.dst, cooked.fromTo)
