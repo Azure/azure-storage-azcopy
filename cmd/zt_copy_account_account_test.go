@@ -33,7 +33,6 @@ import (
 // test copy
 func TestExcludeContainerFlagCopy(t *testing.T) {
 	a := assert.New(t)
-	common.SetUIHooks(common.NewJobUIHooks())
 	srcBSC := scenarioHelper{}.getBlobServiceClientWithSAS(a)
 	dstBSC := scenarioHelper{}.getSecondaryBlobServiceClientWithSAS(a)
 
@@ -94,7 +93,6 @@ func TestExcludeContainerFlagCopy(t *testing.T) {
 
 func TestExcludeContainerFlagCopyNegative(t *testing.T) {
 	a := assert.New(t)
-	common.SetUIHooks(common.NewJobUIHooks())
 	srcBSC := scenarioHelper{}.getBlobServiceClientWithSAS(a)
 	dstBSC := scenarioHelper{}.getSecondaryBlobServiceClientWithSAS(a)
 
