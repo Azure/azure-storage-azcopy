@@ -436,6 +436,12 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		planFlushLogOnce.Do(func() {
 			common.GetLifecycleMgr().Info("Flushing job part plan file(s) to remote filesystem via Sync (Mover build)")
 		})
+
+		// Attempt fdatasync on Linux
+		if err := common.Fdatasync(file); err != nil {
+			common.GetLifecycleMgr().Warn(fmt.Sprintf("[plan-write] fdatasync failed: %v, falling back to fsync", err))
+		}
+
 		if err := file.Sync(); err != nil {
 			common.GetLifecycleMgr().Warn(fmt.Sprintf("failed to flush job part plan file '%s': %v", jpfn.GetJobPartPlanPath(), err))
 		}
