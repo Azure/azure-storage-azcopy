@@ -133,7 +133,6 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 			js.SymlinkTransfers += msg.SymlinkTransfers
 			js.TotalBytesEnumerated += msg.TotalBytesEnumerated
 			js.TotalBytesExpected += msg.TotalBytesEnumerated
-			js.HardlinksConvertedCount += msg.HardlinksConvertedCount
 
 		case msg, ok := <-jstm.xferDone:
 			if !ok { // Channel is closed, all transfers have been attended.
