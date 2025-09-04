@@ -43,19 +43,20 @@ func TestLogSanitizer(t *testing.T) {
 		{"http://foo?something=sigabc&somethingelse=abcsig", "http://foo?something=sigabc&somethingelse=abcsig"}, // sig is inside the value
 
 		// DO redact all of the following
-		{"http://foo?sig=somevalue&x=y", "http://foo?sig=-REDACTED-&x=y"},                                         // remainder of query string is preserved
-		{"http://foo?x=y&" + SigAzure + "=somevalue", "http://foo?x=y&sig=-REDACTED-"},                            // basic case
-		{"http://foo?x=y&sig=somevalue\r\nBlah", "http://foo?x=y&sig=-REDACTED-\r\nBlah"},                         // newline after, case preserved in other text
-		{"blah\r\nhttp://foo?x=y&sig=somevalue blah", "blah\r\nhttp://foo?x=y&sig=-REDACTED- blah"},               // newline before and something else after
-		{"http://foo?a=b&" + SigXAmzForAws + "=somevalue&x=y", "http://foo?a=b&x-amz-signature=-REDACTED-&x=y"},   // AWS (using our official constant for the key
-		{"http://foo?a=b&X-Amz-siGnature=somevalue&x=y", "http://foo?a=b&X-Amz-siGnature=-REDACTED-&x=y"},         // weird caps
-		{"http://foo?sIg=somevalue&x=y", "http://foo?sIg=-REDACTED-&x=y"},                                         // more weird caps
-		{"http://foo?a=b&someother-signature=somevalue&x=y", "http://foo?a=b&someother-signature=-REDACTED-&x=y"}, // unexpected sig type
-		{"http://foo?x=y&my-token=somevalue", "http://foo?x=y&my-token=-REDACTED-"},                               // name ending in "token"
-		{"Foo=x;Signature=bar", "Foo=x;Signature=-REDACTED-"},                                                     // not in a query string
-		{"Signature = bar;Foo = x", "Signature = -REDACTED-;Foo = x"},                                             // not in a query string, with spaces
-		{"Foo=x;Signature=bar", "Foo=x;Signature=-REDACTED-"},                                                     // not in a query string
-		{"Foo : x, Signature : bar, Other: z", "Foo : x, Signature : -REDACTED-, Other: z"},                       // not in a query string, with commas and spaces
+		{"http://foo?sig=somevalue&x=y", "http://foo?sig=-REDACTED-&x=y"},                                                         // remainder of query string is preserved
+		{"http://foo?x=y&" + SigAzure + "=somevalue", "http://foo?x=y&sig=-REDACTED-"},                                            // basic case
+		{"http://foo?x=y&sig=somevalue\r\nBlah", "http://foo?x=y&sig=-REDACTED-\r\nBlah"},                                         // newline after, case preserved in other text
+		{"blah\r\nhttp://foo?x=y&sig=somevalue blah", "blah\r\nhttp://foo?x=y&sig=-REDACTED- blah"},                               // newline before and something else after
+		{"http://foo?a=b&" + SigXAmzForAws + "=somevalue&x=y", "http://foo?a=b&x-amz-signature=-REDACTED-&x=y"},                   // AWS (using our official constant for the key
+		{"http://foo?a=b&X-Amz-siGnature=somevalue&x=y", "http://foo?a=b&X-Amz-siGnature=-REDACTED-&x=y"},                         // weird caps
+		{"http://foo?sIg=somevalue&x=y", "http://foo?sIg=-REDACTED-&x=y"},                                                         // more weird caps
+		{"http://foo?a=b&someother-signature=somevalue&x=y", "http://foo?a=b&someother-signature=-REDACTED-&x=y"},                 // unexpected sig type
+		{"http://foo?x=y&my-token=somevalue", "http://foo?x=y&my-token=-REDACTED-"},                                               // name ending in "token"
+		{"Foo=x;Signature=bar", "Foo=x;Signature=-REDACTED-"},                                                                     // not in a query string
+		{"Signature = bar;Foo = x", "Signature = -REDACTED-;Foo = x"},                                                             // not in a query string, with spaces
+		{"Foo=x;Signature=bar", "Foo=x;Signature=-REDACTED-"},                                                                     // not in a query string
+		{"Foo : x, Signature : bar, Other: z", "Foo : x, Signature : -REDACTED-, Other: z"},                                       // not in a query string, with commas and spaces
+		{"http://foo.com/bar?x=y&" + CredXAmzForAws + "=somevalue&x=y", "http://foo.com/bar?x=y&x-amz-credential=-REDACTED-&x=y"}, // AWS with credential
 
 		// two replacements in same string
 		{"http://foo?sig=somevalue and http://bar?sig=othervalue BlahBlah", "http://foo?sig=-REDACTED- and http://bar?sig=-REDACTED- BlahBlah"},
