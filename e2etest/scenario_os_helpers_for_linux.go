@@ -36,7 +36,7 @@ type osScenarioHelper struct{}
 
 // set file attributes to test file
 // nolint
-func (osScenarioHelper) setAttributesForLocalFile() error {
+func (osScenarioHelper) setAttributesForLocalFileSMB() error {
 	panic("should never be called")
 }
 

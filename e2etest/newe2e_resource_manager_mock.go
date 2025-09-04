@@ -39,11 +39,11 @@ func init() {
 }
 
 var mockAccountServices = map[AccountType][]common.Location{
-	EAccountType.Standard():                     {common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS(), common.ELocation.FileNFS()},
+	EAccountType.Standard():                     {common.ELocation.Blob(), common.ELocation.FileSMB(), common.ELocation.BlobFS(), common.ELocation.FileNFS()},
 	EAccountType.PremiumBlockBlobs():            {common.ELocation.Blob(), common.ELocation.BlobFS()},
 	EAccountType.PremiumPageBlobs():             {common.ELocation.Blob()},
-	EAccountType.PremiumFileShares():            {common.ELocation.File(), common.ELocation.FileNFS()},
-	EAccountType.HierarchicalNamespaceEnabled(): {common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS(), common.ELocation.FileNFS()},
+	EAccountType.PremiumFileShares():            {common.ELocation.FileSMB(), common.ELocation.FileNFS()},
+	EAccountType.HierarchicalNamespaceEnabled(): {common.ELocation.Blob(), common.ELocation.FileSMB(), common.ELocation.BlobFS(), common.ELocation.FileNFS()},
 	EAccountType.Classic():                      {},
 }
 
@@ -83,7 +83,7 @@ func (m *MockAccountResourceManager) GetService(a Asserter, location common.Loca
 
 var mockServiceAuthTypes = map[common.Location]ExplicitCredentialTypes{
 	common.ELocation.Blob():    (&BlobServiceResourceManager{}).ValidAuthTypes(),
-	common.ELocation.File():    (&FileServiceResourceManager{}).ValidAuthTypes(),
+	common.ELocation.FileSMB(): (&FileServiceResourceManager{}).ValidAuthTypes(),
 	common.ELocation.BlobFS():  (&BlobFSServiceResourceManager{}).ValidAuthTypes(),
 	common.ELocation.FileNFS(): (&FileServiceResourceManager{}).ValidAuthTypes(),
 	// todo S3
@@ -92,7 +92,7 @@ var mockServiceAuthTypes = map[common.Location]ExplicitCredentialTypes{
 
 var mockServiceDefaultAuthTypes = map[common.Location]ExplicitCredentialTypes{
 	common.ELocation.Blob():    (&BlobServiceResourceManager{}).DefaultAuthType(),
-	common.ELocation.File():    (&FileServiceResourceManager{}).DefaultAuthType(),
+	common.ELocation.FileSMB(): (&FileServiceResourceManager{}).DefaultAuthType(),
 	common.ELocation.BlobFS():  (&BlobFSServiceResourceManager{}).DefaultAuthType(),
 	common.ELocation.FileNFS(): (&FileServiceResourceManager{}).DefaultAuthType(),
 }
@@ -161,7 +161,7 @@ func (m *MockServiceResourceManager) GetContainer(s string) ContainerResourceMan
 }
 
 func (m *MockServiceResourceManager) IsHierarchical() bool {
-	return m.Location() == common.ELocation.File() || m.Location() == common.ELocation.BlobFS() || m.Location() == common.ELocation.FileNFS()
+	return m.Location() == common.ELocation.FileSMB() || m.Location() == common.ELocation.BlobFS() || m.Location() == common.ELocation.FileNFS()
 }
 
 type MockContainerResourceManager struct {

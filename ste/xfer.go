@@ -86,7 +86,7 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 		switch sourceType {
 		case common.ELocation.Blob():
 			return newBlobDownloader
-		case common.ELocation.File(), common.ELocation.FileNFS():
+		case common.ELocation.FileSMB(), common.ELocation.FileNFS():
 			return newAzureFilesDownloader
 		case common.ELocation.BlobFS():
 			return newBlobFSDownloader
@@ -103,7 +103,7 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 			case common.ELocation.Blob(),
 				common.ELocation.S3(), common.ELocation.GCP():
 				return newURLToBlobCopier
-			case common.ELocation.File(), common.ELocation.FileNFS():
+			case common.ELocation.FileSMB(), common.ELocation.FileNFS():
 				return newURLToAzureFileCopier
 			case common.ELocation.BlobFS():
 				return newURLToBlobCopier
@@ -115,7 +115,7 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 			switch fromTo.To() {
 			case common.ELocation.Blob():
 				return newBlobUploader
-			case common.ELocation.File(), common.ELocation.FileNFS():
+			case common.ELocation.FileSMB(), common.ELocation.FileNFS():
 				return newAzureFilesUploader
 			case common.ELocation.BlobFS():
 				return newBlobFSUploader
@@ -133,7 +133,7 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 			return newBenchmarkSourceInfoProvider
 		case common.ELocation.Blob():
 			return newBlobSourceInfoProvider
-		case common.ELocation.File(), common.ELocation.FileNFS():
+		case common.ELocation.FileSMB(), common.ELocation.FileNFS():
 			return newFileSourceInfoProvider
 		case common.ELocation.BlobFS():
 			return newBlobSourceInfoProvider // Blob source info provider pulls info from blob and dfs
@@ -150,11 +150,11 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 	switch fromTo {
 	case common.EFromTo.BlobTrash():
 		return DeleteBlob
-	case common.EFromTo.FileTrash():
+	case common.EFromTo.FileSMBTrash():
 		return DeleteFile
 	case common.EFromTo.BlobFSTrash():
 		return DeleteHNSResource
-	case common.EFromTo.BlobNone(), common.EFromTo.BlobFSNone(), common.EFromTo.FileNone():
+	case common.EFromTo.BlobNone(), common.EFromTo.BlobFSNone(), common.EFromTo.FileSMBNone():
 		return SetProperties
 	default:
 		if fromTo.IsDownload() {

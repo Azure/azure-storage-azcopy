@@ -6,6 +6,7 @@ package e2etest
 import (
 	"strings"
 	"testing"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"golang.org/x/sys/windows"
 )
@@ -60,9 +61,9 @@ func TestPermissions_SMBSDDLPreserved(t *testing.T) {
 	}
 
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(
-		common.EFromTo.LocalFile(),
-		common.EFromTo.FileLocal(),
-		common.EFromTo.FileFile(),
+		common.EFromTo.LocalFileSMB(),
+		common.EFromTo.FileSMBLocal(),
+		common.EFromTo.FileSMBFileSMB(),
 	), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:              true,
 		preserveSMBPermissions: true,
@@ -100,7 +101,7 @@ func TestPermissions_SMBWithCopyWithShareRoot(t *testing.T) {
 	RunScenarios(
 		t,
 		eOperation.Copy(), // Sync already shares the root by default.
-		eTestFromTo.Other(common.EFromTo.LocalFile()),
+		eTestFromTo.Other(common.EFromTo.LocalFileSMB()),
 		eValidate.Auto(),
 		anonymousAuthOnly,
 		anonymousAuthOnly,

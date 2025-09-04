@@ -30,7 +30,7 @@ func SetProperties(jptm IJobPartTransferMgr, _ pacer) {
 			setPropertiesBlob(jptm)
 		case common.ELocation.BlobFS():
 			setPropertiesBlobFS(jptm)
-		case common.ELocation.File():
+		case common.ELocation.FileSMB():
 			setPropertiesFile(jptm)
 		default:
 			panic("Attempting set-properties on invalid location: " + to.From().String())

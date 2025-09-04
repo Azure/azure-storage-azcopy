@@ -190,7 +190,7 @@ func (raw rawBenchmarkCmdArgs) appendVirtualDir(target, virtualDir string) (stri
 		p.BlobName = virtualDir
 		return p.String(), err
 
-	case common.ELocation.File(), common.ELocation.FileNFS():
+	case common.ELocation.FileSMB(), common.ELocation.FileNFS():
 		p, err := sharefile.ParseURL(target)
 		if err != nil {
 			return "", fmt.Errorf("error parsing the url %s. Failed with error %s", target, err.Error())
@@ -229,8 +229,8 @@ func (raw rawBenchmarkCmdArgs) createCleanupJobArgs(benchmarkDest common.Resourc
 	switch InferArgumentLocation(rc.src) {
 	case common.ELocation.Blob():
 		rc.fromTo = common.EFromTo.BlobTrash().String()
-	case common.ELocation.File(), common.ELocation.FileNFS():
-		rc.fromTo = common.EFromTo.FileTrash().String()
+	case common.ELocation.FileSMB(), common.ELocation.FileNFS():
+		rc.fromTo = common.EFromTo.FileSMBTrash().String()
 	case common.ELocation.BlobFS():
 		rc.fromTo = common.EFromTo.BlobFSTrash().String()
 	default:

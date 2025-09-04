@@ -52,11 +52,11 @@ func ValidateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo,
 	}
 
 	if userFromTo == common.EFromTo.LocalFileSMB() {
-		userFromTo = common.EFromTo.LocalFile()
+		userFromTo = common.EFromTo.LocalFileSMB()
 	} else if userFromTo == common.EFromTo.FileSMBLocal() {
-		userFromTo = common.EFromTo.FileLocal()
+		userFromTo = common.EFromTo.FileSMBLocal()
 	} else if userFromTo == common.EFromTo.FileSMBFileSMB() {
-		userFromTo = common.EFromTo.FileFile()
+		userFromTo = common.EFromTo.FileSMBFileSMB()
 	}
 
 	if userFromTo == common.EFromTo.FileSMBFileNFS() || userFromTo == common.EFromTo.FileNFSFileSMB() {
@@ -89,11 +89,11 @@ var fromToHelp = func() string {
 
 		if isSafeToOutput(fromTo.From()) && isSafeToOutput(fromTo.To()) {
 			fromtoStr := fromTo.String()
-			if fromTo.String() == common.EFromTo.LocalFile().String() {
+			if fromTo.String() == common.EFromTo.LocalFileSMB().String() {
 				fromtoStr = "LocalFileSMB"
-			} else if fromTo.String() == common.EFromTo.FileLocal().String() {
+			} else if fromTo.String() == common.EFromTo.FileSMBLocal().String() {
 				fromtoStr = "FileSMBLocal"
-			} else if fromTo.String() == common.EFromTo.FileFile().String() {
+			} else if fromTo.String() == common.EFromTo.FileSMBFileSMB().String() {
 				fromtoStr = "FileSMBFileSMB"
 			}
 			validFromTos += fromtoStr + ", "
@@ -222,7 +222,7 @@ func InferArgumentLocation(arg string) common.Location {
 			case strings.Contains(host, ".blob"):
 				return common.ELocation.Blob()
 			case strings.Contains(host, ".file"):
-				return common.ELocation.File()
+				return common.ELocation.FileSMB()
 			case strings.Contains(host, ".dfs"):
 				return common.ELocation.BlobFS()
 			case strings.Contains(host, benchmarkSourceHost):

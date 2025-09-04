@@ -152,7 +152,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 			// print the ugly error if unexpected
 			return err
 		}
-	case common.ELocation.File(), common.ELocation.FileNFS():
+	case common.ELocation.FileSMB(), common.ELocation.FileNFS():
 		var shareClient *share.Client
 		shareClient, err = share.NewClientWithNoCredential(resourceURL, &share.ClientOptions{ClientOptions: options})
 		if err != nil {

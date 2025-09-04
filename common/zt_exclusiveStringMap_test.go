@@ -21,8 +21,9 @@
 package common
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestExclusiveStringMap(t *testing.T) {
@@ -69,7 +70,7 @@ func TestChooseRightCaseSensitivity(t *testing.T) {
 	test(EFromTo.BlobLocal(), "windows", false)
 	test(EFromTo.BlobLocal(), "darwin", false) // default MacOS behaviour is case INsensitive, so assume we are running under that default
 
-	test(EFromTo.LocalFile(), "linux", false) // anything ToFile should be INsensitive
-	test(EFromTo.BlobFile(), "linux", false)  // anything ToFile should be INsensitive
+	test(EFromTo.LocalFileSMB(), "linux", false) // anything ToFile should be INsensitive
+	test(EFromTo.BlobFileSMB(), "linux", false)  // anything ToFile should be INsensitive
 	test(EFromTo.BlobBlob(), "windows", true)
 }

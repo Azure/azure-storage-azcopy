@@ -116,8 +116,7 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 				ValidatePropertyPtr(a, canonPathPrefix+"Public access", vProps.BlobContainerProperties.Access, cProps.BlobContainerProperties.Access)
 			}
 
-
-			if manager.Location() == common.ELocation.File() || manager.Location() == common.ELocation.FileNFS() {
+			if manager.Location() == common.ELocation.FileSMB() || manager.Location() == common.ELocation.FileNFS() {
 				ValidatePropertyPtr(a, "Enabled protocols", vProps.FileContainerProperties.EnabledProtocols, cProps.FileContainerProperties.EnabledProtocols)
 				ValidatePropertyPtr(a, "RootSquash", vProps.FileContainerProperties.RootSquash, cProps.FileContainerProperties.RootSquash)
 				ValidatePropertyPtr(a, "AccessTier", vProps.FileContainerProperties.AccessTier, cProps.FileContainerProperties.AccessTier)
@@ -182,7 +181,7 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 				ValidateTags(a, vProps.BlobProperties.Tags, oProps.BlobProperties.Tags)
 				ValidatePropertyPtr(a, "Block blob access tier", vProps.BlobProperties.BlockBlobAccessTier, oProps.BlobProperties.BlockBlobAccessTier)
 				ValidatePropertyPtr(a, "Page blob access tier", vProps.BlobProperties.PageBlobAccessTier, oProps.BlobProperties.PageBlobAccessTier)
-			case common.ELocation.File(), common.ELocation.FileNFS():
+			case common.ELocation.FileSMB(), common.ELocation.FileNFS():
 				ValidatePropertyPtr(a, "Attributes", vProps.FileProperties.FileAttributes, oProps.FileProperties.FileAttributes)
 				ValidatePropertyPtr(a, "Creation time", vProps.FileProperties.FileCreationTime, oProps.FileProperties.FileCreationTime)
 				ValidatePropertyPtr(a, "Last write time", vProps.FileProperties.FileLastWriteTime, oProps.FileProperties.FileLastWriteTime)

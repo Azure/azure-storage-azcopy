@@ -39,7 +39,7 @@ func (bd *azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceIn
 	}
 
 	fromTo := bd.jptm.FromTo()
-	if fromTo.From() == common.ELocation.File() { // Files SDK can panic when the service hands it something unexpected!
+	if fromTo.From() == common.ELocation.FileSMB() { // Files SDK can panic when the service hands it something unexpected!
 		defer func() { // recover from potential panics and output raw properties for debug purposes; will cover the return call to setAttributes
 			if panicerr := recover(); panicerr != nil {
 				attr, _ := propHolder.FileAttributes()

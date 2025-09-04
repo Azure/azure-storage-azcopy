@@ -51,8 +51,8 @@ func init() {
 				switch srcLocationType {
 				case common.ELocation.Blob():
 					raw.fromTo = common.EFromTo.BlobTrash().String()
-				case common.ELocation.File(), common.ELocation.FileNFS():
-					raw.fromTo = common.EFromTo.FileTrash().String()
+				case common.ELocation.FileSMB(), common.ELocation.FileNFS():
+					raw.fromTo = common.EFromTo.FileSMBTrash().String()
 				case common.ELocation.BlobFS():
 					raw.fromTo = common.EFromTo.BlobFSTrash().String()
 				default:

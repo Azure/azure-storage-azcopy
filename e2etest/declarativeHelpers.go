@@ -354,7 +354,7 @@ func (TestFromTo) AllAzureS2S() TestFromTo {
 	result.filter = func(ft common.FromTo) bool {
 		isFromAzure := ft.From() == common.ELocation.BlobFS() ||
 			ft.From() == common.ELocation.Blob() ||
-			ft.From() == common.ELocation.File()
+			ft.From() == common.ELocation.FileSMB()
 		return ft.IsS2S() && isFromAzure
 	}
 	return result
@@ -367,7 +367,7 @@ func (TestFromTo) AllRemove() TestFromTo {
 		useAllTos: true,
 		froms: []common.Location{
 			common.ELocation.Blob(),
-			common.ELocation.File(),
+			common.ELocation.FileSMB(),
 			common.ELocation.BlobFS(),
 		},
 		tos: []common.Location{
@@ -382,13 +382,13 @@ func (TestFromTo) AllSync() TestFromTo {
 		useAllTos: true,
 		froms: []common.Location{
 			common.ELocation.Blob(),
-			common.ELocation.File(),
+			common.ELocation.FileSMB(),
 			common.ELocation.Local(),
 			common.ELocation.BlobFS(),
 		},
 		tos: []common.Location{
 			common.ELocation.Blob(),
-			common.ELocation.File(),
+			common.ELocation.FileSMB(),
 			common.ELocation.Local(),
 			common.ELocation.BlobFS(),
 		},
@@ -441,8 +441,8 @@ func (tft TestFromTo) getValues(op Operation) []common.FromTo {
 			// (Specifically, if testing just one of FileFile and FileBlob, it makes much more sense to do FileFile because its the
 			// more common case in real usage.)
 			if !tft.suppressAutoFileToFile {
-				if from == common.ELocation.File() && to == common.ELocation.Blob() {
-					to = common.ELocation.File()
+				if from == common.ELocation.FileSMB() && to == common.ELocation.Blob() {
+					to = common.ELocation.FileSMB()
 				} else if from == common.ELocation.FileNFS() && to == common.ELocation.Blob() {
 					to = common.ELocation.FileNFS()
 				}
@@ -470,13 +470,13 @@ func (tft TestFromTo) getValues(op Operation) []common.FromTo {
 					common.EFromTo.BlobFSBlobFS(),
 					common.EFromTo.BlobFSLocal(),
 					common.EFromTo.LocalBlobFS(),
-					common.EFromTo.FileFile(),
+					common.EFromTo.FileSMBFileSMB(),
 					common.EFromTo.LocalBlob(),
 					common.EFromTo.BlobLocal(),
-					common.EFromTo.LocalFile(),
-					common.EFromTo.FileLocal(),
-					common.EFromTo.BlobFile(),
-					common.EFromTo.FileBlob():
+					common.EFromTo.LocalFileSMB(),
+					common.EFromTo.FileSMBLocal(),
+					common.EFromTo.BlobFileSMB(),
+					common.EFromTo.FileSMBBlob():
 					// do nothing, these are fine
 				default:
 					continue // not supported for sync

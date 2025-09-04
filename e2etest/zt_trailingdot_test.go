@@ -22,9 +22,10 @@ package e2etest
 
 import (
 	"context"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"runtime"
 	"testing"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func TestTrailingDot_Local(t *testing.T) {
@@ -32,7 +33,7 @@ func TestTrailingDot_Local(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		return
 	}
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileLocal(), common.EFromTo.LocalFile()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly,
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileSMBLocal(), common.EFromTo.LocalFileSMB()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly,
 		params{
 			recursive: true,
 		}, nil,
@@ -57,7 +58,7 @@ func TestTrailingDot_LocalManual(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		return
 	}
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileLocal(), common.EFromTo.LocalFile()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly,
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileSMBLocal(), common.EFromTo.LocalFileSMB()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly,
 		params{
 			recursive:   true,
 			trailingDot: common.ETrailingDotOption.Enable(),
@@ -79,7 +80,7 @@ func TestTrailingDot_LocalManual(t *testing.T) {
 }
 
 func TestTrailingDot_Min(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileSMBFileSMB()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
 		params{
 			recursive:   true,
 			trailingDot: common.ETrailingDotOption.Enable(),
@@ -94,7 +95,7 @@ func TestTrailingDot_Min(t *testing.T) {
 }
 
 func TestTrailingDot_Disabled(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileSMBFileSMB()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
 		params{
 			recursive:   true,
 			trailingDot: common.ETrailingDotOption.Disable(),
@@ -121,7 +122,7 @@ func TestTrailingDot_Disabled(t *testing.T) {
 }
 
 func TestTrailingDot_FileFile(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileSMBFileSMB()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
 		params{
 			recursive: true,
 		}, nil,
@@ -143,7 +144,7 @@ func TestTrailingDot_FileFile(t *testing.T) {
 
 // This is testing that we do not pass the x-ms-source-allow-trailing-dot when the source is not File.
 func TestTrailingDot_BlobFile(t *testing.T) {
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobFileSMB()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
 		params{
 			recursive: true,
 		}, nil,
@@ -158,7 +159,7 @@ func TestTrailingDot_BlobFile(t *testing.T) {
 
 // This is testing that we do not pass the x-ms-source-allow-trailing-dot when the source is not File.
 func TestTrailingDot_BlobFileHNS(t *testing.T) {
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobFileSMB()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
 		params{
 			recursive: true,
 		}, nil,
@@ -173,7 +174,7 @@ func TestTrailingDot_BlobFileHNS(t *testing.T) {
 
 // This is testing that we skip trailing dot files from File to Blob.
 func TestTrailingDot_FileBlob(t *testing.T) {
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.FileBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.FileSMBBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
 		params{
 			recursive: true,
 		}, nil,
@@ -195,7 +196,7 @@ func TestTrailingDot_FileBlob(t *testing.T) {
 
 // This is testing that we skip trailing dot files from File to BlobFS.
 func TestTrailingDot_FileBlobHNS(t *testing.T) {
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.FileBlobFS()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.FileSMBBlobFS()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
 		params{
 			recursive: true,
 		}, nil,
@@ -220,7 +221,7 @@ func TestTrailingDot_FileLocalWindows(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		return
 	}
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly,
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileSMBLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly,
 		params{
 			recursive: true,
 		}, nil,
@@ -246,7 +247,7 @@ func TestTrailingDot_FileLocalWindows(t *testing.T) {
 //	if runtime.GOOS != "windows" {
 //		return
 //	}
-//	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly,
+//	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileSMBLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly,
 //		params{
 //			recursive: true,
 //		}, nil,
@@ -265,7 +266,7 @@ func TestTrailingDot_FileLocalWindowsDisable(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		return
 	}
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly,
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileSMBLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly,
 		params{
 			recursive:   true,
 			trailingDot: common.ETrailingDotOption.Disable(),
@@ -287,7 +288,7 @@ func TestTrailingDot_FileLocalWindowsDisable(t *testing.T) {
 }
 
 func TestTrailingDot_Remove(t *testing.T) {
-	RunScenarios(t, eOperation.Remove(), eTestFromTo.Other(common.EFromTo.FileTrash()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+	RunScenarios(t, eOperation.Remove(), eTestFromTo.Other(common.EFromTo.FileSMBTrash()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "1K",

@@ -21,12 +21,13 @@
 package e2etest
 
 import (
+	"testing"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"testing"
-	"time"
 )
 
 func TestRemove_IncludeAfter(t *testing.T) {
@@ -40,7 +41,7 @@ func TestRemove_IncludeAfter(t *testing.T) {
 		f("fold1/fileb"),
 	}
 	// these filters aren't supported for blobFS
-	RunScenarios(t, eOperation.Remove(), eTestFromTo.Other(common.EFromTo.BlobTrash(), common.EFromTo.FileTrash()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+	RunScenarios(t, eOperation.Remove(), eTestFromTo.Other(common.EFromTo.BlobTrash(), common.EFromTo.FileSMBTrash()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, &hooks{
 		beforeRunJob: func(h hookHelper) {

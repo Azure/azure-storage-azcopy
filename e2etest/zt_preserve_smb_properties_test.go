@@ -15,8 +15,8 @@ import (
 //
 //	See https://github.com/Azure/azure-storage-azcopy/issues/113 (which incidentally, I'm not observing in the tests above, for reasons unknown)
 func TestProperties_SMBDates(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
-		recursive:       true,
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalFileSMB(), common.EFromTo.FileSMBLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive: true,
 
 		// default, but present for clarity
 		//preserveSMBInfo:        to.Ptr(true),
@@ -47,8 +47,8 @@ func TestProperties_SMBDates(t *testing.T) {
 }
 
 func TestProperties_SMBFlags(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileFile(), common.EFromTo.FileLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
-		recursive:       true,
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalFileSMB(), common.EFromTo.FileSMBFileSMB(), common.EFromTo.FileSMBLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive: true,
 
 		// default, but present for clarity
 		//preserveSMBInfo:        to.Ptr(true),
@@ -74,8 +74,8 @@ func TestProperties_SMBPermsAndFlagsWithIncludeAfter(t *testing.T) {
 		f("fold1/fileb", with{smbAttributes: 2}),
 	}
 
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.FileLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
-		recursive:       true,
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.FileSMBLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive: true,
 
 		// default, but present for clarity
 		//preserveSMBInfo:        to.Ptr(true),
@@ -123,8 +123,8 @@ func TestProperties_SMBPermsAndFlagsWithSync(t *testing.T) {
 		f("fold1/fileb", with{smbAttributes: 2}),
 	}
 
-	RunScenarios(t, eOperation.Sync(), eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
-		recursive:       true,
+	RunScenarios(t, eOperation.Sync(), eTestFromTo.Other(common.EFromTo.LocalFileSMB(), common.EFromTo.FileSMBLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive: true,
 
 		// default, but present for clarity
 		//preserveSMBInfo:        to.Ptr(true),
@@ -158,12 +158,12 @@ func TestProperties_SMBTimes(t *testing.T) {
 	RunScenarios(
 		t,
 		eOperation.Sync(),
-		eTestFromTo.Other(common.EFromTo.FileLocal()),
+		eTestFromTo.Other(common.EFromTo.FileSMBLocal()),
 		eValidate.Auto(),
 		anonymousAuthOnly,
 		anonymousAuthOnly,
 		params{
-			recursive:       true,
+			recursive: true,
 
 			// default, but present for clarity
 			//preserveSMBInfo:        to.Ptr(true),
@@ -193,13 +193,13 @@ func TestProperties_EnsureContainerBehavior(t *testing.T) {
 	RunScenarios(
 		t,
 		eOperation.Copy(),
-		eTestFromTo.Other(common.EFromTo.FileFile()),
+		eTestFromTo.Other(common.EFromTo.FileSMBFileSMB()),
 		eValidate.Auto(),
 		anonymousAuthOnly,
 		anonymousAuthOnly,
 		params{
-			recursive: true,
-			preserveSMBInfo: to.Ptr(true),
+			recursive:              true,
+			preserveSMBInfo:        to.Ptr(true),
 			preserveSMBPermissions: true,
 		},
 		nil,
@@ -224,14 +224,14 @@ func TestProperties_ForceReadOnly(t *testing.T) {
 	RunScenarios(
 		t,
 		eOperation.Sync(),
-		eTestFromTo.Other(common.EFromTo.FileFile()),
+		eTestFromTo.Other(common.EFromTo.FileSMBFileSMB()),
 		eValidate.Auto(),
 		anonymousAuthOnly,
 		anonymousAuthOnly,
 		params{
-			recursive:       true,
+			recursive:         true,
 			deleteDestination: common.EDeleteDestination.True(),
-			forceIfReadOnly: true,
+			forceIfReadOnly:   true,
 		},
 		&hooks{
 			beforeRunJob: func(h hookHelper) {

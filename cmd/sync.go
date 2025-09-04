@@ -149,13 +149,13 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 	switch cooked.fromTo {
 	case common.EFromTo.Unknown():
 		return cooked, fmt.Errorf("unable to infer the source '%s' / destination '%s'. ", raw.src, raw.dst)
-	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile(), common.EFromTo.LocalBlobFS(), common.EFromTo.LocalFileNFS():
+	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFileSMB(), common.EFromTo.LocalBlobFS(), common.EFromTo.LocalFileNFS():
 		cooked.destination, err = SplitResourceString(raw.dst, cooked.fromTo.To())
 		common.PanicIfErr(err)
-	case common.EFromTo.BlobLocal(), common.EFromTo.FileLocal(), common.EFromTo.BlobFSLocal(), common.EFromTo.FileNFSLocal():
+	case common.EFromTo.BlobLocal(), common.EFromTo.FileSMBLocal(), common.EFromTo.BlobFSLocal(), common.EFromTo.FileNFSLocal():
 		cooked.source, err = SplitResourceString(raw.src, cooked.fromTo.From())
 		common.PanicIfErr(err)
-	case common.EFromTo.BlobBlob(), common.EFromTo.FileFile(), common.EFromTo.FileNFSFileNFS(), common.EFromTo.BlobFile(), common.EFromTo.FileBlob(), common.EFromTo.BlobFSBlobFS(), common.EFromTo.BlobFSBlob(), common.EFromTo.BlobFSFile(), common.EFromTo.BlobBlobFS(), common.EFromTo.FileBlobFS():
+	case common.EFromTo.BlobBlob(), common.EFromTo.FileSMBFileSMB(), common.EFromTo.FileNFSFileNFS(), common.EFromTo.BlobFileSMB(), common.EFromTo.FileSMBBlob(), common.EFromTo.BlobFSBlobFS(), common.EFromTo.BlobFSBlob(), common.EFromTo.BlobFSFileSMB(), common.EFromTo.BlobBlobFS(), common.EFromTo.FileSMBBlobFS():
 		cooked.destination, err = SplitResourceString(raw.dst, cooked.fromTo.To())
 		common.PanicIfErr(err)
 		cooked.source, err = SplitResourceString(raw.src, cooked.fromTo.From())
@@ -346,7 +346,7 @@ func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
 
 	// display a warning message to console and job log file if there is a sync operation being performed from local to file share.
 	// Reference : https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-files#synchronize-files
-	if cooked.fromTo == common.EFromTo.LocalFile() {
+	if cooked.fromTo == common.EFromTo.LocalFileSMB() {
 
 		glcm.Warn(LocalToFileShareWarnMsg)
 		common.LogToJobLogWithPrefix(LocalToFileShareWarnMsg, common.LogWarning)

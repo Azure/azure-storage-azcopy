@@ -287,7 +287,7 @@ func TestShareFile(t *testing.T) {
 			SrcContainer: sName,
 			SrcFilePath:  fName,
 		}),
-		fromTo: common.EFromTo.FileBlob(),
+		fromTo: common.EFromTo.FileSMBBlob(),
 	}
 	fileSIP, err := newFileSourceInfoProvider(&jptm)
 	a.Nil(err)
@@ -356,7 +356,7 @@ func TestShareDirectory(t *testing.T) {
 			SrcContainer: sName,
 			SrcFilePath:  dName,
 		}),
-		fromTo: common.EFromTo.FileBlob(),
+		fromTo: common.EFromTo.FileSMBBlob(),
 	}
 	fileSIP, err := newFileSourceInfoProvider(&jptm)
 	a.Nil(err)
