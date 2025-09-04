@@ -50,7 +50,11 @@ func cleanupStalePidFiles(pidsSubDir string, currentPid int) error {
 		pid, err := strconv.Atoi(pidStr)
 		if err != nil {
 			// Not a valid PID, remove the file
-			os.Remove(path.Join(pidsSubDir, fileName))
+			err := os.Remove(path.Join(pidsSubDir, fileName))
+			if err != nil {
+				glcm.Info("could not clean up remove invalid pid file. \n AzCopy should continue as normal." + err.Error())
+				return err
+			}
 			continue
 		}
 		if pid == currentPid { // Skip current process
@@ -74,7 +78,7 @@ func WarnMultipleProcesses(directory string, currentPid int) {
 	pidsSubDir := path.Join(directory, "pids") // Made subdir to not clog main dir
 	err := os.MkdirAll(pidsSubDir, 0755)
 	if err != nil {
-		glcm.Info("could not make pids dir" + err.Error())
+		glcm.Info("could not make pids dir \n AzCopy should continue as normal." + err.Error())
 		return
 	}
 	err = cleanupStalePidFiles(pidsSubDir, currentPid) // First, clean up inactive PID files
@@ -85,7 +89,7 @@ func WarnMultipleProcesses(directory string, currentPid int) {
 
 	f, err := os.Open(pidsSubDir)
 	if err != nil {
-		glcm.Info("could not open pids subdir" + err.Error())
+		glcm.Info("could not open pids subdir \n AzCopy should continue as normal." + err.Error())
 		return
 	}
 	defer f.Close()
@@ -99,7 +103,7 @@ func WarnMultipleProcesses(directory string, currentPid int) {
 	// Creates .pid file with specific pid
 	pidFile, err := os.OpenFile(pidFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
-		glcm.Info("could not create pid file" + err.Error())
+		glcm.Info("could not create pid file \n AzCopy should continue as normal." + err.Error())
 		return
 	}
 	defer pidFile.Close()
@@ -107,6 +111,7 @@ func WarnMultipleProcesses(directory string, currentPid int) {
 	glcm.RegisterCloseFunc(func() { // Should also handle scenarios not exit cleanly
 		err = os.Remove(pidFilePath)
 		if err != nil {
+			glcm.Info("could not clean up. you can delete files in pids dir manually \n AzCopy should continue as normal." + err.Error())
 			return
 		}
 	})
