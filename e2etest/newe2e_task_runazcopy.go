@@ -492,7 +492,7 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 			out = &AzCopyRawStdout{}
 		}
 	}
-	fmt.Println("Concurrency Val:---", common.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue()))
+
 	stderr := &bytes.Buffer{}
 	command := exec.Cmd{
 		Path: GlobalConfig.AzCopyExecutableConfig.ExecutablePath,

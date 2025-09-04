@@ -735,6 +735,7 @@ func (FromTo) S3Blob() FromTo         { return FromToValue(ELocation.S3(), ELoca
 func (FromTo) GCPBlob() FromTo        { return FromToValue(ELocation.GCP(), ELocation.Blob()) }
 func (FromTo) BlobNone() FromTo       { return FromToValue(ELocation.Blob(), ELocation.None()) }
 func (FromTo) BlobFSNone() FromTo     { return FromToValue(ELocation.BlobFS(), ELocation.None()) }
+func (FromTo) FileNone() FromTo    { return FromToValue(ELocation.FileSMB(), ELocation.None()) }
 func (FromTo) FileSMBNone() FromTo    { return FromToValue(ELocation.FileSMB(), ELocation.None()) }
 func (FromTo) LocalFileNFS() FromTo   { return FromToValue(ELocation.Local(), ELocation.FileNFS()) }
 func (FromTo) FileNFSLocal() FromTo   { return FromToValue(ELocation.FileNFS(), ELocation.Local()) }
