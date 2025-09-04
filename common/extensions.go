@@ -56,12 +56,12 @@ func (u URLExtension) RedactSecretQueryParamForLogging() string {
 		u.RawQuery = rawQuery
 	}
 
-	// redact x-amx-signature in S3
+	// redact x-amz-signature in S3
 	if ok, rawQuery := RedactSecretQueryParam(u.RawQuery, SigXAmzForAws); ok {
 		u.RawQuery = rawQuery
 	}
 
-	// redact x-amx-credential in S3
+	// redact x-amz-credential in S3
 	if ok, rawquery := RedactSecretQueryParam(u.RawQuery, CredXAmzForAws); ok {
 		u.RawQuery = rawquery
 	}

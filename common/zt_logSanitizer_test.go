@@ -57,6 +57,8 @@ func TestLogSanitizer(t *testing.T) {
 		{"Foo=x;Signature=bar", "Foo=x;Signature=-REDACTED-"},                                                                     // not in a query string
 		{"Foo : x, Signature : bar, Other: z", "Foo : x, Signature : -REDACTED-, Other: z"},                                       // not in a query string, with commas and spaces
 		{"http://foo.com/bar?x=y&" + CredXAmzForAws + "=somevalue&x=y", "http://foo.com/bar?x=y&x-amz-credential=-REDACTED-&x=y"}, // AWS with credential
+		{"http://foo.com/bar?x=y&X-Amz-Credential=somevalue&x=y", "http://foo.com/bar?x=y&X-Amz-Credential=-REDACTED-&x=y"},       // camel case AWS credential
+		{"http://foo.com/bar?x=y&X-AMz-creDential=somevalue&x=y", "http://foo.com/bar?x=y&X-AMz-creDential=-REDACTED-&x=y"},       // weird caseing AWS credential
 
 		// two replacements in same string
 		{"http://foo?sig=somevalue and http://bar?sig=othervalue BlahBlah", "http://foo?sig=-REDACTED- and http://bar?sig=-REDACTED- BlahBlah"},
