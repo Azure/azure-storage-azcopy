@@ -49,7 +49,7 @@ func LogHardLinkIfDefaultPolicy(fileInfo os.FileInfo, hardlinkHandling common.Ha
 }
 
 // HandleSymlinkForNFS processes a symbolic link based on the specified handling type.
-// It either logs a warning or preserves the symlink basd on the symlink handling type.
+// It either logs a warning or preserves the symlink based on the symlink handling type.
 func HandleSymlinkForNFS(singleFileInfo os.FileInfo, symlinkHandlingType common.SymlinkHandlingType, incrementEnumerationCounter enumerationCounterFunc) {
 	if symlinkHandlingType.None() {
 		// Log a warning if symlink handling is disabled
