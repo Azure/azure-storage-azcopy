@@ -73,7 +73,7 @@ func Test_MultipleProcessWithMockedLCM(t *testing.T) {
 	// Assert
 	errorMessages := mockLCM.GatherAllLogs(mockLCM.infoLog) // check mocked LCM infoLogs
 	if errorMessages != nil {
-		a.Equal(common.ERR_MULTIPLE_PROCESSES, errorMessages[0])
+		a.Equal(common.WARN_MULTIPLE_PROCESSES, errorMessages[0])
 	}
 }
 
