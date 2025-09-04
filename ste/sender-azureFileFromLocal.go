@@ -106,9 +106,13 @@ func (u *azureFileUploader) SendSymlink(linkData string) error {
 	_, err := u.getFileClient().CreateSymbolicLink(u.ctx, linkData, nil)
 
 	if fileerror.HasCode(err, fileerror.ParentNotFound) {
-		// Create the parent directories of the file. Note share must be existed, as the files are listed from share or directory.
-		u.jptm.Log(common.LogError, fmt.Sprintf("%s: %s \n AzCopy is going to create parent directories of the Azure files", fileerror.ParentNotFound, err.Error()))
-		err = AzureFileParentDirCreator{}.CreateParentDirToRoot(u.ctx, u.getFileClient(), u.shareClient, u.jptm.GetFolderCreationTracker())
+		// Create the parent directories of the symlink.
+		// Note share must be existed, as the files are listed from share or directory.
+		u.jptm.Log(common.LogError,
+			fmt.Sprintf("%s: %s \n AzCopy is going to create parent directories of the Azure files", fileerror.ParentNotFound, err.Error()))
+
+		err = AzureFileParentDirCreator{}.CreateParentDirToRoot(
+			u.ctx, u.getFileClient(), u.shareClient, u.jptm.GetFolderCreationTracker())
 		if err != nil {
 			u.jptm.FailActiveUpload("Creating parent directory", err)
 		}
