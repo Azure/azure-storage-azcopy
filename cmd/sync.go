@@ -1008,8 +1008,22 @@ func init() {
 	_ = syncCmd.PersistentFlags().MarkHidden("include")
 	_ = syncCmd.PersistentFlags().MarkHidden("exclude")
 
-	// TODO follow sym link is not implemented, clarify behavior first
-	// syncCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "follow symbolic links when performing sync from local file system.")
+	// TODO: Follow symlink is not implemented for Blob or Azure Files SMB.
+	// TODO: Clarify expected behavior before enabling for Blob scenarios.
+
+	// Defining this flag specifically for NFS.
+	// Not applicable to SMB or Blob as symlinks are not supported for SMB and for Blob we dont have defined behavior.
+	syncCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false,
+		"Follow symbolic links when performing sync for NFS resources. "+
+			"This flag is only applicable when either the source or destination is an NFS file share. "+
+			"Note: This flag is not supported for Azure Files SMB shares or Blob storage in case of sync.")
+
+	// Defining this flag specifically for NFS.
+	// Not applicable to SMB or Blob as symlinks are not supported for SMB and for Blob we dont have defined behavior.
+	syncCmd.PersistentFlags().BoolVar(&raw.preserveSymlinks, "preserve-symlinks", false,
+		"Preserve symbolic links when performing sync for NFS resources. "+
+			"This flag is only applicable when either the source or destination is an NFS file share. "+
+			"Note: This flag is not supported for Azure Files SMB shares or Blob storage, as symlinks are not supported in those services.")
 
 	// TODO sync does not support all BlobAttributes on the command line, this functionality should be added
 

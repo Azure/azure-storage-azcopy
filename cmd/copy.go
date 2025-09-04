@@ -500,6 +500,8 @@ func validateSymlinkHandlingMode(symlinkHandling common.SymlinkHandlingType, fro
 			return nil // Fine on all OSes that support symlink via the OS package. (Win, MacOS, and Linux do, and that's what we officially support.)
 		case common.EFromTo.BlobBlob(), common.EFromTo.BlobFSBlobFS(), common.EFromTo.BlobBlobFS(), common.EFromTo.BlobFSBlob():
 			return nil // Blob->Blob doesn't involve any local requirements
+		case common.EFromTo.LocalFileNFS():
+			return nil // for NFS related transfers symlink preservation is supported.
 		default:
 			return fmt.Errorf("flag --%s can only be used on Blob<->Blob or Local<->Blob", common.PreserveSymlinkFlagName)
 		}
@@ -1797,8 +1799,10 @@ func init() {
 		"False by default. 'Preserves' property info gleaned from stat or statx into object metadata.")
 
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSymlinks, common.PreserveSymlinkFlagName, false,
-		"False by default. If enabled, symlink destinations are preserved as the blob content, rather"+
-			"than uploading the file/folder on the other end of the symlink")
+		"Preserve symbolic links when performing copy operations involving NFS resources or blob storages. "+
+			"If enabled, the symlink destination is stored as the blob content instead of uploading the file or folder it points to. "+
+			"This flag is applicable when either the source or destination is an NFS file share. "+
+			"Note: Not supported for Azure Files SMB shares, as symlinks are not supported in those services.")
 
 	cpCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false,
 		"False by default. When overwriting an existing file on Windows or Azure Files, force the overwrite"+
