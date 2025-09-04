@@ -609,12 +609,13 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 			},
 		},
 		{
-			"If NFS flag and preserve-smb-info flag is set to true it will fail",
+			"If NFS flag and preserve-smb-permissions flag is set to true it will fail",
 			"linux",
 			rawSyncCmdArgs{
-				preserveSMBInfo: true, // by user
-				preserveInfo:    true, // by default
-				fromTo:          "LocalFileNFS",
+				preserveSMBPermissions: true, // by user
+				preserveInfo:           true, // by default
+				fromTo:                 "LocalFileNFS",
+				deleteDestination:      "false",
 			},
 			func(cooked *cookedSyncCmdArgs) {
 				a.Equal(true, cooked.preserveInfo)
@@ -622,12 +623,13 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 			},
 		},
 		{
-			"If NFS flag and preserve-smb-permissions flag is set to true it will fail",
+			"If NFS flag and preserve-smb-info flag is set to true it will fail",
 			"linux",
 			rawSyncCmdArgs{
-				preserveSMBPermissions: true, // by user
-				preserveInfo:           true, // by default
-				fromTo:                 "LocalFileNFS",
+				preserveSMBInfo:   true, // by user
+				preserveInfo:      true, // by default
+				fromTo:            "LocalFileNFS",
+				deleteDestination: "false",
 			},
 			func(cooked *cookedSyncCmdArgs) {
 				a.Equal(true, cooked.preserveInfo)
