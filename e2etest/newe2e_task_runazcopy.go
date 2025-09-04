@@ -155,10 +155,10 @@ type AzCopyEnvironment struct {
 
 	// These fields should almost never be intentionally set by a test writer unless the author really knows what they're doing,
 	// as the fields are automatically controlled.
-	ParentContext         *AzCopyEnvironmentContext
-	EnvironmentId         *uint
-	RunCount              *uint
-	AzureConcurrencyValue *string `env:"AZURE_CONCURRENCY_VALUE"`
+	ParentContext          *AzCopyEnvironmentContext
+	EnvironmentId          *uint
+	RunCount               *uint
+	AzcopyConcurrencyValue *string `env:"AZCOPY_CONCURRENCY_VALUE"`
 }
 
 func (env *AzCopyEnvironment) InheritEnvVar(name string) {
