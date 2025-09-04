@@ -1,7 +1,6 @@
 package e2etest
 
 import (
-	"fmt"
 	"os/user"
 	"runtime"
 	"strconv"
@@ -531,7 +530,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 				},
 			},
 		})
-	fmt.Println("Stdout:--------------", stdOut)
+
 	// Dont validate the root directory in case of sync
 	if azCopyVerb == AzCopyVerbSync {
 		delete(srcObjs, rootDir)
@@ -553,34 +552,23 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 	//
 
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync})
-	dstObj1 := CreateResource[ContainerResourceManager](svm, GetRootResource(svm,
-		ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}), GetResourceOptions{
-			PreferredAccount: ResolveVariation(svm, []*string{pointerTo(PremiumFileShareAcct)}),
-		}), ResourceDefinitionContainer{
-		Properties: ContainerProperties{
-			FileContainerProperties: FileContainerProperties{
-				EnabledProtocols: pointerTo("NFS"),
-			},
-		},
-	})
-
-	dstObj2 := CreateResource[ContainerResourceManager](svm, GetRootResource(svm,
-		ResolveVariation(svm, []common.Location{common.ELocation.File()}), GetResourceOptions{
-			PreferredAccount: ResolveVariation(svm, []*string{pointerTo(PremiumFileShareAcct)}),
-		}), ResourceDefinitionContainer{})
-
-	dstShare := ResolveVariation(svm, []ContainerResourceManager{dstObj1, dstObj2})
-
-	srcObj1 := CreateResource[ContainerResourceManager](svm, GetRootResource(svm,
+	// NFS and SMB Share
+	dstShare := CreateResource[ContainerResourceManager](svm, GetRootResource(svm,
 		ResolveVariation(svm, []common.Location{common.ELocation.File()}),
 		GetResourceOptions{
-			PreferredAccount: ResolveVariation(svm, []*string{pointerTo(PremiumFileShareAcct)}),
-		}), ResourceDefinitionContainer{})
+			PreferredAccount: pointerTo(PremiumFileShareAcct),
+		}), ResourceDefinitionContainer{
+		Properties: ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				EnabledProtocols: pointerTo("SMB"),
+			},
+		},
+	})
 
-	srcObj2 := CreateResource[ContainerResourceManager](svm, GetRootResource(svm,
+	srcShare := CreateResource[ContainerResourceManager](svm, GetRootResource(svm,
 		ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}),
 		GetResourceOptions{
-			PreferredAccount: ResolveVariation(svm, []*string{pointerTo(PremiumFileShareAcct)}),
+			PreferredAccount: pointerTo(PremiumFileShareAcct),
 		}), ResourceDefinitionContainer{
 		Properties: ContainerProperties{
 			FileContainerProperties: FileContainerProperties{
@@ -588,8 +576,6 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 			},
 		},
 	})
-
-	srcShare := ResolveVariation(svm, []ContainerResourceManager{srcObj1, srcObj2})
 
 	preserveProperties := ResolveVariation(svm, []bool{true, false})
 	preservePermissions := ResolveVariation(svm, []bool{true, false})
@@ -602,14 +588,6 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 		fileProperties = &FileNFSProperties{
 			FileCreationTime:  pointerTo(time.Now()),
 			FileLastWriteTime: pointerTo(time.Now()),
-		}
-	}
-	var fileOrFolderPermissions *FileNFSPermissions
-	if preservePermissions {
-		fileOrFolderPermissions = &FileNFSPermissions{
-			Owner:    pointerTo("1000"),
-			Group:    pointerTo("1000"),
-			FileMode: pointerTo("0755"),
 		}
 	}
 
@@ -639,13 +617,16 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 			EntityType: common.EEntityType.Folder(),
 		},
 	}
+
 	// based on SMB or NFS set the properties
-	if srcShare.Location() == common.ELocation.FileNFS() {
-		obj.ObjectProperties.FileNFSPermissions = fileOrFolderPermissions
-		obj.ObjectProperties.FileNFSProperties = folderProperties
-	} else {
-		obj.FileProperties.FileCreationTime = folderProperties.FileCreationTime
-		obj.FileProperties.LastModifiedTime = folderProperties.FileLastWriteTime
+	if preserveProperties {
+		if srcShare.Location() == common.ELocation.FileNFS() {
+			//obj.ObjectProperties.FileNFSPermissions = fileOrFolderPermissions
+			obj.ObjectProperties.FileNFSProperties = folderProperties
+		} else {
+			obj.FileProperties.FileCreationTime = folderProperties.FileCreationTime
+			obj.FileProperties.LastModifiedTime = folderProperties.FileLastWriteTime
+		}
 	}
 	CreateResource[ObjectResourceManager](svm, srcShare, obj)
 	srcObjs[rootDir] = obj
@@ -658,13 +639,13 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 			ObjectProperties: ObjectProperties{
 				EntityType: common.EEntityType.File(),
 			}}
-
-		if srcShare.Location() == common.ELocation.FileNFS() {
-			obj.ObjectProperties.FileNFSPermissions = fileOrFolderPermissions
-			obj.ObjectProperties.FileNFSProperties = fileProperties
-		} else {
-			obj.FileProperties.FileCreationTime = fileProperties.FileCreationTime
-			obj.FileProperties.LastModifiedTime = fileProperties.FileLastWriteTime
+		if preserveProperties {
+			if srcShare.Location() == common.ELocation.FileNFS() {
+				obj.ObjectProperties.FileNFSProperties = fileProperties
+			} else {
+				obj.FileProperties.FileCreationTime = fileProperties.FileCreationTime
+				obj.FileProperties.LastModifiedTime = fileProperties.FileLastWriteTime
+			}
 		}
 
 		CreateResource[ObjectResourceManager](svm, srcShare, obj)
@@ -678,6 +659,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 		fromTo = common.EFromTo.FileSMBFileNFS()
 	}
 
+	// we are already testing this scenarios in other tests so skipping the same location scenario here
 	if srcShare.Location() == dstShare.Location() {
 		svm.InvalidateScenario()
 		return
@@ -688,6 +670,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 	if hardlinkHandling != common.EHardlinkHandlingType.Follow() && !preservePermissions {
 		shouldFail = false
 	}
+
 	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
@@ -707,7 +690,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 			},
 			ShouldFail: shouldFail,
 		})
-	fmt.Println("StdOut:------------", stdOut)
+
 	if preservePermissions {
 		ValidateContainsError(svm, stdOut, []string{
 			"--preserve-permissions flag is not supported for cross-protocol transfers",
@@ -726,9 +709,175 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 	if azCopyVerb == AzCopyVerbSync {
 		delete(srcObjs, rootDir)
 	}
-	// ValidateResource[ContainerResourceManager](svm, dstShare, ResourceDefinitionContainer{
-	// 	Objects: srcObjs,
-	// }, false)
+}
+
+func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationManager) {
+
+	//
+	// 	Test Scenario:
+	// 	1. Create a NFS enabled file share container in Azure
+	// 	2. Create a folder with some files in it.
+	// 	5. Run azcopy copy/sync command to copy the folder from Azure NFS enabled file share to local.
+	//
+
+	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync})
+	// NFS and SMB Share
+	dstShare := CreateResource[ContainerResourceManager](svm, GetRootResource(svm,
+		ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}),
+		GetResourceOptions{
+			PreferredAccount: pointerTo(PremiumFileShareAcct),
+		}), ResourceDefinitionContainer{
+		Properties: ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				EnabledProtocols: pointerTo("NFS"),
+			},
+		},
+	})
+
+	srcShare := CreateResource[ContainerResourceManager](svm, GetRootResource(svm,
+		ResolveVariation(svm, []common.Location{common.ELocation.File()}),
+		GetResourceOptions{
+			PreferredAccount: pointerTo(PremiumFileShareAcct),
+		}), ResourceDefinitionContainer{
+		Properties: ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				EnabledProtocols: pointerTo("SMB"),
+			},
+		},
+	})
+
+	preserveProperties := ResolveVariation(svm, []bool{true, false})
+	preservePermissions := ResolveVariation(svm, []bool{true, false})
+
+	var folderProperties, fileProperties *FileNFSProperties
+	if preserveProperties {
+		folderProperties = &FileNFSProperties{
+			FileCreationTime: pointerTo(time.Now()),
+		}
+		fileProperties = &FileNFSProperties{
+			FileCreationTime:  pointerTo(time.Now()),
+			FileLastWriteTime: pointerTo(time.Now()),
+		}
+	}
+
+	rootDir := "dir_file_copy_test_" + uuid.NewString()
+
+	var dst, src ResourceManager
+	if azCopyVerb == AzCopyVerbSync {
+		dstObj := dstShare.GetObject(svm, rootDir+"/test1.txt", common.EEntityType.File())
+		dstObj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
+		dstObj = dstShare.GetObject(svm, rootDir, common.EEntityType.Folder())
+		dst = dstObj
+		if !svm.Dryrun() {
+			// Make sure the LMT is in the past
+			time.Sleep(time.Second * 5)
+		}
+	} else {
+		dst = dstShare
+	}
+	src = srcShare.GetObject(svm, rootDir, common.EEntityType.Folder())
+
+	// Create destination directories
+	srcObjs := make(ObjectResourceMappingFlat)
+
+	obj := ResourceDefinitionObject{
+		ObjectName: pointerTo(rootDir),
+		ObjectProperties: ObjectProperties{
+			EntityType: common.EEntityType.Folder(),
+		},
+	}
+
+	// based on SMB or NFS set the properties
+	if preserveProperties {
+		if srcShare.Location() == common.ELocation.FileNFS() {
+			//obj.ObjectProperties.FileNFSPermissions = fileOrFolderPermissions
+			obj.ObjectProperties.FileNFSProperties = folderProperties
+		} else {
+			obj.FileProperties.FileCreationTime = folderProperties.FileCreationTime
+			obj.FileProperties.LastModifiedTime = folderProperties.FileLastWriteTime
+		}
+	}
+	CreateResource[ObjectResourceManager](svm, srcShare, obj)
+	srcObjs[rootDir] = obj
+
+	for i := range 2 {
+		name := rootDir + "/test" + strconv.Itoa(i) + ".txt"
+		obj := ResourceDefinitionObject{
+			ObjectName: pointerTo(name),
+			Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
+			ObjectProperties: ObjectProperties{
+				EntityType: common.EEntityType.File(),
+			}}
+		if preserveProperties {
+			if srcShare.Location() == common.ELocation.FileNFS() {
+				obj.ObjectProperties.FileNFSProperties = fileProperties
+			} else {
+				obj.FileProperties.FileCreationTime = fileProperties.FileCreationTime
+				obj.FileProperties.LastModifiedTime = fileProperties.FileLastWriteTime
+			}
+		}
+
+		CreateResource[ObjectResourceManager](svm, srcShare, obj)
+		srcObjs[name] = obj
+	}
+
+	var fromTo common.FromTo
+	if srcShare.Location() == common.ELocation.FileNFS() && dstShare.Location() == common.ELocation.File() {
+		fromTo = common.EFromTo.FileNFSFileSMB()
+	} else if srcShare.Location() == common.ELocation.File() && dstShare.Location() == common.ELocation.FileNFS() {
+		fromTo = common.EFromTo.FileSMBFileNFS()
+	}
+
+	// we are already testing this scenarios in other tests so skipping the same location scenario here
+	if srcShare.Location() == dstShare.Location() {
+		svm.InvalidateScenario()
+		return
+	}
+
+	hardlinkHandling := ResolveVariation(svm, []common.HardlinkHandlingType{common.EHardlinkHandlingType.Skip(), common.EHardlinkHandlingType.Follow()})
+	shouldFail := true
+	if hardlinkHandling != common.EHardlinkHandlingType.Follow() && !preservePermissions {
+		shouldFail = false
+	}
+
+	stdOut, _ := RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: azCopyVerb,
+			Targets: []ResourceManager{
+				src.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken()}), svm, CreateAzCopyTargetOptions{}),
+				dst.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken()}), svm, CreateAzCopyTargetOptions{}),
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive:           pointerTo(true),
+					FromTo:              pointerTo(fromTo),
+					PreservePermissions: pointerTo(preservePermissions),
+					PreserveInfo:        pointerTo(preserveProperties),
+					HardlinkType:        pointerTo(hardlinkHandling),
+				},
+			},
+			ShouldFail: shouldFail,
+		})
+
+	if preservePermissions {
+		ValidateContainsError(svm, stdOut, []string{
+			"--preserve-permissions flag is not supported for cross-protocol transfers",
+		})
+		return
+	}
+
+	if hardlinkHandling == common.EHardlinkHandlingType.Follow() {
+		ValidateContainsError(svm, stdOut, []string{
+			"Hardlinked files are not supported between NFS and SMB and will always be skipped. Please re-run with '--hardlinks=skip'.",
+		})
+		return
+	}
+
+	// Dont validate the root directory in case of sync
+	if azCopyVerb == AzCopyVerbSync {
+		delete(srcObjs, rootDir)
+	}
 }
 
 func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForNFS(svm *ScenarioVariationManager) {
