@@ -151,7 +151,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	if err != nil {
 		panic(fmt.Errorf("couldn't create job part plan file %q: %w", jpfn, err))
 	}
-	defer file.Close()
+	//defer file.Close()
 
 	// If block size from the front-end is set to 0
 	// store the block-size as 0. While getting the transfer Info
@@ -437,14 +437,21 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			common.GetLifecycleMgr().Info("Flushing job part plan file(s) to remote filesystem via Sync (Mover build)")
 		})
 
-		// Attempt fdatasync on Linux
-		if err := common.Fdatasync(file); err != nil {
-			common.GetLifecycleMgr().Warn(fmt.Sprintf("[plan-write] fdatasync failed: %v, falling back to fsync", err))
-		}
-
 		if err := file.Sync(); err != nil {
-			common.GetLifecycleMgr().Warn(fmt.Sprintf("failed to flush job part plan file '%s': %v", jpfn.GetJobPartPlanPath(), err))
+			common.GetLifecycleMgr().Info(fmt.Sprintf("fsync error: %v", err))
 		}
+		// Ensure file data is durable before dropping page cache, especially on network filesystems.
+		// Prefer fdatasync (data-only) to reduce metadata flush overhead; fall back to fsync log on error.
+		if err := common.Fdatasync(file); err != nil {
+			common.GetLifecycleMgr().Info(fmt.Sprintf("[plan-write] fdatasync failed prior to fadvise: %v", err))
+			if err2 := file.Sync(); err2 != nil {
+				common.GetLifecycleMgr().Info(fmt.Sprintf("[plan-write] fsync also failed prior to fadvise: %v", err2))
+			}
+		}
+	}
+
+	if err := file.Close(); err != nil {
+		common.GetLifecycleMgr().Info(fmt.Sprintf("[plan-write] close failed after fsync or fdatasync: %v", err))
 	}
 
 	// the file is closed to due to defer above
