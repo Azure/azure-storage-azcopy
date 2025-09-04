@@ -466,8 +466,6 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 				js.FolderPropertyTransfers++
 			case common.EEntityType.Symlink():
 				js.SymlinkTransfers++
-				// case common.EEntityType.Hardlink():
-				// 	js.HardlinksConvertedCount++
 			}
 
 			// check for all completed transfer to calculate the progress percentage at the end

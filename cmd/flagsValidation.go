@@ -47,7 +47,7 @@ func validatePreserveNFSPropertyOption(toPreserve bool, fromTo common.FromTo, fl
 	if toPreserve {
 		// The user cannot preserve permissions between SMB->NFS or NFS->SMB transfers.
 		if flagName == PreservePermissionsFlag && (fromTo == common.EFromTo.FileNFSFileSMB() || fromTo == common.EFromTo.FileSMBFileNFS()) {
-			return fmt.Errorf("--preserve-permissions flag is not supported for cross-protocol transfers (e.g., SMB<->NFS, NFS<->SMB). Please remove this flag and try again.")
+			return fmt.Errorf("--preserve-permissions flag is not supported for cross-protocol transfers (i,e. SMB->NFS, NFS->SMB). Please remove this flag and try again.")
 		} else if !nfsPermPreserveXfers[fromTo] {
 			return fmt.Errorf("%s is set but the job is not between %s-aware resources", flagName, common.Iff(flagName == PreserveInfoFlag, "permission", "NFS"))
 		} else if (fromTo.IsUpload() || fromTo.IsDownload()) && runtime.GOOS != "linux" {
@@ -257,11 +257,11 @@ func validateAndAdjustHardlinksFlag(option *common.HardlinkHandlingType, fromTo 
 		return nil
 	}
 
-	// NFS↔SMB special case: force skip
+	// NF<->SMB special case: force skip
 	if (fromTo == common.EFromTo.FileNFSFileSMB() || fromTo == common.EFromTo.FileSMBFileNFS()) &&
 		*option != common.SkipHardlinkHandlingType {
 		return fmt.Errorf(
-			"For NFS<->SMB transfers, '--hardlinks' must be set to 'skip'. " +
+			"For NFS->SMB and SMB->NFS transfers, '--hardlinks' must be set to 'skip'. " +
 				"Hardlinked files are not supported between NFS and SMB and will always be skipped. " +
 				"Please re-run with '--hardlinks=skip'.",
 		)
@@ -274,19 +274,19 @@ func validateAndAdjustHardlinksFlag(option *common.HardlinkHandlingType, fromTo 
 
 	switch {
 	case fromTo.IsDownload():
-		// Must be NFS → Local Linux
+		// Must be NFS -> Local Linux
 		if fromTo.From() != common.ELocation.FileNFS() {
 			return fmt.Errorf("For downloads, '--hardlinks' is only supported from an NFS file share to a Linux filesystem.")
 		}
 
 	case fromTo.IsUpload():
-		// Must be Local Linux → NFS
+		// Must be Local Linux -> NFS
 		if fromTo.To() != common.ELocation.FileNFS() {
 			return fmt.Errorf("For uploads, '--hardlinks' is only supported from a Linux filesystem to an NFS file share.")
 		}
 
 	case fromTo.IsS2S():
-		// Allowed: NFS↔NFS, NFS→SMB, SMB→NFS
+		// Allowed: NFS<->NFS, NFS->SMB, SMB->NFS
 		validPairs := map[common.FromTo]bool{
 			common.EFromTo.FileNFSFileNFS(): true,
 			common.EFromTo.FileNFSFileSMB(): true,
