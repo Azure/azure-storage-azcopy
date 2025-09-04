@@ -79,13 +79,13 @@ func WarnMultipleProcesses(directory string, currentPid int) {
 	}
 	err = cleanupStalePidFiles(pidsSubDir, currentPid) // First, clean up inactive PID files
 	if err != nil {
-		glcm.Info("failed to clean up pids" + err.Error())
+		glcm.Info("failed to clean up stale pids" + err.Error())
 		return
 	}
 
 	f, err := os.Open(pidsSubDir)
 	if err != nil {
-		glcm.Info("failed to open pid subdir" + err.Error())
+		glcm.Info("failed to open pids subdir" + err.Error())
 		return
 	}
 	defer f.Close()
