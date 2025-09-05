@@ -161,7 +161,8 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 		common.LogPathFolder = ""
 	}
 
-	// TODO : Command string?
+	// TODO : Command string for library users?
+
 	return SyncResult{}, nil
 }
 

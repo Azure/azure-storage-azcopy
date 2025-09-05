@@ -1135,7 +1135,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	// Check if destination is system container
 	if cca.FromTo.IsS2S() || cca.FromTo.IsUpload() {
-		dstContainerName, err := GetContainerName(cca.Destination.Value, cca.FromTo.To())
+		dstContainerName, err := azcopy.GetContainerName(cca.Destination.Value, cca.FromTo.To())
 		if err != nil {
 			return fmt.Errorf("failed to get container name from destination (is it formatted correctly?): %w", err)
 		}

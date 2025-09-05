@@ -186,29 +186,6 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 	return cooked, nil
 }
 
-// validates and transform raw input into cooked input
-func (raw *rawSyncCmdArgs) cook() (cooked cookedSyncCmdArgs, err error) {
-	if cooked, err = raw.toOptions(); err != nil {
-		return cooked, err
-	}
-	if err = cooked.validate(); err != nil {
-		return cooked, err
-	}
-	if err = cooked.processArgs(); err != nil {
-		return cooked, err
-	}
-	return cooked, nil
-}
-
-func (cooked *cookedSyncCmdArgs) validate() (err error) {
-	return nil
-}
-
-func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
-
-	return nil
-}
-
 type cookedSyncCmdArgs struct {
 	// NOTE: for the 64 bit atomic functions to work on a 32 bit system, we have to guarantee the right 64-bit alignment
 	// so the 64 bit integers are placed first in the struct to avoid future breaks
@@ -483,14 +460,6 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm LifecycleMgr) (totalKnown
 func (cca *cookedSyncCmdArgs) process() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	if err := common.VerifyIsURLResolvable(cca.source.Value); cca.fromTo.From().IsRemote() && err != nil {
-		return fmt.Errorf("failed to resolve source: %w", err)
-	}
-
-	if err := common.VerifyIsURLResolvable(cca.destination.Value); cca.fromTo.To().IsRemote() && err != nil {
-		return fmt.Errorf("failed to resolve destination: %w", err)
-	}
-
 	// Verifies credential type and initializes credential info.
 	// Note that this is for the destination.
 	uotm := Client.GetUserOAuthTokenManagerInstance()
@@ -523,15 +492,6 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 	}
 
 	// Check if destination is system container
-	if cca.fromTo.IsS2S() || cca.fromTo.IsUpload() {
-		dstContainerName, err := GetContainerName(cca.destination.Value, cca.fromTo.To())
-		if err != nil {
-			return fmt.Errorf("failed to get container name from destination (is it formatted correctly?)")
-		}
-		if common.IsSystemContainer(dstContainerName) {
-			return fmt.Errorf("cannot copy to system container '%s'", dstContainerName)
-		}
-	}
 
 	enumerator, err := cca.initEnumerator(ctx)
 	if err != nil {
@@ -647,12 +607,7 @@ func init() {
 				// glcm.OnComplete()
 			}
 
-			cooked, err := raw.cook()
-			if err != nil {
-				glcm.Error("error parsing the input given by the user. Failed with error " + err.Error() + getErrorCodeUrl(err))
-			}
-
-			cooked.commandString = gCopyUtil.ConstructCommandStringFromArgs()
+			cooked := &cookedSyncCmdArgs{}
 			err = cooked.process()
 			if err != nil {
 				glcm.Error("Cannot perform sync due to error: " + err.Error() + getErrorCodeUrl(err))

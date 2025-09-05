@@ -59,8 +59,6 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 		}
 	}
 
-	includeDirStubs := (cca.fromTo.From().SupportsHnsACLs() && cca.fromTo.To().SupportsHnsACLs() && cca.preservePermissions.IsTruthy()) || cca.includeDirectoryStubs
-
 	// TODO: enable symlink support in a future release after evaluating the implications
 	// TODO: Consider passing an errorChannel so that enumeration errors during sync can be conveyed to the caller.
 	// GetProperties is enabled by default as sync supports both upload and download.
@@ -222,7 +220,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 		Fpo:             fpo,
 		SourceRoot:      cca.source.CloneWithConsolidatedSeparators(),
 		DestinationRoot: cca.destination.CloneWithConsolidatedSeparators(),
-		CredentialInfo:  cca.credentialInfo,
+		//CredentialInfo:  cca.credentialInfo,
 
 		// flags
 		BlobAttributes: common.BlobTransferAttributes{

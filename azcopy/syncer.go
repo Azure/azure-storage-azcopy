@@ -118,6 +118,8 @@ func applyDefaultsAndInferSyncOptions(s SyncOptions, fromTo common.FromTo) (clon
 		clone.cpkOptions.IsSourceEncrypted = true
 	}
 
+	clone.IncludeDirectoryStubs = (clone.FromTo.From().SupportsHnsACLs() && clone.FromTo.To().SupportsHnsACLs() && clone.preservePermissions.IsTruthy()) || clone.IncludeDirectoryStubs
+
 	return clone, nil
 }
 
@@ -201,6 +203,26 @@ func (s *syncer) validate() (err error) {
 		//		return fmt.Sprintf("DRYRUN: warn %s", LocalToFileShareWarnMsg)
 		//	})
 		//}
+	}
+
+	// are source and destination resolvable?
+	if err := common.VerifyIsURLResolvable(s.source.Value); s.opts.FromTo.From().IsRemote() && err != nil {
+		return fmt.Errorf("failed to resolve source: %w", err)
+	}
+
+	if err := common.VerifyIsURLResolvable(s.destination.Value); s.opts.FromTo.To().IsRemote() && err != nil {
+		return fmt.Errorf("failed to resolve destination: %w", err)
+	}
+
+	// system containers are not supported
+	if s.opts.FromTo.IsS2S() || s.opts.FromTo.IsUpload() {
+		dstContainerName, err := GetContainerName(s.destination.Value, s.opts.FromTo.To())
+		if err != nil {
+			return fmt.Errorf("failed to get container name from destination (is it formatted correctly?)")
+		}
+		if common.IsSystemContainer(dstContainerName) {
+			return fmt.Errorf("cannot copy to system container '%s'", dstContainerName)
+		}
 	}
 
 	return nil
