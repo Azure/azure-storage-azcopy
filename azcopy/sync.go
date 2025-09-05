@@ -44,7 +44,7 @@ type SyncOptions struct {
 	PreservePermissions     bool
 	Hardlinks               common.HardlinkHandlingType
 
-	// AzCopy CLI only options
+	// AzCopy CLI only options TODO (gapra): Should I prefix these names with Internal to make it clear?
 	DryRun                           bool
 	DeleteDestinationFileIfNecessary bool
 
@@ -113,7 +113,7 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 		return SyncResult{}, fmt.Errorf("source and destination must be specified for sync")
 	}
 
-	job := syncJob{}
+	job := syncer{}
 
 	// ValidateAndInferFromTo
 	userFromTo := common.Iff(opts.FromTo == common.EFromTo.Unknown(), "", opts.FromTo.String())
@@ -126,7 +126,14 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 	if err != nil {
 		return SyncResult{}, err
 	}
-	job.opts = applyDefaultsAndInferSyncOptions(opts, fromTo)
+	job.opts, err = applyDefaultsAndInferSyncOptions(opts, fromTo)
+	if err != nil {
+		return SyncResult{}, err
+	}
+	err = job.validate()
+	if err != nil {
+		return SyncResult{}, err
+	}
 
 	// Job
 	c.CurrentJobID = common.NewJobID()

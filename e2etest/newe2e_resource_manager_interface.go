@@ -39,7 +39,7 @@ type LocalURIOpts struct {
 
 type ResourceManager interface {
 	Location() common.Location
-	Level() cmd.LocationLevel
+	Level() traverser.LocationLevel
 
 	// URI gets the resource "URI", either a local path or a remote URL.
 	// This should panic if things fail or make no sense, as a sanity check to the test author.

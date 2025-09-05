@@ -23,7 +23,6 @@ package cmd
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -36,6 +35,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
@@ -111,12 +111,12 @@ type rawSyncCmdArgs struct {
 
 // it is assume that the given url has the SAS stripped, and safe to print
 func validateURLIsNotServiceLevel(url string, location common.Location) error {
-	srcLevel, err := DetermineLocationLevel(url, location, true)
+	srcLevel, err := traverser.DetermineLocationLevel(url, location, true)
 	if err != nil {
 		return err
 	}
 
-	if srcLevel == ELocationLevel.Service() {
+	if srcLevel == traverser.ELocationLevel.Service() {
 		return fmt.Errorf("service level URLs (%s) are not supported in sync: ", url)
 	}
 
@@ -203,71 +203,6 @@ func (raw *rawSyncCmdArgs) cook() (cooked cookedSyncCmdArgs, err error) {
 }
 
 func (cooked *cookedSyncCmdArgs) validate() (err error) {
-	// we do not support service level sync yet
-	if cooked.fromTo.From().IsRemote() {
-		err = validateURLIsNotServiceLevel(cooked.source.Value, cooked.fromTo.From())
-		if err != nil {
-			return err
-		}
-	}
-
-	if cooked.fromTo.To().IsRemote() {
-		err = validateURLIsNotServiceLevel(cooked.destination.Value, cooked.fromTo.To())
-		if err != nil {
-			return err
-		}
-	}
-
-	if err = validateForceIfReadOnly(cooked.forceIfReadOnly, cooked.fromTo); err != nil {
-		return err
-	}
-
-	// NFS/SMB validation
-	// TODO : if we ever support symlink handling for sync, we will need to update validation below
-	if common.IsNFSCopy() {
-		if err := performNFSSpecificValidation(
-			cooked.fromTo, cooked.preservePermissions, cooked.preserveInfo,
-			common.ESymlinkHandlingType.Skip(), cooked.hardlinks); err != nil {
-			return err
-		}
-	} else {
-		if err := performSMBSpecificValidation(
-			cooked.fromTo, cooked.preservePermissions, cooked.preserveInfo,
-			cooked.preservePOSIXProperties, cooked.hardlinks); err != nil {
-			return err
-		}
-	}
-
-	if err = validatePutMd5(cooked.putMd5, cooked.fromTo); err != nil {
-		return err
-	}
-
-	if err = validateMd5Option(cooked.md5ValidationOption, cooked.fromTo); err != nil {
-		return err
-	}
-
-	// Check if user has provided `s2s-preserve-blob-tags` flag.
-	// If yes, we have to ensure that both source and destination must be blob storage.
-	if cooked.s2sPreserveBlobTags && (cooked.fromTo.From() != common.ELocation.Blob() || cooked.fromTo.To() != common.ELocation.Blob()) {
-		return fmt.Errorf("either source or destination is not a blob storage. " +
-			"blob index tags is a property of blobs only therefore both source and destination must be blob storage")
-	}
-
-	if cooked.cpkByName != "" && cooked.cpkByValue {
-		return errors.New("cannot use both cpk-by-name and cpk-by-value at the same time")
-	}
-
-	if OutputLevel == common.EOutputVerbosity.Quiet() || OutputLevel == common.EOutputVerbosity.Essential() {
-		if cooked.deleteDestination == common.EDeleteDestination.Prompt() {
-			err = fmt.Errorf("cannot set output level '%s' with delete-destination option '%s'", OutputLevel.String(), cooked.deleteDestination.String())
-		} else if cooked.dryrunMode {
-			err = fmt.Errorf("cannot set output level '%s' with dry-run mode", OutputLevel.String())
-		}
-	}
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
 
@@ -310,28 +245,6 @@ func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
 
 	// use the globally generated JobID
 	cooked.jobID = Client.CurrentJobID
-
-	cooked.blockSize, err = blockSizeInBytes(cooked.blockSizeMB)
-	if err != nil {
-		return err
-	}
-	cooked.putBlobSize, err = blockSizeInBytes(cooked.putBlobSizeMB)
-	if err != nil {
-		return err
-	}
-
-	cooked.cpkOptions = common.CpkOptions{
-		CpkScopeInfo: cooked.cpkByName,  // Setting CPK-N
-		CpkInfo:      cooked.cpkByValue, // Setting CPK-V
-		// Get the key (EncryptionKey and EncryptionKeySHA256) value from environment variables when required.
-	}
-	// We only support transfer from source encrypted by user key when user wishes to download.
-	// Due to service limitation, S2S transfer is not supported for source encrypted by user key.
-	if cooked.fromTo.IsDownload() && (cooked.cpkOptions.CpkScopeInfo != "" || cooked.cpkOptions.CpkInfo) {
-		glcm.Info("Client Provided Key for encryption/decryption is provided for download scenario. " +
-			"Assuming source is encrypted.")
-		cooked.cpkOptions.IsSourceEncrypted = true
-	}
 
 	return nil
 }
@@ -733,6 +646,15 @@ func init() {
 				raw.preservePermissions = raw.preservePermissions
 			} else {
 				raw.preservePermissions = raw.preservePermissions || raw.preserveSMBPermissions
+			}
+
+			// OutputLevel validations
+			if OutputLevel == common.EOutputVerbosity.Quiet() || OutputLevel == common.EOutputVerbosity.Essential() {
+				if strings.EqualFold(raw.deleteDestination, common.EDeleteDestination.Prompt().String()) {
+					glcm.Error(fmt.Sprintf("cannot set output level '%s' with delete-destination option '%s'", OutputLevel.String(), raw.deleteDestination))
+				} else if raw.dryrun {
+					glcm.Error(fmt.Sprintf("cannot set output level '%s' with dry-run mode", OutputLevel.String()))
+				}
 			}
 
 			opts, err := raw.toSyncOptions()

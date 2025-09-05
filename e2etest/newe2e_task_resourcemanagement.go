@@ -43,12 +43,12 @@ func CreateResource[T ResourceManager](a Asserter, base ResourceManager, def Mat
 	}
 
 	// Create the resource(s)
-	definition.ApplyDefinition(a, base, map[cmd.LocationLevel]func(Asserter, ResourceManager, ResourceDefinition){
-		cmd.ELocationLevel.Container(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
+	definition.ApplyDefinition(a, base, map[traverser.LocationLevel]func(Asserter, ResourceManager, ResourceDefinition){
+		traverser.ELocationLevel.Container(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
 			manager.(ContainerResourceManager).Create(a, definition.(ResourceDefinitionContainer).Properties)
 		},
 
-		cmd.ELocationLevel.Object(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
+		traverser.ELocationLevel.Object(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
 			objDef := definition.(ResourceDefinitionObject)
 
 			if objDef.Body == nil {

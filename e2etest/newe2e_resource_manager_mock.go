@@ -135,8 +135,8 @@ func (m *MockServiceResourceManager) Location() common.Location {
 	return m.serviceType
 }
 
-func (m *MockServiceResourceManager) Level() cmd.LocationLevel {
-	return cmd.ELocationLevel.Service()
+func (m *MockServiceResourceManager) Level() traverser.LocationLevel {
+	return traverser.ELocationLevel.Service()
 }
 
 func (m *MockServiceResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
@@ -219,8 +219,8 @@ func (m *MockContainerResourceManager) Location() common.Location {
 	return m.parent.Location()
 }
 
-func (m *MockContainerResourceManager) Level() cmd.LocationLevel {
-	return cmd.ELocationLevel.Container()
+func (m *MockContainerResourceManager) Level() traverser.LocationLevel {
+	return traverser.ELocationLevel.Container()
 }
 
 func (m *MockContainerResourceManager) ContainerName() string {
@@ -308,8 +308,8 @@ func (m *MockObjectResourceManager) Location() common.Location {
 	return m.parent.Location()
 }
 
-func (m *MockObjectResourceManager) Level() cmd.LocationLevel {
-	return cmd.ELocationLevel.Object()
+func (m *MockObjectResourceManager) Level() traverser.LocationLevel {
+	return traverser.ELocationLevel.Object()
 }
 
 func (m *MockObjectResourceManager) EntityType() common.EntityType {

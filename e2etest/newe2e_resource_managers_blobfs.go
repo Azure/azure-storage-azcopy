@@ -78,8 +78,8 @@ func (b *BlobFSServiceResourceManager) Location() common.Location {
 	return common.ELocation.BlobFS()
 }
 
-func (b *BlobFSServiceResourceManager) Level() cmd.LocationLevel {
-	return cmd.ELocationLevel.Service()
+func (b *BlobFSServiceResourceManager) Level() traverser.LocationLevel {
+	return traverser.ELocationLevel.Service()
 }
 
 func (b *BlobFSServiceResourceManager) URI(opts ...GetURIOptions) string {
@@ -174,8 +174,8 @@ func (b *BlobFSFileSystemResourceManager) Location() common.Location {
 	return b.Service.Location()
 }
 
-func (b *BlobFSFileSystemResourceManager) Level() cmd.LocationLevel {
-	return cmd.ELocationLevel.Container()
+func (b *BlobFSFileSystemResourceManager) Level() traverser.LocationLevel {
+	return traverser.ELocationLevel.Container()
 }
 
 func (b *BlobFSFileSystemResourceManager) URI(opts ...GetURIOptions) string {
@@ -317,8 +317,8 @@ func (b *BlobFSPathResourceProvider) Location() common.Location {
 	return b.Service.Location()
 }
 
-func (b *BlobFSPathResourceProvider) Level() cmd.LocationLevel {
-	return cmd.ELocationLevel.Object()
+func (b *BlobFSPathResourceProvider) Level() traverser.LocationLevel {
+	return traverser.ELocationLevel.Object()
 }
 
 func (b *BlobFSPathResourceProvider) URI(opts ...GetURIOptions) string {

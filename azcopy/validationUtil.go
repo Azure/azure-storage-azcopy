@@ -6,12 +6,15 @@ import (
 	"net/url"
 	"reflect"
 	"regexp"
+	"runtime"
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 	"github.com/JeffreyRichter/enum/enum"
 )
+
+// TODO : (gapra) Once migration is done, look at all functions in azcopy and see which ones can be made private
 
 var IPv4Regex = regexp.MustCompile(`\d+\.\d+\.\d+\.\d+`)
 
@@ -177,4 +180,182 @@ func InferArgumentLocation(arg string) common.Location {
 	}
 
 	return common.ELocation.Local()
+}
+
+// it is assume that the given url has the SAS stripped, and safe to print
+func validateURLIsNotServiceLevel(url string, location common.Location) error {
+	srcLevel, err := traverser.DetermineLocationLevel(url, location, true)
+	if err != nil {
+		return err
+	}
+
+	if srcLevel == traverser.ELocationLevel.Service() {
+		return fmt.Errorf("service level URLs (%s) are not supported in sync: ", url)
+	}
+
+	return nil
+}
+
+func ValidateForceIfReadOnly(toForce bool, fromTo common.FromTo) error {
+	targetIsFiles := (fromTo.To() == common.ELocation.File() || fromTo.To() == common.ELocation.FileNFS()) ||
+		fromTo == common.EFromTo.FileTrash()
+	targetIsWindowsFS := fromTo.To() == common.ELocation.Local() &&
+		runtime.GOOS == "windows"
+	targetIsOK := targetIsFiles || targetIsWindowsFS
+	if toForce && !targetIsOK {
+		return errors.New("force-if-read-only is only supported when the target is Azure Files or a Windows file system")
+	}
+	return nil
+}
+
+// ValidateNFSOptions performs validation specific to NFS (Network File System) configurations
+func ValidateNFSOptions(fromTo common.FromTo,
+	preservePermissions common.PreservePermissionsOption,
+	preserveInfo bool,
+	symlinkHandling common.SymlinkHandlingType,
+	hardlinkHandling common.HardlinkHandlingType) (err error) {
+	// platform
+	if isUnsupported, err := isUnsupportedPlatformForNFS(fromTo); isUnsupported {
+		return err
+	}
+	// preserve permissions
+	// If we are not preserving original file permissions (raw.preservePermissions == false),
+	// and the operation is a file copy from azure file NFS to local linux (FromTo == FileLocal),
+	// and the current OS is Linux, then we require root privileges to proceed.
+	//
+	// This is because modifying file ownership or permissions on Linux
+	// typically requires elevated privileges. To safely handle permission
+	// changes during the local file operation, we enforce that the process
+	// must be running as root.
+	if !preservePermissions.IsTruthy() && fromTo == common.EFromTo.FileNFSLocal() {
+		if err := common.EnsureRunningAsRoot(); err != nil {
+			return fmt.Errorf("failed to copy source to destination without preserving permissions: operation not permitted. Please retry with root privileges or use the default option (--preserve-permissions=true)")
+		}
+	}
+	if err = validatePreserveForNFSAware(fromTo, preservePermissions.IsTruthy(), "preserve-permissions"); err != nil {
+		return err
+	}
+	// preserve info
+	if err = validatePreserveForNFSAware(fromTo, preserveInfo, "preserve-info"); err != nil {
+		return err
+	}
+	// symlink handling
+	if err = validateSymlinkForNFSAware(symlinkHandling); err != nil {
+		return err
+	}
+	// hardlink handling
+	if err = validateHardlinkForNFSAware(fromTo, hardlinkHandling); err != nil {
+		return err
+	}
+	return nil
+}
+
+func isUnsupportedPlatformForNFS(fromTo common.FromTo) (bool, error) {
+	// upload and download is not supported for NFS on non-linux systems
+	if (fromTo.IsUpload() || fromTo.IsDownload()) && runtime.GOOS != "linux" {
+		op := "operation"
+		if fromTo.IsUpload() {
+			op = "upload"
+		} else if fromTo.IsDownload() {
+			op = "download"
+		}
+		return true, fmt.Errorf(
+			"NFS %s is not supported on %s. This functionality is only available on Linux.",
+			op,
+			runtime.GOOS,
+		)
+	}
+	return false, nil
+}
+
+func validatePreserveForNFSAware(fromTo common.FromTo, toPreserve bool, flagName string) error {
+	// 1. Upload (Windows/Linux -> Azure File)
+	// 2. Download (Azure File -> Windows/Linux)
+	// 3. S2S (Azure File -> Azure File)
+	// TODO: More combination checks to be added later
+	if toPreserve && !(fromTo == common.EFromTo.LocalFileNFS() ||
+		fromTo == common.EFromTo.FileNFSLocal() ||
+		fromTo == common.EFromTo.FileNFSFileNFS()) {
+		return fmt.Errorf("%s is set but the job is not between %s-aware resources", flagName, common.Iff(flagName == "preserve-info", "permission", "NFS"))
+	}
+
+	if toPreserve && (fromTo.IsUpload() || fromTo.IsDownload()) &&
+		runtime.GOOS != "windows" && runtime.GOOS != "linux" {
+		return fmt.Errorf("%s is set but persistence for up/downloads is supported only in Windows and Linux", flagName)
+	}
+
+	return nil
+}
+
+// validateSymlinkForNFSAware checks whether the '--follow-symlink' or '--preserve-symlink' flags
+// are set for an NFS copy operation. Since symlink support is not available for NFS,
+// the function returns an error if either flag is enabled.
+// By default, symlink files will be skipped during NFS copy.
+func validateSymlinkForNFSAware(option common.SymlinkHandlingType) error {
+	if option == common.ESymlinkHandlingType.Follow() {
+		return fmt.Errorf("The '--follow-symlink' flag is not supported for NFS copy. Symlink files will be skipped by default.")
+
+	}
+	if option == common.ESymlinkHandlingType.Preserve() {
+		return fmt.Errorf("the --preserve-symlink flag is not support for NFS copy. Symlink files will be skipped by default.")
+	}
+	return nil
+}
+
+// validateHardlinkForNFSAware
+func validateHardlinkForNFSAware(fromTo common.FromTo, option common.HardlinkHandlingType) error {
+	// Validate for Download: Only allowed when downloading from an NFS share to a Linux filesystem
+	if runtime.GOOS == "linux" && fromTo.IsDownload() && (fromTo.From() != common.ELocation.FileNFS()) {
+		return fmt.Errorf("The --hardlinks option, when downloading, is only supported from a NFS file share to a Linux filesystem.")
+	}
+	// Validate for Upload or S2S: Only allowed when uploading *to* a local file system
+	if runtime.GOOS == "linux" && (fromTo.IsUpload() || fromTo.IsS2S()) && (fromTo.To() != common.ELocation.FileNFS()) {
+		return fmt.Errorf("The --hardlinks option, when uploading, is only supported from a NFS file share to a Linux filesystem or between NFS file shares.")
+	}
+	if option == common.DefaultHardlinkHandlingType {
+		common.GetLifecycleMgr().Info("The --hardlinks option is set to 'follow'. Hardlinked files will be copied as a regular file at the destination.")
+	}
+	return nil
+}
+
+func ValidateSMBOptions(fromTo common.FromTo,
+	preservePermissions common.PreservePermissionsOption,
+	preserveInfo bool,
+	preservePOSIXProperties bool) (err error) {
+	// preserve permissions
+	if err = validatePreserveForSMBAware(fromTo, preservePermissions.IsTruthy(), "preserve-permissions"); err != nil {
+		return err
+	}
+	// preserve info
+	if err = validatePreserveForSMBAware(fromTo, preserveInfo, "preserve-info"); err != nil {
+		return err
+	}
+	// preserve POSIX properties
+	if preservePOSIXProperties && !areBothLocationsPOSIXAware(fromTo) {
+		return errors.New("to use the --preserve-posix-properties flag, both the source and destination must be POSIX-aware. Valid combinations are: Linux -> Blob, Blob -> Linux, or Blob -> Blob")
+	}
+	return nil
+}
+
+func validatePreserveForSMBAware(fromTo common.FromTo, toPreserve bool, flagName string) error {
+	// 1. Upload (Windows/Linux -> Azure File)
+	// 2. Download (Azure File -> Windows/Linux)
+	// 3. S2S (Azure File -> Azure File)
+	// TODO: (gapra) I kind of don't like this check being here. It should live in ValidateSMBOptions I think.
+	if toPreserve && flagName == "preserve-permissions" &&
+		(fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFSBlob() || fromTo == common.EFromTo.BlobBlobFS() || fromTo == common.EFromTo.BlobFSBlobFS()) {
+		// the user probably knows what they're doing if they're trying to persist permissions between blob-type endpoints.
+		return nil
+	} else if toPreserve && !(fromTo == common.EFromTo.LocalFile() ||
+		fromTo == common.EFromTo.FileLocal() ||
+		fromTo == common.EFromTo.FileFile()) {
+		return fmt.Errorf("%s is set but the job is not between %s-aware resources", flagName, common.Iff(flagName == "preserve-permission", "permission", "SMB"))
+	}
+
+	if toPreserve && (fromTo.IsUpload() || fromTo.IsDownload()) &&
+		runtime.GOOS != "windows" && runtime.GOOS != "linux" {
+		return fmt.Errorf("%s is set but persistence for up/downloads is supported only in Windows and Linux", flagName)
+	}
+
+	return nil
 }

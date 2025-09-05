@@ -1,13 +1,15 @@
 package azcopy
 
 import (
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-type syncJob struct {
+type syncer struct {
 	source      common.ResourceString
 	destination common.ResourceString
 	opts        SyncOptions
@@ -48,8 +50,8 @@ type syncJob struct {
 }
 
 // defaultAndInferSyncOptions fills in any missing values in the SyncOptions with their defaults, and infers values from other values where applicable.
-func applyDefaultsAndInferSyncOptions(s SyncOptions, fromTo common.FromTo) SyncOptions {
-	clone := s.clone()
+func applyDefaultsAndInferSyncOptions(s SyncOptions, fromTo common.FromTo) (clone SyncOptions, err error) {
+	clone = s.clone()
 	clone.FromTo = fromTo
 
 	if clone.Recursive == nil {
@@ -69,12 +71,12 @@ func applyDefaultsAndInferSyncOptions(s SyncOptions, fromTo common.FromTo) SyncO
 	}
 
 	if fromTo.IsNFSAware() {
-		clone.PreserveInfo = to.Ptr(*clone.PreserveInfo || AreBothLocationsNFSAware(fromTo)) // TODO : (gapra) Pretty sure this is redundant with the defaulting above
+		clone.PreserveInfo = to.Ptr(*clone.PreserveInfo || areBothLocationsNFSAware(fromTo)) // TODO : (gapra) Pretty sure this is redundant with the defaulting above
 		clone.PreservePosixProperties = false
 		// Preserve ACLs and Ownership for NFS
 		clone.preservePermissions = common.NewPreservePermissionsOption(clone.PreservePermissions, true, fromTo)
 	} else {
-		clone.PreserveInfo = to.Ptr(*clone.PreserveInfo && AreBothLocationsSMBAware(fromTo))
+		clone.PreserveInfo = to.Ptr(*clone.PreserveInfo && areBothLocationsSMBAware(fromTo))
 		clone.preservePermissions = common.NewPreservePermissionsOption(clone.PreservePermissions, false, fromTo)
 		clone.Hardlinks = 0
 	}
@@ -95,5 +97,87 @@ func applyDefaultsAndInferSyncOptions(s SyncOptions, fromTo common.FromTo) SyncO
 		clone.S2SPreserveAccessTier = to.Ptr(false)
 	}
 
-	return clone
+	clone.blockSize, err = BlockSizeInBytes(clone.BlockSizeMB)
+	if err != nil {
+		return clone, err
+	}
+	clone.putBlobSize, err = BlockSizeInBytes(clone.PutBlobSizeMB)
+	if err != nil {
+		return clone, err
+	}
+
+	clone.cpkOptions = common.CpkOptions{
+		CpkScopeInfo: clone.CpkByName,  // Setting CPK-N
+		CpkInfo:      clone.CpkByValue, // Setting CPK-V
+		// Get the key (EncryptionKey and EncryptionKeySHA256) value from environment variables when required.
+	}
+	// We only support transfer from source encrypted by user key when user wishes to download.
+	// Due to service limitation, S2S transfer is not supported for source encrypted by user key.
+	if clone.FromTo.IsDownload() && (clone.cpkOptions.CpkScopeInfo != "" || clone.cpkOptions.CpkInfo) {
+		common.GetLifecycleMgr().Info("Client Provided Key for encryption/decryption is provided for download scenario. " +
+			"Assuming source is encrypted.")
+		clone.cpkOptions.IsSourceEncrypted = true
+	}
+
+	return clone, nil
+}
+
+func (s *syncer) validate() (err error) {
+	// service level sync is not supported
+	if s.opts.FromTo.From().IsRemote() {
+		err = validateURLIsNotServiceLevel(s.source.Value, s.opts.FromTo.From())
+		if err != nil {
+			return err
+		}
+	}
+	if s.opts.FromTo.To().IsRemote() {
+		err = validateURLIsNotServiceLevel(s.destination.Value, s.opts.FromTo.To())
+		if err != nil {
+			return err
+		}
+	}
+
+	// force if read only
+	if err = ValidateForceIfReadOnly(s.opts.ForceIfReadOnly, s.opts.FromTo); err != nil {
+		return err
+	}
+
+	// NFS and SMB
+	if s.opts.FromTo.IsNFSAware() {
+		err = ValidateNFSOptions(s.opts.FromTo, s.opts.preservePermissions, *s.opts.PreserveInfo, common.ESymlinkHandlingType.Skip(), s.opts.Hardlinks)
+		if err != nil {
+			return err
+		}
+	} else {
+		err = ValidateSMBOptions(s.opts.FromTo, s.opts.preservePermissions, *s.opts.PreserveInfo, s.opts.PreservePosixProperties)
+		if err != nil {
+			return err
+		}
+	}
+
+	// put md5
+	// In case of S2S transfers, log info message to inform the users that MD5 check doesn't work for S2S Transfers.
+	// This is because we cannot calculate MD5 hash of the data stored at a remote locations.
+	if s.opts.PutMd5 && s.opts.FromTo.IsS2S() {
+		common.GetLifecycleMgr().Info(" --put-md5 flag to check data consistency between source and destination is not applicable for S2S Transfers (i.e. When both the source and the destination are remote). AzCopy cannot compute MD5 hash of data stored at remote location.")
+	}
+
+	// check md5
+	hasMd5Validation := s.opts.CheckMd5 != common.DefaultHashValidationOption
+	if hasMd5Validation && !s.opts.FromTo.IsDownload() {
+		return fmt.Errorf("check-md5 is set but the job is not a download")
+	}
+
+	// s2s preserve blob tags
+	if s.opts.S2SPreserveBlobTags && (s.opts.FromTo.From() != common.ELocation.Blob() || s.opts.FromTo.To() != common.ELocation.Blob()) {
+		return fmt.Errorf("either source or destination is not a blob storage. " +
+			"blob index tags is a property of blobs only therefore both source and destination must be blob storage")
+	}
+
+	// cpk
+	if s.opts.CpkByName != "" && s.opts.CpkByValue {
+		return errors.New("cannot use both cpk-by-name and cpk-by-value at the same time")
+	}
+
+	return nil
 }

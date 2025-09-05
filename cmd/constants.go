@@ -21,8 +21,7 @@ package cmd
 
 // Common Error and Info messages
 const (
-	PreservePOSIXPropertiesIncompatibilityMsg = "to use the --preserve-posix-properties flag, both the source and destination must be POSIX-aware. Valid combinations are: Linux -> Blob, Blob -> Linux, or Blob -> Blob"
-	PreservePermissionsDisabledMsg            = "Note: The preserve-permissions flag is set to false. As a result, AzCopy will not copy SMB ACLs between the source and destination. For more information, visit: https://aka.ms/AzCopyandAzureFiles."
+	PreservePermissionsDisabledMsg = "Note: The preserve-permissions flag is set to false. As a result, AzCopy will not copy SMB ACLs between the source and destination. For more information, visit: https://aka.ms/AzCopyandAzureFiles."
 
 	PreserveNFSPermissionsDisabledMsg = "Note: The preserve-permissions flag is set to false. As a result, AzCopy will not copy NFS permissions between the source and destination."
 	InvalidFlagsForNFSMsg             = "nfs copy cannot be used with SMB-related flags. Please use the --preserve-info or --preserve-permissions flags instead"
