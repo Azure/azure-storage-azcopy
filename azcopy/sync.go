@@ -3,7 +3,6 @@ package azcopy
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -53,6 +52,7 @@ type SyncOptions struct {
 	blockSize           int64
 	putBlobSize         int64
 	cpkOptions          common.CpkOptions
+	commandString       string
 }
 
 func (s SyncOptions) clone() SyncOptions {
@@ -86,15 +86,10 @@ func (s SyncOptions) clone() SyncOptions {
 	return clone
 }
 
-func getSyncCommandString(src, dest string, options SyncOptions) string {
-	cmd := strings.Builder{}
-	cmd.WriteString("sync")
-	sanitizer := common.NewAzCopyLogSanitizer()
-	cmd.WriteString(" " + sanitizer.SanitizeLogMessage(src))
-	cmd.WriteString(" " + sanitizer.SanitizeLogMessage(dest))
-	// TODO : Finish this implementation
-
-	return cmd.String()
+// WithCommandString sets the command string for the sync operation (for logging purposes).
+// This is set internally by AzCopy CLI.
+func (s *SyncOptions) WithCommandString(cmd string) {
+	s.commandString = cmd
 }
 
 type SyncResult struct {
@@ -113,7 +108,10 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 		return SyncResult{}, fmt.Errorf("source and destination must be specified for sync")
 	}
 
-	job := syncer{}
+	c.CurrentJobID = common.NewJobID()
+	job := syncer{
+		jobID: c.CurrentJobID,
+	}
 
 	// ValidateAndInferFromTo
 	userFromTo := common.Iff(opts.FromTo == common.EFromTo.Unknown(), "", opts.FromTo.String())
@@ -136,7 +134,6 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 	}
 
 	// Job
-	c.CurrentJobID = common.NewJobID()
 	timeAtPrestart := time.Now()
 
 	common.AzcopyCurrentJobLogger = common.NewJobLogger(c.CurrentJobID, c.GetLogLevel(), common.LogPathFolder, "")
@@ -153,6 +150,16 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 	common.LogToJobLogWithPrefix(startTimeMessage, common.LogInfo)
 
 	traverser.EnumerationParallelism, traverser.EnumerationParallelStatFiles = jobsAdmin.JobsAdmin.GetConcurrencySettings()
+
+	// set up the scanning logger
+	common.AzcopyScanningLogger = common.NewJobLogger(c.CurrentJobID, c.GetLogLevel(), common.LogPathFolder, "-scanning")
+	common.AzcopyScanningLogger.OpenLog()
+	defer common.AzcopyScanningLogger.CloseLog()
+
+	// if no logging, set this empty so that we don't display the log location
+	if c.GetLogLevel() == common.LogNone {
+		common.LogPathFolder = ""
+	}
 
 	// TODO : Command string?
 	return SyncResult{}, nil

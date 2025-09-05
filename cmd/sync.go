@@ -43,8 +43,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var LocalToFileShareWarnMsg = "AzCopy sync is supported but not fully recommended for Azure Files. AzCopy sync doesn't support differential copies at scale, and some file fidelity might be lost."
-
 type rawSyncCmdArgs struct {
 	src       string
 	dst       string
@@ -207,44 +205,6 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 }
 
 func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
-	// set up the front end scanning logger
-	common.AzcopyScanningLogger = common.NewJobLogger(Client.CurrentJobID, Client.GetLogLevel(), common.LogPathFolder, "-scanning")
-	common.AzcopyScanningLogger.OpenLog()
-	glcm.RegisterCloseFunc(func() {
-		common.AzcopyScanningLogger.CloseLog()
-	})
-
-	// if no logging, set this empty so that we don't display the log location
-	if Client.GetLogLevel() == common.LogNone {
-		common.LogPathFolder = ""
-	}
-
-	// display a warning message to console and job log file if there is a sync operation being performed from local to file share.
-	// Reference : https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-files#synchronize-files
-	if cooked.fromTo == common.EFromTo.LocalFile() {
-
-		glcm.Warn(LocalToFileShareWarnMsg)
-		common.LogToJobLogWithPrefix(LocalToFileShareWarnMsg, common.LogWarning)
-
-		if cooked.dryrunMode {
-			glcm.Dryrun(func(of common.OutputFormat) string {
-				if of == common.EOutputFormat.Json() {
-					var out struct {
-						Warn string `json:"warn"`
-					}
-
-					out.Warn = LocalToFileShareWarnMsg
-					buf, _ := json.Marshal(out)
-					return string(buf)
-				}
-
-				return fmt.Sprintf("DRYRUN: warn %s", LocalToFileShareWarnMsg)
-			})
-		}
-	}
-
-	// use the globally generated JobID
-	cooked.jobID = Client.CurrentJobID
 
 	return nil
 }
@@ -661,6 +621,7 @@ func init() {
 			if err != nil {
 				glcm.Error("error parsing the input given by the user. Failed with error " + err.Error())
 			}
+			opts.WithCommandString(gCopyUtil.ConstructCommandStringFromArgs())
 
 			var _ azcopy.SyncResult
 			// Create a context that can be cancelled by Ctrl-C

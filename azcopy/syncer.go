@@ -15,8 +15,7 @@ type syncer struct {
 	opts        SyncOptions
 
 	// job properties
-	commandString string
-	jobID         common.JobID
+	jobID common.JobID
 
 	// job progress tracker properties
 	// NOTE: for the 64 bit atomic functions to work on a 32 bit system, we have to guarantee the right 64-bit alignment
@@ -122,6 +121,8 @@ func applyDefaultsAndInferSyncOptions(s SyncOptions, fromTo common.FromTo) (clon
 	return clone, nil
 }
 
+const LocalToFileShareWarnMsg = "AzCopy sync is supported but not fully recommended for Azure Files. AzCopy sync doesn't support differential copies at scale, and some file fidelity might be lost."
+
 func (s *syncer) validate() (err error) {
 	// service level sync is not supported
 	if s.opts.FromTo.From().IsRemote() {
@@ -177,6 +178,29 @@ func (s *syncer) validate() (err error) {
 	// cpk
 	if s.opts.CpkByName != "" && s.opts.CpkByValue {
 		return errors.New("cannot use both cpk-by-name and cpk-by-value at the same time")
+	}
+
+	// sync between local and file warning
+	// Reference : https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-files#synchronize-files
+	if s.opts.FromTo == common.EFromTo.LocalFile() {
+		common.GetLifecycleMgr().Warn(LocalToFileShareWarnMsg)
+		common.LogToJobLogWithPrefix(LocalToFileShareWarnMsg, common.LogWarning)
+		// TODO : (gapra) Seems odd to also log it during dryrun log it twice? Commenting this for now unless someone has a strong reason to keep it.
+		//if cooked.dryrunMode {
+		//	glcm.Dryrun(func(of common.OutputFormat) string {
+		//		if of == common.EOutputFormat.Json() {
+		//			var out struct {
+		//				Warn string `json:"warn"`
+		//			}
+		//
+		//			out.Warn = LocalToFileShareWarnMsg
+		//			buf, _ := json.Marshal(out)
+		//			return string(buf)
+		//		}
+		//
+		//		return fmt.Sprintf("DRYRUN: warn %s", LocalToFileShareWarnMsg)
+		//	})
+		//}
 	}
 
 	return nil
