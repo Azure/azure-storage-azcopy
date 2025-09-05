@@ -162,7 +162,7 @@ var rootCmd = &cobra.Command{
 		}
 
 		isBench := cmd.Use == "bench [destination]"
-		isMigratedToLibrary := cmd.Use == "resume [jobID]"
+		isMigratedToLibrary := cmd.Use == "resume [jobID]" || cmd.Use == "sync"
 
 		return Initialize(isMigratedToLibrary, isBench)
 	},
@@ -226,8 +226,10 @@ func Initialize(isMigratedToLibrary, isBench bool) (err error) {
 		}
 
 	}
-	traverser.EnumerationParallelism, traverser.EnumerationParallelStatFiles = jobsAdmin.JobsAdmin.GetConcurrencySettings()
 
+	if !isMigratedToLibrary {
+		traverser.EnumerationParallelism, traverser.EnumerationParallelStatFiles = jobsAdmin.JobsAdmin.GetConcurrencySettings()
+	}
 	if !SkipVersionCheck && !isPipeDownload {
 		// spawn a routine to fetch and compare the local application's version against the latest version available
 		// if there's a newer version that can be used, then write the suggestion to stderr

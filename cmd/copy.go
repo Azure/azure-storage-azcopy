@@ -244,7 +244,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	}
 
 	// We infer FromTo and validate it here since it is critical to a lot of other options parsing below.
-	cooked.FromTo, err = ValidateFromTo(raw.src, raw.dst, raw.fromTo)
+	cooked.FromTo, err = azcopy.InferAndValidateFromTo(raw.src, raw.dst, raw.fromTo)
 	if err != nil {
 		return cooked, err
 	}
@@ -1468,7 +1468,7 @@ func init() {
 		},
 		Run: func(cmd *cobra.Command, args []string) {
 			// We infer FromTo and validate it here since it is critical to a lot of other options parsing below.
-			userFromTo, err := ValidateFromTo(raw.src, raw.dst, raw.fromTo)
+			userFromTo, err := azcopy.InferAndValidateFromTo(raw.src, raw.dst, raw.fromTo)
 			if err != nil {
 				glcm.Error("failed to parse --from-to user input due to error: " + err.Error())
 			}

@@ -25,11 +25,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"os/signal"
 	"runtime"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
@@ -65,12 +69,8 @@ type rawSyncCmdArgs struct {
 	includeDirectoryStubs   bool // Includes hdi_isfolder objects in the sync even w/o preservePermissions.
 	preservePermissions     bool
 	preserveSMBPermissions  bool // deprecated and synonymous with preservePermissions
-	preserveOwner           bool
 	preserveSMBInfo         bool
 	preservePOSIXProperties bool
-	followSymlinks          bool
-	preserveSymlinks        bool
-	backupMode              bool
 	putMd5                  bool
 	md5ValidationOption     string
 	includeRoot             bool
@@ -105,6 +105,8 @@ type rawSyncCmdArgs struct {
 	// Opt-in flag to persist additional properties to Azure Files
 	preserveInfo bool
 	hardlinks    string
+
+	hashMetaDir string
 }
 
 // it is assume that the given url has the SAS stripped, and safe to print
@@ -121,127 +123,67 @@ func validateURLIsNotServiceLevel(url string, location common.Location) error {
 	return nil
 }
 
+func (raw rawSyncCmdArgs) toSyncOptions() (opts azcopy.SyncOptions, err error) {
+	opts = azcopy.SyncOptions{
+		Recursive:                        to.Ptr(raw.recursive),
+		IncludeDirectoryStubs:            raw.includeDirectoryStubs,
+		PreserveInfo:                     to.Ptr(raw.preserveInfo),
+		PreservePosixProperties:          raw.preservePOSIXProperties,
+		ForceIfReadOnly:                  raw.forceIfReadOnly,
+		BlockSizeMB:                      raw.blockSizeMB,
+		PutBlobSizeMB:                    raw.putBlobSizeMB,
+		PutMd5:                           raw.putMd5,
+		S2SPreserveAccessTier:            to.Ptr(raw.s2sPreserveAccessTier), // finalize code will ensure this is only set for S2S
+		S2SPreserveBlobTags:              raw.s2sPreserveBlobTags,
+		CpkByName:                        raw.cpkScopeInfo,
+		CpkByValue:                       raw.cpkInfo,
+		MirrorMode:                       raw.mirrorMode,
+		IncludeRoot:                      raw.includeRoot,
+		HashMetaDir:                      raw.hashMetaDir,
+		PreservePermissions:              raw.preservePermissions,
+		DryRun:                           raw.dryrun,
+		DeleteDestinationFileIfNecessary: raw.deleteDestinationFileIfNecessary,
+	}
+	opts.FromTo, err = azcopy.InferAndValidateFromTo(raw.src, raw.dst, raw.fromTo)
+	if err != nil {
+		return opts, err
+	}
+	opts.IncludePatterns = parsePatterns(raw.include)
+	opts.ExcludePatterns = parsePatterns(raw.exclude)
+	opts.ExcludePaths = parsePatterns(raw.excludePath)
+	opts.IncludeAttributes = parsePatterns(raw.includeFileAttributes)
+	opts.ExcludeAttributes = parsePatterns(raw.excludeFileAttributes)
+	opts.IncludeRegex = parsePatterns(raw.includeRegex)
+	opts.ExcludeRegex = parsePatterns(raw.excludeRegex)
+	err = opts.DeleteDestination.Parse(raw.deleteDestination)
+	if err != nil {
+		return opts, err
+	}
+	err = opts.CheckMd5.Parse(raw.md5ValidationOption)
+	if err != nil {
+		return opts, err
+	}
+	err = opts.TrailingDot.Parse(raw.trailingDot)
+	if err != nil {
+		return opts, err
+	}
+	err = opts.CompareHash.Parse(raw.compareHash)
+	if err != nil {
+		return opts, err
+	}
+	err = opts.LocalHashStorageMode.Parse(raw.localHashStorageMode)
+	if err != nil {
+		return opts, err
+	}
+	err = opts.Hardlinks.Parse(raw.hardlinks)
+	if err != nil {
+		return opts, err
+	}
+	return opts, nil
+}
+
 func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
-	cooked = cookedSyncCmdArgs{
-		dryrunMode:                       raw.dryrun,
-		blockSizeMB:                      raw.blockSizeMB,
-		putBlobSizeMB:                    raw.putBlobSizeMB,
-		recursive:                        raw.recursive,
-		forceIfReadOnly:                  raw.forceIfReadOnly,
-		backupMode:                       raw.backupMode,
-		putMd5:                           raw.putMd5,
-		s2sPreserveBlobTags:              raw.s2sPreserveBlobTags,
-		cpkByName:                        raw.cpkScopeInfo,
-		cpkByValue:                       raw.cpkInfo,
-		mirrorMode:                       raw.mirrorMode,
-		deleteDestinationFileIfNecessary: raw.deleteDestinationFileIfNecessary,
-		includeDirectoryStubs:            raw.includeDirectoryStubs,
-		includeRoot:                      raw.includeRoot,
-	}
-	err = cooked.trailingDot.Parse(raw.trailingDot)
-	if err != nil {
-		return cooked, err
-	}
-	cooked.fromTo, err = ValidateFromTo(raw.src, raw.dst, raw.fromTo)
-	if err != nil {
-		return cooked, err
-	}
-
-	switch cooked.fromTo {
-	case common.EFromTo.Unknown():
-		return cooked, fmt.Errorf("unable to infer the source '%s' / destination '%s'. ", raw.src, raw.dst)
-	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile(), common.EFromTo.LocalBlobFS(), common.EFromTo.LocalFileNFS():
-		cooked.destination, err = azcopy.SplitResourceString(raw.dst, cooked.fromTo.To())
-		common.PanicIfErr(err)
-	case common.EFromTo.BlobLocal(), common.EFromTo.FileLocal(), common.EFromTo.BlobFSLocal(), common.EFromTo.FileNFSLocal():
-		cooked.source, err = azcopy.SplitResourceString(raw.src, cooked.fromTo.From())
-		common.PanicIfErr(err)
-	case common.EFromTo.BlobBlob(), common.EFromTo.FileFile(), common.EFromTo.FileNFSFileNFS(), common.EFromTo.BlobFile(), common.EFromTo.FileBlob(), common.EFromTo.BlobFSBlobFS(), common.EFromTo.BlobFSBlob(), common.EFromTo.BlobFSFile(), common.EFromTo.BlobBlobFS(), common.EFromTo.FileBlobFS():
-		cooked.destination, err = azcopy.SplitResourceString(raw.dst, cooked.fromTo.To())
-		common.PanicIfErr(err)
-		cooked.source, err = azcopy.SplitResourceString(raw.src, cooked.fromTo.From())
-		common.PanicIfErr(err)
-	default:
-		return cooked, fmt.Errorf("source '%s' / destination '%s' combination '%s' not supported for sync command ", raw.src, raw.dst, cooked.fromTo)
-	}
-
-	// Do this check separately so we don't end up with a bunch of code duplication when new src/dstn are added
-	if cooked.fromTo.From() == common.ELocation.Local() {
-		cooked.source = common.ResourceString{Value: common.ToExtendedPath(common.CleanLocalPath(raw.src))}
-	} else if cooked.fromTo.To() == common.ELocation.Local() {
-		cooked.destination = common.ResourceString{Value: common.ToExtendedPath(common.CleanLocalPath(raw.dst))}
-	}
-
-	if err = cooked.symlinkHandling.Determine(raw.followSymlinks, raw.preserveSymlinks); err != nil {
-		return cooked, err
-	}
-
-	// determine whether we should prompt the user to delete extra files
-	err = cooked.deleteDestination.Parse(raw.deleteDestination)
-	if err != nil {
-		return cooked, err
-	}
-
-	// warn on legacy filters
-	if raw.legacyInclude != "" || raw.legacyExclude != "" {
-		return cooked, fmt.Errorf("the include and exclude parameters have been replaced by include-pattern and exclude-pattern. They work on filenames only (not paths)")
-	}
-
-	// parse the filter patterns
-	cooked.includePatterns = parsePatterns(raw.include)
-	cooked.excludePatterns = parsePatterns(raw.exclude)
-	cooked.excludePaths = parsePatterns(raw.excludePath)
-
-	// parse the attribute filter patterns
-	cooked.includeFileAttributes = parsePatterns(raw.includeFileAttributes)
-	cooked.excludeFileAttributes = parsePatterns(raw.excludeFileAttributes)
-
-	// NFS/SMB arg processing
-	if common.IsNFSCopy() {
-		cooked.preserveInfo = raw.preserveInfo && areBothLocationsNFSAware(cooked.fromTo)
-		//TBD: We will be preserving ACLs and ownership info in case of NFS. (UserID,GroupID and FileMode)
-		// Using the same EPreservePermissionsOption that we have today for NFS as well
-		// Please provide the feedback if we should introduce new EPreservePermissionsOption instead.
-		cooked.preservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
-			true,
-			cooked.fromTo)
-		if err = cooked.hardlinks.Parse(raw.hardlinks); err != nil {
-			return cooked, err
-		}
-	} else {
-		cooked.preserveInfo = raw.preserveInfo && areBothLocationsSMBAware(cooked.fromTo)
-		cooked.preservePOSIXProperties = raw.preservePOSIXProperties
-		cooked.preservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
-			raw.preserveOwner,
-			cooked.fromTo)
-	}
-
-	if err = cooked.compareHash.Parse(raw.compareHash); err != nil {
-		return cooked, err
-	}
-
-	switch cooked.compareHash {
-	case common.ESyncHashType.MD5():
-		// Save any new MD5s on files we download.
-		cooked.putMd5 = true
-	default: // no need to put a hash of any kind.
-	}
-
-	if err = common.LocalHashStorageMode.Parse(raw.localHashStorageMode); err != nil {
-		return cooked, err
-	}
-
-	err = cooked.md5ValidationOption.Parse(raw.md5ValidationOption)
-	if err != nil {
-		return cooked, err
-	}
-
-	if cooked.fromTo.IsS2S() {
-		cooked.preserveAccessTier = raw.s2sPreserveAccessTier
-	}
-
-	cooked.includeRegex = parsePatterns(raw.includeRegex)
-	cooked.excludeRegex = parsePatterns(raw.excludeRegex)
+	cooked = cookedSyncCmdArgs{}
 
 	return cooked, nil
 }
@@ -415,15 +357,15 @@ type cookedSyncCmdArgs struct {
 	// deletion count keeps track of how many extra files from the destination were removed
 	atomicDeletionCount uint32
 
-	source                  common.ResourceString
-	destination             common.ResourceString
-	fromTo                  common.FromTo
 	credentialInfo          common.CredentialInfo
 	s2sSourceCredentialType common.CredentialType
 
+	source      common.ResourceString
+	destination common.ResourceString
+	fromTo      common.FromTo
+
 	// filters
 	recursive             bool
-	symlinkHandling       common.SymlinkHandlingType
 	includePatterns       []string
 	excludePatterns       []string
 	excludePaths          []string
@@ -442,9 +384,9 @@ type cookedSyncCmdArgs struct {
 	blockSize               int64
 	putBlobSize             int64
 	forceIfReadOnly         bool
-	backupMode              bool
-	includeDirectoryStubs   bool
-	includeRoot             bool
+	//backupMode bool
+	includeDirectoryStubs bool
+	includeRoot           bool
 
 	// commandString hold the user given command which is logged to the Job log file
 	commandString string
@@ -654,6 +596,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm LifecycleMgr) (totalKnown
 			ElapsedTime:              duration,
 			SourceFilesScanned:       atomic.LoadUint64(&cca.atomicSourceFilesScanned),
 			DestinationFilesScanned:  atomic.LoadUint64(&cca.atomicDestinationFilesScanned),
+			JobType:                  common.EJobType.Sync(),
 		}
 		lcm.OnComplete(jobSummary)
 
@@ -765,14 +708,66 @@ func init() {
 			if cancelFromStdin {
 				glcm.EnableCancelFromStdIn()
 			}
+			// Deal with any parameters that have been deprecated - include/exclude/preserve-smb-info/preserve-smb-permissions
+			if raw.legacyInclude != "" || raw.legacyExclude != "" {
+				glcm.Error(fmt.Sprintf("the include and exclude parameters have been replaced by include-pattern and exclude-pattern. They work on filenames only (not paths)"))
+			}
+
 			// We infer FromTo and validate it here since it is critical to a lot of other options parsing below.
-			userFromTo, err := ValidateFromTo(raw.src, raw.dst, raw.fromTo)
+			userFromTo, err := azcopy.InferAndValidateFromTo(raw.src, raw.dst, raw.fromTo)
 			if err != nil {
 				glcm.Error("failed to parse --from-to user input due to error: " + err.Error())
 			}
 
-			raw.preserveInfo, raw.preservePermissions = ComputePreserveFlags(cmd, userFromTo,
-				raw.preserveInfo, raw.preserveSMBInfo, raw.preservePermissions, raw.preserveSMBPermissions)
+			// validate setting of invalid smb flags for NFS aware transfers
+			if userFromTo.IsNFSAware() {
+				if (raw.preserveSMBInfo && runtime.GOOS == "linux") || raw.preserveSMBPermissions {
+					glcm.Error(InvalidFlagsForNFSMsg)
+				}
+			}
+
+			// if both flags are set, we honor the new flag and ignore the old one
+			if cmd.Flags().Changed(PreserveInfoFlag) && cmd.Flags().Changed(PreserveSMBInfoFlag) {
+				raw.preserveInfo = raw.preserveInfo
+			} else if cmd.Flags().Changed(PreserveInfoFlag) {
+				raw.preserveInfo = raw.preserveInfo
+			} else if cmd.Flags().Changed(PreserveSMBInfoFlag) {
+				raw.preserveInfo = raw.preserveSMBInfo
+			} else {
+				raw.preserveInfo = azcopy.GetPreserveInfoDefault(userFromTo)
+			}
+			// if transfer is NFS aware, honor the preserve-permissions flag, otherwise honor preserve-smb-permissions flag
+			if userFromTo.IsNFSAware() {
+				raw.preservePermissions = raw.preservePermissions
+			} else {
+				raw.preservePermissions = raw.preservePermissions || raw.preserveSMBPermissions
+			}
+
+			opts := raw.toSyncOptions()
+
+			var resp azcopy.SyncResult
+			// Create a context that can be cancelled by Ctrl-C
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			// Set up signal handling for graceful cancellation
+			go func() {
+				sigChan := make(chan os.Signal, 1)
+				signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+				<-sigChan
+				cancel()
+			}()
+
+			resp, err = Client.Sync(ctx, raw.src, raw.dst, opts)
+			if err != nil {
+				glcm.Error("Cannot perform sync due to error: " + err.Error() + getErrorCodeUrl(err))
+			}
+			if raw.dryrun {
+				glcm.Exit(nil, common.EExitCode.Success())
+			} else {
+				// Print summary
+				// glcm.OnComplete()
+			}
 
 			cooked, err := raw.cook()
 			if err != nil {
@@ -810,6 +805,8 @@ func init() {
 		"False by default. "+
 			"\n Preserves SMB ACLs between aware resources (Azure Files). "+
 			"\n This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
+	// Deprecate the old persist-smb-permissions flag
+	_ = syncCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
 
 	syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", (runtime.GOOS == "windows"),
 		"Preserves SMB property info (last write time, creation time, attribute bits)"+
@@ -820,9 +817,9 @@ func init() {
 			"\n This flag applies to both files and folders, unless a file-only filter is specified "+
 			"(e.g. include-pattern). \n The info transferred for folders is the same as that for files, "+
 			"except for Last Write Time which is never preserved for folders.")
-
 	//Marking this flag as hidden as we might not support it in the future
 	_ = syncCmd.PersistentFlags().MarkHidden("preserve-smb-info")
+
 	syncCmd.PersistentFlags().BoolVar(&raw.preserveInfo, PreserveInfoFlag, false,
 		"Specify this flag if you want to preserve properties during the transfer operation."+
 			"The previously available flag for SMB (--preserve-smb-info) is now redirected to --preserve-info "+
@@ -935,7 +932,7 @@ func init() {
 		"Inform sync to rely on hashes as an alternative to LMT. "+
 			"\n Missing hashes at a remote source will throw an error. (None, MD5) Default: None")
 
-	syncCmd.PersistentFlags().StringVar(&common.LocalHashDir, "hash-meta-dir", "",
+	syncCmd.PersistentFlags().StringVar(&raw.hashMetaDir, "hash-meta-dir", "",
 		"When using `--local-hash-storage-mode=HiddenFiles` "+
 			"\n you can specify an alternate directory to Store hash metadata files in (as opposed to next to the related files in the source)")
 
@@ -956,8 +953,6 @@ func init() {
 
 	// TODO sync does not support all BlobAttributes on the command line, this functionality should be added
 
-	// Deprecate the old persist-smb-permissions flag
-	_ = syncCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
 	syncCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default. "+
 		"\nPreserves ACLs between aware resources (Windows and Azure Files SMB or Data Lake Storage to Data Lake Storage)"+
 		"and permissions between aware resources(Linux to Azure Files NFS). "+

@@ -817,6 +817,11 @@ func (ft FromTo) IsPropertyOnlyTransfer() bool {
 	return ft == EFromTo.BlobNone() || ft == EFromTo.BlobFSNone() || ft == EFromTo.FileNone()
 }
 
+func (ft FromTo) IsNFSAware() bool {
+	return ft == EFromTo.FileNFSFileNFS() ||
+		(runtime.GOOS == "linux" && (ft == EFromTo.FileNFSLocal() || ft == EFromTo.LocalFileNFS()))
+}
+
 // TODO: deletes are not covered by the above Is* routines
 
 var BenchmarkLmt = time.Date(1900, 1, 1, 0, 0, 0, 0, time.UTC)
