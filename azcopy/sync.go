@@ -158,15 +158,15 @@ func getSourceAndDestination(src, dst string, fromTo common.FromTo) (source, des
 		err = fmt.Errorf("unable to infer the source '%s' / destination '%s'. ", src, dst)
 		return
 	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile(), common.EFromTo.LocalBlobFS(), common.EFromTo.LocalFileNFS():
-		destination, err = SplitResourceString(dst, fromTo.To())
+		destination, err = traverser.SplitResourceString(dst, fromTo.To())
 		common.PanicIfErr(err)
 	case common.EFromTo.BlobLocal(), common.EFromTo.FileLocal(), common.EFromTo.BlobFSLocal(), common.EFromTo.FileNFSLocal():
-		source, err = SplitResourceString(src, fromTo.From())
+		source, err = traverser.SplitResourceString(src, fromTo.From())
 		common.PanicIfErr(err)
 	case common.EFromTo.BlobBlob(), common.EFromTo.FileFile(), common.EFromTo.FileNFSFileNFS(), common.EFromTo.BlobFile(), common.EFromTo.FileBlob(), common.EFromTo.BlobFSBlobFS(), common.EFromTo.BlobFSBlob(), common.EFromTo.BlobFSFile(), common.EFromTo.BlobBlobFS(), common.EFromTo.FileBlobFS():
-		destination, err = SplitResourceString(dst, fromTo.To())
+		destination, err = traverser.SplitResourceString(dst, fromTo.To())
 		common.PanicIfErr(err)
-		source, err = SplitResourceString(src, fromTo.From())
+		source, err = traverser.SplitResourceString(src, fromTo.From())
 		common.PanicIfErr(err)
 	default:
 		err = fmt.Errorf("source '%s' / destination '%s' combination '%s' not supported for sync command ", src, dst, fromTo)

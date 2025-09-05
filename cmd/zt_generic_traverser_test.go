@@ -32,7 +32,6 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
-	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	traverser2 "github.com/Azure/azure-storage-azcopy/v10/traverser"
 	"github.com/stretchr/testify/assert"
 
@@ -81,7 +80,7 @@ func TestLocalWildcardOverlap(t *testing.T) {
 		"foobarbaz/test.txt",
 	})
 
-	resource, err := azcopy.SplitResourceString(filepath.Join(tmpDir, "tes*t.txt"), common.ELocation.Local())
+	resource, err := traverser2.SplitResourceString(filepath.Join(tmpDir, "tes*t.txt"), common.ELocation.Local())
 	a.Nil(err)
 
 	traverser, err := traverser2.InitResourceTraverser(resource, common.ELocation.Local(), ctx, traverser2.InitResourceTraverserOptions{
