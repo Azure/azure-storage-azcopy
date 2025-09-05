@@ -81,7 +81,6 @@ func TestBlobDeleter(t *testing.T) {
 	rawContainerURL := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	cca := &cookedSyncCmdArgs{
 		destination:       newRemoteRes(rawContainerURL.String()),
-		credentialInfo:    common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()},
 		deleteDestination: common.EDeleteDestination.True(),
 		fromTo:            common.EFromTo.LocalBlob(),
 	}
@@ -119,7 +118,6 @@ func TestFileDeleter(t *testing.T) {
 	rawShareSAS := scenarioHelper{}.getRawShareURLWithSAS(a, shareName)
 	cca := &cookedSyncCmdArgs{
 		destination:       newRemoteRes(rawShareSAS.String()),
-		credentialInfo:    common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()},
 		deleteDestination: common.EDeleteDestination.True(),
 		fromTo:            common.EFromTo.FileFile(),
 	}

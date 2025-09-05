@@ -222,7 +222,6 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 		SymlinkHandlingType: cca.symlinkHandling,
 		SourceRoot:          cca.source.CloneWithConsolidatedSeparators(),
 		DestinationRoot:     cca.destination.CloneWithConsolidatedSeparators(),
-		CredentialInfo:      cca.credentialInfo,
 
 		// flags
 		BlobAttributes: common.BlobTransferAttributes{
@@ -246,7 +245,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 		CpkOptions:                     cca.cpkOptions,
 		S2SPreserveBlobTags:            cca.s2sPreserveBlobTags,
 
-		S2SSourceCredentialType: cca.s2sSourceCredentialType,
+		S2SSourceCredentialType: srcCredInfo.CredentialType,
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.trailingDot,
 		},
