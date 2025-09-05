@@ -34,7 +34,10 @@ func isProcessRunning(pid int) bool {
 func cleanupStalePidFiles(pidsSubDir string, currentPid int) error {
 	f, err := os.Open(pidsSubDir)
 	if err != nil {
-		glcm.Info("could not open pids dir. you can delete files in pids dir manually. \n AzCopy should continue as normal." + err.Error())
+		common.AzcopyCurrentJobLogger.Log(common.LogInfo,
+			fmt.Sprintf("Azcopy could not open pids sub dir located in the app dir. It is used for tracking running jobs. "+
+				"You can safely delete pid files manually. Azcopy will recreate them as needed"+err.Error()+
+				"\n The current job will continue as normal."))
 		return err
 	}
 	defer f.Close()
@@ -52,7 +55,11 @@ func cleanupStalePidFiles(pidsSubDir string, currentPid int) error {
 			// Not a valid PID, remove the file
 			err := os.Remove(path.Join(pidsSubDir, fileName))
 			if err != nil {
-				glcm.Info("could not clean up remove invalid pid file. \n AzCopy should continue as normal." + err.Error())
+				common.AzcopyCurrentJobLogger.Log(common.LogInfo,
+					fmt.Sprintf("Azcopy could not remove invalid pid in pids sub dir. "+
+						"It is located in the app dir used for tracking running jobs. "+
+						"You can safely delete pid files manually. Azcopy will recreate them as needed"+err.Error()+
+						"\n The current job will continue as normal."))
 				return err
 			}
 			continue
@@ -64,7 +71,11 @@ func cleanupStalePidFiles(pidsSubDir string, currentPid int) error {
 			// Process is not running, remove the stale PID file
 			err := os.Remove(path.Join(pidsSubDir, fileName))
 			if err != nil {
-				glcm.Info("could not clean up stale pid file. you can delete files in pids dir manually \n AzCopy should continue as normal." + err.Error())
+				common.AzcopyCurrentJobLogger.Log(common.LogInfo,
+					fmt.Sprintf("Azcopy could not clean up pids sub dir located in the app dir. "+
+						"It is used for tracking running jobs. "+
+						"You can safely delete pid files manually. Azcopy will recreate them as needed"+err.Error()+
+						"\n The current job will continue as normal."))
 				return err
 			}
 		}
@@ -78,18 +89,27 @@ func WarnMultipleProcesses(directory string, currentPid int) {
 	pidsSubDir := path.Join(directory, "pids") // Made subdir to not clog main dir
 	err := os.MkdirAll(pidsSubDir, 0755)
 	if err != nil {
-		glcm.Info("could not make pids dir \n AzCopy should continue as normal." + err.Error())
+		common.AzcopyCurrentJobLogger.Log(common.LogInfo,
+			fmt.Sprintf("Azcopy could not make pids sub dir in the app dir. It is used for tracking running jobs. "+
+				"Azcopy will create them as needed"+err.Error()+
+				"\n The current job will continue as normal."))
 		return
 	}
 	err = cleanupStalePidFiles(pidsSubDir, currentPid) // First, clean up inactive PID files
 	if err != nil {
-		glcm.Info("could not clean up stale pids. you can delete files in pids dir manually. \n AzCopy should continue as normal." + err.Error())
+		common.AzcopyCurrentJobLogger.Log(common.LogInfo,
+			fmt.Sprintf("Azcopy could not clean up pids sub dir located in the app dir. It is used for tracking running jobs. "+
+				"You can safely delete pid files manually. Azcopy will recreate them as needed"+err.Error()+
+				"\n The current job will continue as normal."))
 		return
 	}
 
 	f, err := os.Open(pidsSubDir)
 	if err != nil {
-		glcm.Info("could not open pids subdir \n AzCopy should continue as normal." + err.Error())
+		common.AzcopyCurrentJobLogger.Log(common.LogInfo,
+			fmt.Sprintf("Azcopy could not open pids sub dir located in the app dir. It is used for tracking running jobs. "+
+				"Azcopy will create them as needed"+err.Error()+
+				"\n The current job will continue as normal."))
 		return
 	}
 	defer f.Close()
@@ -103,7 +123,10 @@ func WarnMultipleProcesses(directory string, currentPid int) {
 	// Creates .pid file with specific pid
 	pidFile, err := os.OpenFile(pidFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
-		glcm.Info("could not create pid file \n AzCopy should continue as normal." + err.Error())
+		common.AzcopyCurrentJobLogger.Log(common.LogInfo,
+			fmt.Sprintf("Azcopy could not create file in pids sub dir located in the app dir. It is used for tracking running jobs. "+
+				err.Error()+
+				"\n The current job will continue as normal."))
 		return
 	}
 	defer pidFile.Close()
@@ -111,14 +134,18 @@ func WarnMultipleProcesses(directory string, currentPid int) {
 	glcm.RegisterCloseFunc(func() { // Should also handle scenarios not exit cleanly
 		err = os.Remove(pidFilePath)
 		if err != nil {
-			glcm.Info("could not clean up. you can delete files in pids dir manually \n AzCopy should continue as normal." + err.Error())
+			common.AzcopyCurrentJobLogger.Log(common.LogInfo,
+				fmt.Sprintf("Azcopy could not clean up pids sub dir located in the app dir. It is used for tracking running jobs. "+
+					"You can safely delete pid files manually. Azcopy will recreate them as needed"+err.Error()+
+					"\n The current job will continue as normal."))
 			return
 		}
 	})
 }
 
 // AsyncWarnMultipleProcesses warns if there are multiple AzCopy processes running
-// We log errors with info because this warning check should not be show-stopping
+// We log errors with info to the log file because this warning check should not be show-stopping
+// The main warning about multiple processes is sent to the console.
 func AsyncWarnMultipleProcesses(directory string, currentPid int) {
 	go func() {
 		WarnMultipleProcesses(directory, currentPid)
