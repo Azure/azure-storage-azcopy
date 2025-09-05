@@ -48,7 +48,7 @@ func (t *blobAccountTraverser) IsDirectory(isSource bool) (bool, error) {
 	return true, nil // Returns true as account traversal is inherently folder-oriented and recursive.
 }
 
-func (t *blobAccountTraverser) listContainers() ([]string, error) {
+func (t *blobAccountTraverser) ListContainers() ([]string, error) {
 	cachedContainers, _, err := t.getListContainers()
 	return cachedContainers, err
 }
@@ -103,7 +103,7 @@ func (t *blobAccountTraverser) getListContainers() ([]string, []string, error) {
 }
 
 func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) error {
-	// listContainers will return the cached container list if containers have already been listed by this traverser.
+	// ListContainers will return the cached container list if containers have already been listed by this traverser.
 	cList, skippedContainers, err := t.getListContainers()
 	if len(skippedContainers) > 0 {
 		common.GetLifecycleMgr().Info("Skipped container(s): " + strings.Join(skippedContainers, ", "))

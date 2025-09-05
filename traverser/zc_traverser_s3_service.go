@@ -50,7 +50,7 @@ func (t *s3ServiceTraverser) IsDirectory(isSource bool) (bool, error) {
 	return true, nil // Returns true as account traversal is inherently folder-oriented and recursive.
 }
 
-func (t *s3ServiceTraverser) listContainers() ([]string, error) {
+func (t *s3ServiceTraverser) ListContainers() ([]string, error) {
 	if len(t.cachedBuckets) == 0 {
 		bucketList := make([]string, 0)
 		bucketInfo, err := t.s3Client.ListBuckets()
@@ -81,7 +81,7 @@ func (t *s3ServiceTraverser) listContainers() ([]string, error) {
 }
 
 func (t *s3ServiceTraverser) Traverse(preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) error {
-	bucketList, err := t.listContainers()
+	bucketList, err := t.ListContainers()
 
 	if err != nil {
 		return err

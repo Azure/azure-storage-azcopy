@@ -41,7 +41,7 @@ func (t *fileAccountTraverser) IsDirectory(isSource bool) (bool, error) {
 	return true, nil // Returns true as account traversal is inherently folder-oriented and recursive.
 }
 
-func (t *fileAccountTraverser) listContainers() ([]string, error) {
+func (t *fileAccountTraverser) ListContainers() ([]string, error) {
 	if len(t.cachedShares) == 0 {
 		shareList := make([]string, 0)
 
@@ -77,8 +77,8 @@ func (t *fileAccountTraverser) listContainers() ([]string, error) {
 }
 
 func (t *fileAccountTraverser) Traverse(preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) error {
-	// listContainers will return the cached share list if shares have already been listed by this traverser.
-	shareList, err := t.listContainers()
+	// ListContainers will return the cached share list if shares have already been listed by this traverser.
+	shareList, err := t.ListContainers()
 
 	if err != nil {
 		return err
