@@ -8,7 +8,7 @@
 2. Fixed regression where AzCopy was not honoring concurrency value in copy operations ([#3192](https://github.com/Azure/azure-storage-azcopy/pull/3192))
 3. Fixed the incorrect JSON output format of the warning message when there are multiple AzCopy processes running. ([#3188](https://github.com/Azure/azure-storage-azcopy/pull/3188))
 4. Fixed `latest_version.txt` from being wrongly created in users current directory. ([#3179](https://github.com/Azure/azure-storage-azcopy/pull/3179))
-5. Fixed AzCopy crashing during sync operation from a nil pointer deref in the destination authentication policy. ([3186](https://github.com/Azure/azure-storage-azcopy/pull/3186))
+5. Fixed AzCopy crashing during sync operation from a nil pointer deref in the destination authentication policy. ([#3186](https://github.com/Azure/azure-storage-azcopy/pull/3186))
 
 ### Dependency Updates
 1.	Golang 1.24.2 -> 1.24.6 (CVE-2025-47907) ([#3154](https://github.com/Azure/azure-storage-azcopy/issues/3154))
