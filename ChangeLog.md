@@ -1,7 +1,7 @@
 
 # Change Log
 
-## Version 10.30.1-patch 
+## Version 10.30.1
 
 ### Bug Fixes 
 1. Fixed `--exclude-path` flag not available in remove operations.([#3165](https://github.com/Azure/azure-storage-azcopy/pull/3165))
