@@ -1,6 +1,18 @@
 
 # Change Log
 
+## Version 10.30.1
+
+### Bug Fixes 
+1. Fixed `--exclude-path` flag not available in remove operations.([PR #3165](https://github.com/Azure/azure-storage-azcopy/pull/3165)) ([GH Issue #3159](https://github.com/Azure/azure-storage-azcopy/issues/3159))
+2. Fixed regression where AzCopy was not honoring concurrency value in copy operations ([#3192](https://github.com/Azure/azure-storage-azcopy/pull/3192))
+3. Fixed the incorrect JSON output format of the warning message when there are multiple AzCopy processes running. ([PR #3188](https://github.com/Azure/azure-storage-azcopy/pull/3188)) ([GH Issue #3182](https://github.com/Azure/azure-storage-azcopy/issues/3182))
+4. Fixed `latest_version.txt` from being wrongly created in users current directory. ([PR #3179](https://github.com/Azure/azure-storage-azcopy/pull/3179))([GH Issue #3176](https://github.com/Azure/azure-storage-azcopy/issues/3176))
+5. Fixed AzCopy crashing during sync operation from a nil pointer deref in the destination authentication policy. ([PR #3186](https://github.com/Azure/azure-storage-azcopy/pull/3186)) ([GH Issue #3109](https://github.com/Azure/azure-storage-azcopy/issues/3109)) ([GH Issue #3156](https://github.com/Azure/azure-storage-azcopy/issues/3156)) ([GH Issue #3175](https://github.com/Azure/azure-storage-azcopy/issues/3175))
+
+### Dependency Updates
+1.	Golang 1.24.2 -> 1.24.6 (CVE-2025-47907) ([#3154](https://github.com/Azure/azure-storage-azcopy/issues/3154))
+
 ## Version 10.31.0-preview.1
 
 ### Dependency updates
