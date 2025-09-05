@@ -214,15 +214,15 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 		cca.trailingDot = common.ETrailingDotOption.Disable()
 	}
 
+	// TODO : If we ever support symlinks, it needs to be passed here.
 	copyJobTemplate := &common.CopyJobPartOrderRequest{
-		JobID:               cca.jobID,
-		CommandString:       cca.commandString,
-		FromTo:              cca.fromTo,
-		Fpo:                 fpo,
-		SymlinkHandlingType: cca.symlinkHandling,
-		SourceRoot:          cca.source.CloneWithConsolidatedSeparators(),
-		DestinationRoot:     cca.destination.CloneWithConsolidatedSeparators(),
-		CredentialInfo:      cca.credentialInfo,
+		JobID:           cca.jobID,
+		CommandString:   cca.commandString,
+		FromTo:          cca.fromTo,
+		Fpo:             fpo,
+		SourceRoot:      cca.source.CloneWithConsolidatedSeparators(),
+		DestinationRoot: cca.destination.CloneWithConsolidatedSeparators(),
+		CredentialInfo:  cca.credentialInfo,
 
 		// flags
 		BlobAttributes: common.BlobTransferAttributes{

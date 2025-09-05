@@ -222,15 +222,12 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 		return err
 	}
 
-	if err = validateBackupMode(cooked.backupMode, cooked.fromTo); err != nil {
-		return err
-	}
-
 	// NFS/SMB validation
+	// TODO : if we ever support symlink handling for sync, we will need to update validation below
 	if common.IsNFSCopy() {
 		if err := performNFSSpecificValidation(
 			cooked.fromTo, cooked.preservePermissions, cooked.preserveInfo,
-			cooked.symlinkHandling, cooked.hardlinks); err != nil {
+			common.ESymlinkHandlingType.Skip(), cooked.hardlinks); err != nil {
 			return err
 		}
 	} else {
@@ -613,11 +610,6 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm LifecycleMgr) (totalKnown
 func (cca *cookedSyncCmdArgs) process() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	err = common.SetBackupMode(cca.backupMode, cca.fromTo)
-	if err != nil {
-		return err
-	}
-
 	if err := common.VerifyIsURLResolvable(cca.source.Value); cca.fromTo.From().IsRemote() && err != nil {
 		return fmt.Errorf("failed to resolve source: %w", err)
 	}
@@ -743,9 +735,12 @@ func init() {
 				raw.preservePermissions = raw.preservePermissions || raw.preserveSMBPermissions
 			}
 
-			opts := raw.toSyncOptions()
+			opts, err := raw.toSyncOptions()
+			if err != nil {
+				glcm.Error("error parsing the input given by the user. Failed with error " + err.Error())
+			}
 
-			var resp azcopy.SyncResult
+			var _ azcopy.SyncResult
 			// Create a context that can be cancelled by Ctrl-C
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -758,7 +753,7 @@ func init() {
 				cancel()
 			}()
 
-			resp, err = Client.Sync(ctx, raw.src, raw.dst, opts)
+			_, err = Client.Sync(ctx, raw.src, raw.dst, opts)
 			if err != nil {
 				glcm.Error("Cannot perform sync due to error: " + err.Error() + getErrorCodeUrl(err))
 			}

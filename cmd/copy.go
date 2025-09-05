@@ -1445,12 +1445,12 @@ func init() {
 					if !stdinPipeIn || err != nil {
 						return fmt.Errorf("fatal: failed to read from Stdin due to error: %s", err)
 					}
-					raw.src = pipeLocation
+					raw.src = azcopy.PipeLocation
 					raw.dst = args[0]
 				} else {
 					// Case 2: BlobPipe. In this case if pipe is missing, content will be echoed on the terminal
 					raw.src = args[0]
-					raw.dst = pipeLocation
+					raw.dst = azcopy.PipeLocation
 				}
 			} else if len(args) == 2 { // normal copy
 				raw.src = args[0]
@@ -1564,7 +1564,7 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false,
 		"False by default. Look into sub-directories recursively when uploading from local file system.")
 
-	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", fromToHelp)
+	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", azcopy.FromToHelp)
 
 	cpCmd.PersistentFlags().StringVar(&raw.excludeBlobType, "exclude-blob-type", "",
 		"Optionally specifies the type of blob (BlockBlob/ PageBlob/ AppendBlob) to exclude when copying blobs from the container "+

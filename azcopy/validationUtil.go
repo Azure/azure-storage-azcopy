@@ -16,11 +16,11 @@ import (
 var IPv4Regex = regexp.MustCompile(`\d+\.\d+\.\d+\.\d+`)
 
 const (
-	pipeLocation     = "~pipe~"
+	PipeLocation     = "~pipe~"
 	fromToHelpFormat = "Specified to nudge AzCopy when resource detection may not work (e.g. piping/emulator/azure stack); Valid FromTo are pairs of Source-Destination words (e.g. BlobLocal, BlobBlob) that specify the source and destination resource types. All valid FromTos are: %s"
 )
 
-var fromToHelp = func() string {
+var FromToHelp = func() string {
 	validFromTos := ""
 
 	isSafeToOutput := func(loc common.Location) bool {
@@ -54,7 +54,7 @@ var fromToHelp = func() string {
 	return fmt.Sprintf(fromToHelpFormat, strings.TrimSuffix(validFromTos, ", "))
 }()
 
-var fromToHelpText = fromToHelp
+var fromToHelpText = FromToHelp
 
 func InferAndValidateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo, error) {
 	if userSpecifiedFromTo == "" {
@@ -139,7 +139,7 @@ func inferFromTo(src, dst string) common.FromTo {
 }
 
 func InferArgumentLocation(arg string) common.Location {
-	if arg == pipeLocation {
+	if arg == PipeLocation {
 		return common.ELocation.Pipe()
 	}
 	if traverser.StartsWith(arg, "http") {
