@@ -79,7 +79,8 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	t, err = traverser.InitResourceTraverser(cca.Source, cca.FromTo.From(), ctx, traverser.InitResourceTraverserOptions{
 		DestResourceType: &dest,
 
-		Credential: &srcCredInfo,
+		Client:         jobPartOrder.SrcServiceClient,
+		CredentialType: srcCredInfo.CredentialType,
 
 		ListOfFiles:      cca.ListOfFilesChannel,
 		ListOfVersionIDs: cca.ListOfVersionIDsChannel,
@@ -120,7 +121,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	}
 
 	// Check if the destination is a directory to correctly decide where our files land
-	isDestDir := cca.isDestDirectory(cca.Destination, ctx)
+	isDestDir := cca.isDestDirectory(cca.Destination, jobPartOrder, ctx)
 	if cca.ListOfVersionIDsChannel != nil && (!(cca.FromTo == common.EFromTo.BlobLocal() || cca.FromTo == common.EFromTo.BlobTrash()) || cca.IsSourceDir || !isDestDir) {
 		log.Fatalf("Either source is not a blob or destination is not a local folder")
 	}
@@ -375,7 +376,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 // This is condensed down into an individual function as we don't end up reusing the destination traverser at all.
 // This is just for the directory check.
-func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx context.Context) bool {
+func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, jobPartOrder common.CopyJobPartOrderRequest, ctx context.Context) bool {
 	var err error
 	dstCredInfo := common.CredentialInfo{}
 
@@ -388,7 +389,8 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx con
 	}
 
 	rt, err := traverser.InitResourceTraverser(dst, cca.FromTo.To(), ctx, traverser.InitResourceTraverserOptions{
-		Credential: &dstCredInfo,
+		CredentialType: dstCredInfo.CredentialType,
+		Client:         jobPartOrder.DstServiceClient,
 
 		ListOfVersionIDs: cca.ListOfVersionIDsChannel,
 
