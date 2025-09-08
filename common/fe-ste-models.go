@@ -59,7 +59,8 @@ const (
 	FILE_NOT_FOUND            = "The specified file was not found."
 	EINTR_RETRY_COUNT         = 5
 	RECOMMENDED_OBJECTS_COUNT = 10000000
-	ERR_MULTIPLE_PROCESSES    = "more than one AzCopy process is running. It is best practice to run a single process per VM."
+	WARN_MULTIPLE_PROCESSES   = "More than one AzCopy process is running. This is a non-blocking warning, AzCopy will continue the operation. \n But, it is best practice to run a single process per VM." +
+		"\nPlease terminate other instances." // This particular warning message does not abort the whole operation
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
