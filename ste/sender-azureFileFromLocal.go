@@ -102,8 +102,35 @@ func (u *azureFileUploader) Epilogue() {
 
 // SendSymlink creates a symbolic link on Azure Files NFS with the given link data.
 func (u *azureFileUploader) SendSymlink(linkData string) error {
+	jptm := u.jptm
+	info := jptm.Info()
 
-	_, err := u.getFileClient().CreateSymbolicLink(u.ctx, linkData, nil)
+	createSymlinkOptions := &file.CreateSymbolicLinkOptions{
+		Metadata: u.metadataToApply,
+	}
+
+	if common.IsNFSCopy() {
+
+		stage, err := u.addNFSPropertiesToHeaders(info)
+		if err != nil {
+			jptm.FailActiveSend(stage, err)
+			return err
+		}
+
+		stage, err = u.addNFSPermissionsToHeaders(info, u.getFileClient().URL())
+		if err != nil {
+			jptm.FailActiveSend(stage, err)
+			return err
+		}
+		createSymlinkOptions.FileNFSProperties = &file.NFSProperties{
+			CreationTime:  u.nfsPropertiesToApply.CreationTime,
+			LastWriteTime: u.nfsPropertiesToApply.LastWriteTime,
+			Owner:         u.nfsPropertiesToApply.Owner,
+			Group:         u.nfsPropertiesToApply.Group,
+			FileMode:      u.nfsPropertiesToApply.FileMode,
+		}
+	}
+	_, err := u.getFileClient().CreateSymbolicLink(u.ctx, linkData, createSymlinkOptions)
 
 	if fileerror.HasCode(err, fileerror.ParentNotFound) {
 		// Create the parent directories of the symlink.
@@ -118,7 +145,7 @@ func (u *azureFileUploader) SendSymlink(linkData string) error {
 		}
 
 		// retrying symlink creation
-		_, err = u.getFileClient().CreateSymbolicLink(u.ctx, linkData, nil)
+		_, err = u.getFileClient().CreateSymbolicLink(u.ctx, linkData, createSymlinkOptions)
 	}
 
 	if err != nil {

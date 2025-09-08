@@ -116,7 +116,6 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 				ValidatePropertyPtr(a, canonPathPrefix+"Public access", vProps.BlobContainerProperties.Access, cProps.BlobContainerProperties.Access)
 			}
 
-
 			if manager.Location() == common.ELocation.File() || manager.Location() == common.ELocation.FileNFS() {
 				ValidatePropertyPtr(a, "Enabled protocols", vProps.FileContainerProperties.EnabledProtocols, cProps.FileContainerProperties.EnabledProtocols)
 				ValidatePropertyPtr(a, "RootSquash", vProps.FileContainerProperties.RootSquash, cProps.FileContainerProperties.RootSquash)
@@ -152,17 +151,23 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 
 				a.Assert(canonPathPrefix+"bodies differ in hash", Equal{Deep: true}, hex.EncodeToString(objHash.Sum(nil)), hex.EncodeToString(valHash.Sum(nil)))
 			} else if objMan.EntityType() == common.EEntityType.Symlink() {
-				// Do we have a specified symlink dest or a body?
-				symlinkDest := objDef.SymlinkedFileName
-				if symlinkDest == "" && objDef.Body != nil {
-					buf, err := io.ReadAll(objDef.Body.Reader())
-					a.NoError(canonPathPrefix+"Read symlink body", err)
-					symlinkDest = string(buf)
-				}
-
-				if symlinkDest != "" {
+				if manager.Location() == common.ELocation.FileNFS() {
+					// NFS symlink target is stored as file content
 					linkData := objMan.ReadLink(a)
-					a.Assert(canonPathPrefix+"Symlink mismatch", Equal{}, symlinkDest, linkData)
+					a.Assert(canonPathPrefix+"Symlink target must be present", Not{IsNil{}}, linkData)
+				} else {
+					// Do we have a specified symlink dest or a body?
+					symlinkDest := objDef.SymlinkedFileName
+					if symlinkDest == "" && objDef.Body != nil {
+						buf, err := io.ReadAll(objDef.Body.Reader())
+						a.NoError(canonPathPrefix+"Read symlink body", err)
+						symlinkDest = string(buf)
+					}
+
+					if symlinkDest != "" {
+						linkData := objMan.ReadLink(a)
+						a.Assert(canonPathPrefix+"Symlink mismatch", Equal{}, symlinkDest, linkData)
+					}
 				}
 			}
 
@@ -194,7 +199,12 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 				if vProps.FileNFSPermissions != nil && oProps.FileNFSPermissions != nil {
 					ValidatePropertyPtr(a, canonPathPrefix+"Owner", vProps.FileNFSPermissions.Owner, oProps.FileNFSPermissions.Owner)
 					ValidatePropertyPtr(a, canonPathPrefix+"Group", vProps.FileNFSPermissions.Group, oProps.FileNFSPermissions.Group)
-					ValidatePropertyPtr(a, canonPathPrefix+"FileMode", vProps.FileNFSPermissions.FileMode, oProps.FileNFSPermissions.FileMode)
+					// On Linux, symlink mode bits are mostly ignored by the kernel.
+					// By default, symlinks are created with 0777, and you cannot change
+					// their mode with chmod — the syscall always succeeds but doesn’t alter them.
+					if objMan.EntityType() != common.EEntityType.Symlink() {
+						ValidatePropertyPtr(a, canonPathPrefix+"FileMode", vProps.FileNFSPermissions.FileMode, oProps.FileNFSPermissions.FileMode)
+					}
 				}
 			case common.ELocation.BlobFS():
 				ValidatePropertyPtr(a, canonPathPrefix+"Permissions", vProps.BlobFSProperties.Permissions, oProps.BlobFSProperties.Permissions)

@@ -286,8 +286,10 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 	// NFS/SMB validation
 	if common.IsNFSCopy() {
 		if err := performNFSSpecificValidation(
-			cooked.fromTo, cooked.preservePermissions, cooked.preserveInfo,
-			cooked.symlinkHandling, cooked.hardlinks); err != nil {
+			cooked.fromTo,
+			cooked.preservePermissions,
+			cooked.preserveInfo,
+			cooked.hardlinks); err != nil {
 			return err
 		}
 	} else {

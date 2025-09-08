@@ -670,7 +670,6 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 		azcopyScanningLogger.Log(common.LogError, fmt.Sprintf("Failed to scan path %s: %s", t.fullPath, err.Error()))
 		return fmt.Errorf("failed to scan path %s due to %w", t.fullPath, err)
 	}
-
 	finalizer, hashingProcessor := t.prepareHashingThreads(preprocessor, processor, filters)
 
 	// if the path is a single file, then pass it through the filters and send to processor

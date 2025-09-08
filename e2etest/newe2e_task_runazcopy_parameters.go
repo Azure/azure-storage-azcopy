@@ -4,12 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // MapFromTags Recursively builds a map[string]string from a reflect.val
@@ -303,6 +304,7 @@ type CopySyncCommonFlags struct {
 	IncludeDirectoryStubs   *bool                        `flag:"include-directory-stub"`
 	NFS                     *bool                        `flag:"nfs"`
 	PreserveInfo            *bool                        `flag:"preserve-info"`
+	PreserveSymlinks        *bool                        `flag:"preserve-symlinks"`
 }
 
 // CopyFlags is a more exclusive struct including flags exclusi
