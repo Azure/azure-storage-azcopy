@@ -61,6 +61,70 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 
 	includeDirStubs := (cca.fromTo.From().SupportsHnsACLs() && cca.fromTo.To().SupportsHnsACLs() && cca.preservePermissions.IsTruthy()) || cca.includeDirectoryStubs
 
+	var srcReauthTok *common.ScopedAuthenticator
+	if at, ok := srcCredInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
+		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
+		srcReauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+	}
+
+	options := traverser.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, srcReauthTok)
+
+	// Create Source Client.
+	var azureFileSpecificOptions any
+	if cca.fromTo.From() == common.ELocation.File() || cca.fromTo.From() == common.ELocation.FileNFS() {
+		azureFileSpecificOptions = &common.FileClientOptions{
+			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
+		}
+	}
+
+	srcServiceClient, err := common.GetServiceClientForLocation(
+		cca.fromTo.From(),
+		cca.source,
+		srcCredInfo.CredentialType,
+		srcCredInfo.OAuthTokenInfo.TokenCredential,
+		&options,
+		azureFileSpecificOptions,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create Destination client
+	if cca.fromTo.To() == common.ELocation.File() || cca.fromTo.To() == common.ELocation.FileNFS() {
+		azureFileSpecificOptions = &common.FileClientOptions{
+			AllowTrailingDot:       cca.trailingDot == common.ETrailingDotOption.Enable(),
+			AllowSourceTrailingDot: (cca.trailingDot == common.ETrailingDotOption.Enable() && cca.fromTo.To() == common.ELocation.File()),
+		}
+	}
+
+	// Because we can't trust cca.credinfo, given that it's for the overall job, not the individual traversers, we get cred info again here.
+	dstCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination, false, uotm, cca.cpkOptions)
+
+	if err != nil {
+		return nil, err
+	}
+
+	var dstReauthTok *common.ScopedAuthenticator
+	if at, ok := dstCredInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
+		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
+		dstReauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+	}
+
+	var srcTokenCred *common.ScopedToken
+	if cca.fromTo.IsS2S() && srcCredInfo.CredentialType.IsAzureOAuth() {
+		srcTokenCred = common.NewScopedCredential(srcCredInfo.OAuthTokenInfo.TokenCredential, srcCredInfo.CredentialType)
+	}
+
+	options = traverser.CreateClientOptions(common.AzcopyCurrentJobLogger, srcTokenCred, dstReauthTok)
+	dstServiceClient, err := common.GetServiceClientForLocation(
+		cca.fromTo.To(),
+		cca.destination,
+		dstCredInfo.CredentialType,
+		dstCredInfo.OAuthTokenInfo.TokenCredential,
+		&options,
+		azureFileSpecificOptions,
+	)
+
 	// TODO: enable symlink support in a future release after evaluating the implications
 	// TODO: Consider passing an errorChannel so that enumeration errors during sync can be conveyed to the caller.
 	// GetProperties is enabled by default as sync supports both upload and download.
@@ -69,7 +133,8 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 	sourceTraverser, err := traverser.InitResourceTraverser(cca.source, cca.fromTo.From(), ctx, traverser.InitResourceTraverserOptions{
 		DestResourceType: &dest,
 
-		Credential: &srcCredInfo,
+		Client:         srcServiceClient,
+		CredentialType: srcCredInfo.CredentialType,
 		IncrementEnumeration: func(entityType common.EntityType) {
 			if entityType == common.EEntityType.File() {
 				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
@@ -100,18 +165,12 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 		return nil, err
 	}
 
-	// Because we can't trust cca.credinfo, given that it's for the overall job, not the individual traversers, we get cred info again here.
-	dstCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination, false, uotm, cca.cpkOptions)
-
-	if err != nil {
-		return nil, err
-	}
-
 	// TODO: enable symlink support in a future release after evaluating the implications
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
 	destinationTraverser, err := traverser.InitResourceTraverser(cca.destination, cca.fromTo.To(), ctx, traverser.InitResourceTraverserOptions{
-		Credential: &dstCredInfo,
+		Client:         dstServiceClient,
+		CredentialType: dstCredInfo.CredentialType,
 		IncrementEnumeration: func(entityType common.EntityType) {
 			if entityType == common.EEntityType.File() {
 				atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
@@ -249,65 +308,10 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.trailingDot,
 		},
-		JobErrorHandler: glcm,
+		JobErrorHandler:  glcm,
+		SrcServiceClient: srcServiceClient,
+		DstServiceClient: dstServiceClient,
 	}
-
-	var srcReauthTok *common.ScopedAuthenticator
-	if at, ok := srcCredInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
-		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-		srcReauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
-	}
-
-	options := traverser.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, srcReauthTok)
-
-	// Create Source Client.
-	var azureFileSpecificOptions any
-	if cca.fromTo.From() == common.ELocation.File() || cca.fromTo.From() == common.ELocation.FileNFS() {
-		azureFileSpecificOptions = &common.FileClientOptions{
-			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
-		}
-	}
-
-	copyJobTemplate.SrcServiceClient, err = common.GetServiceClientForLocation(
-		cca.fromTo.From(),
-		cca.source,
-		srcCredInfo.CredentialType,
-		srcCredInfo.OAuthTokenInfo.TokenCredential,
-		&options,
-		azureFileSpecificOptions,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create Destination client
-	if cca.fromTo.To() == common.ELocation.File() || cca.fromTo.To() == common.ELocation.FileNFS() {
-		azureFileSpecificOptions = &common.FileClientOptions{
-			AllowTrailingDot:       cca.trailingDot == common.ETrailingDotOption.Enable(),
-			AllowSourceTrailingDot: (cca.trailingDot == common.ETrailingDotOption.Enable() && cca.fromTo.To() == common.ELocation.File()),
-		}
-	}
-
-	var dstReauthTok *common.ScopedAuthenticator
-	if at, ok := dstCredInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
-		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-		dstReauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
-	}
-
-	var srcTokenCred *common.ScopedToken
-	if cca.fromTo.IsS2S() && srcCredInfo.CredentialType.IsAzureOAuth() {
-		srcTokenCred = common.NewScopedCredential(srcCredInfo.OAuthTokenInfo.TokenCredential, srcCredInfo.CredentialType)
-	}
-
-	options = traverser.CreateClientOptions(common.AzcopyCurrentJobLogger, srcTokenCred, dstReauthTok)
-	copyJobTemplate.DstServiceClient, err = common.GetServiceClientForLocation(
-		cca.fromTo.To(),
-		cca.destination,
-		dstCredInfo.CredentialType,
-		dstCredInfo.OAuthTokenInfo.TokenCredential,
-		&options,
-		azureFileSpecificOptions,
-	)
 
 	// Check protocol compatibility for File Shares
 	if err := validateProtocolCompatibility(ctx, cca.fromTo, cca.source, cca.destination, copyJobTemplate.SrcServiceClient, copyJobTemplate.DstServiceClient); err != nil {
