@@ -207,7 +207,7 @@ func (s *RemoveSuite) Scenario_RemoveFileWithOnlyDotsEnabled(svm *ScenarioVariat
 }
 
 func (s *RemoveSuite) Scenario_RemoveFilesWithExcludePath(svm *ScenarioVariationManager) {
-	src := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()),
+	src := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.FileSMB()),
 		ResourceDefinitionContainer{})
 
 	fullList := []string{
