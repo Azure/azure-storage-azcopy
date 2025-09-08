@@ -283,7 +283,7 @@ func WalkWithSymlinks(appCtx context.Context,
 				}
 
 				if symlinkHandling.None() {
-					if common.IsNFSCopy(fromTo) {
+					if fromTo.IsNFS() {
 						if incrementEnumerationCounter != nil {
 							incrementEnumerationCounter(common.EEntityType.Symlink(), symlinkHandling, hardlinkHandling)
 						}
@@ -365,7 +365,7 @@ func WalkWithSymlinks(appCtx context.Context,
 				}
 				return nil
 			} else {
-				if common.IsNFSCopy(fromTo) {
+				if fromTo.IsNFS() {
 					LogHardLinkIfDefaultPolicy(fileInfo, hardlinkHandling)
 					if !IsRegularFile(fileInfo) && !fileInfo.IsDir() {
 						// We don't want to process other non-regular files here.
@@ -679,7 +679,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	if isSingleFile {
 
 		entityType := common.EEntityType.File()
-		if common.IsNFSCopy(t.fromTo) {
+		if t.fromTo.IsNFS() {
 			if IsSymbolicLink(singleFileInfo) {
 				entityType = common.EEntityType.Symlink()
 				logSpecialFileWarning(singleFileInfo.Name())
@@ -750,7 +750,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				}
 
 				// NFS Handling
-				if common.IsNFSCopy(t.fromTo) {
+				if t.fromTo.IsNFS() {
 					if IsHardlink(fileInfo) {
 						entityType = common.EEntityType.Hardlink()
 					}
@@ -805,7 +805,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				fileInfo, _ := entry.Info()
 				if fileInfo.Mode()&os.ModeSymlink != 0 {
 					if t.symlinkHandling.None() {
-						if common.IsNFSCopy(t.fromTo) && t.incrementEnumerationCounter != nil {
+						if t.fromTo.IsNFS() && t.incrementEnumerationCounter != nil {
 							t.incrementEnumerationCounter(common.EEntityType.Symlink(), t.symlinkHandling, t.hardlinkHandling)
 						}
 						continue
@@ -837,7 +837,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 					}
 				}
 				// NFS handling
-				if common.IsNFSCopy(t.fromTo) {
+				if t.fromTo.IsNFS() {
 					if IsHardlink(fileInfo) {
 						entityType = common.EEntityType.Hardlink()
 					} else if !IsRegularFile(fileInfo) {

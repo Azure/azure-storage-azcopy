@@ -410,7 +410,3 @@ func IsSystemContainer(containerName string) bool {
 	}
 	return false
 }
-
-func IsNFSCopy(fromTo FromTo) bool {
-	return fromTo.From() == ELocation.FileNFS() || fromTo.To() == ELocation.FileNFS()
-}

@@ -794,6 +794,10 @@ func (ft FromTo) IsS2S() bool {
 	return ft.From().IsRemote() && ft.To().IsRemote() && ft.To() != ELocation.None() && ft.To() != ELocation.Unknown()
 }
 
+func (ft FromTo) IsNFS() bool {
+	return ft.From() == ELocation.FileNFS() || ft.To() == ELocation.FileNFS()
+}
+
 func (ft FromTo) IsUpload() bool {
 	return ft.From().IsLocal() && ft.To().IsRemote() && ft.To() != ELocation.None() && ft.To() != ELocation.Unknown()
 }

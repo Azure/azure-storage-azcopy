@@ -253,7 +253,7 @@ func validateSymlinkFlag(followSymlinks, preserveSymlinks bool) error {
 // transfer direction (upload, download, S2S), and source/destination types (NFS, SMB, local).
 // Returns an error if the configuration is unsupported.
 func validateAndAdjustHardlinksFlag(option *common.HardlinkHandlingType, fromTo common.FromTo) error {
-	if !common.IsNFSCopy(fromTo) {
+	if !fromTo.IsNFS() {
 		return nil
 	}
 
@@ -466,11 +466,11 @@ func ComputePreserveFlags(cmd *cobra.Command, userFromTo common.FromTo, preserve
 
 	// Final preservePermissions logic
 	finalPreservePermissions := preservePermissions
-	if !common.IsNFSCopy(userFromTo) {
+	if !userFromTo.IsNFS() {
 		finalPreservePermissions = preservePermissions || preserveSMBPermissions
 	}
 
-	if common.IsNFSCopy(userFromTo) && ((preserveSMBInfo && runtime.GOOS == "linux") || preserveSMBPermissions) {
+	if userFromTo.IsNFS() && ((preserveSMBInfo && runtime.GOOS == "linux") || preserveSMBPermissions) {
 		glcm.Error(InvalidFlagsForNFSMsg)
 	}
 

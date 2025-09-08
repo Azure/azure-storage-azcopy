@@ -199,7 +199,7 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 	cooked.excludeFileAttributes = parsePatterns(raw.excludeFileAttributes)
 
 	// NFS/SMB arg processing
-	if common.IsNFSCopy(cooked.fromTo) {
+	if cooked.fromTo.IsNFS() {
 		cooked.preserveInfo = raw.preserveInfo && areBothLocationsNFSAware(cooked.fromTo)
 		//TBD: We will be preserving ACLs and ownership info in case of NFS. (UserID,GroupID and FileMode)
 		// Using the same EPreservePermissionsOption that we have today for NFS as well
@@ -287,7 +287,7 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 	}
 
 	// NFS/SMB validation
-	if common.IsNFSCopy(cooked.fromTo) {
+	if cooked.fromTo.IsNFS() {
 		if err := performNFSSpecificValidation(
 			cooked.fromTo, cooked.preservePermissions, cooked.preserveInfo,
 			cooked.symlinkHandling, &cooked.hardlinks); err != nil {
