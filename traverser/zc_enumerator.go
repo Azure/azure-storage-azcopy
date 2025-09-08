@@ -541,18 +541,12 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 		fileOptions := &common.FileClientOptions{
 			AllowTrailingDot: opts.TrailingDotOption.IsEnabled(),
 		}
-		var resLoc common.Location
-		if resourceLocation == common.ELocation.File() {
-			resLoc = common.ELocation.File()
-		} else {
-			resLoc = common.ELocation.FileNFS()
-		}
-		res, err := SplitResourceString(fileURLParts.String(), resLoc)
+		res, err := SplitResourceString(fileURLParts.String(), resourceLocation)
 		if err != nil {
 			return nil, err
 		}
 
-		c, err := common.GetServiceClientForLocation(resLoc, res, opts.Credential.CredentialType, opts.Credential.OAuthTokenInfo.TokenCredential, &options, fileOptions)
+		c, err := common.GetServiceClientForLocation(resourceLocation, res, opts.Credential.CredentialType, opts.Credential.OAuthTokenInfo.TokenCredential, &options, fileOptions)
 		if err != nil {
 			return nil, err
 		}
