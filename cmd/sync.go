@@ -227,9 +227,6 @@ type cookedSyncCmdArgs struct {
 	// deletion count keeps track of how many extra files from the destination were removed
 	atomicDeletionCount uint32
 
-	credentialInfo          common.CredentialInfo
-	s2sSourceCredentialType common.CredentialType
-
 	source      common.ResourceString
 	destination common.ResourceString
 	fromTo      common.FromTo
@@ -489,37 +486,6 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 
 	if err := common.VerifyIsURLResolvable(cca.destination.Value); cca.fromTo.To().IsRemote() && err != nil {
 		return fmt.Errorf("failed to resolve destination: %w", err)
-	}
-
-	// Verifies credential type and initializes credential info.
-	// Note that this is for the destination.
-	uotm := Client.GetUserOAuthTokenManagerInstance()
-	cca.credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination, false, uotm, cca.cpkOptions)
-	if err != nil {
-		return err
-	}
-
-	srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source, true, uotm, cca.cpkOptions)
-	if err != nil {
-		return err
-	}
-	cca.s2sSourceCredentialType = srcCredInfo.CredentialType
-	// Download is the only time our primary credential type will be based on source
-	if cca.fromTo.IsDownload() {
-		cca.credentialInfo = srcCredInfo
-	} else if cca.fromTo.IsS2S() {
-		cca.s2sSourceCredentialType = srcCredInfo.CredentialType // Assign the source credential type in S2S
-	}
-
-	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
-	// the info will be transferred to STE.
-	if cca.credentialInfo.CredentialType.IsAzureOAuth() || srcCredInfo.CredentialType.IsAzureOAuth() {
-		// Get token from env var or cache.
-		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
-			return err
-		} else if _, err := tokenInfo.GetTokenCredential(); err != nil {
-			return err
-		}
 	}
 
 	// Check if destination is system container
