@@ -21,9 +21,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
-
-import "github.com/Azure/azure-storage-azcopy/v10/traverser"
+package traverser
 
 type attrFilter struct{}
 
@@ -37,14 +35,14 @@ func (f *attrFilter) AppliesOnlyToFiles() bool {
 	return true
 }
 
-func (f *attrFilter) DoesPass(storedObject traverser.StoredObject) bool {
+func (f *attrFilter) DoesPass(storedObject StoredObject) bool {
 	// ignore this option on Unix systems
 	return true
 }
 
-func buildAttrFilters(attributes []string, fullPath string, resultIfMatch bool) []traverser.ObjectFilter {
+func buildAttrFilters(attributes []string, fullPath string, resultIfMatch bool) []ObjectFilter {
 	// ignore this option on Unix systems
-	filters := make([]traverser.ObjectFilter, 0)
+	filters := make([]ObjectFilter, 0)
 	if len(attributes) > 0 {
 		filters = append(filters, &attrFilter{})
 	}
