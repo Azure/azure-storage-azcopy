@@ -38,7 +38,6 @@ import (
 // extract the right info from cooked arguments and instantiate a generic copy transfer processor from it
 func newSyncTransferProcessor(cca *cookedSyncCmdArgs,
 	numOfTransfersPerPart int,
-	fpo common.FolderPropertyOption,
 	copyJobTemplate *common.CopyJobPartOrderRequest) *copyTransferProcessor {
 	reportFirstPart := func(jobStarted bool) { cca.setFirstPartOrdered() } // for compatibility with the way sync has always worked, we don't check jobStarted here
 	reportFinalPart := func() { cca.isEnumerationComplete = true }

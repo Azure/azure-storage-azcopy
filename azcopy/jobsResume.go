@@ -216,7 +216,7 @@ func getSourceAndDestinationServiceClients(
 		}
 	}
 	if errorMsg != "" {
-		return nil, nil, fmt.Errorf("the %s switch must be provided to resume the job", errorMsg)
+		return nil, nil, fmt.Errorf("the %s must be provided to perform the job", errorMsg)
 	}
 
 	var tc azcore.TokenCredential

@@ -457,8 +457,6 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm LifecycleMgr) (totalKnown
 func (cca *cookedSyncCmdArgs) process() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	// Check if destination is system container
-
 	enumerator, err := cca.initEnumerator(ctx)
 	if err != nil {
 		return err

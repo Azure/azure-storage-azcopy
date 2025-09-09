@@ -12,6 +12,8 @@ import (
 
 // SyncOptions contains the optional parameters for the Sync operation.
 type SyncOptions struct {
+	Handler SyncJobHandler
+
 	FromTo                  common.FromTo
 	Recursive               *bool // Default true
 	IncludeDirectoryStubs   bool
@@ -48,11 +50,20 @@ type SyncOptions struct {
 	DeleteDestinationFileIfNecessary bool
 
 	// internal use only
-	preservePermissions common.PreservePermissionsOption
-	blockSize           int64
-	putBlobSize         int64
-	cpkOptions          common.CpkOptions
-	commandString       string
+	source               common.ResourceString
+	destination          common.ResourceString
+	preservePermissions  common.PreservePermissionsOption
+	blockSize            int64
+	putBlobSize          int64
+	cpkOptions           common.CpkOptions
+	commandString        string
+	filters              []traverser.ObjectFilter
+	folderPropertyOption common.FolderPropertyOption
+
+	srcServiceClient  *common.ServiceClient
+	srcCredType       common.CredentialType
+	destServiceClient *common.ServiceClient
+	destCredType      common.CredentialType
 }
 
 func (s SyncOptions) clone() SyncOptions {
@@ -82,6 +93,7 @@ func (s SyncOptions) clone() SyncOptions {
 	clone.ExcludeAttributes = append([]string(nil), s.ExcludeAttributes...)
 	clone.IncludeRegex = append([]string(nil), s.IncludeRegex...)
 	clone.ExcludeRegex = append([]string(nil), s.ExcludeRegex...)
+	clone.filters = append([]traverser.ObjectFilter(nil), s.filters...)
 
 	return clone
 }
@@ -101,6 +113,25 @@ type SyncResult struct {
 	ElapsedTime              time.Duration
 }
 
+type SyncJobHandler interface {
+	OnStart(ctx common.JobContext)
+	OnTransferProgress(progress ResumeJobProgress)
+	OnScanProgress(progress SyncJobProgress)
+}
+
+type SyncJobProgress struct {
+	common.ListJobSummaryResponse
+	DeleteTotalTransfers     uint32
+	DeleteTransfersCompleted uint32
+	Throughput               float64
+	ElapsedTime              time.Duration
+}
+
+type SyncScanProgress struct {
+	SourceFilesScanned      uint64
+	DestinationFilesScanned uint64
+}
+
 // Sync syncs the source and destination.
 func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (result SyncResult, err error) {
 	// Input
@@ -108,10 +139,19 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 		return SyncResult{}, fmt.Errorf("source and destination must be specified for sync")
 	}
 
-	c.CurrentJobID = common.NewJobID()
-	job := syncer{
-		jobID: c.CurrentJobID,
+	// AzCopy CLI sets this globally before calling ResumeJob.
+	// If in library mode, this will not be set and we will use the user-provided handler.
+	// Note: It is not ideal that this is a global, but keeping it this way for now to avoid a larger refactor than this already is.
+	syncHandler := common.GetLifecycleMgr()
+	if syncHandler == nil {
+		syncHandler = common.NewJobUIHooks()
+		common.SetUIHooks(syncHandler)
 	}
+
+	mgr := NewJobLifecycleManager(syncHandler)
+
+	job := newSyncer()
+	c.CurrentJobID = job.jobID
 
 	// ValidateAndInferFromTo
 	userFromTo := common.Iff(opts.FromTo == common.EFromTo.Unknown(), "", opts.FromTo.String())
@@ -120,7 +160,7 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 		return SyncResult{}, err
 	}
 	common.SetNFSFlag(fromTo.IsNFSAware())
-	job.source, job.destination, err = getSourceAndDestination(src, dest, fromTo)
+	job.opts.source, job.opts.destination, err = getSourceAndDestination(src, dest, fromTo)
 	if err != nil {
 		return SyncResult{}, err
 	}
@@ -130,6 +170,35 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 	}
 	err = job.validate()
 	if err != nil {
+		return SyncResult{}, err
+	}
+
+	// Service Client
+	job.opts.srcServiceClient, job.opts.srcCredType, err = getSourceServiceClient(
+		ctx, job.opts.source, job.opts.FromTo.From(), job.opts.TrailingDot, job.opts.cpkOptions, c.GetUserOAuthTokenManagerInstance())
+	if err != nil {
+		return SyncResult{}, err
+	}
+	job.opts.destServiceClient, job.opts.destCredType, err = getDestinationServiceClient(
+		ctx, job.opts.destination, job.opts.FromTo, job.opts.srcCredType, job.opts.TrailingDot, job.opts.cpkOptions, c.GetUserOAuthTokenManagerInstance())
+	if err != nil {
+		return SyncResult{}, err
+	}
+
+	// Validate
+	if job.opts.FromTo.IsS2S() && job.opts.srcCredType != common.ECredentialType.Anonymous() {
+		if job.opts.srcCredType.IsAzureOAuth() && job.opts.FromTo.To().CanForwardOAuthTokens() {
+			// no-op, this is OK
+		} else if job.opts.srcCredType == common.ECredentialType.GoogleAppCredentials() || job.opts.srcCredType == common.ECredentialType.S3AccessKey() || job.opts.srcCredType == common.ECredentialType.S3PublicBucket() {
+			// this too, is OK
+		} else if job.opts.srcCredType == common.ECredentialType.Anonymous() {
+			// this is OK
+		} else {
+			return SyncResult{}, fmt.Errorf("the source of a %s->%s sync must either be public, or authorized with a SAS token; blob destinations can forward OAuth", job.opts.FromTo.From(), job.opts.FromTo.To())
+		}
+	}
+	// Check protocol compatibility for File Shares
+	if err = validateProtocolCompatibility(ctx, job.opts.FromTo, job.opts.source, job.opts.destination, job.opts.srcServiceClient, job.opts.destServiceClient); err != nil {
 		return SyncResult{}, err
 	}
 

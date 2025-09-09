@@ -1,6 +1,7 @@
 package azcopy
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/url"
@@ -9,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 	"github.com/JeffreyRichter/enum/enum"
@@ -19,8 +21,9 @@ import (
 var IPv4Regex = regexp.MustCompile(`\d+\.\d+\.\d+\.\d+`)
 
 const (
-	PipeLocation     = "~pipe~"
-	fromToHelpFormat = "Specified to nudge AzCopy when resource detection may not work (e.g. piping/emulator/azure stack); Valid FromTo are pairs of Source-Destination words (e.g. BlobLocal, BlobBlob) that specify the source and destination resource types. All valid FromTos are: %s"
+	PipeLocation          = "~pipe~"
+	fromToHelpFormat      = "Specified to nudge AzCopy when resource detection may not work (e.g. piping/emulator/azure stack); Valid FromTo are pairs of Source-Destination words (e.g. BlobLocal, BlobBlob) that specify the source and destination resource types. All valid FromTos are: %s"
+	DstShareDoesNotExists = "the destination file share does not exist; please create it manually with the required quota and settings before running the copy —refer to https://learn.microsoft.com/en-us/azure/storage/files/storage-how-to-create-file-share?tabs=azure-portal for SMB or https://learn.microsoft.com/en-us/azure/storage/files/storage-files-quick-create-use-linux for NFS."
 )
 
 var FromToHelp = func() string {
@@ -355,6 +358,121 @@ func validatePreserveForSMBAware(fromTo common.FromTo, toPreserve bool, flagName
 	if toPreserve && (fromTo.IsUpload() || fromTo.IsDownload()) &&
 		runtime.GOOS != "windows" && runtime.GOOS != "linux" {
 		return fmt.Errorf("%s is set but persistence for up/downloads is supported only in Windows and Linux", flagName)
+	}
+
+	return nil
+}
+
+func validateShareProtocolCompatibility(
+	ctx context.Context,
+	resource common.ResourceString,
+	serviceClient *common.ServiceClient,
+	isSource bool,
+	protocol string,
+) error {
+	if protocol == "" {
+		return nil
+	}
+
+	direction := "from"
+	if !isSource {
+		direction = "to"
+	}
+
+	// We can ignore the error if we fail to get the share properties.
+	shareProtocol, _ := getShareProtocolType(ctx, serviceClient, resource, protocol)
+
+	if shareProtocol == "SMB" && common.IsNFSCopy() {
+		return fmt.Errorf("The %s share has SMB protocol enabled. To copy %s a SMB share, use the appropriate --from-to flag value", direction, direction)
+	}
+
+	if shareProtocol == "NFS" && !common.IsNFSCopy() {
+		return fmt.Errorf("The %s share has NFS protocol enabled. To copy %s a NFS share, use the appropriate --from-to flag value", direction, direction)
+	}
+
+	return nil
+}
+
+// getShareProtocolType returns "SMB", "NFS", or "UNKNOWN" based on the share's enabled protocols.
+// If retrieval fails, it logs a warning and returns the fallback givenValue ("SMB" or "NFS").
+func getShareProtocolType(
+	ctx context.Context,
+	serviceClient *common.ServiceClient,
+	resource common.ResourceString,
+	givenValue string,
+) (string, error) {
+
+	fileURLParts, err := file.ParseURL(resource.Value)
+	if err != nil {
+		return "UNKNOWN", fmt.Errorf("failed to parse resource URL: %w", err)
+	}
+	shareName := fileURLParts.ShareName
+
+	fileServiceClient, err := serviceClient.FileServiceClient()
+	if err != nil {
+		return "UNKNOWN", fmt.Errorf("failed to create file service client: %w", err)
+	}
+
+	shareClient := fileServiceClient.NewShareClient(shareName)
+	properties, err := shareClient.GetProperties(ctx, nil)
+	if err != nil {
+		common.GetLifecycleMgr().Info(fmt.Sprintf("Warning: Failed to fetch share properties for '%s'. Assuming the share uses '%s' protocol based on --from-to flag.", shareName, givenValue))
+		return givenValue, err
+	}
+
+	if properties.EnabledProtocols == nil {
+		return "SMB", nil // Default assumption
+	}
+
+	return *properties.EnabledProtocols, nil
+}
+
+// Protocol compatibility validation for SMB and NFS transfers
+func validateProtocolCompatibility(ctx context.Context, fromTo common.FromTo, src, dst common.ResourceString, srcClient, dstClient *common.ServiceClient) error {
+
+	getUploadDownloadProtocol := func(fromTo common.FromTo) string {
+		switch fromTo {
+		case common.EFromTo.LocalFile(), common.EFromTo.FileLocal():
+			return "SMB"
+		case common.EFromTo.LocalFileNFS(), common.EFromTo.FileNFSLocal():
+			return "NFS"
+		default:
+			return ""
+		}
+	}
+
+	var protocol string
+
+	// S2S Transfers
+	if fromTo.IsS2S() {
+		switch fromTo {
+		case common.EFromTo.FileFile():
+			protocol = "SMB"
+		case common.EFromTo.FileNFSFileNFS():
+			protocol = "NFS"
+		default:
+			if common.IsNFSCopy() {
+				return errors.New("NFS copy is not supported for cross-protocol transfers, i.e., Files SMB to Files NFS or vice versa")
+			}
+		}
+
+		// Validate both source and destination
+		if err := validateShareProtocolCompatibility(ctx, src, srcClient, true, protocol); err != nil {
+			return err
+		}
+		return validateShareProtocolCompatibility(ctx, dst, dstClient, false, protocol)
+	}
+
+	// Uploads to File Shares
+	if fromTo.IsUpload() {
+		protocol = getUploadDownloadProtocol(fromTo)
+		return validateShareProtocolCompatibility(ctx, dst, dstClient, false, protocol)
+	}
+
+	// Downloads from File Shares
+	if fromTo.IsDownload() {
+		protocol = getUploadDownloadProtocol(fromTo)
+		return validateShareProtocolCompatibility(ctx, src, srcClient, true, protocol)
 	}
 
 	return nil

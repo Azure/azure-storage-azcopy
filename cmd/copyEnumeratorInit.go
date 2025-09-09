@@ -229,7 +229,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					// For file share,if the share does not exist, azcopy will fail, prompting the customer to create
 					// the share manually with the required quota and settings.
 					if fileerror.HasCode(err, fileerror.ShareNotFound) {
-						return nil, fmt.Errorf("%s Destination file share: %s", DstShareDoesNotExists, dstContainerName)
+						return nil, fmt.Errorf("%s Destination file share: %s", azcopy.DstShareDoesNotExists, dstContainerName)
 					}
 
 					// if JobsAdmin is nil, we're probably in testing mode.
@@ -278,7 +278,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// decide our folder transfer strategy
 	var message string
-	jobPartOrder.Fpo, message = NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, cca.preserveInfo, cca.preservePermissions.IsTruthy(), cca.preservePOSIXProperties, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.IncludeDirectoryStubs)
+	jobPartOrder.Fpo, message = azcopy.NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, cca.preserveInfo, cca.preservePermissions.IsTruthy(), cca.preservePOSIXProperties, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.IncludeDirectoryStubs)
 	if !cca.dryrunMode {
 		glcm.Info(message)
 	}
@@ -423,32 +423,17 @@ func (cca *CookedCopyCmdArgs) InitModularFilters() []traverser.ObjectFilter {
 		filters = append(filters, &IncludeAfterDateFilter{Threshold: *cca.IncludeAfter})
 	}
 
-	if len(cca.IncludePatterns) != 0 {
-		filters = append(filters, &IncludeFilter{patterns: cca.IncludePatterns}) // TODO should this call buildIncludeFilters?
-	}
+	filters = append(filters, traverser.BuildIncludeFilters(cca.IncludePatterns)...)
 
-	if len(cca.ExcludePatterns) != 0 {
-		for _, v := range cca.ExcludePatterns {
-			filters = append(filters, &excludeFilter{pattern: v})
-		}
-	}
+	filters = append(filters, traverser.BuildExcludeFilters(cca.ExcludePatterns, false)...)
 
 	// include-path is not a filter, therefore it does not get handled here.
 	// Check up in cook() around the list-of-files implementation as include-path gets included in the same way.
 
-	if len(cca.ExcludePathPatterns) != 0 {
-		for _, v := range cca.ExcludePathPatterns {
-			filters = append(filters, &excludeFilter{pattern: v, targetsPath: true})
-		}
-	}
+	filters = append(filters, traverser.BuildExcludeFilters(cca.ExcludePathPatterns, false)...)
 
-	if len(cca.includeRegex) != 0 {
-		filters = append(filters, &regexFilter{patterns: cca.includeRegex, isIncluded: true})
-	}
-
-	if len(cca.excludeRegex) != 0 {
-		filters = append(filters, &regexFilter{patterns: cca.excludeRegex, isIncluded: false})
-	}
+	filters = append(filters, traverser.BuildRegexFilters(cca.includeRegex, true)...)
+	filters = append(filters, traverser.BuildRegexFilters(cca.excludeRegex, false)...)
 
 	if len(cca.excludeBlobType) != 0 {
 		excludeSet := map[blob.BlobType]bool{}
@@ -461,11 +446,11 @@ func (cca *CookedCopyCmdArgs) InitModularFilters() []traverser.ObjectFilter {
 	}
 
 	if len(cca.IncludeFileAttributes) != 0 {
-		filters = append(filters, buildAttrFilters(cca.IncludeFileAttributes, cca.Source.ValueLocal(), true)...)
+		filters = append(filters, traverser.BuildAttrFilters(cca.IncludeFileAttributes, cca.Source.ValueLocal(), true)...)
 	}
 
 	if len(cca.ExcludeFileAttributes) != 0 {
-		filters = append(filters, buildAttrFilters(cca.ExcludeFileAttributes, cca.Source.ValueLocal(), false)...)
+		filters = append(filters, traverser.BuildAttrFilters(cca.ExcludeFileAttributes, cca.Source.ValueLocal(), false)...)
 	}
 
 	// finally, log any search prefix computed from these
@@ -721,64 +706,4 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 	}
 
 	return pathEncodeRules(relativePath, cca.FromTo, cca.disableAutoDecoding, source)
-}
-
-// we assume that preserveSmbPermissions and preserveSmbInfo have already been validated, such that they are only true if both resource types support them
-func NewFolderPropertyOption(fromTo common.FromTo, recursive, stripTopDir bool, filters []traverser.ObjectFilter, preserveSmbInfo, preservePermissions, preservePosixProperties, isDstNull, includeDirectoryStubs bool) (common.FolderPropertyOption, string) {
-
-	getSuffix := func(willProcess bool) string {
-		willProcessString := common.Iff(willProcess, "will be processed", "will not be processed")
-
-		template := ". For the same reason, %s defined on folders %s"
-		switch {
-		case preservePermissions && preserveSmbInfo:
-			return fmt.Sprintf(template, "properties and permissions", willProcessString)
-		case preserveSmbInfo:
-			return fmt.Sprintf(template, "properties", willProcessString)
-		case preservePermissions:
-			return fmt.Sprintf(template, "permissions", willProcessString)
-		default:
-			return "" // no preserve flags set, so we have nothing to say about them
-		}
-	}
-
-	bothFolderAware := (fromTo.AreBothFolderAware() || preservePosixProperties || preservePermissions || includeDirectoryStubs) && !isDstNull
-	isRemoveFromFolderAware := fromTo == common.EFromTo.FileTrash()
-	if bothFolderAware || isRemoveFromFolderAware {
-		if !recursive {
-			return common.EFolderPropertiesOption.NoFolders(), // doesn't make sense to move folders when not recursive. E.g. if invoked with /* and WITHOUT recursive
-				"Any empty folders will not be processed, because --recursive was not specified" +
-					getSuffix(false)
-		}
-
-		// check filters. Otherwise, if filter was say --include-pattern *.txt, we would transfer properties
-		// (but not contents) for every directory that contained NO text files.  Could make heaps of empty directories
-		// at the destination.
-		filtersOK := true
-		for _, f := range filters {
-			if f.AppliesOnlyToFiles() {
-				filtersOK = false // we have a least one filter that doesn't apply to folders
-			}
-		}
-		if !filtersOK {
-			return common.EFolderPropertiesOption.NoFolders(),
-				"Any empty folders will not be processed, because a file-focused filter is applied" +
-					getSuffix(false)
-		}
-
-		message := "Any empty folders will be processed, because source and destination both support folders"
-		if isRemoveFromFolderAware {
-			message = "Any empty folders will be processed, because deletion is from a folder-aware location"
-		}
-		message += getSuffix(true)
-		if stripTopDir {
-			return common.EFolderPropertiesOption.AllFoldersExceptRoot(), message
-		}
-		return common.EFolderPropertiesOption.AllFolders(), message
-	}
-
-	return common.EFolderPropertiesOption.NoFolders(),
-		"Any empty folders will not be processed, because source and/or destination doesn't have full folder support" +
-			getSuffix(false)
-
 }

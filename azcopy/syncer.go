@@ -3,16 +3,19 @@ package azcopy
 import (
 	"errors"
 	"fmt"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 )
 
 type syncer struct {
-	source      common.ResourceString
-	destination common.ResourceString
-	opts        SyncOptions
+
+	// TODO: can source, destination, srcServiceClient, destServiceClient, srcCredType, destCredType just live as local variables in the Sync function instead of being part of the struct?
+	opts SyncOptions
 
 	// job properties
 	jobID common.JobID
@@ -46,6 +49,16 @@ type syncer struct {
 	// it is useful to indicate whether we are simply waiting for the purpose of cancelling
 	// this is set to true once the final part has been dispatched
 	isEnumerationComplete bool
+}
+
+func newSyncer() *syncer {
+	jobID := common.NewJobID()
+
+	s := &syncer{
+		jobID: jobID,
+	}
+
+	return s
 }
 
 // defaultAndInferSyncOptions fills in any missing values in the SyncOptions with their defaults, and infers values from other values where applicable.
@@ -120,6 +133,33 @@ func applyDefaultsAndInferSyncOptions(s SyncOptions, fromTo common.FromTo) (clon
 
 	clone.IncludeDirectoryStubs = (clone.FromTo.From().SupportsHnsACLs() && clone.FromTo.To().SupportsHnsACLs() && clone.preservePermissions.IsTruthy()) || clone.IncludeDirectoryStubs
 
+	if clone.TrailingDot == common.ETrailingDotOption.Enable() && !clone.FromTo.BothSupportTrailingDot() {
+		clone.TrailingDot = common.ETrailingDotOption.Disable()
+	}
+
+	clone.filters = traverser.BuildFilters(traverser.FilterOptions{
+		IncludePatterns:   clone.IncludePatterns,
+		IncludeAttributes: clone.IncludeAttributes,
+		ExcludePatterns:   clone.ExcludePatterns,
+		ExcludePaths:      clone.ExcludePaths,
+		ExcludeAttributes: clone.ExcludeAttributes,
+		IncludeRegex:      clone.IncludeRegex,
+		ExcludeRegex:      clone.ExcludeRegex,
+		SourcePath:        common.Iff(fromTo.From() == common.ELocation.Local(), clone.source.ValueLocal(), ""),
+		FromTo:            fromTo,
+		Recursive:         *clone.Recursive,
+	})
+
+	// decide our folder transfer strategy
+	// sync always acts like stripTopDir=true, but if we intend to persist the root, we must tell NewFolderPropertyOption stripTopDir=false.
+	var folderMessage string
+	clone.folderPropertyOption, folderMessage = NewFolderPropertyOption(fromTo, *clone.Recursive, clone.IncludeRoot, clone.filters, *clone.PreserveInfo, clone.preservePermissions.IsTruthy(), false, strings.EqualFold(clone.destination.Value, common.Dev_Null), clone.IncludeDirectoryStubs)
+
+	if !clone.DryRun {
+		common.GetLifecycleMgr().Info(folderMessage)
+	}
+	common.LogToJobLogWithPrefix(folderMessage, common.LogInfo)
+
 	return clone, nil
 }
 
@@ -128,13 +168,13 @@ const LocalToFileShareWarnMsg = "AzCopy sync is supported but not fully recommen
 func (s *syncer) validate() (err error) {
 	// service level sync is not supported
 	if s.opts.FromTo.From().IsRemote() {
-		err = validateURLIsNotServiceLevel(s.source.Value, s.opts.FromTo.From())
+		err = validateURLIsNotServiceLevel(s.opts.source.Value, s.opts.FromTo.From())
 		if err != nil {
 			return err
 		}
 	}
 	if s.opts.FromTo.To().IsRemote() {
-		err = validateURLIsNotServiceLevel(s.destination.Value, s.opts.FromTo.To())
+		err = validateURLIsNotServiceLevel(s.opts.destination.Value, s.opts.FromTo.To())
 		if err != nil {
 			return err
 		}
@@ -206,17 +246,17 @@ func (s *syncer) validate() (err error) {
 	}
 
 	// are source and destination resolvable?
-	if err := common.VerifyIsURLResolvable(s.source.Value); s.opts.FromTo.From().IsRemote() && err != nil {
+	if err := common.VerifyIsURLResolvable(s.opts.source.Value); s.opts.FromTo.From().IsRemote() && err != nil {
 		return fmt.Errorf("failed to resolve source: %w", err)
 	}
 
-	if err := common.VerifyIsURLResolvable(s.destination.Value); s.opts.FromTo.To().IsRemote() && err != nil {
+	if err := common.VerifyIsURLResolvable(s.opts.destination.Value); s.opts.FromTo.To().IsRemote() && err != nil {
 		return fmt.Errorf("failed to resolve destination: %w", err)
 	}
 
 	// system containers are not supported
 	if s.opts.FromTo.IsS2S() || s.opts.FromTo.IsUpload() {
-		dstContainerName, err := GetContainerName(s.destination.Value, s.opts.FromTo.To())
+		dstContainerName, err := GetContainerName(s.opts.destination.Value, s.opts.FromTo.To())
 		if err != nil {
 			return fmt.Errorf("failed to get container name from destination (is it formatted correctly?)")
 		}
@@ -226,4 +266,12 @@ func (s *syncer) validate() (err error) {
 	}
 
 	return nil
+}
+
+func (s *syncer) OnFirstPartDispatched() {
+	atomic.StoreUint32(&s.atomicFirstPartOrdered, 1)
+}
+
+func (s *syncer) OnLastPartDispatched() {
+	s.isEnumerationComplete = true
 }
