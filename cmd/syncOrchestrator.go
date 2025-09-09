@@ -79,6 +79,8 @@ var (
 	notFoundErrors []string = []string{
 		"ParentNotFound",
 		"BlobNotFound",
+		"PathNotFound",
+		"ResourceNotFound",
 	}
 
 	orchestratorOptions *SyncOrchestratorOptions
@@ -228,6 +230,17 @@ func validateBlobRoot(sourcePath string) error {
 	return nil
 }
 
+// validateBlobFSRoot validates a BlobFS root URL by converting the DFS endpoint to Blob
+// and then parsing it using the Blob URL parser. This mirrors how BlobFS traversers are initialized.
+func validateBlobFSRoot(sourcePath string) error {
+	r := strings.Replace(sourcePath, ".dfs", ".blob", 1)
+	_, err := blob.ParseURL(r)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // validateAndGetRootObject returns the root object for the sync orchestrator
 // based on the source path and fromTo configuration. This determines the starting
 // point for sync enumeration operations.
@@ -250,6 +263,8 @@ func validateAndGetRootObject(path string, fromTo common.FromTo) (minimalStoredO
 		err = validateS3Root(path)
 	case common.ELocation.Blob():
 		err = validateBlobRoot(path)
+	case common.ELocation.BlobFS():
+		err = validateBlobFSRoot(path)
 	default:
 		err = fmt.Errorf("sync orchestrator is not supported for %s source", fromTo.From().String())
 	}
@@ -525,7 +540,7 @@ func newSyncTraverser(enumerator *syncEnumerator, dir string, comparator objectP
 
 func validate(cca *cookedSyncCmdArgs, orchestratorOptions *SyncOrchestratorOptions) error {
 	switch cca.fromTo {
-	case common.EFromTo.LocalBlob(), common.EFromTo.LocalBlobFS(), common.EFromTo.LocalFile(), common.EFromTo.S3Blob(), common.EFromTo.BlobBlob():
+	case common.EFromTo.LocalBlob(), common.EFromTo.LocalBlobFS(), common.EFromTo.LocalFile(), common.EFromTo.S3Blob(), common.EFromTo.BlobBlob(), common.EFromTo.BlobBlobFS(), common.EFromTo.BlobFSBlob(), common.EFromTo.BlobFSBlobFS():
 		// sync orchestrator is supported for these types
 	default:
 		return fmt.Errorf(
@@ -534,7 +549,10 @@ func validate(cca *cookedSyncCmdArgs, orchestratorOptions *SyncOrchestratorOptio
 				"\t- Local->BlobFS\n" +
 				"\t- Local->File\n" +
 				"\t- S3->Blob\n" +
-				"\t- Blob->Blob",
+				"\t- Blob->Blob\n" +
+				"\t- Blob->BlobFS\n" +
+				"\t- BlobFS->Blob\n" +
+				"\t- BlobFS->BlobFS",
 		)
 	}
 

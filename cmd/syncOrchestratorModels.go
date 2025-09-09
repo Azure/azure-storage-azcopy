@@ -77,7 +77,7 @@ func (s *SyncOrchestratorOptions) validate(from common.Location) error {
 		return errors.New("sync orchestrator options should only be used when UseSyncOrchestrator is true")
 	}
 
-	if from != common.ELocation.Local() && from != common.ELocation.S3() && from != common.ELocation.Blob() {
+	if from != common.ELocation.Local() && from != common.ELocation.S3() && from != common.ELocation.Blob() && from != common.ELocation.BlobFS() {
 		return errors.New("sync optimizations using timestamps should only be used for local to remote syncs")
 	}
 
