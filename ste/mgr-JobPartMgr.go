@@ -43,6 +43,7 @@ type IJobPartMgr interface {
 	SAS() (string, string)
 	// CancelJob()
 	Close()
+	UnmapPlanFile() // Added for progressive memory cleanup
 	// TODO: added for debugging purpose. remove later
 	OccupyAConnection()
 	// TODO: added for debugging purpose. remove later
@@ -141,6 +142,7 @@ type jobPartProgressInfo struct {
 	transfersSkipped   int
 	transfersFailed    int
 	completionChan     chan struct{}
+	partNum            *PartNumber // Added for progressive cleanup tracking
 }
 
 // jobPartMgr represents the runtime information for a Job's Part
@@ -625,6 +627,7 @@ func (jpm *jobPartMgr) ReportTransferDone(status common.TransferStatus) (transfe
 			transfersSkipped:   int(atomic.LoadUint32(&jpm.atomicTransfersSkipped)),
 			transfersFailed:    int(atomic.LoadUint32(&jpm.atomicTransfersFailed)),
 			completionChan:     jpm.closeOnCompletion,
+			partNum:            &(jpm.planMMF.Plan().PartNum),
 		}
 		jpm.Plan().SetJobPartStatus(common.EJobStatus.EnhanceJobStatusInfo(jppi.transfersSkipped > 0,
 			jppi.transfersFailed > 0, jppi.transfersCompleted > 0))
@@ -648,6 +651,31 @@ func (jpm *jobPartMgr) Close() {
 	/*if err := os.Remove(jpm.planFile.Name()); err != nil {
 		jpm.Panic(fmt.Errorf("error removing Job Part Plan file %s. Error=%v", jpm.planFile.Name(), err))
 	}*/
+}
+
+// UnmapPlanFile unmaps the plan file to free memory immediately when job part completes
+// This is used for progressive cleanup to prevent OOM issues in large-scale migrations
+// Uses selective unmapping strategy: Part 0 is preserved for job status, Parts 1+ are unmapped for memory savings
+func (jpm *jobPartMgr) UnmapPlanFile() {
+	if jpm.planMMF == nil {
+		fmt.Println("DEBUG: planMMF is nil for part - cannot unmap")
+		return
+	}
+
+	// Get part information for logging
+	plan := jpm.planMMF.Plan()
+	partNum := plan.PartNum
+
+	// SELECTIVE UNMAPPING STRATEGY: Preserve Part 0 for job status, unmap Parts 1+ for memory savings
+	if partNum == 0 {
+		jpm.Log(common.LogError, "MEMORY: Preserving Part 0 for job status - skipping unmap")
+		return
+	}
+
+	jpm.planMMF.Unmap()
+	fmt.Printf("DEBUG: Unmap() completed for part %d\n", partNum)
+	// Note: We don't set planMMF to nil here to maintain Plan() access,
+	// but the memory is freed. The Unmap() is idempotent so it's safe to call again.
 }
 
 // TODO: added for debugging purpose. remove later
