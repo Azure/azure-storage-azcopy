@@ -252,12 +252,12 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	plan := jpm.planMMF.Plan()
 
 	if buildmode.IsMover {
-		// Diagnostic: capture context for panic logging to help identify MMF mapping/unmapping races
-		planFilePath := jpm.filename.GetJobPartPlanPath()
-		partNum := plan.PartNum
-		totalTransfers := plan.NumTransfers
+		// Diagnostic: capture context for panic logging to help identify MMF mapping/unmapping race
 		defer func() {
 			if r := recover(); r != nil {
+				planFilePath := jpm.filename.GetJobPartPlanPath()
+				partNum := plan.PartNum
+				totalTransfers := plan.NumTransfers
 				// Count transfers completed at the time of panic (successfully completed only)
 				completed := atomic.LoadUint32(&jpm.atomicTransfersCompleted)
 				done := atomic.LoadUint32(&jpm.atomicTransfersDone)
