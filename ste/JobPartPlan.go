@@ -2,9 +2,6 @@ package ste
 
 import (
 	"errors"
-	"fmt"
-	"os"
-	"strings"
 	"sync/atomic"
 	"unsafe"
 
@@ -162,84 +159,7 @@ func (jpph *JobPartPlanHeader) TransferSrcDstRelatives(transferIndex uint32) (re
 	srcData := unsafe.Pointer(uintptr(unsafe.Pointer(jpph)) + uintptr(jppt.SrcOffset))                           // Address of Job Part Plan + this transfer's src string offset
 	dstData := unsafe.Pointer(uintptr(unsafe.Pointer(jpph)) + uintptr(jppt.SrcOffset) + uintptr(jppt.SrcLength)) // Address of Job Part Plan + this transfer's src string offset + length of this transfer's src string
 
-	//return unsafe.String((*byte)(srcData), int(jppt.SrcLength)), unsafe.String((*byte)(dstData), int(jppt.DstLength))
-	relSource = unsafe.String((*byte)(srcData), int(jppt.SrcLength))
-	relDest = unsafe.String((*byte)(dstData), int(jppt.DstLength))
-
-	// DIAG: detect embedded NULs in relative paths and log detailed context
-	if i := strings.IndexByte(relSource, 0); i >= 0 {
-		sample := relSource
-		if len(sample) > 128 {
-			sample = sample[:128]
-		}
-		common.GetLifecycleMgr().Error(fmt.Sprintf("[diag] NUL in relSource: jobID=%s part=%d transfer=%d srcOff=%d srcLen=%d dstLen=%d firstNUL=%d relSource_first=%q relSource_hex=%x",
-			jpph.JobID.String(), jpph.PartNum, transferIndex, jppt.SrcOffset, jppt.SrcLength, jppt.DstLength, i, sample, []byte(sample)))
-
-		// Additional on-disk verification: read bytes for source region directly from the plan file and log a short hex sample.
-		// This helps differentiate serialization issues (bad bytes on disk) from mapping-related anomalies.
-		func() {
-			// Reconstruct the plan file path for this job part.
-			jppfn := JobPartPlanFileName(fmt.Sprintf(JobPartPlanFileNameFormat, jpph.JobID.String(), jpph.PartNum, DataSchemaVersion))
-			planPath := jppfn.GetJobPartPlanPath()
-			f, err := os.Open(planPath)
-			if err != nil {
-				common.GetLifecycleMgr().Info(fmt.Sprintf("[diag] relSource disk-read open failed: path=%s err=%v", planPath, err))
-				return
-			}
-			defer f.Close()
-			// Read up to 128 bytes from the source region on disk
-			toRead := int(jppt.SrcLength)
-			if toRead > 128 {
-				toRead = 128
-			}
-			buf := make([]byte, toRead)
-			n, err := f.ReadAt(buf, jppt.SrcOffset)
-			if err != nil && n == 0 {
-				common.GetLifecycleMgr().Info(fmt.Sprintf("[diag] relSource disk-read failed: path=%s off=%d len=%d err=%v", planPath, jppt.SrcOffset, toRead, err))
-				return
-			}
-			if n > 0 {
-				common.GetLifecycleMgr().Error(fmt.Sprintf("[diag] relSource disk bytes: path=%s off=%d n=%d hex=%x", planPath, jppt.SrcOffset, n, buf[:n]))
-			}
-		}()
-	}
-	if j := strings.IndexByte(relDest, 0); j >= 0 {
-		sample := relDest
-		if len(sample) > 128 {
-			sample = sample[:128]
-		}
-		common.GetLifecycleMgr().Error(fmt.Sprintf("[diag] NUL in relDest: jobID=%s part=%d transfer=%d srcOff=%d srcLen=%d dstLen=%d firstNUL=%d relDest_first=%q relDest_hex=%x",
-			jpph.JobID.String(), jpph.PartNum, transferIndex, jppt.SrcOffset, jppt.SrcLength, jppt.DstLength, j, sample, []byte(sample)))
-
-		// Additional on-disk verification: read bytes for destination region directly from the plan file and log a short hex sample.
-		func() {
-			jppfn := JobPartPlanFileName(fmt.Sprintf(JobPartPlanFileNameFormat, jpph.JobID.String(), jpph.PartNum, DataSchemaVersion))
-			planPath := jppfn.GetJobPartPlanPath()
-			f, err := os.Open(planPath)
-			if err != nil {
-				common.GetLifecycleMgr().Info(fmt.Sprintf("[diag] relDest disk-read open failed: path=%s err=%v", planPath, err))
-				return
-			}
-			defer f.Close()
-			// Destination region starts immediately after source region
-			dstOffset := jppt.SrcOffset + int64(jppt.SrcLength)
-			toRead := int(jppt.DstLength)
-			if toRead > 128 {
-				toRead = 128
-			}
-			buf := make([]byte, toRead)
-			n, err := f.ReadAt(buf, dstOffset)
-			if err != nil && n == 0 {
-				common.GetLifecycleMgr().Info(fmt.Sprintf("[diag] relDest disk-read failed: path=%s off=%d len=%d err=%v", planPath, dstOffset, toRead, err))
-				return
-			}
-			if n > 0 {
-				common.GetLifecycleMgr().Error(fmt.Sprintf("[diag] relDest disk bytes: path=%s off=%d n=%d hex=%x", planPath, dstOffset, n, buf[:n]))
-			}
-		}()
-	}
-
-	return relSource, relDest
+	return unsafe.String((*byte)(srcData), int(jppt.SrcLength)), unsafe.String((*byte)(dstData), int(jppt.DstLength))
 }
 
 // TransferSrcDstDetail returns the source and destination string for a transfer at given transferIndex in JobPartOrder
@@ -308,15 +228,6 @@ func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex ui
 	if t.SrcMetadataLength != 0 {
 		tmpMetaData := jpph.getString(offset, t.SrcMetadataLength)
 		metadata, err = common.UnMarshalToCommonMetadata(tmpMetaData)
-		if err != nil {
-			// Diagnostic log to help detect bad slices/races when reading metadata from plan
-			firstBytes := tmpMetaData
-			if len(firstBytes) > 32 {
-				firstBytes = firstBytes[:32]
-			}
-			common.GetLifecycleMgr().Error(fmt.Sprintf("[diag] metadata parse failed: jobID=%s partNum=%d transferIndex=%d offset=%d metaLen=%d firstBytes=%x err=%v",
-				jpph.JobID.String(), jpph.PartNum, transferIndex, offset, t.SrcMetadataLength, []byte(firstBytes), err))
-		}
 		common.PanicIfErr(err)
 		offset += int64(t.SrcMetadataLength)
 	}

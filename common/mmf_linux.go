@@ -73,9 +73,7 @@ func (m *MMF) Unmap() {
 	if m.slice != nil {
 		// 1) Advise the kernel to drop the mapping's pages from the VM (client-side)
 		// Use MADV_DONTNEED on the mapping memory region (not on the fd).
-		if err := unix.Madvise(m.slice, unix.MADV_DONTNEED); err == nil {
-			GetLifecycleMgr().Info("[mmf] madvise(MADV_DONTNEED) applied successfully")
-		} else {
+		if err := unix.Madvise(m.slice, unix.MADV_DONTNEED); err != nil {
 			// log but don't panic - MADV may not be supported or may fail
 			GetLifecycleMgr().Info(fmt.Sprintf("[mmf] madvise(MADV_DONTNEED) failed: %v", err))
 		}
