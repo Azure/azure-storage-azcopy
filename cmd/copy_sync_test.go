@@ -1,5 +1,3 @@
-//go:build windows
-
 package cmd
 
 import (
@@ -25,12 +23,10 @@ func TestCopy_NFSSpecificValidationForFlags(t *testing.T) {
 			rawCopyCmdArgs{
 				preserveSMBInfo: true, // by default
 				preserveInfo:    true, // by the user
-				isNFSCopy:       true, // by the user
 				fromTo:          "LocalFile",
 			},
 			func(cooked *CookedCopyCmdArgs) {
 				a.Equal(true, cooked.preserveInfo)
-				a.Equal(true, cooked.isNFSCopy)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
@@ -40,12 +36,10 @@ func TestCopy_NFSSpecificValidationForFlags(t *testing.T) {
 			rawCopyCmdArgs{
 				preserveSMBInfo: true,  // by default
 				preserveInfo:    false, // by default
-				isNFSCopy:       true,
 				fromTo:          "LocalFile",
 			},
 			func(cooked *CookedCopyCmdArgs) {
 				a.Equal(false, cooked.preserveInfo)
-				a.Equal(true, cooked.isNFSCopy)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
@@ -55,13 +49,11 @@ func TestCopy_NFSSpecificValidationForFlags(t *testing.T) {
 			rawCopyCmdArgs{
 				preserveSMBInfo:     true,  // by default
 				preserveInfo:        false, // by default
-				isNFSCopy:           true,
 				preservePermissions: true,
 				fromTo:              "LocalFile",
 			},
 			func(cooked *CookedCopyCmdArgs) {
 				a.Equal(false, cooked.preserveInfo)
-				a.Equal(true, cooked.isNFSCopy)
 				a.Equal(common.PreservePermissionsOption(2), cooked.preservePermissions)
 			},
 		},
@@ -70,14 +62,12 @@ func TestCopy_NFSSpecificValidationForFlags(t *testing.T) {
 			"windows",
 			rawCopyCmdArgs{
 				preserveSMBInfo:     true, // by default
-				isNFSCopy:           true,
 				preservePermissions: true,
 				preserveInfo:        true,
 				fromTo:              "LocalFile",
 			},
 			func(cooked *CookedCopyCmdArgs) {
 				a.Equal(true, cooked.preserveInfo)
-				a.Equal(true, cooked.isNFSCopy)
 				a.Equal(common.PreservePermissionsOption(2), cooked.preservePermissions)
 			},
 		},
@@ -86,14 +76,12 @@ func TestCopy_NFSSpecificValidationForFlags(t *testing.T) {
 			"windows",
 			rawCopyCmdArgs{
 				preserveSMBInfo:     true, // by default
-				isNFSCopy:           false,
 				preservePermissions: true,
 				preserveInfo:        false,
 				fromTo:              "LocalFile",
 			},
 			func(cooked *CookedCopyCmdArgs) {
 				a.Equal(false, cooked.preserveInfo)
-				a.Equal(false, cooked.isNFSCopy)
 				a.Equal(common.PreservePermissionsOption(2), cooked.preservePermissions)
 			},
 		},
@@ -102,14 +90,12 @@ func TestCopy_NFSSpecificValidationForFlags(t *testing.T) {
 			"windows",
 			rawCopyCmdArgs{
 				preserveSMBInfo:     true,  // by default
-				isNFSCopy:           false, // by default
 				preservePermissions: false, // by default
 				preserveInfo:        true,  // by default
 				fromTo:              "LocalFile",
 			},
 			func(cooked *CookedCopyCmdArgs) {
 				a.Equal(true, cooked.preserveInfo)
-				a.Equal(false, cooked.isNFSCopy)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
@@ -118,13 +104,11 @@ func TestCopy_NFSSpecificValidationForFlags(t *testing.T) {
 			"linux",
 			rawCopyCmdArgs{
 				preserveInfo:    false, // by default
-				isNFSCopy:       false, // by default
 				preserveSMBInfo: false, // by default
 				fromTo:          "LocalFile",
 			},
 			func(cooked *CookedCopyCmdArgs) {
 				a.Equal(false, cooked.preserveInfo)
-				a.Equal(false, cooked.isNFSCopy)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
@@ -133,13 +117,11 @@ func TestCopy_NFSSpecificValidationForFlags(t *testing.T) {
 			"linux",
 			rawCopyCmdArgs{
 				preserveSMBInfo: false, // by default
-				isNFSCopy:       true,
-				preserveInfo:    true, // by default as the OS is linux and nfs flag is also true
-				fromTo:          "LocalFile",
+				preserveInfo:    true,  // by default as the OS is linux and nfs flag is also true
+				fromTo:          "LocalFileNFS",
 			},
 			func(cooked *CookedCopyCmdArgs) {
 				a.Equal(true, cooked.preserveInfo)
-				a.Equal(true, cooked.isNFSCopy)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
@@ -148,13 +130,11 @@ func TestCopy_NFSSpecificValidationForFlags(t *testing.T) {
 			"linux",
 			rawCopyCmdArgs{
 				preserveSMBInfo:     false, // by default
-				isNFSCopy:           false, // by default
 				preservePermissions: true,  // set by user
 				fromTo:              "LocalFile",
 			},
 			func(cooked *CookedCopyCmdArgs) {
 				a.Equal(false, cooked.preserveInfo)
-				a.Equal(false, cooked.isNFSCopy)
 				a.Equal(common.PreservePermissionsOption(2), cooked.preservePermissions)
 			},
 		},
@@ -162,14 +142,12 @@ func TestCopy_NFSSpecificValidationForFlags(t *testing.T) {
 			"If NFS and preserve-permissions flag is set to true we will preserve info and permissions",
 			"linux",
 			rawCopyCmdArgs{
-				isNFSCopy:           true, // set by user
 				preservePermissions: true, // set by user
 				preserveInfo:        true, // this is set to true by default as OS is linux and nfs flag is also set
-				fromTo:              "LocalFile",
+				fromTo:              "LocalFileNFS",
 			},
 			func(cooked *CookedCopyCmdArgs) {
 				a.Equal(true, cooked.preserveInfo)
-				a.Equal(true, cooked.isNFSCopy)
 				a.Equal(common.PreservePermissionsOption(2), cooked.preservePermissions)
 			},
 		},
@@ -177,14 +155,12 @@ func TestCopy_NFSSpecificValidationForFlags(t *testing.T) {
 			"If NFS flag is set to true and preserve-info is set to false we will not preserve anything",
 			"linux",
 			rawCopyCmdArgs{
-				isNFSCopy:           true,  // set by user
 				preservePermissions: false, // by default
 				preserveInfo:        false, // by user
-				fromTo:              "LocalFile",
+				fromTo:              "LocalFileNFS",
 			},
 			func(cooked *CookedCopyCmdArgs) {
 				a.Equal(false, cooked.preserveInfo)
-				a.Equal(true, cooked.isNFSCopy)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
@@ -194,12 +170,10 @@ func TestCopy_NFSSpecificValidationForFlags(t *testing.T) {
 			rawCopyCmdArgs{
 				preserveSMBInfo: true, // by user
 				preserveInfo:    true, // by default
-				isNFSCopy:       true, // by the user
-				fromTo:          "LocalFile",
+				fromTo:          "LocalFileNFS",
 			},
 			func(cooked *CookedCopyCmdArgs) {
 				a.Equal(true, cooked.preserveInfo)
-				a.Equal(true, cooked.isNFSCopy)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
@@ -209,12 +183,10 @@ func TestCopy_NFSSpecificValidationForFlags(t *testing.T) {
 			rawCopyCmdArgs{
 				preserveSMBPermissions: true, // by user
 				preserveInfo:           true, // by default
-				isNFSCopy:              true, // by the user
-				fromTo:                 "LocalFile",
+				fromTo:                 "LocalFileNFS",
 			},
 			func(cooked *CookedCopyCmdArgs) {
 				a.Equal(true, cooked.preserveInfo)
-				a.Equal(true, cooked.isNFSCopy)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
@@ -384,6 +356,7 @@ func TestCopy_SMBSpecificValidationForFlags(t *testing.T) {
 	}
 }
 
+// failing
 func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 	a := assert.New(t)
 
@@ -399,14 +372,12 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 			rawSyncCmdArgs{
 				preserveSMBInfo:   true, // by default
 				preserveInfo:      true, // by the user
-				isNFSCopy:         true, // by the user
-				fromTo:            "LocalFile",
+				fromTo:            "LocalFileNFS",
 				dst:               "https://test.blob.core.windows.net/testcontainer",
 				deleteDestination: "false",
 			},
 			func(cooked *cookedSyncCmdArgs) {
 				a.Equal(true, cooked.preserveInfo)
-				a.Equal(true, cooked.isNFSCopy)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
@@ -416,14 +387,12 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 			rawSyncCmdArgs{
 				preserveSMBInfo:   true,  // by default
 				preserveInfo:      false, // by default
-				isNFSCopy:         true,  // by user
-				fromTo:            "LocalFile",
+				fromTo:            "LocalFileNFS",
 				dst:               "https://test.blob.core.windows.net/testcontainer",
 				deleteDestination: "false",
 			},
 			func(cooked *cookedSyncCmdArgs) {
 				a.Equal(false, cooked.preserveInfo)
-				a.Equal(true, cooked.isNFSCopy)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
@@ -433,15 +402,13 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 			rawSyncCmdArgs{
 				preserveSMBInfo:     true,  // by default
 				preserveInfo:        false, // by default
-				isNFSCopy:           true,  // by user
 				preservePermissions: true,  // by user
-				fromTo:              "LocalFile",
+				fromTo:              "LocalFileNFS",
 				dst:                 "https://test.blob.core.windows.net/testcontainer",
 				deleteDestination:   "false",
 			},
 			func(cooked *cookedSyncCmdArgs) {
 				a.Equal(false, cooked.preserveInfo)
-				a.Equal(true, cooked.isNFSCopy)
 				a.Equal(common.PreservePermissionsOption(2), cooked.preservePermissions)
 			},
 		},
@@ -450,16 +417,14 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 			"windows",
 			rawSyncCmdArgs{
 				preserveSMBInfo:     true, // by default
-				isNFSCopy:           true, // by user
 				preservePermissions: true, // by user
 				preserveInfo:        true, // by user
-				fromTo:              "LocalFile",
+				fromTo:              "LocalFileNFS",
 				dst:                 "https://test.blob.core.windows.net/testcontainer",
 				deleteDestination:   "false",
 			},
 			func(cooked *cookedSyncCmdArgs) {
 				a.Equal(true, cooked.preserveInfo)
-				a.Equal(true, cooked.isNFSCopy)
 				a.Equal(common.PreservePermissionsOption(2), cooked.preservePermissions)
 			},
 		},
@@ -468,16 +433,13 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 			"windows",
 			rawSyncCmdArgs{
 				preserveSMBInfo:     true,  // by default
-				isNFSCopy:           false, // by default
 				preservePermissions: true,  // by user
 				preserveInfo:        false, // by default
-				fromTo:              "LocalFile",
 				dst:                 "https://test.blob.core.windows.net/testcontainer",
 				deleteDestination:   "false",
 			},
 			func(cooked *cookedSyncCmdArgs) {
 				a.Equal(false, cooked.preserveInfo)
-				a.Equal(false, cooked.isNFSCopy)
 				a.Equal(common.PreservePermissionsOption(2), cooked.preservePermissions)
 			},
 		},
@@ -486,16 +448,13 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 			"windows",
 			rawSyncCmdArgs{
 				preserveSMBInfo:     true,  // by default
-				isNFSCopy:           false, // by default
 				preservePermissions: false, // by default
 				preserveInfo:        true,  // by default
-				fromTo:              "LocalFile",
 				dst:                 "https://test.blob.core.windows.net/testcontainer",
 				deleteDestination:   "false",
 			},
 			func(cooked *cookedSyncCmdArgs) {
 				a.Equal(true, cooked.preserveInfo)
-				a.Equal(false, cooked.isNFSCopy)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
@@ -505,14 +464,11 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 			rawSyncCmdArgs{
 				preserveSMBInfo:   false, //by default
 				preserveInfo:      false, // this will be false by default
-				isNFSCopy:         false,
-				fromTo:            "LocalFile",
 				dst:               "https://test.file.core.windows.net/testcontainer",
 				deleteDestination: "false",
 			},
 			func(cooked *cookedSyncCmdArgs) {
 				a.Equal(false, cooked.preserveInfo)
-				a.Equal(false, cooked.isNFSCopy)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
@@ -521,15 +477,13 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 			"linux",
 			rawSyncCmdArgs{
 				preserveSMBInfo:   false, //by default
-				isNFSCopy:         true,
-				preserveInfo:      true, // this will be true by default as the OS is linux and nfs flag is also true
-				fromTo:            "LocalFile",
+				preserveInfo:      true,  // this will be true by default as the OS is linux and nfs flag is also true
+				fromTo:            "LocalFileNFS",
 				dst:               "https://test.file.core.windows.net/testcontainer",
 				deleteDestination: "false",
 			},
 			func(cooked *cookedSyncCmdArgs) {
 				a.Equal(true, cooked.preserveInfo)
-				a.Equal(true, cooked.isNFSCopy)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
@@ -538,15 +492,12 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 			"linux",
 			rawSyncCmdArgs{
 				preserveSMBInfo:     false, //by default
-				isNFSCopy:           false, // by default
 				preservePermissions: true,  // set by user
-				fromTo:              "LocalFile",
 				dst:                 "https://test.file.core.windows.net/testcontainer",
 				deleteDestination:   "false",
 			},
 			func(cooked *cookedSyncCmdArgs) {
 				a.Equal(false, cooked.preserveInfo)
-				a.Equal(false, cooked.isNFSCopy)
 				a.Equal(common.PreservePermissionsOption(2), cooked.preservePermissions)
 			},
 		},
@@ -555,16 +506,14 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 			"linux",
 			rawSyncCmdArgs{
 				preserveSMBInfo:     false, //by default
-				isNFSCopy:           true,  // set by user
 				preservePermissions: true,  // set by user
 				preserveInfo:        true,  // this is set to true by default as OS is linux and nfs flag is also set
-				fromTo:              "LocalFile",
+				fromTo:              "LocalFileNFS",
 				dst:                 "https://test.file.core.windows.net/testcontainer",
 				deleteDestination:   "false",
 			},
 			func(cooked *cookedSyncCmdArgs) {
 				a.Equal(true, cooked.preserveInfo)
-				a.Equal(true, cooked.isNFSCopy)
 				a.Equal(common.PreservePermissionsOption(2), cooked.preservePermissions)
 			},
 		},
@@ -573,16 +522,14 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 			"linux",
 			rawSyncCmdArgs{
 				preserveSMBInfo:     false, //by default
-				isNFSCopy:           true,
 				preservePermissions: false,
 				preserveInfo:        false, // by user
-				fromTo:              "LocalFile",
+				fromTo:              "LocalFileNFS",
 				dst:                 "https://test.file.core.windows.net/testcontainer",
 				deleteDestination:   "false",
 			},
 			func(cooked *cookedSyncCmdArgs) {
 				a.Equal(false, cooked.preserveInfo)
-				a.Equal(true, cooked.isNFSCopy)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
@@ -592,14 +539,11 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 			rawSyncCmdArgs{
 				preserveSMBInfo:   false, //by default
 				preserveInfo:      false, // this will be false by default
-				isNFSCopy:         false,
-				fromTo:            "LocalFile",
 				dst:               "https://test.file.core.windows.net/testcontainer",
 				deleteDestination: "false",
 			},
 			func(cooked *cookedSyncCmdArgs) {
 				a.Equal(false, cooked.preserveInfo)
-				a.Equal(false, cooked.isNFSCopy)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
@@ -608,15 +552,13 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 			"linux",
 			rawSyncCmdArgs{
 				preserveSMBInfo:   false, //by default
-				isNFSCopy:         true,
-				preserveInfo:      true, // this will be true by default as the OS is linux and nfs flag is also true
-				fromTo:            "LocalFile",
+				preserveInfo:      true,  // this will be true by default as the OS is linux and nfs flag is also true
+				fromTo:            "LocalFileNFS",
 				dst:               "https://test.file.core.windows.net/testcontainer",
 				deleteDestination: "false",
 			},
 			func(cooked *cookedSyncCmdArgs) {
 				a.Equal(true, cooked.preserveInfo)
-				a.Equal(true, cooked.isNFSCopy)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
@@ -625,15 +567,12 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 			"linux",
 			rawSyncCmdArgs{
 				preserveSMBInfo:     false, //by default
-				isNFSCopy:           false, // by default
 				preservePermissions: true,  // set by user
-				fromTo:              "LocalFile",
 				dst:                 "https://test.file.core.windows.net/testcontainer",
 				deleteDestination:   "false",
 			},
 			func(cooked *cookedSyncCmdArgs) {
 				a.Equal(false, cooked.preserveInfo)
-				a.Equal(false, cooked.isNFSCopy)
 				a.Equal(common.PreservePermissionsOption(2), cooked.preservePermissions)
 			},
 		},
@@ -642,16 +581,14 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 			"linux",
 			rawSyncCmdArgs{
 				preserveSMBInfo:     false, //by default
-				isNFSCopy:           true,  // set by user
 				preservePermissions: true,  // set by user
 				preserveInfo:        true,  // this is set to true by default as OS is linux and nfs flag is also set
-				fromTo:              "LocalFile",
+				fromTo:              "LocalFileNFS",
 				dst:                 "https://test.file.core.windows.net/testcontainer",
 				deleteDestination:   "false",
 			},
 			func(cooked *cookedSyncCmdArgs) {
 				a.Equal(true, cooked.preserveInfo)
-				a.Equal(true, cooked.isNFSCopy)
 				a.Equal(common.PreservePermissionsOption(2), cooked.preservePermissions)
 			},
 		},
@@ -660,16 +597,14 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 			"linux",
 			rawSyncCmdArgs{
 				preserveSMBInfo:     false, //by default
-				isNFSCopy:           true,
 				preservePermissions: false,
 				preserveInfo:        false, // by user
-				fromTo:              "LocalFile",
+				fromTo:              "LocalFileNFS",
 				dst:                 "https://test.file.core.windows.net/testcontainer",
 				deleteDestination:   "false",
 			},
 			func(cooked *cookedSyncCmdArgs) {
 				a.Equal(false, cooked.preserveInfo)
-				a.Equal(true, cooked.isNFSCopy)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
@@ -679,12 +614,10 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 			rawSyncCmdArgs{
 				preserveSMBInfo: true, // by user
 				preserveInfo:    true, // by default
-				isNFSCopy:       true, // by the user
-				fromTo:          "LocalFile",
+				fromTo:          "LocalFileNFS",
 			},
 			func(cooked *cookedSyncCmdArgs) {
 				a.Equal(true, cooked.preserveInfo)
-				a.Equal(true, cooked.isNFSCopy)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
@@ -694,12 +627,10 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 			rawSyncCmdArgs{
 				preserveSMBPermissions: true, // by user
 				preserveInfo:           true, // by default
-				isNFSCopy:              true, // by the user
-				fromTo:                 "LocalFile",
+				fromTo:                 "LocalFileNFS",
 			},
 			func(cooked *cookedSyncCmdArgs) {
 				a.Equal(true, cooked.preserveInfo)
-				a.Equal(true, cooked.isNFSCopy)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
