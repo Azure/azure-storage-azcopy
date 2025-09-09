@@ -214,7 +214,7 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 		//TBD: We will be preserving ACLs and ownership info in case of NFS. (UserID,GroupID and FileMode)
 		// Using the same EPreservePermissionsOption that we have today for NFS as well
 		// Please provide the feedback if we should introduce new EPreservePermissionsOption instead.
-		cooked.preservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
+		cooked.PreservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
 			true,
 			cooked.fromTo)
 		if err = cooked.hardlinks.Parse(raw.hardlinks); err != nil {
@@ -223,7 +223,7 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 	} else {
 		cooked.preserveInfo = raw.preserveInfo && areBothLocationsSMBAware(cooked.fromTo)
 		cooked.preservePOSIXProperties = raw.preservePOSIXProperties
-		cooked.preservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
+		cooked.PreservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
 			raw.preserveOwner,
 			cooked.fromTo)
 	}
@@ -299,13 +299,13 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 	// NFS/SMB validation
 	if cooked.isNFSCopy {
 		if err := performNFSSpecificValidation(
-			cooked.fromTo, cooked.preservePermissions, cooked.preserveInfo,
+			cooked.fromTo, cooked.PreservePermissions, cooked.preserveInfo,
 			cooked.symlinkHandling, cooked.hardlinks); err != nil {
 			return err
 		}
 	} else {
 		if err := performSMBSpecificValidation(
-			cooked.fromTo, cooked.preservePermissions, cooked.preserveInfo,
+			cooked.fromTo, cooked.PreservePermissions, cooked.preserveInfo,
 			cooked.preservePOSIXProperties); err != nil {
 			return err
 		}
@@ -466,7 +466,7 @@ type cookedSyncCmdArgs struct {
 
 	// options
 	compareHash             common.SyncHashType
-	preservePermissions     common.PreservePermissionsOption
+	PreservePermissions     common.PreservePermissionsOption
 	preserveInfo            bool
 	preservePOSIXProperties bool
 	putMd5                  bool

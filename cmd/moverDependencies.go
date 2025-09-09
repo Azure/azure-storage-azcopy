@@ -485,10 +485,10 @@ func (cooked *cookedSyncCmdArgs) ToStringMap() map[string]string {
 	}
 
 	// Add enums/options if not default/empty
-	if cooked.preservePermissions != common.EPreservePermissionsOption.None() {
+	if cooked.PreservePermissions != common.EPreservePermissionsOption.None() {
 		// PreservePermissionsOption doesn't have String() method, so we handle it manually
 		permStr := "None"
-		switch cooked.preservePermissions {
+		switch cooked.PreservePermissions {
 		case common.EPreservePermissionsOption.ACLsOnly():
 			permStr = "ACLsOnly"
 		case common.EPreservePermissionsOption.OwnershipAndACLs():
