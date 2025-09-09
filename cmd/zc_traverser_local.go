@@ -260,6 +260,7 @@ func WalkWithSymlinks(appCtx context.Context,
 			}
 			if fileInfo.Mode()&os.ModeSymlink != 0 {
 				if symlinkHandling.Preserve() {
+					fmt.Println("Preserve--------------------")
 					// Handle it like it's not a symlink
 					result, err := filepath.Abs(filePath)
 
@@ -282,10 +283,8 @@ func WalkWithSymlinks(appCtx context.Context,
 
 				if symlinkHandling.None() {
 					if common.IsNFSCopy() {
-						if incrementEnumerationCounter != nil {
-							incrementEnumerationCounter(common.EEntityType.Symlink())
-						}
-						logNFSLinkWarning(fileInfo.Name(), "", true)
+						fmt.Println("None--------------------")
+						HandleSymlinkForNFS(fileInfo.Name(), symlinkHandling, incrementEnumerationCounter)
 					}
 					return nil // skip it
 				}
@@ -948,7 +947,8 @@ func logNFSLinkWarning(fileName, inodeNo string, isSymlink bool) {
 	var message string
 	if isSymlink {
 		message = fmt.Sprintf("File '%s' at the source is a symbolic link and will be skipped and not copied", fileName)
-	} else {
+	}
+	if inodeNo != "" { // it's a hard link
 		message = fmt.Sprintf("File '%s' with inode '%s' at the source is a hard link, but is copied as a full file", fileName, inodeNo)
 	}
 

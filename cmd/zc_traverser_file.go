@@ -55,6 +55,7 @@ type fileTraverser struct {
 	trailingDot                 common.TrailingDotOption
 	destination                 *common.Location
 	hardlinkHandling            common.HardlinkHandlingType
+	symlinkHandling             common.SymlinkHandlingType
 }
 
 func createShareClientFromServiceClient(fileURLParts file.URLParts, client *service.Client) (*share.Client, error) {
@@ -205,10 +206,12 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			// NFS handling for different file types
 			if common.IsNFSCopy() {
 				if skip, err := evaluateAndLogNFSFileType(t.ctx, NFSFileMeta{
-					Name:        storedObject.name,
-					NFSFileType: *fileProperties.NFSFileType,
-					LinkCount:   *fileProperties.LinkCount,
-					FileID:      *fileProperties.ID}, t.incrementEnumerationCounter); err == nil && skip {
+					Name:            storedObject.name,
+					NFSFileType:     *fileProperties.NFSFileType,
+					LinkCount:       *fileProperties.LinkCount,
+					FileID:          *fileProperties.ID,
+					symlinkHandling: t.symlinkHandling,
+				}, t.incrementEnumerationCounter); err == nil && skip {
 
 					return nil
 				}
@@ -264,10 +267,11 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		// Check if the file is a hard link and should be logged with proper message in case of NFS
 		if common.IsNFSCopy() {
 			if skip, err := evaluateAndLogNFSFileType(t.ctx, NFSFileMeta{
-				Name:        f.name,
-				NFSFileType: file.NFSFileType(fullProperties.NFSFileType()),
-				LinkCount:   fullProperties.LinkCount(),
-				FileID:      fullProperties.FileID()}, t.incrementEnumerationCounter); err == nil && skip {
+				Name:            f.name,
+				NFSFileType:     file.NFSFileType(fullProperties.NFSFileType()),
+				LinkCount:       fullProperties.LinkCount(),
+				FileID:          fullProperties.FileID(),
+				symlinkHandling: t.symlinkHandling}, t.incrementEnumerationCounter); err == nil && skip {
 				return nil, nil
 			}
 			//set entity tile to hardlink
@@ -462,6 +466,7 @@ func newFileTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		trailingDot:                 opts.TrailingDotOption,
 		destination:                 opts.DestResourceType,
 		hardlinkHandling:            opts.HardlinkHandling,
+		symlinkHandling:             opts.SymlinkHandling,
 	}
 	return
 }
@@ -514,10 +519,11 @@ func newAzFileRootDirectoryEntity(directoryClient *directory.Client, name string
 }
 
 type NFSFileMeta struct {
-	Name        string
-	NFSFileType file.NFSFileType
-	LinkCount   int64
-	FileID      string
+	Name            string
+	NFSFileType     file.NFSFileType
+	LinkCount       int64
+	FileID          string
+	symlinkHandling common.SymlinkHandlingType
 }
 
 // evaluateAndLogNFSFileType determines whether an NFS file should be skipped based on its type,
@@ -552,10 +558,7 @@ func evaluateAndLogNFSFileType(ctx context.Context, meta NFSFileMeta, incrementE
 
 	switch meta.NFSFileType {
 	case file.NFSFileTypeSymlink:
-		logNFSLinkWarning(meta.Name, "", true)
-		if incrementEnumerationCounter != nil {
-			incrementEnumerationCounter(common.EEntityType.Symlink())
-		}
+		HandleSymlinkForNFS(meta.Name, meta.symlinkHandling, incrementEnumerationCounter)
 		return true, nil
 
 	case file.NFSFileTypeRegular:

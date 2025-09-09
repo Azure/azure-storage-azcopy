@@ -4,6 +4,7 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"syscall"
@@ -50,14 +51,21 @@ func LogHardLinkIfDefaultPolicy(fileInfo os.FileInfo, hardlinkHandling common.Ha
 
 // HandleSymlinkForNFS processes a symbolic link based on the specified handling type.
 // It either logs a warning or preserves the symlink based on the symlink handling type.
-func HandleSymlinkForNFS(singleFileInfo os.FileInfo, symlinkHandlingType common.SymlinkHandlingType, incrementEnumerationCounter enumerationCounterFunc) {
+func HandleSymlinkForNFS(fileName string,
+	symlinkHandlingType common.SymlinkHandlingType,
+	incrementEnumerationCounter enumerationCounterFunc) {
+
 	if symlinkHandlingType.None() {
+		fmt.Println("None symlink - TODO---------------------")
 		// Log a warning if symlink handling is disabled
-		logNFSLinkWarning(singleFileInfo.Name(), "", true)
+		logNFSLinkWarning(fileName, "", true)
 		if incrementEnumerationCounter != nil {
 			incrementEnumerationCounter(common.EEntityType.Symlink())
 		}
 	} else if symlinkHandlingType.Preserve() {
+		fmt.Println("Preserve symlink - TODO---------------------")
 		//TODO
+	} else {
+		// Follow symlink - no special action needed here
 	}
 }

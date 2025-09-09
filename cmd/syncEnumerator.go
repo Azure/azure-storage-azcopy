@@ -128,6 +128,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		IncludeDirectoryStubs:   includeDirStubs,
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
 		HardlinkHandling:        common.EHardlinkHandlingType.Follow(),
+		SymlinkHandling:         cca.symlinkHandling,
 	})
 	if err != nil {
 		return nil, err
