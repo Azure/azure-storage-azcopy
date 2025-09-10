@@ -97,10 +97,10 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *traverser.Copy
 		return nil, err
 	}
 
-	includeFilters := buildIncludeFilters(cca.IncludePatterns)
-	excludeFilters := buildExcludeFilters(cca.ExcludePatterns, false)
-	excludePathFilters := buildExcludeFilters(cca.ExcludePathPatterns, true)
-	includeSoftDelete := buildIncludeSoftDeleted(cca.permanentDeleteOption)
+	includeFilters := traverser.BuildIncludeFilters(cca.IncludePatterns)
+	excludeFilters := traverser.BuildExcludeFilters(cca.ExcludePatterns, false)
+	excludePathFilters := traverser.BuildExcludeFilters(cca.ExcludePathPatterns, true)
+	includeSoftDelete := traverser.BuildIncludeSoftDeleted(cca.permanentDeleteOption)
 
 	// set up the filters in the right order
 	filters := append(includeFilters, excludeFilters...)

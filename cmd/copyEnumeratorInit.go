@@ -415,56 +415,32 @@ func (cca *CookedCopyCmdArgs) InitModularFilters() []traverser.ObjectFilter {
 	filters := make([]traverser.ObjectFilter, 0) // same as []ObjectFilter{} under the hood
 
 	if cca.IncludeBefore != nil {
-		filters = append(filters, &IncludeBeforeDateFilter{Threshold: *cca.IncludeBefore})
+		filters = append(filters, &traverser.IncludeBeforeDateFilter{Threshold: *cca.IncludeBefore})
 	}
 
 	if cca.IncludeAfter != nil {
-		filters = append(filters, &IncludeAfterDateFilter{Threshold: *cca.IncludeAfter})
+		filters = append(filters, &traverser.IncludeAfterDateFilter{Threshold: *cca.IncludeAfter})
 	}
 
-	if len(cca.IncludePatterns) != 0 {
-		filters = append(filters, &IncludeFilter{patterns: cca.IncludePatterns}) // TODO should this call buildIncludeFilters?
-	}
-
-	if len(cca.ExcludePatterns) != 0 {
-		for _, v := range cca.ExcludePatterns {
-			filters = append(filters, &excludeFilter{pattern: v})
-		}
-	}
+	filters = append(filters, traverser.BuildIncludeFilters(cca.IncludePatterns)...)
+	filters = append(filters, traverser.BuildExcludeFilters(cca.ExcludePatterns, false)...)
 
 	// include-path is not a filter, therefore it does not get handled here.
 	// Check up in cook() around the list-of-files implementation as include-path gets included in the same way.
 
-	if len(cca.ExcludePathPatterns) != 0 {
-		for _, v := range cca.ExcludePathPatterns {
-			filters = append(filters, &excludeFilter{pattern: v, targetsPath: true})
-		}
-	}
+	filters = append(filters, traverser.BuildExcludeFilters(cca.ExcludePathPatterns, true)...)
 
-	if len(cca.includeRegex) != 0 {
-		filters = append(filters, &regexFilter{patterns: cca.includeRegex, isIncluded: true})
-	}
+	filters = append(filters, traverser.BuildRegexFilters(cca.includeRegex, true)...)
+	filters = append(filters, traverser.BuildRegexFilters(cca.excludeRegex, false)...)
 
-	if len(cca.excludeRegex) != 0 {
-		filters = append(filters, &regexFilter{patterns: cca.excludeRegex, isIncluded: false})
-	}
-
-	if len(cca.excludeBlobType) != 0 {
-		excludeSet := map[blob.BlobType]bool{}
-
-		for _, v := range cca.excludeBlobType {
-			excludeSet[v] = true
-		}
-
-		filters = append(filters, &excludeBlobTypeFilter{blobTypes: excludeSet})
-	}
+	filters = append(filters, traverser.BuildExcludeBlobTypeFilter(cca.excludeBlobType)...)
 
 	if len(cca.IncludeFileAttributes) != 0 {
-		filters = append(filters, buildAttrFilters(cca.IncludeFileAttributes, cca.Source.ValueLocal(), true)...)
+		filters = append(filters, traverser.BuildAttrFilters(cca.IncludeFileAttributes, cca.Source.ValueLocal(), true)...)
 	}
 
 	if len(cca.ExcludeFileAttributes) != 0 {
-		filters = append(filters, buildAttrFilters(cca.ExcludeFileAttributes, cca.Source.ValueLocal(), false)...)
+		filters = append(filters, traverser.BuildAttrFilters(cca.ExcludeFileAttributes, cca.Source.ValueLocal(), false)...)
 	}
 
 	// finally, log any search prefix computed from these
@@ -474,11 +450,11 @@ func (cca *CookedCopyCmdArgs) InitModularFilters() []traverser.ObjectFilter {
 
 	switch cca.permanentDeleteOption {
 	case common.EPermanentDeleteOption.Snapshots():
-		filters = append(filters, &permDeleteFilter{deleteSnapshots: true})
+		filters = append(filters, &traverser.PermDeleteFilter{DeleteSnapshots: true})
 	case common.EPermanentDeleteOption.Versions():
-		filters = append(filters, &permDeleteFilter{deleteVersions: true})
+		filters = append(filters, &traverser.PermDeleteFilter{DeleteVersions: true})
 	case common.EPermanentDeleteOption.SnapshotsAndVersions():
-		filters = append(filters, &permDeleteFilter{deleteSnapshots: true, deleteVersions: true})
+		filters = append(filters, &traverser.PermDeleteFilter{DeleteSnapshots: true, DeleteVersions: true})
 	}
 
 	return filters

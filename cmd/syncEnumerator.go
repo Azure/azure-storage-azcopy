@@ -239,22 +239,22 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 	// Note: includeFilters and includeAttrFilters are ANDed
 	// They must both pass to get the file included
 	// Same rule applies to excludeFilters and excludeAttrFilters
-	filters := buildIncludeFilters(cca.includePatterns)
+	filters := traverser.BuildIncludeFilters(cca.includePatterns)
 	if cca.fromTo.From() == common.ELocation.Local() {
-		includeAttrFilters := buildAttrFilters(cca.includeFileAttributes, cca.source.ValueLocal(), true)
+		includeAttrFilters := traverser.BuildAttrFilters(cca.includeFileAttributes, cca.source.ValueLocal(), true)
 		filters = append(filters, includeAttrFilters...)
 	}
 
-	filters = append(filters, buildExcludeFilters(cca.excludePatterns, false)...)
-	filters = append(filters, buildExcludeFilters(cca.excludePaths, true)...)
+	filters = append(filters, traverser.BuildExcludeFilters(cca.excludePatterns, false)...)
+	filters = append(filters, traverser.BuildExcludeFilters(cca.excludePaths, true)...)
 	if cca.fromTo.From() == common.ELocation.Local() {
-		excludeAttrFilters := buildAttrFilters(cca.excludeFileAttributes, cca.source.ValueLocal(), false)
+		excludeAttrFilters := traverser.BuildAttrFilters(cca.excludeFileAttributes, cca.source.ValueLocal(), false)
 		filters = append(filters, excludeAttrFilters...)
 	}
 
 	// includeRegex
-	filters = append(filters, buildRegexFilters(cca.includeRegex, true)...)
-	filters = append(filters, buildRegexFilters(cca.excludeRegex, false)...)
+	filters = append(filters, traverser.BuildRegexFilters(cca.includeRegex, true)...)
+	filters = append(filters, traverser.BuildRegexFilters(cca.excludeRegex, false)...)
 
 	// after making all filters, log any search prefix computed from them
 	if prefixFilter := traverser.FilterSet(filters).GetEnumerationPreFilter(cca.recursive); prefixFilter != "" {
