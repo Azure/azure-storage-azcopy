@@ -1,6 +1,8 @@
 package e2etest
 
 import (
+	"github.com/stretchr/testify/assert"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -536,4 +538,84 @@ func (s *BasicFunctionalitySuite) Scenario_TagsPermission(svm *ScenarioVariation
 	)
 
 	ValidateMessageOutput(svm, stdOut, "Authorization failed during an attempt to set tags, please ensure you have the appropriate Tags permission", true)
+}
+
+// Scenario_CheckVersion test version info is only printed explicitly when --check-version is used.
+func (*BasicFunctionalitySuite) Scenario_CheckVersion(a *ScenarioVariationManager) {
+	// The flag usage is `azcopy --check-version` without sub-commands.
+	// So, no need to pass azcopy verb
+	stdout, _ := RunAzCopy(a, AzCopyCommand{
+		Flags: CopyFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				GlobalFlags: GlobalFlags{
+					CheckVersion: pointerTo(true),
+					OutputType:   pointerTo(common.EOutputFormat.Text()),
+				},
+			},
+		},
+	})
+
+	versionCheckOpts := []*regexp.Regexp{
+		regexp.MustCompile("INFO: azcopy.* .*: A newer version .* is available to download"),
+		regexp.MustCompile("INFO: Current AzCopy version *.*.* is up to date"),
+	}
+
+	if !a.Dryrun() {
+		foundVersionInOutput := func() bool { // Check if either of the version output is in the string
+			matched := false
+			for _, line := range stdout.RawStdout() { // If there's another warning or info message
+				for _, regex := range versionCheckOpts {
+					if regex.MatchString(line) {
+						matched = true
+						return matched
+					}
+				}
+			}
+			return matched
+		}
+		versionAssertion := assert.New(a.t)
+		versionAssertion.True(foundVersionInOutput())
+	}
+
+	ValidateMessageOutput(a, stdout, "version", true) // loose check
+}
+
+// Scenario_CheckVersion test version info is not printed when the flag is not used.
+func (*BasicFunctionalitySuite) Scenario_DisabledCheckVersion(a *ScenarioVariationManager) {
+	// The flag usage is `azcopy --check-version` without sub-commands.
+	// So, no need to create src and dest
+	stdout, _ := RunAzCopy(a, AzCopyCommand{
+		Flags: CopyFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				GlobalFlags: GlobalFlags{
+					// CheckVersion: pointerTo(false), default is False
+					OutputType: pointerTo(common.EOutputFormat.Text()),
+				},
+			},
+		},
+	})
+
+	versionCheckOpts := []*regexp.Regexp{
+		regexp.MustCompile("INFO: azcopy.* .*: A newer version .* is available to download"),
+		regexp.MustCompile("INFO: Current AzCopy version *.*.* is up to date"),
+	}
+
+	if !a.Dryrun() {
+		foundVersionInOutput := func() bool { // Check if either of the version output is in the string
+			matched := false
+			for _, line := range stdout.RawStdout() { // If there's another warning or info message
+				for _, regex := range versionCheckOpts {
+					if regex.MatchString(line) {
+						matched = true
+						return matched
+					}
+				}
+			}
+			return matched
+		}
+		versionAssertion := assert.New(a.t)
+		versionAssertion.False(foundVersionInOutput())
+	}
+
+	ValidateMessageOutput(a, stdout, "version", false)
 }

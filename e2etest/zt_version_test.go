@@ -110,7 +110,7 @@ func TestCheckVersionCommand(t *testing.T) {
 
 	// Set of output options
 	newVersionInfo := regexp.MustCompile("INFO: azcopy.* .*: A newer version .* is available to download")
-	upToDateVersionInfo := regexp.MustCompile("INFO: Current azcopy version *.*.* up to date")
+	upToDateVersionInfo := regexp.MustCompile("INFO: Current AzCopy version *.*.* is up to date")
 
 	if !(newVersionInfo.Match([]byte(lines[0])) || upToDateVersionInfo.Match([]byte(lines[0]))) {
 		t.Log("Proper version checking information not returned")

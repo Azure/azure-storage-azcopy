@@ -318,7 +318,10 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&debugMemoryProfile, "memory-profile", "", "Export pprof memory profile")
 	_ = rootCmd.PersistentFlags().MarkHidden("memory-profile")
 	rootCmd.PersistentFlags().BoolVar(&checkAzCopyUpdates, "check-version", false,
-		"Check current AzCopy version for a newer version available.")
+		"Check if a newer AzCopy version is available.")
+
+	// Deprecated, to not break customers dependent on flag
+	_ = rootCmd.PersistentFlags().MarkHidden("skip-version-check")
 }
 
 // always spins up a new goroutine, because sometimes the aka.ms URL can't be reached (e.g. a constrained environment where
