@@ -41,7 +41,7 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs,
 	fpo common.FolderPropertyOption,
 	copyJobTemplate *common.CopyJobPartOrderRequest) *copyTransferProcessor {
 	reportFirstPart := func(jobStarted bool) { cca.setFirstPartOrdered() } // for compatibility with the way sync has always worked, we don't check jobStarted here
-	reportFinalPart := func() { cca.isEnumerationComplete = true }
+	reportFinalPart := func() { cca.setScanningComplete() }
 
 	// note that the source and destination, along with the template are given to the generic processor's constructor
 	// this means that given an object with a relative path, this processor already knows how to schedule the right kind of transfers

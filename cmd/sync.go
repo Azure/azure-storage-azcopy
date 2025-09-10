@@ -460,11 +460,6 @@ type cookedSyncCmdArgs struct {
 	// used to calculate job summary
 	jobStartTime time.Time
 
-	// this flag is set by the enumerator
-	// it is useful to indicate whether we are simply waiting for the purpose of cancelling
-	// this is set to true once the final part has been dispatched
-	isEnumerationComplete bool
-
 	// this flag indicates the user agreement with respect to deleting the extra files at the destination
 	// which do not exists at source. With this flag turned on/off, users will not be asked for permission.
 	// otherwise the user is prompted to make a decision
@@ -548,7 +543,7 @@ func (cca *cookedSyncCmdArgs) waitUntilJobCompletion(blocking bool) {
 
 func (cca *cookedSyncCmdArgs) Cancel(lcm LifecycleMgr) {
 	// prompt for confirmation, except when enumeration is complete
-	if !cca.isEnumerationComplete {
+	if !cca.scanningComplete() {
 		answer := lcm.Prompt("The enumeration (source/destination comparison) is not complete, "+
 			"cancelling the job at this point means it cannot be resumed.",
 			common.PromptDetails{
