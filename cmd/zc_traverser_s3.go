@@ -30,8 +30,8 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
-	"github.com/minio/minio-go"
-	"github.com/minio/minio-go/pkg/credentials"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
 const customCreds string = "customS3Creds" //key for custom credentials in stored in context
@@ -121,7 +121,7 @@ func (t *s3Traverser) IsDirectory(isSource bool) (bool, error) {
 		return isDirDirect, nil
 	}
 
-	_, err := t.s3Client.StatObject(t.s3URLParts.BucketName, t.s3URLParts.ObjectKey, minio.StatObjectOptions{})
+	_, err := t.s3Client.StatObject(t.ctx, t.s3URLParts.BucketName, t.s3URLParts.ObjectKey, minio.StatObjectOptions{})
 
 	if err != nil {
 		return true, err
@@ -152,7 +152,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 		objectPath := strings.Split(t.s3URLParts.ObjectKey, "/")
 		objectName := objectPath[len(objectPath)-1]
 
-		oi, err := t.s3Client.StatObject(t.s3URLParts.BucketName, t.s3URLParts.ObjectKey, minio.StatObjectOptions{})
+		oi, err := t.s3Client.StatObject(t.ctx, t.s3URLParts.BucketName, t.s3URLParts.ObjectKey, minio.StatObjectOptions{})
 		if invalidAzureBlobName(t.s3URLParts.ObjectKey) {
 
 			t.writeToS3ErrorChannel(ErrorS3Info{
@@ -214,7 +214,8 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 	searchPrefix := t.s3URLParts.ObjectKey
 
 	// It's a bucket or virtual directory.
-	for objectInfo := range t.s3Client.ListObjectsV2(t.s3URLParts.BucketName, searchPrefix, t.recursive, t.ctx.Done()) {
+	listObjectOptions := minio.ListObjectsOptions{Prefix: searchPrefix, Recursive: t.recursive}
+	for objectInfo := range t.s3Client.ListObjects(t.ctx, t.s3URLParts.BucketName, listObjectOptions) {
 		// re-join the unescaped path.
 		relativePath := strings.TrimPrefix(objectInfo.Key, searchPrefix)
 
@@ -285,7 +286,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			// default to empty props, but retrieve real ones if required
 			oie := common.ObjectInfoExtension{ObjectInfo: minio.ObjectInfo{}}
 			if t.getProperties {
-				oi, err := t.s3Client.StatObject(t.s3URLParts.BucketName, objectInfo.Key, minio.StatObjectOptions{})
+				oi, err := t.s3Client.StatObject(t.ctx, t.s3URLParts.BucketName, objectInfo.Key, minio.StatObjectOptions{})
 				if err != nil {
 					t.writeToS3ErrorChannel(ErrorS3Info{
 						S3Name:             objectName,
