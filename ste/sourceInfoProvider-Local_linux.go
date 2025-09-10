@@ -25,7 +25,6 @@ func (f localFileSourceInfoProvider) HasUNIXProperties() bool {
 
 func (f localFileSourceInfoProvider) GetUNIXProperties() (common.UnixStatAdapter, error) {
 	// First try statx
-	fmt.Println("Trying statx for", f.transferInfo.Source, f.EntityType() == common.EEntityType.Symlink())
 	{
 		var stat unix.Statx_t
 		statxFlags := unix.AT_STATX_SYNC_AS_STAT

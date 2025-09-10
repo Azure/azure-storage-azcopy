@@ -21,10 +21,12 @@
 package ste
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -130,29 +132,77 @@ func (u *azureFileUploader) SendSymlink(linkData string) error {
 			FileMode:      u.nfsPropertiesToApply.FileMode,
 		}
 	}
-	_, err := u.getFileClient().CreateSymbolicLink(u.ctx, linkData, createSymlinkOptions)
 
-	if fileerror.HasCode(err, fileerror.ParentNotFound) {
-		// Create the parent directories of the symlink.
-		// Note share must be existed, as the files are listed from share or directory.
-		u.jptm.Log(common.LogError,
-			fmt.Sprintf("%s: %s \n AzCopy is going to create parent directories of the Azure files", fileerror.ParentNotFound, err.Error()))
+	err := DoWithCreateSymlinkOnAzureFilesNFS(u.ctx, func() error {
+		_, err := u.getFileClient().CreateSymbolicLink(u.ctx, linkData, createSymlinkOptions)
+		return err
+	}, u.getFileClient(), u.shareClient, u.jptm)
 
-		err = AzureFileParentDirCreator{}.CreateParentDirToRoot(
-			u.ctx, u.getFileClient(), u.shareClient, u.jptm.GetFolderCreationTracker())
-		if err != nil {
-			u.jptm.FailActiveUpload("Creating parent directory", err)
-		}
-
-		// retrying symlink creation
-		_, err = u.getFileClient().CreateSymbolicLink(u.ctx, linkData, createSymlinkOptions)
-	}
-
+	// if still failing, give up
 	if err != nil {
-		u.jptm.FailActiveUpload("Creating symlink", err)
+		jptm.FailActiveUpload("Creating symlink", err)
 		return fmt.Errorf("failed to create symlink: %w", err)
 	}
 
 	u.jptm.Log(common.LogDebug, fmt.Sprintf("Created symlink with data: %s", linkData))
 	return nil
+}
+
+// DoWithCreateSymlinkOnAzureFilesNFS tries to create a symlink, with retry logic
+// for parent not found and resource already exists.
+func DoWithCreateSymlinkOnAzureFilesNFS(
+	ctx context.Context,
+	action func() error,
+	client *file.Client,
+	shareClient *share.Client,
+	jptm IJobPartTransferMgr,
+) error {
+	// try the action
+	err := action()
+
+	// did fail because parent is missing?
+	if fileerror.HasCode(err, fileerror.ParentNotFound) {
+		jptm.Log(common.LogInfo,
+			fmt.Sprintf("%s: %s \nAzCopy will create parent directories for the symlink.",
+				fileerror.ParentNotFound, err.Error()))
+
+		err = AzureFileParentDirCreator{}.CreateParentDirToRoot(ctx,
+			client, shareClient, jptm.GetFolderCreationTracker())
+		if err != nil {
+			jptm.FailActiveUpload("Creating parent directory", err)
+		}
+
+		// retry the action
+		err = action()
+	}
+
+	// did fail because symlink already exists?
+	if fileerror.HasCode(err, fileerror.ResourceAlreadyExists) {
+		jptm.Log(common.LogWarning,
+			fmt.Sprintf("%s: %s \nAzCopy will delete and recreate the symlink.",
+				fileerror.ResourceAlreadyExists, err.Error()))
+
+		if _, delErr := client.Delete(ctx, nil); delErr != nil {
+			jptm.FailActiveUpload("Deleting existing symlink", delErr)
+		}
+
+		// retry the action
+		err = action()
+	}
+
+	// did fail because resource type mismatch?
+	if fileerror.HasCode(err, fileerror.ResourceTypeMismatch) {
+		jptm.Log(common.LogWarning,
+			fmt.Sprintf("%s: %s \nAzCopy will delete the destination resource.",
+				fileerror.ResourceAlreadyExists, err.Error()))
+
+		if _, delErr := client.Delete(ctx, nil); delErr != nil {
+			jptm.FailActiveUpload("Deleting existing resource", delErr)
+		}
+
+		// retry the action
+		err = action()
+	}
+
+	return err
 }
