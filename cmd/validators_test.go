@@ -63,5 +63,5 @@ func TestInferArgumentLocation(t *testing.T) {
 	for _, v := range test {
 		loc := InferArgumentLocation(v.src)
 		a.Equal(v.expectedLocation, loc)
-	}
+  }
 }
