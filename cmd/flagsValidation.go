@@ -335,9 +335,9 @@ func validateShareProtocolCompatibility(
 	fromTo common.FromTo,
 ) error {
 
-	location, direction := "source", "from"
+	direction := "from"
 	if !isSource {
-		location, direction = "destination", "to"
+		direction = "to"
 	}
 
 	// We can ignore the error if we fail to get the share properties.
@@ -345,12 +345,10 @@ func validateShareProtocolCompatibility(
 
 	if shareProtocol == common.ELocation.File() {
 		if isSource && fromTo.From() != common.ELocation.File() {
-			return fmt.Errorf("The %s share has SMB protocol enabled. "+
-				"To copy %s a SMB share, use the appropriate --from-to flag value", location, direction)
+			return fmt.Errorf("The %s share has SMB protocol enabled. To copy %s a SMB share, use the appropriate --from-to flag value", direction, direction)
 		}
 		if !isSource && fromTo.To() != common.ELocation.File() {
-			return fmt.Errorf("The %s share has NFS protocol enabled. "+
-				"To copy %s a NFS share, use the appropriate --from-to flag value", location, direction)
+			return fmt.Errorf("The %s share has SMB protocol enabled. To copy %s a SMB share, use the appropriate --from-to flag value", direction, direction)
 		}
 	}
 

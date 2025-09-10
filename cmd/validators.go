@@ -57,22 +57,6 @@ func ValidateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo,
 		userFromTo = common.EFromTo.FileLocal()
 	} else if userFromTo == common.EFromTo.FileSMBFileSMB() {
 		userFromTo = common.EFromTo.FileFile()
-	} else if userFromTo == common.EFromTo.FileSMBBlob() {
-		userFromTo = common.EFromTo.FileBlob()
-	} else if userFromTo == common.EFromTo.BlobFileSMB() {
-		userFromTo = common.EFromTo.BlobFile()
-	} else if userFromTo == common.EFromTo.FileSMBPipe() {
-		userFromTo = common.EFromTo.FilePipe()
-	} else if userFromTo == common.EFromTo.PipeFileSMB() {
-		userFromTo = common.EFromTo.PipeFile()
-	} else if userFromTo == common.EFromTo.FileSMBTrash() {
-		userFromTo = common.EFromTo.FileTrash()
-	} else if userFromTo == common.EFromTo.FileSMBBlobFS() {
-		userFromTo = common.EFromTo.FileBlobFS()
-	} else if userFromTo == common.EFromTo.BlobFSFileSMB() {
-		userFromTo = common.EFromTo.BlobFSFile()
-	} else if userFromTo == common.EFromTo.FileSMBTrash() {
-		userFromTo = common.EFromTo.FileTrash()
 	}
 
 	return userFromTo, nil
