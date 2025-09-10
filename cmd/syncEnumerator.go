@@ -24,9 +24,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
-	"strings"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -36,12 +34,7 @@ import (
 
 func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *traverser.SyncEnumerator, err error) {
 
-	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo, copyJobTemplate)
-
 	// set up the comparator so that the source/destination can be compared
-	indexer := traverser.NewObjectIndexer()
-	var comparator traverser.ObjectProcessor
-	var finalize func() error
 
 	if cca.fromTo.IsUpload() {
 		// In this scenario, the local disk (source) is scanned/indexed first because it is assumed that local file systems will be faster to enumerate than remote resources
@@ -80,9 +73,9 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 		indexer.IsDestinationCaseInsensitive = IsDestinationCaseInsensitive(cca.fromTo)
 		// in all other cases (download and S2S), the destination is scanned/indexed first
 		// then the source is scanned and filtered based on what the destination contains
-		comparator = newSyncSourceComparator(indexer, transferScheduler.scheduleCopyTransfer, cca.compareHash, cca.preserveInfo, cca.mirrorMode).processIfNecessary
+		comparator := newSyncSourceComparator(indexer, transferScheduler.scheduleCopyTransfer, cca.compareHash, cca.preserveInfo, cca.mirrorMode).processIfNecessary
 
-		finalize = func() error {
+		finalize := func() error {
 			// remove the extra files at the destination that were not present at the source
 			// we can only know what needs to be deleted when we have FINISHED traversing the remote source
 			// since only then can we know which local files definitely don't exist remotely

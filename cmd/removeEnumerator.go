@@ -133,7 +133,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *traverser.CopyEnum
 	}
 	common.LogToJobLogWithPrefix(message, common.LogInfo)
 
-	transferScheduler := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo, targetServiceClient)
+	transferScheduler := newRemoveTransferProcessor(cca, azcopy.NumOfFilesPerDispatchJobPart, fpo, targetServiceClient)
 
 	finalize := func() error {
 		jobInitiated, err := transferScheduler.dispatchFinalPart()
@@ -184,7 +184,7 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 
 	dsc, _ := targetServiceClient.DatalakeServiceClient() // We've just created client above, need not verify error here.
 
-	transferProcessor := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart, common.EFolderPropertiesOption.AllFolders(), targetServiceClient)
+	transferProcessor := newRemoveTransferProcessor(cca, azcopy.NumOfFilesPerDispatchJobPart, common.EFolderPropertiesOption.AllFolders(), targetServiceClient)
 
 	// return an error if the unsupported options are passed in
 	if len(cca.InitModularFilters()) > 0 {

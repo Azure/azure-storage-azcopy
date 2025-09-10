@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"sync/atomic"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -116,6 +117,67 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, e
 		DstServiceClient: s.opts.destServiceClient,
 	}
 
+	// Download and S2S flow for sync
+	// 1. traverse the destination and index it
+	// 2. traverse the source and compare it with the index, scheduling transfers as necessary
+	// 3.
+
+	// indexer keeps track of the destination (source in case of upload) files and folders
+	indexer := traverser.NewObjectIndexer()
+
+	// dispatcher is responsible for batching up transfers and sending them to the job service
+	dispatcher := newTransferDispatcher(NumOfFilesPerDispatchJobPart, copyJobTemplate, s.opts.source, s.opts.destination, s, *s.opts.S2SPreserveAccessTier)
+
+	var deleter *interactiveDeleter
+	if s.opts.FromTo.To().IsAzure() {
+		deleter, err = s.newRemoteDeleter()
+		if err != nil {
+			return nil, fmt.Errorf("unable to instantiate destination cleaner due to: %s", err.Error())
+		}
+	} else {
+		deleter = s.newLocalDeleter()
+	}
+	deleteScheduler := traverser.NewFpoAwareProcessor(s.opts.folderPropertyOption, deleter.removeImmediately)
+
+	if s.opts.FromTo.IsUpload() {
+		// In this scenario, the local disk (source) is scanned/indexed first because it is assumed that local file systems will be faster to enumerate than remote resources
+		// Then the destination is scanned and filtered based on what the destination contains
+
+		// 1. Traverse the source and build an index of its paths.
+		// 2. Traverse the destination and compare each path against the index:
+		//    - If path exists in both → schedule transfer (if needed), then remove from index.
+		//    - If path exists only in destination → schedule deletion.
+		// 3. For any paths still left in the index (source-only) → schedule transfer.
+		comparator := newSyncDestinationComparator(indexer, dispatcher.scheduleTransfer, deleteScheduler, s.opts.CompareHash, s.opts.PreserveInfo, s.opts.MirrorMode).processIfNecessary
+		finalize := func() error {
+			// schedule every local file that doesn't exist at the destination
+			err = indexer.Traverse(dispatcher.scheduleTransfer, s.opts.filters)
+			if err != nil {
+				return err
+			}
+			var jobInitiated bool
+			jobInitiated, err = dispatcher.dispatchFinalPart()
+			// sync cleanly exits if nothing is scheduled.
+			if err != nil && err != NothingScheduledError {
+				return err
+			}
+			// Set
+
+			return nil
+		}
+		return traverser.NewSyncEnumerator(sourceTraverser, destinationTraverser, indexer, s.opts.filters, comparator, finalize), nil
+	} else {
+		// In all other scenarios (download and S2S), the destination is scanned/indexed first
+		// Then the source is scanned and filtered based on what the destination contains
+		indexer.IsDestinationCaseInsensitive = s.opts.FromTo.IsDownload() && runtime.GOOS == "windows"
+
+		finalize := func() error {
+			// remove the extra files at the destination that were not present at the source
+			// we can only know what needs to be deleted when we have FINISHED traversing the remote source
+			// since only then can we know which local files definitely don't exist remotely
+
+		}
+	}
 }
 
 func verifyTraverserCompatibility(ctx context.Context, src, dst traverser.ResourceTraverser, fromTo common.FromTo, dstURL string) error {

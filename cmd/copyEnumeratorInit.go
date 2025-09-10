@@ -566,73 +566,6 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 	return
 }
 
-// Because some invalid characters weren't being properly encoded by url.PathEscape, we're going to instead manually encode them.
-var encodedInvalidCharacters = map[rune]string{
-	'<':  "%3C",
-	'>':  "%3E",
-	'\\': "%5C",
-	'/':  "%2F",
-	':':  "%3A",
-	'"':  "%22",
-	'|':  "%7C",
-	'?':  "%3F",
-	'*':  "%2A",
-}
-
-var reverseEncodedChars = map[string]rune{
-	"%3C": '<',
-	"%3E": '>',
-	"%5C": '\\',
-	"%2F": '/',
-	"%3A": ':',
-	"%22": '"',
-	"%7C": '|',
-	"%3F": '?',
-	"%2A": '*',
-}
-
-func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool, source bool) string {
-	var loc common.Location
-
-	if source {
-		loc = fromTo.From()
-	} else {
-		loc = fromTo.To()
-	}
-	pathParts := strings.Split(path, common.AZCOPY_PATH_SEPARATOR_STRING)
-
-	// If downloading on Windows or uploading to files, encode unsafe characters.
-	if (loc == common.ELocation.Local() && !source && runtime.GOOS == "windows") ||
-		(!source && (loc == common.ELocation.File() || loc == common.ELocation.FileNFS())) {
-		// invalidChars := `<>\/:"|?*` + string(0x00)
-
-		for k, c := range encodedInvalidCharacters {
-			for part, p := range pathParts {
-				pathParts[part] = strings.ReplaceAll(p, string(k), c)
-			}
-		}
-
-		// If uploading from Windows or downloading from files, decode unsafe chars if user enables decoding
-	} else if ((!source && fromTo.From() == common.ELocation.Local() && runtime.GOOS == "windows") ||
-		(!source && (fromTo.From() == common.ELocation.File() || fromTo.From() == common.ELocation.FileNFS()))) && !disableAutoDecoding {
-
-		for encoded, c := range reverseEncodedChars {
-			for k, p := range pathParts {
-				pathParts[k] = strings.ReplaceAll(p, encoded, string(c))
-			}
-		}
-	}
-
-	if loc.IsRemote() {
-		for k, p := range pathParts {
-			pathParts[k] = url.PathEscape(p)
-		}
-	}
-
-	path = strings.Join(pathParts, "/")
-	return path
-}
-
 func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool, asSubdir bool, object traverser.StoredObject) (relativePath string) {
 	// write straight to /dev/null, do not determine a indirect path
 	if !source && cca.Destination.Value == common.Dev_Null {
@@ -664,7 +597,7 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 			}
 		}
 
-		return pathEncodeRules(relativePath, cca.FromTo, cca.disableAutoDecoding, source)
+		return azcopy.PathEncodeRules(relativePath, cca.FromTo, cca.disableAutoDecoding, source)
 	}
 
 	// If it's out here, the object is contained in a folder, or was found via a wildcard, or object.isSourceRootFolder == true
@@ -705,5 +638,5 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 		relativePath = "/" + rootDir + relativePath
 	}
 
-	return pathEncodeRules(relativePath, cca.FromTo, cca.disableAutoDecoding, source)
+	return azcopy.PathEncodeRules(relativePath, cca.FromTo, cca.disableAutoDecoding, source)
 }

@@ -115,7 +115,7 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *traverser.Copy
 	}
 	common.LogToJobLogWithPrefix(message, common.LogInfo)
 
-	transferScheduler := setPropertiesTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo, targetServiceClient)
+	transferScheduler := setPropertiesTransferProcessor(cca, azcopy.NumOfFilesPerDispatchJobPart, fpo, targetServiceClient)
 
 	finalize := func() error {
 		jobInitiated, err := transferScheduler.dispatchFinalPart()

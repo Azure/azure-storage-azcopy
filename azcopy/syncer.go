@@ -45,10 +45,6 @@ type syncer struct {
 	intervalBytesTransferred uint64
 	// used to calculate job summary
 	jobStartTime time.Time
-	// this flag is set by the enumerator
-	// it is useful to indicate whether we are simply waiting for the purpose of cancelling
-	// this is set to true once the final part has been dispatched
-	isEnumerationComplete bool
 }
 
 func newSyncer() *syncer {
@@ -273,5 +269,21 @@ func (s *syncer) OnFirstPartDispatched() {
 }
 
 func (s *syncer) OnLastPartDispatched() {
-	s.isEnumerationComplete = true
+	s.SetScanningComplete()
+}
+
+func (s *syncer) IncrementDeletionCount() {
+	atomic.AddUint32(&s.atomicDeletionCount, 1)
+}
+
+func (s *syncer) GetDeletionCount() uint32 {
+	return atomic.LoadUint32(&s.atomicDeletionCount)
+}
+
+func (s *syncer) SetScanningComplete() {
+	atomic.StoreUint32(&s.atomicScanningStatus, 1)
+}
+
+func (s *syncer) CompletedEnumeration() bool {
+	return atomic.LoadUint32(&s.atomicScanningStatus) == 1
 }
