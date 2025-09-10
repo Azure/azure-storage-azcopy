@@ -105,9 +105,9 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *traverser.CopyEnum
 		return nil, err
 	}
 
-	includeFilters := buildIncludeFilters(cca.IncludePatterns)
-	excludeFilters := buildExcludeFilters(cca.ExcludePatterns, false)
-	excludePathFilters := buildExcludeFilters(cca.ExcludePathPatterns, true)
+	includeFilters := traverser.BuildIncludeFilters(cca.IncludePatterns)
+	excludeFilters := traverser.BuildExcludeFilters(cca.ExcludePatterns, false)
+	excludePathFilters := traverser.BuildExcludeFilters(cca.ExcludePathPatterns, true)
 	includeSoftDelete := buildIncludeSoftDeleted(cca.permanentDeleteOption)
 
 	// set up the filters in the right order

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 )
@@ -17,7 +18,7 @@ func (d *dryrunDeleter) dryrunDelete(object traverser.StoredObject) error {
 	glcm.Dryrun(func(format common.OutputFormat) string {
 		if format == common.EOutputFormat.Json() {
 			deleteTarget := common.ELocation.Local()
-			if d.objectTypeToDisplay != LocalFileObjectType {
+			if d.objectTypeToDisplay != azcopy.LocalFileObjectType {
 				_ = deleteTarget.Parse(d.objectTypeToDisplay)
 			}
 

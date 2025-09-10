@@ -428,7 +428,7 @@ func getShareProtocolType(
 }
 
 // Protocol compatibility validation for SMB and NFS transfers
-func validateProtocolCompatibility(ctx context.Context, fromTo common.FromTo, src, dst common.ResourceString, srcClient, dstClient *common.ServiceClient) error {
+func ValidateProtocolCompatibility(ctx context.Context, fromTo common.FromTo, src, dst common.ResourceString, srcClient, dstClient *common.ServiceClient) error {
 
 	getUploadDownloadProtocol := func(fromTo common.FromTo) string {
 		switch fromTo {

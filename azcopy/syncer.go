@@ -9,6 +9,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 )
 
@@ -58,8 +59,12 @@ func newSyncer() *syncer {
 }
 
 // defaultAndInferSyncOptions fills in any missing values in the SyncOptions with their defaults, and infers values from other values where applicable.
-func applyDefaultsAndInferSyncOptions(s SyncOptions, fromTo common.FromTo) (clone SyncOptions, err error) {
-	clone = s.clone()
+func applyDefaultsAndInferSyncOptions(src, dest string, fromTo common.FromTo, opts SyncOptions) (clone SyncOptions, err error) {
+	clone = opts.clone()
+	clone.source, clone.destination, err = getSourceAndDestination(src, dest, fromTo)
+	if err != nil {
+		return clone, err
+	}
 	clone.FromTo = fromTo
 
 	if clone.Recursive == nil {
@@ -96,9 +101,9 @@ func applyDefaultsAndInferSyncOptions(s SyncOptions, fromTo common.FromTo) (clon
 	}
 
 	if clone.HashMetaDir != "" {
-		common.LocalHashDir = s.HashMetaDir
+		common.LocalHashDir = opts.HashMetaDir
 	}
-	common.LocalHashStorageMode = *s.LocalHashStorageMode
+	common.LocalHashStorageMode = *opts.LocalHashStorageMode
 
 	// We only preserve access tier for S2S. For other scenarios, we set it to false
 	if !fromTo.IsS2S() {
@@ -132,6 +137,10 @@ func applyDefaultsAndInferSyncOptions(s SyncOptions, fromTo common.FromTo) (clon
 	if clone.TrailingDot == common.ETrailingDotOption.Enable() && !clone.FromTo.BothSupportTrailingDot() {
 		clone.TrailingDot = common.ETrailingDotOption.Disable()
 	}
+	sourcePath := ""
+	if fromTo.From() == common.ELocation.Local() {
+		sourcePath = clone.source.ValueLocal()
+	}
 
 	clone.filters = traverser.BuildFilters(traverser.FilterOptions{
 		IncludePatterns:   clone.IncludePatterns,
@@ -141,7 +150,7 @@ func applyDefaultsAndInferSyncOptions(s SyncOptions, fromTo common.FromTo) (clon
 		ExcludeAttributes: clone.ExcludeAttributes,
 		IncludeRegex:      clone.IncludeRegex,
 		ExcludeRegex:      clone.ExcludeRegex,
-		SourcePath:        common.Iff(fromTo.From() == common.ELocation.Local(), clone.source.ValueLocal(), ""),
+		SourcePath:        sourcePath,
 		FromTo:            fromTo,
 		Recursive:         *clone.Recursive,
 	})
@@ -265,25 +274,138 @@ func (s *syncer) validate() (err error) {
 }
 
 func (s *syncer) OnFirstPartDispatched() {
+	s.setFirstPartDispatched()
+}
+
+func (s *syncer) setFirstPartDispatched() {
 	atomic.StoreUint32(&s.atomicFirstPartOrdered, 1)
 }
 
+func (s *syncer) isFirstPartDispatched() bool {
+	return atomic.LoadUint32(&s.atomicFirstPartOrdered) == 1
+}
+
 func (s *syncer) OnLastPartDispatched() {
-	s.SetScanningComplete()
+	s.setScanningComplete()
 }
 
 func (s *syncer) IncrementDeletionCount() {
 	atomic.AddUint32(&s.atomicDeletionCount, 1)
 }
 
-func (s *syncer) GetDeletionCount() uint32 {
+func (s *syncer) getDeletionCount() uint32 {
 	return atomic.LoadUint32(&s.atomicDeletionCount)
 }
 
-func (s *syncer) SetScanningComplete() {
+func (s *syncer) setScanningComplete() {
 	atomic.StoreUint32(&s.atomicScanningStatus, 1)
 }
 
-func (s *syncer) CompletedEnumeration() bool {
+func (s *syncer) isScanningComplete() bool {
 	return atomic.LoadUint32(&s.atomicScanningStatus) == 1
+}
+
+func (s *syncer) CompletedEnumeration() bool {
+	return s.isScanningComplete()
+}
+
+func (s *syncer) Start() {
+	// initialize the times necessary to track progress
+	s.jobStartTime = time.Now()
+	s.intervalStartTime = time.Now()
+	s.intervalBytesTransferred = 0
+
+	// print initial message to indicate that the job is starting
+	// Output the log location if log-level is set to other then NONE
+	var logPathFolder string
+	if common.LogPathFolder != "" {
+		logPathFolder = fmt.Sprintf("%s%s%s.log", common.LogPathFolder, common.OS_PATH_SEPARATOR, s.jobID)
+	}
+	s.opts.Handler.OnStart(common.JobContext{JobID: s.jobID, LogPath: logPathFolder})
+}
+
+func (s *syncer) CheckProgress() (uint32, bool) {
+	duration := time.Since(s.jobStartTime)
+	var summary common.ListJobSummaryResponse
+	var jobDone bool
+	var totalKnownCount uint32
+	var throughput float64
+
+	// transfers have begun, so we can start computing throughput
+	if s.isFirstPartDispatched() {
+		summary := jobsAdmin.GetJobSummary(s.jobID)
+		jobDone = summary.JobStatus.IsJobDone()
+		totalKnownCount = summary.TotalTransfers
+		var computeThroughput = func() float64 {
+			// compute the average throughput for the last time interval
+			bytesInMb := float64(float64(summary.BytesOverWire-s.intervalBytesTransferred) / float64(common.Base10Mega))
+			timeElapsed := time.Since(s.intervalStartTime).Seconds()
+
+			// reset the interval timer and byte count
+			s.intervalStartTime = time.Now()
+			s.intervalBytesTransferred = summary.BytesOverWire
+
+			return common.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
+		}
+		throughput = computeThroughput()
+	}
+
+	if !s.isScanningComplete() {
+		// if the scanning is not complete, report scanning progress to the user
+		scanProgress := common.ScanProgress{
+			Source:             s.getSourceFilesScanned(),
+			Destination:        s.getDestinationFilesScanned(),
+			TransferThroughput: common.Iff(s.isFirstPartDispatched(), &throughput, nil),
+		}
+		if common.AzcopyCurrentJobLogger != nil {
+			common.AzcopyCurrentJobLogger.Log(common.LogInfo, common.GetScanProgressOutputBuilder(scanProgress)(common.EOutputFormat.Text()))
+		}
+		s.opts.Handler.OnScanProgress(scanProgress)
+		return totalKnownCount, false
+	} else {
+		// else report transfer progress to the user
+		transferProgress := common.TransferProgress{
+			ListJobSummaryResponse:   summary,
+			DeleteTotalTransfers:     s.getDeletionCount(),
+			DeleteTransfersCompleted: s.getDeletionCount(),
+			Throughput:               throughput,
+			ElapsedTime:              duration,
+			JobType:                  common.EJobType.Sync(),
+		}
+		if common.AzcopyCurrentJobLogger != nil {
+			common.AzcopyCurrentJobLogger.Log(common.LogInfo, common.GetProgressOutputBuilder(transferProgress)(common.EOutputFormat.Text()))
+		}
+		s.opts.Handler.OnTransferProgress(SyncJobProgress{
+			ListJobSummaryResponse:   summary,
+			DeleteTotalTransfers:     s.getDeletionCount(),
+			DeleteTransfersCompleted: s.getDeletionCount(),
+			Throughput:               throughput,
+			ElapsedTime:              duration,
+		})
+		return totalKnownCount, jobDone
+	}
+}
+
+func (s *syncer) GetJobID() common.JobID {
+	return s.jobID
+}
+
+func (s *syncer) GetElapsedTime() time.Duration {
+	return time.Since(s.jobStartTime)
+}
+
+func (s *syncer) getSourceFilesScanned() uint64 {
+	return atomic.LoadUint64(&s.atomicSourceFilesScanned)
+}
+
+func (s *syncer) getDestinationFilesScanned() uint64 {
+	return atomic.LoadUint64(&s.atomicDestinationFilesScanned)
+}
+
+func (s *syncer) getSkippedSymlinkCount() uint32 {
+	return atomic.LoadUint32(&s.atomicSkippedSymlinkCount)
+}
+
+func (s *syncer) getSkippedSpecialFileCount() uint32 {
+	return atomic.LoadUint32(&s.atomicSkippedSpecialFileCount)
 }

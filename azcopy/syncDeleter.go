@@ -9,7 +9,7 @@ import (
 
 type DeleteCounter interface {
 	IncrementDeletionCount()
-	GetDeletionCount() uint32
+	getDeletionCount() uint32
 }
 
 type interactiveDeleter struct {
@@ -20,7 +20,7 @@ type interactiveDeleter struct {
 	shouldDelete            bool
 	objectTypeToDisplay     string
 	objectLocationToDisplay string
-	
+
 	counter DeleteCounter
 
 	// TODO: dryrun can probably be its own deleter?

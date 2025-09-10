@@ -1145,7 +1145,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	}
 
 	// Check protocol compatibility for File Shares
-	if err := validateProtocolCompatibility(ctx, cca.FromTo, cca.Source, cca.Destination, jobPartOrder.SrcServiceClient, jobPartOrder.DstServiceClient); err != nil {
+	if err := azcopy.ValidateProtocolCompatibility(ctx, cca.FromTo, cca.Source, cca.Destination, jobPartOrder.SrcServiceClient, jobPartOrder.DstServiceClient); err != nil {
 		return err
 	}
 

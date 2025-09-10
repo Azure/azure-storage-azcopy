@@ -7,6 +7,7 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 )
 
@@ -69,6 +70,10 @@ type SyncOptions struct {
 func (s SyncOptions) clone() SyncOptions {
 	clone := s // shallow copy everything first
 
+	clone.source = s.source
+	clone.destination = s.destination
+
+	// Deep copy pointer fields
 	if s.Recursive != nil {
 		v := *s.Recursive
 		clone.Recursive = &v
@@ -86,6 +91,7 @@ func (s SyncOptions) clone() SyncOptions {
 		clone.LocalHashStorageMode = &v
 	}
 
+	// Deep copy slices
 	clone.IncludePatterns = append([]string(nil), s.IncludePatterns...)
 	clone.ExcludePatterns = append([]string(nil), s.ExcludePatterns...)
 	clone.ExcludePaths = append([]string(nil), s.ExcludePaths...)
@@ -93,7 +99,6 @@ func (s SyncOptions) clone() SyncOptions {
 	clone.ExcludeAttributes = append([]string(nil), s.ExcludeAttributes...)
 	clone.IncludeRegex = append([]string(nil), s.IncludeRegex...)
 	clone.ExcludeRegex = append([]string(nil), s.ExcludeRegex...)
-	clone.filters = append([]traverser.ObjectFilter(nil), s.filters...)
 
 	return clone
 }
@@ -115,8 +120,8 @@ type SyncResult struct {
 
 type SyncJobHandler interface {
 	OnStart(ctx common.JobContext)
-	OnTransferProgress(progress ResumeJobProgress)
-	OnScanProgress(progress SyncJobProgress)
+	OnTransferProgress(progress SyncJobProgress)
+	OnScanProgress(progress common.ScanProgress)
 }
 
 type SyncJobProgress struct {
@@ -148,8 +153,6 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 		common.SetUIHooks(syncHandler)
 	}
 
-	mgr := NewJobLifecycleManager(syncHandler)
-
 	job := newSyncer()
 	c.CurrentJobID = job.jobID
 
@@ -160,14 +163,12 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 		return SyncResult{}, err
 	}
 	common.SetNFSFlag(fromTo.IsNFSAware())
-	job.opts.source, job.opts.destination, err = getSourceAndDestination(src, dest, fromTo)
+
+	job.opts, err = applyDefaultsAndInferSyncOptions(src, dest, fromTo, opts)
 	if err != nil {
 		return SyncResult{}, err
 	}
-	job.opts, err = applyDefaultsAndInferSyncOptions(opts, fromTo)
-	if err != nil {
-		return SyncResult{}, err
-	}
+
 	err = job.validate()
 	if err != nil {
 		return SyncResult{}, err
@@ -198,7 +199,7 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 		}
 	}
 	// Check protocol compatibility for File Shares
-	if err = validateProtocolCompatibility(ctx, job.opts.FromTo, job.opts.source, job.opts.destination, job.opts.srcServiceClient, job.opts.destServiceClient); err != nil {
+	if err = ValidateProtocolCompatibility(ctx, job.opts.FromTo, job.opts.source, job.opts.destination, job.opts.srcServiceClient, job.opts.destServiceClient); err != nil {
 		return SyncResult{}, err
 	}
 
@@ -232,7 +233,61 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 
 	// TODO : Command string for library users?
 
-	return SyncResult{}, nil
+	mgr := NewJobLifecycleManager(syncHandler)
+
+	ctx = context.WithValue(ctx, ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+
+	se, err := job.initEnumerator(ctx, c.GetLogLevel(), mgr)
+	if err != nil {
+		return SyncResult{}, err
+	}
+
+	mgr.InitiateProgressReporting(ctx, job)
+
+	err = se.Enumerate()
+
+	if err != nil {
+		return SyncResult{}, err
+	}
+	// if we are in dryrun mode, we don't want to actually run the job, so return here
+	if job.opts.DryRun {
+		return SyncResult{}, nil
+	}
+
+	err = mgr.Wait()
+	if err != nil {
+		return SyncResult{}, err
+	}
+
+	// Get final job summary
+	finalSummary := jobsAdmin.GetJobSummary(job.jobID)
+	finalSummary.SkippedSymlinkCount = job.getSkippedSymlinkCount()
+	finalSummary.SkippedSpecialFileCount = job.getSkippedSpecialFileCount()
+
+	// Log to job log
+	if common.AzcopyCurrentJobLogger != nil {
+		// TODO : I think some of this can be simplified after we are done with the copy job refactor.
+		// There should be no need to transform these types so many times
+		_, logStats := common.FormatExtraStats(common.EJobType.Sync(), finalSummary.AverageIOPS, finalSummary.AverageE2EMilliseconds, finalSummary.NetworkErrorPercentage, finalSummary.ServerBusyPercentage)
+		common.AzcopyCurrentJobLogger.Log(common.LogInfo, logStats+"\n"+common.GetJobSummaryOutputBuilder(common.JobSummary{
+			ListJobSummaryResponse:   finalSummary,
+			DeleteTransfersCompleted: job.getDeletionCount(),
+			DeleteTotalTransfers:     job.getDeletionCount(),
+			SourceFilesScanned:       job.getSourceFilesScanned(),
+			DestinationFilesScanned:  job.getDestinationFilesScanned(),
+			ElapsedTime:              job.GetElapsedTime(),
+			JobType:                  common.EJobType.Sync(),
+		})(common.EOutputFormat.Text()))
+	}
+
+	return SyncResult{
+		SourceFilesScanned:       job.getSourceFilesScanned(),
+		DestinationFilesScanned:  job.getDestinationFilesScanned(),
+		ListJobSummaryResponse:   finalSummary,
+		DeleteTotalTransfers:     job.getDeletionCount(),
+		DeleteTransfersCompleted: job.getDeletionCount(),
+		ElapsedTime:              job.GetElapsedTime(),
+	}, nil
 }
 
 func getSourceAndDestination(src, dst string, fromTo common.FromTo) (source, destination common.ResourceString, err error) {
