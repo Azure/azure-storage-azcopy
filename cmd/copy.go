@@ -372,7 +372,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 		glcm.SetOutputFormat(common.EOutputFormat.None())
 	}
 
-	if common.IsNFSCopy() {
+	if cooked.FromTo.IsNFS() {
 		cooked.preserveInfo = raw.preserveInfo && areBothLocationsNFSAware(cooked.FromTo)
 		cooked.preservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
 			true,
@@ -753,6 +753,8 @@ type CookedCopyCmdArgs struct {
 	hardlinks                     common.HardlinkHandlingType
 	atomicSkippedSymlinkCount     uint32
 	atomicSkippedSpecialFileCount uint32
+	atomicSkippedHardlinkCount    uint32
+	atomicHardlinkConvertedCount  uint32
 	BlockSizeMB                   float64
 	PutBlobSizeMB                 float64
 	IncludePathPatterns           []string
@@ -1015,8 +1017,8 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// Make AUTO default for Azure Files since Azure Files throttles too easily unless user specified concurrency value
 	if jobsAdmin.JobsAdmin != nil &&
-		(cca.FromTo.From().IsFile() || (cca.FromTo.To().IsFile() &&
-			common.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue()) == "")) {
+		(cca.FromTo.From().IsFile() || cca.FromTo.To().IsFile()) &&
+		common.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue()) == "" {
 		jobsAdmin.JobsAdmin.SetConcurrencySettingsToAuto()
 	}
 
@@ -1186,7 +1188,11 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	}
 
 	// Check protocol compatibility for File Shares
-	if err := validateProtocolCompatibility(ctx, cca.FromTo, cca.Source, cca.Destination, jobPartOrder.SrcServiceClient, jobPartOrder.DstServiceClient); err != nil {
+	if err := validateProtocolCompatibility(ctx, cca.FromTo,
+		cca.Source,
+		cca.Destination,
+		jobPartOrder.SrcServiceClient,
+		jobPartOrder.DstServiceClient); err != nil {
 		return err
 	}
 
@@ -1389,6 +1395,8 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 	if jobDone {
 		summary.SkippedSymlinkCount = atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)
 		summary.SkippedSpecialFileCount = atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount)
+		summary.SkippedHardlinkCount = atomic.LoadUint32(&cca.atomicSkippedHardlinkCount)
+		summary.HardlinksConvertedCount = atomic.LoadUint32(&cca.atomicHardlinkConvertedCount)
 
 		exitCode := cca.getSuccessExitCode()
 		if summary.TransfersFailed > 0 || summary.JobStatus == common.EJobStatus.Cancelled() || summary.JobStatus == common.EJobStatus.Cancelling() {
@@ -1420,6 +1428,7 @@ Number of File Transfers Skipped: %v
 Number of Folder Transfers Skipped: %v
 Number of Symbolic Links Skipped: %v
 Number of Hardlinks Converted: %v
+Number of Hardlinks Skipped: %v
 Number of Special Files Skipped: %v
 Total Number of Bytes Transferred: %v
 Final Job Status: %v%s%s
@@ -1438,6 +1447,7 @@ Final Job Status: %v%s%s
 					summary.FoldersSkipped,
 					summary.SkippedSymlinkCount,
 					summary.HardlinksConvertedCount,
+					summary.SkippedHardlinkCount,
 					summary.SkippedSpecialFileCount,
 					summary.TotalBytesTransferred,
 					summary.JobStatus,

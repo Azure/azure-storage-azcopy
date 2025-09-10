@@ -23,14 +23,15 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strings"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
-	"net/url"
-	"strings"
-	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 
@@ -266,7 +267,7 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			}
 		}
 		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter(storedObject.entityType)
+			t.incrementEnumerationCounter(storedObject.entityType, common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
 		}
 
 		err := processIfPassedFilters(filters, storedObject, processor)
@@ -297,7 +298,7 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		)
 
 		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter(common.EEntityType.Folder())
+			t.incrementEnumerationCounter(common.EEntityType.Folder(), common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
 		}
 
 		err := processIfPassedFilters(filters, storedObject, processor)
@@ -476,7 +477,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 		}
 
 		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter(common.EEntityType.File())
+			t.incrementEnumerationCounter(common.EEntityType.File(), common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
 		}
 
 		object := item.(StoredObject)
@@ -579,7 +580,7 @@ func (t *blobTraverser) serialList(containerClient *container.Client, containerN
 			}
 
 			if t.incrementEnumerationCounter != nil {
-				t.incrementEnumerationCounter(common.EEntityType.File())
+				t.incrementEnumerationCounter(common.EEntityType.File(), common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
 			}
 
 			processErr := processIfPassedFilters(filters, storedObject, processor)

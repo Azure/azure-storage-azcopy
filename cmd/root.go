@@ -185,13 +185,20 @@ var rootCmd = &cobra.Command{
 
 		isBench := cmd.Use == "bench [destination]"
 
-		return Initialize(resumeJobID, isBench)
+		// We only care to warn about multiple AzCopy processes for commands sent to STE
+		sentToSte := []string{"copy [source] [destination]", "sync", "bench [destination]", "resume [jobID]", "remove [resourceURL]", "set-properties [source]"}
+		var shouldWarn bool
+		for _, currCmd := range sentToSte {
+			if cmd.Use == currCmd {
+				shouldWarn = true
+				break
+			}
+		}
+		return Initialize(resumeJobID, isBench, shouldWarn)
 	},
 }
 
-func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
-	currPid := os.Getpid()
-	AsyncWarnMultipleProcesses(cmd.GetAzCopyAppPath(), currPid)
+func Initialize(resumeJobID common.JobID, isBench bool, shouldWarn bool) (err error) {
 	jobsAdmin.BenchmarkResults = isBench
 	Client, err = azcopy.NewClient(azcopy.ClientOptions{CapMbps: CapMbps})
 	if err != nil {
@@ -210,6 +217,11 @@ func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
 	common.AzcopyCurrentJobLogger.OpenLog()
 
 	glcm.SetForceLogging()
+
+	if shouldWarn {
+		currPid := os.Getpid()
+		AsyncWarnMultipleProcesses(cmd.GetAzCopyAppPath(), currPid)
+	}
 
 	// For benchmarking, try to autotune if possible, otherwise use the default values
 	if jobsAdmin.JobsAdmin != nil && isBench {
