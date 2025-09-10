@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package traverser
 
 import (
 	"time"
@@ -31,9 +31,9 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-var noContentProps = emptyPropertiesAdapter{}
-var noBlobProps = emptyPropertiesAdapter{}
-var noMetadata common.Metadata = nil
+var NoContentProps = emptyPropertiesAdapter{}
+var NoBlobProps = emptyPropertiesAdapter{}
+var NoMetadata common.Metadata = nil
 
 // emptyPropertiesAdapter supplies empty (zero-like) values
 // for all methods in contentPropsProvider and blobPropsProvider
@@ -95,67 +95,67 @@ func (e emptyPropertiesAdapter) LeaseStatus() lease.StatusType {
 	return ""
 }
 
-// blobPropertiesResponseAdapter adapts a BlobGetPropertiesResponse to the blobPropsProvider interface
-type blobPropertiesResponseAdapter struct {
+// BlobPropertiesResponseAdapter adapts a BlobGetPropertiesResponse to the blobPropsProvider interface
+type BlobPropertiesResponseAdapter struct {
 	*blob.GetPropertiesResponse
 }
 
-func (a blobPropertiesResponseAdapter) LastModified() time.Time {
+func (a BlobPropertiesResponseAdapter) LastModified() time.Time {
 	return common.IffNotNil(a.GetPropertiesResponse.LastModified, time.Time{})
 }
 
-func (a blobPropertiesResponseAdapter) CacheControl() string {
+func (a BlobPropertiesResponseAdapter) CacheControl() string {
 	return common.IffNotNil(a.GetPropertiesResponse.CacheControl, "")
 }
 
-func (a blobPropertiesResponseAdapter) ContentDisposition() string {
+func (a BlobPropertiesResponseAdapter) ContentDisposition() string {
 	return common.IffNotNil(a.GetPropertiesResponse.ContentDisposition, "")
 }
 
-func (a blobPropertiesResponseAdapter) ContentEncoding() string {
+func (a BlobPropertiesResponseAdapter) ContentEncoding() string {
 	return common.IffNotNil(a.GetPropertiesResponse.ContentEncoding, "")
 }
 
-func (a blobPropertiesResponseAdapter) ContentLanguage() string {
+func (a BlobPropertiesResponseAdapter) ContentLanguage() string {
 	return common.IffNotNil(a.GetPropertiesResponse.ContentLanguage, "")
 }
 
-func (a blobPropertiesResponseAdapter) ContentType() string {
+func (a BlobPropertiesResponseAdapter) ContentType() string {
 	return common.IffNotNil(a.GetPropertiesResponse.ContentType, "")
 }
 
-func (a blobPropertiesResponseAdapter) ContentMD5() []byte {
+func (a BlobPropertiesResponseAdapter) ContentMD5() []byte {
 	return a.GetPropertiesResponse.ContentMD5
 }
 
-func (a blobPropertiesResponseAdapter) ContentLength() int64 {
+func (a BlobPropertiesResponseAdapter) ContentLength() int64 {
 	return common.IffNotNil(a.GetPropertiesResponse.ContentLength, 0)
 }
 
-func (a blobPropertiesResponseAdapter) BlobType() blob.BlobType {
+func (a BlobPropertiesResponseAdapter) BlobType() blob.BlobType {
 	return common.IffNotNil(a.GetPropertiesResponse.BlobType, "")
 }
 
-func (a blobPropertiesResponseAdapter) AccessTier() blob.AccessTier {
+func (a BlobPropertiesResponseAdapter) AccessTier() blob.AccessTier {
 	return blob.AccessTier(common.IffNotNil(a.GetPropertiesResponse.AccessTier, ""))
 }
 
-func (a blobPropertiesResponseAdapter) ArchiveStatus() blob.ArchiveStatus {
+func (a BlobPropertiesResponseAdapter) ArchiveStatus() blob.ArchiveStatus {
 	return blob.ArchiveStatus(common.IffNotNil(a.GetPropertiesResponse.ArchiveStatus, ""))
 }
 
 // LeaseDuration returns the value for header x-ms-lease-duration.
-func (a blobPropertiesResponseAdapter) LeaseDuration() lease.DurationType {
+func (a BlobPropertiesResponseAdapter) LeaseDuration() lease.DurationType {
 	return common.IffNotNil(a.GetPropertiesResponse.LeaseDuration, "")
 }
 
 // LeaseState returns the value for header x-ms-lease-state.
-func (a blobPropertiesResponseAdapter) LeaseState() lease.StateType {
+func (a BlobPropertiesResponseAdapter) LeaseState() lease.StateType {
 	return common.IffNotNil(a.GetPropertiesResponse.LeaseState, "")
 }
 
 // LeaseStatus returns the value for header x-ms-lease-status.
-func (a blobPropertiesResponseAdapter) LeaseStatus() lease.StatusType {
+func (a BlobPropertiesResponseAdapter) LeaseStatus() lease.StatusType {
 	return common.IffNotNil(a.GetPropertiesResponse.LeaseStatus, "")
 }
 

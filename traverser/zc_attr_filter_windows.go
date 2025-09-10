@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package traverser
 
 import (
 	"fmt"
@@ -47,10 +47,10 @@ func (f *attrFilter) AppliesOnlyToFiles() bool {
 func (f *attrFilter) DoesPass(storedObject StoredObject) bool {
 	fileName := ""
 	if !strings.Contains(f.filePath, "*") {
-		fileName = common.GenerateFullPath(f.filePath, storedObject.relativePath)
+		fileName = common.GenerateFullPath(f.filePath, storedObject.RelativePath)
 	} else {
-		basePath := getPathBeforeFirstWildcard(f.filePath)
-		fileName = common.GenerateFullPath(basePath, storedObject.relativePath)
+		basePath := GetPathBeforeFirstWildcard(f.filePath)
+		fileName = common.GenerateFullPath(basePath, storedObject.RelativePath)
 	}
 
 	lpFileName, _ := syscall.UTF16PtrFromString(fileName)
@@ -59,8 +59,8 @@ func (f *attrFilter) DoesPass(storedObject StoredObject) bool {
 	// If it fails to get file attributes,
 	// let the filter pass
 	if err != nil {
-		glcm.Info(fmt.Sprintf("Skipping file attribute filter for file %s due to error: %s",
-			storedObject.relativePath, err))
+		common.GetLifecycleMgr().Info(fmt.Sprintf("Skipping file attribute filter for file %s due to error: %s",
+			storedObject.RelativePath, err))
 		return true
 	}
 
@@ -122,7 +122,7 @@ var WindowsAttributesByName = map[string]WindowsAttribute{
 	"E": WindowsAttributeEncryptedFile,
 }
 
-func buildAttrFilters(attributes []string, fullPath string, isIncludeFilter bool) []ObjectFilter {
+func BuildAttrFilters(attributes []string, fullPath string, isIncludeFilter bool) []ObjectFilter {
 	var fileAttributes WindowsAttribute
 	filters := make([]ObjectFilter, 0)
 

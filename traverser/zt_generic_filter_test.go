@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package traverser
 
 import (
 	"errors"
@@ -28,10 +28,30 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
 
 	chk "gopkg.in/check.v1"
 )
+
+type dummyProcessor struct {
+	record []StoredObject
+}
+
+func (d *dummyProcessor) process(storedObject StoredObject) (err error) {
+	d.record = append(d.record, storedObject)
+	return
+}
+
+func (d *dummyProcessor) countFilesOnly() int {
+	n := 0
+	for _, x := range d.record {
+		if x.EntityType == common.EEntityType.File() {
+			n++
+		}
+	}
+	return n
+}
 
 type genericFilterSuite struct{}
 
@@ -40,20 +60,20 @@ var _ = chk.Suite(&genericFilterSuite{})
 func TestIncludeFilter(t *testing.T) {
 	a := assert.New(t)
 	// set up the filters
-	includePatternList := parsePatterns("*.pdf;*.jpeg;exactName")
-	includeFilter := buildIncludeFilters(includePatternList)[0]
+	includePatternList := []string{"*.pdf", "*.jpeg", "exactName"}
+	includeFilter := BuildIncludeFilters(includePatternList)[0]
 
 	// test the positive cases
 	filesToPass := []string{"bla.pdf", "fancy.jpeg", "socool.jpeg.pdf", "exactName"}
 	for _, file := range filesToPass {
-		passed := includeFilter.DoesPass(StoredObject{name: file})
+		passed := includeFilter.DoesPass(StoredObject{Name: file})
 		a.True(passed)
 	}
 
 	// test the negative cases
 	filesNotToPass := []string{"bla.pdff", "fancyjpeg", "socool.jpeg.pdf.wut", "eexactName"}
 	for _, file := range filesNotToPass {
-		passed := includeFilter.DoesPass(StoredObject{name: file})
+		passed := includeFilter.DoesPass(StoredObject{Name: file})
 		a.False(passed)
 	}
 }
@@ -61,14 +81,14 @@ func TestIncludeFilter(t *testing.T) {
 func TestExcludeFilter(t *testing.T) {
 	a := assert.New(t)
 	// set up the filters
-	excludePatternList := parsePatterns("*.pdf;*.jpeg;exactName")
-	excludeFilterList := buildExcludeFilters(excludePatternList, false)
+	excludePatternList := []string{"*.pdf", "*.jpeg", "exactName"}
+	excludeFilterList := BuildExcludeFilters(excludePatternList, false)
 
 	// test the positive cases
 	filesToPass := []string{"bla.pdfe", "fancy.jjpeg", "socool.png", "eexactName"}
 	for _, file := range filesToPass {
 		dummyProcessor := &dummyProcessor{}
-		err := processIfPassedFilters(excludeFilterList, StoredObject{name: file}, dummyProcessor.process)
+		err := ProcessIfPassedFilters(excludeFilterList, StoredObject{Name: file}, dummyProcessor.process)
 		a.Nil(err)
 		a.Equal(1, len(dummyProcessor.record))
 	}
@@ -77,8 +97,8 @@ func TestExcludeFilter(t *testing.T) {
 	filesToNotPass := []string{"bla.pdf", "fancy.jpeg", "socool.jpeg.pdf", "exactName"}
 	for _, file := range filesToNotPass {
 		dummyProcessor := &dummyProcessor{}
-		err := processIfPassedFilters(excludeFilterList, StoredObject{name: file}, dummyProcessor.process)
-		a.Equal(ignoredError, err)
+		err := ProcessIfPassedFilters(excludeFilterList, StoredObject{Name: file}, dummyProcessor.process)
+		a.Equal(IgnoredError, err)
 		a.Zero(len(dummyProcessor.record))
 	}
 }

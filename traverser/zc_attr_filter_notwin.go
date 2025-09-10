@@ -1,4 +1,7 @@
-// Copyright © 2017 Microsoft <wastore@microsoft.com>
+//go:build !windows
+// +build !windows
+
+// Copyright © Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,18 +21,30 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package traverser
 
-import (
-	"testing"
+type attrFilter struct{}
 
-	"github.com/stretchr/testify/assert"
-)
+func (f *attrFilter) DoesSupportThisOS() (msg string, supported bool) {
+	msg = "'include-attributes' and 'exclude-attributes' are not supported on this OS. Abort."
+	supported = false
+	return
+}
 
-func TestToReversedString(t *testing.T) {
-	a := assert.New(t)
-	traverser := &benchmarkTraverser{}
-	a.Equal("1", traverser.toReversedString(1))
-	a.Equal("01", traverser.toReversedString(10))
-	a.Equal("54321", traverser.toReversedString(12345))
+func (f *attrFilter) AppliesOnlyToFiles() bool {
+	return true
+}
+
+func (f *attrFilter) DoesPass(storedObject StoredObject) bool {
+	// ignore this option on Unix systems
+	return true
+}
+
+func BuildAttrFilters(attributes []string, fullPath string, resultIfMatch bool) []ObjectFilter {
+	// ignore this option on Unix systems
+	filters := make([]ObjectFilter, 0)
+	if len(attributes) > 0 {
+		filters = append(filters, &attrFilter{})
+	}
+	return filters
 }

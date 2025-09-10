@@ -377,7 +377,7 @@ Set the environment variable AZCOPY_SPA_CERT_PASSWORD to the certificate's passw
 
    - azcopy login --service-principal --certificate-path /path/to/my/cert --application-id <your service principal's application ID>
 
-   Please treat /path/to/my/cert as a path to a PEM or PKCS12 file-- AzCopy does not reach into the system cert store to obtain your certificate.
+   Please treat /path/to/my/cert as a path to a PEM or PKCS12 file-- AzCopy does not reach into the system cert Store to obtain your certificate.
    --certificate-path is mandatory when doing cert-based service principal auth.
 
 Log in using a Device:

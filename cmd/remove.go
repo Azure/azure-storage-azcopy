@@ -87,7 +87,7 @@ func init() {
 				glcm.Info("Permanent delete is a PREVIEW feature and soft-deleted snapshots/versions will be deleted PERMANENTLY. Please proceed with caution.")
 			}
 
-			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
+			cooked.commandString = gCopyUtil.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
 				glcm.Error("failed to perform remove command due to error: " + err.Error() + getErrorCodeUrl(err))
@@ -146,7 +146,7 @@ func init() {
 	// Public Documentation: https://docs.microsoft.com/en-us/azure/storage/blobs/encryption-customer-provided-keys
 	// Clients making requests against Azure Blob storage have the option to provide an encryption key on a per-request basis.
 	// Including the encryption key on the request provides granular control over encryption settings for Blob storage operations.
-	// Customer-provided keys can be stored in Azure Key Vault or in another key store linked to storage account.
+	// Customer-provided keys can be stored in Azure Key Vault or in another key Store linked to storage account.
 	deleteCmd.PersistentFlags().StringVar(&raw.cpkScopeInfo, "cpk-by-name", "", "Client provided key by name let clients making requests against Azure Blob storage "+
 		"\n an option to provide an encryption key on a per-request basis. "+
 		"\n Provided key name will be fetched from Azure Key Vault and will be used to encrypt the data.")

@@ -8,6 +8,7 @@ import (
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	datalakesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/pkg/errors"
@@ -105,7 +106,7 @@ func GetResourceRoot(resource string, location common.Location) (resourceBase st
 		common.ELocation.Benchmark(): // do nothing
 		return resource, nil
 	case common.ELocation.Local():
-		return common.CleanLocalPath(getPathBeforeFirstWildcard(resource)), nil
+		return common.CleanLocalPath(traverser.GetPathBeforeFirstWildcard(resource)), nil
 
 	//noinspection GoNilness
 	case common.ELocation.Blob():
@@ -189,21 +190,6 @@ func GetResourceRoot(resource string, location common.Location) (resourceBase st
 	default:
 		panic(fmt.Sprintf("Location %s is missing from GetResourceRoot", location))
 	}
-}
-
-// All of the below functions only really do one thing at the moment.
-// They've been separated from copyEnumeratorInit.go in order to make the code more maintainable, should we want more destinations in the future.
-func getPathBeforeFirstWildcard(path string) string {
-	if !strings.Contains(path, "*") {
-		return path
-	}
-
-	firstWCIndex := strings.Index(path, "*")
-	result := common.ConsolidatePathSeparators(path[:firstWCIndex])
-	lastSepIndex := strings.LastIndex(result, common.DeterminePathSeparator(path))
-	result = result[:lastSepIndex+1]
-
-	return result
 }
 
 func GetContainerName(path string, location common.Location) (string, error) {

@@ -1,4 +1,4 @@
-package cmd
+package traverser
 
 import (
 	"os"

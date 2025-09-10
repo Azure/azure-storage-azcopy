@@ -45,5 +45,4 @@ const (
 	pipeLocation            = "~pipe~"
 )
 
-const MAX_SYMLINKS_TO_FOLLOW = 40
 const NumOfFilesPerDispatchJobPart = 10000
