@@ -80,8 +80,8 @@ func (s *FileServiceResourceManager) Location() common.Location {
 	return s.Llocation
 }
 
-func (s *FileServiceResourceManager) Level() cmd.LocationLevel {
-	return cmd.ELocationLevel.Service()
+func (s *FileServiceResourceManager) Level() traverser.LocationLevel {
+	return traverser.ELocationLevel.Service()
 }
 
 func (s *FileServiceResourceManager) URI(opts ...GetURIOptions) string {
@@ -178,8 +178,8 @@ func (s *FileShareResourceManager) Location() common.Location {
 	return s.Service.Location()
 }
 
-func (s *FileShareResourceManager) Level() cmd.LocationLevel {
-	return cmd.ELocationLevel.Container()
+func (s *FileShareResourceManager) Level() traverser.LocationLevel {
+	return traverser.ELocationLevel.Container()
 }
 
 func (s *FileShareResourceManager) URI(opts ...GetURIOptions) string {
@@ -417,8 +417,8 @@ func (f *FileObjectResourceManager) Location() common.Location {
 	return f.Service.Location()
 }
 
-func (f *FileObjectResourceManager) Level() cmd.LocationLevel {
-	return cmd.ELocationLevel.Object()
+func (f *FileObjectResourceManager) Level() traverser.LocationLevel {
+	return traverser.ELocationLevel.Object()
 }
 
 func (f *FileObjectResourceManager) URI(opts ...GetURIOptions) string {

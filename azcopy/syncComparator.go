@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package azcopy
 
 import (
 	"fmt"
@@ -42,15 +42,11 @@ const (
 	syncStatusOverwritten                     = "overwritten"
 )
 
-func syncComparatorLog(fileName, status, skipReason string, stdout bool) {
+func syncComparatorLog(fileName, status, skipReason string) {
 	out := fmt.Sprintf("File %s was %s because %s", fileName, status, skipReason)
 
 	if common.AzcopyScanningLogger != nil {
 		common.AzcopyScanningLogger.Log(common.LogInfo, out)
-	}
-
-	if stdout {
-		glcm.Info(out)
 	}
 }
 
@@ -94,7 +90,7 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject travers
 		defer delete(f.sourceIndex.IndexMap, destinationObject.RelativePath)
 
 		if f.disableComparison {
-			syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, false)
+			syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash)
 			return f.copyTransferScheduler(sourceObjectInMap)
 		}
 
@@ -103,17 +99,17 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject travers
 			case common.ESyncHashType.MD5():
 				if sourceObjectInMap.Md5 == nil {
 					if sourceObjectInMap.IsMoreRecentThan(destinationObject, f.preferSMBTime) {
-						syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMTAndMissingHash, false)
+						syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMTAndMissingHash)
 						return f.copyTransferScheduler(sourceObjectInMap)
 					} else {
 						// skip if dest is more recent
-						syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusSkipped, syncSkipReasonTimeAndMissingHash, false)
+						syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusSkipped, syncSkipReasonTimeAndMissingHash)
 						return nil
 					}
 				}
 
 				if !reflect.DeepEqual(sourceObjectInMap.Md5, destinationObject.Md5) {
-					syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, false)
+					syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash)
 
 					// hash inequality = source "newer" in this model.
 					return f.copyTransferScheduler(sourceObjectInMap)
@@ -122,15 +118,15 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject travers
 				panic("sanity check: unsupported hash type " + f.comparisonHashType.String())
 			}
 
-			syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusSkipped, syncSkipReasonSameHash, false)
+			syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusSkipped, syncSkipReasonSameHash)
 			return nil
 		} else if sourceObjectInMap.IsMoreRecentThan(destinationObject, f.preferSMBTime) {
-			syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMT, false)
+			syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMT)
 			return f.copyTransferScheduler(sourceObjectInMap)
 		}
 
 		// skip if dest is more recent
-		syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusSkipped, syncSkipReasonTime, false)
+		syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusSkipped, syncSkipReasonTime)
 	} else {
 		// purposefully ignore the error from destinationCleaner
 		// it's a tolerable error, since it just means some extra destination object might hang around a bit longer
@@ -179,7 +175,7 @@ func (f *syncSourceComparator) processIfNecessary(sourceObject traverser.StoredO
 
 		// if destination is stale, schedule source for transfer
 		if f.disableComparison {
-			syncComparatorLog(sourceObject.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, false)
+			syncComparatorLog(sourceObject.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash)
 			return f.copyTransferScheduler(sourceObject)
 		}
 
@@ -188,34 +184,34 @@ func (f *syncSourceComparator) processIfNecessary(sourceObject traverser.StoredO
 			case common.ESyncHashType.MD5():
 				if sourceObject.Md5 == nil {
 					if sourceObject.IsMoreRecentThan(destinationObjectInMap, f.preferSMBTime) {
-						syncComparatorLog(sourceObject.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMTAndMissingHash, false)
+						syncComparatorLog(sourceObject.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMTAndMissingHash)
 						return f.copyTransferScheduler(sourceObject)
 					} else {
 						// skip if dest is more recent
-						syncComparatorLog(sourceObject.RelativePath, syncStatusSkipped, syncSkipReasonTimeAndMissingHash, false)
+						syncComparatorLog(sourceObject.RelativePath, syncStatusSkipped, syncSkipReasonTimeAndMissingHash)
 						return nil
 					}
 				}
 
 				if !reflect.DeepEqual(sourceObject.Md5, destinationObjectInMap.Md5) {
 					// hash inequality = source "newer" in this model.
-					syncComparatorLog(sourceObject.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, false)
+					syncComparatorLog(sourceObject.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash)
 					return f.copyTransferScheduler(sourceObject)
 				}
 			default:
 				panic("sanity check: unsupported hash type " + f.comparisonHashType.String())
 			}
 
-			syncComparatorLog(sourceObject.RelativePath, syncStatusSkipped, syncSkipReasonSameHash, false)
+			syncComparatorLog(sourceObject.RelativePath, syncStatusSkipped, syncSkipReasonSameHash)
 			return nil
 		} else if sourceObject.IsMoreRecentThan(destinationObjectInMap, f.preferSMBTime) {
 			// if destination is stale, schedule source
-			syncComparatorLog(sourceObject.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMT, false)
+			syncComparatorLog(sourceObject.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMT)
 			return f.copyTransferScheduler(sourceObject)
 		}
 
 		// skip if dest is more recent
-		syncComparatorLog(sourceObject.RelativePath, syncStatusSkipped, syncSkipReasonTime, false)
+		syncComparatorLog(sourceObject.RelativePath, syncStatusSkipped, syncSkipReasonTime)
 		return nil
 	}
 

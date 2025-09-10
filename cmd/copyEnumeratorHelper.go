@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 )
@@ -15,7 +16,7 @@ func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer
 	// dispatch the transfers once the number reaches NumOfFilesPerDispatchJobPart
 	// we do this so that in the case of large transfer, the transfer engine can get started
 	// while the frontend is still gathering more transfers
-	if len(e.Transfers.List) == NumOfFilesPerDispatchJobPart {
+	if len(e.Transfers.List) == azcopy.NumOfFilesPerDispatchJobPart {
 		shuffleTransfers(e.Transfers.List)
 		resp := jobsAdmin.ExecuteNewCopyJobPartOrder(*e)
 

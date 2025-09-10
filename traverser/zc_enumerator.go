@@ -121,13 +121,14 @@ func (s *StoredObject) IsSourceRootFolder() bool {
 	return s.RelativePath == "" && s.EntityType == common.EEntityType.Folder()
 }
 
-// isCompatibleWithEntitySettings serves as our universal filter for filtering out folders in the cases where we should not
+// TODO : (gapra) Investigate if this can just be a filter?
+// IsCompatibleWithEntitySettings serves as our universal filter for filtering out folders in the cases where we should not
 // process them. (If we didn't have a filter like this, we'd have to put the filtering into
 // every enumerator, which would complicated them.)
 // We can't just implement this filtering in ToNewCopyTransfer, because delete transfers (from sync)
 // do not pass through that routine.  So we need to make the filtering available in a separate function
 // so that the sync deletion code path(s) can access it.
-func (s *StoredObject) isCompatibleWithEntitySettings(fpo common.FolderPropertyOption, sht common.SymlinkHandlingType, pho common.HardlinkHandlingType) bool {
+func (s *StoredObject) IsCompatibleWithEntitySettings(fpo common.FolderPropertyOption, sht common.SymlinkHandlingType, pho common.HardlinkHandlingType) bool {
 	if s.EntityType == common.EEntityType.File() {
 		return true
 	} else if s.EntityType == common.EEntityType.Folder() {
@@ -168,7 +169,7 @@ var ErrorHashAsyncCalculation = errors.New("hash is calculating asynchronously")
 // We use this, so that we can easily test for compatibility in the sync deletion code (which expects an ObjectProcessor)
 func NewFpoAwareProcessor(fpo common.FolderPropertyOption, inner ObjectProcessor) ObjectProcessor {
 	return func(s StoredObject) error {
-		if s.isCompatibleWithEntitySettings(fpo, common.ESymlinkHandlingType.Skip(), common.EHardlinkHandlingType.Follow()) {
+		if s.IsCompatibleWithEntitySettings(fpo, common.ESymlinkHandlingType.Skip(), common.EHardlinkHandlingType.Follow()) {
 			return inner(s)
 		} else {
 			return nil // nothing went wrong, because we didn't do anything
@@ -184,7 +185,7 @@ func (s *StoredObject) ToNewCopyTransfer(steWillAutoDecompress bool,
 	symlinkHandlingType common.SymlinkHandlingType,
 	hardlinkHandlingType common.HardlinkHandlingType) (transfer common.CopyTransfer, shouldSendToSte bool) {
 
-	if !s.isCompatibleWithEntitySettings(folderPropertiesOption, symlinkHandlingType, hardlinkHandlingType) {
+	if !s.IsCompatibleWithEntitySettings(folderPropertiesOption, symlinkHandlingType, hardlinkHandlingType) {
 		return common.CopyTransfer{}, false
 	}
 

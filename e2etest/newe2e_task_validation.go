@@ -96,8 +96,8 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 		return
 	}
 
-	definition.ApplyDefinition(a, target, map[cmd.LocationLevel]func(Asserter, ResourceManager, ResourceDefinition){
-		cmd.ELocationLevel.Container(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
+	definition.ApplyDefinition(a, target, map[traverser.LocationLevel]func(Asserter, ResourceManager, ResourceDefinition){
+		traverser.ELocationLevel.Container(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
 			cRes := manager.(ContainerResourceManager)
 
 			if !definition.ShouldExist() {
@@ -121,7 +121,7 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 				ValidatePropertyPtr(a, "Quota", vProps.FileContainerProperties.Quota, cProps.FileContainerProperties.Quota)
 			}
 		},
-		cmd.ELocationLevel.Object(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
+		traverser.ELocationLevel.Object(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
 			objMan := manager.(ObjectResourceManager)
 			objDef := definition.(ResourceDefinitionObject)
 

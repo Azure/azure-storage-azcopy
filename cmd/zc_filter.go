@@ -21,9 +21,6 @@
 package cmd
 
 import (
-	"path"
-	"regexp"
-	"strings"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -32,7 +29,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-const ISO8601 = "2006-01-02T15:04:05.0000000Z" // must have 0's for fractional seconds, because Files Service requires fixed width
 // Design explanation:
 /*
 Blob type exclusion is required as a part of the copy enumerators refactor. This would be used in Download and S2S scenarios.
@@ -60,199 +56,7 @@ func (f *excludeBlobTypeFilter) DoesPass(object traverser.StoredObject) bool {
 	return false
 }
 
-type excludeFilter struct {
-	pattern     string
-	targetsPath bool
-}
-
-func (f *excludeFilter) DoesSupportThisOS() (msg string, supported bool) {
-	msg = ""
-	supported = true
-	return
-}
-
-func (f *excludeFilter) AppliesOnlyToFiles() bool {
-	return !f.targetsPath
-}
-
-func (f *excludeFilter) DoesPass(storedObject traverser.StoredObject) bool {
-	matched := false
-
-	if f.targetsPath {
-		// Don't actually support Patterns here.
-		// Isolate the path separator
-		pattern := strings.ReplaceAll(f.pattern, common.AZCOPY_PATH_SEPARATOR_STRING, common.DeterminePathSeparator(storedObject.RelativePath))
-		matched = strings.HasPrefix(storedObject.RelativePath, pattern)
-	} else {
-		var err error
-		matched, err = path.Match(f.pattern, storedObject.Name)
-
-		// if the pattern failed to match with an error, then we assume the pattern is invalid
-		// and let it pass
-		if err != nil {
-			return true
-		}
-	}
-
-	if matched {
-		return false
-	}
-
-	return true
-}
-
-func buildExcludeFilters(Patterns []string, targetPath bool) []traverser.ObjectFilter {
-	filters := make([]traverser.ObjectFilter, 0)
-	for _, pattern := range Patterns {
-		if pattern != "" {
-			filters = append(filters, &excludeFilter{pattern: pattern, targetsPath: targetPath})
-		}
-	}
-
-	return filters
-}
-
-// design explanation:
-// include filters are different from the exclude ones, which work together in the "AND" manner
-// meaning and if an StoredObject is rejected by any of the exclude filters, then it is rejected by all of them
-// as a result, the exclude filters can be in their own struct, and work correctly
-// on the other hand, include filters work in the "OR" manner
-// meaning that if an StoredObject is accepted by any of the include filters, then it is accepted by all of them
-// consequently, all the include Patterns must be stored together
-type IncludeFilter struct {
-	patterns []string
-}
-
-func (f *IncludeFilter) DoesSupportThisOS() (msg string, supported bool) {
-	msg = ""
-	supported = true
-	return
-}
-
-func (f *IncludeFilter) AppliesOnlyToFiles() bool {
-	return true // IncludeFilter is a name-pattern-based filter, and we treat those as relating to FILE names only
-}
-
-func (f *IncludeFilter) DoesPass(storedObject traverser.StoredObject) bool {
-	if len(f.patterns) == 0 {
-		return true
-	}
-
-	for _, pattern := range f.patterns {
-		checkItem := storedObject.Name
-
-		matched := false
-
-		var err error
-		matched, err = path.Match(pattern, checkItem) // note: getEnumerationPreFilter below encodes assumptions about the valid wildcards used here
-
-		// if the pattern failed to match with an error, then we assume the pattern is invalid
-		// and ignore it
-		if err != nil {
-			continue
-		}
-
-		// if an StoredObject is accepted by any of the include filters
-		// it is accepted
-		if matched {
-			return true
-		}
-	}
-
-	return false
-}
-
-// getEnumerationPreFilter returns a prefix, if any, which can be used service-side to pre-select
-// things that will pass the filter. E.g. if there's exactly one include pattern, and it is
-// "foo*bar", then this routine will return "foo", since only things starting with "foo" can pass the filters.
-// Service side enumeration code can be given that prefix, to optimize the enumeration.
-func (f *IncludeFilter) getEnumerationPreFilter() string {
-	if len(f.patterns) == 1 {
-		pat := f.patterns[0]
-		if strings.ContainsAny(pat, "?[\\") {
-			// this pattern doesn't just use a *, so it's too complex for us to optimize with a prefix
-			return ""
-		}
-		return strings.Split(pat, "*")[0]
-	} else {
-		// for simplicity, we won't even try computing a common prefix for all Patterns (even though that might help in theory in some cases)
-		return ""
-	}
-}
-
-func buildIncludeFilters(Patterns []string) []traverser.ObjectFilter {
-	if len(Patterns) == 0 {
-		return []traverser.ObjectFilter{}
-	}
-
-	validPatterns := make([]string, 0)
-	for _, pattern := range Patterns {
-		if pattern != "" {
-			validPatterns = append(validPatterns, pattern)
-		}
-	}
-
-	return []traverser.ObjectFilter{&IncludeFilter{patterns: validPatterns}}
-}
-
 ////////
-
-// includeRegex & excludeRegex
-type regexFilter struct {
-	patterns   []string
-	isIncluded bool
-}
-
-func (f *regexFilter) DoesSupportThisOS() (msg string, supported bool) {
-	msg = ""
-	supported = true
-	return
-}
-
-func (f *regexFilter) AppliesOnlyToFiles() bool {
-	return false
-}
-
-func (f *regexFilter) DoesPass(storedObject traverser.StoredObject) bool {
-	if len(f.patterns) == 0 {
-		return true
-	}
-	for _, pattern := range f.patterns {
-		matched := false
-		var err error
-
-		matched, err = regexp.MatchString(pattern, storedObject.RelativePath)
-		// if pattern fails to match with an error, we assume the pattern is invalid
-		if err != nil {
-			if f.isIncluded { //if include filter then we ignore it
-				continue
-			} else { //if exclude filter then we let it pass
-				return true
-			}
-		}
-		//check if pattern matched relative path
-		//if matched then return isIncluded which is a boolean expression to represent included and excluded
-		if matched {
-			return f.isIncluded
-		}
-	}
-	return !f.isIncluded
-}
-
-func buildRegexFilters(patterns []string, isIncluded bool) []traverser.ObjectFilter {
-	if len(patterns) == 0 {
-		return []traverser.ObjectFilter{}
-	}
-
-	filters := make([]string, 0)
-	for _, pattern := range patterns {
-		if pattern != "" {
-			filters = append(filters, pattern)
-		}
-	}
-
-	return []traverser.ObjectFilter{&regexFilter{patterns: filters, isIncluded: isIncluded}}
-}
 
 // includeAfterDateFilter includes files with Last Modified Times >= the specified threshold
 // Used for copy, but doesn't make conceptual sense for sync

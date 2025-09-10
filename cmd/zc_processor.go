@@ -27,6 +27,7 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
@@ -176,8 +177,8 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject traverser.Stor
 	if storedObject.RelativePath == "\x00" { // Short circuit when we're talking about root/, because the STE is funky about this.
 		srcRelativePath, dstRelativePath = storedObject.RelativePath, storedObject.RelativePath
 	} else {
-		srcRelativePath = pathEncodeRules(storedObject.RelativePath, s.copyJobTemplate.FromTo, false, true)
-		dstRelativePath = pathEncodeRules(storedObject.RelativePath, s.copyJobTemplate.FromTo, false, false)
+		srcRelativePath = azcopy.PathEncodeRules(storedObject.RelativePath, s.copyJobTemplate.FromTo, false, true)
+		dstRelativePath = azcopy.PathEncodeRules(storedObject.RelativePath, s.copyJobTemplate.FromTo, false, false)
 		if srcRelativePath != "" {
 			srcRelativePath = "/" + srcRelativePath
 		}
@@ -188,6 +189,7 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject traverser.Stor
 
 	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(false, srcRelativePath, dstRelativePath, s.preserveAccessTier, s.folderPropertiesOption, s.symlinkHandlingType, s.hardlinkHandlingType)
 
+	// set properties and metadata for set-properties operation
 	if s.copyJobTemplate.FromTo.To() == common.ELocation.None() {
 		copyTransfer.BlobTier = s.copyJobTemplate.BlobAttributes.BlockBlobTier.ToAccessTierType()
 
@@ -250,6 +252,7 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject traverser.Stor
 					BlobSnapshot: &storedObject.BlobSnapshotID,
 				}
 
+				// only set destination if its not set-properties or remove
 				if fromTo.To() != common.ELocation.None() && fromTo.To() != common.ELocation.Unknown() {
 					tx.Destination = common.GenerateFullPath(s.copyJobTemplate.DestinationRoot.Value, prettyDstRelativePath)
 				}

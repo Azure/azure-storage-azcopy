@@ -32,6 +32,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/filesystem"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -104,9 +105,9 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *traverser.CopyEnum
 		return nil, err
 	}
 
-	includeFilters := buildIncludeFilters(cca.IncludePatterns)
-	excludeFilters := buildExcludeFilters(cca.ExcludePatterns, false)
-	excludePathFilters := buildExcludeFilters(cca.ExcludePathPatterns, true)
+	includeFilters := traverser.BuildIncludeFilters(cca.IncludePatterns)
+	excludeFilters := traverser.BuildExcludeFilters(cca.ExcludePatterns, false)
+	excludePathFilters := traverser.BuildExcludeFilters(cca.ExcludePathPatterns, true)
 	includeSoftDelete := buildIncludeSoftDeleted(cca.permanentDeleteOption)
 
 	// set up the filters in the right order
@@ -125,14 +126,14 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *traverser.CopyEnum
 	// (Must enumerate folders when deleting from a folder-aware location. Can't do folder deletion just based on file
 	// deletion, because that would not handle folders that were empty at the start of the job).
 	// isHNStoHNS is IGNORED here, because BlobFS locations don't take this route currently.
-	fpo, message := NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, false, false, false, false, cca.IncludeDirectoryStubs)
+	fpo, message := azcopy.NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, false, false, false, false, cca.IncludeDirectoryStubs)
 	// do not print Info message if in dry run mode
 	if !cca.dryrunMode {
 		glcm.Info(message)
 	}
 	common.LogToJobLogWithPrefix(message, common.LogInfo)
 
-	transferScheduler := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo, targetServiceClient)
+	transferScheduler := newRemoveTransferProcessor(cca, azcopy.NumOfFilesPerDispatchJobPart, fpo, targetServiceClient)
 
 	finalize := func() error {
 		jobInitiated, err := transferScheduler.dispatchFinalPart()
@@ -183,7 +184,7 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 
 	dsc, _ := targetServiceClient.DatalakeServiceClient() // We've just created client above, need not verify error here.
 
-	transferProcessor := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart, common.EFolderPropertiesOption.AllFolders(), targetServiceClient)
+	transferProcessor := newRemoveTransferProcessor(cca, azcopy.NumOfFilesPerDispatchJobPart, common.EFolderPropertiesOption.AllFolders(), targetServiceClient)
 
 	// return an error if the unsupported options are passed in
 	if len(cca.InitModularFilters()) > 0 {

@@ -19,6 +19,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
@@ -124,13 +125,13 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	if cca.ListOfVersionIDsChannel != nil && (!(cca.FromTo == common.EFromTo.BlobLocal() || cca.FromTo == common.EFromTo.BlobTrash()) || cca.IsSourceDir || !isDestDir) {
 		log.Fatalf("Either source is not a blob or destination is not a local folder")
 	}
-	srcLevel, err := DetermineLocationLevel(cca.Source.Value, cca.FromTo.From(), true)
+	srcLevel, err := traverser.DetermineLocationLevel(cca.Source.Value, cca.FromTo.From(), true)
 
 	if err != nil {
 		return nil, err
 	}
 
-	dstLevel, err := DetermineLocationLevel(cca.Destination.Value, cca.FromTo.To(), false)
+	dstLevel, err := traverser.DetermineLocationLevel(cca.Destination.Value, cca.FromTo.To(), false)
 
 	if err != nil {
 		return nil, err
@@ -142,20 +143,20 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	//       1) Account name doesn't get trimmed from the path
 	//       2) List-of-files is not considered an account traverser; therefore containers don't get made.
 	//       Resolve these two issues and service-level list-of-files/include-path will work
-	if cca.ListOfFilesChannel != nil && srcLevel == ELocationLevel.Service() {
+	if cca.ListOfFilesChannel != nil && srcLevel == traverser.ELocationLevel.Service() {
 		return nil, errors.New("cannot combine list-of-files or include-path with account traversal")
 	}
 
-	if (srcLevel == ELocationLevel.Object() || cca.FromTo.From().IsLocal()) && dstLevel == ELocationLevel.Service() {
+	if (srcLevel == traverser.ELocationLevel.Object() || cca.FromTo.From().IsLocal()) && dstLevel == traverser.ELocationLevel.Service() {
 		return nil, errors.New("cannot transfer individual files/folders to the root of a service. Add a container or directory to the destination URL")
 	}
 
-	if srcLevel == ELocationLevel.Container() && dstLevel == ELocationLevel.Service() && !cca.asSubdir {
+	if srcLevel == traverser.ELocationLevel.Container() && dstLevel == traverser.ELocationLevel.Service() && !cca.asSubdir {
 		return nil, errors.New("cannot use --as-subdir=false with a service level destination")
 	}
 
 	// When copying a container directly to a container, strip the top directory, unless we're attempting to persist permissions.
-	if srcLevel == ELocationLevel.Container() && dstLevel == ELocationLevel.Container() && cca.FromTo.From().IsRemote() && cca.FromTo.To().IsRemote() {
+	if srcLevel == traverser.ELocationLevel.Container() && dstLevel == traverser.ELocationLevel.Container() && cca.FromTo.From().IsRemote() && cca.FromTo.To().IsRemote() {
 		if cca.preservePermissions.IsTruthy() {
 			// if we're preserving permissions, we need to keep the top directory, but with container->container, we don't need to add the container name to the path.
 			// asSubdir is a better option than stripTopDir as stripTopDir disincludes the root.
@@ -179,7 +180,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	dstContainerName := ""
 	// Extract the existing destination container name
 	if cca.FromTo.To().IsRemote() {
-		dstContainerName, err = GetContainerName(cca.Destination.Value, cca.FromTo.To())
+		dstContainerName, err = azcopy.GetContainerName(cca.Destination.Value, cca.FromTo.To())
 
 		if err != nil {
 			return nil, err
@@ -201,7 +202,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				seenFailedContainers[dstContainerName] = true
 			}
 		} else if cca.FromTo.From().IsRemote() { // if the destination has implicit container names
-			if acctTraverser, ok := t.(traverser.AccountTraverser); ok && dstLevel == ELocationLevel.Service() {
+			if acctTraverser, ok := t.(traverser.AccountTraverser); ok && dstLevel == traverser.ELocationLevel.Service() {
 				containers, err := acctTraverser.ListContainers()
 
 				if err != nil {
@@ -228,7 +229,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					// For file share,if the share does not exist, azcopy will fail, prompting the customer to create
 					// the share manually with the required quota and settings.
 					if fileerror.HasCode(err, fileerror.ShareNotFound) {
-						return nil, fmt.Errorf("%s Destination file share: %s", DstShareDoesNotExists, dstContainerName)
+						return nil, fmt.Errorf("%s Destination file share: %s", azcopy.DstShareDoesNotExists, dstContainerName)
 					}
 
 					// if JobsAdmin is nil, we're probably in testing mode.
@@ -244,7 +245,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					}
 				}
 			} else {
-				cName, err := GetContainerName(cca.Source.Value, cca.FromTo.From())
+				cName, err := azcopy.GetContainerName(cca.Source.Value, cca.FromTo.From())
 
 				if err != nil || cName == "" {
 					// this will probably never be reached
@@ -277,7 +278,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// decide our folder transfer strategy
 	var message string
-	jobPartOrder.Fpo, message = NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, cca.preserveInfo, cca.preservePermissions.IsTruthy(), cca.preservePOSIXProperties, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.IncludeDirectoryStubs)
+	jobPartOrder.Fpo, message = azcopy.NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, cca.preserveInfo, cca.preservePermissions.IsTruthy(), cca.preservePOSIXProperties, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.IncludeDirectoryStubs)
 	if !cca.dryrunMode {
 		glcm.Info(message)
 	}
@@ -289,7 +290,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			// set up the destination container name.
 			cName := dstContainerName
 			// if a destination container name is not specified OR copying service to container/folder, append the src container name.
-			if cName == "" || (srcLevel == ELocationLevel.Service() && dstLevel > ELocationLevel.Service()) {
+			if cName == "" || (srcLevel == traverser.ELocationLevel.Service() && dstLevel > traverser.ELocationLevel.Service()) {
 				cName, err = containerResolver.ResolveName(object.ContainerName)
 
 				if err != nil {
@@ -305,11 +306,11 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		}
 
 		// If above the service level, we already know the container name and don't need to supply it to makeEscapedRelativePath
-		if srcLevel != ELocationLevel.Service() {
+		if srcLevel != traverser.ELocationLevel.Service() {
 			object.ContainerName = ""
 
 			// When copying directly TO a container or object from a container, don't drop under a sub directory
-			if dstLevel >= ELocationLevel.Container() {
+			if dstLevel >= traverser.ELocationLevel.Container() {
 				object.DstContainerName = ""
 			}
 		}
@@ -422,32 +423,17 @@ func (cca *CookedCopyCmdArgs) InitModularFilters() []traverser.ObjectFilter {
 		filters = append(filters, &IncludeAfterDateFilter{Threshold: *cca.IncludeAfter})
 	}
 
-	if len(cca.IncludePatterns) != 0 {
-		filters = append(filters, &IncludeFilter{patterns: cca.IncludePatterns}) // TODO should this call buildIncludeFilters?
-	}
+	filters = append(filters, traverser.BuildIncludeFilters(cca.IncludePatterns)...)
 
-	if len(cca.ExcludePatterns) != 0 {
-		for _, v := range cca.ExcludePatterns {
-			filters = append(filters, &excludeFilter{pattern: v})
-		}
-	}
+	filters = append(filters, traverser.BuildExcludeFilters(cca.ExcludePatterns, false)...)
 
 	// include-path is not a filter, therefore it does not get handled here.
 	// Check up in cook() around the list-of-files implementation as include-path gets included in the same way.
 
-	if len(cca.ExcludePathPatterns) != 0 {
-		for _, v := range cca.ExcludePathPatterns {
-			filters = append(filters, &excludeFilter{pattern: v, targetsPath: true})
-		}
-	}
+	filters = append(filters, traverser.BuildExcludeFilters(cca.ExcludePathPatterns, false)...)
 
-	if len(cca.includeRegex) != 0 {
-		filters = append(filters, &regexFilter{patterns: cca.includeRegex, isIncluded: true})
-	}
-
-	if len(cca.excludeRegex) != 0 {
-		filters = append(filters, &regexFilter{patterns: cca.excludeRegex, isIncluded: false})
-	}
+	filters = append(filters, traverser.BuildRegexFilters(cca.includeRegex, true)...)
+	filters = append(filters, traverser.BuildRegexFilters(cca.excludeRegex, false)...)
 
 	if len(cca.excludeBlobType) != 0 {
 		excludeSet := map[blob.BlobType]bool{}
@@ -460,11 +446,11 @@ func (cca *CookedCopyCmdArgs) InitModularFilters() []traverser.ObjectFilter {
 	}
 
 	if len(cca.IncludeFileAttributes) != 0 {
-		filters = append(filters, buildAttrFilters(cca.IncludeFileAttributes, cca.Source.ValueLocal(), true)...)
+		filters = append(filters, traverser.BuildAttrFilters(cca.IncludeFileAttributes, cca.Source.ValueLocal(), true)...)
 	}
 
 	if len(cca.ExcludeFileAttributes) != 0 {
-		filters = append(filters, buildAttrFilters(cca.ExcludeFileAttributes, cca.Source.ValueLocal(), false)...)
+		filters = append(filters, traverser.BuildAttrFilters(cca.ExcludeFileAttributes, cca.Source.ValueLocal(), false)...)
 	}
 
 	// finally, log any search prefix computed from these
@@ -580,73 +566,6 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 	return
 }
 
-// Because some invalid characters weren't being properly encoded by url.PathEscape, we're going to instead manually encode them.
-var encodedInvalidCharacters = map[rune]string{
-	'<':  "%3C",
-	'>':  "%3E",
-	'\\': "%5C",
-	'/':  "%2F",
-	':':  "%3A",
-	'"':  "%22",
-	'|':  "%7C",
-	'?':  "%3F",
-	'*':  "%2A",
-}
-
-var reverseEncodedChars = map[string]rune{
-	"%3C": '<',
-	"%3E": '>',
-	"%5C": '\\',
-	"%2F": '/',
-	"%3A": ':',
-	"%22": '"',
-	"%7C": '|',
-	"%3F": '?',
-	"%2A": '*',
-}
-
-func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool, source bool) string {
-	var loc common.Location
-
-	if source {
-		loc = fromTo.From()
-	} else {
-		loc = fromTo.To()
-	}
-	pathParts := strings.Split(path, common.AZCOPY_PATH_SEPARATOR_STRING)
-
-	// If downloading on Windows or uploading to files, encode unsafe characters.
-	if (loc == common.ELocation.Local() && !source && runtime.GOOS == "windows") ||
-		(!source && (loc == common.ELocation.File() || loc == common.ELocation.FileNFS())) {
-		// invalidChars := `<>\/:"|?*` + string(0x00)
-
-		for k, c := range encodedInvalidCharacters {
-			for part, p := range pathParts {
-				pathParts[part] = strings.ReplaceAll(p, string(k), c)
-			}
-		}
-
-		// If uploading from Windows or downloading from files, decode unsafe chars if user enables decoding
-	} else if ((!source && fromTo.From() == common.ELocation.Local() && runtime.GOOS == "windows") ||
-		(!source && (fromTo.From() == common.ELocation.File() || fromTo.From() == common.ELocation.FileNFS()))) && !disableAutoDecoding {
-
-		for encoded, c := range reverseEncodedChars {
-			for k, p := range pathParts {
-				pathParts[k] = strings.ReplaceAll(p, encoded, string(c))
-			}
-		}
-	}
-
-	if loc.IsRemote() {
-		for k, p := range pathParts {
-			pathParts[k] = url.PathEscape(p)
-		}
-	}
-
-	path = strings.Join(pathParts, "/")
-	return path
-}
-
 func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool, asSubdir bool, object traverser.StoredObject) (relativePath string) {
 	// write straight to /dev/null, do not determine a indirect path
 	if !source && cca.Destination.Value == common.Dev_Null {
@@ -678,7 +597,7 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 			}
 		}
 
-		return pathEncodeRules(relativePath, cca.FromTo, cca.disableAutoDecoding, source)
+		return azcopy.PathEncodeRules(relativePath, cca.FromTo, cca.disableAutoDecoding, source)
 	}
 
 	// If it's out here, the object is contained in a folder, or was found via a wildcard, or object.isSourceRootFolder == true
@@ -719,65 +638,5 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 		relativePath = "/" + rootDir + relativePath
 	}
 
-	return pathEncodeRules(relativePath, cca.FromTo, cca.disableAutoDecoding, source)
-}
-
-// we assume that preserveSmbPermissions and preserveSmbInfo have already been validated, such that they are only true if both resource types support them
-func NewFolderPropertyOption(fromTo common.FromTo, recursive, stripTopDir bool, filters []traverser.ObjectFilter, preserveSmbInfo, preservePermissions, preservePosixProperties, isDstNull, includeDirectoryStubs bool) (common.FolderPropertyOption, string) {
-
-	getSuffix := func(willProcess bool) string {
-		willProcessString := common.Iff(willProcess, "will be processed", "will not be processed")
-
-		template := ". For the same reason, %s defined on folders %s"
-		switch {
-		case preservePermissions && preserveSmbInfo:
-			return fmt.Sprintf(template, "properties and permissions", willProcessString)
-		case preserveSmbInfo:
-			return fmt.Sprintf(template, "properties", willProcessString)
-		case preservePermissions:
-			return fmt.Sprintf(template, "permissions", willProcessString)
-		default:
-			return "" // no preserve flags set, so we have nothing to say about them
-		}
-	}
-
-	bothFolderAware := (fromTo.AreBothFolderAware() || preservePosixProperties || preservePermissions || includeDirectoryStubs) && !isDstNull
-	isRemoveFromFolderAware := fromTo == common.EFromTo.FileTrash()
-	if bothFolderAware || isRemoveFromFolderAware {
-		if !recursive {
-			return common.EFolderPropertiesOption.NoFolders(), // doesn't make sense to move folders when not recursive. E.g. if invoked with /* and WITHOUT recursive
-				"Any empty folders will not be processed, because --recursive was not specified" +
-					getSuffix(false)
-		}
-
-		// check filters. Otherwise, if filter was say --include-pattern *.txt, we would transfer properties
-		// (but not contents) for every directory that contained NO text files.  Could make heaps of empty directories
-		// at the destination.
-		filtersOK := true
-		for _, f := range filters {
-			if f.AppliesOnlyToFiles() {
-				filtersOK = false // we have a least one filter that doesn't apply to folders
-			}
-		}
-		if !filtersOK {
-			return common.EFolderPropertiesOption.NoFolders(),
-				"Any empty folders will not be processed, because a file-focused filter is applied" +
-					getSuffix(false)
-		}
-
-		message := "Any empty folders will be processed, because source and destination both support folders"
-		if isRemoveFromFolderAware {
-			message = "Any empty folders will be processed, because deletion is from a folder-aware location"
-		}
-		message += getSuffix(true)
-		if stripTopDir {
-			return common.EFolderPropertiesOption.AllFoldersExceptRoot(), message
-		}
-		return common.EFolderPropertiesOption.AllFolders(), message
-	}
-
-	return common.EFolderPropertiesOption.NoFolders(),
-		"Any empty folders will not be processed, because source and/or destination doesn't have full folder support" +
-			getSuffix(false)
-
+	return azcopy.PathEncodeRules(relativePath, cca.FromTo, cca.disableAutoDecoding, source)
 }

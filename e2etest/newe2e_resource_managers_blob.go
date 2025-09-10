@@ -76,10 +76,10 @@ func buildCanonForAzureResourceManager(manager ResourceManager) string {
 
 	out += "/" + manager.Location().String()
 
-	if manager.Level() >= cmd.ELocationLevel.Container() {
+	if manager.Level() >= traverser.ELocationLevel.Container() {
 		out += "/" + parsedURI.ContainerName
 
-		if manager.Level() >= cmd.ELocationLevel.Object() {
+		if manager.Level() >= traverser.ELocationLevel.Object() {
 			out += "/" + parsedURI.BlobName
 		}
 	}
@@ -150,8 +150,8 @@ func (b *BlobServiceResourceManager) Location() common.Location {
 	return common.ELocation.Blob()
 }
 
-func (b *BlobServiceResourceManager) Level() cmd.LocationLevel {
-	return cmd.ELocationLevel.Service()
+func (b *BlobServiceResourceManager) Level() traverser.LocationLevel {
+	return traverser.ELocationLevel.Service()
 }
 
 func (b *BlobServiceResourceManager) ResourceClient() any {
@@ -353,8 +353,8 @@ func (b *BlobContainerResourceManager) Location() common.Location {
 	return b.Service.Location()
 }
 
-func (b *BlobContainerResourceManager) Level() cmd.LocationLevel {
-	return cmd.ELocationLevel.Container()
+func (b *BlobContainerResourceManager) Level() traverser.LocationLevel {
+	return traverser.ELocationLevel.Container()
 }
 
 func (b *BlobContainerResourceManager) URI(opts ...GetURIOptions) string {
@@ -759,8 +759,8 @@ func (b *BlobObjectResourceManager) Location() common.Location {
 	return b.Service.Location()
 }
 
-func (b *BlobObjectResourceManager) Level() cmd.LocationLevel {
-	return cmd.ELocationLevel.Object()
+func (b *BlobObjectResourceManager) Level() traverser.LocationLevel {
+	return traverser.ELocationLevel.Object()
 }
 
 func (b *BlobObjectResourceManager) URI(opts ...GetURIOptions) string {

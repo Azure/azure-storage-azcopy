@@ -52,8 +52,8 @@ func (l *LocalContainerResourceManager) Location() common.Location {
 	return common.ELocation.Local()
 }
 
-func (l *LocalContainerResourceManager) Level() cmd.LocationLevel {
-	return cmd.ELocationLevel.Container()
+func (l *LocalContainerResourceManager) Level() traverser.LocationLevel {
+	return traverser.ELocationLevel.Container()
 }
 
 func (l *LocalContainerResourceManager) URI(o ...GetURIOptions) string {
@@ -244,8 +244,8 @@ func (l *LocalObjectResourceManager) Location() common.Location {
 	return common.ELocation.Local()
 }
 
-func (l *LocalObjectResourceManager) Level() cmd.LocationLevel {
-	return cmd.ELocationLevel.Object()
+func (l *LocalObjectResourceManager) Level() traverser.LocationLevel {
+	return traverser.ELocationLevel.Object()
 }
 
 func (l *LocalObjectResourceManager) URI(o ...GetURIOptions) string {
