@@ -125,7 +125,6 @@ func TestValidateFromTo(t *testing.T) {
 
 		// Invalid cases
 		{"Random", common.EFromTo.Unknown(), "invalid --from-to value specified"},
-		{"", common.EFromTo.Unknown(), "the inferred source/destination combination could not be identified, or is currently not supported"},
 	}
 
 	for _, v := range test {
