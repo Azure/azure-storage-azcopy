@@ -19,7 +19,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
-	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
@@ -479,7 +478,7 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
 
-	options := azcopy.CreateClientOptions(
+	options := traverser.CreateClientOptions(
 		common.LogLevelOverrideLogger{ // override our log level here
 			ILoggerResetable:  common.AzcopyCurrentJobLogger,
 			MinimumLevelToLog: common.Iff(Client.GetLogLevel() == common.ELogLevel.Debug(), common.ELogLevel.Debug(), common.ELogLevel.None()),
