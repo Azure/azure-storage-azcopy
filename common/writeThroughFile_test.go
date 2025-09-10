@@ -38,7 +38,9 @@ func TestCreateParentDirectoryIfNotExist(t *testing.T) {
 	plan := &ste.JobPartPlanHeader{}
 	fpo := common.EFolderPropertiesOption.AllFolders()
 
-	tracker := ste.NewFolderCreationTracker(fpo, plan)
+	tracker := ste.NewFolderCreationTracker(fpo, func(index ste.JpptFolderIndex) *ste.JobPartPlanTransfer {
+		return plan.Transfer(index.TransferIndex)
+	})
 	fileName := "stuff.txt"
 
 	// when destination path is defined as "/" in linux, the source file becomes the destination path string
@@ -80,7 +82,9 @@ func TestCreateFileOfSizeWithWriteThroughOption(t *testing.T) {
 
 	plan := &ste.JobPartPlanHeader{}
 	fpo := common.EFolderPropertiesOption.AllFolders()
-	tracker := ste.NewFolderCreationTracker(fpo, plan)
+	tracker := ste.NewFolderCreationTracker(fpo, func(index ste.JpptFolderIndex) *ste.JobPartPlanTransfer {
+		return plan.Transfer(index.TransferIndex)
+	})
 
 	_, err := common.CreateFileOfSizeWithWriteThroughOption(destinationPath, 1,
 		false,
@@ -90,8 +94,7 @@ func TestCreateFileOfSizeWithWriteThroughOption(t *testing.T) {
 	if err != nil {
 		a.NotEqual(syscall.EINTR, err)
 		return
-	} 
+	}
 	a.NoError(err, fmt.Sprintf("Error creating file: %v", err))
-	
 
 }
