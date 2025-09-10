@@ -76,6 +76,10 @@ func TestGetShouldRetry(t *testing.T) {
 			Tests: []*ResponseRetryPair{
 				ErrorTest(syscall.Errno(10054), true),
 				ErrorTest(errors.New("wsarecv: An existing connection was forcibly closed by the remote host."), true),
+				ErrorTest(syscall.Errno(10048), true),
+				ErrorTest(errors.New("Only one usage of each socket address (protocol/network address/port) is normally permitted."), true),
+				ErrorTest(syscall.Errno(10060), true),
+				ErrorTest(errors.New("A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."), true),
 			},
 		},
 		{ // test full code removal
