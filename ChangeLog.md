@@ -1,6 +1,11 @@
 
 # Change Log
 
+## Version 10.31.0-preview.1
+
+### Dependency updates
+1.	Golang 1.24.4 -> 1.24.6 ([#3154](https://github.com/Azure/azure-storage-azcopy/issues/3154))
+
 ## Version 10.30.0
 ### Breaking changes
 1. For transfers involving Azure Files (NFS or SMB), AzCopy will not auto create file shares.
