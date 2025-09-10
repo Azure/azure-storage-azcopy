@@ -75,21 +75,21 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *traverser.CopyEnum
 		return nil, err
 	}
 
-	includeFilters := buildIncludeFilters(cca.IncludePatterns)
-	excludeFilters := buildExcludeFilters(cca.ExcludePatterns, false)
-	excludePathFilters := buildExcludeFilters(cca.ExcludePathPatterns, true)
-	includeSoftDelete := buildIncludeSoftDeleted(cca.permanentDeleteOption)
+	includeFilters := traverser.BuildIncludeFilters(cca.IncludePatterns)
+	excludeFilters := traverser.BuildExcludeFilters(cca.ExcludePatterns, false)
+	excludePathFilters := traverser.BuildExcludeFilters(cca.ExcludePathPatterns, true)
+	includeSoftDelete := traverser.BuildIncludeSoftDeleted(cca.permanentDeleteOption)
 
 	// set up the filters in the right order
 	filters := append(includeFilters, excludeFilters...)
 	filters = append(filters, excludePathFilters...)
 	filters = append(filters, includeSoftDelete...)
 	if cca.IncludeBefore != nil {
-		filters = append(filters, &IncludeBeforeDateFilter{Threshold: *cca.IncludeBefore})
+		filters = append(filters, &traverser.IncludeBeforeDateFilter{Threshold: *cca.IncludeBefore})
 	}
 
 	if cca.IncludeAfter != nil {
-		filters = append(filters, &IncludeAfterDateFilter{Threshold: *cca.IncludeAfter})
+		filters = append(filters, &traverser.IncludeAfterDateFilter{Threshold: *cca.IncludeAfter})
 	}
 
 	// decide our folder transfer strategy

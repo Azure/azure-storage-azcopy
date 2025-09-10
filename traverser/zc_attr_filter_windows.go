@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package traverser
 
 import (
 	"fmt"
@@ -26,7 +26,6 @@ import (
 	"syscall"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 )
 
 type attrFilter struct {
@@ -45,12 +44,12 @@ func (f *attrFilter) AppliesOnlyToFiles() bool {
 	return true // keep this filter consistent with include-pattern
 }
 
-func (f *attrFilter) DoesPass(storedObject traverser.StoredObject) bool {
+func (f *attrFilter) DoesPass(storedObject StoredObject) bool {
 	fileName := ""
 	if !strings.Contains(f.filePath, "*") {
 		fileName = common.GenerateFullPath(f.filePath, storedObject.RelativePath)
 	} else {
-		basePath := traverser.GetPathBeforeFirstWildcard(f.filePath)
+		basePath := GetPathBeforeFirstWildcard(f.filePath)
 		fileName = common.GenerateFullPath(basePath, storedObject.RelativePath)
 	}
 
@@ -60,7 +59,7 @@ func (f *attrFilter) DoesPass(storedObject traverser.StoredObject) bool {
 	// If it fails to get file attributes,
 	// let the filter pass
 	if err != nil {
-		glcm.Info(fmt.Sprintf("Skipping file attribute filter for file %s due to error: %s",
+		common.GetLifecycleMgr().Info(fmt.Sprintf("Skipping file attribute filter for file %s due to error: %s",
 			storedObject.RelativePath, err))
 		return true
 	}
@@ -123,9 +122,9 @@ var WindowsAttributesByName = map[string]WindowsAttribute{
 	"E": WindowsAttributeEncryptedFile,
 }
 
-func buildAttrFilters(attributes []string, fullPath string, isIncludeFilter bool) []traverser.ObjectFilter {
+func BuildAttrFilters(attributes []string, fullPath string, isIncludeFilter bool) []ObjectFilter {
 	var fileAttributes WindowsAttribute
-	filters := make([]traverser.ObjectFilter, 0)
+	filters := make([]ObjectFilter, 0)
 
 	for _, attribute := range attributes {
 		fileAttributes |= WindowsAttributesByName[strings.ToUpper(attribute)]
