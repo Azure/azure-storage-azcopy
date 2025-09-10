@@ -1,8 +1,9 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 /*
@@ -207,7 +208,7 @@ func (*FNSSuite) Scenario_SyncOverlap(a *ScenarioVariationManager) {
 	// Sync must be capable of mirroring a source resource type onto a blob destination.
 
 	// Define our scenario up front; reduce complexity in debugging.
-	srcLoc := ResolveVariation(a, []common.Location{common.ELocation.File(), common.ELocation.Blob(), common.ELocation.BlobFS(), common.ELocation.Local()})
+	srcLoc := ResolveVariation(a, []common.Location{common.ELocation.FileSMB(), common.ELocation.Blob(), common.ELocation.BlobFS(), common.ELocation.Local()})
 	dstLoc := common.ELocation.Blob()
 	a.InsertVariationSeparator("->Blob|Overwrite:")
 

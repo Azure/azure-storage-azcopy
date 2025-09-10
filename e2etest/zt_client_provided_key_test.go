@@ -21,8 +21,9 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"testing"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // Scenarios to consider for copy
@@ -41,7 +42,7 @@ import (
 func TestClient_ProvidedScopeUpload(t *testing.T) {
 	cpkByName := "blobgokeytestscope"
 	verifyOnlyProps := verifyOnly{with{cpkByName: cpkByName}}
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.LocalFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.LocalFileSMB()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 		cpkByName: cpkByName,
 	}, nil, testFiles{
@@ -77,7 +78,7 @@ func TestClient_ProvidedScopeUploadSingleFile(t *testing.T) {
 func TestClient_ProvidedScopeS2S(t *testing.T) {
 	cpkByName := "blobgokeytestscope"
 	verifyOnlyProps := verifyOnly{with{cpkByName: cpkByName}}
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileSMBBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 		cpkByName: cpkByName,
 	}, nil, testFiles{
@@ -228,7 +229,7 @@ func TestClient_ProvidedKeyUploadSingleFile(t *testing.T) {
 
 func TestClient_ProvidedKeyS2S(t *testing.T) {
 	verifyOnlyProps := verifyOnly{with{cpkByValue: true}}
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileSMBBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:  true,
 		cpkByValue: true,
 	}, nil, testFiles{

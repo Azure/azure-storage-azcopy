@@ -12,7 +12,7 @@ func init() {
 }
 
 func (*DryrunSuite) Scenario_UploadSync_Encoded(a *ScenarioVariationManager) {
-	dst := CreateResource[ContainerResourceManager](a, GetRootResource(a, ResolveVariation(a, []common.Location{common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})), ResourceDefinitionContainer{})
+	dst := CreateResource[ContainerResourceManager](a, GetRootResource(a, ResolveVariation(a, []common.Location{common.ELocation.Blob(), common.ELocation.FileSMB(), common.ELocation.BlobFS()})), ResourceDefinitionContainer{})
 
 	src := CreateResource[ContainerResourceManager](a, GetRootResource(a, common.ELocation.Local()), ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
@@ -45,7 +45,7 @@ func (*DryrunSuite) Scenario_UploadSync_Encoded(a *ScenarioVariationManager) {
 }
 
 func (*DryrunSuite) Scenario_DownloadSync_Encoded(a *ScenarioVariationManager) {
-	src := CreateResource[ContainerResourceManager](a, GetRootResource(a, ResolveVariation(a, []common.Location{common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})), ResourceDefinitionContainer{
+	src := CreateResource[ContainerResourceManager](a, GetRootResource(a, ResolveVariation(a, []common.Location{common.ELocation.Blob(), common.ELocation.FileSMB(), common.ELocation.BlobFS()})), ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
 			"foo%bar":  ResourceDefinitionObject{},
 			"baz%bish": ResourceDefinitionObject{},

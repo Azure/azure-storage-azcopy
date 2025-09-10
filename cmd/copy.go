@@ -460,8 +460,8 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaults() {
 }
 
 func validateForceIfReadOnly(toForce bool, fromTo common.FromTo) error {
-	targetIsFiles := (fromTo.To() == common.ELocation.File() || fromTo.To() == common.ELocation.FileNFS()) ||
-		fromTo == common.EFromTo.FileTrash()
+	targetIsFiles := (fromTo.To() == common.ELocation.FileSMB() || fromTo.To() == common.ELocation.FileNFS()) ||
+		fromTo == common.EFromTo.FileSMBTrash()
 	targetIsWindowsFS := fromTo.To() == common.ELocation.Local() &&
 		runtime.GOOS == "windows"
 	targetIsOK := targetIsFiles || targetIsWindowsFS

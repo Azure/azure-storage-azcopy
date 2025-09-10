@@ -427,7 +427,7 @@ func TestBasic_CopyRemoveContainer(t *testing.T) {
 		useAllTos: true,
 		froms: []common.Location{
 			common.ELocation.Blob(), // If you have a container-level SAS and a HNS account, you can't delete the container. HNS should not be included here.
-			common.ELocation.File(),
+			common.ELocation.FileSMB(),
 		},
 		tos: []common.Location{
 			common.ELocation.Unknown(),
@@ -575,7 +575,7 @@ func TestBasic_HashBasedSync_Folders(t *testing.T) {
 	RunScenarios(
 		t,
 		eOperation.Sync(),
-		eTestFromTo.Other(common.EFromTo.FileFile(), common.EFromTo.FileLocal()), // test both dest and source comparators
+		eTestFromTo.Other(common.EFromTo.FileSMBFileSMB(), common.EFromTo.FileSMBLocal()), // test both dest and source comparators
 		eValidate.Auto(),
 		anonymousAuthOnly,
 		anonymousAuthOnly,
@@ -668,7 +668,7 @@ func TestBasic_HashBasedSync_UploadDownload(t *testing.T) {
 	RunScenarios(
 		t,
 		eOperation.Sync(),
-		eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.LocalFile(), common.EFromTo.BlobLocal(), common.EFromTo.FileLocal()), // no need to run every endpoint again
+		eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.LocalFileSMB(), common.EFromTo.BlobLocal(), common.EFromTo.FileSMBLocal()), // no need to run every endpoint again
 		eValidate.Auto(),
 		anonymousAuthOnly,
 		anonymousAuthOnly,
@@ -743,7 +743,7 @@ func TestBasic_HashBasedSync_StorageModeOSSpecific(t *testing.T) {
 	RunScenarios(
 		t,
 		eOperation.Sync(),
-		eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.LocalFile(), common.EFromTo.BlobLocal(), common.EFromTo.FileLocal()), // no need to run every endpoint again
+		eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.LocalFileSMB(), common.EFromTo.BlobLocal(), common.EFromTo.FileSMBLocal()), // no need to run every endpoint again
 		eValidate.Auto(),
 		anonymousAuthOnly,
 		anonymousAuthOnly,
@@ -815,7 +815,7 @@ func TestBasic_HashBasedSync_HashDir(t *testing.T) {
 	RunScenarios(
 		t,
 		eOperation.Sync(),
-		eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.LocalFile(), common.EFromTo.BlobLocal(), common.EFromTo.FileLocal()), // no need to run every endpoint again
+		eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.LocalFileSMB(), common.EFromTo.BlobLocal(), common.EFromTo.FileSMBLocal()), // no need to run every endpoint again
 		eValidate.Auto(),
 		anonymousAuthOnly,
 		anonymousAuthOnly,
@@ -931,7 +931,7 @@ func TestBasic_SyncLMTSwitch_PreferServiceLMT(t *testing.T) {
 	RunScenarios(
 		t,
 		eOperation.Sync(),
-		eTestFromTo.Other(common.EFromTo.FileFile()),
+		eTestFromTo.Other(common.EFromTo.FileSMBFileSMB()),
 		eValidate.Auto(),
 		anonymousAuthOnly,
 		anonymousAuthOnly,
@@ -944,14 +944,14 @@ func TestBasic_SyncLMTSwitch_PreferServiceLMT(t *testing.T) {
 				// re-create dotransfer on the destination before the source to allow an overwrite.
 				// create the files endpoint with an LMT in the future.
 				fromTo := h.FromTo()
-				if fromTo.To() == common.ELocation.File() {
+				if fromTo.To() == common.ELocation.FileSMB() {
 					// if we're ignoring the SMB LMT, then the service LMT will still indicate the file is old, rather than new.
 					h.CreateFile(f("dotransfer", with{lastWriteTime: time.Now().Add(time.Second * 60)}), false)
 				} else {
 					h.CreateFile(f("dotransfer"), false)
 				}
 				time.Sleep(time.Second * 5)
-				if fromTo.From() == common.ELocation.File() {
+				if fromTo.From() == common.ELocation.FileSMB() {
 					// if we're ignoring the SMB LMT, then the service LMT will indicate the destination is older, not newer.
 					h.CreateFile(f("dotransfer", with{lastWriteTime: time.Now().Add(-time.Second * 60)}), true)
 				} else {
@@ -979,7 +979,7 @@ func TestBasic_SyncLMTSwitch_PreferSMBLMT(t *testing.T) {
 	RunScenarios(
 		t,
 		eOperation.Sync(),
-		eTestFromTo.Other(common.EFromTo.FileFile()),
+		eTestFromTo.Other(common.EFromTo.FileSMBFileSMB()),
 		eValidate.Auto(),
 		anonymousAuthOnly,
 		anonymousAuthOnly,
@@ -1040,7 +1040,7 @@ func TestBasic_SyncRemoveFolders(t *testing.T) {
 	RunScenarios(
 		t,
 		eOperation.Sync(),
-		eTestFromTo.Other(common.EFromTo.FileLocal(), common.EFromTo.LocalFile()),
+		eTestFromTo.Other(common.EFromTo.FileSMBLocal(), common.EFromTo.LocalFileSMB()),
 		eValidate.Auto(),
 		anonymousAuthOnly,
 		anonymousAuthOnly,

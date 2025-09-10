@@ -44,7 +44,7 @@ func TestContent_AtBlobStorage(t *testing.T) {
 }
 
 func TestContent_AtFileShare(t *testing.T) {
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalFileSMB()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "4M",

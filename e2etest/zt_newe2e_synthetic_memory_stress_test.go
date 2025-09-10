@@ -60,7 +60,7 @@ func (s *SyntheticMemoryStressTestSuite) Scenario_CopyManyFiles(a *ScenarioVaria
 func (s *SyntheticMemoryStressTestSuite) Scenario_CopyFolders(a *ScenarioVariationManager) {
 	telemetryFileService, err := GlobalConfig.GetTelemetryFileService()
 	a.NoError("Get telemetry file service", err, true)
-	destFileService := GetRootResource(a, common.ELocation.File()).(ServiceResourceManager)
+	destFileService := GetRootResource(a, common.ELocation.FileSMB()).(ServiceResourceManager)
 
 	telemServiceRm := &FileServiceResourceManager{
 		InternalClient: telemetryFileService,

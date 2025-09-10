@@ -19,7 +19,7 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 		return err
 	}
 
-	allowAutoDecompress := cooked.FromTo == common.EFromTo.BlobLocal() || cooked.FromTo == common.EFromTo.FileLocal() || cooked.FromTo == common.EFromTo.FileNFSLocal()
+	allowAutoDecompress := cooked.FromTo == common.EFromTo.BlobLocal() || cooked.FromTo == common.EFromTo.FileSMBLocal() || cooked.FromTo == common.EFromTo.FileNFSLocal()
 	if cooked.autoDecompress && !allowAutoDecompress {
 		return errors.New("automatic decompression is only supported for downloads from Blob and Azure Files") // as at Sept 2019, our ADLS Gen 2 Swagger does not include content-encoding for directory (path) listings so we can't support it there
 	}
@@ -159,7 +159,7 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 		if cooked.s2sSourceChangeValidation {
 			return fmt.Errorf("s2s-detect-source-changed is not supported while uploading to Blob Storage")
 		}
-	case common.EFromTo.LocalFile(), common.EFromTo.LocalFileNFS():
+	case common.EFromTo.LocalFileSMB(), common.EFromTo.LocalFileNFS():
 		if cooked.preserveLastModifiedTime {
 			return fmt.Errorf("preserve-last-modified-time is not supported while uploading")
 		}
@@ -183,7 +183,7 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 			return fmt.Errorf("blob-type is not supported on Azure File")
 		}
 	case common.EFromTo.BlobLocal(),
-		common.EFromTo.FileLocal(),
+		common.EFromTo.FileSMBLocal(),
 		common.EFromTo.FileNFSLocal(),
 		common.EFromTo.BlobFSLocal():
 		if cooked.SymlinkHandling.Follow() {
@@ -211,11 +211,11 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 		if cooked.s2sSourceChangeValidation {
 			return fmt.Errorf("s2s-detect-source-changed is not supported while downloading")
 		}
-	case common.EFromTo.BlobFile(),
+	case common.EFromTo.BlobFileSMB(),
 		common.EFromTo.S3Blob(),
 		common.EFromTo.BlobBlob(),
-		common.EFromTo.FileBlob(),
-		common.EFromTo.FileFile(),
+		common.EFromTo.FileSMBBlob(),
+		common.EFromTo.FileSMBFileSMB(),
 		common.EFromTo.GCPBlob(),
 		common.EFromTo.FileNFSFileNFS():
 

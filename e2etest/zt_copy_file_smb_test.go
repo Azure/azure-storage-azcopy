@@ -10,7 +10,7 @@ import (
 )
 
 func TestSMB_FromShareSnapshot(t *testing.T) {
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.FileFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.FileSMBFileSMB()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:              true,
 		preserveSMBPermissions: true,
 
@@ -36,7 +36,7 @@ func TestSMB_ToDevNull(t *testing.T) {
 
 	RunScenarios(t,
 		eOperation.Copy(),
-		eTestFromTo.Other(common.EFromTo.FileLocal()),
+		eTestFromTo.Other(common.EFromTo.FileSMBLocal()),
 		eValidate.Auto(),
 		anonymousAuthOnly,
 		anonymousAuthOnly,

@@ -112,7 +112,7 @@ func (s *RemoveSuite) Scenario_RemoveVirtualDirectory(svm *ScenarioVariationMana
 // remove with trailing dot flag disabled does not delete any files until trailing dot is enabled
 func (s *RemoveSuite) Scenario_RemoveFileWithOnlyDotsTrailingDotDisabled(svm *ScenarioVariationManager) {
 	// File Share
-	fileShare := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()),
+	fileShare := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.FileSMB()),
 		ResourceDefinitionContainer{})
 
 	// File to remove with multiple dots
@@ -134,7 +134,7 @@ func (s *RemoveSuite) Scenario_RemoveFileWithOnlyDotsTrailingDotDisabled(svm *Sc
 			Flags: RemoveFlags{
 				TrailingDot: pointerTo(common.ETrailingDotOption.Disable()),
 				Recursive:   pointerTo(true),
-				FromTo:      pointerTo(common.EFromTo.FileTrash()),
+				FromTo:      pointerTo(common.EFromTo.FileSMBTrash()),
 				GlobalFlags: GlobalFlags{
 					OutputType: pointerTo(common.EOutputFormat.Text()),
 				},
@@ -153,7 +153,7 @@ func (s *RemoveSuite) Scenario_RemoveFileWithOnlyDotsTrailingDotDisabled(svm *Sc
 // with trailing dot flag enabled correctly deletes only that file
 func (s *RemoveSuite) Scenario_RemoveFileWithOnlyDotsEnabled(svm *ScenarioVariationManager) {
 	// File Share
-	fileShare := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()),
+	fileShare := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.FileSMB()),
 		ResourceDefinitionContainer{})
 
 	// Create parent directory to replicate scenario
@@ -190,7 +190,7 @@ func (s *RemoveSuite) Scenario_RemoveFileWithOnlyDotsEnabled(svm *ScenarioVariat
 			Flags: RemoveFlags{
 				TrailingDot: pointerTo(common.ETrailingDotOption.Enable()),
 				Recursive:   pointerTo(true),
-				FromTo:      pointerTo(common.EFromTo.FileTrash()),
+				FromTo:      pointerTo(common.EFromTo.FileSMBTrash()),
 			},
 		})
 
@@ -207,7 +207,7 @@ func (s *RemoveSuite) Scenario_RemoveFileWithOnlyDotsEnabled(svm *ScenarioVariat
 }
 
 func (s *RemoveSuite) Scenario_RemoveFilesWithExcludePath(svm *ScenarioVariationManager) {
-	src := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()),
+	src := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.FileSMB()),
 		ResourceDefinitionContainer{})
 
 	fullList := []string{

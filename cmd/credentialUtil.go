@@ -241,7 +241,7 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 		common.ECredentialType.MDOAuthToken(),
 		common.ECredentialType.SharedKey():
 		// Files doesn't currently support OAuth, but it's a valid azure endpoint anyway, so it'll pass the check.
-		if resourceType != common.ELocation.Blob() && resourceType != common.ELocation.BlobFS() && resourceType != common.ELocation.File() && resourceType != common.ELocation.FileNFS() {
+		if resourceType != common.ELocation.Blob() && resourceType != common.ELocation.BlobFS() && resourceType != common.ELocation.FileSMB() && resourceType != common.ELocation.FileNFS() {
 			// There may be a reason for files->blob to specify this.
 			if resourceType == common.ELocation.Local() {
 				return nil
@@ -552,7 +552,7 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.To(), raw.destination, false, common.CpkOptions{})
 	case raw.fromTo == common.EFromTo.BlobTrash() ||
 		raw.fromTo == common.EFromTo.BlobFSTrash() ||
-		raw.fromTo == common.EFromTo.FileTrash():
+		raw.fromTo == common.EFromTo.FileSMBTrash():
 		// For to Trash direction, use source as resource URL
 		// Also, by setting isSource=false we inform getCredentialTypeForLocation() that resource
 		// being deleted cannot be public.
