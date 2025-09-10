@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	gcpUtils "cloud.google.com/go/storage"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -62,6 +63,31 @@ func (o CredentialOpOptions) panicError(err error) {
 	}
 }
 
+// Constants for private network transport
+const HttpsRetryAttempts = 5
+const PeCheckCooldownTimeInSecs = 3600
+
+func createS3ClientForPrivateNetwork(credInfo CredentialInfo) (*minio.Client, error) {
+	peIP := privateNetworkArgs.PrivateEndpointIPs
+	baseS3Host := credInfo.S3CredentialInfo.Endpoint
+	// Doublecheck endpoint should contain bucketname : "<bucketname>.s3.<region>.amazonaws.com"
+	s3Host := privateNetworkArgs.BucketName + "." + credInfo.S3CredentialInfo.Endpoint
+	transport := NewRoundRobinTransport(peIP, s3Host, HttpsRetryAttempts, PeCheckCooldownTimeInSecs*time.Second)
+	// Create MinIO client
+	client, err := minio.New(baseS3Host, &minio.Options{
+		Creds:        credentials.New(credInfo.S3CredentialInfo.Provider),
+		Secure:       true,
+		Transport:    transport,
+		Region:       credInfo.S3CredentialInfo.Region,
+		BucketLookup: minio.BucketLookupDNS, // force virtual-hosted style
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create MinIO client: %v", err)
+	}
+	client.SetS3EnableDualstack(false)
+	return client, nil
+}
+
 // CreateS3Credential creates AWS S3 credential according to credential info.
 func CreateS3Credential(ctx context.Context, credInfo CredentialInfo, options CredentialOpOptions) (*credentials.Credentials, error) {
 	switch credInfo.CredentialType {
@@ -81,6 +107,11 @@ func CreateS3Credential(ctx context.Context, credInfo CredentialInfo, options Cr
 }
 
 func CreateS3ClientFromProvider(credInfo CredentialInfo) (*minio.Client, error) {
+	if IsPrivateNetworkEnabled() {
+		fmt.Println("Creating S3 Client for Private Network")
+		s3Client, err := createS3ClientForPrivateNetwork(credInfo)
+		return s3Client, err
+	}
 	fmt.Println("Creating S3 Client for public access")
 	cred := credentials.New(credInfo.S3CredentialInfo.Provider)
 	//s3Client, err := minio.NewWithCredentials(credInfo.S3CredentialInfo.Endpoint, creds, true, credInfo.S3CredentialInfo.Region)

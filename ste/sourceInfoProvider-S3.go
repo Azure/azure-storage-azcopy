@@ -197,6 +197,25 @@ func (p *s3SourceInfoProvider) EntityType() common.EntityType {
 	return common.EEntityType.File() // no real folders exist in S3
 }
 
+func (p *s3SourceInfoProvider) GetObjectRange(offset, length int64) (io.ReadCloser, error) {
+	options := minio.GetObjectOptions{}
+
+	// Set the range header for the bytes we want to retrieve
+	r := formatHTTPRange(offset, length)
+	if r != nil {
+		options.Set("Range", *r)
+	}
+
+	ctx := context.Background()
+	// Get the object with the specified range
+	body, err := p.s3Client.GetObject(ctx, p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, options)
+	if err != nil {
+		return nil, err
+	}
+
+	return body, nil
+}
+
 func (p *s3SourceInfoProvider) GetMD5(offset, count int64) ([]byte, error) {
 	options := minio.GetObjectOptions{}
 	r := formatHTTPRange(offset, count)
