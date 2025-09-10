@@ -62,21 +62,27 @@ The general format of the AzCopy commands is: `azcopy [command] [arguments] --[f
 
 * `bench` - Runs a performance benchmark by uploading or downloading test data to or from a specified destination
 
-* `copy` - Copies source data to a destination location. The supported directions are:
-    - Local File System <-> Azure Blob (SAS or OAuth authentication)
-    - Local File System <-> Azure Files (Share/directory SAS or OAuth authentication)
-    - Local File System <-> Azure Data Lake Storage (ADLS Gen2) (SAS, OAuth, or SharedKey authentication)
-    - Azure Blob (SAS, OAuth or public authentication) -> Azure Blob (SAS or OAuth authentication)
-    - Azure Blob (SAS, OAuth or public authentication) -> Azure Files (SAS or OAuth authentication)
-    - Azure Files (SAS or OAuth authentication) -> Azure Files (SAS or OAuth authentication)
-    - Azure Files (SAS or OAuth authentication) -> Azure Blob (SAS or OAuth authentication)
-    - AWS S3 (Access Key) -> Azure Block Blob (SAS or OAuth authentication)
-    - Google Cloud Storage (Service Account Key) -> Azure Block Blob (SAS or OAuth authentication) [Preview]
+* `copy` - Copies source data to a destination location. The supported directions and forms of authorization are:
+    - local <-> Azure Blob (Microsoft Entra ID or Shared access signature (SAS))
+    - local <-> Azure Files SMB (Microsoft Entra ID or Share/directory SAS)
+    - local <-> Azure Files NFS (Microsoft Entra ID or Share/directory SAS)
+    - local <-> Azure Data Lake Storage (Microsoft Entra ID, SAS, or Shared Key)
+    - Azure Blob (Microsoft Entra ID, SAS, public) -> Azure Blob (Microsoft Entra ID or SAS)
+    - Data Lake Storage (Microsoft Entra ID or SAS) <-> Data Lake Storage (Microsoft Entra ID or SAS)
+    - Data Lake Storage (Microsoft Entra ID or SAS) <-> Azure Blob (Microsoft Entra ID or SAS)
+    - Azure Blob (Microsoft Entra ID, SAS or public) -> Azure Files SMB (Microsoft Entra ID or SAS)
+    - Azure Files SMB (Microsoft Entra ID or SAS) -> Azure Files SMB (Microsoft Entra ID or SAS)
+    - Azure Files SMB (Microsoft Entra ID or SAS) -> Azure Blob (Microsoft Entra ID or SAS)
+    - Azure Files NFS (Microsoft Entra ID or SAS) -> Azure Files NFS (Microsoft Entra ID or SAS)
+    - AWS S3 (Access Key) -> Azure Block Blob (Microsoft Entra ID or SAS)
+    - Google Cloud Storage (Service Account Key) -> Azure Block Blob (Microsoft Entra ID or SAS)
 
-* `sync` - Replicate source to the destination location. The supported directions are:
-    - Local File System <-> Azure Blob (SAS or OAuth authentication)
-    - Local File System <-> Azure Files (Share/directory SAS or OAuth authentication)
-    - Azure Blob (SAS, OAuth or public authentication) -> Azure Files (SAS or OAuth authentication)
+* `sync` - Replicate source to the destination location. The supported directions and forms of authorization are:
+    - Local <-> Azure Blob / Azure File (Microsoft Entra ID or SAS)
+    - Azure Blob <-> Azure Blob (Microsoft Entra ID SAS)
+    - Azure Data Lake Storage <-> Azure Data Lake Storage (Microsoft Entra ID or SAS)
+    - Azure File <-> Azure File (Source must include a SAS or is publicly accessible; SAS authorization should be used for destination)
+    - Azure Blob <-> Azure File
 
 * `login` - Log in to Azure Active Directory (AD) to access Azure Storage resources.
 
