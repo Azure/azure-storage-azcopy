@@ -51,6 +51,9 @@ func ValidateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo,
 
 	}
 
+	// Normalize FileSMB cases to corresponding File cases.
+	// This remapping ensures that we can handle FileSMB scenarios without requiring
+	// widespread code changes in AzCopy for the time being.
 	if userFromTo == common.EFromTo.LocalFileSMB() {
 		userFromTo = common.EFromTo.LocalFile()
 	} else if userFromTo == common.EFromTo.FileSMBLocal() {

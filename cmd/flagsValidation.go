@@ -356,10 +356,12 @@ func validateShareProtocolCompatibility(
 
 	if shareProtocol == common.ELocation.FileNFS() {
 		if isSource && fromTo.From() != common.ELocation.FileNFS() {
-			return fmt.Errorf("The %s share has NFS protocol enabled. To copy %s a NFS share, use the appropriate --from-to flag value", direction, direction)
+			return fmt.Errorf("The %s share has NFS protocol enabled. "+
+				"To copy %s a NFS share, use the appropriate --from-to flag value", location, direction)
 		}
 		if !isSource && fromTo.To() != common.ELocation.FileNFS() {
-			return fmt.Errorf("The %s share has NFS protocol enabled. To copy %s a NFS share, use the appropriate --from-to flag value", direction, direction)
+			return fmt.Errorf("The %s share has NFS protocol enabled. "+
+				"To copy %s a NFS share, use the appropriate --from-to flag value", location, direction)
 		}
 	}
 	return nil
