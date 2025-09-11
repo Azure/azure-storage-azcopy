@@ -109,7 +109,7 @@ func getDryrunNewCopyJobPartOrder(sourceRoot, destinationRoot string, fromTo com
 					} else { // copy for sync
 						return fmt.Sprintf("DRYRUN: copy %v to %v",
 							common.GenerateFullPath(sourceRoot, prettySrcRelativePath),
-							common.GenerateFullPath(sourceRoot, prettyDstRelativePath))
+							common.GenerateFullPath(destinationRoot, prettyDstRelativePath))
 					}
 				}
 			})
