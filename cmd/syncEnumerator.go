@@ -232,29 +232,39 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 		return nil, err
 	}
 
+	// transferScheduler is responsible for batching up transfers and sending them to the job service
 	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo, copyJobTemplate)
 
-	// set up the comparator so that the source/destination can be compared
+	// indexer keeps track of the destination (source in case of upload) files and folders
 	indexer := traverser.NewObjectIndexer()
-	var comparator traverser.ObjectProcessor
-	var finalize func() error
 
-	switch cca.fromTo {
-	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile(), common.EFromTo.LocalFileNFS():
-		// Upload implies transferring from a local disk to a remote resource.
-		// In this scenario, the local disk (source) is scanned/indexed first because it is assumed that local file systems will be faster to enumerate than remote resources
-		// Then the destination is scanned and filtered based on what the destination contains
-		destinationCleaner, err := newSyncDeleteProcessor(cca, fpo, copyJobTemplate.DstServiceClient)
+	// deleter is responsible for deleting files at the destination that no longer exist at the source
+	var deleter *interactiveDeleteProcessor
+	if cca.dryrunMode {
+		deleter = newSyncDryRunDeleteProcessor(cca, common.Iff(cca.fromTo.To() == common.ELocation.Local(), LocalFileObjectType, cca.fromTo.To().String()))
+	} else if cca.fromTo.To().IsAzure() {
+		deleter, err = newSyncDeleteProcessor(cca, fpo, copyJobTemplate.DstServiceClient)
 		if err != nil {
 			return nil, fmt.Errorf("unable to instantiate destination cleaner due to: %s", err.Error())
 		}
-		destCleanerFunc := traverser.NewFpoAwareProcessor(fpo, destinationCleaner.removeImmediately)
+	} else {
+		deleter = newSyncLocalDeleteProcessor(cca, fpo)
+	}
+	deleteScheduler := traverser.NewFpoAwareProcessor(fpo, deleter.removeImmediately)
+
+	var comparator traverser.ObjectProcessor
+	var finalize func() error
+
+	if cca.fromTo.IsUpload() {
+		// Upload implies transferring from a local disk to a remote resource.
+		// In this scenario, the local disk (source) is scanned/indexed first because it is assumed that local file systems will be faster to enumerate than remote resources
+		// Then the destination is scanned and filtered based on what the destination contains
 
 		// when uploading, we can delete remote objects immediately, because as we Traverse the remote location
 		// we ALREADY have available a complete map of everything that exists locally
 		// so as soon as we see a remote destination object we can know whether it exists in the local source
 
-		comparator = newSyncDestinationComparator(indexer, transferScheduler.scheduleCopyTransfer, destCleanerFunc, cca.compareHash, cca.preserveInfo, cca.mirrorMode).processIfNecessary
+		comparator = newSyncDestinationComparator(indexer, transferScheduler.scheduleCopyTransfer, deleteScheduler, cca.compareHash, cca.preserveInfo, cca.mirrorMode).processIfNecessary
 		finalize = func() error {
 			// schedule every local file that doesn't exist at the destination
 			err = indexer.Traverse(transferScheduler.scheduleCopyTransfer, filters)
@@ -271,7 +281,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 		}
 
 		return traverser.NewSyncEnumerator(sourceTraverser, destinationTraverser, indexer, filters, comparator, finalize), nil
-	default:
+	} else {
 		indexer.IsDestinationCaseInsensitive = IsDestinationCaseInsensitive(cca.fromTo)
 		// in all other cases (download and S2S), the destination is scanned/indexed first
 		// then the source is scanned and filtered based on what the destination contains
@@ -281,17 +291,6 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 			// remove the extra files at the destination that were not present at the source
 			// we can only know what needs to be deleted when we have FINISHED traversing the remote source
 			// since only then can we know which local files definitely don't exist remotely
-			var deleteScheduler traverser.ObjectProcessor
-			switch cca.fromTo.To() {
-			case common.ELocation.Blob(), common.ELocation.File(), common.ELocation.FileNFS(), common.ELocation.BlobFS():
-				deleter, err := newSyncDeleteProcessor(cca, fpo, copyJobTemplate.DstServiceClient)
-				if err != nil {
-					return err
-				}
-				deleteScheduler = traverser.NewFpoAwareProcessor(fpo, deleter.removeImmediately)
-			default:
-				deleteScheduler = traverser.NewFpoAwareProcessor(fpo, newSyncLocalDeleteProcessor(cca, fpo).removeImmediately)
-			}
 
 			err = indexer.Traverse(deleteScheduler, nil)
 			if err != nil {

@@ -69,8 +69,6 @@ type rawSyncCmdArgs struct {
 	preserveOwner           bool
 	preserveSMBInfo         bool
 	preservePOSIXProperties bool
-	followSymlinks          bool
-	preserveSymlinks        bool
 	backupMode              bool
 	putMd5                  bool
 	md5ValidationOption     string
@@ -171,10 +169,6 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 		cooked.source = common.ResourceString{Value: common.ToExtendedPath(common.CleanLocalPath(raw.src))}
 	} else if cooked.fromTo.To() == common.ELocation.Local() {
 		cooked.destination = common.ResourceString{Value: common.ToExtendedPath(common.CleanLocalPath(raw.dst))}
-	}
-
-	if err = cooked.symlinkHandling.Determine(raw.followSymlinks, raw.preserveSymlinks); err != nil {
-		return cooked, err
 	}
 
 	// determine whether we should prompt the user to delete extra files

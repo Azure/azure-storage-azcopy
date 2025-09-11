@@ -22,7 +22,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
@@ -70,9 +69,6 @@ type interactiveDeleteProcessor struct {
 
 	// count the deletions that happened
 	incrementDeletionCount func()
-
-	// dryrunMode
-	dryrunMode bool
 }
 
 func (d *interactiveDeleteProcessor) removeImmediately(object traverser.StoredObject) (err error) {
@@ -81,32 +77,6 @@ func (d *interactiveDeleteProcessor) removeImmediately(object traverser.StoredOb
 	}
 
 	if !d.shouldDelete {
-		return nil
-	}
-
-	if d.dryrunMode {
-		glcm.Dryrun(func(format common.OutputFormat) string {
-			if format == common.EOutputFormat.Json() {
-				deleteTarget := common.ELocation.Local()
-				if d.objectTypeToDisplay != LocalFileObjectType {
-					_ = deleteTarget.Parse(d.objectTypeToDisplay)
-				}
-
-				tx := DryrunTransfer{
-					Source:     common.GenerateFullPath(d.objectLocationToDisplay, object.RelativePath),
-					BlobType:   common.FromBlobType(object.BlobType),
-					EntityType: object.EntityType,
-					FromTo:     common.FromToValue(deleteTarget, common.ELocation.Unknown()),
-				}
-
-				jsonOutput, err := json.Marshal(tx)
-				common.PanicIfErr(err)
-				return string(jsonOutput)
-			} else { // remove for sync
-				return fmt.Sprintf("DRYRUN: remove %v",
-					common.GenerateFullPath(d.objectLocationToDisplay, object.RelativePath))
-			}
-		})
 		return nil
 	}
 
@@ -160,7 +130,7 @@ func (d *interactiveDeleteProcessor) promptForConfirmation(object traverser.Stor
 }
 
 func newInteractiveDeleteProcessor(deleter traverser.ObjectProcessor, deleteDestination common.DeleteDestination,
-	objectTypeToDisplay string, objectLocationToDisplay common.ResourceString, incrementDeletionCounter func(), dryrun bool) *interactiveDeleteProcessor {
+	objectTypeToDisplay string, objectLocationToDisplay common.ResourceString, incrementDeletionCounter func()) *interactiveDeleteProcessor {
 
 	return &interactiveDeleteProcessor{
 		deleter:                 deleter,
@@ -169,7 +139,6 @@ func newInteractiveDeleteProcessor(deleter traverser.ObjectProcessor, deleteDest
 		incrementDeletionCount:  incrementDeletionCounter,
 		shouldPromptUser:        deleteDestination == common.EDeleteDestination.Prompt(),
 		shouldDelete:            deleteDestination == common.EDeleteDestination.True(), // if shouldPromptUser is true, this will start as false, but we will determine its value later
-		dryrunMode:              dryrun,
 	}
 }
 
@@ -177,7 +146,7 @@ const LocalFileObjectType = "local file"
 
 func newSyncLocalDeleteProcessor(cca *cookedSyncCmdArgs, fpo common.FolderPropertyOption) *interactiveDeleteProcessor {
 	localDeleter := localFileDeleter{rootPath: cca.destination.ValueLocal(), fpo: fpo, folderManager: common.NewFolderDeletionManager(context.Background(), fpo, common.AzcopyScanningLogger)}
-	return newInteractiveDeleteProcessor(localDeleter.deleteFile, cca.deleteDestination, LocalFileObjectType, cca.destination, cca.incrementDeletionCount, cca.dryrunMode)
+	return newInteractiveDeleteProcessor(localDeleter.deleteFile, cca.deleteDestination, LocalFileObjectType, cca.destination, cca.incrementDeletionCount)
 }
 
 type localFileDeleter struct {
@@ -234,7 +203,7 @@ func newSyncDeleteProcessor(cca *cookedSyncCmdArgs, fpo common.FolderPropertyOpt
 		return nil, err
 	}
 
-	return newInteractiveDeleteProcessor(deleter.delete, cca.deleteDestination, cca.fromTo.To().String(), cca.destination, cca.incrementDeletionCount, cca.dryrunMode), nil
+	return newInteractiveDeleteProcessor(deleter.delete, cca.deleteDestination, cca.fromTo.To().String(), cca.destination, cca.incrementDeletionCount), nil
 }
 
 type remoteResourceDeleter struct {
