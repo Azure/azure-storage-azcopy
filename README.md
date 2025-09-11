@@ -79,7 +79,7 @@ The general format of the AzCopy commands is: `azcopy [command] [arguments] --[f
 
 * `sync` - Replicate source to the destination location. The supported directions and forms of authorization are:
     - Local <-> Azure Blob / Azure File (Microsoft Entra ID or SAS)
-    - Azure Blob <-> Azure Blob (Microsoft Entra ID SAS)
+    - Azure Blob <-> Azure Blob (Microsoft Entra ID or SAS)
     - Azure Data Lake Storage <-> Azure Data Lake Storage (Microsoft Entra ID or SAS)
     - Azure File <-> Azure File (Source must include a SAS or is publicly accessible; SAS authorization should be used for destination)
     - Azure Blob <-> Azure File
