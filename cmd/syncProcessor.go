@@ -30,6 +30,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 )
@@ -44,8 +45,11 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs,
 
 	// note that the source and destination, along with the template are given to the generic processor's constructor
 	// this means that given an object with a relative path, this processor already knows how to schedule the right kind of transfers
+	if cca.dryrunMode {
+		jobsAdmin.ExecuteNewCopyJobPartOrder = getDryrunNewCopyJobPartOrder(copyJobTemplate.SourceRoot.Value, copyJobTemplate.DestinationRoot.Value, cca.fromTo)
+	}
 	return newCopyTransferProcessor(copyJobTemplate, numOfTransfersPerPart, cca.source, cca.destination,
-		reportFirstPart, reportFinalPart, cca.preserveAccessTier, cca.dryrunMode)
+		reportFirstPart, reportFinalPart, cca.preserveAccessTier)
 }
 
 // base for delete processors targeting different resources

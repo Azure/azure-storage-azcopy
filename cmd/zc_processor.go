@@ -23,7 +23,6 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -48,11 +47,10 @@ type copyTransferProcessor struct {
 	preserveAccessTier     bool
 	folderPropertiesOption common.FolderPropertyOption
 	symlinkHandlingType    common.SymlinkHandlingType
-	dryrunMode             bool
 	hardlinkHandlingType   common.HardlinkHandlingType
 }
 
-func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int, source, destination common.ResourceString, reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier, dryrunMode bool) *copyTransferProcessor {
+func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int, source, destination common.ResourceString, reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier bool) *copyTransferProcessor {
 	return &copyTransferProcessor{
 		numOfTransfersPerPart:     numOfTransfersPerPart,
 		copyJobTemplate:           copyJobTemplate,
@@ -63,7 +61,6 @@ func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, n
 		preserveAccessTier:        preserveAccessTier,
 		folderPropertiesOption:    copyJobTemplate.Fpo,
 		symlinkHandlingType:       copyJobTemplate.SymlinkHandlingType,
-		dryrunMode:                dryrunMode,
 	}
 }
 
@@ -206,74 +203,6 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject traverser.Stor
 
 	if !shouldSendToSte {
 		return nil // skip this one
-	}
-
-	if s.dryrunMode {
-		glcm.Dryrun(func(format common.OutputFormat) string {
-			prettySrcRelativePath, prettyDstRelativePath := srcRelativePath, dstRelativePath
-
-			fromTo := s.copyJobTemplate.FromTo
-			if fromTo.From().IsRemote() {
-				prettySrcRelativePath, err = url.PathUnescape(prettySrcRelativePath)
-				if err != nil {
-					prettySrcRelativePath = srcRelativePath // Fall back, because it's better than failing.
-				}
-			}
-
-			if fromTo.To().IsRemote() {
-				prettyDstRelativePath, err = url.PathUnescape(prettyDstRelativePath)
-				if err != nil {
-					prettyDstRelativePath = dstRelativePath // Fall back, because it's better than failing.
-				}
-			}
-
-			if format == common.EOutputFormat.Json() {
-				tx := DryrunTransfer{
-					EntityType:  storedObject.EntityType,
-					BlobType:    common.FromBlobType(storedObject.BlobType),
-					FromTo:      s.copyJobTemplate.FromTo,
-					Source:      common.GenerateFullPath(s.copyJobTemplate.SourceRoot.Value, prettySrcRelativePath),
-					Destination: "",
-					SourceSize:  &storedObject.Size,
-					HttpHeaders: blob.HTTPHeaders{
-						BlobCacheControl:       &storedObject.CacheControl,
-						BlobContentDisposition: &storedObject.ContentDisposition,
-						BlobContentEncoding:    &storedObject.ContentEncoding,
-						BlobContentLanguage:    &storedObject.ContentLanguage,
-						BlobContentMD5:         storedObject.Md5,
-						BlobContentType:        &storedObject.ContentType,
-					},
-					Metadata:     storedObject.Metadata,
-					BlobTier:     &storedObject.BlobAccessTier,
-					BlobVersion:  &storedObject.BlobVersionID,
-					BlobTags:     storedObject.BlobTags,
-					BlobSnapshot: &storedObject.BlobSnapshotID,
-				}
-
-				if fromTo.To() != common.ELocation.None() && fromTo.To() != common.ELocation.Unknown() {
-					tx.Destination = common.GenerateFullPath(s.copyJobTemplate.DestinationRoot.Value, prettyDstRelativePath)
-				}
-
-				jsonOutput, err := json.Marshal(tx)
-				common.PanicIfErr(err)
-				return string(jsonOutput)
-			} else {
-				// if remove then To() will equal to common.ELocation.Unknown()
-				if s.copyJobTemplate.FromTo.To() == common.ELocation.Unknown() { // remove
-					return fmt.Sprintf("DRYRUN: remove %v",
-						common.GenerateFullPath(s.copyJobTemplate.SourceRoot.Value, prettySrcRelativePath))
-				}
-				if s.copyJobTemplate.FromTo.To() == common.ELocation.None() { // set-properties
-					return fmt.Sprintf("DRYRUN: set-properties %v",
-						common.GenerateFullPath(s.copyJobTemplate.SourceRoot.Value, prettySrcRelativePath))
-				} else { // copy for sync
-					return fmt.Sprintf("DRYRUN: copy %v to %v",
-						common.GenerateFullPath(s.copyJobTemplate.SourceRoot.Value, prettySrcRelativePath),
-						common.GenerateFullPath(s.copyJobTemplate.DestinationRoot.Value, prettyDstRelativePath))
-				}
-			}
-		})
-		return nil
 	}
 
 	if len(s.copyJobTemplate.Transfers.List) == s.numOfTransfersPerPart {
