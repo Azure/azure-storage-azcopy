@@ -1036,7 +1036,7 @@ func init() {
 			"\n Available options: skip, preserve, follow (default 'follow').")
 
 	syncCmd.PersistentFlags().BoolVar(&raw.preserveRootProperties, "preserve-root-properties", false, "False by default. "+
-		"\n Preserve the root directory and its properties (ACLs, timestamps, etc.) from source to destination. "+
-		"\n When enabled, the source root directory name will be preserved in the destination path. "+
-		"\n For example, copying from 'src/myroot/file.txt' will result in 'dest/myroot/file.txt' instead of the default 'dest/file.txt'.")
+		"\n Preserves the root directory and its properties from source to destination. "+
+		"\n When enabled, the destination root properties will be overwritten with the source."+
+		"\n For example, syncing from 'src/file.txt' to 'dest/' will result in 'dest/file.txt' with the props of src on dest.")
 }

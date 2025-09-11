@@ -67,12 +67,11 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		(cca.FromTo.From().IsFile() &&
 			cca.FromTo.To().IsRemote() && (cca.s2sSourceChangeValidation || cca.IncludeAfter != nil || cca.IncludeBefore != nil)) || // If S2S from File to *, and sourceChangeValidation is enabled, we get properties so that we have LMTs. Likewise, if we are using includeAfter or includeBefore, which require LMTs.
 		(cca.FromTo.From().IsRemote() && cca.FromTo.To().IsRemote() && cca.s2sPreserveProperties.Value() && !cca.s2sGetPropertiesInBackend) // If S2S and preserve properties AND get properties in backend is on, turn this off, as properties will be obtained in the backend.
-	jobPartOrder.S2SGetPropertiesInBackend = cca.s2sPreserveProperties.Value() && !getRemoteProperties && cca.s2sGetPropertiesInBackend     // Infer GetProperties if GetPropertiesInBackend is enabled.
+	jobPartOrder.S2SGetPropertiesInBackend = cca.s2sPreserveProperties.Value() && !getRemoteProperties && cca.s2sGetPropertiesInBackend // Infer GetProperties if GetPropertiesInBackend is enabled.
 	jobPartOrder.S2SSourceChangeValidation = cca.s2sSourceChangeValidation
 	jobPartOrder.DestLengthValidation = cca.CheckLength
 	jobPartOrder.S2SInvalidMetadataHandleOption = cca.s2sInvalidMetadataHandleOption
 	jobPartOrder.S2SPreserveBlobTags = cca.S2sPreserveBlobTags
-	jobPartOrder.PreserveRootPermissions = cca.preserveRootProperties
 
 	dest := cca.FromTo.To()
 	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), ctx, InitResourceTraverserOptions{
@@ -277,9 +276,9 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	// decide our folder transfer strategy
 	var message string
 	stripTopDir := cca.StripTopDir
-	if cca.preserveRootProperties {
-		stripTopDir = false // when preserve-root-properties is enabled, we want to include the root dir (stripTopDir=false)
-	}
+	//if cca.preserveRootProperties {
+	//	stripTopDir = false // when preserve-root-properties is enabled, we want to include the root dir (stripTopDir=false)
+	//}
 	jobPartOrder.Fpo, message = NewFolderPropertyOption(cca.FromTo, cca.Recursive, stripTopDir, filters, cca.preserveInfo,
 		cca.preservePermissions.IsTruthy(), cca.preservePOSIXProperties, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.IncludeDirectoryStubs)
 	if !cca.dryrunMode {
@@ -726,7 +725,8 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 }
 
 // we assume that preserveSmbPermissions and preserveSmbInfo have already been validated, such that they are only true if both resource types support them
-func NewFolderPropertyOption(fromTo common.FromTo, recursive, stripTopDir bool, filters []ObjectFilter, preserveSmbInfo, preservePermissions, preservePosixProperties, isDstNull, includeDirectoryStubs bool) (common.FolderPropertyOption, string) {
+func NewFolderPropertyOption(fromTo common.FromTo, recursive, stripTopDir bool, filters []ObjectFilter, preserveSmbInfo,
+	preservePermissions, preservePosixProperties, isDstNull, includeDirectoryStubs bool) (common.FolderPropertyOption, string) {
 
 	getSuffix := func(willProcess bool) string {
 		willProcessString := common.Iff(willProcess, "will be processed", "will not be processed")
