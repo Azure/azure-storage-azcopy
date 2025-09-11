@@ -1386,7 +1386,8 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 				summary.TransfersCompleted,
 				summary.TransfersFailed,
 				summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed+summary.TransfersSkipped),
-				summary.TransfersSkipped, summary.TotalTransfers, scanningString, perfString, throughputString, diskString)
+				summary.TransfersSkipped+atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)+atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount),
+				summary.TotalTransfers, scanningString, perfString, throughputString, diskString)
 		}
 	})
 
