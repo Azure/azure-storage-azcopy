@@ -30,6 +30,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
@@ -68,8 +69,6 @@ type rawSyncCmdArgs struct {
 	preserveOwner           bool
 	preserveSMBInfo         bool
 	preservePOSIXProperties bool
-	followSymlinks          bool
-	preserveSymlinks        bool
 	backupMode              bool
 	putMd5                  bool
 	md5ValidationOption     string
@@ -170,10 +169,6 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 		cooked.source = common.ResourceString{Value: common.ToExtendedPath(common.CleanLocalPath(raw.src))}
 	} else if cooked.fromTo.To() == common.ELocation.Local() {
 		cooked.destination = common.ResourceString{Value: common.ToExtendedPath(common.CleanLocalPath(raw.dst))}
-	}
-
-	if err = cooked.symlinkHandling.Determine(raw.followSymlinks, raw.preserveSymlinks); err != nil {
-		return cooked, err
 	}
 
 	// determine whether we should prompt the user to delete extra files
@@ -394,6 +389,30 @@ func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
 		cooked.cpkOptions.IsSourceEncrypted = true
 	}
 
+	cooked.includeDirectoryStubs = (cooked.fromTo.From().SupportsHnsACLs() && cooked.fromTo.To().SupportsHnsACLs() && cooked.preservePermissions.IsTruthy()) || cooked.includeDirectoryStubs
+
+	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+	uotm := Client.GetUserOAuthTokenManagerInstance()
+	cooked.srcServiceClient, cooked.srcCredType, err = azcopy.GetSourceServiceClient(ctx, cooked.source, cooked.fromTo.From(), cooked.trailingDot, cooked.cpkOptions, uotm)
+	if err != nil {
+		return err
+	}
+	if cooked.fromTo.IsS2S() && cooked.srcCredType != common.ECredentialType.Anonymous() {
+		if cooked.srcCredType.IsAzureOAuth() && cooked.fromTo.To().CanForwardOAuthTokens() {
+			// no-op, this is OK
+		} else if cooked.srcCredType == common.ECredentialType.GoogleAppCredentials() || cooked.srcCredType == common.ECredentialType.S3AccessKey() || cooked.srcCredType == common.ECredentialType.S3PublicBucket() {
+			// this too, is OK
+		} else if cooked.srcCredType == common.ECredentialType.Anonymous() {
+			// this is OK
+		} else {
+			return fmt.Errorf("the source of a %s->%s sync must either be public, or authorized with a SAS token; blob destinations can forward OAuth", cooked.fromTo.From(), cooked.fromTo.To())
+		}
+	}
+	cooked.dstServiceClient, cooked.dstCredType, err = azcopy.GetDestinationServiceClient(ctx, cooked.destination, cooked.fromTo, cooked.srcCredType, cooked.trailingDot, cooked.cpkOptions, uotm)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -415,11 +434,9 @@ type cookedSyncCmdArgs struct {
 	// deletion count keeps track of how many extra files from the destination were removed
 	atomicDeletionCount uint32
 
-	source                  common.ResourceString
-	destination             common.ResourceString
-	fromTo                  common.FromTo
-	credentialInfo          common.CredentialInfo
-	s2sSourceCredentialType common.CredentialType
+	source      common.ResourceString
+	destination common.ResourceString
+	fromTo      common.FromTo
 
 	// filters
 	recursive             bool
@@ -462,11 +479,6 @@ type cookedSyncCmdArgs struct {
 	// used to calculate job summary
 	jobStartTime time.Time
 
-	// this flag is set by the enumerator
-	// it is useful to indicate whether we are simply waiting for the purpose of cancelling
-	// this is set to true once the final part has been dispatched
-	isEnumerationComplete bool
-
 	// this flag indicates the user agreement with respect to deleting the extra files at the destination
 	// which do not exists at source. With this flag turned on/off, users will not be asked for permission.
 	// otherwise the user is prompted to make a decision
@@ -492,6 +504,11 @@ type cookedSyncCmdArgs struct {
 	putBlobSizeMB float64
 	cpkByName     string
 	cpkByValue    bool
+
+	srcCredType      common.CredentialType
+	srcServiceClient *common.ServiceClient
+	dstCredType      common.CredentialType
+	dstServiceClient *common.ServiceClient
 }
 
 func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
@@ -550,7 +567,7 @@ func (cca *cookedSyncCmdArgs) waitUntilJobCompletion(blocking bool) {
 
 func (cca *cookedSyncCmdArgs) Cancel(lcm LifecycleMgr) {
 	// prompt for confirmation, except when enumeration is complete
-	if !cca.isEnumerationComplete {
+	if !cca.scanningComplete() {
 		answer := lcm.Prompt("The enumeration (source/destination comparison) is not complete, "+
 			"cancelling the job at this point means it cannot be resumed.",
 			common.PromptDetails{
@@ -681,37 +698,6 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 
 	if err := common.VerifyIsURLResolvable(cca.destination.Value); cca.fromTo.To().IsRemote() && err != nil {
 		return fmt.Errorf("failed to resolve destination: %w", err)
-	}
-
-	// Verifies credential type and initializes credential info.
-	// Note that this is for the destination.
-	uotm := Client.GetUserOAuthTokenManagerInstance()
-	cca.credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination, false, uotm, cca.cpkOptions)
-	if err != nil {
-		return err
-	}
-
-	srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source, true, uotm, cca.cpkOptions)
-	if err != nil {
-		return err
-	}
-	cca.s2sSourceCredentialType = srcCredInfo.CredentialType
-	// Download is the only time our primary credential type will be based on source
-	if cca.fromTo.IsDownload() {
-		cca.credentialInfo = srcCredInfo
-	} else if cca.fromTo.IsS2S() {
-		cca.s2sSourceCredentialType = srcCredInfo.CredentialType // Assign the source credential type in S2S
-	}
-
-	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
-	// the info will be transferred to STE.
-	if cca.credentialInfo.CredentialType.IsAzureOAuth() || srcCredInfo.CredentialType.IsAzureOAuth() {
-		// Get token from env var or cache.
-		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
-			return err
-		} else if _, err := tokenInfo.GetTokenCredential(); err != nil {
-			return err
-		}
 	}
 
 	// Check if destination is system container
