@@ -268,7 +268,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 	// e.g. source is a file (if user provide --follow-symlink) and destination is a symlink
 	// with the same name.
 	// In this case, we delete the destination and retry the creation of the file
-	if fileerror.HasCode(err, fileerror.ResourceTypeMismatch) {
+	if jptm.FromTo().IsNFS() && fileerror.HasCode(err, fileerror.ResourceTypeMismatch) {
 		jptm.Log(common.LogWarning,
 			fmt.Sprintf("%s: %s \nAzCopy will delete the destination resource.",
 				fileerror.ResourceAlreadyExists, err.Error()))

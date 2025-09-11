@@ -262,7 +262,6 @@ func WalkWithSymlinks(appCtx context.Context,
 			}
 			if fileInfo.Mode()&os.ModeSymlink != 0 {
 				if symlinkHandling.Preserve() {
-					fmt.Println("Preserve--------------------")
 					// Handle it like it's not a symlink
 					result, err := filepath.Abs(filePath)
 
@@ -284,7 +283,7 @@ func WalkWithSymlinks(appCtx context.Context,
 				}
 
 				if symlinkHandling.None() {
-					if common.IsNFSCopy() {
+					if fromTo.IsNFS() {
 						HandleSymlinkForNFS(fileInfo.Name(), symlinkHandling, incrementEnumerationCounter)
 					}
 					return nil // skip it

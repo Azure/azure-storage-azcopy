@@ -111,7 +111,7 @@ func (u *azureFileUploader) SendSymlink(linkData string) error {
 		Metadata: u.metadataToApply,
 	}
 
-	if common.IsNFSCopy() {
+	if jptm.FromTo().IsNFS() {
 
 		stage, err := u.addNFSPropertiesToHeaders(info)
 		if err != nil {
