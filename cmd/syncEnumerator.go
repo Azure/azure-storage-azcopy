@@ -31,7 +31,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
-	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -40,33 +39,6 @@ import (
 // -------------------------------------- Implemented Enumerators -------------------------------------- \\
 
 func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *traverser.SyncEnumerator, err error) {
-
-	uotm := Client.GetUserOAuthTokenManagerInstance()
-	srcServiceClient, srcCredType, err := azcopy.GetSourceServiceClient(ctx, cca.source, cca.fromTo.From(), cca.trailingDot, cca.cpkOptions, uotm)
-	if err != nil {
-		return nil, err
-	}
-
-	if cca.fromTo.IsS2S() && srcCredType != common.ECredentialType.Anonymous() {
-		if srcCredType.IsAzureOAuth() && cca.fromTo.To().CanForwardOAuthTokens() {
-			// no-op, this is OK
-		} else if srcCredType == common.ECredentialType.GoogleAppCredentials() || srcCredType == common.ECredentialType.S3AccessKey() || srcCredType == common.ECredentialType.S3PublicBucket() {
-			// this too, is OK
-		} else if srcCredType == common.ECredentialType.Anonymous() {
-			// this is OK
-		} else {
-			return nil, fmt.Errorf("the source of a %s->%s sync must either be public, or authorized with a SAS token; blob destinations can forward OAuth", cca.fromTo.From(), cca.fromTo.To())
-		}
-	}
-
-	includeDirStubs := (cca.fromTo.From().SupportsHnsACLs() && cca.fromTo.To().SupportsHnsACLs() && cca.preservePermissions.IsTruthy()) || cca.includeDirectoryStubs
-
-	// Create Destination client
-	dstServiceClient, dstCredType, err := azcopy.GetDestinationServiceClient(ctx, cca.destination, cca.fromTo, srcCredType, cca.trailingDot, cca.cpkOptions, uotm)
-	if err != nil {
-		return nil, err
-	}
-
 	// TODO: enable symlink support in a future release after evaluating the implications
 	// TODO: Consider passing an errorChannel so that enumeration errors during sync can be conveyed to the caller.
 	// GetProperties is enabled by default as sync supports both upload and download.
@@ -75,8 +47,8 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 	sourceTraverser, err := traverser.InitResourceTraverser(cca.source, cca.fromTo.From(), ctx, traverser.InitResourceTraverserOptions{
 		DestResourceType: &dest,
 
-		Client:         srcServiceClient,
-		CredentialType: srcCredType,
+		Client:         cca.srcServiceClient,
+		CredentialType: cca.srcCredType,
 		IncrementEnumeration: func(entityType common.EntityType) {
 			if entityType == common.EEntityType.File() {
 				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
@@ -98,7 +70,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 
 		Recursive:               cca.recursive,
 		GetPropertiesInFrontend: true,
-		IncludeDirectoryStubs:   includeDirStubs,
+		IncludeDirectoryStubs:   cca.includeDirectoryStubs,
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
 		HardlinkHandling:        cca.hardlinks,
 	})
@@ -111,8 +83,8 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
 	destinationTraverser, err := traverser.InitResourceTraverser(cca.destination, cca.fromTo.To(), ctx, traverser.InitResourceTraverserOptions{
-		Client:         dstServiceClient,
-		CredentialType: dstCredType,
+		Client:         cca.dstServiceClient,
+		CredentialType: cca.dstCredType,
 		IncrementEnumeration: func(entityType common.EntityType) {
 			if entityType == common.EEntityType.File() {
 				atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
@@ -127,7 +99,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 
 		Recursive:               cca.recursive,
 		GetPropertiesInFrontend: true,
-		IncludeDirectoryStubs:   includeDirStubs,
+		IncludeDirectoryStubs:   cca.includeDirectoryStubs,
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
 		HardlinkHandling:        common.EHardlinkHandlingType.Follow(),
 	})
@@ -246,13 +218,13 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 		CpkOptions:                     cca.cpkOptions,
 		S2SPreserveBlobTags:            cca.s2sPreserveBlobTags,
 
-		S2SSourceCredentialType: srcCredType,
+		S2SSourceCredentialType: cca.srcCredType,
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.trailingDot,
 		},
 		JobErrorHandler:  glcm,
-		SrcServiceClient: srcServiceClient,
-		DstServiceClient: dstServiceClient,
+		SrcServiceClient: cca.srcServiceClient,
+		DstServiceClient: cca.dstServiceClient,
 	}
 
 	// Check protocol compatibility for File Shares

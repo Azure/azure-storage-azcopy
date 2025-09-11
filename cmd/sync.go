@@ -30,6 +30,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
@@ -394,6 +395,30 @@ func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
 		cooked.cpkOptions.IsSourceEncrypted = true
 	}
 
+	cooked.includeDirectoryStubs = (cooked.fromTo.From().SupportsHnsACLs() && cooked.fromTo.To().SupportsHnsACLs() && cooked.preservePermissions.IsTruthy()) || cooked.includeDirectoryStubs
+
+	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+	uotm := Client.GetUserOAuthTokenManagerInstance()
+	cooked.srcServiceClient, cooked.srcCredType, err = azcopy.GetSourceServiceClient(ctx, cooked.source, cooked.fromTo.From(), cooked.trailingDot, cooked.cpkOptions, uotm)
+	if err != nil {
+		return err
+	}
+	if cooked.fromTo.IsS2S() && cooked.srcCredType != common.ECredentialType.Anonymous() {
+		if cooked.srcCredType.IsAzureOAuth() && cooked.fromTo.To().CanForwardOAuthTokens() {
+			// no-op, this is OK
+		} else if cooked.srcCredType == common.ECredentialType.GoogleAppCredentials() || cooked.srcCredType == common.ECredentialType.S3AccessKey() || cooked.srcCredType == common.ECredentialType.S3PublicBucket() {
+			// this too, is OK
+		} else if cooked.srcCredType == common.ECredentialType.Anonymous() {
+			// this is OK
+		} else {
+			return fmt.Errorf("the source of a %s->%s sync must either be public, or authorized with a SAS token; blob destinations can forward OAuth", cooked.fromTo.From(), cooked.fromTo.To())
+		}
+	}
+	cooked.dstServiceClient, cooked.dstCredType, err = azcopy.GetDestinationServiceClient(ctx, cooked.destination, cooked.fromTo, cooked.srcCredType, cooked.trailingDot, cooked.cpkOptions, uotm)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -485,6 +510,11 @@ type cookedSyncCmdArgs struct {
 	putBlobSizeMB float64
 	cpkByName     string
 	cpkByValue    bool
+
+	srcCredType      common.CredentialType
+	srcServiceClient *common.ServiceClient
+	dstCredType      common.CredentialType
+	dstServiceClient *common.ServiceClient
 }
 
 func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
