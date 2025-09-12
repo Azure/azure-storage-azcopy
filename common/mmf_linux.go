@@ -24,9 +24,12 @@
 package common
 
 import (
+	"fmt"
 	"os"
 	"sync"
 	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 const lineEnding = "\n"
@@ -66,10 +69,22 @@ func NewMMF(file *os.File, writable bool, offset int64, length int64) (*MMF, err
 // the MMF is unusable.
 func (m *MMF) Unmap() {
 	m.lock.Lock()
-	err := syscall.Munmap(m.slice)
-	m.slice = nil
-	PanicIfErr(err)
-	m.isMapped = false
+	// Best-effort: advise kernel to drop cached pages for this mapping
+	if m.slice != nil {
+		// 1) Advise the kernel to drop the mapping's pages from the VM (client-side)
+		// Use MADV_DONTNEED on the mapping memory region (not on the fd).
+		if err := unix.Madvise(m.slice, unix.MADV_DONTNEED); err != nil {
+			// log but don't panic - MADV may not be supported or may fail
+			GetLifecycleMgr().Info(fmt.Sprintf("[mmf] madvise(MADV_DONTNEED) failed: %v", err))
+		}
+
+		// 2) Unmap the memory region
+		err := syscall.Munmap(m.slice)
+		m.slice = nil
+		PanicIfErr(err)
+		m.isMapped = false
+	}
+
 	m.lock.Unlock()
 }
 

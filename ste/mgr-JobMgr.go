@@ -801,6 +801,21 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 			jobProgressInfo.transfersSkipped += partProgressInfo.transfersSkipped
 			jobProgressInfo.transfersFailed += partProgressInfo.transfersFailed
 
+			if buildmode.IsMover {
+				// PROGRESSIVE CLEANUP: Unmap completed job part plan files immediately to free memory
+				// Uses selective unmapping: Part 0 is preserved, Parts 1+ are unmapped
+				if partProgressInfo.partNum != nil {
+					partNum := *partProgressInfo.partNum
+					if completedPartMgr, exists := jm.jobPartMgrs.Get(partNum); exists {
+						completedPartMgr.UnmapPlanFile()
+					} else {
+						fmt.Printf("DEBUG: Could not find part manager for part %d\n", partNum)
+					}
+				} else {
+					fmt.Println("DEBUG: Skipping unmap - partNum is nil")
+				}
+			}
+
 			if partProgressInfo.completionChan != nil {
 				close(partProgressInfo.completionChan)
 			}

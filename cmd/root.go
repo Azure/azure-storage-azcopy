@@ -253,7 +253,7 @@ func Initialize(resumeJobID common.JobID, isBench bool) error {
 	}
 
 	if buildmode.IsMover {
-		StartSystemStatsMonitorForJob(jobID)
+		//StartSystemStatsMonitorForJob(jobID)
 	}
 
 	return nil
