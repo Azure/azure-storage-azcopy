@@ -49,6 +49,9 @@ func (err AzError) Error() string {
 
 var EAzError AzError
 
+func (err AzError) InvalidAWSStorageClass() AzError {
+	return AzError{uint64(2), "Invalid AWS Storage Class: ", "DEEP_ARCHIVE"}
+}
 func (err AzError) LoginCredMissing() AzError {
 	return AzError{uint64(1), "Login Credentials missing. ", ""}
 }
