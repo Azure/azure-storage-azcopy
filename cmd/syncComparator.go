@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -56,6 +57,17 @@ func syncComparatorLog(fileName, status, skipReason string, stdout bool) {
 	if stdout {
 		glcm.Info(out)
 	}
+}
+
+// timeEqual compares two timestamps with precision tolerance to handle filesystem precision differences.
+// It truncates both times to the specified precision to handle precision differences
+func timeEqual(t1, t2 time.Time, useMicroSecPrecision bool) bool {
+	// Truncate both times to the specified precision to handle precision differences
+	if useMicroSecPrecision {
+		return t1.Truncate(time.Microsecond).Equal(t2.Truncate(time.Microsecond))
+	}
+
+	return t1.Equal(t2)
 }
 
 // with the help of an objectIndexer containing the source objects
@@ -324,8 +336,8 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 		return true, true
 	}
 
-	// Compare last write times
-	if sourceObject.lastWriteTime.Compare(destinationObject.lastWriteTime) != 0 {
+	// Compare last write times with precision tolerance
+	if !timeEqual(sourceObject.lastWriteTime, destinationObject.lastWriteTime, common.IsNFSCopy()) {
 		return true, true
 	}
 
@@ -362,8 +374,8 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 		return false, true
 	}
 
-	// Compare change times
-	if sourceObject.changeTime.Compare(destinationObject.changeTime) != 0 {
+	// Compare change times with precision tolerance
+	if !timeEqual(sourceObject.changeTime, destinationObject.changeTime, common.IsNFSCopy()) {
 		return false, true
 	}
 
