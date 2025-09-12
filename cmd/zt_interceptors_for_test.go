@@ -162,6 +162,24 @@ type dummyProcessor struct {
 	record []StoredObject
 }
 
+type dummyProcessorMap struct {
+	record map[string]StoredObject
+}
+
+func (d *dummyProcessorMap) MakeMap() {
+	d.record = make(map[string]StoredObject)
+	return
+}
+
+func (d *dummyProcessorMap) process(storedObject StoredObject) (err error) {
+	if storedObject.relativePath == "" {
+		d.record[storedObject.name] = storedObject
+	} else {
+		d.record[storedObject.relativePath] = storedObject
+	}
+	return
+}
+
 func (d *dummyProcessor) process(storedObject StoredObject) (err error) {
 	d.record = append(d.record, storedObject)
 	return
