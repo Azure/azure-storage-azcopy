@@ -1189,7 +1189,7 @@ func newLocalTraverser(fullPath string, ctx context.Context, opts InitResourceTr
 	traverser.includeDirectoryOrPrefix = UseSyncOrchestrator && !traverser.recursive
 
 	// This is scoped to only linux system as we depend on POSIX CTime/MTime.
-	traverser.getExtendedProperties = UseSyncOrchestrator && runtime.GOOS == "linux"
+	traverser.getExtendedProperties = UseSyncOrchestrator && runtime.GOOS == "linux" && !traverser.recursive
 
 	return &traverser, nil
 }
