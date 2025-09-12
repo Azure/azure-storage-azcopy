@@ -7,8 +7,10 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -18,6 +20,7 @@ import (
 	azruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
@@ -43,6 +46,7 @@ type IJobPartMgr interface {
 	SAS() (string, string)
 	// CancelJob()
 	Close()
+	UnmapPlanFile() // Added for progressive memory cleanup
 	// TODO: added for debugging purpose. remove later
 	OccupyAConnection()
 	// TODO: added for debugging purpose. remove later
@@ -141,6 +145,7 @@ type jobPartProgressInfo struct {
 	transfersSkipped   int
 	transfersFailed    int
 	completionChan     chan struct{}
+	partNum            *PartNumber // Added for progressive cleanup tracking
 }
 
 // jobPartMgr represents the runtime information for a Job's Part
@@ -245,6 +250,23 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	// partplan file is opened and mapped when job part is added
 	// jpm.planMMF = jpm.filename.Map() // Open the job part plan file & memory-map it in
 	plan := jpm.planMMF.Plan()
+
+	if buildmode.IsMover {
+		// Diagnostic: capture context for panic logging to help identify MMF mapping/unmapping race
+		defer func() {
+			if r := recover(); r != nil {
+				planFilePath := jpm.filename.GetJobPartPlanPath()
+				partNum := plan.PartNum
+				totalTransfers := plan.NumTransfers
+				// Count transfers completed at the time of panic (successfully completed only)
+				completed := atomic.LoadUint32(&jpm.atomicTransfersCompleted)
+				done := atomic.LoadUint32(&jpm.atomicTransfersDone)
+				jpm.Log(common.LogError, fmt.Sprintf("[diag] panic in ScheduleTransfers: planFile=%s partNum=%d transfersCompleted=%d/%d transfersDone=%d panic=%v\n%s",
+					planFilePath, partNum, completed, totalTransfers, done, r, debug.Stack()))
+				os.Exit(1)
+			}
+		}()
+	}
 	if plan.PartNum == 0 && plan.NumTransfers == 0 {
 		/* This will wind down the transfer and report summary */
 		plan.SetJobStatus(common.EJobStatus.Completed())
@@ -625,6 +647,7 @@ func (jpm *jobPartMgr) ReportTransferDone(status common.TransferStatus) (transfe
 			transfersSkipped:   int(atomic.LoadUint32(&jpm.atomicTransfersSkipped)),
 			transfersFailed:    int(atomic.LoadUint32(&jpm.atomicTransfersFailed)),
 			completionChan:     jpm.closeOnCompletion,
+			partNum:            &(jpm.planMMF.Plan().PartNum),
 		}
 		jpm.Plan().SetJobPartStatus(common.EJobStatus.EnhanceJobStatusInfo(jppi.transfersSkipped > 0,
 			jppi.transfersFailed > 0, jppi.transfersCompleted > 0))
@@ -648,6 +671,34 @@ func (jpm *jobPartMgr) Close() {
 	/*if err := os.Remove(jpm.planFile.Name()); err != nil {
 		jpm.Panic(fmt.Errorf("error removing Job Part Plan file %s. Error=%v", jpm.planFile.Name(), err))
 	}*/
+}
+
+// UnmapPlanFile unmaps the plan file to free memory immediately when job part completes
+// This is used for progressive cleanup to prevent OOM issues in large-scale migrations
+// Uses selective unmapping strategy: Part 0 is preserved for job status, Parts 1+ are unmapped for memory savings
+func (jpm *jobPartMgr) UnmapPlanFile() {
+	if jpm.planMMF == nil {
+		fmt.Println("DEBUG: planMMF is nil for part - cannot unmap")
+		return
+	}
+
+	// Get part information for logging
+	plan := jpm.planMMF.Plan()
+	partNum := plan.PartNum
+
+	// SELECTIVE UNMAPPING STRATEGY: Preserve Part 0 for job status, unmap Parts 1+ for memory savings
+	if partNum == 0 {
+		jpm.Log(common.LogError, "MEMORY: Preserving Part 0 for job status - skipping unmap")
+		return
+	}
+
+	jpm.planMMF.Unmap()
+	if partNum%100 == 0 {
+		// logging for every 100th part num
+		fmt.Printf("DEBUG: Unmap() completed for part %d\n", partNum)
+	}
+	// Note: We don't set planMMF to nil here to maintain Plan() access,
+	// but the memory is freed. The Unmap() is idempotent so it's safe to call again.
 }
 
 // TODO: added for debugging purpose. remove later
