@@ -29,6 +29,13 @@ import (
 	"encoding/binary"
 	"flag"
 	"fmt"
+	"io"
+	"math/rand"
+	"mime"
+	"os"
+	"strings"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
@@ -47,17 +54,11 @@ import (
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
-	"io"
-	"math/rand"
-	"mime"
-	"os"
-	"strings"
-	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"github.com/minio/minio-go"
-	"github.com/minio/minio-go/pkg/credentials"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 	chk "gopkg.in/check.v1"
 )
 
@@ -316,10 +317,14 @@ func createS3ClientWithMinio(c asserter, o createS3ResOptions) (*minio.Client, e
 
 	if accessKeyID == "" || secretAccessKey == "" {
 		cred := credentials.NewStatic("", "", "", credentials.SignatureAnonymous)
-		return minio.NewWithOptions("s3.amazonaws.com", &minio.Options{Creds: cred, Secure: true, Region: o.Location})
+		return minio.New("s3.amazonaws.com", &minio.Options{Creds: cred, Secure: true, Region: o.Location})
 	}
 
-	s3Client, err := minio.NewWithRegion("s3.amazonaws.com", accessKeyID, secretAccessKey, true, o.Location)
+	s3Client, err := minio.New("s3.amazonaws.com", &minio.Options{
+		Creds:  credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
+		Secure: true,
+		Region: o.Location,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -328,14 +333,14 @@ func createS3ClientWithMinio(c asserter, o createS3ResOptions) (*minio.Client, e
 
 func createNewBucket(c asserter, client *minio.Client, o createS3ResOptions) string {
 	bucketName := generateBucketName(c)
-	err := client.MakeBucket(bucketName, o.Location)
+	err := client.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{Region: o.Location})
 	c.AssertNoErr(err)
 
 	return bucketName
 }
 
 func createNewBucketWithName(c asserter, client *minio.Client, bucketName string, o createS3ResOptions) {
-	err := client.MakeBucket(bucketName, o.Location)
+	err := client.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{Region: o.Location})
 	c.AssertNoErr(err)
 }
 
@@ -343,7 +348,7 @@ func createNewObject(c asserter, client *minio.Client, bucketName string, prefix
 	objectKey = prefix + generateObjectName(c)
 
 	size := int64(len(objectDefaultData))
-	n, err := client.PutObject(bucketName, objectKey, strings.NewReader(objectDefaultData), size, minio.PutObjectOptions{})
+	n, err := client.PutObject(ctx, bucketName, objectKey, strings.NewReader(objectDefaultData), size, minio.PutObjectOptions{})
 	c.AssertNoErr(err)
 
 	c.Assert(n, equals(), size)
@@ -358,23 +363,23 @@ func deleteBucket(_ asserter, client *minio.Client, bucketName string, waitQuart
 	// Some ghost buckets are temporary, others are permanent.
 	// As such, we need a way to deal with them when they show up.
 	// By doing this, they'll just be cleaned up the next test run instead of failing all tests.
-	objectsCh := make(chan string)
+	objectsCh := make(chan minio.ObjectInfo)
 
 	go func() {
 		defer close(objectsCh)
 
 		// List all objects from a bucket-name with a matching prefix.
-		for object := range client.ListObjectsV2(bucketName, "", true, context.Background().Done()) {
+		for object := range client.ListObjects(ctx, bucketName, minio.ListObjectsOptions{Prefix: "", Recursive: true}) {
 			if object.Err != nil {
 				return
 			}
 
-			objectsCh <- object.Key
+			objectsCh <- object
 		}
 	}()
 
 	// List bucket, and delete all the objects in the bucket
-	errChn := client.RemoveObjects(bucketName, objectsCh)
+	errChn := client.RemoveObjects(ctx, bucketName, objectsCh, minio.RemoveObjectsOptions{})
 	var err error
 
 	for rmObjErr := range errChn {
@@ -384,7 +389,7 @@ func deleteBucket(_ asserter, client *minio.Client, bucketName string, waitQuart
 	}
 
 	// Remove the bucket.
-	err = client.RemoveBucket(bucketName)
+	err = client.RemoveBucket(ctx, bucketName)
 
 	if err != nil {
 		return
@@ -396,7 +401,7 @@ func deleteBucket(_ asserter, client *minio.Client, bucketName string, waitQuart
 }
 
 func cleanS3Account(c asserter, client *minio.Client) {
-	buckets, err := client.ListBuckets()
+	buckets, err := client.ListBuckets(ctx)
 	if err != nil {
 		return
 	}

@@ -45,7 +45,8 @@ import (
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/minio/minio-go"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -161,7 +162,11 @@ func createS3ClientWithMinio() (*minio.Client, error) {
 		return nil, fmt.Errorf("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY should be set before creating the S3 client")
 	}
 
-	s3Client, err := minio.NewWithRegion("s3.amazonaws.com", accessKeyID, secretAccessKey, true, "")
+	s3Client, err := minio.New("s3.amazonaws.com", &minio.Options{
+		Creds:  credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
+		Secure: true,
+		Region: "",
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -483,15 +488,16 @@ func TestS3(t *testing.T) {
 	s3Client, err := createS3ClientWithMinio()
 	a.Nil(err)
 	bName := generateContainerName()
-	err = s3Client.MakeBucket(bName, "")
+	ctx := context.Background()
+	err = s3Client.MakeBucket(ctx, bName, minio.MakeBucketOptions{Region: ""})
 	a.Nil(err)
-	defer s3Client.RemoveBucket(bName)
+	defer s3Client.RemoveBucket(ctx, bName)
 
 	oName := generateBlobName()
 	size := 1024 * 1024 * 10
 	a.Nil(err)
 	dataReader, data := getDataAndReader(t.Name(), size)
-	n, err := s3Client.PutObjectWithContext(context.Background(), bName, oName, dataReader, int64(size), minio.PutObjectOptions{})
+	n, err := s3Client.PutObject(ctx, bName, oName, dataReader, int64(size), minio.PutObjectOptions{})
 	a.Nil(err)
 	a.Equal(int64(size), n)
 

@@ -1,10 +1,17 @@
 package cmd
 
 import (
-	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
+	"os"
+	"reflect"
+	"strings"
+	"time"
+
+	gcpUtils "cloud.google.com/go/storage"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -18,15 +25,10 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"google.golang.org/api/iterator"
-	"net/http"
-	"net/url"
-	"os"
-	"reflect"
-	"strings"
-	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/JeffreyRichter/enum/enum"
+	"github.com/minio/minio-go/v7"
 	"github.com/spf13/cobra"
 )
 
@@ -543,8 +545,8 @@ func cleanS3Account(resourceURL string) {
 	s3Client := createS3ClientWithMinio(createS3ResOptions{
 		Location: s3URLParts.Region,
 	})
-
-	buckets, err := s3Client.ListBuckets()
+	ctx := context.Background()
+	buckets, err := s3Client.ListBuckets(ctx)
 	if err != nil {
 		fmt.Println("error listing S3 service, ", err)
 		os.Exit(1)
@@ -555,26 +557,26 @@ func cleanS3Account(resourceURL string) {
 			continue // skip buckets not created by s2s copy testings.
 		}
 
-		objectsCh := make(chan string)
+		objectsCh := make(chan minio.ObjectInfo)
 
 		go func() {
 			defer close(objectsCh)
 
 			// List all objects from a bucket-name with a matching prefix.
-			for object := range s3Client.ListObjectsV2(bucket.Name, "", true, context.Background().Done()) {
+			for object := range s3Client.ListObjects(ctx, bucket.Name, minio.ListObjectsOptions{Prefix: "", Recursive: true}) {
 				if object.Err != nil {
 					fmt.Printf("error listing the objects from bucket %q, %v\n", bucket.Name, err)
 					return
 				}
-				objectsCh <- object.Key
+				objectsCh <- object
 			}
 		}()
 
 		// List bucket, and delete all the objects in the bucket
-		_ = s3Client.RemoveObjects(bucket.Name, objectsCh)
+		_ = s3Client.RemoveObjects(ctx, bucket.Name, objectsCh, minio.RemoveObjectsOptions{})
 
 		// Remove the bucket.
-		if err := s3Client.RemoveBucket(bucket.Name); err != nil {
+		if err := s3Client.RemoveBucket(ctx, bucket.Name); err != nil {
 			fmt.Printf("error deleting the bucket %q from account, %v\n", bucket.Name, err)
 		}
 	}
