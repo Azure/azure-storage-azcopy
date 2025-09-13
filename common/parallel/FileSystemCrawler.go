@@ -138,7 +138,7 @@ func enumerateOneFileSystemDirectory(dir Directory, enqueueDir func(Directory), 
 
 	// enumerate immediate children
 	for {
-		list, err := r.Readdir(d, 2048) // list it in chunks, so that if we get child dirs early, parallel workers can start working on them
+		list, err := r.Readdir(d, 1024) // list it in chunks, so that if we get child dirs early, parallel workers can start working on them
 		if err == io.EOF {
 			if len(list) > 0 {
 				panic("unexpected non-empty list")
