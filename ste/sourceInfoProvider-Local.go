@@ -71,23 +71,6 @@ func (f localFileSourceInfoProvider) IsLocal() bool {
 func (f localFileSourceInfoProvider) OpenSourceFile() (common.CloseableReaderAt, error) {
 	path := f.jptm.Info().Source
 
-	hasMode := func(fi os.FileInfo, mode os.FileMode) bool {
-		return fi.Mode()&mode == mode
-	}
-
-	fi, err := os.Stat(path)
-	if err != nil {
-		return nil, err
-	}
-
-	// These files have no data for us to upload, and will cause AzCopy to hang upon attempting to open.
-	if hasMode(fi, os.ModeNamedPipe) ||
-		hasMode(fi, os.ModeDevice) ||
-		hasMode(fi, os.ModeCharDevice) ||
-		hasMode(fi, os.ModeSocket) {
-		return emptyCloseableReaderAt{}, nil
-	}
-
 	if custom, ok := interface{}(f).(ICustomLocalOpener); ok {
 		return custom.Open(path)
 	}
