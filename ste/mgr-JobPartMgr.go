@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"mime"
-	"net"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -84,18 +83,12 @@ func NewAzcopyHTTPClient(maxIdleConns int) *http.Client {
 
 	return &http.Client{
 		Transport: &http.Transport{
-			Proxy: common.GlobalProxyLookup,
-			DialContext: (&net.Dialer{
-				Timeout:   15 * time.Second, // Shorter connection timeout for faster failover on network issues
-				KeepAlive: 30 * time.Second,
-				DualStack: true,
-			}).DialContext,
+			Proxy:                  common.GlobalProxyLookup,
 			MaxConnsPerHost:        concurrentDialsPerCpu * runtime.NumCPU(),
-			MaxIdleConns:           0, // No limit
+			MaxIdleConns:           maxIdleConns, // No limit
 			MaxIdleConnsPerHost:    maxIdleConns,
 			IdleConnTimeout:        180 * time.Second,
 			TLSHandshakeTimeout:    10 * time.Second,
-			ResponseHeaderTimeout:  60 * time.Second, // Timeout for reading response headers
 			ExpectContinueTimeout:  1 * time.Second,
 			DisableKeepAlives:      false,
 			DisableCompression:     true, // must disable the auto-decompression of gzipped files, and just download the gzipped version. See https://github.com/Azure/azure-storage-azcopy/issues/374
