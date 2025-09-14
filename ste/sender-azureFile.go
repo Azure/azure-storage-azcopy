@@ -235,6 +235,8 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 	// able to upload any data to the file!). We'll set it in epilogue, if necessary.
 	creationProperties := u.smbPropertiesToApply
 	if creationProperties.Attributes != nil {
+		attrsCopy := *u.smbPropertiesToApply.Attributes
+		creationProperties.Attributes = &attrsCopy
 		creationProperties.Attributes.ReadOnly = false
 	}
 
