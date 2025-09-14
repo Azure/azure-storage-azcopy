@@ -327,6 +327,16 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 			CancelledPauseResumed: true,
 			ErrorMsg:              "",
 		}
+	case common.EJobStatus.Failed():
+		jr = common.CancelPauseResumeResponse{
+			CancelledPauseResumed: false,
+			ErrorMsg:              "Job already in failed state",
+		}
+	default:
+		jr = common.CancelPauseResumeResponse{
+			CancelledPauseResumed: false,
+			ErrorMsg:              fmt.Sprintf("Not Handled Job status : %v", jpp0.JobStatus()),
+		}
 	}
 	return jr
 }
