@@ -501,9 +501,8 @@ func WalkWithSymlinks(
 				}
 				// not a symlink
 				result, err := filepath.Abs(filePath)
-				rStat, err := os.Stat(result)
 
-				if !options.Recursive && rStat.IsDir() {
+				if !options.Recursive && fileInfo.IsDir() {
 					return nil
 				}
 
