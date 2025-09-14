@@ -47,17 +47,23 @@ var (
 		Thresholds:     []int{},
 		Delays:         []int{},
 	}
-)
 
-// GetDefaultProfile returns a default channel pressure profile with configurable disable option
-func GetDefaultProfile(enabled bool) ChannelPressureProfile {
-	return ChannelPressureProfile{
-		Enabled:        enabled,
+	// Profile for chunk channels (more conservative delays)
+	TransferChannelProfile = ChannelPressureProfile{
+		Enabled:        buildmode.IsMover,
 		MinChannelSize: 1000,
 		Thresholds:     []int{10, 20},    // Empty % thresholds
 		Delays:         []int{20, 10, 0}, // Delays: <10%->20ms, 10-20%->10ms, >20%->0ms
 	}
-}
+
+	// Profile for chunk channels (more conservative delays)
+	ChunkTransferProfile = ChannelPressureProfile{
+		Enabled:        buildmode.IsMover,
+		MinChannelSize: 1000,
+		Thresholds:     []int{5, 10, 20},     // Empty % thresholds
+		Delays:         []int{50, 20, 10, 0}, // Delays: <5%->50ms, 5-10%->20ms, 10-20%->10ms, >20%->0ms
+	}
+)
 
 // CalculateChannelBackPressureDelay calculates the delay based on channel fullness using the specified profile
 func CalculateChannelBackPressureDelay(capacity, used int, profile ChannelPressureProfile) int {
