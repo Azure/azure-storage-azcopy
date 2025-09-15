@@ -3,7 +3,6 @@ package azcopy
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -52,15 +51,6 @@ func (s *SyncOptions) SetInternalOptions(dryrun, deleteDestinationFileIfNecessar
 	s.deleteDestinationFileIfNecessary = deleteDestinationFileIfNecessary
 }
 
-// TODO : (gapra) These will be removed as we refactor more of the sync code.
-func (s *SyncOptions) GetDryrun() bool {
-	return s.dryrun
-}
-
-func (s *SyncOptions) GetDeleteDestinationFileIfNecessary() bool {
-	return s.deleteDestinationFileIfNecessary
-}
-
 // Sync
 // 1. Phase 1 will implement arg processing and validation only.
 // 2. Phase 2 will implement enumerator initialization
@@ -79,26 +69,6 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 		syncHandler = common.NewJobUIHooks()
 		common.SetUIHooks(syncHandler)
 	}
-
-	c.CurrentJobID = common.NewJobID()
-	timeAtPrestart := time.Now()
-	common.AzcopyCurrentJobLogger = common.NewJobLogger(c.CurrentJobID, c.GetLogLevel(), common.LogPathFolder, "")
-	common.AzcopyCurrentJobLogger.OpenLog()
-	//glcm.RegisterCloseFunc(func() {
-	//	if common.AzcopyCurrentJobLogger != nil {
-	//		common.AzcopyCurrentJobLogger.CloseLog()
-	//	}
-	//})
-
-	// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter
-	// Subtract a few seconds, to ensure that this date DEFINITELY falls before the LMT of any file changed while this
-	// job is running. I.e. using this later with --include-after is _guaranteed_ to pick up all files that changed during
-	// or after this job
-	adjustedTime := timeAtPrestart.Add(-5 * time.Second)
-	startTimeMessage := fmt.Sprintf("ISO 8601 START TIME: to copy files that changed before or after this job started, use the parameter --%s=%s or --%s=%s",
-		common.IncludeBeforeFlagName, FormatAsUTC(adjustedTime),
-		common.IncludeAfterFlagName, FormatAsUTC(adjustedTime))
-	common.LogToJobLogWithPrefix(startTimeMessage, common.LogInfo)
 
 	ret, err = newSyncer(src, dest, opts)
 

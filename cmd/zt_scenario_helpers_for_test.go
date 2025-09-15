@@ -972,6 +972,7 @@ func getDefaultSyncRawInput(sra, dst string) rawSyncCmdArgs {
 		md5ValidationOption:  common.DefaultHashValidationOption.String(),
 		compareHash:          common.ESyncHashType.None().String(),
 		localHashStorageMode: common.EHashStorageMode.Default().String(),
+		hardlinks:            common.DefaultHardlinkHandlingType.String(),
 	}
 }
 

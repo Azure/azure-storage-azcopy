@@ -162,7 +162,7 @@ var rootCmd = &cobra.Command{
 		}
 
 		isBench := cmd.Use == "bench [destination]"
-		isMigratedToLibrary := cmd.Use == "resume [jobID]" || cmd.Use == "sync"
+		isMigratedToLibrary := cmd.Use == "resume [jobID]"
 
 		return Initialize(isMigratedToLibrary, isBench)
 	},
