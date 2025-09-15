@@ -33,6 +33,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	traverser2 "github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/spf13/cobra"
@@ -234,7 +235,7 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 		return fmt.Errorf("failed to resolve target: %w", err)
 	}
 
-	level, err := DetermineLocationLevel(source.Value, cooked.location, true)
+	level, err := azcopy.DetermineLocationLevel(source.Value, cooked.location, true)
 	if err != nil {
 		return err
 	}
@@ -396,7 +397,7 @@ func (l AzCopyListObject) String() string {
 	return l.StringEncoding
 }
 
-func (cooked cookedListCmdArgs) newListObject(object traverser2.StoredObject, level LocationLevel) AzCopyListObject {
+func (cooked cookedListCmdArgs) newListObject(object traverser2.StoredObject, level azcopy.LocationLevel) AzCopyListObject {
 	path := getPath(object.ContainerName, object.RelativePath, level, object.EntityType)
 	contentLength := sizeToString(object.Size, cooked.MachineReadable)
 
@@ -513,7 +514,7 @@ func ByteSizeToString(size int64) string {
 	return strconv.FormatFloat(floatSize, 'f', 2, 64) + " " + units[unit]
 }
 
-func getPath(containerName, relativePath string, level LocationLevel, entityType common.EntityType) string {
+func getPath(containerName, relativePath string, level azcopy.LocationLevel, entityType common.EntityType) string {
 	builder := strings.Builder{}
 	if level == level.Service() {
 		builder.WriteString(containerName + "/")

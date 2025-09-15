@@ -162,7 +162,7 @@ var rootCmd = &cobra.Command{
 		}
 
 		isBench := cmd.Use == "bench [destination]"
-		isMigratedToLibrary := cmd.Use == "resume [jobID]"
+		isMigratedToLibrary := cmd.Use == "resume [jobID]" || cmd.Use == "sync"
 
 		return Initialize(isMigratedToLibrary, isBench)
 	},
@@ -224,8 +224,8 @@ func Initialize(isMigratedToLibrary, isBench bool) (err error) {
 			// This case happens when benchmarking with a fixed value from the env var
 			glcm.Info(fmt.Sprintf("Cannot auto-tune concurrency because it is fixed by environment variable %s", envVar.Name))
 		}
-
 	}
+	// TODO : Move this when we move traverser logic to library
 	traverser.EnumerationParallelism, traverser.EnumerationParallelStatFiles = jobsAdmin.JobsAdmin.GetConcurrencySettings()
 
 	if !SkipVersionCheck && !isPipeDownload {

@@ -401,3 +401,16 @@ func BuildIncludeSoftDeleted(permanentDeleteOption common.PermanentDeleteOption)
 	}
 	return filters
 }
+
+type FilterOptions struct {
+	IncludePatterns   []string
+	ExcludePatterns   []string
+	ExcludePaths      []string
+	IncludeAttributes []string
+	ExcludeAttributes []string
+	IncludeRegex      []string
+	ExcludeRegex      []string
+}
+
+// Filters need to be applied in a specific order, so ideally this should be shared logic for each command.
+// When we get to the enumerator part of the migration, we will move filter building logic here.

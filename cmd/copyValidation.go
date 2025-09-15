@@ -6,12 +6,13 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // Note: blockSize, blobTagsMap is set here
 func (cooked *CookedCopyCmdArgs) validate() (err error) {
-	if err = validateForceIfReadOnly(cooked.ForceIfReadOnly, cooked.FromTo); err != nil {
+	if err = azcopy.ValidateForceIfReadOnly(cooked.ForceIfReadOnly, cooked.FromTo); err != nil {
 		return err
 	}
 
@@ -24,7 +25,7 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 		return errors.New("automatic decompression is only supported for downloads from Blob and Azure Files") // as at Sept 2019, our ADLS Gen 2 Swagger does not include content-encoding for directory (path) listings so we can't support it there
 	}
 
-	cooked.blockSize, err = blockSizeInBytes(cooked.BlockSizeMB)
+	cooked.blockSize, err = azcopy.BlockSizeInBytes(cooked.BlockSizeMB)
 	if err != nil {
 		return err
 	}
@@ -92,15 +93,15 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 	}
 
 	if common.IsNFSCopy() {
-		if err := performNFSSpecificValidation(
+		if err := azcopy.PerformNFSSpecificValidation(
 			cooked.FromTo, cooked.preservePermissions, cooked.preserveInfo,
 			cooked.SymlinkHandling, cooked.hardlinks); err != nil {
 			return err
 		}
 	} else {
-		if err := performSMBSpecificValidation(
+		if err := azcopy.PerformSMBSpecificValidation(
 			cooked.FromTo, cooked.preservePermissions, cooked.preserveInfo,
-			cooked.preservePOSIXProperties, cooked.hardlinks); err != nil {
+			cooked.preservePOSIXProperties); err != nil {
 			return err
 		}
 
@@ -243,10 +244,10 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 		}
 	}
 
-	if err = validatePutMd5(cooked.putMd5, cooked.FromTo); err != nil {
+	if err = azcopy.ValidatePutMd5(cooked.putMd5, cooked.FromTo); err != nil {
 		return err
 	}
-	if err = validateMd5Option(cooked.md5ValidationOption, cooked.FromTo); err != nil {
+	if err = azcopy.ValidateMd5Option(cooked.md5ValidationOption, cooked.FromTo); err != nil {
 		return err
 	}
 	if (len(cooked.IncludeFileAttributes) > 0 || len(cooked.ExcludeFileAttributes) > 0) && cooked.FromTo.From() != common.ELocation.Local() {

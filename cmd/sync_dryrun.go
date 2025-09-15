@@ -42,8 +42,8 @@ func (d *dryrunDeleter) dryrunDelete(object traverser.StoredObject) error {
 }
 
 func newSyncDryRunDeleteProcessor(cca *cookedSyncCmdArgs, objectTypeToDisplay string) *interactiveDeleteProcessor {
-	deleter := dryrunDeleter{objectTypeToDisplay: objectTypeToDisplay, objectLocationToDisplay: cca.destination.Value}
-	return newInteractiveDeleteProcessor(deleter.dryrunDelete, cca.deleteDestination, objectTypeToDisplay, cca.destination, cca.incrementDeletionCount)
+	deleter := dryrunDeleter{objectTypeToDisplay: objectTypeToDisplay, objectLocationToDisplay: cca.s.Destination.Value}
+	return newInteractiveDeleteProcessor(deleter.dryrunDelete, cca.s.DeleteDestination, objectTypeToDisplay, cca.s.Destination, cca.incrementDeletionCount)
 }
 
 func getDryrunNewCopyJobPartOrder(sourceRoot, destinationRoot string, fromTo common.FromTo) func(common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
