@@ -43,8 +43,8 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 	// TODO: Consider passing an errorChannel so that enumeration errors during sync can be conveyed to the caller.
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
-	dest := cca.fromTo.To()
-	sourceTraverser, err := traverser.InitResourceTraverser(cca.source, cca.fromTo.From(), ctx, traverser.InitResourceTraverserOptions{
+	dest := cca.s.FromTo.To()
+	sourceTraverser, err := traverser.InitResourceTraverser(cca.s.Source, cca.s.FromTo.From(), ctx, traverser.InitResourceTraverserOptions{
 		DestResourceType: &dest,
 
 		Client:         cca.srcServiceClient,
@@ -62,17 +62,17 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 			}
 		},
 
-		CpkOptions: cca.cpkOptions,
+		CpkOptions: cca.s.CpkOptions,
 
-		SyncHashType:        cca.compareHash,
-		PreservePermissions: cca.preservePermissions,
-		TrailingDotOption:   cca.trailingDot,
+		SyncHashType:        cca.s.CompareHash,
+		PreservePermissions: cca.s.PreservePermissions,
+		TrailingDotOption:   cca.s.TrailingDot,
 
-		Recursive:               cca.recursive,
+		Recursive:               cca.s.Recursive,
 		GetPropertiesInFrontend: true,
-		IncludeDirectoryStubs:   cca.includeDirectoryStubs,
-		PreserveBlobTags:        cca.s2sPreserveBlobTags,
-		HardlinkHandling:        cca.hardlinks,
+		IncludeDirectoryStubs:   cca.s.IncludeDirectoryStubs,
+		PreserveBlobTags:        cca.s.S2SPreserveBlobTags,
+		HardlinkHandling:        cca.s.Hardlinks,
 	})
 
 	if err != nil {
@@ -82,7 +82,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 	// TODO: enable symlink support in a future release after evaluating the implications
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
-	destinationTraverser, err := traverser.InitResourceTraverser(cca.destination, cca.fromTo.To(), ctx, traverser.InitResourceTraverserOptions{
+	destinationTraverser, err := traverser.InitResourceTraverser(cca.s.Destination, cca.s.FromTo.To(), ctx, traverser.InitResourceTraverserOptions{
 		Client:         cca.dstServiceClient,
 		CredentialType: cca.dstCredType,
 		IncrementEnumeration: func(entityType common.EntityType) {
@@ -91,16 +91,16 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 			}
 		},
 
-		CpkOptions: cca.cpkOptions,
+		CpkOptions: cca.s.CpkOptions,
 
-		SyncHashType:        cca.compareHash,
-		PreservePermissions: cca.preservePermissions,
-		TrailingDotOption:   cca.trailingDot,
+		SyncHashType:        cca.s.CompareHash,
+		PreservePermissions: cca.s.PreservePermissions,
+		TrailingDotOption:   cca.s.TrailingDot,
 
-		Recursive:               cca.recursive,
+		Recursive:               cca.s.Recursive,
 		GetPropertiesInFrontend: true,
-		IncludeDirectoryStubs:   cca.includeDirectoryStubs,
-		PreserveBlobTags:        cca.s2sPreserveBlobTags,
+		IncludeDirectoryStubs:   cca.s.IncludeDirectoryStubs,
+		PreserveBlobTags:        cca.s.S2SPreserveBlobTags,
 		HardlinkHandling:        common.EHardlinkHandlingType.Follow(),
 	})
 	if err != nil {
@@ -115,7 +115,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 		"sync must happen between source and destination of the same type, e.g. either file <-> file or directory <-> directory." +
 		"To make sure target is handled as a directory, add a trailing '/' to the target.")
 
-	if cca.fromTo.To() == common.ELocation.Blob() || cca.fromTo.To() == common.ELocation.BlobFS() {
+	if cca.s.FromTo.To() == common.ELocation.Blob() || cca.s.FromTo.To() == common.ELocation.BlobFS() {
 
 		/*
 			This is an "opinionated" choice. Blob has no formal understanding of directories. As such, we don't care about if it's a directory.
@@ -143,7 +143,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 			// At this point, we'll let the destination be written to with the original resource type.
 		}
 	} else if err != nil && fileerror.HasCode(err, fileerror.ShareNotFound) {
-		return nil, fmt.Errorf("%s Destination file share: %s", DstShareDoesNotExists, cca.destination.Value)
+		return nil, fmt.Errorf("%s Destination file share: %s", DstShareDoesNotExists, cca.s.Destination.Value)
 	} else if err == nil && sourceIsDir != destIsDir {
 		// If the destination exists, and isn't blob though, we have to match resource types.
 		return nil, resourceMismatchError
@@ -153,74 +153,69 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 	// Note: includeFilters and includeAttrFilters are ANDed
 	// They must both pass to get the file included
 	// Same rule applies to excludeFilters and excludeAttrFilters
-	filters := traverser.BuildIncludeFilters(cca.includePatterns)
-	if cca.fromTo.From() == common.ELocation.Local() {
-		includeAttrFilters := traverser.BuildAttrFilters(cca.includeFileAttributes, cca.source.ValueLocal(), true)
+	filters := traverser.BuildIncludeFilters(cca.s.FilterOptions.IncludePatterns)
+	if cca.s.FromTo.From() == common.ELocation.Local() {
+		includeAttrFilters := traverser.BuildAttrFilters(cca.s.FilterOptions.IncludeAttributes, cca.s.Source.ValueLocal(), true)
 		filters = append(filters, includeAttrFilters...)
 	}
 
-	filters = append(filters, traverser.BuildExcludeFilters(cca.excludePatterns, false)...)
-	filters = append(filters, traverser.BuildExcludeFilters(cca.excludePaths, true)...)
-	if cca.fromTo.From() == common.ELocation.Local() {
-		excludeAttrFilters := traverser.BuildAttrFilters(cca.excludeFileAttributes, cca.source.ValueLocal(), false)
+	filters = append(filters, traverser.BuildExcludeFilters(cca.s.FilterOptions.ExcludePatterns, false)...)
+	filters = append(filters, traverser.BuildExcludeFilters(cca.s.FilterOptions.ExcludePaths, true)...)
+	if cca.s.FromTo.From() == common.ELocation.Local() {
+		excludeAttrFilters := traverser.BuildAttrFilters(cca.s.FilterOptions.ExcludeAttributes, cca.s.Source.ValueLocal(), false)
 		filters = append(filters, excludeAttrFilters...)
 	}
 
 	// includeRegex
-	filters = append(filters, traverser.BuildRegexFilters(cca.includeRegex, true)...)
-	filters = append(filters, traverser.BuildRegexFilters(cca.excludeRegex, false)...)
+	filters = append(filters, traverser.BuildRegexFilters(cca.s.FilterOptions.IncludeRegex, true)...)
+	filters = append(filters, traverser.BuildRegexFilters(cca.s.FilterOptions.ExcludeRegex, false)...)
 
 	// after making all filters, log any search prefix computed from them
-	if prefixFilter := traverser.FilterSet(filters).GetEnumerationPreFilter(cca.recursive); prefixFilter != "" {
+	if prefixFilter := traverser.FilterSet(filters).GetEnumerationPreFilter(cca.s.Recursive); prefixFilter != "" {
 		common.LogToJobLogWithPrefix("Search prefix, which may be used to optimize scanning, is: "+prefixFilter, common.LogInfo) // "May be used" because we don't know here which enumerators will use it
 	}
 
 	// decide our folder transfer strategy
 	// sync always acts like stripTopDir=true, but if we intend to persist the root, we must tell NewFolderPropertyOption stripTopDir=false.
-	fpo, folderMessage := NewFolderPropertyOption(cca.fromTo, cca.recursive, !cca.includeRoot, filters, cca.preserveInfo, cca.preservePermissions.IsTruthy(), false, strings.EqualFold(cca.destination.Value, common.Dev_Null), cca.includeDirectoryStubs)
-	if !cca.dryrunMode {
+	fpo, folderMessage := NewFolderPropertyOption(cca.s.FromTo, cca.s.Recursive, !cca.s.IncludeRoot, filters, cca.s.PreserveInfo, cca.s.PreservePermissions.IsTruthy(), false, strings.EqualFold(cca.s.Destination.Value, common.Dev_Null), cca.s.IncludeDirectoryStubs)
+	if !cca.s.Dryrun {
 		glcm.Info(folderMessage)
 	}
 	common.LogToJobLogWithPrefix(folderMessage, common.LogInfo)
 
-	if cca.trailingDot == common.ETrailingDotOption.Enable() && !cca.fromTo.BothSupportTrailingDot() {
-		cca.trailingDot = common.ETrailingDotOption.Disable()
-	}
-
 	copyJobTemplate := &common.CopyJobPartOrderRequest{
-		JobID:               cca.jobID,
-		CommandString:       cca.commandString,
-		FromTo:              cca.fromTo,
-		Fpo:                 fpo,
-		SymlinkHandlingType: cca.symlinkHandling,
-		SourceRoot:          cca.source.CloneWithConsolidatedSeparators(),
-		DestinationRoot:     cca.destination.CloneWithConsolidatedSeparators(),
+		JobID:           cca.jobID,
+		CommandString:   cca.commandString,
+		FromTo:          cca.s.FromTo,
+		Fpo:             fpo,
+		SourceRoot:      cca.s.Source.CloneWithConsolidatedSeparators(),
+		DestinationRoot: cca.s.Destination.CloneWithConsolidatedSeparators(),
 
 		// flags
 		BlobAttributes: common.BlobTransferAttributes{
-			PreserveLastModifiedTime:         cca.preserveInfo, // true by default for sync so that future syncs have this information available
-			PutMd5:                           cca.putMd5,
-			MD5ValidationOption:              cca.md5ValidationOption,
-			BlockSizeInBytes:                 cca.blockSize,
-			PutBlobSizeInBytes:               cca.putBlobSize,
-			DeleteDestinationFileIfNecessary: cca.deleteDestinationFileIfNecessary,
+			PreserveLastModifiedTime:         cca.s.PreserveInfo, // true by default for sync so that future syncs have this information available
+			PutMd5:                           cca.s.PutMd5,
+			MD5ValidationOption:              cca.s.CheckMd5,
+			BlockSizeInBytes:                 cca.s.BlockSize,
+			PutBlobSizeInBytes:               cca.s.PutBlobSize,
+			DeleteDestinationFileIfNecessary: cca.s.DeleteDestinationFileIfNecessary,
 		},
 		ForceWrite:                     common.EOverwriteOption.True(), // once we decide to transfer for a sync operation, we overwrite the destination regardless
-		ForceIfReadOnly:                cca.forceIfReadOnly,
+		ForceIfReadOnly:                cca.s.ForceIfReadOnly,
 		LogLevel:                       Client.GetLogLevel(),
-		PreservePermissions:            cca.preservePermissions,
-		PreserveInfo:                   cca.preserveInfo,
-		PreservePOSIXProperties:        cca.preservePOSIXProperties,
+		PreservePermissions:            cca.s.PreservePermissions,
+		PreserveInfo:                   cca.s.PreserveInfo,
+		PreservePOSIXProperties:        cca.s.PreservePosixProperties,
 		S2SSourceChangeValidation:      true,
 		DestLengthValidation:           true,
 		S2SGetPropertiesInBackend:      true,
 		S2SInvalidMetadataHandleOption: common.EInvalidMetadataHandleOption.RenameIfInvalid(),
-		CpkOptions:                     cca.cpkOptions,
-		S2SPreserveBlobTags:            cca.s2sPreserveBlobTags,
+		CpkOptions:                     cca.s.CpkOptions,
+		S2SPreserveBlobTags:            cca.s.S2SPreserveBlobTags,
 
 		S2SSourceCredentialType: cca.srcCredType,
 		FileAttributes: common.FileTransferAttributes{
-			TrailingDot: cca.trailingDot,
+			TrailingDot: cca.s.TrailingDot,
 		},
 		JobErrorHandler:  glcm,
 		SrcServiceClient: cca.srcServiceClient,
@@ -228,7 +223,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 	}
 
 	// Check protocol compatibility for File Shares
-	if err := validateProtocolCompatibility(ctx, cca.fromTo, cca.source, cca.destination, copyJobTemplate.SrcServiceClient, copyJobTemplate.DstServiceClient); err != nil {
+	if err := validateProtocolCompatibility(ctx, cca.s.FromTo, cca.s.Source, cca.s.Destination, copyJobTemplate.SrcServiceClient, copyJobTemplate.DstServiceClient); err != nil {
 		return nil, err
 	}
 
@@ -240,9 +235,9 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 
 	// deleter is responsible for deleting files at the destination that no longer exist at the source
 	var deleter *interactiveDeleteProcessor
-	if cca.dryrunMode {
-		deleter = newSyncDryRunDeleteProcessor(cca, common.Iff(cca.fromTo.To() == common.ELocation.Local(), LocalFileObjectType, cca.fromTo.To().String()))
-	} else if cca.fromTo.To().IsAzure() {
+	if cca.s.Dryrun {
+		deleter = newSyncDryRunDeleteProcessor(cca, common.Iff(cca.s.FromTo.To() == common.ELocation.Local(), LocalFileObjectType, cca.s.FromTo.To().String()))
+	} else if cca.s.FromTo.To().IsAzure() {
 		deleter, err = newSyncDeleteProcessor(cca, fpo, copyJobTemplate.DstServiceClient)
 		if err != nil {
 			return nil, fmt.Errorf("unable to instantiate destination cleaner due to: %s", err.Error())
@@ -255,7 +250,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 	var comparator traverser.ObjectProcessor
 	var finalize func() error
 
-	if cca.fromTo.IsUpload() {
+	if cca.s.FromTo.IsUpload() {
 		// Upload implies transferring from a local disk to a remote resource.
 		// In this scenario, the local disk (source) is scanned/indexed first because it is assumed that local file systems will be faster to enumerate than remote resources
 		// Then the destination is scanned and filtered based on what the destination contains
@@ -264,7 +259,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 		// we ALREADY have available a complete map of everything that exists locally
 		// so as soon as we see a remote destination object we can know whether it exists in the local source
 
-		comparator = newSyncDestinationComparator(indexer, transferScheduler.scheduleCopyTransfer, deleteScheduler, cca.compareHash, cca.preserveInfo, cca.mirrorMode).processIfNecessary
+		comparator = newSyncDestinationComparator(indexer, transferScheduler.scheduleCopyTransfer, deleteScheduler, cca.s.CompareHash, cca.s.PreserveInfo, cca.s.MirrorMode).processIfNecessary
 		finalize = func() error {
 			// schedule every local file that doesn't exist at the destination
 			err = indexer.Traverse(transferScheduler.scheduleCopyTransfer, filters)
@@ -282,10 +277,10 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 
 		return traverser.NewSyncEnumerator(sourceTraverser, destinationTraverser, indexer, filters, comparator, finalize), nil
 	} else {
-		indexer.IsDestinationCaseInsensitive = IsDestinationCaseInsensitive(cca.fromTo)
+		indexer.IsDestinationCaseInsensitive = IsDestinationCaseInsensitive(cca.s.FromTo)
 		// in all other cases (download and S2S), the destination is scanned/indexed first
 		// then the source is scanned and filtered based on what the destination contains
-		comparator = newSyncSourceComparator(indexer, transferScheduler.scheduleCopyTransfer, cca.compareHash, cca.preserveInfo, cca.mirrorMode).processIfNecessary
+		comparator = newSyncSourceComparator(indexer, transferScheduler.scheduleCopyTransfer, cca.s.CompareHash, cca.s.PreserveInfo, cca.s.MirrorMode).processIfNecessary
 
 		finalize = func() error {
 			// remove the extra files at the destination that were not present at the source

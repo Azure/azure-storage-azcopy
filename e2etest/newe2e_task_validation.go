@@ -13,6 +13,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -96,8 +97,8 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 		return
 	}
 
-	definition.ApplyDefinition(a, target, map[cmd.LocationLevel]func(Asserter, ResourceManager, ResourceDefinition){
-		cmd.ELocationLevel.Container(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
+	definition.ApplyDefinition(a, target, map[azcopy.LocationLevel]func(Asserter, ResourceManager, ResourceDefinition){
+		azcopy.ELocationLevel.Container(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
 			cRes := manager.(ContainerResourceManager)
 
 			if !definition.ShouldExist() {
@@ -121,7 +122,7 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 				ValidatePropertyPtr(a, "Quota", vProps.FileContainerProperties.Quota, cProps.FileContainerProperties.Quota)
 			}
 		},
-		cmd.ELocationLevel.Object(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
+		azcopy.ELocationLevel.Object(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
 			objMan := manager.(ObjectResourceManager)
 			objDef := definition.(ResourceDefinitionObject)
 

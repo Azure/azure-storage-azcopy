@@ -1,7 +1,7 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -32,5 +32,5 @@ func (s *FileOAuthTestSuite) Scenario_SyncFromLocalToFSWarningMsg(svm *ScenarioV
 			ShouldFail: false,
 		})
 
-	ValidateMessageOutput(svm, stdout, cmd.LocalToFileShareWarnMsg, true)
+	ValidateMessageOutput(svm, stdout, azcopy.LocalToFileShareWarnMsg, true)
 }

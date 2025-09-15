@@ -14,7 +14,7 @@ import (
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
@@ -80,8 +80,8 @@ func (s *FileServiceResourceManager) Location() common.Location {
 	return s.Llocation
 }
 
-func (s *FileServiceResourceManager) Level() cmd.LocationLevel {
-	return cmd.ELocationLevel.Service()
+func (s *FileServiceResourceManager) Level() azcopy.LocationLevel {
+	return azcopy.ELocationLevel.Service()
 }
 
 func (s *FileServiceResourceManager) URI(opts ...GetURIOptions) string {
@@ -178,8 +178,8 @@ func (s *FileShareResourceManager) Location() common.Location {
 	return s.Service.Location()
 }
 
-func (s *FileShareResourceManager) Level() cmd.LocationLevel {
-	return cmd.ELocationLevel.Container()
+func (s *FileShareResourceManager) Level() azcopy.LocationLevel {
+	return azcopy.ELocationLevel.Container()
 }
 
 func (s *FileShareResourceManager) URI(opts ...GetURIOptions) string {
@@ -417,8 +417,8 @@ func (f *FileObjectResourceManager) Location() common.Location {
 	return f.Service.Location()
 }
 
-func (f *FileObjectResourceManager) Level() cmd.LocationLevel {
-	return cmd.ELocationLevel.Object()
+func (f *FileObjectResourceManager) Level() azcopy.LocationLevel {
+	return azcopy.ELocationLevel.Object()
 }
 
 func (f *FileObjectResourceManager) URI(opts ...GetURIOptions) string {

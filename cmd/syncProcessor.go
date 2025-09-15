@@ -45,11 +45,11 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs,
 
 	// note that the source and destination, along with the template are given to the generic processor's constructor
 	// this means that given an object with a relative path, this processor already knows how to schedule the right kind of transfers
-	if cca.dryrunMode {
-		jobsAdmin.ExecuteNewCopyJobPartOrder = getDryrunNewCopyJobPartOrder(copyJobTemplate.SourceRoot.Value, copyJobTemplate.DestinationRoot.Value, cca.fromTo)
+	if cca.s.Dryrun {
+		jobsAdmin.ExecuteNewCopyJobPartOrder = getDryrunNewCopyJobPartOrder(copyJobTemplate.SourceRoot.Value, copyJobTemplate.DestinationRoot.Value, cca.s.FromTo)
 	}
-	return newCopyTransferProcessor(copyJobTemplate, numOfTransfersPerPart, cca.source, cca.destination,
-		reportFirstPart, reportFinalPart, cca.preserveAccessTier)
+	return newCopyTransferProcessor(copyJobTemplate, numOfTransfersPerPart, cca.s.Source, cca.s.Destination,
+		reportFirstPart, reportFinalPart, cca.s.S2SPreserveAccessTier)
 }
 
 // base for delete processors targeting different resources
@@ -149,8 +149,8 @@ func newInteractiveDeleteProcessor(deleter traverser.ObjectProcessor, deleteDest
 const LocalFileObjectType = "local file"
 
 func newSyncLocalDeleteProcessor(cca *cookedSyncCmdArgs, fpo common.FolderPropertyOption) *interactiveDeleteProcessor {
-	localDeleter := localFileDeleter{rootPath: cca.destination.ValueLocal(), fpo: fpo, folderManager: common.NewFolderDeletionManager(context.Background(), fpo, common.AzcopyScanningLogger)}
-	return newInteractiveDeleteProcessor(localDeleter.deleteFile, cca.deleteDestination, LocalFileObjectType, cca.destination, cca.incrementDeletionCount)
+	localDeleter := localFileDeleter{rootPath: cca.s.Destination.ValueLocal(), fpo: fpo, folderManager: common.NewFolderDeletionManager(context.Background(), fpo, common.AzcopyScanningLogger)}
+	return newInteractiveDeleteProcessor(localDeleter.deleteFile, cca.s.DeleteDestination, LocalFileObjectType, cca.s.Destination, cca.incrementDeletionCount)
 }
 
 type localFileDeleter struct {
@@ -195,19 +195,19 @@ func (l *localFileDeleter) deleteFile(object traverser.StoredObject) error {
 }
 
 func newSyncDeleteProcessor(cca *cookedSyncCmdArgs, fpo common.FolderPropertyOption, dstClient *common.ServiceClient) (*interactiveDeleteProcessor, error) {
-	rawURL, err := cca.destination.FullURL()
+	rawURL, err := cca.s.Destination.FullURL()
 	if err != nil {
 		return nil, err
 	}
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	deleter, err := newRemoteResourceDeleter(ctx, dstClient, rawURL, cca.fromTo.To(), fpo, cca.forceIfReadOnly)
+	deleter, err := newRemoteResourceDeleter(ctx, dstClient, rawURL, cca.s.FromTo.To(), fpo, cca.s.ForceIfReadOnly)
 	if err != nil {
 		return nil, err
 	}
 
-	return newInteractiveDeleteProcessor(deleter.delete, cca.deleteDestination, cca.fromTo.To().String(), cca.destination, cca.incrementDeletionCount), nil
+	return newInteractiveDeleteProcessor(deleter.delete, cca.s.DeleteDestination, cca.s.FromTo.To().String(), cca.s.Destination, cca.incrementDeletionCount), nil
 }
 
 type remoteResourceDeleter struct {
