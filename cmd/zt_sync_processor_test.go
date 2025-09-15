@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 	"github.com/stretchr/testify/assert"
 
@@ -42,8 +43,10 @@ func TestLocalDeleter(t *testing.T) {
 
 	// construct the cooked input to simulate user input
 	cca := &cookedSyncCmdArgs{
-		destination:       newLocalRes(dstDirName),
-		deleteDestination: common.EDeleteDestination.True(),
+		s: &azcopy.Syncer{
+			Destination:       newLocalRes(dstDirName),
+			DeleteDestination: common.EDeleteDestination.True(),
+		},
 	}
 
 	// set up local deleter
@@ -80,9 +83,11 @@ func TestBlobDeleter(t *testing.T) {
 	// construct the cooked input to simulate user input
 	rawContainerURL := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	cca := &cookedSyncCmdArgs{
-		destination:       newRemoteRes(rawContainerURL.String()),
-		deleteDestination: common.EDeleteDestination.True(),
-		fromTo:            common.EFromTo.LocalBlob(),
+		s: &azcopy.Syncer{
+			Destination:       newRemoteRes(rawContainerURL.String()),
+			DeleteDestination: common.EDeleteDestination.True(),
+			FromTo:            common.EFromTo.LocalBlob(),
+		},
 	}
 	sc := common.NewServiceClient(bsc, nil, nil)
 
@@ -117,9 +122,11 @@ func TestFileDeleter(t *testing.T) {
 	// construct the cooked input to simulate user input
 	rawShareSAS := scenarioHelper{}.getRawShareURLWithSAS(a, shareName)
 	cca := &cookedSyncCmdArgs{
-		destination:       newRemoteRes(rawShareSAS.String()),
-		deleteDestination: common.EDeleteDestination.True(),
-		fromTo:            common.EFromTo.FileFile(),
+		s: &azcopy.Syncer{
+			Destination:       newRemoteRes(rawShareSAS.String()),
+			DeleteDestination: common.EDeleteDestination.True(),
+			FromTo:            common.EFromTo.FileFile(),
+		},
 	}
 
 	sc := common.NewServiceClient(nil, fsc, nil)
