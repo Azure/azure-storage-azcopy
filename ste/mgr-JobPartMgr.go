@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -18,7 +17,6 @@ import (
 	azruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/minio/minio-go/pkg/credentials"
 	"golang.org/x/sync/semaphore"
 )
@@ -76,64 +74,32 @@ type IJobPartMgr interface {
 	ResetFailedTransfersCount() // Resets number of failed transfers after a job is resumed
 }
 
-// HTTPClientConfig holds configuration for creating HTTP clients
-type HTTPClientConfig struct {
-	MaxIdleConns          int
-	ConcurrentDialsPerCpu int
-	MaxDialConcurrency    int64 // optional override for total dial concurrency
-	EnableDialRateLimit   bool  // whether to enable dial rate limiting
-}
-
 // NewAzcopyHTTPClient creates a new HTTP client.
 // We must minimize use of this, and instead maximize reuse of the returned client object.
 // Why? Because that makes our connection pooling more efficient, and prevents us exhausting the
 // number of available network sockets on resource-constrained Linux systems. (E.g. when
 // 'ulimit -Hn' is low).
 func NewAzcopyHTTPClient(maxIdleConns int) *http.Client {
-	return NewAzcopyHTTPClientWithConfig(HTTPClientConfig{
-		MaxIdleConns:          maxIdleConns,
-		ConcurrentDialsPerCpu: 10, // exact value doesn't matter too much, but too low will be too slow, and too high will reduce the beneficial effect on thread count
-		EnableDialRateLimit:   buildmode.IsMover,
-	})
-}
-
-// NewAzcopyHTTPClientWithConfig creates a new HTTP client with custom configuration
-func NewAzcopyHTTPClientWithConfig(config HTTPClientConfig) *http.Client {
-	if config.ConcurrentDialsPerCpu <= 0 {
-		config.ConcurrentDialsPerCpu = 10
-	}
-
-	client := &http.Client{
+	return &http.Client{
 		Transport: &http.Transport{
-			Proxy:                  common.GlobalProxyLookup,
-			MaxConnsPerHost:        config.ConcurrentDialsPerCpu * runtime.NumCPU(),
+			Proxy: common.GlobalProxyLookup,
+			DialContext: newDialRateLimiter(&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+				DualStack: true,
+			}).DialContext,
 			MaxIdleConns:           0, // No limit
-			MaxIdleConnsPerHost:    config.MaxIdleConns,
+			MaxIdleConnsPerHost:    maxIdleConns,
 			IdleConnTimeout:        180 * time.Second,
 			TLSHandshakeTimeout:    10 * time.Second,
 			ExpectContinueTimeout:  1 * time.Second,
 			DisableKeepAlives:      false,
-			DisableCompression:     true, // must disable the auto-decompression of gzipped files, and just download the gzipped version. See https://github.com/Azure/azure-storage-azcopy/issues/374
+			DisableCompression:     true, // must disable the auto-decompression of gzipped files, and just download the gzipped version. See https://onebranch.visualstudio.com/azure-storage-azcopy/issues/374
 			MaxResponseHeaderBytes: 0,
 			// ResponseHeaderTimeout:  time.Duration{},
 			// ExpectContinueTimeout:  time.Duration{},
 		},
 	}
-
-	if config.EnableDialRateLimit {
-		rateLimiter := newDialRateLimiterWithConfig(&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}, dialRateLimiterConfig{
-			concurrentDialsPerCpu: config.ConcurrentDialsPerCpu,
-			maxConcurrency:        config.MaxDialConcurrency,
-		})
-
-		client.Transport.(*http.Transport).DialContext = rateLimiter.DialContext
-	}
-
-	return client
 }
 
 // Prevents too many dials happening at once, because we've observed that that increases the thread
@@ -141,56 +107,26 @@ func NewAzcopyHTTPClientWithConfig(config HTTPClientConfig) *http.Client {
 // call somewhere. It's tidier to avoid creating those excess OS threads.
 // Even our change from Dial (deprecated) to DialContext did not replicate the effect of dialRateLimiter.
 type dialRateLimiter struct {
-	dialer          *net.Dialer
-	sem             *semaphore.Weighted
-	maxConcurrency  int64
-	activeConns     int64 // atomic counter for active connections
-	totalAcquires   int64 // atomic counter for total acquire attempts
-	totalRejections int64 // atomic counter for context cancellations
+	dialer *net.Dialer
+	sem    *semaphore.Weighted
 }
 
-// dialRateLimiterConfig allows configuration of the rate limiter
-type dialRateLimiterConfig struct {
-	concurrentDialsPerCpu int
-	maxConcurrency        int64 // optional override for total concurrency
-}
-
-func newDialRateLimiterWithConfig(dialer *net.Dialer, config dialRateLimiterConfig) *dialRateLimiter {
-	maxConcurrency := config.maxConcurrency
-	if maxConcurrency <= 0 {
-		maxConcurrency = int64(config.concurrentDialsPerCpu * runtime.NumCPU())
-	}
-
+func newDialRateLimiter(dialer *net.Dialer) *dialRateLimiter {
+	const concurrentDialsPerCpu = 196 // exact value doesn't matter too much, but too low will be too slow, and too high will reduce the beneficial effect on thread count
 	return &dialRateLimiter{
-		dialer:         dialer,
-		sem:            semaphore.NewWeighted(maxConcurrency),
-		maxConcurrency: maxConcurrency,
+		dialer,
+		semaphore.NewWeighted(concurrentDialsPerCpu),
 	}
 }
 
 func (d *dialRateLimiter) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	atomic.AddInt64(&d.totalAcquires, 1)
-
-	err := d.sem.Acquire(ctx, 1)
+	err := d.sem.Acquire(context.Background(), 1)
 	if err != nil {
-		atomic.AddInt64(&d.totalRejections, 1)
-		return nil, fmt.Errorf("dial rate limiter: failed to acquire semaphore: %w", err)
+		return nil, err
 	}
+	defer d.sem.Release(1)
 
-	// Use defer with recovery to ensure semaphore is always released
-	defer func() {
-		d.sem.Release(1)
-		atomic.AddInt64(&d.activeConns, -1)
-	}()
-
-	atomic.AddInt64(&d.activeConns, 1)
-
-	conn, err := d.dialer.DialContext(ctx, network, address)
-	if err != nil {
-		return nil, fmt.Errorf("dial rate limiter: dial failed for %s://%s: %w", network, address, err)
-	}
-
-	return conn, nil
+	return d.dialer.DialContext(ctx, network, address)
 }
 
 func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptions, transport policy.Transporter, log LogOptions, srcCred *common.ScopedToken, dstCred *common.ScopedAuthenticator) azcore.ClientOptions {
