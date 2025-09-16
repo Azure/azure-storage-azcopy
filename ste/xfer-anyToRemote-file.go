@@ -31,11 +31,28 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+)
+
+// Global timing statistics for files
+var (
+	fileTimingStats = struct {
+		mu        sync.Mutex
+		totalTime time.Duration
+		count     int64
+		avgTime   time.Duration
+
+		// Mean tracking for individual steps
+		prepMean    time.Duration
+		openSrcMean time.Duration
+		lockMean    time.Duration
+		uploadMean  time.Duration
+	}{}
 )
 
 // IBlobClient is an interface to allow ValidateTier to accept any type of client
@@ -211,6 +228,60 @@ func anyToRemote(jptm IJobPartTransferMgr, pacer pacer, senderFactory senderFact
 
 // anyToRemote_file handles all kinds of sender operations for files - both uploads from local files, and S2S copies
 func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
+	startTime := time.Now()
+	fileName := info.Source
+	timings := make([]string, 0, 4)
+
+	// Log all timings in one line when function exits
+	defer func() {
+		totalTime := time.Since(startTime)
+
+		// Update global timing statistics
+		fileTimingStats.mu.Lock()
+		fileTimingStats.totalTime += totalTime
+		fileTimingStats.count++
+		fileTimingStats.avgTime = time.Duration(int64(fileTimingStats.totalTime) / fileTimingStats.count)
+		currentAvg := fileTimingStats.avgTime
+		currentCount := fileTimingStats.count
+
+		// Parse individual step timings and update means
+		if len(timings) >= 4 {
+			// Parse timing strings to extract durations
+			for i, timing := range timings {
+				parts := strings.Split(timing, ":")
+				if len(parts) == 2 {
+					if duration, err := time.ParseDuration(parts[1]); err == nil {
+						switch i {
+						case 0: // Prep
+							fileTimingStats.prepMean = time.Duration((int64(fileTimingStats.prepMean)*(currentCount-1) + int64(duration)) / currentCount)
+						case 1: // OpenSrc
+							fileTimingStats.openSrcMean = time.Duration((int64(fileTimingStats.openSrcMean)*(currentCount-1) + int64(duration)) / currentCount)
+						case 2: // Lock
+							fileTimingStats.lockMean = time.Duration((int64(fileTimingStats.lockMean)*(currentCount-1) + int64(duration)) / currentCount)
+						case 3: // Upload
+							fileTimingStats.uploadMean = time.Duration((int64(fileTimingStats.uploadMean)*(currentCount-1) + int64(duration)) / currentCount)
+						}
+					}
+				}
+			}
+		}
+
+		// Log mean timings every 100,000 transfers
+		if currentCount%100000 == 0 {
+			meanLine := fmt.Sprintf("FILE_TIMING_MEAN: [Count:%d | Prep:%s | OpenSrc:%s | Lock:%s | Upload:%s | Total:%s]",
+				currentCount,
+				fileTimingStats.prepMean.String(),
+				fileTimingStats.openSrcMean.String(),
+				fileTimingStats.lockMean.String(),
+				fileTimingStats.uploadMean.String(),
+				currentAvg.String())
+			jptm.Log(common.LogError, meanLine)
+		}
+
+		fileTimingStats.mu.Unlock()
+		timingLine := "FILE_TIMING: " + fileName + " [" + strings.Join(timings, " | ") + " | Total:" + totalTime.String() + " | Count:" + fmt.Sprintf("%d", currentCount) + "]"
+		jptm.Log(common.LogError, timingLine)
+	}()
 
 	pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
 	jptm.LogChunkStatus(pseudoId, common.EWaitReason.XferStart())
@@ -218,7 +289,8 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 
 	srcSize := info.SourceSize
 
-	// step 1. perform initial checks
+	// step 1. prepare transfer (init, srcinfo, sender, overwrite check)
+	step1Start := time.Now()
 	if jptm.WasCanceled() {
 		/* This is the earliest we detect jptm has been cancelled before scheduling chunks */
 		jptm.SetStatus(common.ETransferStatus.Cancelled())
@@ -226,7 +298,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 		return
 	}
 
-	// step 2a. Create sender
+	// Create source info provider
 	srcInfoProvider, err := sipf(jptm)
 	if err != nil {
 		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
@@ -248,6 +320,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 		panic("configuration error. Source Info Provider does not have File entity type")
 	}
 
+	// Create sender
 	s, err := senderFactory(jptm, info.Destination, pacer, srcInfoProvider)
 	if err != nil {
 		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
@@ -256,7 +329,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 		return
 	}
 
-	// step 2b. Read chunk size and count from the sender (since it may have applied its own defaults and/or calculations to produce these values
+	// Read chunk size and count from the sender (since it may have applied its own defaults and/or calculations to produce these values
 	numChunks := s.NumChunks()
 	if jptm.ShouldLog(common.LogInfo) {
 		jptm.LogTransferStart(info.Source, info.Destination, fmt.Sprintf("Specified chunk size %d", s.ChunkSize()))
@@ -265,7 +338,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 		panic("must always schedule one chunk, even if file is empty") // this keeps our code structure simpler, by using a dummy chunk for empty files
 	}
 
-	// step 3: check overwrite option
+	// Check overwrite option
 	// if the force Write flags is set to false or prompt
 	// then check the file exists at the remote location
 	// if it does, react accordingly
@@ -302,8 +375,10 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 			}
 		}
 	}
+	timings = append(timings, "Prep:"+time.Since(step1Start).String())
 
-	// step 4: Open the local Source File (if any)
+	// step 2: Open the local Source File (if any)
+	step2Start := time.Now()
 	common.GetLifecycleMgr().E2EAwaitAllowOpenFiles()
 	jptm.LogChunkStatus(pseudoId, common.EWaitReason.OpenLocalSource())
 	var sourceFileFactory func() (common.CloseableReaderAt, error)
@@ -323,10 +398,13 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 		}
 		defer srcFile.Close() // we read all the chunks in this routine, so can close the file at the end
 	}
+	timings = append(timings, "OpenSrc:"+time.Since(step2Start).String())
 
+	// step 3: Lock and Setup (LMT verification, destination locking, transfer setup)
 	// We always to LMT verification after the transfer. Also do it here, before transfer, when:
 	// 1) Source is local, and source's size is > 1 chunk.  (why not always?  Since getting LMT is not "free" at very small sizes)
 	// 2) Source is remote, i.e. S2S copy case. And source's size is larger than one chunk. So verification can possibly save transfer's cost.
+	step3Start := time.Now()
 	jptm.LogChunkStatus(pseudoId, common.EWaitReason.ModifiedTimeRefresh())
 	if _, isS2SCopier := s.(s2sCopier); numChunks > 1 &&
 		(srcInfoProvider.IsLocal() || isS2SCopier && info.S2SSourceChangeValidation) {
@@ -345,7 +423,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 		}
 	}
 
-	// step 5a: lock the destination
+	// Lock the destination
 	// (is safe to do it relatively early here, before we run the prologue, because its just a internal lock, within the app)
 	// But must be after all of the early returns that are above here (since
 	// if we succeed here, we need to know the epilogue will definitely run to unlock later)
@@ -370,15 +448,18 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 	//   eventually reach numChunks, since we have no better short-term alternative.
 	// ******
 
-	// step 5b: tell jptm what to expect, and how to clean up at the end
+	// Tell jptm what to expect, and how to clean up at the end
 	jptm.SetNumberOfChunks(numChunks)
 	jptm.SetActionAfterLastChunk(func() { epilogueWithCleanupSendToRemote(jptm, s, srcInfoProvider) })
 
 	// stop tracking pseudo id (since real chunk id's will be tracked from here on)
 	jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone())
+	timings = append(timings, "Lock:"+time.Since(step3Start).String())
 
-	// Step 6: Go through the file and schedule chunk messages to send each chunk
+	// Step 4: Go through the file and schedule chunk messages to send each chunk
+	step4Start := time.Now()
 	scheduleSendChunks(jptm, info.Source, srcFile, srcSize, s, sourceFileFactory, srcInfoProvider)
+	timings = append(timings, "Upload:"+time.Since(step4Start).String())
 }
 
 var jobCancelledLocalPrefetchErr = errors.New("job was cancelled; Pre-fetching stopped")
@@ -462,6 +543,7 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 			// If file is not local, we'll get no leading bytes, but we still run the prologue in case
 			// there's other initialization to do in the sender.
 			modified := s.Prologue(ps)
+			// Step5 timing will be tracked separately due to closure scope
 			if modified {
 				jptm.SetDestinationIsModified()
 			}
@@ -593,6 +675,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 	}
 
 	commonSenderCompletion(jptm, s, info)
+	// Step7 timing will be part of total timing
 }
 
 // commonSenderCompletion is used for both files and folders
