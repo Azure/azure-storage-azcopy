@@ -239,10 +239,10 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 	}
 
 	// isSource is rather misnomer for canBePublic. We can list public containers, and hence isSource=true
-	if credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cooked.location, source, true, common.CpkOptions{}); err != nil {
+	uotm := Client.GetUserOAuthTokenManagerInstance()
+	if credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cooked.location, source, true, uotm, common.CpkOptions{}); err != nil {
 		return fmt.Errorf("failed to obtain credential info: %s", err.Error())
 	} else if credentialInfo.CredentialType.IsAzureOAuth() {
-		uotm := Client.GetUserOAuthTokenManagerInstance()
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return err
 		} else {
