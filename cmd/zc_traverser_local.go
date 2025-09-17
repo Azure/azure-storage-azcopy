@@ -698,6 +698,14 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				}
 				return nil
 			}
+		} else {
+			if IsSymbolicLink(singleFileInfo) {
+				entityType = common.EEntityType.Symlink()
+			} else if IsRegularFile(singleFileInfo) {
+				entityType = common.EEntityType.File()
+			} else {
+				entityType = common.EEntityType.Other()
+			}
 		}
 
 		if t.incrementEnumerationCounter != nil {
