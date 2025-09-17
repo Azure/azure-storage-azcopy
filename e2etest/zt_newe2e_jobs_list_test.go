@@ -1,7 +1,6 @@
 package e2etest
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -109,10 +108,6 @@ func (s *JobsListSuite) Scenario_JobsListAll(svm *ScenarioVariationManager) {
 	if !svm.Dryrun() {
 		j1 := getJobID(svm, job1)
 		j2 := getJobID(svm, job2)
-
-		fmt.Println(job1.String())
-		fmt.Println(job2.String())
-		fmt.Println(jobsListOutput.String())
 		ValidateJobsListOutput(svm, jobsListOutput, 2, []string{j1, j2})
 	}
 }

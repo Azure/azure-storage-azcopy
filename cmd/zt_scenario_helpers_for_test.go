@@ -48,6 +48,7 @@ import (
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/stretchr/testify/assert"
 
 	gcpUtils "cloud.google.com/go/storage"
@@ -860,6 +861,10 @@ func runSyncAndVerify(a *assert.Assertions, raw rawSyncCmdArgs, mockTransfer fun
 	a.Nil(err)
 	opts.SetInternalOptions(true, raw.deleteDestinationFileIfNecessary, "", mockTransfer, dryrunDelete)
 
+	// create the client if it is not already created
+	if jobsAdmin.JobsAdmin == nil {
+		Client, err = azcopy.NewClient(azcopy.ClientOptions{CapMbps: CapMbps})
+	}
 	// the enumeration ends when process() returns
 	_, err = Client.Sync(context.TODO(), raw.src, raw.dst, opts, nil)
 
