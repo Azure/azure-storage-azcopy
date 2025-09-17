@@ -676,7 +676,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	// if the path is a single file, then pass it through the filters and send to processor
 	if isSingleFile {
 
-		entityType := common.EEntityType.File()
+		var entityType common.EntityType
 		if common.IsNFSCopy() {
 			if IsSymbolicLink(singleFileInfo) {
 				entityType = common.EEntityType.Symlink()
@@ -869,7 +869,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 						preprocessor,
 						entry.Name(),
 						strings.ReplaceAll(relativePath, common.DeterminePathSeparator(t.fullPath), common.AZCOPY_PATH_SEPARATOR_STRING), // Consolidate relative paths to the azcopy path separator for sync
-						entityType, // TODO: add code path for folders
+						entityType,                                                                                                       // TODO: add code path for folders
 						fileInfo.ModTime(),
 						fileInfo.Size(),
 						noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
