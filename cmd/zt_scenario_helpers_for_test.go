@@ -853,13 +853,15 @@ func (scenarioHelper) containerExists(containerClient *container.Client) bool {
 	return false
 }
 
-func runSyncAndVerify(a *assert.Assertions, raw rawSyncCmdArgs, verifier func(err error)) {
+// A unit test is like a dryrun transfer
+func runSyncAndVerify(a *assert.Assertions, raw rawSyncCmdArgs, mockTransfer func(common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse, verifier func(err error)) {
 	// the simulated user input should parse properly
-	cooked, err := raw.cook()
+	opts, err := raw.toOptions()
 	a.Nil(err)
+	opts.SetInternalOptions(true, raw.deleteDestinationFileIfNecessary, "", mockTransfer, dryrunDelete)
 
 	// the enumeration ends when process() returns
-	err = cooked.process()
+	_, err = Client.Sync(context.TODO(), raw.src, raw.dst, opts, nil)
 
 	// the err is passed to verified, which knows whether it is expected or not
 	verifier(err)

@@ -169,13 +169,13 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 		if err != nil {
 			return nil, fmt.Errorf("invalid destination URL: %s. Error: %s", s.opts.destination.Value, err.Error())
 		}
-		remoteDeleter, err := newRemoteResourceDeleter(ctx, s.srp.dstServiceClient, rawURL, fpo, s.opts.forceIfReadOnly)
+		remoteDeleter, err := NewRemoteResourceDeleter(ctx, s.srp.dstServiceClient, rawURL, fpo, s.opts.forceIfReadOnly)
 		if err != nil {
 			return nil, fmt.Errorf("unable to instantiate destination cleaner due to: %s", err.Error())
 		}
 		deleter = remoteDeleter.Delete
 	} else {
-		deleter = localFileDeleter{fpo: fpo, folderManager: common.NewFolderDeletionManager(context.Background(), fpo, common.AzcopyScanningLogger)}.Delete
+		deleter = NewLocalFileDeleter(fpo).Delete
 	}
 	deleteProcessor := newInteractiveDeleteProcessor(deleter, s.opts.deleteDestination, s.opts.fromTo.To(), s.opts.destination, s.spt.incrementDeletionCount)
 

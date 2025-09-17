@@ -153,8 +153,9 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions, h
 		return SyncResult{}, err
 	}
 
-	mgr.InitiateProgressReporting(ctx, s.spt)
-
+	if !s.opts.dryrun {
+		mgr.InitiateProgressReporting(ctx, s.spt)
+	}
 	err = enumerator.Enumerate()
 
 	if err != nil {

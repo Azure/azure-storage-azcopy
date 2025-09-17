@@ -145,19 +145,26 @@ func newInteractiveDeleteProcessor(deleter ObjectDeleter, deleteDestination comm
 
 const LocalFileObjectType = "local file"
 
-type localFileDeleter struct {
+type LocalFileDeleter struct {
 	fpo           common.FolderPropertyOption
 	folderManager common.FolderDeletionManager
 }
 
-func (l localFileDeleter) getObjectURL(object traverser.StoredObject) *url.URL {
+func NewLocalFileDeleter(fpo common.FolderPropertyOption) LocalFileDeleter {
+	return LocalFileDeleter{
+		fpo:           fpo,
+		folderManager: common.NewFolderDeletionManager(context.TODO(), fpo, common.AzcopyScanningLogger),
+	}
+}
+
+func (l LocalFileDeleter) getObjectURL(object traverser.StoredObject) *url.URL {
 	return &url.URL{
 		Scheme: "local",
 		Path:   "/" + strings.ReplaceAll(object.RelativePath, "\\", "/"), // consolidate to forward slashes
 	}
 }
 
-func (l localFileDeleter) Delete(rootPath string, _ common.Location, object traverser.StoredObject) error {
+func (l LocalFileDeleter) Delete(rootPath string, _ common.Location, object traverser.StoredObject) error {
 	objectURI := l.getObjectURL(object)
 	l.folderManager.RecordChildExists(objectURI)
 
@@ -185,7 +192,7 @@ func (l localFileDeleter) Delete(rootPath string, _ common.Location, object trav
 	return nil
 }
 
-type remoteResourceDeleter struct {
+type RemoteResourceDeleter struct {
 	remoteClient    *common.ServiceClient
 	containerName   string // name of target container/share/filesystem
 	rootPath        string
@@ -195,12 +202,12 @@ type remoteResourceDeleter struct {
 	forceIfReadOnly bool
 }
 
-func newRemoteResourceDeleter(ctx context.Context, remoteClient *common.ServiceClient, rawRootURL *url.URL, fpo common.FolderPropertyOption, forceIfReadOnly bool) (*remoteResourceDeleter, error) {
+func NewRemoteResourceDeleter(ctx context.Context, remoteClient *common.ServiceClient, rawRootURL *url.URL, fpo common.FolderPropertyOption, forceIfReadOnly bool) (*RemoteResourceDeleter, error) {
 	containerName, rootPath, err := common.SplitContainerNameFromPath(rawRootURL.String())
 	if err != nil {
 		return nil, err
 	}
-	return &remoteResourceDeleter{
+	return &RemoteResourceDeleter{
 		containerName:   containerName,
 		rootPath:        rootPath,
 		remoteClient:    remoteClient,
@@ -211,7 +218,7 @@ func newRemoteResourceDeleter(ctx context.Context, remoteClient *common.ServiceC
 	}, nil
 }
 
-func (b *remoteResourceDeleter) getObjectURL(objectURL string) (*url.URL, error) {
+func (b *RemoteResourceDeleter) getObjectURL(objectURL string) (*url.URL, error) {
 	u, err := url.Parse(objectURL)
 	if err != nil {
 		return nil, err
@@ -219,7 +226,7 @@ func (b *remoteResourceDeleter) getObjectURL(objectURL string) (*url.URL, error)
 	return u, nil
 }
 
-func (b *remoteResourceDeleter) Delete(_ string, target common.Location, object traverser.StoredObject) error {
+func (b *RemoteResourceDeleter) Delete(_ string, target common.Location, object traverser.StoredObject) error {
 	/* knarasim: This needs to be taken care of
 	if b.targetLocation == common.ELocation.BlobFS() && object.entityType == common.EEntityType.Folder() {
 		b.clientOptions.PerCallPolicies = append([]policy.Policy{common.NewRecursivePolicy()}, b.clientOptions.PerCallPolicies...)

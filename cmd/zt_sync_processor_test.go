@@ -41,23 +41,15 @@ func TestLocalDeleter(t *testing.T) {
 	dstFileName := "extraFile.txt"
 	scenarioHelper{}.generateLocalFilesFromList(a, dstDirName, []string{dstFileName})
 
-	// construct the cooked input to simulate user input
-	cca := &cookedSyncCmdArgs{
-		s: &azcopy.CookedSyncOptions{
-			Destination:       newLocalRes(dstDirName),
-			DeleteDestination: common.EDeleteDestination.True(),
-		},
-	}
-
 	// set up local deleter
-	deleter := azcopy.newSyncLocalDeleteProcessor(cca, common.EFolderPropertiesOption.NoFolders())
+	deleter := azcopy.NewLocalFileDeleter(common.EFolderPropertiesOption.NoFolders())
 
 	// validate that the file still exists
 	_, err := os.Stat(filepath.Join(dstDirName, dstFileName))
 	a.Nil(err)
 
 	// exercise the deleter
-	err = deleter.removeImmediately(traverser.StoredObject{RelativePath: dstFileName})
+	err = deleter.Delete(dstDirName, common.ELocation.Local(), traverser.StoredObject{RelativePath: dstFileName})
 	a.Nil(err)
 
 	// validate that the file no longer exists
@@ -82,21 +74,14 @@ func TestBlobDeleter(t *testing.T) {
 
 	// construct the cooked input to simulate user input
 	rawContainerURL := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
-	cca := &cookedSyncCmdArgs{
-		s: &azcopy.CookedSyncOptions{
-			Destination:       newRemoteRes(rawContainerURL.String()),
-			DeleteDestination: common.EDeleteDestination.True(),
-			FromTo:            common.EFromTo.LocalBlob(),
-		},
-	}
 	sc := common.NewServiceClient(bsc, nil, nil)
 
 	// set up the blob deleter
-	deleter, err := azcopy.newSyncDeleteProcessor(cca, common.EFolderPropertiesOption.NoFolders(), sc)
+	deleter, err := azcopy.NewRemoteResourceDeleter(context.TODO(), sc, rawContainerURL, common.EFolderPropertiesOption.NoFolders(), false)
 	a.Nil(err)
 
 	// exercise the deleter
-	err = deleter.removeImmediately(traverser.StoredObject{RelativePath: blobName})
+	err = deleter.Delete(rawContainerURL.String(), common.ELocation.Blob(), traverser.StoredObject{RelativePath: blobName})
 	a.Nil(err)
 
 	// validate that the blob was deleted
@@ -121,21 +106,14 @@ func TestFileDeleter(t *testing.T) {
 
 	// construct the cooked input to simulate user input
 	rawShareSAS := scenarioHelper{}.getRawShareURLWithSAS(a, shareName)
-	cca := &cookedSyncCmdArgs{
-		s: &azcopy.CookedSyncOptions{
-			Destination:       newRemoteRes(rawShareSAS.String()),
-			DeleteDestination: common.EDeleteDestination.True(),
-			FromTo:            common.EFromTo.FileFile(),
-		},
-	}
 
 	sc := common.NewServiceClient(nil, fsc, nil)
 	// set up the file deleter
-	deleter, err := azcopy.newSyncDeleteProcessor(cca, common.EFolderPropertiesOption.NoFolders(), sc)
+	deleter, err := azcopy.NewRemoteResourceDeleter(context.TODO(), sc, rawShareSAS, common.EFolderPropertiesOption.NoFolders(), false)
 	a.Nil(err)
 
 	// exercise the deleter
-	err = deleter.removeImmediately(traverser.StoredObject{RelativePath: fileName})
+	err = deleter.Delete(rawShareSAS.String(), common.ELocation.File(), traverser.StoredObject{RelativePath: fileName})
 	a.Nil(err)
 
 	// validate that the file was deleted
