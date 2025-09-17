@@ -20,7 +20,6 @@
 package e2etest
 
 import (
-	"github.com/stretchr/testify/assert"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -68,55 +67,4 @@ func TestVersionCommand(t *testing.T) {
 		t.Log("Second Line does not contain new version info " + lines[1])
 		t.FailNow()
 	}
-}
-
-func TestCheckVersionCommand(t *testing.T) {
-	a := assert.New(t)
-	cmd := exec.Command(GlobalInputManager{}.GetExecutablePath(), "--check-version")
-	o, err := cmd.Output()
-	if err != nil {
-		t.Log("Version check failed with error " + err.Error())
-		t.FailNow()
-	}
-
-	output := string(o)
-
-	if output == "" {
-		t.Log("Version check command returned empty string")
-		t.FailNow()
-	}
-
-	output = strings.TrimSpace(output)
-	lines := strings.Split(output, "\n")
-
-	// There might be a warning message in the output, we should skip this
-	if len(lines) > 1 {
-		skipLine := func() (val int) {
-			for i, line := range lines {
-				if strings.Contains(line, "WARN:") {
-					return i
-				}
-			}
-			return
-		}()
-		lines = lines[skipLine+1:]
-
-		// There should now be a max of one line for if the version is up to date or old
-		if len(lines) > 1 {
-			t.Log("Invalid output " + string(output))
-			t.FailNow()
-		}
-	}
-
-	// Set of output options
-	newVersionInfo := regexp.MustCompile("INFO: azcopy.* .*: A newer version .* is available to download")
-	upToDateVersionInfo := regexp.MustCompile("INFO: Current AzCopy version *.*.* is up to date")
-
-	if !(newVersionInfo.Match([]byte(lines[0])) || upToDateVersionInfo.Match([]byte(lines[0]))) {
-		t.Log("Proper version checking information not returned")
-		t.FailNow()
-	}
-
-	// Can only be one of two
-	a.True(newVersionInfo.Match([]byte(lines[0])) || upToDateVersionInfo.Match([]byte(lines[0])))
 }

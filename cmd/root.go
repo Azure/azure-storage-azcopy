@@ -51,6 +51,7 @@ var OutputFormat common.OutputFormat
 var OutputLevel common.OutputVerbosity
 var LogLevel common.LogLevel
 var CapMbps float64
+var SkipVersionCheck bool
 
 // It's not pretty that this one is read directly by credential util.
 // But doing otherwise required us passing it around in many places, even though really
@@ -320,6 +321,8 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&checkAzCopyUpdates, "check-version", false,
 		"Check if a newer AzCopy version is available.")
 
+	rootCmd.PersistentFlags().BoolVar(&SkipVersionCheck, "skip-version-check", false,
+		"Do not perform the version check at startup. \nIntended for automation scenarios & airgapped use.")
 	// Deprecated, to not break customers dependent on flag
 	_ = rootCmd.PersistentFlags().MarkHidden("skip-version-check")
 }
