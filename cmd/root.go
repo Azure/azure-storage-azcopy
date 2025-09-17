@@ -33,10 +33,9 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/testSuite/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
-
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
@@ -162,7 +161,7 @@ var rootCmd = &cobra.Command{
 		}
 
 		isBench := cmd.Use == "bench [destination]"
-		isMigratedToLibrary := cmd.Use == "resume [jobID]"
+		isMigratedToLibrary := cmd.Use == "resume [jobID]" || cmd.Use == "sync"
 
 		return Initialize(isMigratedToLibrary, isBench)
 	},
@@ -225,8 +224,10 @@ func Initialize(isMigratedToLibrary, isBench bool) (err error) {
 			glcm.Info(fmt.Sprintf("Cannot auto-tune concurrency because it is fixed by environment variable %s", envVar.Name))
 		}
 	}
-	// TODO : Move this when we move traverser logic to library
-	traverser.EnumerationParallelism, traverser.EnumerationParallelStatFiles = jobsAdmin.JobsAdmin.GetConcurrencySettings()
+
+	if !isMigratedToLibrary {
+		traverser.EnumerationParallelism, traverser.EnumerationParallelStatFiles = jobsAdmin.JobsAdmin.GetConcurrencySettings()
+	}
 
 	if !SkipVersionCheck && !isPipeDownload {
 		// spawn a routine to fetch and compare the local application's version against the latest version available

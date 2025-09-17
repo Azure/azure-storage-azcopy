@@ -43,14 +43,14 @@ func TestLocalDeleter(t *testing.T) {
 
 	// construct the cooked input to simulate user input
 	cca := &cookedSyncCmdArgs{
-		s: &azcopy.Syncer{
+		s: &azcopy.CookedSyncOptions{
 			Destination:       newLocalRes(dstDirName),
 			DeleteDestination: common.EDeleteDestination.True(),
 		},
 	}
 
 	// set up local deleter
-	deleter := newSyncLocalDeleteProcessor(cca, common.EFolderPropertiesOption.NoFolders())
+	deleter := azcopy.newSyncLocalDeleteProcessor(cca, common.EFolderPropertiesOption.NoFolders())
 
 	// validate that the file still exists
 	_, err := os.Stat(filepath.Join(dstDirName, dstFileName))
@@ -83,7 +83,7 @@ func TestBlobDeleter(t *testing.T) {
 	// construct the cooked input to simulate user input
 	rawContainerURL := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	cca := &cookedSyncCmdArgs{
-		s: &azcopy.Syncer{
+		s: &azcopy.CookedSyncOptions{
 			Destination:       newRemoteRes(rawContainerURL.String()),
 			DeleteDestination: common.EDeleteDestination.True(),
 			FromTo:            common.EFromTo.LocalBlob(),
@@ -92,7 +92,7 @@ func TestBlobDeleter(t *testing.T) {
 	sc := common.NewServiceClient(bsc, nil, nil)
 
 	// set up the blob deleter
-	deleter, err := newSyncDeleteProcessor(cca, common.EFolderPropertiesOption.NoFolders(), sc)
+	deleter, err := azcopy.newSyncDeleteProcessor(cca, common.EFolderPropertiesOption.NoFolders(), sc)
 	a.Nil(err)
 
 	// exercise the deleter
@@ -122,7 +122,7 @@ func TestFileDeleter(t *testing.T) {
 	// construct the cooked input to simulate user input
 	rawShareSAS := scenarioHelper{}.getRawShareURLWithSAS(a, shareName)
 	cca := &cookedSyncCmdArgs{
-		s: &azcopy.Syncer{
+		s: &azcopy.CookedSyncOptions{
 			Destination:       newRemoteRes(rawShareSAS.String()),
 			DeleteDestination: common.EDeleteDestination.True(),
 			FromTo:            common.EFromTo.FileFile(),
@@ -131,7 +131,7 @@ func TestFileDeleter(t *testing.T) {
 
 	sc := common.NewServiceClient(nil, fsc, nil)
 	// set up the file deleter
-	deleter, err := newSyncDeleteProcessor(cca, common.EFolderPropertiesOption.NoFolders(), sc)
+	deleter, err := azcopy.newSyncDeleteProcessor(cca, common.EFolderPropertiesOption.NoFolders(), sc)
 	a.Nil(err)
 
 	// exercise the deleter

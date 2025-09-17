@@ -2,11 +2,52 @@ package azcopy
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 )
+
+type remoteProvider struct {
+	srcServiceClient *common.ServiceClient
+	srcCredType      common.CredentialType
+	dstServiceClient *common.ServiceClient
+	dstCredType      common.CredentialType
+}
+
+func NewSyncRemoteProvider(ctx context.Context, uotm *common.UserOAuthTokenManager, src, dst common.ResourceString, fromTo common.FromTo, cpkOptions common.CpkOptions, trailingDot common.TrailingDotOption) (rp *remoteProvider, err error) {
+	rp = &remoteProvider{}
+
+	ctx = context.WithValue(ctx, ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+	rp.srcServiceClient, rp.srcCredType, err = GetSourceServiceClient(ctx, src, fromTo.From(), trailingDot, cpkOptions, uotm)
+	if err != nil {
+		return rp, err
+	}
+	if fromTo.IsS2S() && rp.srcCredType != common.ECredentialType.Anonymous() {
+		if rp.srcCredType.IsAzureOAuth() && fromTo.To().CanForwardOAuthTokens() {
+			// no-op, this is OK
+		} else if rp.srcCredType == common.ECredentialType.GoogleAppCredentials() || rp.srcCredType == common.ECredentialType.S3AccessKey() || rp.srcCredType == common.ECredentialType.S3PublicBucket() {
+			// this too, is OK
+		} else if rp.srcCredType == common.ECredentialType.Anonymous() {
+			// this is OK
+		} else {
+			return rp, fmt.Errorf("the source of a %s->%s sync must either be public, or authorized with a SAS token; blob destinations can forward OAuth", fromTo.From(), fromTo.To())
+		}
+	}
+	rp.dstServiceClient, rp.dstCredType, err = GetDestinationServiceClient(ctx, dst, fromTo, rp.srcCredType, trailingDot, cpkOptions, uotm)
+	if err != nil {
+		return rp, err
+	}
+
+	// Check protocol compatibility for File Shares
+	if err := ValidateProtocolCompatibility(ctx, fromTo, src, dst, rp.srcServiceClient, rp.dstServiceClient); err != nil {
+		return nil, err
+	}
+
+	return rp, nil
+}
 
 func GetSourceServiceClient(ctx context.Context,
 	source common.ResourceString,

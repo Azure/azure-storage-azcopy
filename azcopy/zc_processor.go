@@ -18,14 +18,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package azcopy
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
@@ -34,7 +32,9 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-type copyTransferProcessor struct {
+const NumOfFilesPerDispatchJobPart = 10000
+
+type CopyTransferProcessor struct {
 	numOfTransfersPerPart int
 	copyJobTemplate       *common.CopyJobPartOrderRequest
 	source                common.ResourceString
@@ -48,10 +48,15 @@ type copyTransferProcessor struct {
 	folderPropertiesOption common.FolderPropertyOption
 	symlinkHandlingType    common.SymlinkHandlingType
 	hardlinkHandlingType   common.HardlinkHandlingType
+
+	dryrun                    bool
+	dryrunJobPartOrderHandler func(request common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse
 }
 
-func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int, source, destination common.ResourceString, reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier bool) *copyTransferProcessor {
-	return &copyTransferProcessor{
+func NewCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int,
+	source, destination common.ResourceString, reportFirstPartDispatched func(bool), reportFinalPartDispatched func(),
+	preserveAccessTier bool, dryrun bool, dryrunJobPartOrderHandler func(request common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse) *CopyTransferProcessor {
+	return &CopyTransferProcessor{
 		numOfTransfersPerPart:     numOfTransfersPerPart,
 		copyJobTemplate:           copyJobTemplate,
 		source:                    source,
@@ -61,111 +66,12 @@ func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, n
 		preserveAccessTier:        preserveAccessTier,
 		folderPropertiesOption:    copyJobTemplate.Fpo,
 		symlinkHandlingType:       copyJobTemplate.SymlinkHandlingType,
+		dryrun:                    dryrun,
+		dryrunJobPartOrderHandler: dryrunJobPartOrderHandler,
 	}
 }
 
-type DryrunTransfer struct {
-	EntityType   common.EntityType
-	BlobType     common.BlobType
-	FromTo       common.FromTo
-	Source       string
-	Destination  string
-	SourceSize   *int64
-	HttpHeaders  blob.HTTPHeaders
-	Metadata     common.Metadata
-	BlobTier     *blob.AccessTier
-	BlobVersion  *string
-	BlobTags     common.BlobTags
-	BlobSnapshot *string
-}
-
-type dryrunTransferSurrogate struct {
-	EntityType         string
-	BlobType           string
-	FromTo             string
-	Source             string
-	Destination        string
-	SourceSize         int64           `json:"SourceSize,omitempty"`
-	ContentType        string          `json:"ContentType,omitempty"`
-	ContentEncoding    string          `json:"ContentEncoding,omitempty"`
-	ContentDisposition string          `json:"ContentDisposition,omitempty"`
-	ContentLanguage    string          `json:"ContentLanguage,omitempty"`
-	CacheControl       string          `json:"CacheControl,omitempty"`
-	ContentMD5         []byte          `json:"ContentMD5,omitempty"`
-	BlobTags           common.BlobTags `json:"BlobTags,omitempty"`
-	Metadata           common.Metadata `json:"Metadata,omitempty"`
-	BlobTier           blob.AccessTier `json:"BlobTier,omitempty"`
-	BlobVersion        string          `json:"BlobVersion,omitempty"`
-	BlobSnapshotID     string          `json:"BlobSnapshotID,omitempty"`
-}
-
-func (d *DryrunTransfer) UnmarshalJSON(bytes []byte) error {
-	var surrogate dryrunTransferSurrogate
-
-	err := json.Unmarshal(bytes, &surrogate)
-	if err != nil {
-		return fmt.Errorf("failed to parse dryrun transfer: %w", err)
-	}
-
-	err = d.FromTo.Parse(surrogate.FromTo)
-	if err != nil {
-		return fmt.Errorf("failed to parse fromto: %w", err)
-	}
-
-	err = d.EntityType.Parse(surrogate.EntityType)
-	if err != nil {
-		return fmt.Errorf("failed to parse entity type: %w", err)
-	}
-
-	err = d.BlobType.Parse(surrogate.BlobType)
-	if err != nil {
-		return fmt.Errorf("failed to parse entity type: %w", err)
-	}
-
-	d.Source = surrogate.Source
-	d.Destination = surrogate.Destination
-
-	d.SourceSize = &surrogate.SourceSize
-	d.HttpHeaders.BlobContentType = &surrogate.ContentType
-	d.HttpHeaders.BlobContentEncoding = &surrogate.ContentEncoding
-	d.HttpHeaders.BlobCacheControl = &surrogate.CacheControl
-	d.HttpHeaders.BlobContentDisposition = &surrogate.ContentDisposition
-	d.HttpHeaders.BlobContentLanguage = &surrogate.ContentLanguage
-	d.HttpHeaders.BlobContentMD5 = surrogate.ContentMD5
-	d.BlobTags = surrogate.BlobTags
-	d.Metadata = surrogate.Metadata
-	d.BlobTier = &surrogate.BlobTier
-	d.BlobVersion = &surrogate.BlobVersion
-	d.BlobSnapshot = &surrogate.BlobSnapshotID
-
-	return nil
-}
-
-func (d DryrunTransfer) MarshalJSON() ([]byte, error) {
-	surrogate := dryrunTransferSurrogate{
-		d.EntityType.String(),
-		d.BlobType.String(),
-		d.FromTo.String(),
-		d.Source,
-		d.Destination,
-		common.IffNotNil(d.SourceSize, 0),
-		common.IffNotNil(d.HttpHeaders.BlobContentType, ""),
-		common.IffNotNil(d.HttpHeaders.BlobContentEncoding, ""),
-		common.IffNotNil(d.HttpHeaders.BlobContentDisposition, ""),
-		common.IffNotNil(d.HttpHeaders.BlobContentLanguage, ""),
-		common.IffNotNil(d.HttpHeaders.BlobCacheControl, ""),
-		d.HttpHeaders.BlobContentMD5,
-		d.BlobTags,
-		d.Metadata,
-		common.IffNotNil(d.BlobTier, ""),
-		common.IffNotNil(d.BlobVersion, ""),
-		common.IffNotNil(d.BlobSnapshot, ""),
-	}
-
-	return json.Marshal(surrogate)
-}
-
-func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject traverser.StoredObject) (err error) {
+func (s *CopyTransferProcessor) ScheduleCopyTransfer(storedObject traverser.StoredObject) (err error) {
 
 	// Escape paths on destinations where the characters are invalid
 	// And re-encode them where the characters are valid.
@@ -173,8 +79,8 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject traverser.Stor
 	if storedObject.RelativePath == "\x00" { // Short circuit when we're talking about root/, because the STE is funky about this.
 		srcRelativePath, dstRelativePath = storedObject.RelativePath, storedObject.RelativePath
 	} else {
-		srcRelativePath = pathEncodeRules(storedObject.RelativePath, s.copyJobTemplate.FromTo, false, true)
-		dstRelativePath = pathEncodeRules(storedObject.RelativePath, s.copyJobTemplate.FromTo, false, false)
+		srcRelativePath = PathEncodeRules(storedObject.RelativePath, s.copyJobTemplate.FromTo, false, true)
+		dstRelativePath = PathEncodeRules(storedObject.RelativePath, s.copyJobTemplate.FromTo, false, false)
 		if srcRelativePath != "" {
 			srcRelativePath = "/" + srcRelativePath
 		}
@@ -240,7 +146,7 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject traverser.Stor
 var NothingScheduledError = errors.New("no transfers were scheduled because no files matched the specified criteria")
 var FinalPartCreatedMessage = "Final job part has been created"
 
-func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err error) {
+func (s *CopyTransferProcessor) DispatchFinalPart() (copyJobInitiated bool, err error) {
 	var resp common.CopyJobPartOrderResponse
 	s.copyJobTemplate.IsFinalPart = true
 	resp = s.sendPartToSte()
@@ -263,8 +169,12 @@ func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err 
 }
 
 // only test the response on the final dispatch to help diagnose root cause of test failures from 0 transfers
-func (s *copyTransferProcessor) sendPartToSte() common.CopyJobPartOrderResponse {
-	resp := jobsAdmin.ExecuteNewCopyJobPartOrder(*s.copyJobTemplate)
+func (s *CopyTransferProcessor) sendPartToSte() (resp common.CopyJobPartOrderResponse) {
+	if s.dryrun {
+		resp = s.dryrunJobPartOrderHandler(*s.copyJobTemplate)
+	} else {
+		resp = jobsAdmin.ExecuteNewCopyJobPartOrder(*s.copyJobTemplate)
+	}
 
 	// if the current part order sent to ste is 0, then alert the progress reporting routine
 	if s.copyJobTemplate.PartNum == 0 && s.reportFirstPartDispatched != nil {

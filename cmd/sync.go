@@ -22,19 +22,16 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"os"
+	"os/signal"
 	"runtime"
 	"strings"
-	"sync/atomic"
-	"time"
+	"syscall"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
-
 	"github.com/spf13/cobra"
 )
 
@@ -161,312 +158,31 @@ func (raw rawSyncCmdArgs) toOptions() (opts azcopy.SyncOptions, err error) {
 		return opts, err
 	}
 	// set internal only options
-	opts.SetInternalOptions(raw.dryrun, raw.deleteDestinationFileIfNecessary)
+	cmd := gCopyUtil.ConstructCommandStringFromArgs()
+	opts.SetInternalOptions(raw.dryrun, raw.deleteDestinationFileIfNecessary, cmd, dryrunNewCopyJobPartOrder, dryrunDelete)
 	return opts, nil
 }
 
-// validates and transform raw input into cooked input
-func (raw *rawSyncCmdArgs) cook() (cooked cookedSyncCmdArgs, err error) {
-	var opts azcopy.SyncOptions
-	if opts, err = raw.toOptions(); err != nil {
-		return cooked, err
-	}
-
-	syncer, err := Client.Sync(context.TODO(), raw.src, raw.dst, opts)
-	if err != nil {
-		return cooked, err
-	}
-
-	cooked = cookedSyncCmdArgs{
-		s: syncer,
-	}
-
-	if err = cooked.processArgs(); err != nil {
-		return cooked, err
-	}
-	return cooked, nil
+// TODO : (gapra) We need to wrap glcm since Golang does not support method overloading.
+// We could consider naming the methods different per job type - then we can just pass glcm.
+type CLISyncHandler struct {
 }
 
-func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
-	// set up the front end scanning logger
-	common.AzcopyScanningLogger = common.NewJobLogger(Client.CurrentJobID, Client.GetLogLevel(), common.LogPathFolder, "-scanning")
-	common.AzcopyScanningLogger.OpenLog()
-	glcm.RegisterCloseFunc(func() {
-		common.AzcopyScanningLogger.CloseLog()
+func (C CLISyncHandler) OnStart(ctx common.JobContext) {
+	glcm.OnStart(ctx)
+}
+
+func (C CLISyncHandler) OnTransferProgress(progress azcopy.SyncJobProgress) {
+	glcm.OnTransferProgress(common.TransferProgress{
+		ListJobSummaryResponse: progress.ListJobSummaryResponse,
+		Throughput:             progress.Throughput,
+		ElapsedTime:            progress.ElapsedTime,
+		JobType:                common.EJobType.Resume(),
 	})
-
-	// if no logging, set this empty so that we don't display the log location
-	if Client.GetLogLevel() == common.LogNone {
-		common.LogPathFolder = ""
-	}
-
-	// use the globally generated JobID
-	cooked.jobID = Client.CurrentJobID
-
-	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	uotm := Client.GetUserOAuthTokenManagerInstance()
-	cooked.srcServiceClient, cooked.srcCredType, err = azcopy.GetSourceServiceClient(ctx, cooked.s.Source, cooked.s.FromTo.From(), cooked.s.TrailingDot, cooked.s.CpkOptions, uotm)
-	if err != nil {
-		return err
-	}
-	if cooked.s.FromTo.IsS2S() && cooked.srcCredType != common.ECredentialType.Anonymous() {
-		if cooked.srcCredType.IsAzureOAuth() && cooked.s.FromTo.To().CanForwardOAuthTokens() {
-			// no-op, this is OK
-		} else if cooked.srcCredType == common.ECredentialType.GoogleAppCredentials() || cooked.srcCredType == common.ECredentialType.S3AccessKey() || cooked.srcCredType == common.ECredentialType.S3PublicBucket() {
-			// this too, is OK
-		} else if cooked.srcCredType == common.ECredentialType.Anonymous() {
-			// this is OK
-		} else {
-			return fmt.Errorf("the source of a %s->%s sync must either be public, or authorized with a SAS token; blob destinations can forward OAuth", cooked.s.FromTo.From(), cooked.s.FromTo.To())
-		}
-	}
-	cooked.dstServiceClient, cooked.dstCredType, err = azcopy.GetDestinationServiceClient(ctx, cooked.s.Destination, cooked.s.FromTo, cooked.srcCredType, cooked.s.TrailingDot, cooked.s.CpkOptions, uotm)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
-type cookedSyncCmdArgs struct {
-
-	// phase 1: only holds options that have been parsed and validated
-	s *azcopy.Syncer // temporarily holding this here until we refactor more of the sync code
-
-	// NOTE: for the 64 bit atomic functions to work on a 32 bit system, we have to guarantee the right 64-bit alignment
-	// so the 64 bit integers are placed first in the struct to avoid future breaks
-	// refer to: https://golang.org/pkg/sync/atomic/#pkg-note-BUG
-	// defines the number of files listed at the source and compared.
-	atomicSourceFilesScanned uint64
-	// defines the number of files listed at the destination and compared.
-	atomicDestinationFilesScanned uint64
-	// defines the scanning status of the sync operation.
-	// 0 means scanning is in progress and 1 means scanning is complete.
-	atomicScanningStatus uint32
-	// defines whether first part has been ordered or not.
-	// 0 means first part is not ordered and 1 means first part is ordered.
-	atomicFirstPartOrdered uint32
-
-	// deletion count keeps track of how many extra files from the destination were removed
-	atomicDeletionCount uint32
-
-	// commandString hold the user given command which is logged to the Job log file
-	commandString string
-
-	// generated
-	jobID common.JobID
-
-	// variables used to calculate progress
-	// intervalStartTime holds the last time value when the progress summary was fetched
-	// the value of this variable is used to calculate the throughput
-	// it gets updated every time the progress summary is fetched
-	intervalStartTime        time.Time
-	intervalBytesTransferred uint64
-
-	// used to calculate job summary
-	jobStartTime time.Time
-
-	atomicSkippedSymlinkCount     uint32
-	atomicSkippedSpecialFileCount uint32
-
-	srcCredType      common.CredentialType
-	srcServiceClient *common.ServiceClient
-	dstCredType      common.CredentialType
-	dstServiceClient *common.ServiceClient
-}
-
-func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
-	atomic.AddUint32(&cca.atomicDeletionCount, 1)
-}
-
-func (cca *cookedSyncCmdArgs) getDeletionCount() uint32 {
-	return atomic.LoadUint32(&cca.atomicDeletionCount)
-}
-
-// setFirstPartOrdered sets the value of atomicFirstPartOrdered to 1
-func (cca *cookedSyncCmdArgs) setFirstPartOrdered() {
-	atomic.StoreUint32(&cca.atomicFirstPartOrdered, 1)
-}
-
-// firstPartOrdered returns the value of atomicFirstPartOrdered.
-func (cca *cookedSyncCmdArgs) firstPartOrdered() bool {
-	return atomic.LoadUint32(&cca.atomicFirstPartOrdered) > 0
-}
-
-// setScanningComplete sets the value of atomicScanningStatus to 1.
-func (cca *cookedSyncCmdArgs) setScanningComplete() {
-	atomic.StoreUint32(&cca.atomicScanningStatus, 1)
-}
-
-// scanningComplete returns the value of atomicScanningStatus.
-func (cca *cookedSyncCmdArgs) scanningComplete() bool {
-	return atomic.LoadUint32(&cca.atomicScanningStatus) > 0
-}
-
-// wraps call to lifecycle manager to wait for the job to complete
-// if blocking is specified to true, then this method will never return
-// if blocking is specified to false, then another goroutine spawns and wait out the job
-func (cca *cookedSyncCmdArgs) waitUntilJobCompletion(blocking bool) {
-	// print initial message to indicate that the job is starting
-	// Output the log location if log-level is set to other then NONE
-	var logPathFolder string
-	if common.LogPathFolder != "" {
-		logPathFolder = fmt.Sprintf("%s%s%s.log", common.LogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
-	}
-	glcm.OnStart(common.JobContext{JobID: cca.jobID, LogPath: logPathFolder})
-
-	// initialize the times necessary to track progress
-	cca.jobStartTime = time.Now()
-	cca.intervalStartTime = time.Now()
-	cca.intervalBytesTransferred = 0
-
-	glcm.InitiateProgressReporting(cca)
-	if blocking {
-		// blocking, hand over control to the lifecycle manager
-		glcm.SurrenderControl()
-	} else {
-		// non-blocking, return after spawning a go routine to watch the job
-	}
-}
-
-func (cca *cookedSyncCmdArgs) Cancel(lcm LifecycleMgr) {
-	// prompt for confirmation, except when enumeration is complete
-	if !cca.scanningComplete() {
-		answer := lcm.Prompt("The enumeration (source/destination comparison) is not complete, "+
-			"cancelling the job at this point means it cannot be resumed.",
-			common.PromptDetails{
-				PromptType: common.EPromptType.Cancel(),
-				ResponseOptions: []common.ResponseOption{
-					common.EResponseOption.Yes(),
-					common.EResponseOption.No(),
-				},
-			})
-
-		if answer != common.EResponseOption.Yes() {
-			// user aborted cancel
-			return
-		}
-	}
-
-	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
-	if err != nil {
-		lcm.Error("error occurred while cancelling the job " + cca.jobID.String() + ". Failed with error " + err.Error())
-	}
-}
-
-func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm LifecycleMgr, throughput float64) {
-	scanProgress := common.ScanProgress{
-		Source:             atomic.LoadUint64(&cca.atomicSourceFilesScanned),
-		Destination:        atomic.LoadUint64(&cca.atomicDestinationFilesScanned),
-		TransferThroughput: common.Iff(cca.firstPartOrdered(), &throughput, nil),
-	}
-	// Log to Job Log
-	if common.AzcopyCurrentJobLogger != nil {
-		common.AzcopyCurrentJobLogger.Log(common.LogInfo, common.GetScanProgressOutputBuilder(scanProgress)(common.EOutputFormat.Text()))
-	}
-
-	lcm.OnScanProgress(scanProgress)
-}
-
-func (cca *cookedSyncCmdArgs) getJsonOfSyncJobSummary(summary common.ListJobSummaryResponse) string {
-	wrapped := common.ListSyncJobSummaryResponse{ListJobSummaryResponse: summary}
-	wrapped.DeleteTotalTransfers = cca.getDeletionCount()
-	wrapped.DeleteTransfersCompleted = cca.getDeletionCount()
-	jsonOutput, err := json.Marshal(wrapped)
-	common.PanicIfErr(err)
-	return string(jsonOutput)
-}
-
-func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm LifecycleMgr) (totalKnownCount uint32) {
-	duration := time.Since(cca.jobStartTime) // report the total run time of the job
-	var summary common.ListJobSummaryResponse
-	var throughput float64
-	var jobDone bool
-
-	// fetch a job status and compute throughput if the first part was dispatched
-	if cca.firstPartOrdered() {
-		summary = jobsAdmin.GetJobSummary(cca.jobID)
-		jobDone = summary.JobStatus.IsJobDone()
-		totalKnownCount = summary.TotalTransfers
-
-		// compute the average throughput for the last time interval
-		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) * 8 / float64(common.Base10Mega))
-		timeElapsed := time.Since(cca.intervalStartTime).Seconds()
-		throughput = common.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0)
-
-		// reset the interval timer and byte count
-		cca.intervalStartTime = time.Now()
-		cca.intervalBytesTransferred = summary.BytesOverWire
-	}
-
-	// first part not dispatched, and we are still scanning
-	// so a special message is outputted to notice the user that we are not stalling
-	if !cca.scanningComplete() {
-		cca.reportScanningProgress(glcm, throughput)
-		return
-	}
-	transferProgress := common.TransferProgress{
-		ListJobSummaryResponse:   summary,
-		DeleteTotalTransfers:     cca.getDeletionCount(),
-		DeleteTransfersCompleted: cca.getDeletionCount(),
-		Throughput:               throughput,
-		ElapsedTime:              duration,
-		JobType:                  common.EJobType.Sync(),
-	}
-	if common.AzcopyCurrentJobLogger != nil {
-		common.AzcopyCurrentJobLogger.Log(common.LogInfo, common.GetProgressOutputBuilder(transferProgress)(common.EOutputFormat.Text()))
-	}
-	glcm.OnTransferProgress(transferProgress)
-
-	if jobDone {
-
-		exitCode := common.EExitCode.Success()
-		if summary.TransfersFailed > 0 || summary.JobStatus == common.EJobStatus.Cancelled() || summary.JobStatus == common.EJobStatus.Cancelling() {
-			exitCode = common.EExitCode.Error()
-		}
-		summary.SkippedSymlinkCount = atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)
-		summary.SkippedSpecialFileCount = atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount)
-
-		jobSummary := common.JobSummary{
-			ExitCode:                 exitCode,
-			ListJobSummaryResponse:   summary,
-			DeleteTotalTransfers:     cca.getDeletionCount(),
-			DeleteTransfersCompleted: cca.getDeletionCount(),
-			ElapsedTime:              duration,
-			SourceFilesScanned:       atomic.LoadUint64(&cca.atomicSourceFilesScanned),
-			DestinationFilesScanned:  atomic.LoadUint64(&cca.atomicDestinationFilesScanned),
-		}
-		lcm.OnComplete(jobSummary)
-
-		jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
-		if exists {
-			_, logStats := common.FormatExtraStats(common.EJobType.Sync(), summary.AverageIOPS, summary.AverageE2EMilliseconds, summary.NetworkErrorPercentage, summary.ServerBusyPercentage)
-			jobMan.Log(common.LogInfo, logStats+"\n"+common.GetJobSummaryOutputBuilder(jobSummary)(common.EOutputFormat.Text()))
-		}
-	}
-
-	return
-}
-
-func (cca *cookedSyncCmdArgs) process() (err error) {
-	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-
-	enumerator, err := cca.initEnumerator(ctx)
-	if err != nil {
-		return err
-	}
-
-	// trigger the progress reporting
-	if !cca.s.Dryrun {
-		cca.waitUntilJobCompletion(false)
-	}
-
-	// trigger the enumeration
-	err = enumerator.Enumerate()
-	if err != nil {
-		return err
-	}
-	return nil
+func (C CLISyncHandler) OnScanProgress(progress common.ScanProgress) {
+	glcm.OnScanProgress(progress)
 }
 
 func init() {
@@ -534,20 +250,48 @@ func init() {
 				}
 			}
 
-			cooked, err := raw.cook()
-			if err != nil {
+			var opts azcopy.SyncOptions
+			if opts, err = raw.toOptions(); err != nil {
 				glcm.Error("error parsing the input given by the user. Failed with error " + err.Error() + getErrorCodeUrl(err))
 			}
 
-			cooked.commandString = gCopyUtil.ConstructCommandStringFromArgs()
-			err = cooked.process()
+			// Create a context that can be cancelled by Ctrl-C
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			// Set up signal handling for graceful cancellation
+			go func() {
+				sigChan := make(chan os.Signal, 1)
+				signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+				<-sigChan
+				cancel()
+			}()
+
+			result, err := Client.Sync(ctx, raw.src, raw.dst, opts, CLISyncHandler{})
 			if err != nil {
 				glcm.Error("Cannot perform sync due to error: " + err.Error() + getErrorCodeUrl(err))
 			}
-			if cooked.s.Dryrun {
+			if raw.dryrun {
 				glcm.Exit(nil, common.EExitCode.Success())
+			} else {
+				// Print summary
+				exitCode := common.EExitCode.Success()
+				if result.TransfersFailed > 0 || result.JobStatus == common.EJobStatus.Cancelled() || result.JobStatus == common.EJobStatus.Cancelling() {
+					exitCode = common.EExitCode.Error()
+				}
+				summary := common.JobSummary{
+					ExitCode:                 exitCode,
+					ListJobSummaryResponse:   result.ListJobSummaryResponse,
+					DeleteTransfersCompleted: result.DeleteTransfersCompleted,
+					DeleteTotalTransfers:     result.DeleteTotalTransfers,
+					SourceFilesScanned:       result.SourceFilesScanned,
+					DestinationFilesScanned:  result.DestinationFilesScanned,
+					ElapsedTime:              result.ElapsedTime,
+					JobType:                  common.EJobType.Sync(),
+				}
+				glcm.OnComplete(summary)
 			}
-
+			// Wait for the user to see the final output before exiting
 			glcm.SurrenderControl()
 		},
 	}
