@@ -153,6 +153,10 @@ func (i *TransferInfo) IsFolderPropertiesTransfer() bool {
 	return i.EntityType == common.EEntityType.Folder()
 }
 
+func (i *TransferInfo) SetEntityType(entityType common.EntityType) {
+	i.EntityType = entityType
+}
+
 // We don't preserve LMTs on folders.
 // The main reason is that preserving folder LMTs at download time is very difficult, because it requires us to keep track of when the
 // last file has been saved in each folder OR just do all the folders at the very end.

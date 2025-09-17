@@ -76,7 +76,12 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 				if entityType == common.EEntityType.Other() {
 					atomic.AddUint32(&cca.atomicSkippedSpecialFileCount, 1)
 				} else if entityType == common.EEntityType.Symlink() {
-					atomic.AddUint32(&cca.atomicSkippedSymlinkCount, 1)
+					switch symlinkOption {
+					case common.ESymlinkHandlingType.Skip():
+						atomic.AddUint32(&cca.atomicSkippedSymlinkCount, 1)
+					case common.ESymlinkHandlingType.Follow():
+						atomic.AddUint32(&cca.atomicSymlinkConvertedCount, 1)
+					}
 				} else if entityType == common.EEntityType.Hardlink() {
 					switch hardlinkHandling {
 					case common.SkipHardlinkHandlingType:

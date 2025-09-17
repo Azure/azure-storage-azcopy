@@ -52,7 +52,7 @@ func LogHardLinkIfDefaultPolicy(fileInfo os.FileInfo, hardlinkHandling common.Ha
 // It either logs a warning or preserves the symlink based on the symlink handling type.
 func HandleSymlinkForNFS(fileName string,
 	symlinkHandlingType common.SymlinkHandlingType,
-	incrementEnumerationCounter enumerationCounterFunc) {
+	incrementEnumerationCounter enumerationCounterFunc) bool {
 
 	if symlinkHandlingType.None() {
 		// Log a warning if symlink handling is disabled
@@ -61,9 +61,15 @@ func HandleSymlinkForNFS(fileName string,
 			incrementEnumerationCounter(common.EEntityType.Symlink(),
 				symlinkHandlingType, common.DefaultHardlinkHandlingType)
 		}
+		return true
 	} else if symlinkHandlingType.Preserve() {
-		//TODO
+		//TODO: no action need as of now
+		return false
 	} else {
-		// Follow symlink - no special action needed here
+		if incrementEnumerationCounter != nil {
+			incrementEnumerationCounter(common.EEntityType.Symlink(),
+				symlinkHandlingType, common.DefaultHardlinkHandlingType)
+		}
+		return false
 	}
 }

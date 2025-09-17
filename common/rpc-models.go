@@ -95,6 +95,7 @@ type Transfers struct {
 	FolderTransferCount     uint32
 	SymlinkTransferCount    uint32
 	HardlinksConvertedCount uint32
+	SymlinkConvertedCount   uint32
 }
 
 // This struct represents the job info (a single part) to be sent to the storage engine
@@ -286,9 +287,10 @@ type ListJobSummaryResponse struct {
 	PerformanceAdvice       []PerformanceAdvice
 	IsCleanupJob            bool
 	SkippedSymlinkCount     uint32 `json:",string"`
-	HardlinksConvertedCount uint32 `json:",string"`
+	HardlinksConvertedCount uint32 `json:",string"` // Hardlinks converted count is only applicable for NFS transfers
 	SkippedHardlinkCount    uint32 `json:",string"` // Skipped hardlinks count is only applicable for NFS transfers
 	SkippedSpecialFileCount uint32 `json:",string"`
+	SymlinkConvertedCount   uint32 `json:",string"` // Symlink converted count is only applicable for NFS transfers
 }
 
 // wraps the standard ListJobSummaryResponse with sync-specific stats

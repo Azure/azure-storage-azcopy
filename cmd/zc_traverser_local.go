@@ -261,6 +261,9 @@ func WalkWithSymlinks(appCtx context.Context,
 				return nil
 			}
 			if fileInfo.Mode()&os.ModeSymlink != 0 {
+				if fromTo.IsNFS() {
+					HandleSymlinkForNFS(fileInfo.Name(), symlinkHandling, incrementEnumerationCounter)
+				}
 				if symlinkHandling.Preserve() {
 					// Handle it like it's not a symlink
 					result, err := filepath.Abs(filePath)
@@ -283,9 +286,6 @@ func WalkWithSymlinks(appCtx context.Context,
 				}
 
 				if symlinkHandling.None() {
-					if fromTo.IsNFS() {
-						HandleSymlinkForNFS(fileInfo.Name(), symlinkHandling, incrementEnumerationCounter)
-					}
 					return nil // skip it
 				}
 
@@ -676,13 +676,13 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 
 		entityType := common.EEntityType.File()
 		if t.fromTo.IsNFS() {
+
 			if IsSymbolicLink(singleFileInfo) {
 				entityType = common.EEntityType.Symlink()
-				logSpecialFileWarning(singleFileInfo.Name())
-				if t.incrementEnumerationCounter != nil {
-					t.incrementEnumerationCounter(entityType, t.symlinkHandling, t.hardlinkHandling)
+				if skip := HandleSymlinkForNFS(singleFileInfo.Name(),
+					t.symlinkHandling, t.incrementEnumerationCounter); skip {
+					return nil
 				}
-				return nil
 			} else if IsHardlink(singleFileInfo) {
 				entityType = common.EEntityType.Hardlink()
 				LogHardLinkIfDefaultPolicy(singleFileInfo, t.hardlinkHandling)

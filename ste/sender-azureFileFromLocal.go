@@ -133,10 +133,15 @@ func (u *azureFileUploader) SendSymlink(linkData string) error {
 		}
 	}
 
-	err := DoWithCreateSymlinkOnAzureFilesNFS(u.ctx, func() error {
-		_, err := u.getFileClient().CreateSymbolicLink(u.ctx, linkData, createSymlinkOptions)
-		return err
-	}, u.getFileClient(), u.shareClient, u.jptm)
+	err := DoWithCreateSymlinkOnAzureFilesNFS(u.ctx,
+		func() error {
+			_, err := u.getFileClient().CreateSymbolicLink(u.ctx, linkData, createSymlinkOptions)
+			return err
+		},
+		u.getFileClient(),
+		u.shareClient,
+		u.pacer,
+		u.jptm)
 
 	// if still failing, give up
 	if err != nil {
@@ -155,6 +160,7 @@ func DoWithCreateSymlinkOnAzureFilesNFS(
 	action func() error,
 	client *file.Client,
 	shareClient *share.Client,
+	pacer pacer,
 	jptm IJobPartTransferMgr,
 ) error {
 	// try the action
@@ -181,8 +187,9 @@ func DoWithCreateSymlinkOnAzureFilesNFS(
 		jptm.Log(common.LogWarning,
 			fmt.Sprintf("%s: %s \nAzCopy will delete and recreate the symlink.",
 				fileerror.ResourceAlreadyExists, err.Error()))
-
-		if _, delErr := client.Delete(ctx, nil); delErr != nil {
+		// destination symlink already exists
+		_, delErr := client.Delete(ctx, nil)
+		if delErr != nil {
 			jptm.FailActiveUpload("Deleting existing symlink", delErr)
 		}
 
@@ -196,7 +203,18 @@ func DoWithCreateSymlinkOnAzureFilesNFS(
 			fmt.Sprintf("%s: %s \nAzCopy will delete the destination resource.",
 				fileerror.ResourceAlreadyExists, err.Error()))
 
+		// destination can be a file
 		if _, delErr := client.Delete(ctx, nil); delErr != nil {
+			// destination can be a folder
+			// TODO: Handle this logic
+			// if fileerror.HasCode(delErr, fileerror.ResourceNotFound) {
+			// 	// The symlink might be a folder, so try deleting as a folder
+			// 	// Set the entity type to folder so that the delete logic knows it's a folder
+			// 	jptm.Info().SetEntityType(common.EEntityType.Folder())
+			// 	DeleteFile(jptm, pacer)
+			// 	// setting it back to file for further processing
+			// 	jptm.Info().SetEntityType(common.EEntityType.File())
+			// }
 			jptm.FailActiveUpload("Deleting existing resource", delErr)
 		}
 

@@ -299,7 +299,14 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 	case common.EEntityType.Folder():
 		s.copyJobTemplate.Transfers.FolderTransferCount++
 	case common.EEntityType.Symlink():
-		s.copyJobTemplate.Transfers.SymlinkTransferCount++
+		if s.symlinkHandlingType == common.ESymlinkHandlingType.Preserve() {
+			s.copyJobTemplate.Transfers.SymlinkTransferCount++
+		} else if s.symlinkHandlingType == common.ESymlinkHandlingType.Follow() {
+			fmt.Println("Follow---------------------")
+			s.copyJobTemplate.Transfers.SymlinkConvertedCount++
+		}
+	case common.EEntityType.Hardlink():
+		s.copyJobTemplate.Transfers.HardlinksConvertedCount++
 	}
 
 	return nil

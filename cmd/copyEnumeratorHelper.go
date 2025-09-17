@@ -45,7 +45,13 @@ func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer
 		case common.EEntityType.Folder():
 			e.Transfers.FolderTransferCount++
 		case common.EEntityType.Symlink():
-			e.Transfers.SymlinkTransferCount++
+			if cca.SymlinkHandling == common.ESymlinkHandlingType.Preserve() {
+				e.Transfers.SymlinkTransferCount++
+			} else if cca.SymlinkHandling == common.ESymlinkHandlingType.Follow() {
+				e.Transfers.SymlinkConvertedCount++
+			}
+		case common.EEntityType.Hardlink():
+			e.Transfers.HardlinksConvertedCount++
 		}
 	}
 

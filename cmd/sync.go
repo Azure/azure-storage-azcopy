@@ -490,6 +490,7 @@ type cookedSyncCmdArgs struct {
 	deleteDestinationFileIfNecessary bool
 	hardlinks                        common.HardlinkHandlingType
 	atomicSkippedSymlinkCount        uint32
+	atomicSymlinkConvertedCount      uint32
 	atomicSkippedSpecialFileCount    uint32
 	atomicSkippedHardlinkCount       uint32
 	atomicHardlinkConvertedCount     uint32
@@ -673,6 +674,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 		}
 
 		summary.SkippedSymlinkCount = atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)
+		summary.SymlinkConvertedCount = atomic.LoadUint32(&cca.atomicSymlinkConvertedCount)
 		summary.SkippedSpecialFileCount = atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount)
 		summary.SkippedHardlinkCount = atomic.LoadUint32(&cca.atomicSkippedHardlinkCount)
 		summary.HardlinksConvertedCount = atomic.LoadUint32(&cca.atomicHardlinkConvertedCount)
@@ -696,6 +698,7 @@ Number of Copy Transfers Completed: %v
 Number of Copy Transfers Failed: %v
 Number of Deletions at Destination: %v
 Number of Symbolic Links Skipped: %v
+Number of Symbolic Links Converted: %v
 Number of Special Files Skipped: %v
 Number of Hardlinks Converted: %v
 Number of Hardlinks Skipped: %v
@@ -714,6 +717,7 @@ Final Job Status: %v%s%s
 				summary.TransfersFailed,
 				cca.atomicDeletionCount,
 				summary.SkippedSymlinkCount,
+				summary.SymlinkConvertedCount,
 				summary.SkippedSpecialFileCount,
 				summary.HardlinksConvertedCount,
 				summary.SkippedHardlinkCount,
