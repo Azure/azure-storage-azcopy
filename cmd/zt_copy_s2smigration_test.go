@@ -23,17 +23,18 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"os"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	datalakedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/directory"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/stretchr/testify/assert"
-	"net/url"
-	"os"
-	"strings"
-	"testing"
-	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -1425,7 +1426,7 @@ func TestCopyWithDFSResource(t *testing.T) {
 	a.Nil(err)
 
 	rawSync := getDefaultSyncRawInput(dirClientWithSASSource.DFSURL(), dirClientWithSAS.DFSURL())
-	runSyncAndVerify(a, rawSync, func(err error) {
+	runSyncAndVerify(a, rawSync, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled

@@ -24,14 +24,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-	"github.com/stretchr/testify/assert"
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -55,9 +55,6 @@ func TestSyncS2SWithSingleBlob(t *testing.T) {
 
 		// set up interceptor
 		mockedRPC := interceptor{}
-		jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-			return mockedRPC.intercept(order)
-		}
 		mockedRPC.init()
 
 		// construct the raw input to simulate user input
@@ -66,7 +63,7 @@ func TestSyncS2SWithSingleBlob(t *testing.T) {
 		raw := getDefaultSyncRawInput(srcBlobURLWithSAS.String(), dstBlobURLWithSAS.String())
 
 		// the destination was created after the source, so no sync should happen
-		runSyncAndVerify(a, raw, func(err error) {
+		runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 			a.Nil(err)
 
 			// validate that the right number of transfers were scheduled
@@ -77,7 +74,7 @@ func TestSyncS2SWithSingleBlob(t *testing.T) {
 		scenarioHelper{}.generateBlobsFromList(a, srcContainerClient, blobList, blockBlobDefaultData)
 		mockedRPC.reset()
 
-		runSyncAndVerify(a, raw, func(err error) {
+		runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 			a.Nil(err)
 			validateS2SSyncTransfersAreScheduled(a, []string{""}, mockedRPC)
 		})
@@ -99,9 +96,6 @@ func TestSyncS2SWithEmptyDestination(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -110,7 +104,7 @@ func TestSyncS2SWithEmptyDestination(t *testing.T) {
 	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
 
 	// all blobs at source should be synced to destination
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -123,7 +117,7 @@ func TestSyncS2SWithEmptyDestination(t *testing.T) {
 	// turn off recursive, this time only top blobs should be transferred
 	raw.recursive = false
 	mockedRPC.reset()
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
@@ -152,9 +146,6 @@ func TestSyncS2SWithIdenticalDestination(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -163,7 +154,7 @@ func TestSyncS2SWithIdenticalDestination(t *testing.T) {
 	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
 
 	// nothing should be sync since the source is older
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -173,7 +164,7 @@ func TestSyncS2SWithIdenticalDestination(t *testing.T) {
 	// refresh the source blobs' last modified time so that they get synced
 	scenarioHelper{}.generateBlobsFromList(a, srcContainerClient, blobList, blockBlobDefaultData)
 	mockedRPC.reset()
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		validateS2SSyncTransfersAreScheduled(a, blobList, mockedRPC)
 	})
@@ -202,9 +193,6 @@ func TestSyncS2SWithMismatchedDestination(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -212,7 +200,7 @@ func TestSyncS2SWithMismatchedDestination(t *testing.T) {
 	dstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
 
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		validateS2SSyncTransfersAreScheduled(a, expectedOutput, mockedRPC)
 
@@ -255,9 +243,6 @@ func TestSyncS2SWithIncludePatternFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -267,7 +252,7 @@ func TestSyncS2SWithIncludePatternFlag(t *testing.T) {
 	raw.include = includeString
 
 	// verify that only the blobs specified by the include flag are synced
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		validateS2SSyncTransfersAreScheduled(a, blobsToInclude, mockedRPC)
 	})
@@ -293,9 +278,6 @@ func TestSyncS2SWithExcludePatternFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -305,7 +287,7 @@ func TestSyncS2SWithExcludePatternFlag(t *testing.T) {
 	raw.exclude = excludeString
 
 	// make sure the list doesn't include the blobs specified by the exclude flag
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		validateS2SSyncTransfersAreScheduled(a, blobList, mockedRPC)
 	})
@@ -337,9 +319,6 @@ func TestSyncS2SWithIncludeAndExcludePatternFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -350,7 +329,7 @@ func TestSyncS2SWithIncludeAndExcludePatternFlag(t *testing.T) {
 	raw.exclude = excludeString
 
 	// verify that only the blobs specified by the include flag are synced
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		validateS2SSyncTransfersAreScheduled(a, blobsToInclude, mockedRPC)
 	})
@@ -376,9 +355,6 @@ func TestSyncS2SWithExcludePathFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -388,7 +364,7 @@ func TestSyncS2SWithExcludePathFlag(t *testing.T) {
 	raw.excludePath = excludeString
 
 	// make sure the list doesn't include the blobs specified by the exclude flag
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		validateS2SSyncTransfersAreScheduled(a, blobList, mockedRPC)
 	})
@@ -400,7 +376,7 @@ func TestSyncS2SWithExcludePathFlag(t *testing.T) {
 	scenarioHelper{}.generateBlobsFromList(a, srcContainerClient, blobsToExclude, blockBlobDefaultData)
 
 	mockedRPC.reset()
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		validateS2SSyncTransfersAreScheduled(a, blobList, mockedRPC)
 
@@ -429,9 +405,6 @@ func TestSyncS2SWithMissingDestination(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -440,7 +413,7 @@ func TestSyncS2SWithMissingDestination(t *testing.T) {
 	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
 
 	// verify error is thrown
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		// error should not be nil, but the app should not crash either
 		a.NotNil(err)
 
@@ -468,9 +441,6 @@ func TestSyncS2SMismatchContainerAndBlob(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -479,7 +449,7 @@ func TestSyncS2SMismatchContainerAndBlob(t *testing.T) {
 	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstBlobURLWithSAS.String())
 
 	// type mismatch, we should not get an error
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -490,7 +460,7 @@ func TestSyncS2SMismatchContainerAndBlob(t *testing.T) {
 	raw = getDefaultSyncRawInput(dstBlobURLWithSAS.String(), srcContainerURLWithSAS.String())
 
 	// type mismatch again, we should also not get an error
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -513,9 +483,6 @@ func TestSyncS2SContainerAndEmptyVirtualDir(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -524,7 +491,7 @@ func TestSyncS2SContainerAndEmptyVirtualDir(t *testing.T) {
 	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstVirtualDirURLWithSAS.String())
 
 	// verify that targeting a virtual directory works fine
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -538,7 +505,7 @@ func TestSyncS2SContainerAndEmptyVirtualDir(t *testing.T) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
@@ -568,9 +535,6 @@ func TestSyncS2SBetweenVirtualDirs(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -581,7 +545,7 @@ func TestSyncS2SBetweenVirtualDirs(t *testing.T) {
 	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
 
 	// nothing should be synced since the source is older
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -592,7 +556,7 @@ func TestSyncS2SBetweenVirtualDirs(t *testing.T) {
 	scenarioHelper{}.generateBlobsFromList(a, srcContainerClient, blobList, blockBlobDefaultData)
 	mockedRPC.reset()
 	expectedList := scenarioHelper{}.shaveOffPrefix(blobList, vdirName+common.AZCOPY_PATH_SEPARATOR_STRING)
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		validateS2SSyncTransfersAreScheduled(a, expectedList, mockedRPC)
 	})
@@ -622,9 +586,6 @@ func TestSyncS2SBetweenVirtualDirsWithConflictingBlob(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// case 1: vdir -> blob sync: should fail
@@ -634,7 +595,7 @@ func TestSyncS2SBetweenVirtualDirsWithConflictingBlob(t *testing.T) {
 	dstContainerURLWithSAS.Path += common.AZCOPY_PATH_SEPARATOR_STRING + vdirName
 	// construct the raw input to simulate user input
 	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.NotNil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -643,7 +604,7 @@ func TestSyncS2SBetweenVirtualDirsWithConflictingBlob(t *testing.T) {
 
 	// case 2: blob -> vdir sync: simply swap src and dst, should fail too
 	raw = getDefaultSyncRawInput(dstContainerURLWithSAS.String(), srcContainerURLWithSAS.String())
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.NotNil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -654,7 +615,7 @@ func TestSyncS2SBetweenVirtualDirsWithConflictingBlob(t *testing.T) {
 	// create a blob at the source with the exact same name as the vdir
 	scenarioHelper{}.generateBlobsFromList(a, srcContainerClient, []string{vdirName}, blockBlobDefaultData)
 	raw = getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		validateS2SSyncTransfersAreScheduled(a, []string{""}, mockedRPC)
 	})
@@ -668,7 +629,7 @@ func TestSyncS2SBetweenVirtualDirsWithConflictingBlob(t *testing.T) {
 	dstContainerURLWithSAS.Path += common.AZCOPY_PATH_SEPARATOR_STRING
 	raw = getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
 	expectedList := scenarioHelper{}.shaveOffPrefix(blobList, vdirName+common.AZCOPY_PATH_SEPARATOR_STRING)
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		validateS2SSyncTransfersAreScheduled(a, expectedList, mockedRPC)
 	})
@@ -701,9 +662,6 @@ func TestSyncS2SADLSDirectory(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// ADLS Gen2 directory -> vdir sync: should work
@@ -714,7 +672,7 @@ func TestSyncS2SADLSDirectory(t *testing.T) {
 	dstContainerURLWithSAS.Path += common.AZCOPY_PATH_SEPARATOR_STRING + vdirName
 	// construct the raw input to simulate user input
 	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -726,7 +684,7 @@ func TestSyncS2SADLSDirectory(t *testing.T) {
 	mockedRPC.reset()
 
 	expectedTransfers := scenarioHelper{}.shaveOffPrefix(blobList, vdirName+common.AZCOPY_PATH_SEPARATOR_STRING)
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		validateS2SSyncTransfersAreScheduled(a, expectedTransfers, mockedRPC)
 	})
@@ -752,9 +710,6 @@ func TestSyncS2SWithIncludeRegexFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -764,7 +719,7 @@ func TestSyncS2SWithIncludeRegexFlag(t *testing.T) {
 	raw.includeRegex = includeString
 
 	// verify that only the blobs specified by the include flag are synced
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobsToInclude), len(mockedRPC.transfers))
@@ -801,9 +756,6 @@ func TestSyncS2SWithExcludeRegexFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -813,7 +765,7 @@ func TestSyncS2SWithExcludeRegexFlag(t *testing.T) {
 	raw.excludeRegex = excludeString
 
 	// make sure the list doesn't include the blobs specified by the exclude flag
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobList), len(mockedRPC.transfers))
@@ -847,9 +799,6 @@ func TestSyncS2SWithIncludeAndExcludeRegexFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -860,7 +809,7 @@ func TestSyncS2SWithIncludeAndExcludeRegexFlag(t *testing.T) {
 	raw.excludeRegex = excludeString
 
 	// verify that only the blobs specified by the include flag are synced
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobsToInclude), len(mockedRPC.transfers))
@@ -894,10 +843,6 @@ func TestDryrunSyncBlobtoBlob(t *testing.T) {
 	scenarioHelper{}.generateBlobsFromList(a, dstContainerClient, blobsToDelete, blockBlobDefaultData)
 
 	// set up interceptor
-	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
 	mockedLcm.SetOutputFormat(common.EOutputFormat.Text())
 	glcm = &mockedLcm
@@ -909,9 +854,7 @@ func TestDryrunSyncBlobtoBlob(t *testing.T) {
 	raw.dryrun = true
 	raw.deleteDestination = "true"
 
-	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
-		validateS2SSyncTransfersAreScheduled(a, []string{}, mockedRPC)
+	runSyncAndVerify(a, raw, dryrunNewCopyJobPartOrder, func(err error) {
 
 		msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)
 		sort.Strings(msg)
@@ -945,10 +888,6 @@ func TestDryrunSyncBlobtoBlobJson(t *testing.T) {
 	scenarioHelper{}.generateBlobsFromList(a, dstContainerClient, blobsToDelete, blockBlobDefaultData)
 
 	// set up interceptor
-	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
 	mockedLcm.SetOutputFormat(common.EOutputFormat.Json())
 	glcm = &mockedLcm
@@ -960,9 +899,7 @@ func TestDryrunSyncBlobtoBlobJson(t *testing.T) {
 	raw.dryrun = true
 	raw.deleteDestination = "true"
 
-	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
-		validateS2SSyncTransfersAreScheduled(a, []string{}, mockedRPC)
+	runSyncAndVerify(a, raw, dryrunNewCopyJobPartOrder, func(err error) {
 
 		msg := <-mockedLcm.dryrunLog
 		syncMessage := DryrunTransfer{}

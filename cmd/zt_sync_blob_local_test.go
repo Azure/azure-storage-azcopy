@@ -23,16 +23,16 @@ package cmd
 import (
 	"bytes"
 	"context"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -63,9 +63,6 @@ func TestSyncDownloadWithSingleFile(t *testing.T) {
 
 		// set up interceptor
 		mockedRPC := interceptor{}
-		jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-			return mockedRPC.intercept(order)
-		}
 		mockedRPC.init()
 
 		// construct the raw input to simulate user input
@@ -73,7 +70,7 @@ func TestSyncDownloadWithSingleFile(t *testing.T) {
 		raw := getDefaultSyncRawInput(rawBlobURLWithSAS.String(), filepath.Join(dstDirName, dstFileName))
 
 		// the file was created after the blob, so no sync should happen
-		runSyncAndVerify(a, raw, func(err error) {
+		runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 			a.Nil(err)
 
 			// validate that the right number of transfers were scheduled
@@ -87,7 +84,7 @@ func TestSyncDownloadWithSingleFile(t *testing.T) {
 		scenarioHelper{}.generateBlobsFromList(a, cc, blobList, blockBlobDefaultData)
 		mockedRPC.reset()
 
-		runSyncAndVerify(a, raw, func(err error) {
+		runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 			a.Nil(err)
 
 			validateDownloadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, []string{""}, mockedRPC)
@@ -113,16 +110,13 @@ func TestSyncDownloadWithEmptyDestination(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
 
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -136,7 +130,7 @@ func TestSyncDownloadWithEmptyDestination(t *testing.T) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
@@ -166,16 +160,13 @@ func TestSyncDownloadWithIdenticalDestination(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
 
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -186,7 +177,7 @@ func TestSyncDownloadWithIdenticalDestination(t *testing.T) {
 	scenarioHelper{}.generateBlobsFromList(a, cc, blobList, blockBlobDefaultData)
 	mockedRPC.reset()
 
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		validateDownloadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, blobList, mockedRPC)
 	})
@@ -213,16 +204,13 @@ func TestSyncDownloadWithMismatchedDestination(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
 
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		validateDownloadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, expectedOutput, mockedRPC)
 
@@ -263,9 +251,6 @@ func TestSyncDownloadWithIncludePatternFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -273,7 +258,7 @@ func TestSyncDownloadWithIncludePatternFlag(t *testing.T) {
 	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
 	raw.include = includeString
 
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		validateDownloadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, blobsToInclude, mockedRPC)
 	})
@@ -302,9 +287,6 @@ func TestSyncDownloadWithExcludePatternFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -312,7 +294,7 @@ func TestSyncDownloadWithExcludePatternFlag(t *testing.T) {
 	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
 	raw.exclude = excludeString
 
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		validateDownloadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, blobList, mockedRPC)
 	})
@@ -347,9 +329,6 @@ func TestSyncDownloadWithIncludeAndExcludePatternFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -358,7 +337,7 @@ func TestSyncDownloadWithIncludeAndExcludePatternFlag(t *testing.T) {
 	raw.include = includeString
 	raw.exclude = excludeString
 
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		validateDownloadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, blobsToInclude, mockedRPC)
 	})
@@ -388,9 +367,6 @@ func TestSyncDownloadWithExcludePathFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -398,7 +374,7 @@ func TestSyncDownloadWithExcludePathFlag(t *testing.T) {
 	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
 	raw.excludePath = excludeString
 
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		validateDownloadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, blobList, mockedRPC)
 	})
@@ -410,7 +386,7 @@ func TestSyncDownloadWithExcludePathFlag(t *testing.T) {
 	scenarioHelper{}.generateBlobsFromList(a, cc, blobsToExclude, blockBlobDefaultData)
 
 	mockedRPC.reset()
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		validateDownloadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, blobList, mockedRPC)
 
@@ -441,16 +417,13 @@ func TestSyncDownloadWithMissingDestination(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
 
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		// error should not be nil, but the app should not crash either
 		a.Nil(err)
 
@@ -486,9 +459,6 @@ func TestSyncDownloadADLSDirectoryTypeMismatch(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -496,7 +466,7 @@ func TestSyncDownloadADLSDirectoryTypeMismatch(t *testing.T) {
 	raw := getDefaultSyncRawInput(rawBlobURLWithSAS.String(), filepath.Join(dstDirName, dstFileName))
 
 	// the file was created after the blob, so no sync should happen
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.NotNil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -538,16 +508,13 @@ func TestSyncDownloadWithADLSDirectory(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, adlsDirName)
 	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
 
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -558,7 +525,7 @@ func TestSyncDownloadWithADLSDirectory(t *testing.T) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
