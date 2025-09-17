@@ -122,6 +122,7 @@ func (v Version) EqualTo(v2 Version) bool {
 func (v Version) CacheRemoteVersion(remoteVer Version, filePath string) error {
 	if v.OlderThan(remoteVer) || v.EqualTo(remoteVer) {
 		expiry := time.Now().Add(24 * time.Hour).Format(versionFileTimeFormat)
+		// make sure filepath is absolute filepath so WriteFile is not written to customers current directory
 		if err := os.WriteFile(filePath, []byte(remoteVer.original+","+expiry), 0666); err != nil {
 			return err
 		}

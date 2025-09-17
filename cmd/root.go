@@ -77,6 +77,7 @@ var rootCmd = &cobra.Command{
 	Use:     "azcopy",
 	Short:   rootCmdShortDescription,
 	Long:    rootCmdLongDescription,
+	// PersistentPreRunE hook will not run on just `azcopy` without any subcommand
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		glcm.RegisterCloseFunc(func() {
 			if debugMemoryProfile != "" {
@@ -185,7 +186,16 @@ var rootCmd = &cobra.Command{
 
 		isBench := cmd.Use == "bench [destination]"
 
-		return Initialize(resumeJobID, isBench)
+		// We only care to warn about multiple AzCopy processes for commands sent to STE
+		sentToSte := []string{"copy [source] [destination]", "sync", "bench [destination]", "resume [jobID]", "remove [resourceURL]", "set-properties [source]"}
+		var shouldWarn bool
+		for _, currCmd := range sentToSte {
+			if cmd.Use == currCmd {
+				shouldWarn = true
+				break
+			}
+		}
+		return Initialize(resumeJobID, isBench, shouldWarn)
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Version checking is done explicitly when the user sets flag
@@ -203,9 +213,7 @@ var rootCmd = &cobra.Command{
 	},
 }
 
-func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
-	currPid := os.Getpid()
-	AsyncWarnMultipleProcesses(cmd.GetAzCopyAppPath(), currPid)
+func Initialize(resumeJobID common.JobID, isBench bool, shouldWarn bool) (err error) {
 	jobsAdmin.BenchmarkResults = isBench
 	Client, err = azcopy.NewClient(azcopy.ClientOptions{CapMbps: CapMbps})
 	if err != nil {
@@ -224,6 +232,11 @@ func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
 	common.AzcopyCurrentJobLogger.OpenLog()
 
 	glcm.SetForceLogging()
+
+	if shouldWarn {
+		currPid := os.Getpid()
+		AsyncWarnMultipleProcesses(cmd.GetAzCopyAppPath(), currPid)
+	}
 
 	// For benchmarking, try to autotune if possible, otherwise use the default values
 	if jobsAdmin.JobsAdmin != nil && isBench {
@@ -294,6 +307,10 @@ func init() {
 			trustedSuffixesAAD+"'. \n Any listed here are added to the default. For security, you should only put Microsoft Azure domains here. "+
 			"\n Separate multiple entries with semi-colons.")
 
+	rootCmd.PersistentFlags().BoolVar(&SkipVersionCheck, "skip-version-check", false,
+		"Do not perform the version check at startup. \nIntended for automation scenarios & airgapped use.")
+	// Deprecated, marked as hidden to not break customers dependent on flag
+	_ = rootCmd.PersistentFlags().MarkHidden("skip-version-check")
 	// Note: this is due to Windows not supporting signals properly
 	rootCmd.PersistentFlags().BoolVar(&cancelFromStdin, "cancel-from-stdin", false,
 		"Used by partner teams to send in `cancel` through stdin to stop a job.")
@@ -320,11 +337,6 @@ func init() {
 	_ = rootCmd.PersistentFlags().MarkHidden("memory-profile")
 	rootCmd.PersistentFlags().BoolVar(&checkAzCopyUpdates, "check-version", false,
 		"Check if a newer AzCopy version is available.")
-
-	rootCmd.PersistentFlags().BoolVar(&SkipVersionCheck, "skip-version-check", false,
-		"Do not perform the version check at startup. \nIntended for automation scenarios & airgapped use.")
-	// Deprecated, to not break customers dependent on flag
-	_ = rootCmd.PersistentFlags().MarkHidden("skip-version-check")
 }
 
 // always spins up a new goroutine, because sometimes the aka.ms URL can't be reached (e.g. a constrained environment where
@@ -345,7 +357,6 @@ func beginDetectNewVersion() chan struct{} {
 		if err != nil {
 			return
 		}
-
 		// Step 1: Fetch & validate cached version. If it is up to date, we return without making API calls
 		filePath := filepath.Join(common.LogPathFolder, "latest_version.txt")
 		cachedVersion, err := ValidateCachedVersion(filePath) // same as the remote version

@@ -434,6 +434,7 @@ type RemoveFlags struct {
 	TrailingDot     *common.TrailingDotOption     `flag:"trailing-dot"`
 	CPKByName       *string                       `flag:"cpk-by-name"`
 	CPKByValue      *bool                         `flag:"cpk-by-value"`
+	ExcludePath     *string                       `flag:"exclude-path"`
 }
 
 func (r RemoveFlags) SerializeListingFile(in any, scenarioAsserter ScenarioAsserter, ctx context.Context) {
