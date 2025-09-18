@@ -123,7 +123,7 @@ func TestSyncUploadWithEmptyDestination(t *testing.T) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runSyncAndVerify(a, raw, mockedRPC.intercept, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, mockedRPC.delete, func(err error) {
 		a.Nil(err)
 		a.NotEqual(len(fileList), len(mockedRPC.transfers))
 
