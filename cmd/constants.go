@@ -25,7 +25,6 @@ const (
 
 	PreserveNFSPermissionsDisabledMsg = "Note: The preserve-permissions flag is set to false. As a result, AzCopy will not copy NFS permissions between the source and destination."
 	InvalidFlagsForNFSMsg             = "nfs copy cannot be used with SMB-related flags. Please use the --preserve-info or --preserve-permissions flags instead"
-	DstShareDoesNotExists             = "the destination file share does not exist; please create it manually with the required quota and settings before running the copy —refer to https://learn.microsoft.com/en-us/azure/storage/files/storage-how-to-create-file-share?tabs=azure-portal for SMB or https://learn.microsoft.com/en-us/azure/storage/files/storage-files-quick-create-use-linux for NFS."
 )
 
 // Flags associated with copy and sync commands
@@ -42,5 +41,3 @@ const (
 	pipingUploadParallelism = 5
 	pipingDefaultBlockSize  = 8 * 1024 * 1024
 )
-
-const NumOfFilesPerDispatchJobPart = 10000
