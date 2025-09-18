@@ -182,12 +182,16 @@ func DoWithCreateSymlinkOnAzureFilesNFS(
 		err = action()
 	}
 
-	// did fail because symlink already exists?
+	// did fail because item already exists on the destination?
+	// The destination object can be a symlink, file or directory.
+	// If it's a symlink or a file, we will delete it try creating symlink.
+	// If it's a directory, we will fail.
 	if fileerror.HasCode(err, fileerror.ResourceAlreadyExists) {
 		jptm.Log(common.LogWarning,
 			fmt.Sprintf("%s: %s \nAzCopy will delete and recreate the symlink.",
 				fileerror.ResourceAlreadyExists, err.Error()))
-		// destination symlink already exists
+
+		// destination symlink already exists we try to delete the destination symlink
 		_, delErr := client.Delete(ctx, nil)
 		if delErr != nil {
 			jptm.FailActiveUpload("Deleting existing symlink", delErr)
@@ -198,6 +202,9 @@ func DoWithCreateSymlinkOnAzureFilesNFS(
 	}
 
 	// did fail because resource type mismatch?
+	// This can happen if the destination is a file or a directory.
+	// We will delete the destination and try creating the symlink.
+	// If the destination is a directory, the delete will fail and we will fail the transfer.
 	if fileerror.HasCode(err, fileerror.ResourceTypeMismatch) {
 		jptm.Log(common.LogWarning,
 			fmt.Sprintf("%s: %s \nAzCopy will delete the destination resource.",
@@ -205,16 +212,10 @@ func DoWithCreateSymlinkOnAzureFilesNFS(
 
 		// destination can be a file
 		if _, delErr := client.Delete(ctx, nil); delErr != nil {
-			// destination can be a folder
-			// TODO: Handle this logic
-			// if fileerror.HasCode(delErr, fileerror.ResourceNotFound) {
-			// 	// The symlink might be a folder, so try deleting as a folder
-			// 	// Set the entity type to folder so that the delete logic knows it's a folder
-			// 	jptm.Info().SetEntityType(common.EEntityType.Folder())
-			// 	DeleteFile(jptm, pacer)
-			// 	// setting it back to file for further processing
-			// 	jptm.Info().SetEntityType(common.EEntityType.File())
-			// }
+			// if this fails it means the destination is a directory
+			// we don't support deleting a directory here because it can be recursive and dangerous
+			// so we fail the transfer
+			// customer can manually delete the destination directory and rerun the transfer
 			jptm.FailActiveUpload("Deleting existing resource", delErr)
 		}
 

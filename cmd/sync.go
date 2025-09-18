@@ -490,10 +490,8 @@ type cookedSyncCmdArgs struct {
 	deleteDestinationFileIfNecessary bool
 	hardlinks                        common.HardlinkHandlingType
 	atomicSkippedSymlinkCount        uint32
-	atomicSymlinkConvertedCount      uint32
 	atomicSkippedSpecialFileCount    uint32
 	atomicSkippedHardlinkCount       uint32
-	atomicHardlinkConvertedCount     uint32
 
 	blockSizeMB   float64
 	putBlobSizeMB float64
@@ -674,10 +672,8 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 		}
 
 		summary.SkippedSymlinkCount = atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)
-		summary.SymlinkConvertedCount = atomic.LoadUint32(&cca.atomicSymlinkConvertedCount)
 		summary.SkippedSpecialFileCount = atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount)
 		summary.SkippedHardlinkCount = atomic.LoadUint32(&cca.atomicSkippedHardlinkCount)
-		summary.HardlinksConvertedCount = atomic.LoadUint32(&cca.atomicHardlinkConvertedCount)
 
 		lcm.Exit(func(format common.OutputFormat) string {
 			if format == common.EOutputFormat.Json() {
@@ -693,12 +689,12 @@ Files Scanned at Destination: %v
 Elapsed Time (Minutes): %v
 Number of Copy Transfers for Files: %v
 Number of Copy Transfers for Folder Properties: %v 
+Number of Symlink Transfers: %v
 Total Number of Copy Transfers: %v
 Number of Copy Transfers Completed: %v
 Number of Copy Transfers Failed: %v
 Number of Deletions at Destination: %v
 Number of Symbolic Links Skipped: %v
-Number of Symbolic Links Converted: %v
 Number of Special Files Skipped: %v
 Number of Hardlinks Converted: %v
 Number of Hardlinks Skipped: %v
@@ -712,12 +708,12 @@ Final Job Status: %v%s%s
 				jobsAdmin.ToFixed(duration.Minutes(), 4),
 				summary.FileTransfers,
 				summary.FolderPropertyTransfers,
+				summary.SymlinkTransfers,
 				summary.TotalTransfers,
 				summary.TransfersCompleted,
 				summary.TransfersFailed,
 				cca.atomicDeletionCount,
 				summary.SkippedSymlinkCount,
-				summary.SymlinkConvertedCount,
 				summary.SkippedSpecialFileCount,
 				summary.HardlinksConvertedCount,
 				summary.SkippedHardlinkCount,

@@ -118,7 +118,6 @@ func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
 		ScheduleTransfers: true,
 	}
 	jm.AddJobPart(args)
-
 	// Update jobPart Status with the status Manager
 	jm.SendJobPartCreatedMsg(ste.JobPartCreatedMsg{TotalTransfers: uint32(len(order.Transfers.List)),
 		IsFinalPart:             order.IsFinalPart,
@@ -127,7 +126,6 @@ func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
 		SymlinkTransfers:        order.Transfers.SymlinkTransferCount,
 		FolderTransfer:          order.Transfers.FolderTransferCount,
 		HardlinksConvertedCount: order.Transfers.HardlinksConvertedCount,
-		SymlinkConvertedCount:   order.Transfers.SymlinkConvertedCount,
 	})
 
 	return common.CopyJobPartOrderResponse{JobStarted: true}
@@ -467,12 +465,7 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 			case common.EEntityType.Folder():
 				js.FolderPropertyTransfers++
 			case common.EEntityType.Symlink():
-				if jpp.SymlinkHandling == common.ESymlinkHandlingType.Preserve() {
-					js.SymlinkTransfers++
-				} else if jpp.SymlinkHandling == common.ESymlinkHandlingType.Follow() {
-					fmt.Println("Follow---------------------")
-					js.SymlinkConvertedCount++
-				}
+				js.SymlinkTransfers++
 			case common.EEntityType.Hardlink():
 				js.HardlinksConvertedCount++
 			}

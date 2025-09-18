@@ -141,7 +141,10 @@ func GetFileInformation(path string, isNFSCopy bool) (ByHandleFileInformation, e
 
 	var info ByHandleFileInformation
 	if !isNFSCopy {
-		// SMB: query the extended attribute for file attributes
+		// For getting FileAttributes we need to query the CIFS_XATTR_ATTRIB extended attribute.
+		// Note: This doesn't necessarily cause a new QUERY_PATH_INFO call to the SMB server, instead
+		//       the value cached in the inode (likely as a result of the above Statx call) will be
+		//       returned.
 		xattrbuf, err := xattr.Get(path, CIFS_XATTR_ATTRIB)
 		if err != nil {
 			return ByHandleFileInformation{},
