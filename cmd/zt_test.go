@@ -634,7 +634,7 @@ func deleteGCPBucket(client *gcpUtils.Client, bucketName string, waitQuarterMinu
 	}
 	err := bucket.Delete(context.Background())
 	if err != nil {
-		fmt.Println(fmt.Sprintf("Failed to Delete GCS Bucket %v", bucketName))
+		fmt.Println(fmt.Sprintf("Failed to delete GCS Bucket %v", bucketName))
 	}
 
 	if waitQuarterMinute {

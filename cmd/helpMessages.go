@@ -418,9 +418,9 @@ const makeCmdExample = `
 `
 
 // ===================================== REMOVE COMMAND ===================================== //
-const removeCmdShortDescription = "Delete blobs or files from an Azure storage account"
+const removeCmdShortDescription = "delete blobs or files from an Azure storage account"
 
-const removeCmdLongDescription = `"Delete blobs or files from an Azure storage account"`
+const removeCmdLongDescription = `"delete blobs or files from an Azure storage account"`
 
 const removeCmdExample = `
 Remove a single blob by using a SAS token:

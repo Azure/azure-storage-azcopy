@@ -855,11 +855,11 @@ func (scenarioHelper) containerExists(containerClient *container.Client) bool {
 }
 
 // A unit test is like a dryrun transfer
-func runSyncAndVerify(a *assert.Assertions, raw rawSyncCmdArgs, mockTransfer func(common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse, verifier func(err error)) {
+func runSyncAndVerify(a *assert.Assertions, raw rawSyncCmdArgs, mockTransfer func(common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse, mockDelete azcopy.ObjectDeleter, verifier func(err error)) {
 	// the simulated user input should parse properly
 	opts, err := raw.toOptions()
 	a.Nil(err)
-	opts.SetInternalOptions(true, raw.deleteDestinationFileIfNecessary, "", mockTransfer, dryrunDelete)
+	opts.SetInternalOptions(true, raw.deleteDestinationFileIfNecessary, "", mockTransfer, mockDelete)
 
 	// create the client if it is not already created
 	if jobsAdmin.JobsAdmin == nil {
@@ -888,6 +888,22 @@ func runCopyAndVerify(a *assert.Assertions, raw rawCopyCmdArgs, verifier func(er
 
 	// the err is passed to verified, which knows whether it is expected or not
 	verifier(err)
+}
+
+func validateDeleteTransfersAreScheduled(a *assert.Assertions, expectedTransfers []string, mockedRPC interceptor) {
+	// validate that the right number of transfers were scheduled
+	a.Equal(len(expectedTransfers), len(mockedRPC.deletions))
+
+	// validate that the right transfers were sent
+	lookupMap := scenarioHelper{}.convertListToMap(expectedTransfers)
+	for _, transfer := range mockedRPC.deletions {
+		// look up the source from the expected transfers, make sure it exists
+		_, exists := lookupMap[transfer.Name]
+		a.True(exists, transfer.Name)
+
+		delete(lookupMap, transfer.Name)
+	}
+
 }
 
 func validateUploadTransfersAreScheduled(a *assert.Assertions, sourcePrefix string, destinationPrefix string, expectedTransfers []string, mockedRPC interceptor) {

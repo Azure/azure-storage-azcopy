@@ -1401,7 +1401,7 @@ func TestCopyWithDFSResource(t *testing.T) {
 	rawCopy.recursive = true
 
 	// set up interceptor
-	mockedRPC := interceptor{}
+	mockedRPC := &interceptor{}
 	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
 		return mockedRPC.intercept(order)
 	}
@@ -1426,7 +1426,7 @@ func TestCopyWithDFSResource(t *testing.T) {
 	a.Nil(err)
 
 	rawSync := getDefaultSyncRawInput(dirClientWithSASSource.DFSURL(), dirClientWithSAS.DFSURL())
-	runSyncAndVerify(a, rawSync, mockedRPC.intercept, func(err error) {
+	runSyncAndVerify(a, rawSync, mockedRPC.intercept, mockedRPC.delete, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled

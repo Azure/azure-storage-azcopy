@@ -1155,10 +1155,10 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		err = e.Enumerate()
 
 	case cca.FromTo.IsDelete():
-		// Delete gets ran through copy, so handle delete
+		// delete gets ran through copy, so handle delete
 		if cca.FromTo.From() == common.ELocation.BlobFS() {
 			// TODO merge with BlobTrash case
-			// Currently, Blob Delete in STE does not appropriately handle folders. In addition, dfs delete is free-ish.
+			// Currently, Blob delete in STE does not appropriately handle folders. In addition, dfs delete is free-ish.
 			err = removeBfsResources(cca)
 		} else {
 			e, createErr := newRemoveEnumerator(cca)
