@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"mime"
-	"net"
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -18,7 +18,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/minio/minio-go/pkg/credentials"
-	"golang.org/x/sync/semaphore"
 )
 
 var _ IJobPartMgr = &jobPartMgr{}
@@ -80,53 +79,23 @@ type IJobPartMgr interface {
 // number of available network sockets on resource-constrained Linux systems. (E.g. when
 // 'ulimit -Hn' is low).
 func NewAzcopyHTTPClient(maxIdleConns int) *http.Client {
+	const concurrentDialsPerCpu = 10 // exact value doesn't matter too much, but too low will be too slow, and too high will reduce the beneficial effect on thread count
 	return &http.Client{
 		Transport: &http.Transport{
-			Proxy: common.GlobalProxyLookup,
-			DialContext: newDialRateLimiter(&net.Dialer{
-				Timeout:   30 * time.Second,
-				KeepAlive: 30 * time.Second,
-				DualStack: true,
-			}).DialContext,
+			Proxy:                  common.GlobalProxyLookup,
+			MaxConnsPerHost:        concurrentDialsPerCpu * runtime.NumCPU(),
 			MaxIdleConns:           0, // No limit
 			MaxIdleConnsPerHost:    maxIdleConns,
 			IdleConnTimeout:        180 * time.Second,
 			TLSHandshakeTimeout:    10 * time.Second,
 			ExpectContinueTimeout:  1 * time.Second,
 			DisableKeepAlives:      false,
-			DisableCompression:     true, // must disable the auto-decompression of gzipped files, and just download the gzipped version. See https://onebranch.visualstudio.com/azure-storage-azcopy/issues/374
+			DisableCompression:     true, // must disable the auto-decompression of gzipped files, and just download the gzipped version. See https://github.com/Azure/azure-storage-azcopy/issues/374
 			MaxResponseHeaderBytes: 0,
 			// ResponseHeaderTimeout:  time.Duration{},
 			// ExpectContinueTimeout:  time.Duration{},
 		},
 	}
-}
-
-// Prevents too many dials happening at once, because we've observed that that increases the thread
-// count in the app, to several times more than is actually necessary - presumably due to a blocking OS
-// call somewhere. It's tidier to avoid creating those excess OS threads.
-// Even our change from Dial (deprecated) to DialContext did not replicate the effect of dialRateLimiter.
-type dialRateLimiter struct {
-	dialer *net.Dialer
-	sem    *semaphore.Weighted
-}
-
-func newDialRateLimiter(dialer *net.Dialer) *dialRateLimiter {
-	const concurrentDialsPerCpu = 196 // exact value doesn't matter too much, but too low will be too slow, and too high will reduce the beneficial effect on thread count
-	return &dialRateLimiter{
-		dialer,
-		semaphore.NewWeighted(concurrentDialsPerCpu),
-	}
-}
-
-func (d *dialRateLimiter) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	err := d.sem.Acquire(context.Background(), 1)
-	if err != nil {
-		return nil, err
-	}
-	defer d.sem.Release(1)
-
-	return d.dialer.DialContext(ctx, network, address)
 }
 
 func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptions, transport policy.Transporter, log LogOptions, srcCred *common.ScopedToken, dstCred *common.ScopedAuthenticator) azcore.ClientOptions {
