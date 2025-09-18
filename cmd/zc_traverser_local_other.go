@@ -47,29 +47,3 @@ func LogHardLinkIfDefaultPolicy(fileInfo os.FileInfo, hardlinkHandling common.Ha
 	inodeStr := strconv.FormatUint(stat.Ino, 10)
 	logNFSLinkWarning(fileInfo.Name(), inodeStr, false, hardlinkHandling)
 }
-
-// HandleSymlinkForNFS processes a symbolic link based on the specified handling type.
-// It either logs a warning or preserves the symlink based on the symlink handling type.
-func HandleSymlinkForNFS(fileName string,
-	symlinkHandlingType common.SymlinkHandlingType,
-	incrementEnumerationCounter enumerationCounterFunc) bool {
-
-	if symlinkHandlingType.None() {
-		// Log a warning if symlink handling is disabled
-		logNFSLinkWarning(fileName, "", true, common.DefaultHardlinkHandlingType)
-		if incrementEnumerationCounter != nil {
-			incrementEnumerationCounter(common.EEntityType.Symlink(),
-				symlinkHandlingType, common.DefaultHardlinkHandlingType)
-		}
-		return true
-	} else if symlinkHandlingType.Preserve() {
-		//TODO: no action need as of now
-		return false
-	} else {
-		if incrementEnumerationCounter != nil {
-			incrementEnumerationCounter(common.EEntityType.Symlink(),
-				symlinkHandlingType, common.DefaultHardlinkHandlingType)
-		}
-		return false
-	}
-}
