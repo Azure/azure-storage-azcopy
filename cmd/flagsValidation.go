@@ -184,10 +184,6 @@ func performNFSSpecificValidation(fromTo common.FromTo,
 		return err
 	}
 
-	// if err = validateSymlinkFlag(symlinkHandling == common.ESymlinkHandlingType.Follow(), symlinkHandling == common.ESymlinkHandlingType.Preserve()); err != nil {
-	// 	return err
-	// }
-
 	if err = validateAndAdjustHardlinksFlag(hardlinkHandling, fromTo); err != nil {
 		return err
 	}
@@ -231,16 +227,6 @@ func performSMBSpecificValidation(fromTo common.FromTo,
 	}
 	return nil
 }
-
-// validateSymlinkFlag ensures symlink-related flags are not used for NFS.
-// Returns an error if both are set; symlinks are skipped by default.
-// func validateSymlinkFlag(followSymlinks, preserveSymlinks bool) error {
-
-// 	if followSymlinks && preserveSymlinks {
-// 		return fmt.Errorf("The '--follow-symlinks' and '--preserve-symlinks' flags cannot be used together.")
-// 	}
-// 	return nil
-// }
 
 // validateAndAdjustHardlinksFlag validates and adjusts the --hardlinks option based on OS,
 // transfer direction (upload, download, S2S), and source/destination types (NFS, SMB, local).

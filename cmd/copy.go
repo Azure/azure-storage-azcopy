@@ -1395,7 +1395,6 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 		summary.SkippedSymlinkCount = atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)
 		summary.SkippedSpecialFileCount = atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount)
 		summary.SkippedHardlinkCount = atomic.LoadUint32(&cca.atomicSkippedHardlinkCount)
-		//summary.HardlinksConvertedCount = atomic.LoadUint32(&cca.atomicHardlinkConvertedCount)
 
 		exitCode := cca.getSuccessExitCode()
 		if summary.TransfersFailed > 0 || summary.JobStatus == common.EJobStatus.Cancelled() || summary.JobStatus == common.EJobStatus.Cancelling() {

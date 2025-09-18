@@ -955,8 +955,6 @@ func logNFSLinkWarning(fileName,
 	} else if inodeNo != "" {
 		if hardlinkHandling == common.EHardlinkHandlingType.Skip() {
 			message = fmt.Sprintf("File '%s' with inode '%s' at the source is a hard link, but will be skipped", fileName, inodeNo)
-		} else if hardlinkHandling == common.EHardlinkHandlingType.Follow() {
-			message = fmt.Sprintf("File '%s' with inode '%s' at the source is a hard link, but will copied as a full file", fileName, inodeNo)
 		}
 	}
 

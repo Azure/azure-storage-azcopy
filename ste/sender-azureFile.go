@@ -265,9 +265,8 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 	}
 
 	// In case of NFS there might be a mismatch between the source and destination file types
-	// e.g. source is a file (if user provide --follow-symlink) and destination is a symlink
-	// with the same name.
-	// In this case, we delete the destination and retry the creation of the file
+	// e.g. source is a file and destination is a symlink with the same name.
+	// In this case, we delete the destination symlink and retry the creation of the file
 	if jptm.FromTo().IsNFS() && fileerror.HasCode(err, fileerror.ResourceTypeMismatch) {
 		jptm.Log(common.LogWarning,
 			fmt.Sprintf("%s: %s \nAzCopy will delete the destination resource.",
