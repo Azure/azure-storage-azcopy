@@ -455,6 +455,7 @@ func TestSyncS2SMismatchContainerAndBlob(t *testing.T) {
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(mockedRPC.transfers), len(blobList))
 	})
+	mockedRPC.reset()
 
 	// reverse the source and destination
 	raw = getDefaultSyncRawInput(dstBlobURLWithSAS.String(), srcContainerURLWithSAS.String())

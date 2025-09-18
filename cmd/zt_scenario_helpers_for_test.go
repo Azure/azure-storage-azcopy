@@ -898,7 +898,7 @@ func validateDeleteTransfersAreScheduled(a *assert.Assertions, expectedTransfers
 	lookupMap := scenarioHelper{}.convertListToMap(expectedTransfers)
 	for _, transfer := range mockedRPC.deletions {
 		// look up the source from the expected transfers, make sure it exists
-		_, exists := lookupMap[transfer.Name]
+		_, exists := lookupMap[transfer.RelativePath]
 		a.True(exists, transfer.Name)
 
 		delete(lookupMap, transfer.Name)

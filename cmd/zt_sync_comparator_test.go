@@ -206,6 +206,7 @@ func TestFileSyncS2SWithMismatchedDestination(t *testing.T) {
 		delete(expectedOutputMap, exists) // remove directories that actually exist at destination
 	}
 	expectedOutput = scenarioHelper{}.convertMapKeysToList(expectedOutputMap)
+	extras = scenarioHelper{}.addFoldersToList(extras, false)
 
 	runSyncAndVerify(a, raw, mockedRPC.intercept, mockedRPC.delete, func(err error) {
 		a.Nil(err)

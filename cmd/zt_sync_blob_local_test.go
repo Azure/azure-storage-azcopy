@@ -199,7 +199,7 @@ func TestSyncDownloadWithMismatchedDestination(t *testing.T) {
 	dstDirName := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(dstDirName)
 	scenarioHelper{}.generateLocalFilesFromList(a, dstDirName, blobList[0:len(blobList)/2])
-	scenarioHelper{}.generateLocalFilesFromList(a, dstDirName, []string{"extraFile1.pdf, extraFile2.txt"})
+	scenarioHelper{}.generateLocalFilesFromList(a, dstDirName, []string{"extraFile1.pdf", "extraFile2.txt"})
 	expectedOutput := blobList[len(blobList)/2:] // the missing half of source files should be transferred
 
 	// set up interceptor
