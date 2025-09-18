@@ -59,7 +59,11 @@ func (s *BlobSymlinkSuite) Scenario_TestPreserveSymlinks_IndirectSource(svm *Sce
 				source, dest,
 			},
 			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive: pointerTo(true),
+				},
 				PreserveSymlinks: pointerTo(true),
+				AsSubdir:         pointerTo(false),
 			},
 		})
 
