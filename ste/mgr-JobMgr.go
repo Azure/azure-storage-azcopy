@@ -37,6 +37,10 @@ import (
 
 var _ IJobMgr = &jobMgr{}
 
+// GlobalHTTPClient, when set, is the shared *http.Client used by the process for creating SDK clients.
+// If non-nil, callers of createClientOptions will prefer this client to avoid creating duplicate transports.
+var GlobalHTTPClient *http.Client
+
 type PartNumber = common.PartNumber
 
 // ChannelStats represents the current usage statistics for transfer channels
@@ -229,7 +233,7 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	}
 
 	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), include: map[string]int{}, exclude: map[string]int{},
-		httpClient:           NewAzcopyHTTPClient(concurrency.MaxIdleConnections),
+		httpClient:           common.GetGlobalHTTPClient(jobLogger),
 		logger:               jobLogger,
 		chunkStatusLogger:    common.NewChunkStatusLogger(jobID, cpuMon, common.LogPathFolder, enableChunkLogOutput),
 		concurrency:          concurrency,
