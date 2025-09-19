@@ -272,6 +272,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 			fmt.Sprintf("%s: %s \nAzCopy will delete the destination resource.",
 				fileerror.ResourceAlreadyExists, err.Error()))
 
+		// delete the destination object
 		if _, delErr := u.getFileClient().Delete(u.ctx, nil); delErr != nil {
 			jptm.FailActiveUpload("Deleting existing resource", delErr)
 		}
@@ -661,5 +662,56 @@ func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, shareCli
 			return verifiedErr
 		}
 	}
+	return nil
+}
+
+// SendSymlink creates a symbolic link on Azure Files NFS with the given link data.
+func (u *azureFileSenderBase) SendSymlink(linkData string) error {
+	jptm := u.jptm
+	info := jptm.Info()
+
+	createSymlinkOptions := &file.CreateSymbolicLinkOptions{
+		Metadata: u.metadataToApply,
+	}
+
+	if jptm.FromTo().IsNFS() {
+
+		stage, err := u.addNFSPropertiesToHeaders(info)
+		if err != nil {
+			jptm.FailActiveSend(stage, err)
+			return err
+		}
+
+		stage, err = u.addNFSPermissionsToHeaders(info, u.getFileClient().URL())
+		if err != nil {
+			jptm.FailActiveSend(stage, err)
+			return err
+		}
+		createSymlinkOptions.FileNFSProperties = &file.NFSProperties{
+			CreationTime:  u.nfsPropertiesToApply.CreationTime,
+			LastWriteTime: u.nfsPropertiesToApply.LastWriteTime,
+			Owner:         u.nfsPropertiesToApply.Owner,
+			Group:         u.nfsPropertiesToApply.Group,
+			FileMode:      u.nfsPropertiesToApply.FileMode,
+		}
+	}
+
+	err := DoWithCreateSymlinkOnAzureFilesNFS(u.ctx,
+		func() error {
+			_, err := u.getFileClient().CreateSymbolicLink(u.ctx, linkData, createSymlinkOptions)
+			return err
+		},
+		u.getFileClient(),
+		u.shareClient,
+		u.pacer,
+		u.jptm)
+
+	// if still failing, give up
+	if err != nil {
+		jptm.FailActiveUpload("Creating symlink", err)
+		return fmt.Errorf("failed to create symlink: %w", err)
+	}
+
+	u.jptm.Log(common.LogDebug, fmt.Sprintf("Created symlink with data: %s", linkData))
 	return nil
 }

@@ -277,6 +277,10 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				symlinkHandling:  t.symlinkHandling}, t.incrementEnumerationCounter); err == nil && skip {
 				return nil, nil
 			}
+			//set entity tile to symlink
+			if fullProperties.NFSFileType() == string(file.NFSFileTypeSymlink) {
+				f.entityType = common.EEntityType.Symlink()
+			}
 			//set entity tile to hardlink
 			if fullProperties.LinkCount() > int64(1) {
 				f.entityType = common.EEntityType.Hardlink()

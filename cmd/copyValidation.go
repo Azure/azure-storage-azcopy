@@ -93,10 +93,11 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 
 	if cooked.FromTo.IsNFS() {
 		if err := performNFSSpecificValidation(
-			cooked.FromTo, 
-			cooked.preservePermissions, 
+			cooked.FromTo,
+			cooked.preservePermissions,
 			cooked.preserveInfo,
-			&cooked.hardlinks); err != nil {
+			&cooked.hardlinks,
+			cooked.SymlinkHandling); err != nil {
 			return err
 		}
 	} else {

@@ -292,7 +292,8 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 			cooked.fromTo,
 			cooked.preservePermissions,
 			cooked.preserveInfo,
-			&cooked.hardlinks); err != nil {
+			&cooked.hardlinks,
+			cooked.symlinkHandling); err != nil {
 			return err
 		}
 	} else {

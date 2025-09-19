@@ -152,7 +152,8 @@ func GetPreserveInfoFlagDefault(cmd *cobra.Command, fromTo common.FromTo) bool {
 func performNFSSpecificValidation(fromTo common.FromTo,
 	preservePermissions common.PreservePermissionsOption,
 	preserveInfo bool,
-	hardlinkHandling *common.HardlinkHandlingType) (err error) {
+	hardlinkHandling *common.HardlinkHandlingType,
+	symlinkHandling common.SymlinkHandlingType) (err error) {
 
 	// check for unsupported NFS behavior
 	if isUnsupported, err := isUnsupportedPlatformForNFS(fromTo); isUnsupported {
@@ -185,6 +186,11 @@ func performNFSSpecificValidation(fromTo common.FromTo,
 	}
 
 	if err = validateAndAdjustHardlinksFlag(hardlinkHandling, fromTo); err != nil {
+		return err
+	}
+
+	if err = validateSymlinkFlag(symlinkHandling == common.ESymlinkHandlingType.Follow(),
+		fromTo); err != nil {
 		return err
 	}
 	return nil
@@ -224,6 +230,20 @@ func performSMBSpecificValidation(fromTo common.FromTo,
 	}
 	if err = validateAndAdjustHardlinksFlag(hardlinkHandling, fromTo); err != nil {
 		return err
+	}
+	return nil
+}
+
+// validateSymlinkFlag checks if the --follow-symlink flag is valid for the given transfer scenario.
+// Returns an error if the flag is not supported (e.g., NFS<->NFS copy).
+func validateSymlinkFlag(followSymlinks bool, fromTo common.FromTo) error {
+
+	if followSymlinks {
+		if fromTo == common.EFromTo.FileNFSFileNFS() {
+
+			return fmt.Errorf("The '--follow-symlink' flag is not supported for NFS<->NFS copy operations. " +
+				"Please retry the command without using this flag. Symlink files will be skipped by default.")
+		}
 	}
 	return nil
 }
