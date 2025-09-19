@@ -7,8 +7,10 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -18,6 +20,7 @@ import (
 	azruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/minio/minio-go/pkg/credentials"
 )
 
@@ -247,6 +250,23 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	// partplan file is opened and mapped when job part is added
 	// jpm.planMMF = jpm.filename.Map() // Open the job part plan file & memory-map it in
 	plan := jpm.planMMF.Plan()
+
+	if buildmode.IsMover {
+		// Diagnostic: capture context for panic logging to help identify MMF mapping/unmapping race
+		defer func() {
+			if r := recover(); r != nil {
+				planFilePath := jpm.filename.GetJobPartPlanPath()
+				partNum := plan.PartNum
+				totalTransfers := plan.NumTransfers
+				// Count transfers completed at the time of panic (successfully completed only)
+				completed := atomic.LoadUint32(&jpm.atomicTransfersCompleted)
+				done := atomic.LoadUint32(&jpm.atomicTransfersDone)
+				jpm.Log(common.LogError, fmt.Sprintf("[diag] panic in ScheduleTransfers: planFile=%s partNum=%d transfersCompleted=%d/%d transfersDone=%d panic=%v\n%s",
+					planFilePath, partNum, completed, totalTransfers, done, r, debug.Stack()))
+				os.Exit(1)
+			}
+		}()
+	}
 	if plan.PartNum == 0 && plan.NumTransfers == 0 {
 		/* This will wind down the transfer and report summary */
 		plan.SetJobStatus(common.EJobStatus.Completed())
@@ -673,7 +693,10 @@ func (jpm *jobPartMgr) UnmapPlanFile() {
 	}
 
 	jpm.planMMF.Unmap()
-	fmt.Printf("DEBUG: Unmap() completed for part %d\n", partNum)
+	if partNum%100 == 0 {
+		// logging for every 100th part num
+		fmt.Printf("DEBUG: Unmap() completed for part %d\n", partNum)
+	}
 	// Note: We don't set planMMF to nil here to maintain Plan() access,
 	// but the memory is freed. The Unmap() is idempotent so it's safe to call again.
 }

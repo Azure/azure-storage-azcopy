@@ -315,14 +315,6 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 	if len(dstSAS) > 0 {
 		dUrl, e := url.Parse(dstURI)
 		if e != nil {
-			// DIAG: url.Parse failed for dstURI; log plan/transfer context and a preview of the URI
-			t := plan.Transfer(jptm.transferIndex)
-			sample := dstURI
-			if len(sample) > 128 {
-				sample = sample[:128]
-			}
-			common.GetLifecycleMgr().Error(fmt.Sprintf("[diag] url.Parse(dstURI) failed: jobID=%s part=%d transfer=%d srcOff=%d srcLen=%d dstLen=%d dstURI_first=%q dstURI_hex=%x err=%v",
-				plan.JobID.String(), plan.PartNum, jptm.transferIndex, t.SrcOffset, t.SrcLength, t.DstLength, sample, []byte(sample), e))
 			panic(e)
 		}
 		if len(dUrl.RawQuery) > 0 {
@@ -341,14 +333,6 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 	if len(srcSAS) > 0 {
 		sUrl, e := url.Parse(srcURI)
 		if e != nil {
-			// DIAG: url.Parse failed for srcURI (srcSAS append path)
-			t := plan.Transfer(jptm.transferIndex)
-			sample := srcURI
-			if len(sample) > 128 {
-				sample = sample[:128]
-			}
-			common.GetLifecycleMgr().Error(fmt.Sprintf("[diag] url.Parse(srcURI) failed (srcSAS): jobID=%s part=%d transfer=%d srcOff=%d srcLen=%d dstLen=%d srcURI_first=%q srcURI_hex=%x err=%v",
-				plan.JobID.String(), plan.PartNum, jptm.transferIndex, t.SrcOffset, t.SrcLength, t.DstLength, sample, []byte(sample), e))
 			panic(e)
 		}
 		if len(sUrl.RawQuery) > 0 {
@@ -362,14 +346,6 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 	if versionID != "" {
 		sURL, e := url.Parse(srcURI)
 		if e != nil {
-			// DIAG: url.Parse failed while appending versionID
-			t := plan.Transfer(jptm.transferIndex)
-			sample := srcURI
-			if len(sample) > 128 {
-				sample = sample[:128]
-			}
-			common.GetLifecycleMgr().Error(fmt.Sprintf("[diag] url.Parse(srcURI) failed (versionID): jobID=%s part=%d transfer=%d srcOff=%d srcLen=%d dstLen=%d versionID=%q srcURI_first=%q srcURI_hex=%x err=%v",
-				plan.JobID.String(), plan.PartNum, jptm.transferIndex, t.SrcOffset, t.SrcLength, t.DstLength, versionID, sample, []byte(sample), e))
 			panic(e)
 		}
 		if len(sURL.RawQuery) > 0 {
@@ -383,14 +359,6 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 	if snapshotID != "" {
 		sURL, e := url.Parse(srcURI)
 		if e != nil {
-			// DIAG: url.Parse failed while appending snapshotID
-			t := plan.Transfer(jptm.transferIndex)
-			sample := srcURI
-			if len(sample) > 128 {
-				sample = sample[:128]
-			}
-			common.GetLifecycleMgr().Error(fmt.Sprintf("[diag] url.Parse(srcURI) failed (snapshotID): jobID=%s part=%d transfer=%d srcOff=%d srcLen=%d dstLen=%d snapshotID=%q srcURI_first=%q srcURI_hex=%x err=%v",
-				plan.JobID.String(), plan.PartNum, jptm.transferIndex, t.SrcOffset, t.SrcLength, t.DstLength, snapshotID, sample, []byte(sample), e))
 			panic(e)
 		}
 		if len(sURL.RawQuery) > 0 {
