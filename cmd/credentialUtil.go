@@ -586,17 +586,23 @@ func createClientOptions(logger common.ILoggerResetable, srcCred *common.ScopedT
 		logOptions.Log = logger.Log
 		logOptions.ShouldLog = logger.ShouldLog
 	}
-	// Prefer job-level/global client if available so we reuse connections and transports.
+	// Job-level/global client if available so we reuse connections and transports.
 	client := common.GetGlobalHTTPClient(logger)
 
-	return ste.NewClientOptions(policy.RetryOptions{
-		MaxRetries:    ste.UploadMaxTries,
-		TryTimeout:    ste.UploadTryTimeout,
-		RetryDelay:    ste.UploadRetryDelay,
-		MaxRetryDelay: ste.UploadMaxRetryDelay,
-	}, policy.TelemetryOptions{
-		ApplicationID: common.AddUserAgentPrefix(common.UserAgent),
-	}, common.NewTracingTransport(client, "createClientOptions", logger), logOptions, srcCred, reauthCred)
+	return ste.NewClientOptions(
+		policy.RetryOptions{
+			MaxRetries:    ste.UploadMaxTries,
+			TryTimeout:    ste.UploadTryTimeout,
+			RetryDelay:    ste.UploadRetryDelay,
+			MaxRetryDelay: ste.UploadMaxRetryDelay,
+		},
+		policy.TelemetryOptions{
+			ApplicationID: common.AddUserAgentPrefix(common.UserAgent),
+		},
+		client, /*Use common.NewTracingTransport(client, "createClientOptions", logger) for http.Trace*/
+		logOptions,
+		srcCred,
+		reauthCred)
 }
 
 const frontEndMaxIdleConnectionsPerHost = http.DefaultMaxIdleConnsPerHost

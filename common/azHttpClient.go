@@ -1,18 +1,36 @@
+// Copyright © Microsoft <wastore@microsoft.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
 package common
 
 import (
-	"context"
 	"fmt"
-	"net"
 	"net/http"
 	"net/http/httptrace"
 	"runtime"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	"golang.org/x/sync/semaphore"
 )
 
 // GlobalHTTPClient is the process-wide HTTP client used by AzCopy when initialized via InitGlobalHTTPClient.
@@ -22,8 +40,8 @@ var (
 )
 
 const (
-	maxIdleConnsPerHost     = 300
-	httpTraceTickerInterval = time.Minute * 1
+	maxIdleConnsPerHost_MaxValue = 3000
+	httpTraceTickerInterval      = time.Minute * 1
 )
 
 // GetGlobalHTTPClient initializes and returns the process-global HTTP client exactly once.
@@ -37,7 +55,7 @@ func GetGlobalHTTPClient(logger ILoggerResetable) *http.Client {
 				Proxy:                  GlobalProxyLookup,
 				MaxConnsPerHost:        concurrentDialsPerCpu * runtime.NumCPU(),
 				MaxIdleConns:           0,
-				MaxIdleConnsPerHost:    maxIdleConnsPerHost,
+				MaxIdleConnsPerHost:    GetMaxIdleConnsPerHost(),
 				IdleConnTimeout:        180 * time.Second,
 				TLSHandshakeTimeout:    10 * time.Second,
 				ExpectContinueTimeout:  1 * time.Second,
@@ -49,16 +67,80 @@ func GetGlobalHTTPClient(logger ILoggerResetable) *http.Client {
 		GlobalHTTPClient = client
 		if logger != nil {
 			if tr, ok := client.Transport.(*http.Transport); ok {
-				logger.Log(LogError,
+				logger.Log(LogError, // XDM: This is error level on purpose as we want to make sure it is seen in the logs
 					fmt.Sprintf(
-						"GetGlobalHTTPClient: initialized %p MaxIdleConnsPerHost=%d MaxConnsPerHost=%d",
-						client, tr.MaxIdleConnsPerHost, tr.MaxConnsPerHost))
+						"GetGlobalHTTPClient: initialized %p MaxIdleConnsPerHost=%d MaxConnsPerHost=%d MaxIdleConns=%d",
+						client, tr.MaxIdleConnsPerHost, tr.MaxConnsPerHost, tr.MaxIdleConns))
 			} else {
 				logger.Log(LogError, fmt.Sprintf("GetGlobalHTTPClient: initialized %p", client))
 			}
 		}
 	})
 	return GlobalHTTPClient
+}
+
+// This is a code duplication of GetMainPoolSize in ste/concurrency.go
+// Ideally we should just move concurrency.go to common package. That is a todo for future.
+func GetMaxIdleConnsPerHost() int {
+
+	autoTune := true
+	envVar := EEnvironmentVariable.ConcurrencyValue()
+	envValue := GetEnvironmentVariable(envVar)
+	concurrencyValue := maxIdleConnsPerHost_MaxValue
+
+	if envValue != "AUTO" && envValue != "" {
+		concurrencyVal, err := strconv.ParseInt(envValue, 10, 0)
+		if err == nil {
+			concurrencyValue = min(int(concurrencyVal), concurrencyValue)
+			autoTune = false
+		}
+	}
+
+	if autoTune {
+		var computedDefaultVal int
+		numOfCPUs := runtime.NumCPU()
+
+		if autoTune {
+			computedDefaultVal = 4 // deliberately start with a small initial value if we are auto-tuning.  If it's not small enough, then the auto tuning becomes
+			// sluggish since, every time it needs to tune downwards, it needs to let a lot of data (num connections * block size) get transmitted,
+			// and that is slow over very small links, e.g. 10 Mbps, and produces noticeable time lag when downsizing the connection count.
+			// So we start small. (The alternatives, of using small chunk sizes or small file sizes just for the first 200 MB or so, were too hard to orchestrate within the existing app architecture)
+		} else if numOfCPUs <= 4 {
+			// fix the concurrency value for smaller machines
+			computedDefaultVal = 32
+		} else if 16*numOfCPUs > 300 {
+			// for machines that are extremely powerful, fix to 300 (previously this was to avoid running out of file descriptors, but we have another solution to that now)
+			computedDefaultVal = 300
+		} else {
+			// for moderately powerful machines, compute a reasonable number
+			computedDefaultVal = 16 * numOfCPUs
+		}
+
+		concurrencyValue = min(computedDefaultVal, concurrencyValue) // we don't expect to ever need more than this, even in small-files cases
+	}
+
+	// Set the max idle connections that we allow. If there are any more idle connections
+	// than this, they will be closed, and then will result in creation of new connections
+	// later if needed. In AzCopy, they almost always will be needed soon after, so better to
+	// keep them open.
+	// So set this number high so that that will not happen.
+	// (Previously, when using Dial instead of DialContext, there was an added benefit of keeping
+	// this value high, which was that, without it being high, all the extra dials,
+	// to compensate for the closures, were causing a pathological situation
+	// where lots and lots of OS threads get created during the creation of new connections
+	// (presumably due to some blocking OS call in dial) and the app hits Go's default
+	// limit of 10,000 OS threads, and panics and shuts down.  This has been observed
+	// on Windows when this value was set to 500 but there were 1000 to 2000 goroutines in the
+	// main pool size.  Using DialContext appears to mitigate that issue, so the value
+	// we compute here is really just to reduce unneeded make and break of connections)
+
+	// Add a buffer to the concurrencyValue to compute the max idle conns value.
+	// This buffer is to allow for some extra idle connections that might be needed
+	// in certain scenarios
+
+	maxIdleConnsPerHost := int(float64(concurrencyValue) * 1.2)
+
+	return maxIdleConnsPerHost
 }
 
 // connStats aggregates connection reuse metrics per label.
@@ -127,6 +209,10 @@ func dumpConnStats() {
 
 // NewTracingTransport wraps an existing policy.Transporter and injects an httptrace.ClientTrace to
 // collect aggregated connection reuse metrics (per label). A periodic dumper is started once.
+//
+// Usage: replace the Transport field of an *http.Client with the result of this function.
+// Use common.NewTracingTransport(client, "createClientOptions", logger) for http.Trace
+// This will log connection stats every minute using the provided logger.
 func NewTracingTransport(inner policy.Transporter, label string, logger ILoggerResetable) policy.Transporter {
 	connStatsLoggerOnce.Do(func() {
 		if logger != nil {
@@ -167,31 +253,4 @@ func (t *traceTransport) Do(req *http.Request) (*http.Response, error) {
 	}
 	req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
 	return t.inner.Do(req)
-}
-
-// Prevents too many dials happening at once, because we've observed that that increases the thread
-// count in the app, to several times more than is actually necessary - presumably due to a blocking OS
-// call somewhere. It's tidier to avoid creating those excess OS threads.
-// Even our change from Dial (deprecated) to DialContext did not replicate the effect of dialRateLimiter.
-type dialRateLimiter struct {
-	dialer *net.Dialer
-	sem    *semaphore.Weighted
-}
-
-func newDialRateLimiter(dialer *net.Dialer) *dialRateLimiter {
-	const concurrentDialsPerCpu = 196 // exact value doesn't matter too much, but too low will be too slow, and too high will reduce the beneficial effect on thread count
-	return &dialRateLimiter{
-		dialer,
-		semaphore.NewWeighted(concurrentDialsPerCpu),
-	}
-}
-
-func (d *dialRateLimiter) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	err := d.sem.Acquire(context.Background(), 1)
-	if err != nil {
-		return nil, err
-	}
-	defer d.sem.Release(1)
-
-	return d.dialer.DialContext(ctx, network, address)
 }
