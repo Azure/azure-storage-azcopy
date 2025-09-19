@@ -588,12 +588,7 @@ func createClientOptions(logger common.ILoggerResetable, srcCred *common.ScopedT
 	}
 	// Prefer job-level/global client if available so we reuse connections and transports.
 	client := common.GetGlobalHTTPClient(logger)
-	if tr, ok := client.Transport.(*http.Transport); ok {
-		msg := fmt.Sprintf("createClientOptions: using GlobalHTTPClient %p MaxIdleConnsPerHost=%d MaxConnsPerHost=%d", client, tr.MaxIdleConnsPerHost, tr.MaxConnsPerHost)
-		logger.Log(LogLevel.Error(), msg)
-	} else {
-		logger.Log(LogLevel.Error(), fmt.Sprintf("createClientOptions: using GlobalHTTPClient %p", client))
-	}
+
 	return ste.NewClientOptions(policy.RetryOptions{
 		MaxRetries:    ste.UploadMaxTries,
 		TryTimeout:    ste.UploadTryTimeout,
