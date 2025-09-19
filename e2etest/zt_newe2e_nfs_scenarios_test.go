@@ -193,8 +193,12 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
-			Verb:    azCopyVerb,
-			Targets: []ResourceManager{srcDirObj, dst.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken() /*, EExplicitCredentialType.OAuth()*/}), svm, CreateAzCopyTargetOptions{})},
+			Verb: azCopyVerb,
+			Targets: []ResourceManager{srcDirObj, dst.(RemoteResourceManager).WithSpecificAuthType(
+				ResolveVariation(svm, []ExplicitCredentialTypes{
+					EExplicitCredentialType.SASToken(),
+					EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{})
+				},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
 					Recursive: pointerTo(true),
@@ -231,7 +235,6 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 	ValidateSkippedSpecialFileCount(svm, stdOut, 1)
 }
 
-/*
 func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManager) {
 
 	//
@@ -1068,4 +1071,3 @@ func (s *FilesNFSTestSuite) Scenario_DstShareDoesNotExists(svm *ScenarioVariatio
 		delete(srcObjs, rootDir)
 	}
 }
-*/
