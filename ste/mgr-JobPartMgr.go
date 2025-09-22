@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"mime"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -85,15 +84,9 @@ type IJobPartMgr interface {
 // 'ulimit -Hn' is low).
 func NewAzcopyHTTPClient(maxIdleConns int) *http.Client {
 	const concurrentDialsPerCpu = 10 // exact value doesn't matter too much, but too low will be too slow, and too high will reduce the beneficial effect on thread count
-
 	return &http.Client{
 		Transport: &http.Transport{
-			Proxy: common.GlobalProxyLookup,
-			DialContext: (&net.Dialer{
-				Timeout:   15 * time.Second, // Shorter connection timeout for faster failover on network issues
-				KeepAlive: 30 * time.Second,
-				DualStack: true,
-			}).DialContext,
+			Proxy:                  common.GlobalProxyLookup,
 			MaxConnsPerHost:        concurrentDialsPerCpu * runtime.NumCPU(),
 			MaxIdleConns:           0, // No limit
 			MaxIdleConnsPerHost:    maxIdleConns,
