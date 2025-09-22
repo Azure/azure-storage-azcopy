@@ -2,6 +2,7 @@ package ste
 
 import (
 	"fmt"
+	"hash/fnv"
 	"net/url"
 	"strings"
 	"sync"
@@ -28,19 +29,23 @@ func NewFolderCreationTracker(fpo common.FolderPropertyOption, plan *JobPartPlan
 		}
 	}
 
-	return NewFolderCreationTrackerInt(fpo, plan, lockFolderCreation)
+	return NewFolderCreationTrackerInt(fpo, plan, lockFolderCreation, true)
 }
 
-func NewFolderCreationTrackerInt(fpo common.FolderPropertyOption, plan *JobPartPlanHeader, lockFolderCreation bool) FolderCreationTracker {
+func NewFolderCreationTrackerInt(fpo common.FolderPropertyOption, plan *JobPartPlanHeader, lockFolderCreation, useShardedTracker bool) FolderCreationTracker {
 	switch fpo {
 	case common.EFolderPropertiesOption.AllFolders(),
 		common.EFolderPropertiesOption.AllFoldersExceptRoot():
-		return &jpptFolderTracker{ // This prevents a dependency cycle. Reviewers: Are we OK with this? Can you think of a better way to do it?
-			plan:                   plan,
-			mu:                     &sync.RWMutex{},
-			contents:               make(map[string]uint32),
-			unregisteredButCreated: make(map[string]struct{}),
-			lockFolderCreation:     lockFolderCreation,
+		if useShardedTracker {
+			return newShardedFolderTracker(plan)
+		} else {
+			return &jpptFolderTracker{ // This prevents a dependency cycle. Reviewers: Are we OK with this? Can you think of a better way to do it?
+				plan:                   plan,
+				mu:                     &sync.RWMutex{},
+				contents:               make(map[string]uint32),
+				unregisteredButCreated: make(map[string]struct{}),
+				lockFolderCreation:     lockFolderCreation,
+			}
 		}
 	case common.EFolderPropertiesOption.NoFolders():
 		// can't use simpleFolderTracker here, because when no folders are processed,
@@ -98,25 +103,23 @@ func (f *jpptFolderTracker) isFolderAlreadyCreatedUnSafe(folder string) bool {
 }
 
 func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, transferIndex uint32) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
 	if folder == common.Dev_Null {
 		return // Never persist to dev-null
 	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
 
 	f.contents[folder] = transferIndex
 
 	// We created it before it was enumerated-- Let's register that now.
 	if _, ok := f.unregisteredButCreated[folder]; ok {
 		f.plan.Transfer(transferIndex).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
-
 		delete(f.unregisteredButCreated, folder)
 	}
 }
 
 func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error) error {
-
 	if folder == common.Dev_Null {
 		return nil // Never persist to dev-null
 	}
@@ -207,12 +210,12 @@ func (f *jpptFolderTracker) ShouldSetProperties(folder string, overwrite common.
 }
 
 func (f *jpptFolderTracker) StopTracking(folder string) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
 	if folder == common.Dev_Null {
 		return // Not possible to track this
 	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
 
 	// no-op, because tracking is now handled by jppt, anyway.
 	if _, ok := f.contents[folder]; ok {
@@ -225,6 +228,197 @@ func (f *jpptFolderTracker) StopTracking(folder string) {
 		}
 
 		// double should never be hit, but *just in case*.
+		panic(common.NewAzCopyLogSanitizer().SanitizeLogMessage("Folder " + folder + " shouldn't finish tracking until it's been recorded\nCurrent Contents:\n" + currentContents))
+	}
+}
+
+// ==============================================================================================
+// shardedFolderTracker is a folder tracker that uses sharding to improve concurrency and performance.
+
+const numShards = 32 // Power of 2 for efficient modulo
+
+type mapShard struct {
+	mu                     sync.RWMutex
+	contents               map[string]uint32
+	unregisteredButCreated map[string]struct{}
+}
+
+type shardedFolderTracker struct {
+	plan   IJobPartPlanHeader
+	shards [numShards]*mapShard
+}
+
+func newShardedFolderTracker(plan IJobPartPlanHeader) *shardedFolderTracker {
+	tracker := &shardedFolderTracker{
+		plan: plan,
+	}
+
+	// Initialize all shards
+	for i := 0; i < numShards; i++ {
+		tracker.shards[i] = &mapShard{
+			contents:               make(map[string]uint32),
+			unregisteredButCreated: make(map[string]struct{}),
+		}
+	}
+
+	return tracker
+}
+
+// Hash function to determine which shard to use
+func (f *shardedFolderTracker) getShard(folder string) *mapShard {
+	h := fnv.New32a()
+	h.Write([]byte(folder))
+	shardIdx := h.Sum32() & (numShards - 1) // Fast modulo for power of 2
+	return f.shards[shardIdx]
+}
+
+func (f *shardedFolderTracker) IsFolderAlreadyCreated(folder string) bool {
+	shard := f.getShard(folder)
+	shard.mu.RLock()
+	defer shard.mu.RUnlock()
+
+	if idx, ok := shard.contents[folder]; ok &&
+		f.plan.Transfer(idx).TransferStatus() == (common.ETransferStatus.FolderCreated()) {
+		return true
+	}
+
+	if _, ok := shard.unregisteredButCreated[folder]; ok {
+		return true
+	}
+
+	return false
+}
+
+func (f *shardedFolderTracker) RegisterPropertiesTransfer(folder string, transferIndex uint32) {
+	if folder == common.Dev_Null {
+		return // Never persist to dev-null
+	}
+
+	shard := f.getShard(folder)
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+
+	shard.contents[folder] = transferIndex
+
+	// We created it before it was enumerated-- Let's register that now.
+	if _, ok := shard.unregisteredButCreated[folder]; ok {
+		f.plan.Transfer(transferIndex).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
+		delete(shard.unregisteredButCreated, folder)
+	}
+}
+
+func (f *shardedFolderTracker) CreateFolder(folder string, doCreation func() error) error {
+	if folder == common.Dev_Null {
+		return nil // Never persist to dev-null
+	}
+
+	shard := f.getShard(folder)
+
+	err := doCreation()
+	if err != nil {
+		return err
+	}
+
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+
+	// Check if folder was created while waiting for lock
+	if f.isFolderAlreadyCreatedUnsafe(shard, folder) {
+		return nil
+	}
+
+	if idx, ok := shard.contents[folder]; ok {
+		// Set transfer status outside of critical section if possible
+		f.plan.Transfer(idx).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
+	} else {
+		// A folder hasn't been hit in traversal yet
+		shard.unregisteredButCreated[folder] = struct{}{}
+	}
+
+	return nil
+}
+
+// Helper method to check folder creation status without acquiring lock
+func (f *shardedFolderTracker) isFolderAlreadyCreatedUnsafe(shard *mapShard, folder string) bool {
+	if idx, ok := shard.contents[folder]; ok &&
+		f.plan.Transfer(idx).TransferStatus() == (common.ETransferStatus.FolderCreated()) {
+		return true
+	}
+
+	if _, ok := shard.unregisteredButCreated[folder]; ok {
+		return true
+	}
+
+	return false
+}
+
+func (f *shardedFolderTracker) ShouldSetProperties(folder string, overwrite common.OverwriteOption, prompter common.Prompter) bool {
+	if folder == common.Dev_Null {
+		return false // Never persist to dev-null
+	}
+
+	switch overwrite {
+	case common.EOverwriteOption.True():
+		return true
+	case common.EOverwriteOption.Prompt(),
+		common.EOverwriteOption.IfSourceNewer(),
+		common.EOverwriteOption.False():
+
+		shard := f.getShard(folder)
+		shard.mu.RLock()
+		defer shard.mu.RUnlock()
+
+		var created bool
+		if idx, ok := shard.contents[folder]; ok {
+			created = f.plan.Transfer(idx).TransferStatus() == common.ETransferStatus.FolderCreated()
+		} else {
+			// This should not happen, ever.
+			// Folder property jobs register with the tracker before they start getting processed.
+			panic(common.NewAzCopyLogSanitizer().SanitizeLogMessage("folder " + folder + " was not registered when properties persistence occurred"))
+		}
+
+		// prompt only if we didn't create this folder
+		if overwrite == common.EOverwriteOption.Prompt() && !created {
+			cleanedFolderPath := folder
+
+			if !strings.HasPrefix(folder, common.EXTENDED_PATH_PREFIX) {
+				parsedURL, _ := url.Parse(folder)
+				if parsedURL.Scheme != "" && parsedURL.Host != "" {
+					parsedURL.RawQuery = ""
+					cleanedFolderPath = parsedURL.String()
+				}
+			}
+			return prompter.ShouldOverwrite(cleanedFolderPath, common.EEntityType.Folder())
+		}
+
+		return created
+	default:
+		panic("unknown overwrite option")
+	}
+}
+
+func (f *shardedFolderTracker) StopTracking(folder string) {
+	if folder == common.Dev_Null {
+		return // Not possible to track this
+	}
+
+	shard := f.getShard(folder)
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+
+	if _, ok := shard.contents[folder]; ok {
+		delete(shard.contents, folder)
+	} else {
+		// Collect all contents for error message (this is expensive but rare)
+		currentContents := ""
+		for i := 0; i < numShards; i++ {
+			otherShard := f.shards[i]
+			otherShard.mu.RLock()
+			for k, v := range otherShard.contents {
+				currentContents += fmt.Sprintf("K: %s V: %d\n", k, v)
+			}
+			otherShard.mu.RUnlock()
+		}
 		panic(common.NewAzCopyLogSanitizer().SanitizeLogMessage("Folder " + folder + " shouldn't finish tracking until it's been recorded\nCurrent Contents:\n" + currentContents))
 	}
 }
