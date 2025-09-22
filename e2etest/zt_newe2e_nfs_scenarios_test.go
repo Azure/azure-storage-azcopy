@@ -1,6 +1,7 @@
 package e2etest
 
 import (
+	"fmt"
 	"os/user"
 	"strconv"
 	"time"
@@ -405,6 +406,9 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 	//
 
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
+	preserveSymlinks := ResolveVariation(svm, []bool{true, false})
+	followSymlinks := ResolveVariation(svm, []bool{true, false})
+
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
 	}), ResourceDefinitionContainer{
@@ -495,6 +499,33 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 		srcObjs[name] = obj
 	}
 
+	// create original file for linking symlink
+	sOriginalFileName := rootDir + "/soriginal.txt"
+	obj = ResourceDefinitionObject{
+		ObjectName: pointerTo(sOriginalFileName),
+		ObjectProperties: ObjectProperties{
+			EntityType:         common.EEntityType.File(),
+			FileNFSProperties:  fileProperties,
+			FileNFSPermissions: fileOrFolderPermissions,
+		}}
+	CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+	srcObjs[sOriginalFileName] = obj
+
+	// create symlink file
+	symLinkedFileName := rootDir + "/symlinked.txt"
+	obj = ResourceDefinitionObject{
+		ObjectName: pointerTo(symLinkedFileName),
+		ObjectProperties: ObjectProperties{
+			EntityType:         common.EEntityType.Symlink(),
+			FileNFSProperties:  fileProperties,
+			FileNFSPermissions: fileOrFolderPermissions,
+			SymlinkedFileName:  sOriginalFileName,
+		}}
+	CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+	if preserveSymlinks {
+		srcObjs[symLinkedFileName] = obj
+	}
+
 	// create original file for creating hardlinked file
 	hOriginalFileName := rootDir + "/horiginal.txt"
 	obj = ResourceDefinitionObject{
@@ -520,13 +551,23 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 	CreateResource[ObjectResourceManager](svm, srcContainer, obj)
 	srcObjs[hardLinkedFileName] = obj
 
+	shouldFail := false
+	if (followSymlinks && preserveSymlinks) || followSymlinks {
+		shouldFail = true
+		return
+	}
+
 	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
 			Verb: azCopyVerb,
 			Targets: []ResourceManager{
-				src.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{}),
-				dst.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{}),
+				src.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, 
+					[]ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), 
+						/*EExplicitCredentialType.OAuth()*/}), svm, CreateAzCopyTargetOptions{}),
+				dst.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, 
+					[]ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), 
+						/*EExplicitCredentialType.OAuth()*/}), svm, CreateAzCopyTargetOptions{}),
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
@@ -534,9 +575,28 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 					FromTo:              pointerTo(common.EFromTo.FileNFSFileNFS()),
 					PreservePermissions: pointerTo(preservePermissions),
 					PreserveInfo:        pointerTo(preserveProperties),
+					PreserveSymlinks:    pointerTo(preserveSymlinks),
+					FollowSymlinks:      pointerTo(followSymlinks),
 				},
 			},
+			ShouldFail: shouldFail,
 		})
+
+		fmt.Println("Stdout---------", stdOut)
+
+	if followSymlinks && preserveSymlinks {
+		ValidateContainsError(svm, stdOut, []string{
+			"--preserve-symlinks and --follow-symlinks contradict",
+		})
+		return
+	}
+
+	if followSymlinks {
+		ValidateContainsError(svm, stdOut, []string{
+			"The '--follow-symlink' flag is not supported for NFS<->NFS copy operations.",
+		})
+		return
+	}
 
 	// Dont validate the root directory in case of sync
 	if azCopyVerb == AzCopyVerbSync {

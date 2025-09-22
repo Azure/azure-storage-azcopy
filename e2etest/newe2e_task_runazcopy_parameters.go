@@ -305,6 +305,7 @@ type CopySyncCommonFlags struct {
 	PreserveInfo            *bool                        `flag:"preserve-info"`
 	PreserveSymlinks        *bool                        `flag:"preserve-symlinks"`
 	HardlinkType            *common.HardlinkHandlingType `flag:"hardlinks"`
+	FollowSymlinks          *bool                        `flag:"follow-symlinks"`
 }
 
 // CopyFlags is a more exclusive struct including flags exclusi

@@ -555,9 +555,13 @@ func (f *FileObjectResourceManager) Create(a Asserter, body ObjectContentContain
 
 		_, err := client.CreateHardLink(ctx, props.HardLinkedFileName, &file.CreateHardLinkOptions{})
 		a.NoError("Create file", err)
-		// fmt.Println("Name", f.ObjectName())
-		// fmt.Println("Resp.LinkCount", *resp.LinkCount)
-		// fmt.Println("Resp.NFSFileType", *resp.NFSFileType)
+	case common.EEntityType.Symlink():
+		client := f.getFileClient()
+
+		_, err := client.CreateSymbolicLink(ctx, props.SymlinkedFileName, &file.CreateSymbolicLinkOptions{
+			FileNFSProperties: nfsProperties,
+		})
+		a.NoError("Create symlink", err)
 	case common.EEntityType.Other():
 		if body == nil {
 			body = NewZeroObjectContentContainer(0)
@@ -585,7 +589,7 @@ func (f *FileObjectResourceManager) Delete(a Asserter) {
 	a.HelperMarker().Helper()
 	var err error
 	switch f.entityType {
-	case common.EEntityType.File():
+	case common.EEntityType.File(), common.EEntityType.Symlink():
 		_, err = f.getFileClient().Delete(ctx, nil)
 	case common.EEntityType.Folder():
 		_, err = f.getDirClient().Delete(ctx, nil)
