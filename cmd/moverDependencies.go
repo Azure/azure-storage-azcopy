@@ -472,10 +472,10 @@ func (cooked *cookedSyncCmdArgs) ToStringMap() map[string]string {
 	if cooked.preservePOSIXProperties {
 		result["preservePOSIXProperties"] = "true"
 	}
-	if cooked.s2sPreserveBlobTags {
+	if cooked.S2sPreserveBlobTags {
 		result["s2sPreserveBlobTags"] = "true"
 	}
-	if cooked.preserveAccessTier {
+	if cooked.PreserveAccessTier {
 		result["preserveAccessTier"] = "true"
 	}
 	if cooked.includeDirectoryStubs {
@@ -486,10 +486,10 @@ func (cooked *cookedSyncCmdArgs) ToStringMap() map[string]string {
 	}
 
 	// Add enums/options if not default/empty
-	if cooked.preservePermissions != common.EPreservePermissionsOption.None() {
+	if cooked.PreservePermissions != common.EPreservePermissionsOption.None() {
 		// PreservePermissionsOption doesn't have String() method, so we handle it manually
 		permStr := "None"
-		switch cooked.preservePermissions {
+		switch cooked.PreservePermissions {
 		case common.EPreservePermissionsOption.ACLsOnly():
 			permStr = "ACLsOnly"
 		case common.EPreservePermissionsOption.OwnershipAndACLs():

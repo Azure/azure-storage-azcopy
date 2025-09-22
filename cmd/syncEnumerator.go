@@ -97,7 +97,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		}
 	}
 
-	includeDirStubs := (cca.fromTo.From().SupportsHnsACLs() && cca.fromTo.To().SupportsHnsACLs() && cca.preservePermissions.IsTruthy()) || cca.includeDirectoryStubs
+	includeDirStubs := (cca.fromTo.From().SupportsHnsACLs() && cca.fromTo.To().SupportsHnsACLs() && cca.PreservePermissions.IsTruthy()) || cca.includeDirectoryStubs
 
 	// TODO: enable symlink support in a future release after evaluating the implications
 	// TODO: Consider passing an errorChannel so that enumeration errors during sync can be conveyed to the caller.
@@ -126,13 +126,13 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		CpkOptions: cca.cpkOptions,
 
 		SyncHashType:        cca.compareHash,
-		PreservePermissions: cca.preservePermissions,
+		PreservePermissions: cca.PreservePermissions,
 		TrailingDotOption:   cca.trailingDot,
 
 		Recursive:               cca.recursive,
 		GetPropertiesInFrontend: true,
 		IncludeDirectoryStubs:   includeDirStubs,
-		PreserveBlobTags:        cca.s2sPreserveBlobTags,
+		PreserveBlobTags:        cca.S2sPreserveBlobTags,
 		HardlinkHandling:        cca.hardlinks,
 		IncrementNotTransferred: func(entityType common.EntityType) {
 			if entityType == common.EEntityType.File() {
@@ -175,13 +175,13 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		CpkOptions: cca.cpkOptions,
 
 		SyncHashType:        cca.compareHash,
-		PreservePermissions: cca.preservePermissions,
+		PreservePermissions: cca.PreservePermissions,
 		TrailingDotOption:   cca.trailingDot,
 
 		Recursive:               cca.recursive,
 		GetPropertiesInFrontend: true,
 		IncludeDirectoryStubs:   includeDirStubs,
-		PreserveBlobTags:        cca.s2sPreserveBlobTags,
+		PreserveBlobTags:        cca.S2sPreserveBlobTags,
 		HardlinkHandling:        common.EHardlinkHandlingType.Follow(),
 	}
 	dstTraverserTemplate := ResourceTraverserTemplate{
@@ -272,7 +272,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 
 	// decide our folder transfer strategy
 	// sync always acts like stripTopDir=true, but if we intend to persist the root, we must tell NewFolderPropertyOption stripTopDir=false.
-	fpo, folderMessage := NewFolderPropertyOption(cca.fromTo, cca.recursive, !cca.includeRoot, filters, cca.preserveInfo, cca.preservePermissions.IsTruthy(), false, strings.EqualFold(cca.destination.Value, common.Dev_Null), cca.includeDirectoryStubs)
+	fpo, folderMessage := NewFolderPropertyOption(cca.fromTo, cca.recursive, !cca.includeRoot, filters, cca.preserveInfo, cca.PreservePermissions.IsTruthy(), false, strings.EqualFold(cca.destination.Value, common.Dev_Null), cca.includeDirectoryStubs)
 	if !cca.dryrunMode {
 		glcm.Info(folderMessage)
 	}
@@ -306,7 +306,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		ForceWrite:                     common.EOverwriteOption.True(), // once we decide to transfer for a sync operation, we overwrite the destination regardless
 		ForceIfReadOnly:                cca.forceIfReadOnly,
 		LogLevel:                       LogLevel,
-		PreservePermissions:            cca.preservePermissions,
+		PreservePermissions:            cca.PreservePermissions,
 		PreserveInfo:                   cca.preserveInfo,
 		PreservePOSIXProperties:        cca.preservePOSIXProperties,
 		S2SSourceChangeValidation:      true,
@@ -314,7 +314,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		S2SGetPropertiesInBackend:      true,
 		S2SInvalidMetadataHandleOption: common.EInvalidMetadataHandleOption.RenameIfInvalid(),
 		CpkOptions:                     cca.cpkOptions,
-		S2SPreserveBlobTags:            cca.s2sPreserveBlobTags,
+		S2SPreserveBlobTags:            cca.S2sPreserveBlobTags,
 
 		S2SSourceCredentialType: cca.s2sSourceCredentialType,
 		FileAttributes: common.FileTransferAttributes{
