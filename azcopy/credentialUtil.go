@@ -369,7 +369,6 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 			}
 			if public {
 				credType = common.ECredentialType.Anonymous()
-				public = true
 				return
 			}
 		}
