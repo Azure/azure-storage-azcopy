@@ -606,6 +606,16 @@ func (cca *cookedSyncCmdArgs) GetDestinationFolderEnumerationSkipped() uint64 {
 	return cca.atomicDestinationFolderEnumerationSkipped.Load()
 }
 
+// GetSymlinkSkipped returns the number of symbolic links skipped during sync.
+func (cca *cookedSyncCmdArgs) GetSymlinkSkipped() uint32 {
+	return atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)
+}
+
+// GetSpecialFileSkipped returns the number of special files skipped during sync.
+func (cca *cookedSyncCmdArgs) GetSpecialFileSkipped() uint32 {
+	return atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount)
+}
+
 // wraps call to lifecycle manager to wait for the job to complete
 // if blocking is specified to true, then this method will never return
 // if blocking is specified to false, then another goroutine spawns and wait out the job
