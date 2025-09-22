@@ -197,8 +197,9 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 			Targets: []ResourceManager{srcDirObj, dst.(RemoteResourceManager).WithSpecificAuthType(
 				ResolveVariation(svm, []ExplicitCredentialTypes{
 					EExplicitCredentialType.SASToken(),
-					EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{})
-				},
+					EExplicitCredentialType.OAuth(),
+				}), svm, CreateAzCopyTargetOptions{}),
+			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
 					Recursive: pointerTo(true),
@@ -370,8 +371,11 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
-			Verb:    azCopyVerb,
-			Targets: []ResourceManager{srcDirObj.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{}), dst},
+			Verb: azCopyVerb,
+			Targets: []ResourceManager{srcDirObj.(RemoteResourceManager).WithSpecificAuthType(
+				ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(),
+					EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{}),
+				dst},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
 					Recursive:           pointerTo(true),
