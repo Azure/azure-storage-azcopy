@@ -176,15 +176,57 @@ type rawCopyCmdArgs struct {
 	hardlinks    string
 }
 
+func (raw *rawCopyCmdArgs) toOptions(cmd *cobra.Command) (opts azcopy.CopyOptions, err error) {
+	opts = azcopy.CopyOptions{
+		Recursive:        raw.recursive,
+		ForceIfReadOnly:  raw.forceIfReadOnly,
+		AutoDecompress:   raw.autoDecompress,
+		BlockSizeMB:      raw.blockSizeMB,
+		PutBlobSizeMB:    raw.putBlobSizeMB,
+		ListOfVersionIds: raw.listOfVersionIDs,
+		Metadata:         common.Iff(cmd.Flags().Changed("metadata")),
+	}
+	// metadata flag can be one of three things
+	// 1. "" (empty string), meaning no metadata specifically set -> opts.Metadata = nil
+	// 2. clear, meaning clear metadata -> opts.Metadata = &map[string]string{}
+	// 3. foo=bar;some=thing... -> opts.Metadata = &map[string]string{"foo":"bar", "some":"thing"}
+	opts.Metadata
+
+	opts.WithInternalOptions(raw.listOfFilesToCopy)
+}
+
+func getMetadata(metadataString string) (metadata *map[string]string, err error) {
+	if metadataString == "" {
+		return nil, nil // user didn't specify metadata, so we leave it as-is
+	}
+	if strings.EqualFold(metadataString, common.MetadataAndBlobTagsClearFlag) {
+		emptyMap := map[string]string{}
+		return &emptyMap, nil // user specifically asked to clear metadata
+	}
+
+	// user specified metadata in foo=bar;some=thing... format
+	meta := make(map[string]string)
+	pairs := strings.Split(metadataString, ";")
+	for _, pair := range pairs {
+		if pair == "" {
+			continue // skip empty pairs, which can happen if user put a ; at the end
+		}
+		splits := strings.SplitN(pair, "=", 2)
+		if len(splits) != 2 {
+			return nil, fmt.Errorf("invalid metadata format. Please refer to the help document for correct format")
+		}
+		key := strings.TrimSpace(splits[0])
+		value := strings.TrimSpace(splits[1])
+		if key == "" {
+			return nil, fmt.Errorf("empty metadata keys are not allowed")
+		}
+		meta[key] = value
+	}
+	return &meta, nil
+}
+
 func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	cooked = CookedCopyCmdArgs{
-		Recursive:                raw.recursive,
-		ForceIfReadOnly:          raw.forceIfReadOnly,
-		autoDecompress:           raw.autoDecompress,
-		BlockSizeMB:              raw.blockSizeMB,
-		PutBlobSizeMB:            raw.putBlobSizeMB,
-		ListOfFiles:              raw.listOfFilesToCopy,
-		ListOfVersionIDs:         raw.listOfVersionIDs,
 		metadata:                 raw.metadata,
 		contentType:              raw.contentType,
 		contentEncoding:          raw.contentEncoding,
@@ -1403,7 +1445,7 @@ func init() {
 				raw.src = args[0]
 				raw.dst = args[1]
 
-				// under normal copy, we may ask the user questions such as whether to overwrite a file
+				// under normal copy, we may ask the user q uestions such as whether to overwrite a file
 				glcm.EnableInputWatcher()
 				if cancelFromStdin {
 					glcm.EnableCancelFromStdIn()
@@ -1414,14 +1456,41 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
+			// Deprecated flags
+
 			// We infer FromTo and validate it here since it is critical to a lot of other options parsing below.
 			userFromTo, err := azcopy.InferAndValidateFromTo(raw.src, raw.dst, raw.fromTo)
 			if err != nil {
 				glcm.Error("failed to parse --from-to user input due to error: " + err.Error())
 			}
 
-			raw.preserveInfo, raw.preservePermissions = ComputePreserveFlags(cmd, userFromTo,
-				raw.preserveInfo, raw.preserveSMBInfo, raw.preservePermissions, raw.preserveSMBPermissions)
+			if azcopy.AreBothLocationsNFSAware(userFromTo) {
+				if (raw.preserveSMBInfo && runtime.GOOS == "linux") || raw.preserveSMBPermissions {
+					glcm.Error(InvalidFlagsForNFSMsg)
+				}
+			}
+
+			// if both flags are set, we honor the new flag and ignore the old one
+			if cmd.Flags().Changed(PreserveInfoFlag) && cmd.Flags().Changed(PreserveSMBInfoFlag) {
+				raw.preserveInfo = raw.preserveInfo
+			} else if cmd.Flags().Changed(PreserveInfoFlag) {
+				raw.preserveInfo = raw.preserveInfo
+			} else if cmd.Flags().Changed(PreserveSMBInfoFlag) {
+				raw.preserveInfo = raw.preserveSMBInfo
+			} else {
+				raw.preserveInfo = azcopy.GetPreserveInfoDefault(userFromTo)
+			}
+			// if transfer is NFS aware, honor the preserve-permissions flag, otherwise honor preserve-smb-permissions flag
+			if azcopy.AreBothLocationsNFSAware(userFromTo) {
+				raw.preservePermissions = raw.preservePermissions
+			} else {
+				raw.preservePermissions = raw.preservePermissions || raw.preserveSMBPermissions
+			}
+
+			var opts azcopy.CopyOptions
+			if opts, err = raw.toOptions(cmd); err != nil {
+				glcm.Error("error parsing the input given by the user. Failed with error " + err.Error() + getErrorCodeUrl(err))
+			}
 
 			cooked, err := raw.cook()
 			if err != nil {

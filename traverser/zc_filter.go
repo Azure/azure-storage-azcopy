@@ -410,6 +410,11 @@ type FilterOptions struct {
 	ExcludeAttributes []string
 	IncludeRegex      []string
 	ExcludeRegex      []string
+
+	ExcludeContainers []string
+	IncludeBefore     time.Time
+	IncludeAfter      time.Time
+	ExcludeBlobTypes  []common.BlobType
 }
 
 // BuildFilters sets up the filters in a specific order
