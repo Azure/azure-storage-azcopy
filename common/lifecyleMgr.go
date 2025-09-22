@@ -11,15 +11,14 @@ package common
 //
 // Example:
 //
-//   h := NewJobUIHooks()
-//   h.Warn = func(msg string) { fmt.Println("⚠️", msg) }
-//   h.Prompt = func(msg string, d PromptDetails) ResponseOption {
-//       return ResponseOption{<my code here>}
-//   }
+//	h := NewJobUIHooks()
+//	h.Warn = func(msg string) { fmt.Println("⚠️", msg) }
+//	h.Prompt = func(msg string, d PromptDetails) ResponseOption {
+//	    return ResponseOption{<my code here>}
+//	}
 //
-//   h.Info("this uses the default")
-//   h.Warn("this uses the custom override")
-
+//	h.Info("this uses the default")
+//	h.Warn("this uses the custom override")
 type JobUIHooks struct {
 	Prompt                 func(message string, details PromptDetails) ResponseOption
 	Info                   func(string)
