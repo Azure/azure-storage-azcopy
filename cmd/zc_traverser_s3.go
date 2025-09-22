@@ -124,12 +124,24 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 	// This is because * is both a valid URL path character and a valid portion of an object key in S3.
 	searchPrefix := t.s3URLParts.ObjectKey
 
+	fmt.Printf("s3URLParts properties:\n")
+	fmt.Printf("  BucketName: %s\n", t.s3URLParts.BucketName)
+	fmt.Printf("  ObjectKey: %s\n", t.s3URLParts.ObjectKey)
+	fmt.Printf("  Endpoint: %s\n", t.s3URLParts.Endpoint)
+	fmt.Printf("  Region: %s\n", t.s3URLParts.Region)
+	fmt.Printf("  Host: %s\n", t.s3URLParts.Host)
+	fmt.Printf("  IsBucketSyntactically: %v\n", t.s3URLParts.IsBucketSyntactically())
+	fmt.Printf("  IsDirectorySyntactically: %v\n", t.s3URLParts.IsDirectorySyntactically())
+	fmt.Printf("  IsObjectSyntactically: %v\n", t.s3URLParts.IsObjectSyntactically())
+	fmt.Printf("Bucket name: %s, searchPrefix: %s\n", t.s3URLParts.BucketName, searchPrefix)
+
 	// It's a bucket or virtual directory.
 	for objectInfo := range t.s3Client.ListObjectsV2(t.s3URLParts.BucketName, searchPrefix, t.recursive, t.ctx.Done()) {
 		if objectInfo.Err != nil {
 			return fmt.Errorf("cannot list objects, %v", objectInfo.Err)
 		}
 
+		fmt.Printf("List Objects Succeeded\n")
 		if objectInfo.StorageClass == "" {
 			// Directories are the only objects without storage classes.
 			continue

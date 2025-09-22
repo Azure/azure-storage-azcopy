@@ -1,8 +1,9 @@
 package cmd
 
 import (
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"strings"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 )
 
 // errorURLs - map of error codes that currently have shorthand URLs
@@ -16,8 +17,8 @@ var errorURLs = map[bloberror.Code]string{
 	bloberror.AccountIsDisabled:             "https://aka.ms/AzCopyError/AccountIsDisabled",
 	bloberror.ResourceNotFound:              "https://aka.ms/AzCopyError/ResourceNotFound",
 	bloberror.ResourceTypeMismatch:          "https://aka.ms/AzCopyError/ResourceTypeMismatch",
-	bloberror.CannotVerifyCopySource:        "https://aka.ms/AzCopyError/CannotVerifyCopySource",
-	bloberror.ServerBusy:                    "https://aka.ms/AzCopyError/ServerBusy",
+	//bloberror.CannotVerifyCopySource:        "https://aka.ms/AzCopyError/CannotVerifyCopySource",
+	bloberror.ServerBusy: "https://aka.ms/AzCopyError/ServerBusy",
 }
 
 // getErrorCodeUrl - returns url string for specific error codes
