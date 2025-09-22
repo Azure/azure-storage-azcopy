@@ -48,7 +48,7 @@ var sharedKeyDeprecation sync.Once
 var autoOAuth sync.Once
 var announceOAuthTokenOnce sync.Once
 var authMessagesAlreadyLogged = &sync.Map{}
-var stashedEnvCredType = ""
+var stashedEnvCredType string
 
 func warnIfSharedKeyAuthForDatalake() {
 	sharedKeyDeprecation.Do(func() {
@@ -119,13 +119,12 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 	case common.ECredentialType.OAuthToken(),
 		common.ECredentialType.MDOAuthToken(),
 		common.ECredentialType.SharedKey():
+		if resourceType == common.ELocation.Local() {
+			return nil
+		}
 		// Files doesn't currently support OAuth, but it's a valid azure endpoint anyway, so it'll pass the check.
 		if resourceType != common.ELocation.Blob() && resourceType != common.ELocation.BlobFS() && resourceType != common.ELocation.File() && resourceType != common.ELocation.FileNFS() {
 			// There may be a reason for files->blob to specify this.
-			if resourceType == common.ELocation.Local() {
-				return nil
-			}
-
 			return fmt.Errorf("azure OAuth authentication to %s is not enabled in AzCopy", resourceType.String())
 		}
 
