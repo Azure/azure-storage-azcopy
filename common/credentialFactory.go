@@ -21,12 +21,15 @@
 package common
 
 import (
-	gcpUtils "cloud.google.com/go/storage"
 	"context"
+	"crypto/tls"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"net/http"
 	"strings"
 	"sync"
+
+	gcpUtils "cloud.google.com/go/storage"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
 	"github.com/minio/minio-go"
 	"github.com/minio/minio-go/pkg/credentials"
@@ -64,6 +67,7 @@ func (o CredentialOpOptions) panicError(err error) {
 
 // CreateS3Credential creates AWS S3 credential according to credential info.
 func CreateS3Credential(ctx context.Context, credInfo CredentialInfo, options CredentialOpOptions) (*credentials.Credentials, error) {
+	glcm := GetLifecycleMgr()
 	switch credInfo.CredentialType {
 	case ECredentialType.S3PublicBucket():
 		return credentials.NewStatic("", "", "", credentials.SignatureAnonymous), nil
@@ -71,7 +75,7 @@ func CreateS3Credential(ctx context.Context, credInfo CredentialInfo, options Cr
 		accessKeyID := GetEnvironmentVariable(EEnvironmentVariable.AWSAccessKeyID())
 		secretAccessKey := GetEnvironmentVariable(EEnvironmentVariable.AWSSecretAccessKey())
 		sessionToken := GetEnvironmentVariable(EEnvironmentVariable.AwsSessionToken())
-
+		glcm.Info("Creating Credentials for S3...")
 		// create and return s3 credential
 		return credentials.NewStaticV4(accessKeyID, secretAccessKey, sessionToken), nil // S3 uses V4 signature
 	default:
@@ -105,15 +109,31 @@ func CreateS3Client(ctx context.Context, credInfo CredentialInfo, option Credent
 		//glcm.Info(fmt.Sprintf("Region (if provided): %s\n", credInfo.S3CredentialInfo.Region))
 
 		// Ensure we have a port for IP address, default to 9000 if not specified
+		/* COmmented by Santosh
 		if !strings.Contains(endpoint, ":") {
 			endpoint = endpoint + ":9000"
 		}
+		*/
 
 		// For IP and localhost, we typically use HTTP instead of HTTPS
-		useSSL := false
+		useSSL := true
+		accessKeyID := "8R02ASILRDCRO6BEEXTK"                         // GetEnvironmentVariable(EEnvironmentVariable.AWSAccessKeyID())
+		secretAccessKey := "Tkd6WauCEvEyLrD7kvxqujhq9u8o0yNNNp3mxBIT" // GetEnvironmentVariable(EEnvironmentVariable.AWSSecretAccessKey())
 
 		// TODO: change to S3Access CredentialType?
 		if credInfo.CredentialType == ECredentialType.S3PublicBucket() {
+			if isIPEndpoint {
+
+				s3Client1, err := minio.New(endpoint, accessKeyID, secretAccessKey, useSSL)
+				s3Client1.SetCustomTransport(&http.Transport{
+					TLSClientConfig: &tls.Config{
+						InsecureSkipVerify: true, // ⚠️ disables TLS verification
+					},
+				})
+				return s3Client1, err
+			}
+
+			glcm.Info("Minio Client with Anonymous Credential")
 			cred := credentials.NewStatic("", "", "", credentials.SignatureAnonymous)
 			return minio.NewWithOptions(endpoint, &minio.Options{
 				Creds:  cred,
@@ -123,12 +143,31 @@ func CreateS3Client(ctx context.Context, credInfo CredentialInfo, option Credent
 		}
 
 		// Support access key
-		credential, err := CreateS3Credential(ctx, credInfo, option)
+		// credential, err := CreateS3Credential(ctx, credInfo, option)
+		// if err != nil {
+		// 	return nil, err
+		// }
+
+		glcm.Info("Minio Client with Support Access Key")
+
+		s3Client, err := minio.New(endpoint, accessKeyID, secretAccessKey, useSSL)
+		s3Client.SetCustomTransport(&http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true, // ⚠️ disables TLS verification
+			},
+		})
+		fmt.Println("MinIO client created with access key %s and secret key %s\n", accessKeyID, secretAccessKey)
+		buckets, err := s3Client.ListBuckets()
 		if err != nil {
-			return nil, err
+			fmt.Println("Failed to list buckets: %v", err)
 		}
 
-		s3Client, err := minio.NewWithCredentials(endpoint, credential, useSSL, credInfo.S3CredentialInfo.Region)
+		for _, bucket := range buckets {
+			fmt.Println("Bucket:", bucket.Name, "Created at:", bucket.CreationDate)
+		}
+
+		//s3Client, err := minio.NewWithCredentials(endpoint, credential, useSSL, credInfo.S3CredentialInfo.Region)
+		//s3Client, err := minio.NewWithCredentials(endpoint, credential, useSSL, "")
 		if logger != nil {
 			s3Client.TraceOn(NewS3HTTPTraceLogger(logger, LogDebug))
 		}

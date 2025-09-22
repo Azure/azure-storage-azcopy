@@ -26,12 +26,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
 
 	"github.com/spf13/cobra"
 
@@ -191,11 +192,11 @@ func init() {
 				return
 			}
 			err = cooked.handleListContainerCommand()
-			if err == nil {
-				glcm.Exit(nil, common.EExitCode.Success())
-			} else {
-				glcm.Error(err.Error() + getErrorCodeUrl(err))
-			}
+			// if err == nil {
+			// 	glcm.Exit(nil, common.EExitCode.Success())
+			// } else {
+			// 	glcm.Error(err.Error() + getErrorCodeUrl(err))
+			// }
 		},
 	}
 
