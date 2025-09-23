@@ -251,6 +251,9 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		creationProperties.LastWriteTime = &minimalLwt
 	}
 
+	// Set this before file creation
+	createOptions.SMBProperties = &creationProperties
+
 	err := common.DoWithOverrideReadOnlyOnAzureFiles(u.ctx,
 		func() (interface{}, error) {
 			return u.getFileClient().Create(u.ctx, info.SourceSize, createOptions)
@@ -276,9 +279,6 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 			u.jptm.FailActiveUpload("Creating parent directory", err)
 		}
 
-		if creationProperties.Attributes != nil {
-			createOptions.SMBProperties = &creationProperties
-		}
 		// retrying file creation
 		err = common.DoWithOverrideReadOnlyOnAzureFiles(u.ctx,
 			func() (interface{}, error) {
