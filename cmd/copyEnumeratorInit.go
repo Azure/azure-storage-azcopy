@@ -20,6 +20,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -612,9 +613,17 @@ func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool
 	}
 	pathParts := strings.Split(path, common.AZCOPY_PATH_SEPARATOR_STRING)
 
+	var targetCheck bool
+	if buildmode.IsMover {
+		// XDM: AutoEncoding for Local->FileNFS is not required as NFS target supports these characters in file names.
+		// Ideally this should be the default behavior for all AzCopy builds, but this will be done post discussion with the team.
+		targetCheck = (loc == common.ELocation.File())
+	} else {
+		targetCheck = (loc == common.ELocation.File() || loc == common.ELocation.FileNFS())
+	}
+
 	// If downloading on Windows or uploading to files, encode unsafe characters.
-	if (loc == common.ELocation.Local() && !source && runtime.GOOS == "windows") ||
-		(!source && (loc == common.ELocation.File() || loc == common.ELocation.FileNFS())) {
+	if (loc == common.ELocation.Local() && !source && runtime.GOOS == "windows") || (!source && targetCheck) {
 		// invalidChars := `<>\/:"|?*` + string(0x00)
 
 		for k, c := range encodedInvalidCharacters {
