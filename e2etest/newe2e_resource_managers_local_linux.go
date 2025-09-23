@@ -97,9 +97,13 @@ func (l LocalObjectResourceManager) PutNFSPermissions(a Asserter, permissions Fi
 
 func (l LocalObjectResourceManager) GetNFSProperties(a Asserter) ste.TypedNFSPropertyHolder {
 	filePath := l.getWorkingPath()
-	info, err := common.GetFileInformation(filePath, true, common.Iff(l.EntityType() == common.EEntityType.Symlink(), common.ESymlinkHandlingType.Preserve(), common.ESymlinkHandlingType.Follow()))
+	info, err := common.GetFileInformation(filePath, true, l.getSymlinkHandlingForEntityType())
 	a.NoError("get file NFS props", err)
 	return ste.HandleInfo{info}
+}
+
+func (l LocalObjectResourceManager) getSymlinkHandlingForEntityType() common.SymlinkHandlingType {
+	return common.Iff(l.EntityType() == common.EEntityType.Symlink(), common.ESymlinkHandlingType.Preserve(), common.ESymlinkHandlingType.Follow())
 }
 
 func (l LocalObjectResourceManager) GetNFSPermissions(a Asserter) ste.TypedNFSPermissionsHolder {
