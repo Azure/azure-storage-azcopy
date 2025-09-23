@@ -460,7 +460,7 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaults() {
 }
 
 func validateForceIfReadOnly(toForce bool, fromTo common.FromTo) error {
-	targetIsFiles := (fromTo.To() == common.ELocation.File() || fromTo.To() == common.ELocation.FileNFS()) ||
+	targetIsFiles := (fromTo.To().IsFile()) ||
 		fromTo == common.EFromTo.FileTrash()
 	targetIsWindowsFS := fromTo.To() == common.ELocation.Local() &&
 		runtime.GOOS == "windows"
@@ -1387,7 +1387,8 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 				summary.TransfersCompleted,
 				summary.TransfersFailed,
 				summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed+summary.TransfersSkipped),
-				summary.TransfersSkipped, summary.TotalTransfers, scanningString, perfString, throughputString, diskString)
+				summary.TransfersSkipped+atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)+atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount),
+				summary.TotalTransfers, scanningString, perfString, throughputString, diskString)
 		}
 	})
 
