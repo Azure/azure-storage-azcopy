@@ -152,8 +152,8 @@ func GetPreserveInfoFlagDefault(cmd *cobra.Command, fromTo common.FromTo) bool {
 func performNFSSpecificValidation(fromTo common.FromTo,
 	preservePermissions common.PreservePermissionsOption,
 	preserveInfo bool,
-	symlinkHandling common.SymlinkHandlingType,
-	hardlinkHandling *common.HardlinkHandlingType) (err error) {
+	hardlinkHandling *common.HardlinkHandlingType,
+	symlinkHandling common.SymlinkHandlingType) (err error) {
 
 	// check for unsupported NFS behavior
 	if isUnsupported, err := isUnsupportedPlatformForNFS(fromTo); isUnsupported {
@@ -185,11 +185,12 @@ func performNFSSpecificValidation(fromTo common.FromTo,
 		return err
 	}
 
-	if err = validateSymlinkFlag(symlinkHandling == common.ESymlinkHandlingType.Follow(), symlinkHandling == common.ESymlinkHandlingType.Preserve()); err != nil {
+	if err = validateAndAdjustHardlinksFlag(hardlinkHandling, fromTo); err != nil {
 		return err
 	}
 
-	if err = validateAndAdjustHardlinksFlag(hardlinkHandling, fromTo); err != nil {
+	if err = validateSymlinkFlag(symlinkHandling == common.ESymlinkHandlingType.Follow(),
+		fromTo); err != nil {
 		return err
 	}
 	return nil
@@ -233,18 +234,16 @@ func performSMBSpecificValidation(fromTo common.FromTo,
 	return nil
 }
 
-// validateSymlinkFlag checks whether the '--follow-symlink' or '--preserve-symlink' flags
-// are set for an NFS copy operation. Since symlink support is not available for NFS,
-// the function returns an error if either flag is enabled.
-// By default, symlink files will be skipped during NFS copy.
-func validateSymlinkFlag(followSymlinks, preserveSymlinks bool) error {
+// validateSymlinkFlag checks if the --follow-symlink flag is valid for the given transfer scenario.
+// Returns an error if the flag is not supported (e.g., NFS<->NFS copy).
+func validateSymlinkFlag(followSymlinks bool, fromTo common.FromTo) error {
 
 	if followSymlinks {
-		return fmt.Errorf("The '--follow-symlink' flag is not supported for NFS copy. Symlink files will be skipped by default.")
+		if fromTo == common.EFromTo.FileNFSFileNFS() {
 
-	}
-	if preserveSymlinks {
-		return fmt.Errorf("the --preserve-symlink flag is not support for NFS copy. Symlink files will be skipped by default.")
+			return fmt.Errorf("The '--follow-symlink' flag is not supported for NFS<->NFS copy operations. " +
+				"Please retry the command without using this flag. Symlink files will be skipped by default.")
+		}
 	}
 	return nil
 }

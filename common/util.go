@@ -410,3 +410,15 @@ func IsSystemContainer(containerName string) bool {
 	}
 	return false
 }
+
+// this is a global variable so that we can use it in traversal phase
+var isNFSCopy bool
+
+func SetNFSFlag(isNFS bool) {
+	// SetNFSFlag sets the global isNFSCopy variable to the given value
+	isNFSCopy = isNFS
+}
+
+func IsNFSCopy() bool {
+	return isNFSCopy
+}

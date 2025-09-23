@@ -277,6 +277,10 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				symlinkHandling:  t.symlinkHandling}, t.incrementEnumerationCounter); err == nil && skip {
 				return nil, nil
 			}
+			//set entity tile to symlink
+			if fullProperties.NFSFileType() == string(file.NFSFileTypeSymlink) {
+				f.entityType = common.EEntityType.Symlink()
+			}
 			//set entity tile to hardlink
 			if fullProperties.LinkCount() > int64(1) {
 				f.entityType = common.EEntityType.Hardlink()
@@ -539,11 +543,11 @@ func evaluateAndLogNFSFileType(ctx context.Context, meta NFSFileMeta, incrementE
 
 	switch meta.NFSFileType {
 	case file.NFSFileTypeSymlink:
-		logNFSLinkWarning(meta.Name, "", true, meta.hardlinkHandling)
-		if incrementEnumerationCounter != nil {
-			incrementEnumerationCounter(common.EEntityType.Symlink(), meta.symlinkHandling, meta.hardlinkHandling)
+		if skip := HandleSymlinkForNFS(meta.Name,
+			meta.symlinkHandling, incrementEnumerationCounter); skip {
+			return true, nil
 		}
-		return true, nil
+		return false, nil
 
 	case file.NFSFileTypeRegular:
 		if meta.LinkCount > 1 {
