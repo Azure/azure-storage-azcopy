@@ -333,7 +333,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 					dst = uri.String()
 				}
 
-				jpptFolderTracker.RegisterPropertiesTransfer(dst, t)
+				jpptFolderTracker.RegisterPropertiesTransfer(dst, plan.PartNum, t)
 			}
 		}
 
