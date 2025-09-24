@@ -94,6 +94,7 @@ func TestCheckAuthSafeForTarget(t *testing.T) {
 }
 
 func TestCheckAuthSafeForTargetIsCalledWhenGettingAuthType(t *testing.T) {
+	common.SetUIHooks(common.NewJobUIHooks())
 	common.AzcopyJobPlanFolder = os.TempDir()
 	a := assert.New(t)
 	mockGetCredTypeFromEnvVar := func() common.CredentialType {
@@ -112,6 +113,7 @@ func TestCheckAuthSafeForTargetIsCalledWhenGettingAuthType(t *testing.T) {
 }
 
 func TestCheckAuthSafeForTargetIsCalledWhenGettingAuthTypeMDOAuth(t *testing.T) {
+	common.SetUIHooks(common.NewJobUIHooks())
 	a := assert.New(t)
 	mockGetCredTypeFromEnvVar := func() common.CredentialType {
 		return common.ECredentialType.MDOAuthToken() // force it to OAuth, which is the case we want to test
