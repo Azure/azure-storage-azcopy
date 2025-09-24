@@ -49,6 +49,28 @@ func NewSyncRemoteProvider(ctx context.Context, uotm *common.UserOAuthTokenManag
 	return rp, nil
 }
 
+func NewCopyRemoteProvider(ctx context.Context, uotm *common.UserOAuthTokenManager, src, dst common.ResourceString, fromTo common.FromTo, cpkOptions common.CpkOptions, trailingDot common.TrailingDotOption) (rp *remoteProvider, err error) {
+	rp = &remoteProvider{}
+
+	ctx = context.WithValue(ctx, ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+	rp.srcServiceClient, rp.srcCredType, err = GetSourceServiceClient(ctx, src, fromTo.From(), trailingDot, cpkOptions, uotm)
+	if err != nil {
+		return rp, err
+	}
+
+	rp.dstServiceClient, rp.dstCredType, err = GetDestinationServiceClient(ctx, dst, fromTo, rp.srcCredType, trailingDot, cpkOptions, uotm)
+	if err != nil {
+		return rp, err
+	}
+
+	// Check protocol compatibility for File Shares
+	if err := ValidateProtocolCompatibility(ctx, fromTo, src, dst, rp.srcServiceClient, rp.dstServiceClient); err != nil {
+		return nil, err
+	}
+
+	return rp, nil
+}
+
 func GetSourceServiceClient(ctx context.Context,
 	source common.ResourceString,
 	loc common.Location,

@@ -24,11 +24,6 @@ func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 		common.LogPathFolder = ""
 	}
 
-	cooked.putBlobSize, err = azcopy.BlockSizeInBytes(cooked.PutBlobSizeMB)
-	if err != nil {
-		return err
-	}
-
 	// Everything uses the new implementation of list-of-files now.
 	// This handles both list-of-files and include-path as a list enumerator.
 	// This saves us time because we know *exactly* what we're looking for right off the bat.
@@ -55,7 +50,7 @@ func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 		addToChannel := func(v string, paramName string) {
 			// empty strings should be ignored, otherwise the source root itself is selected
 			if len(v) > 0 {
-				warnIfHasWildcard(includeWarningOncer, paramName, v)
+				azcopy.WarnIfHasWildcard(includeWarningOncer, paramName, v)
 				listChan <- v
 			}
 		}
@@ -168,9 +163,9 @@ func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 
 	if cooked.preserveInfo && !cooked.preservePermissions.IsTruthy() {
 		if common.IsNFSCopy() {
-			glcm.Info(PreserveNFSPermissionsDisabledMsg)
+			glcm.Info(azcopy.PreserveNFSPermissionsDisabledMsg)
 		} else {
-			glcm.Info(PreservePermissionsDisabledMsg)
+			glcm.Info(azcopy.PreservePermissionsDisabledMsg)
 		}
 	}
 

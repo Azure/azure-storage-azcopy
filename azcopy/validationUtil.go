@@ -1,14 +1,17 @@
 package azcopy
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"reflect"
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -514,4 +517,160 @@ func getShareProtocolType(
 	}
 
 	return *properties.EnabledProtocols, nil
+}
+
+func ValidateSymlinkHandlingMode(symlinkHandling common.SymlinkHandlingType, fromTo common.FromTo) error {
+	if symlinkHandling.Preserve() {
+		switch fromTo {
+		case common.EFromTo.LocalBlob(), common.EFromTo.BlobLocal(), common.EFromTo.BlobFSLocal(), common.EFromTo.LocalBlobFS():
+			return nil // Fine on all OSes that support symlink via the OS package. (Win, MacOS, and Linux do, and that's what we officially support.)
+		case common.EFromTo.BlobBlob(), common.EFromTo.BlobFSBlobFS(), common.EFromTo.BlobBlobFS(), common.EFromTo.BlobFSBlob():
+			return nil // Blob->Blob doesn't involve any local requirements
+		default:
+			return fmt.Errorf("flag --%s can only be used on Blob<->Blob or Local<->Blob", common.PreserveSymlinkFlagName)
+		}
+	}
+
+	return nil // other older symlink handling modes can work on all OSes
+}
+
+func WarnIfAnyHasWildcard(paramName string, value []string) {
+	anyOncer := &sync.Once{}
+	for _, v := range value {
+		WarnIfHasWildcard(anyOncer, paramName, v)
+	}
+}
+
+func WarnIfHasWildcard(oncer *sync.Once, paramName string, value string) {
+	if strings.Contains(value, "*") || strings.Contains(value, "?") {
+		oncer.Do(func() {
+			common.GetLifecycleMgr().Warn(fmt.Sprintf("*** Warning *** The %s parameter does not support wildcards. The wildcard "+
+				"character provided will be interpreted literally and will not have any wildcard effect. To use wildcards "+
+				"(in filenames only, not paths) use include-pattern or exclude-pattern", paramName))
+		})
+	}
+}
+
+func ValidateMetadataString(metadata string) error {
+	if strings.EqualFold(metadata, common.MetadataAndBlobTagsClearFlag) {
+		return nil
+	}
+	metadataMap, err := common.StringToMetadata(metadata)
+	if err != nil {
+		return err
+	}
+	for k := range metadataMap {
+		if strings.ContainsAny(k, " !#$%^&*,<>{}|\\:.()+'\"?/") {
+			return fmt.Errorf("invalid metadata key value '%s': can't have spaces or special characters", k)
+		}
+	}
+
+	return nil
+}
+
+// Valid tag key and value characters include:
+// 1. Lowercase and uppercase letters (a-z, A-Z)
+// 2. Digits (0-9)
+// 3. A space ( )
+// 4. Plus (+), minus (-), period (.), solidus (/), colon (:), equals (=), and underscore (_)
+func isValidBlobTagsKeyValue(keyVal string) bool {
+	for _, c := range keyVal {
+		if !((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == ' ' || c == '+' ||
+			c == '-' || c == '.' || c == '/' || c == ':' || c == '=' || c == '_') {
+			return false
+		}
+	}
+	return true
+}
+
+// ValidateBlobTagsKeyValue
+// The tag set may contain at most 10 tags. Tag keys and values are case sensitive.
+// Tag keys must be between 1 and 128 characters, and tag values must be between 0 and 256 characters.
+func ValidateBlobTagsKeyValue(bt common.BlobTags) error {
+	if len(bt) > 10 {
+		return errors.New("at-most 10 tags can be associated with a blob")
+	}
+	for k, v := range bt {
+		key, err := url.QueryUnescape(k)
+		if err != nil {
+			return err
+		}
+		value, err := url.QueryUnescape(v)
+		if err != nil {
+			return err
+		}
+
+		if key == "" || len(key) > 128 || len(value) > 256 {
+			return errors.New("tag keys must be between 1 and 128 characters, and tag values must be between 0 and 256 characters")
+		}
+
+		if !isValidBlobTagsKeyValue(key) {
+			return errors.New("incorrect character set used in key: " + k)
+		}
+
+		if !isValidBlobTagsKeyValue(value) {
+			return errors.New("incorrect character set used in value: " + v)
+		}
+	}
+	return nil
+}
+
+func ValidatePreserveOwner(preserve bool, fromTo common.FromTo) error {
+	if fromTo.IsDownload() {
+		return nil // it can be used in downloads
+	}
+	if preserve != common.PreserveOwnerDefault {
+		return fmt.Errorf("flag --%s can only be used on downloads", common.PreserveOwnerFlagName)
+	}
+	return nil
+}
+
+func ValidateBackupMode(backupMode bool, fromTo common.FromTo) error {
+	if !backupMode {
+		return nil
+	}
+	if runtime.GOOS != "windows" {
+		return errors.New(common.BackupModeFlagName + " mode is only supported on Windows")
+	}
+	if fromTo.IsUpload() || fromTo.IsDownload() {
+		return nil
+	} else {
+		return errors.New(common.BackupModeFlagName + " mode is only supported for uploads and downloads")
+	}
+}
+
+// validateListOfFilesFormat checks if the file uses the old JSON format
+func validateListOfFilesFormat(f *os.File) error {
+	scanner := bufio.NewScanner(f)
+	headerLineNum := 0
+	firstLineIsCurlyBrace := false
+	utf8BOM := string([]byte{0xEF, 0xBB, 0xBF})
+	checkBOM := false
+
+	for scanner.Scan() && headerLineNum <= 1 {
+		v := scanner.Text()
+
+		// Check if the UTF-8 BOM is on the first line and remove it if necessary.
+		if !checkBOM {
+			v = strings.TrimPrefix(v, utf8BOM)
+			checkBOM = true
+		}
+
+		cleanedLine := strings.Replace(strings.Replace(v, " ", "", -1), "\t", "", -1)
+		cleanedLine = strings.TrimSuffix(cleanedLine, "[") // don't care which line this is on, could be third line
+
+		if cleanedLine == "{" && headerLineNum == 0 {
+			firstLineIsCurlyBrace = true
+		} else {
+			const jsonStart = "{\"Files\":"
+			jsonStartNoBrace := strings.TrimPrefix(jsonStart, "{")
+			isJson := cleanedLine == jsonStart || firstLineIsCurlyBrace && cleanedLine == jsonStartNoBrace
+			if isJson {
+				return errors.New("The format for list-of-files has changed. The old JSON format is no longer supported")
+			}
+		}
+		headerLineNum++
+	}
+
+	return nil
 }

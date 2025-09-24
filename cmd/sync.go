@@ -249,6 +249,9 @@ func init() {
 					err = fmt.Errorf("cannot set output level '%s' with dry-run mode", OutputLevel.String())
 				}
 			}
+			if err != nil {
+				glcm.Error(err.Error())
+			}
 
 			var opts azcopy.SyncOptions
 			if opts, err = raw.toOptions(); err != nil {

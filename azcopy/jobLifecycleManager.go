@@ -112,6 +112,12 @@ func (j *JobLifecycleManager) OnError(err string) {
 	}
 }
 
+func (j *JobLifecycleManager) GetError() error {
+	j.mutex.RLock()
+	defer j.mutex.RUnlock()
+	return common.Iff(j.lastError == "", nil, errors.New(j.lastError))
+}
+
 func (j *JobLifecycleManager) Wait() error {
 	j.mutex.RLock()
 	isDone := j.done

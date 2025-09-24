@@ -412,8 +412,8 @@ type FilterOptions struct {
 	ExcludeRegex      []string
 
 	ExcludeContainers []string
-	IncludeBefore     time.Time
-	IncludeAfter      time.Time
+	IncludeBefore     *time.Time
+	IncludeAfter      *time.Time
 	ExcludeBlobTypes  []common.BlobType
 }
 

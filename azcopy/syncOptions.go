@@ -142,7 +142,7 @@ func (s *CookedSyncOptions) applyDefaultsAndInferOptions(opts SyncOptions) (err 
 		CpkInfo: opts.CpkByValue,
 		// We only support transfer from source encrypted by user key when user wishes to download.
 		// Due to service limitation, S2S transfer is not supported for source encrypted by user key.
-		IsSourceEncrypted: opts.FromTo.IsDownload() && (opts.CpkByName != "" || opts.CpkByValue),
+		IsSourceEncrypted: s.fromTo.IsDownload() && (opts.CpkByName != "" || opts.CpkByValue),
 	}
 	s.mirrorMode = opts.MirrorMode
 	s.trailingDot = opts.TrailingDot
@@ -262,6 +262,17 @@ func (s *CookedSyncOptions) validateOptions() (err error) {
 
 	if s.cpkOptions.CpkScopeInfo != "" && s.cpkOptions.CpkInfo {
 		return errors.New("cannot use both cpk-by-name and cpk-by-value at the same time")
+	}
+
+	if s.fromTo == common.EFromTo.LocalFile() {
+		common.GetLifecycleMgr().Warn(LocalToFileShareWarnMsg)
+		common.LogToJobLogWithPrefix(LocalToFileShareWarnMsg, common.LogWarning)
+	}
+	if s.cpkOptions.CpkScopeInfo != "" || s.cpkOptions.CpkInfo {
+		if s.cpkOptions.IsSourceEncrypted {
+			common.GetLifecycleMgr().Info("Client Provided Key for encryption/decryption is provided for download scenario. " +
+				"Assuming source is encrypted.")
+		}
 	}
 
 	return nil
