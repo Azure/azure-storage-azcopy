@@ -346,6 +346,8 @@ type RawMoverSyncCmdArgs struct {
 	IsNfsCopy               bool
 	Hardlinks               string
 	IncludeDirectoryStubs   bool
+	S2sPreserveAccessTier   bool
+	S2sPreserveBlobTags     bool
 }
 
 type SyncCmdArgsInput struct {
@@ -365,6 +367,8 @@ type SyncCmdArgsInput struct {
 	LocalHashStorageMode    string
 	IsNfsCopy               bool
 	Hardlinks               string
+	S2sPreserveAccessTier   bool
+	S2sPreserveBlobTags     bool
 }
 
 func CookRawSyncCmdArgs(args RawMoverSyncCmdArgs) (cookedSyncCmdArgs, error) {
@@ -387,6 +391,8 @@ func CookRawSyncCmdArgs(args RawMoverSyncCmdArgs) (cookedSyncCmdArgs, error) {
 		isNFSCopy:               args.IsNfsCopy,
 		hardlinks:               args.Hardlinks,
 		includeDirectoryStubs:   args.IncludeDirectoryStubs,
+		s2sPreserveAccessTier:   args.S2sPreserveAccessTier,
+		s2sPreserveBlobTags:     args.S2sPreserveBlobTags,
 	}
 	return raw.cook()
 }
@@ -472,10 +478,10 @@ func (cooked *cookedSyncCmdArgs) ToStringMap() map[string]string {
 	if cooked.preservePOSIXProperties {
 		result["preservePOSIXProperties"] = "true"
 	}
-	if cooked.S2sPreserveBlobTags {
+	if cooked.s2sPreserveBlobTags {
 		result["s2sPreserveBlobTags"] = "true"
 	}
-	if cooked.PreserveAccessTier {
+	if cooked.preserveAccessTier {
 		result["preserveAccessTier"] = "true"
 	}
 	if cooked.includeDirectoryStubs {
@@ -486,10 +492,10 @@ func (cooked *cookedSyncCmdArgs) ToStringMap() map[string]string {
 	}
 
 	// Add enums/options if not default/empty
-	if cooked.PreservePermissions != common.EPreservePermissionsOption.None() {
+	if cooked.preservePermissions != common.EPreservePermissionsOption.None() {
 		// PreservePermissionsOption doesn't have String() method, so we handle it manually
 		permStr := "None"
-		switch cooked.PreservePermissions {
+		switch cooked.preservePermissions {
 		case common.EPreservePermissionsOption.ACLsOnly():
 			permStr = "ACLsOnly"
 		case common.EPreservePermissionsOption.OwnershipAndACLs():

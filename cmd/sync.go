@@ -133,7 +133,7 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 		backupMode:                       raw.backupMode,
 		isNFSCopy:                        raw.isNFSCopy,
 		putMd5:                           raw.putMd5,
-		S2sPreserveBlobTags:              raw.s2sPreserveBlobTags,
+		s2sPreserveBlobTags:              raw.s2sPreserveBlobTags,
 		cpkByName:                        raw.cpkScopeInfo,
 		cpkByValue:                       raw.cpkInfo,
 		mirrorMode:                       raw.mirrorMode,
@@ -214,7 +214,7 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 		//TBD: We will be preserving ACLs and ownership info in case of NFS. (UserID,GroupID and FileMode)
 		// Using the same EPreservePermissionsOption that we have today for NFS as well
 		// Please provide the feedback if we should introduce new EPreservePermissionsOption instead.
-		cooked.PreservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
+		cooked.preservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
 			true,
 			cooked.fromTo)
 		if err = cooked.hardlinks.Parse(raw.hardlinks); err != nil {
@@ -223,7 +223,7 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 	} else {
 		cooked.preserveInfo = raw.preserveInfo && areBothLocationsSMBAware(cooked.fromTo)
 		cooked.preservePOSIXProperties = raw.preservePOSIXProperties
-		cooked.PreservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
+		cooked.preservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
 			raw.preserveOwner,
 			cooked.fromTo)
 	}
@@ -249,7 +249,7 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 	}
 
 	if cooked.fromTo.IsS2S() {
-		cooked.PreserveAccessTier = raw.s2sPreserveAccessTier
+		cooked.preserveAccessTier = raw.s2sPreserveAccessTier
 	}
 
 	cooked.includeRegex = parsePatterns(raw.includeRegex)
@@ -299,13 +299,13 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 	// NFS/SMB validation
 	if cooked.isNFSCopy {
 		if err := performNFSSpecificValidation(
-			cooked.fromTo, cooked.PreservePermissions, cooked.preserveInfo,
+			cooked.fromTo, cooked.preservePermissions, cooked.preserveInfo,
 			cooked.symlinkHandling, cooked.hardlinks); err != nil {
 			return err
 		}
 	} else {
 		if err := performSMBSpecificValidation(
-			cooked.fromTo, cooked.PreservePermissions, cooked.preserveInfo,
+			cooked.fromTo, cooked.preservePermissions, cooked.preserveInfo,
 			cooked.preservePOSIXProperties); err != nil {
 			return err
 		}
@@ -321,7 +321,7 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 
 	// Check if user has provided `s2s-preserve-blob-tags` flag.
 	// If yes, we have to ensure that both source and destination must be blob storage.
-	if cooked.S2sPreserveBlobTags && (cooked.fromTo.From() != common.ELocation.Blob() || cooked.fromTo.To() != common.ELocation.Blob()) {
+	if cooked.s2sPreserveBlobTags && (cooked.fromTo.From() != common.ELocation.Blob() || cooked.fromTo.To() != common.ELocation.Blob()) {
 		return fmt.Errorf("either source or destination is not a blob storage. " +
 			"blob index tags is a property of blobs only therefore both source and destination must be blob storage")
 	}
@@ -466,7 +466,7 @@ type cookedSyncCmdArgs struct {
 
 	// options
 	compareHash             common.SyncHashType
-	PreservePermissions     common.PreservePermissionsOption
+	preservePermissions     common.PreservePermissionsOption
 	preserveInfo            bool
 	preservePOSIXProperties bool
 	putMd5                  bool
@@ -504,9 +504,9 @@ type cookedSyncCmdArgs struct {
 	// otherwise the user is prompted to make a decision
 	deleteDestination common.DeleteDestination
 
-	PreserveAccessTier bool
+	preserveAccessTier bool
 	// To specify whether user wants to preserve the blob index tags during service to service transfer.
-	S2sPreserveBlobTags bool
+	s2sPreserveBlobTags bool
 
 	cpkOptions common.CpkOptions
 
