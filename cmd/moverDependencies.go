@@ -346,6 +346,8 @@ type RawMoverSyncCmdArgs struct {
 	IsNfsCopy               bool
 	Hardlinks               string
 	IncludeDirectoryStubs   bool
+	S2sPreserveAccessTier   bool
+	S2sPreserveBlobTags     bool
 }
 
 type SyncCmdArgsInput struct {
@@ -365,6 +367,8 @@ type SyncCmdArgsInput struct {
 	LocalHashStorageMode    string
 	IsNfsCopy               bool
 	Hardlinks               string
+	S2sPreserveAccessTier   bool
+	S2sPreserveBlobTags     bool
 }
 
 func CookRawSyncCmdArgs(args RawMoverSyncCmdArgs) (cookedSyncCmdArgs, error) {
@@ -387,6 +391,8 @@ func CookRawSyncCmdArgs(args RawMoverSyncCmdArgs) (cookedSyncCmdArgs, error) {
 		isNFSCopy:               args.IsNfsCopy,
 		hardlinks:               args.Hardlinks,
 		includeDirectoryStubs:   args.IncludeDirectoryStubs,
+		s2sPreserveAccessTier:   args.S2sPreserveAccessTier,
+		s2sPreserveBlobTags:     args.S2sPreserveBlobTags,
 	}
 	return raw.cook()
 }
