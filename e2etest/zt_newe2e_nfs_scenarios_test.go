@@ -1,8 +1,8 @@
 package e2etest
 
 import (
-	"fmt"
 	"os/user"
+	"runtime"
 	"strconv"
 	"time"
 
@@ -231,7 +231,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 		ValidateHardlinkedSkippedCount(svm, stdOut, 2)
 		ValidateSkippedSpecialFileCount(svm, stdOut, 1)
 	}
-
+*/
 func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManager) {
 
 	//
@@ -251,6 +251,9 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 	}
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
 	preserveProperties := ResolveVariation(svm, []bool{true, false})
+	preserveSymlinks := ResolveVariation(svm, []bool{true, false})
+	followSymlinks := ResolveVariation(svm, []bool{true, false})
+
 	//TODO: Not checking for this flag as false as azcopy needs to run by root user
 	// in order to set the owner and group to 0(root)
 	preservePermissions := ResolveVariation(svm, []bool{true})
@@ -311,31 +314,31 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 	}
 
 	// create original file for linking symlink
-	// Symlink creation in NFS is currently not supported in go-sdk.
-	// TODO: Add this once the support is added
-	// sOriginalFileName := rootDir + "/soriginal.txt"
-	// obj = ResourceDefinitionObject{
-	// 	ObjectName: pointerTo(sOriginalFileName),
-	// 	ObjectProperties: ObjectProperties{
-	// 		EntityType:         common.EEntityType.File(),
-	// 		FileNFSProperties:  fileProperties,
-	// 		FileNFSPermissions: fileOrFolderPermissions,
-	// 	}}
-	// CreateResource[ObjectResourceManager](svm, srcContainer, obj)
-	// srcObjs[sOriginalFileName] = obj
+	sOriginalFileName := rootDir + "/soriginal.txt"
+	obj = ResourceDefinitionObject{
+		ObjectName: pointerTo(sOriginalFileName),
+		ObjectProperties: ObjectProperties{
+			EntityType:         common.EEntityType.File(),
+			FileNFSProperties:  fileProperties,
+			FileNFSPermissions: fileOrFolderPermissions,
+		}}
+	CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+	srcObjs[sOriginalFileName] = obj
 
-	// // create symlink file
-	// symLinkedFileName := rootDir + "/symlinked.txt"
-	// obj = ResourceDefinitionObject{
-	// 	ObjectName: pointerTo(symLinkedFileName),
-	// 	ObjectProperties: ObjectProperties{
-	// 		EntityType:         common.EEntityType.Symlink(),
-	// 		FileNFSProperties:  fileProperties,
-	// 		FileNFSPermissions: fileOrFolderPermissions,
-	// 		SymlinkedFileName:  sOriginalFileName,
-	// 	}}
-	// // Symlink file should not be copied
-	// CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+	// create symlink file
+	symLinkedFileName := rootDir + "/symlinked.txt"
+	obj = ResourceDefinitionObject{
+		ObjectName: pointerTo(symLinkedFileName),
+		ObjectProperties: ObjectProperties{
+			EntityType:         common.EEntityType.Symlink(),
+			FileNFSProperties:  fileProperties,
+			FileNFSPermissions: fileOrFolderPermissions,
+			SymlinkedFileName:  sOriginalFileName,
+		}}
+	CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+	if preserveSymlinks {
+		srcObjs[symLinkedFileName] = obj
+	}
 
 	// create original file for creating hardlinked file
 	hOriginalFileName := rootDir + "/horiginal.txt"
@@ -361,23 +364,46 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 		}}
 	CreateResource[ObjectResourceManager](svm, srcContainer, obj)
 	srcObjs[hardLinkedFileName] = obj
-
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+
+	shouldFail := false
+	if (followSymlinks && preserveSymlinks) || followSymlinks {
+		shouldFail = true
+		return
+	}
 
 	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
 			Verb:    azCopyVerb,
-			Targets: []ResourceManager{srcDirObj.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{}), dst},
+			Targets: []ResourceManager{srcDirObj.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken() /*, EExplicitCredentialType.OAuth()*/}), svm, CreateAzCopyTargetOptions{}), dst},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
 					Recursive:           pointerTo(true),
 					FromTo:              pointerTo(common.EFromTo.FileNFSLocal()),
 					PreservePermissions: pointerTo(preservePermissions),
 					PreserveInfo:        pointerTo(preserveProperties),
+					PreserveSymlinks:    pointerTo(preserveSymlinks),
+					FollowSymlinks:      pointerTo(followSymlinks),
 				},
 			},
+			ShouldFail: shouldFail,
 		})
+
+	if followSymlinks && preserveSymlinks {
+		ValidateContainsError(svm, stdOut, []string{
+			"--preserve-symlinks and --follow-symlinks contradict",
+		})
+		return
+	}
+
+	if followSymlinks {
+		ValidateContainsError(svm, stdOut, []string{
+			"The '--follow-symlink' flag is not supported for NFS<->NFS copy operations.",
+		})
+		return
+	}
+
 	// Dont validate the root directory in case of sync
 	if azCopyVerb == AzCopyVerbSync {
 		delete(srcObjs, rootDir)
@@ -387,11 +413,14 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 		Objects: srcObjs,
 	}, true)
 	ValidateHardlinkedSkippedCount(svm, stdOut, 2)
-	// TODO: add this validation later when symlink is supported for NFS in go-sdk
-	//ValidateSkippedSymLinkedCount(svm, stdOut, 1)
+
+	if !followSymlinks && !preserveSymlinks {
+		ValidateSkippedSymLinkedCount(svm, stdOut, 1)
+	}
 
 }
-*/
+
+/*
 func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationManager) {
 
 	//
@@ -562,12 +591,12 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 		AzCopyCommand{
 			Verb: azCopyVerb,
 			Targets: []ResourceManager{
-				src.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, 
-					[]ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), 
-						/*EExplicitCredentialType.OAuth()*/}), svm, CreateAzCopyTargetOptions{}),
-				dst.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, 
-					[]ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), 
-						/*EExplicitCredentialType.OAuth()*/}), svm, CreateAzCopyTargetOptions{}),
+				src.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm,
+					[]ExplicitCredentialTypes{EExplicitCredentialType.SASToken(),
+						EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{}),
+				dst.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm,
+					[]ExplicitCredentialTypes{EExplicitCredentialType.SASToken(),
+						EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{}),
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{

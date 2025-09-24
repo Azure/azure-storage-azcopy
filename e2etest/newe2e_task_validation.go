@@ -151,7 +151,7 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 
 				a.Assert(canonPathPrefix+"bodies differ in hash", Equal{Deep: true}, hex.EncodeToString(objHash.Sum(nil)), hex.EncodeToString(valHash.Sum(nil)))
 			} else if objMan.EntityType() == common.EEntityType.Symlink() {
-				if manager.Location() == common.ELocation.FileNFS() {
+				if vProps.FileNFSProperties != nil {
 					// NFS symlink target is stored as file content
 					linkData := objMan.ReadLink(a)
 					a.Assert(canonPathPrefix+"Symlink target must be present", Not{IsNil{}}, linkData)

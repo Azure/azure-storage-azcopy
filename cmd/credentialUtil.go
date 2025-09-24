@@ -591,6 +591,7 @@ func createClientOptions(logger common.ILoggerResetable, srcCred *common.ScopedT
 	}, policy.TelemetryOptions{
 		ApplicationID: common.AddUserAgentPrefix(common.UserAgent),
 	}, ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost), logOptions, srcCred, reauthCred)
+
 }
 
 const frontEndMaxIdleConnectionsPerHost = http.DefaultMaxIdleConnsPerHost
