@@ -1025,9 +1025,9 @@ func init() {
 	// Defining this flag specifically for NFS.
 	// Not applicable to SMB or Blob as symlinks are not supported for SMB and for Blob we dont have defined behavior.
 	syncCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false,
-		"Follow symbolic links when performing sync for NFS resources. "+
-			"This flag is only applicable when either the source or destination is an NFS file share. "+
-			"Note: This flag is not supported for Azure Files SMB shares or Blob storage in case of sync.")
+		"Follow symbolic links when uploading from local file system."+
+			"This flag is applicable only if destination is an NFS file share. "+
+			"Note: This flag is not supported for Azure Files SMB shares or Blob storage in case of sync")
 
 	// Defining this flag specifically for NFS.
 	// Not applicable to SMB or Blob as symlinks are not supported for SMB and for Blob we dont have defined behavior.

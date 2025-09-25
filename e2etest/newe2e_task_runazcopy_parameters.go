@@ -304,6 +304,7 @@ type CopySyncCommonFlags struct {
 	IncludeDirectoryStubs   *bool                        `flag:"include-directory-stub"`
 	PreserveInfo            *bool                        `flag:"preserve-info"`
 	PreserveSymlinks        *bool                        `flag:"preserve-symlinks"`
+	FollowSymlinks          *bool                        `flag:"follow-symlinks"`
 	HardlinkType            *common.HardlinkHandlingType `flag:"hardlinks"`
 }
 

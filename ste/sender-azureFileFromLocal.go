@@ -104,36 +104,37 @@ func (u *azureFileUploader) Epilogue() {
 
 // SendSymlink creates a symbolic link on Azure Files NFS with the given link data.
 func (u *azureFileUploader) SendSymlink(linkData string) error {
+
 	jptm := u.jptm
 	info := jptm.Info()
+	if !jptm.FromTo().IsNFS() {
+		return nil
+	}
 
 	createSymlinkOptions := &file.CreateSymbolicLinkOptions{
 		Metadata: u.metadataToApply,
 	}
 
-	if jptm.FromTo().IsNFS() {
-
-		stage, err := u.addNFSPropertiesToHeaders(info)
-		if err != nil {
-			jptm.FailActiveSend(stage, err)
-			return err
-		}
-
-		stage, err = u.addNFSPermissionsToHeaders(info, u.getFileClient().URL())
-		if err != nil {
-			jptm.FailActiveSend(stage, err)
-			return err
-		}
-		createSymlinkOptions.FileNFSProperties = &file.NFSProperties{
-			CreationTime:  u.nfsPropertiesToApply.CreationTime,
-			LastWriteTime: u.nfsPropertiesToApply.LastWriteTime,
-			Owner:         u.nfsPropertiesToApply.Owner,
-			Group:         u.nfsPropertiesToApply.Group,
-			FileMode:      u.nfsPropertiesToApply.FileMode,
-		}
+	stage, err := u.addNFSPropertiesToHeaders(info)
+	if err != nil {
+		jptm.FailActiveSend(stage, err)
+		return err
 	}
 
-	err := DoWithCreateSymlinkOnAzureFilesNFS(u.ctx,
+	stage, err = u.addNFSPermissionsToHeaders(info, u.getFileClient().URL())
+	if err != nil {
+		jptm.FailActiveSend(stage, err)
+		return err
+	}
+	createSymlinkOptions.FileNFSProperties = &file.NFSProperties{
+		CreationTime:  u.nfsPropertiesToApply.CreationTime,
+		LastWriteTime: u.nfsPropertiesToApply.LastWriteTime,
+		Owner:         u.nfsPropertiesToApply.Owner,
+		Group:         u.nfsPropertiesToApply.Group,
+		FileMode:      u.nfsPropertiesToApply.FileMode,
+	}
+
+	err = DoWithCreateSymlinkOnAzureFilesNFS(u.ctx,
 		func() error {
 			_, err := u.getFileClient().CreateSymbolicLink(u.ctx, linkData, createSymlinkOptions)
 			return err

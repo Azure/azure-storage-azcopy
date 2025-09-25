@@ -6,7 +6,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
@@ -62,7 +64,7 @@ func ValidateTags(a Asserter, expected, real map[string]string) {
 	a.Assert("Tags must match", Equal{Deep: true}, expected, real)
 }
 
-func ValidateSkippedSymLinkedCount(a Asserter, stdOut AzCopyStdout, expected uint32) {
+func ValidateSkippedSymlinksCount(a Asserter, stdOut AzCopyStdout, expected uint32) {
 	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
 		return
 	}
@@ -72,7 +74,6 @@ func ValidateSkippedSymLinkedCount(a Asserter, stdOut AzCopyStdout, expected uin
 	if skippedSymlinkedCount != expected {
 		a.Error(fmt.Sprintf("expected skipped symlink count (%d) received count (%d)", expected, skippedSymlinkedCount))
 	}
-	return
 }
 
 func ValidateSkippedSpecialFileCount(a Asserter, stdOut AzCopyStdout, expected uint32) {
@@ -153,8 +154,14 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 			} else if objMan.EntityType() == common.EEntityType.Symlink() {
 				if manager.Location() == common.ELocation.FileNFS() {
 					// NFS symlink target is stored as file content
-					linkData := objMan.ReadLink(a)
-					a.Assert(canonPathPrefix+"Symlink target must be present", Not{IsNil{}}, linkData)
+					linkDataDest := objMan.ReadLink(a)
+					linkDataSrc := objDef.SymlinkedFileName
+
+					decodedDest, err := url.PathUnescape(linkDataDest)
+					a.NoError("decode failed", err) // or handle error if needed
+
+					a.Assert(canonPathPrefix+"Symlink mismatch", Equal{},
+						filepath.Base(linkDataSrc), filepath.Base(decodedDest))
 				} else {
 					// Do we have a specified symlink dest or a body?
 					symlinkDest := objDef.SymlinkedFileName
@@ -238,15 +245,15 @@ func ValidateListOutput(a Asserter, stdout AzCopyStdout, expectedObjects map[AzC
 	a.Assert("summary must match", Equal{}, listStdout.Summary, DerefOrZero(expectedSummary))
 }
 
-func ValidateHardlinkedSkippedCount(a Asserter, stdOut AzCopyStdout, expected uint32) {
+func ValidateHardlinksConvertedCount(a Asserter, stdOut AzCopyStdout, expected uint32) {
 	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
 		return
 	}
 
 	parsedStdout := GetTypeOrAssert[*AzCopyParsedCopySyncRemoveStdout](a, stdOut)
-	hardlinkedConvertedCount := parsedStdout.FinalStatus.HardlinksConvertedCount
-	if hardlinkedConvertedCount != expected {
-		a.Error(fmt.Sprintf("expected hardlink converted count (%d) received count (%d)", expected, hardlinkedConvertedCount))
+	hardlinksConvertedCount := parsedStdout.FinalStatus.HardlinksConvertedCount
+	if hardlinksConvertedCount != expected {
+		a.Error(fmt.Sprintf("expected hardlink converted count (%d) received count (%d)", expected, hardlinksConvertedCount))
 	}
 	return
 }
