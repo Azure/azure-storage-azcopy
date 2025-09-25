@@ -152,7 +152,7 @@ var defaultAzdTokenProvider PSTokenProvider = func(ctx context.Context, opts pol
 	if err != nil {
 		// Retry command to ensure backwards compat for Az.Accounts older than 5.0.0
 		if strings.Contains(stderr.String(), "A parameter cannot be found that matches parameter name 'AsSecureString'") {
-			GetLifecycleMgr().Warn("Your Az.Account is on an older version. \n We recommended upgrading (5.0.0+) to improve security" +
+			GetLifecycleMgr().Warn("Your Az.Account powershell commandlet is on an older version. \n We recommend upgrading to (5.0.0+) to improve security" +
 				"and reduce the risk of sensitive credential leaks.")
 			stderr.Reset()
 
