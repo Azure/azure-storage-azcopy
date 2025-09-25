@@ -81,7 +81,7 @@ The general format of the AzCopy commands is: `azcopy [command] [arguments] --[f
     - Local <-> Azure Blob / Azure File (Microsoft Entra ID or SAS)
     - Azure Blob <-> Azure Blob (Microsoft Entra ID or SAS)
     - Azure Data Lake Storage <-> Azure Data Lake Storage (Microsoft Entra ID or SAS)
-    - Azure File <-> Azure File (Source must include a SAS or is publicly accessible; SAS authorization should be used for destination)
+    - Azure File <-> Azure File (SAS for destination; source SAS or public access)
     - Azure Blob <-> Azure File
 
 * `login` - Log in to Azure Active Directory (AD) to access Azure Storage resources.
