@@ -792,19 +792,19 @@ extends:
                 displayName: 'Build AzCopy'
 
               # DownloadPipelineArtifact AFTER checkout since checkout wipes out the DefaultWorkingDirectory
-              - task: 1ES.DownloadPipelineArtifact@1
+              - task: DownloadPipelineArtifact@2
                 inputs:
                   artifactName: azcopy-linux-signed
                   targetPath: $(System.DefaultWorkingDirectory)/input/azcopy-linux-signed
                   displayName: "Download Linux Signed"
 
-              - task: 1ES.DownloadPipelineArtifact@1
+              - task: DownloadPipelineArtifact@2
                 inputs:
                   artifactName: azcopy-windows-signed
                   targetPath: $(System.DefaultWorkingDirectory)/input/azcopy-windows-signed
                   displayName: "Download Windows Signed"
 
-              - task: 1ES.DownloadPipelineArtifact@1
+              - task: DownloadPipelineArtifact@2
                 inputs:
                   artifactName: azcopy-mac-signed
                   targetPath: $(System.DefaultWorkingDirectory)/input/azcopy-mac-signed
@@ -817,25 +817,25 @@ extends:
                   cp $(input)/azcopy-mac-signed/azcopy* $(release)
                 displayName: 'Prepare release folder'
 
-              - task: 1ES.DownloadPipelineArtifact@1
+              - task: DownloadPipelineArtifact@2
                 inputs:
                   artifactName: azcopy-binaries-linux-amd64
                   targetPath: $(System.DefaultWorkingDirectory)/input/azcopy-binaries-linux-amd64
                   displayName: "Download Linux AMD64 Binaries"
 
-              - task: 1ES.DownloadPipelineArtifact@1
+              - task: DownloadPipelineArtifact@2
                 inputs:
                   artifactName: azcopy-binaries-linux-arm64
                   targetPath: $(System.DefaultWorkingDirectory)/input/azcopy-binaries-linux-arm64
                   displayName: "Download Linux ARM64 Binaries"
 
-              - task: 1ES.DownloadPipelineArtifact@1
+              - task: DownloadPipelineArtifact@2
                 inputs:
                   artifactName: azcopy-binaries-windows
                   targetPath: $(System.DefaultWorkingDirectory)/input/azcopy-binaries-windows
                   displayName: "Download Windows Binaries"
 
-              - task: 1ES.DownloadPipelineArtifact@1
+              - task: DownloadPipelineArtifact@2
                 inputs:
                   artifactName: azcopy-binaries-mac
                   targetPath: $(System.DefaultWorkingDirectory)/input/azcopy-binaries-mac
@@ -894,7 +894,7 @@ extends:
                   - checkout: self
                     displayName: 'Checkout repository'
 
-                  - task: 1ES.DownloadPipelineArtifact@1
+                  - task: DownloadPipelineArtifact@2
                     inputs:
                       artifactName: azcopy-binaries-linux-amd64
                       targetPath: $(System.DefaultWorkingDirectory)
@@ -947,7 +947,7 @@ extends:
                   - checkout: self
                     displayName: 'Checkout repository'
 
-                  - task: 1ES.DownloadPipelineArtifact@1
+                  - task: DownloadPipelineArtifact@2
                     inputs:
                       artifactName: azcopy-binaries-linux-arm64
                       targetPath: $(System.DefaultWorkingDirectory)
@@ -1105,7 +1105,7 @@ extends:
                         fi
 
                   # DownloadPipelineArtifact AFTER checkout since checkout wipes out the DefaultWorkingDirectory
-                  - task: 1ES.DownloadPipelineArtifact@1
+                  - task: DownloadPipelineArtifact@2
                     inputs:
                       artifactName: azcopy-linux-signed
                       targetPath: $(signed)
