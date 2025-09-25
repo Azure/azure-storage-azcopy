@@ -69,6 +69,7 @@ func SetPrivateNetworkArgs(privateNetworkEnabled bool, privateEndpointIPs []stri
 		ipAddress := strings.TrimSpace(ip) // removes spaces, tabs, newlines
 		resultPeEndpoints = append(resultPeEndpoints, re.ReplaceAllString(ipAddress, ""))
 	}
+	privateNetworkArgs.PrivateEndpointIPs = resultPeEndpoints
 	privateNetworkArgs.BucketName = bucketName
 }
 
