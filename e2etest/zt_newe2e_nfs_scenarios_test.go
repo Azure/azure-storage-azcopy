@@ -53,13 +53,13 @@ func getPropertiesAndPermissions(svm *ScenarioVariationManager, preserveProperti
 /*
 func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariationManager) {
 
-		// 	Test Scenario:
-		// 	1. Create a NFS enabled file share container in Azure
-		// 	2. Create a folder with some files in it. Create a regular,special file,symlink and hardlink files in the folder.
-		// 	3. Run azcopy copy/sync command to copy the folder from Azure NFS enabled file share to local.
-		// 	4. Hardlinked files should be downloaded as regular files. Hardlinks will not be preserved.
-		// 	5. Number of hardlinks converted count will be displayed in job's summary
-		//  6. Symlinked and special files should be skipped and number of skipped files will be displayed in job's summary
+			// 	Test Scenario:
+			// 	1. Create a NFS enabled file share container in Azure
+			// 	2. Create a folder with some files in it. Create a regular,special file,symlink and hardlink files in the folder.
+			// 	3. Run azcopy copy/sync command to copy the folder from Azure NFS enabled file share to local.
+			// 	4. Hardlinked files should be downloaded as regular files. Hardlinks will not be preserved.
+			// 	5. Number of hardlinks converted count will be displayed in job's summary
+			//  6. Symlinked and special files should be skipped and number of skipped files will be displayed in job's summary
 
 		if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
 			svm.InvalidateScenario()
@@ -69,6 +69,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 		preserveProperties := ResolveVariation(svm, []bool{true, false})
 		preservePermissions := ResolveVariation(svm, []bool{true, false})
 		preserveSymlinks := ResolveVariation(svm, []bool{true, false})
+		followSymlinks := ResolveVariation(svm, []bool{true, false})
 
 		dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}), GetResourceOptions{
 			PreferredAccount: pointerTo(PremiumFileShareAcct),
@@ -85,46 +86,88 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 
 		var dst ResourceManager
 		if azCopyVerb == AzCopyVerbSync {
-			dstObj := dstContainer.GetObject(svm, rootDir+"/test1.txt", common.EEntityType.File())
-			dstObj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
+			dstObj1 := dstContainer.GetObject(svm, rootDir+"/test1.txt", common.EEntityType.File())
+			dstObj1.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
+
+			dstObj2 := dstContainer.GetObject(svm, rootDir+"/symlinked2.txt", common.EEntityType.File())
+			dstObj2.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
+
 			if !svm.Dryrun() {
 				// Make sure the LMT is in the past
 				time.Sleep(time.Second * 5)
 			}
-			dst = dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
-		} else {
-			dst = dstContainer
-		}
+			azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
+			preserveProperties := ResolveVariation(svm, []bool{true, false})
+			preservePermissions := ResolveVariation(svm, []bool{true, false})
+			preserveSymlinks := ResolveVariation(svm, []bool{true, false})
 
-		folderProperties, fileProperties, fileOrFolderPermissions := getPropertiesAndPermissions(svm, preserveProperties, preservePermissions)
+			dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}), GetResourceOptions{
+				PreferredAccount: pointerTo(PremiumFileShareAcct),
+			}), ResourceDefinitionContainer{
+				Properties: ContainerProperties{
+					FileContainerProperties: FileContainerProperties{
+						EnabledProtocols: pointerTo("NFS"),
+					},
+				},
+			})
+			srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
 
-		srcObjs := make(ObjectResourceMappingFlat)
-		srcObjRes := make(map[string]ObjectResourceManager)
+			rootDir := "dir_file_copy_test_" + uuid.NewString()
 
-		obj := ResourceDefinitionObject{
-			ObjectName: pointerTo(rootDir),
-			ObjectProperties: ObjectProperties{
-				EntityType:         common.EEntityType.Folder(),
-				FileNFSProperties:  folderProperties,
-				FileNFSPermissions: fileOrFolderPermissions,
-			},
-		}
-		srcObjRes[rootDir] = CreateResource[ObjectResourceManager](svm, srcContainer, obj)
-		srcObjs[rootDir] = obj
+			var dst ResourceManager
+			if azCopyVerb == AzCopyVerbSync {
+				dstObj := dstContainer.GetObject(svm, rootDir+"/test1.txt", common.EEntityType.File())
+				dstObj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
+				if !svm.Dryrun() {
+					// Make sure the LMT is in the past
+					time.Sleep(time.Second * 5)
+				}
+				dst = dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+			} else {
+				dst = dstContainer
+			}
 
-		for i := range 2 {
-			name := rootDir + "/test" + strconv.Itoa(i) + ".txt"
+			folderProperties, fileProperties, fileOrFolderPermissions := getPropertiesAndPermissions(svm, preserveProperties, preservePermissions)
+
+			srcObjs := make(ObjectResourceMappingFlat)
+			srcObjRes := make(map[string]ObjectResourceManager)
+
 			obj := ResourceDefinitionObject{
-				ObjectName: pointerTo(name),
-				Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
+				ObjectName: pointerTo(rootDir),
+				ObjectProperties: ObjectProperties{
+					EntityType:         common.EEntityType.Folder(),
+					FileNFSProperties:  folderProperties,
+					FileNFSPermissions: fileOrFolderPermissions,
+				},
+			}
+			srcObjRes[rootDir] = CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+			srcObjs[rootDir] = obj
+
+			for i := range 2 {
+				name := rootDir + "/test" + strconv.Itoa(i) + ".txt"
+				obj := ResourceDefinitionObject{
+					ObjectName: pointerTo(name),
+					Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
+					ObjectProperties: ObjectProperties{
+						EntityType:         common.EEntityType.File(),
+						FileNFSProperties:  fileProperties,
+						FileNFSPermissions: fileOrFolderPermissions,
+					}}
+				srcObjRes[name] = CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+				srcObjs[name] = obj
+			}
+
+			// create original file for linking symlink
+			sOriginalFileName := rootDir + "/soriginal.txt"
+			obj = ResourceDefinitionObject{
+				ObjectName: pointerTo(sOriginalFileName),
 				ObjectProperties: ObjectProperties{
 					EntityType:         common.EEntityType.File(),
 					FileNFSProperties:  fileProperties,
 					FileNFSPermissions: fileOrFolderPermissions,
 				}}
-			srcObjRes[name] = CreateResource[ObjectResourceManager](svm, srcContainer, obj)
-			srcObjs[name] = obj
-		}
+			srcObjRes[sOriginalFileName] = CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+			srcObjs[sOriginalFileName] = obj
 
 		// create original file for linking symlink
 		sOriginalFileName := rootDir + "/soriginal.txt"
@@ -151,6 +194,21 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 		srcObjRes[symLinkedFileName] = CreateResource[ObjectResourceManager](svm, srcContainer, obj)
 		if preserveSymlinks {
 			srcObjs[symLinkedFileName] = obj
+		}
+
+		// create symlink file
+		symLinkedFileName2 := rootDir + "/symlinked2.txt"
+		obj = ResourceDefinitionObject{
+			ObjectName: pointerTo(symLinkedFileName2),
+			ObjectProperties: ObjectProperties{
+				EntityType:         common.EEntityType.Symlink(),
+				FileNFSProperties:  fileProperties,
+				FileNFSPermissions: fileOrFolderPermissions,
+				SymlinkedFileName:  sOriginalFileName,
+			}}
+		srcObjRes[symLinkedFileName2] = CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+		if preserveSymlinks {
+			srcObjs[symLinkedFileName2] = obj
 		}
 
 		// create original file for creating hardlinked file
@@ -181,6 +239,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 		// create special file
 		specialFileFileName := rootDir + "/mypipe"
 		obj = ResourceDefinitionObject{
+
 			ObjectName: pointerTo(specialFileFileName),
 			ObjectProperties: ObjectProperties{
 				EntityType:         common.EEntityType.Other(),
@@ -191,11 +250,21 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 
 		srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
+		shouldFail := false
+		if followSymlinks && preserveSymlinks {
+			shouldFail = true
+		}
+
 		stdOut, _ := RunAzCopy(
 			svm,
 			AzCopyCommand{
-				Verb:    azCopyVerb,
-				Targets: []ResourceManager{srcDirObj, dst.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken() , EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{})},
+				Verb: azCopyVerb,
+				Targets: []ResourceManager{srcDirObj, dst.(RemoteResourceManager).WithSpecificAuthType(
+					ResolveVariation(svm, []ExplicitCredentialTypes{
+						EExplicitCredentialType.SASToken(),
+						EExplicitCredentialType.OAuth(),
+					}), svm, CreateAzCopyTargetOptions{}),
+				},
 				Flags: CopyFlags{
 					CopySyncCommonFlags: CopySyncCommonFlags{
 						Recursive: pointerTo(true),
@@ -204,9 +273,16 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 						PreserveInfo:        pointerTo(preserveProperties),
 						PreservePermissions: pointerTo(preservePermissions),
 						PreserveSymlinks:    pointerTo(preserveSymlinks),
+						FollowSymlinks:      pointerTo(followSymlinks),
 					},
 				},
+				ShouldFail: shouldFail,
 			})
+
+		if followSymlinks && preserveSymlinks {
+			ValidateMessageOutput(svm, stdOut, "cannot both follow and preserve symlinks", true)
+			return
+		}
 
 		// As we cannot set creationTime in linux we will fetch the properties from local and set it to src object properties
 		for objName := range srcObjs {
@@ -215,20 +291,11 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 			if obj.ObjectProperties.FileNFSProperties != nil {
 				obj.ObjectProperties.FileNFSProperties.FileCreationTime = objProp.FileProperties.FileCreationTime
 			}
-		}
-		// Dont validate the root directory in case of sync
-		if azCopyVerb == AzCopyVerbSync {
-			delete(srcObjs, rootDir)
-		}
 
-		ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
-			Objects: srcObjs,
-		}, true)
-
-		if !preserveSymlinks {
-			ValidateSkippedSymLinkedCount(svm, stdOut, 1)
+		if !preserveSymlinks && !followSymlinks {
+			ValidateSkippedSymlinksCount(svm, stdOut, 2)
 		}
-		ValidateHardlinkedSkippedCount(svm, stdOut, 2)
+		ValidateHardlinksConvertedCount(svm, stdOut, 2)
 		ValidateSkippedSpecialFileCount(svm, stdOut, 1)
 	}
 */
@@ -369,14 +436,16 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 	shouldFail := false
 	if (followSymlinks && preserveSymlinks) || followSymlinks {
 		shouldFail = true
-		return
 	}
 
 	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
-			Verb:    azCopyVerb,
-			Targets: []ResourceManager{srcDirObj.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken() /*, EExplicitCredentialType.OAuth()*/}), svm, CreateAzCopyTargetOptions{}), dst},
+			Verb: azCopyVerb,
+			Targets: []ResourceManager{srcDirObj.(RemoteResourceManager).WithSpecificAuthType(
+				ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(),
+					EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{}),
+				dst},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
 					Recursive:           pointerTo(true),
@@ -412,12 +481,11 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcObjs,
 	}, true)
-	ValidateHardlinkedSkippedCount(svm, stdOut, 2)
+	ValidateHardlinksConvertedCount(svm, stdOut, 2)
 
 	if !followSymlinks && !preserveSymlinks {
-		ValidateSkippedSymLinkedCount(svm, stdOut, 1)
+		ValidateSkippedSymlinksCount(svm, stdOut, 1)
 	}
-
 }
 
 /*
@@ -635,7 +703,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 		Objects: srcObjs,
 	}, false)
 
-	ValidateHardlinkedSkippedCount(svm, stdOut, 2)
+	ValidateHardlinksConvertedCount(svm, stdOut, 2)
 }
 
 /*
