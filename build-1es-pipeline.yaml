@@ -1014,6 +1014,7 @@ extends:
                   - task: 1ES.DownloadPipelineArtifact@1
                     displayName: 'Download Linux, Windows, Mac Build Artifacts'
                     inputs:
+                      artifactName: ' '
                       itemPattern: 'azcopy-*-signed/**'
                       downloadPath: $(Build.ArtifactStagingDirectory)
 
