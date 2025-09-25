@@ -1091,15 +1091,30 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				}
 
 				// NFS handling
-				if common.IsNFSCopy() && !entry.IsDir() {
-					if IsHardlink(fileInfo) {
-						entityType = common.EEntityType.Hardlink()
-					} else if !IsRegularFile(fileInfo) {
-						entityType = common.EEntityType.Other()
-						if t.incrementEnumerationCounter != nil {
-							t.incrementEnumerationCounter(entityType)
+				if !entry.IsDir() {
+
+					if common.IsNFSCopy() {
+						if IsHardlink(fileInfo) {
+							entityType = common.EEntityType.Hardlink()
+						} else if !IsRegularFile(fileInfo) {
+							entityType = common.EEntityType.Other()
+							if t.incrementEnumerationCounter != nil {
+								t.incrementEnumerationCounter(entityType)
+							}
+							continue
 						}
-						continue
+					} else {
+
+						switch fileInfo.Mode() {
+						case fs.ModeNamedPipe, fs.ModeDevice, fs.ModeSocket, fs.ModeCharDevice:
+							// These files have no data for us to upload, and will cause AzCopy to hang upon attempting to open.
+							entityType = common.EEntityType.Other()
+							if t.incrementEnumerationCounter != nil {
+								t.incrementEnumerationCounter(entityType)
+							}
+							continue
+						default:
+						}
 					}
 				}
 
