@@ -40,7 +40,7 @@ parameters:
   - name: remove_packages
     displayName: 'Remove Linux Packages'
     type: string
-    default: ''
+    default: ' '
 
 # Do not trigger this pipeline automatically
 trigger: none
