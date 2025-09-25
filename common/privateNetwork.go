@@ -63,10 +63,11 @@ type RoundRobinTransport struct {
 // Set private network arguments
 func SetPrivateNetworkArgs(privateNetworkEnabled bool, privateEndpointIPs []string, bucketName string) {
 	re := regexp.MustCompile(`[^0-9.]`)
+	var resultPeEndpoints []string
 	privateNetworkArgs.Enabled = privateNetworkEnabled
-	for i, ip := range privateEndpointIPs {
+	for _, ip := range privateEndpointIPs {
 		ipAddress := strings.TrimSpace(ip) // removes spaces, tabs, newlines
-		privateNetworkArgs.PrivateEndpointIPs[i] = re.ReplaceAllString(ipAddress, "")
+		resultPeEndpoints = append(resultPeEndpoints, re.ReplaceAllString(ipAddress, ""))
 	}
 	privateNetworkArgs.BucketName = bucketName
 }
