@@ -27,10 +27,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-type BucketToContainerNameResolver interface {
-	ResolveName(bucketName string) (string, error)
-}
-
 func (cca *CookedCopyCmdArgs) validateSourceDir(traverser traverser.ResourceTraverser) error {
 	var err error
 	// Ensure we're only copying a directory under valid conditions
@@ -168,10 +164,10 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// Create a Remote resource resolver
 	// Giving it nothing to work with as new names will be added as we Traverse.
-	var containerResolver BucketToContainerNameResolver
-	containerResolver = NewS3BucketNameToAzureResourcesResolver(nil)
+	var containerResolver azcopy.BucketToContainerNameResolver
+	containerResolver = azcopy.NewS3BucketNameToAzureResourcesResolver(nil)
 	if cca.FromTo == common.EFromTo.GCPBlob() {
-		containerResolver = NewGCPBucketNameToAzureResourcesResolver(nil)
+		containerResolver = azcopy.NewGCPBucketNameToAzureResourcesResolver(nil)
 	}
 	existingContainers := make(map[string]bool)
 	var logDstContainerCreateFailureOnce sync.Once
@@ -212,9 +208,9 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				// Resolve all container names up front.
 				// If we were to resolve on-the-fly, then name order would affect the results inconsistently.
 				if cca.FromTo == common.EFromTo.S3Blob() {
-					containerResolver = NewS3BucketNameToAzureResourcesResolver(containers)
+					containerResolver = azcopy.NewS3BucketNameToAzureResourcesResolver(containers)
 				} else if cca.FromTo == common.EFromTo.GCPBlob() {
-					containerResolver = NewGCPBucketNameToAzureResourcesResolver(containers)
+					containerResolver = azcopy.NewGCPBucketNameToAzureResourcesResolver(containers)
 				}
 
 				for _, v := range containers {

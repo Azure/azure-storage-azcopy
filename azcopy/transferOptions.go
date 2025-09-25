@@ -73,12 +73,15 @@ func (b boolDefaultTrue) GetIfSet() (bool, bool) {
 type CookedTransferOptions struct {
 	source      common.ResourceString
 	destination common.ResourceString
+	srcLevel    LocationLevel
+	dstLevel    LocationLevel
 
-	fromTo        common.FromTo
-	filterOptions traverser.FilterOptions
+	fromTo            common.FromTo
+	filterOptions     traverser.FilterOptions
+	excludeContainers []string
 
 	listOfVersionIds chan string
-	listOFFiles      chan string
+	listOfFiles      chan string
 
 	recursive                      bool
 	stripTopDir                    bool
@@ -112,6 +115,7 @@ type CookedTransferOptions struct {
 	asSubdir                       bool
 	s2sPreserveProperties          boolDefaultTrue
 	s2sGetPropertiesInBackend      bool
+	getPropertiesInFrontend        bool // inferred
 	s2sPreserveAccessTier          boolDefaultTrue
 	s2sSourceChangeValidation      bool
 	s2sPreserveBlobTags            bool
@@ -232,7 +236,7 @@ func (c *CookedTransferOptions) applyDefaultsAndInferOptions(opts CopyOptions) (
 	if err != nil {
 		return err
 	}
-	c.listOFFiles = listChan
+	c.listOfFiles = listChan
 	versionsChan, err := getVersionsChannel(opts.ListOfVersionIds)
 	if err != nil {
 		return err
@@ -279,12 +283,12 @@ func (c *CookedTransferOptions) applyDefaultsAndInferOptions(opts CopyOptions) (
 		IncludePatterns:   opts.IncludePatterns,
 		ExcludePatterns:   opts.ExcludePatterns,
 		ExcludePaths:      opts.ExcludePaths,
-		ExcludeContainers: opts.ExcludeContainers,
 		IncludeAttributes: opts.IncludeAttributes,
 		ExcludeAttributes: opts.ExcludeAttributes,
 		IncludeRegex:      opts.IncludeRegex,
 		ExcludeRegex:      opts.ExcludeRegex,
 	}
+	c.excludeContainers = opts.ExcludeContainers
 	c.trailingDot = opts.TrailingDot
 	c.checkMd5 = opts.CheckMd5
 	c.hardlinks = opts.Hardlinks
@@ -305,6 +309,54 @@ func (c *CookedTransferOptions) applyDefaultsAndInferOptions(opts CopyOptions) (
 		// If a user is trying to persist from Blob storage with ACLs, they probably want directories too, because ACLs only exist in HNS.
 		c.includeDirectoryStubs = true
 	}
+	// We set preservePOSIXProperties if the customer has explicitly asked for this in transfer or if it is just a Posix-property only transfer
+	c.preservePosixProperties = opts.PreservePosixProperties || c.forceWrite == common.EOverwriteOption.PosixProperties()
+	// Infer on download so that we get LMT and MD5 on files download
+	// On S2S transfers the following rules apply:
+	// If preserve properties is enabled, but get properties in backend is disabled, turn it on
+	c.getPropertiesInFrontend = c.forceWrite == common.EOverwriteOption.IfSourceNewer() ||
+		(c.fromTo.From().IsFile() && !c.fromTo.To().IsRemote()) || // If it's a download, we still need LMT and MD5 from files.
+		(c.fromTo.From().IsFile() &&
+			c.fromTo.To().IsRemote() && (c.s2sSourceChangeValidation || c.filterOptions.IncludeAfter != nil || c.filterOptions.IncludeBefore != nil)) || // If S2S from File to *, and sourceChangeValidation is enabled, we get properties so that we have LMTs. Likewise, if we are using includeAfter or includeBefore, which require LMTs.
+		(c.fromTo.From().IsRemote() && c.fromTo.To().IsRemote() && c.s2sPreserveProperties.Get() && !c.s2sGetPropertiesInBackend) // If S2S and preserve properties AND get properties in backend is on, turn this off, as properties will be obtained in the backend.
+	c.s2sGetPropertiesInBackend = c.s2sPreserveProperties.Get() && !c.getPropertiesInFrontend && c.s2sGetPropertiesInBackend // Infer GetProperties if GetPropertiesInBackend is enabled.
+
+	// source root trailing slash handling
+	root, err := NormalizeResourceRoot(c.source.Value, c.fromTo.From())
+	if err != nil {
+		return err
+	}
+	// Handle special case: local source paths with trailing "/*".
+	if c.fromTo.From().IsLocal() {
+		diff := strings.TrimPrefix(c.source.Value, root)
+
+		// Match either "*" or "/*" with OS or AzCopy separators.
+		if diff == "*" ||
+			diff == common.OS_PATH_SEPARATOR+"*" ||
+			diff == common.AZCOPY_PATH_SEPARATOR_STRING+"*" {
+			c.stripTopDir = true
+		}
+	}
+	c.source.Value = root
+	c.srcLevel, err = DetermineLocationLevel(c.source.Value, c.fromTo.From(), true)
+	if err != nil {
+		return err
+	}
+	c.dstLevel, err = DetermineLocationLevel(c.destination.Value, c.fromTo.To(), false)
+	if err != nil {
+		return err
+	}
+	// When copying a container directly to a container, strip the top directory, unless we're attempting to persist permissions.
+	if c.srcLevel == ELocationLevel.Container() && c.dstLevel == ELocationLevel.Container() && c.fromTo.IsS2S() {
+		if c.preservePermissions.IsTruthy() {
+			// if we're preserving permissions, we need to keep the top directory, but with container->container, we don't need to add the container name to the path.
+			// asSubdir is a better option than stripTopDir as stripTopDir disincludes the root.
+			c.asSubdir = false
+		} else {
+			c.stripTopDir = true
+		}
+	}
+
 	return
 }
 
@@ -438,6 +490,42 @@ func getVersionsChannel(listOfVersionIDs string) (versionsChan chan string, err 
 }
 
 func (c *CookedTransferOptions) validateOptions() (err error) {
+	if err := common.VerifyIsURLResolvable(c.source.Value); c.fromTo.From().IsRemote() && err != nil {
+		return fmt.Errorf("failed to resolve source: %w", err)
+	}
+
+	if err := common.VerifyIsURLResolvable(c.destination.Value); c.fromTo.To().IsRemote() && err != nil {
+		return fmt.Errorf("failed to resolve destination: %w", err)
+	}
+
+	// check if destination is a system container
+	if c.fromTo.IsS2S() || c.fromTo.IsUpload() {
+		dstContainerName, err := GetContainerName(c.destination.Value, c.fromTo.To())
+		if err != nil {
+			return fmt.Errorf("failed to get container name from destination (is it formatted correctly?): %w", err)
+		}
+		if common.IsSystemContainer(dstContainerName) {
+			return fmt.Errorf("cannot copy to system container '%s'", dstContainerName)
+		}
+	}
+
+	// Disallow list-of-files and include-path on service-level traversal due to a major bug
+	// TODO: Fix the bug.
+	//       Two primary issues exist with the list-of-files implementation:
+	//       1) Account name doesn't get trimmed from the path
+	//       2) List-of-files is not considered an account traverser; therefore containers don't get made.
+	//       Resolve these two issues and service-level list-of-files/include-path will work
+	if c.listOfFiles != nil && c.srcLevel == ELocationLevel.Service() {
+		return errors.New("cannot combine list-of-files or include-path with account traversal")
+	}
+	if (c.srcLevel == ELocationLevel.Object() || c.fromTo.From().IsLocal()) && c.dstLevel == ELocationLevel.Service() {
+		return errors.New("cannot transfer individual files/folders to the root of a service. Add a container or directory to the destination URL")
+	}
+
+	if c.srcLevel == ELocationLevel.Container() && c.dstLevel == ELocationLevel.Service() && !c.asSubdir {
+		return errors.New("cannot use --as-subdir=false with a service level destination")
+	}
+
 	if err = ValidateForceIfReadOnly(c.forceIfReadOnly, c.fromTo); err != nil {
 		return err
 	}

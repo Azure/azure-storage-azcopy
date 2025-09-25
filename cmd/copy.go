@@ -279,7 +279,7 @@ func (raw *rawCopyCmdArgs) toCopyOptions(cmd *cobra.Command) (opts azcopy.CopyOp
 	}
 	// If the user has provided some input with excludeBlobType flag, parse the input.
 	if len(raw.excludeBlobType) > 0 {
-		excludeBlobTypes := make([]common.BlobType, 0)
+		excludeBlobTypes := make([]blob.BlobType, 0)
 		// Split the string using delimiter ';' and parse the individual blobType
 		blobTypes := strings.Split(raw.excludeBlobType, ";")
 		for _, blobType := range blobTypes {
@@ -288,7 +288,7 @@ func (raw *rawCopyCmdArgs) toCopyOptions(cmd *cobra.Command) (opts azcopy.CopyOp
 			if err != nil {
 				return opts, fmt.Errorf("error parsing the exclude-blob-type %s provided with exclude-blob-type flag ", blobType)
 			}
-			excludeBlobTypes = append(excludeBlobTypes, eBlobType)
+			excludeBlobTypes = append(excludeBlobTypes, eBlobType.ToBlobType())
 		}
 		opts.ExcludeBlobTypes = excludeBlobTypes
 	}
@@ -653,7 +653,7 @@ type CookedCopyCmdArgs struct {
 	jobID common.JobID
 
 	// extracted from the input
-	credentialInfo common.CredentialInfo
+	//credentialInfo common.CredentialInfo
 
 	// variables used to calculate progress
 	// intervalStartTime holds the last time value when the progress summary was fetched
@@ -752,7 +752,7 @@ func (cca *CookedCopyCmdArgs) process() error {
 		return err
 	}
 
-	if isRedirection(cca.FromTo) {
+	if cca.FromTo.IsRedirection() {
 		err := cca.processRedirectionCopy()
 
 		if err != nil {
@@ -763,182 +763,6 @@ func (cca *CookedCopyCmdArgs) process() error {
 		glcm.Exit(nil, common.EExitCode.Success())
 	}
 	return cca.processCopyJobPartOrders()
-}
-
-// TODO discuss with Jeff what features should be supported by redirection, such as metadata, content-type, etc.
-func (cca *CookedCopyCmdArgs) processRedirectionCopy() error {
-	if cca.FromTo == common.EFromTo.PipeBlob() {
-		return cca.processRedirectionUpload(cca.Destination, cca.blockSize)
-	} else if cca.FromTo == common.EFromTo.BlobPipe() {
-		return cca.processRedirectionDownload(cca.Source)
-	}
-
-	return fmt.Errorf("unsupported redirection type: %s", cca.FromTo)
-}
-
-func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.ResourceString) error {
-
-	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-
-	// step 0: check the Stdout before uploading
-	_, err := os.Stdout.Stat()
-	if err != nil {
-		return fmt.Errorf("fatal: cannot write to Stdout due to error: %s", err.Error())
-	}
-
-	// The isPublic flag is useful in S2S transfers but doesn't much matter for download. Fortunately, no S2S happens here.
-	// This means that if there's auth, there's auth. We're happy and can move on.
-	// GetCredentialInfoForLocation also populates oauth token fields... so, it's very easy.
-	credInfo, _, err := GetCredentialInfoForLocation(ctx, common.ELocation.Blob(), blobResource, true, Client.GetUserOAuthTokenManagerInstance(), cca.CpkOptions)
-
-	if err != nil {
-		return fmt.Errorf("fatal: cannot find auth on source blob URL: %s", err.Error())
-	}
-
-	// step 1: create client options
-	// note: dstCred is nil, as we could not reauth effectively because stdout is a pipe.
-	options := &blockblob.ClientOptions{ClientOptions: traverser.CreateClientOptions(common.AzcopyScanningLogger, nil, nil)}
-
-	// step 2: parse source url
-	u, err := blobResource.FullURL()
-	if err != nil {
-		return fmt.Errorf("fatal: cannot parse source blob URL due to error: %s", err.Error())
-	}
-
-	var blobClient *blockblob.Client
-	if credInfo.CredentialType.IsAzureOAuth() {
-		blobClient, err = blockblob.NewClient(u.String(), credInfo.OAuthTokenInfo.TokenCredential, options)
-	} else {
-		blobClient, err = blockblob.NewClientWithNoCredential(u.String(), options)
-	}
-	if err != nil {
-		return fmt.Errorf("fatal: Could not create client: %s", err.Error())
-	}
-
-	// step 3: start download
-
-	cpkInfo, err := cca.CpkOptions.GetCPKInfo()
-	if err != nil {
-		return err
-	}
-	blobStream, err := blobClient.DownloadStream(ctx, &blob.DownloadStreamOptions{
-		CPKInfo:      cpkInfo,
-		CPKScopeInfo: cca.CpkOptions.GetCPKScopeInfo(),
-	})
-	if err != nil {
-		return fmt.Errorf("fatal: cannot download blob due to error: %s", err.Error())
-	}
-
-	blobBody := blobStream.NewRetryReader(ctx, &blob.RetryReaderOptions{MaxRetries: ste.MaxRetryPerDownloadBody})
-	defer blobBody.Close()
-
-	// step 4: pipe everything into Stdout
-	_, err = io.Copy(os.Stdout, blobBody)
-	if err != nil {
-		return fmt.Errorf("fatal: cannot download blob to Stdout due to error: %s", err.Error())
-	}
-
-	return nil
-}
-
-func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.ResourceString, blockSize int64) error {
-	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-
-	// Use the concurrency environment value
-	concurrencyEnvVar := common.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue())
-
-	pipingUploadParallelism := pipingUploadParallelism
-	if concurrencyEnvVar != "" {
-		// handle when the concurrency value is AUTO
-		if concurrencyEnvVar == "AUTO" {
-			return errors.New("concurrency auto-tuning is not possible when using redirection transfers (AZCOPY_CONCURRENCY_VALUE = AUTO)")
-		}
-
-		// convert the concurrency value to int
-		concurrencyValue, err := strconv.ParseInt(concurrencyEnvVar, 10, 32)
-
-		//handle the error if the conversion fails
-		if err != nil {
-			return fmt.Errorf("AZCOPY_CONCURRENCY_VALUE is not set to a valid value, an integer is expected (current value: %s): %w", concurrencyEnvVar, err)
-		}
-
-		pipingUploadParallelism = int(concurrencyValue) // Cast to Integer
-	}
-
-	// if no block size is set, then use default value
-	if blockSize == 0 {
-		blockSize = pipingDefaultBlockSize
-	}
-
-	// GetCredentialInfoForLocation populates oauth token fields... so, it's very easy.
-	credInfo, _, err := GetCredentialInfoForLocation(ctx, common.ELocation.Blob(), blobResource, false, Client.GetUserOAuthTokenManagerInstance(), cca.CpkOptions)
-
-	if err != nil {
-		return fmt.Errorf("fatal: cannot find auth on destination blob URL: %s", err.Error())
-	}
-
-	var reauthTok *common.ScopedAuthenticator
-	if at, ok := credInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
-		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
-	}
-
-	// step 0: initialize pipeline
-	// Reauthentication is theoretically possible here, since stdin is blocked.
-	options := &blockblob.ClientOptions{ClientOptions: traverser.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)}
-
-	// step 1: parse destination url
-	u, err := blobResource.FullURL()
-	if err != nil {
-		return fmt.Errorf("fatal: cannot parse destination blob URL due to error: %s", err.Error())
-	}
-
-	// step 2: leverage high-level call in Blob SDK to upload stdin in parallel
-	var blockBlobClient *blockblob.Client
-	if credInfo.CredentialType.IsAzureOAuth() {
-		blockBlobClient, err = blockblob.NewClient(u.String(), credInfo.OAuthTokenInfo.TokenCredential, options)
-	} else {
-		blockBlobClient, err = blockblob.NewClientWithNoCredential(u.String(), options)
-	}
-	if err != nil {
-		return fmt.Errorf("fatal: Could not construct blob client: %s", err.Error())
-	}
-
-	metadataString := cca.metadata
-	metadataMap := common.Metadata{}
-	if len(metadataString) > 0 {
-		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
-			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
-			metadataMap[kv[0]] = &kv[1]
-		}
-	}
-	blobTags := cca.blobTagsMap
-	var bbAccessTier *blob.AccessTier
-	if cca.blockBlobTier != common.EBlockBlobTier.None() {
-		bbAccessTier = to.Ptr(blob.AccessTier(cca.blockBlobTier.String()))
-	}
-	cpkInfo, err := cca.CpkOptions.GetCPKInfo()
-	if err != nil {
-		return err
-	}
-	_, err = blockBlobClient.UploadStream(ctx, os.Stdin, &blockblob.UploadStreamOptions{
-		BlockSize:   blockSize,
-		Concurrency: pipingUploadParallelism,
-		Metadata:    metadataMap,
-		Tags:        blobTags,
-		HTTPHeaders: &blob.HTTPHeaders{
-			BlobContentType:        common.IffNotEmpty(cca.contentType),
-			BlobContentLanguage:    common.IffNotEmpty(cca.contentLanguage),
-			BlobContentEncoding:    common.IffNotEmpty(cca.contentEncoding),
-			BlobContentDisposition: common.IffNotEmpty(cca.contentDisposition),
-			BlobCacheControl:       common.IffNotEmpty(cca.cacheControl),
-		},
-		AccessTier:   bbAccessTier,
-		CPKInfo:      cpkInfo,
-		CPKScopeInfo: cca.CpkOptions.GetCPKScopeInfo(),
-	})
-
-	return err
 }
 
 // get source credential - if there is a token it will be used to get passed along our pipeline
@@ -1043,7 +867,6 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		AutoDecompress:      cca.autoDecompress,
 		Priority:            common.EJobPriority.Normal(),
 		LogLevel:            Client.GetLogLevel(),
-		ExcludeBlobType:     cca.excludeBlobType,
 		SymlinkHandlingType: cca.SymlinkHandling,
 		BlobAttributes: common.BlobTransferAttributes{
 			BlobType:                 cca.blobType,
@@ -1138,7 +961,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	jobPartOrder.DestinationRoot = cca.Destination
 	jobPartOrder.SourceRoot = cca.Source
-	jobPartOrder.SourceRoot.Value, err = GetResourceRoot(cca.Source.Value, cca.FromTo.From())
+	jobPartOrder.SourceRoot.Value, err = azcopy.NormalizeResourceRoot(cca.Source.Value, cca.FromTo.From())
 	if err != nil {
 		return err
 	}
@@ -1385,10 +1208,6 @@ func isStdinPipeIn() (bool, error) {
 	return info.Mode()&(os.ModeNamedPipe|os.ModeSocket) != 0, nil
 }
 
-func isRedirection(fromTo common.FromTo) bool {
-	return fromTo == common.EFromTo.PipeBlob() || fromTo == common.EFromTo.BlobPipe()
-}
-
 var cpCmd *cobra.Command
 
 // TODO check file size, max is 4.75TB
@@ -1478,7 +1297,7 @@ func init() {
 			}
 
 			// if redirection is triggered, avoid printing any output
-			if isRedirection(userFromTo) {
+			if userFromTo.IsRedirection() {
 				glcm.SetOutputFormat(common.EOutputFormat.None())
 			}
 			if OutputLevel == common.EOutputVerbosity.Quiet() || OutputLevel == common.EOutputVerbosity.Essential() {
@@ -1509,7 +1328,7 @@ func init() {
 				glcm.Error("failed to perform copy command due to error: " + err.Error() + getErrorCodeUrl(err))
 			}
 
-			if cooked.dryrunMode {
+			if cooked.dryrunMode || userFromTo.IsRedirection() {
 				glcm.Exit(nil, common.EExitCode.Success())
 			}
 

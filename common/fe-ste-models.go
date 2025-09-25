@@ -817,6 +817,10 @@ func (ft FromTo) IsPropertyOnlyTransfer() bool {
 	return ft == EFromTo.BlobNone() || ft == EFromTo.BlobFSNone() || ft == EFromTo.FileNone()
 }
 
+func (ft FromTo) IsRedirection() bool {
+	return ft == EFromTo.PipeBlob() || ft == EFromTo.BlobPipe()
+}
+
 // TODO: deletes are not covered by the above Is* routines
 
 var BenchmarkLmt = time.Date(1900, 1, 1, 0, 0, 0, 0, time.UTC)

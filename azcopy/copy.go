@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
@@ -34,7 +35,7 @@ type CopyOptions struct {
 	AutoDecompress              bool
 	Recursive                   bool
 	FromTo                      common.FromTo
-	ExcludeBlobTypes            []common.BlobType
+	ExcludeBlobTypes            []blob.BlobType
 	BlockSizeMB                 float64
 	PutBlobSizeMB               float64
 	BlobType                    common.BlobType
@@ -152,8 +153,28 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions, h
 		return CopyResult{}, err
 	}
 
-	mgr := NewJobLifecycleManager(copyHandler)
-	common.GetLifecycleMgr().Info("Scanning...")
+	// handle from/to pipe
+	if t.opts.fromTo.IsRedirection() {
+		err = t.redirectionTransfer(ctx)
+		return CopyResult{}, err
+	} else {
 
-	return CopyResult{}, nil
+		// Make AUTO default for Azure Files since Azure Files throttles too easily unless user specified concurrency value
+		if jobsAdmin.JobsAdmin != nil &&
+			(t.opts.fromTo.From().IsFile() || (t.opts.fromTo.To().IsFile() &&
+				common.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue()) == "")) {
+			jobsAdmin.JobsAdmin.SetConcurrencySettingsToAuto()
+		}
+
+		mgr := NewJobLifecycleManager(copyHandler)
+		common.GetLifecycleMgr().Info("Scanning...")
+
+		enumerator, err := t.initCopyEnumerator(ctx, c.GetLogLevel(), mgr)
+		if err != nil {
+			return SyncResult{}, err
+		}
+
+		return CopyResult{}, nil
+	}
+
 }

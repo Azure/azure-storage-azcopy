@@ -4,8 +4,6 @@ import (
 	"net/url"
 	"strings"
 	"time"
-
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 )
 
 // ResourceString represents a source or dest string, that can have
@@ -109,8 +107,6 @@ type CopyJobPartOrderRequest struct {
 	FromTo              FromTo
 	Fpo                 FolderPropertyOption // passed in from front-end to ensure that front-end and STE agree on the desired behaviour for the job
 	SymlinkHandlingType SymlinkHandlingType
-	// list of blobTypes to exclude.
-	ExcludeBlobType []blob.BlobType
 
 	SourceRoot       ResourceString
 	DestinationRoot  ResourceString
@@ -121,7 +117,7 @@ type CopyJobPartOrderRequest struct {
 	LogLevel       LogLevel
 	BlobAttributes BlobTransferAttributes
 	CommandString  string // commandString hold the user given command which is logged to the Job log file
-	CredentialInfo CredentialInfo
+	//CredentialInfo CredentialInfo
 
 	PreservePermissions            PreservePermissionsOption
 	PreserveInfo                   bool

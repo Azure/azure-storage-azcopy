@@ -411,18 +411,27 @@ type FilterOptions struct {
 	IncludeRegex      []string
 	ExcludeRegex      []string
 
-	ExcludeContainers []string
-	IncludeBefore     *time.Time
-	IncludeAfter      *time.Time
-	ExcludeBlobTypes  []common.BlobType
+	IncludeBefore    *time.Time
+	IncludeAfter     *time.Time
+	ExcludeBlobTypes []blob.BlobType
 }
 
 // BuildFilters sets up the filters in a specific order
 func BuildFilters(fromTo common.FromTo, source common.ResourceString, recursive bool, opts FilterOptions) []ObjectFilter {
+	filters := make([]ObjectFilter, 0)
+
+	if opts.IncludeBefore != nil {
+		filters = append(filters, &IncludeBeforeDateFilter{Threshold: *opts.IncludeBefore})
+	}
+
+	if opts.IncludeAfter != nil {
+		filters = append(filters, &IncludeAfterDateFilter{Threshold: *opts.IncludeAfter})
+	}
+
 	// Note: includeFilters and includeAttrFilters are ANDed
 	// They must both pass to get the file included
 	// Same rule applies to excludeFilters and excludeAttrFilters
-	filters := BuildIncludeFilters(opts.IncludePatterns)
+	filters = append(filters, BuildIncludeFilters(opts.IncludePatterns)...)
 	if fromTo.From() == common.ELocation.Local() {
 		includeAttrFilters := BuildAttrFilters(opts.IncludeAttributes, source.ValueLocal(), true)
 		filters = append(filters, includeAttrFilters...)
@@ -438,6 +447,8 @@ func BuildFilters(fromTo common.FromTo, source common.ResourceString, recursive 
 	// regex
 	filters = append(filters, BuildRegexFilters(opts.IncludeRegex, true)...)
 	filters = append(filters, BuildRegexFilters(opts.ExcludeRegex, false)...)
+
+	filters = append(filters, BuildExcludeBlobTypeFilter(opts.ExcludeBlobTypes)...)
 
 	// after making all filters, log any search prefix computed from them
 	if prefixFilter := FilterSet(filters).GetEnumerationPreFilter(recursive); prefixFilter != "" {
