@@ -1,4 +1,4 @@
-package azcopy
+package traverser
 
 import (
 	"testing"
