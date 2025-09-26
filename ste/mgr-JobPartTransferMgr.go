@@ -117,6 +117,7 @@ type TransferInfo struct {
 	PreservePermissions     common.PreservePermissionsOption
 	PreserveInfo            bool
 	PreservePOSIXProperties bool
+	PreserveRootProperties  bool // If true, root dir props will be transferred to destination root dir
 	BlobFSRecursiveDelete   bool
 
 	// Paths of targets excluding the container/fileshare name.
