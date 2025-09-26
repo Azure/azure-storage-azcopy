@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package traverser
 
 import (
 	"context"
@@ -40,6 +40,8 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 )
+
+const MAX_SYMLINKS_TO_FOLLOW = 40
 
 type localTraverser struct {
 	fullPath        string
@@ -270,7 +272,7 @@ func WalkWithSymlinks(appCtx context.Context,
 
 					err = walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
 					// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
-					skipped, err := getProcessingError(err)
+					skipped, err := GetProcessingError(err)
 
 					// If the file was skipped, don't record it.
 					if !skipped {
@@ -334,7 +336,7 @@ func WalkWithSymlinks(appCtx context.Context,
 					if !seenPaths.HasSeen(result) {
 						err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), symlinkTargetFileInfo{rStat, fileInfo.Name()}, fileError)
 						// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
-						skipped, err := getProcessingError(err)
+						skipped, err := GetProcessingError(err)
 
 						if !skipped { // Don't go any deeper (or record it) if we skipped it.
 							seenPaths.Record(common.ToExtendedPath(result))
@@ -344,7 +346,7 @@ func WalkWithSymlinks(appCtx context.Context,
 								relativeBase: computedRelativePath,
 							})
 						}
-						// enumerate the FOLDER now (since its presence in seenDirs will prevent its properties getting enumerated later)
+						// Enumerate the FOLDER now (since its presence in seenDirs will prevent its properties getting enumerated later)
 						return err
 					} else {
 						WarnStdoutAndScanningLog(fmt.Sprintf("Ignored already linked directory pointed at %s (link at %s)", result, common.GenerateFullPath(fullPath, computedRelativePath)))
@@ -358,7 +360,7 @@ func WalkWithSymlinks(appCtx context.Context,
 					targetFi := symlinkTargetFileInfo{rStat, fileInfo.Name()}
 
 					err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), targetFi, fileError)
-					_, err = getProcessingError(err)
+					_, err = GetProcessingError(err)
 					return err
 				}
 				return nil
@@ -387,7 +389,7 @@ func WalkWithSymlinks(appCtx context.Context,
 				if !seenPaths.HasSeen(result) {
 					err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
 					// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
-					skipped, err := getProcessingError(err)
+					skipped, err := GetProcessingError(err)
 
 					// If the file was skipped, don't record it.
 					if !skipped {
@@ -448,8 +450,8 @@ func (t *localTraverser) GetHashData(relPath string) (*common.SyncHashData, erro
 	if err != nil {
 		if !errors.Is(err, fs.ErrNotExist) {
 			common.LogHashStorageFailure()
-			if azcopyScanningLogger != nil {
-				azcopyScanningLogger.Log(common.LogError, fmt.Sprintf("failed to read hash data for %s: %s", relPath, err.Error()))
+			if common.AzcopyScanningLogger != nil {
+				common.AzcopyScanningLogger.Log(common.LogError, fmt.Sprintf("failed to read hash data for %s: %s", relPath, err.Error()))
 			}
 		}
 
@@ -471,7 +473,7 @@ func (t *localTraverser) GetHashData(relPath string) (*common.SyncHashData, erro
 // prepareHashingThreads creates background threads to perform hashing on local files that are missing hashes.
 // It returns a finalizer and a wrapped processor-- Use the wrapped processor in place of the original processor (even if synchashtype is none)
 // and wrap the error getting returned in the finalizer function to kill the background threads.
-func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (finalizer func(existingErr error) error, hashingProcessor func(obj StoredObject) error) {
+func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) (finalizer func(existingErr error) error, hashingProcessor func(obj StoredObject) error) {
 	if t.targetHashType == common.ESyncHashType.None() { // if no hashing is needed, do nothing.
 		return func(existingErr error) error {
 			return existingErr // nothing to overwrite with, no-op
@@ -511,7 +513,7 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 
 	// wrap the processor, preventing a data race
 	commitMutex := &sync.Mutex{}
-	mutexProcessor := func(proc objectProcessor) objectProcessor {
+	mutexProcessor := func(proc ObjectProcessor) ObjectProcessor {
 		return func(object StoredObject) error {
 			commitMutex.Lock() // prevent committing two objects at once to prevent a data race
 			defer commitMutex.Unlock()
@@ -579,19 +581,19 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 				err = t.hashAdapter.SetHashData(relPath, &hashData)
 				if err != nil {
 					common.LogHashStorageFailure()
-					if azcopyScanningLogger != nil {
-						azcopyScanningLogger.Log(common.LogError, fmt.Sprintf("failed to write hash data for %s: %s", relPath, err.Error()))
+					if common.AzcopyScanningLogger != nil {
+						common.AzcopyScanningLogger.Log(common.LogError, fmt.Sprintf("failed to write hash data for %s: %s", relPath, err.Error()))
 					}
 				}
 
-				err = processIfPassedFilters(filters,
-					newStoredObject(
+				err = ProcessIfPassedFilters(filters,
+					NewStoredObject(
 						func(storedObject *StoredObject) {
 							// apply the hash data
 							// storedObject.hashData = hashData
 							switch hashData.Mode {
 							case common.ESyncHashType.MD5():
-								storedObject.md5 = sum
+								storedObject.Md5 = sum
 							default: // no-op
 							}
 
@@ -606,14 +608,14 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 						common.EEntityType.File(),
 						fi.ModTime(),
 						fi.Size(),
-						noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
-						noBlobProps,
-						noMetadata,
+						NoContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
+						NoBlobProps,
+						NoMetadata,
 						"", // Local has no such thing as containers
 					),
 					processor, // the original processor is wrapped in the mutex processor.
 				)
-				_, err = getProcessingError(err)
+				_, err = GetProcessingError(err)
 				if err != nil {
 					hashError <- err
 					return
@@ -624,16 +626,16 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 
 	// wrap the processor, try to grab hashes, or defer processing to the goroutines
 	hashingProcessor = func(storedObject StoredObject) error {
-		if storedObject.entityType != common.EEntityType.File() {
+		if storedObject.EntityType != common.EEntityType.File() {
 			// the original processor is wrapped in the mutex processor.
 			return processor(storedObject) // no process folders
 		}
 
-		if strings.HasSuffix(path.Base(storedObject.relativePath), common.AzCopyHashDataStream) {
+		if strings.HasSuffix(path.Base(storedObject.RelativePath), common.AzCopyHashDataStream) {
 			return nil // do not process hash data files.
 		}
 
-		hashData, err := t.GetHashData(storedObject.relativePath)
+		hashData, err := t.GetHashData(storedObject.RelativePath)
 
 		if err != nil {
 			switch err {
@@ -651,7 +653,7 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 		switch hashData.Mode {
 		case common.ESyncHashType.MD5():
 			md5data, _ := base64.StdEncoding.DecodeString(hashData.Data) // If decode fails, treat it like no hash is present.
-			storedObject.md5 = md5data
+			storedObject.Md5 = md5data
 		default: // do nothing, no hash is present.
 		}
 
@@ -663,11 +665,11 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 	return finalizer, hashingProcessor
 }
 
-func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
+func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) (err error) {
 	singleFileInfo, isSingleFile, err := t.getInfoIfSingleFile()
 	// it fails here if file does not exist
 	if err != nil {
-		azcopyScanningLogger.Log(common.LogError, fmt.Sprintf("Failed to scan path %s: %s", t.fullPath, err.Error()))
+		common.AzcopyScanningLogger.Log(common.LogError, fmt.Sprintf("Failed to scan path %s: %s", t.fullPath, err.Error()))
 		return fmt.Errorf("failed to scan path %s due to %w", t.fullPath, err)
 	}
 
@@ -704,22 +706,22 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 			t.incrementEnumerationCounter(entityType)
 		}
 
-		err := processIfPassedFilters(filters,
-			newStoredObject(
+		err := ProcessIfPassedFilters(filters,
+			NewStoredObject(
 				preprocessor,
 				singleFileInfo.Name(),
 				"",
 				entityType,
 				singleFileInfo.ModTime(),
 				singleFileInfo.Size(),
-				noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
-				noBlobProps,
-				noMetadata,
+				NoContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
+				NoBlobProps,
+				NoMetadata,
 				"", // Local has no such thing as containers
 			),
 			hashingProcessor, // hashingProcessor handles the mutex wrapper
 		)
-		_, err = getProcessingError(err)
+		_, err = GetProcessingError(err)
 
 		return finalizer(err)
 	} else {
@@ -765,17 +767,17 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				}
 
 				// This is an exception to the rule. We don't strip the error here, because WalkWithSymlinks catches it.
-				return processIfPassedFilters(filters,
-					newStoredObject(
+				return ProcessIfPassedFilters(filters,
+					NewStoredObject(
 						preprocessor,
 						fileInfo.Name(),
 						strings.ReplaceAll(relPath, common.DeterminePathSeparator(t.fullPath), common.AZCOPY_PATH_SEPARATOR_STRING), // Consolidate relative paths to the azcopy path separator for sync
 						entityType,
 						fileInfo.ModTime(), // get this for both files and folders, since sync needs it for both.
 						fileInfo.Size(),
-						noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
-						noBlobProps,
-						noMetadata,
+						NoContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
+						NoBlobProps,
+						NoMetadata,
 						"", // Local has no such thing as containers
 					),
 					hashingProcessor, // hashingProcessor handles the mutex wrapper
@@ -856,22 +858,22 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 					t.incrementEnumerationCounter(common.EEntityType.File())
 				}
 
-				err := processIfPassedFilters(filters,
-					newStoredObject(
+				err := ProcessIfPassedFilters(filters,
+					NewStoredObject(
 						preprocessor,
 						entry.Name(),
 						strings.ReplaceAll(relativePath, common.DeterminePathSeparator(t.fullPath), common.AZCOPY_PATH_SEPARATOR_STRING), // Consolidate relative paths to the azcopy path separator for sync
 						entityType, // TODO: add code path for folders
 						fileInfo.ModTime(),
 						fileInfo.Size(),
-						noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
-						noBlobProps,
-						noMetadata,
+						NoContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
+						NoBlobProps,
+						NoMetadata,
 						"", // Local has no such thing as containers
 					),
 					hashingProcessor, // hashingProcessor handles the mutex wrapper
 				)
-				_, err = getProcessingError(err)
+				_, err = GetProcessingError(err)
 				if err != nil {
 					return finalizer(err)
 				}
@@ -882,7 +884,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	return finalizer(err)
 }
 
-func newLocalTraverser(fullPath string, ctx context.Context, opts InitResourceTraverserOptions) (*localTraverser, error) {
+func NewLocalTraverser(fullPath string, ctx context.Context, opts InitResourceTraverserOptions) (*localTraverser, error) {
 	var hashAdapter common.HashDataAdapter
 	if opts.SyncHashType != common.ESyncHashType.None() { // Only initialize the hash adapter should we need it.
 		var err error

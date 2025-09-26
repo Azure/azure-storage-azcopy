@@ -86,6 +86,7 @@ func (j *JobLifecycleManager) markComplete(err error) {
 	}
 
 	j.done = true
+
 	j.lastError = err
 
 	// Execute completion functions

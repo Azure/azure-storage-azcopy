@@ -124,7 +124,7 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 		}
 		// Files doesn't currently support OAuth, but it's a valid azure endpoint anyway, so it'll pass the check.
 		if resourceType != common.ELocation.Blob() && resourceType != common.ELocation.BlobFS() && resourceType != common.ELocation.File() && resourceType != common.ELocation.FileNFS() {
-			// There may be a reason for files->blob to specify this.
+			// There may be a reason for files->blob to specify this.\
 			return fmt.Errorf("azure OAuth authentication to %s is not enabled in AzCopy", resourceType.String())
 		}
 

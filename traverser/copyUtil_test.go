@@ -18,18 +18,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package traverser
 
 import (
+	"testing"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestUrlIsContainerOrBlob(t *testing.T) {
 	a := assert.New(t)
-	util := copyHandlerUtil{}
+	util := CopyHandlerUtil{}
 
 	testUrl := "https://fakeaccount.core.windows.net/container/dir1"
 	isContainer := util.urlIsContainerOrVirtualDirectory(testUrl)
@@ -55,7 +56,7 @@ func TestUrlIsContainerOrBlob(t *testing.T) {
 
 func TestIPIsContainerOrBlob(t *testing.T) {
 	a := assert.New(t)
-	util := copyHandlerUtil{}
+	util := CopyHandlerUtil{}
 
 	testIP := "https://127.0.0.1:8256/account/container"
 	testURL := "https://fakeaccount.core.windows.net/account/container"
@@ -82,7 +83,7 @@ func TestIPIsContainerOrBlob(t *testing.T) {
 
 func TestDoesBlobRepresentAFolder(t *testing.T) {
 	a := assert.New(t)
-	util := copyHandlerUtil{}
+	util := CopyHandlerUtil{}
 
 	// Test case 1: metadata is empty
 	metadata := make(common.Metadata)

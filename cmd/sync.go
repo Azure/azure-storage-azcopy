@@ -334,10 +334,10 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 
 func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
 	// set up the front end scanning logger
-	azcopyScanningLogger = common.NewJobLogger(Client.CurrentJobID, Client.GetLogLevel(), common.LogPathFolder, "-scanning")
-	azcopyScanningLogger.OpenLog()
+	common.AzcopyScanningLogger = common.NewJobLogger(Client.CurrentJobID, Client.GetLogLevel(), common.LogPathFolder, "-scanning")
+	common.AzcopyScanningLogger.OpenLog()
 	glcm.RegisterCloseFunc(func() {
-		azcopyScanningLogger.CloseLog()
+		common.AzcopyScanningLogger.CloseLog()
 	})
 
 	// if no logging, set this empty so that we don't display the log location
@@ -736,7 +736,7 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 	}
 
 	// trigger the enumeration
-	err = enumerator.enumerate()
+	err = enumerator.Enumerate()
 	if err != nil {
 		return err
 	}
@@ -779,7 +779,7 @@ func init() {
 				glcm.Error("error parsing the input given by the user. Failed with error " + err.Error() + getErrorCodeUrl(err))
 			}
 
-			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
+			cooked.commandString = gCopyUtil.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
 				glcm.Error("Cannot perform sync due to error: " + err.Error() + getErrorCodeUrl(err))
@@ -899,7 +899,7 @@ func init() {
 	// Public Documentation: https://docs.microsoft.com/en-us/azure/storage/blobs/encryption-customer-provided-keys
 	// Clients making requests against Azure Blob storage have the option to provide an encryption key on a per-request basis.
 	// Including the encryption key on the request provides granular control over encryption settings for Blob storage operations.
-	// Customer-provided keys can be stored in Azure Key Vault or in another key store linked to storage account.
+	// Customer-provided keys can be stored in Azure Key Vault or in another key Store linked to storage account.
 	syncCmd.PersistentFlags().StringVar(&raw.cpkScopeInfo, "cpk-by-name", "",
 		"Client provided key by name let clients making requests against Azure Blob storage an option "+
 			"\n to provide an encryption key on a per-request basis. "+
@@ -937,7 +937,7 @@ func init() {
 
 	syncCmd.PersistentFlags().StringVar(&common.LocalHashDir, "hash-meta-dir", "",
 		"When using `--local-hash-storage-mode=HiddenFiles` "+
-			"\n you can specify an alternate directory to store hash metadata files in (as opposed to next to the related files in the source)")
+			"\n you can specify an alternate directory to Store hash metadata files in (as opposed to next to the related files in the source)")
 
 	syncCmd.PersistentFlags().StringVar(&raw.localHashStorageMode, "local-hash-storage-mode",
 		common.EHashStorageMode.Default().String(), "Specify an alternative way to cache file hashes; "+

@@ -20,6 +20,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
@@ -30,7 +31,7 @@ type BucketToContainerNameResolver interface {
 	ResolveName(bucketName string) (string, error)
 }
 
-func (cca *CookedCopyCmdArgs) validateSourceDir(traverser ResourceTraverser) error {
+func (cca *CookedCopyCmdArgs) validateSourceDir(traverser traverser.ResourceTraverser) error {
 	var err error
 	// Ensure we're only copying a directory under valid conditions
 	cca.IsSourceDir, err = traverser.IsDirectory(true)
@@ -47,8 +48,8 @@ func (cca *CookedCopyCmdArgs) validateSourceDir(traverser ResourceTraverser) err
 	return nil
 }
 
-func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrderRequest, srcCredInfo common.CredentialInfo, ctx context.Context) (*CopyEnumerator, error) {
-	var traverser ResourceTraverser
+func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrderRequest, srcCredInfo common.CredentialInfo, ctx context.Context) (*traverser.CopyEnumerator, error) {
+	var t traverser.ResourceTraverser
 	var err error
 	jobPartOrder.FileAttributes = common.FileTransferAttributes{
 		TrailingDot: cca.trailingDot,
@@ -75,7 +76,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	jobPartOrder.S2SPreserveBlobTags = cca.S2sPreserveBlobTags
 
 	dest := cca.FromTo.To()
-	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), ctx, InitResourceTraverserOptions{
+	t, err = traverser.InitResourceTraverser(cca.Source, cca.FromTo.From(), ctx, traverser.InitResourceTraverserOptions{
 		DestResourceType: &dest,
 
 		Credential: &srcCredInfo,
@@ -113,7 +114,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		return nil, err
 	}
 
-	err = cca.validateSourceDir(traverser)
+	err = cca.validateSourceDir(t)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +166,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	}
 
 	// Create a Remote resource resolver
-	// Giving it nothing to work with as new names will be added as we traverse.
+	// Giving it nothing to work with as new names will be added as we Traverse.
 	var containerResolver BucketToContainerNameResolver
 	containerResolver = NewS3BucketNameToAzureResourcesResolver(nil)
 	if cca.FromTo == common.EFromTo.GCPBlob() {
@@ -200,8 +201,8 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				seenFailedContainers[dstContainerName] = true
 			}
 		} else if cca.FromTo.From().IsRemote() { // if the destination has implicit container names
-			if acctTraverser, ok := traverser.(AccountTraverser); ok && dstLevel == ELocationLevel.Service() {
-				containers, err := acctTraverser.listContainers()
+			if acctTraverser, ok := t.(traverser.AccountTraverser); ok && dstLevel == ELocationLevel.Service() {
+				containers, err := acctTraverser.ListContainers()
 
 				if err != nil {
 					return nil, fmt.Errorf("failed to list containers: %w", err)
@@ -282,7 +283,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	}
 	common.LogToJobLogWithPrefix(message, common.LogInfo)
 
-	processor := func(object StoredObject) error {
+	processor := func(object traverser.StoredObject) error {
 		// Start by resolving the name and creating the container
 		if object.ContainerName != "" {
 			// set up the destination container name.
@@ -293,7 +294,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 				if err != nil {
 					if _, ok := seenFailedContainers[object.ContainerName]; !ok {
-						WarnStdoutAndScanningLog(fmt.Sprintf("failed to add transfers from container %s as it has an invalid name. Please manually transfer from this container to one with a valid name.", object.ContainerName))
+						traverser.WarnStdoutAndScanningLog(fmt.Sprintf("failed to add transfers from container %s as it has an invalid name. Please manually transfer from this container to one with a valid name.", object.ContainerName))
 						seenFailedContainers[object.ContainerName] = true
 					}
 					return nil
@@ -369,7 +370,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		return dispatchFinalPart(&jobPartOrder, cca)
 	}
 
-	return NewCopyEnumerator(traverser, filters, processor, finalizer), nil
+	return traverser.NewCopyEnumerator(t, filters, processor, finalizer), nil
 }
 
 // This is condensed down into an individual function as we don't end up reusing the destination traverser at all.
@@ -386,7 +387,7 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx con
 		return false
 	}
 
-	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, InitResourceTraverserOptions{
+	rt, err := traverser.InitResourceTraverser(dst, cca.FromTo.To(), ctx, traverser.InitResourceTraverserOptions{
 		Credential: &dstCredInfo,
 
 		ListOfVersionIDs: cca.ListOfVersionIDsChannel,
@@ -409,74 +410,50 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx con
 }
 
 // Initialize the modular filters outside of copy to increase readability.
-func (cca *CookedCopyCmdArgs) InitModularFilters() []ObjectFilter {
-	filters := make([]ObjectFilter, 0) // same as []ObjectFilter{} under the hood
+func (cca *CookedCopyCmdArgs) InitModularFilters() []traverser.ObjectFilter {
+	filters := make([]traverser.ObjectFilter, 0) // same as []ObjectFilter{} under the hood
 
 	if cca.IncludeBefore != nil {
-		filters = append(filters, &IncludeBeforeDateFilter{Threshold: *cca.IncludeBefore})
+		filters = append(filters, &traverser.IncludeBeforeDateFilter{Threshold: *cca.IncludeBefore})
 	}
 
 	if cca.IncludeAfter != nil {
-		filters = append(filters, &IncludeAfterDateFilter{Threshold: *cca.IncludeAfter})
+		filters = append(filters, &traverser.IncludeAfterDateFilter{Threshold: *cca.IncludeAfter})
 	}
 
-	if len(cca.IncludePatterns) != 0 {
-		filters = append(filters, &IncludeFilter{patterns: cca.IncludePatterns}) // TODO should this call buildIncludeFilters?
-	}
-
-	if len(cca.ExcludePatterns) != 0 {
-		for _, v := range cca.ExcludePatterns {
-			filters = append(filters, &excludeFilter{pattern: v})
-		}
-	}
+	filters = append(filters, traverser.BuildIncludeFilters(cca.IncludePatterns)...)
+	filters = append(filters, traverser.BuildExcludeFilters(cca.ExcludePatterns, false)...)
 
 	// include-path is not a filter, therefore it does not get handled here.
 	// Check up in cook() around the list-of-files implementation as include-path gets included in the same way.
 
-	if len(cca.ExcludePathPatterns) != 0 {
-		for _, v := range cca.ExcludePathPatterns {
-			filters = append(filters, &excludeFilter{pattern: v, targetsPath: true})
-		}
-	}
+	filters = append(filters, traverser.BuildExcludeFilters(cca.ExcludePathPatterns, true)...)
 
-	if len(cca.includeRegex) != 0 {
-		filters = append(filters, &regexFilter{patterns: cca.includeRegex, isIncluded: true})
-	}
+	filters = append(filters, traverser.BuildRegexFilters(cca.includeRegex, true)...)
+	filters = append(filters, traverser.BuildRegexFilters(cca.excludeRegex, false)...)
 
-	if len(cca.excludeRegex) != 0 {
-		filters = append(filters, &regexFilter{patterns: cca.excludeRegex, isIncluded: false})
-	}
-
-	if len(cca.excludeBlobType) != 0 {
-		excludeSet := map[blob.BlobType]bool{}
-
-		for _, v := range cca.excludeBlobType {
-			excludeSet[v] = true
-		}
-
-		filters = append(filters, &excludeBlobTypeFilter{blobTypes: excludeSet})
-	}
+	filters = append(filters, traverser.BuildExcludeBlobTypeFilter(cca.excludeBlobType)...)
 
 	if len(cca.IncludeFileAttributes) != 0 {
-		filters = append(filters, buildAttrFilters(cca.IncludeFileAttributes, cca.Source.ValueLocal(), true)...)
+		filters = append(filters, traverser.BuildAttrFilters(cca.IncludeFileAttributes, cca.Source.ValueLocal(), true)...)
 	}
 
 	if len(cca.ExcludeFileAttributes) != 0 {
-		filters = append(filters, buildAttrFilters(cca.ExcludeFileAttributes, cca.Source.ValueLocal(), false)...)
+		filters = append(filters, traverser.BuildAttrFilters(cca.ExcludeFileAttributes, cca.Source.ValueLocal(), false)...)
 	}
 
 	// finally, log any search prefix computed from these
-	if prefixFilter := FilterSet(filters).GetEnumerationPreFilter(cca.Recursive); prefixFilter != "" {
+	if prefixFilter := traverser.FilterSet(filters).GetEnumerationPreFilter(cca.Recursive); prefixFilter != "" {
 		common.LogToJobLogWithPrefix("Search prefix, which may be used to optimize scanning, is: "+prefixFilter, common.LogInfo) // "May be used" because we don't know here which enumerators will use it
 	}
 
 	switch cca.permanentDeleteOption {
 	case common.EPermanentDeleteOption.Snapshots():
-		filters = append(filters, &permDeleteFilter{deleteSnapshots: true})
+		filters = append(filters, &traverser.PermDeleteFilter{DeleteSnapshots: true})
 	case common.EPermanentDeleteOption.Versions():
-		filters = append(filters, &permDeleteFilter{deleteVersions: true})
+		filters = append(filters, &traverser.PermDeleteFilter{DeleteVersions: true})
 	case common.EPermanentDeleteOption.SnapshotsAndVersions():
-		filters = append(filters, &permDeleteFilter{deleteSnapshots: true, deleteVersions: true})
+		filters = append(filters, &traverser.PermDeleteFilter{DeleteSnapshots: true, DeleteVersions: true})
 	}
 
 	return filters
@@ -645,18 +622,18 @@ func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool
 	return path
 }
 
-func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool, asSubdir bool, object StoredObject) (relativePath string) {
+func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool, asSubdir bool, object traverser.StoredObject) (relativePath string) {
 	// write straight to /dev/null, do not determine a indirect path
 	if !source && cca.Destination.Value == common.Dev_Null {
 		return "" // ignore path encode rules
 	}
 
-	if object.relativePath == "\x00" { // Short circuit, our relative path is requesting root/
+	if object.RelativePath == "\x00" { // Short circuit, our relative path is requesting root/
 		return "\x00"
 	}
 
 	// source is a EXACT path to the file
-	if object.isSingleSourceFile() {
+	if object.IsSingleSourceFile() {
 		// If we're finding an object from the source, it returns "" if it's already got it.
 		// If we're finding an object on the destination and we get "", we need to hand it the object name (if it's pointing to a folder)
 		if source {
@@ -667,10 +644,10 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 				// but our dest does not point to a specific file, it just points to a directory,
 				// and so relativePath needs the _name_ of the source.
 				processedVID := ""
-				if len(object.blobVersionID) > 0 {
-					processedVID = strings.ReplaceAll(object.blobVersionID, ":", "-") + "-"
+				if len(object.BlobVersionID) > 0 {
+					processedVID = strings.ReplaceAll(object.BlobVersionID, ":", "-") + "-"
 				}
-				relativePath += "/" + processedVID + object.name
+				relativePath += "/" + processedVID + object.Name
 			} else {
 				relativePath = ""
 			}
@@ -680,10 +657,10 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 	}
 
 	// If it's out here, the object is contained in a folder, or was found via a wildcard, or object.isSourceRootFolder == true
-	if object.isSourceRootFolder() {
+	if object.IsSourceRootFolder() {
 		relativePath = "" // otherwise we get "/" from the line below, and that breaks some clients, e.g. blobFS
 	} else {
-		relativePath = "/" + strings.Replace(object.relativePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+		relativePath = "/" + strings.Replace(object.RelativePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
 	}
 
 	if common.Iff(source, object.ContainerName, object.DstContainerName) != "" {
@@ -721,7 +698,7 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 }
 
 // we assume that preserveSmbPermissions and preserveSmbInfo have already been validated, such that they are only true if both resource types support them
-func NewFolderPropertyOption(fromTo common.FromTo, recursive, stripTopDir bool, filters []ObjectFilter, preserveSmbInfo, preservePermissions, preservePosixProperties, isDstNull, includeDirectoryStubs bool) (common.FolderPropertyOption, string) {
+func NewFolderPropertyOption(fromTo common.FromTo, recursive, stripTopDir bool, filters []traverser.ObjectFilter, preserveSmbInfo, preservePermissions, preservePosixProperties, isDstNull, includeDirectoryStubs bool) (common.FolderPropertyOption, string) {
 
 	getSuffix := func(willProcess bool) string {
 		willProcessString := common.Iff(willProcess, "will be processed", "will not be processed")

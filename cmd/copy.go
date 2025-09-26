@@ -39,6 +39,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
@@ -824,7 +825,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 
 	// step 1: create client options
 	// note: dstCred is nil, as we could not reauth effectively because stdout is a pipe.
-	options := &blockblob.ClientOptions{ClientOptions: azcopy.CreateClientOptions(azcopyScanningLogger, nil, nil)}
+	options := &blockblob.ClientOptions{ClientOptions: azcopy.CreateClientOptions(common.AzcopyScanningLogger, nil, nil)}
 
 	// step 2: parse source url
 	u, err := blobResource.FullURL()
@@ -1199,12 +1200,12 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	switch {
 	case cca.FromTo.IsUpload(), cca.FromTo.IsDownload(), cca.FromTo.IsS2S():
 		// Execute a standard copy command
-		var e *CopyEnumerator
+		var e *traverser.CopyEnumerator
 		e, err = cca.initEnumerator(jobPartOrder, srcCredInfo, ctx)
 		if err != nil {
 			return fmt.Errorf("failed to initialize enumerator: %w", err)
 		}
-		err = e.enumerate()
+		err = e.Enumerate()
 
 	case cca.FromTo.IsDelete():
 		// Delete gets ran through copy, so handle delete
@@ -1218,7 +1219,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 				return fmt.Errorf("failed to initialize enumerator: %w", createErr)
 			}
 
-			err = e.enumerate()
+			err = e.Enumerate()
 		}
 
 	case cca.FromTo.IsSetProperties():
@@ -1227,7 +1228,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		if createErr != nil {
 			return fmt.Errorf("failed to initialize enumerator: %w", createErr)
 		}
-		err = e.enumerate()
+		err = e.Enumerate()
 
 	default:
 		return fmt.Errorf("copy direction %v is not supported", cca.FromTo)
@@ -1481,7 +1482,7 @@ func init() {
 			}
 			glcm.Info("Scanning...")
 
-			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
+			cooked.commandString = gCopyUtil.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
 				glcm.Error("failed to perform copy command due to error: " + err.Error() + getErrorCodeUrl(err))
@@ -1780,7 +1781,7 @@ func init() {
 	// Public Documentation: https://docs.microsoft.com/en-us/azure/storage/blobs/encryption-customer-provided-keys
 	// Clients making requests against Azure Blob storage have the option to provide an encryption key on a per-request basis.
 	// Including the encryption key on the request provides granular control over encryption settings for Blob storage operations.
-	// Customer-provided keys can be stored in Azure Key Vault or in another key store linked to storage account.
+	// Customer-provided keys can be stored in Azure Key Vault or in another key Store linked to storage account.
 	cpCmd.PersistentFlags().StringVar(&raw.cpkScopeInfo, "cpk-by-name", "",
 		"\n Client provided key by name lets clients making requests against "+
 			"\n Azure Blob storage an option to provide an encryption key on a per-request basis. "+

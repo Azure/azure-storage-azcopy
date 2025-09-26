@@ -33,6 +33,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/filesystem"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
@@ -44,13 +45,13 @@ var ErrNothingToRemove = errors.New("nothing found to remove")
 // and schedule delete transfers to remove them
 // TODO: Make this merge into the other copy refactor code
 // TODO: initEnumerator is significantly more verbose at this point, evaluate the impact of switching over
-func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, err error) {
-	var sourceTraverser ResourceTraverser
+func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *traverser.CopyEnumerator, err error) {
+	var sourceTraverser traverser.ResourceTraverser
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	// Include-path is handled by ListOfFilesChannel.
-	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), ctx, InitResourceTraverserOptions{
+	sourceTraverser, err = traverser.InitResourceTraverser(cca.Source, cca.FromTo.From(), ctx, traverser.InitResourceTraverserOptions{
 		Credential: &cca.credentialInfo,
 
 		ListOfFiles:      cca.ListOfFilesChannel,
@@ -75,21 +76,21 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 		return nil, err
 	}
 
-	includeFilters := buildIncludeFilters(cca.IncludePatterns)
-	excludeFilters := buildExcludeFilters(cca.ExcludePatterns, false)
-	excludePathFilters := buildExcludeFilters(cca.ExcludePathPatterns, true)
-	includeSoftDelete := buildIncludeSoftDeleted(cca.permanentDeleteOption)
+	includeFilters := traverser.BuildIncludeFilters(cca.IncludePatterns)
+	excludeFilters := traverser.BuildExcludeFilters(cca.ExcludePatterns, false)
+	excludePathFilters := traverser.BuildExcludeFilters(cca.ExcludePathPatterns, true)
+	includeSoftDelete := traverser.BuildIncludeSoftDeleted(cca.permanentDeleteOption)
 
 	// set up the filters in the right order
 	filters := append(includeFilters, excludeFilters...)
 	filters = append(filters, excludePathFilters...)
 	filters = append(filters, includeSoftDelete...)
 	if cca.IncludeBefore != nil {
-		filters = append(filters, &IncludeBeforeDateFilter{Threshold: *cca.IncludeBefore})
+		filters = append(filters, &traverser.IncludeBeforeDateFilter{Threshold: *cca.IncludeBefore})
 	}
 
 	if cca.IncludeAfter != nil {
-		filters = append(filters, &IncludeAfterDateFilter{Threshold: *cca.IncludeAfter})
+		filters = append(filters, &traverser.IncludeAfterDateFilter{Threshold: *cca.IncludeAfter})
 	}
 
 	// decide our folder transfer strategy
@@ -157,7 +158,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 		return nil
 	}
 
-	return NewCopyEnumerator(sourceTraverser, filters, transferScheduler.scheduleCopyTransfer, finalize), nil
+	return traverser.NewCopyEnumerator(sourceTraverser, filters, transferScheduler.scheduleCopyTransfer, finalize), nil
 }
 
 // TODO move after ADLS/Blob interop goes public
@@ -204,15 +205,15 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 		if cca.dryrunMode {
 			return dryrunRemoveSingleDFSResource(ctx, dsc, datalakeURLParts, cca.Recursive)
 		} else {
-			err := transferProcessor.scheduleCopyTransfer(newStoredObject(
+			err := transferProcessor.scheduleCopyTransfer(traverser.NewStoredObject(
 				nil,
 				path.Base(datalakeURLParts.PathName),
 				"",
 				common.EEntityType.File(), // blobfs deleter doesn't differentiate
 				time.Now(),
 				0,
-				noContentProps,
-				noContentProps,
+				traverser.NoContentProps,
+				traverser.NoContentProps,
 				nil,
 				"",
 			))
@@ -233,15 +234,15 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 			if cca.dryrunMode {
 				return dryrunRemoveSingleDFSResource(ctx, dsc, datalakeURLParts, cca.Recursive)
 			} else {
-				err := transferProcessor.scheduleCopyTransfer(newStoredObject(
+				err := transferProcessor.scheduleCopyTransfer(traverser.NewStoredObject(
 					nil,
 					path.Base(datalakeURLParts.PathName),
 					childPath,
 					common.EEntityType.File(), // blobfs deleter doesn't differentiate
 					time.Now(),
 					0,
-					noContentProps,
-					noContentProps,
+					traverser.NoContentProps,
+					traverser.NoContentProps,
 					nil,
 					"",
 				))

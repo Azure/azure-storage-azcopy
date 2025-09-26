@@ -24,6 +24,7 @@ import (
 	"fmt"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 )
 
 // the interceptor gathers/saves the job part orders for validation
@@ -173,10 +174,10 @@ func (*mockedLifecycleManager) MsgHandlerChannel() <-chan *common.LCMMsg {
 }
 
 type dummyProcessor struct {
-	record []StoredObject
+	record []traverser.StoredObject
 }
 
-func (d *dummyProcessor) process(storedObject StoredObject) (err error) {
+func (d *dummyProcessor) process(storedObject traverser.StoredObject) (err error) {
 	d.record = append(d.record, storedObject)
 	return
 }
@@ -184,7 +185,7 @@ func (d *dummyProcessor) process(storedObject StoredObject) (err error) {
 func (d *dummyProcessor) countFilesOnly() int {
 	n := 0
 	for _, x := range d.record {
-		if x.entityType == common.EEntityType.File() {
+		if x.EntityType == common.EEntityType.File() {
 			n++
 		}
 	}

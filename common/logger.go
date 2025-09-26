@@ -36,6 +36,7 @@ import (
 )
 
 var AzcopyCurrentJobLogger ILoggerResetable
+var AzcopyScanningLogger ILoggerResetable
 
 // TODO: (gapra) I think this should actually be a function on the logger?
 

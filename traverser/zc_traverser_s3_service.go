@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package traverser
 
 import (
 	"context"
@@ -50,7 +50,7 @@ func (t *s3ServiceTraverser) IsDirectory(isSource bool) (bool, error) {
 	return true, nil // Returns true as account traversal is inherently folder-oriented and recursive.
 }
 
-func (t *s3ServiceTraverser) listContainers() ([]string, error) {
+func (t *s3ServiceTraverser) ListContainers() ([]string, error) {
 	if len(t.cachedBuckets) == 0 {
 		bucketList := make([]string, 0)
 		bucketInfo, err := t.s3Client.ListBuckets()
@@ -80,8 +80,8 @@ func (t *s3ServiceTraverser) listContainers() ([]string, error) {
 	}
 }
 
-func (t *s3ServiceTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
-	bucketList, err := t.listContainers()
+func (t *s3ServiceTraverser) Traverse(preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) error {
+	bucketList, err := t.ListContainers()
 
 	if err != nil {
 		return err
@@ -93,7 +93,7 @@ func (t *s3ServiceTraverser) Traverse(preprocessor objectMorpher, processor obje
 		urlResult := tmpS3URL.URL()
 		credentialInfo := common.CredentialInfo{CredentialType: common.ECredentialType.S3AccessKey()}
 
-		bucketTraverser, err := newS3Traverser(&urlResult, t.ctx, InitResourceTraverserOptions{
+		bucketTraverser, err := NewS3Traverser(&urlResult, t.ctx, InitResourceTraverserOptions{
 			Credential: &credentialInfo,
 
 			Recursive: true,
@@ -130,7 +130,7 @@ func (t *s3ServiceTraverser) Traverse(preprocessor objectMorpher, processor obje
 	return nil
 }
 
-func newS3ServiceTraverser(rawURL *url.URL, ctx context.Context, opts InitResourceTraverserOptions) (t *s3ServiceTraverser, err error) {
+func NewS3ServiceTraverser(rawURL *url.URL, ctx context.Context, opts InitResourceTraverserOptions) (t *s3ServiceTraverser, err error) {
 	t = &s3ServiceTraverser{opts: opts, ctx: ctx}
 
 	var s3URLParts common.S3URLParts
@@ -154,6 +154,6 @@ func newS3ServiceTraverser(rawURL *url.URL, ctx context.Context, opts InitResour
 		S3CredentialInfo: common.S3CredentialInfo{
 			Endpoint: t.s3URL.Endpoint,
 		},
-	}, azcopyScanningLogger)
+	}, common.AzcopyScanningLogger)
 	return
 }
