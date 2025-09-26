@@ -141,6 +141,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 				atomic.AddUint64(&cca.atomicSourceFoldersTransferNotRequired, 1)
 			}
 		},
+		ErrorChannel: enumeratorOptions.ErrorChannel,
 	}
 	srcTraverserTemplate := ResourceTraverserTemplate{
 		location: cca.fromTo.From(),
@@ -183,6 +184,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		IncludeDirectoryStubs:   includeDirStubs,
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
 		HardlinkHandling:        common.EHardlinkHandlingType.Follow(),
+		ErrorChannel:            enumeratorOptions.ErrorChannel,
 	}
 	dstTraverserTemplate := ResourceTraverserTemplate{
 		location: cca.fromTo.To(),
