@@ -37,6 +37,7 @@ func newRemoveTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPart in
 		ForceIfReadOnly:       cca.ForceIfReadOnly,
 		BlobFSRecursiveDelete: cca.Recursive,
 		SrcServiceClient:      targetServiceClient,
+		DisableAutoDecoding:   cca.DisableAutoDecoding,
 
 		// flags
 		LogLevel:       LogLevel,

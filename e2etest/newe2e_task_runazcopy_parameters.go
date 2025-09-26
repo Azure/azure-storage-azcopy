@@ -424,17 +424,18 @@ type RemoveFlags struct {
 	GlobalFlags
 	CommonFilterFlags
 
-	Recursive       *bool                         `flag:"recursive"`
-	ForceIfReadOnly *bool                         `flag:"force-if-read-only"`
-	ListOfFiles     []string                      `flag:"list-of-files"`
-	ListOfVersions  []string                      `flag:"list-of-versions"`
-	DryRun          *bool                         `flag:"dry-run"`
-	FromTo          *common.FromTo                `flag:"from-to"`
-	PermanentDelete *common.PermanentDeleteOption `flag:"permanent-delete"`
-	TrailingDot     *common.TrailingDotOption     `flag:"trailing-dot"`
-	CPKByName       *string                       `flag:"cpk-by-name"`
-	CPKByValue      *bool                         `flag:"cpk-by-value"`
-	ExcludePath     *string                       `flag:"exclude-path"`
+	Recursive           *bool                         `flag:"recursive"`
+	ForceIfReadOnly     *bool                         `flag:"force-if-read-only"`
+	ListOfFiles         []string                      `flag:"list-of-files"`
+	ListOfVersions      []string                      `flag:"list-of-versions"`
+	DryRun              *bool                         `flag:"dry-run"`
+	FromTo              *common.FromTo                `flag:"from-to"`
+	PermanentDelete     *common.PermanentDeleteOption `flag:"permanent-delete"`
+	TrailingDot         *common.TrailingDotOption     `flag:"trailing-dot"`
+	CPKByName           *string                       `flag:"cpk-by-name"`
+	CPKByValue          *bool                         `flag:"cpk-by-value"`
+	ExcludePath         *string                       `flag:"exclude-path"`
+	DisableAutoDecoding *bool                         `flag:"disable-auto-decoding"`
 }
 
 func (r RemoveFlags) SerializeListingFile(in any, scenarioAsserter ScenarioAsserter, ctx context.Context) {

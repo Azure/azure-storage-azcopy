@@ -143,6 +143,8 @@ type TransferInfo struct {
 
 	VersionID  string
 	SnapshotID string
+
+	DisableAutoDecoding bool
 }
 
 func (i *TransferInfo) IsFilePropertiesTransfer() bool {
@@ -428,6 +430,7 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 		S2SInvalidMetadataHandleOption: s2sInvalidMetadataHandleOption,
 		BlobFSRecursiveDelete:          plan.BlobFSRecursiveDelete,
 		DestLengthValidation:           DestLengthValidation,
+		DisableAutoDecoding:            plan.DisableAutoDecoding,
 		SrcProperties: SrcProperties{
 			SrcHTTPHeaders: srcHTTPHeaders,
 			SrcMetadata:    srcMetadata,

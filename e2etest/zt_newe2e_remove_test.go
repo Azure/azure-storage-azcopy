@@ -300,11 +300,14 @@ func (s *RemoveSuite) Scenario_RemoveFilesWithSpecialChars(svm *ScenarioVariatio
 		fullList := []string{
 			"sample/sample%5C.json",
 			"test/test%5C.json",
-			"test/test%255C.json",
 			"ex%5C",
 			"regular_file.txt",
-			"file%2F.png",
+
+			// same name after decoding
+			"file%2Ffile.png",
 			"file/file.png",
+			"test/test%aC.json",
+			"test/test%25aC.json",
 		}
 		// create objs
 		for i := range len(fullList) {
@@ -317,7 +320,8 @@ func (s *RemoveSuite) Scenario_RemoveFilesWithSpecialChars(svm *ScenarioVariatio
 				Verb:    AzCopyVerbRemove,
 				Targets: []ResourceManager{src},
 				Flags: RemoveFlags{
-					Recursive: pointerTo(true),
+					Recursive:           pointerTo(true),
+					DisableAutoDecoding: pointerTo(true),
 				},
 			})
 

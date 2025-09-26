@@ -216,7 +216,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 		cacheControl:             raw.cacheControl,
 		noGuessMimeType:          raw.noGuessMimeType,
 		preserveLastModifiedTime: raw.preserveLastModifiedTime,
-		disableAutoDecoding:      raw.disableAutoDecoding,
+		DisableAutoDecoding:      raw.disableAutoDecoding,
 		blobTags:                 raw.blobTags,
 		S2sPreserveBlobTags:      raw.s2sPreserveBlobTags,
 		cpkByName:                raw.cpkScopeInfo,
@@ -727,7 +727,7 @@ type CookedCopyCmdArgs struct {
 	IncludeDirectoryStubs bool
 
 	// whether to disable automatic decoding of illegal chars on Windows
-	disableAutoDecoding bool
+	DisableAutoDecoding bool
 
 	// specify if dry run mode on
 	dryrunMode bool
