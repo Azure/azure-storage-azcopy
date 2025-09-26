@@ -1020,6 +1020,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 						if common.IsNFSCopy() && t.incrementEnumerationCounter != nil {
 							t.incrementEnumerationCounter(common.EEntityType.Symlink())
 						}
+						WarnStdoutAndScanningLog(fmt.Sprintf("Skipping: Symlink File - '%s'.", path))
 						continue
 
 					} else if t.symlinkHandling.Preserve() { // Mark the entity type as a symlink.
@@ -1099,6 +1100,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 						if t.incrementEnumerationCounter != nil {
 							t.incrementEnumerationCounter(entityType)
 						}
+						WarnStdoutAndScanningLog(fmt.Sprintf("Skipping: Special File - '%s'.", path))
 						continue
 					}
 				}
