@@ -57,6 +57,7 @@ func (JobType) Copy() JobType      { return JobType(0) }
 func (JobType) Sync() JobType      { return JobType(1) }
 func (JobType) Resume() JobType    { return JobType(2) }
 func (JobType) Benchmark() JobType { return JobType(3) }
+func (JobType) Show() JobType      { return JobType(4) }
 
 type TransferProgress struct {
 	ListJobSummaryResponse

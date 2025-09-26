@@ -298,7 +298,7 @@ func GetJobSummaryOutputBuilder(summary JobSummary) OutputBuilder {
 	return func(format OutputFormat) string {
 		if format == EOutputFormat.Json() {
 			switch summary.JobType {
-			case EJobType.Copy(), EJobType.Resume(), EJobType.Benchmark():
+			case EJobType.Copy(), EJobType.Resume(), EJobType.Benchmark(), EJobType.Show():
 				jsonOutput, err := json.Marshal(summary.ListJobSummaryResponse)
 				PanicIfErr(err)
 				return string(jsonOutput)
@@ -439,6 +439,39 @@ Final Job Status: %v%s%s
 					formatPerfAdvice(summary.PerformanceAdvice))
 
 				return output
+			case EJobType.Show():
+				return fmt.Sprintf(
+					`
+Job %s summary
+Number of File Transfers: %v
+Number of Folder Property Transfers: %v
+Number of Symlink Transfers: %v
+Total Number of Transfers: %v
+Number of File Transfers Completed: %v
+Number of Folder Transfers Completed: %v
+Number of File Transfers Failed: %v
+Number of Folder Transfers Failed: %v
+Number of File Transfers Skipped: %v
+Number of Folder Transfers Skipped: %v
+Total Number of Bytes Transferred: %v
+Percent Complete (approx): %.1f
+Final Job Status: %v
+`,
+					summary.JobID.String(),
+					summary.FileTransfers,
+					summary.FolderPropertyTransfers,
+					summary.SymlinkTransfers,
+					summary.TotalTransfers,
+					summary.TransfersCompleted-summary.FoldersCompleted,
+					summary.FoldersCompleted,
+					summary.TransfersFailed-summary.FoldersFailed,
+					summary.FoldersFailed,
+					summary.TransfersSkipped-summary.FoldersSkipped,
+					summary.FoldersSkipped,
+					summary.TotalBytesTransferred,
+					summary.PercentComplete, // noted as approx in the format string because won't include in-flight files if this Show command is run from a different process
+					summary.JobStatus,
+				)
 			default:
 				return ""
 			}
