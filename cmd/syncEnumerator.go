@@ -108,7 +108,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		Credential: &srcCredInfo,
 		IncrementEnumeration: func(entityType common.EntityType) {
 			switch entityType {
-			case common.EEntityType.File():
+			case common.EEntityType.File(), common.EEntityType.Hardlink():
 				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 			case common.EEntityType.Folder():
 				atomic.AddUint64(&cca.atomicSourceFoldersScanned, 1)
@@ -117,10 +117,6 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 					atomic.AddUint32(&cca.atomicSkippedSymlinkCount, 1)
 				}
 				if cca.symlinkHandling != common.ESymlinkHandlingType.Follow() {
-					atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
-				}
-			case common.EEntityType.Hardlink():
-				if cca.hardlinks != common.EHardlinkHandlingType.Follow() {
 					atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 				}
 			case common.EEntityType.Other():
