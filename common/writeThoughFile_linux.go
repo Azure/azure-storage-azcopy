@@ -114,12 +114,17 @@ func StatxTimestampToFiletime(ts unix.StatxTimestamp) Filetime {
 	return NsecToFiletime(ts.Sec*int64(time.Second) + int64(ts.Nsec))
 }
 
-func GetFileInformation(path string, isNFSCopy bool) (ByHandleFileInformation, error) {
+func GetFileInformation(path string, isNFSCopy bool, symlinkHandling SymlinkHandlingType) (ByHandleFileInformation, error) {
 	var stx unix.Statx_t
 
 	// We want all attributes including Btime (aka creation time).
 	// For consistency with Windows implementation we pass flags==0 which causes it to follow symlinks.
-	err := unix.Statx(unix.AT_FDCWD, path, 0 /* flags */, unix.STATX_ALL, &stx)
+	flags := 0
+	if symlinkHandling == ESymlinkHandlingType.Preserve() {
+		flags = unix.AT_SYMLINK_NOFOLLOW
+	}
+
+	err := unix.Statx(unix.AT_FDCWD, path, flags /* flags */, unix.STATX_ALL, &stx)
 	if err == unix.ENOSYS || err == unix.EPERM {
 		panic(fmt.Errorf("statx syscall is not available: %v", err))
 	} else if err != nil {

@@ -358,7 +358,7 @@ func (l *LocalObjectResourceManager) ListChildren(a Asserter, recursive bool) ma
 
 func (l *LocalObjectResourceManager) GetProperties(a Asserter) ObjectProperties {
 	a.HelperMarker().Helper()
-	stats, err := os.Stat(l.getWorkingPath())
+	stats, err := os.Lstat(l.getWorkingPath())
 	if err != nil { // Prevent nil dereferences
 		a.NoError("failed to get stat", err)
 		return ObjectProperties{}
