@@ -46,11 +46,10 @@ type JobProgressTracker interface {
 
 type JobLifecycleManager struct {
 	completionFuncs []func()
-	completionChan  chan struct{}
-	errorChan       chan string
+	doneChan        chan struct{}
 	mutex           sync.RWMutex
 	done            bool
-	lastError       string
+	lastError       error
 	handler         *common.JobUIHooks
 }
 
@@ -65,8 +64,7 @@ type JobLifecycleManager struct {
 func NewJobLifecycleManager(handler *common.JobUIHooks) *JobLifecycleManager {
 	jlcm := &JobLifecycleManager{
 		completionFuncs: make([]func(), 0),
-		completionChan:  make(chan struct{}, 1),
-		errorChan:       make(chan string, 1),
+		doneChan:        make(chan struct{}),
 		done:            false,
 		handler:         handler,
 	}
@@ -78,41 +76,13 @@ func (j *JobLifecycleManager) RegisterCloseFunc(f func()) {
 	j.completionFuncs = append(j.completionFuncs, f)
 }
 
-func (j *JobLifecycleManager) OnComplete() {
+// markComplete handles the common completion logic for both success and error cases
+func (j *JobLifecycleManager) markComplete(err error) {
 	j.mutex.Lock()
 	defer j.mutex.Unlock()
 
 	if j.done {
 		return // prevent multiple completions
-	}
-
-	j.done = true
-
-	// Execute completion functions
-	for _, fn := range j.completionFuncs {
-		if fn != nil {
-			fn()
-		}
-	}
-
-	// Signal completion (non-blocking)
-	select {
-	case j.completionChan <- struct{}{}:
-	default:
-	}
-}
-
-// TODO : rename interface method to OnError to match other methods
-func (j *JobLifecycleManager) Error(err string) {
-	j.OnError(err)
-}
-
-func (j *JobLifecycleManager) OnError(err string) {
-	j.mutex.Lock()
-	defer j.mutex.Unlock()
-
-	if j.done {
-		return // prevent multiple errors
 	}
 
 	j.done = true
@@ -125,11 +95,21 @@ func (j *JobLifecycleManager) OnError(err string) {
 		}
 	}
 
-	// Signal error (non-blocking)
-	select {
-	case j.errorChan <- err:
-	default:
-	}
+	// Signal completion by closing the channel
+	close(j.doneChan)
+}
+
+func (j *JobLifecycleManager) OnComplete() {
+	j.markComplete(nil)
+}
+
+// TODO : rename interface method to OnError to match other methods
+func (j *JobLifecycleManager) Error(err string) {
+	j.OnError(err)
+}
+
+func (j *JobLifecycleManager) OnError(err string) {
+	j.markComplete(errors.New(err))
 }
 
 func (j *JobLifecycleManager) Wait() error {
@@ -139,19 +119,16 @@ func (j *JobLifecycleManager) Wait() error {
 	j.mutex.RUnlock()
 
 	if isDone {
-		if lastError != "" {
-			return errors.New(lastError)
-		}
-		return nil
+		return lastError // nil for success, error for failure
 	}
 
-	// wait until OnComplete or OnError is called
-	select {
-	case <-j.completionChan:
-		return nil
-	case errMsg := <-j.errorChan:
-		return errors.New(errMsg)
-	}
+	// Wait for completion signal (channel close)
+	<-j.doneChan
+
+	// Re-check the error after completion
+	j.mutex.RLock()
+	defer j.mutex.RUnlock()
+	return j.lastError
 }
 
 func (j *JobLifecycleManager) InitiateProgressReporting(ctx context.Context, reporter JobProgressTracker) {
