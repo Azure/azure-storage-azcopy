@@ -107,17 +107,27 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 
 		Credential: &srcCredInfo,
 		IncrementEnumeration: func(entityType common.EntityType) {
-			if entityType == common.EEntityType.File() {
+			switch entityType {
+			case common.EEntityType.File():
 				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
-			} else if entityType == common.EEntityType.Folder() {
+			case common.EEntityType.Folder():
 				atomic.AddUint64(&cca.atomicSourceFoldersScanned, 1)
-			}
-			if common.IsNFSCopy() {
-				if entityType == common.EEntityType.Other() {
-					atomic.AddUint32(&cca.atomicSkippedSpecialFileCount, 1)
-				} else if entityType == common.EEntityType.Symlink() {
+			case common.EEntityType.Symlink():
+				if common.IsNFSCopy() {
 					atomic.AddUint32(&cca.atomicSkippedSymlinkCount, 1)
 				}
+				if cca.symlinkHandling != common.ESymlinkHandlingType.Follow() {
+					atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
+				}
+			case common.EEntityType.Hardlink():
+				if cca.hardlinks != common.EHardlinkHandlingType.Follow() {
+					atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
+				}
+			case common.EEntityType.Other():
+				if common.IsNFSCopy() {
+					atomic.AddUint32(&cca.atomicSkippedSpecialFileCount, 1)
+				}
+			default:
 			}
 		},
 
@@ -139,6 +149,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 				atomic.AddUint64(&cca.atomicSourceFoldersTransferNotRequired, 1)
 			}
 		},
+		ErrorChannel: enumeratorOptions.ErrorChannel,
 	}
 	srcTraverserTemplate := ResourceTraverserTemplate{
 		location: cca.fromTo.From(),
@@ -181,6 +192,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		IncludeDirectoryStubs:   includeDirStubs,
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
 		HardlinkHandling:        common.EHardlinkHandlingType.Follow(),
+		ErrorChannel:            enumeratorOptions.ErrorChannel,
 	}
 	dstTraverserTemplate := ResourceTraverserTemplate{
 		location: cca.fromTo.To(),
