@@ -49,9 +49,38 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *traverser.CopyEnum
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
+	from := cca.FromTo.From()
+	if !from.SupportsTrailingDot() {
+		cca.trailingDot = common.ETrailingDotOption.Disable()
+	}
+
+	var reauthTok *common.ScopedAuthenticator
+	if at, ok := cca.credentialInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok { // We don't need two different tokens here since it gets passed in just the same either way.
+		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
+		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+	}
+
+	options := traverser.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
+	var fileClientOptions any
+	if cca.FromTo.From().IsFile() {
+		fileClientOptions = &common.FileClientOptions{AllowTrailingDot: cca.trailingDot.IsEnabled()}
+	}
+	targetServiceClient, err := common.GetServiceClientForLocation(
+		cca.FromTo.From(),
+		cca.Source,
+		cca.credentialInfo.CredentialType,
+		cca.credentialInfo.OAuthTokenInfo.TokenCredential,
+		&options,
+		fileClientOptions,
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	// Include-path is handled by ListOfFilesChannel.
 	sourceTraverser, err = traverser.InitResourceTraverser(cca.Source, cca.FromTo.From(), ctx, traverser.InitResourceTraverserOptions{
-		Credential: &cca.credentialInfo,
+		Client:         targetServiceClient,
+		CredentialType: cca.credentialInfo.CredentialType,
 
 		ListOfFiles:      cca.ListOfFilesChannel,
 		ListOfVersionIDs: cca.ListOfVersionIDsChannel,
@@ -103,33 +132,6 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *traverser.CopyEnum
 	}
 	common.LogToJobLogWithPrefix(message, common.LogInfo)
 
-	from := cca.FromTo.From()
-	if !from.SupportsTrailingDot() {
-		cca.trailingDot = common.ETrailingDotOption.Disable()
-	}
-
-	var reauthTok *common.ScopedAuthenticator
-	if at, ok := cca.credentialInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok { // We don't need two different tokens here since it gets passed in just the same either way.
-		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
-	}
-
-	options := traverser.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
-	var fileClientOptions any
-	if cca.FromTo.From().IsFile() {
-		fileClientOptions = &common.FileClientOptions{AllowTrailingDot: cca.trailingDot.IsEnabled()}
-	}
-	targetServiceClient, err := common.GetServiceClientForLocation(
-		cca.FromTo.From(),
-		cca.Source,
-		cca.credentialInfo.CredentialType,
-		cca.credentialInfo.OAuthTokenInfo.TokenCredential,
-		&options,
-		fileClientOptions,
-	)
-	if err != nil {
-		return nil, err
-	}
 	transferScheduler := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo, targetServiceClient)
 
 	finalize := func() error {

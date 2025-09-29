@@ -213,7 +213,7 @@ func NewS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTrave
 	showS3UrlTypeWarning(s3URLParts)
 
 	t.s3Client, err = common.CreateS3Client(t.ctx, common.CredentialInfo{
-		CredentialType: opts.Credential.CredentialType,
+		CredentialType: opts.CredentialType,
 		S3CredentialInfo: common.S3CredentialInfo{
 			Endpoint: t.s3URLParts.Endpoint,
 			Region:   t.s3URLParts.Region,
