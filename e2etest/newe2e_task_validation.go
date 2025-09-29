@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
@@ -151,13 +152,10 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 
 				a.Assert(canonPathPrefix+"bodies differ in hash", Equal{Deep: true}, hex.EncodeToString(objHash.Sum(nil)), hex.EncodeToString(valHash.Sum(nil)))
 			} else if objMan.EntityType() == common.EEntityType.Symlink() {
-				// Do we have a specified symlink dest or a body?
-				symlinkDest := objDef.SymlinkedFileName
-				if symlinkDest == "" && objDef.Body != nil {
-					buf, err := io.ReadAll(objDef.Body.Reader())
-					a.NoError(canonPathPrefix+"Read symlink body", err)
-					symlinkDest = string(buf)
-				}
+				if manager.Location() == common.ELocation.FileNFS() {
+					// NFS symlink target is stored as file content
+					linkDataDest := objMan.ReadLink(a)
+					linkDataSrc := objDef.SymlinkedFileName
 
 				if symlinkDest != "" {
 					linkData := objMan.ReadLink(a)
