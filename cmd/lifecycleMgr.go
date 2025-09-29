@@ -1,3 +1,23 @@
+// Copyright © 2025 Microsoft <wastore@microsoft.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
 package cmd
 
 import (
@@ -112,7 +132,7 @@ type lifecycleMgr struct {
 	closeFunc             func()         // used to close logs before exiting
 	waitForUserResponse   chan bool
 	msgHandlerChannel     chan *common.LCMMsg
-	OutputVerbosityType   common.OutputVerbosity
+	outputVerbosityType   common.OutputVerbosity
 }
 
 type userInput struct {
@@ -464,7 +484,7 @@ func (lcm *lifecycleMgr) processOutputMessage() {
 	for {
 		msgToPrint := <-lcm.msgQueue
 
-		if shouldQuietMessage(msgToPrint, lcm.OutputVerbosityType) {
+		if shouldQuietMessage(msgToPrint, lcm.outputVerbosityType) {
 			lcm.processNoneOutput(msgToPrint)
 			continue
 		}
@@ -694,7 +714,7 @@ func (lcm *lifecycleMgr) ReportAllJobPartsDone() {
 }
 
 func (lcm *lifecycleMgr) SetOutputVerbosity(mode common.OutputVerbosity) {
-	lcm.OutputVerbosityType = mode
+	lcm.outputVerbosityType = mode
 }
 
 func shouldQuietMessage(msgToOutput outputMessage, quietMode common.OutputVerbosity) bool {

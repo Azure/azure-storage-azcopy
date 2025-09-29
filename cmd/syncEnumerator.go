@@ -226,7 +226,6 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 		SrcServiceClient: cca.srcServiceClient,
 		DstServiceClient: cca.dstServiceClient,
 	}
-
 	// Check protocol compatibility for File Shares
 	if err := validateProtocolCompatibility(ctx, cca.fromTo, cca.source, cca.destination, copyJobTemplate.SrcServiceClient, copyJobTemplate.DstServiceClient); err != nil {
 		return nil, err
