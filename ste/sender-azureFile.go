@@ -194,26 +194,24 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		Metadata:    u.metadataToApply,
 	}
 
-	if jptm.FromTo().IsNFS() {
+	// Handle source properties (sets creation & lastWrite time once
+
+	var creationTime, lastWriteTime *time.Time
+	if jptm.FromTo().From() == common.ELocation.FileNFS() {
 
 		stage, err := u.addNFSPropertiesToHeaders(info)
 		if err != nil {
 			jptm.FailActiveSend(stage, err)
 			return
 		}
+		creationTime, lastWriteTime = u.nfsPropertiesToApply.CreationTime, u.nfsPropertiesToApply.LastWriteTime
 
 		stage, err = u.addNFSPermissionsToHeaders(info, u.getFileClient().URL())
 		if err != nil {
 			jptm.FailActiveSend(stage, err)
 			return
 		}
-		createOptions.NFSProperties = &file.NFSProperties{
-			CreationTime:  u.nfsPropertiesToApply.CreationTime,
-			LastWriteTime: u.nfsPropertiesToApply.LastWriteTime,
-			Owner:         u.nfsPropertiesToApply.Owner,
-			Group:         u.nfsPropertiesToApply.Group,
-			FileMode:      u.nfsPropertiesToApply.FileMode,
-		}
+
 	} else {
 		stage, err := u.addPermissionsToHeaders(info, u.getFileClient().URL())
 		if err != nil {
@@ -226,14 +224,31 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 			jptm.FailActiveSend(stage, err)
 			return
 		}
+		creationTime, lastWriteTime = u.smbPropertiesToApply.CreationTime, u.smbPropertiesToApply.LastWriteTime
+	}
+
+	// Handle destination properties
+	if jptm.FromTo().To() == common.ELocation.FileNFS() {
+		createOptions.NFSProperties = &file.NFSProperties{
+			CreationTime:  creationTime,  // for smb to nfs transfer
+			LastWriteTime: lastWriteTime, // for smb to nfs transfer
+			Owner:         u.nfsPropertiesToApply.Owner,
+			Group:         u.nfsPropertiesToApply.Group,
+			FileMode:      u.nfsPropertiesToApply.FileMode,
+		}
+	} else {
 		createOptions.SMBProperties = &u.smbPropertiesToApply
 		createOptions.Permissions = &u.permissionsToApply
+
+		// for nfs to smb transfer
+		createOptions.SMBProperties.CreationTime = creationTime
+		createOptions.SMBProperties.LastWriteTime = lastWriteTime
 	}
 
 	// Turn off readonly at creation time (because if its set at creation time, we won't be
 	// able to upload any data to the file!). We'll set it in epilogue, if necessary.
-	creationProperties := u.smbPropertiesToApply
-	if creationProperties.Attributes != nil {
+	creationProperties := createOptions.SMBProperties
+	if creationProperties != nil && creationProperties.Attributes != nil {
 		creationProperties.Attributes.ReadOnly = false
 	}
 
@@ -253,7 +268,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		}
 
 		if creationProperties.Attributes != nil {
-			createOptions.SMBProperties = &creationProperties
+			createOptions.SMBProperties = creationProperties
 		}
 		// retrying file creation
 		err = common.DoWithOverrideReadOnlyOnAzureFiles(u.ctx,
@@ -670,33 +685,34 @@ func (u *azureFileSenderBase) SendSymlink(linkData string) error {
 	jptm := u.jptm
 	info := jptm.Info()
 
+	if !jptm.FromTo().IsNFS() {
+		return nil
+	}
+
 	createSymlinkOptions := &file.CreateSymbolicLinkOptions{
 		Metadata: u.metadataToApply,
 	}
 
-	if jptm.FromTo().IsNFS() {
-
-		stage, err := u.addNFSPropertiesToHeaders(info)
-		if err != nil {
-			jptm.FailActiveSend(stage, err)
-			return err
-		}
-
-		stage, err = u.addNFSPermissionsToHeaders(info, u.getFileClient().URL())
-		if err != nil {
-			jptm.FailActiveSend(stage, err)
-			return err
-		}
-		createSymlinkOptions.FileNFSProperties = &file.NFSProperties{
-			CreationTime:  u.nfsPropertiesToApply.CreationTime,
-			LastWriteTime: u.nfsPropertiesToApply.LastWriteTime,
-			Owner:         u.nfsPropertiesToApply.Owner,
-			Group:         u.nfsPropertiesToApply.Group,
-			FileMode:      u.nfsPropertiesToApply.FileMode,
-		}
+	stage, err := u.addNFSPropertiesToHeaders(info)
+	if err != nil {
+		jptm.FailActiveSend(stage, err)
+		return err
 	}
 
-	err := DoWithCreateSymlinkOnAzureFilesNFS(u.ctx,
+	stage, err = u.addNFSPermissionsToHeaders(info, u.getFileClient().URL())
+	if err != nil {
+		jptm.FailActiveSend(stage, err)
+		return err
+	}
+	createSymlinkOptions.FileNFSProperties = &file.NFSProperties{
+		CreationTime:  u.nfsPropertiesToApply.CreationTime,
+		LastWriteTime: u.nfsPropertiesToApply.LastWriteTime,
+		Owner:         u.nfsPropertiesToApply.Owner,
+		Group:         u.nfsPropertiesToApply.Group,
+		FileMode:      u.nfsPropertiesToApply.FileMode,
+	}
+
+	err = DoWithCreateSymlinkOnAzureFilesNFS(u.ctx,
 		func() error {
 			_, err := u.getFileClient().CreateSymbolicLink(u.ctx, linkData, createSymlinkOptions)
 			return err

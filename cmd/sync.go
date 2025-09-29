@@ -286,6 +286,10 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 		return err
 	}
 
+	if err = validateSymlinkHandlingMode(cooked.symlinkHandling, cooked.fromTo); err != nil {
+		return err
+	}
+
 	// NFS/SMB validation
 	if cooked.fromTo.IsNFS() {
 		if err := performNFSSpecificValidation(
@@ -299,7 +303,7 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 	} else {
 		if err := performSMBSpecificValidation(
 			cooked.fromTo, cooked.preservePermissions, cooked.preserveInfo,
-			cooked.preservePOSIXProperties, &cooked.hardlinks); err != nil {
+			cooked.preservePOSIXProperties, cooked.symlinkHandling); err != nil {
 			return err
 		}
 	}

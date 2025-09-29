@@ -358,11 +358,22 @@ func (l *LocalObjectResourceManager) ListChildren(a Asserter, recursive bool) ma
 
 func (l *LocalObjectResourceManager) GetProperties(a Asserter) ObjectProperties {
 	a.HelperMarker().Helper()
-	stats, err := os.Stat(l.getWorkingPath())
-	if err != nil { // Prevent nil dereferences
-		a.NoError("failed to get stat", err)
-		return ObjectProperties{}
+	var stats fs.FileInfo
+	var err error
+	if l.entityType == common.EEntityType.Symlink() {
+		stats, err = os.Lstat(l.getWorkingPath())
+		if err != nil { // Prevent nil dereferences
+			a.NoError("failed to get stat", err)
+			return ObjectProperties{}
+		}
+	} else {
+		stats, err = os.Stat(l.getWorkingPath())
+		if err != nil { // Prevent nil dereferences
+			a.NoError("failed to get stat", err)
+			return ObjectProperties{}
+		}
 	}
+
 	lmt := common.Iff(stats == nil, nil, PtrOf(stats.ModTime()))
 	out := ObjectProperties{
 		LastModifiedTime: lmt,
