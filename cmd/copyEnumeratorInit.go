@@ -104,13 +104,14 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				if entityType == common.EEntityType.Other() {
 					atomic.AddUint32(&cca.atomicSkippedSpecialFileCount, 1)
 				} else if entityType == common.EEntityType.Symlink() {
-					atomic.AddUint32(&cca.atomicSkippedSymlinkCount, 1)
+					switch symlinkOption {
+					case common.ESymlinkHandlingType.Skip():
+						atomic.AddUint32(&cca.atomicSkippedSymlinkCount, 1)
+					}
 				} else if entityType == common.EEntityType.Hardlink() {
 					switch hardlinkHandling {
 					case common.SkipHardlinkHandlingType:
 						atomic.AddUint32(&cca.atomicSkippedHardlinkCount, 1)
-					case common.DefaultHardlinkHandlingType:
-						atomic.AddUint32(&cca.atomicHardlinkConvertedCount, 1)
 					}
 				}
 			}
@@ -624,7 +625,7 @@ func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool
 
 	// If downloading on Windows or uploading to files, encode unsafe characters.
 	if (loc == common.ELocation.Local() && !source && runtime.GOOS == "windows") ||
-		(!source && (loc == common.ELocation.File() || loc == common.ELocation.FileNFS())) {
+		(!source && loc.IsFile()) {
 		// invalidChars := `<>\/:"|?*` + string(0x00)
 
 		for k, c := range encodedInvalidCharacters {
@@ -635,7 +636,7 @@ func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool
 
 		// If uploading from Windows or downloading from files, decode unsafe chars if user enables decoding
 	} else if ((!source && fromTo.From() == common.ELocation.Local() && runtime.GOOS == "windows") ||
-		(!source && (fromTo.From() == common.ELocation.File() || fromTo.From() == common.ELocation.FileNFS()))) && !disableAutoDecoding {
+		(!source && fromTo.From().IsFile())) && !disableAutoDecoding {
 
 		for encoded, c := range reverseEncodedChars {
 			for k, p := range pathParts {

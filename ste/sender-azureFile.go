@@ -264,6 +264,27 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 			u.jptm.GetForceIfReadOnly())
 	}
 
+	// In case of NFS there might be a mismatch between the source and destination file types
+	// e.g. source is a file and destination is a symlink with the same name.
+	// In this case, we delete the destination symlink and retry the creation of the file
+	if jptm.FromTo().IsNFS() && fileerror.HasCode(err, fileerror.ResourceTypeMismatch) {
+		jptm.Log(common.LogWarning,
+			fmt.Sprintf("%s: %s \nAzCopy will delete the destination resource.",
+				fileerror.ResourceAlreadyExists, err.Error()))
+
+		if _, delErr := u.getFileClient().Delete(u.ctx, nil); delErr != nil {
+			jptm.FailActiveUpload("Deleting existing resource", delErr)
+		}
+
+		// retrying file creation
+		err = common.DoWithOverrideReadOnlyOnAzureFiles(u.ctx,
+			func() (interface{}, error) {
+				return u.getFileClient().Create(u.ctx, info.SourceSize, createOptions)
+			},
+			u.fileOrDirClient,
+			u.jptm.GetForceIfReadOnly())
+	}
+
 	if err != nil {
 		jptm.FailActiveUpload("Creating file", err)
 		return

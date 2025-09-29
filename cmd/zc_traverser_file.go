@@ -539,11 +539,11 @@ func evaluateAndLogNFSFileType(ctx context.Context, meta NFSFileMeta, incrementE
 
 	switch meta.NFSFileType {
 	case file.NFSFileTypeSymlink:
-		logNFSLinkWarning(meta.Name, "", true, meta.hardlinkHandling)
-		if incrementEnumerationCounter != nil {
-			incrementEnumerationCounter(common.EEntityType.Symlink(), meta.symlinkHandling, meta.hardlinkHandling)
+		if skip := HandleSymlinkForNFS(meta.Name,
+			meta.symlinkHandling, incrementEnumerationCounter); skip {
+			return true, nil
 		}
-		return true, nil
+		return false, nil
 
 	case file.NFSFileTypeRegular:
 		if meta.LinkCount > 1 {
