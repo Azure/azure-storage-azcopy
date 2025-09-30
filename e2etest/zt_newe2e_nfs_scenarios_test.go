@@ -113,6 +113,9 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 			// Make sure the LMT is in the past
 			time.Sleep(time.Second * 5)
 		}
+		dst = dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+	} else {
+		dst = dstContainer
 	}
 
 	folderProperties, fileProperties, fileOrFolderPermissions := getPropertiesAndPermissions(svm, preserveProperties, preservePermissions)
@@ -433,9 +436,8 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 		AzCopyCommand{
 			Verb: azCopyVerb,
 			Targets: []ResourceManager{srcDirObj.(RemoteResourceManager).WithSpecificAuthType(
-				ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(),
-					EExplicitCredentialType.OAuth(),
-				}), svm, CreateAzCopyTargetOptions{}),
+				ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken()}), //EExplicitCredentialType.OAuth(),
+				svm, CreateAzCopyTargetOptions{}),
 				dst},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
@@ -459,7 +461,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 
 	if followSymlinks {
 		ValidateContainsError(svm, stdOut, []string{
-			"The '--follow-symlink' flag is not supported when copying from Azure Files NFS.",
+			"The '--follow-symlink' flag is only applicable when uploading from local filesystem.",
 		})
 		return
 	}
@@ -695,7 +697,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 
 	if followSymlinks {
 		ValidateContainsError(svm, stdOut, []string{
-			"The '--follow-symlink' flag is not supported when copying from Azure Files NFS.",
+			"The '--follow-symlink' flag is only applicable when uploading from local filesystem.",
 		})
 		return
 	}

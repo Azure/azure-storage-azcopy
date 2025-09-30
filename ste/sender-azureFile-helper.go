@@ -92,7 +92,7 @@ func (u *azureFileSenderBase) addCreationOptions(createOptions *file.CreateOptio
 		}
 
 	// Pure NFS case
-	case jptm.FromTo().From() == common.ELocation.FileNFS():
+	case jptm.FromTo().IsNFS():
 		if err := u.applyNFSHeaders(info); err != nil {
 			return
 		}
