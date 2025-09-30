@@ -214,10 +214,10 @@ func (c *CookedTransferOptions) applyFromToSrcDest(src, dst string, fromTo commo
 
 func (c *CookedTransferOptions) applyDefaultsAndInferOptions(opts CopyOptions) (err error) {
 	// defaults
-	preserveOwner := common.Iff(opts.PreserveOwner == nil, true, *opts.PreserveOwner)
+	preserveOwner := common.IffNil(opts.PreserveOwner, true)
 	// --as-subdir is OK on all sources and destinations, but additional verification has to be done down the line. (e.g. https://account.blob.core.windows.net is not a valid root)
-	c.asSubdir = common.Iff(opts.AsSubDir == nil, true, *opts.AsSubDir)
-	c.s2sGetPropertiesInBackend = common.Iff(opts.s2SGetPropertiesInBackend == nil, true, *opts.s2SGetPropertiesInBackend)
+	c.asSubdir = common.IffNil(opts.AsSubDir, true)
+	c.s2sGetPropertiesInBackend = common.IffNil(opts.s2SGetPropertiesInBackend, true)
 	c.preserveInfo = common.IffNil(opts.PreserveInfo, GetPreserveInfoDefault(opts.FromTo))
 
 	// 1:1 mapping
@@ -319,7 +319,7 @@ func (c *CookedTransferOptions) applyDefaultsAndInferOptions(opts CopyOptions) (
 		(c.fromTo.From().IsFile() &&
 			c.fromTo.To().IsRemote() && (c.s2sSourceChangeValidation || c.filterOptions.IncludeAfter != nil || c.filterOptions.IncludeBefore != nil)) || // If S2S from File to *, and sourceChangeValidation is enabled, we get properties so that we have LMTs. Likewise, if we are using includeAfter or includeBefore, which require LMTs.
 		(c.fromTo.From().IsRemote() && c.fromTo.To().IsRemote() && c.s2sPreserveProperties.Get() && !c.s2sGetPropertiesInBackend) // If S2S and preserve properties AND get properties in backend is on, turn this off, as properties will be obtained in the backend.
-	c.s2sGetPropertiesInBackend = c.s2sPreserveProperties.Get() && !c.getPropertiesInFrontend && c.s2sGetPropertiesInBackend // Infer GetProperties if GetPropertiesInBackend is enabled.
+	c.s2sGetPropertiesInBackend = c.s2sPreserveProperties.Get() && !c.getPropertiesInFrontend && c.s2sGetPropertiesInBackend      // Infer GetProperties if GetPropertiesInBackend is enabled.
 
 	// source root trailing slash handling
 	root, err := NormalizeResourceRoot(c.source.Value, c.fromTo.From())
