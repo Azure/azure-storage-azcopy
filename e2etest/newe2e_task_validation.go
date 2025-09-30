@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/url"
 	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
@@ -152,18 +151,17 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 
 				a.Assert(canonPathPrefix+"bodies differ in hash", Equal{Deep: true}, hex.EncodeToString(objHash.Sum(nil)), hex.EncodeToString(valHash.Sum(nil)))
 			} else if objMan.EntityType() == common.EEntityType.Symlink() {
-				if manager.Location() == common.ELocation.FileNFS() {
-					// NFS symlink target is stored as file content
-					linkDataDest := objMan.ReadLink(a)
-					linkDataSrc := objDef.SymlinkedFileName
+				// NFS symlink target is stored as file content
+				linkDataDest := objMan.ReadLink(a)
+				linkDataSrc := objDef.SymlinkedFileName
 
-				if symlinkDest != "" {
+				if linkDataDest != "" {
 					linkData := objMan.ReadLink(a)
 
 					decodedDest, err := url.PathUnescape(linkData)
 					a.NoError("decode failed", err) // or handle error if needed
 
-					a.Assert(canonPathPrefix+"Symlink mismatch", Equal{}, symlinkDest, decodedDest)
+					a.Assert(canonPathPrefix+"Symlink mismatch", Equal{}, linkDataSrc, decodedDest)
 				}
 			}
 
@@ -188,11 +186,9 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 				ValidatePropertyPtr(a, "Permissions", vProps.FileProperties.FilePermissions, oProps.FileProperties.FilePermissions)
 				// SMB to NFS transfer
 				if vProps.FileProperties.FileCreationTime != nil && oProps.FileNFSProperties != nil {
-					fmt.Println("Here--------------------------------")
 					ValidatePropertyPtr(a, "Creation time here", vProps.FileProperties.FileCreationTime, oProps.FileNFSProperties.FileCreationTime)
 					ValidatePropertyPtr(a, "Last write time here", vProps.FileProperties.FileLastWriteTime, oProps.FileNFSProperties.FileLastWriteTime)
 				} else { // SMB to SMB transfer
-					fmt.Println("Not here--------------------------------")
 					ValidatePropertyPtr(a, "Creation time no", vProps.FileProperties.FileCreationTime, oProps.FileProperties.FileCreationTime)
 					ValidatePropertyPtr(a, "Last write time no", vProps.FileProperties.FileLastWriteTime, oProps.FileProperties.FileLastWriteTime)
 				}
