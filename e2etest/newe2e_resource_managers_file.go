@@ -794,6 +794,8 @@ func (f *FileObjectResourceManager) SetObjectProperties(a Asserter, props Object
 	a.HelperMarker().Helper()
 
 	nfsProperties := &file.NFSProperties{}
+	shareType, err := f.Share.InternalClient.GetProperties(ctx, nil)
+	a.NoError("Get share properties", err)
 
 	if props.FileNFSProperties != nil {
 		nfsProperties.CreationTime = props.FileNFSProperties.FileCreationTime
@@ -816,32 +818,47 @@ func (f *FileObjectResourceManager) SetObjectProperties(a Asserter, props Object
 
 	switch f.entityType {
 	case common.EEntityType.File():
+		var opts *file.SetHTTPHeadersOptions
+		if shareType.EnabledProtocols == nil || *shareType.EnabledProtocols == "SMB" {
+			opts = &file.SetHTTPHeadersOptions{
+				SMBProperties: &file.SMBProperties{
+					Attributes:    attr,
+					CreationTime:  props.FileProperties.FileCreationTime,
+					LastWriteTime: props.FileProperties.FileLastWriteTime,
+				},
+				Permissions: perms,
+				HTTPHeaders: props.HTTPHeaders.ToFile(),
+			}
+		} else {
+			opts = &file.SetHTTPHeadersOptions{
+				NFSProperties: nfsProperties,
+				HTTPHeaders:   props.HTTPHeaders.ToFile(),
+			}
+		}
 		client := f.getFileClient()
-		var _, err = client.SetHTTPHeaders(ctx, &file.SetHTTPHeadersOptions{
-			SMBProperties: &file.SMBProperties{
-				Attributes:    attr,
-				CreationTime:  props.FileProperties.FileCreationTime,
-				LastWriteTime: props.FileProperties.FileLastWriteTime,
-			},
-			Permissions:   perms,
-			HTTPHeaders:   props.HTTPHeaders.ToFile(),
-			NFSProperties: nfsProperties,
-		})
+		var _, err = client.SetHTTPHeaders(ctx, opts)
 		a.NoError("Set file HTTP headers", err)
 
 		_, err = client.SetMetadata(ctx, &file.SetMetadataOptions{Metadata: props.Metadata})
 		a.NoError("Set file metadata", err)
 	case common.EEntityType.Folder():
+		var opts *directory.SetPropertiesOptions
+		if shareType.EnabledProtocols == nil || *shareType.EnabledProtocols == "SMB" {
+			opts = &directory.SetPropertiesOptions{
+				FileSMBProperties: &file.SMBProperties{
+					Attributes:    attr,
+					CreationTime:  props.FileProperties.FileCreationTime,
+					LastWriteTime: props.FileProperties.FileLastWriteTime,
+				},
+				FilePermissions: perms,
+			}
+		} else {
+			opts = &directory.SetPropertiesOptions{
+				FileNFSProperties: nfsProperties,
+			}
+		}
 		client := f.getDirClient()
-		var _, err = client.SetProperties(ctx, &directory.SetPropertiesOptions{
-			FileSMBProperties: &file.SMBProperties{
-				Attributes:    attr,
-				CreationTime:  props.FileProperties.FileCreationTime,
-				LastWriteTime: props.FileProperties.FileLastWriteTime,
-			},
-			FilePermissions:   perms,
-			FileNFSProperties: nfsProperties,
-		})
+		var _, err = client.SetProperties(ctx, opts)
 		a.NoError("Set folder properties", err)
 
 		_, err = f.getDirClient().SetMetadata(ctx, &directory.SetMetadataOptions{Metadata: props.Metadata})

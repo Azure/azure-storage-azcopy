@@ -186,11 +186,14 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 				ValidatePropertyPtr(a, "Permissions", vProps.FileProperties.FilePermissions, oProps.FileProperties.FilePermissions)
 				// SMB to NFS transfer
 				if vProps.FileProperties.FileCreationTime != nil && oProps.FileNFSProperties != nil {
-					ValidatePropertyPtr(a, "Creation time here", vProps.FileProperties.FileCreationTime, oProps.FileNFSProperties.FileCreationTime)
-					ValidatePropertyPtr(a, "Last write time here", vProps.FileProperties.FileLastWriteTime, oProps.FileNFSProperties.FileLastWriteTime)
+					ValidateTimePtr(a, "Creation time SMB to NFS", vProps.FileProperties.FileCreationTime, oProps.FileNFSProperties.FileCreationTime)
+					ValidateTimePtr(a, "Last write time SMB to NFS", vProps.FileProperties.FileLastWriteTime, oProps.FileNFSProperties.FileLastWriteTime)
+				} else if vProps.FileNFSProperties != nil && oProps.FileProperties.FileCreationTime != nil {
+					ValidateTimePtr(a, "Creation time NFS to SMB", vProps.FileNFSProperties.FileCreationTime, oProps.FileProperties.FileCreationTime)
+					ValidateTimePtr(a, "Last write time NFS to SMB", vProps.FileNFSProperties.FileLastWriteTime, oProps.FileProperties.FileLastWriteTime)
 				} else { // SMB to SMB transfer
-					ValidatePropertyPtr(a, "Creation time no", vProps.FileProperties.FileCreationTime, oProps.FileProperties.FileCreationTime)
-					ValidatePropertyPtr(a, "Last write time no", vProps.FileProperties.FileLastWriteTime, oProps.FileProperties.FileLastWriteTime)
+					ValidateTimePtr(a, "Creation time SMB to SMB", vProps.FileProperties.FileCreationTime, oProps.FileProperties.FileCreationTime)
+					ValidateTimePtr(a, "Last write time SMB to SMB", vProps.FileProperties.FileLastWriteTime, oProps.FileProperties.FileLastWriteTime)
 				}
 				// NFS to NFS transfers
 				if vProps.FileNFSProperties != nil && oProps.FileNFSProperties != nil {

@@ -267,7 +267,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 			u.jptm.FailActiveUpload("Creating parent directory", err)
 		}
 
-		if creationProperties.Attributes != nil {
+		if creationProperties != nil && creationProperties.Attributes != nil {
 			createOptions.SMBProperties = creationProperties
 		}
 		// retrying file creation
@@ -469,32 +469,43 @@ func (u *azureFileSenderBase) Epilogue() {
 	//      This is not trivial but the Files Team has explicitly told us to perform this extra set call.
 	//   2. The service started updating the last-write-time in March 2021 when the file is modified.
 	//      So when we uploaded the ranges, we've unintentionally changed the last-write-time.
-	if u.jptm.IsLive() && u.jptm.Info().PreserveInfo {
-		// This is an extra round trip, but we can live with that for these relatively rare cases
-		if u.jptm.FromTo().IsNFS() {
-			_, err := u.getFileClient().SetHTTPHeaders(u.ctx, &file.SetHTTPHeadersOptions{
+
+	if !(u.jptm.IsLive() && u.jptm.Info().PreserveInfo) {
+		return
+	}
+
+	var opts file.SetHTTPHeadersOptions
+
+	if u.jptm.FromTo().IsNFS() {
+		// NFS case
+		if u.jptm.FromTo().To() == common.ELocation.FileNFS() {
+			opts = file.SetHTTPHeadersOptions{
 				HTTPHeaders: &u.headersToApply,
 				NFSProperties: &file.NFSProperties{
-					CreationTime:  u.nfsPropertiesToApply.CreationTime,
-					LastWriteTime: u.nfsPropertiesToApply.LastWriteTime,
-					FileMode:      u.nfsPropertiesToApply.FileMode,
-					Owner:         u.nfsPropertiesToApply.Owner,
-					Group:         u.nfsPropertiesToApply.Group,
+					CreationTime:  u.smbPropertiesToApply.CreationTime,
+					LastWriteTime: u.smbPropertiesToApply.LastWriteTime,
 				},
-			})
-			if err != nil {
-				u.jptm.FailActiveSend("Applying final attribute settings", err)
 			}
 		} else {
-			_, err := u.getFileClient().SetHTTPHeaders(u.ctx, &file.SetHTTPHeadersOptions{
-				HTTPHeaders:   &u.headersToApply,
-				Permissions:   &u.permissionsToApply,
-				SMBProperties: &u.smbPropertiesToApply,
-			})
-			if err != nil {
-				u.jptm.FailActiveSend("Applying final attribute settings", err)
+			opts = file.SetHTTPHeadersOptions{
+				HTTPHeaders: &u.headersToApply,
+				SMBProperties: &file.SMBProperties{
+					CreationTime:  u.nfsPropertiesToApply.CreationTime,
+					LastWriteTime: u.nfsPropertiesToApply.LastWriteTime,
+				},
 			}
 		}
+	} else {
+		// SMB only case
+		opts = file.SetHTTPHeadersOptions{
+			HTTPHeaders:   &u.headersToApply,
+			Permissions:   &u.permissionsToApply,
+			SMBProperties: &u.smbPropertiesToApply,
+		}
+	}
+
+	if _, err := u.getFileClient().SetHTTPHeaders(u.ctx, &opts); err != nil {
+		u.jptm.FailActiveSend("Applying final attribute settings", err)
 	}
 }
 
