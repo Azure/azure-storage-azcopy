@@ -624,9 +624,13 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 		srcDirEnumerating.Add(1) // Increment active directory count
 
+		// func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool, source bool) string
+		// srcRelativePath = pathEncodeRules(dir.(minimalStoredObject).relativePath, cca.fromTo, false, true)
+		dstRelativePath := pathEncodeRules(dir.(minimalStoredObject).relativePath, cca.fromTo, false, false)
+
 		// Build source and destination paths for current directory
 		sync_src := []string{cca.source.Value, dir.(minimalStoredObject).relativePath}
-		sync_dst := []string{cca.destination.Value, dir.(minimalStoredObject).relativePath}
+		sync_dst := []string{cca.destination.Value, dstRelativePath}
 
 		pt_src := cca.source
 		st_src := cca.destination

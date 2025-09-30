@@ -122,6 +122,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 			case common.EEntityType.Other():
 				if common.IsNFSCopy() {
 					atomic.AddUint32(&cca.atomicSkippedSpecialFileCount, 1)
+					atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 				}
 			default:
 			}

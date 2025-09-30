@@ -1019,8 +1019,14 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 						// If we are not following symlinks, we skip them.
 						if common.IsNFSCopy() && t.incrementEnumerationCounter != nil {
 							t.incrementEnumerationCounter(common.EEntityType.Symlink())
+							// Using errorChannel to log skipped files
+							writeToErrorChannel(t.errorChannel,
+								ErrorFileInfo{
+									FilePath: path,
+									FileInfo: fileInfo,
+									ErrorMsg: GetSkippedFileErrorMessage(common.EEntityType.Symlink(), nil),
+								})
 						}
-						WarnStdoutAndScanningLog(fmt.Sprintf("Skipping: Symlink File - '%s'.", path))
 						continue
 
 					} else if t.symlinkHandling.Preserve() { // Mark the entity type as a symlink.
@@ -1100,7 +1106,14 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 						if t.incrementEnumerationCounter != nil {
 							t.incrementEnumerationCounter(entityType)
 						}
-						WarnStdoutAndScanningLog(fmt.Sprintf("Skipping: Special File - '%s'.", path))
+
+						// Using errorChannel to log skipped files
+						writeToErrorChannel(t.errorChannel,
+							ErrorFileInfo{
+								FilePath: path,
+								FileInfo: fileInfo,
+								ErrorMsg: GetUnsupportedFileErrorMessage(common.EEntityType.Other(), nil),
+							})
 						continue
 					}
 				}
