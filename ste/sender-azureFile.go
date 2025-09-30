@@ -194,62 +194,14 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		Metadata:    u.metadataToApply,
 	}
 
-	// Handle source properties (sets creation & lastWrite time once
-
-	var creationTime, lastWriteTime *time.Time
-	if jptm.FromTo().From() == common.ELocation.FileNFS() {
-
-		stage, err := u.addNFSPropertiesToHeaders(info)
-		if err != nil {
-			jptm.FailActiveSend(stage, err)
-			return
-		}
-		creationTime, lastWriteTime = u.nfsPropertiesToApply.CreationTime, u.nfsPropertiesToApply.LastWriteTime
-
-		stage, err = u.addNFSPermissionsToHeaders(info, u.getFileClient().URL())
-		if err != nil {
-			jptm.FailActiveSend(stage, err)
-			return
-		}
-
-	} else {
-		stage, err := u.addPermissionsToHeaders(info, u.getFileClient().URL())
-		if err != nil {
-			jptm.FailActiveSend(stage, err)
-			return
-		}
-
-		stage, err = u.addSMBPropertiesToHeaders(info)
-		if err != nil {
-			jptm.FailActiveSend(stage, err)
-			return
-		}
-		creationTime, lastWriteTime = u.smbPropertiesToApply.CreationTime, u.smbPropertiesToApply.LastWriteTime
-	}
-
-	// Handle destination properties
-	if jptm.FromTo().To() == common.ELocation.FileNFS() {
-		createOptions.NFSProperties = &file.NFSProperties{
-			CreationTime:  creationTime,  // for smb to nfs transfer
-			LastWriteTime: lastWriteTime, // for smb to nfs transfer
-			Owner:         u.nfsPropertiesToApply.Owner,
-			Group:         u.nfsPropertiesToApply.Group,
-			FileMode:      u.nfsPropertiesToApply.FileMode,
-		}
-	} else {
-		createOptions.SMBProperties = &u.smbPropertiesToApply
-		createOptions.Permissions = &u.permissionsToApply
-
-		// for nfs to smb transfer
-		createOptions.SMBProperties.CreationTime = creationTime
-		createOptions.SMBProperties.LastWriteTime = lastWriteTime
-	}
+	u.addCreationOptions(createOptions)
 
 	// Turn off readonly at creation time (because if its set at creation time, we won't be
 	// able to upload any data to the file!). We'll set it in epilogue, if necessary.
-	creationProperties := createOptions.SMBProperties
-	if creationProperties != nil && creationProperties.Attributes != nil {
-		creationProperties.Attributes.ReadOnly = false
+	// Disable readonly temporarily
+	props := createOptions.SMBProperties
+	if props != nil && props.Attributes != nil {
+		props.Attributes.ReadOnly = false
 	}
 
 	err := common.DoWithOverrideReadOnlyOnAzureFiles(u.ctx,
@@ -267,8 +219,8 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 			u.jptm.FailActiveUpload("Creating parent directory", err)
 		}
 
-		if creationProperties != nil && creationProperties.Attributes != nil {
-			createOptions.SMBProperties = creationProperties
+		if props != nil && props.Attributes != nil {
+			createOptions.SMBProperties = props
 		}
 		// retrying file creation
 		err = common.DoWithOverrideReadOnlyOnAzureFiles(u.ctx,
@@ -309,159 +261,6 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 	return
 }
 
-func (u *azureFileSenderBase) addNFSPropertiesToHeaders(info *TransferInfo) (stage string, err error) {
-	if !info.PreserveInfo {
-		return "", nil
-	}
-	if nfsSIP, ok := u.sip.(INFSPropertyBearingSourceInfoProvider); ok {
-		nfsProps, err := nfsSIP.GetNFSProperties()
-		if err != nil {
-			return "Obtaining NFS properties", err
-		}
-		// TODO: commenting out for now. If required will add it later.
-		// fromTo := u.jptm.FromTo()
-		// if fromTo.From() == common.ELocation.File() { // Files SDK can panic when the service hands it something unexpected!
-		// 	defer func() { // recover from potential panics and output raw properties for debug purposes
-		// 		if panicerr := recover(); panicerr != nil {
-		// 			stage = "Reading SMB properties"
-
-		// 			attr, _ := smbProps.FileAttributes()
-		// 			lwt := smbProps.FileLastWriteTime()
-		// 			fct := smbProps.FileCreationTime()
-
-		// 			err = fmt.Errorf("failed to read SMB properties (%w)! Raw data: attr: `%s` lwt: `%s`, fct: `%s`", err, attr, lwt, fct)
-		// 		}
-		// 	}()
-		// }
-
-		if info.ShouldTransferLastWriteTime() {
-			lwTime := nfsProps.FileLastWriteTime()
-			u.nfsPropertiesToApply.LastWriteTime = &lwTime
-		}
-
-		creationTime := nfsProps.FileCreationTime()
-		u.nfsPropertiesToApply.CreationTime = &creationTime
-	}
-	return "", nil
-}
-
-func (u *azureFileSenderBase) addNFSPermissionsToHeaders(info *TransferInfo, destURL string) (stage string, err error) {
-	if !info.PreservePermissions.IsTruthy() {
-		if nfsSIP, ok := u.sip.(INFSPropertyBearingSourceInfoProvider); ok {
-			fileMode, owner, group, err := nfsSIP.GetNFSDefaultPerms()
-			if err != nil {
-				return "Obtaining NFS default permissions", err
-			}
-			u.nfsPropertiesToApply.Owner = owner
-			u.nfsPropertiesToApply.Group = group
-			u.nfsPropertiesToApply.FileMode = fileMode
-		}
-		return "", nil
-	}
-
-	if nfsSIP, ok := u.sip.(INFSPropertyBearingSourceInfoProvider); ok {
-		nfsPerms, err := nfsSIP.GetNFSPermissions()
-		if err != nil {
-			return "Obtaining NFS permissions", err
-		}
-		u.nfsPropertiesToApply.Owner = nfsPerms.GetOwner()
-		u.nfsPropertiesToApply.Group = nfsPerms.GetGroup()
-		u.nfsPropertiesToApply.FileMode = nfsPerms.GetFileMode()
-	}
-	return "", nil
-}
-
-func (u *azureFileSenderBase) addPermissionsToHeaders(info *TransferInfo, destURL string) (stage string, err error) {
-	if !info.PreservePermissions.IsTruthy() {
-		return "", nil
-	}
-
-	// Prepare to transfer SDDLs from the source.
-	if sddlSIP, ok := u.sip.(ISMBPropertyBearingSourceInfoProvider); ok {
-		// If both sides are Azure Files...
-		if fSIP, ok := sddlSIP.(*fileSourceInfoProvider); ok {
-
-			srcURLParts, err := file.ParseURL(info.Source)
-			common.PanicIfErr(err)
-			dstURLParts, err := file.ParseURL(destURL)
-			common.PanicIfErr(err)
-
-			// and happen to be the same account and share, we can get away with using the same key and save a trip.
-			if srcURLParts.Host == dstURLParts.Host && srcURLParts.ShareName == dstURLParts.ShareName {
-				u.permissionsToApply.PermissionKey = &fSIP.cachedPermissionKey
-			}
-		}
-
-		// If we didn't do the workaround, then let's get the SDDL and put it later.
-		if u.permissionsToApply.PermissionKey == nil || *u.permissionsToApply.PermissionKey == "" {
-			pString, err := sddlSIP.GetSDDL()
-
-			// Sending "" to the service is invalid, but the service will return it sometimes (e.g. on file shares)
-			// Thus, we'll let the files SDK fill in "inherit" for us, so the service is happy.
-			if pString != "" {
-				u.permissionsToApply.Permission = &pString
-			}
-
-			if err != nil {
-				return "Getting permissions", err
-			}
-		}
-	}
-
-	if u.permissionsToApply.Permission != nil && len(*u.permissionsToApply.Permission) > FilesServiceMaxSDDLSize {
-		sipm := u.jptm.SecurityInfoPersistenceManager()
-		pkey, err := sipm.PutSDDL(*u.permissionsToApply.Permission, u.shareClient)
-		u.permissionsToApply.PermissionKey = &pkey
-		if err != nil {
-			return "Putting permissions", err
-		}
-
-		ePermString := ""
-		u.permissionsToApply.Permission = &ePermString
-	}
-	return "", nil
-}
-
-func (u *azureFileSenderBase) addSMBPropertiesToHeaders(info *TransferInfo) (stage string, err error) {
-	if !info.PreserveInfo {
-		return "", nil
-	}
-	if smbSIP, ok := u.sip.(ISMBPropertyBearingSourceInfoProvider); ok {
-		smbProps, err := smbSIP.GetSMBProperties()
-
-		if err != nil {
-			return "Obtaining SMB properties", err
-		}
-
-		fromTo := u.jptm.FromTo()
-		if fromTo.From() == common.ELocation.File() { // Files SDK can panic when the service hands it something unexpected!
-			defer func() { // recover from potential panics and output raw properties for debug purposes
-				if panicerr := recover(); panicerr != nil {
-					stage = "Reading SMB properties"
-
-					attr, _ := smbProps.FileAttributes()
-					lwt := smbProps.FileLastWriteTime()
-					fct := smbProps.FileCreationTime()
-
-					err = fmt.Errorf("failed to read SMB properties (%w)! Raw data: attr: `%s` lwt: `%s`, fct: `%s`", err, attr, lwt, fct)
-				}
-			}()
-		}
-
-		attribs, _ := smbProps.FileAttributes()
-		u.smbPropertiesToApply.Attributes = attribs
-
-		if info.ShouldTransferLastWriteTime() {
-			lwTime := smbProps.FileLastWriteTime()
-			u.smbPropertiesToApply.LastWriteTime = &lwTime
-		}
-
-		creationTime := smbProps.FileCreationTime()
-		u.smbPropertiesToApply.CreationTime = &creationTime
-	}
-	return "", nil
-}
-
 func (u *azureFileSenderBase) Epilogue() {
 	// always set the SMB info again after the file content has been uploaded, for the following reasons:
 	//   0. File attributes such as readOnly and archive need to be passed through another Set Properties call.
@@ -469,43 +268,22 @@ func (u *azureFileSenderBase) Epilogue() {
 	//      This is not trivial but the Files Team has explicitly told us to perform this extra set call.
 	//   2. The service started updating the last-write-time in March 2021 when the file is modified.
 	//      So when we uploaded the ranges, we've unintentionally changed the last-write-time.
-
-	if !(u.jptm.IsLive() && u.jptm.Info().PreserveInfo) {
-		return
-	}
-
-	var opts file.SetHTTPHeadersOptions
-
-	if u.jptm.FromTo().IsNFS() {
-		// NFS case
-		if u.jptm.FromTo().To() == common.ELocation.FileNFS() {
-			opts = file.SetHTTPHeadersOptions{
-				HTTPHeaders: &u.headersToApply,
-				NFSProperties: &file.NFSProperties{
-					CreationTime:  u.smbPropertiesToApply.CreationTime,
-					LastWriteTime: u.smbPropertiesToApply.LastWriteTime,
-				},
-			}
+	var opts *file.SetHTTPHeadersOptions
+	if u.jptm.IsLive() && u.jptm.Info().PreserveInfo {
+		// This is an extra round trip, but we can live with that for these relatively rare cases
+		if u.jptm.FromTo().IsNFS() {
+			opts = u.buildSetHTTPHeadersOptions()
 		} else {
-			opts = file.SetHTTPHeadersOptions{
-				HTTPHeaders: &u.headersToApply,
-				SMBProperties: &file.SMBProperties{
-					CreationTime:  u.nfsPropertiesToApply.CreationTime,
-					LastWriteTime: u.nfsPropertiesToApply.LastWriteTime,
-				},
+			opts = &file.SetHTTPHeadersOptions{
+				HTTPHeaders:   &u.headersToApply,
+				Permissions:   &u.permissionsToApply,
+				SMBProperties: &u.smbPropertiesToApply,
 			}
 		}
-	} else {
-		// SMB only case
-		opts = file.SetHTTPHeadersOptions{
-			HTTPHeaders:   &u.headersToApply,
-			Permissions:   &u.permissionsToApply,
-			SMBProperties: &u.smbPropertiesToApply,
+		_, err := u.getFileClient().SetHTTPHeaders(u.ctx, opts)
+		if err != nil {
+			u.jptm.FailActiveSend("Applying final attribute settings", err)
 		}
-	}
-
-	if _, err := u.getFileClient().SetHTTPHeaders(u.ctx, &opts); err != nil {
-		u.jptm.FailActiveSend("Applying final attribute settings", err)
 	}
 }
 
