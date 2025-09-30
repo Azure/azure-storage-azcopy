@@ -117,7 +117,7 @@ type CopyJobPartOrderRequest struct {
 	LogLevel       LogLevel
 	BlobAttributes BlobTransferAttributes
 	CommandString  string // commandString hold the user given command which is logged to the Job log file
-	//CredentialInfo CredentialInfo
+	CredentialInfo CredentialInfo
 
 	PreservePermissions            PreservePermissionsOption
 	PreserveInfo                   bool

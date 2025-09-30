@@ -140,5 +140,5 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *traverser.Copy
 
 		return nil
 	}
-	return traverser.NewCopyEnumerator(sourceTraverser, filters, transferScheduler.ScheduleCopyTransfer, finalize), nil
+	return traverser.NewCopyEnumerator(sourceTraverser, filters, transferScheduler.ScheduleSyncRemoveSetPropertiesTransfer, finalize), nil
 }

@@ -24,19 +24,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"net/url"
 	"os"
+	"os/signal"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
@@ -653,7 +651,7 @@ type CookedCopyCmdArgs struct {
 	jobID common.JobID
 
 	// extracted from the input
-	//credentialInfo common.CredentialInfo
+	credentialInfo common.CredentialInfo
 
 	// variables used to calculate progress
 	// intervalStartTime holds the last time value when the progress summary was fetched
@@ -752,16 +750,6 @@ func (cca *CookedCopyCmdArgs) process() error {
 		return err
 	}
 
-	if cca.FromTo.IsRedirection() {
-		err := cca.processRedirectionCopy()
-
-		if err != nil {
-			return err
-		}
-
-		// if no error, the operation is now complete
-		glcm.Exit(nil, common.EExitCode.Success())
-	}
 	return cca.processCopyJobPartOrders()
 }
 
@@ -790,7 +778,7 @@ func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.
 		return srcCredInfo, errors.New("shared key auth is not supported for S2S operations")
 	}
 
-	if cca.Source.SAS != "" && cca.FromTo.IsS2S() && jpo.CredentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
+	if cca.Source.SAS != "" && cca.FromTo.IsS2S() && jpo.S2SSourceCredentialType == common.ECredentialType.OAuthToken() {
 		glcm.Info("Authentication: If the source and destination accounts are in the same AAD tenant & the user/spn/msi has appropriate permissions on both, the source SAS token is not required and OAuth can be used round-trip.")
 	}
 
@@ -1210,6 +1198,22 @@ func isStdinPipeIn() (bool, error) {
 
 var cpCmd *cobra.Command
 
+type CLICopyHandler struct {
+}
+
+func (C CLICopyHandler) OnStart(ctx common.JobContext) {
+	glcm.OnStart(ctx)
+}
+
+func (C CLICopyHandler) OnTransferProgress(progress azcopy.CopyJobProgress) {
+	glcm.OnTransferProgress(common.TransferProgress{
+		ListJobSummaryResponse: progress.ListJobSummaryResponse,
+		Throughput:             progress.Throughput,
+		ElapsedTime:            progress.ElapsedTime,
+		JobType:                common.EJobType.Resume(),
+	})
+}
+
 // TODO check file size, max is 4.75TB
 func init() {
 	raw := rawCopyCmdArgs{}
@@ -1315,23 +1319,40 @@ func init() {
 			if opts, err = raw.toCopyOptions(cmd); err != nil {
 				glcm.Error("error parsing the input given by the user. Failed with error " + err.Error() + getErrorCodeUrl(err))
 			}
+			// Create a context that can be cancelled by Ctrl-C
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 
-			cooked, err := raw.cook()
+			// Set up signal handling for graceful cancellation
+			go func() {
+				sigChan := make(chan os.Signal, 1)
+				signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+				<-sigChan
+				cancel()
+			}()
+
+			result, err := Client.Copy(ctx, raw.src, raw.dst, opts, CLICopyHandler{})
 			if err != nil {
-				glcm.Error("failed to parse user input due to error: " + err.Error())
+				glcm.Error("Cannot perform sync due to error: " + err.Error() + getErrorCodeUrl(err))
 			}
-			glcm.Info("Scanning...")
-
-			cooked.commandString = gCopyUtil.ConstructCommandStringFromArgs()
-			err = cooked.process()
-			if err != nil {
-				glcm.Error("failed to perform copy command due to error: " + err.Error() + getErrorCodeUrl(err))
-			}
-
-			if cooked.dryrunMode || userFromTo.IsRedirection() {
+			if raw.dryrun || userFromTo.IsRedirection() {
 				glcm.Exit(nil, common.EExitCode.Success())
+			} else {
+				// Print summary
+				exitCode := common.EExitCode.Success()
+				if result.TransfersFailed > 0 || result.JobStatus == common.EJobStatus.Cancelled() || result.JobStatus == common.EJobStatus.Cancelling() {
+					exitCode = common.EExitCode.Error()
+				}
+				summary := common.JobSummary{
+					ExitCode:               exitCode,
+					ListJobSummaryResponse: result.ListJobSummaryResponse,
+					ElapsedTime:            result.ElapsedTime,
+					JobType:                common.EJobType.Copy(),
+				}
+				glcm.OnComplete(summary)
 			}
 
+			// Wait for the user to see the final output before exiting
 			glcm.SurrenderControl()
 		},
 	}

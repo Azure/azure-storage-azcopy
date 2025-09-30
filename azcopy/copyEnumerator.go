@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
-	"sync/atomic"
-	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
@@ -45,16 +46,8 @@ func (t *transferExecutor) initCopyEnumerator(ctx context.Context, logLevel comm
 		PreserveBlobTags:        t.opts.s2sPreserveBlobTags,
 		StripTopDir:             t.opts.stripTopDir,
 
-		ExcludeContainers: t.opts.excludeContainers,
-		IncrementEnumeration: func(entityType common.EntityType) {
-			if common.IsNFSCopy() {
-				if entityType == common.EEntityType.Other() {
-					atomic.AddUint32(&cca.atomicSkippedSpecialFileCount, 1)
-				} else if entityType == common.EEntityType.Symlink() {
-					atomic.AddUint32(&cca.atomicSkippedSymlinkCount, 1)
-				}
-			}
-		},
+		ExcludeContainers:    t.opts.excludeContainers,
+		IncrementEnumeration: t.tpt.incEnumeration,
 	})
 	if err != nil {
 		return nil, err
@@ -82,6 +75,7 @@ func (t *transferExecutor) initCopyEnumerator(ctx context.Context, logLevel comm
 
 	// Resolve containers
 	// TODO : I think we can add a more lightweight resolver for Local/Azure scenarios
+	// TODO : I also think this should be its own processor that runs before copy transfer scheduling
 	// Create a Remote resource resolver
 	// Giving it nothing to work with as new names will be added as we Traverse.
 	var containerResolver BucketToContainerNameResolver
@@ -189,9 +183,20 @@ func (t *transferExecutor) initCopyEnumerator(ctx context.Context, logLevel comm
 			}
 		}
 	}
+
+	// construct filters
+	filters := traverser.BuildFilters(t.opts.fromTo, t.opts.source, t.opts.recursive, t.opts.filterOptions)
+
+	// folder transfer strategy
+	fpo, folderMessage := NewFolderPropertyOption(t.opts.fromTo, t.opts.recursive, t.opts.stripTopDir, filters, t.opts.preserveInfo, t.opts.preservePermissions.IsTruthy(), t.opts.preservePosixProperties, strings.EqualFold(t.opts.destination.Value, common.Dev_Null), t.opts.includeDirectoryStubs)
+	if !t.opts.dryrun {
+		common.GetLifecycleMgr().Info(folderMessage)
+	}
+	common.LogToJobLogWithPrefix(folderMessage, common.LogInfo)
+
 	// initialize the fields that are constant across all job part orders,
 	// and for which we have sufficient info now to set them
-	jobPartOrder := common.CopyJobPartOrderRequest{
+	jobPartOrder := &common.CopyJobPartOrderRequest{
 		JobID:               t.tpt.jobID,
 		FromTo:              t.opts.fromTo,
 		ForceWrite:          t.opts.forceWrite,
@@ -240,8 +245,142 @@ func (t *transferExecutor) initCopyEnumerator(ctx context.Context, logLevel comm
 		DstServiceClient:               t.trp.dstServiceClient,
 		DestinationRoot:                t.opts.destination,
 		SourceRoot:                     t.opts.source,
+		Fpo:                            fpo,
 	}
 
+	transferScheduler := t.newCopyTransferProcessor(NumOfFilesPerDispatchJobPart, jobPartOrder)
+
+	processor := func(object traverser.StoredObject) error {
+		// Start by resolving the name and creating the container
+		if object.ContainerName != "" {
+			// set up the destination container name.
+			cName := dstContainerName
+			// if a destination container name is not specified OR copying service to container/folder, append the src container name.
+			if cName == "" || (t.opts.srcLevel == ELocationLevel.Service() && t.opts.dstLevel > ELocationLevel.Service()) {
+				cName, err = containerResolver.ResolveName(object.ContainerName)
+
+				if err != nil {
+					if _, ok := seenFailedContainers[object.ContainerName]; !ok {
+						traverser.WarnStdoutAndScanningLog(fmt.Sprintf("failed to add transfers from container %s as it has an invalid name. Please manually transfer from this container to one with a valid name.", object.ContainerName))
+						seenFailedContainers[object.ContainerName] = true
+					}
+					return nil
+				}
+
+				object.DstContainerName = cName
+			}
+		}
+
+		// If above the service level, we already know the container name and don't need to supply it to makeEscapedRelativePath
+		if t.opts.srcLevel != ELocationLevel.Service() {
+			object.ContainerName = ""
+
+			// When copying directly TO a container or object from a container, don't drop under a sub directory
+			if t.opts.dstLevel >= ELocationLevel.Container() {
+				object.DstContainerName = ""
+			}
+		}
+
+		srcRelPath := t.MakeEscapedRelativePath(true, isDestDir, object)
+		dstRelPath := t.MakeEscapedRelativePath(false, isDestDir, object)
+		return transferScheduler.scheduleTransfer(srcRelPath, dstRelPath, object)
+	}
+	finalizer := func() error {
+		_, err := transferScheduler.DispatchFinalPart()
+		// cleanly exits if nothing is scheduled.
+		if err != nil && err != NothingScheduledError {
+			return err
+		}
+		return nil
+	}
+
+	return traverser.NewCopyEnumerator(sourceTraverser, filters, processor, finalizer), nil
+}
+
+// TODO : This function should probably be split into escape source and escape destination. As is this method is a little confusing imo.
+func (t *transferExecutor) MakeEscapedRelativePath(source bool, dstIsDir bool, object traverser.StoredObject) (relativePath string) {
+	// write straight to /dev/null, do not determine a indirect path
+	if !source && t.opts.destination.Value == common.Dev_Null {
+		return "" // ignore path encode rules
+	}
+
+	if object.RelativePath == "\x00" { // Short circuit, our relative path is requesting root/
+		return "\x00"
+	}
+
+	// source is a EXACT path to the file
+	if object.IsSingleSourceFile() {
+		// If we're finding an object from the source, it returns "" if it's already got it.
+		// If we're finding an object on the destination and we get "", we need to hand it the object name (if it's pointing to a folder)
+		if source {
+			relativePath = ""
+		} else {
+			if dstIsDir {
+				// Our source points to a specific file (and so has no relative path)
+				// but our dest does not point to a specific file, it just points to a directory,
+				// and so relativePath needs the _name_ of the source.
+				processedVID := ""
+				if len(object.BlobVersionID) > 0 {
+					processedVID = strings.ReplaceAll(object.BlobVersionID, ":", "-") + "-"
+				}
+				relativePath += "/" + processedVID + object.Name
+			} else {
+				relativePath = ""
+			}
+		}
+
+		return PathEncodeRules(relativePath, t.opts.fromTo, t.opts.disableAutoDecoding, source)
+	}
+
+	// If it's out here, the object is contained in a folder, or was found via a wildcard, or object.isSourceRootFolder == true
+	if object.IsSourceRootFolder() {
+		relativePath = "" // otherwise we get "/" from the line below, and that breaks some clients, e.g. blobFS
+	} else {
+		relativePath = "/" + strings.Replace(object.RelativePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+	}
+
+	if common.Iff(source, object.ContainerName, object.DstContainerName) != "" {
+		relativePath = `/` + common.Iff(source, object.ContainerName, object.DstContainerName) + relativePath
+	} else if !source && !t.opts.stripTopDir && t.opts.asSubdir { // Avoid doing this where the root is shared or renamed.
+		// We ONLY need to do this adjustment to the destination.
+		// The source SAS has already been removed. No need to convert it to a URL or whatever.
+		// Save to a directory
+		rootDir := filepath.Base(t.opts.source.Value)
+
+		/* In windows, when a user tries to copy whole volume (eg. D:\),  the upload destination
+		will contains "//"" in the files/directories names because of rootDir = "\" prefix.
+		(e.g. D:\file.txt will end up as //file.txt).
+		Following code will get volume name from source and add volume name as prefix in rootDir
+		*/
+		if runtime.GOOS == "windows" && rootDir == `\` {
+			rootDir = filepath.VolumeName(common.ToShortPath(t.opts.source.Value))
+		}
+
+		if t.opts.fromTo.From().IsRemote() {
+			ueRootDir, err := url.PathUnescape(rootDir)
+
+			// Realistically, err should never not be nil here.
+			if err == nil {
+				rootDir = ueRootDir
+			} else {
+				panic("unexpected inescapable rootDir name")
+			}
+		}
+
+		relativePath = "/" + rootDir + relativePath
+	}
+
+	return PathEncodeRules(relativePath, t.opts.fromTo, t.opts.disableAutoDecoding, source)
+}
+
+// extract the right info from cooked arguments and instantiate a generic copy transfer processor from it
+func (t *transferExecutor) newCopyTransferProcessor(numOfTransfersPerPart int,
+	copyJobTemplate *common.CopyJobPartOrderRequest) *CopyTransferProcessor {
+	reportFirstPart := func(jobStarted bool) { t.tpt.setFirstPartOrdered() }
+	reportFinalPart := func() { t.tpt.setScanningComplete() }
+	// note that the source and destination, along with the template are given to the generic processor's constructor
+	// this means that given an object with a relative path, this processor already knows how to schedule the right kind of transfers
+	return NewCopyTransferProcessor(true, copyJobTemplate, numOfTransfersPerPart, t.opts.source, t.opts.destination, reportFirstPart, reportFinalPart, t.opts.s2sPreserveAccessTier.Get(), t.opts.dryrun, t.opts.dryrunJobPartOrderHandler)
 }
 
 func isResourceDirectory(ctx context.Context, res common.ResourceString, loc common.Location, serviceClient *common.ServiceClient, isSource bool) bool {

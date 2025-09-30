@@ -311,8 +311,8 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			}
 		}
 
-		srcRelPath := cca.MakeEscapedRelativePath(true, isDestDir, cca.asSubdir, object)
-		dstRelPath := cca.MakeEscapedRelativePath(false, isDestDir, cca.asSubdir, object)
+		srcRelPath := cca.MakeEscapedRelativePath(true, isDestDir, object)
+		dstRelPath := cca.MakeEscapedRelativePath(false, isDestDir, object)
 
 		transfer, shouldSendToSte := object.ToNewCopyTransfer(cca.autoDecompress && cca.FromTo.IsDownload(), srcRelPath, dstRelPath, cca.s2sPreserveAccessTier.Value(), jobPartOrder.Fpo, cca.SymlinkHandling, cca.hardlinks)
 		if !cca.S2sPreserveBlobTags {
@@ -553,7 +553,7 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 	return
 }
 
-func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool, asSubdir bool, object traverser.StoredObject) (relativePath string) {
+func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool, object traverser.StoredObject) (relativePath string) {
 	// write straight to /dev/null, do not determine a indirect path
 	if !source && cca.Destination.Value == common.Dev_Null {
 		return "" // ignore path encode rules

@@ -17,8 +17,15 @@ type CopyResult struct {
 	ElapsedTime time.Duration
 }
 
+type CopyJobProgress struct {
+	common.ListJobSummaryResponse
+	Throughput  float64
+	ElapsedTime time.Duration
+}
+
 type CopyJobHandler interface {
 	OnStart(ctx common.JobContext)
+	OnTransferProgress(progress CopyJobProgress)
 }
 
 // CopyOptions contains the optional parameters for the Copy operation.
@@ -171,10 +178,46 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions, h
 
 		enumerator, err := t.initCopyEnumerator(ctx, c.GetLogLevel(), mgr)
 		if err != nil {
-			return SyncResult{}, err
+			return CopyResult{}, err
+		}
+		if !t.opts.dryrun {
+			mgr.InitiateProgressReporting(ctx, t.tpt)
+		}
+		err = enumerator.Enumerate()
+
+		if err != nil {
+			return CopyResult{}, err
+		}
+		// if we are in dryrun mode, we don't want to actually run the job, so return here
+		if t.opts.dryrun {
+			return CopyResult{}, nil
 		}
 
-		return CopyResult{}, nil
+		err = mgr.Wait()
+		if err != nil {
+			return CopyResult{}, err
+		}
+
+		// Get final job summary
+		finalSummary := jobsAdmin.GetJobSummary(t.tpt.jobID)
+		finalSummary.SkippedSymlinkCount = t.tpt.getSkippedSymlinkCount()
+		finalSummary.SkippedSpecialFileCount = t.tpt.getSkippedSpecialFileCount()
+
+		// Log to job log
+		if common.AzcopyCurrentJobLogger != nil {
+			// TODO : I think some of this can be simplified after we are done with the copy job refactor.
+			// There should be no need to transform these types so many times
+			_, logStats := common.FormatExtraStats(common.EJobType.Copy(), finalSummary.AverageIOPS, finalSummary.AverageE2EMilliseconds, finalSummary.NetworkErrorPercentage, finalSummary.ServerBusyPercentage)
+			common.AzcopyCurrentJobLogger.Log(common.LogInfo, logStats+"\n"+common.GetJobSummaryOutputBuilder(common.JobSummary{
+				ListJobSummaryResponse: finalSummary,
+				JobType:                common.EJobType.Copy(),
+			})(common.EOutputFormat.Text()))
+		}
+
+		return CopyResult{
+			ListJobSummaryResponse: finalSummary,
+			ElapsedTime:            t.tpt.GetElapsedTime(),
+		}, nil
 	}
 
 }
