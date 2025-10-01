@@ -205,7 +205,7 @@ func GetDestinationServiceClient(ctx context.Context,
 	if fromTo.To() == common.ELocation.File() || fromTo.To() == common.ELocation.FileNFS() {
 		azureFileSpecificOptions = &common.FileClientOptions{
 			AllowTrailingDot:       trailingDot.IsEnabled(),
-			AllowSourceTrailingDot: trailingDot.IsEnabled() && fromTo.To() == common.ELocation.File(),
+			AllowSourceTrailingDot: trailingDot.IsEnabled() && fromTo.From() == common.ELocation.File(),
 		}
 	}
 
