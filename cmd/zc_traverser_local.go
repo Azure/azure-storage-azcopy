@@ -1026,6 +1026,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 									FileInfo: fileInfo,
 									ErrorMsg: GetSkippedFileErrorMessage(common.EEntityType.Symlink(), nil),
 								})
+							WarnStdoutAndScanningLog(fmt.Sprintf("Skipping symlink - '%s' for NFS", path))
 						}
 						continue
 
@@ -1114,6 +1115,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 								FileInfo: fileInfo,
 								ErrorMsg: GetUnsupportedFileErrorMessage(common.EEntityType.Other(), nil),
 							})
+						WarnStdoutAndScanningLog(fmt.Sprintf("Skipping special file - '%s' for NFS", path))
 						continue
 					}
 				}
