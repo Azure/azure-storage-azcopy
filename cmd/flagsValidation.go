@@ -228,12 +228,6 @@ func performSMBSpecificValidation(fromTo common.FromTo,
 		PreservePermissionsFlag); err != nil {
 		return err
 	}
-
-	if symlinkHandling == common.ESymlinkHandlingType.Follow() {
-			return fmt.Errorf("The '--follow-symlink' flag is not applicable for sync operations.")
-	}else if symlinkHandling == common.ESymlinkHandlingType.Preserve() {
-			return fmt.Errorf("The '--preserve-symlink' flag is not applicable for sync operations.")
-	}
 	
 	// TODO: Add this check in Phase-3 which targets to support hardlinks for NFS copy.
 	// if err = validateAndAdjustHardlinksFlag(hardlinkHandling, fromTo); err != nil {
