@@ -288,12 +288,17 @@ func newRemoteResourceDeleter(
 		return nil, err
 	}
 	deleter := remoteResourceDeleter{
-		containerName:          containerName,
-		rootPath:               rootPath,
-		remoteClient:           remoteClient,
-		ctx:                    ctx,
-		targetLocation:         targetLocation,
-		folderManager:          common.NewFolderDeletionManager(ctx, fpo, azcopyScanningLogger),
+		containerName:  containerName,
+		rootPath:       rootPath,
+		remoteClient:   remoteClient,
+		ctx:            ctx,
+		targetLocation: targetLocation,
+		folderManager: func() common.FolderDeletionManager { // ensure we don't create a null manager when orchestrator requires recursive deletion
+			if UseSyncOrchestrator && fpo == common.EFolderPropertiesOption.NoFolders() {
+				return common.NewRecursiveFolderDeletionManager(ctx, fpo, azcopyScanningLogger)
+			}
+			return common.NewFolderDeletionManager(ctx, fpo, azcopyScanningLogger)
+		}(),
 		folderOption:           fpo,
 		forceIfReadOnly:        forceIfReadOnly,
 		incrementDeletionCount: incrementDeleteCounter,
