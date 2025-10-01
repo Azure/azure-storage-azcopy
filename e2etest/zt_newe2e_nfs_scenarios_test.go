@@ -7,6 +7,7 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/google/uuid"
+	"runtime"
 )
 
 func init() {
