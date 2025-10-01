@@ -65,12 +65,12 @@ type FolderDeletionManager interface {
 }
 
 type FolderDeletionManagerOptions struct {
-	recursive bool
+	Recursive bool
 }
 
 func NewDefaultFolderDeletionManagerOptions() FolderDeletionManagerOptions {
 	return FolderDeletionManagerOptions{
-		recursive: false, // default to non-recursive deletion
+		Recursive: false, // default to non-recursive deletion
 	}
 }
 
@@ -104,7 +104,7 @@ func NewFolderDeletionManager(ctx context.Context, fpo FolderPropertyOption, log
 		return &mgr
 
 	case EFolderPropertiesOption.NoFolders():
-		if options.recursive {
+		if options.Recursive {
 			// if we are doing recursive deletion, we need to provide a folder deletion manager
 			// even if location is not folder-aware
 			return &mgr
