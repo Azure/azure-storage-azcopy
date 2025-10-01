@@ -295,7 +295,7 @@ func newRemoteResourceDeleter(
 		targetLocation: targetLocation,
 		folderManager: func() common.FolderDeletionManager { // ensure we don't create a null manager when orchestrator requires recursive deletion
 			if UseSyncOrchestrator && fpo == common.EFolderPropertiesOption.NoFolders() {
-				return common.NewRecursiveFolderDeletionManager(ctx, fpo, azcopyScanningLogger)
+				return common.NewFolderDeletionManager(ctx, fpo, azcopyScanningLogger, common.FolderDeletionManagerOptions{Recursive: true})
 			}
 			return common.NewFolderDeletionManager(ctx, fpo, azcopyScanningLogger)
 		}(),

@@ -65,12 +65,12 @@ type FolderDeletionManager interface {
 }
 
 type FolderDeletionManagerOptions struct {
-	recursive bool
+	Recursive bool
 }
 
 func NewDefaultFolderDeletionManagerOptions() FolderDeletionManagerOptions {
 	return FolderDeletionManagerOptions{
-		recursive: false, // default to non-recursive deletion
+		Recursive: false, // default to non-recursive deletion
 	}
 }
 
@@ -104,7 +104,7 @@ func NewFolderDeletionManager(ctx context.Context, fpo FolderPropertyOption, log
 		return &mgr
 
 	case EFolderPropertiesOption.NoFolders():
-		if options.recursive {
+		if options.Recursive {
 			// if we are doing recursive deletion, we need to provide a folder deletion manager
 			// even if location is not folder-aware
 			return &mgr
@@ -116,17 +116,6 @@ func NewFolderDeletionManager(ctx context.Context, fpo FolderPropertyOption, log
 	default:
 		panic("unknown folderPropertiesOption")
 	}
-}
-
-// NewRecursiveFolderDeletionManager forces creation of a standard (non-null) folder deletion manager
-// even when the folder property option is NoFolders. This is required in scenarios (e.g. sync orchestrator)
-// where the underlying source is not folder aware (S3) but we still need recursive deletion semantics
-// at the destination (e.g. Blob / File) for extra folders. Without this, a nullFolderDeletionManager
-// would be instantiated and any attempt to RequestDeletion would panic.
-func NewRecursiveFolderDeletionManager(ctx context.Context, fpo FolderPropertyOption, logger ILogger) FolderDeletionManager {
-	// Pass an options struct with recursive=true so that NoFolders() still returns a working manager.
-	println("Creating RecursiveFolderDeletionManager: forcing creation of standard folder deletion manager with recursive deletion enabled.")
-	return NewFolderDeletionManager(ctx, fpo, logger, FolderDeletionManagerOptions{recursive: true})
 }
 
 // Note: the current implementation assumes that names are either case sensitive, or at least
