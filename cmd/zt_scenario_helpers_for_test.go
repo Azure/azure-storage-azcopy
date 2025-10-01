@@ -49,6 +49,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 
 	gcpUtils "cloud.google.com/go/storage"
@@ -872,8 +873,7 @@ func runSyncAndVerify(a *assert.Assertions, raw rawSyncCmdArgs, mockTransfer fun
 	verifier(err)
 }
 
-func runCopyAndVerify(a *assert.Assertions, raw rawCopyCmdArgs, verifier func(err error)) {
-	// the simulated user input should parse properly
+func runOldCopyAndVerify(a *assert.Assertions, raw rawCopyCmdArgs, verifier func(err error)) {
 	cooked, err := raw.cook()
 	if err == nil {
 		err = cooked.makeTransferEnum()
@@ -885,6 +885,23 @@ func runCopyAndVerify(a *assert.Assertions, raw rawCopyCmdArgs, verifier func(er
 
 	// the enumeration ends when process() returns
 	err = cooked.process()
+
+	// the err is passed to verified, which knows whether it is expected or not
+	verifier(err)
+}
+
+func runCopyAndVerify(a *assert.Assertions, raw rawCopyCmdArgs, mockTransfer func(common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse, verifier func(err error)) {
+	// the simulated user input should parse properly
+	opts, err := raw.toCopyOptions(&cobra.Command{})
+	a.Nil(err)
+	opts.WithInternalOptions(raw.listOfFilesToCopy, to.Ptr(raw.s2sGetPropertiesInBackend), true, mockTransfer, raw.deleteDestinationFileIfNecessary, "")
+
+	// create the client if it is not already created
+	if jobsAdmin.JobsAdmin == nil {
+		Client, err = azcopy.NewClient(azcopy.ClientOptions{CapMbps: CapMbps})
+	}
+	// the enumeration ends when process() returns
+	_, err = Client.Copy(context.TODO(), raw.src, raw.dst, opts, nil)
 
 	// the err is passed to verified, which knows whether it is expected or not
 	verifier(err)
@@ -1011,6 +1028,7 @@ func getDefaultCopyRawInput(src string, dst string) rawCopyCmdArgs {
 		forceWrite:                     common.EOverwriteOption.True().String(),
 		preserveOwner:                  common.PreserveOwnerDefault,
 		asSubdir:                       true,
+		hardlinks:                      common.DefaultHardlinkHandlingType.String(),
 	}
 }
 

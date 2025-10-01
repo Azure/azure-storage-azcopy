@@ -21,18 +21,14 @@
 package cmd
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestCPKEncryptionInputTest(t *testing.T) {
 	a := assert.New(t)
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	dirPath := "this/is/a/dummy/path"
@@ -41,7 +37,7 @@ func TestCPKEncryptionInputTest(t *testing.T) {
 	raw.recursive = true
 	raw.cpkInfo = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.NotNil(err)
 		a.Contains(err.Error(), "client provided keys (CPK) based encryption is only supported with blob endpoints (blob.core.windows.net)")
 	})
@@ -49,7 +45,7 @@ func TestCPKEncryptionInputTest(t *testing.T) {
 	mockedRPC.reset()
 	raw.cpkInfo = false
 	raw.cpkScopeInfo = "dummyscope"
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.NotNil(err)
 		a.Contains(err.Error(), "client provided keys (CPK) based encryption is only supported with blob endpoints (blob.core.windows.net)")
 	})

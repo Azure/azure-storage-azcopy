@@ -28,7 +28,7 @@ func (e *transferExecutor) redirectionTransfer(ctx context.Context) error {
 	} else if e.opts.fromTo == common.EFromTo.BlobPipe() {
 		return e.redirectionBlobDownload(ctx)
 	}
-	return fmt.Errorf("unsupported redirection type: %e", e.opts.fromTo)
+	return fmt.Errorf("unsupported redirection type: %s", e.opts.fromTo.String())
 }
 
 // redirectionBlobUpload uploads data from os.stdin to a blob destination using piping (redirection).
@@ -49,7 +49,7 @@ func (e *transferExecutor) redirectionBlobUpload(ctx context.Context) (err error
 
 		//handle the error if the conversion fails
 		if err != nil {
-			return fmt.Errorf("AZCOPY_CONCURRENCY_VALUE is not set to a valid value, an integer is expected (current value: %e): %w", concurrencyEnvVar, err)
+			return fmt.Errorf("AZCOPY_CONCURRENCY_VALUE is not set to a valid value, an integer is expected (current value: %s): %w", concurrencyEnvVar, err)
 		}
 
 		pipingUploadParallelism = int(concurrencyValue) // Cast to Integer
@@ -70,7 +70,7 @@ func (e *transferExecutor) redirectionBlobUpload(ctx context.Context) (err error
 	var blobURLParts blob.URLParts
 	blobURLParts, err = blob.ParseURL(resourceURL)
 	if err != nil {
-		return fmt.Errorf("fatal: cannot parse destination URL due to error: %e", err.Error())
+		return fmt.Errorf("fatal: cannot parse destination URL due to error: %s", err.Error())
 	}
 
 	// step 2: leverage high-level call in Blob SDK to upload stdin in parallel
@@ -118,7 +118,7 @@ func (e *transferExecutor) redirectionBlobDownload(ctx context.Context) error {
 	// step 0: check the Stdout before uploading
 	_, err := os.Stdout.Stat()
 	if err != nil {
-		return fmt.Errorf("fatal: cannot write to Stdout due to error: %e", err.Error())
+		return fmt.Errorf("fatal: cannot write to Stdout due to error: %s", err.Error())
 	}
 
 	var resourceURL string
@@ -130,7 +130,7 @@ func (e *transferExecutor) redirectionBlobDownload(ctx context.Context) error {
 	var blobURLParts blob.URLParts
 	blobURLParts, err = blob.ParseURL(resourceURL)
 	if err != nil {
-		return fmt.Errorf("fatal: cannot parse destination URL due to error: %e", err.Error())
+		return fmt.Errorf("fatal: cannot parse destination URL due to error: %s", err.Error())
 	}
 
 	// step 2: leverage high-level call in Blob SDK to upload stdin in parallel
@@ -152,7 +152,7 @@ func (e *transferExecutor) redirectionBlobDownload(ctx context.Context) error {
 		CPKScopeInfo: e.opts.cpkOptions.GetCPKScopeInfo(),
 	})
 	if err != nil {
-		return fmt.Errorf("fatal: cannot download blob due to error: %e", err.Error())
+		return fmt.Errorf("fatal: cannot download blob due to error: %s", err.Error())
 	}
 
 	blobBody := blobStream.NewRetryReader(ctx, &blob.RetryReaderOptions{MaxRetries: ste.MaxRetryPerDownloadBody})
@@ -161,7 +161,7 @@ func (e *transferExecutor) redirectionBlobDownload(ctx context.Context) error {
 	// step 4: pipe everything into Stdout
 	_, err = io.Copy(os.Stdout, blobBody)
 	if err != nil {
-		return fmt.Errorf("fatal: cannot download blob to Stdout due to error: %e", err.Error())
+		return fmt.Errorf("fatal: cannot download blob to Stdout due to error: %s", err.Error())
 	}
 
 	return nil
