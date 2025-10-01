@@ -375,22 +375,24 @@ func (c *CookedTransferOptions) applyDefaultsAndInferOptions(opts CopyOptions) (
 		}
 	}
 	c.source.Value = root
-	c.srcLevel, err = DetermineLocationLevel(c.source.Value, c.fromTo.From(), true)
-	if err != nil {
-		return err
-	}
-	c.dstLevel, err = DetermineLocationLevel(c.destination.Value, c.fromTo.To(), false)
-	if err != nil {
-		return err
-	}
-	// When copying a container directly to a container, strip the top directory, unless we're attempting to persist permissions.
-	if c.srcLevel == ELocationLevel.Container() && c.dstLevel == ELocationLevel.Container() && c.fromTo.IsS2S() {
-		if c.preservePermissions.IsTruthy() {
-			// if we're preserving permissions, we need to keep the top directory, but with container->container, we don't need to add the container name to the path.
-			// asSubdir is a better option than stripTopDir as stripTopDir disincludes the root.
-			c.asSubdir = false
-		} else {
-			c.stripTopDir = true
+	if !c.fromTo.IsRedirection() {
+		c.srcLevel, err = DetermineLocationLevel(c.source.Value, c.fromTo.From(), true)
+		if err != nil {
+			return err
+		}
+		c.dstLevel, err = DetermineLocationLevel(c.destination.Value, c.fromTo.To(), false)
+		if err != nil {
+			return err
+		}
+		// When copying a container directly to a container, strip the top directory, unless we're attempting to persist permissions.
+		if c.srcLevel == ELocationLevel.Container() && c.dstLevel == ELocationLevel.Container() && c.fromTo.IsS2S() {
+			if c.preservePermissions.IsTruthy() {
+				// if we're preserving permissions, we need to keep the top directory, but with container->container, we don't need to add the container name to the path.
+				// asSubdir is a better option than stripTopDir as stripTopDir disincludes the root.
+				c.asSubdir = false
+			} else {
+				c.stripTopDir = true
+			}
 		}
 	}
 
