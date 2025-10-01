@@ -402,14 +402,14 @@ func (p *fileSourceInfoProvider) GetNFSDefaultPerms() (fileMode, owner, group *s
 func (p *fileSourceInfoProvider) ReadLink() (string, error) {
 	fsc, err := p.jptm.SrcServiceClient().FileServiceClient()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to get file service client: %w", err)
 	}
 
 	share := fsc.NewShareClient(p.transferInfo.SrcContainer)
 	fileClient := share.NewRootDirectoryClient().NewFileClient(p.transferInfo.SrcFilePath)
 	symlink, err := fileClient.GetSymbolicLink(p.ctx, nil)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to get symlink info: %w", err)
 	}
 
 	return string(*symlink.LinkText), nil

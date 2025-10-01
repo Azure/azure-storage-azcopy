@@ -189,10 +189,10 @@ func performNFSSpecificValidation(fromTo common.FromTo,
 	// 	return err
 	// }
 
-	if err = validateSymlinkFlag(symlinkHandling == common.ESymlinkHandlingType.Follow(),
-		fromTo); err != nil {
-		return err
-	}
+	// if err = validateSymlinkFlag(symlinkHandling == common.ESymlinkHandlingType.Follow(),
+	// 	fromTo); err != nil {
+	// 	return err
+	// }
 	return nil
 }
 
@@ -229,10 +229,11 @@ func performSMBSpecificValidation(fromTo common.FromTo,
 		return err
 	}
 
-	if err = validateSymlinkFlag(symlinkHandling == common.ESymlinkHandlingType.Follow(),
-		fromTo); err != nil {
-		return err
-	}
+	// if err = validateSymlinkFlag(symlinkHandling == common.ESymlinkHandlingType.Follow(),
+	// 	fromTo); err != nil {
+	// 	return err
+	// }
+	
 	// TODO: Add this check in Phase-3 which targets to support hardlinks for NFS copy.
 	// if err = validateAndAdjustHardlinksFlag(hardlinkHandling, fromTo); err != nil {
 	// 	return err

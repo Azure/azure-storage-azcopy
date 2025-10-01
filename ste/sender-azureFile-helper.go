@@ -144,21 +144,6 @@ func (u *azureFileSenderBase) addNFSPropertiesToHeaders(info *TransferInfo) (sta
 		if err != nil {
 			return "Obtaining NFS properties", err
 		}
-		// TODO: commenting out for now. If required will add it later.
-		// fromTo := u.jptm.FromTo()
-		// if fromTo.From() == common.ELocation.File() { // Files SDK can panic when the service hands it something unexpected!
-		// 	defer func() { // recover from potential panics and output raw properties for debug purposes
-		// 		if panicerr := recover(); panicerr != nil {
-		// 			stage = "Reading SMB properties"
-
-		// 			attr, _ := smbProps.FileAttributes()
-		// 			lwt := smbProps.FileLastWriteTime()
-		// 			fct := smbProps.FileCreationTime()
-
-		// 			err = fmt.Errorf("failed to read SMB properties (%w)! Raw data: attr: `%s` lwt: `%s`, fct: `%s`", err, attr, lwt, fct)
-		// 		}
-		// 	}()
-		// }
 
 		if info.ShouldTransferLastWriteTime() {
 			lwTime := nfsProps.FileLastWriteTime()
@@ -242,6 +227,11 @@ func (u *azureFileSenderBase) addPermissionsToHeaders(info *TransferInfo, destUR
 			return "Putting permissions", err
 		}
 
+		// At this point, we’ve stored the full SDDL string in the security persistence manager
+		// and obtained a PermissionKey that references it.  
+		// To avoid sending an oversized SDDL string,  
+		// we replace the Permission field with an empty string.  
+		// This ensures that only the PermissionKey is sent to the service, not the large SDDL itself.
 		ePermString := ""
 		u.permissionsToApply.Permission = &ePermString
 	}
