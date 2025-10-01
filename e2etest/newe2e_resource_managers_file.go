@@ -870,6 +870,15 @@ func (f *FileObjectResourceManager) Download(a Asserter) io.ReadSeeker {
 }
 
 func (f *FileObjectResourceManager) ReadLink(a Asserter) string {
+	if f.Share.Service.Location() == common.ELocation.FileNFS() {
+		a.HelperMarker().Helper()
+		a.Assert("Entity type must be symlink", Equal{}, f.entityType, common.EEntityType.Symlink())
+
+		resp, err := f.getFileClient().GetSymbolicLink(ctx, nil)
+		a.NoError("Read symlink", err)
+
+		return *resp.LinkText
+	}
 	a.Error("Symlinks are unsupported on Files.")
 	return ""
 }

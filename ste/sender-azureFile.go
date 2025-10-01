@@ -194,7 +194,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		Metadata:    u.metadataToApply,
 	}
 
-	if common.IsNFSCopy() {
+	if jptm.FromTo().IsNFS() {
 
 		stage, err := u.addNFSPropertiesToHeaders(info)
 		if err != nil {
@@ -255,6 +255,27 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		if creationProperties.Attributes != nil {
 			createOptions.SMBProperties = &creationProperties
 		}
+		// retrying file creation
+		err = common.DoWithOverrideReadOnlyOnAzureFiles(u.ctx,
+			func() (interface{}, error) {
+				return u.getFileClient().Create(u.ctx, info.SourceSize, createOptions)
+			},
+			u.fileOrDirClient,
+			u.jptm.GetForceIfReadOnly())
+	}
+
+	// In case of NFS there might be a mismatch between the source and destination file types
+	// e.g. source is a file and destination is a symlink with the same name.
+	// In this case, we delete the destination symlink and retry the creation of the file
+	if jptm.FromTo().IsNFS() && fileerror.HasCode(err, fileerror.ResourceTypeMismatch) {
+		jptm.Log(common.LogWarning,
+			fmt.Sprintf("%s: %s \nAzCopy will delete the destination resource.",
+				fileerror.ResourceAlreadyExists, err.Error()))
+
+		if _, delErr := u.getFileClient().Delete(u.ctx, nil); delErr != nil {
+			jptm.FailActiveUpload("Deleting existing resource", delErr)
+		}
+
 		// retrying file creation
 		err = common.DoWithOverrideReadOnlyOnAzureFiles(u.ctx,
 			func() (interface{}, error) {
@@ -434,7 +455,7 @@ func (u *azureFileSenderBase) Epilogue() {
 	//      So when we uploaded the ranges, we've unintentionally changed the last-write-time.
 	if u.jptm.IsLive() && u.jptm.Info().PreserveInfo {
 		// This is an extra round trip, but we can live with that for these relatively rare cases
-		if common.IsNFSCopy() {
+		if u.jptm.FromTo().IsNFS() {
 			_, err := u.getFileClient().SetHTTPHeaders(u.ctx, &file.SetHTTPHeadersOptions{
 				HTTPHeaders: &u.headersToApply,
 				NFSProperties: &file.NFSProperties{
@@ -499,7 +520,7 @@ func (u *azureFileSenderBase) SetFolderProperties() (err error) {
 	info := u.jptm.Info()
 
 	setPropertiesOptions := &directory.SetPropertiesOptions{}
-	if common.IsNFSCopy() {
+	if u.jptm.FromTo().IsNFS() {
 
 		_, err = u.addNFSPropertiesToHeaders(info)
 		if err != nil {

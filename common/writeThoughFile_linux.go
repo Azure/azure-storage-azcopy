@@ -117,6 +117,13 @@ func StatxTimestampToFiletime(ts unix.StatxTimestamp) Filetime {
 func GetFileInformation(path string, isNFSCopy bool, symlinkHandling SymlinkHandlingType) (ByHandleFileInformation, error) {
 	var stx unix.Statx_t
 
+	// First detect if the path is a symlink
+	var lst unix.Stat_t
+	err := unix.Lstat(path, &lst)
+	if err != nil {
+		return ByHandleFileInformation{}, fmt.Errorf("lstat(%s) failed: %v", path, err)
+	}
+
 	// We want all attributes including Btime (aka creation time).
 	// For consistency with Windows implementation we pass flags==0 which causes it to follow symlinks.
 	flags := 0
@@ -130,6 +137,7 @@ func GetFileInformation(path string, isNFSCopy bool, symlinkHandling SymlinkHand
 	} else if err != nil {
 		return ByHandleFileInformation{}, fmt.Errorf("statx(%s) failed: %v", path, err)
 	}
+
 	var info ByHandleFileInformation
 	if !isNFSCopy {
 		// For getting FileAttributes we need to query the CIFS_XATTR_ATTRIB extended attribute.

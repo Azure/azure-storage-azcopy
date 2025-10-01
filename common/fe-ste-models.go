@@ -710,20 +710,27 @@ func (FromTo) FileLocal() FromTo      { return FromToValue(ELocation.File(), ELo
 func (FromTo) BlobPipe() FromTo       { return FromToValue(ELocation.Blob(), ELocation.Pipe()) }
 func (FromTo) PipeBlob() FromTo       { return FromToValue(ELocation.Pipe(), ELocation.Blob()) }
 func (FromTo) FilePipe() FromTo       { return FromToValue(ELocation.File(), ELocation.Pipe()) }
+func (FromTo) FileSMBPipe() FromTo    { return FromToValue(ELocation.File(), ELocation.Pipe()) }
 func (FromTo) PipeFile() FromTo       { return FromToValue(ELocation.Pipe(), ELocation.File()) }
+func (FromTo) PipeFileSMB() FromTo    { return FromToValue(ELocation.Pipe(), ELocation.File()) }
 func (FromTo) BlobTrash() FromTo      { return FromToValue(ELocation.Blob(), ELocation.Unknown()) }
 func (FromTo) FileTrash() FromTo      { return FromToValue(ELocation.File(), ELocation.Unknown()) }
+func (FromTo) FileSMBTrash() FromTo   { return FromToValue(ELocation.File(), ELocation.Unknown()) }
 func (FromTo) BlobFSTrash() FromTo    { return FromToValue(ELocation.BlobFS(), ELocation.Unknown()) }
 func (FromTo) LocalBlobFS() FromTo    { return FromToValue(ELocation.Local(), ELocation.BlobFS()) }
 func (FromTo) BlobFSLocal() FromTo    { return FromToValue(ELocation.BlobFS(), ELocation.Local()) }
 func (FromTo) BlobFSBlobFS() FromTo   { return FromToValue(ELocation.BlobFS(), ELocation.BlobFS()) }
 func (FromTo) BlobFSBlob() FromTo     { return FromToValue(ELocation.BlobFS(), ELocation.Blob()) }
 func (FromTo) BlobFSFile() FromTo     { return FromToValue(ELocation.BlobFS(), ELocation.File()) }
+func (FromTo) BlobFSFileSMB() FromTo  { return FromToValue(ELocation.BlobFS(), ELocation.File()) }
 func (FromTo) BlobBlobFS() FromTo     { return FromToValue(ELocation.Blob(), ELocation.BlobFS()) }
 func (FromTo) FileBlobFS() FromTo     { return FromToValue(ELocation.File(), ELocation.BlobFS()) }
+func (FromTo) FileSMBBlobFS() FromTo  { return FromToValue(ELocation.File(), ELocation.BlobFS()) }
 func (FromTo) BlobBlob() FromTo       { return FromToValue(ELocation.Blob(), ELocation.Blob()) }
 func (FromTo) FileBlob() FromTo       { return FromToValue(ELocation.File(), ELocation.Blob()) }
+func (FromTo) FileSMBBlob() FromTo    { return FromToValue(ELocation.File(), ELocation.Blob()) }
 func (FromTo) BlobFile() FromTo       { return FromToValue(ELocation.Blob(), ELocation.File()) }
+func (FromTo) BlobFileSMB() FromTo    { return FromToValue(ELocation.Blob(), ELocation.File()) }
 func (FromTo) FileFile() FromTo       { return FromToValue(ELocation.File(), ELocation.File()) }
 func (FromTo) S3Blob() FromTo         { return FromToValue(ELocation.S3(), ELocation.Blob()) }
 func (FromTo) GCPBlob() FromTo        { return FromToValue(ELocation.GCP(), ELocation.Blob()) }
@@ -792,6 +799,10 @@ func (ft FromTo) IsDownload() bool {
 
 func (ft FromTo) IsS2S() bool {
 	return ft.From().IsRemote() && ft.To().IsRemote() && ft.To() != ELocation.None() && ft.To() != ELocation.Unknown()
+}
+
+func (ft FromTo) IsNFS() bool {
+	return ft.From() == ELocation.FileNFS() || ft.To() == ELocation.FileNFS()
 }
 
 func (ft FromTo) IsUpload() bool {
@@ -1583,12 +1594,18 @@ func (pc *PerfConstraint) Parse(s string) error {
 var EHardlinkHandlingType = HardlinkHandlingType(0)
 
 var DefaultHardlinkHandlingType = EHardlinkHandlingType.Follow()
+var SkipHardlinkHandlingType = EHardlinkHandlingType.Skip()
 
 type HardlinkHandlingType uint8
 
-// Copy means copy the files to the destination as regular files
+// Follow means copy the files to the destination as regular files
 func (HardlinkHandlingType) Follow() HardlinkHandlingType {
 	return HardlinkHandlingType(0)
+}
+
+// Skip means skip the hardlinks and do not copy them to the destination
+func (HardlinkHandlingType) Skip() HardlinkHandlingType {
+	return HardlinkHandlingType(1)
 }
 
 func (pho HardlinkHandlingType) String() string {
