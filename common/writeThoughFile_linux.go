@@ -114,7 +114,7 @@ func StatxTimestampToFiletime(ts unix.StatxTimestamp) Filetime {
 	return NsecToFiletime(ts.Sec*int64(time.Second) + int64(ts.Nsec))
 }
 
-func GetFileInformation(path string, isNFSCopy bool) (ByHandleFileInformation, error) {
+func GetFileInformation(path string, isNFSCopy bool, symlinkHandling SymlinkHandlingType) (ByHandleFileInformation, error) {
 	var stx unix.Statx_t
 
 	// First detect if the path is a symlink
@@ -124,15 +124,14 @@ func GetFileInformation(path string, isNFSCopy bool) (ByHandleFileInformation, e
 		return ByHandleFileInformation{}, fmt.Errorf("lstat(%s) failed: %v", path, err)
 	}
 
-	// Choose statx flags based on symlink detection
+	// We want all attributes including Btime (aka creation time).
+	// For consistency with Windows implementation we pass flags==0 which causes it to follow symlinks.
 	flags := 0
-	if lst.Mode&unix.S_IFMT == unix.S_IFLNK {
-		// Don't follow symlink (important for orphan links)
+	if symlinkHandling == ESymlinkHandlingType.Preserve() {
 		flags = unix.AT_SYMLINK_NOFOLLOW
 	}
 
-	// We want all attributes including Btime (aka creation time).
-	err = unix.Statx(unix.AT_FDCWD, path, flags, unix.STATX_ALL, &stx)
+	err := unix.Statx(unix.AT_FDCWD, path, flags /* flags */, unix.STATX_ALL, &stx)
 	if err == unix.ENOSYS || err == unix.EPERM {
 		panic(fmt.Errorf("statx syscall is not available: %v", err))
 	} else if err != nil {

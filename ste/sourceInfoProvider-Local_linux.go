@@ -222,8 +222,12 @@ func (f localFileSourceInfoProvider) GetSDDL() (string, error) {
 	return fSDDL.PortableString(), nil
 }
 
+func (f localFileSourceInfoProvider) getSymlinkHandlingForEntityType() common.SymlinkHandlingType {
+	return common.Iff(f.EntityType() == common.EEntityType.Symlink(), common.ESymlinkHandlingType.Preserve(), common.ESymlinkHandlingType.Follow())
+}
+
 func (f localFileSourceInfoProvider) GetSMBProperties() (TypedSMBPropertyHolder, error) {
-	info, err := common.GetFileInformation(f.jptm.Info().Source, false)
+	info, err := common.GetFileInformation(f.jptm.Info().Source, false, f.getSymlinkHandlingForEntityType())
 
 	return HandleInfo{info}, err
 }
@@ -253,7 +257,7 @@ func (hi HandleInfo) FileAccessTime() time.Time {
 }
 
 func (f localFileSourceInfoProvider) GetNFSProperties() (TypedNFSPropertyHolder, error) {
-	info, err := common.GetFileInformation(f.jptm.Info().Source, true)
+	info, err := common.GetFileInformation(f.jptm.Info().Source, true, f.getSymlinkHandlingForEntityType())
 	return HandleInfo{info}, err
 }
 

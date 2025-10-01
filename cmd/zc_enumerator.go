@@ -111,7 +111,7 @@ func (s *StoredObject) isMoreRecentThan(storedObject2 StoredObject, preferSMBTim
 }
 
 func (s *StoredObject) isSingleSourceFile() bool {
-	return s.relativePath == "" && (s.entityType == common.EEntityType.File() || s.entityType == common.EEntityType.Hardlink())
+	return s.relativePath == "" && (s.entityType == common.EEntityType.File() || s.entityType == common.EEntityType.Hardlink() || s.entityType == common.EEntityType.Symlink() || s.entityType == common.EEntityType.Other())
 }
 
 func (s *StoredObject) isSourceRootFolder() bool {
