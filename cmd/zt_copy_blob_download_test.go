@@ -924,9 +924,6 @@ func TestDryrunCopyGCPtoBlob(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
 	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) // text format
 	glcm = &mockedLcm
@@ -1009,6 +1006,9 @@ func TestListOfVersions(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -1016,7 +1016,7 @@ func TestListOfVersions(t *testing.T) {
 	raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String())
 	raw.recursive = true
 	raw.listOfVersionIDs = file.Name()
-	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -1057,6 +1057,9 @@ func TestListOfVersionsNegative(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -1064,7 +1067,7 @@ func TestListOfVersionsNegative(t *testing.T) {
 	raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String())
 	raw.recursive = true
 	raw.listOfVersionIDs = file.Name()
-	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Error(err)
 	})
 }

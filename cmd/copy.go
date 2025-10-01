@@ -321,23 +321,20 @@ func getMetadata(metadataString string) (metadata map[string]string, err error) 
 		return map[string]string{}, nil // user specifically asked to clear metadata
 	}
 
-	// user specified metadata in foo=bar;some=thing... format
+	// Use the existing StringToMetadata function that properly handles escaped semicolons
+	commonMetadata, err := common.StringToMetadata(metadataString)
+	if err != nil {
+		return nil, fmt.Errorf("invalid metadata format. Please refer to the help document for correct format")
+	}
+
+	// Convert from common.Metadata (map[string]*string) to map[string]string
 	meta := make(map[string]string)
-	pairs := strings.Split(metadataString, ";")
-	for _, pair := range pairs {
-		if pair == "" {
-			continue // skip empty pairs, which can happen if user put a ; at the end
+	for key, valuePtr := range commonMetadata {
+		if valuePtr != nil {
+			meta[key] = *valuePtr
+		} else {
+			meta[key] = ""
 		}
-		splits := strings.SplitN(pair, "=", 2)
-		if len(splits) != 2 {
-			return nil, fmt.Errorf("invalid metadata format. Please refer to the help document for correct format")
-		}
-		key := strings.TrimSpace(splits[0])
-		value := strings.TrimSpace(splits[1])
-		if key == "" {
-			return nil, fmt.Errorf("empty metadata keys are not allowed")
-		}
-		meta[key] = value
 	}
 	return meta, nil
 }
