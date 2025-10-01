@@ -662,6 +662,10 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 	return finalizer, hashingProcessor
 }
 
+var (
+	ErrorLoneSymlinkSkipped = errors.New("symlink handling was not specified and defaulted to skip, but the sole file target is a symlink")
+)
+
 func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
 	singleFileInfo, isSingleFile, err := t.getInfoIfSingleFile()
 	// it fails here if file does not exist
@@ -695,6 +699,25 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 					t.incrementEnumerationCounter(entityType, t.symlinkHandling, t.hardlinkHandling)
 				}
 				return nil
+			}
+		} else {
+			if IsSymbolicLink(singleFileInfo) {
+				if t.symlinkHandling == common.ESymlinkHandlingType.Follow() {
+					entityType = common.EEntityType.File()
+					singleFileInfo, err = os.Stat(t.fullPath) // follow the symlink intentionally
+
+					if err != nil {
+						return fmt.Errorf("failed to follow symlink: %w", err)
+					}
+				} else if t.symlinkHandling == common.ESymlinkHandlingType.Preserve() {
+					entityType = common.EEntityType.Symlink()
+				} else if t.symlinkHandling == common.ESymlinkHandlingType.Skip() {
+					return ErrorLoneSymlinkSkipped
+				}
+			} else if IsRegularFile(singleFileInfo) {
+				entityType = common.EEntityType.File()
+			} else {
+				entityType = common.EEntityType.Other()
 			}
 		}
 
@@ -859,7 +882,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 						preprocessor,
 						entry.Name(),
 						strings.ReplaceAll(relativePath, common.DeterminePathSeparator(t.fullPath), common.AZCOPY_PATH_SEPARATOR_STRING), // Consolidate relative paths to the azcopy path separator for sync
-						entityType, // TODO: add code path for folders
+						entityType,                                                                                                       // TODO: add code path for folders
 						fileInfo.ModTime(),
 						fileInfo.Size(),
 						noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
