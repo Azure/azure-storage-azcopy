@@ -341,6 +341,13 @@ func getMetadata(metadataString string) (metadata map[string]string, err error) 
 
 func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	cooked = CookedCopyCmdArgs{
+		Recursive:                raw.recursive,
+		ForceIfReadOnly:          raw.forceIfReadOnly,
+		autoDecompress:           raw.autoDecompress,
+		BlockSizeMB:              raw.blockSizeMB,
+		PutBlobSizeMB:            raw.putBlobSizeMB,
+		ListOfFiles:              raw.listOfFilesToCopy,
+		ListOfVersionIDs:         raw.listOfVersionIDs,
 		metadata:                 raw.metadata,
 		contentType:              raw.contentType,
 		contentEncoding:          raw.contentEncoding,
@@ -450,6 +457,9 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 		return cooked, err
 	}
 
+	if raw.legacyInclude != "" || raw.legacyExclude != "" {
+		return cooked, fmt.Errorf("the include and exclude parameters have been replaced by include-pattern; include-path; exclude-pattern and exclude-path. For info, run: azcopy copy help")
+	}
 	cooked.IncludePathPatterns = parsePatterns(raw.includePath)
 
 	if raw.includeBefore != "" {
