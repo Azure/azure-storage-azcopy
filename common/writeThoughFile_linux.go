@@ -131,7 +131,7 @@ func GetFileInformation(path string, isNFSCopy bool, symlinkHandling SymlinkHand
 		flags = unix.AT_SYMLINK_NOFOLLOW
 	}
 
-	err := unix.Statx(unix.AT_FDCWD, path, flags /* flags */, unix.STATX_ALL, &stx)
+	err = unix.Statx(unix.AT_FDCWD, path, flags /* flags */, unix.STATX_ALL, &stx)
 	if err == unix.ENOSYS || err == unix.EPERM {
 		panic(fmt.Errorf("statx syscall is not available: %v", err))
 	} else if err != nil {

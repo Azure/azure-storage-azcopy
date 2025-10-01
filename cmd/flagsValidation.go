@@ -189,10 +189,10 @@ func performNFSSpecificValidation(fromTo common.FromTo,
 	// 	return err
 	// }
 
-	// if err = validateSymlinkFlag(symlinkHandling == common.ESymlinkHandlingType.Follow(),
-	// 	fromTo); err != nil {
-	// 	return err
-	// }
+	if err = validateSymlinkFlag(symlinkHandling == common.ESymlinkHandlingType.Follow(),
+		fromTo); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -229,10 +229,10 @@ func performSMBSpecificValidation(fromTo common.FromTo,
 		return err
 	}
 
-	// if err = validateSymlinkFlag(symlinkHandling == common.ESymlinkHandlingType.Follow(),
-	// 	fromTo); err != nil {
-	// 	return err
-	// }
+	if err = validateSymlinkFlag(symlinkHandling == common.ESymlinkHandlingType.Follow(),
+		fromTo); err != nil {
+		return err
+	}
 	
 	// TODO: Add this check in Phase-3 which targets to support hardlinks for NFS copy.
 	// if err = validateAndAdjustHardlinksFlag(hardlinkHandling, fromTo); err != nil {
@@ -245,7 +245,9 @@ func performSMBSpecificValidation(fromTo common.FromTo,
 func validateSymlinkFlag(followSymlinks bool, fromTo common.FromTo) error {
 
 	if followSymlinks {
-		if fromTo.From() != common.ELocation.Local() {
+		if !fromTo.IsNFS(){
+			return fmt.Errorf("The '--follow-symlink' flag is only supported for NFS-aware locations.")
+		}else if fromTo.From() != common.ELocation.Local() {
 			return fmt.Errorf("The '--follow-symlink' flag is only applicable when uploading from local filesystem.")
 		}
 	}
