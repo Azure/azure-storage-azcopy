@@ -1319,6 +1319,7 @@ func init() {
 			if opts, err = raw.toCopyOptions(cmd); err != nil {
 				glcm.Error("error parsing the input given by the user. Failed with error " + err.Error() + getErrorCodeUrl(err))
 			}
+			opts.FromTo = userFromTo
 			// Create a context that can be cancelled by Ctrl-C
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
