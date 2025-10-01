@@ -436,10 +436,10 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 		AzCopyCommand{
 			Verb: azCopyVerb,
 			Targets: []ResourceManager{srcDirObj.(RemoteResourceManager).WithSpecificAuthType(
-				ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken()}), 
-				EExplicitCredentialType.OAuth(),
-				svm, CreateAzCopyTargetOptions{}),
-				dst},
+				ResolveVariation(svm, []ExplicitCredentialTypes{
+					EExplicitCredentialType.SASToken(),
+					EExplicitCredentialType.OAuth(),
+				}), svm, CreateAzCopyTargetOptions{}), dst},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
 					Recursive:           pointerTo(true),
