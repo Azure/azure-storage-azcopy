@@ -2,15 +2,16 @@ package e2etest
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/google/uuid"
-	"strings"
 )
 
 // AccountRegistry is a set of accounts that are intended to be initialized when the tests start running.
 // Suites and tests should not add to this pool.
 // todo: long-term, support flexible static configuration of accounts.
-var AccountRegistry = map[string]AccountResourceManager{} // For re-using accounts across testing
+var AccountRegistry = map[string]AccountResourceManager{} // For reusing accounts across testing
 
 func GetAccount(a Asserter, AccountName string) AccountResourceManager {
 	targetAccount, ok := AccountRegistry[AccountName]
@@ -87,15 +88,15 @@ func CreateAccount(a Asserter, accountType AccountType, options *CreateAccountOp
 	}
 
 	_, err := accountARMClient.Create(accountARMDefinition)
-	a.NoError("ARM create account call", err)
+	a.NoError("ARM create account call", err, true)
 	keys, err := accountARMClient.GetKeys()
-	a.NoError("ARM get keys call", err)
+	a.NoError("ARM get keys call", err, true)
 
 	acct := &AzureAccountResourceManager{
-		accountName: accountARMClient.AccountName,
-		accountKey:  keys.Keys[0].Value, // todo find useful key
-		accountType: accountType,
-		armClient:   accountARMClient,
+		InternalAccountName: accountARMClient.AccountName,
+		InternalAccountKey:  keys.Keys[0].Value, // todo find useful key
+		InternalAccountType: accountType,
+		ArmClient:           accountARMClient,
 	}
 
 	if rt, ok := a.(ResourceTracker); ok {
@@ -122,35 +123,50 @@ func DeleteAccount(a Asserter, arm AccountResourceManager) {
 }
 
 const (
-	PrimaryStandardAcct string = "PrimaryStandard"
-	PrimaryHNSAcct      string = "PrimaryHNS"
-	PremiumPageBlobAcct string = "PremiumPageBlob"
+	PrimaryStandardAcct  string = "PrimaryStandard"
+	PrimaryHNSAcct       string = "PrimaryHNS"
+	PremiumPageBlobAcct  string = "PremiumPageBlob"
+	PremiumFileShareAcct string = "PremiumFileShare"
 )
 
 func AccountRegistryInitHook(a Asserter) {
 	if GlobalConfig.StaticResources() {
 		acctInfo := GlobalConfig.E2EAuthConfig.StaticStgAcctInfo
 
-		AccountRegistry[PrimaryStandardAcct] = &AzureAccountResourceManager{
-			accountName: acctInfo.Standard.AccountName,
-			accountKey:  acctInfo.Standard.AccountKey,
-			accountType: EAccountType.Standard(),
+		if acctInfo.Standard.AccountName != "" {
+			AccountRegistry[PrimaryStandardAcct] = &AzureAccountResourceManager{
+				InternalAccountName: acctInfo.Standard.AccountName,
+				InternalAccountKey:  acctInfo.Standard.AccountKey,
+				InternalAccountType: EAccountType.Standard(),
+			}
 		}
-		AccountRegistry[PrimaryHNSAcct] = &AzureAccountResourceManager{
-			accountName: acctInfo.HNS.AccountName,
-			accountKey:  acctInfo.HNS.AccountKey,
-			accountType: EAccountType.HierarchicalNamespaceEnabled(),
+		if acctInfo.HNS.AccountName != "" {
+			AccountRegistry[PrimaryHNSAcct] = &AzureAccountResourceManager{
+				InternalAccountName: acctInfo.HNS.AccountName,
+				InternalAccountKey:  acctInfo.HNS.AccountKey,
+				InternalAccountType: EAccountType.HierarchicalNamespaceEnabled(),
+			}
 		}
-		AccountRegistry[PremiumPageBlobAcct] = &AzureAccountResourceManager{
-			accountName: acctInfo.PremiumPage.AccountName,
-			accountKey:  acctInfo.PremiumPage.AccountKey,
-			accountType: EAccountType.PremiumPageBlobs(),
+		if acctInfo.PremiumPage.AccountName != "" {
+			AccountRegistry[PremiumPageBlobAcct] = &AzureAccountResourceManager{
+				InternalAccountName: acctInfo.PremiumPage.AccountName,
+				InternalAccountKey:  acctInfo.PremiumPage.AccountKey,
+				InternalAccountType: EAccountType.PremiumPageBlobs(),
+			}
+		}
+		if acctInfo.PremiumFileShare.AccountName != "" {
+			AccountRegistry[PremiumFileShareAcct] = &AzureAccountResourceManager{
+				InternalAccountName: acctInfo.PremiumFileShare.AccountName,
+				InternalAccountKey:  acctInfo.PremiumFileShare.AccountKey,
+				InternalAccountType: EAccountType.PremiumFileShares(),
+			}
 		}
 	} else {
 		// Create standard accounts
 		AccountRegistry[PrimaryStandardAcct] = CreateAccount(a, EAccountType.Standard(), nil)
 		AccountRegistry[PrimaryHNSAcct] = CreateAccount(a, EAccountType.HierarchicalNamespaceEnabled(), nil)
 		AccountRegistry[PremiumPageBlobAcct] = CreateAccount(a, EAccountType.PremiumPageBlobs(), nil)
+		AccountRegistry[PremiumFileShareAcct] = CreateAccount(a, EAccountType.PremiumFileShares(), nil)
 	}
 }
 

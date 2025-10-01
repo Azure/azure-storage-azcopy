@@ -3,9 +3,10 @@ package e2etest
 import (
 	"bytes"
 	"fmt"
+	"io"
+
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"io"
 )
 
 /*
@@ -38,11 +39,11 @@ func init() {
 }
 
 var mockAccountServices = map[AccountType][]common.Location{
-	EAccountType.Standard():                     {common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()},
+	EAccountType.Standard():                     {common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS(), common.ELocation.FileNFS()},
 	EAccountType.PremiumBlockBlobs():            {common.ELocation.Blob(), common.ELocation.BlobFS()},
 	EAccountType.PremiumPageBlobs():             {common.ELocation.Blob()},
-	EAccountType.PremiumFileShares():            {common.ELocation.File()},
-	EAccountType.HierarchicalNamespaceEnabled(): {common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()},
+	EAccountType.PremiumFileShares():            {common.ELocation.File(), common.ELocation.FileNFS()},
+	EAccountType.HierarchicalNamespaceEnabled(): {common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS(), common.ELocation.FileNFS()},
 	EAccountType.Classic():                      {},
 }
 
@@ -81,17 +82,19 @@ func (m *MockAccountResourceManager) GetService(a Asserter, location common.Loca
 }
 
 var mockServiceAuthTypes = map[common.Location]ExplicitCredentialTypes{
-	common.ELocation.Blob():   (&BlobServiceResourceManager{}).ValidAuthTypes(),
-	common.ELocation.File():   (&FileServiceResourceManager{}).ValidAuthTypes(),
-	common.ELocation.BlobFS(): (&BlobFSServiceResourceManager{}).ValidAuthTypes(),
+	common.ELocation.Blob():    (&BlobServiceResourceManager{}).ValidAuthTypes(),
+	common.ELocation.File():    (&FileServiceResourceManager{}).ValidAuthTypes(),
+	common.ELocation.BlobFS():  (&BlobFSServiceResourceManager{}).ValidAuthTypes(),
+	common.ELocation.FileNFS(): (&FileServiceResourceManager{}).ValidAuthTypes(),
 	// todo S3
 	// todo GCP
 }
 
 var mockServiceDefaultAuthTypes = map[common.Location]ExplicitCredentialTypes{
-	common.ELocation.Blob():   (&BlobServiceResourceManager{}).DefaultAuthType(),
-	common.ELocation.File():   (&FileServiceResourceManager{}).DefaultAuthType(),
-	common.ELocation.BlobFS(): (&BlobFSServiceResourceManager{}).DefaultAuthType(),
+	common.ELocation.Blob():    (&BlobServiceResourceManager{}).DefaultAuthType(),
+	common.ELocation.File():    (&FileServiceResourceManager{}).DefaultAuthType(),
+	common.ELocation.BlobFS():  (&BlobFSServiceResourceManager{}).DefaultAuthType(),
+	common.ELocation.FileNFS(): (&FileServiceResourceManager{}).DefaultAuthType(),
 }
 
 type MockServiceResourceManager struct {
@@ -158,7 +161,7 @@ func (m *MockServiceResourceManager) GetContainer(s string) ContainerResourceMan
 }
 
 func (m *MockServiceResourceManager) IsHierarchical() bool {
-	return m.Location() == common.ELocation.File() || m.Location() == common.ELocation.BlobFS()
+	return m.Location() == common.ELocation.File() || m.Location() == common.ELocation.BlobFS() || m.Location() == common.ELocation.FileNFS()
 }
 
 type MockContainerResourceManager struct {
@@ -232,6 +235,9 @@ func (m *MockContainerResourceManager) GetProperties(a Asserter) ContainerProper
 	return ContainerProperties{}
 }
 
+func (m *MockContainerResourceManager) SetProperties(a Asserter, properties *ContainerResourceManager) {
+}
+
 func (m *MockContainerResourceManager) Delete(a Asserter) {
 	// No-op it
 }
@@ -250,11 +256,12 @@ func (m *MockContainerResourceManager) GetResourceTarget(a Asserter) string {
 }
 
 type MockObjectResourceManager struct {
-	overrideLocation common.Location // If there is no parent, e.g. this is a lone file, it needs to be overridden
-	parent           *MockContainerResourceManager
-	account          *MockAccountResourceManager
-	entityType       common.EntityType
-	path             string
+	overrideLocation   common.Location // If there is no parent, e.g. this is a lone file, it needs to be overridden
+	parent             *MockContainerResourceManager
+	account            *MockAccountResourceManager
+	entityType         common.EntityType
+	path               string
+	hardlinkedFilePath string
 }
 
 func (m *MockObjectResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
@@ -317,6 +324,10 @@ func (m *MockObjectResourceManager) ObjectName() string {
 	return m.path
 }
 
+func (l *MockObjectResourceManager) HardlinkedFileName() string {
+	return l.hardlinkedFilePath
+}
+
 func (m *MockObjectResourceManager) Create(a Asserter, body ObjectContentContainer, properties ObjectProperties) {
 	// no-op
 }
@@ -350,6 +361,10 @@ func (m *MockObjectResourceManager) SetObjectProperties(a Asserter, props Object
 
 func (m *MockObjectResourceManager) Download(a Asserter) io.ReadSeeker {
 	return bytes.NewReader([]byte{})
+}
+
+func (b *MockObjectResourceManager) ReadLink(a Asserter) string {
+	return ""
 }
 
 func (m *MockObjectResourceManager) Exists() bool {

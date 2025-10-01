@@ -47,7 +47,7 @@ func (i *ConfiguredInt) GetDescription() string {
 
 // tryNewConfiguredInt populates a ConfiguredInt from an environment variable, or returns nil if env var is not set
 func tryNewConfiguredInt(envVar common.EnvironmentVariable) *ConfiguredInt {
-	override := common.GetLifecycleMgr().GetEnvironmentVariable(envVar)
+	override := common.GetEnvironmentVariable(envVar)
 	if override != "" {
 		val, err := strconv.ParseInt(override, 10, 32)
 		if err != nil {
@@ -77,7 +77,7 @@ func (b *ConfiguredBool) GetDescription() string {
 
 // tryNewConfiguredBool populates a ConfiguredInt from an environment variable, or returns nil if env var is not set
 func tryNewConfiguredBool(envVar common.EnvironmentVariable) *ConfiguredBool {
-	override := common.GetLifecycleMgr().GetEnvironmentVariable(envVar)
+	override := common.GetEnvironmentVariable(envVar)
 	if override != "" {
 		val, err := strconv.ParseBool(override)
 		if err != nil {
@@ -138,9 +138,9 @@ const concurrentFilesFloor = 32
 // NewConcurrencySettings gets concurrency settings by referring to the
 // environment variable AZCOPY_CONCURRENCY_VALUE (if set) and to properties of the
 // machine where we are running
-func NewConcurrencySettings(maxFileAndSocketHandles int, requestAutoTuneGRs bool) ConcurrencySettings {
+func NewConcurrencySettings(maxFileAndSocketHandles int) ConcurrencySettings {
 
-	initialMainPoolSize, maxMainPoolSize := getMainPoolSize(runtime.NumCPU(), requestAutoTuneGRs)
+	initialMainPoolSize, maxMainPoolSize := getMainPoolSize(runtime.NumCPU())
 
 	s := ConcurrencySettings{
 		InitialMainPoolSize:        initialMainPoolSize,
@@ -173,28 +173,24 @@ func NewConcurrencySettings(maxFileAndSocketHandles int, requestAutoTuneGRs bool
 	return s
 }
 
-func getMainPoolSize(numOfCPUs int, requestAutoTune bool) (initial int, max *ConfiguredInt) {
+func getMainPoolSize(numOfCPUs int) (initial int, max *ConfiguredInt) {
 
+	autoTune := false
 	envVar := common.EEnvironmentVariable.ConcurrencyValue()
 
-	if common.GetLifecycleMgr().GetEnvironmentVariable(envVar) == "AUTO" {
+	if common.GetEnvironmentVariable(envVar) == "AUTO" {
 		// Allow user to force auto-tuning from the env var, even when not in benchmark mode
 		// Might be handy in some S2S cases, where we know that release 10.2.1 was using too few goroutines
 		// This feature will probably remain undocumented for at least one release cycle, while we consider
 		// whether to do more in this regard (e.g. make it the default behaviour)
-		requestAutoTune = true
+		autoTune = true
 	} else if c := tryNewConfiguredInt(envVar); c != nil {
-		if requestAutoTune {
-			// Tell user that we can't actually auto tune, because configured value takes precedence
-			// This case happens when benchmarking with a fixed value from the env var
-			common.GetLifecycleMgr().Info(fmt.Sprintf("Cannot auto-tune concurrency because it is fixed by environment variable %s", envVar.Name))
-		}
 		return c.Value, c // initial and max are same, fixed to the env var
 	}
 
 	var initialValue int
 
-	if requestAutoTune {
+	if autoTune {
 		initialValue = 4 // deliberately start with a small initial value if we are auto-tuning.  If it's not small enough, then the auto tuning becomes
 		// sluggish since, every time it needs to tune downwards, it needs to let a lot of data (num connections * block size) get transmitted,
 		// and that is slow over very small links, e.g. 10 Mbps, and produces noticeable time lag when downsizing the connection count.
@@ -212,7 +208,7 @@ func getMainPoolSize(numOfCPUs int, requestAutoTune bool) (initial int, max *Con
 
 	reason := "number of CPUs"
 	maxValue := initialValue
-	if requestAutoTune {
+	if autoTune {
 		reason = "auto-tuning limit"
 		maxValue = 3000 // TODO: what should this be?  Testing indicates that this value is all we're ever likely to need, even in small-files cases
 	}

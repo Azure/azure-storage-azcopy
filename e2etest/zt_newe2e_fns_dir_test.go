@@ -202,3 +202,72 @@ func (*FNSSuite) Scenario_SyncTrailingSlashDeletion(a *ScenarioVariationManager)
 		},
 	}, false)
 }
+
+func (*FNSSuite) Scenario_SyncOverlap(a *ScenarioVariationManager) {
+	// Sync must be capable of mirroring a source resource type onto a blob destination.
+
+	// Define our scenario up front; reduce complexity in debugging.
+	srcLoc := ResolveVariation(a, []common.Location{common.ELocation.File(), common.ELocation.Blob(), common.ELocation.BlobFS(), common.ELocation.Local()})
+	dstLoc := common.ELocation.Blob()
+	a.InsertVariationSeparator("->Blob|Overwrite:")
+
+	const (
+		DestTypeStandardStub = iota
+		DestTypeOverlapStup
+	)
+
+	dstType := NamedResolveVariation(a, map[string]uint{
+		"StandardStub":      DestTypeStandardStub,
+		"TrailingSlashStub": DestTypeOverlapStup,
+	})
+
+	// Set up the resource maps
+	srcMap := ObjectResourceMappingFlat{
+		"foo": ResourceDefinitionObject{},
+	}
+
+	dstMap := map[uint]ObjectResourceMappingFlat{
+		DestTypeStandardStub: {
+			"foo": ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType: common.EEntityType.Folder(),
+				},
+			},
+		},
+		DestTypeOverlapStup: {
+			"foo/": ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType: common.EEntityType.Folder(),
+				},
+			},
+		},
+	}[dstType]
+
+	// Spin up the resources
+	src := CreateResource(a, GetRootResource(a, srcLoc), ResourceDefinitionContainer{
+		Objects: srcMap,
+	})
+
+	dst := CreateResource(a, GetRootResource(a, dstLoc), ResourceDefinitionContainer{
+		Objects: dstMap,
+	})
+
+	// Execute the test
+	RunAzCopy(a, AzCopyCommand{
+		Verb: AzCopyVerbSync,
+		Targets: []ResourceManager{
+			src.GetObject(a, "foo", common.EEntityType.File()),
+			dst.GetObject(a, "foo", common.EEntityType.File()),
+		},
+		Flags: SyncFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive:             pointerTo(true),
+				IncludeDirectoryStubs: pointerTo(true),
+			},
+		},
+	})
+
+	ValidateResource(a, dst, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat(JoinMap(dstMap, srcMap)),
+	}, false)
+}

@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -52,8 +53,8 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		TrailingDot: cca.trailingDot,
 	}
 	jobPartOrder.CpkOptions = cca.CpkOptions
-	jobPartOrder.PreserveSMBPermissions = cca.preservePermissions
-	jobPartOrder.PreserveSMBInfo = cca.preserveSMBInfo
+	jobPartOrder.PreservePermissions = cca.preservePermissions
+	jobPartOrder.PreserveInfo = cca.preserveInfo
 	// We set preservePOSIXProperties if the customer has explicitly asked for this in transfer or if it is just a Posix-property only transfer
 	jobPartOrder.PreservePOSIXProperties = cca.preservePOSIXProperties || (cca.ForceWrite == common.EOverwriteOption.PosixProperties())
 
@@ -62,17 +63,50 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	// If preserve properties is enabled, but get properties in backend is disabled, turn it on
 	// If source change validation is enabled on files to remote, turn it on (consider a separate flag entirely?)
 	getRemoteProperties := cca.ForceWrite == common.EOverwriteOption.IfSourceNewer() ||
-		(cca.FromTo.From() == common.ELocation.File() && !cca.FromTo.To().IsRemote()) || // If it's a download, we still need LMT and MD5 from files.
-		(cca.FromTo.From() == common.ELocation.File() && cca.FromTo.To().IsRemote() && (cca.s2sSourceChangeValidation || cca.IncludeAfter != nil || cca.IncludeBefore != nil)) || // If S2S from File to *, and sourceChangeValidation is enabled, we get properties so that we have LMTs. Likewise, if we are using includeAfter or includeBefore, which require LMTs.
-		(cca.FromTo.From().IsRemote() && cca.FromTo.To().IsRemote() && cca.s2sPreserveProperties && !cca.s2sGetPropertiesInBackend) // If S2S and preserve properties AND get properties in backend is on, turn this off, as properties will be obtained in the backend.
-	jobPartOrder.S2SGetPropertiesInBackend = cca.s2sPreserveProperties && !getRemoteProperties && cca.s2sGetPropertiesInBackend // Infer GetProperties if GetPropertiesInBackend is enabled.
+		(cca.FromTo.From().IsFile() && !cca.FromTo.To().IsRemote()) || // If it's a download, we still need LMT and MD5 from files.
+		(cca.FromTo.From().IsFile() &&
+			cca.FromTo.To().IsRemote() && (cca.s2sSourceChangeValidation || cca.IncludeAfter != nil || cca.IncludeBefore != nil)) || // If S2S from File to *, and sourceChangeValidation is enabled, we get properties so that we have LMTs. Likewise, if we are using includeAfter or includeBefore, which require LMTs.
+		(cca.FromTo.From().IsRemote() && cca.FromTo.To().IsRemote() && cca.s2sPreserveProperties.Value() && !cca.s2sGetPropertiesInBackend) // If S2S and preserve properties AND get properties in backend is on, turn this off, as properties will be obtained in the backend.
+	jobPartOrder.S2SGetPropertiesInBackend = cca.s2sPreserveProperties.Value() && !getRemoteProperties && cca.s2sGetPropertiesInBackend // Infer GetProperties if GetPropertiesInBackend is enabled.
 	jobPartOrder.S2SSourceChangeValidation = cca.s2sSourceChangeValidation
 	jobPartOrder.DestLengthValidation = cca.CheckLength
 	jobPartOrder.S2SInvalidMetadataHandleOption = cca.s2sInvalidMetadataHandleOption
 	jobPartOrder.S2SPreserveBlobTags = cca.S2sPreserveBlobTags
 
 	dest := cca.FromTo.To()
-	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &srcCredInfo, cca.SymlinkHandling, cca.ListOfFilesChannel, cca.Recursive, getRemoteProperties, cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, cca.S2sPreserveBlobTags, common.ESyncHashType.None(), cca.preservePermissions, azcopyLogVerbosity, cca.CpkOptions, nil, cca.StripTopDir, cca.trailingDot, &dest, cca.excludeContainer, false)
+	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), ctx, InitResourceTraverserOptions{
+		DestResourceType: &dest,
+
+		Credential: &srcCredInfo,
+
+		ListOfFiles:      cca.ListOfFilesChannel,
+		ListOfVersionIDs: cca.ListOfVersionIDsChannel,
+
+		CpkOptions: cca.CpkOptions,
+
+		PreservePermissions: cca.preservePermissions,
+		SymlinkHandling:     cca.SymlinkHandling,
+		PermanentDelete:     cca.permanentDeleteOption,
+		SyncHashType:        common.ESyncHashType.None(),
+		TrailingDotOption:   cca.trailingDot,
+
+		Recursive:               cca.Recursive,
+		GetPropertiesInFrontend: getRemoteProperties,
+		IncludeDirectoryStubs:   cca.IncludeDirectoryStubs,
+		PreserveBlobTags:        cca.S2sPreserveBlobTags,
+		StripTopDir:             cca.StripTopDir,
+
+		ExcludeContainers: cca.excludeContainer,
+		IncrementEnumeration: func(entityType common.EntityType) {
+			if common.IsNFSCopy() {
+				if entityType == common.EEntityType.Other() {
+					atomic.AddUint32(&cca.atomicSkippedSpecialFileCount, 1)
+				} else if entityType == common.EEntityType.Symlink() {
+					atomic.AddUint32(&cca.atomicSkippedSymlinkCount, 1)
+				}
+			}
+		},
+	})
 
 	if err != nil {
 		return nil, err
@@ -84,8 +118,8 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	}
 
 	// Check if the destination is a directory to correctly decide where our files land
-	isDestDir := cca.isDestDirectory(cca.Destination, &ctx)
-	if cca.ListOfVersionIDs != nil && (!(cca.FromTo == common.EFromTo.BlobLocal() || cca.FromTo == common.EFromTo.BlobTrash()) || cca.IsSourceDir || !isDestDir) {
+	isDestDir := cca.isDestDirectory(cca.Destination, ctx)
+	if cca.ListOfVersionIDsChannel != nil && (!(cca.FromTo == common.EFromTo.BlobLocal() || cca.FromTo == common.EFromTo.BlobTrash()) || cca.IsSourceDir || !isDestDir) {
 		log.Fatalf("Either source is not a blob or destination is not a local folder")
 	}
 	srcLevel, err := DetermineLocationLevel(cca.Source.Value, cca.FromTo.From(), true)
@@ -153,14 +187,15 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		if cca.FromTo.From().IsRemote() && dstContainerName != "" { // if the destination has a explicit container name
 			// Attempt to create the container. If we fail, fail silently.
 			err = cca.createDstContainer(dstContainerName, cca.Destination, ctx, existingContainers, common.ELogLevel.None())
+			// For file share,if the share does not exist, azcopy will fail, prompting the customer to create
+			// the share manually with the required quota and settings.
+			if fileerror.HasCode(err, fileerror.ShareNotFound) {
+				return nil, fmt.Errorf("the destination file share %s does not exist; please create it manually with the required quota and settings before running the copy —refer to https://learn.microsoft.com/en-us/azure/storage/files/storage-how-to-create-file-share?tabs=azure-portal for SMB or https://learn.microsoft.com/en-us/azure/storage/files/storage-files-quick-create-use-linux for NFS.", dstContainerName)
+			}
 
 			// check against seenFailedContainers so we don't spam the job log with initialization failed errors
 			if _, ok := seenFailedContainers[dstContainerName]; err != nil && jobsAdmin.JobsAdmin != nil && !ok {
-				logDstContainerCreateFailureOnce.Do(func() {
-					glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
-				})
-				jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("Failed to create destination container %s. The transfer will continue if the container exists", dstContainerName), common.LogWarning)
-				jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("Error %s", err), common.LogDebug)
+				common.LogToJobLogWithPrefix(fmt.Sprintf("Failed attempt to create destination container (this is not blocking): %v", err), common.LogDebug)
 				seenFailedContainers[dstContainerName] = true
 			}
 		} else if cca.FromTo.From().IsRemote() { // if the destination has implicit container names
@@ -168,7 +203,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				containers, err := acctTraverser.listContainers()
 
 				if err != nil {
-					return nil, fmt.Errorf("failed to list containers: %s", err)
+					return nil, fmt.Errorf("failed to list containers: %w", err)
 				}
 
 				// Resolve all container names up front.
@@ -188,16 +223,21 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					}
 
 					err = cca.createDstContainer(bucketName, cca.Destination, ctx, existingContainers, common.ELogLevel.None())
+					// For file share,if the share does not exist, azcopy will fail, prompting the customer to create
+					// the share manually with the required quota and settings.
+					if fileerror.HasCode(err, fileerror.ShareNotFound) {
+						return nil, fmt.Errorf("%s Destination file share: %s", DstShareDoesNotExists, dstContainerName)
+					}
 
 					// if JobsAdmin is nil, we're probably in testing mode.
 					// As a result, container creation failures are expected as we don't give the SAS tokens adequate permissions.
 					// check against seenFailedContainers so we don't spam the job log with initialization failed errors
 					if _, ok := seenFailedContainers[bucketName]; err != nil && jobsAdmin.JobsAdmin != nil && !ok {
 						logDstContainerCreateFailureOnce.Do(func() {
-							glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
+							glcm.Warn("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
 						})
-						jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail).", bucketName), common.LogWarning)
-						jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("Error %s", err), common.LogDebug)
+						common.LogToJobLogWithPrefix(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail).", bucketName), common.LogWarning)
+						common.LogToJobLogWithPrefix(fmt.Sprintf("Error %v", err), common.LogDebug)
 						seenFailedContainers[bucketName] = true
 					}
 				}
@@ -212,13 +252,18 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 				if err == nil {
 					err = cca.createDstContainer(resName, cca.Destination, ctx, existingContainers, common.ELogLevel.None())
+					// For file share,if the share does not exist, azcopy will fail, prompting the customer to create
+					// the share manually with the required quota and settings.
+					if fileerror.HasCode(err, fileerror.ShareNotFound) {
+						return nil, fmt.Errorf("the destination file share %s does not exist; please create it manually with the required quota and settings before running the copy —refer to https://learn.microsoft.com/en-us/azure/storage/files/storage-how-to-create-file-share?tabs=azure-portal for SMB or https://learn.microsoft.com/en-us/azure/storage/files/storage-files-quick-create-use-linux for NFS.", dstContainerName)
+					}
 
 					if _, ok := seenFailedContainers[dstContainerName]; err != nil && jobsAdmin.JobsAdmin != nil && !ok {
 						logDstContainerCreateFailureOnce.Do(func() {
-							glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
+							glcm.Warn("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
 						})
-						jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail).", resName), common.LogWarning)
-						jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("Error %s", err), common.LogDebug)
+						common.LogToJobLogWithPrefix(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail).", resName), common.LogWarning)
+						common.LogToJobLogWithPrefix(fmt.Sprintf("Error %v", err), common.LogDebug)
 						seenFailedContainers[dstContainerName] = true
 					}
 				}
@@ -230,13 +275,11 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// decide our folder transfer strategy
 	var message string
-	jobPartOrder.Fpo, message = NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), cca.preservePOSIXProperties, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.IncludeDirectoryStubs)
+	jobPartOrder.Fpo, message = NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, cca.preserveInfo, cca.preservePermissions.IsTruthy(), cca.preservePOSIXProperties, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.IncludeDirectoryStubs)
 	if !cca.dryrunMode {
 		glcm.Info(message)
 	}
-	if jobsAdmin.JobsAdmin != nil {
-		jobsAdmin.JobsAdmin.LogToJobLog(message, common.LogInfo)
-	}
+	common.LogToJobLogWithPrefix(message, common.LogInfo)
 
 	processor := func(object StoredObject) error {
 		// Start by resolving the name and creating the container
@@ -272,9 +315,9 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		srcRelPath := cca.MakeEscapedRelativePath(true, isDestDir, cca.asSubdir, object)
 		dstRelPath := cca.MakeEscapedRelativePath(false, isDestDir, cca.asSubdir, object)
 
-		transfer, shouldSendToSte := object.ToNewCopyTransfer(cca.autoDecompress && cca.FromTo.IsDownload(), srcRelPath, dstRelPath, cca.s2sPreserveAccessTier, jobPartOrder.Fpo, cca.SymlinkHandling)
+		transfer, shouldSendToSte := object.ToNewCopyTransfer(cca.autoDecompress && cca.FromTo.IsDownload(), srcRelPath, dstRelPath, cca.s2sPreserveAccessTier.Value(), jobPartOrder.Fpo, cca.SymlinkHandling, cca.hardlinks)
 		if !cca.S2sPreserveBlobTags {
-			transfer.BlobTags = cca.blobTags
+			transfer.BlobTags = cca.blobTagsMap
 		}
 
 		if cca.dryrunMode && shouldSendToSte {
@@ -290,6 +333,20 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 						FromTo:      cca.FromTo,
 						Source:      src,
 						Destination: dst,
+						SourceSize:  &transfer.SourceSize,
+						HttpHeaders: blob.HTTPHeaders{
+							BlobCacheControl:       &transfer.CacheControl,
+							BlobContentDisposition: &transfer.ContentDisposition,
+							BlobContentEncoding:    &transfer.ContentEncoding,
+							BlobContentLanguage:    &transfer.ContentLanguage,
+							BlobContentMD5:         transfer.ContentMD5,
+							BlobContentType:        &transfer.ContentType,
+						},
+						Metadata:     transfer.Metadata,
+						BlobTier:     &transfer.BlobTier,
+						BlobVersion:  &transfer.BlobVersionID,
+						BlobTags:     transfer.BlobTags,
+						BlobSnapshot: &transfer.BlobSnapshotID,
 					}
 
 					buf, _ := json.Marshal(tx)
@@ -314,9 +371,9 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	return NewCopyEnumerator(traverser, filters, processor, finalizer), nil
 }
 
-// This is condensed down into an individual function as we don't end up re-using the destination traverser at all.
+// This is condensed down into an individual function as we don't end up reusing the destination traverser at all.
 // This is just for the directory check.
-func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *context.Context) bool {
+func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx context.Context) bool {
 	var err error
 	dstCredInfo := common.CredentialInfo{}
 
@@ -324,11 +381,23 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 		return false
 	}
 
-	if dstCredInfo, _, err = GetCredentialInfoForLocation(*ctx, cca.FromTo.To(), cca.Destination, false, cca.CpkOptions); err != nil {
+	if dstCredInfo, _, err = GetCredentialInfoForLocation(ctx, cca.FromTo.To(), cca.Destination, false, cca.CpkOptions); err != nil {
 		return false
 	}
 
-	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, &dstCredInfo, common.ESymlinkHandlingType.Skip(), nil, false, false, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), cca.preservePermissions, common.LogNone, cca.CpkOptions, nil, cca.StripTopDir, cca.trailingDot, nil, cca.excludeContainer, false)
+	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, InitResourceTraverserOptions{
+		Credential: &dstCredInfo,
+
+		ListOfVersionIDs: cca.ListOfVersionIDsChannel,
+
+		PreservePermissions: cca.preservePermissions,
+
+		StripTopDir:       cca.StripTopDir,
+		TrailingDotOption: cca.trailingDot,
+
+		ExcludeContainers: cca.excludeContainer,
+		HardlinkHandling:  cca.hardlinks,
+	})
 
 	if err != nil {
 		return false
@@ -396,10 +465,8 @@ func (cca *CookedCopyCmdArgs) InitModularFilters() []ObjectFilter {
 	}
 
 	// finally, log any search prefix computed from these
-	if jobsAdmin.JobsAdmin != nil {
-		if prefixFilter := FilterSet(filters).GetEnumerationPreFilter(cca.Recursive); prefixFilter != "" {
-			jobsAdmin.JobsAdmin.LogToJobLog("Search prefix, which may be used to optimize scanning, is: "+prefixFilter, common.LogInfo) // "May be used" because we don't know here which enumerators will use it
-		}
+	if prefixFilter := FilterSet(filters).GetEnumerationPreFilter(cca.Recursive); prefixFilter != "" {
+		common.LogToJobLogWithPrefix("Search prefix, which may be used to optimize scanning, is: "+prefixFilter, common.LogInfo) // "May be used" because we don't know here which enumerators will use it
 	}
 
 	switch cca.permanentDeleteOption {
@@ -428,7 +495,17 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 		return err
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil)
+	var reauthTok *common.ScopedAuthenticator
+	if at, ok := dstCredInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
+		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
+		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+	}
+
+	options := createClientOptions(
+		common.LogLevelOverrideLogger{ // override our log level here
+			ILoggerResetable:  common.AzcopyCurrentJobLogger,
+			MinimumLevelToLog: common.Iff(LogLevel == common.ELogLevel.Debug(), common.ELogLevel.Debug(), common.ELogLevel.None()),
+		}, nil, reauthTok)
 
 	sc, err := common.GetServiceClientForLocation(
 		cca.FromTo.To(),
@@ -454,7 +531,6 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 		bcc := bsc.NewContainerClient(containerName)
 
 		_, err = bcc.GetProperties(ctx, nil)
-
 		if err == nil {
 			return err // Container already exists, return gracefully
 		}
@@ -464,21 +540,23 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 			return nil
 		}
 		return err
-	case common.ELocation.File():
+	case common.ELocation.File(), common.ELocation.FileNFS():
 		fsc, _ := sc.FileServiceClient()
 		sc := fsc.NewShareClient(containerName)
 
 		_, err = sc.GetProperties(ctx, nil)
 		if err == nil {
-			return err
+			return err // If err is nil share already exists, return gracefully
 		}
 
-		// Create a destination share with the default service quota
-		// TODO: Create a flag for the quota
-		_, err = sc.Create(ctx, nil)
-		if fileerror.HasCode(err, fileerror.ShareAlreadyExists) {
-			return nil
-		}
+		// For file shares using NFS and SMB, we will not create the share if it does not exist.
+		//
+		// Rationale: This decision was made after evaluating the implications of the upcoming V2 APIs.
+		// In V2, customers are billed based on the provisioned quota rather than actual usage.
+		// Automatically creating a share with a default quota could result in unintended charges,
+		// even if the share is never used.
+		//
+		// Therefore, to avoid unexpected billing, we will not auto-create the share here.
 		return err
 	case common.ELocation.BlobFS():
 		dsc, _ := sc.DatalakeServiceClient()
@@ -535,7 +613,8 @@ func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool
 	pathParts := strings.Split(path, common.AZCOPY_PATH_SEPARATOR_STRING)
 
 	// If downloading on Windows or uploading to files, encode unsafe characters.
-	if (loc == common.ELocation.Local() && !source && runtime.GOOS == "windows") || (!source && loc == common.ELocation.File()) {
+	if (loc == common.ELocation.Local() && !source && runtime.GOOS == "windows") ||
+		(!source && (loc == common.ELocation.File() || loc == common.ELocation.FileNFS())) {
 		// invalidChars := `<>\/:"|?*` + string(0x00)
 
 		for k, c := range encodedInvalidCharacters {
@@ -545,7 +624,8 @@ func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool
 		}
 
 		// If uploading from Windows or downloading from files, decode unsafe chars if user enables decoding
-	} else if ((!source && fromTo.From() == common.ELocation.Local() && runtime.GOOS == "windows") || (!source && fromTo.From() == common.ELocation.File())) && !disableAutoDecoding {
+	} else if ((!source && fromTo.From() == common.ELocation.Local() && runtime.GOOS == "windows") ||
+		(!source && (fromTo.From() == common.ELocation.File() || fromTo.From() == common.ELocation.FileNFS()))) && !disableAutoDecoding {
 
 		for encoded, c := range reverseEncodedChars {
 			for k, p := range pathParts {

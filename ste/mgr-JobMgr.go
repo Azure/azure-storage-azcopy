@@ -53,16 +53,17 @@ type IJobMgr interface {
 	JobPartMgr(partNum PartNumber) (IJobPartMgr, bool)
 	// Throughput() XferThroughput
 	// If existingPlanMMF is nil, a new MMF is opened.
-	AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, existingPlanMMF *JobPartPlanMMF, sourceSAS string,
-		destinationSAS string, scheduleTransfers bool, completionChan chan struct{}) IJobPartMgr
-	AddJobPart2(args *AddJobPartArgs) IJobPartMgr
+	AddJobPart(args *AddJobPartArgs) IJobPartMgr
 
 	SetIncludeExclude(map[string]int, map[string]int)
 	IncludeExclude() (map[string]int, map[string]int)
 	ResumeTransfers(appCtx context.Context)
+	ResetFailedTransfersCount()
 	AllTransfersScheduled() bool
 	ConfirmAllTransfersScheduled()
 	ResetAllTransfersScheduled()
+	GetTotalNumFilesProcessed() int64
+	AddTotalNumFilesProcessed(numFiles int64)
 	Reset(context.Context, string) IJobMgr
 	PipelineLogInfo() LogOptions
 	ReportJobPartDone(jobPartProgressInfo)
@@ -109,7 +110,7 @@ type IJobMgr interface {
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx context.Context, cpuMon common.CPUMonitor, level common.LogLevel,
-	commandString string, logFileFolder string, tuner ConcurrencyTuner,
+	commandString string, tuner ConcurrencyTuner,
 	pacer PacerAdmin, slicePool common.ByteSlicePooler, cacheLimiter common.CacheLimiter, fileCountLimiter common.CacheLimiter,
 	jobLogger common.ILoggerResetable, daemonMode bool) IJobMgr {
 	const channelSize = 100000
@@ -144,14 +145,14 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	jstm.statusMgrDone = make(chan struct{})
 	// Different logger for each job.
 	if jobLogger == nil {
-		jobLogger = common.NewJobLogger(jobID, common.ELogLevel.Debug(), logFileFolder, "" /* logFileNameSuffix */)
+		jobLogger = common.NewJobLogger(jobID, common.ELogLevel.Debug(), common.LogPathFolder, "" /* logFileNameSuffix */)
 		jobLogger.OpenLog()
 	}
 
 	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), include: map[string]int{}, exclude: map[string]int{},
 		httpClient:           NewAzcopyHTTPClient(concurrency.MaxIdleConnections),
 		logger:               jobLogger,
-		chunkStatusLogger:    common.NewChunkStatusLogger(jobID, cpuMon, logFileFolder, enableChunkLogOutput),
+		chunkStatusLogger:    common.NewChunkStatusLogger(jobID, cpuMon, common.LogPathFolder, enableChunkLogOutput),
 		concurrency:          concurrency,
 		overwritePrompter:    newOverwritePrompter(),
 		pipelineNetworkStats: newPipelineNetworkStats(tuner), // let the stats coordinate with the concurrency tuner
@@ -288,14 +289,14 @@ type jobMgr struct {
 	atomicAllTransfersScheduled     int32
 	atomicFinalPartOrderedIndicator int32
 	atomicTransferDirection         common.TransferDirection
-
-	concurrency          ConcurrencySettings
-	logger               common.ILoggerResetable
-	chunkStatusLogger    common.ChunkStatusLoggerCloser
-	jobID                common.JobID // The Job's unique ID
-	ctx                  context.Context
-	cancel               context.CancelFunc
-	pipelineNetworkStats *PipelineNetworkStats
+	atomicTotalFilesProcessed       int64 // Number of files processed across multiple job parts
+	concurrency                     ConcurrencySettings
+	logger                          common.ILoggerResetable
+	chunkStatusLogger               common.ChunkStatusLoggerCloser
+	jobID                           common.JobID // The Job's unique ID
+	ctx                             context.Context
+	cancel                          context.CancelFunc
+	pipelineNetworkStats            *PipelineNetworkStats
 
 	// Share the same HTTP Client across all job parts, so that the we maximize reuse of
 	// its internal connection pool
@@ -435,7 +436,7 @@ type AddJobPartArgs struct {
 }
 
 // initializeJobPartPlanInfo func initializes the JobPartPlanInfo handler for given JobPartOrder
-func (jm *jobMgr) AddJobPart2(args *AddJobPartArgs) IJobPartMgr {
+func (jm *jobMgr) AddJobPart(args *AddJobPartArgs) IJobPartMgr {
 	jpm := &jobPartMgr{
 		jobMgr:            jm,
 		filename:          args.PlanFile,
@@ -465,7 +466,7 @@ func (jm *jobMgr) AddJobPart2(args *AddJobPartArgs) IJobPartMgr {
 		var logger common.ILogger = jm
 		jm.initState = &jobMgrInitState{
 			securityInfoPersistenceManager: newSecurityInfoPersistenceManager(jm.ctx),
-			folderCreationTracker:          NewFolderCreationTracker(jpm.Plan().Fpo, jpm.Plan()),
+			folderCreationTracker:          NewFolderCreationTracker(jpm.Plan().Fpo, NewTransferFetcher(jm)),
 			folderDeletionManager:          common.NewFolderDeletionManager(jm.ctx, jpm.Plan().Fpo, logger),
 			exclusiveDestinationMapHolder:  &atomic.Value{},
 		}
@@ -475,53 +476,6 @@ func (jm *jobMgr) AddJobPart2(args *AddJobPartArgs) IJobPartMgr {
 	jpm.exclusiveDestinationMap = jm.getExclusiveDestinationMap(args.PartNum, jpm.Plan().FromTo)
 
 	if args.ScheduleTransfers {
-		// If the schedule transfer is set to true
-		// Instead of the scheduling the Transfer for given JobPart
-		// JobPart is put into the partChannel
-		// from where it is picked up and scheduled
-		// jpm.ScheduleTransfers(jm.ctx, make(map[string]int), make(map[string]int))
-		jm.QueueJobParts(jpm)
-	}
-	return jpm
-}
-
-// initializeJobPartPlanInfo func initializes the JobPartPlanInfo handler for given JobPartOrder
-func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, existingPlanMMF *JobPartPlanMMF, sourceSAS string,
-	destinationSAS string, scheduleTransfers bool, completionChan chan struct{}) IJobPartMgr {
-	jpm := &jobPartMgr{jobMgr: jm, filename: planFile, sourceSAS: sourceSAS,
-		destinationSAS: destinationSAS, pacer: jm.pacer,
-		slicePool:         jm.slicePool,
-		cacheLimiter:      jm.cacheLimiter,
-		fileCountLimiter:  jm.fileCountLimiter,
-		closeOnCompletion: completionChan,
-	}
-	// If an existing plan MMF was supplied, re use it. Otherwise, init a new one.
-	if existingPlanMMF == nil {
-		jpm.planMMF = jpm.filename.Map()
-	} else {
-		jpm.planMMF = existingPlanMMF
-	}
-
-	jm.jobPartMgrs.Set(partNum, jpm)
-	jm.setFinalPartOrdered(partNum, jpm.planMMF.Plan().IsFinalPart)
-	jm.setDirection(jpm.Plan().FromTo)
-
-	jm.initMu.Lock()
-	defer jm.initMu.Unlock()
-	if jm.initState == nil {
-		var logger common.ILogger = jm
-		jm.initState = &jobMgrInitState{
-			securityInfoPersistenceManager: newSecurityInfoPersistenceManager(jm.ctx),
-			folderCreationTracker:          NewFolderCreationTracker(jpm.Plan().Fpo, jpm.Plan()),
-			folderDeletionManager:          common.NewFolderDeletionManager(jm.ctx, jpm.Plan().Fpo, logger),
-			exclusiveDestinationMapHolder:  &atomic.Value{},
-		}
-		jm.initState.exclusiveDestinationMapHolder.Store(common.NewExclusiveStringMap(jpm.Plan().FromTo, runtime.GOOS))
-	}
-	jpm.jobMgrInitState = jm.initState // so jpm can use it as much as desired without locking (since the only mutation is the init in jobManager. As far as jobPartManager is concerned, the init state is read-only
-	jpm.exclusiveDestinationMap = jm.getExclusiveDestinationMap(partNum, jpm.Plan().FromTo)
-
-	if scheduleTransfers {
 		// If the schedule transfer is set to true
 		// Instead of the scheduling the Transfer for given JobPart
 		// JobPart is put into the partChannel
@@ -559,7 +513,7 @@ func (jm *jobMgr) AddJobOrder(order common.CopyJobPartOrderRequest) IJobPartMgr 
 		var logger common.ILogger = jm
 		jm.initState = &jobMgrInitState{
 			securityInfoPersistenceManager: newSecurityInfoPersistenceManager(jm.ctx),
-			folderCreationTracker:          NewFolderCreationTracker(jpm.Plan().Fpo, jpm.Plan()),
+			folderCreationTracker:          NewFolderCreationTracker(jpm.Plan().Fpo, NewTransferFetcher(jm)),
 			folderDeletionManager:          common.NewFolderDeletionManager(jm.ctx, jpm.Plan().Fpo, logger),
 			exclusiveDestinationMapHolder:  &atomic.Value{},
 		}
@@ -580,7 +534,7 @@ func (jm *jobMgr) setFinalPartOrdered(partNum PartNumber, isFinalPart bool) {
 		if partNum == 0 {
 			// We can't complain because, when resuming a job, there are actually TWO calls made the ResurrectJob.
 			// The effect is that all the parts are ordered... then all the parts are ordered _again_ (with new JobPartManagers replacing those from the first time)
-			// (The first resurrect is from GetJobFromTo and the second is from ResumeJobOrder)
+			// (The first resurrect is from GetJobDetails and the second is from ResumeJobOrder)
 			// So we don't object if the _first_ part clears the flag. The assumption we make, by allowing this special case here, is that
 			// the first part will be scheduled before any higher-numbered part.  As long as that assumption is true, this is safe.
 			// TODO: do we really need to to Resurrect the job twice?
@@ -641,11 +595,38 @@ func (jm *jobMgr) ResumeTransfers(appCtx context.Context) {
 	jm.Reset(appCtx, "")
 	// Since while creating the JobMgr, atomicAllTransfersScheduled is set to true
 	// reset it to false while resuming it
-	// jm.ResetAllTransfersScheduled()
+	jm.ResetAllTransfersScheduled()
 	jm.jobPartMgrs.Iterate(false, func(p common.PartNumber, jpm IJobPartMgr) {
 		jm.QueueJobParts(jpm)
 		// jpm.ScheduleTransfers(jm.ctx, includeTransfer, excludeTransfer)
 	})
+}
+
+// When a previously job is resumed, ResetFailedTransfersCount
+// resets the number of failed transfers
+// persists the correct count of TotalBytesExpected
+func (jm *jobMgr) ResetFailedTransfersCount() {
+	// Ensure total bytes expected is correct
+	totalBytesExpected := uint64(0)
+
+	jm.jobPartMgrs.Iterate(false, func(partNum common.PartNumber, jpm IJobPartMgr) {
+		jpm.ResetFailedTransfersCount()
+
+		// After resuming a failed job, the percentComplete reporting needs to carry correct value for bytes expected.
+		jpp := jpm.Plan()
+		for t := uint32(0); t < jpp.NumTransfers; t++ {
+			jppt := jpp.Transfer(t)
+			totalBytesExpected += uint64(jppt.SourceSize)
+		}
+	})
+
+	// Reset job summary in status manager
+	summaryResp := jm.ListJobSummary()
+	summaryResp.TransfersFailed = 0
+	summaryResp.FailedTransfers = []common.TransferDetail{}
+	summaryResp.TotalBytesExpected = totalBytesExpected
+
+	jm.ResurrectSummary(summaryResp)
 }
 
 // AllTransfersScheduled returns whether Job has completely resumed or not
@@ -661,6 +642,14 @@ func (jm *jobMgr) ConfirmAllTransfersScheduled() {
 // ResetAllTransfersScheduled sets the ResetAllTransfersScheduled to false
 func (jm *jobMgr) ResetAllTransfersScheduled() {
 	atomic.StoreInt32(&jm.atomicAllTransfersScheduled, 0)
+}
+
+func (jm *jobMgr) GetTotalNumFilesProcessed() int64 {
+	return atomic.LoadInt64(&jm.atomicTotalFilesProcessed)
+}
+
+func (jm *jobMgr) AddTotalNumFilesProcessed(numFiles int64) {
+	atomic.AddInt64(&jm.atomicTotalFilesProcessed, numFiles)
 }
 
 // ReportJobPartDone is called to report that a job part completed or failed
@@ -715,7 +704,9 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 				(isCancelling && !haveFinalPart) // If we're cancelling, it's OK to try to exit early; the user already accepted this job cannot be resumed. Outgoing requests will fail anyway, so nothing can properly clean up.
 			if shouldComplete {
 				// Inform StatusManager that all parts are done.
-				close(jm.jstm.xferDone)
+				if jm.jstm.xferDone != nil {
+					close(jm.jstm.xferDone)
+				}
 
 				// Wait  for all XferDone messages to be processed by statusManager. Front end
 				// depends on JobStatus to determine if we've to quit job. Setting it here without

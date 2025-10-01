@@ -3,15 +3,16 @@ package e2etest
 import (
 	"bytes"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"github.com/google/uuid"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"github.com/google/uuid"
 )
 
 // enforce interface compliance at compile time
@@ -130,9 +131,10 @@ func (l *LocalContainerResourceManager) ListObjects(a Asserter, prefixOrDirector
 
 func (l *LocalContainerResourceManager) GetObject(a Asserter, path string, eType common.EntityType) ObjectResourceManager {
 	return &LocalObjectResourceManager{
-		container:  l,
-		entityType: eType,
-		objectPath: path,
+		container:                l,
+		entityType:               eType,
+		objectPath:               path,
+		hardlinkOriginalFilePath: path,
 	}
 }
 
@@ -146,8 +148,9 @@ type LocalObjectResourceManager struct {
 	entityType common.EntityType
 
 	// objectPath and rawPath are mutually exclusive fields.
-	objectPath string
-	rawPath    string
+	objectPath               string
+	rawPath                  string
+	hardlinkOriginalFilePath string
 }
 
 func (l *LocalObjectResourceManager) ContainerName() string {
@@ -166,11 +169,19 @@ func (l *LocalObjectResourceManager) ObjectName() string {
 	}
 }
 
-type localSMBPropertiesManager interface {
+func (l *LocalObjectResourceManager) HardlinkedFileName() string {
+	return l.hardlinkOriginalFilePath
+}
+
+type localPropertiesManager interface {
 	GetSDDL(Asserter) string
 	PutSDDL(sddlstr string, a Asserter)
 	GetSMBProperties(Asserter) ste.TypedSMBPropertyHolder
-	PutSMBProperties(Asserter, ste.TypedSMBPropertyHolder)
+	PutSMBProperties(Asserter, FileProperties)
+	PutNFSPermissions(Asserter, FileNFSPermissions)
+	PutNFSProperties(Asserter, FileNFSProperties)
+	GetNFSPermissions(Asserter) ste.TypedNFSPermissionsHolder
+	GetNFSProperties(Asserter) ste.TypedNFSPropertyHolder
 }
 
 func (l *LocalObjectResourceManager) getChildObject(relPath string, entityType common.EntityType) *LocalObjectResourceManager {
@@ -207,6 +218,15 @@ func (l *LocalObjectResourceManager) getWorkingPath() string {
 
 	// l.objectPath can be "", indicating it is the folder at the root of the container.
 	return filepath.Join(l.container.RootPath, l.objectPath)
+}
+
+func (l *LocalObjectResourceManager) getHardlinkedFilePath() string {
+
+	if l.container == nil {
+		panic("objectPath (relative) must have a container as a parent.")
+	}
+	fmt.Println("RootPath:", l.container.RootPath, "hardlinked.txt")
+	return filepath.Join(l.container.RootPath, "hardlinked.txt")
 }
 
 func (l *LocalObjectResourceManager) getRelPath(fullPath string) (string, error) {
@@ -271,18 +291,37 @@ func (l *LocalObjectResourceManager) CreateParents(a Asserter) {
 
 func (l *LocalObjectResourceManager) Create(a Asserter, body ObjectContentContainer, properties ObjectProperties) {
 	a.HelperMarker().Helper()
-	a.AssertNow("Object must be file to have content", Equal{})
+	if properties.EntityType != l.entityType {
+		l.entityType = properties.EntityType
+	}
 
 	l.CreateParents(a)
-	f, err := os.OpenFile(l.getWorkingPath(), os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0774)
-	a.NoError("Open file", err)
-	defer func(f *os.File) {
-		err := f.Close()
-		a.NoError("Close file", err)
-	}(f)
 
-	_, err = io.Copy(f, body.Reader())
-	a.NoError("Write file", err)
+	if l.entityType == common.EEntityType.File() {
+		f, err := os.OpenFile(l.getWorkingPath(), os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0774)
+		a.NoError("Open file", err)
+		defer func(f *os.File) {
+			err := f.Close()
+			a.NoError("Close file", err)
+		}(f)
+
+		if body != nil {
+			_, err = io.Copy(f, body.Reader())
+			a.NoError("Write file", err)
+		}
+	} else if l.entityType == common.EEntityType.Folder() {
+		err := os.Mkdir(l.getWorkingPath(), 0775)
+		a.NoError("Mkdir", err)
+	} else if l.entityType == common.EEntityType.Symlink() {
+		err := os.Symlink(filepath.Join(l.container.RootPath, properties.SymlinkedFileName), l.getWorkingPath())
+		a.NoError("Create Symlink", err)
+	} else if l.entityType == common.EEntityType.Hardlink() {
+		err := os.Link(filepath.Join(l.container.RootPath, properties.HardLinkedFileName), l.getWorkingPath())
+		a.NoError("Create hardlink", err)
+	} else if l.entityType == common.EEntityType.Other() {
+		err := osScenarioHelper{}.CreateSpecialFile(l.getWorkingPath())
+		a.NoError("Create special file", err)
+	}
 
 	l.SetObjectProperties(a, properties)
 
@@ -319,31 +358,47 @@ func (l *LocalObjectResourceManager) ListChildren(a Asserter, recursive bool) ma
 
 func (l *LocalObjectResourceManager) GetProperties(a Asserter) ObjectProperties {
 	a.HelperMarker().Helper()
-	stats, err := os.Stat(l.getWorkingPath())
-	a.NoError("failed to get stat", err)
-	var lmt *time.Time
-	if stats != nil {
-		lmt = PtrOf(stats.ModTime())
+	stats, err := os.Lstat(l.getWorkingPath())
+	if err != nil { // Prevent nil dereferences
+		a.NoError("failed to get stat", err)
+		return ObjectProperties{}
 	}
+	lmt := common.Iff(stats == nil, nil, PtrOf(stats.ModTime()))
 	out := ObjectProperties{
 		LastModifiedTime: lmt,
 	}
 
 	// OS-triggered code, implemented in newe2e_resource_managers_local_windows.go
-	if smb, ok := any(l).(localSMBPropertiesManager); ok {
-		props := smb.GetSMBProperties(a)
+	if localProp, ok := any(l).(localPropertiesManager); ok {
+		props := localProp.GetSMBProperties(a)
 
-		attr, err := props.FileAttributes()
-		a.NoError("get attributes", err)
+		perms := localProp.GetSDDL(a)
 
-		perms := smb.GetSDDL(a)
+		nfsProps := localProp.GetNFSProperties(a)
+		nfsPerms := localProp.GetNFSPermissions(a)
 
-		out.FileProperties.FileAttributes = PtrOf(attr.String())
-		out.FileProperties.FileCreationTime = PtrOf(props.FileCreationTime())
-		out.FileProperties.FileLastWriteTime = PtrOf(props.FileLastWriteTime())
+		if props != nil {
+			attr, err := props.FileAttributes()
+			a.NoError("get attributes", err)
+			out.FileProperties.FileAttributes = PtrOf(attr.String())
+			out.FileProperties.FileCreationTime = PtrOf(props.FileCreationTime())
+			out.FileProperties.FileLastWriteTime = PtrOf(props.FileLastWriteTime())
+		}
 		out.FileProperties.FilePermissions = common.Iff(perms == "", nil, &perms)
+		if nfsProps != nil {
+			out.FileNFSProperties = &FileNFSProperties{
+				FileCreationTime:  PtrOf(nfsProps.FileCreationTime()),
+				FileLastWriteTime: PtrOf(nfsProps.FileLastWriteTime()),
+			}
+		}
+		if nfsPerms != nil {
+			out.FileNFSPermissions = &FileNFSPermissions{
+				Owner:    nfsPerms.GetOwner(),
+				Group:    nfsPerms.GetGroup(),
+				FileMode: nfsPerms.GetFileMode(),
+			}
+		}
 	}
-
 	return out
 }
 
@@ -360,10 +415,17 @@ func (l *LocalObjectResourceManager) SetObjectProperties(a Asserter, props Objec
 	a.HelperMarker().Helper()
 
 	// todo: set SMB properties
-	if smb, ok := any(l).(localSMBPropertiesManager); ok {
+	if localProps, ok := any(l).(localPropertiesManager); ok {
 		if props.FileProperties.FilePermissions != nil {
-			smb.PutSDDL(*props.FileProperties.FilePermissions, a)
+			localProps.PutSDDL(*props.FileProperties.FilePermissions, a)
 		}
+		if props.FileNFSProperties != nil {
+			localProps.PutNFSProperties(a, *props.FileNFSProperties)
+		}
+		if props.FileNFSPermissions != nil {
+			localProps.PutNFSPermissions(a, *props.FileNFSPermissions)
+		}
+
 	}
 }
 
@@ -383,6 +445,13 @@ func (l *LocalObjectResourceManager) Download(a Asserter) io.ReadSeeker {
 	a.NoError("read file", err)
 
 	return bytes.NewReader(buf.Bytes())
+}
+
+func (l *LocalObjectResourceManager) ReadLink(a Asserter) string {
+	out, err := os.Readlink(l.getWorkingPath())
+	a.NoError("ReadLink", err)
+
+	return out
 }
 
 func (l *LocalObjectResourceManager) Exists() bool {

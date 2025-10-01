@@ -3,9 +3,12 @@ package e2etest
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"math"
+	"os"
 	"strconv"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func init() {
@@ -224,6 +227,7 @@ func (s *FileTestSuite) Scenario_DownloadPreserveLMTFile(svm *ScenarioVariationM
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body: body,
 		ObjectProperties: ObjectProperties{
+
 			LastModifiedTime: srcObjLMT,
 		},
 	}, false)
@@ -509,4 +513,194 @@ func (s *FileTestSuite) Scenario_SeveralFileDownloadWildcard(svm *ScenarioVariat
 	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, srcContainer.ContainerName()+"/"+fileName, common.EEntityType.File()), ResourceDefinitionObject{
 		Body: body,
 	}, true)
+}
+
+// Test copy with AllowToUnsafeDestination option
+func (s *FileTestSuite) Scenario_CopyTrailingDotUnsafeDestination(svm *ScenarioVariationManager) {
+	body := NewRandomObjectContentContainer(0)
+
+	name := "test."
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File(), common.ELocation.Local()})),
+		ResourceDefinitionObject{ObjectName: pointerTo(name), Body: body})
+	dstObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.File()})),
+		ResourceDefinitionObject{ObjectName: pointerTo("test"), Body: body})
+
+	if srcObj.Location() == dstObj.Location() {
+		svm.InvalidateScenario()
+		return
+	}
+
+	RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbCopy,
+			Targets: []ResourceManager{TryApplySpecificAuthType(srcObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{}),
+				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{})},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					BlockSizeMB: pointerTo(4.0),
+					TrailingDot: to.Ptr(common.ETrailingDotOption.AllowToUnsafeDestination()),
+				},
+				ListOfFiles: []string{"lof"},
+			},
+		})
+
+	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
+		Body: body,
+	}, false)
+}
+
+// Test:
+// - correct number of non-empty files are uploaded when file share quota is hit
+func (s *FileTestSuite) Scenario_UploadFilesWithQuota(svm *ScenarioVariationManager) {
+	if svm.Dryrun() {
+		return
+	}
+
+	quotaGB := int32(1) // 1 GB quota
+	shareResource := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{
+		Properties: ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				Quota: &quotaGB},
+		},
+	})
+	svm.Assert("Quota is 1GB", Equal{Deep: true},
+		DerefOrZero(shareResource.GetProperties(svm).FileContainerProperties.Quota), int32(1))
+
+	// Fill the share up
+	if !svm.Dryrun() {
+		shareClient := shareResource.(*FileShareResourceManager).InternalClient
+		fileClient := shareClient.NewRootDirectoryClient().NewFileClient("big.txt")
+		_, err := fileClient.Create(ctx, 990*common.MegaByte, nil)
+		svm.NoError("Create large file", err)
+	}
+
+	srcOverflowObject := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Local()),
+		ResourceDefinitionObject{
+			Body: NewRandomObjectContentContainer(common.GigaByte),
+		})
+	env := &AzCopyEnvironment{
+		InheritEnvironment: map[string]bool{"*": true},
+	}
+	stdOut, _ := RunAzCopy(svm, AzCopyCommand{
+		Verb: AzCopyVerbCopy,
+		Targets: []ResourceManager{
+			TryApplySpecificAuthType(srcOverflowObject, EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{}),
+			TryApplySpecificAuthType(shareResource, EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{}),
+		},
+		Flags: CopyFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive: pointerTo(true),
+			},
+		},
+		ShouldFail:  true,
+		Environment: env,
+	})
+
+	// Error catchers for full file share
+	ValidateContainsError(svm, stdOut, []string{"Increase the file share quota and call Resume command."})
+
+	fileMap := shareResource.ListObjects(svm, "", true)
+	svm.Assert("One file should be uploaded within the quota", Equal{}, len(fileMap), 1)
+
+	// Increase quota to fit all files
+	newQuota := int32(2)
+	if resourceManager, ok := shareResource.(*FileShareResourceManager); ok {
+		resourceManager.SetProperties(svm, &ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				Quota: &newQuota}})
+	}
+
+	// Validate correctly SetProperties updates quota. Prevent nil deref in dry runs
+	svm.Assert("Quota should be updated", Equal{},
+		DerefOrZero(shareResource.GetProperties(svm).FileContainerProperties.Quota),
+		newQuota)
+
+	var jobId string
+	if parsedOut, ok := stdOut.(*AzCopyParsedCopySyncRemoveStdout); ok {
+		if parsedOut.InitMsg.JobID != "" {
+			jobId = parsedOut.InitMsg.JobID
+		}
+	} else {
+		// Will enter during dry runs
+		fmt.Println("failed to cast to AzCopyParsedCopySyncRemoveStdout")
+	}
+	resStdOut, _ := RunAzCopy(svm, AzCopyCommand{
+		Verb:           AzCopyVerbJobsResume,
+		PositionalArgs: []string{jobId},
+		Environment:    env, // Resume job with same log and job plan folders
+	})
+
+	if env.LogLocation != nil {
+		if _, err := os.Stat(*env.LogLocation); os.IsNotExist(err) {
+			svm.Log("Log directory does not exist: %s", *env.LogLocation)
+		}
+		svm.Log("Log location: %v", DerefOrZero(env.LogLocation))
+	}
+
+	if !svm.Dryrun() {
+		svm.Log("%v", resStdOut)
+	}
+
+	// Validate all files can be uploaded after resume and quota increase
+	fileMapResume := shareResource.ListObjects(svm, "", true)
+	svm.Assert("All files should be successfully uploaded after quota increase",
+		Equal{}, len(fileMapResume), 2)
+}
+
+// Test that POSIX errors are not returned in a RemoteLocal transfer
+func (s *FileTestSuite) Scenario_SingleFileDownloadNoError(svm *ScenarioVariationManager) {
+	body := NewRandomObjectContentContainer(0)
+	srcObj := CreateResource[ObjectResourceManager](svm,
+		GetRootResource(svm, common.ELocation.File()),
+		ResourceDefinitionObject{Body: body})
+	destObj := CreateResource[ObjectResourceManager](svm,
+		GetRootResource(svm, common.ELocation.Local()),
+		ResourceDefinitionObject{Body: body})
+
+	stdOut, _ := RunAzCopy(svm, AzCopyCommand{
+		Verb:       AzCopyVerbCopy,
+		Targets:    []ResourceManager{srcObj, destObj},
+		ShouldFail: false,
+	})
+
+	ValidateDoesNotContainError(svm, stdOut, []string{"interrupted system call"})
+}
+
+// Scenario_TrailingDotDisabledCorrectError tests that copying an already removed file with trailing dot
+// disabled has the correct error message (404: resource does not exist)
+func (s *FileTestSuite) Scenario_TrailingDotDisabledCorrectError(svm *ScenarioVariationManager) {
+	body := NewRandomObjectContentContainer(0)
+	srcObj := CreateResource[ObjectResourceManager](svm,
+		GetRootResource(svm, common.ELocation.File()),
+		ResourceDefinitionObject{Body: body})
+
+	RunAzCopy(svm,
+		AzCopyCommand{
+			Verb:       AzCopyVerbRemove,
+			Targets:    []ResourceManager{srcObj},
+			ShouldFail: false,
+		})
+
+	ValidateResource[ObjectResourceManager](svm, srcObj, ResourceDefinitionObject{
+		ObjectShouldExist: to.Ptr(false),
+	}, false)
+
+	destContainer := CreateResource[ContainerResourceManager](
+		svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
+
+	stdOut, _ := RunAzCopy(svm,
+		AzCopyCommand{
+			Verb:       AzCopyVerbCopy,
+			Targets:    []ResourceManager{srcObj, destContainer},
+			ShouldFail: true,
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					TrailingDot: pointerTo(common.ETrailingDotOption.Disable()),
+				},
+			},
+		})
+
+	ValidateDoesNotContainError(svm, stdOut, []string{"--trailing-dot=Disable is dangerous here"})
+	ValidateContainsError(svm, stdOut, []string{"resource does not exist"})
 }

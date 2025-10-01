@@ -43,7 +43,7 @@ func init() {
 		lookupMethod:    GetProxyFunc(),
 	}
 
-	ev := GetLifecycleMgr().GetEnvironmentVariable(EEnvironmentVariable.CacheProxyLookup())
+	ev := GetEnvironmentVariable(EEnvironmentVariable.CacheProxyLookup())
 	if strings.ToLower(ev) == "true" {
 		GlobalProxyLookup = c.getProxy
 	} else {

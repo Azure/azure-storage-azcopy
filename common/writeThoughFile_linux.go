@@ -114,31 +114,35 @@ func StatxTimestampToFiletime(ts unix.StatxTimestamp) Filetime {
 	return NsecToFiletime(ts.Sec*int64(time.Second) + int64(ts.Nsec))
 }
 
-func GetFileInformation(path string) (ByHandleFileInformation, error) {
+func GetFileInformation(path string, isNFSCopy bool, symlinkHandling SymlinkHandlingType) (ByHandleFileInformation, error) {
 	var stx unix.Statx_t
 
 	// We want all attributes including Btime (aka creation time).
 	// For consistency with Windows implementation we pass flags==0 which causes it to follow symlinks.
-	err := unix.Statx(unix.AT_FDCWD, path, 0 /* flags */, unix.STATX_ALL, &stx)
+	flags := 0
+	if symlinkHandling == ESymlinkHandlingType.Preserve() {
+		flags = unix.AT_SYMLINK_NOFOLLOW
+	}
+
+	err := unix.Statx(unix.AT_FDCWD, path, flags /* flags */, unix.STATX_ALL, &stx)
 	if err == unix.ENOSYS || err == unix.EPERM {
 		panic(fmt.Errorf("statx syscall is not available: %v", err))
 	} else if err != nil {
 		return ByHandleFileInformation{}, fmt.Errorf("statx(%s) failed: %v", path, err)
 	}
-
-	// For getting FileAttributes we need to query the CIFS_XATTR_ATTRIB extended attribute.
-	// Note: This doesn't necessarily cause a new QUERY_PATH_INFO call to the SMB server, instead
-	//       the value cached in the inode (likely as a result of the above Statx call) will be
-	//       returned.
-	xattrbuf, err := xattr.Get(path, CIFS_XATTR_ATTRIB)
-	if err != nil {
-		return ByHandleFileInformation{},
-			fmt.Errorf("xattr.Get(%s, %s) failed: %v", path, CIFS_XATTR_ATTRIB, err)
-	}
-
 	var info ByHandleFileInformation
-
-	info.FileAttributes = binary.LittleEndian.Uint32(xattrbuf)
+	if !isNFSCopy {
+		// For getting FileAttributes we need to query the CIFS_XATTR_ATTRIB extended attribute.
+		// Note: This doesn't necessarily cause a new QUERY_PATH_INFO call to the SMB server, instead
+		//       the value cached in the inode (likely as a result of the above Statx call) will be
+		//       returned.
+		xattrbuf, err := xattr.Get(path, CIFS_XATTR_ATTRIB)
+		if err != nil {
+			return ByHandleFileInformation{},
+				fmt.Errorf("xattr.Get(%s, %s) failed: %v", path, CIFS_XATTR_ATTRIB, err)
+		}
+		info.FileAttributes = binary.LittleEndian.Uint32(xattrbuf)
+	}
 
 	info.CreationTime = StatxTimestampToFiletime(stx.Btime)
 	info.LastAccessTime = StatxTimestampToFiletime(stx.Atime)
@@ -180,7 +184,13 @@ func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int
 		return f, err
 	}
 
-	err = syscall.Fallocate(int(f.Fd()), 0, 0, fileSize)
+	for i := 0; i < EINTR_RETRY_COUNT; i++ { // Perform up to 5 EINTR error retries
+		err = syscall.Fallocate(int(f.Fd()), 0, 0, fileSize)
+		if err == nil || err != syscall.EINTR {
+			break
+		}
+	}
+
 	if err != nil {
 		// To solve the case that Fallocate cannot work well with cifs/smb3.
 		if err == syscall.ENOTSUP {

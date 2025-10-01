@@ -2,15 +2,10 @@
 FROM mcr.microsoft.com/mirror/docker/library/ubuntu:22.04 
 
 # Copy azcopy binary to executable path
-COPY ./azcopy /usr/local/bin/
+COPY ./azcopy_bin /usr/local/bin/azcopy
 
 # Make azcopy executable
 RUN chmod +x /usr/local/bin/azcopy
-
-# Install dependencies
-RUN \
-	apt update && \
-	apt-get install -y ca-certificates
 
 WORKDIR /azcopy
 CMD [ "azcopy" ]

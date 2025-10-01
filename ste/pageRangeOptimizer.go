@@ -31,7 +31,7 @@ import (
 // isolate the logic to fetch page ranges for a page blob, and check whether a given range has data
 // for two purposes:
 //  1. capture the necessary info to do so, so that fetchPages can be invoked anywhere
-//  2. open to extending the logic, which could be re-used for both download and s2s scenarios
+//  2. open to extending the logic, which could be reused for both download and s2s scenarios
 type pageRangeOptimizer struct {
 	srcPageBlobClient *pageblob.Client
 	ctx               context.Context
@@ -51,7 +51,7 @@ func withNoRetryForBlob(ctx context.Context) context.Context {
 func (p *pageRangeOptimizer) fetchPages() {
 	// don't fetch page blob list if optimizations are not desired,
 	// the lack of page list indicates that there's data everywhere
-	if !strings.EqualFold(common.GetLifecycleMgr().GetEnvironmentVariable(
+	if !strings.EqualFold(common.GetEnvironmentVariable(
 		common.EEnvironmentVariable.OptimizeSparsePageBlobTransfers()), "true") {
 		return
 	}

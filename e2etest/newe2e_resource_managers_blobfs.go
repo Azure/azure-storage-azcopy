@@ -2,6 +2,11 @@ package e2etest
 
 import (
 	"bytes"
+	"io"
+	"path"
+	"runtime"
+	"strings"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/directory"
@@ -11,10 +16,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"io"
-	"path"
-	"runtime"
-	"strings"
 )
 
 // check that everything aligns with interfaces
@@ -44,8 +45,8 @@ func dfsStripSAS(uri string) string {
 }
 
 type BlobFSServiceResourceManager struct {
-	internalAccount *AzureAccountResourceManager
-	internalClient  *service.Client
+	InternalAccount *AzureAccountResourceManager
+	InternalClient  *service.Client
 }
 
 func (b *BlobFSServiceResourceManager) DefaultAuthType() ExplicitCredentialTypes {
@@ -70,7 +71,7 @@ func (b *BlobFSServiceResourceManager) Parent() ResourceManager {
 }
 
 func (b *BlobFSServiceResourceManager) Account() AccountResourceManager {
-	return b.internalAccount
+	return b.InternalAccount
 }
 
 func (b *BlobFSServiceResourceManager) Location() common.Location {
@@ -82,20 +83,20 @@ func (b *BlobFSServiceResourceManager) Level() cmd.LocationLevel {
 }
 
 func (b *BlobFSServiceResourceManager) URI(opts ...GetURIOptions) string {
-	base := dfsStripSAS(b.internalClient.DFSURL())
-	base = b.internalAccount.ApplySAS(base, b.Location(), opts...)
+	base := dfsStripSAS(b.InternalClient.DFSURL())
+	base = b.InternalAccount.ApplySAS(base, b.Location(), opts...)
 	base = addWildCard(base, opts...)
 
 	return base
 }
 
 func (b *BlobFSServiceResourceManager) ResourceClient() any {
-	return b.internalClient
+	return b.InternalClient
 }
 
 func (b *BlobFSServiceResourceManager) ListContainers(a Asserter) []string {
 	a.HelperMarker().Helper()
-	pager := b.internalClient.NewListFileSystemsPager(nil)
+	pager := b.InternalClient.NewListFileSystemsPager(nil)
 
 	out := make([]string, 0)
 
@@ -116,10 +117,10 @@ func (b *BlobFSServiceResourceManager) ListContainers(a Asserter) []string {
 
 func (b *BlobFSServiceResourceManager) GetContainer(containerName string) ContainerResourceManager {
 	return &BlobFSFileSystemResourceManager{
-		internalAccount: b.internalAccount,
+		internalAccount: b.InternalAccount,
 		Service:         b,
 		containerName:   containerName,
-		internalClient:  b.internalClient.NewFileSystemClient(containerName),
+		internalClient:  b.InternalClient.NewFileSystemClient(containerName),
 	}
 }
 
@@ -273,8 +274,9 @@ type BlobFSPathResourceProvider struct {
 	Service         *BlobFSServiceResourceManager
 	Container       *BlobFSFileSystemResourceManager
 
-	entityType common.EntityType
-	objectPath string
+	entityType         common.EntityType
+	objectPath         string
+	hardlinkedFilePath string
 }
 
 func (b *BlobFSPathResourceProvider) DefaultAuthType() ExplicitCredentialTypes {
@@ -339,6 +341,10 @@ func (b *BlobFSPathResourceProvider) ObjectName() string {
 	return b.objectPath
 }
 
+func (b *BlobFSPathResourceProvider) HardlinkedFileName() string {
+	return b.hardlinkedFilePath
+}
+
 func (b *BlobFSPathResourceProvider) CreateParents(a Asserter) {
 	if !b.Container.Exists() {
 		b.Container.Create(a, ContainerProperties{})
@@ -369,6 +375,12 @@ func (b *BlobFSPathResourceProvider) Create(a Asserter, body ObjectContentContai
 		})
 		a.NoError("Create directory", err)
 	case common.EEntityType.File(), common.EEntityType.Symlink(): // Symlinks just need an extra metadata tag
+		if b.entityType == common.EEntityType.Symlink() && body == nil {
+			body = NewStringObjectContentContainer(properties.SymlinkedFileName)
+		} else if body == nil {
+			body = NewZeroObjectContentContainer(0)
+		}
+
 		_, err := b.getFileClient().Create(ctx, &file.CreateOptions{
 			HTTPHeaders: properties.HTTPHeaders.ToBlobFS(),
 		})
@@ -554,13 +566,14 @@ func (b *BlobFSPathResourceProvider) getFileClient() *file.Client {
 func (b *BlobFSPathResourceProvider) getBlobClient(a Asserter) *blob.Client {
 	a.HelperMarker().Helper()
 	blobService := b.internalAccount.GetService(a, common.ELocation.Blob()).(*BlobServiceResourceManager) // Blob and BlobFS are synonymous, so simply getting the same path is fine.
-	container := blobService.internalClient.NewContainerClient(b.Container.containerName)
+	container := blobService.InternalClient.NewContainerClient(b.Container.containerName)
 	return container.NewBlobClient(b.objectPath) // Generic blob client for now, we can specialize if we want in the future.
 }
 
 func (b *BlobFSPathResourceProvider) Download(a Asserter) io.ReadSeeker {
 	a.HelperMarker().Helper()
-	a.Assert("Object type must be file", Equal{}, common.EEntityType.File(), b.entityType)
+	isFileOrSymlink := b.entityType == common.EEntityType.File() || b.entityType == common.EEntityType.Symlink()
+	a.Assert("Object type must be file or symlink", Equal{}, isFileOrSymlink, true)
 
 	resp, err := b.getFileClient().DownloadStream(ctx, nil)
 	a.NoError("Download stream", err)
@@ -572,6 +585,13 @@ func (b *BlobFSPathResourceProvider) Download(a Asserter) io.ReadSeeker {
 	}
 
 	return bytes.NewReader(buf.Bytes())
+}
+
+func (b *BlobFSPathResourceProvider) ReadLink(a Asserter) string {
+	reader := b.Download(a)
+	buf, err := io.ReadAll(reader)
+	a.NoError("Read symlink body", err)
+	return string(buf)
 }
 
 func (b *BlobFSPathResourceProvider) Exists() bool {

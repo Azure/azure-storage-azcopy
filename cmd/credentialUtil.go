@@ -35,8 +35,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/minio/minio-go/pkg/s3utils"
@@ -51,17 +49,13 @@ var sharedKeyDeprecationMessage = "*** WARNING *** shared key authentication for
 func warnIfSharedKeyAuthForDatalake() {
 	sharedKeyDeprecation.Do(func() {
 		glcm.Warn(sharedKeyDeprecationMessage)
-		jobsAdmin.JobsAdmin.LogToJobLog(sharedKeyDeprecationMessage, common.LogWarning)
+		common.LogToJobLogWithPrefix(sharedKeyDeprecationMessage, common.LogWarning)
 	})
 }
 
 // only one UserOAuthTokenManager should exists in azcopy-v2 process in cmd(FE) module for current user.
 // (given appAppPathFolder is mapped to current user)
 var currentUserOAuthTokenManager *common.UserOAuthTokenManager
-
-const oauthLoginSessionCacheKeyName = "AzCopyOAuthTokenCache"
-const oauthLoginSessionCacheServiceName = "AzCopyV10"
-const oauthLoginSessionCacheAccountName = "AzCopyOAuthTokenCache"
 
 // GetUserOAuthTokenManagerInstance gets or creates OAuthTokenManager for current user.
 // Note: Currently, only support to have TokenManager for one user mapping to one tenantID.
@@ -70,11 +64,13 @@ func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
 		if common.AzcopyJobPlanFolder == "" {
 			panic("invalid state, AzcopyJobPlanFolder should not be an empty string")
 		}
+		cacheName := common.GetEnvironmentVariable(common.EEnvironmentVariable.LoginCacheName())
+
 		currentUserOAuthTokenManager = common.NewUserOAuthTokenManagerInstance(common.CredCacheOptions{
 			DPAPIFilePath: common.AzcopyJobPlanFolder,
-			KeyName:       oauthLoginSessionCacheKeyName,
+			KeyName:       common.Iff(cacheName != "", cacheName, oauthLoginSessionCacheKeyName),
 			ServiceName:   oauthLoginSessionCacheServiceName,
-			AccountName:   oauthLoginSessionCacheAccountName,
+			AccountName:   common.Iff(cacheName != "", cacheName, oauthLoginSessionCacheAccountName),
 		})
 	})
 
@@ -88,44 +84,51 @@ func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
 func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 	var err error
 	autoOAuth.Do(func() {
-		var lca loginCmdArgs
-		autoLoginType := strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AutoLoginType()))
+		var options LoginOptions
+		autoLoginType := strings.ToLower(common.GetEnvironmentVariable(common.EEnvironmentVariable.AutoLoginType()))
 		if autoLoginType == "" {
 			glcm.Info("Autologin not specified.")
 			return
 		}
 
-		if tenantID := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.TenantID()); tenantID != "" {
-			lca.tenantID = tenantID
+		if tenantID := common.GetEnvironmentVariable(common.EEnvironmentVariable.TenantID()); tenantID != "" {
+			options.TenantID = tenantID
 		}
 
-		if endpoint := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AADEndpoint()); endpoint != "" {
-			lca.aadEndpoint = endpoint
+		if endpoint := common.GetEnvironmentVariable(common.EEnvironmentVariable.AADEndpoint()); endpoint != "" {
+			options.AADEndpoint = endpoint
 		}
 
-		// Fill up lca
-		lca.loginType = autoLoginType
-		switch autoLoginType {
-		case common.EAutoLoginType.SPN().String():
-			lca.applicationID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ApplicationID())
-			lca.certPath = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePath())
-			lca.certPass = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
-			lca.clientSecret = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
-		case common.EAutoLoginType.MSI().String():
-			lca.identityClientID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityClientID())
-			lca.identityObjectID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityObjectID())
-			lca.identityResourceID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityResourceString())
-		case common.EAutoLoginType.Device().String():
-		case common.EAutoLoginType.AzCLI().String():
-		case common.EAutoLoginType.PsCred().String():
-		case common.EAutoLoginType.Workload().String():
+		var loginType common.AutoLoginType
+		err = loginType.Parse(autoLoginType)
+		if err != nil {
+			glcm.Error("Invalid Auto-login type specified: " + autoLoginType)
+			return
+		}
+
+		// Fill up options
+		options.LoginType = loginType
+		switch options.LoginType {
+		case common.EAutoLoginType.SPN():
+			options.ApplicationID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ApplicationID())
+			options.CertificatePath = common.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePath())
+			options.certificatePassword = common.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
+			options.clientSecret = common.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
+		case common.EAutoLoginType.MSI():
+			options.IdentityClientID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityClientID())
+			options.identityObjectID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityObjectID())
+			options.IdentityResourceID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityResourceString())
+		case common.EAutoLoginType.Device():
+		case common.EAutoLoginType.AzCLI():
+		case common.EAutoLoginType.PsCred():
+		case common.EAutoLoginType.Workload():
 		default:
 			glcm.Error("Invalid Auto-login type specified: " + autoLoginType)
 			return
 		}
 
-		lca.persistToken = false
-		if err = lca.process(); err != nil {
+		options.persistToken = false
+		if err = options.process(); err != nil {
 			glcm.Error(fmt.Sprintf("Failed to perform Auto-login: %v.", err.Error()))
 		}
 	})
@@ -174,7 +177,7 @@ var stashedEnvCredType = ""
 func GetCredTypeFromEnvVar() common.CredentialType {
 	rawVal := stashedEnvCredType
 	if stashedEnvCredType == "" {
-		rawVal = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.CredentialType())
+		rawVal = common.GetEnvironmentVariable(common.EEnvironmentVariable.CredentialType())
 		if rawVal == "" {
 			return common.ECredentialType.Unknown()
 		}
@@ -183,7 +186,7 @@ func GetCredTypeFromEnvVar() common.CredentialType {
 
 	// Remove the env var after successfully fetching once,
 	// in case of env var is further spreading into child processes unexpectedly.
-	glcm.ClearEnvironmentVariable(common.EEnvironmentVariable.CredentialType())
+	common.ClearEnvironmentVariable(common.EEnvironmentVariable.CredentialType())
 
 	// Try to get the value set.
 	var credType common.CredentialType
@@ -198,9 +201,6 @@ type rawFromToInfo struct {
 	fromTo              common.FromTo
 	source, destination common.ResourceString
 }
-
-const trustedSuffixesNameAAD = "trusted-microsoft-suffixes"
-const trustedSuffixesAAD = "*.core.windows.net;*.core.chinacloudapi.cn;*.core.cloudapi.de;*.core.usgovcloudapi.net;*.storage.azure.net"
 
 // checkAuthSafeForTarget checks our "implicit" auth types (those that pick up creds from the environment
 // or a prior login) to make sure they are only being used in places where we know those auth types are safe.
@@ -241,7 +241,7 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 		common.ECredentialType.MDOAuthToken(),
 		common.ECredentialType.SharedKey():
 		// Files doesn't currently support OAuth, but it's a valid azure endpoint anyway, so it'll pass the check.
-		if resourceType != common.ELocation.Blob() && resourceType != common.ELocation.BlobFS() && resourceType != common.ELocation.File() {
+		if resourceType != common.ELocation.Blob() && resourceType != common.ELocation.BlobFS() && resourceType != common.ELocation.File() && resourceType != common.ELocation.FileNFS() {
 			// There may be a reason for files->blob to specify this.
 			if resourceType == common.ELocation.Local() {
 				return nil
@@ -293,7 +293,7 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 		}
 	case common.ECredentialType.GoogleAppCredentials():
 		if resourceType != common.ELocation.GCP() {
-			return fmt.Errorf("Google Application Credentials to %s is not valid", resourceType.String())
+			return fmt.Errorf("google application credentials to %s is not valid", resourceType.String())
 		}
 
 		u, err := url.Parse(resource)
@@ -336,9 +336,7 @@ func logAuthType(ct common.CredentialType, location common.Location, isSource bo
 	}
 	if _, exists := authMessagesAlreadyLogged.Load(message); !exists {
 		authMessagesAlreadyLogged.Store(message, struct{}{}) // dedup because source is auth'd by both enumerator and STE
-		if jobsAdmin.JobsAdmin != nil {
-			jobsAdmin.JobsAdmin.LogToJobLog(message, common.LogInfo)
-		}
+		common.LogToJobLogWithPrefix(message, common.LogInfo)
 		glcm.Info(message)
 	}
 }
@@ -364,8 +362,8 @@ func isPublic(ctx context.Context, blobResourceURL string, cpkOptions common.Cpk
 		RetryDelay:    ste.UploadRetryDelay,
 		MaxRetryDelay: ste.UploadMaxRetryDelay,
 	}, policy.TelemetryOptions{
-		ApplicationID: glcm.AddUserAgentPrefix(common.UserAgent),
-	}, nil, ste.LogOptions{}, nil)
+		ApplicationID: common.AddUserAgentPrefix(common.UserAgent),
+	}, nil, ste.LogOptions{}, nil, nil)
 
 	blobClient, _ := blob.NewClientWithNoCredential(bURLParts.String(), &blob.ClientOptions{ClientOptions: clientOptions})
 	bURLParts.BlobName = ""
@@ -397,8 +395,8 @@ func mdAccountNeedsOAuth(ctx context.Context, blobResourceURL string, cpkOptions
 		RetryDelay:    ste.UploadRetryDelay,
 		MaxRetryDelay: ste.UploadMaxRetryDelay,
 	}, policy.TelemetryOptions{
-		ApplicationID: glcm.AddUserAgentPrefix(common.UserAgent),
-	}, nil, ste.LogOptions{}, nil)
+		ApplicationID: common.AddUserAgentPrefix(common.UserAgent),
+	}, nil, ste.LogOptions{}, nil, nil)
 
 	blobClient, _ := blob.NewClientWithNoCredential(blobResourceURL, &blob.ClientOptions{ClientOptions: clientOptions})
 	_, err := blobClient.GetProperties(ctx, &blob.GetPropertiesOptions{CPKInfo: cpkOptions.GetCPKInfo()})
@@ -441,7 +439,7 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 			return
 		}
 
-		if err = checkAuthSafeForTarget(credType, resource.Value, cmdLineExtraSuffixesAAD, location); err != nil {
+		if err = checkAuthSafeForTarget(credType, resource.Value, TrustedSuffixes, location); err != nil {
 			credType = common.ECredentialType.Unknown()
 			public = false
 		}
@@ -454,8 +452,8 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 	}
 
 	if location == common.ELocation.S3() {
-		accessKeyID := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AWSAccessKeyID())
-		secretAccessKey := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AWSSecretAccessKey())
+		accessKeyID := common.GetEnvironmentVariable(common.EEnvironmentVariable.AWSAccessKeyID())
+		secretAccessKey := common.GetEnvironmentVariable(common.EEnvironmentVariable.AWSSecretAccessKey())
 		if accessKeyID == "" || secretAccessKey == "" {
 			credType = common.ECredentialType.S3PublicBucket()
 			public = true
@@ -467,7 +465,7 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 	}
 
 	if location == common.ELocation.GCP() {
-		googleAppCredentials := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.GoogleAppCredentials())
+		googleAppCredentials := common.GetEnvironmentVariable(common.EEnvironmentVariable.GoogleAppCredentials())
 		if googleAppCredentials == "" {
 			return common.ECredentialType.Unknown(), false, errors.New("GOOGLE_APPLICATION_CREDENTIALS environment variable must be set before using GCP transfer feature")
 		}
@@ -508,8 +506,8 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 	// BlobFS currently supports Shared key. Remove this piece of code, once
 	// we deprecate that.
 	if location == common.ELocation.BlobFS() {
-		name := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AccountName())
-		key := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AccountKey())
+		name := common.GetEnvironmentVariable(common.EEnvironmentVariable.AccountName())
+		key := common.GetEnvironmentVariable(common.EEnvironmentVariable.AccountKey())
 		if name != "" && key != "" { // TODO: To remove, use for internal testing, SharedKey should not be supported from commandline
 			credType = common.ECredentialType.SharedKey()
 			warnIfSharedKeyAuthForDatalake()
@@ -577,7 +575,7 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 // createClientOptions creates generic client options which are required to create any
 // client to interact with storage service. Default options are modified to suit azcopy.
 // srcCred is required in cases where source is authenticated via oAuth for S2S transfers
-func createClientOptions(logger common.ILoggerResetable, srcCred *common.ScopedCredential) azcore.ClientOptions {
+func createClientOptions(logger common.ILoggerResetable, srcCred *common.ScopedToken, reauthCred *common.ScopedAuthenticator) azcore.ClientOptions {
 	logOptions := ste.LogOptions{}
 
 	if logger != nil {
@@ -591,8 +589,8 @@ func createClientOptions(logger common.ILoggerResetable, srcCred *common.ScopedC
 		RetryDelay:    ste.UploadRetryDelay,
 		MaxRetryDelay: ste.UploadMaxRetryDelay,
 	}, policy.TelemetryOptions{
-		ApplicationID: glcm.AddUserAgentPrefix(common.UserAgent),
-	}, ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost), logOptions, srcCred)
+		ApplicationID: common.AddUserAgentPrefix(common.UserAgent),
+	}, ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost), logOptions, srcCred, reauthCred)
 }
 
 const frontEndMaxIdleConnectionsPerHost = http.DefaultMaxIdleConnsPerHost

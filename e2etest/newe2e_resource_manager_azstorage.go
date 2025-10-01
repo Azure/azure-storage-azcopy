@@ -2,6 +2,8 @@ package e2etest
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
@@ -11,7 +13,6 @@ import (
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"strings"
 )
 
 func addWildCard(uri string, optList ...GetURIOptions) string {
@@ -29,11 +30,11 @@ func addWildCard(uri string, optList ...GetURIOptions) string {
 }
 
 type AzureAccountResourceManager struct {
-	accountName string
-	accountKey  string
-	accountType AccountType
+	InternalAccountName string
+	InternalAccountKey  string
+	InternalAccountType AccountType
 
-	armClient *ARMStorageAccount
+	ArmClient *ARMStorageAccount
 }
 
 func (acct *AzureAccountResourceManager) ApplySAS(URI string, loc common.Location, optList ...GetURIOptions) string {
@@ -57,7 +58,7 @@ func (acct *AzureAccountResourceManager) ApplySAS(URI string, loc common.Locatio
 
 	switch loc {
 	case common.ELocation.Blob():
-		skc, err := blobservice.NewSharedKeyCredential(acct.accountName, acct.accountKey)
+		skc, err := blobservice.NewSharedKeyCredential(acct.InternalAccountName, acct.InternalAccountKey)
 		common.PanicIfErr(err)
 
 		p, err := sasVals.AsBlob().SignWithSharedKey(skc)
@@ -69,8 +70,8 @@ func (acct *AzureAccountResourceManager) ApplySAS(URI string, loc common.Locatio
 		parts.SAS = p
 		parts.Scheme = common.Iff(opts.RemoteOpts.Scheme != "", opts.RemoteOpts.Scheme, "https")
 		return parts.String()
-	case common.ELocation.File():
-		skc, err := fileservice.NewSharedKeyCredential(acct.accountName, acct.accountKey)
+	case common.ELocation.File(), common.ELocation.FileNFS():
+		skc, err := fileservice.NewSharedKeyCredential(acct.InternalAccountName, acct.InternalAccountKey)
 		common.PanicIfErr(err)
 
 		p, err := sasVals.AsFile().SignWithSharedKey(skc)
@@ -83,7 +84,7 @@ func (acct *AzureAccountResourceManager) ApplySAS(URI string, loc common.Locatio
 		parts.Scheme = common.Iff(opts.RemoteOpts.Scheme != "", opts.RemoteOpts.Scheme, "https")
 		return parts.String()
 	case common.ELocation.BlobFS():
-		skc, err := blobfscommon.NewSharedKeyCredential(acct.accountName, acct.accountKey)
+		skc, err := blobfscommon.NewSharedKeyCredential(acct.InternalAccountName, acct.InternalAccountKey)
 		common.PanicIfErr(err)
 
 		p, err := sasVals.AsDatalake().SignWithSharedKey(skc)
@@ -106,15 +107,15 @@ func (acct *AzureAccountResourceManager) ApplySAS(URI string, loc common.Locatio
 // If the account is a "modern" ARM storage account, ARMStorageAccount will be returned.
 // If the account is a "classic" storage account, ARMClassicStorageAccount (not yet implemented) will be returned.
 func (acct *AzureAccountResourceManager) ManagementClient() *ARMStorageAccount {
-	return acct.armClient
+	return acct.ArmClient
 }
 
 func (acct *AzureAccountResourceManager) AccountName() string {
-	return acct.accountName
+	return acct.InternalAccountName
 }
 
 func (acct *AzureAccountResourceManager) AccountType() AccountType {
-	return acct.accountType
+	return acct.InternalAccountType
 }
 
 func (acct *AzureAccountResourceManager) AvailableServices() []common.Location {
@@ -122,17 +123,18 @@ func (acct *AzureAccountResourceManager) AvailableServices() []common.Location {
 		common.ELocation.Blob(),
 		common.ELocation.BlobFS(),
 		common.ELocation.File(),
+		common.ELocation.FileNFS(),
 	}
 }
 
 func (acct *AzureAccountResourceManager) getServiceURL(a Asserter, service common.Location) string {
 	switch service {
 	case common.ELocation.Blob():
-		return fmt.Sprintf("https://%s.blob.core.windows.net/", acct.accountName)
-	case common.ELocation.File():
-		return fmt.Sprintf("https://%s.file.core.windows.net/", acct.accountName)
+		return fmt.Sprintf("https://%s.blob.core.windows.net/", acct.InternalAccountName)
+	case common.ELocation.File(), common.ELocation.FileNFS():
+		return fmt.Sprintf("https://%s.file.core.windows.net/", acct.InternalAccountName)
 	case common.ELocation.BlobFS():
-		return fmt.Sprintf("https://%s.dfs.core.windows.net/", acct.accountName)
+		return fmt.Sprintf("https://%s.dfs.core.windows.net/", acct.InternalAccountName)
 	default:
 		a.Error(fmt.Sprintf("Service %s is not supported by this resource manager.", service))
 		return ""
@@ -144,33 +146,34 @@ func (acct *AzureAccountResourceManager) GetService(a Asserter, location common.
 
 	switch location {
 	case common.ELocation.Blob():
-		sharedKey, err := blobservice.NewSharedKeyCredential(acct.accountName, acct.accountKey)
+		sharedKey, err := blobservice.NewSharedKeyCredential(acct.InternalAccountName, acct.InternalAccountKey)
 		a.NoError("Create shared key", err)
 		client, err := blobservice.NewClientWithSharedKeyCredential(uri, sharedKey, nil)
 		a.NoError("Create Blob client", err)
 
 		return &BlobServiceResourceManager{
-			internalAccount: acct,
-			internalClient:  client,
+			InternalAccount: acct,
+			InternalClient:  client,
 		}
-	case common.ELocation.File():
-		sharedKey, err := fileservice.NewSharedKeyCredential(acct.accountName, acct.accountKey)
+	case common.ELocation.File(), common.ELocation.FileNFS():
+		sharedKey, err := fileservice.NewSharedKeyCredential(acct.InternalAccountName, acct.InternalAccountKey)
 		a.NoError("Create shared key", err)
 		client, err := fileservice.NewClientWithSharedKeyCredential(uri, sharedKey, &fileservice.ClientOptions{AllowTrailingDot: to.Ptr(true)})
 		a.NoError("Create File client", err)
 
 		return &FileServiceResourceManager{
-			internalAccount: acct,
-			internalClient:  client,
+			InternalAccount: acct,
+			InternalClient:  client,
+			Llocation:       location,
 		}
 	case common.ELocation.BlobFS():
-		sharedKey, err := blobfscommon.NewSharedKeyCredential(acct.accountName, acct.accountKey)
+		sharedKey, err := blobfscommon.NewSharedKeyCredential(acct.InternalAccountName, acct.InternalAccountKey)
 		client, err := blobfsservice.NewClientWithSharedKeyCredential(uri, sharedKey, nil)
 		a.NoError("Create BlobFS client", err)
 
 		return &BlobFSServiceResourceManager{
-			internalAccount: acct,
-			internalClient:  client,
+			InternalAccount: acct,
+			InternalClient:  client,
 		}
 	default:
 		return nil // GetServiceURL already covered the error

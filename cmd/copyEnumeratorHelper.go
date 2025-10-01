@@ -2,9 +2,10 @@ package cmd
 
 import (
 	"fmt"
+	"math/rand"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-	"math/rand"
 )
 
 var EnumerationParallelism = 1
@@ -12,16 +13,14 @@ var EnumerationParallelStatFiles = false
 
 // addTransfer accepts a new transfer, if the threshold is reached, dispatch a job part order.
 func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer, cca *CookedCopyCmdArgs) error {
-	// Source and destination paths are and should be relative paths. 
+	// Source and destination paths are and should be relative paths.
 
 	// dispatch the transfers once the number reaches NumOfFilesPerDispatchJobPart
 	// we do this so that in the case of large transfer, the transfer engine can get started
 	// while the frontend is still gathering more transfers
 	if len(e.Transfers.List) == NumOfFilesPerDispatchJobPart {
 		shuffleTransfers(e.Transfers.List)
-		resp := common.CopyJobPartOrderResponse{}
-
-		Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(e), &resp)
+		resp := jobsAdmin.ExecuteNewCopyJobPartOrder(*e)
 
 		if !resp.JobStarted {
 			return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNum, resp.ErrorMsg)
@@ -47,6 +46,8 @@ func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer
 			e.Transfers.FolderTransferCount++
 		case common.EEntityType.Symlink():
 			e.Transfers.SymlinkTransferCount++
+		case common.EEntityType.Hardlink():
+			e.Transfers.HardlinksConvertedCount++
 		}
 	}
 
@@ -65,12 +66,15 @@ func shuffleTransfers(transfers []common.CopyTransfer) {
 func dispatchFinalPart(e *common.CopyJobPartOrderRequest, cca *CookedCopyCmdArgs) error {
 	shuffleTransfers(e.Transfers.List)
 	e.IsFinalPart = true
-	var resp common.CopyJobPartOrderResponse
-	Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(e), &resp)
+	resp := jobsAdmin.ExecuteNewCopyJobPartOrder(*e)
 
 	if !resp.JobStarted {
-		// Output the log location and such
-		glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), fmt.Sprintf("%s%s%s.log", azcopyLogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID), cca.isCleanupJob, cca.cleanupJobMessage))
+		// Output the log location if log-level is set to other then NONE
+		var logPathFolder string
+		if common.LogPathFolder != "" {
+			logPathFolder = fmt.Sprintf("%s%s%s.log", common.LogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
+		}
+		glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), logPathFolder, cca.isCleanupJob, cca.cleanupJobMessage))
 
 		if cca.dryrunMode {
 			return nil
@@ -83,9 +87,7 @@ func dispatchFinalPart(e *common.CopyJobPartOrderRequest, cca *CookedCopyCmdArgs
 		return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNum, resp.ErrorMsg)
 	}
 
-	if jobsAdmin.JobsAdmin != nil {
-		jobsAdmin.JobsAdmin.LogToJobLog(FinalPartCreatedMessage, common.LogInfo)
-	}
+	common.LogToJobLogWithPrefix(FinalPartCreatedMessage, common.LogInfo)
 
 	// set the flag on cca, to indicate the enumeration is done
 	cca.isEnumerationComplete = true

@@ -57,13 +57,20 @@ func (t *s3Traverser) IsDirectory(isSource bool) (bool, error) {
 	_, err := t.s3Client.StatObject(t.s3URLParts.BucketName, t.s3URLParts.ObjectKey, minio.StatObjectOptions{})
 
 	if err != nil {
-		return true, nil
+		return true, err
 	}
 
 	return false, nil
 }
 
 func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
+	p := processor
+	processor = func(storedObject StoredObject) error {
+		t.incrementEnumerationCounter(storedObject.entityType)
+
+		return p(storedObject)
+	}
+
 	invalidAzureBlobName := func(objectKey string) bool {
 		/* S3 object name is invalid if it ends with period or
 		   one of virtual directories in path ends with period.
@@ -185,10 +192,9 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 	return
 }
 
-func newS3Traverser(credentialType common.CredentialType, rawURL *url.URL, ctx context.Context, recursive, getProperties bool,
-	incrementEnumerationCounter enumerationCounterFunc) (t *s3Traverser, err error) {
-	t = &s3Traverser{rawURL: rawURL, ctx: ctx, recursive: recursive, getProperties: getProperties,
-		incrementEnumerationCounter: incrementEnumerationCounter}
+func newS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTraverserOptions) (t *s3Traverser, err error) {
+	t = &s3Traverser{rawURL: rawURL, ctx: ctx, recursive: opts.Recursive, getProperties: opts.GetPropertiesInFrontend,
+		incrementEnumerationCounter: opts.IncrementEnumeration}
 
 	// initialize S3 client and URL parts
 	var s3URLParts common.S3URLParts
@@ -203,7 +209,7 @@ func newS3Traverser(credentialType common.CredentialType, rawURL *url.URL, ctx c
 	showS3UrlTypeWarning(s3URLParts)
 
 	t.s3Client, err = common.CreateS3Client(t.ctx, common.CredentialInfo{
-		CredentialType: credentialType,
+		CredentialType: opts.Credential.CredentialType,
 		S3CredentialInfo: common.S3CredentialInfo{
 			Endpoint: t.s3URLParts.Endpoint,
 			Region:   t.s3URLParts.Region,

@@ -23,6 +23,7 @@ package common
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"reflect"
 	"runtime"
 	"strings"
@@ -35,6 +36,20 @@ type EnvironmentVariable struct {
 	DefaultValue string
 	Description  string
 	Hidden       bool
+}
+
+// GetEnvironmentVariable gets the environment variable or its default value
+func GetEnvironmentVariable(env EnvironmentVariable) string {
+	value := os.Getenv(env.Name)
+	if value == "" {
+		return env.DefaultValue
+	}
+	return value
+}
+
+// ClearEnvironmentVariable clears the environment variable
+func ClearEnvironmentVariable(variable EnvironmentVariable) {
+	_ = os.Setenv(variable.Name, "")
 }
 
 // This array needs to be updated when a new public environment variable is added
@@ -100,12 +115,16 @@ func (AutoLoginType) PsCred() AutoLoginType     { return AutoLoginType(4) }
 func (AutoLoginType) Workload() AutoLoginType   { return AutoLoginType(5) }
 func (AutoLoginType) TokenStore() AutoLoginType { return AutoLoginType(255) } // Storage Explorer internal integration only. Do not add this to ValidAutoLoginTypes.
 
+func (d AutoLoginType) IsInteractive() bool {
+	return d == d.Device()
+}
+
 func (d AutoLoginType) String() string {
 	return strings.ToLower(enum.StringInt(d, reflect.TypeOf(d)))
 }
 
 func (d *AutoLoginType) Parse(s string) error {
-	// allow empty to mean "Enable"
+	// allow empty to mean "Device"
 	if s == "" {
 		*d = EAutoLoginType.Device()
 		return nil
@@ -291,6 +310,13 @@ func (EnvironmentVariable) CacheProxyLookup() EnvironmentVariable {
 	}
 }
 
+func (EnvironmentVariable) LoginCacheName() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_LOGIN_CACHE_NAME",
+		Description: "Do not use in production. Overrides the file name or key name used to cache azcopy's token. Do not use in production. This feature is not documented, intended for testing, and may break. Do not use in production.",
+	}
+}
+
 func (EnvironmentVariable) LogLocation() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_LOG_LOCATION",
@@ -392,7 +418,7 @@ func (EnvironmentVariable) CredentialType() EnvironmentVariable {
 func (EnvironmentVariable) DefaultServiceApiVersion() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:         "AZCOPY_DEFAULT_SERVICE_API_VERSION",
-		DefaultValue: "2023-08-03",
+		DefaultValue: "2025-05-05",
 		Description:  "Overrides the service API version so that AzCopy could accommodate custom environments such as Azure Stack.",
 	}
 }

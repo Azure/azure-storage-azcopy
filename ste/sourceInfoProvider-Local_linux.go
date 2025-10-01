@@ -5,12 +5,18 @@ package ste
 
 import (
 	"fmt"
+	"os/user"
+	"strconv"
+	"strings"
+	"sync"
+	"syscall"
+	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
 	"golang.org/x/sys/unix"
-	"strings"
-	"time"
 )
 
 func (f localFileSourceInfoProvider) HasUNIXProperties() bool {
@@ -207,8 +213,12 @@ func (f localFileSourceInfoProvider) GetSDDL() (string, error) {
 	return fSDDL.PortableString(), nil
 }
 
+func (f localFileSourceInfoProvider) getSymlinkHandlingForEntityType() common.SymlinkHandlingType {
+	return common.Iff(f.EntityType() == common.EEntityType.Symlink(), common.ESymlinkHandlingType.Preserve(), common.ESymlinkHandlingType.Follow())
+}
+
 func (f localFileSourceInfoProvider) GetSMBProperties() (TypedSMBPropertyHolder, error) {
-	info, err := common.GetFileInformation(f.jptm.Info().Source)
+	info, err := common.GetFileInformation(f.jptm.Info().Source, false, f.getSymlinkHandlingForEntityType())
 
 	return HandleInfo{info}, err
 }
@@ -230,4 +240,78 @@ func (hi HandleInfo) FileLastWriteTime() time.Time {
 func (hi HandleInfo) FileAttributes() (*file.NTFSFileAttributes, error) {
 	// Can't shorthand it because the function name overrides.
 	return FileAttributesFromUint32(hi.ByHandleFileInformation.FileAttributes)
+}
+
+func (hi HandleInfo) FileAccessTime() time.Time {
+	// This returns nanoseconds since Unix Epoch.
+	return time.Unix(0, hi.LastAccessTime.Nanoseconds())
+}
+
+func (f localFileSourceInfoProvider) GetNFSProperties() (TypedNFSPropertyHolder, error) {
+	info, err := common.GetFileInformation(f.jptm.Info().Source, true, f.getSymlinkHandlingForEntityType())
+	return HandleInfo{info}, err
+}
+
+type HandleNFSPermissions struct {
+	common.UnixStatAdapter
+}
+
+func (f localFileSourceInfoProvider) GetNFSPermissions() (TypedNFSPermissionsHolder, error) {
+	stats, err := f.GetUNIXProperties()
+	return HandleNFSPermissions{stats}, err
+}
+
+func (h HandleNFSPermissions) GetOwner() *string {
+	return to.Ptr(strconv.Itoa(int(h.Owner())))
+}
+
+func (h HandleNFSPermissions) GetGroup() *string {
+	return to.Ptr(strconv.Itoa(int(h.Group())))
+}
+
+func (h HandleNFSPermissions) GetFileMode() *string {
+	fileMode := h.FileMode() &^ unix.S_IFMT // Remove file type bits
+	return to.Ptr(fmt.Sprintf("%#o", fileMode))
+}
+
+var (
+	umask     int
+	umaskOnce sync.Once
+)
+
+// getUmask retrieves the current process's umask without permanently modifying it.
+func getUmask() int {
+	umaskOnce.Do(func() {
+		// Set umask to 0, capture the old value
+		current := syscall.Umask(0)
+		// Restore it immediately
+		syscall.Umask(current)
+		umask = current
+	})
+	return umask
+}
+
+// GetNFSDefaultPerms retrieves the default file permissions, owner UID, and group GID
+// for the current user, with permissions adjusted based on the user's umask.
+// This is typically used to infer default NFS permissions when creating new files or directories.
+// Returns pointers to strings representing the file mode (in octal), UID, and GID.
+func (f localFileSourceInfoProvider) GetNFSDefaultPerms() (fileMode, owner, group *string, err error) {
+	defaultStats, err := f.GetUNIXProperties()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	// Get the default file mode
+	currFileMode := defaultStats.FileMode() &^ unix.S_IFMT
+	defaultMode := int(currFileMode) &^ getUmask()
+	fileMode = to.Ptr(fmt.Sprintf("%#o", defaultMode))
+
+	currentUser, err := user.Current()
+	owner = to.Ptr(currentUser.Uid)
+
+	// Lookup the primary group using the user's GID
+	group = to.Ptr(currentUser.Gid)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return
 }

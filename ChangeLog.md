@@ -1,10 +1,133 @@
 
 # Change Log
 
-## Version 10.28.0-Preview
+## Version 10.30.1
+
+### Bug Fixes 
+1. Fixed `--exclude-path` flag not available in remove operations.([PR #3165](https://github.com/Azure/azure-storage-azcopy/pull/3165)) ([GH Issue #3159](https://github.com/Azure/azure-storage-azcopy/issues/3159))
+2. Fixed regression where AzCopy was not honoring concurrency value in copy operations ([#3192](https://github.com/Azure/azure-storage-azcopy/pull/3192))
+3. Fixed the incorrect JSON output format of the warning message when there are multiple AzCopy processes running. ([PR #3188](https://github.com/Azure/azure-storage-azcopy/pull/3188)) ([GH Issue #3182](https://github.com/Azure/azure-storage-azcopy/issues/3182))
+4. Fixed `latest_version.txt` from being wrongly created in users current directory. ([PR #3179](https://github.com/Azure/azure-storage-azcopy/pull/3179))([GH Issue #3176](https://github.com/Azure/azure-storage-azcopy/issues/3176))
+5. Fixed AzCopy crashing during sync operation from a nil pointer deref in the destination authentication policy. ([PR #3186](https://github.com/Azure/azure-storage-azcopy/pull/3186)) ([GH Issue #3109](https://github.com/Azure/azure-storage-azcopy/issues/3109)) ([GH Issue #3156](https://github.com/Azure/azure-storage-azcopy/issues/3156)) ([GH Issue #3175](https://github.com/Azure/azure-storage-azcopy/issues/3175))
+
+### Dependency Updates
+1.	Golang 1.24.2 -> 1.24.6 (CVE-2025-47907) ([#3154](https://github.com/Azure/azure-storage-azcopy/issues/3154))
+
+## Version 10.31.0-preview.1
+
+### Dependency updates
+1.	Golang 1.24.4 -> 1.24.6 ([#3154](https://github.com/Azure/azure-storage-azcopy/issues/3154))
+
+## Version 10.30.0
+### Breaking changes
+1. For transfers involving Azure Files (NFS or SMB), AzCopy will not auto create file shares.
+2. AzCopy binaries and latest version information will now be distributed from Github releases instead of the static website. ([#3014](https://github.com/Azure/azure-storage-azcopy/pull/3014))
+
+### New Features
+1. Azure Files NFS Support via REST. 
+   Support for transferring data between local Linux systems and Azure Files NFS using REST. To use this feature, please explicitly specify the `--from-to` flag. 
+   - Transfer from local Linux to Azure Files NFS. (`--from-to=LocalFileNFS`)
+   - Transfer from Azure Files NFS to local Linux. (`--from-to=FileNFSLocal`)
+   - Transfer between Azure Files NFS shares. (`--from-to=FileNFSFileNFS`)
+2. Added support to retry on copy source error code and status code for service to service copies. ([#3105](https://github.com/Azure/azure-storage-azcopy/pull/3105))
+3. Added support for service to service copies from Azure Files to Blob Storage using EntraID. ([#3053](https://github.com/Azure/azure-storage-azcopy/pull/3053))
 
 ### Bug Fixes
-1. Fixed an issue where AzCopy would not persist tokens when logging in via Device Code. ([#2361](https://github.com/Azure/azure-storage-azcopy/issues/2361))
+1. Fixed a bug where when copying a file that has already been deleted with `--trailing-dot=Disable` resulted in the wrong error instead of a 404. ([#3092](https://github.com/Azure/azure-storage-azcopy/pull/3092))
+
+### Supportability
+1. Removed the warning message when failing to create a container. This message can be misleading when there is insufficient permissions to create a container and the container already exists. ([#3045](https://github.com/Azure/azure-storage-azcopy/pull/3045))
+2. Improved the error message returned when block size is larger than bandwidth limit. ([#3051](https://github.com/Azure/azure-storage-azcopy/pull/3051))
+3. Warn user if transfer is going to exceed 10M objects. ([#3111](https://github.com/Azure/azure-storage-azcopy/pull/3111))
+4. Warn user if multiple AzCopy processes are running. ([#3128](https://github.com/Azure/azure-storage-azcopy/pull/3128))
+
+## Version 10.30.0-preview.2
+
+### Dependency updates
+1.	Golang 1.24.2 -> 1.24.4 ([#3085](https://github.com/Azure/azure-storage-azcopy/issues/3085))
+
+## Version 10.30.0-preview.1 
+
+### New Feature
+1. Azure Files NFS Support via REST API
+   Support for transferring data between local Linux systems and Azure Files NFS using REST.
+
+      a. Transfer from local Linux to Azure Files NFS.
+      b. Transfer from Azure Files NFS to local Linux.
+      c. Transfer between Azure Files NFS shares.
+
+## Version 10.29.1 
+
+### Bug Fixes 
+1. Fix the TokenStore getting stuck in a read lock ([#3035](https://github.com/Azure/azure-storage-azcopy/pull/3035))
+
+### Dependency Updates 
+1. golang.org/x/net 0.36.0 ->  0.38.0 (CVE-2025-22872) ([#3023](https://github.com/Azure/azure-storage-azcopy/pull/3023))
+2. golang.org/x/crypto 0.35.0 ->  0.36.0 ([#3023](https://github.com/Azure/azure-storage-azcopy/pull/3023))
+3. golang.org/x/sync 0.11.0 ->  0.12.0 ([#3023](https://github.com/Azure/azure-storage-azcopy/pull/3023))
+4. golang.org/x/sys 0.30.0 ->  0.31.0 ([#3023](https://github.com/Azure/azure-storage-azcopy/pull/3023))
+5. golang.org/x/text 0.22.0 ->  0.23.0 ([#3023](https://github.com/Azure/azure-storage-azcopy/pull/3023))
+
+## Version 10.29.0
+
+### Breaking changes
+1. TokenStore tokens now use sha256 ([#3006](https://github.com/Azure/azure-storage-azcopy/pull/3006))
+
+### Bug Fixes
+1. Fixed a regression where certain values were no longer output on dryruns ([#2923](https://github.com/Azure/azure-storage-azcopy/pull/2923))
+2. Catch and retry on certain Windows networking errors (e.g. port in use, remote host dropped) ([#2916](https://github.com/Azure/azure-storage-azcopy/pull/2916), [2962](https://github.com/Azure/azure-storage-azcopy/pull/2962), [2967](https://github.com/Azure/azure-storage-azcopy/pull/2967))
+3. Fixed an incorrect number of transfers being displayed upon resume ([#2961](https://github.com/Azure/azure-storage-azcopy/pull/2961))
+4. Fixed the URL output by AzCopy login to correct some sign in issues ([#2973](https://github.com/Azure/azure-storage-azcopy/pull/2973))
+5. Fixed a bug with `put-blob-mb` where a lower maximum threshold would be used ([#2936](https://github.com/Azure/azure-storage-azcopy/pull/2936))
+6. Catch EINTR responses from system calls appropriately ([#2942](https://github.com/Azure/azure-storage-azcopy/pull/2942))
+
+## Version 10.28.1
+
+### Dependency updates
+1.	Golang 1.22.7 -> 1.24.0 ([#2948](https://github.com/Azure/azure-storage-azcopy/pull/2948))
+2.	golang.org/x/oauth2 v0.23.0 -> v0.27.0 (CVE-2025-22868)([#2992](https://github.com/Azure/azure-storage-azcopy/pull/2992))
+3.	golang.org/x/net v0.33.0 -> v0.36.0 (CVE-2025-22870)([#2978](https://github.com/Azure/azure-storage-azcopy/pull/2978))
+4.	github.com/golang-jwt 5.2.1 -> 5.2.2 (CVE-2025-30204)([#2990](https://github.com/Azure/azure-storage-azcopy/pull/2990))
+
+## Version 10.28.0
+
+### New Features
+1. Added support for trailing dot transfers to destinations that do not support trailing dot files. ([#2827](https://github.com/Azure/azure-storage-azcopy/pull/2827))
+2. Added support to fall back to LMT on missing source hash when `--compare-hash` is set for `sync` commands. ([#2866](https://github.com/Azure/azure-storage-azcopy/pull/2866))
+3. When receiving a `ShareSizeLimitReached` error on transferring a file, AzCopy will now fail fast and suggest the customer increase file share quota and resume the command. ([#2895](https://github.com/Azure/azure-storage-azcopy/pull/2895))
+4. Added support to validate destination container name to fail fast if it is a system container. ([#2883](https://github.com/Azure/azure-storage-azcopy/pull/2883))
+5. Added support to allow customers to reauthorize credentials on token expiration. ([#2887](https://github.com/Azure/azure-storage-azcopy/pull/2887))
+6. Added support to always create missing destination resources in `azcopy sync`. ([#2894](https://github.com/Azure/azure-storage-azcopy/pull/2894))
+7. When targeting flat namespace accounts in `azcopy sync`,directory stubs can now be overwritten or overlapped. ([#2894](https://github.com/Azure/azure-storage-azcopy/pull/2894))
+
+### Bug Fixes
+1. Fixed an issue where AzCopy would not persist tokens when logging in via Device Code by migrating Device Code logic to azidentity Track 2 SDK. ([#2361](https://github.com/Azure/azure-storage-azcopy/issues/2361), [#2747](https://github.com/Azure/azure-storage-azcopy/pull/2747))
+2. Updated version check to hit updated AzCopy static website URL. The previous URL was taken down due to security requirements. ([#2852](https://github.com/Azure/azure-storage-azcopy/pull/2852))  
+3. Fixed an issue where `jobs clean` would be blocked due to trying to clean up its own log file. ([#2850](https://github.com/Azure/azure-storage-azcopy/pull/2850))
+4. Fixed an issue where a panic would sometimes be hit due to closing an nil channel. ([#2874](https://github.com/Azure/azure-storage-azcopy/pull/2874))
+5. Downgraded go version to 1.22.7 to temporarily resolve reported high memory issue. ([#2855](https://github.com/Azure/azure-storage-azcopy/issues/2855))
+6. Fixed an issue where `--log-level=NONE` would display a log file location. ([#2845](https://github.com/Azure/azure-storage-azcopy/pull/2845))
+7. Fixed the log levels of some messages. ([#2845](https://github.com/Azure/azure-storage-azcopy/pull/2845))
+8. Corrected the cleanup of files with names ending in `/` when using `--delete-destination-files` on `azcopy sync`. ([#2847](https://github.com/Azure/azure-storage-azcopy/pull/2847))
+9. Correctly target objects in `copy/sync/delete` with names ending in `/`. ([#2847](https://github.com/Azure/azure-storage-azcopy/pull/2847))
+
+### Dependency updates
+1. Golang 1.23.1 -> 1.22.7 ([#2911](https://github.com/Azure/azure-storage-azcopy/pull/2911))
+
+2. golang.org/x/crypto v0.28.0 -> v0.31.0 (CVE-2024-45337)([#2890](https://github.com/Azure/azure-storage-azcopy/pull/2890))
+3. golang.org/x/net v0.30.0 -> v0.33.0 (CVE-2024-45338)([#2899](https://github.com/Azure/azure-storage-azcopy/pull/2899))
+
+### Documentation
+1. Updated README and in line text help messages to clarify OAuth support as a source AuthN method in Blob <-> File transfers. ([#2838](https://github.com/Azure/azure-storage-azcopy/pull/2838))
+2. Added `--log-level=DEBUG` as a valid option in text help message. ([#2845](https://github.com/Azure/azure-storage-azcopy/pull/2845))
+
+## Version 10.27.1
+
+### Bug Fixes
+1. Reverted a change that resulted in breaking file service transfers and a larger memory footprint. ([#2858](https://github.com/Azure/azure-storage-azcopy/issues/2858)[#2855](https://github.com/Azure/azure-storage-azcopy/issues/2855))
+
+### Dependency updates
+1. github.com/golang-jwt/jwt/v4 v4.5.0 -> v4.5.1 ([#2861](https://github.com/Azure/azure-storage-azcopy/issues/2861))
 
 ## Version 10.27.0
 

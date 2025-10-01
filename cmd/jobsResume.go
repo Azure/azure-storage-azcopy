@@ -59,7 +59,12 @@ type resumeJobController struct {
 // if blocking is specified to false, then another goroutine spawns and wait out the job
 func (cca *resumeJobController) waitUntilJobCompletion(blocking bool) {
 	// print initial message to indicate that the job is starting
-	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), fmt.Sprintf("%s%s%s.log", azcopyLogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID), false, ""))
+	// Output the log location if log-level is set to other then NONE
+	var logPathFolder string
+	if common.LogPathFolder != "" {
+		logPathFolder = fmt.Sprintf("%s%s%s.log", common.LogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
+	}
+	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), logPathFolder, false, ""))
 
 	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
@@ -86,10 +91,9 @@ func (cca *resumeJobController) Cancel(lcm common.LifecycleMgr) {
 // TODO: can we combine this with the copy one (and the sync one?)
 func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint32) {
 	// fetch a job status
-	var summary common.ListJobSummaryResponse
-	Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
+	summary := jobsAdmin.GetJobSummary(cca.jobID)
 	glcmSwapOnce.Do(func() {
-		Rpc(common.ERpcCmd.GetJobLCMWrapper(), &cca.jobID, &glcm)
+		glcm = jobsAdmin.GetJobLCMWrapper(cca.jobID)
 	})
 	jobDone := summary.JobStatus.IsJobDone()
 	totalKnownCount = summary.TotalTransfers
@@ -229,13 +233,13 @@ func init() {
 	}
 
 	jobsCmd.AddCommand(resumeCmd)
-	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.includeTransfer, "include", "", "Filter: only include these failed transfer(s) when resuming the job. "+
+	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.includeTransfer, "include", "", "Filter: Include only these failed transfer(s) when resuming the job. "+
 		"Files should be separated by ';'.")
-	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.excludeTransfer, "exclude", "", "Filter: exclude these failed transfer(s) when resuming the job. "+
+	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.excludeTransfer, "exclude", "", "Filter: Exclude these failed transfer(s) when resuming the job. "+
 		"Files should be separated by ';'.")
 	// oauth options
 	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.SourceSAS, "source-sas", "", "Source SAS token of the source for a given Job ID.")
-	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.DestinationSAS, "destination-sas", "", "destination SAS token of the destination for a given Job ID.")
+	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.DestinationSAS, "destination-sas", "", "Destination SAS token of the destination for a given Job ID.")
 }
 
 type resumeCmdArgs struct {
@@ -296,23 +300,52 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		}
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil)
+	var reauthTok *common.ScopedAuthenticator
+	if at, ok := tc.(common.AuthenticateToken); ok { // We don't need two different tokens here since it gets passed in just the same either way.
+		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
+		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+	}
+	jobID, err := common.ParseJobID(rca.jobID)
+	if err != nil {
+		// Error for invalid JobId format
+		return nil, nil, fmt.Errorf("error parsing the jobId %s. Failed with error %w", rca.jobID, err)
+	}
 
-	srcServiceClient, err := common.GetServiceClientForLocation(fromTo.From(), source, srcCredType, tc, &options, nil)
+	// But we don't want to supply a reauth token if we're not using OAuth. That could cause problems if say, a SAS is invalid.
+	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, common.Iff(srcCredType.IsAzureOAuth(), reauthTok, nil))
+	// Get job details from the STE
+	getJobDetailsResponse := jobsAdmin.GetJobDetails(common.GetJobDetailsRequest{JobID: jobID})
+	if getJobDetailsResponse.ErrorMsg != "" {
+		glcm.Error(getJobDetailsResponse.ErrorMsg)
+	}
+
+	var fileSrcClientOptions any
+	if fromTo.From() == common.ELocation.File() || fromTo.From() == common.ELocation.FileNFS() {
+		fileSrcClientOptions = &common.FileClientOptions{
+			AllowTrailingDot: getJobDetailsResponse.TrailingDot.IsEnabled(), //Access the trailingDot option of the job
+		}
+	}
+	srcServiceClient, err := common.GetServiceClientForLocation(fromTo.From(), source, srcCredType, tc, &options, fileSrcClientOptions)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	var srcCred *common.ScopedCredential
+	var srcCred *common.ScopedToken
 	if fromTo.IsS2S() && srcCredType.IsAzureOAuth() {
 		srcCred = common.NewScopedCredential(tc, srcCredType)
 	}
-	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred)
-	dstServiceClient, err := common.GetServiceClientForLocation(fromTo.To(), destination, dstCredType, tc, &options, nil)
+	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred, common.Iff(dstCredType.IsAzureOAuth(), reauthTok, nil))
+	var fileClientOptions any
+	if fromTo.To() == common.ELocation.File() || fromTo.To() == common.ELocation.FileNFS() {
+		fileClientOptions = &common.FileClientOptions{
+			AllowSourceTrailingDot: getJobDetailsResponse.TrailingDot.IsEnabled() && fromTo.From() == common.ELocation.File(),
+			AllowTrailingDot:       getJobDetailsResponse.TrailingDot.IsEnabled(),
+		}
+	}
+	dstServiceClient, err := common.GetServiceClientForLocation(fromTo.To(), destination, dstCredType, tc, &options, fileClientOptions)
 	if err != nil {
 		return nil, nil, err
 	}
-
 	return srcServiceClient, dstServiceClient, nil
 }
 
@@ -323,7 +356,12 @@ func (rca resumeCmdArgs) process() error {
 	jobID, err := common.ParseJobID(rca.jobID)
 	if err != nil {
 		// If parsing gives an error, hence it is not a valid JobId format
-		return fmt.Errorf("error parsing the jobId %s. Failed with error %s", rca.jobID, err.Error())
+		return fmt.Errorf("error parsing the jobId %s. Failed with error %w", rca.jobID, err)
+	}
+
+	// if no logging, set this empty so that we don't display the log location
+	if LogLevel == common.LogNone {
+		common.LogPathFolder = ""
 	}
 
 	includeTransfer := make(map[string]int)
@@ -359,10 +397,7 @@ func (rca resumeCmdArgs) process() error {
 	}
 
 	// Get fromTo info, so we can decide what's the proper credential type to use.
-	var getJobFromToResponse common.GetJobFromToResponse
-	Rpc(common.ERpcCmd.GetJobFromTo(),
-		&common.GetJobFromToRequest{JobID: jobID},
-		&getJobFromToResponse)
+	getJobFromToResponse := jobsAdmin.GetJobDetails(common.GetJobDetailsRequest{JobID: jobID})
 	if getJobFromToResponse.ErrorMsg != "" {
 		glcm.Error(getJobFromToResponse.ErrorMsg)
 	}
@@ -404,19 +439,16 @@ func (rca resumeCmdArgs) process() error {
 		return errors.New("could not create service clients " + err.Error())
 	}
 	// Send resume job request.
-	var resumeJobResponse common.CancelPauseResumeResponse
-	Rpc(common.ERpcCmd.ResumeJob(),
-		&common.ResumeJobRequest{
-			JobID:            jobID,
-			SourceSAS:        rca.SourceSAS,
-			DestinationSAS:   rca.DestinationSAS,
-			SrcServiceClient: srcServiceClient,
-			DstServiceClient: dstServiceClient,
-			CredentialInfo:   credentialInfo,
-			IncludeTransfer:  includeTransfer,
-			ExcludeTransfer:  excludeTransfer,
-		},
-		&resumeJobResponse)
+	resumeJobResponse := jobsAdmin.ResumeJobOrder(common.ResumeJobRequest{
+		JobID:            jobID,
+		SourceSAS:        rca.SourceSAS,
+		DestinationSAS:   rca.DestinationSAS,
+		SrcServiceClient: srcServiceClient,
+		DstServiceClient: dstServiceClient,
+		CredentialInfo:   credentialInfo,
+		IncludeTransfer:  includeTransfer,
+		ExcludeTransfer:  excludeTransfer,
+	})
 
 	if !resumeJobResponse.CancelledPauseResumed {
 		glcm.Error(resumeJobResponse.ErrorMsg)

@@ -23,20 +23,24 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"runtime"
+	"strings"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
-	"runtime"
-	"strings"
-	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-const trailingDotErrMsg = "File share contains file/directory %s with a trailing dot but the trailing dot parameter was set to Disable, meaning these files could be potentially treated in an unsafe manner."
+const trailingDotErrMsg = "File share contains file/directory: %s with a trailing dot. But the trailing dot parameter was set to Disable, meaning these files could be potentially treated in an unsafe manner." +
+	"To avoid this, use --trailing-dot=Enable"
 const invalidNameErrorMsg = "Skipping File share path %s, as it is not a valid Blob or Windows name. Rename the object and retry the transfer"
+const allDotsErrorMsg = "File/ Directory name: %s consists of only dots. Using --trailing-dot=Disable is dangerous here. " +
+	"Retry remove command with default --trailing-dot=Enable"
 
 // allow us to iterate through a path pointing to the file endpoint
 type fileTraverser struct {
@@ -48,8 +52,9 @@ type fileTraverser struct {
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
-	trailingDot common.TrailingDotOption
-	destination *common.Location
+	trailingDot                 common.TrailingDotOption
+	destination                 *common.Location
+	hardlinkHandling            common.HardlinkHandlingType
 }
 
 func createShareClientFromServiceClient(fileURLParts file.URLParts, client *service.Client) (*share.Client, error) {
@@ -81,7 +86,16 @@ func createFileClientFromServiceClient(fileURLParts file.URLParts, client *servi
 func (t *fileTraverser) IsDirectory(bool) (bool, error) {
 	// Azure file share case
 	if gCopyUtil.urlIsContainerOrVirtualDirectory(t.rawURL) {
-		return true, nil
+		// Let's at least test if it exists, that way we toss an error.
+		fileURLParts, err := file.ParseURL(t.rawURL)
+		if err != nil {
+			return true, err
+		}
+		shareClient := t.serviceClient.NewShareClient(fileURLParts.ShareName)
+		p := shareClient.NewRootDirectoryClient().NewListFilesAndDirectoriesPager(nil)
+		_, err = p.NextPage(t.ctx)
+
+		return true, err
 	}
 
 	// Need make request to ensure if it's directory
@@ -95,7 +109,7 @@ func (t *fileTraverser) IsDirectory(bool) (bool, error) {
 		if azcopyScanningLogger != nil {
 			azcopyScanningLogger.Log(common.LogWarning, fmt.Sprintf("Failed to check if the destination is a folder or a file (Azure Files). Assuming the destination is a file: %s", err))
 		}
-		return false, nil
+		return false, err
 	}
 
 	return true, nil
@@ -104,16 +118,17 @@ func (t *fileTraverser) IsDirectory(bool) (bool, error) {
 func (t *fileTraverser) getPropertiesIfSingleFile() (*file.GetPropertiesResponse, bool, error) {
 	fileURLParts, err := file.ParseURL(t.rawURL)
 	if err != nil {
-		return nil, false, err
+		return nil, false, fmt.Errorf("error parsing URL %w", err)
 	}
+
 	fileClient, err := createFileClientFromServiceClient(fileURLParts, t.serviceClient)
 	if err != nil {
-		return nil, false, err
+		return nil, false, fmt.Errorf("error creating file client %w", err)
 	}
-	fileProps, filePropertiesErr := fileClient.GetProperties(t.ctx, nil)
 
-	// if there was no problem getting the properties, it means that we are looking at a single file
+	fileProps, filePropertiesErr := fileClient.GetProperties(t.ctx, nil)
 	if filePropertiesErr == nil {
+		// if there was no problem getting the properties, it means that we are looking at a single file
 		return &fileProps, true, nil
 	}
 
@@ -123,6 +138,10 @@ func (t *fileTraverser) getPropertiesIfSingleFile() (*file.GetPropertiesResponse
 func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
 	invalidBlobOrWindowsName := func(path string) bool {
 		if t.destination != nil {
+			if t.trailingDot == common.ETrailingDotOption.AllowToUnsafeDestination() && (*t.destination != common.ELocation.Blob() || *t.destination != common.ELocation.BlobFS()) { // Allow only Local, Trailing dot files not supported in Blob
+				return false // Please let me shoot myself in the foot!
+			}
+
 			if (t.destination.IsLocal() && runtime.GOOS == "windows") || *t.destination == common.ELocation.Blob() || *t.destination == common.ELocation.BlobFS() {
 				/* Blob or Windows object name is invalid if it ends with period or
 				   one of (virtual) directories in path ends with period.
@@ -139,15 +158,28 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		return err
 	}
 
+	// We stop remove operations if file/dir name is only dots
+	checkAllDots := func(path string) bool {
+		return path != "" && strings.Trim(path, ".") == ""
+	}
 	// if not pointing to a share, check if we are pointing to a single file
 	if targetURLParts.DirectoryOrFilePath != "" {
 		if invalidBlobOrWindowsName(targetURLParts.DirectoryOrFilePath) {
 			WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, targetURLParts.DirectoryOrFilePath))
 			return common.EAzError.InvalidBlobOrWindowsName()
 		}
-		if t.trailingDot != common.ETrailingDotOption.Enable() && strings.HasSuffix(targetURLParts.DirectoryOrFilePath, ".") {
+		if !t.trailingDot.IsEnabled() && strings.HasSuffix(targetURLParts.DirectoryOrFilePath, ".") {
 			azcopyScanningLogger.Log(common.LogWarning, fmt.Sprintf(trailingDotErrMsg, getObjectNameOnly(targetURLParts.DirectoryOrFilePath)))
 		}
+
+		// Abort remove operation for files with only dots. i.e  a file named "dir/..." with trailing dot flag Disabled.
+		// The dot is stripped and the file is seen as a directory; incorrectly removing all other files within the parent dir/
+		// with Disable, "..." is seen as "dir/..." folder and other child files of dir would be wrongly deleted.
+		if !t.trailingDot.IsEnabled() && checkAllDots(getObjectNameOnly(targetURLParts.DirectoryOrFilePath)) {
+			glcm.Error(fmt.Sprintf(allDotsErrorMsg, getObjectNameOnly(targetURLParts.DirectoryOrFilePath)))
+
+		}
+
 		// check if the url points to a single file
 		fileProperties, isFile, err := t.getPropertiesIfSingleFile()
 		if err != nil {
@@ -170,11 +202,26 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				fileProperties.Metadata,
 				targetURLParts.ShareName,
 			)
+			// NFS handling for different file types
+			if common.IsNFSCopy() {
+				if skip, err := evaluateAndLogNFSFileType(t.ctx, NFSFileMeta{
+					Name:        storedObject.name,
+					NFSFileType: *fileProperties.NFSFileType,
+					LinkCount:   *fileProperties.LinkCount,
+					FileID:      *fileProperties.ID}, t.incrementEnumerationCounter); err == nil && skip {
+
+					return nil
+				}
+				//set entity tile to hardlink
+				if *fileProperties.LinkCount > int64(1) {
+					storedObject.entityType = common.EEntityType.Hardlink()
+				}
+			}
 
 			storedObject.smbLastModifiedTime = *fileProperties.FileLastWriteTime
 
 			if t.incrementEnumerationCounter != nil {
-				t.incrementEnumerationCounter(common.EEntityType.File())
+				t.incrementEnumerationCounter(storedObject.entityType)
 			}
 			err := processIfPassedFilters(filters, storedObject, processor)
 			_, err = getProcessingError(err)
@@ -204,15 +251,33 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		var contentProps contentPropsProvider = noContentProps
 		var metadata common.Metadata
 
+		fullProperties, err := f.propertyGetter(t.ctx)
+		if err != nil {
+			return StoredObject{
+				relativePath: relativePath,
+			}, err
+		}
+
+		// NFS handling
+		// Check if the file is a symlink and should be skipped in case of NFS
+		// We don't want to skip the file if we are not using NFS
+		// Check if the file is a hard link and should be logged with proper message in case of NFS
+		if common.IsNFSCopy() {
+			if skip, err := evaluateAndLogNFSFileType(t.ctx, NFSFileMeta{
+				Name:        f.name,
+				NFSFileType: file.NFSFileType(fullProperties.NFSFileType()),
+				LinkCount:   fullProperties.LinkCount(),
+				FileID:      fullProperties.FileID()}, t.incrementEnumerationCounter); err == nil && skip {
+				return nil, nil
+			}
+			//set entity tile to hardlink
+			if fullProperties.LinkCount() > int64(1) {
+				f.entityType = common.EEntityType.Hardlink()
+			}
+		}
+
 		// Only get the properties if we're told to
 		if t.getProperties {
-			var fullProperties filePropsProvider
-			fullProperties, err = f.propertyGetter(t.ctx)
-			if err != nil {
-				return StoredObject{
-					relativePath: relativePath,
-				}, err
-			}
 			lmt = fullProperties.LastModified()
 			smbLMT = fullProperties.FileLastWriteTime()
 			contentProps = fullProperties
@@ -280,7 +345,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		for pager.More() {
 			lResp, err := pager.NextPage(t.ctx)
 			if err != nil {
-				return fmt.Errorf("cannot list files due to reason %s", err)
+				return fmt.Errorf("cannot list files due to reason %w", err)
 			}
 			for _, fileInfo := range lResp.Segment.Files {
 				if invalidBlobOrWindowsName(*fileInfo.Name) {
@@ -288,8 +353,11 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 					WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, *fileInfo.Name))
 					continue
 				} else {
-					if t.trailingDot != common.ETrailingDotOption.Enable() && strings.HasSuffix(*fileInfo.Name, ".") {
+					if !t.trailingDot.IsEnabled() && strings.HasSuffix(*fileInfo.Name, ".") {
 						azcopyScanningLogger.Log(common.LogWarning, fmt.Sprintf(trailingDotErrMsg, *fileInfo.Name))
+					}
+					if !t.trailingDot.IsEnabled() && checkAllDots(*fileInfo.Name) {
+						glcm.Error(fmt.Sprintf(allDotsErrorMsg, *fileInfo.Name))
 					}
 				}
 				enqueueOutput(newAzFileFileEntity(currentDirectoryClient, fileInfo), nil)
@@ -301,13 +369,13 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 					WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, *dirInfo.Name))
 					continue
 				} else {
-					if t.trailingDot != common.ETrailingDotOption.Enable() && strings.HasSuffix(*dirInfo.Name, ".") {
+					if !t.trailingDot.IsEnabled() && strings.HasSuffix(*dirInfo.Name, ".") {
 						azcopyScanningLogger.Log(common.LogWarning, fmt.Sprintf(trailingDotErrMsg, *dirInfo.Name))
 					}
 				}
 				enqueueOutput(newAzFileSubdirectoryEntity(currentDirectoryClient, *dirInfo.Name), nil)
 				if t.recursive {
-						// If recursive is turned on, add sub directories to be processed
+					// If recursive is turned on, add sub directories to be processed
 					enqueueDir(currentDirectoryClient.NewSubdirectoryClient(*dirInfo.Name))
 				}
 
@@ -362,7 +430,11 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			if item != nil {
 				relativePath = item.(StoredObject).relativePath
 			}
-			glcm.Info("Failed to scan directory/file " + relativePath + ". Logging errors in scanning logs.")
+			if !t.trailingDot.IsEnabled() && checkAllDots(relativePath) {
+				glcm.Error(fmt.Sprintf(allDotsErrorMsg, relativePath))
+			}
+			glcm.Info("Failed to scan Directory/File " + relativePath + ". Logging errors in scanning logs.")
+
 			if azcopyScanningLogger != nil {
 				azcopyScanningLogger.Log(common.LogWarning, workerError.Error())
 			}
@@ -379,16 +451,17 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	return
 }
 
-func newFileTraverser(rawURL string, serviceClient *service.Client, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc, trailingDot common.TrailingDotOption, destination *common.Location) (t *fileTraverser) {
+func newFileTraverser(rawURL string, serviceClient *service.Client, ctx context.Context, opts InitResourceTraverserOptions) (t *fileTraverser) {
 	t = &fileTraverser{
-		rawURL: rawURL,
-		serviceClient: serviceClient,
-		ctx: ctx,
-		recursive: recursive,
-		getProperties: getProperties,
-		incrementEnumerationCounter: incrementEnumerationCounter,
-		trailingDot: trailingDot,
-		destination: destination,
+		rawURL:                      rawURL,
+		serviceClient:               serviceClient,
+		ctx:                         ctx,
+		recursive:                   opts.Recursive,
+		getProperties:               opts.GetPropertiesInFrontend,
+		incrementEnumerationCounter: opts.IncrementEnumeration,
+		trailingDot:                 opts.TrailingDotOption,
+		destination:                 opts.DestResourceType,
+		hardlinkHandling:            opts.HardlinkHandling,
 	}
 	return
 }
@@ -438,4 +511,67 @@ func newAzFileRootDirectoryEntity(directoryClient *directory.Client, name string
 		},
 		common.EEntityType.Folder(),
 	}
+}
+
+type NFSFileMeta struct {
+	Name        string
+	NFSFileType file.NFSFileType
+	LinkCount   int64
+	FileID      string
+}
+
+// evaluateAndLogNFSFileType determines whether an NFS file should be skipped based on its type,
+// and logs relevant warnings or metrics.
+//
+// Behavior:
+//
+//   - If the file is a symbolic link:
+//
+//   - Logs a symlink warning
+//
+//   - Increments the skipped symlink counter (if provided)
+//
+//   - Returns (true, nil) to indicate skipping
+//
+//   - If the file is a regular file with multiple hard links:
+//
+//   - Logs a hard link warning
+//
+//   - Returns (false, nil) to allow processing
+//
+//   - If the file is of an unsupported or special type (not regular, symlink, hardlink or directory):
+//
+//   - Logs a warning
+//
+//   - Increments the special file counter (if provided)
+//
+//   - Returns (true, nil) to indicate skipping
+//
+//   - Otherwise (for regular files or directories), it returns (false, nil).
+func evaluateAndLogNFSFileType(ctx context.Context, meta NFSFileMeta, incrementEnumerationCounter enumerationCounterFunc) (skip bool, err error) {
+
+	switch meta.NFSFileType {
+	case file.NFSFileTypeSymlink:
+		logNFSLinkWarning(meta.Name, "", true)
+		if incrementEnumerationCounter != nil {
+			incrementEnumerationCounter(common.EEntityType.Symlink())
+		}
+		return true, nil
+
+	case file.NFSFileTypeRegular:
+		if meta.LinkCount > 1 {
+			logNFSLinkWarning(meta.Name, meta.FileID, false)
+		}
+
+	case file.NFSFileTypeDirectory:
+		// Process normally
+
+	default:
+		logSpecialFileWarning(meta.Name)
+		if incrementEnumerationCounter != nil {
+			incrementEnumerationCounter(common.EEntityType.Other())
+		}
+		return true, nil
+	}
+	return false, nil
 }

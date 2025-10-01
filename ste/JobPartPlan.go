@@ -13,7 +13,7 @@ import (
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
 // current version of azcopy
 // To be Incremented every time when we release azcopy with changed dataSchema
-const DataSchemaVersion common.Version = 18
+const DataSchemaVersion common.Version = 19
 
 const (
 	CustomHeaderMaxBytes = 256
@@ -78,7 +78,7 @@ type JobPartPlanHeader struct {
 	DstFileData            JobPartPlanDstFile  // Additional data for file destinations
 
 	PreservePermissions     common.PreservePermissionsOption
-	PreserveSMBInfo         bool
+	PreserveInfo            bool
 	PreservePOSIXProperties bool
 	// S2SGetPropertiesInBackend represents whether to enable get S3 objects' or Azure files' properties during s2s copy in backend.
 	S2SGetPropertiesInBackend bool

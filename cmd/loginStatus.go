@@ -22,18 +22,58 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/spf13/cobra"
 )
 
-func init() {
-	type loginStatus struct {
-		tenantID bool
-		endpoint bool
+type LoginStatusOptions struct {
+	TenantID    bool
+	AADEndpoint bool
+	Method      bool
+}
+
+type LoginStatus struct {
+	Valid       bool
+	TenantID    string
+	AADEndpoint string
+	AuthMethod  common.AutoLoginType
+}
+
+func (options LoginStatusOptions) process() (LoginStatus, error) {
+	// getting current token info and refreshing it with GetTokenInfo()
+	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+	uotm := GetUserOAuthTokenManagerInstance()
+	tokenInfo, err := uotm.GetTokenInfo(ctx)
+	var status = LoginStatus{
+		Valid: err == nil && !tokenInfo.IsExpired(),
 	}
-	commandLineInput := loginStatus{}
+	if status.Valid {
+		status.TenantID = tokenInfo.Tenant
+		status.AADEndpoint = tokenInfo.ActiveDirectoryEndpoint
+		status.AuthMethod = tokenInfo.LoginType
+		return status, nil
+	} else {
+		return status, errors.New("You are currently not logged in. Please login using 'azcopy login'")
+	}
+}
+
+func RunLoginStatus(options LoginStatusOptions) (LoginStatus, error) {
+	return options.process()
+}
+
+type LoginStatusOutput struct {
+	Valid       bool    `json:"valid"`
+	TenantID    *string `json:"tenantID,omitempty"`
+	AADEndpoint *string `json:"AADEndpoint,omitempty"`
+	AuthMethod  *string `json:"authMethod,omitempty"`
+}
+
+func init() {
+	commandLineInput := LoginStatusOptions{}
 
 	lgStatus := &cobra.Command{
 		Use:   "status",
@@ -46,31 +86,55 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			// getting current token info and refreshing it with GetTokenInfo()
-			ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-			uotm := GetUserOAuthTokenManagerInstance()
-			tokenInfo, err := uotm.GetTokenInfo(ctx)
+			logText := func(format string, a ...any) {
+				if OutputFormat == common.EOutputFormat.None() || OutputFormat == common.EOutputFormat.Text() {
+					glcm.Info(fmt.Sprintf(format, a...))
+				}
+			}
+			status, _ := RunLoginStatus(commandLineInput)
+			var Info = LoginStatusOutput{
+				Valid: status.Valid,
+			}
+			if Info.Valid {
+				logText("You have successfully refreshed your token. Your login session is still active")
 
-			if err == nil && !tokenInfo.IsExpired() {
-				glcm.Info("You have successfully refreshed your token. Your login session is still active")
-
-				if commandLineInput.tenantID {
-					glcm.Info(fmt.Sprintf("Tenant ID: %v", tokenInfo.Tenant))
+				if commandLineInput.TenantID {
+					logText("Tenant ID: %v", status.TenantID)
+					Info.TenantID = &status.TenantID
 				}
 
-				if commandLineInput.endpoint {
-					glcm.Info(fmt.Sprintf("Active directory endpoint: %v", tokenInfo.ActiveDirectoryEndpoint))
+				if commandLineInput.AADEndpoint {
+					logText(fmt.Sprintf("Active directory endpoint: %v", status.AADEndpoint))
+					Info.AADEndpoint = &status.AADEndpoint
 				}
 
-				glcm.Exit(nil, common.EExitCode.Success())
+				if commandLineInput.Method {
+					logText(fmt.Sprintf("Authorized using %s", status.AuthMethod))
+					method := status.AuthMethod.String()
+					Info.AuthMethod = &method
+				}
+			} else {
+				logText("You are currently not logged in. Please login using 'azcopy login'")
 			}
 
-			glcm.Info("You are currently not logged in. Please login using 'azcopy login'")
-			glcm.Exit(nil, common.EExitCode.Error())
+			if OutputFormat == common.EOutputFormat.Json() {
+				glcm.Output(
+					func(_ common.OutputFormat) string {
+						buf, err := json.Marshal(Info)
+						if err != nil {
+							panic(err)
+						}
+
+						return string(buf)
+					}, common.EOutputMessageType.LoginStatusInfo())
+			}
+
+			glcm.Exit(nil, common.Iff(Info.Valid, common.EExitCode.Success(), common.EExitCode.Error()))
 		},
 	}
 
 	lgCmd.AddCommand(lgStatus)
-	lgStatus.PersistentFlags().BoolVar(&commandLineInput.tenantID, "tenant", false, "Prints the Azure Active Directory tenant ID that is currently being used in session.")
-	lgStatus.PersistentFlags().BoolVar(&commandLineInput.endpoint, "endpoint", false, "Prints the Azure Active Directory endpoint that is being used in the current session.")
+	lgStatus.PersistentFlags().BoolVar(&commandLineInput.TenantID, "tenant", false, "Prints the Microsoft Entra tenant ID that is currently being used in session.")
+	lgStatus.PersistentFlags().BoolVar(&commandLineInput.AADEndpoint, "endpoint", false, "Prints the Microsoft Entra endpoint that is being used in the current session.")
+	lgStatus.PersistentFlags().BoolVar(&commandLineInput.Method, "method", false, "Prints the authorization method used in the current session.")
 }

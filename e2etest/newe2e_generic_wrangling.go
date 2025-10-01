@@ -3,6 +3,7 @@ package e2etest
 import (
 	"fmt"
 	"reflect"
+	"sync"
 )
 
 func FirstOrZero[T any](list []T) T {
@@ -159,4 +160,40 @@ func ClonePointer[T any](in *T) *T {
 	out := *in
 
 	return &out
+}
+
+func JoinMap[K comparable, V any](in ...map[K]V) map[K]V {
+	out := map[K]V{}
+
+	for _, dict := range in {
+		for k, v := range dict {
+			out[k] = v
+		}
+	}
+
+	return out
+}
+
+type RWMutexResource[T any] struct {
+	res  T
+	rwmu *sync.RWMutex
+}
+
+func NewRWMutexResource[T any](res T) *RWMutexResource[T] {
+	return &RWMutexResource[T]{
+		res:  res,
+		rwmu: &sync.RWMutex{},
+	}
+}
+
+func (r *RWMutexResource[T]) DoRead(f func(res T)) {
+	r.rwmu.RLock()
+	defer r.rwmu.RUnlock()
+	f(r.res)
+}
+
+func (r *RWMutexResource[T]) DoWrite(f func(res T)) {
+	r.rwmu.Lock()
+	defer r.rwmu.Unlock()
+	f(r.res)
 }

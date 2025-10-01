@@ -25,6 +25,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"strconv"
 	"strings"
 	"sync"
@@ -71,8 +72,10 @@ func getVerifiedChunkParams(transferInfo *TransferInfo, memLimit int64, strictMe
 	srcSize := transferInfo.SourceSize
 	numChunks = getNumChunks(srcSize, chunkSize, putBlobSize)
 
+	maxSize := int64(common.MaxBlockBlobBlockSize)
 	if srcSize < putBlobSize {
 		chunkSize = putBlobSize
+		maxSize = common.MaxPutBlobSize
 	}
 
 	toGiB := func(bytes int64) float64 {
@@ -103,10 +106,10 @@ func getVerifiedChunkParams(transferInfo *TransferInfo, memLimit int64, strictMe
 	}
 
 	// sanity check
-	if chunkSize > common.MaxBlockBlobBlockSize {
+	if chunkSize > maxSize { // Use relevant PutBlob or Block size max
 		// mercy, please
-		err = fmt.Errorf("block size of %.2fGiB for file %s of size %.2fGiB exceeds maximum allowed block size for a BlockBlob",
-			toGiB(chunkSize), transferInfo.Source, toGiB(transferInfo.SourceSize))
+		err = fmt.Errorf("block size of %.2fGiB for file %s of size %.2fGiB exceeds maximum allowed %.2fMiB block size for a BlockBlob",
+			toGiB(chunkSize), transferInfo.Source, toGiB(transferInfo.SourceSize), float64(maxSize/(1024*1024)))
 		return
 	}
 
@@ -246,8 +249,6 @@ func (s *blockBlobSenderBase) Epilogue() {
 
 	// commit block list if necessary
 	if jptm.IsLive() && shouldPutBlockList == putListNeeded {
-		jptm.Log(common.LogDebug, fmt.Sprintf("Conclude Transfer with BlockList %s", blockIDs))
-
 		// commit the blocks.
 		if !ValidateTier(jptm, s.destBlobTier, s.destBlockBlobClient.BlobClient(), s.jptm.Context(), false) {
 			s.destBlobTier = nil
@@ -276,6 +277,59 @@ func (s *blockBlobSenderBase) Epilogue() {
 			})
 		if err != nil {
 			jptm.FailActiveSend(common.Iff(blobTags != nil, "Committing block list (with tags)", "Committing block list"), err)
+
+			/*
+				If we get an invalid block list, it's likely one of our blocks was deleted, or GC'd mid-job or something.
+				Knowing which blocks are missing is useful, as up to 50k blocks can exist in a single object.
+
+				This info could *potentially* be used to just re-upload the missing blocks later, but for now we want to discover the why.
+			*/
+			if bloberror.HasCode(err, bloberror.InvalidBlockList) {
+				blockList, err := s.destBlockBlobClient.GetBlockList(jptm.Context(), blockblob.BlockListTypeAll, nil)
+				if err != nil {
+					jptm.Log(common.LogWarning, fmt.Sprintf("Failed to get block list to provide delta: %v", err))
+				} else {
+					blockSet := map[string]bool{}
+					extraBlocks := map[string]bool{} // any blocks the service has but we don't
+					for _, v := range blockIDs {
+						blockSet[v] = true
+					}
+
+					recordBlock := func(blockId string) { // Subtract blocks we know of, but keep track of the ones we don't
+						if blockSet[blockId] {
+							delete(blockSet, blockId)
+						} else {
+							extraBlocks[blockId] = true
+						}
+					}
+
+					for _, v := range blockList.UncommittedBlocks { // Uncommitted is primarily what we're looking for, BUT:
+						recordBlock(*v.Name)
+					}
+					for _, v := range blockList.CommittedBlocks { // For the sake of thoroughness, we'll include blocks that already were present.
+						recordBlock(*v.Name)
+					}
+
+					formatBlocklist := func(dict map[string]bool) string { // Format things pretty
+						out := ""
+
+						out += fmt.Sprintf("%d blocks: ", len(dict))
+						out += "["
+						for k := range dict {
+							out += k + ", "
+						}
+						out = out[:len(out)-2] + "]"
+
+						return out
+					}
+
+					// And do our due diligence in the logs.
+					jptm.Log(common.LogError, fmt.Sprintf("Total blocks: %d blocks: %v", len(blockIDs), blockIDs))
+					jptm.Log(common.LogError, fmt.Sprintf("Missing blocks: %s", formatBlocklist(blockSet)))
+					jptm.Log(common.LogError, fmt.Sprintf("Unrecognized blocks: %s", formatBlocklist(extraBlocks)))
+				}
+			}
+
 			return
 		}
 
@@ -288,7 +342,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 
 	// Upload ADLS Gen 2 ACLs
 	fromTo := jptm.FromTo()
-	if fromTo.From().SupportsHnsACLs() && fromTo.To().SupportsHnsACLs() && jptm.Info().PreserveSMBPermissions.IsTruthy() {
+	if fromTo.From().SupportsHnsACLs() && fromTo.To().SupportsHnsACLs() && jptm.Info().PreservePermissions.IsTruthy() {
 		// We know for a fact our source is a "blob".
 		acl, err := s.sip.(*blobSourceInfoProvider).AccessControl()
 		if err != nil {
@@ -384,7 +438,7 @@ func (s *blockBlobSenderBase) buildCommittedBlockMap() {
 	changedChunkSize := "buildCommittedBlockMap: Chunksize mismatch on uncommitted blocks"
 	list := make(map[int]string)
 
-	if common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.DisableBlobTransferResume()) == "true" {
+	if common.GetEnvironmentVariable(common.EEnvironmentVariable.DisableBlobTransferResume()) == "true" {
 		return
 	}
 

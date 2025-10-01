@@ -1,6 +1,6 @@
 variables:
-  AZCOPY_GOLANG_VERSION: '1.23.1'
-  AZCOPY_GOLANG_VERSION_COVERAGE: '1.23.1'
+  AZCOPY_GOLANG_VERSION: '1.24.6'
+  AZCOPY_GOLANG_VERSION_COVERAGE: '1.24.6'
 
 trigger:
   branches:
@@ -39,6 +39,12 @@ jobs:
         displayName: 'Golang Vet - Linux'
         workingDirectory: $(System.DefaultWorkingDirectory)
 
+      - script: |
+          sudo apt-get update
+          sudo apt-get install -y libsecret-1-dev libglib2.0-dev
+        displayName: 'Install dependencies'
+        condition: eq(variables['type'], 'linux')
+        
       - script: |
           GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
         displayName: 'Generate Linux AMD64'
@@ -123,7 +129,7 @@ jobs:
     parameters:
       name: 'New_E2E'
       test_cli_param: '-run "TestNewE2E/.*"'
-
+      
   - job: Test_On_Ubuntu
     variables:
       isMutexSet: 'false'
@@ -135,7 +141,7 @@ jobs:
       - task: UsePythonVersion@0
         name: 'Set_up_Python'
         inputs:
-          versionSpec: '3.7'
+          versionSpec: '3.10'
       - task: GoTool@0
         name: 'Set_up_Golang'
         inputs:

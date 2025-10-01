@@ -1,10 +1,14 @@
 package e2etest
 
 import (
-	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/stretchr/testify/assert"
+	"regexp"
 	"strconv"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func init() {
@@ -346,7 +350,7 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFileUploadDownload_EmptySAS(svm
 		})
 
 	// Validate that the stdout contains the missing sas message
-	ValidateMessageOutput(svm, stdout, "Please authenticate using Microsoft Entra ID (https://aka.ms/AzCopy/AuthZ), use AzCopy login, or append a SAS token to your Azure URL.")
+	ValidateMessageOutput(svm, stdout, "Please authenticate using Microsoft Entra ID (https://aka.ms/AzCopy/AuthZ), use AzCopy login, or append a SAS token to your Azure URL.", true)
 }
 
 func (s *BasicFunctionalitySuite) Scenario_Sync_EmptySASErrorCodes(svm *ScenarioVariationManager) {
@@ -410,6 +414,57 @@ func (s *BasicFunctionalitySuite) Scenario_Copy_EmptySASErrorCodes(svm *Scenario
 
 	// Validate that the stdout contains these error URLs
 	ValidateContainsError(svm, stdout, []string{"https://aka.ms/AzCopyError/NoAuthenticationInformation", "https://aka.ms/AzCopyError/ResourceNotFound"})
+}
+
+// Test of Copy to UnsafeDestinations (Windows Local dest)
+func (s *BasicFunctionalitySuite) Scenario_CopyUnSafeDest(svm *ScenarioVariationManager) {
+	azCopyVerb := AzCopyVerbCopy
+
+	fileName := "file."
+	body := NewRandomObjectContentContainer(SizeFromString("10K"))
+
+	// Scale up from service to object
+	srcObj := CreateResource[ObjectResourceManager](svm,
+		GetRootResource(svm, common.ELocation.File()), // Only source is File - Windows Local & Blob doesn't support T.D
+		ResourceDefinitionObject{
+			ObjectName: pointerTo(fileName),
+			Body:       body,
+		})
+
+	dstObj := CreateResource[ContainerResourceManager](svm,
+		GetRootResource(svm,
+			ResolveVariation(svm, []common.Location{common.ELocation.File(),
+				common.ELocation.Local()})),
+		ResourceDefinitionContainer{}).GetObject(svm, "file", common.EEntityType.File())
+
+	sasOpts := GenericAccountSignatureValues{}
+
+	RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: azCopyVerb,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcObj, EExplicitCredentialType.SASToken(), svm,
+					CreateAzCopyTargetOptions{
+						SASTokenOptions: sasOpts,
+					}),
+				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.SASToken(), svm,
+					CreateAzCopyTargetOptions{
+						SASTokenOptions: sasOpts,
+					}),
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive:   pointerTo(true),
+					TrailingDot: to.Ptr(common.ETrailingDotOption.AllowToUnsafeDestination()), // Allow download to unsafe Local destination
+				},
+			},
+		})
+
+	ValidateResource[ObjectResourceManager](svm, dstObj,
+		ResourceDefinitionObject{
+			Body: body,
+		}, false)
 }
 
 func (s *BasicFunctionalitySuite) Scenario_TagsPermission(svm *ScenarioVariationManager) {
@@ -482,5 +537,206 @@ func (s *BasicFunctionalitySuite) Scenario_TagsPermission(svm *ScenarioVariation
 		},
 	)
 
-	ValidateMessageOutput(svm, stdOut, "Authorization failed during an attempt to set tags, please ensure you have the appropriate Tags permission")
+	ValidateMessageOutput(svm, stdOut, "Authorization failed during an attempt to set tags, please ensure you have the appropriate Tags permission", true)
+}
+
+// This scenario tests that if the AZCOPY_CONCURRENCY_VALUE is set azcopy should honor this.
+func (s *BasicFunctionalitySuite) Scenario_ConcurrencyValueSet(svm *ScenarioVariationManager) {
+	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
+	// Resolve variation early so name makes sense
+	srcLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob()})
+	// Scale up from service to object
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()})), ResourceDefinitionContainer{})
+
+	// Scale up from service to object
+	srcDef := ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"abc":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
+			"def":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
+			"foobar": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
+		},
+	}
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, srcLoc), srcDef)
+
+	// no s2s, no local->local
+	if srcContainer.Location().IsRemote() == dstContainer.Location().IsRemote() {
+		svm.InvalidateScenario()
+		return
+	}
+
+	sasOpts := GenericAccountSignatureValues{}
+
+	var asSubdir bool
+	if azCopyVerb == AzCopyVerbCopy {
+		svm.InsertVariationSeparator("-Subdir:")
+		asSubdir = ResolveVariation(svm, []bool{true, false})
+	}
+
+	stdOut, _ := RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: azCopyVerb,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+				TryApplySpecificAuthType(dstContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive: pointerTo(true),
+				},
+
+				AsSubdir: common.Iff(azCopyVerb == AzCopyVerbCopy, &asSubdir, nil), // defaults true
+			},
+			Environment: &AzCopyEnvironment{
+				AzcopyConcurrencyValue: pointerTo("64"),
+			},
+		})
+
+	ValidateMessageOutput(svm, stdOut, "concurrent connections", false)
+}
+
+// Scenario_CheckVersion test version info is only printed explicitly when --check-version is used.
+func (*BasicFunctionalitySuite) Scenario_CheckVersion(svm *ScenarioVariationManager) {
+	// The flag usage is `azcopy --check-version` without sub-commands.
+	// So, no need to pass azcopy verb
+	stdout, _ := RunAzCopy(svm, AzCopyCommand{
+		Flags: CopyFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				GlobalFlags: GlobalFlags{
+					CheckVersion: pointerTo(true),
+					OutputType:   pointerTo(common.EOutputFormat.Text()),
+				},
+			},
+		},
+	})
+
+	versionCheckOpts := []*regexp.Regexp{
+		regexp.MustCompile("INFO: azcopy.* .*: A newer version .* is available to download"),
+		regexp.MustCompile("INFO: Current AzCopy version *.*.* is up to date"),
+	}
+
+	if !svm.Dryrun() {
+		foundVersionInOutput := func() bool { // Check if either of the version output is in the string
+			matched := false
+			for _, line := range stdout.RawStdout() { // If there's another warning or info message
+				for _, regex := range versionCheckOpts {
+					if regex.MatchString(line) {
+						matched = true
+						return matched
+					}
+				}
+			}
+			return matched
+		}
+		versionAssertion := assert.New(svm.t)
+		versionAssertion.True(foundVersionInOutput())
+	}
+
+	ValidateMessageOutput(svm, stdout, "version", true) // loose check
+}
+
+// Scenario_CheckVersion test version info is not printed when the flag is not used.
+func (*BasicFunctionalitySuite) Scenario_DisabledCheckVersion(svm *ScenarioVariationManager) {
+	// The flag usage is `azcopy --check-version` without sub-commands.
+	// So, no need to create src and dest
+	stdout, _ := RunAzCopy(svm, AzCopyCommand{
+		Flags: CopyFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				GlobalFlags: GlobalFlags{
+					// CheckVersion: pointerTo(false), default is False
+					OutputType: pointerTo(common.EOutputFormat.Text()),
+				},
+			},
+		},
+	})
+
+	versionCheckOpts := []*regexp.Regexp{
+		regexp.MustCompile("INFO: azcopy.* .*: A newer version .* is available to download"),
+		regexp.MustCompile("INFO: Current AzCopy version *.*.* is up to date"),
+	}
+
+	if !svm.Dryrun() {
+		foundVersionInOutput := func() bool { // Check if either of the version output is in the string
+			matched := false
+			for _, line := range stdout.RawStdout() { // If there's another warning or info message
+				for _, regex := range versionCheckOpts {
+					if regex.MatchString(line) {
+						matched = true
+						return matched
+					}
+				}
+			}
+			return matched
+		}
+		versionAssertion := assert.New(svm.t)
+		versionAssertion.False(foundVersionInOutput())
+	}
+
+	ValidateMessageOutput(svm, stdout, "version", false)
+}
+
+// Scenario_SkipVersionCheckDisabledBackCompat validates we are backwards compatible with skip-version-check now deprecated.
+func (*BasicFunctionalitySuite) Scenario_SkipVersionCheckDisabledBackCompat(svm *ScenarioVariationManager) {
+	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
+	// Scale up from service to object
+	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})),
+		ResourceDefinitionContainer{}).GetObject(svm, "test", common.EEntityType.File())
+	// The object must exist already if we're syncing.
+	if azCopyVerb == AzCopyVerbSync {
+		dstObj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
+
+		if !svm.Dryrun() {
+			// Make sure the LMT is in the past
+			time.Sleep(time.Second * 10)
+		}
+	}
+
+	body := NewRandomObjectContentContainer(SizeFromString("10K"))
+	// Scale up from service to object
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})),
+		ResourceDefinitionObject{
+			ObjectName: pointerTo("test"),
+			Body:       body,
+		})
+
+	// no local->local
+	if srcObj.Location().IsLocal() && dstObj.Location().IsLocal() {
+		svm.InvalidateScenario()
+		return
+	}
+
+	sasOpts := GenericAccountSignatureValues{}
+
+	stdOut, _ := RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: azCopyVerb,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					GlobalFlags: GlobalFlags{
+						SkipVersionCheck: pointerTo(false),
+					},
+					Recursive: pointerTo(true),
+				},
+			},
+		})
+
+	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
+		Body: body,
+	}, true)
+
+	ValidateDoesNotContainError(svm, stdOut, []string{"unknown flag: --skip-version-check"})
+
 }

@@ -61,19 +61,15 @@ type LifecycleMgr interface {
 	SurrenderControl()                                           // give up control, this should never return
 	InitiateProgressReporting(WorkController)                    // start writing progress with another routine
 	AllowReinitiateProgressReporting()                           // allow re-initiation of progress reporting for followup job
-	GetEnvironmentVariable(EnvironmentVariable) string           // get the environment variable or its default value
-	ClearEnvironmentVariable(EnvironmentVariable)                // clears the environment variable
 	SetOutputFormat(OutputFormat)                                // change the output format of the entire application
 	EnableInputWatcher()                                         // depending on the command, we may allow user to give input through Stdin
 	EnableCancelFromStdIn()                                      // allow user to send in `cancel` to stop the job
-	AddUserAgentPrefix(string) string                            // append the global user agent prefix, if applicable
 	E2EAwaitContinue()                                           // used by E2E tests
 	E2EAwaitAllowOpenFiles()                                     // used by E2E tests
 	E2EEnableAwaitAllowOpenFiles(enable bool)                    // used by E2E tests
 	RegisterCloseFunc(func())
 	SetForceLogging()
 	IsForceLoggingDisabled() bool
-	DownloadToTempPath() bool
 	MsgHandlerChannel() <-chan *LCMMsg
 	ReportAllJobPartsDone()
 	SetOutputVerbosity(mode OutputVerbosity)
@@ -206,10 +202,6 @@ func (lcm *lifecycleMgr) EnableCancelFromStdIn() {
 	lcm.allowCancelFromStdIn = true
 }
 
-func (lcm *lifecycleMgr) ClearEnvironmentVariable(variable EnvironmentVariable) {
-	_ = os.Setenv(variable.Name, "")
-}
-
 func (lcm *lifecycleMgr) SetOutputFormat(format OutputFormat) {
 	lcm.outputFormat = format
 }
@@ -219,7 +211,7 @@ func (lcm *lifecycleMgr) checkAndStartCPUProfiling() {
 	// the value AZCOPY_PROFILE_CPU indicates the path to save CPU profiling data.
 	// e.g. export AZCOPY_PROFILE_CPU="cpu.prof"
 	// For more details, please refer to https://golang.org/pkg/runtime/pprof/
-	cpuProfilePath := lcm.GetEnvironmentVariable(EEnvironmentVariable.ProfileCPU())
+	cpuProfilePath := GetEnvironmentVariable(EEnvironmentVariable.ProfileCPU())
 	if cpuProfilePath != "" {
 		lcm.Info(fmt.Sprintf("pprof start CPU profiling, and saving profiling data to: %q", cpuProfilePath))
 		f, err := os.Create(cpuProfilePath)
@@ -242,7 +234,7 @@ func (lcm *lifecycleMgr) checkAndTriggerMemoryProfiling() {
 	// the value AZCOPY_PROFILE_MEM indicates the path to save memory profiling data.
 	// e.g. export AZCOPY_PROFILE_MEM="mem.prof"
 	// For more details, please refer to https://golang.org/pkg/runtime/pprof/
-	memProfilePath := lcm.GetEnvironmentVariable(EEnvironmentVariable.ProfileMemory())
+	memProfilePath := GetEnvironmentVariable(EEnvironmentVariable.ProfileMemory())
 	if memProfilePath != "" {
 		lcm.Info(fmt.Sprintf("pprof start memory profiling, and saving profiling data to: %q", memProfilePath))
 		f, err := os.Create(memProfilePath)
@@ -435,7 +427,16 @@ func (lcm *lifecycleMgr) SurrenderControl() {
 }
 
 func (lcm *lifecycleMgr) RegisterCloseFunc(closeFunc func()) {
-	lcm.closeFunc = closeFunc
+	if lcm.closeFunc != nil {
+		// "dereference" the function for later calling
+		orig := lcm.closeFunc
+		lcm.closeFunc = func() {
+			orig()
+			closeFunc()
+		}
+	} else {
+		lcm.closeFunc = closeFunc
+	}
 }
 
 func (lcm *lifecycleMgr) processOutputMessage() {
@@ -634,23 +635,6 @@ func (lcm *lifecycleMgr) InitiateProgressReporting(jc WorkController) {
 	}()
 }
 
-func (lcm *lifecycleMgr) GetEnvironmentVariable(env EnvironmentVariable) string {
-	value := os.Getenv(env.Name)
-	if value == "" {
-		return env.DefaultValue
-	}
-	return value
-}
-
-func (lcm *lifecycleMgr) AddUserAgentPrefix(userAgent string) string {
-	prefix := lcm.GetEnvironmentVariable(EEnvironmentVariable.UserAgentPrefix())
-	if len(prefix) > 0 {
-		userAgent = prefix + " " + userAgent
-	}
-
-	return userAgent
-}
-
 func (_ *lifecycleMgr) awaitChannel(ch chan struct{}, timeout time.Duration) {
 	select {
 	case <-ch:
@@ -685,7 +669,7 @@ func (lcm *lifecycleMgr) E2EEnableAwaitAllowOpenFiles(enable bool) {
 // Fetching `AZCOPY_DISABLE_SYSLOG` from the environment variables and
 // setting `disableSyslog` flag in LifeCycleManager to avoid Env Vars Lookup redundantly
 func (lcm *lifecycleMgr) SetForceLogging() {
-	disableSyslog, err := strconv.ParseBool(lcm.GetEnvironmentVariable(EEnvironmentVariable.DisableSyslog()))
+	disableSyslog, err := strconv.ParseBool(GetEnvironmentVariable(EEnvironmentVariable.DisableSyslog()))
 	if err != nil {
 		// By default, we'll retain the current behaviour. i.e. To log in Syslog/WindowsEventLog if not specified by the user
 		disableSyslog = false
@@ -695,15 +679,6 @@ func (lcm *lifecycleMgr) SetForceLogging() {
 
 func (lcm *lifecycleMgr) IsForceLoggingDisabled() bool {
 	return lcm.disableSyslog
-}
-
-func (lcm *lifecycleMgr) DownloadToTempPath() bool {
-	ret, err := strconv.ParseBool(lcm.GetEnvironmentVariable(EEnvironmentVariable.DownloadToTempPath()))
-	if err != nil {
-		// By default we'll download to temp path
-		ret = true
-	}
-	return ret
 }
 
 func (lcm *lifecycleMgr) MsgHandlerChannel() <-chan *LCMMsg {

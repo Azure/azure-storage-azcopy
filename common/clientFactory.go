@@ -27,8 +27,8 @@ import (
 )
 
 func GetDatalakeSharedKeyCredential() (*azdatalake.SharedKeyCredential, error) {
-	name := lcm.GetEnvironmentVariable(EEnvironmentVariable.AccountName())
-	key := lcm.GetEnvironmentVariable(EEnvironmentVariable.AccountKey())
+	name := GetEnvironmentVariable(EEnvironmentVariable.AccountName())
+	key := GetEnvironmentVariable(EEnvironmentVariable.AccountKey())
 	// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
 	if name == "" || key == "" {
 		return nil, fmt.Errorf("ACCOUNT_NAME and ACCOUNT_KEY environment variables must be set before creating the SharedKey credential")
@@ -37,8 +37,8 @@ func GetDatalakeSharedKeyCredential() (*azdatalake.SharedKeyCredential, error) {
 }
 
 func GetBlobSharedKeyCredential() (*blob.SharedKeyCredential, error) {
-	name := lcm.GetEnvironmentVariable(EEnvironmentVariable.AccountName())
-	key := lcm.GetEnvironmentVariable(EEnvironmentVariable.AccountKey())
+	name := GetEnvironmentVariable(EEnvironmentVariable.AccountName())
+	key := GetEnvironmentVariable(EEnvironmentVariable.AccountKey())
 	// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
 	if name == "" || key == "" {
 		return nil, fmt.Errorf("ACCOUNT_NAME and ACCOUNT_KEY environment variables must be set before creating the SharedKey credential")

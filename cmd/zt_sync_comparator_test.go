@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"context"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"os"
 	"sort"
 	"strings"
@@ -51,7 +52,9 @@ func TestFileSyncS2SWithSingleFile(t *testing.T) {
 
 		// set up interceptor
 		mockedRPC := interceptor{}
-		Rpc = mockedRPC.intercept
+		jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+			return mockedRPC.intercept(order)
+		}
 		mockedRPC.init()
 
 		// construct the raw input to simulate user input
@@ -93,7 +96,9 @@ func TestFileSyncS2SWithEmptyDestination(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -145,7 +150,9 @@ func TestFileSyncS2SWithIdenticalDestination(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -193,7 +200,9 @@ func TestFileSyncS2SWithMismatchedDestination(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -253,7 +262,9 @@ func TestFileSyncS2SWithIncludeFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -289,7 +300,9 @@ func TestFileSyncS2SWithExcludeFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -331,7 +344,9 @@ func TestFileSyncS2SWithIncludeAndExcludeFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -366,7 +381,9 @@ func TestFileSyncS2SWithIncludeAndExcludeFlag(t *testing.T) {
 //
 // 	// set up interceptor
 // 	mockedRPC := interceptor{}
-// 	Rpc = mockedRPC.intercept
+// 		jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+//return mockedRPC.intercept(order)
+//}
 // 	mockedRPC.init()
 //
 // 	// construct the raw input to simulate user input
@@ -384,53 +401,6 @@ func TestFileSyncS2SWithIncludeAndExcludeFlag(t *testing.T) {
 // 	})
 // }
 
-// there is a type mismatch between the source and destination
-func TestFileSyncS2SMismatchShareAndFile(t *testing.T) {
-	a := assert.New(t)
-	fsc := getFileServiceClient()
-	srcShareClient, srcShareName := createNewShare(a, fsc)
-	dstShareClient, dstShareName := createNewShare(a, fsc)
-	defer deleteShare(a, srcShareClient)
-	defer deleteShare(a, dstShareClient)
-
-	// set up the source share with numerous files
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareClient, fsc, "")
-	a.NotZero(len(fileList))
-
-	// set up the destination share with a single file
-	singleFileName := "single"
-	scenarioHelper{}.generateShareFilesFromList(a, dstShareClient, fsc, []string{singleFileName})
-
-	// set up interceptor
-	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
-	mockedRPC.init()
-
-	// construct the raw input to simulate user input
-	srcShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(a, srcShareName)
-	dstFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(a, dstShareName, singleFileName)
-	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstFileURLWithSAS.String())
-
-	// type mismatch, we should get an error
-	runSyncAndVerify(a, raw, func(err error) {
-		a.NotNil(err)
-
-		// validate that the right number of transfers were scheduled
-		a.Zero(len(mockedRPC.transfers))
-	})
-
-	// reverse the source and destination
-	raw = getDefaultSyncRawInput(dstFileURLWithSAS.String(), srcShareURLWithSAS.String())
-
-	// type mismatch again, we should also get an error
-	runSyncAndVerify(a, raw, func(err error) {
-		a.NotNil(err)
-
-		// validate that the right number of transfers were scheduled
-		a.Zero(len(mockedRPC.transfers))
-	})
-}
-
 // share <-> dir sync
 func TestFileSyncS2SShareAndEmptyDir(t *testing.T) {
 	a := assert.New(t)
@@ -446,7 +416,9 @@ func TestFileSyncS2SShareAndEmptyDir(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -503,7 +475,9 @@ func TestFileSyncS2SBetweenDirs(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -549,7 +523,9 @@ func TestDryrunSyncFiletoFile(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
 	mockedLcm.SetOutputFormat(common.EOutputFormat.Text())
 	glcm = &mockedLcm
@@ -600,7 +576,9 @@ func TestDryrunSyncLocaltoFile(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
 	mockedLcm.SetOutputFormat(common.EOutputFormat.Text())
 	glcm = &mockedLcm
@@ -653,14 +631,16 @@ func TestFileSyncS2SWithIdenticalDestinationTemp(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
 	srcShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(a, srcShareName)
 	dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(a, dstShareName)
 	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstShareURLWithSAS.String())
-	raw.preserveSMBInfo = false
+	raw.preserveInfo = false
 
 	// nothing should be sync since the source is older
 	runSyncAndVerify(a, raw, func(err error) {

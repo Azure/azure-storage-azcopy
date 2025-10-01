@@ -1,0 +1,31 @@
+steps:
+  - task: GoTool@0
+    env:
+      GO111MODULE: 'on'
+    inputs:
+      version: $(AZCOPY_GOLANG_VERSION)
+
+  - script: |
+      sudo apt-get clean
+      sudo apt-get update --fix-missing
+      sudo apt-get install -y zip unzip
+    displayName: "Installing Dependencies"
+
+  - template: ../setup/trigger_m1_build.yml@self
+    parameters:
+      download_path: '$(System.DefaultWorkingDirectory)'
+
+  - script: |
+      mkdir -p $(unsigned)
+      darwin_arm64_m1_dir="$(System.DefaultWorkingDirectory)/azcopy_darwin_m1_arm64_$(azcopy_version)"
+      echo "##vso[task.setvariable variable=darwin_arm64_m1_dir]$darwin_arm64_m1_dir"
+      mkdir -p $darwin_arm64_m1_dir
+      cp $(System.DefaultWorkingDirectory)/azcopy_darwin_m1_arm64  $darwin_arm64_m1_dir/azcopy
+      cp NOTICE.txt $darwin_arm64_m1_dir
+    displayName: 'Copy required files for packaging'
+
+  - task: ArchiveFiles@2
+    displayName: 'Archive MacOS M1_ARM64 Build (must happen before signing/notarization)'
+    inputs:
+      rootFolderOrFile: '$(darwin_arm64_m1_dir)'
+      archiveFile: '$(unsigned)/azcopy_darwin_m1_arm64_$(azcopy_version).zip'

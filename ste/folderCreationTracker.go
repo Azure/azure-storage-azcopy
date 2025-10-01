@@ -1,6 +1,7 @@
 package ste
 
 import (
+	"fmt"
 	"net/url"
 	"strings"
 	"sync"
@@ -12,17 +13,33 @@ type FolderCreationTracker common.FolderCreationTracker
 
 type JPPTCompatibleFolderCreationTracker interface {
 	FolderCreationTracker
-	RegisterPropertiesTransfer(folder string, transferIndex uint32)
+	RegisterPropertiesTransfer(folder string, partNum PartNumber, transferIndex uint32)
 }
 
-func NewFolderCreationTracker(fpo common.FolderPropertyOption, plan *JobPartPlanHeader) FolderCreationTracker {
+type TransferFetcher = func(index JpptFolderIndex) *JobPartPlanTransfer
+
+func NewTransferFetcher(jobMgr IJobMgr) TransferFetcher {
+	return func(index JpptFolderIndex) *JobPartPlanTransfer {
+		mgr, ok := jobMgr.JobPartMgr(index.PartNum)
+		if !ok {
+			panic(fmt.Errorf("sanity check: failed to fetch job part manager %d", index.PartNum))
+		}
+
+		return mgr.Plan().Transfer(index.TransferIndex)
+	}
+}
+
+// NewFolderCreationTracker creates a folder creation tracker taking in a TransferFetcher (typically created by NewTransferFetcher)
+// A TransferFetcher is used in place of an IJobMgr to make testing easier to implement.
+func NewFolderCreationTracker(fpo common.FolderPropertyOption, fetcher TransferFetcher) FolderCreationTracker {
 	switch fpo {
 	case common.EFolderPropertiesOption.AllFolders(),
 		common.EFolderPropertiesOption.AllFoldersExceptRoot():
 		return &jpptFolderTracker{ // This prevents a dependency cycle. Reviewers: Are we OK with this? Can you think of a better way to do it?
-			plan:     plan,
-			mu:       &sync.Mutex{},
-			contents: common.NewTrie(),
+			fetchTransfer:          fetcher,
+			mu:                     &sync.Mutex{},
+			contents:               make(map[string]JpptFolderIndex),
+			unregisteredButCreated: make(map[string]struct{}),
 		}
 	case common.EFolderPropertiesOption.NoFolders():
 		// can't use simpleFolderTracker here, because when no folders are processed,
@@ -46,13 +63,24 @@ func (f *nullFolderTracker) ShouldSetProperties(folder string, overwrite common.
 	panic("wrong type of folder tracker has been instantiated. This type does not do any tracking")
 }
 
-type jpptFolderTracker struct {
-	plan     IJobPartPlanHeader
-	mu       *sync.Mutex
-	contents *common.Trie
+func (f *nullFolderTracker) StopTracking(folder string) {
+	// noop (because we don't track anything)
 }
 
-func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, transferIndex uint32) {
+type jpptFolderTracker struct {
+	// fetchTransfer is used instead of a IJobMgr reference to support testing
+	fetchTransfer          func(index JpptFolderIndex) *JobPartPlanTransfer
+	mu                     *sync.Mutex
+	contents               map[string]JpptFolderIndex
+	unregisteredButCreated map[string]struct{}
+}
+
+type JpptFolderIndex struct {
+	PartNum       PartNumber
+	TransferIndex uint32
+}
+
+func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, partNum PartNumber, transferIndex uint32) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -60,14 +88,16 @@ func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, transferIn
 		return // Never persist to dev-null
 	}
 
-	fNode, _ := f.contents.InsertDirNode(folder)
-	fNode.TransferIndex = transferIndex
+	f.contents[folder] = JpptFolderIndex{
+		PartNum:       partNum,
+		TransferIndex: transferIndex,
+	}
 
 	// We created it before it was enumerated-- Let's register that now.
-	if fNode.UnregisteredButCreated {
-		f.plan.Transfer(transferIndex).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
-		fNode.UnregisteredButCreated = false
+	if _, ok := f.unregisteredButCreated[folder]; ok {
+		f.fetchTransfer(JpptFolderIndex{PartNum: partNum, TransferIndex: transferIndex}).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
 
+		delete(f.unregisteredButCreated, folder)
 	}
 }
 
@@ -79,15 +109,12 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 		return nil // Never persist to dev-null
 	}
 
-	// If the folder has already been created, then we don't need to create it again
-	fNode, addedToTrie := f.contents.InsertDirNode(folder)
-
-	if !addedToTrie && (f.plan.Transfer(fNode.TransferIndex).TransferStatus() == common.ETransferStatus.FolderCreated() ||
-		f.plan.Transfer(fNode.TransferIndex).TransferStatus() == common.ETransferStatus.Success()) {
+	if idx, ok := f.contents[folder]; ok &&
+		f.fetchTransfer(idx).TransferStatus() == (common.ETransferStatus.FolderCreated()) {
 		return nil
 	}
 
-	if fNode.UnregisteredButCreated {
+	if _, ok := f.unregisteredButCreated[folder]; ok {
 		return nil
 	}
 
@@ -96,14 +123,13 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 		return err
 	}
 
-	if !addedToTrie {
+	if idx, ok := f.contents[folder]; ok {
 		// overwrite it's transfer status
-		f.plan.Transfer(fNode.TransferIndex).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
+		f.fetchTransfer(idx).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
 	} else {
 		// A folder hasn't been hit in traversal yet.
 		// Recording it in memory is OK, because we *cannot* resume a job that hasn't finished traversal.
-		// We set the value to 0 as we just want to record it in memory
-		fNode.UnregisteredButCreated = true
+		f.unregisteredButCreated[folder] = struct{}{}
 	}
 
 	return nil
@@ -125,9 +151,8 @@ func (f *jpptFolderTracker) ShouldSetProperties(folder string, overwrite common.
 		defer f.mu.Unlock()
 
 		var created bool
-		if fNode, ok := f.contents.GetDirNode(folder); ok {
-			created = f.plan.Transfer(fNode.TransferIndex).TransferStatus() == common.ETransferStatus.FolderCreated() ||
-				f.plan.Transfer(fNode.TransferIndex).TransferStatus() == common.ETransferStatus.Success()
+		if idx, ok := f.contents[folder]; ok {
+			created = f.fetchTransfer(idx).TransferStatus() == common.ETransferStatus.FolderCreated()
 		} else {
 			// This should not happen, ever.
 			// Folder property jobs register with the tracker before they start getting processed.
@@ -155,5 +180,28 @@ func (f *jpptFolderTracker) ShouldSetProperties(folder string, overwrite common.
 		return created
 	default:
 		panic("unknown overwrite option")
+	}
+}
+
+func (f *jpptFolderTracker) StopTracking(folder string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if folder == common.Dev_Null {
+		return // Not possible to track this
+	}
+
+	// no-op, because tracking is now handled by jppt, anyway.
+	if _, ok := f.contents[folder]; ok {
+		delete(f.contents, folder)
+	} else {
+		currentContents := ""
+
+		for k, v := range f.contents {
+			currentContents += fmt.Sprintf("K: %s V: %d\n", k, v)
+		}
+
+		// double should never be hit, but *just in case*.
+		panic(common.NewAzCopyLogSanitizer().SanitizeLogMessage("Folder " + folder + " shouldn't finish tracking until it's been recorded\nCurrent Contents:\n" + currentContents))
 	}
 }

@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -20,9 +22,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 )
-
-var AzcopyJobPlanFolder string
-var AzcopyCurrentJobLogger ILoggerResetable
 
 // isIPEndpointStyle checks if URL's host is IP, in this case the storage account endpoint will be composed as:
 // http(s)://IP(:port)/storageaccount/container/...
@@ -191,7 +190,7 @@ func GetServiceClientForLocation(loc Location,
 		ret.bsc = bsc
 		return ret, nil
 
-	case ELocation.File():
+	case ELocation.File(), ELocation.FileNFS():
 		fileURLParts, err := file.ParseURL(resourceURL)
 		if err != nil {
 			return nil, err
@@ -231,7 +230,7 @@ func GetServiceClientForLocation(loc Location,
 // NewScopedCredential takes in a credInfo object and returns ScopedCredential
 // if credentialType is either MDOAuth or oAuth. For anything else,
 // nil is returned
-func NewScopedCredential(cred azcore.TokenCredential, credType CredentialType) *ScopedCredential {
+func NewScopedCredential[T azcore.TokenCredential](cred T, credType CredentialType) *ScopedCredential[T] {
 	var scope string
 	if !credType.IsAzureOAuth() {
 		return nil
@@ -240,16 +239,27 @@ func NewScopedCredential(cred azcore.TokenCredential, credType CredentialType) *
 	} else if credType == ECredentialType.OAuthToken() {
 		scope = StorageScope
 	}
-	return &ScopedCredential{cred: cred, scopes: []string{scope}}
+	return &ScopedCredential[T]{cred: cred, scopes: []string{scope}}
 }
 
-type ScopedCredential struct {
-	cred   azcore.TokenCredential
+type ScopedCredential[T azcore.TokenCredential] struct {
+	cred   T
 	scopes []string
 }
 
-func (s *ScopedCredential) GetToken(ctx context.Context, _ policy.TokenRequestOptions) (azcore.AccessToken, error) {
-	return s.cred.GetToken(ctx, policy.TokenRequestOptions{Scopes: s.scopes})
+func (s *ScopedCredential[T]) GetToken(ctx context.Context, _ policy.TokenRequestOptions) (azcore.AccessToken, error) {
+	return s.cred.GetToken(ctx, policy.TokenRequestOptions{Scopes: s.scopes, EnableCAE: true})
+}
+
+type ScopedToken = ScopedCredential[azcore.TokenCredential]
+type ScopedAuthenticator ScopedCredential[AuthenticateToken]
+
+func (s *ScopedAuthenticator) GetToken(ctx context.Context, _ policy.TokenRequestOptions) (azcore.AccessToken, error) {
+	return s.cred.GetToken(ctx, policy.TokenRequestOptions{Scopes: s.scopes, EnableCAE: true})
+}
+
+func (s *ScopedAuthenticator) Authenticate(ctx context.Context, _ *policy.TokenRequestOptions) (azidentity.AuthenticationRecord, error) {
+	return s.cred.Authenticate(ctx, &policy.TokenRequestOptions{Scopes: s.scopes, EnableCAE: true})
 }
 
 type ServiceClient struct {
@@ -381,4 +391,34 @@ func DoWithOverrideReadOnlyOnAzureFiles(ctx context.Context, action func() (inte
 	// retry the action
 	_, err = action()
 	return err
+}
+
+// @brief Checks if the container name provided is a system container or not
+func IsSystemContainer(containerName string) bool {
+	// Decode the container name in case it's URL-encoded
+	decodedName, err := url.QueryUnescape(containerName)
+	if err != nil {
+		// If decoding fails, it's unlikely the name matches a system container
+		return false
+	}
+	// define the system variables for the system containers
+	systemContainers := []string{"$blobchangefeed", "$logs"}
+	for _, sys := range systemContainers {
+		if decodedName == sys {
+			return true
+		}
+	}
+	return false
+}
+
+// this is a global variable so that we can use it in traversal phase
+var isNFSCopy bool
+
+func SetNFSFlag(isNFS bool) {
+	// SetNFSFlag sets the global isNFSCopy variable to the given value
+	isNFSCopy = isNFS
+}
+
+func IsNFSCopy() bool {
+	return isNFSCopy
 }

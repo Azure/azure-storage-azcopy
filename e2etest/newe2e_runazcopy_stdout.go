@@ -12,6 +12,7 @@ var _ AzCopyStdout = &AzCopyParsedListStdout{}
 var _ AzCopyStdout = &AzCopyParsedCopySyncRemoveStdout{}
 var _ AzCopyStdout = &AzCopyParsedDryrunStdout{}
 var _ AzCopyStdout = &AzCopyParsedJobsListStdout{}
+var _ AzCopyStdout = &AzCopyParsedJobsShowStdout{}
 
 // ManySubscriberChannel is intended to reproduce the effects of .NET's events.
 // This allows us to *partially* answer the question of how we want to handle testing of prompting in the New E2E framework.
@@ -87,6 +88,10 @@ func (a *AzCopyParsedStdout) Write(p []byte) (n int, err error) {
 	n = len(p)
 
 	for _, v := range lines {
+		// Instead of failing, skip WARN messages since they will fail processing due to being invalid JSON.
+		if strings.HasPrefix(v, "WARN") {
+			continue
+		}
 		var out common.JsonOutputTemplate
 		err = json.Unmarshal([]byte(v), &out)
 		if err != nil {
@@ -211,6 +216,8 @@ func (d *AzCopyParsedDryrunStdout) Write(p []byte) (n int, err error) {
 			if err != nil {
 				continue
 			}
+
+			d.Transfers = append(d.Transfers, tx)
 		}
 	}
 
@@ -221,6 +228,7 @@ type AzCopyParsedJobsListStdout struct {
 	AzCopyParsedStdout
 	listenChan chan<- common.JsonOutputTemplate
 	JobsCount  int
+	Jobs       []common.JobIDDetails
 }
 
 func (a *AzCopyParsedJobsListStdout) Write(p []byte) (n int, err error) {
@@ -234,6 +242,96 @@ func (a *AzCopyParsedJobsListStdout) Write(p []byte) (n int, err error) {
 				}
 
 				a.JobsCount = len(tx.JobIDDetails)
+				a.Jobs = tx.JobIDDetails
+			}
+		})
+	}
+	return a.AzCopyParsedStdout.Write(p)
+}
+
+type AzCopyParsedLoginStatusStdout struct {
+	AzCopyParsedStdout
+	listenChan chan<- common.JsonOutputTemplate
+	status     cmd.LoginStatusOutput
+}
+
+func (a *AzCopyParsedLoginStatusStdout) Write(p []byte) (n int, err error) {
+	if a.listenChan == nil {
+		a.listenChan = a.OnParsedLine.SubscribeFunc(func(line common.JsonOutputTemplate) {
+			if line.MessageType == common.EOutputMessageType.LoginStatusInfo().String() {
+				out := &cmd.LoginStatusOutput{}
+				err = json.Unmarshal([]byte(line.MessageContent), out)
+				if err != nil {
+					return
+				}
+
+				a.status = *out
+			}
+		})
+	}
+	return a.AzCopyParsedStdout.Write(p)
+}
+
+var _ AzCopyStdout = &AzCopyInteractiveStdout{}
+
+// AzCopyInteractiveStdout is still a semi-raw stdout struct.
+type AzCopyInteractiveStdout struct {
+	Messages []string
+	asserter Asserter
+}
+
+// NewInteractiveWriter creates a new InteractiveWriter instance.
+func NewAzCopyInteractiveStdout(a Asserter) *AzCopyInteractiveStdout {
+	return &AzCopyInteractiveStdout{
+		asserter: a,
+	}
+}
+
+func (a *AzCopyInteractiveStdout) RawStdout() []string {
+	return a.Messages
+}
+
+func (a *AzCopyInteractiveStdout) Write(p []byte) (n int, err error) {
+	str := string(p)
+	lines := strings.Split(strings.TrimSuffix(str, "\n"), "\n")
+	n = len(p)
+
+	for _, v := range lines {
+		a.Messages = append(a.Messages, v)
+		a.asserter.Log(v)
+	}
+
+	return
+}
+
+func (a *AzCopyInteractiveStdout) String() string {
+	return strings.Join(a.RawStdout(), "\n")
+}
+
+type AzCopyParsedJobsShowStdout struct {
+	AzCopyParsedStdout
+	listenChan chan<- common.JsonOutputTemplate
+	transfers  common.ListJobTransfersResponse
+	summary    common.ListJobSummaryResponse
+}
+
+func (a *AzCopyParsedJobsShowStdout) Write(p []byte) (n int, err error) {
+	if a.listenChan == nil {
+		a.listenChan = a.OnParsedLine.SubscribeFunc(func(line common.JsonOutputTemplate) {
+			if line.MessageType == common.EOutputMessageType.ListJobTransfers().String() {
+				var tx common.ListJobTransfersResponse
+				err = json.Unmarshal([]byte(line.MessageContent), &tx)
+				if err != nil {
+					return
+				}
+				a.transfers = tx
+			} else if line.MessageType == common.EOutputMessageType.GetJobSummary().String() {
+				var summary common.ListJobSummaryResponse
+				err = json.Unmarshal([]byte(line.MessageContent), &summary)
+				if err != nil {
+					return
+				}
+				a.summary = summary
 			}
 		})
 	}

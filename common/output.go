@@ -36,6 +36,11 @@ func (OutputMessageType) Response() OutputMessageType { return OutputMessageType
 func (OutputMessageType) ListObject() OutputMessageType  { return OutputMessageType(8) }
 func (OutputMessageType) ListSummary() OutputMessageType { return OutputMessageType(9) }
 
+func (OutputMessageType) LoginStatusInfo() OutputMessageType { return OutputMessageType(10) }
+
+func (OutputMessageType) GetJobSummary() OutputMessageType    { return OutputMessageType(11) }
+func (OutputMessageType) ListJobTransfers() OutputMessageType { return OutputMessageType(12) }
+
 func (o OutputMessageType) String() string {
 	return enum.StringInt(o, reflect.TypeOf(o))
 }
@@ -68,6 +73,7 @@ var EPromptType = PromptType("")
 
 type PromptType string
 
+func (PromptType) Reauth() PromptType            { return PromptType("Reauth") }
 func (PromptType) Cancel() PromptType            { return PromptType("Cancel") }
 func (PromptType) Overwrite() PromptType         { return PromptType("Overwrite") }
 func (PromptType) DeleteDestination() PromptType { return PromptType("DeleteDestination") }
@@ -118,7 +124,9 @@ func GetStandardInitOutputBuilder(jobID string, logFileLocation string, isCleanu
 			sb.WriteString(cleanupHeader)
 		} else {
 			sb.WriteString("\nJob " + jobID + " has started\n")
-			sb.WriteString("Log file is located at: " + logFileLocation)
+			if logFileLocation != "" {
+				sb.WriteString("Log file is located at: " + logFileLocation)
+			}
 			sb.WriteString("\n")
 		}
 		return sb.String()

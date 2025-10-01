@@ -3,6 +3,12 @@ package e2etest
 import (
 	"bytes"
 	"fmt"
+	"io"
+	"regexp"
+	"runtime"
+	"strings"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
@@ -15,11 +21,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"io"
-	"regexp"
-	"runtime"
-	"strings"
-	"time"
 )
 
 /*
@@ -89,9 +90,8 @@ func buildCanonForAzureResourceManager(manager ResourceManager) string {
 // ==================== SERVICE ====================
 
 type BlobServiceResourceManager struct {
-	internalAccount  *AzureAccountResourceManager
-	specificAuthType *ExplicitCredentialTypes
-	internalClient   *service.Client
+	InternalAccount *AzureAccountResourceManager
+	InternalClient  *service.Client
 }
 
 func (b *BlobServiceResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
@@ -114,7 +114,7 @@ func (b *BlobServiceResourceManager) Parent() ResourceManager {
 }
 
 func (b *BlobServiceResourceManager) Account() AccountResourceManager {
-	return b.internalAccount
+	return b.InternalAccount
 }
 
 func (b *BlobServiceResourceManager) Canon() string {
@@ -123,7 +123,7 @@ func (b *BlobServiceResourceManager) Canon() string {
 
 func (b *BlobServiceResourceManager) ListContainers(a Asserter) []string {
 	a.HelperMarker().Helper()
-	pager := b.internalClient.NewListContainersPager(&service.ListContainersOptions{})
+	pager := b.InternalClient.NewListContainersPager(&service.ListContainersOptions{})
 	out := make([]string, 0)
 
 	for pager.More() {
@@ -139,8 +139,8 @@ func (b *BlobServiceResourceManager) ListContainers(a Asserter) []string {
 }
 
 func (b *BlobServiceResourceManager) URI(opts ...GetURIOptions) string {
-	base := blobStripSAS(b.internalClient.URL())
-	base = b.internalAccount.ApplySAS(base, b.Location(), opts...)
+	base := blobStripSAS(b.InternalClient.URL())
+	base = b.InternalAccount.ApplySAS(base, b.Location(), opts...)
 	base = addWildCard(base, opts...)
 
 	return base
@@ -155,34 +155,34 @@ func (b *BlobServiceResourceManager) Level() cmd.LocationLevel {
 }
 
 func (b *BlobServiceResourceManager) ResourceClient() any {
-	return b.internalClient
+	return b.InternalClient
 }
 
 func (b *BlobServiceResourceManager) GetContainer(name string) ContainerResourceManager {
-	containerClient := b.internalClient.NewContainerClient(name)
+	containerClient := b.InternalClient.NewContainerClient(name)
 	return &BlobContainerResourceManager{
-		internalAccount: b.internalAccount,
-		Service:         b,
-		containerName:   name,
-		internalClient:  containerClient,
+		InternalAccount:       b.InternalAccount,
+		Service:               b,
+		InternalContainerName: name,
+		InternalClient:        containerClient,
 	}
 }
 
 func (b *BlobServiceResourceManager) IsHierarchical() bool {
-	return b.internalAccount.AccountType() == EAccountType.HierarchicalNamespaceEnabled()
+	return b.InternalAccount.AccountType() == EAccountType.HierarchicalNamespaceEnabled()
 }
 
 // ==================== CONTAINER ====================
 
 type BlobContainerResourceManager struct {
-	internalAccount *AzureAccountResourceManager
-	Service         *BlobServiceResourceManager
-	containerName   string
-	internalClient  *container.Client
+	InternalAccount       *AzureAccountResourceManager
+	Service               *BlobServiceResourceManager
+	InternalContainerName string
+	InternalClient        *container.Client
 }
 
 func (b *BlobContainerResourceManager) GetDatalakeContainerManager(a Asserter) ContainerResourceManager {
-	return b.internalAccount.GetService(a, common.ELocation.BlobFS()).GetContainer(b.containerName)
+	return b.InternalAccount.GetService(a, common.ELocation.BlobFS()).GetContainer(b.InternalContainerName)
 }
 
 func (b *BlobContainerResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
@@ -203,13 +203,13 @@ func (b *BlobContainerResourceManager) Canon() string {
 }
 
 func (b *BlobContainerResourceManager) Exists() bool {
-	_, err := b.internalClient.GetProperties(ctx, nil)
+	_, err := b.InternalClient.GetProperties(ctx, nil)
 
 	return err == nil || !bloberror.HasCode(err, bloberror.ContainerNotFound, bloberror.ContainerBeingDeleted, bloberror.ResourceNotFound)
 }
 
 func (b *BlobContainerResourceManager) Account() AccountResourceManager {
-	return b.internalAccount
+	return b.InternalAccount
 }
 
 func (b *BlobContainerResourceManager) Parent() ResourceManager {
@@ -262,7 +262,7 @@ func (b *BlobContainerResourceManager) ListObjects(a Asserter, prefix string, re
 	}
 
 	if !recursive {
-		pager := b.internalClient.NewListBlobsHierarchyPager("/", &container.ListBlobsHierarchyOptions{
+		pager := b.InternalClient.NewListBlobsHierarchyPager("/", &container.ListBlobsHierarchyOptions{
 			Include: container.ListBlobsInclude{Metadata: true, Tags: true, Versions: true, LegalHold: true},
 			Prefix:  &prefix,
 		})
@@ -276,7 +276,7 @@ func (b *BlobContainerResourceManager) ListObjects(a Asserter, prefix string, re
 			}
 		}
 	} else {
-		pager := b.internalClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
+		pager := b.InternalClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
 			Include: container.ListBlobsInclude{Metadata: true, Tags: true, Versions: true, LegalHold: true},
 			Prefix:  &prefix,
 		})
@@ -305,7 +305,7 @@ func (b *BlobContainerResourceManager) Create(a Asserter, props ContainerPropert
 
 func (b *BlobContainerResourceManager) GetProperties(a Asserter) ContainerProperties {
 	a.HelperMarker().Helper()
-	props, err := b.internalClient.GetProperties(ctx, nil)
+	props, err := b.InternalClient.GetProperties(ctx, nil)
 	a.NoError("Get container properties", err)
 
 	return ContainerProperties{
@@ -320,7 +320,7 @@ type BlobContainerCreateOptions = container.CreateOptions
 
 func (b *BlobContainerResourceManager) CreateWithOptions(a Asserter, options *BlobContainerCreateOptions) {
 	a.HelperMarker().Helper()
-	_, err := b.internalClient.Create(ctx, options)
+	_, err := b.InternalClient.Create(ctx, options)
 
 	created := true
 	if bloberror.HasCode(err, bloberror.ContainerAlreadyExists) {
@@ -336,17 +336,17 @@ func (b *BlobContainerResourceManager) CreateWithOptions(a Asserter, options *Bl
 
 func (b *BlobContainerResourceManager) GetObject(a Asserter, path string, eType common.EntityType) ObjectResourceManager {
 	return &BlobObjectResourceManager{
-		internalAccount: b.internalAccount,
+		internalAccount: b.InternalAccount,
 		Service:         b.Service,
 		Container:       b,
 		Path:            path,
 		entityType:      eType,
-		internalClient:  b.internalClient.NewBlobClient(path),
+		internalClient:  b.InternalClient.NewBlobClient(path),
 	}
 }
 
 func (b *BlobContainerResourceManager) ResourceClient() any {
-	return b.internalClient
+	return b.InternalClient
 }
 
 func (b *BlobContainerResourceManager) Location() common.Location {
@@ -358,8 +358,8 @@ func (b *BlobContainerResourceManager) Level() cmd.LocationLevel {
 }
 
 func (b *BlobContainerResourceManager) URI(opts ...GetURIOptions) string {
-	base := blobStripSAS(b.internalClient.URL())
-	base = b.internalAccount.ApplySAS(base, b.Location(), opts...)
+	base := blobStripSAS(b.InternalClient.URL())
+	base = b.InternalAccount.ApplySAS(base, b.Location(), opts...)
 	base = addWildCard(base, opts...)
 
 	return base
@@ -371,7 +371,7 @@ func (b *BlobContainerResourceManager) HasMetadata() PropertiesAvailability {
 
 func (b *BlobContainerResourceManager) GetMetadata(a Asserter) common.Metadata {
 	a.HelperMarker().Helper()
-	resp, err := b.internalClient.GetProperties(ctx, &container.GetPropertiesOptions{})
+	resp, err := b.InternalClient.GetProperties(ctx, &container.GetPropertiesOptions{})
 	a.NoError("Get container properties", err)
 
 	return resp.Metadata
@@ -379,18 +379,18 @@ func (b *BlobContainerResourceManager) GetMetadata(a Asserter) common.Metadata {
 
 func (b *BlobContainerResourceManager) SetMetadata(a Asserter, metadata common.Metadata) {
 	a.HelperMarker().Helper()
-	_, err := b.internalClient.SetMetadata(ctx, &container.SetMetadataOptions{Metadata: metadata})
+	_, err := b.InternalClient.SetMetadata(ctx, &container.SetMetadataOptions{Metadata: metadata})
 	a.NoError("Set container metadata", err)
 }
 
 func (b *BlobContainerResourceManager) Delete(a Asserter) {
 	a.HelperMarker().Helper()
-	_, err := b.internalClient.Delete(ctx, nil)
+	_, err := b.InternalClient.Delete(ctx, nil)
 	a.NoError("Delete container", err)
 }
 
 func (b *BlobContainerResourceManager) ContainerName() string {
-	return b.containerName
+	return b.InternalContainerName
 }
 
 // ==================== OBJECT ====================
@@ -402,7 +402,8 @@ type BlobObjectResourceManager struct {
 	Path            string
 	entityType      common.EntityType
 
-	internalClient *blob.Client
+	internalClient     *blob.Client
+	hardlinkedFilePath string
 }
 
 func (b *BlobObjectResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
@@ -446,6 +447,10 @@ func (b *BlobObjectResourceManager) ObjectName() string {
 	return b.Path
 }
 
+func (b *BlobObjectResourceManager) HardlinkedFileName() string {
+	return b.hardlinkedFilePath
+}
+
 // Create defaults to Block Blob. For implementation-specific options, GetTypeOrZero[T] / GetTypeOrAssert[T] to BlobObjectResourceManager and call CreateWithOptions
 func (b *BlobObjectResourceManager) Create(a Asserter, body ObjectContentContainer, properties ObjectProperties) {
 	a.HelperMarker().Helper()
@@ -470,6 +475,7 @@ type BlobObjectCreateOptions struct {
 
 func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectContentContainer, properties ObjectProperties, options *BlobObjectCreateOptions) {
 	a.HelperMarker().Helper()
+
 	opts := DerefOrZero(options)
 	blobProps := properties.BlobProperties
 
@@ -495,7 +501,9 @@ func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectCon
 		// Override blob type
 		properties.BlobProperties.Type = pointerTo(blob.BlobTypeBlockBlob)
 	case common.EEntityType.Symlink():
-		// body should already be path
+		if body == nil {
+			body = NewStringObjectContentContainer(properties.SymlinkedFileName)
+		}
 
 		// Set symlink meta
 		properties.Metadata = copyMeta()
@@ -508,6 +516,10 @@ func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectCon
 
 	switch DerefOrZero(blobProps.Type) {
 	case "", blob.BlobTypeBlockBlob:
+		if body == nil {
+			body = NewZeroObjectContentContainer(0)
+		}
+
 		blockSize := DerefOrDefault(opts.BlockSize, common.DefaultBlockBlobBlockSize)
 		bodySize := body.Size()
 
@@ -517,7 +529,7 @@ func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectCon
 			}
 		}
 
-		_, err := b.Container.internalClient.NewBlockBlobClient(b.Path).UploadStream(ctx, body.Reader(), &blockblob.UploadStreamOptions{
+		_, err := b.Container.InternalClient.NewBlockBlobClient(b.Path).UploadStream(ctx, body.Reader(), &blockblob.UploadStreamOptions{
 			BlockSize:               blockSize,
 			Concurrency:             runtime.NumCPU(),
 			TransactionalValidation: blob.TransferValidationTypeComputeCRC64(),
@@ -530,8 +542,12 @@ func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectCon
 		})
 		a.NoError("Block blob upload", err)
 	case blob.BlobTypePageBlob:
+		if body == nil {
+			body = NewZeroObjectContentContainer(0)
+		}
+
 		// TODO : Investigate bug in multistep uploader for PageBlob. (WI 28334208)
-		client := b.Container.internalClient.NewPageBlobClient(b.Path)
+		client := b.Container.InternalClient.NewPageBlobClient(b.Path)
 		blockSize := DerefOrDefault(opts.BlockSize, common.DefaultPageBlobChunkSize)
 		size := body.Size()
 		_, err := client.Create(
@@ -576,6 +592,10 @@ func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectCon
 			blockIndex++
 		}
 	case blob.BlobTypeAppendBlob:
+		if body == nil {
+			body = NewZeroObjectContentContainer(0)
+		}
+
 		// TODO : Investigate bug in multistep uploader for AppendBlob. (WI 28334208)
 		blockSize := DerefOrDefault(opts.BlockSize, common.DefaultBlockBlobBlockSize)
 		size := body.Size()
@@ -586,7 +606,7 @@ func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectCon
 			}
 		}
 
-		client := b.Container.internalClient.NewAppendBlobClient(b.Path)
+		client := b.Container.InternalClient.NewAppendBlobClient(b.Path)
 
 		_, err := client.Create(ctx, &appendblob.CreateOptions{
 			HTTPHeaders:  properties.HTTPHeaders.ToBlob(),
@@ -772,6 +792,13 @@ func (b *BlobObjectResourceManager) Download(a Asserter) io.ReadSeeker {
 	}
 
 	return bytes.NewReader(buf.Bytes())
+}
+
+func (b *BlobObjectResourceManager) ReadLink(a Asserter) string {
+	reader := b.Download(a)
+	buf, err := io.ReadAll(reader)
+	a.NoError("Read symlink body", err)
+	return string(buf)
 }
 
 func (b *BlobObjectResourceManager) Exists() bool {

@@ -21,10 +21,13 @@
 package common_test
 
 import (
+	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/stretchr/testify/assert"
 	"os"
+	"runtime"
+	"syscall"
 	"testing"
 )
 
@@ -35,7 +38,9 @@ func TestCreateParentDirectoryIfNotExist(t *testing.T) {
 	plan := &ste.JobPartPlanHeader{}
 	fpo := common.EFolderPropertiesOption.AllFolders()
 
-	tracker := ste.NewFolderCreationTracker(fpo, plan)
+	tracker := ste.NewFolderCreationTracker(fpo, func(index ste.JpptFolderIndex) *ste.JobPartPlanTransfer {
+		return plan.Transfer(index.TransferIndex)
+	})
 	fileName := "stuff.txt"
 
 	// when destination path is defined as "/" in linux, the source file becomes the destination path string
@@ -64,4 +69,32 @@ func TestCreateParentDirectoryIfNotExist(t *testing.T) {
 	fullPath := path + "\\" + fileName
 	err = common.CreateParentDirectoryIfNotExist(fullPath, tracker)
 	a.Nil(err)
+}
+
+// Test EINTR errors are not returned on Linux
+func TestCreateFileOfSizeWithWriteThroughOption(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("EINTR errors are POSIX specific")
+		return
+	}
+	a := assert.New(t)
+	destinationPath := "/"
+
+	plan := &ste.JobPartPlanHeader{}
+	fpo := common.EFolderPropertiesOption.AllFolders()
+	tracker := ste.NewFolderCreationTracker(fpo, func(index ste.JpptFolderIndex) *ste.JobPartPlanTransfer {
+		return plan.Transfer(index.TransferIndex)
+	})
+
+	_, err := common.CreateFileOfSizeWithWriteThroughOption(destinationPath, 1,
+		false,
+		tracker,
+		false)
+
+	if err != nil {
+		a.NotEqual(syscall.EINTR, err)
+		return
+	}
+	a.NoError(err, fmt.Sprintf("Error creating file: %v", err))
+
 }

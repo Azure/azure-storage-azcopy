@@ -22,41 +22,23 @@ package cmd
 
 import (
 	"fmt"
-	"os"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // the interceptor gathers/saves the job part orders for validation
 type interceptor struct {
-	transfers   []common.CopyTransfer
-	lastRequest interface{}
+	transfers []common.CopyTransfer
 }
 
-func (i *interceptor) intercept(cmd common.RpcCmd, request interface{}, response interface{}) {
-	switch cmd {
-	case common.ERpcCmd.CopyJobPartOrder():
-		// cache the transfers
-		copyRequest := *request.(*common.CopyJobPartOrderRequest)
-		i.transfers = append(i.transfers, copyRequest.Transfers.List...)
-		i.lastRequest = request
+func (i *interceptor) intercept(copyRequest common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+	// cache the transfers
+	i.transfers = append(i.transfers, copyRequest.Transfers.List...)
 
-		// mock the result
-		if len(i.transfers) != 0 || !copyRequest.IsFinalPart {
-			*(response.(*common.CopyJobPartOrderResponse)) = common.CopyJobPartOrderResponse{JobStarted: true}
-		} else {
-			*(response.(*common.CopyJobPartOrderResponse)) = common.CopyJobPartOrderResponse{JobStarted: false, ErrorMsg: common.ECopyJobPartOrderErrorType.NoTransfersScheduledErr()}
-		}
-	case common.ERpcCmd.ListJobs():
-	case common.ERpcCmd.ListJobSummary():
-	case common.ERpcCmd.ListJobTransfers():
-	case common.ERpcCmd.PauseJob():
-	case common.ERpcCmd.CancelJob():
-	case common.ERpcCmd.ResumeJob():
-	case common.ERpcCmd.GetJobFromTo():
-		fallthrough
-	default:
-		panic("RPC mock not implemented")
+	// mock the result
+	if len(i.transfers) != 0 || !copyRequest.IsFinalPart {
+		return common.CopyJobPartOrderResponse{JobStarted: true}
+	} else {
+		return common.CopyJobPartOrderResponse{JobStarted: false, ErrorMsg: common.ECopyJobPartOrderErrorType.NoTransfersScheduledErr()}
 	}
 }
 
@@ -69,7 +51,6 @@ func (i *interceptor) init() {
 
 func (i *interceptor) reset() {
 	i.transfers = make([]common.CopyTransfer, 0)
-	i.lastRequest = nil
 }
 
 // this lifecycle manager substitute does not perform any action
@@ -81,10 +62,6 @@ type mockedLifecycleManager struct {
 	exitLog      chan string
 	dryrunLog    chan string
 	outputFormat common.OutputFormat
-}
-
-func (m *mockedLifecycleManager) DownloadToTempPath() bool {
-	return false
 }
 
 func (m *mockedLifecycleManager) ReportAllJobPartsDone() {
@@ -143,24 +120,11 @@ func (*mockedLifecycleManager) SurrenderControl()                               
 func (*mockedLifecycleManager) RegisterCloseFunc(func())                        {}
 func (mockedLifecycleManager) AllowReinitiateProgressReporting()                {}
 func (*mockedLifecycleManager) InitiateProgressReporting(common.WorkController) {}
-func (*mockedLifecycleManager) ClearEnvironmentVariable(env common.EnvironmentVariable) {
-	_ = os.Setenv(env.Name, "")
-}
-func (*mockedLifecycleManager) GetEnvironmentVariable(env common.EnvironmentVariable) string {
-	value := os.Getenv(env.Name)
-	if value == "" {
-		return env.DefaultValue
-	}
-	return value
-}
 func (m *mockedLifecycleManager) SetOutputFormat(format common.OutputFormat) {
 	m.outputFormat = format
 }
 func (*mockedLifecycleManager) EnableInputWatcher()    {}
 func (*mockedLifecycleManager) EnableCancelFromStdIn() {}
-func (*mockedLifecycleManager) AddUserAgentPrefix(userAgent string) string {
-	return userAgent
-}
 
 func (*mockedLifecycleManager) SetForceLogging() {}
 

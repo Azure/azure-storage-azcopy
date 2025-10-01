@@ -23,33 +23,25 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"strings"
 )
 
 // Enumerates an entire blob account, looking into each matching container as it goes
 type blobAccountTraverser struct {
-	serviceClient         *service.Client
-	ctx                   context.Context
-	containerPattern      string
-	cachedContainers      []string
-	includeDirectoryStubs bool
+	opts InitResourceTraverserOptions
 
-	// a generic function to notify that a new stored object has been enumerated
-	incrementEnumerationCounter enumerationCounterFunc
+	serviceClient    *blobservice.Client
+	ctx              context.Context
+	containerPattern string
+	cachedContainers []string
 
-	s2sPreserveSourceTags bool
-
-	cpkOptions          common.CpkOptions
-	preservePermissions common.PreservePermissionsOption
-
-	isDFS bool
+	blobOpts []BlobTraverserOptions
 
 	excludeContainerName []ObjectFilter
 }
 
-func (t *blobAccountTraverser) IsDirectory(_ bool) (bool, error) {
+func (t *blobAccountTraverser) IsDirectory(isSource bool) (bool, error) {
 	return true, nil // Returns true as account traversal is inherently folder-oriented and recursive.
 }
 
@@ -120,7 +112,16 @@ func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 
 	for _, v := range cList {
 		containerURL := t.serviceClient.NewContainerClient(v).URL()
-		containerTraverser := newBlobTraverser(containerURL, t.serviceClient, t.ctx, true, t.includeDirectoryStubs, t.incrementEnumerationCounter, t.s2sPreserveSourceTags, t.cpkOptions, false, false, false, t.preservePermissions, t.isDFS)
+		containerTraverser := newBlobTraverser(containerURL, t.serviceClient, t.ctx, InitResourceTraverserOptions{
+			IncrementEnumeration: t.opts.IncrementEnumeration,
+
+			CpkOptions: t.opts.CpkOptions,
+
+			Recursive:             true,
+			IncludeDirectoryStubs: t.opts.IncludeDirectoryStubs,
+			PreserveBlobTags:      t.opts.PreserveBlobTags,
+			PreservePermissions:   t.opts.PreservePermissions,
+		}, t.blobOpts...)
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
@@ -135,18 +136,16 @@ func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 	return nil
 }
 
-func newBlobAccountTraverser(serviceClient *service.Client, container string, ctx context.Context, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, preservePermissions common.PreservePermissionsOption, isDFS bool, containerNames []string) (t *blobAccountTraverser) {
+func newBlobAccountTraverser(serviceClient *blobservice.Client, container string, ctx context.Context, opts InitResourceTraverserOptions, blobOpts ...BlobTraverserOptions) (t *blobAccountTraverser) {
 	t = &blobAccountTraverser{
-		ctx:                         ctx,
-		incrementEnumerationCounter: incrementEnumerationCounter,
-		serviceClient:               serviceClient,
-		containerPattern:            container,
-		includeDirectoryStubs:       includeDirectoryStubs,
-		s2sPreserveSourceTags:       s2sPreserveSourceTags,
-		cpkOptions:                  cpkOptions,
-		preservePermissions:         preservePermissions,
-		isDFS:                       isDFS,
-		excludeContainerName:        buildExcludeContainerFilter(containerNames),
+		opts: opts,
+
+		ctx:                  ctx,
+		serviceClient:        serviceClient,
+		containerPattern:     container,
+		excludeContainerName: buildExcludeContainerFilter(opts.ExcludeContainers),
+
+		blobOpts: blobOpts,
 	}
 
 	return
