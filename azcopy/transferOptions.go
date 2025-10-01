@@ -71,10 +71,11 @@ func (b boolDefaultTrue) GetIfSet() (bool, bool) {
 }
 
 type CookedTransferOptions struct {
-	source      common.ResourceString
-	destination common.ResourceString
-	srcLevel    LocationLevel
-	dstLevel    LocationLevel
+	source           common.ResourceString
+	destination      common.ResourceString
+	srcLevel         LocationLevel
+	dstLevel         LocationLevel
+	containerPattern string // Store wildcard container pattern for account-level traversal
 
 	fromTo            common.FromTo
 	filterOptions     traverser.FilterOptions
@@ -320,6 +321,42 @@ func (c *CookedTransferOptions) applyDefaultsAndInferOptions(opts CopyOptions) (
 			c.fromTo.To().IsRemote() && (c.s2sSourceChangeValidation || c.filterOptions.IncludeAfter != nil || c.filterOptions.IncludeBefore != nil)) || // If S2S from File to *, and sourceChangeValidation is enabled, we get properties so that we have LMTs. Likewise, if we are using includeAfter or includeBefore, which require LMTs.
 		(c.fromTo.From().IsRemote() && c.fromTo.To().IsRemote() && c.s2sPreserveProperties.Get() && !c.s2sGetPropertiesInBackend) // If S2S and preserve properties AND get properties in backend is on, turn this off, as properties will be obtained in the backend.
 	c.s2sGetPropertiesInBackend = c.s2sPreserveProperties.Get() && !c.getPropertiesInFrontend && c.s2sGetPropertiesInBackend      // Infer GetProperties if GetPropertiesInBackend is enabled.
+
+	// Extract container pattern before normalization (for account-level traversal with wildcards)
+	if c.fromTo.From().IsRemote() {
+		switch c.fromTo.From() {
+		case common.ELocation.Blob():
+			if bURLParts, err := url.Parse(c.source.Value); err == nil {
+				if gURLParts := common.NewGenericResourceURLParts(*bURLParts, c.fromTo.From()); strings.Contains(gURLParts.GetContainerName(), "*") {
+					c.containerPattern = gURLParts.GetContainerName()
+				}
+			}
+		case common.ELocation.File(), common.ELocation.FileNFS():
+			if fURLParts, err := url.Parse(c.source.Value); err == nil {
+				if gURLParts := common.NewGenericResourceURLParts(*fURLParts, c.fromTo.From()); strings.Contains(gURLParts.GetContainerName(), "*") {
+					c.containerPattern = gURLParts.GetContainerName()
+				}
+			}
+		case common.ELocation.BlobFS():
+			if dURLParts, err := url.Parse(c.source.Value); err == nil {
+				if gURLParts := common.NewGenericResourceURLParts(*dURLParts, c.fromTo.From()); strings.Contains(gURLParts.GetContainerName(), "*") {
+					c.containerPattern = gURLParts.GetContainerName()
+				}
+			}
+		case common.ELocation.S3():
+			if s3URLParts, err := url.Parse(c.source.Value); err == nil {
+				if gURLParts := common.NewGenericResourceURLParts(*s3URLParts, c.fromTo.From()); strings.Contains(gURLParts.GetContainerName(), "*") {
+					c.containerPattern = gURLParts.GetContainerName()
+				}
+			}
+		case common.ELocation.GCP():
+			if gcpURLParts, err := url.Parse(c.source.Value); err == nil {
+				if gURLParts := common.NewGenericResourceURLParts(*gcpURLParts, c.fromTo.From()); strings.Contains(gURLParts.GetContainerName(), "*") {
+					c.containerPattern = gURLParts.GetContainerName()
+				}
+			}
+		}
+	}
 
 	// source root trailing slash handling
 	root, err := NormalizeResourceRoot(c.source.Value, c.fromTo.From())

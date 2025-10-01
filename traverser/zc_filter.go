@@ -76,6 +76,10 @@ func (s *excludeContainerFilter) DoesPass(storedObject StoredObject) bool {
 }
 
 func buildExcludeContainerFilter(containerNames []string) []ObjectFilter {
+	if len(containerNames) == 0 {
+		return make([]ObjectFilter, 0)
+	}
+	
 	excludeContainerSet := make(map[string]bool)
 	for _, name := range containerNames {
 		excludeContainerSet[name] = true

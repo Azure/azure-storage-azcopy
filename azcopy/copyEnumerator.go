@@ -24,7 +24,16 @@ func (t *transferExecutor) initCopyEnumerator(ctx context.Context, logLevel comm
 	// Initialize the source traverser
 	dest := t.opts.fromTo.To()
 	var sourceTraverser traverser.ResourceTraverser
-	sourceTraverser, err = traverser.InitResourceTraverser(t.opts.source, t.opts.fromTo.From(), ctx, traverser.InitResourceTraverserOptions{
+
+	// Reconstruct source URL with wildcard pattern if needed for account-level traversal
+	sourceResource := t.opts.source
+	if t.opts.containerPattern != "" && t.opts.fromTo.From().IsRemote() {
+		// Reconstruct URL with wildcard container pattern
+		reconstructedURL := t.opts.source.Value + "/" + t.opts.containerPattern
+		sourceResource = common.ResourceString{Value: reconstructedURL}
+	}
+
+	sourceTraverser, err = traverser.InitResourceTraverser(sourceResource, t.opts.fromTo.From(), ctx, traverser.InitResourceTraverserOptions{
 		DestResourceType: &dest,
 
 		Client:         t.trp.srcServiceClient,
