@@ -22,7 +22,6 @@ package azcopy
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
@@ -83,10 +82,12 @@ func (s *CopyTransferProcessor) scheduleTransfer(srcRelativePath, dstRelativePat
 		metadataString := s.CopyJobTemplate.BlobAttributes.Metadata
 		metadataMap := common.Metadata{}
 		if len(metadataString) > 0 {
-			for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
-				kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
-				metadataMap[kv[0]] = &kv[1]
+			// Use the proper metadata parsing function that handles escaped semicolons
+			parsedMetadata, err := common.StringToMetadata(metadataString)
+			if err != nil {
+				return fmt.Errorf("invalid metadata format: %w", err)
 			}
+			metadataMap = parsedMetadata
 		}
 		copyTransfer.Metadata = metadataMap
 

@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"strconv"
-	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -84,10 +83,12 @@ func (e *transferExecutor) redirectionBlobUpload(ctx context.Context) (err error
 	metadataString := e.opts.metadata
 	metadataMap := common.Metadata{}
 	if len(metadataString) > 0 {
-		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
-			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
-			metadataMap[kv[0]] = &kv[1]
+		// Use the proper metadata parsing function that handles escaped semicolons
+		parsedMetadata, err := common.StringToMetadata(metadataString)
+		if err != nil {
+			return fmt.Errorf("invalid metadata format: %w", err)
 		}
+		metadataMap = parsedMetadata
 	}
 	cpkInfo, err := e.opts.cpkOptions.GetCPKInfo()
 	if err != nil {
@@ -115,7 +116,7 @@ func (e *transferExecutor) redirectionBlobUpload(ctx context.Context) (err error
 
 // redirectionBlobDownload downloads a blob from a source URL to os.Stdout using piping (redirection).
 func (e *transferExecutor) redirectionBlobDownload(ctx context.Context) error {
-	// step 0: check the Stdout before uploading
+	// step 0: check the Stdout before downloading
 	_, err := os.Stdout.Stat()
 	if err != nil {
 		return fmt.Errorf("fatal: cannot write to Stdout due to error: %s", err.Error())
@@ -130,12 +131,12 @@ func (e *transferExecutor) redirectionBlobDownload(ctx context.Context) error {
 	var blobURLParts blob.URLParts
 	blobURLParts, err = blob.ParseURL(resourceURL)
 	if err != nil {
-		return fmt.Errorf("fatal: cannot parse destination URL due to error: %s", err.Error())
+		return fmt.Errorf("fatal: cannot parse source URL due to error: %s", err.Error())
 	}
 
-	// step 2: leverage high-level call in Blob SDK to upload stdin in parallel
+	// step 2: leverage high-level call in Blob SDK to download from source blob
 	var serviceClient *blobservice.Client
-	serviceClient, err = e.trp.dstServiceClient.BlobServiceClient()
+	serviceClient, err = e.trp.srcServiceClient.BlobServiceClient()
 	if err != nil {
 		return err
 	}
