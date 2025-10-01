@@ -601,7 +601,7 @@ func (c *CookedTransferOptions) validateOptions() (err error) {
 		if err != nil {
 			return err
 		}
-		if err = ValidatePreserveOwner(c.preservePermissions.IsOwner(), c.fromTo); err != nil {
+		if err = ValidatePreserveOwner(c.preservePermissions == common.EPreservePermissionsOption.OwnershipAndACLs() || c.preservePermissions == common.EPreservePermissionsOption.None(), c.fromTo); err != nil {
 			return err
 		}
 	}

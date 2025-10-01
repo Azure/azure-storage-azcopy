@@ -778,7 +778,7 @@ func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.
 		return srcCredInfo, errors.New("shared key auth is not supported for S2S operations")
 	}
 
-	if cca.Source.SAS != "" && cca.FromTo.IsS2S() && jpo.S2SSourceCredentialType == common.ECredentialType.OAuthToken() {
+	if cca.Source.SAS != "" && cca.FromTo.IsS2S() && jpo.CredentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
 		glcm.Info("Authentication: If the source and destination accounts are in the same AAD tenant & the user/spn/msi has appropriate permissions on both, the source SAS token is not required and OAuth can be used round-trip.")
 	}
 
@@ -1333,7 +1333,7 @@ func init() {
 
 			result, err := Client.Copy(ctx, raw.src, raw.dst, opts, CLICopyHandler{})
 			if err != nil {
-				glcm.Error("Cannot perform sync due to error: " + err.Error() + getErrorCodeUrl(err))
+				glcm.Error("Cannot perform copy due to error: " + err.Error() + getErrorCodeUrl(err))
 			}
 			if raw.dryrun || userFromTo.IsRedirection() {
 				glcm.Exit(nil, common.EExitCode.Success())

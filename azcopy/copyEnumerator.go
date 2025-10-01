@@ -67,9 +67,9 @@ func (t *transferExecutor) initCopyEnumerator(ctx context.Context, logLevel comm
 	}
 
 	// Check if the destination is a directory to correctly decide where our files land
-	isDestDir := isResourceDirectory(ctx, t.opts.destination, t.opts.fromTo.To(), t.trp.dstServiceClient, false)
-	if t.opts.listOfFiles != nil &&
-		(t.opts.fromTo != common.EFromTo.BlobLocal() || isSourceDir || !isDestDir) {
+	isDestDir := isResourceDirectory(ctx, t.opts.destination, t.opts.fromTo.To(), t.trp.dstServiceClient, false, t.opts.trailingDot)
+	if t.opts.listOfVersionIds != nil &&
+		(!(t.opts.fromTo == common.EFromTo.BlobLocal() || t.opts.fromTo == common.EFromTo.BlobTrash()) || isSourceDir || !isDestDir) {
 		return nil, errors.New("either source is not a blob or destination is not a local folder")
 	}
 
@@ -383,7 +383,7 @@ func (t *transferExecutor) newCopyTransferProcessor(numOfTransfersPerPart int,
 	return NewCopyTransferProcessor(true, copyJobTemplate, numOfTransfersPerPart, t.opts.source, t.opts.destination, reportFirstPart, reportFinalPart, t.opts.s2sPreserveAccessTier.Get(), t.opts.dryrun, t.opts.dryrunJobPartOrderHandler)
 }
 
-func isResourceDirectory(ctx context.Context, res common.ResourceString, loc common.Location, serviceClient *common.ServiceClient, isSource bool) bool {
+func isResourceDirectory(ctx context.Context, res common.ResourceString, loc common.Location, serviceClient *common.ServiceClient, isSource bool, trailingDotOption common.TrailingDotOption) bool {
 	rt, err := traverser.InitResourceTraverser(res, loc, ctx,
 		traverser.InitResourceTraverserOptions{
 			Client: serviceClient,

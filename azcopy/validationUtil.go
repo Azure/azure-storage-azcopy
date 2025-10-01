@@ -619,7 +619,7 @@ func ValidatePreserveOwner(preserve bool, fromTo common.FromTo) error {
 	if fromTo.IsDownload() {
 		return nil // it can be used in downloads
 	}
-	if preserve != common.PreserveOwnerDefault {
+	if !preserve {
 		return fmt.Errorf("flag --%s can only be used on downloads", common.PreserveOwnerFlagName)
 	}
 	return nil

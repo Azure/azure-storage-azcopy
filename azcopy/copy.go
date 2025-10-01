@@ -174,13 +174,13 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions, h
 		}
 
 		mgr := NewJobLifecycleManager(copyHandler)
-		common.GetLifecycleMgr().Info("Scanning...")
 
 		enumerator, err := t.initCopyEnumerator(ctx, c.GetLogLevel(), mgr)
 		if err != nil {
 			return CopyResult{}, err
 		}
 		if !t.opts.dryrun {
+			common.GetLifecycleMgr().Info("Scanning...")
 			mgr.InitiateProgressReporting(ctx, t.tpt)
 		}
 		err = enumerator.Enumerate()
