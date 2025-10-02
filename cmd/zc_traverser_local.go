@@ -258,6 +258,8 @@ func writeToErrorChannel(errorChannel chan<- TraverserErrorItemInfo, err ErrorFi
 			// Channel might be full, log the error instead
 			WarnStdoutAndScanningLog(fmt.Sprintf("Failed to send error to channel: %v", err.ErrorMessage()))
 		}
+	} else {
+		WarnStdoutAndScanningLog(fmt.Sprintf("Error channel is nil, cannot send error: %v", err.ErrorMessage()))
 	}
 }
 
@@ -367,6 +369,16 @@ func WalkWithSymlinks(
 						if options.IncrementEnumerationCounter != nil {
 							options.IncrementEnumerationCounter(common.EEntityType.Symlink())
 						}
+
+						// Using errorChannel to log skipped files
+						writeToErrorChannel(options.ErrorChannel,
+							ErrorFileInfo{
+								FilePath: filePath,
+								FileInfo: fileInfo,
+								ErrorMsg: GetSkippedFileErrorMessage(common.EEntityType.Symlink(), nil),
+							})
+						WarnStdoutAndScanningLog(fmt.Sprintf("Skipping symlink - '%s' for NFS", filePath))
+
 						logNFSLinkWarning(fileInfo.Name(), "", true)
 					}
 					return nil // skip it
@@ -495,6 +507,15 @@ func WalkWithSymlinks(
 						if options.IncrementEnumerationCounter != nil {
 							options.IncrementEnumerationCounter(common.EEntityType.Other())
 						}
+
+						// Using errorChannel to log skipped files
+						writeToErrorChannel(options.ErrorChannel,
+							ErrorFileInfo{
+								FilePath: filePath,
+								FileInfo: fileInfo,
+								ErrorMsg: GetUnsupportedFileErrorMessage(common.EEntityType.Other(), nil),
+							})
+						WarnStdoutAndScanningLog(fmt.Sprintf("Skipping special file - '%s' for NFS", filePath))
 						logSpecialFileWarning(fileInfo.Name())
 						return nil
 					}
