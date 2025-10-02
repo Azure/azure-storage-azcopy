@@ -895,7 +895,9 @@ func runCopyAndVerify(a *assert.Assertions, raw rawCopyCmdArgs, mockTransfer fun
 	opts, err := raw.toCopyOptions(&cobra.Command{})
 	a.Nil(err)
 	opts.WithInternalOptions(raw.listOfFilesToCopy, to.Ptr(raw.s2sGetPropertiesInBackend), true, mockTransfer, raw.deleteDestinationFileIfNecessary, "")
-
+	if !raw.s2sPreserveAccessTier {
+		opts.S2SPreserveAccessTier = to.Ptr(false)
+	}
 	// create the client if it is not already created
 	if jobsAdmin.JobsAdmin == nil {
 		Client, err = azcopy.NewClient(azcopy.ClientOptions{CapMbps: CapMbps})

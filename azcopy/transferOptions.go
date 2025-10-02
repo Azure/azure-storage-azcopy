@@ -310,8 +310,6 @@ func (c *CookedTransferOptions) applyDefaultsAndInferOptions(opts CopyOptions) (
 		c.includeDirectoryStubs = true
 	}
 
-	// We set preservePOSIXProperties if the customer has explicitly asked for this in transfer or if it is just a Posix-property only transfer
-	c.preservePosixProperties = opts.PreservePosixProperties || c.forceWrite == common.EOverwriteOption.PosixProperties()
 	// Infer on download so that we get LMT and MD5 on files download
 	// On S2S transfers the following rules apply:
 	// If preserve properties is enabled, but get properties in backend is disabled, turn it on

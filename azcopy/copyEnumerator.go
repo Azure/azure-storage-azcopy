@@ -76,10 +76,11 @@ func (t *transferExecutor) initCopyEnumerator(ctx context.Context, logLevel comm
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: t.opts.trailingDot,
 		},
-		CpkOptions:                     t.opts.cpkOptions,
-		PreservePermissions:            t.opts.preservePermissions,
-		PreserveInfo:                   t.opts.preserveInfo,
-		PreservePOSIXProperties:        t.opts.preservePosixProperties,
+		CpkOptions:          t.opts.cpkOptions,
+		PreservePermissions: t.opts.preservePermissions,
+		PreserveInfo:        t.opts.preserveInfo,
+		// We set preservePOSIXProperties if the customer has explicitly asked for this in transfer or if it is just a Posix-property only transfer
+		PreservePOSIXProperties:        t.opts.preservePosixProperties || t.opts.forceWrite == common.EOverwriteOption.PosixProperties(),
 		S2SGetPropertiesInBackend:      t.opts.s2sGetPropertiesInBackend,
 		S2SSourceChangeValidation:      t.opts.s2sSourceChangeValidation,
 		DestLengthValidation:           t.opts.checkLength,
