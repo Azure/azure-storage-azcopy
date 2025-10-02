@@ -71,11 +71,10 @@ func (b boolDefaultTrue) GetIfSet() (bool, bool) {
 }
 
 type CookedTransferOptions struct {
-	source           common.ResourceString
-	destination      common.ResourceString
-	srcLevel         LocationLevel
-	dstLevel         LocationLevel
-	containerPattern string // Store wildcard container pattern for account-level traversal
+	source      common.ResourceString
+	destination common.ResourceString
+	srcLevel    LocationLevel
+	dstLevel    LocationLevel
 
 	fromTo            common.FromTo
 	filterOptions     traverser.FilterOptions
@@ -306,10 +305,11 @@ func (c *CookedTransferOptions) applyDefaultsAndInferOptions(opts CopyOptions) (
 	if c.destination.Value == common.Dev_Null {
 		c.checkLength = false
 	}
-	if opts.PreservePermissions && c.fromTo.From() == common.ELocation.Blob() {
+	if c.preservePermissions.IsTruthy() && c.fromTo.From() == common.ELocation.Blob() {
 		// If a user is trying to persist from Blob storage with ACLs, they probably want directories too, because ACLs only exist in HNS.
 		c.includeDirectoryStubs = true
 	}
+
 	// We set preservePOSIXProperties if the customer has explicitly asked for this in transfer or if it is just a Posix-property only transfer
 	c.preservePosixProperties = opts.PreservePosixProperties || c.forceWrite == common.EOverwriteOption.PosixProperties()
 	// Infer on download so that we get LMT and MD5 on files download
@@ -320,61 +320,8 @@ func (c *CookedTransferOptions) applyDefaultsAndInferOptions(opts CopyOptions) (
 		(c.fromTo.From().IsFile() &&
 			c.fromTo.To().IsRemote() && (c.s2sSourceChangeValidation || c.filterOptions.IncludeAfter != nil || c.filterOptions.IncludeBefore != nil)) || // If S2S from File to *, and sourceChangeValidation is enabled, we get properties so that we have LMTs. Likewise, if we are using includeAfter or includeBefore, which require LMTs.
 		(c.fromTo.From().IsRemote() && c.fromTo.To().IsRemote() && c.s2sPreserveProperties.Get() && !c.s2sGetPropertiesInBackend) // If S2S and preserve properties AND get properties in backend is on, turn this off, as properties will be obtained in the backend.
-	c.s2sGetPropertiesInBackend = c.s2sPreserveProperties.Get() && !c.getPropertiesInFrontend && c.s2sGetPropertiesInBackend // Infer GetProperties if GetPropertiesInBackend is enabled.
+	c.s2sGetPropertiesInBackend = c.s2sPreserveProperties.Get() && !c.getPropertiesInFrontend && c.s2sGetPropertiesInBackend      // Infer GetProperties if GetPropertiesInBackend is enabled.
 
-	// Extract container pattern before normalization (for account-level traversal with wildcards)
-	if c.fromTo.From().IsRemote() {
-		switch c.fromTo.From() {
-		case common.ELocation.Blob():
-			if bURLParts, err := url.Parse(c.source.Value); err == nil {
-				if gURLParts := common.NewGenericResourceURLParts(*bURLParts, c.fromTo.From()); strings.Contains(gURLParts.GetContainerName(), "*") {
-					c.containerPattern = gURLParts.GetContainerName()
-				}
-			}
-		case common.ELocation.File(), common.ELocation.FileNFS():
-			if fURLParts, err := url.Parse(c.source.Value); err == nil {
-				if gURLParts := common.NewGenericResourceURLParts(*fURLParts, c.fromTo.From()); strings.Contains(gURLParts.GetContainerName(), "*") {
-					c.containerPattern = gURLParts.GetContainerName()
-				}
-			}
-		case common.ELocation.BlobFS():
-			if dURLParts, err := url.Parse(c.source.Value); err == nil {
-				if gURLParts := common.NewGenericResourceURLParts(*dURLParts, c.fromTo.From()); strings.Contains(gURLParts.GetContainerName(), "*") {
-					c.containerPattern = gURLParts.GetContainerName()
-				}
-			}
-		case common.ELocation.S3():
-			if s3URLParts, err := url.Parse(c.source.Value); err == nil {
-				if gURLParts := common.NewGenericResourceURLParts(*s3URLParts, c.fromTo.From()); strings.Contains(gURLParts.GetContainerName(), "*") {
-					c.containerPattern = gURLParts.GetContainerName()
-				}
-			}
-		case common.ELocation.GCP():
-			if gcpURLParts, err := url.Parse(c.source.Value); err == nil {
-				if gURLParts := common.NewGenericResourceURLParts(*gcpURLParts, c.fromTo.From()); strings.Contains(gURLParts.GetContainerName(), "*") {
-					c.containerPattern = gURLParts.GetContainerName()
-				}
-			}
-		}
-	}
-
-	// source root trailing slash handling
-	root, err := NormalizeResourceRoot(c.source.Value, c.fromTo.From())
-	if err != nil {
-		return err
-	}
-	// Handle special case: local source paths with trailing "/*".
-	if c.fromTo.From().IsLocal() {
-		diff := strings.TrimPrefix(c.source.Value, root)
-
-		// Match either "*" or "/*" with OS or AzCopy separators.
-		if diff == "*" ||
-			diff == common.OS_PATH_SEPARATOR+"*" ||
-			diff == common.AZCOPY_PATH_SEPARATOR_STRING+"*" {
-			c.stripTopDir = true
-		}
-	}
-	c.source.Value = root
 	c.srcLevel, err = DetermineLocationLevel(c.source.Value, c.fromTo.From(), true)
 	if err != nil {
 		return err
@@ -382,16 +329,6 @@ func (c *CookedTransferOptions) applyDefaultsAndInferOptions(opts CopyOptions) (
 	c.dstLevel, err = DetermineLocationLevel(c.destination.Value, c.fromTo.To(), false)
 	if err != nil {
 		return err
-	}
-	// When copying a container directly to a container, strip the top directory, unless we're attempting to persist permissions.
-	if c.srcLevel == ELocationLevel.Container() && c.dstLevel == ELocationLevel.Container() && c.fromTo.IsS2S() {
-		if c.preservePermissions.IsTruthy() {
-			// if we're preserving permissions, we need to keep the top directory, but with container->container, we don't need to add the container name to the path.
-			// asSubdir is a better option than stripTopDir as stripTopDir disincludes the root.
-			c.asSubdir = false
-		} else {
-			c.stripTopDir = true
-		}
 	}
 
 	return
@@ -409,6 +346,11 @@ func getMetadataString(m map[string]string) string {
 		if result != "" {
 			result += ";"
 		}
+		// Escape any '=' or ';' characters in metadata key or value
+		k = strings.Replace(k, ";", "\\;", -1)
+		k = strings.Replace(k, "=", "\\=", -1)
+		v = strings.Replace(v, ";", "\\;", -1)
+		v = strings.Replace(v, "=", "\\=", -1)
 		result += fmt.Sprintf("%s=%s", k, v)
 	}
 	return result

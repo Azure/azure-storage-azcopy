@@ -21,19 +21,83 @@ import (
 
 func (t *transferExecutor) initCopyEnumerator(ctx context.Context, logLevel common.LogLevel, mgr *JobLifecycleManager) (enumerator *traverser.CopyEnumerator, err error) {
 
+	// source root trailing slash handling
+	normalizedSource := t.opts.source
+	normalizedSource.Value, err = NormalizeResourceRoot(t.opts.source.Value, t.opts.fromTo.From())
+	if err != nil {
+		return nil, err
+	}
+
+	// Handle special case: local source paths with trailing "/*".
+	if t.opts.fromTo.From().IsLocal() {
+		diff := strings.TrimPrefix(t.opts.source.Value, normalizedSource.Value)
+
+		// Match either "*" or "/*" with OS or AzCopy separators.
+		if diff == "*" ||
+			diff == common.OS_PATH_SEPARATOR+"*" ||
+			diff == common.AZCOPY_PATH_SEPARATOR_STRING+"*" {
+			t.opts.stripTopDir = true
+		}
+	}
+
+	// initialize the fields that are constant across all job part orders,
+	// and for which we have sufficient info now to set them
+	jobPartOrder := &common.CopyJobPartOrderRequest{
+		JobID:               t.tpt.jobID,
+		FromTo:              t.opts.fromTo,
+		ForceWrite:          t.opts.forceWrite,
+		ForceIfReadOnly:     t.opts.forceIfReadOnly,
+		AutoDecompress:      t.opts.autoDecompress,
+		Priority:            common.EJobPriority.Normal(),
+		LogLevel:            logLevel,
+		SymlinkHandlingType: t.opts.symlinks,
+		BlobAttributes: common.BlobTransferAttributes{
+			BlobType:                 t.opts.blobType,
+			BlockSizeInBytes:         t.opts.blockSize,
+			PutBlobSizeInBytes:       t.opts.putBlobSize,
+			ContentType:              t.opts.contentType,
+			ContentEncoding:          t.opts.contentEncoding,
+			ContentLanguage:          t.opts.contentLanguage,
+			ContentDisposition:       t.opts.contentDisposition,
+			CacheControl:             t.opts.cacheControl,
+			BlockBlobTier:            t.opts.blockBlobTier,
+			PageBlobTier:             t.opts.pageBlobTier,
+			Metadata:                 t.opts.metadata,
+			NoGuessMimeType:          t.opts.noGuessMimeType,
+			PreserveLastModifiedTime: t.opts.preserveLastModifiedTime,
+			PutMd5:                   t.opts.putMd5,
+			MD5ValidationOption:      t.opts.checkMd5,
+			DeleteSnapshotsOption:    t.opts.deleteSnapshotsOption,
+			// Setting tags when tags explicitly provided by the user through blob-tags flag
+			BlobTagsString:                   t.opts.blobTags.ToString(),
+			DeleteDestinationFileIfNecessary: t.opts.deleteDestinationFileIfNecessary,
+		},
+		CommandString: t.opts.commandString,
+		FileAttributes: common.FileTransferAttributes{
+			TrailingDot: t.opts.trailingDot,
+		},
+		CpkOptions:                     t.opts.cpkOptions,
+		PreservePermissions:            t.opts.preservePermissions,
+		PreserveInfo:                   t.opts.preserveInfo,
+		PreservePOSIXProperties:        t.opts.preservePosixProperties,
+		S2SGetPropertiesInBackend:      t.opts.s2sGetPropertiesInBackend,
+		S2SSourceChangeValidation:      t.opts.s2sSourceChangeValidation,
+		DestLengthValidation:           t.opts.checkLength,
+		S2SInvalidMetadataHandleOption: t.opts.s2sInvalidMetadataHandleOption,
+		S2SPreserveBlobTags:            t.opts.s2sPreserveBlobTags,
+		S2SSourceCredentialType:        t.trp.srcCredType,
+		JobErrorHandler:                mgr,
+		SrcServiceClient:               t.trp.srcServiceClient,
+		DstServiceClient:               t.trp.dstServiceClient,
+		DestinationRoot:                t.opts.destination,
+		SourceRoot:                     normalizedSource,
+	}
+
 	// Initialize the source traverser
 	dest := t.opts.fromTo.To()
 	var sourceTraverser traverser.ResourceTraverser
 
-	// Reconstruct source URL with wildcard pattern if needed for account-level traversal
-	sourceResource := t.opts.source
-	if t.opts.containerPattern != "" && t.opts.fromTo.From().IsRemote() {
-		// Reconstruct URL with wildcard container pattern
-		reconstructedURL := t.opts.source.Value + "/" + t.opts.containerPattern
-		sourceResource = common.ResourceString{Value: reconstructedURL}
-	}
-
-	sourceTraverser, err = traverser.InitResourceTraverser(sourceResource, t.opts.fromTo.From(), ctx, traverser.InitResourceTraverserOptions{
+	sourceTraverser, err = traverser.InitResourceTraverser(t.opts.source, t.opts.fromTo.From(), ctx, traverser.InitResourceTraverserOptions{
 		DestResourceType: &dest,
 
 		Client:         t.trp.srcServiceClient,
@@ -80,6 +144,18 @@ func (t *transferExecutor) initCopyEnumerator(ctx context.Context, logLevel comm
 	if t.opts.listOfVersionIds != nil &&
 		(!(t.opts.fromTo == common.EFromTo.BlobLocal() || t.opts.fromTo == common.EFromTo.BlobTrash()) || isSourceDir || !isDestDir) {
 		return nil, errors.New("either source is not a blob or destination is not a local folder")
+	}
+
+	// for the source dir checking to work, we can only infer these options here.
+	// When copying a container directly to a container, strip the top directory, unless we're attempting to persist permissions.
+	if t.opts.srcLevel == ELocationLevel.Container() && t.opts.dstLevel == ELocationLevel.Container() && t.opts.fromTo.IsS2S() {
+		if t.opts.preservePermissions.IsTruthy() {
+			// if we're preserving permissions, we need to keep the top directory, but with container->container, we don't need to add the container name to the path.
+			// asSubdir is a better option than stripTopDir as stripTopDir disincludes the root.
+			t.opts.asSubdir = false
+		} else {
+			t.opts.stripTopDir = true
+		}
 	}
 
 	// Resolve containers
@@ -197,65 +273,12 @@ func (t *transferExecutor) initCopyEnumerator(ctx context.Context, logLevel comm
 	filters := traverser.BuildFilters(t.opts.fromTo, t.opts.source, t.opts.recursive, t.opts.filterOptions)
 
 	// folder transfer strategy
-	fpo, folderMessage := NewFolderPropertyOption(t.opts.fromTo, t.opts.recursive, t.opts.stripTopDir, filters, t.opts.preserveInfo, t.opts.preservePermissions.IsTruthy(), t.opts.preservePosixProperties, strings.EqualFold(t.opts.destination.Value, common.Dev_Null), t.opts.includeDirectoryStubs)
+	var folderMessage string
+	jobPartOrder.Fpo, folderMessage = NewFolderPropertyOption(t.opts.fromTo, t.opts.recursive, t.opts.stripTopDir, filters, t.opts.preserveInfo, t.opts.preservePermissions.IsTruthy(), t.opts.preservePosixProperties, strings.EqualFold(t.opts.destination.Value, common.Dev_Null), t.opts.includeDirectoryStubs)
 	if !t.opts.dryrun {
 		common.GetLifecycleMgr().Info(folderMessage)
 	}
 	common.LogToJobLogWithPrefix(folderMessage, common.LogInfo)
-
-	// initialize the fields that are constant across all job part orders,
-	// and for which we have sufficient info now to set them
-	jobPartOrder := &common.CopyJobPartOrderRequest{
-		JobID:               t.tpt.jobID,
-		FromTo:              t.opts.fromTo,
-		ForceWrite:          t.opts.forceWrite,
-		ForceIfReadOnly:     t.opts.forceIfReadOnly,
-		AutoDecompress:      t.opts.autoDecompress,
-		Priority:            common.EJobPriority.Normal(),
-		LogLevel:            logLevel,
-		SymlinkHandlingType: t.opts.symlinks,
-		BlobAttributes: common.BlobTransferAttributes{
-			BlobType:                 t.opts.blobType,
-			BlockSizeInBytes:         t.opts.blockSize,
-			PutBlobSizeInBytes:       t.opts.putBlobSize,
-			ContentType:              t.opts.contentType,
-			ContentEncoding:          t.opts.contentEncoding,
-			ContentLanguage:          t.opts.contentLanguage,
-			ContentDisposition:       t.opts.contentDisposition,
-			CacheControl:             t.opts.cacheControl,
-			BlockBlobTier:            t.opts.blockBlobTier,
-			PageBlobTier:             t.opts.pageBlobTier,
-			Metadata:                 t.opts.metadata,
-			NoGuessMimeType:          t.opts.noGuessMimeType,
-			PreserveLastModifiedTime: t.opts.preserveLastModifiedTime,
-			PutMd5:                   t.opts.putMd5,
-			MD5ValidationOption:      t.opts.checkMd5,
-			DeleteSnapshotsOption:    t.opts.deleteSnapshotsOption,
-			// Setting tags when tags explicitly provided by the user through blob-tags flag
-			BlobTagsString:                   t.opts.blobTags.ToString(),
-			DeleteDestinationFileIfNecessary: t.opts.deleteDestinationFileIfNecessary,
-		},
-		CommandString: t.opts.commandString,
-		FileAttributes: common.FileTransferAttributes{
-			TrailingDot: t.opts.trailingDot,
-		},
-		CpkOptions:                     t.opts.cpkOptions,
-		PreservePermissions:            t.opts.preservePermissions,
-		PreserveInfo:                   t.opts.preserveInfo,
-		PreservePOSIXProperties:        t.opts.preservePosixProperties,
-		S2SGetPropertiesInBackend:      t.opts.s2sGetPropertiesInBackend,
-		S2SSourceChangeValidation:      t.opts.s2sSourceChangeValidation,
-		DestLengthValidation:           t.opts.checkLength,
-		S2SInvalidMetadataHandleOption: t.opts.s2sInvalidMetadataHandleOption,
-		S2SPreserveBlobTags:            t.opts.s2sPreserveBlobTags,
-		S2SSourceCredentialType:        t.trp.srcCredType,
-		JobErrorHandler:                mgr,
-		SrcServiceClient:               t.trp.srcServiceClient,
-		DstServiceClient:               t.trp.dstServiceClient,
-		DestinationRoot:                t.opts.destination,
-		SourceRoot:                     t.opts.source,
-		Fpo:                            fpo,
-	}
 
 	transferScheduler := t.newCopyTransferProcessor(NumOfFilesPerDispatchJobPart, jobPartOrder)
 
