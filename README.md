@@ -63,39 +63,41 @@ The general format of the AzCopy commands is: `azcopy [command] [arguments] --[f
 * `bench` - Runs a performance benchmark by uploading or downloading test data to or from a specified destination
 
 * `copy` - Copies source data to a destination location. The supported directions and forms of authorization are:
-    Source | Destination | Direction
-    --- | --- | ---
-    local | Azure Blob (Microsoft Entra ID or SAS) | <->  
-    local | Azure Files SMB (Microsoft Entra ID or share/directory SAS) | <->  
-    local | Azure Files NFS (Microsoft Entra ID or share/directory SAS) | <->  
-    local | Azure Data Lake Storage (Microsoft Entra ID, SAS, or Shared Key) | <->  
-    Azure Blob (Microsoft Entra ID, SAS, or public) | Azure Blob (Microsoft Entra ID or SAS) | ->  
-    Azure Data Lake Storage (Microsoft Entra ID or SAS) | Data Lake Storage (Microsoft Entra ID or SAS) | <->  
-    Azure Data Lake Storage (Microsoft Entra ID or SAS) | Azure Blob (Microsoft Entra ID or SAS) | <->  
-    Azure Blob (Microsoft Entra ID, SAS, or public) | Azure Files SMB (Microsoft Entra ID or SAS) | ->  
-    Azure Files SMB (Microsoft Entra ID or SAS) | Azure Files SMB (Microsoft Entra ID or SAS) | ->  
-    Azure Files SMB (Microsoft Entra ID or SAS) | Azure Blob (Microsoft Entra ID or SAS) | ->  
-    Azure Files NFS (Microsoft Entra ID or SAS) | Azure Files NFS (Microsoft Entra ID or SAS) | ->  
-    AWS S3 (Access Key) | Azure Block Blob (Microsoft Entra ID or SAS) | ->  
-    Google Cloud Storage (Service Account Key) | Azure Block Blob (Microsoft Entra ID or SAS) | ->  
-
-    Notes: "->" denotes supported only from left to right; "<->" denotes bidirectional support.
+    Source | Destination
+    --- | ---
+    Local | Azure Blob (Microsoft Entra ID or SAS)
+    Local | Azure Files SMB (Microsoft Entra ID or share/directory SAS)
+    Local | Azure Files NFS (Microsoft Entra ID or share/directory SAS)
+    Local | Azure Data Lake Storage (Microsoft Entra ID, SAS, or Shared Key)
+    Azure Blob (Microsoft Entra ID or SAS) | Local
+    Azure Files SMB (Microsoft Entra ID or share/directory SAS) | Local
+    Azure Files NFS (Microsoft Entra ID or share/directory SAS) | Local
+    Azure Data Lake Storage (Microsoft Entra ID, SAS, or Shared Key) | Local
+    Azure Blob (Microsoft Entra ID, SAS, or public) | Azure Blob (Microsoft Entra ID or SAS)
+    Azure Blob (Microsoft Entra ID, SAS, or public) | Azure Files SMB (Microsoft Entra ID or SAS)
+    Azure Blob (Microsoft Entra ID or SAS) | Azure Data Lake Storage (Microsoft Entra ID or SAS)
+    Azure Data Lake Storage (Microsoft Entra ID or SAS) | Azure Blob (Microsoft Entra ID or SAS)
+    Azure Data Lake Storage (Microsoft Entra ID or SAS) | Azure Data Lake Storage (Microsoft Entra ID or SAS)
+    Azure Files SMB (Microsoft Entra ID or SAS) | Azure Blob (Microsoft Entra ID or SAS)
+    Azure Files SMB (Microsoft Entra ID or SAS) | Azure Files SMB (Microsoft Entra ID or SAS)
+    Azure Files NFS (Microsoft Entra ID or SAS) | Azure Files NFS (Microsoft Entra ID or SAS)
+    AWS S3 (Access Key) | Azure Block Blob (Microsoft Entra ID or SAS)
+    Google Cloud Storage (Service Account Key) | Azure Block Blob (Microsoft Entra ID or SAS)
 
 * `sync` - Replicate source to the destination location. The supported directions and forms of authorization are:
-    Source | Destination | Direction
-    --- | --- | ---
-    Local | Azure Blob (Microsoft Entra ID or SAS) | <->  
-    Local | Azure File (Microsoft Entra ID or SAS) | <->  
-    Azure Blob (Microsoft Entra ID or SAS) | Azure Blob (Microsoft Entra ID or SAS) | <->  
-    Azure Data Lake Storage (Microsoft Entra ID or SAS) | Azure Data Lake Storage (Microsoft Entra ID or SAS) | <->  
-    Azure File (source: SAS or public) | Azure File (destination: SAS) | <->  
-    Azure Blob (Microsoft Entra ID or SAS) | Azure File (Microsoft Entra ID or SAS) | <->
+    Source | Destination
+    --- | ---
+    Local | Azure Blob (Microsoft Entra ID or SAS)
+    Local | Azure File (Microsoft Entra ID or SAS)
+    Azure Blob (Microsoft Entra ID or SAS) | Local
+    Azure File (Microsoft Entra ID or SAS) | Local
+    Azure Blob (Microsoft Entra ID or SAS) | Azure Blob (Microsoft Entra ID or SAS)
+    Azure Blob (Microsoft Entra ID or SAS) | Azure File (Microsoft Entra ID or SAS)
+    Azure Data Lake Storage (Microsoft Entra ID or SAS) | Azure Data Lake Storage (Microsoft Entra ID or SAS)
+    Azure File (Microsoft Entra ID or SAS) | Azure Blob (Microsoft Entra ID or SAS)
+    Azure File (SAS or public) | Azure File (SAS)
 
-    Notes: "<->" denotes bidirectional support.
-
-* `login` - Log in to Azure Active Directory (AD) to access Azure Storage resources.
-
-* `logout` - Log out to terminate access to Azure Storage resources.
+* `login` - Log in to Azure Active Directory (AD) to access Azure Storage resources.* `logout` - Log out to terminate access to Azure Storage resources.
 
 * `list` - List the entities in a given resource
 
