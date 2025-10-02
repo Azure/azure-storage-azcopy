@@ -33,7 +33,8 @@ func TestCPKEncryptionInputTest(t *testing.T) {
 
 	dirPath := "this/is/a/dummy/path"
 	rawDFSEndpointWithSAS := scenarioHelper{}.getDatalakeServiceClientWithSAS(a)
-	raw := getDefaultRawCopyInput(dirPath, rawDFSEndpointWithSAS.DFSURL())
+	cc := rawDFSEndpointWithSAS.NewFileSystemClient("testcpkfs")
+	raw := getDefaultRawCopyInput(dirPath, cc.DFSURL())
 	raw.recursive = true
 	raw.cpkInfo = true
 
