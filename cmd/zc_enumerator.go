@@ -460,7 +460,10 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 			baseResource := resource.CloneWithValue(cleanLocalPath(basePath))
 			output = newListTraverser(baseResource, resourceLocation, ctx, opts)
 		} else {
-			output, _ = newLocalTraverser(resource.ValueLocal(), ctx, opts)
+			output, err = newLocalTraverser(resource.ValueLocal(), ctx, opts)
+			if err != nil {
+				return nil, err
+			}
 		}
 	case common.ELocation.Benchmark():
 		ben, err := newBenchmarkTraverser(resource.Value, opts.IncrementEnumeration)
