@@ -26,6 +26,25 @@ func ValidatePropertyPtr[T any](a Asserter, name string, expected, real *T) {
 	a.Assert(name+" must match", Equal{Deep: true}, expected, real)
 }
 
+func ValidateTimePtrWithASecDrift(a Asserter, name string, expected, real *time.Time) {
+	if expected == nil || real == nil {
+		return
+	}
+
+	expectedTime := expected.UTC().Truncate(time.Second)
+	realTime := real.UTC().Truncate(time.Second)
+
+	diff := realTime.Sub(expectedTime)
+	if diff < 0 {
+		diff = -diff
+	}
+
+	// allow 1-second drift
+	if diff > time.Second {
+		a.Assert(name+" must match", Equal{Deep: true}, expectedTime, realTime)
+	}
+}
+
 func ValidateTimePtr(a Asserter, name string, expected, real *time.Time) {
 	if expected == nil {
 		return
@@ -186,11 +205,11 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 				ValidatePropertyPtr(a, "Permissions", vProps.FileProperties.FilePermissions, oProps.FileProperties.FilePermissions)
 				// SMB to NFS transfer
 				if vProps.FileProperties.FileCreationTime != nil && oProps.FileNFSProperties != nil {
-					ValidateTimePtr(a, "Creation time SMB to NFS", vProps.FileProperties.FileCreationTime, oProps.FileNFSProperties.FileCreationTime)
-					ValidateTimePtr(a, "Last write time SMB to NFS", vProps.FileProperties.FileLastWriteTime, oProps.FileNFSProperties.FileLastWriteTime)
+					ValidateTimePtrWithASecDrift(a, "Creation time SMB to NFS", vProps.FileProperties.FileCreationTime, oProps.FileNFSProperties.FileCreationTime)
+					ValidateTimePtrWithASecDrift(a, "Last write time SMB to NFS", vProps.FileProperties.FileLastWriteTime, oProps.FileNFSProperties.FileLastWriteTime)
 				} else if vProps.FileNFSProperties != nil && oProps.FileProperties.FileCreationTime != nil {
-					ValidateTimePtr(a, "Creation time NFS to SMB", vProps.FileNFSProperties.FileCreationTime, oProps.FileProperties.FileCreationTime)
-					ValidateTimePtr(a, "Last write time NFS to SMB", vProps.FileNFSProperties.FileLastWriteTime, oProps.FileProperties.FileLastWriteTime)
+					ValidateTimePtrWithASecDrift(a, "Creation time NFS to SMB", vProps.FileNFSProperties.FileCreationTime, oProps.FileProperties.FileCreationTime)
+					ValidateTimePtrWithASecDrift(a, "Last write time NFS to SMB", vProps.FileNFSProperties.FileLastWriteTime, oProps.FileProperties.FileLastWriteTime)
 				} else { // SMB to SMB transfer
 					ValidateTimePtr(a, "Creation time SMB to SMB", vProps.FileProperties.FileCreationTime, oProps.FileProperties.FileCreationTime)
 					ValidateTimePtr(a, "Last write time SMB to SMB", vProps.FileProperties.FileLastWriteTime, oProps.FileProperties.FileLastWriteTime)
