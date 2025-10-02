@@ -23,9 +23,10 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 	"net/url"
 	"strings"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
@@ -151,7 +152,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 			// print the ugly error if unexpected
 			return err
 		}
-	case common.ELocation.File():
+	case common.ELocation.File(), common.ELocation.FileNFS():
 		var shareClient *share.Client
 		shareClient, err = share.NewClientWithNoCredential(resourceURL, &share.ClientOptions{ClientOptions: options})
 		if err != nil {
@@ -214,6 +215,7 @@ func init() {
 		},
 	}
 
-	makeCmd.PersistentFlags().Uint32Var(&rawArgs.quota, "quota-gb", 0, "Specifies the maximum size of the share in gigabytes (GiB), 0 means you accept the file service's default quota.")
+	makeCmd.PersistentFlags().Uint32Var(&rawArgs.quota, "quota-gb", 0, "Specifies the maximum size of the share in gigabytes (GiB), "+
+		"\n 0 means you accept the file service's default quota.")
 	rootCmd.AddCommand(makeCmd)
 }

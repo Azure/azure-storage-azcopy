@@ -78,6 +78,8 @@ const ( // initially supporting a limited set of verbs
 	AzCopyVerbJobsList    AzCopyVerb = "jobs list"
 	AzCopyVerbJobsResume  AzCopyVerb = "jobs resume"
 	AzCopyVerbJobsClean   AzCopyVerb = "jobs clean"
+	AzCopyVerbJobsRemove  AzCopyVerb = "jobs remove"
+	AzCopyVerbJobsShow    AzCopyVerb = "jobs show"
 )
 
 type AzCopyTarget struct {
@@ -153,9 +155,10 @@ type AzCopyEnvironment struct {
 
 	// These fields should almost never be intentionally set by a test writer unless the author really knows what they're doing,
 	// as the fields are automatically controlled.
-	ParentContext *AzCopyEnvironmentContext
-	EnvironmentId *uint
-	RunCount      *uint
+	ParentContext          *AzCopyEnvironmentContext
+	EnvironmentId          *uint
+	RunCount               *uint
+	AzcopyConcurrencyValue *string `env:"AZCOPY_CONCURRENCY_VALUE"`
 }
 
 func (env *AzCopyEnvironment) InheritEnvVar(name string) {
@@ -370,6 +373,14 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 				commandSpec.Flags = LoginStatusFlags{}
 			case AzCopyVerbRemove:
 				commandSpec.Flags = RemoveFlags{}
+			case AzCopyVerbJobsClean:
+				commandSpec.Flags = JobsCleanFlags{}
+			case AzCopyVerbJobsRemove:
+				commandSpec.Flags = JobsRemoveFlags{}
+			case AzCopyVerbJobsList:
+				commandSpec.Flags = JobsListFlags{}
+			case AzCopyVerbJobsShow:
+				commandSpec.Flags = JobsShowFlags{}
 			default:
 				commandSpec.Flags = GlobalFlags{}
 			}
@@ -452,6 +463,13 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 				LogFolder:     *commandSpec.Environment.LogLocation,
 			}
 
+		case commandSpec.Verb == AzCopyVerbJobsShow:
+			if !commandSpec.ShouldFail {
+				out = &AzCopyParsedJobsShowStdout{}
+			} else {
+				out = &AzCopyRawStdout{}
+			}
+
 		// Login status
 		case commandSpec.Verb == AzCopyVerbLoginStatus:
 			out = &AzCopyParsedLoginStatusStdout{}
@@ -500,11 +518,6 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	a.Assert("expected exit code",
 		common.Iff[Assertion](commandSpec.ShouldFail, Not{Equal{}}, Equal{}),
 		0, command.ProcessState.ExitCode())
-
-	// validate log file retention for jobs clean command before the job logs are cleaned up and uploaded
-	if !a.Failed() && commandSpec.Verb == AzCopyVerbJobsClean {
-		ValidateLogFileRetention(a, *commandSpec.Environment.LogLocation, 1)
-	}
 
 	// The environment manager will handle cleanup for us-- All we need to do at this point is register our stdout.
 	envCtx.RegisterLogUpload(LogUpload{

@@ -50,6 +50,13 @@ func Iff[T any](test bool, trueVal, falseVal T) T {
 	return falseVal
 }
 
+func IffNil[T any](wanted *T, instead T) T {
+	if wanted == nil {
+		return instead
+	}
+	return *wanted
+}
+
 func IffNotNil[T any](wanted *T, instead T) T {
 	if wanted == nil {
 		return instead
