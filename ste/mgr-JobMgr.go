@@ -62,6 +62,8 @@ type IJobMgr interface {
 	AllTransfersScheduled() bool
 	ConfirmAllTransfersScheduled()
 	ResetAllTransfersScheduled()
+	GetTotalNumFilesProcessed() int64
+	AddTotalNumFilesProcessed(numFiles int64)
 	Reset(context.Context, string) IJobMgr
 	PipelineLogInfo() LogOptions
 	ReportJobPartDone(jobPartProgressInfo)
@@ -108,7 +110,7 @@ type IJobMgr interface {
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx context.Context, cpuMon common.CPUMonitor, level common.LogLevel,
-	commandString string, logFileFolder string, tuner ConcurrencyTuner,
+	commandString string, tuner ConcurrencyTuner,
 	pacer PacerAdmin, slicePool common.ByteSlicePooler, cacheLimiter common.CacheLimiter, fileCountLimiter common.CacheLimiter,
 	jobLogger common.ILoggerResetable, daemonMode bool) IJobMgr {
 	const channelSize = 100000
@@ -143,14 +145,14 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	jstm.statusMgrDone = make(chan struct{})
 	// Different logger for each job.
 	if jobLogger == nil {
-		jobLogger = common.NewJobLogger(jobID, common.ELogLevel.Debug(), logFileFolder, "" /* logFileNameSuffix */)
+		jobLogger = common.NewJobLogger(jobID, common.ELogLevel.Debug(), common.LogPathFolder, "" /* logFileNameSuffix */)
 		jobLogger.OpenLog()
 	}
 
 	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), include: map[string]int{}, exclude: map[string]int{},
 		httpClient:           NewAzcopyHTTPClient(concurrency.MaxIdleConnections),
 		logger:               jobLogger,
-		chunkStatusLogger:    common.NewChunkStatusLogger(jobID, cpuMon, logFileFolder, enableChunkLogOutput),
+		chunkStatusLogger:    common.NewChunkStatusLogger(jobID, cpuMon, common.LogPathFolder, enableChunkLogOutput),
 		concurrency:          concurrency,
 		overwritePrompter:    newOverwritePrompter(),
 		pipelineNetworkStats: newPipelineNetworkStats(tuner), // let the stats coordinate with the concurrency tuner
@@ -287,14 +289,14 @@ type jobMgr struct {
 	atomicAllTransfersScheduled     int32
 	atomicFinalPartOrderedIndicator int32
 	atomicTransferDirection         common.TransferDirection
-
-	concurrency          ConcurrencySettings
-	logger               common.ILoggerResetable
-	chunkStatusLogger    common.ChunkStatusLoggerCloser
-	jobID                common.JobID // The Job's unique ID
-	ctx                  context.Context
-	cancel               context.CancelFunc
-	pipelineNetworkStats *PipelineNetworkStats
+	atomicTotalFilesProcessed       int64 // Number of files processed across multiple job parts
+	concurrency                     ConcurrencySettings
+	logger                          common.ILoggerResetable
+	chunkStatusLogger               common.ChunkStatusLoggerCloser
+	jobID                           common.JobID // The Job's unique ID
+	ctx                             context.Context
+	cancel                          context.CancelFunc
+	pipelineNetworkStats            *PipelineNetworkStats
 
 	// Share the same HTTP Client across all job parts, so that the we maximize reuse of
 	// its internal connection pool
@@ -464,7 +466,7 @@ func (jm *jobMgr) AddJobPart(args *AddJobPartArgs) IJobPartMgr {
 		var logger common.ILogger = jm
 		jm.initState = &jobMgrInitState{
 			securityInfoPersistenceManager: newSecurityInfoPersistenceManager(jm.ctx),
-			folderCreationTracker:          NewFolderCreationTracker(jpm.Plan().Fpo, jpm.Plan()),
+			folderCreationTracker:          NewFolderCreationTracker(jpm.Plan().Fpo, NewTransferFetcher(jm)),
 			folderDeletionManager:          common.NewFolderDeletionManager(jm.ctx, jpm.Plan().Fpo, logger),
 			exclusiveDestinationMapHolder:  &atomic.Value{},
 		}
@@ -511,7 +513,7 @@ func (jm *jobMgr) AddJobOrder(order common.CopyJobPartOrderRequest) IJobPartMgr 
 		var logger common.ILogger = jm
 		jm.initState = &jobMgrInitState{
 			securityInfoPersistenceManager: newSecurityInfoPersistenceManager(jm.ctx),
-			folderCreationTracker:          NewFolderCreationTracker(jpm.Plan().Fpo, jpm.Plan()),
+			folderCreationTracker:          NewFolderCreationTracker(jpm.Plan().Fpo, NewTransferFetcher(jm)),
 			folderDeletionManager:          common.NewFolderDeletionManager(jm.ctx, jpm.Plan().Fpo, logger),
 			exclusiveDestinationMapHolder:  &atomic.Value{},
 		}
@@ -640,6 +642,14 @@ func (jm *jobMgr) ConfirmAllTransfersScheduled() {
 // ResetAllTransfersScheduled sets the ResetAllTransfersScheduled to false
 func (jm *jobMgr) ResetAllTransfersScheduled() {
 	atomic.StoreInt32(&jm.atomicAllTransfersScheduled, 0)
+}
+
+func (jm *jobMgr) GetTotalNumFilesProcessed() int64 {
+	return atomic.LoadInt64(&jm.atomicTotalFilesProcessed)
+}
+
+func (jm *jobMgr) AddTotalNumFilesProcessed(numFiles int64) {
+	atomic.AddInt64(&jm.atomicTotalFilesProcessed, numFiles)
 }
 
 // ReportJobPartDone is called to report that a job part completed or failed

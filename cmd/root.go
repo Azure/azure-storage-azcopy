@@ -21,13 +21,14 @@
 package cmd
 
 import (
-	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
+	"github.com/Azure/azure-storage-azcopy/v10/testSuite/cmd"
 	"log"
+	"net/http"
 	"os"
-	"path"
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
@@ -35,7 +36,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -43,7 +43,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var azcopyLogPathFolder string
 var outputFormatRaw string
 var outputVerbosityRaw string
 var logVerbosityRaw string
@@ -62,18 +61,15 @@ var TrustedSuffixes string
 var azcopyAwaitContinue bool
 var azcopyAwaitAllowOpenFiles bool
 var azcopyScanningLogger common.ILoggerResetable
-var azcopyCurrentJobID common.JobID
 var isPipeDownload bool
 var retryStatusCodes string
 var debugMemoryProfile string
-
-type jobLoggerInfo struct {
-	jobID         common.JobID
-	logFileFolder string
-}
+var checkAzCopyUpdates bool
 
 // It would be preferable if this was a local variable, since it just gets altered and shot off to the STE
 var debugSkipFiles string
+
+var Client azcopy.Client
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -81,6 +77,7 @@ var rootCmd = &cobra.Command{
 	Use:     "azcopy",
 	Short:   rootCmdShortDescription,
 	Long:    rootCmdLongDescription,
+	// PersistentPreRunE hook will not run on just `azcopy` without any subcommand
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		glcm.RegisterCloseFunc(func() {
 			if debugMemoryProfile != "" {
@@ -189,48 +186,72 @@ var rootCmd = &cobra.Command{
 
 		isBench := cmd.Use == "bench [destination]"
 
-		return Initialize(resumeJobID, isBench)
+		// We only care to warn about multiple AzCopy processes for commands sent to STE
+		sentToSte := []string{"copy [source] [destination]", "sync", "bench [destination]", "resume [jobID]", "remove [resourceURL]", "set-properties [source]"}
+		var shouldWarn bool
+		for _, currCmd := range sentToSte {
+			if cmd.Use == currCmd {
+				shouldWarn = true
+				break
+			}
+		}
+		return Initialize(resumeJobID, isBench, shouldWarn)
+	},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Version checking is done explicitly when the user sets flag
+		if checkAzCopyUpdates && !isPipeDownload {
+			select {
+			// Either wait till this routine completes or timeout and do not print if it exceeds 8s
+			// Spawn a routine to fetch & compare the local application's version against the latest version available
+			case <-beginDetectNewVersion():
+				// noop
+			case <-time.After(time.Second * 8):
+				// don't wait too long
+			}
+		}
+		return nil
 	},
 }
 
-func Initialize(resumeJobID common.JobID, isBench bool) error {
-	azcopyLogPathFolder, common.AzcopyJobPlanFolder = initializeFolders()
-
-	configureGoMaxProcs()
-
-	// Perform os specific initialization
-	azcopyMaxFileAndSocketHandles, err := processOSSpecificInitialization()
+func Initialize(resumeJobID common.JobID, isBench bool, shouldWarn bool) (err error) {
+	jobsAdmin.BenchmarkResults = isBench
+	Client, err = azcopy.NewClient(azcopy.ClientOptions{CapMbps: CapMbps})
 	if err != nil {
-		log.Fatalf("initialization failed: %v", err)
+		return err
 	}
-	jobID := common.NewJobID()
-	azcopyCurrentJobID = jobID
-	loggerInfo := jobLoggerInfo{jobID, azcopyLogPathFolder}
+	Client.CurrentJobID = resumeJobID
+	if Client.CurrentJobID.IsEmpty() {
+		Client.CurrentJobID = common.NewJobID()
+	}
 
 	timeAtPrestart := time.Now()
 	glcm.SetOutputFormat(OutputFormat)
 	glcm.SetOutputVerbosity(OutputLevel)
 
-	if !resumeJobID.IsEmpty() {
-		loggerInfo.jobID = resumeJobID
-	}
-
-	common.AzcopyCurrentJobLogger = common.NewJobLogger(loggerInfo.jobID, LogLevel, loggerInfo.logFileFolder, "")
+	common.AzcopyCurrentJobLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "")
 	common.AzcopyCurrentJobLogger.OpenLog()
 
 	glcm.SetForceLogging()
 
-	// currently, we only automatically do auto-tuning when benchmarking
-	preferToAutoTuneGRs, providePerformanceAdvice := isBench, isBench
-
-	// startup of the STE happens here, so that the startup can access the values of command line parameters that are defined for "root" command
-	concurrencySettings := ste.NewConcurrencySettings(azcopyMaxFileAndSocketHandles, preferToAutoTuneGRs)
-	err = jobsAdmin.MainSTE(concurrencySettings, float64(CapMbps), common.AzcopyJobPlanFolder, azcopyLogPathFolder, providePerformanceAdvice)
-	if err != nil {
-		return err
+	if shouldWarn {
+		currPid := os.Getpid()
+		AsyncWarnMultipleProcesses(cmd.GetAzCopyAppPath(), currPid)
 	}
-	EnumerationParallelism = concurrencySettings.EnumerationPoolSize.Value
-	EnumerationParallelStatFiles = concurrencySettings.ParallelStatFiles.Value
+
+	// For benchmarking, try to autotune if possible, otherwise use the default values
+	if jobsAdmin.JobsAdmin != nil && isBench {
+		envVar := common.EEnvironmentVariable.ConcurrencyValue()
+		userValue := common.GetEnvironmentVariable(envVar)
+		if userValue == "" || userValue == "auto" {
+			jobsAdmin.JobsAdmin.SetConcurrencySettingsToAuto()
+		} else {
+			// Tell user that we can't actually auto tune, because configured value takes precedence
+			// This case happens when benchmarking with a fixed value from the env var
+			glcm.Info(fmt.Sprintf("Cannot auto-tune concurrency because it is fixed by environment variable %s", envVar.Name))
+		}
+
+	}
+	EnumerationParallelism, EnumerationParallelStatFiles = jobsAdmin.JobsAdmin.GetConcurrencySettings()
 
 	// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter
 	// Subtract a few seconds, to ensure that this date DEFINITELY falls before the LMT of any file changed while this
@@ -240,16 +261,7 @@ func Initialize(resumeJobID common.JobID, isBench bool) error {
 	startTimeMessage := fmt.Sprintf("ISO 8601 START TIME: to copy files that changed before or after this job started, use the parameter --%s=%s or --%s=%s",
 		common.IncludeBeforeFlagName, IncludeBeforeDateFilter{}.FormatAsUTC(adjustedTime),
 		common.IncludeAfterFlagName, IncludeAfterDateFilter{}.FormatAsUTC(adjustedTime))
-	jobsAdmin.JobsAdmin.LogToJobLog(startTimeMessage, common.LogInfo)
-
-	if !SkipVersionCheck && !isPipeDownload {
-		// spawn a routine to fetch and compare the local application's version against the latest version available
-		// if there's a newer version that can be used, then write the suggestion to stderr
-		// however if this takes too long the message won't get printed
-		// Note: this function is necessary for non-help, non-login commands, since they don't reach the corresponding
-		// beginDetectNewVersion call in Execute (below)
-		beginDetectNewVersion()
-	}
+	common.LogToJobLogWithPrefix(startTimeMessage, common.LogInfo)
 
 	return nil
 
@@ -268,64 +280,19 @@ func InitializeAndExecute() {
 	if err := Execute(); err != nil {
 		glcm.Error(err.Error())
 	} else {
-		if !SkipVersionCheck && !isPipeDownload {
-			// our commands all control their own life explicitly with the lifecycle manager
-			// only commands that don't explicitly exit actually reach this point (e.g. help commands)
-			select {
-			case <-beginDetectNewVersion():
-				// noop
-			case <-time.After(time.Second * 8):
-				// don't wait too long
-			}
-		}
 		glcm.Exit(nil, common.EExitCode.Success())
-	}
-}
-
-func initializeFolders() (azcopyLogPathFolder, azcopyJobPlanFolder string) {
-	azcopyLogPathFolder = common.GetEnvironmentVariable(common.EEnvironmentVariable.LogLocation())     // user specified location for log files
-	azcopyJobPlanFolder = common.GetEnvironmentVariable(common.EEnvironmentVariable.JobPlanLocation()) // user specified location for plan files
-
-	// note: azcopyAppPathFolder is the default location for all AzCopy data (logs, job plans, oauth token on Windows)
-	// but all the above can be put elsewhere as they can become very large
-	azcopyAppPathFolder := getAzCopyAppPath()
-
-	// the user can optionally put the log files somewhere else
-	if azcopyLogPathFolder == "" {
-		azcopyLogPathFolder = azcopyAppPathFolder
-	}
-	if err := os.Mkdir(azcopyLogPathFolder, os.ModeDir|os.ModePerm); err != nil && !os.IsExist(err) {
-		log.Fatalf("Problem making .azcopy directory. Try setting AZCOPY_LOG_LOCATION env variable. %v", err)
-	}
-
-	// the user can optionally put the plan files somewhere else
-	if azcopyJobPlanFolder == "" {
-		// make the app path folder ".azcopy" first so we can make a plans folder in it
-		if err := os.MkdirAll(azcopyAppPathFolder, os.ModeDir); err != nil && !os.IsExist(err) {
-			log.Fatalf("Problem making .azcopy directory. Try setting AZCOPY_JOB_PLAN_LOCATION env variable. %v", err)
-		}
-		azcopyJobPlanFolder = path.Join(azcopyAppPathFolder, "plans")
-	}
-
-	if err := os.MkdirAll(azcopyJobPlanFolder, os.ModeDir|os.ModePerm); err != nil && !os.IsExist(err) {
-		log.Fatalf("Problem making .azcopy directory. Try setting AZCOPY_JOB_PLAN_LOCATION env variable. %v", err)
-	}
-	return
-}
-
-// Ensure we always have more than 1 OS thread running goroutines, since there are issues with having just 1.
-// (E.g. version check doesn't happen at login time, if have only one go proc. Not sure why that happens if have only one
-// proc. Is presumably due to the high CPU usage we see on login if only 1 CPU, even tho can't see any busy-wait in that code)
-func configureGoMaxProcs() {
-	isOnlyOne := runtime.GOMAXPROCS(0) == 1
-	if isOnlyOne {
-		runtime.GOMAXPROCS(2)
 	}
 }
 
 func init() {
 	// replace the word "global" to avoid confusion (e.g. it doesn't affect all instances of AzCopy)
 	rootCmd.SetUsageTemplate(strings.Replace((&cobra.Command{}).UsageTemplate(), "Global Flags", "Flags Applying to All Commands", -1))
+
+	// the default value is set as -1 to differentiate from an input 3.
+	// if unspecified, the policy doesn't set the request headers, which will cause the service to default to 3.
+	// an explicit 3 will set the header and potentially upgrade x-ms-version.
+	rootCmd.PersistentFlags().IntVar(&ste.GlobalRequestPriority, RequestPriorityFlag, -1, "Specify a request priority for Azure Storage to utilize in throttling from 0-7; priority is inverted, where 0 is the highest priority, and 7 is the lowest priority. The default is 3.")
+	_ = rootCmd.PersistentFlags().MarkHidden(RequestPriorityFlag) // hide the request priority flag until official release
 
 	rootCmd.PersistentFlags().Float64Var(&CapMbps, "cap-mbps", 0,
 		"Caps the transfer rate, in megabits per second. "+
@@ -348,7 +315,8 @@ func init() {
 
 	rootCmd.PersistentFlags().BoolVar(&SkipVersionCheck, "skip-version-check", false,
 		"Do not perform the version check at startup. \nIntended for automation scenarios & airgapped use.")
-
+	// Deprecated, marked as hidden to not break customers dependent on flag
+	_ = rootCmd.PersistentFlags().MarkHidden("skip-version-check")
 	// Note: this is due to Windows not supporting signals properly
 	rootCmd.PersistentFlags().BoolVar(&cancelFromStdin, "cancel-from-stdin", false,
 		"Used by partner teams to send in `cancel` through stdin to stop a job.")
@@ -373,9 +341,9 @@ func init() {
 	_ = rootCmd.PersistentFlags().MarkHidden("retry-status-codes")
 	rootCmd.PersistentFlags().StringVar(&debugMemoryProfile, "memory-profile", "", "Export pprof memory profile")
 	_ = rootCmd.PersistentFlags().MarkHidden("memory-profile")
+	rootCmd.PersistentFlags().BoolVar(&checkAzCopyUpdates, "check-version", false,
+		"Check if a newer AzCopy version is available.")
 }
-
-const versionMetadataUrl = "https://azcopyvnextrelease.z22.web.core.windows.net/releasemetadata/latest_version.txt"
 
 // always spins up a new goroutine, because sometimes the aka.ms URL can't be reached (e.g. a constrained environment where
 // aka.ms is not resolvable to a reachable IP address). In such cases, this routine will run for ever, and the caller should
@@ -385,7 +353,7 @@ const versionMetadataUrl = "https://azcopyvnextrelease.z22.web.core.windows.net/
 func beginDetectNewVersion() chan struct{} {
 	completionChannel := make(chan struct{})
 	go func() {
-		// step 0: check the Stderr, check local version
+		// Step 0: check the Stderr, check local version
 		_, err := os.Stderr.Stat()
 		if err != nil {
 			return
@@ -395,44 +363,23 @@ func beginDetectNewVersion() chan struct{} {
 		if err != nil {
 			return
 		}
-
-		// step 1: fetch & validate cached version and if it is updated, return without making API calls
-		filePath := filepath.Join(azcopyLogPathFolder, "latest_version.txt")
+		// Step 1: Fetch & validate cached version. If it is up to date, we return without making API calls
+		filePath := filepath.Join(common.LogPathFolder, "latest_version.txt")
 		cachedVersion, err := ValidateCachedVersion(filePath) // same as the remote version
 		if err == nil {
 			PrintOlderVersion(*cachedVersion, *localVersion)
 		} else {
-			// step 2: initialize pipeline
-			options := createClientOptions(nil, nil, nil)
-
-			// step 3: start download
-			blobClient, err := blob.NewClientWithNoCredential(versionMetadataUrl, &blob.ClientOptions{ClientOptions: options})
+			// Step 2: Gets latest release on GitHub
+			// If the cache version is expired, then we need to make a new API call
+			// checking against latest Github release version
+			gitHubRemoteVersion, err := getGitHubLatestRemoteVersion()
 			if err != nil {
 				return
 			}
+			PrintOlderVersion(*gitHubRemoteVersion, *localVersion)
 
-			downloadBlobResp, err := blobClient.DownloadStream(context.TODO(), nil)
-			if err != nil {
-				return
-			}
-
-			// step 4: read newest version str
-			data := make([]byte, *downloadBlobResp.ContentLength)
-			_, err = downloadBlobResp.Body.Read(data)
-			defer downloadBlobResp.Body.Close()
-			if err != nil && err != io.EOF {
-				return
-			}
-
-			remoteVersion, err := NewVersion(string(data))
-			if err != nil {
-				return
-			}
-
-			PrintOlderVersion(*remoteVersion, *localVersion)
-
-			// step 5: persist remote version in local
-			err = localVersion.CacheRemoteVersion(*remoteVersion, filePath)
+			// Step 3: Persist  GitHub Remote version in local
+			err = localVersion.CacheRemoteVersion(*gitHubRemoteVersion, filePath)
 			if err != nil {
 				return
 			}
@@ -443,4 +390,56 @@ func beginDetectNewVersion() chan struct{} {
 	}()
 
 	return completionChannel
+}
+
+func getGitHubLatestRemoteVersionWithURL(apiEndpoint string) (*Version, error) {
+	transport := &http.Transport{
+		MaxIdleConns:       10,
+		IdleConnTimeout:    30 * time.Second,
+		DisableCompression: true,  // GitHub API responses are small
+		DisableKeepAlives:  false, // Connections are reused
+	}
+
+	client := &http.Client{
+		Timeout:   30 * time.Second,
+		Transport: transport,
+	}
+	// Get Request
+	req, err := http.NewRequest("GET", apiEndpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("error in GitHub GET latest release: %s", resp.Status)
+	}
+
+	var release struct { // JSON response representation
+		TagName string `json:"tag_name"`
+		Name    string `json:"name"`
+	}
+	decoder := json.NewDecoder(resp.Body)
+	err = decoder.Decode(&release)
+	if err != nil {
+		return nil, err
+	}
+	// Remove v prefix in TagName, convert str to Version
+	versionStr := strings.TrimPrefix(release.TagName, "v")
+	return NewVersion(versionStr)
+}
+
+// Uses GitHub REST API to get the latest release version
+func getGitHubLatestRemoteVersion() (*Version, error) {
+	// GitHub REST API endpoint for latest release
+	apiEndpoint := "https://api.github.com/repos/Azure/azure-storage-azcopy/releases/latest"
+	return getGitHubLatestRemoteVersionWithURL(apiEndpoint)
+
 }

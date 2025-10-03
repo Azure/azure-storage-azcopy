@@ -2,6 +2,7 @@ package e2etest
 
 import (
 	"fmt"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -29,7 +30,7 @@ func GetRootResource(a Asserter, location common.Location, varOpts ...GetResourc
 		defaultacct = PrimaryHNSAcct
 
 		fallthrough // Continue to grab the account
-	case common.ELocation.Blob(), common.ELocation.File():
+	case common.ELocation.Blob(), common.ELocation.File(), common.ELocation.FileNFS():
 		acct := GetAccount(a, DerefOrDefault(opts.PreferredAccount, defaultacct))
 		return acct.GetService(a, location)
 	default:

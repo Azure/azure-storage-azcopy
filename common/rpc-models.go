@@ -2,47 +2,12 @@ package common
 
 import (
 	"net/url"
-	"reflect"
 	"strings"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	datalake "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
-
-	"github.com/JeffreyRichter/enum/enum"
 )
-
-var ERpcCmd = RpcCmd("")
-
-// JobStatus indicates the status of a Job; the default is InProgress.
-type RpcCmd string
-
-func (RpcCmd) None() RpcCmd               { return RpcCmd("--none--") }
-func (RpcCmd) CopyJobPartOrder() RpcCmd   { return RpcCmd("CopyJobPartOrder") }
-func (RpcCmd) GetJobLCMWrapper() RpcCmd   { return RpcCmd("GetJobLCMWrapper") }
-func (RpcCmd) ListJobs() RpcCmd           { return RpcCmd("ListJobs") }
-func (RpcCmd) ListJobSummary() RpcCmd     { return RpcCmd("ListJobSummary") }
-func (RpcCmd) ListSyncJobSummary() RpcCmd { return RpcCmd("ListSyncJobSummary") }
-func (RpcCmd) ListJobTransfers() RpcCmd   { return RpcCmd("ListJobTransfers") }
-func (RpcCmd) CancelJob() RpcCmd          { return RpcCmd("Cancel") }
-func (RpcCmd) PauseJob() RpcCmd           { return RpcCmd("PauseJob") }
-func (RpcCmd) ResumeJob() RpcCmd          { return RpcCmd("ResumeJob") }
-func (RpcCmd) GetJobDetails() RpcCmd      { return RpcCmd("GetJobDetails") }
-
-func (c RpcCmd) String() string {
-	return enum.String(c, reflect.TypeOf(c))
-}
-func (c RpcCmd) Pattern() string { return "/" + c.String() }
-
-func (c *RpcCmd) Parse(s string) error {
-	val, err := enum.Parse(reflect.TypeOf(c), s, false)
-	if err == nil {
-		*c = val.(RpcCmd)
-	}
-	return err
-}
-
-// ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // ResourceString represents a source or dest string, that can have
 // three parts: the main part, a sas, and extra query parameters that are not part of the sas.
@@ -180,7 +145,6 @@ type CopyJobPartOrderRequest struct {
 	// This may not always be the case (for instance, if we opt to use multiple OAuth tokens). At that point, this will likely be it's own CredentialInfo.
 	S2SSourceCredentialType CredentialType // Only Anonymous and OAuth will really be used in response to this, but S3 and GCP will come along too...
 	FileAttributes          FileTransferAttributes
-	IsNFSCopy               bool
 }
 
 // CredentialInfo contains essential credential info which need be transited between modules,
@@ -218,13 +182,6 @@ func (CopyJobPartOrderErrorType) NoTransfersScheduledErr() CopyJobPartOrderError
 type CopyJobPartOrderResponse struct {
 	ErrorMsg   CopyJobPartOrderErrorType
 	JobStarted bool
-}
-
-// represents the raw list command input from the user when requested the list of transfer with given status for given JobId
-type ListRequest struct {
-	JobID    JobID
-	OfStatus string // TODO: OfStatus with string type sounds not good, change it to enum
-	Output   OutputFormat
 }
 
 // This struct represents the optional attribute for blob request header

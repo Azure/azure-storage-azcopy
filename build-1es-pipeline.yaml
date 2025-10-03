@@ -1,12 +1,7 @@
 variables:
-  AZCOPY_GOLANG_VERSION: '1.24.0'
+  AZCOPY_GOLANG_VERSION: '1.24.6'
 
 parameters:
-  - name: publish_to_container
-    displayName: 'Publish To Container'
-    type: boolean
-    default: false
-
   - name: publish_to_m1_container
     displayName: 'Publish To M1 Container'
     type: boolean
@@ -37,11 +32,10 @@ parameters:
     type: boolean
     default: false
 
-  - name: update_version
-    displayName: 'Update Version'
+  - name: test_pmc_connection
+    displayName: 'Test PMC Connection without Publishing Artifacts to Linux Repos'
     type: boolean
     default: false
-
 # Do not trigger this pipeline automatically
 trigger: none
 pr: none
@@ -83,12 +77,12 @@ extends:
                   version: $(AZCOPY_GOLANG_VERSION)
 
               - script: |
-                  go build -tags "netgo" -o azcopy
+                  go build -tags "netgo" -o azcopy_bin
                 displayName: 'Build AzCopy'
 
               - script: |
                   # Run azcopy --version and capture the output
-                  azcopyOutput=$(./azcopy --version)
+                  azcopyOutput=$(./azcopy_bin --version)
                   # Extract the version part
                   if echo "$azcopyOutput" | grep -q "azcopy version"; then
                     version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
@@ -286,16 +280,10 @@ extends:
             steps:
               - checkout: none
 
-              - script: |
-                  sudo apt-get clean
-                  sudo apt-get update
-                  sudo apt-get upgrade -y
-                  sudo apt-get install -f --fix-missing
-                  wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
-                  sudo dpkg -i packages-microsoft-prod.deb
-                  sudo apt install apt-transport-https -y
-                  sudo apt install dotnet-sdk-6.0 -y
-                displayName: "Update dependencies"
+              - task: UseDotNet@2
+                inputs:
+                  packageType: 'sdk'
+                  version: '9.0.x'
 
               - script: |
                   mkdir -p $(mariner)
@@ -375,16 +363,14 @@ extends:
 
             steps:
               - script: |
-                  sudo apt-get clean
                   sudo apt-get update
-                  sudo apt-get upgrade -y
-                  sudo apt-get install -f --fix-missing
-                  wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
-                  sudo dpkg -i packages-microsoft-prod.deb
-                  sudo apt install apt-transport-https -y
-                  sudo apt install dotnet-sdk-6.0 -y
                   sudo apt-get install -y zip
-                displayName: "Update dependencies"
+                displayName: 'Install dependencies'
+
+              - task: UseDotNet@2
+                inputs:
+                  packageType: 'sdk'
+                  version: '9.0.x'
 
               - template: setup/esrp_sign_windows.yml@self
                 parameters:
@@ -482,16 +468,14 @@ extends:
               - checkout: none
 
               - script: |
-                  sudo apt-get clean
                   sudo apt-get update
-                  sudo apt-get upgrade -y
-                  sudo apt-get install unzip -y
-                  sudo apt-get install -f --fix-missing
-                  wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
-                  sudo dpkg -i packages-microsoft-prod.deb
-                  sudo apt install apt-transport-https -y
-                  sudo apt install dotnet-sdk-6.0 -y
-                displayName: "Update dependencies"
+                  sudo apt-get install -y unzip
+                displayName: 'Install dependencies'
+
+              - task: UseDotNet@2
+                inputs:
+                  packageType: 'sdk'
+                  version: '9.0.x'
 
               - template: setup/esrp_sign_notarize_macos.yml@self
                 parameters:
@@ -761,7 +745,6 @@ extends:
                 displayName: 'Verify exe in zip'
 
       # VerifyArtifacts end here
-
       - stage: UploadToStorage
         dependsOn:
           - AzCopyVersion
@@ -779,8 +762,6 @@ extends:
                 value: '$(System.DefaultWorkingDirectory)/release'
               - name: drop
                 value: '$(System.DefaultWorkingDirectory)/drop'
-              - name: publish_to_container
-                value: ${{ parameters.publish_to_container }}
               - name: publish_to_m1_container
                 value: ${{ parameters.publish_to_m1_container }}
               - name: azcopy_version
@@ -801,10 +782,10 @@ extends:
                   version: $(AZCOPY_GOLANG_VERSION)
 
               - script: |
-                  go build -tags "netgo" -o azcopy
+                  go build -tags "netgo" -o azcopy_bin
                 displayName: 'Build AzCopy'
 
-              # DownloadPipelineArtifacts AFTER checkout since checkout wipes out the DefaultWorkingDirectory
+              # DownloadPipelineArtifact AFTER checkout since checkout wipes out the DefaultWorkingDirectory
               - task: DownloadPipelineArtifact@2
                 inputs:
                   artifactName: azcopy-linux-signed
@@ -876,17 +857,13 @@ extends:
                   scriptLocation: inlineScript
                   inlineScript: |
                     today=$(date +"%Y%m%d")
-                    if [ $(publish_to_container) = "True" ]; then
-                      container_url="https://azcopyvnextrelease.blob.core.windows.net/%24web/releases/release-$(azcopy_version)-$today"
-                    else
-                      container_url="https://azcopyprivatedrops.blob.core.windows.net/%24web/releases/release-$(azcopy_version)-$today"
-                    fi
-                    echo "Artifacts will be uploaded to: $container_url"
-                    AZCOPY_AUTO_LOGIN_TYPE=AzCLI ./azcopy cp "$(release)/*" "$container_url" --recursive --put-md5=true
-                    
+                    container_url="https://azcopyprivatedrops.blob.core.windows.net/%24web/releases/release-$(azcopy_version)-$today"
+                    echo "Artifacts will be uploaded to private drop container: $container_url"
+                    AZCOPY_AUTO_LOGIN_TYPE=AzCLI ./azcopy_bin cp "$(release)/*" "$container_url" --recursive --put-md5=true
+
                     if [ $(publish_to_m1_container) = "True" ]; then
                       m1_container_url="https://azcopyvnextrelease.blob.core.windows.net/%24web/azcopy-m1-drops/azcopy-$(azcopy_version)-$today"
-                    AZCOPY_AUTO_LOGIN_TYPE=AzCLI ./azcopy cp "$(input)/azcopy-binaries-mac/azcopy_darwin_m1_arm64" "$m1_container_url" --recursive --put-md5=true
+                    AZCOPY_AUTO_LOGIN_TYPE=AzCLI ./azcopy_bin cp "$(input)/azcopy-binaries-mac/azcopy_darwin_m1_arm64" "$m1_container_url" --recursive --put-md5=true
                     fi
       # UploadToStorage ends here
       - ${{ if eq(parameters.publish_docker_image, true) }}:
@@ -919,7 +896,7 @@ extends:
                       displayName: "Download Linux AMD64 Binary"
 
                   - script: |
-                      mv azcopy_linux_amd64 azcopy
+                      mv azcopy_linux_amd64 azcopy_bin
                       # (~) to be replaced by (-) if azcopy version contains a tilde as this is not supported in docker image tags
                       azcopy_docker_version=$(echo $(azcopy_version) | sed 's/~/-/')
                       echo "##vso[task.setvariable variable=azcopy_docker_version]$azcopy_docker_version"
@@ -947,17 +924,6 @@ extends:
                       image: azcopycontainers.azurecr.io/azure-azcopy-mariner-x86_64.$(azcopy_docker_version):latest
                       remoteImage: azcopycontainers.azurecr.io/azure-azcopy-mariner-x86_64.$(azcopy_docker_version):latest
                   
-                  - task: 1ES.BuildContainerImage@1
-                    inputs:
-                      image: azcopycontainers.azurecr.io/azure-azcopy-mariner-arm64.$(azcopy_docker_version):latest
-                      path: '$(System.DefaultWorkingDirectory)'
-                      dockerfile: docker/DockerfileMarinerArm64
-
-                  - task: 1ES.PushContainerImage@1
-                    inputs:
-                      image: azcopycontainers.azurecr.io/azure-azcopy-mariner-arm64.$(azcopy_docker_version):latest
-                      remoteImage: azcopycontainers.azurecr.io/azure-azcopy-mariner-arm64.$(azcopy_docker_version):latest
-
               - job: LinuxARM64
                 pool:
                   name: azcopy-arm-pool
@@ -983,7 +949,7 @@ extends:
                       displayName: "Download Linux ARM64 Binary"
 
                   - script: |
-                      mv azcopy_linux_arm64 azcopy
+                      mv azcopy_linux_arm64 azcopy_bin
                       # (~) to be replaced by (-) if azcopy version contains a tilde as this is not supported in docker image tags
                       azcopy_docker_version=$(echo $(azcopy_version) | sed 's/~/-/')
                       echo "##vso[task.setvariable variable=azcopy_docker_version]$azcopy_docker_version"
@@ -999,6 +965,18 @@ extends:
                     inputs:
                       image: azcopycontainers.azurecr.io/azure-azcopy-ubuntu-arm64.$(azcopy_docker_version):latest
                       remoteImage: azcopycontainers.azurecr.io/azure-azcopy-ubuntu-arm64.$(azcopy_docker_version):latest
+
+                  - task: 1ES.BuildContainerImage@1
+                    inputs:
+                      image: azcopycontainers.azurecr.io/azure-azcopy-mariner-arm64.$(azcopy_version):latest
+                      path: '$(System.DefaultWorkingDirectory)'
+                      dockerfile: docker/DockerfileMarinerArm64
+
+                  - task: 1ES.PushContainerImage@1
+                    inputs:
+                      image: azcopycontainers.azurecr.io/azure-azcopy-mariner-arm64.$(azcopy_version):latest
+                      remoteImage: azcopycontainers.azurecr.io/azure-azcopy-mariner-arm64.$(azcopy_version):latest
+
 
       - ${{ if eq(parameters.post_release, true) }}:
           - stage: ReleaseToGithub
@@ -1024,6 +1002,16 @@ extends:
                       echo "##vso[task.setvariable variable=azcopy_github_tag]$azcopy_github_tag"
                     displayName: 'AzCopy Tag Name'
 
+                  - task : DownloadPipelineArtifact@2
+                    displayName: 'Download Linux, Windows, Mac Build Artifacts'
+                    inputs:
+                      itemPattern: 'azcopy-*-signed/**'
+                      downloadPath: $(Build.ArtifactStagingDirectory)
+
+                  - script: |
+                      sudo ls -lRt $(Build.ArtifactStagingDirectory)
+                    displayName: 'List Artifacts'
+
                   - task: GithubRelease@1
                     inputs:
                       githubConnection: 'azcopy-github-connection'
@@ -1037,13 +1025,20 @@ extends:
                       changeLogType: 'commitBased'
                       isDraft: ${{ parameters.draft }}
                       isPreRelease: ${{ parameters.prerelease }}
+                      assets: |
+                        $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/*.deb
+                        $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/*.rpm
+                        $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/*.tar.gz
+                        $(Build.ArtifactStagingDirectory)/azcopy-windows-signed/*.zip
+                        $(Build.ArtifactStagingDirectory)/azcopy-mac-signed/*.zip
+                        $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/mariner/*
                       assetUploadMode: replace
 
       - ${{ if eq(parameters.publish_artifacts, true) }}:
           - stage: PublishArtifacts
             dependsOn:
               - AzCopyVersion
-              - UploadToStorage
+              - VerifyArtifacts
             jobs:
               - job: Job
                 timeoutInMinutes: 120
@@ -1086,15 +1081,21 @@ extends:
                     inputs:
                       secureFile: 'settings.toml'
 
-                  - script: |
-                      pmc --version
-                      pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo list --limit 1
-                      if [ $? -ne 0 ]; then
-                        exit 1
-                      fi
+                  - task: AzureCLI@2
                     displayName: 'Test PMC installation'
+                    inputs:
+                      addSpnToEnvironment: true
+                      azureSubscription: 'azcopy-release'
+                      scriptType: bash
+                      scriptLocation: inlineScript
+                      inlineScript: |
+                        pmc --version
+                        pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" repo list --limit 1
+                        if [ $? -ne 0 ]; then
+                          exit 1
+                        fi
 
-                  # DownloadPipelineArtifacts AFTER checkout since checkout wipes out the DefaultWorkingDirectory
+                  # DownloadPipelineArtifact AFTER checkout since checkout wipes out the DefaultWorkingDirectory
                   - task: DownloadPipelineArtifact@2
                     inputs:
                       artifactName: azcopy-linux-signed
@@ -1123,112 +1124,95 @@ extends:
                     displayName: 'Remove manifest'
 
                   - script: |
-                      pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package upload signed
-                    displayName: 'Upload files'
+                      ls -lRt $(signed)
+                    displayName: 'List artifacts'
 
-                  - script: |
-                      azcopyAmdDeb=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy*.x86_64.deb`
-                      echo "Azcopy AMD DEB ID: $azcopyAmdDeb"
-                      
-                      azcopyAmdRpmFile=$(ls azcopy-* | grep -vE 'cm2\.x86_64\.rpm|arm64\.deb|x86_64\.deb|arm64\.rpm')
-                      azcopyAmdRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $azcopyAmdRpmFile)
-                      echo "Azcopy AMD RPM ID: $azcopyAmdRpm"
-                      
-                      azcopyArmDeb=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy*.arm64.deb`
-                      echo "Azcopy ARM DEB ID: $azcopyArmDeb"
-                      
-                      azcopyArmRpmFile=$(ls azcopy* | grep -vE 'cm2\.arm64\.rpm|arm64\.deb|x86_64\.deb|x86_64\.rpm')
-                      azcopyArmRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $azcopyArmRpmFile)
-                      echo "Azcopy ARM RPM $azcopyArmRpmFile"
-                      echo "Azcopy ARM RPM ID: $azcopyArmRpm"
-                      
-                      # Find the Mariner RPM file and upload
-                      marinerAmdRpmFile=$(ls azcopy-* | grep 'cm2\.x86_64\.rpm')
-                      marinerAmdRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $marinerAmdRpmFile)
-                      echo "Azcopy mariner AMD RPM $marinerAmdRpmFile"
-                      echo "Azcopy mariner AMD RPM ID: $marinerAmdRpm"
-                      
-                      marinerAarchRpmFile=$(ls azcopy-* | grep 'cm2\.arm64\.rpm')
-                      marinerAarchRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $marinerAarchRpmFile)
-                      echo "Azcopy mariner ARM RPM: $marinerAarchRpmFile"
-                      echo "Azcopy mariner ARM RPM ID: $marinerAarchRpm"
-                      
-                      is_preview="false"
-                      echo "##vso[task.setvariable variable=is_preview]$is_preview"
-                      if [[ $marinerAmdRpmFile == *"preview"* ]]; then
-                        is_preview="true"
-                        echo "##vso[task.setvariable variable=is_preview]$is_preview"
-                      fi
+                  - ${{ if eq(parameters.test_pmc_connection, false) }}:
+                    - task: AzureCLI@2
+                      displayName: 'Upload files'
+                      inputs:
+                        addSpnToEnvironment: true
+                        azureSubscription: 'azcopy-release'
+                        scriptType: bash
+                        scriptLocation: inlineScript
+                        inlineScript: |
+                          pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" package upload signed
 
-                      while IFS=, read -r distro archetype repoName releaseName; do
-                        # If the package is preview, publish to mariner preview package
-                        if [[ $distro == *"Mariner-"* ]]; then
-                          if [ $is_preview = "true" ]; then
-                            repoName=$(echo $repoName | sed 's/prod/preview/')
+                  - ${{ if eq(parameters.test_pmc_connection, false) }}:
+                    - task: AzureCLI@2
+                      displayName: 'Add uploaded packages to repository'
+                      inputs:
+                        addSpnToEnvironment: true
+                        azureSubscription: 'azcopy-release'
+                        scriptType: bash
+                        scriptLocation: inlineScript
+                        workingDirectory: $(signed)
+                        inlineScript: |
+                          azcopyAmdDeb=`pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload azcopy*.x86_64.deb`
+                          echo "Azcopy AMD DEB ID: $azcopyAmdDeb"
+                          
+                          azcopyAmdRpmFile=$(ls azcopy-* | grep -vE 'cm2\.x86_64\.rpm|arm64\.deb|x86_64\.deb|arm64\.rpm')
+                          azcopyAmdRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azcopyAmdRpmFile)
+                          echo "Azcopy AMD RPM ID: $azcopyAmdRpm"
+                          
+                          azcopyArmDeb=`pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload azcopy*.arm64.deb`
+                          echo "Azcopy ARM DEB ID: $azcopyArmDeb"
+                          
+                          azcopyArmRpmFile=$(ls azcopy* | grep -vE 'cm2\.arm64\.rpm|arm64\.deb|x86_64\.deb|x86_64\.rpm')
+                          azcopyArmRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azcopyArmRpmFile)
+                          echo "Azcopy ARM RPM $azcopyArmRpmFile"
+                          echo "Azcopy ARM RPM ID: $azcopyArmRpm"
+                          
+                          # Find the Mariner RPM file and upload
+                          marinerAmdRpmFile=$(ls azcopy-* | grep 'cm2\.x86_64\.rpm')
+                          marinerAmdRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $marinerAmdRpmFile)
+                          echo "Azcopy mariner AMD RPM $marinerAmdRpmFile"
+                          echo "Azcopy mariner AMD RPM ID: $marinerAmdRpm"
+                          
+                          marinerAarchRpmFile=$(ls azcopy-* | grep 'cm2\.arm64\.rpm')
+                          marinerAarchRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $marinerAarchRpmFile)
+                          echo "Azcopy mariner ARM RPM: $marinerAarchRpmFile"
+                          echo "Azcopy mariner ARM RPM ID: $marinerAarchRpm"
+                          
+                          is_preview="false"
+                          echo "##vso[task.setvariable variable=is_preview]$is_preview"
+                          if [[ $marinerAmdRpmFile == *"preview"* ]]; then
+                            is_preview="true"
+                            echo "##vso[task.setvariable variable=is_preview]$is_preview"
                           fi
-                        fi
-                        echo "Uploading packages for $distro"
-                        echo "Repo Name: $repoName"
-                        pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!archetype} $repoName $releaseName
-                      done < <(tail -n +3 ../packages.csv)
-                    displayName: 'Add uploaded packages to repository'
-                    workingDirectory: $(signed)
-
-                  - script: |
-                      while IFS=, read -r distro archetype repoName releaseName; do
-                        if [[ $archetype == *"Arm"* ]]; then
-                          echo "Skipping for ARM type on $distro"
-                        else
-                          if [[ $distro == *"Mariner-"* ]]; then
-                            if [ "$(is_preview)" = "true" ]; then
-                              repoName=$(echo $repoName | sed 's/prod/preview/')
+    
+                          while IFS=, read -r distro archetype repoName releaseName; do
+                            # If the package is preview, publish to mariner preview package
+                            if [[ $distro == *"Mariner-"* ]]; then
+                              if [ $is_preview = "true" ]; then
+                                repoName=$(echo $repoName | sed 's/prod/preview/')
+                              fi
                             fi
-                          fi
-                          echo "Repo Name: $repoName"
-                          pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo publish $repoName
-                        fi
-                      done < <(tail -n +3 ../packages.csv)
-                    displayName: 'Publish the repository'
-                    workingDirectory: $(signed)
+                            echo "Uploading packages for $distro"
+                            echo "Repo Name: $repoName"
+                            pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" repo package update --add-packages ${!archetype} $repoName $releaseName
+                          done < <(tail -n +3 ../packages.csv)
 
-      - ${{ if eq(parameters.update_version, true) }}:
-          - stage: UpdateLatestVersion
-            dependsOn:
-              - AzCopyVersion
-              - UploadToStorage
-            jobs:
-              - job: Job
-                pool:
-                  name: azcopy-pool
-                  image: ubuntu22-1espt
-                  os: linux
-                variables:
-                  - name: azcopy_version
-                    value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
-                steps:
-                  - checkout: self
-                    displayName: 'Checkout repository'
-
-                  - task: GoTool@0
-                    env:
-                      GO111MODULE: 'on'
-                    inputs:
-                      version: $(AZCOPY_GOLANG_VERSION)
-
-                  - script: |
-                      go build -tags "netgo" -o azcopy
-                    displayName: 'Build AzCopy'
-
-                  - task: AzureCLI@2
-                    inputs:
-                      azureSubscription: 'ESRP KeyVault identity'
-                      scriptType: bash
-                      scriptLocation: inlineScript
-                      inlineScript: |
-                        export AZCOPY_AUTO_LOGIN_TYPE=AzCLI
-                        echo "azcopy version: $(azcopy_version)"
-                        #Upload to release version blob file
-                        upload_url="https://azcopyvnextrelease.blob.core.windows.net/%24web/releasemetadata/latest_version.txt"
-                        echo "Version will be uploaded to: $upload_url"
-                        echo $(azcopy_version) | ./azcopy copy "$upload_url" --from-to=PipeBlob --log-level=DEBUG --output-type=text 2>&1 | tee /dev/null
-                        exit ${PIPESTATUS[1]}
+                  - ${{ if eq(parameters.test_pmc_connection, false) }}:
+                      - task: AzureCLI@2
+                        displayName: 'Publish the repository'
+                        inputs:
+                          addSpnToEnvironment: true
+                          azureSubscription: 'azcopy-release'
+                          scriptType: bash
+                          scriptLocation: inlineScript
+                          workingDirectory: $(signed)
+                          inlineScript: |
+                            while IFS=, read -r distro archetype repoName releaseName; do
+                              if [[ $archetype == *"Arm"* ]]; then
+                                echo "Skipping for ARM type on $distro"
+                              else
+                                if [[ $distro == *"Mariner-"* ]]; then
+                                  if [ "$(is_preview)" = "true" ]; then
+                                    repoName=$(echo $repoName | sed 's/prod/preview/')
+                                  fi
+                                fi
+                                echo "Repo Name: $repoName"
+                                pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" repo publish $repoName
+                              fi
+                            done < <(tail -n +3 ../packages.csv)

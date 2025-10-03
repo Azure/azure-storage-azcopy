@@ -22,9 +22,10 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
-	"strings"
 )
 
 func init() {
@@ -50,7 +51,7 @@ func init() {
 				switch srcLocationType {
 				case common.ELocation.Blob():
 					raw.fromTo = common.EFromTo.BlobTrash().String()
-				case common.ELocation.File():
+				case common.ELocation.File(), common.ELocation.FileNFS():
 					raw.fromTo = common.EFromTo.FileTrash().String()
 				case common.ELocation.BlobFS():
 					raw.fromTo = common.EFromTo.BlobFSTrash().String()
@@ -109,6 +110,9 @@ func init() {
 		"\n Checks relative path prefix. For example: myFolder;myFolder/subDirName/file.pdf")
 	deleteCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "", "Exclude files where the name matches the pattern list. "+
 		"\n For example: *.jpg;*.pdf;exactName")
+	deleteCmd.PersistentFlags().StringVar(&raw.excludePath, "exclude-path", "", "Exclude these paths when removing. "+
+		"This option does not support wildcard characters (*). "+
+		"\n Checks relative path prefix (For example: myFolder;myFolder/subDirName/file.pdf).")
 	deleteCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "False by default. "+
 		"\n When deleting an Azure Files file or folder, force the deletion to work even if the existing object is has its read-only attribute set")
 	deleteCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "Defines the location of a text file which contains the list of files and directories to be deleted. "+
