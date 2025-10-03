@@ -175,8 +175,8 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 	if storedObject.relativePath == "\x00" { // Short circuit when we're talking about root/, because the STE is funky about this.
 		srcRelativePath, dstRelativePath = storedObject.relativePath, storedObject.relativePath
 	} else {
-		srcRelativePath = pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, s.copyJobTemplate.DisableAutoDecoding, true)
-		dstRelativePath = pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, s.copyJobTemplate.DisableAutoDecoding, false)
+		srcRelativePath = pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false, true)
+		dstRelativePath = pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false, false)
 		if srcRelativePath != "" {
 			srcRelativePath = "/" + srcRelativePath
 		}

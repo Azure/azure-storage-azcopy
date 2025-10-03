@@ -13,7 +13,7 @@ import (
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
 // current version of azcopy
 // To be Incremented every time when we release azcopy with changed dataSchema
-const DataSchemaVersion common.Version = 20
+const DataSchemaVersion common.Version = 19
 
 const (
 	CustomHeaderMaxBytes = 256
@@ -107,8 +107,6 @@ type JobPartPlanHeader struct {
 	PermanentDeleteOption common.PermanentDeleteOption
 
 	RehydratePriority common.RehydratePriorityType
-
-	DisableAutoDecoding bool //TODO wonwuakpa needed?
 }
 
 // Status returns the job status stored in JobPartPlanHeader in thread-safe manner
@@ -324,15 +322,11 @@ type JobPartPlanDstBlob struct {
 	SetPropertiesFlags common.SetPropertiesFlags
 
 	DeleteDestinationFileIfNecessary bool
-
-	DisableAutoDecoding bool //TODO wonwuakpa needed?
 }
 
 // JobPartPlanDstFile holds additional settings required when the destination is a file
 type JobPartPlanDstFile struct {
 	TrailingDot common.TrailingDotOption
-
-	DisableAutoDecoding bool //TODO wonwuakpa needed?
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

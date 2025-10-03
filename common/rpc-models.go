@@ -139,7 +139,6 @@ type CopyJobPartOrderRequest struct {
 	CpkOptions                     CpkOptions
 	SetPropertiesFlags             SetPropertiesFlags
 	BlobFSRecursiveDelete          bool
-	DisableAutoDecoding            bool
 
 	// S2SSourceCredentialType will override CredentialInfo.CredentialType for use on the source.
 	// As a result, CredentialInfo.OAuthTokenInfo may end up being fulfilled even _if_ CredentialInfo.CredentialType is _not_ OAuth.

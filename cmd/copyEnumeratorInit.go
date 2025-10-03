@@ -72,7 +72,6 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	jobPartOrder.DestLengthValidation = cca.CheckLength
 	jobPartOrder.S2SInvalidMetadataHandleOption = cca.s2sInvalidMetadataHandleOption
 	jobPartOrder.S2SPreserveBlobTags = cca.S2sPreserveBlobTags
-	jobPartOrder.DisableAutoDecoding = cca.DisableAutoDecoding
 
 	dest := cca.FromTo.To()
 	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), ctx, InitResourceTraverserOptions{
@@ -96,7 +95,6 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		IncludeDirectoryStubs:   cca.IncludeDirectoryStubs,
 		PreserveBlobTags:        cca.S2sPreserveBlobTags,
 		StripTopDir:             cca.StripTopDir,
-		DisableAutoDecoding:     cca.DisableAutoDecoding,
 
 		ExcludeContainers: cca.excludeContainer,
 		IncrementEnumeration: func(entityType common.EntityType) {
@@ -626,7 +624,10 @@ func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool
 		}
 
 		// If uploading from Windows or downloading from files, decode unsafe chars if user enables decoding
-		// For deletions, the path special char does not to be decoded but preserved.
+
+		// Encoding is intended to handle behavior going between two resources.
+		// For deletions, There isn't an actual "other resource"
+		// So, the path special char does not to be decoded but preserved.
 		// Why? Take an edge case where path contains special char like '%5C' (encoded backslash `\\`)
 		// this will be decoded and error to inconsistent path separators.
 	} else if ((!source && fromTo.From() == common.ELocation.Local() && runtime.GOOS == "windows") ||
@@ -681,7 +682,7 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 			}
 		}
 
-		return pathEncodeRules(relativePath, cca.FromTo, cca.DisableAutoDecoding, source)
+		return pathEncodeRules(relativePath, cca.FromTo, cca.disableAutoDecoding, source)
 	}
 
 	// If it's out here, the object is contained in a folder, or was found via a wildcard, or object.isSourceRootFolder == true
@@ -722,7 +723,7 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 		relativePath = "/" + rootDir + relativePath
 	}
 
-	return pathEncodeRules(relativePath, cca.FromTo, cca.DisableAutoDecoding, source)
+	return pathEncodeRules(relativePath, cca.FromTo, cca.disableAutoDecoding, source)
 }
 
 // we assume that preserveSmbPermissions and preserveSmbInfo have already been validated, such that they are only true if both resource types support them

@@ -378,8 +378,6 @@ type InitResourceTraverserOptions struct {
 	ExcludeContainers []string // Blob account
 	ListVersions      bool     // Blob
 	HardlinkHandling  common.HardlinkHandlingType
-
-	DisableAutoDecoding bool
 }
 
 func (o *InitResourceTraverserOptions) PerformChecks() error {

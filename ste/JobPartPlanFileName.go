@@ -209,7 +209,6 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			IsSourceEncrypted:                order.CpkOptions.IsSourceEncrypted,
 			SetPropertiesFlags:               order.SetPropertiesFlags,
 			DeleteDestinationFileIfNecessary: order.BlobAttributes.DeleteDestinationFileIfNecessary,
-			DisableAutoDecoding:              order.DisableAutoDecoding, //TODO wonwuakpa needed
 		},
 		DstLocalData: JobPartPlanDstLocal{
 			PreserveLastModifiedTime: order.BlobAttributes.PreserveLastModifiedTime,
@@ -229,10 +228,8 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		PermanentDeleteOption:          order.BlobAttributes.PermanentDeleteOption,
 		RehydratePriority:              order.BlobAttributes.RehydratePriority,
 		DstFileData: JobPartPlanDstFile{
-			TrailingDot:         order.FileAttributes.TrailingDot,
-			DisableAutoDecoding: order.DisableAutoDecoding, // TODO wonwuakpa needed
+			TrailingDot: order.FileAttributes.TrailingDot,
 		},
-		DisableAutoDecoding: order.DisableAutoDecoding,
 	}
 
 	// Copy any strings into their respective fields

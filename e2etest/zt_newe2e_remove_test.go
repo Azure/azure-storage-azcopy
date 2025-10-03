@@ -294,7 +294,8 @@ func (s *RemoveSuite) Scenario_RemoveBlobsWithExcludePath(svm *ScenarioVariation
 // Scenario_RemoveFilesWithSpecialChars validates that we correctly remove special chars and do not decode them prematurely
 func (s *RemoveSuite) Scenario_RemoveFilesWithSpecialChars(svm *ScenarioVariationManager) {
 	if !svm.Dryrun() {
-		src := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()),
+		src := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(),
+			common.ELocation.File()})),
 			ResourceDefinitionContainer{})
 
 		fullList := []string{
@@ -303,7 +304,7 @@ func (s *RemoveSuite) Scenario_RemoveFilesWithSpecialChars(svm *ScenarioVariatio
 			"ex%5C",
 			"regular_file.txt",
 
-			// same name after decoding
+			// other encoded chars
 			"file%2Ffile.png",
 			"file/file.png",
 			"test/test%aC.json",
@@ -320,14 +321,13 @@ func (s *RemoveSuite) Scenario_RemoveFilesWithSpecialChars(svm *ScenarioVariatio
 				Verb:    AzCopyVerbRemove,
 				Targets: []ResourceManager{src},
 				Flags: RemoveFlags{
-					Recursive:           pointerTo(true),
-					DisableAutoDecoding: pointerTo(true),
+					Recursive: pointerTo(true),
 				},
 			})
 
 		fileMap := make(map[string]ObjectProperties)
 		fileMap = src.ListObjects(svm, "", true)
-		svm.Assert("ALl files should be removed", Equal{}, len(fileMap), 0)
+		svm.Assert("All files should be removed", Equal{}, len(fileMap), 0)
 		ValidateResource[ContainerResourceManager](svm, src, ResourceDefinitionContainer{}, true)
 		ValidateDoesNotContainError(svm, stdOut, []string{"inconsistent path separators. Some are forward, some are back. This is not supported"})
 	}

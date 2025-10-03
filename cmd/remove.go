@@ -157,7 +157,4 @@ func init() {
 		"\n Client provided key by name let clients making requests against "+
 		"\n Azure Blob storage an option to provide an encryption key on a per-request basis. "+
 		"\n Provided key and its hash will be fetched from environment variables CPK_ENCRYPTION_KEY and CPK_ENCRYPTION_KEY_SHA256 must be set).")
-	deleteCmd.PersistentFlags().BoolVar(&raw.disableAutoDecoding, "disable-auto-decoding", false, "False by default. \n"+
-		"This turns off auto decoding; it preserves the special characters present in file names. \n"+
-		"Useful in situations where filename contains chars like `%5C` could cause errors when decoded.")
 }
