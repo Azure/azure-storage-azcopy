@@ -682,7 +682,6 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 			},
 		}
 	case common.EEntityType.File():
-		fmt.Println("**********GetProperties for File", f.path)
 		resp, err := f.getFileClient().GetProperties(ctx, &file.GetPropertiesOptions{})
 		a.NoError("Get file properties", err)
 
@@ -730,12 +729,6 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 				Group:    resp.Group,
 				FileMode: resp.FileMode,
 			},
-		}
-		if out.FileNFSProperties != nil {
-			fmt.Println("**********File NFS Creation Time: ", out.FileNFSProperties.FileCreationTime)
-			fmt.Println("**********File NFS LastWrite Time: ", out.FileNFSProperties.FileLastWriteTime)
-		} else {
-			fmt.Print("**********File NFS Properties is nil")
 		}
 	case common.EEntityType.Symlink():
 		resp, err := f.getFileClient().GetProperties(ctx, &file.GetPropertiesOptions{})
@@ -800,7 +793,6 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 	default:
 		a.Error("EntityType must be Folder,File,Hardlink or Symlink. Currently: " + f.entityType.String())
 	}
-	fmt.Println("---------finishing	 GetProperties for File", f.path)
 	return
 }
 
