@@ -24,7 +24,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"time"
 
 	gcpUtils "cloud.google.com/go/storage"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -65,14 +64,16 @@ func (o CredentialOpOptions) panicError(err error) {
 
 // Constants for private network transport
 const HttpsRetryAttempts = 5
-const PeCheckCooldownTimeInSecs = 3600
+const PeReCheckCooldownTimeInSecs = 3600
+const PeCheckRetries = 3
+const PeCheckIntervalInmilliSecs = 200
 
 func createS3ClientForPrivateNetwork(credInfo CredentialInfo) (*minio.Client, error) {
 	peIP := privateNetworkArgs.PrivateEndpointIPs
 	baseS3Host := credInfo.S3CredentialInfo.Endpoint
 	// Doublecheck endpoint should contain bucketname : "<bucketname>.s3.<region>.amazonaws.com"
 	s3Host := privateNetworkArgs.BucketName + "." + credInfo.S3CredentialInfo.Endpoint
-	transport := NewRoundRobinTransport(peIP, s3Host, HttpsRetryAttempts, PeCheckCooldownTimeInSecs*time.Second)
+	transport := NewRoundRobinTransport(peIP, s3Host, HttpsRetryAttempts, PeReCheckCooldownTimeInSecs, PeCheckRetries, PeCheckIntervalInmilliSecs)
 	// Create MinIO client
 	client, err := minio.New(baseS3Host, &minio.Options{
 		Creds:        credentials.New(credInfo.S3CredentialInfo.Provider),

@@ -8,6 +8,7 @@ import (
 	"hash"
 	"io"
 	"sync"
+	"time"
 )
 
 // IRemoteSourceInfoProvider interface is imported from ste package
@@ -101,47 +102,87 @@ func (cr *S3ChunkReader) BlockingPrefetch(_ io.ReaderAt, isRetry bool) error {
 
 	//GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: Getting object range from S3 with offset: %d, length: %d for chunkId: %v", cr.chunkId.offsetInFile, cr.length, cr.chunkId))
 
-	// Release muClose lock before making the network call and reading the response body.
-	cr.muClose.Unlock()
-
-	// Use GetObjectRange instead of HTTP GET with presigned URL
-	body, err := cr.sourceInfoProvider.GetObjectRange(cr.chunkId.offsetInFile, cr.length)
-	var n int
-	var readErr error
-	if err == nil {
-		defer body.Close()
-		n, readErr = io.ReadFull(body, targetBuffer)
+	// We'll attempt the network read a few times on transient network errors like "connection reset by peer", "io timeout, etc".
+	maxAttempts := 1
+	if !isRetry {
+		maxAttempts = 1 // if not a retry, just try once
 	}
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		// Release muClose lock before making the network call and reading the response body.
+		cr.muClose.Unlock()
 
-	cr.muClose.Lock()
-	if err != nil {
+		body, err := cr.sourceInfoProvider.GetObjectRange(cr.chunkId.offsetInFile, cr.length)
+		var n int
+		var readErr error
+		if err == nil {
+			// Ensure body.Close() is called even on partial read errors
+			func() {
+				defer func() {
+					if body != nil {
+						body.Close()
+					}
+				}()
+				n, readErr = io.ReadFull(body, targetBuffer)
+			}()
+		}
+
+		cr.muClose.Lock()
+
+		// If GetObjectRange returned an error, treat it similarly to readErr
+		if err != nil {
+			lastErr = err
+		} else if readErr != nil {
+			// If ReadFull returned io.EOF or unexpected EOF, wrap it
+			lastErr = readErr
+		} else if int64(n) != cr.length {
+			lastErr = fmt.Errorf("bytes read not equal to expected length: got %d expected %d", n, cr.length)
+		} else {
+			// Success path
+			cr.buffer = targetBuffer
+			//GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: Successfully fetched %d bytes from S3 and stored in buffer for chunkId: %v", n, cr.chunkId))
+			return nil
+		}
+
+		// On error: cleanup allocated resources for this attempt
 		cr.slicePool.ReturnSlice(targetBuffer)
 		cr.cacheLimiter.Remove(cr.length)
-		GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: GetObjectRange failed for chunkId: %v, err: %v", cr.chunkId, err))
-		return err
+		GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: read attempt %d failed for chunkId: %v err: %v", attempt, cr.chunkId, lastErr))
+
+		// Decide whether error is transient and worth retrying
+		if attempt < maxAttempts && IsRetryableNetworkError(lastErr) {
+			// small backoff
+			backoff := time.Duration(attempt) * 100 * time.Millisecond
+			GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: transient network error detected, retrying after %v (attempt %d/%d) for chunkId: %v", backoff, attempt, maxAttempts, cr.chunkId))
+			time.Sleep(backoff)
+			// allocate a fresh buffer for next attempt
+			targetBuffer = cr.slicePool.RentSlice(cr.length)
+			// continue retry loop
+			continue
+		}
+
+		// Non-retryable or attempts exhausted: return the last error
+		if lastErr != nil {
+			return lastErr
+		}
+		// Fallback
+		return errors.New("unknown error during BlockingPrefetch")
 	}
 
-	if readErr == nil && int64(n) != cr.length {
-		readErr = errors.New("bytes read not equal to expected length")
+	// If we fall out, return the last seen error
+	if lastErr != nil {
+		return lastErr
 	}
-	if readErr != nil {
-		cr.slicePool.ReturnSlice(targetBuffer)
-		cr.cacheLimiter.Remove(cr.length)
-		GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: Failed to read response body for chunkId: %v, err: %v, bytesRead: %d, expected: %d", cr.chunkId, readErr, n, cr.length))
-		return readErr
-	}
-
-	cr.buffer = targetBuffer
-	GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: Successfully fetched %d bytes from S3 and stored in buffer for chunkId: %v", n, cr.chunkId))
-	return nil
+	return errors.New("blocking prefetch failed")
 }
 
 func (cr *S3ChunkReader) retryBlockingPrefetchIfNecessary() error {
 	if cr.buffer != nil {
 		return nil // nothing to do
 	}
+	const isRetry = true
 	// For S3, just call BlockingPrefetch again with isRetry=true
-	return cr.BlockingPrefetch(nil, true)
+	return cr.BlockingPrefetch(nil, isRetry)
 }
 
 // Seeks within this chunk
