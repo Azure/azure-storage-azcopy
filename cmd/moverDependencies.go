@@ -922,6 +922,18 @@ func SetJobId(jobId common.JobID) {
 	azcopyCurrentJobID = jobId
 }
 
+func OpenScanningLogger() {
+	// set up the front end scanning logger
+	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, LogLevel, azcopyLogPathFolder, "-scanning")
+	azcopyScanningLogger.OpenLog()
+}
+
+func CloseScanningLogger() {
+	if azcopyScanningLogger != nil {
+		azcopyScanningLogger.CloseLog()
+	}
+}
+
 // ============================================================================
 // End Utility Functions - Misellaneous
 // ============================================================================
