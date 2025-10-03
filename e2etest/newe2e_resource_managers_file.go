@@ -497,16 +497,25 @@ func (f *FileObjectResourceManager) Create(a Asserter, body ObjectContentContain
 		nfsProperties.FileMode = props.FileNFSPermissions.FileMode
 	}
 
+	smbProperties := &file.SMBProperties{}
+	if props.FileProperties.FileCreationTime != nil {
+		smbProperties.CreationTime = props.FileProperties.FileCreationTime
+		smbProperties.LastWriteTime = props.FileProperties.FileLastWriteTime
+	}
+
 	var attr *file.NTFSFileAttributes
 	if DerefOrZero(props.FileProperties.FileAttributes) != "" {
 		var err error
 		attr, err = file.ParseNTFSFileAttributes(props.FileProperties.FileAttributes)
 		a.NoError("Parse attributes", err)
+		smbProperties.Attributes = attr
 	}
 
 	perms := f.PreparePermissions(a, props.FileProperties.FilePermissions)
 
 	f.CreateParents(a)
+	shareType, err := f.Share.InternalClient.GetProperties(ctx, nil)
+	a.NoError("Get share properties", err)
 
 	switch f.entityType {
 	case common.EEntityType.File():
@@ -515,41 +524,49 @@ func (f *FileObjectResourceManager) Create(a Asserter, body ObjectContentContain
 		}
 
 		client := f.getFileClient()
-
-		_, err := client.Create(ctx, body.Size(), &file.CreateOptions{
-			SMBProperties: &file.SMBProperties{
-				Attributes:    attr,
-				CreationTime:  props.FileProperties.FileCreationTime,
-				LastWriteTime: props.FileProperties.FileLastWriteTime,
-			},
-			Permissions:   perms,
-			NFSProperties: nfsProperties,
-		})
-		a.NoError("Create file", err)
-		err = client.UploadStream(ctx, body.Reader(), &file.UploadStreamOptions{
+		if shareType.EnabledProtocols == nil || *shareType.EnabledProtocols == "SMB" {
+			_, err := client.Create(ctx, body.Size(), &file.CreateOptions{
+				SMBProperties: smbProperties,
+				Permissions:   perms,
+			})
+			a.NoError("Create file", err)
+		} else {
+			_, err := client.Create(ctx, body.Size(), &file.CreateOptions{
+				NFSProperties: nfsProperties,
+			})
+			a.NoError("Create file", err)
+		}
+		err := client.UploadStream(ctx, body.Reader(), &file.UploadStreamOptions{
 			Concurrency: runtime.NumCPU(),
 		})
 		a.NoError("Upload Stream", err)
 	case common.EEntityType.Folder():
 		client := f.getDirClient()
-		_, err := client.Create(ctx, &directory.CreateOptions{
-			FileSMBProperties: &file.SMBProperties{
-				Attributes:    attr,
-				CreationTime:  props.FileProperties.FileCreationTime,
-				LastWriteTime: props.FileProperties.FileLastWriteTime,
-			},
-			FilePermissions:   perms,
-			Metadata:          props.Metadata,
-			FileNFSProperties: nfsProperties,
-		})
-		// This is fine. Instead let's set properties.
-		if fileerror.HasCode(err, fileerror.ResourceAlreadyExists) {
-			err = nil
+		if shareType.EnabledProtocols == nil || *shareType.EnabledProtocols == "SMB" {
+			_, err := client.Create(ctx, &directory.CreateOptions{
+				FileSMBProperties: smbProperties,
+				FilePermissions:   perms,
+				Metadata:          props.Metadata,
+			})
+			// This is fine. Instead let's set properties.
+			if fileerror.HasCode(err, fileerror.ResourceAlreadyExists) {
+				err = nil
+				f.SetObjectProperties(a, props)
+			}
+			a.NoError("Create directory", err)
 
-			f.SetObjectProperties(a, props)
+		} else if props.FileNFSPermissions != nil || props.FileNFSProperties != nil {
+			_, err := client.Create(ctx, &directory.CreateOptions{
+				FileNFSProperties: nfsProperties,
+			})
+			// This is fine. Instead let's set properties.
+			if fileerror.HasCode(err, fileerror.ResourceAlreadyExists) {
+				err = nil
+				f.SetObjectProperties(a, props)
+			}
+			a.NoError("Create directory", err)
 		}
 
-		a.NoError("Create directory", err)
 	case common.EEntityType.Hardlink():
 		client := f.getFileClient()
 
@@ -807,11 +824,18 @@ func (f *FileObjectResourceManager) SetObjectProperties(a Asserter, props Object
 		nfsProperties.FileMode = props.FileNFSPermissions.FileMode
 	}
 
+	smbProperties := &file.SMBProperties{}
+	if props.FileProperties.FileCreationTime != nil {
+		smbProperties.CreationTime = props.FileProperties.FileCreationTime
+		smbProperties.LastWriteTime = props.FileProperties.FileLastWriteTime
+	}
+
 	var attr *file.NTFSFileAttributes
 	if DerefOrZero(props.FileProperties.FileAttributes) != "" {
 		var err error
 		attr, err = file.ParseNTFSFileAttributes(props.FileProperties.FileAttributes)
 		a.NoError("Parse attributes", err)
+		smbProperties.Attributes = attr
 	}
 
 	perms := f.PreparePermissions(a, props.FileProperties.FilePermissions)
@@ -821,13 +845,9 @@ func (f *FileObjectResourceManager) SetObjectProperties(a Asserter, props Object
 		var opts *file.SetHTTPHeadersOptions
 		if shareType.EnabledProtocols == nil || *shareType.EnabledProtocols == "SMB" {
 			opts = &file.SetHTTPHeadersOptions{
-				SMBProperties: &file.SMBProperties{
-					Attributes:    attr,
-					CreationTime:  props.FileProperties.FileCreationTime,
-					LastWriteTime: props.FileProperties.FileLastWriteTime,
-				},
-				Permissions: perms,
-				HTTPHeaders: props.HTTPHeaders.ToFile(),
+				SMBProperties: smbProperties,
+				Permissions:   perms,
+				HTTPHeaders:   props.HTTPHeaders.ToFile(),
 			}
 		} else {
 			opts = &file.SetHTTPHeadersOptions{
@@ -845,12 +865,8 @@ func (f *FileObjectResourceManager) SetObjectProperties(a Asserter, props Object
 		var opts *directory.SetPropertiesOptions
 		if shareType.EnabledProtocols == nil || *shareType.EnabledProtocols == "SMB" {
 			opts = &directory.SetPropertiesOptions{
-				FileSMBProperties: &file.SMBProperties{
-					Attributes:    attr,
-					CreationTime:  props.FileProperties.FileCreationTime,
-					LastWriteTime: props.FileProperties.FileLastWriteTime,
-				},
-				FilePermissions: perms,
+				FileSMBProperties: smbProperties,
+				FilePermissions:   perms,
 			}
 		} else {
 			opts = &directory.SetPropertiesOptions{

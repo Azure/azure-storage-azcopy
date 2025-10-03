@@ -2,12 +2,12 @@ package e2etest
 
 import (
 	"os/user"
+	"runtime"
 	"strconv"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/google/uuid"
-	"runtime"
 )
 
 func init() {
@@ -31,11 +31,11 @@ func getPropertiesAndPermissions(svm *ScenarioVariationManager, preserveProperti
 	var folderProperties, fileProperties *FileNFSProperties
 	if preserveProperties {
 		folderProperties = &FileNFSProperties{
-			FileCreationTime: pointerTo(time.Now()),
+			FileCreationTime: pointerTo(time.Now().Add(-1 * time.Minute)),
 		}
 		fileProperties = &FileNFSProperties{
-			FileCreationTime:  pointerTo(time.Now()),
-			FileLastWriteTime: pointerTo(time.Now()),
+			FileCreationTime:  pointerTo(time.Now().Add(-1 * time.Minute)),
+			FileLastWriteTime: pointerTo(time.Now().Add(-1 * time.Minute)),
 		}
 	}
 	var fileOrFolderPermissions *FileNFSPermissions
@@ -67,23 +67,23 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
 
 	preserveSymlinks := NamedResolveVariation(svm, map[string]bool{
-		"preserveSymlinks=true":  true,
-		"preserveSymlinks=false": false,
+		"|preserveSymlinks=true":  true,
+		"|preserveSymlinks=false": false,
 	})
 
 	followSymlinks := NamedResolveVariation(svm, map[string]bool{
-		"followSymlinks=true":  true,
-		"followSymlinks=false": false,
+		"|followSymlinks=true":  true,
+		"|followSymlinks=false": false,
 	})
 
 	preserveProperties := NamedResolveVariation(svm, map[string]bool{
-		"preserveProperties=true":  true,
-		"preserveProperties=false": false,
+		"|preserveProperties=true":  true,
+		"|preserveProperties=false": false,
 	})
 
 	preservePermissions := NamedResolveVariation(svm, map[string]bool{
-		"preservePermissions=true":  true,
-		"preservePermissions=false": false,
+		"|preservePermissions=true":  true,
+		"|preservePermissions=false": false,
 	})
 
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}), GetResourceOptions{
@@ -298,24 +298,24 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 	}
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
 	preserveSymlinks := NamedResolveVariation(svm, map[string]bool{
-		"preserveSymlinks=true":  true,
-		"preserveSymlinks=false": false,
+		"|preserveSymlinks=true":  true,
+		"|preserveSymlinks=false": false,
 	})
 
 	followSymlinks := NamedResolveVariation(svm, map[string]bool{
-		"followSymlinks=true":  true,
-		"followSymlinks=false": false,
+		"|followSymlinks=true":  true,
+		"|followSymlinks=false": false,
 	})
 
 	preserveProperties := NamedResolveVariation(svm, map[string]bool{
-		"preserveProperties=true":  true,
-		"preserveProperties=false": false,
+		"|preserveProperties=true":  true,
+		"|preserveProperties=false": false,
 	})
 
 	//TODO: Not checking for this flag as false as azcopy needs to run by root user
 	// in order to set the owner and group to 0(root)
 	preservePermissions := NamedResolveVariation(svm, map[string]bool{
-		"preservePermissions=true": true,
+		"|preservePermissions=true": true,
 	})
 
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
@@ -336,11 +336,13 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 	var dst ResourceManager
 	if azCopyVerb == AzCopyVerbSync {
 		dstObj := dstContainer.GetObject(svm, rootDir+"/test1.txt", common.EEntityType.File())
-		dstObj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
-		if !svm.Dryrun() {
-			// Make sure the LMT is in the past
-			time.Sleep(time.Second * 5)
-		}
+		dstObj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{
+			FileNFSPermissions: fileOrFolderPermissions,
+			FileNFSProperties: &FileNFSProperties{
+				FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
+				FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
+			},
+		})
 		dst = dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 	} else {
 		dst = dstContainer
@@ -497,23 +499,23 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
 	preserveSymlinks := NamedResolveVariation(svm, map[string]bool{
-		"preserveSymlinks=true":  true,
-		"preserveSymlinks=false": false,
+		"|preserveSymlinks=true":  true,
+		"|preserveSymlinks=false": false,
 	})
 
 	followSymlinks := NamedResolveVariation(svm, map[string]bool{
-		"followSymlinks=true":  true,
-		"followSymlinks=false": false,
+		"|followSymlinks=true":  true,
+		"|followSymlinks=false": false,
 	})
 
 	preserveProperties := NamedResolveVariation(svm, map[string]bool{
-		"preserveProperties=true":  true,
-		"preserveProperties=false": false,
+		"|preserveProperties=true":  true,
+		"|preserveProperties=false": false,
 	})
 
 	preservePermissions := NamedResolveVariation(svm, map[string]bool{
-		"preservePermissions=true":  true,
-		"preservePermissions=false": false,
+		"|preservePermissions=true":  true,
+		"|preservePermissions=false": false,
 	})
 
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}), GetResourceOptions{
@@ -539,11 +541,11 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 	var folderProperties, fileProperties *FileNFSProperties
 	if preserveProperties {
 		folderProperties = &FileNFSProperties{
-			FileCreationTime: pointerTo(time.Now()),
+			FileCreationTime: pointerTo(time.Now().Add(-1 * time.Minute)),
 		}
 		fileProperties = &FileNFSProperties{
-			FileCreationTime:  pointerTo(time.Now()),
-			FileLastWriteTime: pointerTo(time.Now()),
+			FileCreationTime:  pointerTo(time.Now().Add(-1 * time.Minute)),
+			FileLastWriteTime: pointerTo(time.Now().Add(-1 * time.Minute)),
 		}
 	}
 	var fileOrFolderPermissions *FileNFSPermissions
@@ -562,16 +564,14 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 		dstObj := dstContainer.GetObject(svm, rootDir+"/test1.txt", common.EEntityType.File())
 		dstObj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{
 			FileNFSPermissions: fileOrFolderPermissions,
-			FileNFSProperties:  fileProperties,
+			FileNFSProperties: &FileNFSProperties{
+				FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
+				FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
+			},
 		})
 
 		dstObj = dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 		dst = dstObj
-
-		if !svm.Dryrun() {
-			// Make sure the LMT is in the past
-			time.Sleep(time.Second * 5)
-		}
 	} else {
 		dst = dstContainer
 	}
@@ -775,11 +775,11 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 	var folderProperties, fileProperties *FileNFSProperties
 	if preserveProperties {
 		folderProperties = &FileNFSProperties{
-			FileCreationTime: pointerTo(time.Now()),
+			FileCreationTime: pointerTo(time.Now().Add(-1 * time.Minute)),
 		}
 		fileProperties = &FileNFSProperties{
-			FileCreationTime:  pointerTo(time.Now()),
-			FileLastWriteTime: pointerTo(time.Now()),
+			FileCreationTime:  pointerTo(time.Now().Add(-1 * time.Minute)),
+			FileLastWriteTime: pointerTo(time.Now().Add(-1 * time.Minute)),
 		}
 	}
 
@@ -788,13 +788,14 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 	var dst, src ResourceManager
 	if azCopyVerb == AzCopyVerbSync {
 		dstObj := dstShare.GetObject(svm, rootDir+"/test1.txt", common.EEntityType.File())
-		dstObj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
+		dstObj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{
+			FileProperties: FileProperties{
+				FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
+				FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
+			},
+		})
 		dstObj = dstShare.GetObject(svm, rootDir, common.EEntityType.Folder())
 		dst = dstObj
-		if !svm.Dryrun() {
-			// Make sure the LMT is in the past
-			time.Sleep(time.Second * 5)
-		}
 	} else {
 		dst = dstShare
 	}
@@ -1007,11 +1008,11 @@ func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationMa
 	var folderProperties, fileProperties FileProperties
 	if preserveProperties {
 		folderProperties = FileProperties{
-			FileCreationTime: pointerTo(time.Now()),
+			FileCreationTime: pointerTo(time.Now().Add(-1 * time.Minute)),
 		}
 		fileProperties = FileProperties{
-			FileCreationTime:  pointerTo(time.Now()),
-			FileLastWriteTime: pointerTo(time.Now()),
+			FileCreationTime:  pointerTo(time.Now().Add(-1 * time.Minute)),
+			FileLastWriteTime: pointerTo(time.Now().Add(-1 * time.Minute)),
 		}
 	}
 
@@ -1020,13 +1021,14 @@ func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationMa
 	var dst, src ResourceManager
 	if azCopyVerb == AzCopyVerbSync {
 		dstObj := dstShare.GetObject(svm, rootDir+"/test1.txt", common.EEntityType.File())
-		dstObj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
+		dstObj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{
+			FileProperties: FileProperties{
+				FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
+				FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
+			},
+		})
 		dstObj = dstShare.GetObject(svm, rootDir, common.EEntityType.Folder())
 		dst = dstObj
-		if !svm.Dryrun() {
-			// Make sure the LMT is in the past
-			time.Sleep(time.Second * 5)
-		}
 	} else {
 		dst = dstShare
 	}
@@ -1074,9 +1076,13 @@ func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationMa
 			Verb: azCopyVerb,
 			Targets: []ResourceManager{
 				src.(RemoteResourceManager).WithSpecificAuthType(
-					EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{}),
+					ResolveVariation(svm, []ExplicitCredentialTypes{
+						EExplicitCredentialType.SASToken(),
+						EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{}),
 				dst.(RemoteResourceManager).WithSpecificAuthType(
-					EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{}),
+					ResolveVariation(svm, []ExplicitCredentialTypes{
+						EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth(),
+					}), svm, CreateAzCopyTargetOptions{}),
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
@@ -1186,11 +1192,11 @@ func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForNFS(svm *ScenarioVar
 		dstObj := dstShare.GetObject(svm, rootDir+"/test1.txt", common.EEntityType.File())
 		dstObj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
 		dstObj = dstShare.GetObject(svm, rootDir, common.EEntityType.Folder())
-		dst = dstObj
 		if !svm.Dryrun() {
 			// Make sure the LMT is in the past
 			time.Sleep(time.Second * 5)
 		}
+		dst = dstObj
 	} else {
 		dst = dstShare
 	}

@@ -205,20 +205,22 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 				ValidatePropertyPtr(a, "Permissions", vProps.FileProperties.FilePermissions, oProps.FileProperties.FilePermissions)
 				// SMB to NFS transfer
 				if vProps.FileProperties.FileCreationTime != nil && oProps.FileNFSProperties != nil {
-					ValidateTimePtrWithASecDrift(a, "Creation time SMB to NFS", vProps.FileProperties.FileCreationTime, oProps.FileNFSProperties.FileCreationTime)
-					ValidateTimePtrWithASecDrift(a, "Last write time SMB to NFS", vProps.FileProperties.FileLastWriteTime, oProps.FileNFSProperties.FileLastWriteTime)
-				} else if vProps.FileNFSProperties != nil && oProps.FileProperties.FileCreationTime != nil {
-					ValidateTimePtrWithASecDrift(a, "Creation time NFS to SMB", vProps.FileNFSProperties.FileCreationTime, oProps.FileProperties.FileCreationTime)
-					ValidateTimePtrWithASecDrift(a, "Last write time NFS to SMB", vProps.FileNFSProperties.FileLastWriteTime, oProps.FileProperties.FileLastWriteTime)
-				} else { // SMB to SMB transfer
+					ValidateTimePtr(a, "Creation time SMB to NFS", vProps.FileProperties.FileCreationTime, oProps.FileNFSProperties.FileCreationTime)
+					ValidateTimePtr(a, "Last write time SMB to NFS", vProps.FileProperties.FileLastWriteTime, oProps.FileNFSProperties.FileLastWriteTime)
+
+				} else if vProps.FileNFSProperties != nil && oProps.FileProperties.FileCreationTime != nil { // NFS to SMB transfer
+					ValidateTimePtr(a, "Creation time NFS to SMB", vProps.FileNFSProperties.FileCreationTime, oProps.FileProperties.FileCreationTime)
+					ValidateTimePtr(a, "Last write time NFS to SMB", vProps.FileNFSProperties.FileLastWriteTime, oProps.FileProperties.FileLastWriteTime)
+
+				} else if vProps.FileProperties.FileCreationTime != nil && oProps.FileProperties.FileCreationTime != nil { // SMB to SMB transfer
 					ValidateTimePtr(a, "Creation time SMB to SMB", vProps.FileProperties.FileCreationTime, oProps.FileProperties.FileCreationTime)
 					ValidateTimePtr(a, "Last write time SMB to SMB", vProps.FileProperties.FileLastWriteTime, oProps.FileProperties.FileLastWriteTime)
+
+				} else if vProps.FileNFSProperties != nil && oProps.FileNFSProperties != nil { // NFS to NFS transfers
+					ValidateTimePtr(a, canonPathPrefix+"Creation Time NFS to NFS", vProps.FileNFSProperties.FileCreationTime, oProps.FileNFSProperties.FileCreationTime)
+					ValidateTimePtr(a, canonPathPrefix+"Last Write Time NFS to NFS", vProps.FileNFSProperties.FileLastWriteTime, oProps.FileNFSProperties.FileLastWriteTime)
 				}
-				// NFS to NFS transfers
-				if vProps.FileNFSProperties != nil && oProps.FileNFSProperties != nil {
-					ValidateTimePtr(a, canonPathPrefix+"NFS Creation Time", vProps.FileNFSProperties.FileCreationTime, oProps.FileNFSProperties.FileCreationTime)
-					ValidateTimePtr(a, canonPathPrefix+"NFS Last Write Time", vProps.FileNFSProperties.FileLastWriteTime, oProps.FileNFSProperties.FileLastWriteTime)
-				}
+
 				if vProps.FileNFSPermissions != nil && oProps.FileNFSPermissions != nil {
 					ValidatePropertyPtr(a, canonPathPrefix+"Owner", vProps.FileNFSPermissions.Owner, oProps.FileNFSPermissions.Owner)
 					ValidatePropertyPtr(a, canonPathPrefix+"Group", vProps.FileNFSPermissions.Group, oProps.FileNFSPermissions.Group)
