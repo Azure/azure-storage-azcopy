@@ -555,7 +555,7 @@ func (f *FileObjectResourceManager) Create(a Asserter, body ObjectContentContain
 			}
 			a.NoError("Create directory", err)
 
-		} else if props.FileNFSPermissions != nil || props.FileNFSProperties != nil {
+		} else {
 			_, err := client.Create(ctx, &directory.CreateOptions{
 				FileNFSProperties: nfsProperties,
 			})
