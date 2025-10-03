@@ -21,23 +21,20 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package main
+package azcopy
 
 import (
 	"math"
-	"path"
 	"syscall"
-
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-// ProcessOSSpecificInitialization changes the soft limit for file descriptor for process
+// processOSSpecificInitialization changes the soft limit for file descriptor for process
 // and returns the new file descriptor limit for process.
 // We need to do this because the default limits are low on Linux, and we concurrently open lots of files
 // and sockets (both of which count towards this limit).
 // Api gets the hard limit for process file descriptor
 // and sets the soft limit for process file descriptor to (hard limit - 1)
-func ProcessOSSpecificInitialization() (int, error) {
+func processOSSpecificInitialization() (int, error) {
 	var rlimit, zero syscall.Rlimit
 	// get the hard limit
 	err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rlimit)
@@ -66,12 +63,4 @@ func ProcessOSSpecificInitialization() (int, error) {
 	} else {
 		return int(set.Cur), nil
 	}
-}
-
-// GetAzCopyAppPath returns the path of Azcopy folder in local appdata.
-// Azcopy folder in local appdata contains all the files created by azcopy locally.
-func GetAzCopyAppPath() string {
-	localAppData := common.GetEnvironmentVariable(common.EEnvironmentVariable.UserDir())
-	azcopyAppDataFolder := path.Join(localAppData, ".azcopy")
-	return azcopyAppDataFolder
 }

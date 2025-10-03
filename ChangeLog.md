@@ -1,6 +1,51 @@
 
 # Change Log
 
+## Version 10.30.1
+
+### Bug Fixes 
+1. Fixed `--exclude-path` flag not available in remove operations.([PR #3165](https://github.com/Azure/azure-storage-azcopy/pull/3165)) ([GH Issue #3159](https://github.com/Azure/azure-storage-azcopy/issues/3159))
+2. Fixed regression where AzCopy was not honoring concurrency value in copy operations ([#3192](https://github.com/Azure/azure-storage-azcopy/pull/3192))
+3. Fixed the incorrect JSON output format of the warning message when there are multiple AzCopy processes running. ([PR #3188](https://github.com/Azure/azure-storage-azcopy/pull/3188)) ([GH Issue #3182](https://github.com/Azure/azure-storage-azcopy/issues/3182))
+4. Fixed `latest_version.txt` from being wrongly created in users current directory. ([PR #3179](https://github.com/Azure/azure-storage-azcopy/pull/3179))([GH Issue #3176](https://github.com/Azure/azure-storage-azcopy/issues/3176))
+5. Fixed AzCopy crashing during sync operation from a nil pointer deref in the destination authentication policy. ([PR #3186](https://github.com/Azure/azure-storage-azcopy/pull/3186)) ([GH Issue #3109](https://github.com/Azure/azure-storage-azcopy/issues/3109)) ([GH Issue #3156](https://github.com/Azure/azure-storage-azcopy/issues/3156)) ([GH Issue #3175](https://github.com/Azure/azure-storage-azcopy/issues/3175))
+
+### Dependency Updates
+1.	Golang 1.24.2 -> 1.24.6 (CVE-2025-47907) ([#3154](https://github.com/Azure/azure-storage-azcopy/issues/3154))
+
+## Version 10.31.0-preview.1
+
+### Dependency updates
+1.	Golang 1.24.4 -> 1.24.6 ([#3154](https://github.com/Azure/azure-storage-azcopy/issues/3154))
+
+## Version 10.30.0
+### Breaking changes
+1. For transfers involving Azure Files (NFS or SMB), AzCopy will not auto create file shares.
+2. AzCopy binaries and latest version information will now be distributed from Github releases instead of the static website. ([#3014](https://github.com/Azure/azure-storage-azcopy/pull/3014))
+
+### New Features
+1. Azure Files NFS Support via REST. 
+   Support for transferring data between local Linux systems and Azure Files NFS using REST. To use this feature, please explicitly specify the `--from-to` flag. 
+   - Transfer from local Linux to Azure Files NFS. (`--from-to=LocalFileNFS`)
+   - Transfer from Azure Files NFS to local Linux. (`--from-to=FileNFSLocal`)
+   - Transfer between Azure Files NFS shares. (`--from-to=FileNFSFileNFS`)
+2. Added support to retry on copy source error code and status code for service to service copies. ([#3105](https://github.com/Azure/azure-storage-azcopy/pull/3105))
+3. Added support for service to service copies from Azure Files to Blob Storage using EntraID. ([#3053](https://github.com/Azure/azure-storage-azcopy/pull/3053))
+
+### Bug Fixes
+1. Fixed a bug where when copying a file that has already been deleted with `--trailing-dot=Disable` resulted in the wrong error instead of a 404. ([#3092](https://github.com/Azure/azure-storage-azcopy/pull/3092))
+
+### Supportability
+1. Removed the warning message when failing to create a container. This message can be misleading when there is insufficient permissions to create a container and the container already exists. ([#3045](https://github.com/Azure/azure-storage-azcopy/pull/3045))
+2. Improved the error message returned when block size is larger than bandwidth limit. ([#3051](https://github.com/Azure/azure-storage-azcopy/pull/3051))
+3. Warn user if transfer is going to exceed 10M objects. ([#3111](https://github.com/Azure/azure-storage-azcopy/pull/3111))
+4. Warn user if multiple AzCopy processes are running. ([#3128](https://github.com/Azure/azure-storage-azcopy/pull/3128))
+
+## Version 10.30.0-preview.2
+
+### Dependency updates
+1.	Golang 1.24.2 -> 1.24.4 ([#3085](https://github.com/Azure/azure-storage-azcopy/issues/3085))
+
 ## Version 10.30.0-preview.1 
 
 ### New Feature

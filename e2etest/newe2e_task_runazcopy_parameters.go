@@ -196,6 +196,7 @@ type GlobalFlags struct {
 	CapMbps          *float64 `flag:"cap-mbps"`
 	TrustedSuffixes  []string `flag:"trusted-microsoft-suffixes"`
 	SkipVersionCheck *bool    `flag:"skip-version-check,default:true"`
+	CheckVersion     *bool    `flag:"check-version,default:false"`
 
 	// TODO : Flags default seems to be broken; WI#26954065
 	OutputType  *common.OutputFormat    `flag:"output-type,default:json"`
@@ -433,6 +434,7 @@ type RemoveFlags struct {
 	TrailingDot     *common.TrailingDotOption     `flag:"trailing-dot"`
 	CPKByName       *string                       `flag:"cpk-by-name"`
 	CPKByValue      *bool                         `flag:"cpk-by-value"`
+	ExcludePath     *string                       `flag:"exclude-path"`
 }
 
 func (r RemoveFlags) SerializeListingFile(in any, scenarioAsserter ScenarioAsserter, ctx context.Context) {
@@ -472,6 +474,26 @@ type LoginStatusFlags struct {
 	Tenant   *bool `flag:"tenant"`
 	Endpoint *bool `flag:"endpoint"`
 	Method   *bool `flag:"method"`
+}
+
+type JobsCleanFlags struct {
+	GlobalFlags
+
+	WithStatus *common.JobStatus `flag:"with-status"`
+}
+
+type JobsRemoveFlags struct {
+	GlobalFlags
+}
+
+type JobsListFlags struct {
+	GlobalFlags
+	WithStatus *common.JobStatus `flag:"with-status"`
+}
+
+type JobsShowFlags struct {
+	GlobalFlags
+	WithStatus *common.TransferStatus `flag:"with-status"`
 }
 
 type WindowsAttribute uint32

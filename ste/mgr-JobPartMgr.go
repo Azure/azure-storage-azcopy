@@ -101,7 +101,7 @@ func NewAzcopyHTTPClient(maxIdleConns int) *http.Client {
 func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptions, transport policy.Transporter, log LogOptions, srcCred *common.ScopedToken, dstCred *common.ScopedAuthenticator) azcore.ClientOptions {
 	// Pipeline will look like
 	// [includeResponsePolicy, newAPIVersionPolicy (ignored), NewTelemetryPolicy, perCall, NewRetryPolicy, perRetry, NewLogPolicy, httpHeaderPolicy, bodyDownloadPolicy]
-	perCallPolicies := []policy.Policy{azruntime.NewRequestIDPolicy(), NewVersionPolicy(), newFileUploadRangeFromURLFixPolicy()}
+	perCallPolicies := []policy.Policy{azruntime.NewRequestIDPolicy(), NewRequestPriorityPolicy(), NewVersionPolicy(), newFileUploadRangeFromURLFixPolicy()}
 	// TODO : Default logging policy is not equivalent to old one. tracing HTTP request
 	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), newLogPolicy(log), newStatsPolicy()}
 	if dstCred != nil {
@@ -333,7 +333,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 					dst = uri.String()
 				}
 
-				jpptFolderTracker.RegisterPropertiesTransfer(dst, t)
+				jpptFolderTracker.RegisterPropertiesTransfer(dst, plan.PartNum, t)
 			}
 		}
 
