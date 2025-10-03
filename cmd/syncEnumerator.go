@@ -116,7 +116,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 				if common.IsNFSCopy() {
 					atomic.AddUint32(&cca.atomicSkippedSymlinkCount, 1)
 				}
-				if cca.symlinkHandling != common.ESymlinkHandlingType.Follow() {
+				if cca.symlinkHandling == common.ESymlinkHandlingType.Skip() {
 					atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 				}
 			case common.EEntityType.Other():
@@ -140,10 +140,14 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
 		HardlinkHandling:        cca.hardlinks,
 		IncrementNotTransferred: func(entityType common.EntityType) {
-			if entityType == common.EEntityType.File() {
+
+			switch entityType {
+			case common.EEntityType.File(), common.EEntityType.Hardlink(), common.EEntityType.Symlink():
 				atomic.AddUint64(&cca.atomicSourceFilesTransferNotRequired, 1)
-			} else if entityType == common.EEntityType.Folder() {
+			case common.EEntityType.Folder():
 				atomic.AddUint64(&cca.atomicSourceFoldersTransferNotRequired, 1)
+			case common.EEntityType.Other():
+			default:
 			}
 		},
 		ErrorChannel: enumeratorOptions.ErrorChannel,
