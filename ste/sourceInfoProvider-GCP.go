@@ -1,14 +1,15 @@
 package ste
 
 import (
-	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"crypto/md5"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"golang.org/x/oauth2/google"
 	"io"
 	"os"
+
+	gcpUtils "cloud.google.com/go/storage"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"golang.org/x/oauth2/google"
 
 	"net/url"
 	"time"
@@ -165,6 +166,10 @@ func (p *gcpSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, error
 
 func (p *gcpSourceInfoProvider) EntityType() common.EntityType {
 	return common.EEntityType.File() // All folders are virtual in GCP and only files exist.
+}
+
+func (p *gcpSourceInfoProvider) GetObjectRange(offset, length int64) (io.ReadCloser, error) {
+	return nil, fmt.Errorf("GetObjectRange not implemented for gcpSourceInfoProvider")
 }
 
 func (p *gcpSourceInfoProvider) GetMD5(offset, count int64) ([]byte, error) {
