@@ -55,7 +55,7 @@ func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 		addToChannel := func(v string, paramName string) {
 			// empty strings should be ignored, otherwise the source root itself is selected
 			if len(v) > 0 {
-				warnIfHasWildcard(includeWarningOncer, paramName, v)
+				azcopy.WarnIfHasWildcard(includeWarningOncer, paramName, v)
 				listChan <- v
 			}
 		}
@@ -168,9 +168,9 @@ func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 
 	if cooked.preserveInfo && !cooked.preservePermissions.IsTruthy() {
 		if common.IsNFSCopy() {
-			glcm.Info(PreserveNFSPermissionsDisabledMsg)
+			glcm.Info(azcopy.PreserveNFSPermissionsDisabledMsg)
 		} else {
-			glcm.Info(PreservePermissionsDisabledMsg)
+			glcm.Info(azcopy.PreservePermissionsDisabledMsg)
 		}
 	}
 

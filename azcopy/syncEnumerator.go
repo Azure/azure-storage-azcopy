@@ -192,10 +192,10 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 		// we ALREADY have available a complete map of everything that exists locally
 		// so as soon as we see a remote destination object we can know whether it exists in the local source
 
-		comparator = newSyncDestinationComparator(indexer, transferScheduler.ScheduleCopyTransfer, deleteScheduler, s.opts.compareHash, s.opts.preserveInfo, s.opts.mirrorMode).processIfNecessary
+		comparator = newSyncDestinationComparator(indexer, transferScheduler.ScheduleSyncRemoveSetPropertiesTransfer, deleteScheduler, s.opts.compareHash, s.opts.preserveInfo, s.opts.mirrorMode).processIfNecessary
 		finalize = func() error {
 			// schedule every local file that doesn't exist at the destination
-			err = indexer.Traverse(transferScheduler.ScheduleCopyTransfer, filters)
+			err = indexer.Traverse(transferScheduler.ScheduleSyncRemoveSetPropertiesTransfer, filters)
 			if err != nil {
 				return err
 			}
@@ -213,7 +213,7 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 		indexer.IsDestinationCaseInsensitive = IsDestinationCaseInsensitive(s.opts.fromTo)
 		// in all other cases (download and S2S), the destination is scanned/indexed first
 		// then the source is scanned and filtered based on what the destination contains
-		comparator = newSyncSourceComparator(indexer, transferScheduler.ScheduleCopyTransfer, s.opts.compareHash, s.opts.preserveInfo, s.opts.mirrorMode).processIfNecessary
+		comparator = newSyncSourceComparator(indexer, transferScheduler.ScheduleSyncRemoveSetPropertiesTransfer, s.opts.compareHash, s.opts.preserveInfo, s.opts.mirrorMode).processIfNecessary
 
 		finalize = func() error {
 			// remove the extra files at the destination that were not present at the source

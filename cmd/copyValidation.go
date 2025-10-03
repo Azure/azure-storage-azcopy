@@ -16,7 +16,7 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 		return err
 	}
 
-	if err = validateSymlinkHandlingMode(cooked.SymlinkHandling, cooked.FromTo); err != nil {
+	if err = azcopy.ValidateSymlinkHandlingMode(cooked.SymlinkHandling, cooked.FromTo); err != nil {
 		return err
 	}
 
@@ -42,7 +42,7 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 	}
 
 	// warn on exclude unsupported wildcards here. Include have to be later, to cover list-of-files
-	warnIfAnyHasWildcard(excludeWarningOncer, "exclude-path", cooked.ExcludePathPatterns)
+	azcopy.WarnIfAnyHasWildcard("exclude-path", cooked.ExcludePathPatterns)
 
 	// A combined implementation reduces the amount of code duplication present.
 	// However, it _does_ increase the amount of code-intertwining present.
@@ -53,7 +53,7 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 	if cooked.FromTo.To() == common.ELocation.None() && strings.EqualFold(cooked.metadata, common.MetadataAndBlobTagsClearFlag) { // in case of Blob, BlobFS and Files
 		glcm.Warn("*** WARNING *** Metadata will be cleared because of input --metadata=clear ")
 	}
-	if err = validateMetadataString(cooked.metadata); err != nil {
+	if err = azcopy.ValidateMetadataString(cooked.metadata); err != nil {
 		return err
 	}
 
@@ -65,7 +65,7 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 	}
 
 	cooked.blobTagsMap = common.ToCommonBlobTagsMap(cooked.blobTags)
-	err = validateBlobTagsKeyValue(cooked.blobTagsMap)
+	err = azcopy.ValidateBlobTagsKeyValue(cooked.blobTagsMap)
 	if err != nil {
 		return err
 	}
@@ -105,12 +105,12 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 			return err
 		}
 
-		if err = validatePreserveOwner(cooked.preserveOwner, cooked.FromTo); err != nil {
+		if err = azcopy.ValidatePreserveOwner(cooked.preserveOwner, cooked.FromTo); err != nil {
 			return err
 		}
 	}
 
-	if err = validateBackupMode(cooked.backupMode, cooked.FromTo); err != nil {
+	if err = azcopy.ValidateBackupMode(cooked.backupMode, cooked.FromTo); err != nil {
 		return err
 	}
 
@@ -254,13 +254,6 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 		return errors.New("cannot check file attributes on remote objects")
 	}
 
-	if OutputLevel == common.EOutputVerbosity.Quiet() || OutputLevel == common.EOutputVerbosity.Essential() {
-		if cooked.ForceWrite == common.EOverwriteOption.Prompt() {
-			err = fmt.Errorf("cannot set output level '%s' with overwrite option '%s'", OutputLevel.String(), cooked.ForceWrite.String())
-		} else if cooked.dryrunMode {
-			err = fmt.Errorf("cannot set output level '%s' with dry-run mode", OutputLevel.String())
-		}
-	}
 	if err != nil {
 		return err
 	}

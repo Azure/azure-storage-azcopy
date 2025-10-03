@@ -24,19 +24,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"net/url"
 	"os"
+	"os/signal"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
@@ -176,6 +174,171 @@ type rawCopyCmdArgs struct {
 	hardlinks    string
 }
 
+func (raw *rawCopyCmdArgs) toCopyOptions(cmd *cobra.Command) (opts azcopy.CopyOptions, err error) {
+	opts = azcopy.CopyOptions{
+		Recursive:                raw.recursive,
+		ForceIfReadOnly:          raw.forceIfReadOnly,
+		AutoDecompress:           raw.autoDecompress,
+		BlockSizeMB:              raw.blockSizeMB,
+		PutBlobSizeMB:            raw.putBlobSizeMB,
+		ListOfVersionIds:         raw.listOfVersionIDs,
+		ContentType:              raw.contentType,
+		ContentEncoding:          raw.contentEncoding,
+		ContentLanguage:          raw.contentLanguage,
+		ContentDisposition:       raw.contentDisposition,
+		CacheControl:             raw.cacheControl,
+		NoGuessMimeType:          raw.noGuessMimeType,
+		PreserveLastModifiedTime: raw.preserveLastModifiedTime,
+		DisableAutoDecoding:      raw.disableAutoDecoding,
+		S2SPreserveBlobTags:      raw.s2sPreserveBlobTags,
+		CpkByName:                raw.cpkScopeInfo,
+		CpkByValue:               raw.cpkInfo,
+		PutMd5:                   opts.PutMd5,
+		CheckLength:              opts.CheckLength,
+		PreserveOwner:            common.Iff(cmd.Flags().Changed("preserve-owner"), &raw.preserveOwner, nil),
+		AsSubDir:                 common.Iff(cmd.Flags().Changed("as-subdir"), &raw.asSubdir, nil),
+		IncludeDirectoryStubs:    raw.includeDirectoryStubs,
+		BackupMode:               raw.backupMode,
+		S2SPreserveProperties:    common.Iff(cmd.Flags().Changed("s2s-preserve-properties"), &raw.s2sPreserveProperties, nil),
+		S2SPreserveAccessTier:    common.Iff(cmd.Flags().Changed("s2s-preserve-access-tier"), &raw.s2sPreserveAccessTier, nil),
+		S2SDetectSourceChanged:   raw.s2sSourceChangeValidation,
+		PreserveInfo:             to.Ptr(raw.preserveInfo),
+		PreservePermissions:      raw.preservePermissions,
+		PreservePosixProperties:  raw.preservePOSIXProperties,
+	}
+	// metadata flag can be one of three things
+	// 1. "" (empty string), meaning no metadata specifically set -> opts.Metadata = nil
+	// 2. clear, meaning clear metadata -> opts.Metadata = &map[string]string{}
+	// 3. foo=bar;some=thing... -> opts.Metadata = &map[string]string{"foo":"bar", "some":"thing"}
+	var metadata map[string]string
+	metadata = nil
+	if cmd.Flags().Changed("metadata") {
+		metadata, err = getMetadata(raw.metadata)
+		if err != nil {
+			return opts, err
+		}
+	}
+	opts.Metadata = metadata
+	opts.BlobTags = common.ToCommonBlobTagsMap(raw.blobTags)
+
+	if err = opts.Symlinks.Determine(raw.followSymlinks, raw.preserveSymlinks); err != nil {
+		return opts, err
+	}
+	err = opts.Overwrite.Parse(raw.forceWrite)
+	if err != nil {
+		return opts, err
+	}
+
+	err = opts.BlobType.Parse(raw.blobType)
+	if err != nil {
+		return opts, err
+	}
+
+	err = opts.BlockBlobTier.Parse(raw.blockBlobTier)
+	if err != nil {
+		return opts, err
+	}
+
+	err = opts.PageBlobTier.Parse(raw.pageBlobTier)
+	if err != nil {
+		return opts, err
+	}
+
+	opts.IncludePaths = parsePatterns(raw.includePath)
+	if raw.includeBefore != "" {
+		// must set chooseEarliest = false, so that if there's an ambiguous local date, the latest will be returned
+		// (since that's safest for includeBefore.  Better to choose the later time and do more work, than the earlier one and fail to pick up a changed file
+		parsedIncludeBefore, err := azcopy.ParseISO8601(raw.includeBefore, false)
+		if err != nil {
+			return opts, err
+		}
+		opts.IncludeBefore = &parsedIncludeBefore
+	}
+
+	if raw.includeAfter != "" {
+		// must set chooseEarliest = true, so that if there's an ambiguous local date, the earliest will be returned
+		// (since that's safest for includeAfter.  Better to choose the earlier time and do more work, than the later one and fail to pick up a changed file
+		parsedIncludeAfter, err := azcopy.ParseISO8601(raw.includeAfter, true)
+		if err != nil {
+			return opts, err
+		}
+		opts.IncludeAfter = &parsedIncludeAfter
+	}
+	err = opts.TrailingDot.Parse(raw.trailingDot)
+	if err != nil {
+		return opts, err
+	}
+	err = opts.CheckMd5.Parse(raw.md5ValidationOption)
+	if err != nil {
+		return opts, err
+	}
+	if err = opts.Hardlinks.Parse(raw.hardlinks); err != nil {
+		return opts, err
+	}
+	// If the user has provided some input with excludeBlobType flag, parse the input.
+	if len(raw.excludeBlobType) > 0 {
+		excludeBlobTypes := make([]blob.BlobType, 0)
+		// Split the string using delimiter ';' and parse the individual blobType
+		blobTypes := strings.Split(raw.excludeBlobType, ";")
+		for _, blobType := range blobTypes {
+			var eBlobType common.BlobType
+			err := eBlobType.Parse(blobType)
+			if err != nil {
+				return opts, fmt.Errorf("error parsing the exclude-blob-type %s provided with exclude-blob-type flag ", blobType)
+			}
+			excludeBlobTypes = append(excludeBlobTypes, eBlobType.ToBlobType())
+		}
+		opts.ExcludeBlobTypes = excludeBlobTypes
+	}
+
+	err = opts.S2SHandleInvalidateMetadata.Parse(raw.s2sInvalidMetadataHandleOption)
+	if err != nil {
+		return opts, err
+	}
+
+	opts.IncludePatterns = parsePatterns(raw.include)
+	opts.ExcludePatterns = parsePatterns(raw.exclude)
+	opts.ExcludePaths = parsePatterns(raw.excludePath)
+	opts.ExcludeContainers = parsePatterns(raw.excludeContainer)
+	opts.IncludeAttributes = parsePatterns(raw.includeFileAttributes)
+	opts.ExcludeAttributes = parsePatterns(raw.excludeFileAttributes)
+	opts.IncludeRegex = parsePatterns(raw.includeRegex)
+	opts.ExcludeRegex = parsePatterns(raw.excludeRegex)
+
+	opts.WithInternalOptions(raw.listOfFilesToCopy,
+		common.Iff(cmd.Flags().Changed("s2s-get-properties-in-backend"), &raw.s2sGetPropertiesInBackend, nil),
+		raw.dryrun, dryrunNewCopyJobPartOrder,
+		raw.deleteDestinationFileIfNecessary,
+		gCopyUtil.ConstructCommandStringFromArgs())
+	return opts, nil
+}
+
+func getMetadata(metadataString string) (metadata map[string]string, err error) {
+	if metadataString == "" {
+		return nil, nil // user didn't specify metadata, so we leave it as-is
+	}
+	if strings.EqualFold(metadataString, common.MetadataAndBlobTagsClearFlag) {
+		return map[string]string{}, nil // user specifically asked to clear metadata
+	}
+
+	// Use the existing StringToMetadata function that properly handles escaped semicolons
+	commonMetadata, err := common.StringToMetadata(metadataString)
+	if err != nil {
+		return nil, fmt.Errorf("invalid metadata format. Please refer to the help document for correct format")
+	}
+
+	// Convert from common.Metadata (map[string]*string) to map[string]string
+	meta := make(map[string]string)
+	for key, valuePtr := range commonMetadata {
+		if valuePtr != nil {
+			meta[key] = *valuePtr
+		} else {
+			meta[key] = ""
+		}
+	}
+	return meta, nil
+}
+
 func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	cooked = CookedCopyCmdArgs{
 		Recursive:                raw.recursive,
@@ -241,7 +404,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	tempSrc := raw.src
 	// Check if source has a trailing wildcard on a URL
 	if cooked.FromTo.From().IsRemote() {
-		tempSrc, cooked.StripTopDir, err = stripTrailingWildcardOnRemoteSource(raw.src, cooked.FromTo.From())
+		tempSrc, cooked.StripTopDir, err = azcopy.StripTrailingWildcardOnRemoteSource(raw.src, cooked.FromTo.From())
 
 		if err != nil {
 			return cooked, err
@@ -343,12 +506,6 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 		cooked.CheckLength = false
 	}
 
-	// This will only happen in CLI commands, not AzCopy as a library.
-	// if redirection is triggered, avoid printing any output
-	if cooked.isRedirection() {
-		glcm.SetOutputFormat(common.EOutputFormat.None())
-	}
-
 	if common.IsNFSCopy() {
 		cooked.preserveInfo = raw.preserveInfo && areBothLocationsNFSAware(cooked.FromTo)
 		cooked.preservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
@@ -420,7 +577,6 @@ func (raw rawCopyCmdArgs) cook() (cooked CookedCopyCmdArgs, err error) {
 	return cooked, nil
 }
 
-var excludeWarningOncer = &sync.Once{}
 var includeWarningOncer = &sync.Once{}
 
 // When other commands use the copy command arguments to cook cook, set the blobType to None and validation option
@@ -434,121 +590,6 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaults() {
 	raw.forceWrite = common.EOverwriteOption.True().String()
 	raw.preserveOwner = common.PreserveOwnerDefault
 	raw.hardlinks = common.DefaultHardlinkHandlingType.String()
-}
-
-func areBothLocationsPOSIXAware(fromTo common.FromTo) bool {
-	// POSIX properties are stored in blob metadata-- They don't need a special persistence strategy for S2S methods.
-	switch fromTo {
-	case common.EFromTo.BlobLocal(), common.EFromTo.LocalBlob(), common.EFromTo.BlobFSLocal(), common.EFromTo.LocalBlobFS():
-		return runtime.GOOS == "linux"
-	case common.EFromTo.BlobBlob(), common.EFromTo.BlobFSBlobFS(), common.EFromTo.BlobFSBlob(), common.EFromTo.BlobBlobFS():
-		return true
-	default:
-		return false
-	}
-}
-
-func validatePreserveOwner(preserve bool, fromTo common.FromTo) error {
-	if fromTo.IsDownload() {
-		return nil // it can be used in downloads
-	}
-	if preserve != common.PreserveOwnerDefault {
-		return fmt.Errorf("flag --%s can only be used on downloads", common.PreserveOwnerFlagName)
-	}
-	return nil
-}
-
-func validateSymlinkHandlingMode(symlinkHandling common.SymlinkHandlingType, fromTo common.FromTo) error {
-	if symlinkHandling.Preserve() {
-		switch fromTo {
-		case common.EFromTo.LocalBlob(), common.EFromTo.BlobLocal(), common.EFromTo.BlobFSLocal(), common.EFromTo.LocalBlobFS():
-			return nil // Fine on all OSes that support symlink via the OS package. (Win, MacOS, and Linux do, and that's what we officially support.)
-		case common.EFromTo.BlobBlob(), common.EFromTo.BlobFSBlobFS(), common.EFromTo.BlobBlobFS(), common.EFromTo.BlobFSBlob():
-			return nil // Blob->Blob doesn't involve any local requirements
-		default:
-			return fmt.Errorf("flag --%s can only be used on Blob<->Blob or Local<->Blob", common.PreserveSymlinkFlagName)
-		}
-	}
-
-	return nil // other older symlink handling modes can work on all OSes
-}
-
-func validateBackupMode(backupMode bool, fromTo common.FromTo) error {
-	if !backupMode {
-		return nil
-	}
-	if runtime.GOOS != "windows" {
-		return errors.New(common.BackupModeFlagName + " mode is only supported on Windows")
-	}
-	if fromTo.IsUpload() || fromTo.IsDownload() {
-		return nil
-	} else {
-		return errors.New(common.BackupModeFlagName + " mode is only supported for uploads and downloads")
-	}
-}
-
-// Valid tag key and value characters include:
-// 1. Lowercase and uppercase letters (a-z, A-Z)
-// 2. Digits (0-9)
-// 3. A space ( )
-// 4. Plus (+), minus (-), period (.), solidus (/), colon (:), equals (=), and underscore (_)
-func isValidBlobTagsKeyValue(keyVal string) bool {
-	for _, c := range keyVal {
-		if !((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == ' ' || c == '+' ||
-			c == '-' || c == '.' || c == '/' || c == ':' || c == '=' || c == '_') {
-			return false
-		}
-	}
-	return true
-}
-
-// ValidateBlobTagsKeyValue
-// The tag set may contain at most 10 tags. Tag keys and values are case sensitive.
-// Tag keys must be between 1 and 128 characters, and tag values must be between 0 and 256 characters.
-func validateBlobTagsKeyValue(bt common.BlobTags) error {
-	if len(bt) > 10 {
-		return errors.New("at-most 10 tags can be associated with a blob")
-	}
-	for k, v := range bt {
-		key, err := url.QueryUnescape(k)
-		if err != nil {
-			return err
-		}
-		value, err := url.QueryUnescape(v)
-		if err != nil {
-			return err
-		}
-
-		if key == "" || len(key) > 128 || len(value) > 256 {
-			return errors.New("tag keys must be between 1 and 128 characters, and tag values must be between 0 and 256 characters")
-		}
-
-		if !isValidBlobTagsKeyValue(key) {
-			return errors.New("incorrect character set used in key: " + k)
-		}
-
-		if !isValidBlobTagsKeyValue(value) {
-			return errors.New("incorrect character set used in value: " + v)
-		}
-	}
-	return nil
-}
-
-func validateMetadataString(metadata string) error {
-	if strings.EqualFold(metadata, common.MetadataAndBlobTagsClearFlag) {
-		return nil
-	}
-	metadataMap, err := common.StringToMetadata(metadata)
-	if err != nil {
-		return err
-	}
-	for k := range metadataMap {
-		if strings.ContainsAny(k, " !#$%^&*,<>{}|\\:.()+'\"?/") {
-			return fmt.Errorf("invalid metadata key value '%s': can't have spaces or special characters", k)
-		}
-	}
-
-	return nil
 }
 
 // represents the processed copy command input from the user
@@ -709,17 +750,6 @@ type CookedCopyCmdArgs struct {
 	preserveOwner                 bool
 }
 
-func (cca *CookedCopyCmdArgs) isRedirection() bool {
-	switch cca.FromTo {
-	case common.EFromTo.BlobPipe():
-		fallthrough
-	case common.EFromTo.PipeBlob():
-		return true
-	default:
-		return false
-	}
-}
-
 func (cca *CookedCopyCmdArgs) process() error {
 
 	err := common.SetBackupMode(cca.backupMode, cca.FromTo)
@@ -727,193 +757,7 @@ func (cca *CookedCopyCmdArgs) process() error {
 		return err
 	}
 
-	if cca.isRedirection() {
-		err := cca.processRedirectionCopy()
-
-		if err != nil {
-			return err
-		}
-
-		// if no error, the operation is now complete
-		glcm.Exit(nil, common.EExitCode.Success())
-	}
 	return cca.processCopyJobPartOrders()
-}
-
-// TODO discuss with Jeff what features should be supported by redirection, such as metadata, content-type, etc.
-func (cca *CookedCopyCmdArgs) processRedirectionCopy() error {
-	if cca.FromTo == common.EFromTo.PipeBlob() {
-		return cca.processRedirectionUpload(cca.Destination, cca.blockSize)
-	} else if cca.FromTo == common.EFromTo.BlobPipe() {
-		return cca.processRedirectionDownload(cca.Source)
-	}
-
-	return fmt.Errorf("unsupported redirection type: %s", cca.FromTo)
-}
-
-func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.ResourceString) error {
-
-	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-
-	// step 0: check the Stdout before uploading
-	_, err := os.Stdout.Stat()
-	if err != nil {
-		return fmt.Errorf("fatal: cannot write to Stdout due to error: %s", err.Error())
-	}
-
-	// The isPublic flag is useful in S2S transfers but doesn't much matter for download. Fortunately, no S2S happens here.
-	// This means that if there's auth, there's auth. We're happy and can move on.
-	// GetCredentialInfoForLocation also populates oauth token fields... so, it's very easy.
-	credInfo, _, err := GetCredentialInfoForLocation(ctx, common.ELocation.Blob(), blobResource, true, Client.GetUserOAuthTokenManagerInstance(), cca.CpkOptions)
-
-	if err != nil {
-		return fmt.Errorf("fatal: cannot find auth on source blob URL: %s", err.Error())
-	}
-
-	// step 1: create client options
-	// note: dstCred is nil, as we could not reauth effectively because stdout is a pipe.
-	options := &blockblob.ClientOptions{ClientOptions: traverser.CreateClientOptions(common.AzcopyScanningLogger, nil, nil)}
-
-	// step 2: parse source url
-	u, err := blobResource.FullURL()
-	if err != nil {
-		return fmt.Errorf("fatal: cannot parse source blob URL due to error: %s", err.Error())
-	}
-
-	var blobClient *blockblob.Client
-	if credInfo.CredentialType.IsAzureOAuth() {
-		blobClient, err = blockblob.NewClient(u.String(), credInfo.OAuthTokenInfo.TokenCredential, options)
-	} else {
-		blobClient, err = blockblob.NewClientWithNoCredential(u.String(), options)
-	}
-	if err != nil {
-		return fmt.Errorf("fatal: Could not create client: %s", err.Error())
-	}
-
-	// step 3: start download
-
-	cpkInfo, err := cca.CpkOptions.GetCPKInfo()
-	if err != nil {
-		return err
-	}
-	blobStream, err := blobClient.DownloadStream(ctx, &blob.DownloadStreamOptions{
-		CPKInfo:      cpkInfo,
-		CPKScopeInfo: cca.CpkOptions.GetCPKScopeInfo(),
-	})
-	if err != nil {
-		return fmt.Errorf("fatal: cannot download blob due to error: %s", err.Error())
-	}
-
-	blobBody := blobStream.NewRetryReader(ctx, &blob.RetryReaderOptions{MaxRetries: ste.MaxRetryPerDownloadBody})
-	defer blobBody.Close()
-
-	// step 4: pipe everything into Stdout
-	_, err = io.Copy(os.Stdout, blobBody)
-	if err != nil {
-		return fmt.Errorf("fatal: cannot download blob to Stdout due to error: %s", err.Error())
-	}
-
-	return nil
-}
-
-func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.ResourceString, blockSize int64) error {
-	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-
-	// Use the concurrency environment value
-	concurrencyEnvVar := common.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue())
-
-	pipingUploadParallelism := pipingUploadParallelism
-	if concurrencyEnvVar != "" {
-		// handle when the concurrency value is AUTO
-		if concurrencyEnvVar == "AUTO" {
-			return errors.New("concurrency auto-tuning is not possible when using redirection transfers (AZCOPY_CONCURRENCY_VALUE = AUTO)")
-		}
-
-		// convert the concurrency value to int
-		concurrencyValue, err := strconv.ParseInt(concurrencyEnvVar, 10, 32)
-
-		//handle the error if the conversion fails
-		if err != nil {
-			return fmt.Errorf("AZCOPY_CONCURRENCY_VALUE is not set to a valid value, an integer is expected (current value: %s): %w", concurrencyEnvVar, err)
-		}
-
-		pipingUploadParallelism = int(concurrencyValue) // Cast to Integer
-	}
-
-	// if no block size is set, then use default value
-	if blockSize == 0 {
-		blockSize = pipingDefaultBlockSize
-	}
-
-	// GetCredentialInfoForLocation populates oauth token fields... so, it's very easy.
-	credInfo, _, err := GetCredentialInfoForLocation(ctx, common.ELocation.Blob(), blobResource, false, Client.GetUserOAuthTokenManagerInstance(), cca.CpkOptions)
-
-	if err != nil {
-		return fmt.Errorf("fatal: cannot find auth on destination blob URL: %s", err.Error())
-	}
-
-	var reauthTok *common.ScopedAuthenticator
-	if at, ok := credInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
-		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
-	}
-
-	// step 0: initialize pipeline
-	// Reauthentication is theoretically possible here, since stdin is blocked.
-	options := &blockblob.ClientOptions{ClientOptions: traverser.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)}
-
-	// step 1: parse destination url
-	u, err := blobResource.FullURL()
-	if err != nil {
-		return fmt.Errorf("fatal: cannot parse destination blob URL due to error: %s", err.Error())
-	}
-
-	// step 2: leverage high-level call in Blob SDK to upload stdin in parallel
-	var blockBlobClient *blockblob.Client
-	if credInfo.CredentialType.IsAzureOAuth() {
-		blockBlobClient, err = blockblob.NewClient(u.String(), credInfo.OAuthTokenInfo.TokenCredential, options)
-	} else {
-		blockBlobClient, err = blockblob.NewClientWithNoCredential(u.String(), options)
-	}
-	if err != nil {
-		return fmt.Errorf("fatal: Could not construct blob client: %s", err.Error())
-	}
-
-	metadataString := cca.metadata
-	metadataMap := common.Metadata{}
-	if len(metadataString) > 0 {
-		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
-			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
-			metadataMap[kv[0]] = &kv[1]
-		}
-	}
-	blobTags := cca.blobTagsMap
-	var bbAccessTier *blob.AccessTier
-	if cca.blockBlobTier != common.EBlockBlobTier.None() {
-		bbAccessTier = to.Ptr(blob.AccessTier(cca.blockBlobTier.String()))
-	}
-	cpkInfo, err := cca.CpkOptions.GetCPKInfo()
-	if err != nil {
-		return err
-	}
-	_, err = blockBlobClient.UploadStream(ctx, os.Stdin, &blockblob.UploadStreamOptions{
-		BlockSize:   blockSize,
-		Concurrency: pipingUploadParallelism,
-		Metadata:    metadataMap,
-		Tags:        blobTags,
-		HTTPHeaders: &blob.HTTPHeaders{
-			BlobContentType:        common.IffNotEmpty(cca.contentType),
-			BlobContentLanguage:    common.IffNotEmpty(cca.contentLanguage),
-			BlobContentEncoding:    common.IffNotEmpty(cca.contentEncoding),
-			BlobContentDisposition: common.IffNotEmpty(cca.contentDisposition),
-			BlobCacheControl:       common.IffNotEmpty(cca.cacheControl),
-		},
-		AccessTier:   bbAccessTier,
-		CPKInfo:      cpkInfo,
-		CPKScopeInfo: cca.CpkOptions.GetCPKScopeInfo(),
-	})
-
-	return err
 }
 
 // get source credential - if there is a token it will be used to get passed along our pipeline
@@ -1018,7 +862,6 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		AutoDecompress:      cca.autoDecompress,
 		Priority:            common.EJobPriority.Normal(),
 		LogLevel:            Client.GetLogLevel(),
-		ExcludeBlobType:     cca.excludeBlobType,
 		SymlinkHandlingType: cca.SymlinkHandling,
 		BlobAttributes: common.BlobTransferAttributes{
 			BlobType:                 cca.blobType,
@@ -1113,7 +956,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	jobPartOrder.DestinationRoot = cca.Destination
 	jobPartOrder.SourceRoot = cca.Source
-	jobPartOrder.SourceRoot.Value, err = GetResourceRoot(cca.Source.Value, cca.FromTo.From())
+	jobPartOrder.SourceRoot.Value, err = azcopy.NormalizeResourceRoot(cca.Source.Value, cca.FromTo.From())
 	if err != nil {
 		return err
 	}
@@ -1362,6 +1205,22 @@ func isStdinPipeIn() (bool, error) {
 
 var cpCmd *cobra.Command
 
+type CLICopyHandler struct {
+}
+
+func (C CLICopyHandler) OnStart(ctx common.JobContext) {
+	glcm.OnStart(ctx)
+}
+
+func (C CLICopyHandler) OnTransferProgress(progress azcopy.CopyJobProgress) {
+	glcm.OnTransferProgress(common.TransferProgress{
+		ListJobSummaryResponse: progress.ListJobSummaryResponse,
+		Throughput:             progress.Throughput,
+		ElapsedTime:            progress.ElapsedTime,
+		JobType:                common.EJobType.Resume(),
+	})
+}
+
 // TODO check file size, max is 4.75TB
 func init() {
 	raw := rawCopyCmdArgs{}
@@ -1403,7 +1262,7 @@ func init() {
 				raw.src = args[0]
 				raw.dst = args[1]
 
-				// under normal copy, we may ask the user questions such as whether to overwrite a file
+				// under normal copy, we may ask the user q uestions such as whether to overwrite a file
 				glcm.EnableInputWatcher()
 				if cancelFromStdin {
 					glcm.EnableCancelFromStdIn()
@@ -1414,31 +1273,94 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
+			// Deprecated flags
+			if raw.legacyInclude != "" || raw.legacyExclude != "" {
+				glcm.Error("the include and exclude parameters have been replaced by include-pattern; include-path; exclude-pattern and exclude-path. For info, run: azcopy copy help")
+			}
+
 			// We infer FromTo and validate it here since it is critical to a lot of other options parsing below.
 			userFromTo, err := azcopy.InferAndValidateFromTo(raw.src, raw.dst, raw.fromTo)
 			if err != nil {
 				glcm.Error("failed to parse --from-to user input due to error: " + err.Error())
 			}
 
-			raw.preserveInfo, raw.preservePermissions = ComputePreserveFlags(cmd, userFromTo,
-				raw.preserveInfo, raw.preserveSMBInfo, raw.preservePermissions, raw.preserveSMBPermissions)
-
-			cooked, err := raw.cook()
-			if err != nil {
-				glcm.Error("failed to parse user input due to error: " + err.Error())
-			}
-			glcm.Info("Scanning...")
-
-			cooked.commandString = gCopyUtil.ConstructCommandStringFromArgs()
-			err = cooked.process()
-			if err != nil {
-				glcm.Error("failed to perform copy command due to error: " + err.Error() + getErrorCodeUrl(err))
+			if azcopy.AreBothLocationsNFSAware(userFromTo) {
+				if (raw.preserveSMBInfo && runtime.GOOS == "linux") || raw.preserveSMBPermissions {
+					glcm.Error(InvalidFlagsForNFSMsg)
+				}
 			}
 
-			if cooked.dryrunMode {
+			// if both flags are set, we honor the new flag and ignore the old one
+			if cmd.Flags().Changed(PreserveInfoFlag) && cmd.Flags().Changed(PreserveSMBInfoFlag) {
+				raw.preserveInfo = raw.preserveInfo
+			} else if cmd.Flags().Changed(PreserveInfoFlag) {
+				raw.preserveInfo = raw.preserveInfo
+			} else if cmd.Flags().Changed(PreserveSMBInfoFlag) {
+				raw.preserveInfo = raw.preserveSMBInfo
+			} else {
+				raw.preserveInfo = azcopy.GetPreserveInfoDefault(userFromTo)
+			}
+			// if transfer is NFS aware, honor the preserve-permissions flag, otherwise honor preserve-smb-permissions flag
+			if azcopy.AreBothLocationsNFSAware(userFromTo) {
+				raw.preservePermissions = raw.preservePermissions
+			} else {
+				raw.preservePermissions = raw.preservePermissions || raw.preserveSMBPermissions
+			}
+
+			// if redirection is triggered, avoid printing any output
+			if userFromTo.IsRedirection() {
+				glcm.SetOutputFormat(common.EOutputFormat.None())
+			}
+			if OutputLevel == common.EOutputVerbosity.Quiet() || OutputLevel == common.EOutputVerbosity.Essential() {
+				if strings.EqualFold(raw.forceWrite, common.EDeleteDestination.Prompt().String()) {
+					err = fmt.Errorf("cannot set output level '%s' with overwrite option '%s'", OutputLevel.String(), raw.forceWrite)
+				} else if raw.dryrun {
+					err = fmt.Errorf("cannot set output level '%s' with dry-run mode", OutputLevel.String())
+				}
+			}
+			if err != nil {
+				glcm.Error(err.Error())
+			}
+
+			var opts azcopy.CopyOptions
+			if opts, err = raw.toCopyOptions(cmd); err != nil {
+				glcm.Error("error parsing the input given by the user. Failed with error " + err.Error() + getErrorCodeUrl(err))
+			}
+			opts.FromTo = userFromTo
+			// Create a context that can be cancelled by Ctrl-C
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			// Set up signal handling for graceful cancellation
+			go func() {
+				sigChan := make(chan os.Signal, 1)
+				signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+				<-sigChan
+				cancel()
+			}()
+
+			result, err := Client.Copy(ctx, raw.src, raw.dst, opts, CLICopyHandler{})
+			if err != nil {
+				glcm.Error("Cannot perform copy due to error: " + err.Error() + getErrorCodeUrl(err))
+			}
+			if raw.dryrun || userFromTo.IsRedirection() {
 				glcm.Exit(nil, common.EExitCode.Success())
+			} else {
+				// Print summary
+				exitCode := common.EExitCode.Success()
+				if result.TransfersFailed > 0 || result.JobStatus == common.EJobStatus.Cancelled() || result.JobStatus == common.EJobStatus.Cancelling() {
+					exitCode = common.EExitCode.Error()
+				}
+				summary := common.JobSummary{
+					ExitCode:               exitCode,
+					ListJobSummaryResponse: result.ListJobSummaryResponse,
+					ElapsedTime:            result.ElapsedTime,
+					JobType:                common.EJobType.Copy(),
+				}
+				glcm.OnComplete(summary)
 			}
 
+			// Wait for the user to see the final output before exiting
 			glcm.SurrenderControl()
 		},
 	}

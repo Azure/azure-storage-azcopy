@@ -23,7 +23,6 @@ import (
 	"runtime"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/spf13/cobra"
 )
 
 func areBothLocationsNFSAware(fromTo common.FromTo) bool {
@@ -54,48 +53,4 @@ func areBothLocationsSMBAware(fromTo common.FromTo) bool {
 	} else {
 		return false
 	}
-}
-
-// GetPreserveInfoFlagDefault returns the default value for the 'preserve-info' flag
-// based on the operating system and the copy type (NFS or SMB).
-// The default value is:
-// - true if it's an NFS copy on Linux or share to share copy on windows or mac and an SMB copy on Windows.
-// - false otherwise.
-//
-// This default behavior ensures that file preservation logic is aligned with the OS and copy type.
-func GetPreserveInfoFlagDefault(cmd *cobra.Command, fromTo common.FromTo) bool {
-	// For Linux systems, if it's an NFS copy, we set the default value of preserveInfo to true.
-	// For Windows systems, if it's an SMB copy, we set the default value of preserveInfo to true.
-	// These default values are important to set here for the logic of file preservation based on the system and copy type.
-	return (areBothLocationsNFSAware(fromTo)) ||
-		(runtime.GOOS == "windows" && areBothLocationsSMBAware(fromTo))
-}
-
-// ComputePreserveFlags determines the final preserveInfo and preservePermissions flag values
-// based on user inputs, deprecated flags, and validation rules.
-func ComputePreserveFlags(cmd *cobra.Command, userFromTo common.FromTo, preserveInfo, preserveSMBInfo, preservePermissions, preserveSMBPermissions bool) (bool, bool) {
-	// Compute default value
-	preserveInfoDefaultVal := GetPreserveInfoFlagDefault(cmd, userFromTo)
-
-	// Final preserveInfo logic
-	var finalPreserveInfo bool
-	if cmd.Flags().Changed(PreserveInfoFlag) && cmd.Flags().Changed(PreserveSMBInfoFlag) || cmd.Flags().Changed(PreserveInfoFlag) {
-		finalPreserveInfo = preserveInfo
-	} else if cmd.Flags().Changed(PreserveSMBInfoFlag) {
-		finalPreserveInfo = preserveSMBInfo
-	} else {
-		finalPreserveInfo = preserveInfoDefaultVal
-	}
-
-	// Final preservePermissions logic
-	finalPreservePermissions := preservePermissions
-	if !common.IsNFSCopy() {
-		finalPreservePermissions = preservePermissions || preserveSMBPermissions
-	}
-
-	if common.IsNFSCopy() && ((preserveSMBInfo && runtime.GOOS == "linux") || preserveSMBPermissions) {
-		glcm.Error(InvalidFlagsForNFSMsg)
-	}
-
-	return finalPreserveInfo, finalPreservePermissions
 }

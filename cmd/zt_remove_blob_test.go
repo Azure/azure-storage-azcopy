@@ -23,6 +23,13 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"log"
+	"net/url"
+	"os"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
@@ -31,12 +38,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/stretchr/testify/assert"
-	"log"
-	"net/url"
-	"os"
-	"strings"
-	"testing"
-	"time"
 )
 
 func TestRemoveSingleBlob(t *testing.T) {
@@ -62,7 +63,7 @@ func TestRemoveSingleBlob(t *testing.T) {
 		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, blobList[0])
 		raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String())
 
-		runCopyAndVerify(a, raw, func(err error) {
+		runOldCopyAndVerify(a, raw, func(err error) {
 			a.Nil(err)
 
 			// note that when we are targeting single blobs, the relative path is empty ("") since the root path already points to the blob
@@ -95,7 +96,7 @@ func TestRemoveBlobsUnderContainer(t *testing.T) {
 	raw.recursive = true
 	raw.includeDirectoryStubs = false // The test target is a DFS account, which coincidentally created our directory stubs. Thus, we mustn't include them, since this is a test of blob.
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -109,7 +110,7 @@ func TestRemoveBlobsUnderContainer(t *testing.T) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
@@ -145,7 +146,7 @@ func TestRemoveBlobsUnderVirtualDir(t *testing.T) {
 	raw := getDefaultRemoveRawInput(rawVirtualDirectoryURLWithSAS.String())
 	raw.recursive = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -160,7 +161,7 @@ func TestRemoveBlobsUnderVirtualDir(t *testing.T) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
@@ -201,7 +202,7 @@ func TestRemoveWithIncludeFlag(t *testing.T) {
 	raw.include = includeString
 	raw.recursive = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 		validateRemoveTransfersAreScheduled(a, true, blobsToInclude, mockedRPC)
 	})
@@ -238,7 +239,7 @@ func TestRemoveWithExcludeFlag(t *testing.T) {
 	raw.recursive = true
 	raw.includeDirectoryStubs = false // The test target is a DFS account, which coincidentally created our directory stubs. Thus, we mustn't include them, since this is a test of blob.
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 		validateRemoveTransfersAreScheduled(a, true, blobList, mockedRPC)
 	})
@@ -281,7 +282,7 @@ func TestRemoveWithIncludeAndExcludeFlag(t *testing.T) {
 	raw.exclude = excludeString
 	raw.recursive = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 		validateRemoveTransfersAreScheduled(a, true, blobsToInclude, mockedRPC)
 	})
@@ -323,7 +324,7 @@ func TestRemoveListOfBlobsAndVirtualDirs(t *testing.T) {
 	listOfFiles = append(listOfFiles, "DONTKNOW")
 	raw.listOfFilesToCopy = scenarioHelper{}.generateListOfFiles(a, listOfFiles)
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -337,7 +338,7 @@ func TestRemoveListOfBlobsAndVirtualDirs(t *testing.T) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
@@ -404,7 +405,7 @@ func TestRemoveListOfBlobsWithIncludeAndExclude(t *testing.T) {
 	listOfFiles = append(listOfFiles, blobsToExclude...)
 	raw.listOfFilesToCopy = scenarioHelper{}.generateListOfFiles(a, listOfFiles)
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -440,7 +441,7 @@ func TestRemoveBlobsWithDirectoryStubs(t *testing.T) {
 	raw := getDefaultRemoveRawInput(rawVirtualDirectoryURLWithSAS.String())
 	raw.recursive = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -456,7 +457,7 @@ func TestRemoveBlobsWithDirectoryStubs(t *testing.T) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 
 		// there should be exactly 20 top files, no directory stubs should be included
@@ -503,7 +504,7 @@ func TestRemoveBlobsWithDirectoryStubsWithListOfFiles(t *testing.T) {
 	listOfFiles := []string{vdirName, vdirName2}
 	raw.listOfFilesToCopy = scenarioHelper{}.generateListOfFiles(a, listOfFiles)
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -517,7 +518,7 @@ func TestRemoveBlobsWithDirectoryStubsWithListOfFiles(t *testing.T) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.NotNil(err)
 		a.Zero(len(mockedRPC.transfers))
 	})
@@ -548,7 +549,7 @@ func TestDryrunRemoveSingleBlob(t *testing.T) {
 	raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String())
 	raw.dryrun = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 		// validate that none where transferred
 		a.Zero(len(mockedRPC.transfers))
@@ -587,7 +588,7 @@ func TestDryrunRemoveBlobsUnderContainer(t *testing.T) {
 	raw.dryrun = true
 	raw.recursive = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 		// validate that none where transferred
 		a.Zero(len(mockedRPC.transfers))
@@ -627,7 +628,7 @@ func TestDryrunRemoveBlobsUnderContainerJson(t *testing.T) {
 	raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String())
 	raw.dryrun = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 		// validate that none where transferred
 		a.Zero(len(mockedRPC.transfers))
@@ -669,7 +670,7 @@ func TestRemoveSingleBlobWithFromTo(t *testing.T) {
 		raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String())
 		raw.fromTo = "BlobTrash"
 
-		runCopyAndVerify(a, raw, func(err error) {
+		runOldCopyAndVerify(a, raw, func(err error) {
 			a.Nil(err)
 
 			// note that when we are targeting single blobs, the relative path is empty ("") since the root path already points to the blob
@@ -703,7 +704,7 @@ func TestRemoveBlobsUnderContainerWithFromTo(t *testing.T) {
 	raw.recursive = true
 	raw.includeDirectoryStubs = false // The test target is a DFS account, which coincidentally created our directory stubs. Thus, we mustn't include them, since this is a test of blob.
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -717,7 +718,7 @@ func TestRemoveBlobsUnderContainerWithFromTo(t *testing.T) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
@@ -754,7 +755,7 @@ func TestRemoveBlobsUnderVirtualDirWithFromTo(t *testing.T) {
 	raw.fromTo = "BlobTrash"
 	raw.recursive = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -769,7 +770,7 @@ func TestRemoveBlobsUnderVirtualDirWithFromTo(t *testing.T) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
@@ -815,7 +816,7 @@ func TestPermDeleteSnapshotsVersionsUnderSingleBlob(t *testing.T) {
 	raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String())
 	raw.recursive = true
 	raw.permanentDeleteOption = "snapshotsandversions"
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -849,7 +850,7 @@ func TestPermDeleteSnapshotsVersionsUnderContainer(t *testing.T) {
 	raw := getDefaultRemoveRawInput(rawContainerURLWithSAS.String())
 	raw.recursive = true
 	raw.permanentDeleteOption = "snapshotsandversions"
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
