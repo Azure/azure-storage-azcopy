@@ -102,8 +102,8 @@ var (
 	// Throttling control flags
 	enableThrottling               bool = true
 	enableFileBasedThrottling      bool = false
-	enableMemoryBasedThrottling    bool = true
-	enableGoroutineBasedThrottling bool = true
+	enableMemoryBasedThrottling    bool = false
+	enableGoroutineBasedThrottling bool = false
 
 	// Dynamic limits
 	activeFilesLimit          atomic.Int64 // Dynamic limit for active files managed by StatsMonitor
