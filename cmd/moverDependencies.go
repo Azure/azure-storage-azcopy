@@ -883,6 +883,18 @@ func (cooked *CookedCopyCmdArgs) ToString() string {
 	return fmt.Sprintf("CookedCopyCmdArgs{%s}", strings.Join(parts, ", "))
 }
 
+func OpenScanningLogger() {
+	// set up the front end scanning logger
+	azcopyScanningLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "-scanning")
+	azcopyScanningLogger.OpenLog()
+}
+
+func CloseScanningLogger() {
+	if azcopyScanningLogger != nil {
+		azcopyScanningLogger.CloseLog()
+	}
+}
+
 // ============================================================================
 // End Utility Functions - Misellaneous
 // ============================================================================
