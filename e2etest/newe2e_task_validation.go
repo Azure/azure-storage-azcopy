@@ -26,25 +26,6 @@ func ValidatePropertyPtr[T any](a Asserter, name string, expected, real *T) {
 	a.Assert(name+" must match", Equal{Deep: true}, expected, real)
 }
 
-func ValidateTimePtrWithASecDrift(a Asserter, name string, expected, real *time.Time) {
-	if expected == nil || real == nil {
-		return
-	}
-
-	expectedTime := expected.UTC().Truncate(time.Second)
-	realTime := real.UTC().Truncate(time.Second)
-
-	diff := realTime.Sub(expectedTime)
-	if diff < 0 {
-		diff = -diff
-	}
-
-	// allow 1-second drift
-	if diff > time.Second {
-		a.Assert(name+" must match", Equal{Deep: true}, expectedTime, realTime)
-	}
-}
-
 func ValidateTimePtr(a Asserter, name string, expected, real *time.Time) {
 	if expected == nil {
 		return
@@ -156,7 +137,9 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 			oProps := objMan.GetProperties(a)
 			vProps := objDef.ObjectProperties
 
-			if validateObjectContent && (objMan.EntityType() == common.EEntityType.File() || objMan.EntityType() == common.EEntityType.Hardlink()) && objDef.Body != nil {
+			if validateObjectContent && (objMan.EntityType() == common.EEntityType.File() ||
+				objMan.EntityType() == common.EEntityType.Hardlink()) && objDef.Body != nil {
+
 				objBody := objMan.Download(a)
 				validationBody := objDef.Body.Reader()
 
@@ -204,6 +187,7 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 				ValidatePropertyPtr(a, "Attributes", vProps.FileProperties.FileAttributes, oProps.FileProperties.FileAttributes)
 				ValidatePropertyPtr(a, "Permissions", vProps.FileProperties.FilePermissions, oProps.FileProperties.FilePermissions)
 				// SMB to NFS transfer
+				fmt.Println("files/folder--------******", objMan.ObjectName())
 				if vProps.FileProperties.FileCreationTime != nil && oProps.FileNFSProperties != nil {
 					ValidateTimePtr(a, "Creation time SMB to NFS", vProps.FileProperties.FileCreationTime, oProps.FileNFSProperties.FileCreationTime)
 					ValidateTimePtr(a, "Last write time SMB to NFS", vProps.FileProperties.FileLastWriteTime, oProps.FileNFSProperties.FileLastWriteTime)
@@ -219,8 +203,8 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 				} else if vProps.FileNFSProperties != nil && oProps.FileNFSProperties != nil { // NFS to NFS transfers
 					ValidateTimePtr(a, canonPathPrefix+"Creation Time NFS to NFS", vProps.FileNFSProperties.FileCreationTime, oProps.FileNFSProperties.FileCreationTime)
 					ValidateTimePtr(a, canonPathPrefix+"Last Write Time NFS to NFS", vProps.FileNFSProperties.FileLastWriteTime, oProps.FileNFSProperties.FileLastWriteTime)
-				}
 
+				}
 				if vProps.FileNFSPermissions != nil && oProps.FileNFSPermissions != nil {
 					ValidatePropertyPtr(a, canonPathPrefix+"Owner", vProps.FileNFSPermissions.Owner, oProps.FileNFSPermissions.Owner)
 					ValidatePropertyPtr(a, canonPathPrefix+"Group", vProps.FileNFSPermissions.Group, oProps.FileNFSPermissions.Group)

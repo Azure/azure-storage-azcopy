@@ -634,6 +634,11 @@ func (f *FileObjectResourceManager) ListChildren(a Asserter, recursive bool) map
 
 func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectProperties) {
 	a.HelperMarker().Helper()
+
+	shareType := f.Share.InternalClient
+	shareProps, err := shareType.GetProperties(ctx, nil)
+	a.NoError("Get share properties", err)
+
 	switch f.entityType {
 	case common.EEntityType.Folder():
 		resp, err := f.getDirClient().GetProperties(ctx, &directory.GetPropertiesOptions{})
@@ -647,21 +652,29 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 			permissions = permResp.Permission
 		}
 
-		out = ObjectProperties{
-			EntityType:       f.entityType, // It should be OK to just return entity type, getproperties should fail with the wrong restype
-			Metadata:         resp.Metadata,
-			LastModifiedTime: resp.LastModified,
-			FileProperties: FileProperties{
+		var nfsProperties *FileNFSProperties
+		var smbProperties FileProperties
+		if shareProps.EnabledProtocols != nil && *shareProps.EnabledProtocols == "NFS" {
+			nfsProperties = &FileNFSProperties{
+				FileCreationTime:  resp.FileCreationTime,
+				FileLastWriteTime: resp.FileLastWriteTime,
+			}
+		} else {
+			smbProperties = FileProperties{
 				FileAttributes:    resp.FileAttributes,
 				FileCreationTime:  resp.FileCreationTime,
 				FileLastWriteTime: resp.FileLastWriteTime,
 				FilePermissions:   permissions,
 				LastModifiedTime:  resp.LastModified,
-			},
-			FileNFSProperties: &FileNFSProperties{
-				FileCreationTime:  resp.FileCreationTime,
-				FileLastWriteTime: resp.FileLastWriteTime,
-			},
+			}
+		}
+
+		out = ObjectProperties{
+			EntityType:        f.entityType, // It should be OK to just return entity type, getproperties should fail with the wrong restype
+			Metadata:          resp.Metadata,
+			LastModifiedTime:  resp.LastModified,
+			FileProperties:    smbProperties,
+			FileNFSProperties: nfsProperties,
 			FileNFSPermissions: &FileNFSPermissions{
 				Owner:    resp.Owner,
 				Group:    resp.Group,
@@ -669,6 +682,7 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 			},
 		}
 	case common.EEntityType.File():
+		fmt.Println("**********GetProperties for File", f.path)
 		resp, err := f.getFileClient().GetProperties(ctx, &file.GetPropertiesOptions{})
 		a.NoError("Get file properties", err)
 
@@ -678,6 +692,23 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 			a.NoError("Get file permissions", err)
 
 			permissions = permResp.Permission
+		}
+
+		var nfsProperties *FileNFSProperties
+		var smbProperties FileProperties
+		if shareProps.EnabledProtocols != nil && *shareProps.EnabledProtocols == "NFS" {
+			nfsProperties = &FileNFSProperties{
+				FileCreationTime:  resp.FileCreationTime,
+				FileLastWriteTime: resp.FileLastWriteTime,
+			}
+		} else {
+			smbProperties = FileProperties{
+				FileAttributes:    resp.FileAttributes,
+				FileCreationTime:  resp.FileCreationTime,
+				FileLastWriteTime: resp.FileLastWriteTime,
+				FilePermissions:   permissions,
+				LastModifiedTime:  resp.LastModified,
+			}
 		}
 
 		out = ObjectProperties{
@@ -690,24 +721,21 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 				contentType:        resp.ContentType,
 				contentMD5:         resp.ContentMD5,
 			},
-			Metadata:         resp.Metadata,
-			LastModifiedTime: resp.LastModified,
-			FileProperties: FileProperties{
-				FileAttributes:    resp.FileAttributes,
-				FileCreationTime:  resp.FileCreationTime,
-				FileLastWriteTime: resp.FileLastWriteTime,
-				FilePermissions:   permissions,
-				LastModifiedTime:  resp.LastModified,
-			},
-			FileNFSProperties: &FileNFSProperties{
-				FileCreationTime:  resp.FileCreationTime,
-				FileLastWriteTime: resp.FileLastWriteTime,
-			},
+			Metadata:          resp.Metadata,
+			LastModifiedTime:  resp.LastModified,
+			FileProperties:    smbProperties,
+			FileNFSProperties: nfsProperties,
 			FileNFSPermissions: &FileNFSPermissions{
 				Owner:    resp.Owner,
 				Group:    resp.Group,
 				FileMode: resp.FileMode,
 			},
+		}
+		if out.FileNFSProperties != nil {
+			fmt.Println("**********File NFS Creation Time: ", out.FileNFSProperties.FileCreationTime)
+			fmt.Println("**********File NFS LastWrite Time: ", out.FileNFSProperties.FileLastWriteTime)
+		} else {
+			fmt.Print("**********File NFS Properties is nil")
 		}
 	case common.EEntityType.Symlink():
 		resp, err := f.getFileClient().GetProperties(ctx, &file.GetPropertiesOptions{})
@@ -772,6 +800,7 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 	default:
 		a.Error("EntityType must be Folder,File,Hardlink or Symlink. Currently: " + f.entityType.String())
 	}
+	fmt.Println("---------finishing	 GetProperties for File", f.path)
 	return
 }
 
