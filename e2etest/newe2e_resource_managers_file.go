@@ -864,15 +864,15 @@ func (f *FileObjectResourceManager) SetObjectProperties(a Asserter, props Object
 	switch f.entityType {
 	case common.EEntityType.File():
 		var opts *file.SetHTTPHeadersOptions
-		if shareType.EnabledProtocols == nil || *shareType.EnabledProtocols == "SMB" {
+		if shareType.EnabledProtocols != nil && *shareType.EnabledProtocols == "NFS" {
 			opts = &file.SetHTTPHeadersOptions{
-				SMBProperties: smbProperties,
-				Permissions:   perms,
+				NFSProperties: nfsProperties,
 				HTTPHeaders:   props.HTTPHeaders.ToFile(),
 			}
 		} else {
 			opts = &file.SetHTTPHeadersOptions{
-				NFSProperties: nfsProperties,
+				SMBProperties: smbProperties,
+				Permissions:   perms,
 				HTTPHeaders:   props.HTTPHeaders.ToFile(),
 			}
 		}
