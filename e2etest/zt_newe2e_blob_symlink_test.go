@@ -1,9 +1,10 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"path"
 	"runtime"
+
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -85,7 +86,9 @@ func (s *BlobSymlinkSuite) Scenario_TestPreserveSymlinks_IndirectSource(svm *Sce
 		}
 	}
 
-	ValidateResource(svm, dest, srcDef, true)
+	ValidateResource(svm, dest, srcDef, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *BlobSymlinkSuite) Scenario_TestPreserveSymlinks_DirectSource(svm *ScenarioVariationManager) {
@@ -155,7 +158,9 @@ func (s *BlobSymlinkSuite) Scenario_TestPreserveSymlinks_DirectSource(svm *Scena
 		delete(srcDef.Objects.(ObjectResourceMappingFlat), "bar")
 	}
 
-	ValidateResource(svm, dest, srcDef, true)
+	ValidateResource(svm, dest, srcDef, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *BlobSymlinkSuite) Scenario_TestDirectSourceFollowing(svm *ScenarioVariationManager) {
@@ -207,7 +212,9 @@ func (s *BlobSymlinkSuite) Scenario_TestDirectSourceFollowing(svm *ScenarioVaria
 					Body: srcBody,
 				},
 			},
-		}, true)
+		}, ValidateResourceOptions{
+			validateObjectContent: true,
+		})
 	} else if toFollow == nil {
 		ValidateContainsError(svm, stdOut, []string{
 			cmd.ErrorLoneSymlinkSkipped.Error(),
@@ -259,5 +266,7 @@ func (s *BlobSymlinkSuite) Scenario_TestFollowLinks(svm *ScenarioVariationManage
 				Body: srcBody,
 			},
 		},
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }

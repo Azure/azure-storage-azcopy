@@ -625,7 +625,7 @@ func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool
 
 	// If downloading on Windows or uploading to files, encode unsafe characters.
 	if (loc == common.ELocation.Local() && !source && runtime.GOOS == "windows") ||
-		(!source && loc.IsFile()) {
+		(!source && loc == common.ELocation.File()) {
 		// invalidChars := `<>\/:"|?*` + string(0x00)
 
 		for k, c := range encodedInvalidCharacters {
@@ -636,7 +636,7 @@ func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool
 
 		// If uploading from Windows or downloading from files, decode unsafe chars if user enables decoding
 	} else if ((!source && fromTo.From() == common.ELocation.Local() && runtime.GOOS == "windows") ||
-		(!source && fromTo.From().IsFile())) && !disableAutoDecoding {
+		(!source && fromTo.From() == common.ELocation.File())) && !disableAutoDecoding {
 
 		for encoded, c := range reverseEncodedChars {
 			for k, p := range pathParts {

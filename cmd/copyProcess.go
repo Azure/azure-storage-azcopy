@@ -167,7 +167,11 @@ func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 
 	if cooked.preserveInfo && !cooked.preservePermissions.IsTruthy() {
 		if cooked.FromTo.IsNFS() {
-			glcm.Info(PreserveNFSPermissionsDisabledMsg)
+			// Skip logging this msg for cross-protocol transfers
+			// because --preserve-permissions flag is not applicable.
+			if !(cooked.FromTo == common.EFromTo.FileSMBFileNFS() || cooked.FromTo == common.EFromTo.FileNFSFileSMB()) {
+				glcm.Info(PreserveNFSPermissionsDisabledMsg)
+			}
 		} else {
 			glcm.Info(PreservePermissionsDisabledMsg)
 		}

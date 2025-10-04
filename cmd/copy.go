@@ -500,10 +500,10 @@ func validateSymlinkHandlingMode(symlinkHandling common.SymlinkHandlingType, fro
 			return nil // Fine on all OSes that support symlink via the OS package. (Win, MacOS, and Linux do, and that's what we officially support.)
 		case common.EFromTo.BlobBlob(), common.EFromTo.BlobFSBlobFS(), common.EFromTo.BlobBlobFS(), common.EFromTo.BlobFSBlob():
 			return nil // Blob->Blob doesn't involve any local requirements
-		case common.EFromTo.LocalFileNFS():
+		case common.EFromTo.LocalFileNFS(), common.EFromTo.FileNFSLocal(), common.EFromTo.FileNFSFileNFS():
 			return nil // for NFS related transfers symlink preservation is supported.
 		default:
-			return fmt.Errorf("flag --%s can only be used on Blob<->Blob or Local<->Blob", common.PreserveSymlinkFlagName)
+			return fmt.Errorf("flag --%s can only be used on Blob<->Blob, Local<->Blob, Local<->FileNFS, FileNFS<->FileNFS", common.PreserveSymlinkFlagName)
 		}
 	}
 
@@ -845,7 +845,6 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	if err != nil {
 		return fmt.Errorf("fatal: Could not create client: %s", err.Error())
 	}
-
 	// step 3: start download
 
 	blobStream, err := blobClient.DownloadStream(ctx, &blob.DownloadStreamOptions{

@@ -47,7 +47,7 @@ func (f localFileSourceInfoProvider) GetUNIXProperties() (common.UnixStatAdapter
 			// orphan symlink → continue to Lstat
 		}
 	}
-	fmt.Println("Coming here for statx fallback", f.EntityType() == common.EEntityType.Symlink())
+
 	// Fallback: use Lstat for symlinks, Stat for others
 	var stat unix.Stat_t
 	var err error
@@ -57,7 +57,7 @@ func (f localFileSourceInfoProvider) GetUNIXProperties() (common.UnixStatAdapter
 		err = unix.Stat(f.transferInfo.Source, &stat)
 	}
 	if err != nil {
-		return nil, err
+		return nil, err 	 	
 	}
 
 	return StatTAdapter(stat), nil

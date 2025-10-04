@@ -348,3 +348,17 @@ func (a *azureFilesDownloader) PutNFSDefaultPermissions(sip INFSPropertyBearingS
 
 	return nil
 }
+
+func (a *azureFilesDownloader) CreateSymlink(jptm IJobPartTransferMgr) error {
+	sip, err := newFileSourceInfoProvider(jptm)
+	if err != nil {
+		return err
+	}
+	symsip := sip.(ISymlinkBearingSourceInfoProvider) // blob always implements this
+	symlinkInfo, _ := symsip.ReadLink()
+
+	// create the link
+	err = os.Symlink(symlinkInfo, jptm.Info().Destination)
+
+	return err
+}

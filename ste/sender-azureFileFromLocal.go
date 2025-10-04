@@ -209,7 +209,7 @@ func DoWithCreateSymlinkOnAzureFilesNFS(
 	if fileerror.HasCode(err, fileerror.ResourceTypeMismatch) {
 		jptm.Log(common.LogWarning,
 			fmt.Sprintf("%s: %s \nAzCopy will delete the destination resource.",
-				fileerror.ResourceAlreadyExists, err.Error()))
+				fileerror.ResourceTypeMismatch, err.Error()))
 
 		// destination can be a file
 		if _, delErr := client.Delete(ctx, nil); delErr != nil {

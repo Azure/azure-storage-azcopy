@@ -42,7 +42,9 @@ func (s *FileTestSuite) Scenario_SingleFileUploadDifferentSizes(svm *ScenarioVar
 
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body: body,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *FileTestSuite) Scenario_CompleteSparseFileUpload(svm *ScenarioVariationManager) {
@@ -72,7 +74,9 @@ func (s *FileTestSuite) Scenario_CompleteSparseFileUpload(svm *ScenarioVariation
 
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body: body,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 
 	if svm.Dryrun() {
 		return
@@ -119,7 +123,9 @@ func (s *FileTestSuite) Scenario_PartialSparseFileUpload(svm *ScenarioVariationM
 
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body: body,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 
 	if svm.Dryrun() {
 		return
@@ -161,7 +167,9 @@ func (s *FileTestSuite) Scenario_GuessMimeType(svm *ScenarioVariationManager) {
 				contentType: pointerTo("text/html"),
 			},
 		},
-	}, false)
+	}, ValidateResourceOptions{
+		validateObjectContent: false,
+	})
 }
 
 func (s *FileTestSuite) Scenario_UploadFileProperties(svm *ScenarioVariationManager) {
@@ -203,7 +211,9 @@ func (s *FileTestSuite) Scenario_UploadFileProperties(svm *ScenarioVariationMana
 				contentEncoding: contentEncoding,
 			},
 		},
-	}, false)
+	}, ValidateResourceOptions{
+		validateObjectContent: false,
+	})
 }
 
 func (s *FileTestSuite) Scenario_DownloadPreserveLMTFile(svm *ScenarioVariationManager) {
@@ -230,7 +240,9 @@ func (s *FileTestSuite) Scenario_DownloadPreserveLMTFile(svm *ScenarioVariationM
 
 			LastModifiedTime: srcObjLMT,
 		},
-	}, false)
+	}, ValidateResourceOptions{
+		validateObjectContent: false,
+	})
 }
 
 func (s *FileTestSuite) Scenario_Download63MBFile(svm *ScenarioVariationManager) {
@@ -253,7 +265,9 @@ func (s *FileTestSuite) Scenario_Download63MBFile(svm *ScenarioVariationManager)
 
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body: body,
-	}, false)
+	}, ValidateResourceOptions{
+		validateObjectContent: false,
+	})
 }
 
 func (s *FileTestSuite) Scenario_UploadDirectory(svm *ScenarioVariationManager) {
@@ -310,7 +324,9 @@ func (s *FileTestSuite) Scenario_UploadDirectory(svm *ScenarioVariationManager) 
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcObjs,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *FileTestSuite) Scenario_DownloadDirectory(svm *ScenarioVariationManager) {
@@ -367,7 +383,9 @@ func (s *FileTestSuite) Scenario_DownloadDirectory(svm *ScenarioVariationManager
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcObjs,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *FileTestSuite) Scenario_SingleFileUploadWildcard(svm *ScenarioVariationManager) {
@@ -394,7 +412,9 @@ func (s *FileTestSuite) Scenario_SingleFileUploadWildcard(svm *ScenarioVariation
 
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body: body,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *FileTestSuite) Scenario_AllFileUploadWildcard(svm *ScenarioVariationManager) {
@@ -423,7 +443,9 @@ func (s *FileTestSuite) Scenario_AllFileUploadWildcard(svm *ScenarioVariationMan
 
 	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, fileName, common.EEntityType.File()), ResourceDefinitionObject{
 		Body: body,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *FileTestSuite) Scenario_AllFileDownloadWildcard(svm *ScenarioVariationManager) {
@@ -452,7 +474,9 @@ func (s *FileTestSuite) Scenario_AllFileDownloadWildcard(svm *ScenarioVariationM
 
 	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, fileName, common.EEntityType.File()), ResourceDefinitionObject{
 		Body: body,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *FileTestSuite) Scenario_SeveralFileUploadWildcard(svm *ScenarioVariationManager) {
@@ -481,7 +505,9 @@ func (s *FileTestSuite) Scenario_SeveralFileUploadWildcard(svm *ScenarioVariatio
 
 	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, fileName, common.EEntityType.File()), ResourceDefinitionObject{
 		Body: body,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *FileTestSuite) Scenario_SeveralFileDownloadWildcard(svm *ScenarioVariationManager) {
@@ -512,7 +538,9 @@ func (s *FileTestSuite) Scenario_SeveralFileDownloadWildcard(svm *ScenarioVariat
 
 	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, srcContainer.ContainerName()+"/"+fileName, common.EEntityType.File()), ResourceDefinitionObject{
 		Body: body,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 // Test copy with AllowToUnsafeDestination option
@@ -547,7 +575,9 @@ func (s *FileTestSuite) Scenario_CopyTrailingDotUnsafeDestination(svm *ScenarioV
 
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body: body,
-	}, false)
+	}, ValidateResourceOptions{
+		validateObjectContent: false,
+	})
 }
 
 // Test:
@@ -684,7 +714,9 @@ func (s *FileTestSuite) Scenario_TrailingDotDisabledCorrectError(svm *ScenarioVa
 
 	ValidateResource[ObjectResourceManager](svm, srcObj, ResourceDefinitionObject{
 		ObjectShouldExist: to.Ptr(false),
-	}, false)
+	}, ValidateResourceOptions{
+		validateObjectContent: false,
+	})
 
 	destContainer := CreateResource[ContainerResourceManager](
 		svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
