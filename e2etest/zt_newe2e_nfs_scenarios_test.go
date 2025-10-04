@@ -20,14 +20,20 @@ func GetCurrentUIDAndGID(a Asserter) (uid, gid string) {
 	// Get the current user information
 	currentUser, err := user.Current()
 	a.NoError("Error retrieving current user:", err)
+	if runtime.GOOS == "windows" {
+		uid = currentUser.Uid
+		gid = currentUser.Gid
+	} else { // for windows and linux
+		uid = "1000"
+		gid = "1000"
+	}
 
-	uid = currentUser.Uid
-	gid = currentUser.Gid
 	return
 }
 
 func getPropertiesAndPermissions(svm *ScenarioVariationManager, preserveProperties, preservePermissions bool) (*FileNFSProperties, *FileNFSProperties, *FileNFSPermissions) {
 	uid, gid := GetCurrentUIDAndGID(svm)
+
 	var folderProperties, fileProperties *FileNFSProperties
 	if preserveProperties {
 		folderProperties = &FileNFSProperties{
@@ -960,7 +966,6 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 	}
 }
 
-/*
 func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationManager) {
 
 	//
@@ -1330,4 +1335,3 @@ func (s *FilesNFSTestSuite) Scenario_DstShareDoesNotExists(svm *ScenarioVariatio
 			},
 		})
 }
-*/
