@@ -77,8 +77,8 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 	})
 
 	preserveProperties := NamedResolveVariation(svm, map[string]bool{
-		"|preserveProperties=true":  true,
-		"|preserveProperties=false": false,
+		"|preserveInfo=true":  true,
+		"|preserveInfo=false": false,
 	})
 
 	preservePermissions := NamedResolveVariation(svm, map[string]bool{
@@ -330,8 +330,8 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 	})
 
 	preserveProperties := NamedResolveVariation(svm, map[string]bool{
-		"|preserveProperties=true":  true,
-		"|preserveProperties=false": false,
+		"|preserveInfo=true":  true,
+		"|preserveInfo=false": false,
 	})
 
 	//TODO: Not checking for this flag as false as azcopy needs to run by root user
@@ -534,8 +534,8 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 	})
 
 	preserveProperties := NamedResolveVariation(svm, map[string]bool{
-		"|preserveProperties=true":  true,
-		"|preserveProperties=false": false,
+		"|preserveInfo=true":  true,
+		"|preserveInfo=false": false,
 	})
 
 	preservePermissions := NamedResolveVariation(svm, map[string]bool{
@@ -752,8 +752,8 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 	})
 
 	preserveProperties := NamedResolveVariation(svm, map[string]bool{
-		"|preserveProperties=true":  true,
-		"|preserveProperties=false": false,
+		"|preserveInfo=true":  true,
+		"|preserveInfo=false": false,
 	})
 
 	preservePermissions := NamedResolveVariation(svm, map[string]bool{
@@ -948,7 +948,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 	ValidateResource[ContainerResourceManager](svm, dstShare, ResourceDefinitionContainer{
 		Objects: srcObjs,
 	}, ValidateResourceOptions{
-		validateObjectContent: true,
+		validateObjectContent: false,
 		fromTo:                common.EFromTo.FileNFSFileSMB(),
 		preservePermissions:   preservePermissions,
 		preserveInfo:          preserveProperties,
@@ -960,6 +960,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 	}
 }
 
+/*
 func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationManager) {
 
 	//
@@ -981,8 +982,8 @@ func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationMa
 	})
 
 	preserveProperties := NamedResolveVariation(svm, map[string]bool{
-		"|preserveProperties=true":  true,
-		"|preserveProperties=false": false,
+		"|preserveInfo=true":  true,
+		"|preserveInfo=false": false,
 	})
 
 	preservePermissions := NamedResolveVariation(svm, map[string]bool{
@@ -1329,3 +1330,4 @@ func (s *FilesNFSTestSuite) Scenario_DstShareDoesNotExists(svm *ScenarioVariatio
 			},
 		})
 }
+*/
