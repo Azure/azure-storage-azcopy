@@ -514,8 +514,6 @@ func (f *FileObjectResourceManager) Create(a Asserter, body ObjectContentContain
 	perms := f.PreparePermissions(a, props.FileProperties.FilePermissions)
 
 	f.CreateParents(a)
-	shareType, err := f.Share.InternalClient.GetProperties(ctx, nil)
-	a.NoError("Get share properties", err)
 
 	switch f.entityType {
 	case common.EEntityType.File():
@@ -524,7 +522,7 @@ func (f *FileObjectResourceManager) Create(a Asserter, body ObjectContentContain
 		}
 
 		client := f.getFileClient()
-		if shareType.EnabledProtocols == nil || *shareType.EnabledProtocols == "SMB" {
+		if f.Location() == common.ELocation.File() {
 			_, err := client.Create(ctx, body.Size(), &file.CreateOptions{
 				SMBProperties: smbProperties,
 				Permissions:   perms,
@@ -542,7 +540,7 @@ func (f *FileObjectResourceManager) Create(a Asserter, body ObjectContentContain
 		a.NoError("Upload Stream", err)
 	case common.EEntityType.Folder():
 		client := f.getDirClient()
-		if shareType.EnabledProtocols == nil || *shareType.EnabledProtocols == "SMB" {
+		if f.Location() == common.ELocation.File() {
 			_, err := client.Create(ctx, &directory.CreateOptions{
 				FileSMBProperties: smbProperties,
 				FilePermissions:   perms,
@@ -635,10 +633,6 @@ func (f *FileObjectResourceManager) ListChildren(a Asserter, recursive bool) map
 func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectProperties) {
 	a.HelperMarker().Helper()
 
-	shareType := f.Share.InternalClient
-	shareProps, err := shareType.GetProperties(ctx, nil)
-	a.NoError("Get share properties", err)
-
 	switch f.entityType {
 	case common.EEntityType.Folder():
 		resp, err := f.getDirClient().GetProperties(ctx, &directory.GetPropertiesOptions{})
@@ -654,7 +648,7 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 
 		var nfsProperties *FileNFSProperties
 		var smbProperties FileProperties
-		if shareProps.EnabledProtocols != nil && *shareProps.EnabledProtocols == "NFS" {
+		if f.Location() == common.ELocation.FileNFS() {
 			nfsProperties = &FileNFSProperties{
 				FileCreationTime:  resp.FileCreationTime,
 				FileLastWriteTime: resp.FileLastWriteTime,
@@ -695,7 +689,7 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 
 		var nfsProperties *FileNFSProperties
 		var smbProperties FileProperties
-		if shareProps.EnabledProtocols != nil && *shareProps.EnabledProtocols == "NFS" {
+		if f.Location() == common.ELocation.FileNFS() {
 			nfsProperties = &FileNFSProperties{
 				FileCreationTime:  resp.FileCreationTime,
 				FileLastWriteTime: resp.FileLastWriteTime,
@@ -832,8 +826,6 @@ func (f *FileObjectResourceManager) SetObjectProperties(a Asserter, props Object
 	a.HelperMarker().Helper()
 
 	nfsProperties := &file.NFSProperties{}
-	shareType, err := f.Share.InternalClient.GetProperties(ctx, nil)
-	a.NoError("Get share properties", err)
 
 	if props.FileNFSProperties != nil {
 		nfsProperties.CreationTime = props.FileNFSProperties.FileCreationTime
@@ -864,7 +856,7 @@ func (f *FileObjectResourceManager) SetObjectProperties(a Asserter, props Object
 	switch f.entityType {
 	case common.EEntityType.File():
 		var opts *file.SetHTTPHeadersOptions
-		if shareType.EnabledProtocols != nil && *shareType.EnabledProtocols == "NFS" {
+		if f.Location() == common.ELocation.FileNFS() {
 			opts = &file.SetHTTPHeadersOptions{
 				NFSProperties: nfsProperties,
 				HTTPHeaders:   props.HTTPHeaders.ToFile(),
@@ -884,7 +876,7 @@ func (f *FileObjectResourceManager) SetObjectProperties(a Asserter, props Object
 		a.NoError("Set file metadata", err)
 	case common.EEntityType.Folder():
 		var opts *directory.SetPropertiesOptions
-		if shareType.EnabledProtocols != nil || *shareType.EnabledProtocols == "NFS" {
+		if f.Location() == common.ELocation.FileNFS() {
 			opts = &directory.SetPropertiesOptions{
 				FileNFSProperties: nfsProperties,
 			}
