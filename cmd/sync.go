@@ -303,13 +303,13 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 	} else {
 		if err := performSMBSpecificValidation(
 			cooked.fromTo, cooked.preservePermissions, cooked.preserveInfo,
-			cooked.preservePOSIXProperties, cooked.symlinkHandling); err != nil {
+			cooked.preservePOSIXProperties); err != nil {
 			return err
 		}
 
 		if cooked.symlinkHandling == common.ESymlinkHandlingType.Follow() {
 			return fmt.Errorf("The '--follow-symlink' flag is not applicable for sync operations.")
-		}else if cooked.symlinkHandling == common.ESymlinkHandlingType.Preserve() {
+		} else if cooked.symlinkHandling == common.ESymlinkHandlingType.Preserve() {
 			return fmt.Errorf("The '--preserve-symlink' flag is not applicable for sync operations.")
 		}
 	}
