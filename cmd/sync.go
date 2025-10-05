@@ -286,20 +286,31 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 		return err
 	}
 
+	if err = validateSymlinkHandlingMode(cooked.symlinkHandling, cooked.fromTo); err != nil {
+		return err
+	}
+
 	// NFS/SMB validation
 	if cooked.fromTo.IsNFS() {
 		if err := performNFSSpecificValidation(
 			cooked.fromTo,
 			cooked.preservePermissions,
 			cooked.preserveInfo,
-			&cooked.hardlinks); err != nil {
+			&cooked.hardlinks,
+			cooked.symlinkHandling); err != nil {
 			return err
 		}
 	} else {
 		if err := performSMBSpecificValidation(
 			cooked.fromTo, cooked.preservePermissions, cooked.preserveInfo,
-			cooked.preservePOSIXProperties, &cooked.hardlinks); err != nil {
+			cooked.preservePOSIXProperties); err != nil {
 			return err
+		}
+
+		if cooked.symlinkHandling == common.ESymlinkHandlingType.Follow() {
+			return fmt.Errorf("The '--follow-symlink' flag is not applicable for sync operations.")
+		} else if cooked.symlinkHandling == common.ESymlinkHandlingType.Preserve() {
+			return fmt.Errorf("The '--preserve-symlink' flag is not applicable for sync operations.")
 		}
 	}
 
