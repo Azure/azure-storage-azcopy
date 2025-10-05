@@ -17,13 +17,14 @@ func init() {
 type FilesNFSTestSuite struct{}
 
 func GetCurrentUIDAndGID(a Asserter) (uid, gid string) {
-	// Get the current user information
-	currentUser, err := user.Current()
-	a.NoError("Error retrieving current user:", err)
-	if runtime.GOOS == "windows" {
+
+	if runtime.GOOS == "linux" {
+		// Get the current user information
+		currentUser, err := user.Current()
+		a.NoError("Error retrieving current user:", err)
 		uid = currentUser.Uid
 		gid = currentUser.Gid
-	} else { // for windows and linux
+	} else { // for windows and mac
 		uid = "1000"
 		gid = "1000"
 	}

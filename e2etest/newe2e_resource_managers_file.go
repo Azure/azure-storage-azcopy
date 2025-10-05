@@ -884,14 +884,14 @@ func (f *FileObjectResourceManager) SetObjectProperties(a Asserter, props Object
 		a.NoError("Set file metadata", err)
 	case common.EEntityType.Folder():
 		var opts *directory.SetPropertiesOptions
-		if shareType.EnabledProtocols == nil || *shareType.EnabledProtocols == "SMB" {
+		if shareType.EnabledProtocols != nil || *shareType.EnabledProtocols == "NFS" {
 			opts = &directory.SetPropertiesOptions{
-				FileSMBProperties: smbProperties,
-				FilePermissions:   perms,
+				FileNFSProperties: nfsProperties,
 			}
 		} else {
 			opts = &directory.SetPropertiesOptions{
-				FileNFSProperties: nfsProperties,
+				FileSMBProperties: smbProperties,
+				FilePermissions:   perms,
 			}
 		}
 		client := f.getDirClient()

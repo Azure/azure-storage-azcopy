@@ -212,8 +212,7 @@ func performNFSSpecificValidation(fromTo common.FromTo,
 func performSMBSpecificValidation(fromTo common.FromTo,
 	preservePermissions common.PreservePermissionsOption,
 	preserveInfo bool,
-	preservePOSIXProperties bool,
-	symlinkHandling common.SymlinkHandlingType) (err error) {
+	preservePOSIXProperties bool) (err error) {
 
 	if err = validatePreserveSMBPropertyOption(preserveInfo,
 		fromTo,
