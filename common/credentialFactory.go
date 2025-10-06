@@ -67,15 +67,22 @@ const PeReCheckCooldownTimeInSecs = 3600
 const PeCheckRetries = 3
 const PeCheckIntervalInmilliSecs = 200
 
-func createS3ClientForPrivateNetwork(credInfo CredentialInfo) (*minio.Client, error) {
+func createS3ClientForPrivateNetwork(credInfo CredentialInfo, cred *credentials.Credentials) (*minio.Client, error) {
 	peIP := privateNetworkArgs.PrivateEndpointIPs
 	baseS3Host := credInfo.S3CredentialInfo.Endpoint
-	// Doublecheck endpoint should contain bucketname : "<bucketname>.s3.<region>.amazonaws.com"
+	// Endpoint should contain bucketname : "<bucketname>.s3.<region>.amazonaws.com"
 	s3Host := privateNetworkArgs.BucketName + "." + credInfo.S3CredentialInfo.Endpoint
 	transport := NewRoundRobinTransport(peIP, s3Host, PeReCheckCooldownTimeInSecs, PeCheckRetries, PeCheckIntervalInmilliSecs)
+	var minioCred *credentials.Credentials
+	if cred != nil {
+		minioCred = cred
+	} else {
+		minioCred = credentials.New(credInfo.S3CredentialInfo.Provider)
+	}
+
 	// Create MinIO client
 	client, err := minio.New(baseS3Host, &minio.Options{
-		Creds:        credentials.New(credInfo.S3CredentialInfo.Provider),
+		Creds:        minioCred,
 		Secure:       true,
 		Transport:    transport,
 		Region:       credInfo.S3CredentialInfo.Region,
@@ -109,7 +116,7 @@ func CreateS3Credential(ctx context.Context, credInfo CredentialInfo, options Cr
 func CreateS3ClientFromProvider(credInfo CredentialInfo) (*minio.Client, error) {
 	if IsPrivateNetworkEnabled() {
 		fmt.Println("Creating S3 Client for Private Network")
-		s3Client, err := createS3ClientForPrivateNetwork(credInfo)
+		s3Client, err := createS3ClientForPrivateNetwork(credInfo, nil)
 		return s3Client, err
 	}
 	fmt.Println("Creating S3 Client for public access")
@@ -137,6 +144,11 @@ func CreateS3Client(ctx context.Context, credInfo CredentialInfo, option Credent
 	credential, err := CreateS3Credential(ctx, credInfo, option)
 	if err != nil {
 		return nil, err
+	}
+	if IsPrivateNetworkEnabled() {
+		fmt.Println("Creating S3 Client for Private Network")
+		s3Client, err := createS3ClientForPrivateNetwork(credInfo, credential)
+		return s3Client, err
 	}
 	s3Client, err := minio.New(credInfo.S3CredentialInfo.Endpoint, &minio.Options{Creds: credential, Secure: true, Region: credInfo.S3CredentialInfo.Region})
 
