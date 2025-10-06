@@ -41,6 +41,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity/cache"
 	"github.com/Azure/go-autorest/autorest/date"
 
 	// importing the cache module registers the cache implementation for the current platform
@@ -632,6 +633,7 @@ func (credInfo *OAuthTokenInfo) GetClientCertificateCredential() (azcore.TokenCr
 			Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: authorityHost.String()},
 			Transport: newAzcopyHTTPClient(),
 		},
+		SendCertificateChain: true,
 	})
 	if err != nil {
 		return nil, err
