@@ -227,7 +227,7 @@ func performSMBSpecificValidation(fromTo common.FromTo,
 		PreservePermissionsFlag); err != nil {
 		return err
 	}
-	
+
 	// TODO: Add this check in Phase-3 which targets to support hardlinks for NFS copy.
 	// if err = validateAndAdjustHardlinksFlag(hardlinkHandling, fromTo); err != nil {
 	// 	return err
@@ -333,33 +333,28 @@ func validateShareProtocolCompatibility(
 	fromTo common.FromTo,
 ) error {
 
-	location, direction := "source", "from"
-	if !isSource {
-		location, direction = "destination", "to"
-	}
-
 	// We can ignore the error if we fail to get the share properties.
 	shareProtocol, _ := getShareProtocolType(ctx, serviceClient, resource, protocol)
 
 	if shareProtocol == common.ELocation.File() {
 		if isSource && fromTo.From() != common.ELocation.File() {
-			return fmt.Errorf("The %s share has SMB protocol enabled. "+
-				"To copy %s a SMB share, use the appropriate --from-to flag value", location, direction)
+			return errors.New("the source share has SMB protocol enabled. " +
+				"To copy from a SMB share, use the appropriate --from-to flag value")
 		}
 		if !isSource && fromTo.To() != common.ELocation.File() {
-			return fmt.Errorf("The %s share has NFS protocol enabled. "+
-				"To copy %s a NFS share, use the appropriate --from-to flag value", location, direction)
+			return errors.New("the destination share has NFS protocol enabled. " +
+				"To copy to a NFS share, use the appropriate --from-to flag value")
 		}
 	}
 
 	if shareProtocol == common.ELocation.FileNFS() {
 		if isSource && fromTo.From() != common.ELocation.FileNFS() {
-			return fmt.Errorf("The %s share has NFS protocol enabled. "+
-				"To copy %s a NFS share, use the appropriate --from-to flag value", location, direction)
+			return errors.New("the source share has NFS protocol enabled. " +
+				"To copy from a NFS share, use the appropriate --from-to flag value")
 		}
 		if !isSource && fromTo.To() != common.ELocation.FileNFS() {
-			return fmt.Errorf("The %s share has NFS protocol enabled. "+
-				"To copy %s a NFS share, use the appropriate --from-to flag value", location, direction)
+			return errors.New("the destination share has NFS protocol enabled. " +
+				"To copy to a NFS share, use the appropriate --from-to flag value")
 		}
 	}
 	return nil
