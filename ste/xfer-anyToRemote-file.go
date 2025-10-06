@@ -31,6 +31,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -549,8 +550,13 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 				//      corrupt or inconsistent data. It's also essential to the integrity of our MD5 hashes.
 				common.DocumentationForDependencyOnChangeDetection() // <-- read the documentation here ***
 
-				jptm.Log(common.LogError, fmt.Sprintf("Source Modified during transfer. Enumeration %v, current %v", jptm.LastModifiedTime(), lmt))
-				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", errors.New("source modified during transfer"))
+				mismatchErrMsg := "source modified during transfer"
+				if !lmt.IsZero() && lmt.Before(time.Unix(0, 0)) {
+					mismatchErrMsg = fmt.Sprintf("source has an unsupported timestamp (before 1970): %v", lmt)
+				}
+
+				jptm.Log(common.LogError, fmt.Sprintf("%s. Enumeration %v, current %v", mismatchErrMsg, jptm.LastModifiedTime(), lmt))
+				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", errors.New(mismatchErrMsg))
 			}
 		}
 	}
