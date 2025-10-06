@@ -432,8 +432,10 @@ type cookedSyncCmdArgs struct {
 	atomicSourceFilesTransferNotRequired   uint64
 	atomicSourceFoldersTransferNotRequired uint64
 
+	atomicSourceFolderEnumerationFailed atomic.Uint64
+	atomicSourceFileEnumerationFailed   atomic.Uint64
+
 	// defined the failure counters for sync operation through SyncOrchestrator
-	atomicSourceFolderEnumerationFailed       atomic.Uint64
 	atomicDestinationFolderEnumerationFailed  atomic.Uint64
 	atomicDestinationFolderEnumerationSkipped atomic.Uint64
 
@@ -586,6 +588,10 @@ func (cca *cookedSyncCmdArgs) IncrementSourceFolderEnumerationFailed() {
 	cca.atomicSourceFolderEnumerationFailed.Add(1)
 }
 
+func (cca *cookedSyncCmdArgs) IncrementSourceFileEnumerationFailed() {
+	cca.atomicSourceFileEnumerationFailed.Add(1)
+}
+
 func (cca *cookedSyncCmdArgs) IncrementDestinationFolderEnumerationFailed() {
 	cca.atomicDestinationFolderEnumerationFailed.Add(1)
 }
@@ -596,6 +602,10 @@ func (cca *cookedSyncCmdArgs) IncrementDestinationFolderEnumerationSkipped() {
 
 func (cca *cookedSyncCmdArgs) GetSourceFolderEnumerationFailed() uint64 {
 	return cca.atomicSourceFolderEnumerationFailed.Load()
+}
+
+func (cca *cookedSyncCmdArgs) GetSourceFileEnumerationFailed() uint64 {
+	return cca.atomicSourceFileEnumerationFailed.Load()
 }
 
 func (cca *cookedSyncCmdArgs) GetDestinationFolderEnumerationFailed() uint64 {
@@ -966,6 +976,7 @@ Number of Files Not Requiring Transfer: ........ %12v
 Number of Folders Not Requiring Transfer: ...... %12v
 ------------------------------------------------------------
 Source Folders Failed During Enumeration: ...... %12v
+Source Files Failed During Enumeration: ........ %12v
 Destination Folders Failed During Enumeration: . %12v
 Destination Folders Skipped During Enumeration: %13v
 ------------------------------------------------------------
@@ -998,6 +1009,7 @@ Final Job Status: .............................. %12v
 		atomic.LoadUint64(&cca.atomicSourceFoldersTransferNotRequired),
 
 		cca.atomicSourceFolderEnumerationFailed.Load(),
+		cca.atomicSourceFileEnumerationFailed.Load(),
 		cca.atomicDestinationFolderEnumerationFailed.Load(),
 		cca.atomicDestinationFolderEnumerationSkipped.Load(),
 
@@ -1021,6 +1033,7 @@ Folders Scanned at Destination: ................ %12v
 Elapsed Time (Minutes): ........................ %12v
 ------------------------------------------------------------
 Source Folders Failed During Enumeration: ...... %12v
+Source Files Failed During Enumeration: ........ %12v
 Destination Folders Failed During Enumeration: . %12v
 Destination Folders Skipped During Enumeration: %13v
 ------------------------------------------------------------
@@ -1034,6 +1047,7 @@ Destination Folders Skipped During Enumeration: %13v
 		jobsAdmin.ToFixed(time.Since(cca.jobStartTime).Minutes(), 4),
 
 		cca.atomicSourceFolderEnumerationFailed.Load(),
+		cca.atomicSourceFileEnumerationFailed.Load(),
 		cca.atomicDestinationFolderEnumerationFailed.Load(),
 		cca.atomicDestinationFolderEnumerationSkipped.Load())
 }

@@ -382,8 +382,9 @@ var enumerationCounterFuncNoop enumerationCounterFunc = func(entityType common.E
 type InitResourceTraverserOptions struct {
 	DestResourceType *common.Location // Used by Azure Files
 
-	Credential           *common.CredentialInfo // Required for most remote traversers
-	IncrementEnumeration enumerationCounterFunc
+	Credential                  *common.CredentialInfo // Required for most remote traversers
+	IncrementEnumeration        enumerationCounterFunc
+	IncrementEnumerationFailure enumerationCounterFunc
 
 	ListOfFiles      <-chan string // Creates a list of files traverser
 	ListOfVersionIDs <-chan string // Used by Blob/DFS
@@ -423,6 +424,14 @@ type ResourceTraverserTemplate struct {
 func (o *InitResourceTraverserOptions) PerformChecks() error {
 	if o.IncrementEnumeration == nil {
 		o.IncrementEnumeration = enumerationCounterFuncNoop
+	}
+
+	if o.IncrementEnumerationFailure == nil {
+		o.IncrementEnumerationFailure = enumerationCounterFuncNoop
+	}
+
+	if o.IncrementNotTransferred == nil {
+		o.IncrementNotTransferred = enumerationCounterFuncNoop
 	}
 
 	return nil

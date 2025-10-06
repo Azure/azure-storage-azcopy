@@ -116,9 +116,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 				if common.IsNFSCopy() {
 					atomic.AddUint32(&cca.atomicSkippedSymlinkCount, 1)
 				}
-				if cca.symlinkHandling == common.ESymlinkHandlingType.Skip() {
-					atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
-				}
+				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 			case common.EEntityType.Other():
 				if common.IsNFSCopy() {
 					atomic.AddUint32(&cca.atomicSkippedSpecialFileCount, 1)
@@ -127,7 +125,15 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 			default:
 			}
 		},
-
+		IncrementEnumerationFailure: func(entityType common.EntityType) {
+			if entityType == common.EEntityType.Folder() {
+				cca.IncrementSourceFolderEnumerationFailed()
+				atomic.AddUint64(&cca.atomicSourceFoldersScanned, 1)
+			} else {
+				cca.IncrementSourceFileEnumerationFailed()
+				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
+			}
+		},
 		CpkOptions: cca.cpkOptions,
 
 		SyncHashType:        cca.compareHash,
@@ -139,6 +145,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		IncludeDirectoryStubs:   includeDirStubs,
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
 		HardlinkHandling:        cca.hardlinks,
+		SymlinkHandling:         cca.symlinkHandling,
 		IncrementNotTransferred: func(entityType common.EntityType) {
 
 			switch entityType {
@@ -194,6 +201,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
 		HardlinkHandling:        common.EHardlinkHandlingType.Follow(),
 		ErrorChannel:            enumeratorOptions.ErrorChannel,
+		SymlinkHandling:         cca.symlinkHandling,
 	}
 	dstTraverserTemplate := ResourceTraverserTemplate{
 		location: cca.fromTo.To(),
