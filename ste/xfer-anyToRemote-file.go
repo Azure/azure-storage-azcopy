@@ -445,12 +445,13 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 					if !isSourcePrivate {
 						// create reader and prefetch the data into it
 						chunkReader = createPopulatedChunkReader(jptm, sourceFileFactory, id, adjustedChunkSize, srcFile)
+						// Wait until we have enough RAM, and when we do, prefetch the data for this chunk.
+						prefetchErr = chunkReader.BlockingPrefetch(srcFile, false)
 					} else {
 						chunkReader = createS3ChunkReader(jptm, srcInfoProvider.(IRemoteSourceInfoProvider), id, adjustedChunkSize, srcFile)
+						prefetchErr = chunkReader.BlockingPrefetch(srcFile, true)
 					}
 
-					// Wait until we have enough RAM, and when we do, prefetch the data for this chunk.
-					prefetchErr = chunkReader.BlockingPrefetch(srcFile, false)
 					if prefetchErr == nil {
 						// *** NOTE: the hasher hashes the buffer as it is right now.  IF the chunk upload fails, then
 						//     the chunkReader will repeat the read from disk. So there is an essential dependency

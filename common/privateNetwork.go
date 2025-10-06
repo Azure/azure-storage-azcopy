@@ -47,7 +47,7 @@ var privateNetworkArgs PrivateNetworkConfig = PrivateNetworkConfig{}
 // IPEntry holds one private IP with health info
 type IPEntry struct {
 	IP          string
-	unhealthy   int32 // 0 = healthy, 1 = unhealthy
+	unhealthy   uint32 // 0 = healthy, 1 = unhealthy
 	lastChecked time.Time
 	lastErrCode int
 	lastErrMsg  string
@@ -61,9 +61,8 @@ type RoundRobinTransport struct {
 	ips             []*IPEntry
 	host            string
 	healthyIPs      atomic.Value // []*IPEntry, cached healthy list
-	counter         uint32
+	counter         uint64
 	transport       *http.Transport
-	maxRetries      int
 	cooldown        time.Duration // how long to wait before retrying unhealthy IP
 	perIPRetries    int           // number of times to retry the same IP before moving on
 	perIPRetryDelay time.Duration // delay between retries to same IP
@@ -97,7 +96,6 @@ func NewRoundRobinTransport(ips []string, host string, maxRetries int, cooldownI
 		ips:             entries,
 		host:            host,
 		transport:       tr,
-		maxRetries:      maxRetries,
 		cooldown:        time.Duration(cooldownInSecs) * time.Second,
 		perIPRetries:    ipRetries,
 		perIPRetryDelay: time.Duration(ipRetryIntervalInMilliSecs) * time.Millisecond,
@@ -113,24 +111,24 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 	var lastErr error
 	var peIP string
 
-	for attempt := 1; attempt <= rr.maxRetries; attempt++ {
-		healthy := rr.healthyIPs.Load().([]*IPEntry)
+	healthy := rr.healthyIPs.Load().([]*IPEntry)
+	initialHealthyCount := len(healthy)
+	for attempt := 1; attempt <= initialHealthyCount; attempt++ {
 		if len(healthy) == 0 {
-			fmt.Errorf("[Attempt %d] No healthy IPs available", attempt)
-			return nil, fmt.Errorf("no healthy IPs available")
+			fmt.Errorf("No healthy Private Endpoint IPs are available", attempt)
+			return nil, fmt.Errorf("no healthy Private Endpoint IPs are available")
 		}
 
-		idx := atomic.AddUint32(&rr.counter, 1)
-		entry := healthy[idx%uint32(len(healthy))]
+		idx := atomic.AddUint64(&rr.counter, 1)
+		entry := healthy[idx%uint64(len(healthy))]
 		peIP = entry.IP
-		log.Printf("[Attempt %d Counter=%d]  -> Selected IP: %s Unhealth Status: %d LastTime: %v\n",
+		log.Printf("Selected Private endpoint IP: %s Unhealth Status: %d LastTime: %v\n",
 			attempt, idx, peIP, entry.unhealthy, entry.lastChecked)
 
 		// Skip if still in cooldown
-		if atomic.LoadInt32(&entry.unhealthy) == 1 &&
+		if atomic.LoadUint32(&entry.unhealthy) == 1 &&
 			time.Since(entry.lastChecked) < rr.cooldown {
-			log.Printf("[Attempt %d Counter=%d] Skipping IP %s (still in cooldown)",
-				attempt, idx, peIP)
+			log.Printf("[Counter=%d] Skipping Unhealthy IP %s (still in cooldown)", idx, peIP)
 			continue
 		}
 
@@ -144,28 +142,28 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 			clonedReq.URL.Host = peIP
 			clonedReq.Host = rr.host
 
-			log.Printf("[RoundTrip] [%d.%d] Sending request to %s (Host header: %s)", attempt, ipAttempt, clonedReq.URL.Host, clonedReq.Host)
+			log.Printf("[Counter=%d Retry=%d] Sending request to PrivateEndpoint IP: %s (Host header: %s)", idx, ipAttempt, clonedReq.URL.Host, clonedReq.Host)
 
 			resp, err := rr.transport.RoundTrip(clonedReq)
 			if err == nil {
-				// Success on this IP: mark healthy, remove from global unhealthy map, return resp
-				atomic.StoreInt32(&entry.unhealthy, 0)
+				if atomic.CompareAndSwapUint32(&entry.unhealthy, 1, 0) {
+					// remove from global unhealthy map and refresh pool once (state changed)
+					UnHealthyMu.Lock()
+					delete(UnHealthyPrivateEndpoints, entry.IP)
+					UnHealthyMu.Unlock()
 
-				UnHealthyMu.Lock()
-				delete(UnHealthyPrivateEndpoints, entry.IP)
-				UnHealthyMu.Unlock()
+					// update diagnostics (clear)
+					entry.lastErrCode = 0
+					entry.lastErrMsg = ""
 
-				// reset last error info
-				entry.lastErrCode = 0
-				entry.lastErrMsg = ""
-
-				rr.refreshHealthyPool()
-				log.Printf("[Attempt %d Counter %d.%d] SUCCESS using IP %s", attempt, idx, ipAttempt, peIP)
+					rr.refreshHealthyPool()
+					log.Printf("[Counter=%d Retry=%d] SUCCESS using IP %s", idx, ipAttempt, peIP)
+				}
 				return resp, nil
 			}
 
 			// Transport-level failure (err != nil). Capture diagnostics.
-			log.Printf("[Attempt %d Counter %d.%d] FAILED using IP %s -> %v", attempt, idx, ipAttempt, peIP, err)
+			log.Printf("[Counter=%d Retry=%d] FAILED using IP %s with Error %v", idx, ipAttempt, peIP, err)
 
 			// If resp is non-nil on error, close body to avoid leaks and capture status for diagnostics.
 			if resp != nil {
@@ -193,21 +191,25 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 
 			// If we still have per-IP attempts left, wait and retry the same IP
 			if ipAttempt < rr.perIPRetries {
-				log.Printf("[Attempt %d Counter %d.%d] Retrying same IP %s after %v", attempt, idx, ipAttempt, peIP, rr.perIPRetryDelay)
+				log.Printf("[Counter=%d Retry=%d] Retrying same IP %s after %v", idx, ipAttempt, peIP, rr.perIPRetryDelay)
 				time.Sleep(rr.perIPRetryDelay)
 				continue
 			}
 
 			// Exhausted per-IP retries: mark the IP unhealthy, record time, update global map and healthy pool,
 			// then break to pick another IP (outer loop continues).
-			atomic.StoreInt32(&entry.unhealthy, 1)
-			entry.lastChecked = time.Now()
-			log.Printf("[Attempt %d Counter %d.%d] Marked IP %s as unhealthy after %d failed attempts: %s", attempt, idx, ipAttempt, peIP, rr.perIPRetries, entry.lastErrMsg)
-			rr.refreshHealthyPool()
+			// attempt to mark unhealthy: 0 -> 1
+			if atomic.CompareAndSwapUint32(&entry.unhealthy, 0, 1) {
+				entry.lastChecked = time.Now()
+				// populate global unhealthy map and refresh pool on transition
+				UnHealthyMu.Lock()
+				UnHealthyPrivateEndpoints[peIP] = *entry
+				UnHealthyMu.Unlock()
 
-			UnHealthyMu.Lock()
-			UnHealthyPrivateEndpoints[peIP] = *entry
-			UnHealthyMu.Unlock()
+				rr.refreshHealthyPool()
+				log.Printf("[Counter %d] Marked IP %s as unhealthy after %d failed attempts with Error Message: %s",
+					idx, peIP, rr.perIPRetries, entry.lastErrMsg)
+			}
 			// break inner loop; outer loop will select another IP (or finish if attempts exhausted)
 			break
 		}
@@ -215,7 +217,7 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 	}
 
 	// All attempts exhausted
-	return nil, fmt.Errorf("all retries for ip %v failed after %d attempts: %w", peIP, rr.maxRetries, lastErr)
+	return nil, fmt.Errorf("Request failed after trying all healthy Private Endpoint IPs. Last error from IP %s: %v", peIP, lastErr)
 }
 
 // refreshHealthyPool updates the healthy IP list atomically
@@ -223,7 +225,7 @@ func (rr *RoundRobinTransport) refreshHealthyPool() {
 	var healthy []*IPEntry
 	for _, e := range rr.ips {
 		log.Printf("refreshHealthyPool Counter: %d IP Address: %s Unhealthy: %d\n", rr.counter, e.IP, e.unhealthy)
-		if atomic.LoadInt32(&e.unhealthy) == 0 ||
+		if atomic.LoadUint32(&e.unhealthy) == 0 ||
 			time.Since(e.lastChecked) >= rr.cooldown {
 			healthy = append(healthy, e)
 		}

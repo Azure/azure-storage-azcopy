@@ -180,9 +180,8 @@ func (cr *S3ChunkReader) retryBlockingPrefetchIfNecessary() error {
 	if cr.buffer != nil {
 		return nil // nothing to do
 	}
-	const isRetry = true
 	// For S3, just call BlockingPrefetch again with isRetry=true
-	return cr.BlockingPrefetch(nil, isRetry)
+	return cr.BlockingPrefetch(nil, true)
 }
 
 // Seeks within this chunk
