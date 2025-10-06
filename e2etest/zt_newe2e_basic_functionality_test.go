@@ -3,6 +3,7 @@ package e2etest
 import (
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -614,6 +615,9 @@ func (s *BasicFunctionalitySuite) Scenario_ConcurrencyValueSet(svm *ScenarioVari
 
 // Scenario_CheckVersion test version info is only printed explicitly when --check-version is used.
 func (*BasicFunctionalitySuite) Scenario_CheckVersion(svm *ScenarioVariationManager) {
+	if strings.Contains(common.AzcopyVersion, "preview") {
+		svm.Skip("Check version does not print output for preview versions.")
+	}
 	// The flag usage is `azcopy --check-version` without sub-commands.
 	// So, no need to pass azcopy verb
 	stdout, _ := RunAzCopy(svm, AzCopyCommand{
