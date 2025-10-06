@@ -29,6 +29,17 @@
    - Preserve symlinks: `--preserve-symlinks=true`  
    - Skip symlinks: default behavior when flags are not provided  
    - Follow symlinks: `--follow-symlinks=true`
+4. Added a --check-version flag to make version checking an opt in feature. ([#3173](https://github.com/Azure/azure-storage-azcopy/pull/3173))
+
+Bug Fixes
+1. Fixed a bug to retry on WSAETIMEDOUT on Windows. ([#3195](https://github.com/Azure/azure-storage-azcopy/pull/3195))
+2. Fixed a bug with the folder creation tracker which caused folder creation calls to happen more often than necessary. ([#3151](https://github.com/Azure/azure-storage-azcopy/pull/3151)) 
+3. Fixed a bug to redact x-ams-credential from logs. ([#3206](https://github.com/Azure/azure-storage-azcopy/pull/3206))
+4. Fixed a bug where powershell login would fail with older versions of Az.Accounts. ([#3191](https://github.com/Azure/azure-storage-azcopy/pull/3191))
+5. Fixed a bug where symlink direct targets would be handled as a file instead of a symlink. ([#3222](https://github.com/Azure/azure-storage-azcopy/pull/3222))
+
+Breaking changes
+1. AzCopy no longer checks version by default. ([#3173](https://github.com/Azure/azure-storage-azcopy/pull/3173))
 
 ## Version 10.30.0
 ### Breaking changes
