@@ -22,11 +22,11 @@
 1. Azure Files NFS -> Azure Files SMB transfers.
    - Transfer from Azure Files NFS to Azure Files SMB. (`--from-to=FileNFSFileSMB`)
 2. Azure Files SMB -> Azure Files NFS transfers.
-   - Transfer from Azure Files SMB to Azure Files NFS. (`--from-to=FileSMBFileNFS`)  
+   - Transfer from Azure Files SMB to Azure Files NFS. (`--from-to=FileSMBFileNFS`)
 3. Symlink support for Azure Files NFS shares.
    Introduced support for symbolic links in Azure Files NFS shares. 
    Symlinks can be preserved, skipped, or followed based on command-line flags.  
-   - Preserve symlinks: `--preserve-symlinks=true`  
+   - Preserve symlinks: `--preserve-symlinks=true`
    - Skip symlinks: default behavior when flags are not provided  
    - Follow symlinks: `--follow-symlinks=true`
 4. Added a --check-version flag to make version checking an opt in feature. ([#3173](https://github.com/Azure/azure-storage-azcopy/pull/3173))
