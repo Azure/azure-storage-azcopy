@@ -347,9 +347,10 @@ func recommendHttpsIfNecessary(url url.URL) {
 	}
 }
 
-type enumerationCounterFunc func(entityType common.EntityType)
+type enumerationCounterFunc func(entityType common.EntityType, symlinkOption common.SymlinkHandlingType, hardlinkOption common.HardlinkHandlingType)
 
-var enumerationCounterFuncNoop enumerationCounterFunc = func(entityType common.EntityType) {}
+var enumerationCounterFuncNoop enumerationCounterFunc = func(entityType common.EntityType, symlinkOption common.SymlinkHandlingType, hardlinkoption common.HardlinkHandlingType) {
+}
 
 type InitResourceTraverserOptions struct {
 	DestResourceType *common.Location // Used by Azure Files
@@ -378,6 +379,7 @@ type InitResourceTraverserOptions struct {
 	ExcludeContainers []string // Blob account
 	ListVersions      bool     // Blob
 	HardlinkHandling  common.HardlinkHandlingType
+	FromTo            common.FromTo
 }
 
 func (o *InitResourceTraverserOptions) PerformChecks() error {

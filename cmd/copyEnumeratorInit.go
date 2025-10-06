@@ -95,14 +95,24 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		IncludeDirectoryStubs:   cca.IncludeDirectoryStubs,
 		PreserveBlobTags:        cca.S2sPreserveBlobTags,
 		StripTopDir:             cca.StripTopDir,
+		HardlinkHandling:        cca.hardlinks,
+		FromTo:                  cca.FromTo,
 
 		ExcludeContainers: cca.excludeContainer,
-		IncrementEnumeration: func(entityType common.EntityType) {
-			if common.IsNFSCopy() {
+		IncrementEnumeration: func(entityType common.EntityType, symlinkOption common.SymlinkHandlingType, hardlinkHandling common.HardlinkHandlingType) {
+			if cca.FromTo.IsNFS() {
 				if entityType == common.EEntityType.Other() {
 					atomic.AddUint32(&cca.atomicSkippedSpecialFileCount, 1)
 				} else if entityType == common.EEntityType.Symlink() {
-					atomic.AddUint32(&cca.atomicSkippedSymlinkCount, 1)
+					switch symlinkOption {
+					case common.ESymlinkHandlingType.Skip():
+						atomic.AddUint32(&cca.atomicSkippedSymlinkCount, 1)
+					}
+				} else if entityType == common.EEntityType.Hardlink() {
+					switch hardlinkHandling {
+					case common.SkipHardlinkHandlingType:
+						atomic.AddUint32(&cca.atomicSkippedHardlinkCount, 1)
+					}
 				}
 			}
 		},
@@ -397,6 +407,7 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx con
 
 		ExcludeContainers: cca.excludeContainer,
 		HardlinkHandling:  cca.hardlinks,
+		FromTo:            cca.FromTo,
 	})
 
 	if err != nil {
@@ -614,7 +625,7 @@ func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool
 
 	// If downloading on Windows or uploading to files, encode unsafe characters.
 	if (loc == common.ELocation.Local() && !source && runtime.GOOS == "windows") ||
-		(!source && (loc == common.ELocation.File() || loc == common.ELocation.FileNFS())) {
+		(!source && loc == common.ELocation.File()) {
 		// invalidChars := `<>\/:"|?*` + string(0x00)
 
 		for k, c := range encodedInvalidCharacters {
@@ -625,7 +636,7 @@ func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool
 
 		// If uploading from Windows or downloading from files, decode unsafe chars if user enables decoding
 	} else if ((!source && fromTo.From() == common.ELocation.Local() && runtime.GOOS == "windows") ||
-		(!source && (fromTo.From() == common.ELocation.File() || fromTo.From() == common.ELocation.FileNFS()))) && !disableAutoDecoding {
+		(!source && fromTo.From() == common.ELocation.File())) && !disableAutoDecoding {
 
 		for encoded, c := range reverseEncodedChars {
 			for k, p := range pathParts {
