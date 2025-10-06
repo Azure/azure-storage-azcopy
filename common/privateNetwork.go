@@ -82,7 +82,7 @@ func SetPrivateNetworkArgs(privateNetworkEnabled bool, privateEndpointIPs []stri
 }
 
 // RoundRobinTransport creates the transport
-func NewRoundRobinTransport(ips []string, host string, maxRetries int, cooldownInSecs int, ipRetries int, ipRetryIntervalInMilliSecs int) *RoundRobinTransport {
+func NewRoundRobinTransport(ips []string, host string, cooldownInSecs int, ipRetries int, ipRetryIntervalInMilliSecs int) *RoundRobinTransport {
 	entries := make([]*IPEntry, len(ips))
 	for i, ip := range ips {
 		entries[i] = &IPEntry{IP: ip, unhealthy: 0, lastChecked: time.Now()}
