@@ -63,5 +63,76 @@ func TestInferArgumentLocation(t *testing.T) {
 	for _, v := range test {
 		loc := InferArgumentLocation(v.src)
 		a.Equal(v.expectedLocation, loc)
-  }
+	}
+}
+
+func TestValidateFromTo(t *testing.T) {
+	a := assert.New(t)
+
+	test := []struct {
+		userSpecifiedLocation string
+
+		expectedFromTo common.FromTo
+		expectedError  string
+	}{
+		{"LocalFileSMB", common.EFromTo.LocalFile(), ""},
+		{"FileSMBLocal", common.EFromTo.FileLocal(), ""},
+		{"LocalFile", common.EFromTo.LocalFile(), ""},
+		{"FileLocal", common.EFromTo.FileLocal(), ""},
+
+		{"BlobFileSMB", common.EFromTo.BlobFile(), ""},
+		{"FileSMBBlob", common.EFromTo.FileBlob(), ""},
+		{"BlobFile", common.EFromTo.BlobFile(), ""},
+		{"FileBlob", common.EFromTo.FileBlob(), ""},
+
+		{"FileSMBPipe", common.EFromTo.FilePipe(), ""},
+		{"PipeFileSMB", common.EFromTo.PipeFile(), ""},
+		{"PipeFile", common.EFromTo.PipeFile(), ""},
+		{"FilePipe", common.EFromTo.FilePipe(), ""},
+
+		{"BlobTrash", common.EFromTo.BlobTrash(), ""},
+		{"BlobFSTrash", common.EFromTo.BlobFSTrash(), ""},
+		{"FileTrash", common.EFromTo.FileTrash(), ""},
+		{"FileSMBTrash", common.EFromTo.FileTrash(), ""},
+
+		{"LocalBlobFS", common.EFromTo.LocalBlobFS(), ""},
+		{"BlobFSLocal", common.EFromTo.BlobFSLocal(), ""},
+
+		{"BlobFSBlobFS", common.EFromTo.BlobFSBlobFS(), ""},
+		{"BlobFSBlob", common.EFromTo.BlobFSBlob(), ""},
+		{"BlobFSFileSMB", common.EFromTo.BlobFSFile(), ""},
+		{"BlobFSFile", common.EFromTo.BlobFSFile(), ""},
+
+		{"BlobBlobFS", common.EFromTo.BlobBlobFS(), ""},
+		{"FileSMBBlobFS", common.EFromTo.FileBlobFS(), ""},
+		{"FileBlobFS", common.EFromTo.FileBlobFS(), ""},
+		{"BlobBlob", common.EFromTo.BlobBlob(), ""},
+		{"FileSMBBlob", common.EFromTo.FileBlob(), ""},
+		{"FileBlob", common.EFromTo.FileBlob(), ""},
+		{"BlobFileSMB", common.EFromTo.BlobFile(), ""},
+		{"BlobFile", common.EFromTo.BlobFile(), ""},
+		{"FileFile", common.EFromTo.FileFile(), ""},
+		{"FileSMBFileSMB", common.EFromTo.FileFile(), ""},
+
+		{"FileNFSFileSMB", common.EFromTo.FileNFSFileSMB(), ""},
+		{"FileSMBFileNFS", common.EFromTo.FileSMBFileNFS(), ""},
+		{"FileNFSFileNFS", common.EFromTo.FileNFSFileNFS(), ""},
+		{"FileNFSLocal", common.EFromTo.FileNFSLocal(), ""},
+		{"LocalFileNFS", common.EFromTo.LocalFileNFS(), ""},
+
+		{"S3Blob", common.EFromTo.S3Blob(), ""},
+		{"GCPBlob", common.EFromTo.GCPBlob(), ""},
+
+		// Invalid cases
+		{"Random", common.EFromTo.Unknown(), "invalid --from-to value specified"},
+	}
+
+	for _, v := range test {
+		fromTo, err := ValidateFromTo("", "", v.userSpecifiedLocation)
+		a.Equal(v.expectedFromTo, fromTo)
+		a.Equal(err == nil, v.expectedError == "")
+		if err != nil {
+			a.Contains(err.Error(), v.expectedError)
+		}
+	}
 }
