@@ -1,10 +1,12 @@
 package e2etest
 
 import (
-	"github.com/stretchr/testify/assert"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
@@ -67,7 +69,9 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFile(svm *ScenarioVariationMana
 
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body: body,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 
 	ValidatePlanFiles(svm, stdOut, ExpectedPlanFile{
 		Objects: map[PlanFilePath]PlanFileObject{
@@ -147,7 +151,9 @@ func (s *BasicFunctionalitySuite) Scenario_MultiFileUploadDownload(svm *Scenario
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: common.Iff[ObjectResourceMapping](asSubdir, ObjectResourceMappingParentFolder{srcContainer.ContainerName(), srcDef.Objects}, srcDef.Objects),
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *BasicFunctionalitySuite) Scenario_EntireDirectory_S2SContainer(svm *ScenarioVariationManager) {
@@ -208,7 +214,9 @@ func (s *BasicFunctionalitySuite) Scenario_EntireDirectory_S2SContainer(svm *Sce
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcObjs,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *BasicFunctionalitySuite) Scenario_EntireDirectory_UploadContainer(svm *ScenarioVariationManager) {
@@ -262,7 +270,9 @@ func (s *BasicFunctionalitySuite) Scenario_EntireDirectory_UploadContainer(svm *
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcObjs,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *BasicFunctionalitySuite) Scenario_EntireDirectory_DownloadContainer(svm *ScenarioVariationManager) {
@@ -316,7 +326,9 @@ func (s *BasicFunctionalitySuite) Scenario_EntireDirectory_DownloadContainer(svm
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcObjs,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *BasicFunctionalitySuite) Scenario_SingleFileUploadDownload_EmptySAS(svm *ScenarioVariationManager) {
@@ -464,7 +476,9 @@ func (s *BasicFunctionalitySuite) Scenario_CopyUnSafeDest(svm *ScenarioVariation
 	ValidateResource[ObjectResourceManager](svm, dstObj,
 		ResourceDefinitionObject{
 			Body: body,
-		}, false)
+		}, ValidateResourceOptions{
+			validateObjectContent: false,
+		})
 }
 
 func (s *BasicFunctionalitySuite) Scenario_TagsPermission(svm *ScenarioVariationManager) {
@@ -601,6 +615,9 @@ func (s *BasicFunctionalitySuite) Scenario_ConcurrencyValueSet(svm *ScenarioVari
 
 // Scenario_CheckVersion test version info is only printed explicitly when --check-version is used.
 func (*BasicFunctionalitySuite) Scenario_CheckVersion(svm *ScenarioVariationManager) {
+	if strings.Contains(common.AzcopyVersion, "preview") {
+		svm.Skip("Check version does not print output for preview versions.")
+	}
 	// The flag usage is `azcopy --check-version` without sub-commands.
 	// So, no need to pass azcopy verb
 	stdout, _ := RunAzCopy(svm, AzCopyCommand{
@@ -735,7 +752,9 @@ func (*BasicFunctionalitySuite) Scenario_SkipVersionCheckDisabledBackCompat(svm 
 
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body: body,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 
 	ValidateDoesNotContainError(svm, stdOut, []string{"unknown flag: --skip-version-check"})
 
