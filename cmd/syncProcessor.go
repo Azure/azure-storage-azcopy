@@ -357,6 +357,46 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 		}
 
 		return nil
+	} else if object.entityType == common.EEntityType.Symlink() {
+		msg := "Deleting extra object: " + object.relativePath
+		glcm.Info(msg)
+		if azcopyScanningLogger != nil {
+			azcopyScanningLogger.Log(common.LogInfo, msg)
+		}
+
+		var err error
+		var objURL *url.URL
+
+		switch b.targetLocation {
+		case common.ELocation.FileNFS():
+			fsc, _ := sc.FileServiceClient()
+			fileClient := fsc.NewShareClient(b.containerName).NewRootDirectoryClient().NewFileClient(objectPath)
+
+			objURL, err = b.getObjectURL(fileClient.URL())
+			if err != nil {
+				break
+			}
+			b.folderManager.RecordChildExists(objURL)
+			defer b.folderManager.RecordChildDeleted(objURL)
+
+			err = common.DoWithOverrideReadOnlyOnAzureFiles(b.ctx, func() (interface{}, error) {
+				return fileClient.Delete(b.ctx, nil)
+			}, fileClient, b.forceIfReadOnly)
+		default:
+			panic("not implemented, check your code")
+		}
+
+		if err != nil {
+			msg := fmt.Sprintf("error %s deleting the object %s", err.Error(), object.relativePath)
+			glcm.Info(msg + "; check the scanning log file for more details")
+			if azcopyScanningLogger != nil {
+				azcopyScanningLogger.Log(common.LogError, msg+": "+err.Error())
+			}
+
+			return err
+		}
+
+		return nil
 	} else {
 		if b.folderOption == common.EFolderPropertiesOption.NoFolders() {
 			return nil
