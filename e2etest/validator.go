@@ -57,7 +57,7 @@ var versionIDRegex = regexp.MustCompile("^\\d{4}-\\d{2}-\\d{2}T\\d{2}[-:]\\d{2}[
 
 func trimBaseSnapshotDetails(c asserter, url *url.URL, location common.Location, acctType AccountType) (trimmed, snapshot string) {
 	switch {
-	case location == common.ELocation.File(), location == common.ELocation.FileNFS():
+	case location.IsFile():
 		snapshot = url.Query().Get("sharesnapshot")
 		if snapshot != "" {
 			query := url.Query()
