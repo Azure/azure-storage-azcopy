@@ -11,7 +11,7 @@ func init() {
 
 type FileOAuthTestSuite struct{}
 
-// Scenario_FileBlobOAuthNoError tests S2S FileBlob (default BlockBlob) copies using OAuth are successful
+// Scenario_FileBlobOAuthNoError tests S2S FileBlob (default BlockBlob) container copies using OAuth are successful
 func (s *FileOAuthTestSuite) Scenario_FileBlobOAuthNoError(svm *ScenarioVariationManager) {
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
@@ -39,12 +39,16 @@ func (s *FileOAuthTestSuite) Scenario_FileBlobOAuthNoError(svm *ScenarioVariatio
 			"S2S sync from Azure File authenticated with Azure AD to Blob/BlobFS is not supported"})
 }
 
-// Test FilePageBlob and FileAppendBlob copy and sync
+// Test FileBlockBlob, FilePageBlob, FileAppendBlob object copy and sync with OAuth are successful
 func (s *FileOAuthTestSuite) Scenario_CopyFileBlobOAuth(svm *ScenarioVariationManager) {
-	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionObject{})
-	blobTypesSDK := ResolveVariation(svm, []blob.BlobType{blob.BlobTypeAppendBlob, blob.BlobTypePageBlob})
+	body := NewRandomObjectContentContainer(SizeFromString("1K"))
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionObject{
+		Body: body,
+	})
+	blobTypesSDK := ResolveVariation(svm, []blob.BlobType{blob.BlobTypeAppendBlob, blob.BlobTypePageBlob, blob.BlobTypeBlockBlob})
 	dstObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()),
 		ResourceDefinitionObject{
+			Body: body,
 			ObjectProperties: ObjectProperties{
 				BlobProperties: BlobProperties{
 					Type: pointerTo(blobTypesSDK),
@@ -59,7 +63,7 @@ func (s *FileOAuthTestSuite) Scenario_CopyFileBlobOAuth(svm *ScenarioVariationMa
 		blobType = common.EBlobType.AppendBlob()
 	case blob.BlobTypePageBlob:
 		blobType = common.EBlobType.PageBlob()
-	default:
+	case blob.BlobTypeBlockBlob:
 		blobType = common.EBlobType.BlockBlob()
 	}
 
@@ -81,8 +85,13 @@ func (s *FileOAuthTestSuite) Scenario_CopyFileBlobOAuth(svm *ScenarioVariationMa
 }
 
 func (s *FileOAuthTestSuite) Scenario_SyncBlobOAuth(svm *ScenarioVariationManager) {
-	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionObject{})
-	dstObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionObject{})
+	body := NewRandomObjectContentContainer(SizeFromString("1K"))
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionObject{
+		Body: body,
+	})
+	dstObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionObject{
+		Body: body,
+	})
 
 	RunAzCopy(svm,
 		AzCopyCommand{
