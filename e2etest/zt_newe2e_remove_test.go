@@ -51,7 +51,9 @@ func (s *RemoveSuite) Scenario_SingleFileRemoveBlobFSEncodedPath(svm *ScenarioVa
 		})
 	ValidateResource[ObjectResourceManager](svm, srcObj, ResourceDefinitionObject{
 		ObjectShouldExist: to.Ptr(false),
-	}, false)
+	}, ValidateResourceOptions{
+		validateObjectContent: false,
+	})
 }
 
 func (s *RemoveSuite) Scenario_EmptySASErrorCodes(svm *ScenarioVariationManager) {
@@ -105,7 +107,9 @@ func (s *RemoveSuite) Scenario_RemoveVirtualDirectory(svm *ScenarioVariationMana
 
 	ValidateResource[ContainerResourceManager](svm, srcContainer, ResourceDefinitionContainer{
 		Objects: srcObjs,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 // Scenario_RemoveFileWithOnlyDotsTrailingDotDisabled tests removing a file with only dots. i.e "...."
@@ -197,7 +201,9 @@ func (s *RemoveSuite) Scenario_RemoveFileWithOnlyDotsEnabled(svm *ScenarioVariat
 	// Validate that relevant file is deleted in File share - does not exist
 	ValidateResource[ObjectResourceManager](svm, srcObject, ResourceDefinitionObject{
 		ObjectShouldExist: pointerTo(false),
-	}, false)
+	}, ValidateResourceOptions{
+		validateObjectContent: false,
+	})
 
 	fileMap := make(map[string]ObjectProperties)
 	fileMap = fileShare.ListObjects(svm, "", true)
@@ -247,7 +253,9 @@ func (s *RemoveSuite) Scenario_RemoveFilesWithExcludePath(svm *ScenarioVariation
 	fileMap = src.ListObjects(svm, "", true)
 	svm.Assert("Only necessary files should be removed",
 		Equal{}, len(fileMap)-1, len(expectedList)) // Minus 1 to remove the directory
-	ValidateResource[ContainerResourceManager](svm, src, ResourceDefinitionContainer{}, true)
+	ValidateResource[ContainerResourceManager](svm, src, ResourceDefinitionContainer{}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 	ValidateDoesNotContainError(svm, stdOut, []string{"unknown flag: --exclude-path"})
 }
 
@@ -287,7 +295,9 @@ func (s *RemoveSuite) Scenario_RemoveBlobsWithExcludePath(svm *ScenarioVariation
 	fileMap := make(map[string]ObjectProperties)
 	fileMap = src.ListObjects(svm, "", true)
 	svm.Assert("Only necessary files should be removed", Equal{}, len(fileMap), len(expectedList))
-	ValidateResource[ContainerResourceManager](svm, src, ResourceDefinitionContainer{}, true)
+	ValidateResource[ContainerResourceManager](svm, src, ResourceDefinitionContainer{}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 	ValidateDoesNotContainError(svm, stdOut, []string{"unknown flag: --exclude-path"})
 }
 
