@@ -328,7 +328,7 @@ func (s *RemoveSuite) Scenario_RemoveFilesWithSpecialChars(svm *ScenarioVariatio
 		fileMap := make(map[string]ObjectProperties)
 		fileMap = src.ListObjects(svm, "", true)
 		svm.Assert("All files should be removed", Equal{}, len(fileMap), 0)
-		ValidateResource[ContainerResourceManager](svm, src, ResourceDefinitionContainer{}, true)
+		ValidateResource[ContainerResourceManager](svm, src, ResourceDefinitionContainer{}, false)
 		ValidateDoesNotContainError(svm, stdOut, []string{"inconsistent path separators. Some are forward, some are back. This is not supported"})
 	}
 }
