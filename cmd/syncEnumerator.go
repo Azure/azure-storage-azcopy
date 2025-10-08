@@ -526,10 +526,12 @@ func GetSyncEnumeratorWithDestComparator(
 	}
 	destCleanerFunc := newFpoAwareProcessor(fpo, destinationCleaner.removeImmediately)
 
-	if UseSyncOrchestrator && cca.fromTo == common.EFromTo.S3Blob() {
+	if UseSyncOrchestrator && (cca.fromTo == common.EFromTo.S3Blob() || cca.fromTo == common.EFromTo.BlobBlob() || cca.fromTo == common.EFromTo.BlobBlobFS() || cca.fromTo == common.EFromTo.BlobFSBlob() || cca.fromTo == common.EFromTo.BlobFSBlobFS()) {
 		// newFpoAwareProcessor sets the destCleanerFunc to nil for a non folder aware source destination pair like S3->Blob.
 		// But in case of SyncOrchestrator, S3->Blob sync does recursive deletion for a prefix.
 		// This requires a valid deletion processor to be passed to the comparator.
+		fmt.Println("Using SyncOrchestrator: setting up deletion processor for S3/Blob to Blob sync")
+
 		destCleanerFunc = destinationCleaner.removeImmediately
 	}
 
