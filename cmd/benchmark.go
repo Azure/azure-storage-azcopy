@@ -30,6 +30,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -179,7 +180,7 @@ func (raw rawBenchmarkCmdArgs) cook() (CookedCopyCmdArgs, error) {
 }
 
 func (raw rawBenchmarkCmdArgs) appendVirtualDir(target, virtualDir string) (string, error) {
-	switch InferArgumentLocation(target) {
+	switch azcopy.InferArgumentLocation(target) {
 	case common.ELocation.Blob():
 		p, err := blob.ParseURL(target)
 		if err != nil {
@@ -227,7 +228,7 @@ func (raw rawBenchmarkCmdArgs) createCleanupJobArgs(benchmarkDest common.Resourc
 	rc.src = u.String()             // the SOURCE for the deletion is the the dest from the benchmark
 	rc.recursive = true
 
-	switch InferArgumentLocation(rc.src) {
+	switch azcopy.InferArgumentLocation(rc.src) {
 	case common.ELocation.Blob():
 		rc.fromTo = common.EFromTo.BlobTrash().String()
 	case common.ELocation.File(), common.ELocation.FileNFS():

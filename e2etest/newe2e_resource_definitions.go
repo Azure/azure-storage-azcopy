@@ -1,20 +1,20 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/google/uuid"
 )
 
 // ResourceDefinition itself exists to loosely accept the handful of relevant types as a part of CreateResource and ValidateResource.
 type ResourceDefinition interface {
 	// DefinitionTarget returns the location level this definition applies at.
-	DefinitionTarget() cmd.LocationLevel
+	DefinitionTarget() azcopy.LocationLevel
 	// GenerateAdoptiveParent is designed for scaling a definition down to a root resource for creation
 	GenerateAdoptiveParent(a Asserter) ResourceDefinition
 	// MatchAdoptiveChild scales a resource of the same level up one level to the real definition level
 	MatchAdoptiveChild(a Asserter, target ResourceManager) (ResourceManager, ResourceDefinition)
 	// ApplyDefinition manages tree traversal by itself. applicationFunctions should realistically be creation of the underlying resource or validation.
-	ApplyDefinition(a Asserter, target ResourceManager, applicationFunctions map[cmd.LocationLevel]func(Asserter, ResourceManager, ResourceDefinition))
+	ApplyDefinition(a Asserter, target ResourceManager, applicationFunctions map[azcopy.LocationLevel]func(Asserter, ResourceManager, ResourceDefinition))
 	// ShouldExist determines whether the resource should exist.
 	// This should be checked in functions called by ApplyDefinition, as it is intended to alter creation and validation behavior.
 	ShouldExist() bool
@@ -51,7 +51,7 @@ func (r ResourceDefinitionService) MatchAdoptiveChild(a Asserter, target Resourc
 	panic("sanity check: assertnow should have caught this")
 }
 
-func (r ResourceDefinitionService) ApplyDefinition(a Asserter, target ResourceManager, applicationFunctions map[cmd.LocationLevel]func(Asserter, ResourceManager, ResourceDefinition)) {
+func (r ResourceDefinitionService) ApplyDefinition(a Asserter, target ResourceManager, applicationFunctions map[azcopy.LocationLevel]func(Asserter, ResourceManager, ResourceDefinition)) {
 	a.HelperMarker().Helper()
 	a.AssertNow("target must match level", Equal{}, target.Level(), r.DefinitionTarget())
 	serviceManager := target.(ServiceResourceManager)
@@ -69,8 +69,8 @@ func (r ResourceDefinitionService) ApplyDefinition(a Asserter, target ResourceMa
 	}
 }
 
-func (r ResourceDefinitionService) DefinitionTarget() cmd.LocationLevel {
-	return cmd.ELocationLevel.Service()
+func (r ResourceDefinitionService) DefinitionTarget() azcopy.LocationLevel {
+	return azcopy.ELocationLevel.Service()
 }
 
 func (r ResourceDefinitionService) ShouldExist() bool {
@@ -114,7 +114,7 @@ func (r ResourceDefinitionContainer) MatchAdoptiveChild(a Asserter, target Resou
 	panic("sanity check: assertnow should have caught this")
 }
 
-func (r ResourceDefinitionContainer) ApplyDefinition(a Asserter, target ResourceManager, applicationFunctions map[cmd.LocationLevel]func(Asserter, ResourceManager, ResourceDefinition)) {
+func (r ResourceDefinitionContainer) ApplyDefinition(a Asserter, target ResourceManager, applicationFunctions map[azcopy.LocationLevel]func(Asserter, ResourceManager, ResourceDefinition)) {
 	a.HelperMarker().Helper()
 	a.AssertNow("target must match level", Equal{}, target.Level(), r.DefinitionTarget())
 	containerManager := target.(ContainerResourceManager)
@@ -140,8 +140,8 @@ func (r ResourceDefinitionContainer) resourceDefinition() ContainerResourceManag
 	panic("marker method")
 }
 
-func (r ResourceDefinitionContainer) DefinitionTarget() cmd.LocationLevel {
-	return cmd.ELocationLevel.Container()
+func (r ResourceDefinitionContainer) DefinitionTarget() azcopy.LocationLevel {
+	return azcopy.ELocationLevel.Container()
 }
 
 func (r ResourceDefinitionContainer) ShouldExist() bool {
@@ -227,7 +227,7 @@ func (r ResourceDefinitionObject) MatchAdoptiveChild(a Asserter, target Resource
 	panic("sanity check: error should catch this")
 }
 
-func (r ResourceDefinitionObject) ApplyDefinition(a Asserter, target ResourceManager, applicationFunctions map[cmd.LocationLevel]func(Asserter, ResourceManager, ResourceDefinition)) {
+func (r ResourceDefinitionObject) ApplyDefinition(a Asserter, target ResourceManager, applicationFunctions map[azcopy.LocationLevel]func(Asserter, ResourceManager, ResourceDefinition)) {
 	a.HelperMarker().Helper()
 	a.AssertNow("target must match level", Equal{}, target.Level(), r.DefinitionTarget())
 
@@ -237,8 +237,8 @@ func (r ResourceDefinitionObject) ApplyDefinition(a Asserter, target ResourceMan
 	}
 }
 
-func (r ResourceDefinitionObject) DefinitionTarget() cmd.LocationLevel {
-	return cmd.ELocationLevel.Object()
+func (r ResourceDefinitionObject) DefinitionTarget() azcopy.LocationLevel {
+	return azcopy.ELocationLevel.Object()
 }
 
 func (r ResourceDefinitionObject) resourceDefinition() ObjectResourceManager {
