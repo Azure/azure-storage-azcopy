@@ -6,7 +6,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
@@ -62,7 +64,7 @@ func ValidateTags(a Asserter, expected, real map[string]string) {
 	a.Assert("Tags must match", Equal{Deep: true}, expected, real)
 }
 
-func ValidateSkippedSymLinkedCount(a Asserter, stdOut AzCopyStdout, expected uint32) {
+func ValidateSkippedSymlinksCount(a Asserter, stdOut AzCopyStdout, expected uint32) {
 	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
 		return
 	}
@@ -72,7 +74,6 @@ func ValidateSkippedSymLinkedCount(a Asserter, stdOut AzCopyStdout, expected uin
 	if skippedSymlinkedCount != expected {
 		a.Error(fmt.Sprintf("expected skipped symlink count (%d) received count (%d)", expected, skippedSymlinkedCount))
 	}
-	return
 }
 
 func ValidateSkippedSpecialFileCount(a Asserter, stdOut AzCopyStdout, expected uint32) {
@@ -88,7 +89,14 @@ func ValidateSkippedSpecialFileCount(a Asserter, stdOut AzCopyStdout, expected u
 	return
 }
 
-func ValidateResource[T ResourceManager](a Asserter, target T, definition MatchedResourceDefinition[T], validateObjectContent bool) {
+type ValidateResourceOptions struct {
+	validateObjectContent bool
+	fromTo                common.FromTo
+	preservePermissions   bool
+	preserveInfo          bool
+}
+
+func ValidateResource[T ResourceManager](a Asserter, target T, definition MatchedResourceDefinition[T], validateOptions ValidateResourceOptions) {
 	a.AssertNow("Target resource and definition must not be null", Not{IsNil{}}, a, target, definition)
 	a.AssertNow("Target resource must be at a equal level to the resource definition", Equal{}, target.Level(), definition.DefinitionTarget())
 
@@ -100,8 +108,10 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 		cmd.ELocationLevel.Container(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
 			cRes := manager.(ContainerResourceManager)
 
+			canonPathPrefix := cRes.Canon() + ": "
+
 			if !definition.ShouldExist() {
-				a.AssertNow("container must not exist", Equal{}, cRes.Exists(), false)
+				a.AssertNow(canonPathPrefix+"container must not exist", Equal{}, cRes.Exists(), false)
 				return
 			}
 
@@ -111,10 +121,10 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 			ValidateMetadata(a, vProps.Metadata, cProps.Metadata)
 
 			if manager.Location() == common.ELocation.Blob() || manager.Location() == common.ELocation.BlobFS() {
-				ValidatePropertyPtr(a, "Public access", vProps.BlobContainerProperties.Access, cProps.BlobContainerProperties.Access)
+				ValidatePropertyPtr(a, canonPathPrefix+"Public access", vProps.BlobContainerProperties.Access, cProps.BlobContainerProperties.Access)
 			}
 
-			if manager.Location() == common.ELocation.File() {
+			if manager.Location().IsFile() {
 				ValidatePropertyPtr(a, "Enabled protocols", vProps.FileContainerProperties.EnabledProtocols, cProps.FileContainerProperties.EnabledProtocols)
 				ValidatePropertyPtr(a, "RootSquash", vProps.FileContainerProperties.RootSquash, cProps.FileContainerProperties.RootSquash)
 				ValidatePropertyPtr(a, "AccessTier", vProps.FileContainerProperties.AccessTier, cProps.FileContainerProperties.AccessTier)
@@ -125,6 +135,8 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 			objMan := manager.(ObjectResourceManager)
 			objDef := definition.(ResourceDefinitionObject)
 
+			canonPathPrefix := objMan.Canon() + ": "
+
 			if !objDef.ShouldExist() {
 				a.Assert(fmt.Sprintf("object %s must not exist", objMan.ObjectName()), Equal{}, objMan.Exists(), false)
 				return
@@ -133,7 +145,9 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 			oProps := objMan.GetProperties(a)
 			vProps := objDef.ObjectProperties
 
-			if validateObjectContent && (objMan.EntityType() == common.EEntityType.File() || objMan.EntityType() == common.EEntityType.Hardlink()) && objDef.Body != nil {
+			if validateOptions.validateObjectContent && (objMan.EntityType() == common.EEntityType.File() ||
+				objMan.EntityType() == common.EEntityType.Hardlink()) && objDef.Body != nil {
+
 				objBody := objMan.Download(a)
 				validationBody := objDef.Body.Reader()
 
@@ -141,50 +155,84 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 				valHash := md5.New()
 
 				_, err := io.Copy(objHash, objBody)
-				a.NoError("hash object body", err)
+				a.NoError(canonPathPrefix+"hash object body", err)
 				_, err = io.Copy(valHash, validationBody)
-				a.NoError("hash validation body", err)
+				a.NoError(canonPathPrefix+"hash validation body", err)
 
-				a.Assert("bodies differ in hash", Equal{Deep: true}, hex.EncodeToString(objHash.Sum(nil)), hex.EncodeToString(valHash.Sum(nil)))
+				a.Assert(canonPathPrefix+"bodies differ in hash", Equal{Deep: true}, hex.EncodeToString(objHash.Sum(nil)), hex.EncodeToString(valHash.Sum(nil)))
+			} else if objMan.EntityType() == common.EEntityType.Symlink() {
+				// NFS symlink target is stored as file content
+				linkDataDest := objMan.ReadLink(a)
+				linkDataSrc := objDef.SymlinkedFileName
+
+				if linkDataDest != "" {
+					linkData := objMan.ReadLink(a)
+
+					decodedDest, err := url.PathUnescape(linkData)
+					a.NoError("decode failed", err) // or handle error if needed
+
+					// Normalize both paths for comparison
+					srcBase := filepath.Base(linkDataSrc)
+					destBase := filepath.Base(decodedDest)
+
+					a.Assert(canonPathPrefix+"Symlink mismatch", Equal{}, srcBase, destBase)
+				}
 			}
 
 			// properties
 			ValidateMetadata(a, vProps.Metadata, oProps.Metadata)
 
 			// HTTP headers
-			ValidatePropertyPtr(a, "Cache control", vProps.HTTPHeaders.cacheControl, oProps.HTTPHeaders.cacheControl)
-			ValidatePropertyPtr(a, "Content disposition", vProps.HTTPHeaders.contentDisposition, oProps.HTTPHeaders.contentDisposition)
-			ValidatePropertyPtr(a, "Content encoding", vProps.HTTPHeaders.contentEncoding, oProps.HTTPHeaders.contentEncoding)
-			ValidatePropertyPtr(a, "Content language", vProps.HTTPHeaders.contentLanguage, oProps.HTTPHeaders.contentLanguage)
-			ValidatePropertyPtr(a, "Content type", vProps.HTTPHeaders.contentType, oProps.HTTPHeaders.contentType)
+			ValidatePropertyPtr(a, canonPathPrefix+"Cache control", vProps.HTTPHeaders.cacheControl, oProps.HTTPHeaders.cacheControl)
+			ValidatePropertyPtr(a, canonPathPrefix+"Content disposition", vProps.HTTPHeaders.contentDisposition, oProps.HTTPHeaders.contentDisposition)
+			ValidatePropertyPtr(a, canonPathPrefix+"Content encoding", vProps.HTTPHeaders.contentEncoding, oProps.HTTPHeaders.contentEncoding)
+			ValidatePropertyPtr(a, canonPathPrefix+"Content language", vProps.HTTPHeaders.contentLanguage, oProps.HTTPHeaders.contentLanguage)
+			ValidatePropertyPtr(a, canonPathPrefix+"Content type", vProps.HTTPHeaders.contentType, oProps.HTTPHeaders.contentType)
 
 			switch manager.Location() {
 			case common.ELocation.Blob():
-				ValidatePropertyPtr(a, "Blob type", vProps.BlobProperties.Type, oProps.BlobProperties.Type)
+				ValidatePropertyPtr(a, canonPathPrefix+"Blob type", vProps.BlobProperties.Type, oProps.BlobProperties.Type)
 				ValidateTags(a, vProps.BlobProperties.Tags, oProps.BlobProperties.Tags)
 				ValidatePropertyPtr(a, "Block blob access tier", vProps.BlobProperties.BlockBlobAccessTier, oProps.BlobProperties.BlockBlobAccessTier)
 				ValidatePropertyPtr(a, "Page blob access tier", vProps.BlobProperties.PageBlobAccessTier, oProps.BlobProperties.PageBlobAccessTier)
-			case common.ELocation.File():
+			case common.ELocation.File(), common.ELocation.FileNFS():
 				ValidatePropertyPtr(a, "Attributes", vProps.FileProperties.FileAttributes, oProps.FileProperties.FileAttributes)
-				ValidatePropertyPtr(a, "Creation time", vProps.FileProperties.FileCreationTime, oProps.FileProperties.FileCreationTime)
-				ValidatePropertyPtr(a, "Last write time", vProps.FileProperties.FileLastWriteTime, oProps.FileProperties.FileLastWriteTime)
 				ValidatePropertyPtr(a, "Permissions", vProps.FileProperties.FilePermissions, oProps.FileProperties.FilePermissions)
-				if vProps.FileNFSProperties != nil && oProps.FileNFSProperties != nil {
-					ValidateTimePtr(a, "NFS Creation Time", vProps.FileNFSProperties.FileCreationTime, oProps.FileNFSProperties.FileCreationTime)
-					ValidateTimePtr(a, "NFS Last Write Time", vProps.FileNFSProperties.FileLastWriteTime, oProps.FileNFSProperties.FileLastWriteTime)
+
+				if validateOptions.preserveInfo && validateOptions.fromTo == common.EFromTo.FileSMBFileNFS() { // SMB to NFS transfer
+					ValidateTimePtr(a, "Creation time SMB to NFS", vProps.FileProperties.FileCreationTime, oProps.FileNFSProperties.FileCreationTime)
+					ValidateTimePtr(a, "Last write time SMB to NFS", vProps.FileProperties.FileLastWriteTime, oProps.FileNFSProperties.FileLastWriteTime)
+
+				} else if validateOptions.preserveInfo && validateOptions.fromTo == common.EFromTo.FileNFSFileSMB() { // NFS to SMB transfer
+					ValidateTimePtr(a, "Creation time NFS to SMB", vProps.FileNFSProperties.FileCreationTime, oProps.FileProperties.FileCreationTime)
+					ValidateTimePtr(a, "Last write time NFS to SMB", vProps.FileNFSProperties.FileLastWriteTime, oProps.FileProperties.FileLastWriteTime)
+
+				} else if validateOptions.preserveInfo && validateOptions.fromTo == common.EFromTo.FileSMBFileSMB() { // SMB to SMB transfer
+					ValidateTimePtr(a, "Creation time SMB to SMB", vProps.FileProperties.FileCreationTime, oProps.FileProperties.FileCreationTime)
+					ValidateTimePtr(a, "Last write time SMB to SMB", vProps.FileProperties.FileLastWriteTime, oProps.FileProperties.FileLastWriteTime)
+
+				} else if validateOptions.preserveInfo && validateOptions.fromTo == common.EFromTo.FileNFSFileNFS() { // NFS to NFS transfers
+					ValidateTimePtr(a, canonPathPrefix+"Creation Time NFS to NFS", vProps.FileNFSProperties.FileCreationTime, oProps.FileNFSProperties.FileCreationTime)
+					ValidateTimePtr(a, canonPathPrefix+"Last Write Time NFS to NFS", vProps.FileNFSProperties.FileLastWriteTime, oProps.FileNFSProperties.FileLastWriteTime)
+
 				}
-				if vProps.FileNFSPermissions != nil && oProps.FileNFSPermissions != nil {
-					ValidatePropertyPtr(a, "Owner", vProps.FileNFSPermissions.Owner, oProps.FileNFSPermissions.Owner)
-					ValidatePropertyPtr(a, "Group", vProps.FileNFSPermissions.Group, oProps.FileNFSPermissions.Group)
-					ValidatePropertyPtr(a, "FileMode", vProps.FileNFSPermissions.FileMode, oProps.FileNFSPermissions.FileMode)
+				if validateOptions.preservePermissions {
+					ValidatePropertyPtr(a, canonPathPrefix+"Owner", vProps.FileNFSPermissions.Owner, oProps.FileNFSPermissions.Owner)
+					ValidatePropertyPtr(a, canonPathPrefix+"Group", vProps.FileNFSPermissions.Group, oProps.FileNFSPermissions.Group)
+					// On Linux, symlink mode bits are mostly ignored by the kernel.
+					// By default, symlinks are created with 0777, and you cannot change
+					// their mode with chmod — the syscall always succeeds but doesn’t alter them.
+					if objMan.EntityType() != common.EEntityType.Symlink() {
+						ValidatePropertyPtr(a, canonPathPrefix+"FileMode", vProps.FileNFSPermissions.FileMode, oProps.FileNFSPermissions.FileMode)
+					}
 				}
 			case common.ELocation.BlobFS():
-				ValidatePropertyPtr(a, "Permissions", vProps.BlobFSProperties.Permissions, oProps.BlobFSProperties.Permissions)
-				ValidatePropertyPtr(a, "Owner", vProps.BlobFSProperties.Owner, oProps.BlobFSProperties.Owner)
-				ValidatePropertyPtr(a, "Group", vProps.BlobFSProperties.Group, oProps.BlobFSProperties.Group)
-				ValidatePropertyPtr(a, "ACL", vProps.BlobFSProperties.ACL, oProps.BlobFSProperties.ACL)
+				ValidatePropertyPtr(a, canonPathPrefix+"Permissions", vProps.BlobFSProperties.Permissions, oProps.BlobFSProperties.Permissions)
+				ValidatePropertyPtr(a, canonPathPrefix+"Owner", vProps.BlobFSProperties.Owner, oProps.BlobFSProperties.Owner)
+				ValidatePropertyPtr(a, canonPathPrefix+"Group", vProps.BlobFSProperties.Group, oProps.BlobFSProperties.Group)
+				ValidatePropertyPtr(a, canonPathPrefix+"ACL", vProps.BlobFSProperties.ACL, oProps.BlobFSProperties.ACL)
 			case common.ELocation.Local():
-				ValidateTimePtr(a, "Last modified time", vProps.LastModifiedTime, oProps.LastModifiedTime)
+				ValidateTimePtr(a, canonPathPrefix+"Last modified time", vProps.LastModifiedTime, oProps.LastModifiedTime)
 			}
 		},
 	})
@@ -210,15 +258,15 @@ func ValidateListOutput(a Asserter, stdout AzCopyStdout, expectedObjects map[AzC
 	a.Assert("summary must match", Equal{}, listStdout.Summary, DerefOrZero(expectedSummary))
 }
 
-func ValidateHardlinkedSkippedCount(a Asserter, stdOut AzCopyStdout, expected uint32) {
+func ValidateHardlinksConvertedCount(a Asserter, stdOut AzCopyStdout, expected uint32) {
 	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
 		return
 	}
 
 	parsedStdout := GetTypeOrAssert[*AzCopyParsedCopySyncRemoveStdout](a, stdOut)
-	hardlinkedConvertedCount := parsedStdout.FinalStatus.HardlinksConvertedCount
-	if hardlinkedConvertedCount != expected {
-		a.Error(fmt.Sprintf("expected hardlink converted count (%d) received count (%d)", expected, hardlinkedConvertedCount))
+	hardlinksConvertedCount := parsedStdout.FinalStatus.HardlinksConvertedCount
+	if hardlinksConvertedCount != expected {
+		a.Error(fmt.Sprintf("expected hardlink converted count (%d) received count (%d)", expected, hardlinksConvertedCount))
 	}
 	return
 }
@@ -295,7 +343,7 @@ func ValidateListTextOutput(a Asserter, stdout AzCopyStdout, expectedObjects map
 	}
 
 	for _, line := range stdout.RawStdout() {
-		if line != "" {
+		if line != "" && !strings.HasPrefix(line, "WARN") {
 			// checking summary lines first if they exist
 			if strings.Contains(line, "File count:") {
 				fileCount := strings.Split(line, ":")

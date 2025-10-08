@@ -74,8 +74,28 @@ func TestGetShouldRetry(t *testing.T) {
 			},
 			Rules: ParseRules("409: ShareAlreadyExists, ShareBeingDeleted, BlobAlreadyExists; 500; 404: BlobNotFound"),
 			Tests: []*ResponseRetryPair{
-				ErrorTest(syscall.Errno(10054), true),
+				ErrorTest(syscall.Errno(10054), true), // WSAECONNRESET
 				ErrorTest(errors.New("wsarecv: An existing connection was forcibly closed by the remote host."), true),
+				ErrorTest(syscall.Errno(10048), true), // WSAEADDRINUSE
+				ErrorTest(errors.New("Only one usage of each socket address (protocol/network address/port) is normally permitted."), true),
+				ErrorTest(syscall.Errno(10060), true), // WSAETIMEDOUT
+				ErrorTest(errors.New("A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."), true),
+			},
+		},
+		{
+			TestCond: func() bool { return runtime.GOOS == "linux" },
+			Rules:    ParseRules("409: ShareAlreadyExists, ShareBeingDeleted, BlobAlreadyExists; 500; 404: BlobNotFound"),
+			Tests: []*ResponseRetryPair{
+				ErrorTest(syscall.Errno(0x63), true), // EADDRNOTAVAILABLE
+				ErrorTest(errors.New("connect: cannot assign requested address"), true),
+			},
+		},
+		{
+			TestCond: func() bool { return runtime.GOOS == "darwin" },
+			Rules:    ParseRules("409: ShareAlreadyExists, ShareBeingDeleted, BlobAlreadyExists; 500; 404: BlobNotFound"),
+			Tests: []*ResponseRetryPair{
+				ErrorTest(syscall.Errno(0x63), true), // EADDRNOTAVAILABLE
+				ErrorTest(errors.New("connect: cannot assign requested address"), true),
 			},
 		},
 		{ // test full code removal

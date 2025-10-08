@@ -3,15 +3,16 @@ package e2etest
 import (
 	"bytes"
 	"encoding/base64"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
-	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/google/uuid"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/google/uuid"
 )
 
 type SyncTestSuite struct{}
@@ -106,7 +107,9 @@ func (s *SyncTestSuite) Scenario_TestSyncHashStorageModes(a *ScenarioVariationMa
 		},
 	})
 
-	ValidateResource[ContainerResourceManager](a, dest, resourceSpec, true)
+	ValidateResource[ContainerResourceManager](a, dest, resourceSpec, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 
 	// Finally, validate that we're actually storing the hash correctly.
 	// For this, we'll only validate the single hash we expected to conflict, because we already have the hash data for that.
@@ -177,7 +180,9 @@ func (s *SyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariatio
 			"deleteme.txt":      ResourceDefinitionObject{ObjectShouldExist: pointerTo(false)},
 			"also/deleteme.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(false)},
 		},
-	}, false)
+	}, ValidateResourceOptions{
+		validateObjectContent: false,
+	})
 }
 
 // Scenario_TestSyncDeleteDestinationIfNecessary tests that sync is
@@ -266,7 +271,9 @@ func (s *SyncTestSuite) Scenario_TestSyncDeleteDestinationIfNecessary(svm *Scena
 				Body: dstData, // Validate we did not overwrite this one
 			},
 		},
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 // Note : For local sources, the hash is computed by a hashProcessor created in zc_traverser_local, so there is no way
@@ -341,7 +348,9 @@ func (s *SyncTestSuite) Scenario_TestSyncHashTypeSourceHash(svm *ScenarioVariati
 	// All source, dest should match
 	ValidateResource[ContainerResourceManager](svm, dest, ResourceDefinitionContainer{
 		Objects: srcObjs,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 
 	// Only non skipped paths should be in plan file
 	ValidatePlanFiles(svm, stdOut, ExpectedPlanFile{
@@ -427,7 +436,9 @@ func (s *SyncTestSuite) Scenario_TestSyncHashTypeDestinationHash(svm *ScenarioVa
 	// All source, dest should match
 	ValidateResource[ContainerResourceManager](svm, dest, ResourceDefinitionContainer{
 		Objects: srcObjs,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 
 	// Only non skipped paths should be in plan file
 	ValidatePlanFiles(svm, stdOut, ExpectedPlanFile{
@@ -449,7 +460,9 @@ func (s *SyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationMan
 	// Set up the scenario
 	a.InsertVariationSeparator("Blob->")
 	srcLoc := common.ELocation.Blob()
-	dstLoc := ResolveVariation(a, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})
+	// We cannot test it for File because if the file share does not exists at the destination, azcopy will fail the azcopy job.
+	// The user will have to manually create the destination file share.
+	dstLoc := ResolveVariation(a, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.BlobFS()})
 	a.InsertVariationSeparator("|Create:")
 
 	const (
@@ -544,5 +557,7 @@ func (s *SyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationMan
 
 	ValidateResource(a, dst, ResourceDefinitionContainer{
 		Objects: srcMap,
-	}, false)
+	}, ValidateResourceOptions{
+		validateObjectContent: false,
+	})
 }

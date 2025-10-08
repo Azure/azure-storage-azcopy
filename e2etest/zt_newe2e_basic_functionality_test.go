@@ -1,8 +1,12 @@
 package e2etest
 
 import (
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
@@ -65,7 +69,9 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFile(svm *ScenarioVariationMana
 
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body: body,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 
 	ValidatePlanFiles(svm, stdOut, ExpectedPlanFile{
 		Objects: map[PlanFilePath]PlanFileObject{
@@ -145,7 +151,9 @@ func (s *BasicFunctionalitySuite) Scenario_MultiFileUploadDownload(svm *Scenario
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: common.Iff[ObjectResourceMapping](asSubdir, ObjectResourceMappingParentFolder{srcContainer.ContainerName(), srcDef.Objects}, srcDef.Objects),
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *BasicFunctionalitySuite) Scenario_EntireDirectory_S2SContainer(svm *ScenarioVariationManager) {
@@ -206,7 +214,9 @@ func (s *BasicFunctionalitySuite) Scenario_EntireDirectory_S2SContainer(svm *Sce
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcObjs,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *BasicFunctionalitySuite) Scenario_EntireDirectory_UploadContainer(svm *ScenarioVariationManager) {
@@ -260,7 +270,9 @@ func (s *BasicFunctionalitySuite) Scenario_EntireDirectory_UploadContainer(svm *
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcObjs,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *BasicFunctionalitySuite) Scenario_EntireDirectory_DownloadContainer(svm *ScenarioVariationManager) {
@@ -314,7 +326,9 @@ func (s *BasicFunctionalitySuite) Scenario_EntireDirectory_DownloadContainer(svm
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcObjs,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *BasicFunctionalitySuite) Scenario_SingleFileUploadDownload_EmptySAS(svm *ScenarioVariationManager) {
@@ -462,7 +476,9 @@ func (s *BasicFunctionalitySuite) Scenario_CopyUnSafeDest(svm *ScenarioVariation
 	ValidateResource[ObjectResourceManager](svm, dstObj,
 		ResourceDefinitionObject{
 			Body: body,
-		}, false)
+		}, ValidateResourceOptions{
+			validateObjectContent: false,
+		})
 }
 
 func (s *BasicFunctionalitySuite) Scenario_TagsPermission(svm *ScenarioVariationManager) {
@@ -536,4 +552,210 @@ func (s *BasicFunctionalitySuite) Scenario_TagsPermission(svm *ScenarioVariation
 	)
 
 	ValidateMessageOutput(svm, stdOut, "Authorization failed during an attempt to set tags, please ensure you have the appropriate Tags permission", true)
+}
+
+// This scenario tests that if the AZCOPY_CONCURRENCY_VALUE is set azcopy should honor this.
+func (s *BasicFunctionalitySuite) Scenario_ConcurrencyValueSet(svm *ScenarioVariationManager) {
+	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
+	// Resolve variation early so name makes sense
+	srcLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob()})
+	// Scale up from service to object
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()})), ResourceDefinitionContainer{})
+
+	// Scale up from service to object
+	srcDef := ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"abc":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
+			"def":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
+			"foobar": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
+		},
+	}
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, srcLoc), srcDef)
+
+	// no s2s, no local->local
+	if srcContainer.Location().IsRemote() == dstContainer.Location().IsRemote() {
+		svm.InvalidateScenario()
+		return
+	}
+
+	sasOpts := GenericAccountSignatureValues{}
+
+	var asSubdir bool
+	if azCopyVerb == AzCopyVerbCopy {
+		svm.InsertVariationSeparator("-Subdir:")
+		asSubdir = ResolveVariation(svm, []bool{true, false})
+	}
+
+	stdOut, _ := RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: azCopyVerb,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+				TryApplySpecificAuthType(dstContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive: pointerTo(true),
+				},
+
+				AsSubdir: common.Iff(azCopyVerb == AzCopyVerbCopy, &asSubdir, nil), // defaults true
+			},
+			Environment: &AzCopyEnvironment{
+				AzcopyConcurrencyValue: pointerTo("64"),
+			},
+		})
+
+	ValidateMessageOutput(svm, stdOut, "concurrent connections", false)
+}
+
+// Scenario_CheckVersion test version info is only printed explicitly when --check-version is used.
+func (*BasicFunctionalitySuite) Scenario_CheckVersion(svm *ScenarioVariationManager) {
+	if strings.Contains(common.AzcopyVersion, "preview") {
+		svm.Skip("Check version does not print output for preview versions.")
+	}
+	// The flag usage is `azcopy --check-version` without sub-commands.
+	// So, no need to pass azcopy verb
+	stdout, _ := RunAzCopy(svm, AzCopyCommand{
+		Flags: CopyFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				GlobalFlags: GlobalFlags{
+					CheckVersion: pointerTo(true),
+					OutputType:   pointerTo(common.EOutputFormat.Text()),
+				},
+			},
+		},
+	})
+
+	versionCheckOpts := []*regexp.Regexp{
+		regexp.MustCompile("INFO: azcopy.* .*: A newer version .* is available to download"),
+		regexp.MustCompile("INFO: Current AzCopy version *.*.* is up to date"),
+	}
+
+	if !svm.Dryrun() {
+		foundVersionInOutput := func() bool { // Check if either of the version output is in the string
+			matched := false
+			for _, line := range stdout.RawStdout() { // If there's another warning or info message
+				for _, regex := range versionCheckOpts {
+					if regex.MatchString(line) {
+						matched = true
+						return matched
+					}
+				}
+			}
+			return matched
+		}
+		versionAssertion := assert.New(svm.t)
+		versionAssertion.True(foundVersionInOutput())
+	}
+
+	ValidateMessageOutput(svm, stdout, "version", true) // loose check
+}
+
+// Scenario_CheckVersion test version info is not printed when the flag is not used.
+func (*BasicFunctionalitySuite) Scenario_DisabledCheckVersion(svm *ScenarioVariationManager) {
+	// The flag usage is `azcopy --check-version` without sub-commands.
+	// So, no need to create src and dest
+	stdout, _ := RunAzCopy(svm, AzCopyCommand{
+		Flags: CopyFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				GlobalFlags: GlobalFlags{
+					// CheckVersion: pointerTo(false), default is False
+					OutputType: pointerTo(common.EOutputFormat.Text()),
+				},
+			},
+		},
+	})
+
+	versionCheckOpts := []*regexp.Regexp{
+		regexp.MustCompile("INFO: azcopy.* .*: A newer version .* is available to download"),
+		regexp.MustCompile("INFO: Current AzCopy version *.*.* is up to date"),
+	}
+
+	if !svm.Dryrun() {
+		foundVersionInOutput := func() bool { // Check if either of the version output is in the string
+			matched := false
+			for _, line := range stdout.RawStdout() { // If there's another warning or info message
+				for _, regex := range versionCheckOpts {
+					if regex.MatchString(line) {
+						matched = true
+						return matched
+					}
+				}
+			}
+			return matched
+		}
+		versionAssertion := assert.New(svm.t)
+		versionAssertion.False(foundVersionInOutput())
+	}
+
+	ValidateMessageOutput(svm, stdout, "version", false)
+}
+
+// Scenario_SkipVersionCheckDisabledBackCompat validates we are backwards compatible with skip-version-check now deprecated.
+func (*BasicFunctionalitySuite) Scenario_SkipVersionCheckDisabledBackCompat(svm *ScenarioVariationManager) {
+	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
+	// Scale up from service to object
+	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})),
+		ResourceDefinitionContainer{}).GetObject(svm, "test", common.EEntityType.File())
+	// The object must exist already if we're syncing.
+	if azCopyVerb == AzCopyVerbSync {
+		dstObj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
+
+		if !svm.Dryrun() {
+			// Make sure the LMT is in the past
+			time.Sleep(time.Second * 10)
+		}
+	}
+
+	body := NewRandomObjectContentContainer(SizeFromString("10K"))
+	// Scale up from service to object
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})),
+		ResourceDefinitionObject{
+			ObjectName: pointerTo("test"),
+			Body:       body,
+		})
+
+	// no local->local
+	if srcObj.Location().IsLocal() && dstObj.Location().IsLocal() {
+		svm.InvalidateScenario()
+		return
+	}
+
+	sasOpts := GenericAccountSignatureValues{}
+
+	stdOut, _ := RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: azCopyVerb,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					GlobalFlags: GlobalFlags{
+						SkipVersionCheck: pointerTo(false),
+					},
+					Recursive: pointerTo(true),
+				},
+			},
+		})
+
+	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
+		Body: body,
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
+
+	ValidateDoesNotContainError(svm, stdOut, []string{"unknown flag: --skip-version-check"})
+
 }

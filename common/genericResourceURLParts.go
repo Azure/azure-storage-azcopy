@@ -2,10 +2,11 @@ package common
 
 import (
 	"fmt"
+	"net/url"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
-	"net/url"
 )
 
 // GenericResourceURLParts is intended to be a generic solution to code duplication when using *URLParts
@@ -28,7 +29,7 @@ func NewGenericResourceURLParts(resourceURL url.URL, location Location) GenericR
 	switch location {
 	case ELocation.Blob():
 		g.blobURLParts, err = azblob.ParseURL(resourceURL.String())
-	case ELocation.File():
+	case ELocation.File(), ELocation.FileNFS():
 		g.fileURLParts, err = file.ParseURL(resourceURL.String())
 	case ELocation.BlobFS():
 		g.bfsURLParts, err = azdatalake.ParseURL(resourceURL.String())
@@ -47,7 +48,7 @@ func (g *GenericResourceURLParts) GetContainerName() string {
 	switch g.location {
 	case ELocation.Blob():
 		return g.blobURLParts.ContainerName
-	case ELocation.File():
+	case ELocation.File(), ELocation.FileNFS():
 		return g.fileURLParts.ShareName
 	case ELocation.BlobFS():
 		return g.bfsURLParts.FileSystemName
@@ -64,7 +65,7 @@ func (g *GenericResourceURLParts) GetObjectName() string {
 	switch g.location {
 	case ELocation.Blob():
 		return g.blobURLParts.BlobName
-	case ELocation.File():
+	case ELocation.File(), ELocation.FileNFS():
 		return g.fileURLParts.DirectoryOrFilePath
 	case ELocation.BlobFS():
 		return g.bfsURLParts.PathName
@@ -81,7 +82,7 @@ func (g *GenericResourceURLParts) SetObjectName(objectName string) {
 	switch g.location {
 	case ELocation.Blob():
 		g.blobURLParts.BlobName = objectName
-	case ELocation.File():
+	case ELocation.File(), ELocation.FileNFS():
 		g.fileURLParts.DirectoryOrFilePath = objectName
 	case ELocation.BlobFS():
 		g.bfsURLParts.PathName = objectName
@@ -102,7 +103,7 @@ func (g *GenericResourceURLParts) String() string {
 		return g.gcpURLParts.String()
 	case ELocation.Blob():
 		return g.blobURLParts.String()
-	case ELocation.File():
+	case ELocation.File(), ELocation.FileNFS():
 		return g.fileURLParts.String()
 	case ELocation.BlobFS():
 		return g.bfsURLParts.String()
@@ -119,7 +120,7 @@ func (g *GenericResourceURLParts) URL() url.URL {
 		parsedURL, err := url.Parse(u)
 		PanicIfErr(err)
 		return *parsedURL
-	case ELocation.File():
+	case ELocation.File(), ELocation.FileNFS():
 		u := g.fileURLParts.String()
 		parsedURL, err := url.Parse(u)
 		PanicIfErr(err)

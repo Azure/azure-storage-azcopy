@@ -83,23 +83,6 @@ func (bd *azureFilesDownloader) preserveAttributes() (stage string, err error) {
 		if err != nil {
 			return
 		}
-	} else {
-		// If PreservePermissions is false and the source is an NFS share,
-		// apply default NFS permissions (mode, owner, group) to the destination file.
-		// This ensures the destination has valid permissions when none are preserved.
-		if info.IsNFSCopy {
-			if spdl, ok := interface{}(bd).(nfsPermissionsAwareDownloader); ok {
-				// Azure Files sources always implement INFSPropertyBearingSourceInfoProvider,
-				// so the type assertion below is guaranteed to succeed.
-				err := spdl.PutNFSDefaultPermissions(
-					bd.sip.(INFSPropertyBearingSourceInfoProvider),
-					bd.txInfo,
-				)
-				if err != nil {
-					return "Setting destination file NFS permissions", err
-				}
-			}
-		}
 	}
 
 	if info.PreserveInfo {
@@ -178,7 +161,7 @@ func (bd *azureFilesDownloader) SetFolderProperties(jptm IJobPartTransferMgr) er
 // Return - It returns a string message and an error if an issue occurs.
 func (bd *azureFilesDownloader) preservePermissions(info *TransferInfo) (string, error) {
 
-	if info.IsNFSCopy {
+	if bd.jptm.FromTo().IsNFS() {
 		if spdl, ok := interface{}(bd).(nfsPermissionsAwareDownloader); ok {
 			// We don't need to worry about the sip not being a INFSPropertyBearingSourceInfoProvider as Azure Files always is.
 			err := spdl.PutNFSPermissions(bd.sip.(INFSPropertyBearingSourceInfoProvider), bd.txInfo)
@@ -215,7 +198,7 @@ func (bd *azureFilesDownloader) preservePermissions(info *TransferInfo) (string,
 // It ensures the properties are preserved after the permissions have been set.
 // Return - It returns a string message and an error if an issue occurs.
 func (bd *azureFilesDownloader) preserveProperties(info *TransferInfo) (string, error) {
-	if info.IsNFSCopy {
+	if bd.jptm.FromTo().IsNFS() {
 		// must be done AFTER we preserve the permissions (else some of the flags/dates set here may be lost)
 		if spdl, ok := interface{}(bd).(nfsPropertyAwareDownloader); ok {
 			// We don't need to worry about the sip not being a ISMBPropertyBearingSourceInfoProvider as Azure Files always is.

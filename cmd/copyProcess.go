@@ -3,9 +3,10 @@ package cmd
 import (
 	"bufio"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"os"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
@@ -164,10 +165,13 @@ func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 		}
 	}
 
-	SetNFSFlag(cooked.isNFSCopy)
 	if cooked.preserveInfo && !cooked.preservePermissions.IsTruthy() {
-		if cooked.isNFSCopy {
-			glcm.Info(PreserveNFSPermissionsDisabledMsg)
+		if cooked.FromTo.IsNFS() {
+			// Skip logging this msg for cross-protocol transfers
+			// because --preserve-permissions flag is not applicable.
+			if !(cooked.FromTo == common.EFromTo.FileSMBFileNFS() || cooked.FromTo == common.EFromTo.FileNFSFileSMB()) {
+				glcm.Info(PreserveNFSPermissionsDisabledMsg)
+			}
 		} else {
 			glcm.Info(PreservePermissionsDisabledMsg)
 		}

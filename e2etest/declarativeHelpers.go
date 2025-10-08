@@ -185,7 +185,6 @@ type params struct {
 	trailingDot            common.TrailingDotOption
 	decompress             bool
 	preserveInfo           *bool
-	isNFSCopy              bool
 	// looks like this for a folder transfer:
 	/*
 		INFO: source: /New folder/New Text Document.txt dest: /Test/New folder/New Text Document.txt
@@ -443,6 +442,8 @@ func (tft TestFromTo) getValues(op Operation) []common.FromTo {
 			if !tft.suppressAutoFileToFile {
 				if from == common.ELocation.File() && to == common.ELocation.Blob() {
 					to = common.ELocation.File()
+				} else if from == common.ELocation.FileNFS() && to == common.ELocation.Blob() {
+					to = common.ELocation.FileNFS()
 				}
 			}
 

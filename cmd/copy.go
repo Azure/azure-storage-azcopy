@@ -171,24 +171,9 @@ type rawCopyCmdArgs struct {
 
 	// when specified, AzCopy deletes the destination blob that has uncommitted blocks, not just the uncommitted blocks
 	deleteDestinationFileIfNecessary bool
-	// Opt-in flag to state if the copy is nfs copy
-	isNFSCopy bool
 	// Opt-in flag to persist additional properties to Azure Files
 	preserveInfo bool
 	hardlinks    string
-}
-
-// this is a global variable so that we can use it in traversal phase
-var isNFSCopy bool
-
-func SetNFSFlag(isNFS bool) {
-	// SetNFSFlag sets the global isNFSCopy variable to the given value
-	isNFSCopy = isNFS
-}
-
-func GetNFSFlag() bool {
-	// GetNFSFlag returns the value of the global isNFSCopy variable
-	return isNFSCopy
 }
 
 // blockSizeInBytes converts a FLOATING POINT number of MiB, to a number of bytes
@@ -238,10 +223,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 		cpkByValue:               raw.cpkInfo,
 		putMd5:                   raw.putMd5,
 		CheckLength:              raw.CheckLength,
-
-		// NFS/SMB part
-		isNFSCopy:     raw.isNFSCopy,
-		preserveOwner: raw.preserveOwner,
+		preserveOwner:            raw.preserveOwner,
 
 		asSubdir:              raw.asSubdir, // --as-subdir is OK on all sources and destinations, but additional verification has to be done down the line. (e.g. https://account.blob.core.windows.net is not a valid root)
 		IncludeDirectoryStubs: raw.includeDirectoryStubs,
@@ -390,11 +372,8 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 		glcm.SetOutputFormat(common.EOutputFormat.None())
 	}
 
-	if cooked.isNFSCopy {
+	if cooked.FromTo.IsNFS() {
 		cooked.preserveInfo = raw.preserveInfo && areBothLocationsNFSAware(cooked.FromTo)
-		//TBD: We will be preserving ACLs and ownership info in case of NFS. (UserID,GroupID and FileMode)
-		// Using the same EPreservePermissionsOption that we have today for NFS as well
-		// Please provide the feedback if we should introduce new EPreservePermissionsOption instead.
 		cooked.preservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
 			true,
 			cooked.FromTo)
@@ -481,7 +460,7 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaults() {
 }
 
 func validateForceIfReadOnly(toForce bool, fromTo common.FromTo) error {
-	targetIsFiles := fromTo.To() == common.ELocation.File() ||
+	targetIsFiles := (fromTo.To().IsFile()) ||
 		fromTo == common.EFromTo.FileTrash()
 	targetIsWindowsFS := fromTo.To() == common.ELocation.Local() &&
 		runtime.GOOS == "windows"
@@ -521,8 +500,10 @@ func validateSymlinkHandlingMode(symlinkHandling common.SymlinkHandlingType, fro
 			return nil // Fine on all OSes that support symlink via the OS package. (Win, MacOS, and Linux do, and that's what we officially support.)
 		case common.EFromTo.BlobBlob(), common.EFromTo.BlobFSBlobFS(), common.EFromTo.BlobBlobFS(), common.EFromTo.BlobFSBlob():
 			return nil // Blob->Blob doesn't involve any local requirements
+		case common.EFromTo.LocalFileNFS(), common.EFromTo.FileNFSLocal(), common.EFromTo.FileNFSFileNFS():
+			return nil // for NFS related transfers symlink preservation is supported.
 		default:
-			return fmt.Errorf("flag --%s can only be used on Blob<->Blob or Local<->Blob", common.PreserveSymlinkFlagName)
+			return fmt.Errorf("flag --%s can only be used on Blob<->Blob, Local<->Blob, Local<->FileNFS, FileNFS<->FileNFS", common.PreserveSymlinkFlagName)
 		}
 	}
 
@@ -768,12 +749,11 @@ type CookedCopyCmdArgs struct {
 
 	deleteDestinationFileIfNecessary bool
 	// Whether the user wants to preserve the properties of a file...
-	preserveInfo bool
-	// Specifies whether the copy operation is an NFS copy
-	isNFSCopy                     bool
+	preserveInfo                  bool
 	hardlinks                     common.HardlinkHandlingType
 	atomicSkippedSymlinkCount     uint32
 	atomicSkippedSpecialFileCount uint32
+	atomicSkippedHardlinkCount    uint32
 	BlockSizeMB                   float64
 	PutBlobSizeMB                 float64
 	IncludePathPatterns           []string
@@ -865,7 +845,6 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	if err != nil {
 		return fmt.Errorf("fatal: Could not create client: %s", err.Error())
 	}
-
 	// step 3: start download
 
 	blobStream, err := blobClient.DownloadStream(ctx, &blob.DownloadStreamOptions{
@@ -1035,7 +1014,9 @@ func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.
 func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// Make AUTO default for Azure Files since Azure Files throttles too easily unless user specified concurrency value
-	if jobsAdmin.JobsAdmin != nil && (cca.FromTo.From() == common.ELocation.File() || cca.FromTo.To() == common.ELocation.File()) && common.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue()) == "" {
+	if jobsAdmin.JobsAdmin != nil &&
+		(cca.FromTo.From().IsFile() || cca.FromTo.To().IsFile()) &&
+		common.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue()) == "" {
 		jobsAdmin.JobsAdmin.SetConcurrencySettingsToAuto()
 	}
 
@@ -1127,7 +1108,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, srcReauth)
 	var azureFileSpecificOptions any
-	if cca.FromTo.From() == common.ELocation.File() {
+	if cca.FromTo.From().IsFile() {
 		azureFileSpecificOptions = &common.FileClientOptions{
 			AllowTrailingDot: cca.trailingDot.IsEnabled(),
 		}
@@ -1145,10 +1126,11 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		return err
 	}
 
-	if cca.FromTo.To() == common.ELocation.File() {
+	if cca.FromTo.To().IsFile() {
 		azureFileSpecificOptions = &common.FileClientOptions{
-			AllowTrailingDot:       cca.trailingDot.IsEnabled(),
-			AllowSourceTrailingDot: cca.trailingDot.IsEnabled() && cca.FromTo.From() == common.ELocation.File(),
+			AllowTrailingDot: cca.trailingDot.IsEnabled(),
+			AllowSourceTrailingDot: cca.trailingDot.IsEnabled() &&
+				cca.FromTo.From().IsFile(),
 		}
 	}
 
@@ -1203,30 +1185,13 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 	}
 
-	//Protocol compatibility for SMB and NFS
-	// Handles source validation
-	if cca.FromTo.IsS2S() {
-		if cca.FromTo.From() == common.ELocation.File() {
-			if err := validateShareProtocolCompatibility(ctx,
-				cca.FromTo, cca.Source, jobPartOrder.SrcServiceClient, cca.isNFSCopy, true); err != nil {
-				return err
-			}
-		} else if isNFSCopy {
-			return errors.New("NFS copy is not supported for source location " + cca.FromTo.From().String())
-		}
-	}
-
-	// Handle destination validation
-	if (cca.FromTo.IsUpload() || cca.FromTo.IsS2S()) && cca.FromTo.To() == common.ELocation.File() {
-		if err := validateShareProtocolCompatibility(ctx,
-			cca.FromTo, cca.Destination, jobPartOrder.DstServiceClient, cca.isNFSCopy, false); err != nil {
-			return err
-		}
-	} else if cca.FromTo.IsDownload() && cca.FromTo.From() == common.ELocation.File() {
-		if err := validateShareProtocolCompatibility(ctx,
-			cca.FromTo, cca.Source, jobPartOrder.SrcServiceClient, cca.isNFSCopy, true); err != nil {
-			return err
-		}
+	// Check protocol compatibility for File Shares
+	if err := validateProtocolCompatibility(ctx, cca.FromTo,
+		cca.Source,
+		cca.Destination,
+		jobPartOrder.SrcServiceClient,
+		jobPartOrder.DstServiceClient); err != nil {
+		return err
 	}
 
 	switch {
@@ -1421,13 +1386,15 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 				summary.TransfersCompleted,
 				summary.TransfersFailed,
 				summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed+summary.TransfersSkipped),
-				summary.TransfersSkipped, summary.TotalTransfers, scanningString, perfString, throughputString, diskString)
+				summary.TransfersSkipped+atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)+atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount),
+				summary.TotalTransfers, scanningString, perfString, throughputString, diskString)
 		}
 	})
 
 	if jobDone {
 		summary.SkippedSymlinkCount = atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)
 		summary.SkippedSpecialFileCount = atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount)
+		summary.SkippedHardlinkCount = atomic.LoadUint32(&cca.atomicSkippedHardlinkCount)
 
 		exitCode := cca.getSuccessExitCode()
 		if summary.TransfersFailed > 0 || summary.JobStatus == common.EJobStatus.Cancelled() || summary.JobStatus == common.EJobStatus.Cancelling() {
@@ -1459,6 +1426,7 @@ Number of File Transfers Skipped: %v
 Number of Folder Transfers Skipped: %v
 Number of Symbolic Links Skipped: %v
 Number of Hardlinks Converted: %v
+Number of Hardlinks Skipped: %v
 Number of Special Files Skipped: %v
 Total Number of Bytes Transferred: %v
 Final Job Status: %v%s%s
@@ -1477,6 +1445,7 @@ Final Job Status: %v%s%s
 					summary.FoldersSkipped,
 					summary.SkippedSymlinkCount,
 					summary.HardlinksConvertedCount,
+					summary.SkippedHardlinkCount,
 					summary.SkippedSpecialFileCount,
 					summary.TotalBytesTransferred,
 					summary.JobStatus,
@@ -1646,26 +1615,14 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-
-			// The following code is to deal with deprecated flags
-			// preserveInfo
-			preserveInfoDefaultVal := GetPreserveInfoFlagDefault(cmd, raw.isNFSCopy)
-			if cmd.Flags().Changed(PreserveInfoFlag) && cmd.Flags().Changed(PreserveSMBInfoFlag) || cmd.Flags().Changed(PreserveInfoFlag) {
-				// we give precedence to raw.preserveInfo flag value if both flags are set
-			} else if cmd.Flags().Changed(PreserveSMBInfoFlag) {
-				raw.preserveInfo = raw.preserveSMBInfo
-			} else {
-				raw.preserveInfo = preserveInfoDefaultVal
+			// We infer FromTo and validate it here since it is critical to a lot of other options parsing below.
+			userFromTo, err := ValidateFromTo(raw.src, raw.dst, raw.fromTo)
+			if err != nil {
+				glcm.Error("failed to parse --from-to user input due to error: " + err.Error())
 			}
 
-			// preservePermissions
-			// TODO : Double check this logic. In the flag processing logic, we used to set a temporary variable isUserPersistingPermissions and that was a simple or of the deprecated and new flag.
-			if !raw.isNFSCopy {
-				raw.preservePermissions = raw.preservePermissions || raw.preserveSMBPermissions
-			}
-			if raw.isNFSCopy && ((raw.preserveSMBInfo && runtime.GOOS == "linux") || raw.preserveSMBPermissions) {
-				glcm.Error(InvalidFlagsForNFSMsg)
-			}
+			raw.preserveInfo, raw.preservePermissions = ComputePreserveFlags(cmd, userFromTo,
+				raw.preserveInfo, raw.preserveSMBInfo, raw.preservePermissions, raw.preserveSMBPermissions)
 
 			cooked, err := raw.cook()
 			if err != nil {
@@ -1691,141 +1648,255 @@ func init() {
 	// filters change which files get transferred
 	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false,
 		"False by default. Follow symbolic links when uploading from local file system.")
+
 	cpCmd.PersistentFlags().StringVar(&raw.includeBefore, common.IncludeBeforeFlagName, "",
 		"Include only those files were modified before or on the given date/time. \n "+
-			"The value should be in ISO8601 format. If no timezone is specified, the value is assumed to be in the local timezone of the machine running AzCopy. "+
-			"\n E.g. '2020-08-19T15:04:00Z' for a UTC time, or '2020-08-19' for midnight (00:00) in the local timezone. "+
-			"\n As of AzCopy 10.7, this flag applies only to files, not folders, so folder properties won't be copied when using this flag with --preserve-info or --preserve-permissions.")
+			"The value should be in ISO8601 format. If no timezone is specified, "+
+			"the value is assumed to be in the local timezone of the machine running AzCopy. "+
+			"\n E.g. '2020-08-19T15:04:00Z' for a UTC time, or '2020-08-19' for midnight (00:00) "+
+			"in the local timezone. \n As of AzCopy 10.7, this flag applies only to files, not folders,"+
+			"so folder properties won't be copied when using this flag with --preserve-info or --preserve-permissions.")
+
 	cpCmd.PersistentFlags().StringVar(&raw.includeAfter, common.IncludeAfterFlagName, "",
 		"Include only those files modified on or after the given date/time. \n "+
-			"The value should be in ISO8601 format. If no timezone is specified, the value is assumed to be in the local timezone of the machine running AzCopy. "+
-			"\n E.g. '2020-08-19T15:04:00Z' for a UTC time, or '2020-08-19' for midnight (00:00) in the local timezone. "+
-			"\n As of AzCopy 10.5, this flag applies only to files, not folders, so folder properties won't be copied when using this flag with --preserve-info or --preserve-permissions.")
+			"The value should be in ISO8601 format. If no timezone is specified, the value is assumed "+
+			"to be in the local timezone of the machine running AzCopy. "+
+			"\n E.g. '2020-08-19T15:04:00Z' for a UTC time, or '2020-08-19' for midnight (00:00) in the local "+
+			"timezone.\n As of AzCopy 10.5, this flag applies only to files, not folders, so folder properties "+
+			"won't be copied when using this flag with --preserve-info or --preserve-permissions.")
+
 	cpCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "",
 		"Include only these files when copying. "+
-			"\n This option supports wildcard characters (*). Separate files by using a ';' (For example: *.jpg;*.pdf;exactName).")
+			"\n This option supports wildcard characters (*). Separate files by using a ';' "+
+			"(For example: *.jpg;*.pdf;exactName).")
+
 	cpCmd.PersistentFlags().StringVar(&raw.includePath, "include-path", "",
 		"Include only these paths when copying. "+
-			"This option does not support wildcard characters (*). \n Checks the relative path prefix (For example: myFolder;myFolder/subDirName/file.pdf).")
+			"This option does not support wildcard characters (*). "+
+			"\n Checks the relative path prefix (For example: myFolder;myFolder/subDirName/file.pdf).")
+
 	cpCmd.PersistentFlags().StringVar(&raw.excludePath, "exclude-path", "",
 		"Exclude these paths when copying. "+ // Currently, only exclude-path is supported alongside account traversal.
-			"This option does not support wildcard characters (*). \n Checks relative path prefix (For example: myFolder;myFolder/subDirName/file.pdf). "+
+			"This option does not support wildcard characters (*). "+
+			"\n Checks relative path prefix (For example: myFolder;myFolder/subDirName/file.pdf). "+
 			"\n When used in combination with account traversal, paths do not include the container name.")
+
 	cpCmd.PersistentFlags().StringVar(&raw.includeRegex, "include-regex", "",
 		"Include only the relative path of the files that align with regular expressions. "+
 			"\n Separate regular expressions with ';'.")
+
 	cpCmd.PersistentFlags().StringVar(&raw.excludeRegex, "exclude-regex", "",
-		"Exclude all the relative path of the files that align with regular expressions. Separate regular expressions with ';'.")
+		"Exclude all the relative path of the files that align with regular expressions. "+
+			"Separate regular expressions with ';'.")
+
 	// This flag is implemented only for Storage Explorer.
 	cpCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "",
 		"Defines the location of text file which has the list of files to be copied. "+
-			"\n The text file should contain paths from root for each file name or directory written on a separate line.")
+			"\n The text file should contain paths from root for each file name or directory"+
+			"written on a separate line.")
+
 	cpCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "",
 		"Exclude these files when copying. This option supports wildcard characters (*). "+
 			"\n Separate files by using a ';' (For example: *.jpg;*.pdf;exactName).")
+
 	cpCmd.PersistentFlags().StringVar(&raw.forceWrite, "overwrite", "true",
 		"Overwrite the conflicting files and blobs at the destination if this flag is set to true (default 'true'). "+
 			"\n Possible values include 'true', 'false', 'prompt', and 'ifSourceNewer'."+
-			"\n  For destinations that support folders, conflicting folder-level properties will be overwritten if this flag is 'true' or if a positive response is provided to the prompt.")
+			"\n  For destinations that support folders, conflicting folder-level properties"+
+			"will be overwritten if this flag is 'true' or if a positive response is provided to the prompt.")
 	cpCmd.PersistentFlags().BoolVar(&raw.autoDecompress, "decompress", false,
-		"False by default. Automatically decompress files when downloading, if their content-encoding indicates that they are compressed."+
-			"\n  The supported content-encoding values are 'gzip' and 'deflate'. "+
+		"False by default. Automatically decompress files when downloading, if their content-encoding indicates"+
+			"that they are compressed.\n  The supported content-encoding values are 'gzip' and 'deflate'. "+
 			"\n File extensions of '.gz'/'.gzip' or '.zz' aren't necessary, but will be removed if present.")
+
 	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false,
 		"False by default. Look into sub-directories recursively when uploading from local file system.")
+
 	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", fromToHelp)
+
 	cpCmd.PersistentFlags().StringVar(&raw.excludeBlobType, "exclude-blob-type", "",
 		"Optionally specifies the type of blob (BlockBlob/ PageBlob/ AppendBlob) to exclude when copying blobs from the container "+
 			"or the account. \n Use of this flag is not applicable for copying data from non azure-service to service. "+
 			"\n More than one blob should be separated by ';'. ")
+
 	// options change how the transfers are performed
 	cpCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0,
 		"Use this block size (specified in MiB) when uploading to Azure Storage, and downloading from Azure Storage. "+
 			"\n The default value is automatically calculated based on file size. Decimal fractions are allowed (For example: 0.25)."+
 			"\n When uploading or downloading, maximum allowed block size is 0.75 * AZCOPY_BUFFER_GB. "+
 			"\n Please refer https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-optimize#optimize-memory-use.")
+
 	cpCmd.PersistentFlags().Float64Var(&raw.putBlobSizeMB, "put-blob-size-mb", 0,
-		"Use this size (specified in MiB) as a threshold to determine whether to upload a blob as a single PUT request when uploading to Azure Storage. "+
-			"\n The default value is automatically calculated based on file size. "+
+		"Use this size (specified in MiB) as a threshold to determine whether to upload a blob as a single "+
+			"PUT request when uploading to Azure Storage.\n The default value is automatically calculated based on file size. "+
 			"\n Decimal fractions are allowed (For example: 0.25).")
+
 	cpCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "Detect",
-		"Defines the type of blob at the destination. \n This is used for uploading blobs and when copying between accounts (default 'Detect')."+
-			"\n  Valid values include 'Detect', 'BlockBlob', 'PageBlob', and 'AppendBlob'. "+
-			"\n When copying between accounts, a value of 'Detect' causes AzCopy to use the type of source blob to determine the type of the destination blob. "+
-			"\n When uploading a file, 'Detect' determines if the file is a VHD or a VHDX file based on the file extension. If the file is either a VHD or VHDX file, AzCopy treats the file as a page blob.")
+		"Defines the type of blob at the destination. \n This is used for uploading blobs and when copying "+
+			"between accounts (default 'Detect').\n  Valid values include 'Detect', 'BlockBlob', 'PageBlob', and "+
+			"AppendBlob.\n When copying between accounts, a value of 'Detect' causes AzCopy to use the type of source"+
+			"blob to determine the type of the destination blob.\n When uploading a file, 'Detect' determines if the"+
+			"file is a VHD or a VHDX file based on the file extension. If the file is either a VHD or VHDX file, AzCopy treats the file as a page blob.")
+
 	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None",
 		"Upload block blob to Azure Storage using this blob tier. (default 'None'). "+
 			"\n Valid options are Hot, Cold, Cool, Archive")
+
 	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None",
 		"Upload page blob to Azure Storage using this blob tier. (default 'None'). "+
 			"\n Valid options are P10, P15, P20, P30, P4, P40, P50, P6")
+
 	cpCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "",
 		"Upload to Azure Storage with these key-value pairs as metadata. "+
 			"\n Multiple key-value pairs should be separated by ';', i.e. 'foo=bar;some=thing'")
+
 	cpCmd.PersistentFlags().StringVar(&raw.contentType, "content-type", "",
 		"Specifies the content type of the file. \n Implies no-guess-mime-type flag is set to true. Returned on download.")
+
 	cpCmd.PersistentFlags().StringVar(&raw.contentEncoding, "content-encoding", "",
 		"Set the content-encoding header. Returned on download.")
+
 	cpCmd.PersistentFlags().StringVar(&raw.contentDisposition, "content-disposition", "",
 		"Set the content-disposition header. Returned on download.")
+
 	cpCmd.PersistentFlags().StringVar(&raw.contentLanguage, "content-language", "",
 		"Set the content-language header. Returned on download.")
-	cpCmd.PersistentFlags().StringVar(&raw.cacheControl, "cache-control", "", "Set the cache-control header. Returned on download.")
-	cpCmd.PersistentFlags().BoolVar(&raw.noGuessMimeType, "no-guess-mime-type", false, "False by default. Prevents AzCopy from detecting the content-type based on the extension or content of the file.")
-	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false, "False by default. Preserves Last Modified Time. Only available when destination is file system.")
-	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false, "False by default. Preserves SMB ACLs between aware resources (Windows and Azure Files). "+
-		"\n For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. "+
-		"\n This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
-	cpCmd.PersistentFlags().BoolVar(&raw.asSubdir, "as-subdir", true, "True by default. Places folder sources as subdirectories under the destination.")
-	cpCmd.PersistentFlags().BoolVar(&raw.preserveOwner, common.PreserveOwnerFlagName, common.PreserveOwnerDefault, "Only has an effect in downloads, and only when --preserve-smb-permissions is used. "+
-		"\n If true (the default), the file Owner and Group are preserved in downloads. "+
-		"\n If set to false, --preserve-smb-permissions will still preserve ACLs but Owner and Group will be based on the user running AzCopy")
 
-	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", (runtime.GOOS == "windows"), "Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Windows and Azure Files). "+
-		"\n On windows, this flag will be set to true by default. If the source or destination is a volume mounted on Linux using SMB protocol, this flag will have to be explicitly set to true. "+
-		"\n Only the attribute bits supported by Azure Files will be transferred; any others will be ignored. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern). "+
-		"\n The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
-	cpCmd.PersistentFlags().BoolVar(&raw.isNFSCopy, IsNFSProtocolFlag, false, "False by default. Users must specify this flag if they intend to transfer data to or from NFS shares.")
+	cpCmd.PersistentFlags().StringVar(&raw.cacheControl, "cache-control", "",
+		"Set the cache-control header. Returned on download.")
+
+	cpCmd.PersistentFlags().BoolVar(&raw.noGuessMimeType, "no-guess-mime-type", false,
+		"False by default. "+
+			"Prevents AzCopy from detecting the content-type based on the extension or content of the file.")
+
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false,
+		"False by default. Preserves Last Modified Time. Only available when destination is file system.")
+
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false,
+		"False by default. Preserves SMB ACLs between aware resources (Windows and Azure Files SMB). "+
+			"\n For downloads, you will also need the --backup flag to restore permissions where the new Owner"+
+			"will not be the user running AzCopy.\n This flag applies to both files and folders, unless a file-only"+
+			"filter is specified (e.g. include-pattern).")
+
+	cpCmd.PersistentFlags().BoolVar(&raw.asSubdir, "as-subdir", true,
+		"True by default. Places folder sources as subdirectories under the destination.")
+
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveOwner, common.PreserveOwnerFlagName, common.PreserveOwnerDefault,
+		"Only has an effect in downloads, and only when --preserve-smb-permissions is used. "+
+			"\n If true (the default), the file Owner and Group are preserved in downloads. "+
+			"\n If set to false, --preserve-smb-permissions will still preserve ACLs but Owner and Group "+
+			"will be based on the user running AzCopy")
+
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", (runtime.GOOS == "windows"),
+		"Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Windows and Azure Files SMB). "+
+			"\n On windows, this flag will be set to true by default. If the source or destination is a "+
+			"volume mounted on Linux using SMB protocol, this flag will have to be explicitly set to true. "+
+			"\n Only the attribute bits supported by Azure Files will be transferred; any others will be ignored."+
+			"This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern). "+
+			"\n The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
+
 	//Marking this flag as hidden as we might not support it in the future
 	_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-info")
-	cpCmd.PersistentFlags().BoolVar(&raw.preserveInfo, PreserveInfoFlag, false, "Specify this flag if you want to preserve properties during the transfer operation.The previously available flag for SMB (--preserve-smb-info) is now redirected to --preserve-info flag for both SMB and NFS operations. The default value is true for Windows when copying to Azure Files SMB share and for Linux when copying to Azure Files NFS share. ")
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveInfo, PreserveInfoFlag, false,
+		"Specify this flag if you want to preserve properties during the transfer operation."+
+			"The previously available flag for SMB (--preserve-smb-info) is now redirected to --preserve-info flag"+
+			"for both SMB and NFS operations. The default value is true for Windows when copying to Azure Files SMB"+
+			"share and for Linux when copying to Azure Files NFS share. ")
 
-	cpCmd.PersistentFlags().BoolVar(&raw.preservePOSIXProperties, "preserve-posix-properties", false, "False by default. 'Preserves' property info gleaned from stat or statx into object metadata.")
-	cpCmd.PersistentFlags().BoolVar(&raw.preserveSymlinks, common.PreserveSymlinkFlagName, false, "False by default. If enabled, symlink destinations are preserved as the blob content, rather than uploading the file/folder on the other end of the symlink")
-	cpCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "False by default. When overwriting an existing file on Windows or Azure Files, force the overwrite to work even if the existing file has its read-only attribute set")
-	cpCmd.PersistentFlags().BoolVar(&raw.backupMode, common.BackupModeFlagName, false, "False by default. Activates Windows' SeBackupPrivilege for uploads, or SeRestorePrivilege for downloads, to allow AzCopy to see read all files, regardless of their file system permissions, and to restore all permissions. "+
-		"\n Requires that the account running AzCopy already has these permissions (e.g. has Administrator rights or is a member of the 'Backup Operators' group). "+
-		"\n All this flag does is activate privileges that the account already has.")
-	cpCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "Create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob or file. "+
-		"\n By default the hash is NOT created. Only available when uploading.")
-	cpCmd.PersistentFlags().StringVar(&raw.md5ValidationOption, "check-md5", common.DefaultHashValidationOption.String(), "Specifies how strictly MD5 hashes should be validated when downloading. Only available when downloading. "+
-		"\n Available options: NoCheck, LogOnly, FailIfDifferent, FailIfDifferentOrMissing (default 'FailIfDifferent').")
-	cpCmd.PersistentFlags().StringVar(&raw.includeFileAttributes, "include-attributes", "", "(Windows only) Include files whose attributes match the attribute list. For example: A;S;R")
-	cpCmd.PersistentFlags().StringVar(&raw.excludeFileAttributes, "exclude-attributes", "", "(Windows only) Exclude files whose attributes match the attribute list. For example: A;S;R")
-	cpCmd.PersistentFlags().StringVar(&raw.excludeContainer, "exclude-container", "", "Exclude these containers when transferring from Account to Account only. "+
-		"\n Multiple containers can be separated with ';', i.e. 'containername;containernametwo'.")
-	cpCmd.PersistentFlags().BoolVar(&raw.CheckLength, "check-length", true, "True by default. Check the length of a file on the destination after the transfer. If there is a mismatch between source and destination, the transfer is marked as failed.")
-	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveProperties, "s2s-preserve-properties", true, "Preserve full properties during service to service copy. "+
-		"\n For AWS S3 and Azure File non-single file source, the list operation doesn't return full properties of objects and files."+
-		"\n To preserve full properties, AzCopy needs to send one additional request per object or file. (default true)")
-	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveAccessTier, "s2s-preserve-access-tier", true, "Preserve access tier during service to service copy. "+
-		"\n Please refer to [Azure Blob storage: hot, cool, cold, and archive access tiers](https://docs.microsoft.com/azure/storage/blobs/storage-blob-storage-tiers) to ensure destination storage account supports setting access tier. "+
-		"\n In the cases that setting access tier is not supported, please use s2sPreserveAccessTier=false to bypass copying access tier. (default true). ")
-	cpCmd.PersistentFlags().BoolVar(&raw.s2sSourceChangeValidation, "s2s-detect-source-changed", false, "False by default. Detect if the source file/blob changes while it is being read. "+
-		"\n This parameter only applies to service to service copies, because the corresponding check is permanently enabled for uploads and downloads.")
-	cpCmd.PersistentFlags().StringVar(&raw.s2sInvalidMetadataHandleOption, "s2s-handle-invalid-metadata", common.DefaultInvalidMetadataHandleOption.String(), "Specifies how invalid metadata keys are handled. "+
-		"\n Available options: ExcludeIfInvalid, FailIfInvalid, RenameIfInvalid (default 'ExcludeIfInvalid').")
-	cpCmd.PersistentFlags().StringVar(&raw.listOfVersionIDs, "list-of-versions", "", "Specifies a path to a text file where each version id is listed on a separate line. "+
-		"\n Ensure that the source must point to a single blob and all the version ids specified in the file using this flag must belong to the source blob only. "+
-		"\n AzCopy will download the specified versions in the destination folder provided.")
-	cpCmd.PersistentFlags().StringVar(&raw.blobTags, "blob-tags", "", "Set tags on blobs to categorize data in your storage account. "+
-		"\n Multiple blob tags should be separated by '&', i.e. 'foo=bar&some=thing'.")
-	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveBlobTags, "s2s-preserve-blob-tags", false, "False by default. Preserve blob tags during service to service transfer from one blob storage to another.")
-	cpCmd.PersistentFlags().BoolVar(&raw.includeDirectoryStubs, "include-directory-stub", false, "False by default to ignore directory stubs. Directory stubs are blobs with metadata 'hdi_isfolder:true'. "+
-		"\n Setting value to true will preserve directory stubs during transfers. Including this flag with no value defaults to true (e.g, azcopy copy --include-directory-stub is the same as azcopy copy --include-directory-stub=true).")
-	cpCmd.PersistentFlags().BoolVar(&raw.disableAutoDecoding, "disable-auto-decoding", false, "False by default to enable automatic decoding of illegal chars on Windows. "+
-		"\n Can be set to true to disable automatic decoding.")
-	cpCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "False by default. Prints the file paths that would be copied by this command. This flag does not copy the actual files. The --overwrite flag has no effect. If you set the --overwrite flag to false, files in the source directory are listed even if those files exist in the destination directory.")
+	cpCmd.PersistentFlags().BoolVar(&raw.preservePOSIXProperties, "preserve-posix-properties", false,
+		"False by default. 'Preserves' property info gleaned from stat or statx into object metadata.")
+
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveSymlinks, common.PreserveSymlinkFlagName, false,
+		"Preserve symbolic links when performing copy operations involving NFS resources or blob storages. "+
+			"If enabled, the symlink destination is stored as the blob content instead of uploading the file or folder it points to. "+
+			"This flag is applicable when either the source or destination is an NFS file share. "+
+			"Note: Not supported for Azure Files SMB shares, as symlinks are not supported in those services.")
+
+	cpCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false,
+		"False by default. When overwriting an existing file on Windows or Azure Files, force the overwrite"+
+			"to work even if the existing file has its read-only attribute set")
+
+	cpCmd.PersistentFlags().BoolVar(&raw.backupMode, common.BackupModeFlagName, false,
+		"False by default. Activates Windows' SeBackupPrivilege for uploads, or SeRestorePrivilege for downloads,"+
+			"to allow AzCopy to see read all files, regardless of their file system permissions, and to restore all"+
+			"permissions.\n Requires that the account running AzCopy already has these permissions"+
+			"(e.g. has Administrator rights or is a member of the 'Backup Operators' group). "+
+			"\n All this flag does is activate privileges that the account already has.")
+
+	cpCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false,
+		"Create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination"+
+			"blob or file.\n By default the hash is NOT created. Only available when uploading.")
+
+	cpCmd.PersistentFlags().StringVar(&raw.md5ValidationOption, "check-md5",
+		common.DefaultHashValidationOption.String(),
+		"Specifies how strictly MD5 hashes should be validated when downloading. Only available when downloading. "+
+			"\n Available options: NoCheck, LogOnly, FailIfDifferent, FailIfDifferentOrMissing (default 'FailIfDifferent').")
+
+	cpCmd.PersistentFlags().StringVar(&raw.includeFileAttributes, "include-attributes", "",
+		"(Windows only) Include files whose attributes match the attribute list. For example: A;S;R")
+
+	cpCmd.PersistentFlags().StringVar(&raw.excludeFileAttributes, "exclude-attributes", "",
+		"(Windows only) Exclude files whose attributes match the attribute list. For example: A;S;R")
+
+	cpCmd.PersistentFlags().StringVar(&raw.excludeContainer, "exclude-container", "",
+		"Exclude these containers when transferring from Account to Account only. "+
+			"\n Multiple containers can be separated with ';', i.e. 'containername;containernametwo'.")
+
+	cpCmd.PersistentFlags().BoolVar(&raw.CheckLength, "check-length", true,
+		"True by default. Check the length of a file on the destination after the transfer. "+
+			"If there is a mismatch between source and destination, the transfer is marked as failed.")
+
+	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveProperties, "s2s-preserve-properties", true,
+		"Preserve full properties during service to service copy. "+
+			"\n For AWS S3 and Azure File non-single file source, the list operation doesn't return full "+
+			"properties of objects and files.\n To preserve full properties, AzCopy needs to send one additional"+
+			"request per object or file. (default true)")
+
+	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveAccessTier, "s2s-preserve-access-tier", true,
+		"Preserve access tier during service to service copy. "+
+			"\n Please refer to [Azure Blob storage: hot, cool, cold, and archive access tiers](https://docs.microsoft.com/azure/storage/blobs/storage-blob-storage-tiers) "+
+			"to ensure destination storage account supports setting access tier. "+
+			"\n In the cases that setting access tier is not supported, please use s2sPreserveAccessTier=false"+
+			"to bypass copying access tier. (default true). ")
+
+	cpCmd.PersistentFlags().BoolVar(&raw.s2sSourceChangeValidation, "s2s-detect-source-changed", false,
+		"False by default. Detect if the source file/blob changes while it is being read. "+
+			"\n This parameter only applies to service to service copies, because the corresponding check"+
+			"is permanently enabled for uploads and downloads.")
+
+	cpCmd.PersistentFlags().StringVar(&raw.s2sInvalidMetadataHandleOption, "s2s-handle-invalid-metadata",
+		common.DefaultInvalidMetadataHandleOption.String(), "Specifies how invalid metadata keys are handled. "+
+			"\n Available options: ExcludeIfInvalid, FailIfInvalid, RenameIfInvalid (default 'ExcludeIfInvalid').")
+
+	cpCmd.PersistentFlags().StringVar(&raw.listOfVersionIDs, "list-of-versions", "",
+		"Specifies a path to a text file where each version id is listed on a separate line. "+
+			"\n Ensure that the source must point to a single blob and all the version ids specified in the"+
+			"file using this flag must belong to the source blob only. "+
+			"\n AzCopy will download the specified versions in the destination folder provided.")
+
+	cpCmd.PersistentFlags().StringVar(&raw.blobTags, "blob-tags", "",
+		"Set tags on blobs to categorize data in your storage account. "+
+			"\n Multiple blob tags should be separated by '&', i.e. 'foo=bar&some=thing'.")
+
+	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveBlobTags, "s2s-preserve-blob-tags", false,
+		"False by default. Preserve blob tags during service to service transfer from one blob storage to another.")
+
+	cpCmd.PersistentFlags().BoolVar(&raw.includeDirectoryStubs, "include-directory-stub", false,
+		"False by default to ignore directory stubs. Directory stubs are blobs with metadata 'hdi_isfolder:true'. "+
+			"\n Setting value to true will preserve directory stubs during transfers."+
+			"Including this flag with no value defaults to true (e.g, azcopy copy --include-directory-stub"+
+			"is the same as azcopy copy --include-directory-stub=true).")
+
+	cpCmd.PersistentFlags().BoolVar(&raw.disableAutoDecoding, "disable-auto-decoding", false,
+		"False by default to enable automatic decoding of illegal chars on Windows. "+
+			"\n Can be set to true to disable automatic decoding.")
+
+	cpCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false,
+		"False by default. Prints the file paths that would be copied by this command. "+
+			"This flag does not copy the actual files. The --overwrite flag has no effect. "+
+			"If you set the --overwrite flag to false, files in the source directory are listed "+
+			"even if those files exist in the destination directory.")
+
 	// s2sGetPropertiesInBackend is an optional flag for controlling whether S3 object's or Azure file's full properties are get during enumerating in frontend or
 	// right before transferring in ste(backend).
 	// The traditional behavior of all existing enumerator is to get full properties during enumerating(more specifically listing),
@@ -1834,29 +1905,43 @@ func init() {
 	// To achieve better performance and at same time have good control for overall go routine numbers, getting property in ste is introduced,
 	// so properties can be get in parallel, at same time no additional go routines are created for this specific job.
 	// The usage of this hidden flag is to provide fallback to traditional behavior, when service supports returning full properties during list.
-	cpCmd.PersistentFlags().BoolVar(&raw.s2sGetPropertiesInBackend, "s2s-get-properties-in-backend", true, "True by default. Gets S3 objects' or Azure files' properties in backend, if properties need to be accessed. "+
-		"\n Properties need to be accessed if s2s-preserve-properties is true, and in certain other cases where we need the properties for modification time checks or MD5 checks.")
-	cpCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "Available options: "+strings.Join(common.ValidTrailingDotOptions(), ", ")+". "+
-		"\n 'Enable'(Default) treats trailing dot file operations in a safe manner between systems that support these files. "+
-		"\n On Windows, the transfers will not occur to stop risk of data corruption. "+
-		"\n See 'AllowToUnsafeDestination' to bypass this."+
-		"\n 'Disable' reverts to the legacy functionality, where trailing dot files are ignored. "+
-		"\n This can result in potential data corruption if the transfer contains two paths that differ only by a trailing dot (E.g 'path/foo' and 'path/foo.'). "+
-		"\n If this flag is set to 'Disable' and AzCopy encounters a trailing dot file, it will warn customers in the scanning log but will not attempt to abort the operation."+
-		"\n If the destination does not support trailing dot files (Windows or Blob Storage), AzCopy will fail if the trailing dot file is the root of the transfer and skip any trailing dot paths encountered during enumeration."+
-		"\n 'AllowToUnsafeDestination' supports transferring trailing dot files to systems that do not support them e.g Windows. "+
-		"\n Use with caution acknowledging risk of data corruption, when two files with different contents 'path/bar' and 'path/bar.' (differ only by a trailing dot) are seen as identical.")
+	cpCmd.PersistentFlags().BoolVar(&raw.s2sGetPropertiesInBackend, "s2s-get-properties-in-backend", true,
+		"True by default. Gets S3 objects' or Azure files' properties in backend, if properties need to be accessed."+
+			"\n Properties need to be accessed if s2s-preserve-properties is true, and in certain other cases where we "+
+			"need the properties for modification time checks or MD5 checks.")
+
+	cpCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "",
+		"Available options: "+strings.Join(common.ValidTrailingDotOptions(), ", ")+". "+
+			"\n 'Enable'(Default) treats trailing dot file operations in a safe manner between systems that support these files. "+
+			"\n On Windows, the transfers will not occur to stop risk of data corruption. "+
+			"\n See 'AllowToUnsafeDestination' to bypass this."+
+			"\n 'Disable' reverts to the legacy functionality, where trailing dot files are ignored. "+
+			"\n This can result in potential data corruption if the transfer contains two paths that differ "+
+			"only by a trailing dot (E.g 'path/foo' and 'path/foo.'). "+
+			"\n If this flag is set to 'Disable' and AzCopy encounters a trailing dot file, it will warn "+
+			"customers in the scanning log but will not attempt to abort the operation."+
+			"\n If the destination does not support trailing dot files (Windows or Blob Storage), "+
+			"AzCopy will fail if the trailing dot file is the root of the transfer and skip any trailing dot paths"+
+			"encountered during enumeration."+
+			"\n 'AllowToUnsafeDestination' supports transferring trailing dot files to systems that do not "+
+			"support them e.g Windows.\n Use with caution acknowledging risk of data corruption, when two files"+
+			"with different contents 'path/bar' and 'path/bar.' (differ only by a trailing dot) are seen as"+
+			"identical.")
 
 	// Public Documentation: https://docs.microsoft.com/en-us/azure/storage/blobs/encryption-customer-provided-keys
 	// Clients making requests against Azure Blob storage have the option to provide an encryption key on a per-request basis.
 	// Including the encryption key on the request provides granular control over encryption settings for Blob storage operations.
 	// Customer-provided keys can be stored in Azure Key Vault or in another key store linked to storage account.
-	cpCmd.PersistentFlags().StringVar(&raw.cpkScopeInfo, "cpk-by-name", "", "\n Client provided key by name lets clients making requests against "+
-		"\n Azure Blob storage an option to provide an encryption key on a per-request basis. "+
-		"\n Provided key name will be fetched from Azure Key Vault and will be used to encrypt the data.")
-	cpCmd.PersistentFlags().BoolVar(&raw.cpkInfo, "cpk-by-value", false, "False by default. Client provided key by name lets clients making requests against "+
-		"\n Azure Blob storage an option to provide an encryption key on a per-request basis. "+
-		"\n Provided key and its hash will be fetched from environment variables (CPK_ENCRYPTION_KEY and CPK_ENCRYPTION_KEY_SHA256 must be set).")
+	cpCmd.PersistentFlags().StringVar(&raw.cpkScopeInfo, "cpk-by-name", "",
+		"\n Client provided key by name lets clients making requests against "+
+			"\n Azure Blob storage an option to provide an encryption key on a per-request basis. "+
+			"\n Provided key name will be fetched from Azure Key Vault and will be used to encrypt the data.")
+
+	cpCmd.PersistentFlags().BoolVar(&raw.cpkInfo, "cpk-by-value", false,
+		"False by default. Client provided key by name lets clients making requests against "+
+			"\n Azure Blob storage an option to provide an encryption key on a per-request basis. "+
+			"\n Provided key and its hash will be fetched from environment variables"+
+			"(CPK_ENCRYPTION_KEY and CPK_ENCRYPTION_KEY_SHA256 must be set).")
 
 	// permanently hidden
 	// Hide the list-of-files flag since it is implemented only for Storage Explorer.
@@ -1878,8 +1963,9 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default."+
 		" Preserves ACLs between aware resources (Windows and Azure Files SMB, or Data Lake Storage to Data Lake Storage) and "+
 		"\n permissions between aware resources(Linux to Azure Files NFS). \n"+
-		"For accounts that have a hierarchical namespace, your security principal must be the owning user of the target container or "+
-		"\n it must be assigned the Storage Blob Data Owner role, scoped to the target container, storage account, parent resource group, or subscription."+
+		"For accounts that have a hierarchical namespace, your security principal must be the owning user "+
+		"of the target container or \n it must be assigned the Storage Blob Data Owner role, scoped to the target"+
+		"container, storage account, parent resource group, or subscription."+
 		"\n  For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy."+
 		"\n  This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
 
@@ -1887,8 +1973,10 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.deleteDestinationFileIfNecessary, "delete-destination-file", false, "False by default. "+
 		"\n Deletes destination blobs, specifically blobs with uncommitted blocks when staging block.")
 	_ = cpCmd.PersistentFlags().MarkHidden("delete-destination-file")
+
 	cpCmd.PersistentFlags().StringVar(&raw.hardlinks, HardlinksFlag, "follow",
 		"Specifies how hardlinks should be handled. "+
-			"\n This flag is only applicable when downloading from an NFS file share, uploading to an NFS share, or performing service-to-service copies involving NFS. \n"+
+			"\n This flag is only applicable when downloading from an Azure NFS file share, uploading "+
+			"to an Azure Files NFS share, or performing service-to-service copies involving Azure Files NFS. \n"+
 			"\n The only supported option is 'follow' (default), which copies hardlinks as regular, independent files at the destination.")
 }

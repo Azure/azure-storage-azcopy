@@ -111,7 +111,7 @@ func (s *StoredObject) isMoreRecentThan(storedObject2 StoredObject, preferSMBTim
 }
 
 func (s *StoredObject) isSingleSourceFile() bool {
-	return s.relativePath == "" && (s.entityType == common.EEntityType.File() || s.entityType == common.EEntityType.Hardlink())
+	return s.relativePath == "" && (s.entityType == common.EEntityType.File() || s.entityType == common.EEntityType.Hardlink() || s.entityType == common.EEntityType.Symlink() || s.entityType == common.EEntityType.Other())
 }
 
 func (s *StoredObject) isSourceRootFolder() bool {
@@ -347,9 +347,10 @@ func recommendHttpsIfNecessary(url url.URL) {
 	}
 }
 
-type enumerationCounterFunc func(entityType common.EntityType)
+type enumerationCounterFunc func(entityType common.EntityType, symlinkOption common.SymlinkHandlingType, hardlinkOption common.HardlinkHandlingType)
 
-var enumerationCounterFuncNoop enumerationCounterFunc = func(entityType common.EntityType) {}
+var enumerationCounterFuncNoop enumerationCounterFunc = func(entityType common.EntityType, symlinkOption common.SymlinkHandlingType, hardlinkoption common.HardlinkHandlingType) {
+}
 
 type InitResourceTraverserOptions struct {
 	DestResourceType *common.Location // Used by Azure Files
@@ -378,6 +379,7 @@ type InitResourceTraverserOptions struct {
 	ExcludeContainers []string // Blob account
 	ListVersions      bool     // Blob
 	HardlinkHandling  common.HardlinkHandlingType
+	FromTo            common.FromTo
 }
 
 func (o *InitResourceTraverserOptions) PerformChecks() error {
@@ -515,7 +517,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 		} else {
 			output = newBlobTraverser(r, bsc, ctx, opts)
 		}
-	case common.ELocation.File():
+	case common.ELocation.File(), common.ELocation.FileNFS():
 		// TODO (last service migration) : Remove dependency on URLs.
 		resourceURL, err := resource.FullURL()
 		if err != nil {
@@ -538,13 +540,18 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 		fileOptions := &common.FileClientOptions{
 			AllowTrailingDot: opts.TrailingDotOption.IsEnabled(),
 		}
-
-		res, err := SplitResourceString(fileURLParts.String(), common.ELocation.File())
+		var resLoc common.Location
+		if resourceLocation == common.ELocation.File() {
+			resLoc = common.ELocation.File()
+		} else {
+			resLoc = common.ELocation.FileNFS()
+		}
+		res, err := SplitResourceString(fileURLParts.String(), resLoc)
 		if err != nil {
 			return nil, err
 		}
 
-		c, err := common.GetServiceClientForLocation(common.ELocation.File(), res, opts.Credential.CredentialType, opts.Credential.OAuthTokenInfo.TokenCredential, &options, fileOptions)
+		c, err := common.GetServiceClientForLocation(resLoc, res, opts.Credential.CredentialType, opts.Credential.OAuthTokenInfo.TokenCredential, &options, fileOptions)
 		if err != nil {
 			return nil, err
 		}
