@@ -552,10 +552,10 @@ func (s *SyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationMan
 
 // Scenario_TestSyncPreserveRootProperties validates that when --preserve-root-properties is set, the destination root folder's properties are overwritten
 // with the source root folder properties.
-func (s *SyncTestSuite) Scenario_TestSyncPreserveRootProperties(svm *ScenarioVariationManager) {
+func (s *SyncTestSuite) Scenario_TestSyncBlobFSPreserveRootProperties(svm *ScenarioVariationManager) {
 	// Use BlobFS (HNS) for ACLs we can validate
 	src := CreateResource[ContainerResourceManager](svm,
-		GetRootResource(svm, common.ELocation.BlobFS(), GetResourceOptions{PreferredAccount: pointerTo(PrimaryHNSAcct)}),
+		GetRootResource(svm, common.ELocation.BlobFS()),
 		ResourceDefinitionContainer{
 			Objects: ObjectResourceMappingFlat{
 				// Root directory with a specific ACL we will validate later
@@ -575,7 +575,7 @@ func (s *SyncTestSuite) Scenario_TestSyncPreserveRootProperties(svm *ScenarioVar
 	)
 
 	dst := CreateResource[ContainerResourceManager](svm,
-		GetRootResource(svm, common.ELocation.BlobFS(), GetResourceOptions{PreferredAccount: pointerTo(PrimaryHNSAcct)}),
+		GetRootResource(svm, common.ELocation.BlobFS()),
 		ResourceDefinitionContainer{
 			Objects: ObjectResourceMappingFlat{
 				// Destination root with a different ACL to observe the change after sync
@@ -622,3 +622,76 @@ func (s *SyncTestSuite) Scenario_TestSyncPreserveRootProperties(svm *ScenarioVar
 		},
 	}, false)
 }
+
+// Scenario_TestSyncPreserveRootProperties validates that when --preserve-root-properties is set, the destination root folder's properties are overwritten
+// with the source root folder properties.
+//func (s *SyncTestSuite) Scenario_TestSyncPreserveRootProperties(svm *ScenarioVariationManager) {
+//	// Use BlobFS (HNS) for ACLs we can validate
+//	src := CreateResource[ContainerResourceManager](svm,
+//		GetRootResource(svm, common.ELocation.File()),
+//		ResourceDefinitionContainer{
+//			Objects: ObjectResourceMappingFlat{
+//				// Root directory with a specific ACL we will validate later
+//				"root": ResourceDefinitionObject{
+//					ObjectProperties: ObjectProperties{
+//						EntityType: common.EEntityType.Folder(),
+//						FileProperties: FileProperties{
+//							// grant all for group to make it observably different
+//							ACL: pointerTo("user::rwx,group::rwx,other::---"),
+//						},
+//					},
+//				},
+//				// Include at least one file under root so the sync enumerates content
+//				"root/file.txt": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(0)},
+//			},
+//		},
+//	)
+//
+//	dst := CreateResource[ContainerResourceManager](svm,
+//		GetRootResource(svm, common.ELocation.File()),
+//		ResourceDefinitionContainer{
+//			Objects: ObjectResourceMappingFlat{
+//				// Destination root with a different ACL to observe the change after sync
+//				"root": ResourceDefinitionObject{
+//					ObjectProperties: ObjectProperties{
+//						EntityType: common.EEntityType.Folder(),
+//						BlobFSProperties: BlobFSProperties{
+//							ACL: pointerTo("user::rwx,group::---,other::---"),
+//						},
+//					},
+//				},
+//			},
+//		},
+//	)
+//
+//	RunAzCopy(svm, AzCopyCommand{
+//		Verb: AzCopyVerbSync,
+//		Targets: []ResourceManager{
+//			// Sync the directory to the directory
+//			src.GetObject(svm, "root", common.EEntityType.Folder()),
+//			dst.GetObject(svm, "root", common.EEntityType.File()),
+//		},
+//		Flags: SyncFlags{
+//			CopySyncCommonFlags: CopySyncCommonFlags{
+//				Recursive:           pointerTo(true),
+//				PreservePermissions: pointerTo(true),
+//			},
+//			PreserveRootProperties: pointerTo(true),
+//		},
+//	})
+//
+//	// Validate that the destination root folder picked up the source ACL
+//	ValidateResource[ContainerResourceManager](svm, dst, ResourceDefinitionContainer{
+//		Objects: ObjectResourceMappingFlat{
+//			"root": ResourceDefinitionObject{
+//				ObjectProperties: ObjectProperties{
+//					EntityType: common.EEntityType.Folder(),
+//					BlobFSProperties: BlobFSProperties{
+//						ACL: pointerTo("user::rwx,group::rwx,other::---"),
+//					},
+//				},
+//			},
+//			"root/file.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(true)},
+//		},
+//	}, false)
+//}

@@ -266,7 +266,8 @@ type filePropsProvider interface {
 
 // a constructor is used so that in case the StoredObject has to change, the callers would get a compilation error
 // and it forces all necessary properties to be always supplied and not forgotten
-func newStoredObject(morpher objectMorpher, name string, relativePath string, entityType common.EntityType, lmt time.Time, size int64, props contentPropsProvider, blobProps blobPropsProvider, meta common.Metadata, containerName string) StoredObject {
+func newStoredObject(morpher objectMorpher, name string, relativePath string, entityType common.EntityType, lmt time.Time,
+	size int64, props contentPropsProvider, blobProps blobPropsProvider, meta common.Metadata, containerName string) StoredObject {
 	obj := StoredObject{
 		name:               name,
 		relativePath:       relativePath,

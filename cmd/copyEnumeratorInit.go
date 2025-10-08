@@ -275,11 +275,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// decide our folder transfer strategy
 	var message string
-	stripTopDir := cca.StripTopDir
-	//if cca.preserveRootProperties {
-	//	stripTopDir = false // when preserve-root-properties is enabled, we want to include the root dir (stripTopDir=false)
-	//}
-	jobPartOrder.Fpo, message = NewFolderPropertyOption(cca.FromTo, cca.Recursive, stripTopDir, filters, cca.preserveInfo,
+	jobPartOrder.Fpo, message = NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, cca.preserveInfo,
 		cca.preservePermissions.IsTruthy(), cca.preservePOSIXProperties, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.IncludeDirectoryStubs)
 	if !cca.dryrunMode {
 		glcm.Info(message)

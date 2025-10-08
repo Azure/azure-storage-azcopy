@@ -326,6 +326,21 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 			err = fmt.Errorf("cannot set output level '%s' with dry-run mode", OutputLevel.String())
 		}
 	}
+
+	if cooked.preserveRootProperties {
+		// Both the source and destination must support folders
+		if !cooked.fromTo.AreBothFolderAware() {
+			return fmt.Errorf("preserve-root-properties flag needs both the source and destination resources to be support folders."+
+				"\n Syncing from %s to %s is not supported"+
+				"\n Supported combinations: Local<->File, Local<->BlobFS, BlobFS<->File, File<->File, BlobFS<->BlobFS", cooked.fromTo.From(), cooked.fromTo.To())
+		}
+
+		// For user to use preserveRootProperties flag, preserveInfo and preservePermissions must be set
+		// Reviewers: is it ok to make the preserveRootProperties flag to depend on  preserveInfo and preservePermissions?
+		if !cooked.preservePermissions.IsTruthy() && !cooked.preserveInfo {
+			return fmt.Errorf("preserve-root-properties flag needs preserve-info and preserve-permissions flags to be set for full functionality")
+		}
+	}
 	if err != nil {
 		return err
 	}
@@ -1038,5 +1053,6 @@ func init() {
 	syncCmd.PersistentFlags().BoolVar(&raw.preserveRootProperties, "preserve-root-properties", false, "False by default. "+
 		"\n Preserves the root directory and its properties from source to destination. "+
 		"\n When enabled, the destination root properties will be overwritten with the source."+
-		"\n For example, syncing from 'src/file.txt' to 'dest/' will result in 'dest/file.txt' with the props of src on dest.")
+		"\n For example, syncing from 'src/file.txt' to 'dest/' will result in 'dest/file.txt' "+
+		"\n with the properties of source on destination.")
 }
