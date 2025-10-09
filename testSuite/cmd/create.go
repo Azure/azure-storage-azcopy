@@ -2,10 +2,14 @@ package cmd
 
 import (
 	"bytes"
-	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"crypto/md5"
 	"fmt"
+	"net/url"
+	"os"
+	"time"
+
+	gcpUtils "cloud.google.com/go/storage"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -14,9 +18,6 @@ import (
 	sharedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
-	"net/url"
-	"os"
-	"time"
 
 	"io"
 	"math/rand"
@@ -24,7 +25,7 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	minio "github.com/minio/minio-go"
+	minio "github.com/minio/minio-go/v7"
 	"github.com/spf13/cobra"
 )
 
@@ -245,8 +246,8 @@ func createBlob(blobURL string, blobSize uint32, metadata map[string]*string, bl
 	_, err := blobClient.Upload(context.Background(), streaming.NopCloser(strings.NewReader(randomString)),
 		&blockblob.UploadOptions{
 			HTTPHeaders: blobHTTPHeaders,
-			Metadata: metadata,
-			Tier: tier,
+			Metadata:    metadata,
+			Tier:        tier,
 		})
 	if err != nil {
 		fmt.Printf("error uploading the blob %v\n", err)
@@ -342,8 +343,9 @@ func createBucket(bucketURLStr string) {
 		Location: s3URLParts.Region,
 	})
 
-	if err := s3Client.MakeBucket(s3URLParts.BucketName, s3URLParts.Region); err != nil {
-		exists, err := s3Client.BucketExists(s3URLParts.BucketName)
+	ctx := context.Background()
+	if err := s3Client.MakeBucket(ctx, s3URLParts.BucketName, minio.MakeBucketOptions{Region: s3URLParts.Region}); err != nil {
+		exists, err := s3Client.BucketExists(ctx, s3URLParts.BucketName)
 		if err != nil || !exists {
 			fmt.Println("fail to create bucket, ", err)
 			os.Exit(1)
@@ -403,7 +405,7 @@ func createObject(objectURLStr string, objectSize uint32, o minio.PutObjectOptio
 		o.ContentType = strings.Split(http.DetectContentType([]byte(randomString)), ";")[0]
 	}
 
-	_, err = s3Client.PutObject(s3URLParts.BucketName, s3URLParts.ObjectKey, bytes.NewReader([]byte(randomString)), int64(objectSize), o)
+	_, err = s3Client.PutObject(context.Background(), s3URLParts.BucketName, s3URLParts.ObjectKey, bytes.NewReader([]byte(randomString)), int64(objectSize), o)
 
 	if err != nil {
 		fmt.Println("fail to upload file to S3 object, ", err)

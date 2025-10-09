@@ -23,6 +23,15 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/url"
+	"os"
+	"path"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
@@ -39,17 +48,9 @@ import (
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/stretchr/testify/assert"
-	"io"
-	"net/url"
-	"os"
-	"path"
-	"path/filepath"
-	"runtime"
-	"strings"
-	"time"
 
 	gcpUtils "cloud.google.com/go/storage"
-	"github.com/minio/minio-go"
+	"github.com/minio/minio-go/v7"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -317,7 +318,7 @@ func (s scenarioHelper) generateFilesystemsAndFilesFromLists(a *assert.Assertion
 
 func (s scenarioHelper) generateS3BucketsAndObjectsFromLists(a *assert.Assertions, s3Client *minio.Client, bucketList []string, objectList []string, data string) {
 	for _, bucketName := range bucketList {
-		err := s3Client.MakeBucket(bucketName, "")
+		err := s3Client.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{Region: ""})
 		a.Nil(err)
 
 		s.generateObjects(a, s3Client, bucketName, objectList)
@@ -408,7 +409,7 @@ func (scenarioHelper) generateBlockBlobWithAccessTier(a *assert.Assertions, cont
 func (scenarioHelper) generateObjects(a *assert.Assertions, client *minio.Client, bucketName string, objectList []string) {
 	size := int64(len(objectDefaultData))
 	for _, objectName := range objectList {
-		n, err := client.PutObjectWithContext(ctx, bucketName, objectName, strings.NewReader(objectDefaultData), size, minio.PutObjectOptions{})
+		n, err := client.PutObject(ctx, bucketName, objectName, strings.NewReader(objectDefaultData), size, minio.PutObjectOptions{})
 		a.Nil(err)
 		a.Equal(size, n)
 	}
