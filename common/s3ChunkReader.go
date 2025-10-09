@@ -11,15 +11,14 @@ import (
 	"time"
 )
 
-// IRemoteSourceInfoProvider interface is imported from ste package
-// We'll use an interface{} for now to avoid circular imports, and cast it in the implementation
+// S3ChunkReader streams or buffers a chunk of data sourced from S3.
 type S3ChunkReader struct {
 	ctx             context.Context
 	slicePool       ByteSlicePooler
 	cacheLimiter    CacheLimiter
 	chunkLogger     ChunkStatusLogger
 	generalLogger   ILogger
-	chunkId         ChunkID // <-- Add this for offset/length/logging
+	chunkId         ChunkID
 	length          int64
 	positionInChunk int64
 	buffer          []byte
@@ -27,13 +26,15 @@ type S3ChunkReader struct {
 	muClose         *sync.Mutex
 	isClosed        bool
 
-	// S3-specific - source info provider that implements GetObjectRange
 	sourceInfoProvider interface {
 		GetObjectRange(offset, length int64) (io.ReadCloser, error)
 	}
-}
 
-type S3ChunkReaderSourceFactory func() (interface{}, error)
+	useStreaming  bool
+	stream        *s3StreamReader
+	streamHasher  hash.Hash
+	reservedBytes int64
+}
 
 func NewS3ChunkReader(
 	ctx context.Context,
@@ -46,10 +47,14 @@ func NewS3ChunkReader(
 	generalLogger ILogger,
 	slicePool ByteSlicePooler,
 	cacheLimiter CacheLimiter,
+	allowStreaming bool,
 ) SingleChunkReader {
 	if length <= 0 {
 		return &emptyChunkReader{}
 	}
+
+	useStreaming := shouldUseS3Streaming(length, allowStreaming)
+
 	return &S3ChunkReader{
 		ctx:                ctx,
 		sourceInfoProvider: sourceInfoProvider,
@@ -61,6 +66,7 @@ func NewS3ChunkReader(
 		cacheLimiter:       cacheLimiter,
 		muMaster:           &sync.Mutex{},
 		muClose:            &sync.Mutex{},
+		useStreaming:       useStreaming,
 	}
 }
 
@@ -77,11 +83,37 @@ func (cr *S3ChunkReader) unuse() {
 func (cr *S3ChunkReader) BlockingPrefetch(_ io.ReaderAt, isRetry bool) error {
 	cr.use()
 	defer cr.unuse()
-	GetLifecycleMgr().Info(fmt.Sprintf("BlockingPrefetch called for chunkId: %v, length: %d, isRetry: %v", cr.chunkId, cr.length, isRetry))
+	return cr.ensurePrefetchLocked(isRetry)
+}
+
+func (cr *S3ChunkReader) ensurePrefetchLocked(isRetry bool) error {
+	if cr.useStreaming {
+		if cr.stream != nil {
+			return nil
+		}
+
+		if cr.chunkLogger != nil {
+			cr.chunkLogger.LogChunkStatus(cr.chunkId, EWaitReason.RAMToSchedule())
+		}
+
+		reservation := s3StreamingReservation(cr.length)
+		if cr.reservedBytes == 0 && reservation > 0 {
+			if err := cr.cacheLimiter.WaitUntilAdd(cr.ctx, reservation, func() bool { return isRetry }); err != nil {
+				return err
+			}
+			cr.reservedBytes = reservation
+		}
+
+		if cr.chunkLogger != nil {
+			cr.chunkLogger.LogChunkStatus(cr.chunkId, EWaitReason.DiskIO())
+		}
+
+		cr.stream = newS3StreamReader(cr.ctx, cr.sourceInfoProvider, cr.chunkId, cr.length)
+		return nil
+	}
 
 	if cr.buffer != nil {
-		GetLifecycleMgr().Info(fmt.Sprintf("BlockingPrefetch: Buffer already prefetched for chunkId: %v", cr.chunkId))
-		return nil // already prefetched
+		return nil
 	}
 
 	if cr.chunkLogger != nil {
@@ -89,7 +121,6 @@ func (cr *S3ChunkReader) BlockingPrefetch(_ io.ReaderAt, isRetry bool) error {
 	}
 	err := cr.cacheLimiter.WaitUntilAdd(cr.ctx, cr.length, func() bool { return isRetry })
 	if err != nil {
-		GetLifecycleMgr().Info(fmt.Sprintf("s3 BlockingPrefetch: cacheLimiter.WaitUntilAdd failed for chunkId: %v, err: %v", cr.chunkId, err))
 		return err
 	}
 
@@ -98,25 +129,21 @@ func (cr *S3ChunkReader) BlockingPrefetch(_ io.ReaderAt, isRetry bool) error {
 	}
 
 	targetBuffer := cr.slicePool.RentSlice(cr.length)
-	GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: Allocated buffer of length: %d for chunkId: %v", cr.length, cr.chunkId))
-
-	//GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: Getting object range from S3 with offset: %d, length: %d for chunkId: %v", cr.chunkId.offsetInFile, cr.length, cr.chunkId))
-
-	// We'll attempt the network read a few times on transient network errors like "connection reset by peer", "io timeout, etc".
-	maxAttempts := 1
-	if !isRetry {
-		maxAttempts = 1 // if not a retry, just try once
+	if S3StreamingVerbose() {
+		GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: allocated buffer len=%d chunkId=%v", cr.length, cr.chunkId))
 	}
-	var lastErr error
-	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		// Release muClose lock before making the network call and reading the response body.
+
+	opName := fmt.Sprintf("s3 chunk prefetch (chunkId=%v)", cr.chunkId)
+	prefetchStart := time.Now()
+
+	_, err = WithNetworkRetry(cr.ctx, nil, opName, func() (struct{}, error) {
+		start := time.Now()
 		cr.muClose.Unlock()
 
-		body, err := cr.sourceInfoProvider.GetObjectRange(cr.chunkId.offsetInFile, cr.length)
+		body, getErr := cr.sourceInfoProvider.GetObjectRange(cr.chunkId.offsetInFile, cr.length)
 		var n int
 		var readErr error
-		if err == nil {
-			// Ensure body.Close() is called even on partial read errors
+		if getErr == nil {
 			func() {
 				defer func() {
 					if body != nil {
@@ -128,69 +155,62 @@ func (cr *S3ChunkReader) BlockingPrefetch(_ io.ReaderAt, isRetry bool) error {
 		}
 
 		cr.muClose.Lock()
-
-		// If GetObjectRange returned an error, treat it similarly to readErr
-		if err != nil {
-			lastErr = err
-		} else if readErr != nil {
-			// If ReadFull returned io.EOF or unexpected EOF, wrap it
-			lastErr = readErr
-		} else if int64(n) != cr.length {
-			lastErr = fmt.Errorf("bytes read not equal to expected length: got %d expected %d", n, cr.length)
-		} else {
-			// Success path
-			cr.buffer = targetBuffer
-			//GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: Successfully fetched %d bytes from S3 and stored in buffer for chunkId: %v", n, cr.chunkId))
-			return nil
+		if getErr != nil {
+			if S3StreamingVerbose() {
+				GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: GetObjectRange failed chunkId=%v err=%v", cr.chunkId, getErr))
+			}
+			return struct{}{}, getErr
+		}
+		if readErr != nil {
+			if S3StreamingVerbose() {
+				GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: read response failed chunkId=%v err=%v", cr.chunkId, readErr))
+			}
+			return struct{}{}, readErr
+		}
+		if cr.isClosed {
+			return struct{}{}, errors.New("closed while reading")
+		}
+		if err := cr.ctx.Err(); err != nil {
+			return struct{}{}, err
+		}
+		if int64(n) != cr.length {
+			mismatchErr := fmt.Errorf("bytes read not equal to expected length: got %d expected %d", n, cr.length)
+			if S3StreamingVerbose() {
+				GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: length check failed chunkId=%v err=%v", cr.chunkId, mismatchErr))
+			}
+			return struct{}{}, mismatchErr
 		}
 
-		// On error: cleanup allocated resources for this attempt
+		cr.buffer = targetBuffer
+		if S3StreamingVerbose() {
+			GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: fetched %d bytes in %v chunkId=%v", n, time.Since(start), cr.chunkId))
+		}
+		return struct{}{}, nil
+	})
+	if err != nil {
 		cr.slicePool.ReturnSlice(targetBuffer)
 		cr.cacheLimiter.Remove(cr.length)
-		GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: read attempt %d failed for chunkId: %v err: %v", attempt, cr.chunkId, lastErr))
-
-		// Decide whether error is transient and worth retrying
-		if attempt < maxAttempts && IsRetryableNetworkError(lastErr) {
-			// small backoff
-			backoff := time.Duration(attempt) * 100 * time.Millisecond
-			GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: transient network error detected, retrying after %v (attempt %d/%d) for chunkId: %v", backoff, attempt, maxAttempts, cr.chunkId))
-			time.Sleep(backoff)
-			// allocate a fresh buffer for next attempt
-			targetBuffer = cr.slicePool.RentSlice(cr.length)
-			// continue retry loop
-			continue
-		}
-
-		// Non-retryable or attempts exhausted: return the last error
-		if lastErr != nil {
-			return lastErr
-		}
-		// Fallback
-		return errors.New("unknown error during BlockingPrefetch")
+		return err
 	}
 
-	// If we fall out, return the last seen error
-	if lastErr != nil {
-		return lastErr
-	}
-	return errors.New("blocking prefetch failed")
+	RecordS3DownloadMetric(cr.chunkId, cr.length, time.Since(prefetchStart), "prefetch")
+
+	return nil
 }
 
 func (cr *S3ChunkReader) retryBlockingPrefetchIfNecessary() error {
-	if cr.buffer != nil {
-		return nil // nothing to do
-	}
-	// For S3, just call BlockingPrefetch again with isRetry=true
-	return cr.BlockingPrefetch(nil, true)
+	return cr.ensurePrefetchLocked(true)
 }
 
-// Seeks within this chunk
-// Seeking is used for retries, and also by some code to get length (by seeking to end).
 func (cr *S3ChunkReader) Seek(offset int64, whence int) (int64, error) {
-	DocumentationForDependencyOnChangeDetection() // <-- read the documentation here
+	DocumentationForDependencyOnChangeDetection()
 
 	cr.use()
 	defer cr.unuse()
+
+	if cr.useStreaming {
+		return cr.seekStreamingLocked(offset, whence)
+	}
 
 	newPosition := cr.positionInChunk
 
@@ -214,37 +234,28 @@ func (cr *S3ChunkReader) Seek(offset int64, whence int) (int64, error) {
 	return cr.positionInChunk, nil
 }
 
-// Reads from within this chunk.
 func (cr *S3ChunkReader) Read(p []byte) (n int, err error) {
-	DocumentationForDependencyOnChangeDetection() // <-- read the documentation here
+	DocumentationForDependencyOnChangeDetection()
 
 	cr.use()
 	defer cr.unuse()
 
-	// This is a normal read, so free the prefetch buffer when hit EOF (i.e. end of this chunk).
-	// We do so on the assumption that if we've read to the end we don't need the prefetched data any longer.
-	// (If later, there's a retry that forces seek back to start and re-read, we'll automatically trigger a re-fetch at that time)
-	return cr.doRead(p, true)
+	if cr.useStreaming {
+		return cr.streamReadLocked(p, true)
+	}
+
+	return cr.doReadLocked(p, true)
 }
 
-func (cr *S3ChunkReader) doRead(p []byte, freeBufferOnEof bool) (n int, err error) {
-	//GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: doRead called for chunkId: %v, positionInChunk: %d, length: %d", cr.chunkId, cr.positionInChunk, cr.length))
-	// check for EOF, BEFORE we ensure prefetch
-	// (Otherwise, some readers can call us after EOF, and we end up re-pre-fetching unnecessarily)
+func (cr *S3ChunkReader) doReadLocked(p []byte, freeBufferOnEof bool) (n int, err error) {
 	if cr.positionInChunk >= cr.length {
 		return 0, io.EOF
 	}
 
-	// Always use the prefetch logic to read the data
-	// This is simpler to maintain than using a different code path for the (rare) cases
-	// where there has been no prefetch before this routine is called
-	err = cr.retryBlockingPrefetchIfNecessary()
-	if err != nil {
+	if err = cr.retryBlockingPrefetchIfNecessary(); err != nil {
 		return 0, err
 	}
 
-	// extra checks to be safe (originally for https://github.com/Azure/azure-storage-azcopy/issues/191)
-	// No longer needed now that use/unuse lock with a mutex, but there's no harm in leaving them here
 	if cr.buffer == nil {
 		panic("unexpected nil buffer")
 	}
@@ -255,16 +266,13 @@ func (cr *S3ChunkReader) doRead(p []byte, freeBufferOnEof bool) (n int, err erro
 		panic("unexpected buffer length discrepancy")
 	}
 
-	// Copy the data across
 	bytesCopied := copy(p, cr.buffer[cr.positionInChunk:])
 	cr.positionInChunk += int64(bytesCopied)
 
-	// check for EOF
 	isEof := cr.positionInChunk >= cr.length
 	if isEof {
 		if freeBufferOnEof {
-			//GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: closeBuffer is called for chunkId: %v", cr.chunkId))
-			cr.closeBuffer()
+			cr.closeBufferLocked()
 		}
 		return bytesCopied, io.EOF
 	}
@@ -272,10 +280,52 @@ func (cr *S3ChunkReader) doRead(p []byte, freeBufferOnEof bool) (n int, err erro
 	return bytesCopied, nil
 }
 
-// Disposes of the buffer to save RAM.
+func (cr *S3ChunkReader) streamReadLocked(p []byte, freeBufferOnEof bool) (int, error) {
+	if cr.positionInChunk >= cr.length {
+		return 0, io.EOF
+	}
+
+	if err := cr.ensurePrefetchLocked(false); err != nil {
+		return 0, err
+	}
+
+	if cr.stream == nil {
+		return 0, errors.New("stream not initialised")
+	}
+
+	bytesRead, err := cr.stream.Read(p)
+	if bytesRead > 0 {
+		cr.positionInChunk += int64(bytesRead)
+		if cr.streamHasher != nil {
+			if _, hashErr := cr.streamHasher.Write(p[:bytesRead]); hashErr != nil {
+				return bytesRead, hashErr
+			}
+		}
+	}
+
+	if err == io.EOF {
+		if freeBufferOnEof {
+			cr.closeBufferLocked()
+		}
+		return bytesRead, io.EOF
+	}
+
+	return bytesRead, err
+}
+
 func (cr *S3ChunkReader) closeBuffer() {
-	DocumentationForDependencyOnChangeDetection() // <-- read the documentation here
-	//GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: closeBuffer called for chunkId: %v", cr.chunkId))
+	DocumentationForDependencyOnChangeDetection()
+	cr.muMaster.Lock()
+	defer cr.muMaster.Unlock()
+	cr.closeBufferLocked()
+}
+
+func (cr *S3ChunkReader) closeBufferLocked() {
+	if cr.useStreaming {
+		cr.releaseStreamLocked()
+		return
+	}
+
 	if cr.buffer == nil {
 		return
 	}
@@ -284,7 +334,6 @@ func (cr *S3ChunkReader) closeBuffer() {
 }
 
 func (cr *S3ChunkReader) returnSlice(slice []byte) {
-	//GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: returnSlice called for chunkId: %v", cr.chunkId))
 	cr.slicePool.ReturnSlice(slice)
 	cr.cacheLimiter.Remove(int64(len(slice)))
 }
@@ -293,96 +342,104 @@ func (r *S3ChunkReader) Length() int64 {
 	return r.length
 }
 
-// Some code paths can call this, when cleaning up. (Even though in the normal, non error, code path, we don't NEED this
-// because we close at the completion of a successful read of the whole prefetch buffer.
-// We still want this though, to handle cases where for some reason the transfer stops before all the buffer has been read.)
-// Without this close, if something failed part way through, we would keep counting this object's bytes in cacheLimiter
-// "for ever", even after the object is gone.
 func (cr *S3ChunkReader) Close() error {
-	// First, check and log early closes
-	// This check originates from issue 191. Even tho we think we've now resolved that issue,
-	// we'll keep this code just to make sure.
 	if cr.positionInChunk < cr.length && cr.ctx.Err() == nil {
 		cr.generalLogger.Log(LogInfo, "Early close of chunk in S3ChunkReader with context still active")
-		// cannot panic here, since this code path is NORMAL in the case of sparse files to Azure Files and Page Blobs
 	}
 
-	// Only acquire the Close mutex (it will be free if the prefetch method is in the middle of a disk read)
-	// Don't acquire muMaster, which will not be free in that situation
 	cr.muClose.Lock()
 	defer cr.muClose.Unlock()
 
-	// do the real work
-	cr.closeBuffer()
+	cr.closeBufferLocked()
 	cr.isClosed = true
-
-	/*
-	 * Set chunkLogger to nil, so that chunkStatusLogger can be GC'ed.
-	 *
-	 * TODO: We should not need to explicitly set this to nil but today we have a yet-unknown ref on cr which
-	 *       is leaking this "big" chunkStatusLogger memory, so we cause that to be freed by force dropping this ref.
-	 *
-	 * Note: We are force setting this to nil and we safe guard against this by checking chunklogger not nil at respective places.
-	 *       At present this is called only from blockingPrefetch().
-	 */
 	cr.chunkLogger = nil
 
 	return nil
 }
 
-// Grab the leading bytes, for later MIME type recognition
-// (else we would have to re-read the start of the file later, and that breaks our rule to use sequential
-// reads as much as possible)
 func (cr *S3ChunkReader) GetPrologueState() PrologueState {
 	cr.use()
-	// can't defer unuse here. See explicit calls (plural) below
 
-	const mimeRecgonitionLen = 512
-	leadingBytes := make([]byte, mimeRecgonitionLen)
-	n, err := cr.doRead(leadingBytes, false) // do NOT free bufferOnEOF. So that if its a very small file, and we hit the end, we won't needlessly discard the prefetched data
+	const mimeRecognitionLen = 512
+
+	if cr.useStreaming {
+		leadingBytes, err := cr.fetchStreamingPrologue(mimeRecognitionLen)
+		cr.unuse()
+		if err != nil {
+			return PrologueState{}
+		}
+		_, _ = cr.Seek(0, io.SeekStart)
+		return PrologueState{LeadingBytes: leadingBytes}
+	}
+
+	leadingBytes := make([]byte, mimeRecognitionLen)
+	n, err := cr.doReadLocked(leadingBytes, false)
 	if err != nil && err != io.EOF {
 		cr.unuse()
-		return PrologueState{} // empty return value, because we just can't sniff the mime type
+		return PrologueState{}
 	}
 	if n < len(leadingBytes) {
-		// truncate if we read less than expected (very small file, so err was EOF above)
 		leadingBytes = leadingBytes[:n]
 	}
-	// unuse before Seek, since Seek is public
 	cr.unuse()
-	// MUST re-wind, so that the bytes we read will get transferred too!
 	_, _ = cr.Seek(0, io.SeekStart)
 	return PrologueState{LeadingBytes: leadingBytes}
 }
 
+func (cr *S3ChunkReader) fetchStreamingPrologue(maxLen int) ([]byte, error) {
+	if cr.length == 0 || maxLen == 0 {
+		return []byte{}, nil
+	}
+
+	requestLen := int64(maxLen)
+	if requestLen > cr.length {
+		requestLen = cr.length
+	}
+
+	body, err := cr.sourceInfoProvider.GetObjectRange(cr.chunkId.offsetInFile, requestLen)
+	if err != nil {
+		return nil, err
+	}
+	defer body.Close()
+
+	buf := make([]byte, requestLen)
+	n, err := io.ReadFull(body, buf)
+	if err != nil && err != io.ErrUnexpectedEOF && err != io.EOF {
+		return nil, err
+	}
+	return buf[:n], nil
+}
+
 func (cr *S3ChunkReader) HasPrefetchedEntirelyZeros() bool {
+	if cr.useStreaming {
+		return false
+	}
+
 	cr.use()
 	defer cr.unuse()
 
 	if cr.buffer == nil {
-		return false // not prefetched (and, to simply error handling in the caller, we don't call retryBlockingPrefetchIfNecessary here)
+		return false
 	}
 
 	for _, b := range cr.buffer {
 		if b != 0 {
-			return false // it's not all zeroes
+			return false
 		}
 	}
 	return true
-
-	// note: we are not using this optimization: int64Slice := (*(*[]int64)(unsafe.Pointer(&rangeBytes)))[:len(rangeBytes)/8]
-	//       Why?  Because (a) it only works when chunk size is divisible by 8, and that's not universally the case (e.g. last chunk in a file)
-	//       and (b) some sources seem to imply that the middle of it should be &rangeBytes[0] instead of just &rangeBytes, so we'd want to
-	//       check out the pros and cons of using the [0] before using it.
-	//       and (c) we would want to check whether it really did offer meaningful real-world performance gain, before introducing use of unsafe.
 }
 
-// Writes the buffer to a hasher. Does not alter positionInChunk
 func (cr *S3ChunkReader) WriteBufferTo(h hash.Hash) {
-	DocumentationForDependencyOnChangeDetection() // <-- read the documentation here
+	DocumentationForDependencyOnChangeDetection()
 
 	cr.use()
 	defer cr.unuse()
+
+	if cr.useStreaming {
+		cr.streamHasher = h
+		return
+	}
 
 	if cr.buffer == nil {
 		panic("invalid state. No prefetch buffer is present")
@@ -391,4 +448,159 @@ func (cr *S3ChunkReader) WriteBufferTo(h hash.Hash) {
 	if err != nil {
 		panic("documentation of hash.Hash.Write says it will never return an error")
 	}
+}
+
+func (cr *S3ChunkReader) seekStreamingLocked(offset int64, whence int) (int64, error) {
+	newPosition := cr.positionInChunk
+
+	switch whence {
+	case io.SeekStart:
+		newPosition = offset
+	case io.SeekCurrent:
+		newPosition += offset
+	case io.SeekEnd:
+		newPosition = cr.length - offset
+	}
+
+	if newPosition < 0 {
+		return 0, errors.New("cannot seek to before beginning")
+	}
+	if newPosition > cr.length {
+		newPosition = cr.length
+	}
+
+	cr.positionInChunk = newPosition
+	if cr.stream != nil {
+		if _, err := cr.stream.Seek(newPosition, io.SeekStart); err != nil {
+			return 0, err
+		}
+	}
+
+	return cr.positionInChunk, nil
+}
+
+func (cr *S3ChunkReader) releaseStreamLocked() {
+	if cr.stream != nil {
+		_ = cr.stream.Close()
+		cr.stream = nil
+	}
+	if cr.reservedBytes > 0 {
+		cr.cacheLimiter.Remove(cr.reservedBytes)
+		cr.reservedBytes = 0
+	}
+	cr.streamHasher = nil
+}
+
+// s3StreamReader provides a streaming view over an S3 range while supporting seeks for retries.
+type s3StreamReader struct {
+	ctx      context.Context
+	provider interface {
+		GetObjectRange(offset, length int64) (io.ReadCloser, error)
+	}
+	chunkID         ChunkID
+	length          int64
+	position        int64
+	body            io.ReadCloser
+	downloadStart   time.Time
+	metricsEnabled  bool
+	metricsRecorded bool
+}
+
+func newS3StreamReader(
+	ctx context.Context,
+	provider interface {
+		GetObjectRange(offset, length int64) (io.ReadCloser, error)
+	},
+	chunkID ChunkID,
+	length int64,
+) *s3StreamReader {
+	return &s3StreamReader{
+		ctx:            ctx,
+		provider:       provider,
+		chunkID:        chunkID,
+		length:         length,
+		metricsEnabled: S3StreamingMetricsEnabled(),
+	}
+}
+
+func (sr *s3StreamReader) ensureBody() error {
+	if sr.body != nil {
+		return nil
+	}
+	if sr.position >= sr.length {
+		return io.EOF
+	}
+
+	offset := sr.chunkID.offsetInFile + sr.position
+	remaining := sr.length - sr.position
+	body, err := sr.provider.GetObjectRange(offset, remaining)
+	if err != nil {
+		return err
+	}
+
+	sr.body = body
+	if sr.metricsEnabled {
+		sr.downloadStart = time.Now()
+		sr.metricsRecorded = false
+	}
+	return nil
+}
+
+func (sr *s3StreamReader) Read(p []byte) (int, error) {
+	if err := sr.ensureBody(); err != nil {
+		return 0, err
+	}
+
+	n, err := sr.body.Read(p)
+	sr.position += int64(n)
+
+	if err == io.EOF || sr.position >= sr.length {
+		_ = sr.closeBody()
+		if sr.metricsEnabled && !sr.metricsRecorded && sr.length > 0 {
+			duration := time.Since(sr.downloadStart)
+			RecordS3DownloadMetric(sr.chunkID, sr.length, duration, "stream")
+			sr.metricsRecorded = true
+		}
+		return n, io.EOF
+	}
+
+	return n, err
+}
+
+func (sr *s3StreamReader) Seek(offset int64, whence int) (int64, error) {
+	var target int64
+	switch whence {
+	case io.SeekStart:
+		target = offset
+	case io.SeekCurrent:
+		target = sr.position + offset
+	case io.SeekEnd:
+		target = sr.length + offset
+	default:
+		return 0, errors.New("invalid whence")
+	}
+
+	if target < 0 {
+		return 0, errors.New("cannot seek to before beginning")
+	}
+	if target > sr.length {
+		target = sr.length
+	}
+
+	sr.position = target
+	_ = sr.closeBody()
+	return sr.position, nil
+}
+
+func (sr *s3StreamReader) Close() error {
+	return sr.closeBody()
+}
+
+func (sr *s3StreamReader) closeBody() error {
+	if sr.body == nil {
+		return nil
+	}
+	err := sr.body.Close()
+	sr.body = nil
+	return err
 }

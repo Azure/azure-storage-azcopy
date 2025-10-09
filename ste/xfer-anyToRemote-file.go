@@ -448,7 +448,7 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 						// Wait until we have enough RAM, and when we do, prefetch the data for this chunk.
 						prefetchErr = chunkReader.BlockingPrefetch(srcFile, false)
 					} else {
-						chunkReader = createS3ChunkReader(jptm, srcInfoProvider.(IRemoteSourceInfoProvider), id, adjustedChunkSize, srcFile)
+						chunkReader = createS3ChunkReader(jptm, srcInfoProvider.(IRemoteSourceInfoProvider), id, adjustedChunkSize, srcFile, isSourcePrivate)
 						prefetchErr = chunkReader.BlockingPrefetch(srcFile, true)
 					}
 
@@ -519,6 +519,7 @@ func createS3ChunkReader(
 	id common.ChunkID,
 	adjustedChunkSize int64,
 	_ common.CloseableReaderAt, // not used for S3, but kept for signature consistency
+	allowStreaming bool,
 ) common.SingleChunkReader {
 	s3ChunkReader := common.NewS3ChunkReader(
 		jptm.Context(),
@@ -529,6 +530,7 @@ func createS3ChunkReader(
 		jptm,
 		jptm.SlicePool(),
 		jptm.CacheLimiter(),
+		allowStreaming,
 	)
 	return s3ChunkReader
 }

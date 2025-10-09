@@ -23,9 +23,11 @@ package ste
 import (
 	"bytes"
 	"fmt"
+	"sync/atomic"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
-	"sync/atomic"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -100,6 +102,7 @@ func (u *blockBlobUploader) generatePutBlock(id common.ChunkID, blockIndex int32
 
 		// step 3: put block to remote
 		u.jptm.LogChunkStatus(id, common.EWaitReason.Body())
+		uploadStart := time.Now()
 		body := newPacedRequestBody(u.jptm.Context(), reader, u.pacer)
 		_, err := u.destBlockBlobClient.StageBlock(u.jptm.Context(), encodedBlockID, body,
 			&blockblob.StageBlockOptions{
@@ -109,6 +112,10 @@ func (u *blockBlobUploader) generatePutBlock(id common.ChunkID, blockIndex int32
 		if err != nil {
 			u.jptm.FailActiveUpload("Staging block", err)
 			return
+		}
+
+		if _, ok := reader.(*common.S3ChunkReader); ok {
+			common.RecordS3UploadMetric(id, reader.Length(), time.Since(uploadStart))
 		}
 
 		atomic.AddInt32(&u.atomicChunksWritten, 1)
@@ -164,6 +171,7 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, reader commo
 			}
 
 			// Upload the file
+			uploadStart := time.Now()
 			body := newPacedRequestBody(jptm.Context(), reader, u.pacer)
 			_, err = u.destBlockBlobClient.Upload(jptm.Context(), body,
 				&blockblob.UploadOptions{
@@ -174,6 +182,11 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, reader commo
 					CPKInfo:      jptm.CpkInfo(),
 					CPKScopeInfo: jptm.CpkScopeInfo(),
 				})
+			if err == nil {
+				if _, ok := reader.(*common.S3ChunkReader); ok {
+					common.RecordS3UploadMetric(id, reader.Length(), time.Since(uploadStart))
+				}
+			}
 		}
 
 		// if the put blob is a failure, update the transfer status to failed
