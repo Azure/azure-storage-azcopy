@@ -44,7 +44,7 @@ func NewObjectIndexer() *ObjectIndexer {
 }
 
 // process the given stored object by indexing it using its relative path
-func (i *ObjectIndexer) store(storedObject StoredObject) (err error) {
+func (i *ObjectIndexer) Store(storedObject StoredObject) (err error) {
 	// TODO we might buffer too much data in memory, figure out whether we should limit the max number of files
 	// TODO previously we used 10M as the max, but it was proven to be too small for some users
 
@@ -64,7 +64,7 @@ func (i *ObjectIndexer) store(storedObject StoredObject) (err error) {
 // go through the remaining stored objects in the map to process them
 func (i *ObjectIndexer) Traverse(processor ObjectProcessor, filters []ObjectFilter) (err error) {
 	for _, value := range i.IndexMap {
-		err = processIfPassedFilters(filters, value, processor)
+		err = ProcessIfPassedFilters(filters, value, processor)
 		_, err = getProcessingError(err)
 		if err != nil {
 			return

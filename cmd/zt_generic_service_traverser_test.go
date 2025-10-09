@@ -96,34 +96,34 @@ func TestServiceTraverserWithManyObjects(t *testing.T) {
 	scenarioHelper{}.generateLocalFilesFromList(a, dstDirName, objectList)
 
 	// Create a local traversal
-	localTraverser, _ := traverser.newLocalTraverser(dstDirName, ctx, traverser.InitResourceTraverserOptions{
+	localTraverser, _ := traverser.NewLocalTraverser(dstDirName, ctx, traverser.InitResourceTraverserOptions{
 		Recursive:       true,
 		SymlinkHandling: common.ESymlinkHandlingType.Follow(),
 	})
 
 	// Invoke the traversal with an indexer so the results are indexed for easy validation
-	localIndexer := traverser.newObjectIndexer()
-	err = localTraverser.Traverse(traverser.noPreProccessor, localIndexer.store, nil)
+	localIndexer := traverser.NewObjectIndexer()
+	err = localTraverser.Traverse(traverser.NoPreProccessor, localIndexer.Store, nil)
 	a.Nil(err)
 
 	// construct a blob account traverser
 	rawBSU := scenarioHelper{}.getBlobServiceClientWithSAS(a)
-	blobAccountTraverser := traverser.newBlobAccountTraverser(rawBSU, "", ctx, traverser.InitResourceTraverserOptions{})
+	blobAccountTraverser := traverser.NewBlobAccountTraverser(rawBSU, "", ctx, traverser.InitResourceTraverserOptions{})
 
 	// invoke the blob account traversal with a dummy processor
 	blobDummyProcessor := dummyProcessor{}
-	err = blobAccountTraverser.Traverse(traverser.noPreProccessor, blobDummyProcessor.process, nil)
+	err = blobAccountTraverser.Traverse(traverser.NoPreProccessor, blobDummyProcessor.process, nil)
 	a.Nil(err)
 
 	// construct a file account traverser
 	rawFSU := scenarioHelper{}.getFileServiceClientWithSAS(a)
-	fileAccountTraverser := traverser.newFileAccountTraverser(rawFSU, "", ctx, traverser.InitResourceTraverserOptions{
+	fileAccountTraverser := traverser.NewFileAccountTraverser(rawFSU, "", ctx, traverser.InitResourceTraverserOptions{
 		TrailingDotOption: common.ETrailingDotOption.Enable(),
 	})
 
 	// invoke the file account traversal with a dummy processor
 	fileDummyProcessor := dummyProcessor{}
-	err = fileAccountTraverser.Traverse(traverser.noPreProccessor, fileDummyProcessor.process, nil)
+	err = fileAccountTraverser.Traverse(traverser.NoPreProccessor, fileDummyProcessor.process, nil)
 	a.Nil(err)
 
 	var s3DummyProcessor dummyProcessor
@@ -131,31 +131,31 @@ func TestServiceTraverserWithManyObjects(t *testing.T) {
 	if testS3 {
 		// construct a s3 service traverser
 		accountURL := scenarioHelper{}.getRawS3AccountURL(a, "")
-		s3ServiceTraverser, err := traverser.newS3ServiceTraverser(&accountURL, ctx, traverser.InitResourceTraverserOptions{})
+		s3ServiceTraverser, err := traverser.NewS3ServiceTraverser(&accountURL, ctx, traverser.InitResourceTraverserOptions{})
 		a.Nil(err)
 
 		// invoke the s3 service traversal with a dummy processor
 		s3DummyProcessor = dummyProcessor{}
-		err = s3ServiceTraverser.Traverse(traverser.noPreProccessor, s3DummyProcessor.process, nil)
+		err = s3ServiceTraverser.Traverse(traverser.NoPreProccessor, s3DummyProcessor.process, nil)
 		a.Nil(err)
 	}
 
 	if testGCP {
 		gcpAccountURL := scenarioHelper{}.getRawGCPAccountURL(a)
-		gcpServiceTraverser, err := traverser.newS3ServiceTraverser(&gcpAccountURL, ctx, traverser.InitResourceTraverserOptions{})
+		gcpServiceTraverser, err := traverser.NewS3ServiceTraverser(&gcpAccountURL, ctx, traverser.InitResourceTraverserOptions{})
 		a.Nil(err)
 
 		gcpDummyProcessor = dummyProcessor{}
-		err = gcpServiceTraverser.Traverse(traverser.noPreProccessor, gcpDummyProcessor.process, nil)
+		err = gcpServiceTraverser.Traverse(traverser.NoPreProccessor, gcpDummyProcessor.process, nil)
 		a.Nil(err)
 	}
 
 	records := append(blobDummyProcessor.record, fileDummyProcessor.record...)
 
-	localTotalCount := len(localIndexer.indexMap)
+	localTotalCount := len(localIndexer.IndexMap)
 	localFileOnlyCount := 0
-	for _, x := range localIndexer.indexMap {
-		if x.entityType == common.EEntityType.File() {
+	for _, x := range localIndexer.IndexMap {
+		if x.EntityType == common.EEntityType.File() {
 			localFileOnlyCount++
 		}
 	}
@@ -171,12 +171,12 @@ func TestServiceTraverserWithManyObjects(t *testing.T) {
 	}
 
 	for _, storedObject := range records {
-		correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]
+		correspondingLocalFile, present := localIndexer.IndexMap[storedObject.RelativePath]
 		_, cnamePresent := cnames[storedObject.ContainerName]
 
 		a.True(present)
 		a.True(cnamePresent)
-		a.Equal(storedObject.name, correspondingLocalFile.name)
+		a.Equal(storedObject.Name, correspondingLocalFile.Name)
 	}
 }
 
@@ -267,36 +267,36 @@ func TestServiceTraverserWithWildcards(t *testing.T) {
 	scenarioHelper{}.generateLocalFilesFromList(a, dstDirName, objectList)
 
 	// Create a local traversal
-	localTraverser, _ := traverser.newLocalTraverser(dstDirName, ctx, traverser.InitResourceTraverserOptions{
+	localTraverser, _ := traverser.NewLocalTraverser(dstDirName, ctx, traverser.InitResourceTraverserOptions{
 		Recursive:       true,
 		SymlinkHandling: common.ESymlinkHandlingType.Follow(),
 	})
 
 	// Invoke the traversal with an indexer so the results are indexed for easy validation
-	localIndexer := traverser.newObjectIndexer()
-	err = localTraverser.Traverse(traverser.noPreProccessor, localIndexer.store, nil)
+	localIndexer := traverser.NewObjectIndexer()
+	err = localTraverser.Traverse(traverser.NoPreProccessor, localIndexer.Store, nil)
 	a.Nil(err)
 
 	// construct a blob account traverser
 	rawBSU := scenarioHelper{}.getBlobServiceClientWithSAS(a)
 	container := "objectmatch*" // set the container name to contain a wildcard
-	blobAccountTraverser := traverser.newBlobAccountTraverser(rawBSU, container, ctx, traverser.InitResourceTraverserOptions{})
+	blobAccountTraverser := traverser.NewBlobAccountTraverser(rawBSU, container, ctx, traverser.InitResourceTraverserOptions{})
 
 	// invoke the blob account traversal with a dummy processor
 	blobDummyProcessor := dummyProcessor{}
-	err = blobAccountTraverser.Traverse(traverser.noPreProccessor, blobDummyProcessor.process, nil)
+	err = blobAccountTraverser.Traverse(traverser.NoPreProccessor, blobDummyProcessor.process, nil)
 	a.Nil(err)
 
 	// construct a file account traverser
 	rawFSU := scenarioHelper{}.getFileServiceClientWithSAS(a)
 	share := "objectmatch*" // set the container name to contain a wildcard
-	fileAccountTraverser := traverser.newFileAccountTraverser(rawFSU, share, ctx, traverser.InitResourceTraverserOptions{
+	fileAccountTraverser := traverser.NewFileAccountTraverser(rawFSU, share, ctx, traverser.InitResourceTraverserOptions{
 		TrailingDotOption: common.ETrailingDotOption.Enable(),
 	})
 
 	// invoke the file account traversal with a dummy processor
 	fileDummyProcessor := dummyProcessor{}
-	err = fileAccountTraverser.Traverse(traverser.noPreProccessor, fileDummyProcessor.process, nil)
+	err = fileAccountTraverser.Traverse(traverser.NoPreProccessor, fileDummyProcessor.process, nil)
 	a.Nil(err)
 
 	var s3DummyProcessor dummyProcessor
@@ -308,11 +308,11 @@ func TestServiceTraverserWithWildcards(t *testing.T) {
 		accountURL.BucketName = "objectmatch*" // set the container name to contain a wildcard
 
 		urlOut := accountURL.URL()
-		s3ServiceTraverser, err := traverser.newS3ServiceTraverser(&urlOut, ctx, traverser.InitResourceTraverserOptions{})
+		s3ServiceTraverser, err := traverser.NewS3ServiceTraverser(&urlOut, ctx, traverser.InitResourceTraverserOptions{})
 
 		// invoke the s3 service traversal with a dummy processor
 		s3DummyProcessor = dummyProcessor{}
-		err = s3ServiceTraverser.Traverse(traverser.noPreProccessor, s3DummyProcessor.process, nil)
+		err = s3ServiceTraverser.Traverse(traverser.NoPreProccessor, s3DummyProcessor.process, nil)
 		a.Nil(err)
 	}
 	if testGCP {
@@ -321,20 +321,20 @@ func TestServiceTraverserWithWildcards(t *testing.T) {
 		gcpAccountURL.BucketName = "objectmatch*"
 		urlStr := gcpAccountURL.URL()
 
-		gcpServiceTraverser, err := traverser.newGCPServiceTraverser(&urlStr, ctx, traverser.InitResourceTraverserOptions{})
+		gcpServiceTraverser, err := traverser.NewGCPServiceTraverser(&urlStr, ctx, traverser.InitResourceTraverserOptions{})
 		a.Nil(err)
 
 		gcpDummyProcessor = dummyProcessor{}
-		err = gcpServiceTraverser.Traverse(traverser.noPreProccessor, gcpDummyProcessor.process, nil)
+		err = gcpServiceTraverser.Traverse(traverser.NoPreProccessor, gcpDummyProcessor.process, nil)
 		a.Nil(err)
 	}
 
 	records := append(blobDummyProcessor.record, fileDummyProcessor.record...)
 
-	localTotalCount := len(localIndexer.indexMap)
+	localTotalCount := len(localIndexer.IndexMap)
 	localFileOnlyCount := 0
-	for _, x := range localIndexer.indexMap {
-		if x.entityType == common.EEntityType.File() {
+	for _, x := range localIndexer.IndexMap {
+		if x.EntityType == common.EEntityType.File() {
 			localFileOnlyCount++
 		}
 	}
@@ -352,11 +352,11 @@ func TestServiceTraverserWithWildcards(t *testing.T) {
 	}
 
 	for _, storedObject := range records {
-		correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]
+		correspondingLocalFile, present := localIndexer.IndexMap[storedObject.RelativePath]
 		_, cnamePresent := cnames[storedObject.ContainerName]
 
 		a.True(present)
 		a.True(cnamePresent)
-		a.Equal(storedObject.name, correspondingLocalFile.name)
+		a.Equal(storedObject.Name, correspondingLocalFile.Name)
 	}
 }

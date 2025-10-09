@@ -54,7 +54,7 @@ func TestLocalDeleter(t *testing.T) {
 	a.Nil(err)
 
 	// exercise the deleter
-	err = deleter.removeImmediately(traverser.StoredObject{relativePath: dstFileName})
+	err = deleter.removeImmediately(traverser.StoredObject{RelativePath: dstFileName})
 	a.Nil(err)
 
 	// validate that the file no longer exists
@@ -92,7 +92,7 @@ func TestBlobDeleter(t *testing.T) {
 	a.Nil(err)
 
 	// exercise the deleter
-	err = deleter.removeImmediately(traverser.StoredObject{relativePath: blobName})
+	err = deleter.removeImmediately(traverser.StoredObject{RelativePath: blobName})
 	a.Nil(err)
 
 	// validate that the blob was deleted
@@ -130,7 +130,7 @@ func TestFileDeleter(t *testing.T) {
 	a.Nil(err)
 
 	// exercise the deleter
-	err = deleter.removeImmediately(traverser.StoredObject{relativePath: fileName})
+	err = deleter.removeImmediately(traverser.StoredObject{RelativePath: fileName})
 	a.Nil(err)
 
 	// validate that the file was deleted

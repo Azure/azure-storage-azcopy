@@ -56,7 +56,7 @@ func TestIsSourceDirWithStub(t *testing.T) {
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, dirName).URL()
 	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
-	blobTraverser := traverser.newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, traverser.InitResourceTraverserOptions{
+	blobTraverser := traverser.NewBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, traverser.InitResourceTraverserOptions{
 		Recursive:             true,
 		IncludeDirectoryStubs: true,
 	})
@@ -81,7 +81,7 @@ func TestIsSourceDirWithNoStub(t *testing.T) {
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, dirName).URL()
 	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
-	blobTraverser := traverser.newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, traverser.InitResourceTraverserOptions{
+	blobTraverser := traverser.NewBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, traverser.InitResourceTraverserOptions{
 		Recursive:             true,
 		IncludeDirectoryStubs: true,
 	})
@@ -106,7 +106,7 @@ func TestIsDestDirWithBlobEP(t *testing.T) {
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, dirName).URL()
 	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
-	blobTraverser := traverser.newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, traverser.InitResourceTraverserOptions{
+	blobTraverser := traverser.NewBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, traverser.InitResourceTraverserOptions{
 		Recursive:             true,
 		IncludeDirectoryStubs: true,
 	})
@@ -119,7 +119,7 @@ func TestIsDestDirWithBlobEP(t *testing.T) {
 	dirName = "dest_file"
 	// List
 	rawBlobURLWithSAS = scenarioHelper{}.getBlobClientWithSAS(a, containerName, dirName).URL()
-	blobTraverser = traverser.newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, traverser.InitResourceTraverserOptions{
+	blobTraverser = traverser.NewBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, traverser.InitResourceTraverserOptions{
 		Recursive:             true,
 		IncludeDirectoryStubs: true,
 	})
@@ -148,10 +148,10 @@ func TestIsDestDirWithDFSEP(t *testing.T) {
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, fileSystemName, parentDirName).URL()
 	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
-	blobTraverser := traverser.newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, traverser.InitResourceTraverserOptions{
+	blobTraverser := traverser.NewBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, traverser.InitResourceTraverserOptions{
 		Recursive:             true,
 		IncludeDirectoryStubs: true,
-	}, traverser.BlobTraverserOptions{isDFS: to.Ptr(true)})
+	}, traverser.BlobTraverserOptions{IsDFS: to.Ptr(true)})
 
 	// a directory with name parentDirName exists on target. So irrespective of
 	// isSource, IsDirectory()  should return true.
@@ -168,10 +168,10 @@ func TestIsDestDirWithDFSEP(t *testing.T) {
 	// With a directory that does not exist, without path separator.
 	parentDirName = "dirDoesNotExist"
 	rawBlobURLWithSAS = scenarioHelper{}.getBlobClientWithSAS(a, fileSystemName, parentDirName).URL()
-	blobTraverser = traverser.newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, traverser.InitResourceTraverserOptions{
+	blobTraverser = traverser.NewBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, traverser.InitResourceTraverserOptions{
 		Recursive:             true,
 		IncludeDirectoryStubs: true,
-	}, traverser.BlobTraverserOptions{isDFS: to.Ptr(true)})
+	}, traverser.BlobTraverserOptions{IsDFS: to.Ptr(true)})
 
 	// The directory does not exist, so IsDirectory()
 	// should return false, in all cases
@@ -188,10 +188,10 @@ func TestIsDestDirWithDFSEP(t *testing.T) {
 	// With a directory that does not exist, with path separator
 	parentDirNameWithSeparator := "dirDoesNotExist" + common.OS_PATH_SEPARATOR
 	rawBlobURLWithSAS = scenarioHelper{}.getBlobClientWithSAS(a, fileSystemName, parentDirNameWithSeparator).URL()
-	blobTraverser = traverser.newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, traverser.InitResourceTraverserOptions{
+	blobTraverser = traverser.NewBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, traverser.InitResourceTraverserOptions{
 		Recursive:             true,
 		IncludeDirectoryStubs: true,
-	}, traverser.BlobTraverserOptions{isDFS: to.Ptr(true)})
+	}, traverser.BlobTraverserOptions{IsDFS: to.Ptr(true)})
 
 	// The directory does not exist, but with a path separator
 	// we should identify it as a directory.
@@ -222,7 +222,7 @@ func TestIsSourceFileExists(t *testing.T) {
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, fileName).URL()
 	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
-	blobTraverser := traverser.newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, traverser.InitResourceTraverserOptions{
+	blobTraverser := traverser.NewBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, traverser.InitResourceTraverserOptions{
 		Recursive:             true,
 		IncludeDirectoryStubs: true,
 	})
@@ -247,7 +247,7 @@ func TestIsSourceFileDoesNotExist(t *testing.T) {
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, fileName).URL()
 	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
-	blobTraverser := traverser.newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, traverser.InitResourceTraverserOptions{
+	blobTraverser := traverser.NewBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, traverser.InitResourceTraverserOptions{
 		Recursive:             true,
 		IncludeDirectoryStubs: true,
 	})
@@ -262,64 +262,64 @@ func TestGetEntityType(t *testing.T) {
 
 	// Test case 1: metadata is file
 	metadata := make(common.Metadata)
-	entityType := traverser.getEntityType(metadata)
+	entityType := traverser.GetEntityType(metadata)
 	a.Equal(common.EEntityType.File(), entityType)
 
 	metadata = make(common.Metadata)
 	metadata["key"] = to.Ptr("value")
-	entityType = traverser.getEntityType(metadata)
+	entityType = traverser.GetEntityType(metadata)
 	a.Equal(common.EEntityType.File(), entityType)
 
 	metadata = make(common.Metadata)
 	metadata["hdi_isfolder"] = to.Ptr("false")
-	entityType = traverser.getEntityType(metadata)
+	entityType = traverser.GetEntityType(metadata)
 	a.Equal(common.EEntityType.File(), entityType)
 
 	metadata = make(common.Metadata)
 	metadata["Hdi_isfolder"] = to.Ptr("false")
-	entityType = traverser.getEntityType(metadata)
+	entityType = traverser.GetEntityType(metadata)
 	a.Equal(common.EEntityType.File(), entityType)
 
 	metadata = make(common.Metadata)
 	metadata["is_symlink"] = to.Ptr("false")
-	entityType = traverser.getEntityType(metadata)
+	entityType = traverser.GetEntityType(metadata)
 	a.Equal(common.EEntityType.File(), entityType)
 
 	metadata = make(common.Metadata)
 	metadata["Is_symlink"] = to.Ptr("false")
-	entityType = traverser.getEntityType(metadata)
+	entityType = traverser.GetEntityType(metadata)
 	a.Equal(common.EEntityType.File(), entityType)
 
 	// Test case 2: metadata is a folder
 	metadata = make(common.Metadata)
 	metadata["hdi_isfolder"] = to.Ptr("true")
-	entityType = traverser.getEntityType(metadata)
+	entityType = traverser.GetEntityType(metadata)
 	a.Equal(common.EEntityType.Folder(), entityType)
 
 	metadata = make(common.Metadata)
 	metadata["hdi_isfolder"] = to.Ptr("True")
-	entityType = traverser.getEntityType(metadata)
+	entityType = traverser.GetEntityType(metadata)
 	a.Equal(common.EEntityType.Folder(), entityType)
 
 	metadata = make(common.Metadata)
 	metadata["Hdi_isfolder"] = to.Ptr("true")
-	entityType = traverser.getEntityType(metadata)
+	entityType = traverser.GetEntityType(metadata)
 	a.Equal(common.EEntityType.Folder(), entityType)
 
 	// Test case 2: metadata is a symlink
 	metadata = make(common.Metadata)
 	metadata["is_symlink"] = to.Ptr("true")
-	entityType = traverser.getEntityType(metadata)
+	entityType = traverser.GetEntityType(metadata)
 	a.Equal(common.EEntityType.Symlink(), entityType)
 
 	metadata = make(common.Metadata)
 	metadata["is_symlink"] = to.Ptr("True")
-	entityType = traverser.getEntityType(metadata)
+	entityType = traverser.GetEntityType(metadata)
 	a.Equal(common.EEntityType.Symlink(), entityType)
 
 	metadata = make(common.Metadata)
 	metadata["Is_symlink"] = to.Ptr("true")
-	entityType = traverser.getEntityType(metadata)
+	entityType = traverser.GetEntityType(metadata)
 	a.Equal(common.EEntityType.Symlink(), entityType)
 
 }
@@ -362,7 +362,7 @@ func TestManagedDiskProperties(t *testing.T) {
 	a.Nil(prop.LastModified)
 	a.NotNil(prop.ContentLength) // note:content length will never be nil as the service calculates the size of the blob and stores it in this header
 
-	propAdapter := traverser.blobPropertiesResponseAdapter{GetPropertiesResponse: &prop}
+	propAdapter := traverser.BlobPropertiesResponseAdapter{GetPropertiesResponse: &prop}
 	a.Equal(propAdapter.LastModified(), time.Time{})
 	a.NotNil(prop.ContentLength) // see note from above
 }

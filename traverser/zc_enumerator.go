@@ -464,7 +464,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 			baseResource := resource.CloneWithValue(CleanLocalPath(basePath))
 			output = newListTraverser(baseResource, resourceLocation, ctx, opts)
 		} else {
-			output, _ = newLocalTraverser(resource.ValueLocal(), ctx, opts)
+			output, _ = NewLocalTraverser(resource.ValueLocal(), ctx, opts)
 		}
 	case common.ELocation.Benchmark():
 		ben, err := newBenchmarkTraverser(resource.Value, opts.IncrementEnumeration)
@@ -513,11 +513,11 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 			if !opts.Recursive {
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
-			output = newBlobAccountTraverser(bsc, containerName, ctx, opts)
+			output = NewBlobAccountTraverser(bsc, containerName, ctx, opts)
 		} else if opts.ListOfVersionIDs != nil {
 			output = newBlobVersionsTraverser(r, bsc, ctx, opts)
 		} else {
-			output = newBlobTraverser(r, bsc, ctx, opts)
+			output = NewBlobTraverser(r, bsc, ctx, opts)
 		}
 	case common.ELocation.File(), common.ELocation.FileNFS():
 		// TODO (last service migration) : Remove dependency on URLs.
@@ -566,9 +566,9 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 			if !opts.Recursive {
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
-			output = newFileAccountTraverser(fsc, shareName, ctx, opts)
+			output = NewFileAccountTraverser(fsc, shareName, ctx, opts)
 		} else {
-			output = newFileTraverser(r, fsc, ctx, opts)
+			output = NewFileTraverser(r, fsc, ctx, opts)
 		}
 	case common.ELocation.BlobFS():
 		resourceURL, err := resource.FullURL()
@@ -610,11 +610,11 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 			if !opts.Recursive {
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
-			output = newBlobAccountTraverser(bsc, containerName, ctx, opts, BlobTraverserOptions{isDFS: to.Ptr(true)})
+			output = NewBlobAccountTraverser(bsc, containerName, ctx, opts, BlobTraverserOptions{IsDFS: to.Ptr(true)})
 		} else if opts.ListOfVersionIDs != nil {
 			output = newBlobVersionsTraverser(r, bsc, ctx, opts)
 		} else {
-			output = newBlobTraverser(r, bsc, ctx, opts, BlobTraverserOptions{isDFS: to.Ptr(true)})
+			output = NewBlobTraverser(r, bsc, ctx, opts, BlobTraverserOptions{IsDFS: to.Ptr(true)})
 		}
 	case common.ELocation.S3():
 		resourceURL, err := resource.FullURL()
@@ -636,13 +636,13 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
 
-			output, err = newS3ServiceTraverser(resourceURL, ctx, opts)
+			output, err = NewS3ServiceTraverser(resourceURL, ctx, opts)
 
 			if err != nil {
 				return nil, err
 			}
 		} else {
-			output, err = newS3Traverser(resourceURL, ctx, opts)
+			output, err = NewS3Traverser(resourceURL, ctx, opts)
 
 			if err != nil {
 				return nil, err
@@ -666,12 +666,12 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
 
-			output, err = newGCPServiceTraverser(resourceURL, ctx, opts)
+			output, err = NewGCPServiceTraverser(resourceURL, ctx, opts)
 			if err != nil {
 				return nil, err
 			}
 		} else {
-			output, err = newGCPTraverser(resourceURL, ctx, opts)
+			output, err = NewGCPTraverser(resourceURL, ctx, opts)
 			if err != nil {
 				return nil, err
 			}
@@ -718,7 +718,7 @@ func (existing objectMorpher) FollowedBy(additional objectMorpher) objectMorpher
 // noPreProcessor is used at the top level, when we start traversal because at that point we have no morphing to apply
 // Morphing only becomes necessary as we drill down through a tree of nested traversers, at which point the children
 // add their morphers with FollowedBy()
-var noPreProccessor objectMorpher = nil
+var NoPreProccessor objectMorpher = nil
 
 // given a StoredObject, verify if it satisfies the defined conditions
 // if yes, return true
@@ -783,7 +783,7 @@ func (e *SyncEnumerator) Enumerate() (err error) {
 	}
 
 	// enumerate the primary resource and build lookup map
-	err = e.primaryTraverser.Traverse(noPreProccessor, e.objectIndexer.store, e.filters)
+	err = e.primaryTraverser.Traverse(NoPreProccessor, e.objectIndexer.Store, e.filters)
 	handleAcceptableErrors()
 	if err != nil {
 		return err
@@ -793,7 +793,7 @@ func (e *SyncEnumerator) Enumerate() (err error) {
 	// they will be passed to the object comparator
 	// which can process given objects based on what's already indexed
 	// note: transferring can start while scanning is ongoing
-	err = e.secondaryTraverser.Traverse(noPreProccessor, e.objectComparator, e.filters)
+	err = e.secondaryTraverser.Traverse(NoPreProccessor, e.objectComparator, e.filters)
 	handleAcceptableErrors()
 	if err != nil {
 		return
@@ -839,7 +839,7 @@ func WarnStdoutAndScanningLog(toLog string) {
 }
 
 func (e *CopyEnumerator) Enumerate() (err error) {
-	err = e.Traverser.Traverse(noPreProccessor, e.ObjectDispatcher, e.Filters)
+	err = e.Traverser.Traverse(NoPreProccessor, e.ObjectDispatcher, e.Filters)
 	if err != nil {
 		return
 	}
@@ -878,22 +878,22 @@ func passedFilters(filters []ObjectFilter, storedObject StoredObject) bool {
 
 // This error should be treated as a flag, that we didn't fail processing, but instead, we just didn't process it.
 // Currently, this is only really used for symlink processing, but it _is_ an error, so it must be handled in all new traversers.
-// Basically, anywhere processIfPassedFilters is called, additionally call getProcessingError.
-var ignoredError = errors.New("FileIgnored")
+// Basically, anywhere ProcessIfPassedFilters is called, additionally call getProcessingError.
+var IgnoredError = errors.New("FileIgnored")
 
 func getProcessingError(errin error) (ignored bool, err error) {
-	if errin == ignoredError {
+	if errin == IgnoredError {
 		return true, nil
 	}
 
 	return false, errin
 }
 
-func processIfPassedFilters(filters []ObjectFilter, storedObject StoredObject, processor ObjectProcessor) (err error) {
+func ProcessIfPassedFilters(filters []ObjectFilter, storedObject StoredObject, processor ObjectProcessor) (err error) {
 	if passedFilters(filters, storedObject) {
 		err = processor(storedObject)
 	} else {
-		err = ignoredError
+		err = IgnoredError
 	}
 
 	return

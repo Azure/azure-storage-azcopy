@@ -198,7 +198,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 				*fileProperties.LastModified,
 				*fileProperties.ContentLength,
 				shareFilePropertiesAdapter{fileProperties},
-				noBlobProps,
+				NoBlobProps,
 				fileProperties.Metadata,
 				targetURLParts.ShareName,
 			)
@@ -227,7 +227,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 
 			storedObject.smbLastModifiedTime = *fileProperties.FileLastWriteTime
 
-			err := processIfPassedFilters(filters, storedObject, processor)
+			err := ProcessIfPassedFilters(filters, storedObject, processor)
 			_, err = getProcessingError(err)
 
 			return err
@@ -309,7 +309,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			lmt,
 			size,
 			contentProps,
-			noBlobProps,
+			NoBlobProps,
 			metadata,
 			targetURLParts.ShareName,
 		)
@@ -320,7 +320,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 	}
 
 	processStoredObject := func(s StoredObject) error {
-		err := processIfPassedFilters(filters, s, processor)
+		err := ProcessIfPassedFilters(filters, s, processor)
 		_, err = getProcessingError(err)
 		return err
 	}
@@ -464,7 +464,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 	return
 }
 
-func newFileTraverser(rawURL string, serviceClient *service.Client, ctx context.Context, opts InitResourceTraverserOptions) (t *fileTraverser) {
+func NewFileTraverser(rawURL string, serviceClient *service.Client, ctx context.Context, opts InitResourceTraverserOptions) (t *fileTraverser) {
 	t = &fileTraverser{
 		rawURL:                      rawURL,
 		serviceClient:               serviceClient,

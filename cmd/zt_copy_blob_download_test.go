@@ -183,7 +183,7 @@ func TestDownloadAccount(t *testing.T) {
 
 	// Traverse the account ahead of time and determine the relative paths for testing.
 	relPaths := make([]string, 0) // Use a map for easy lookup
-	blobTraverser := traverser.newBlobAccountTraverser(rawBSC, "", ctx, traverser.InitResourceTraverserOptions{})
+	blobTraverser := traverser.NewBlobAccountTraverser(rawBSC, "", ctx, traverser.InitResourceTraverserOptions{})
 	processor := func(object traverser.StoredObject) error {
 		// Skip non-file types
 		_, ok := object.Metadata[common.POSIXSymlinkMeta]
@@ -192,12 +192,12 @@ func TestDownloadAccount(t *testing.T) {
 		}
 
 		// Append the container name to the relative path
-		relPath := "/" + object.ContainerName + "/" + object.relativePath
+		relPath := "/" + object.ContainerName + "/" + object.RelativePath
 		relPaths = append(relPaths, relPath)
 
 		return nil
 	}
-	err := blobTraverser.Traverse(traverser.noPreProccessor, processor, []traverser.ObjectFilter{})
+	err := blobTraverser.Traverse(traverser.NoPreProccessor, processor, []traverser.ObjectFilter{})
 	a.Nil(err)
 
 	// set up a destination
@@ -240,7 +240,7 @@ func TestDownloadAccountWildcard(t *testing.T) {
 
 	// Traverse the account ahead of time and determine the relative paths for testing.
 	relPaths := make([]string, 0) // Use a map for easy lookup
-	blobTraverser := traverser.newBlobAccountTraverser(rawBSC, container, ctx, traverser.InitResourceTraverserOptions{})
+	blobTraverser := traverser.NewBlobAccountTraverser(rawBSC, container, ctx, traverser.InitResourceTraverserOptions{})
 	processor := func(object traverser.StoredObject) error {
 		// Skip non-file types
 		_, ok := object.Metadata[common.POSIXSymlinkMeta]
@@ -249,11 +249,11 @@ func TestDownloadAccountWildcard(t *testing.T) {
 		}
 
 		// Append the container name to the relative path
-		relPath := "/" + object.ContainerName + "/" + object.relativePath
+		relPath := "/" + object.ContainerName + "/" + object.RelativePath
 		relPaths = append(relPaths, relPath)
 		return nil
 	}
-	err = blobTraverser.Traverse(traverser.noPreProccessor, processor, []traverser.ObjectFilter{})
+	err = blobTraverser.Traverse(traverser.NoPreProccessor, processor, []traverser.ObjectFilter{})
 	a.Nil(err)
 
 	// set up a destination

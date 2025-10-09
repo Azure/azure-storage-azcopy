@@ -105,11 +105,11 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor ObjectProce
 				oi.LastModified,
 				oi.Size,
 				&oie,
-				noBlobProps,
+				NoBlobProps,
 				oie.NewCommonMetadata(),
 				t.s3URLParts.BucketName)
 
-			err = processIfPassedFilters(
+			err = ProcessIfPassedFilters(
 				filters,
 				storedObject,
 				processor)
@@ -177,11 +177,11 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor ObjectProce
 			objectInfo.LastModified,
 			objectInfo.Size,
 			&oie,
-			noBlobProps,
+			NoBlobProps,
 			oie.NewCommonMetadata(),
 			t.s3URLParts.BucketName)
 
-		err = processIfPassedFilters(filters,
+		err = ProcessIfPassedFilters(filters,
 			storedObject,
 			processor)
 		_, err = getProcessingError(err)
@@ -192,7 +192,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor ObjectProce
 	return
 }
 
-func newS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTraverserOptions) (t *s3Traverser, err error) {
+func NewS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTraverserOptions) (t *s3Traverser, err error) {
 	t = &s3Traverser{rawURL: rawURL, ctx: ctx, recursive: opts.Recursive, getProperties: opts.GetPropertiesInFrontend,
 		incrementEnumerationCounter: opts.IncrementEnumeration}
 

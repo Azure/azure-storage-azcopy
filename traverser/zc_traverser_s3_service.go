@@ -93,7 +93,7 @@ func (t *s3ServiceTraverser) Traverse(preprocessor objectMorpher, processor Obje
 		urlResult := tmpS3URL.URL()
 		credentialInfo := common.CredentialInfo{CredentialType: common.ECredentialType.S3AccessKey()}
 
-		bucketTraverser, err := newS3Traverser(&urlResult, t.ctx, InitResourceTraverserOptions{
+		bucketTraverser, err := NewS3Traverser(&urlResult, t.ctx, InitResourceTraverserOptions{
 			Credential: &credentialInfo,
 
 			Recursive: true,
@@ -130,7 +130,7 @@ func (t *s3ServiceTraverser) Traverse(preprocessor objectMorpher, processor Obje
 	return nil
 }
 
-func newS3ServiceTraverser(rawURL *url.URL, ctx context.Context, opts InitResourceTraverserOptions) (t *s3ServiceTraverser, err error) {
+func NewS3ServiceTraverser(rawURL *url.URL, ctx context.Context, opts InitResourceTraverserOptions) (t *s3ServiceTraverser, err error) {
 	t = &s3ServiceTraverser{opts: opts, ctx: ctx}
 
 	var s3URLParts common.S3URLParts

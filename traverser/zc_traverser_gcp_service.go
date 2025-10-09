@@ -71,7 +71,7 @@ func (t *gcpServiceTraverser) Traverse(preprocessor objectMorpher, processor Obj
 		tmpGCPURL := t.gcpURL
 		tmpGCPURL.BucketName = v
 		urlResult := tmpGCPURL.URL()
-		bucketTraverser, err := newGCPTraverser(&urlResult, t.ctx, InitResourceTraverserOptions{
+		bucketTraverser, err := NewGCPTraverser(&urlResult, t.ctx, InitResourceTraverserOptions{
 			Recursive:               true,
 			Credential:              t.opts.Credential,
 			GetPropertiesInFrontend: t.opts.GetPropertiesInFrontend,
@@ -97,7 +97,7 @@ func (t *gcpServiceTraverser) Traverse(preprocessor objectMorpher, processor Obj
 	return nil
 }
 
-func newGCPServiceTraverser(rawURL *url.URL, ctx context.Context, opts InitResourceTraverserOptions) (*gcpServiceTraverser, error) {
+func NewGCPServiceTraverser(rawURL *url.URL, ctx context.Context, opts InitResourceTraverserOptions) (*gcpServiceTraverser, error) {
 	projectID = common.GetEnvironmentVariable(common.EEnvironmentVariable.GoogleCloudProject())
 	t := &gcpServiceTraverser{
 		opts: opts,

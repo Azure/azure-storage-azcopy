@@ -585,7 +585,7 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 					}
 				}
 
-				err = processIfPassedFilters(filters,
+				err = ProcessIfPassedFilters(filters,
 					NewStoredObject(
 						func(storedObject *StoredObject) {
 							// apply the hash data
@@ -608,8 +608,8 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 						fi.ModTime(),
 						fi.Size(),
 						NoContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
-						noBlobProps,
-						noMetadata,
+						NoBlobProps,
+						NoMetadata,
 						"", // Local has no such thing as containers
 					),
 					processor, // the original processor is wrapped in the mutex processor.
@@ -727,7 +727,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 			t.incrementEnumerationCounter(entityType, t.symlinkHandling, t.hardlinkHandling)
 		}
 
-		err := processIfPassedFilters(filters,
+		err := ProcessIfPassedFilters(filters,
 			NewStoredObject(
 				preprocessor,
 				singleFileInfo.Name(),
@@ -736,8 +736,8 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 				singleFileInfo.ModTime(),
 				singleFileInfo.Size(),
 				NoContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
-				noBlobProps,
-				noMetadata,
+				NoBlobProps,
+				NoMetadata,
 				"", // Local has no such thing as containers
 			),
 			hashingProcessor, // hashingProcessor handles the mutex wrapper
@@ -788,7 +788,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 				}
 
 				// This is an exception to the rule. We don't strip the error here, because WalkWithSymlinks catches it.
-				return processIfPassedFilters(filters,
+				return ProcessIfPassedFilters(filters,
 					NewStoredObject(
 						preprocessor,
 						fileInfo.Name(),
@@ -797,8 +797,8 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 						fileInfo.ModTime(), // get this for both files and folders, since sync needs it for both.
 						fileInfo.Size(),
 						NoContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
-						noBlobProps,
-						noMetadata,
+						NoBlobProps,
+						NoMetadata,
 						"", // Local has no such thing as containers
 					),
 					hashingProcessor, // hashingProcessor handles the mutex wrapper
@@ -879,7 +879,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 					t.incrementEnumerationCounter(common.EEntityType.File(), t.symlinkHandling, t.hardlinkHandling)
 				}
 
-				err := processIfPassedFilters(filters,
+				err := ProcessIfPassedFilters(filters,
 					NewStoredObject(
 						preprocessor,
 						entry.Name(),
@@ -888,8 +888,8 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 						fileInfo.ModTime(),
 						fileInfo.Size(),
 						NoContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
-						noBlobProps,
-						noMetadata,
+						NoBlobProps,
+						NoMetadata,
 						"", // Local has no such thing as containers
 					),
 					hashingProcessor, // hashingProcessor handles the mutex wrapper
@@ -905,7 +905,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 	return finalizer(err)
 }
 
-func newLocalTraverser(fullPath string, ctx context.Context, opts InitResourceTraverserOptions) (*localTraverser, error) {
+func NewLocalTraverser(fullPath string, ctx context.Context, opts InitResourceTraverserOptions) (*localTraverser, error) {
 	var hashAdapter common.HashDataAdapter
 	if opts.SyncHashType != common.ESyncHashType.None() { // Only initialize the hash adapter should we need it.
 		var err error

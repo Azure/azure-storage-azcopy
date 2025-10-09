@@ -41,19 +41,19 @@ func TestIncludeFilter(t *testing.T) {
 	a := assert.New(t)
 	// set up the filters
 	includePatternList := parsePatterns("*.pdf;*.jpeg;exactName")
-	includeFilter := traverser.buildIncludeFilters(includePatternList)[0]
+	includeFilter := traverser.BuildIncludeFilters(includePatternList)[0]
 
 	// test the positive cases
 	filesToPass := []string{"bla.pdf", "fancy.jpeg", "socool.jpeg.pdf", "exactName"}
 	for _, file := range filesToPass {
-		passed := includeFilter.DoesPass(traverser.StoredObject{name: file})
+		passed := includeFilter.DoesPass(traverser.StoredObject{Name: file})
 		a.True(passed)
 	}
 
 	// test the negative cases
 	filesNotToPass := []string{"bla.pdff", "fancyjpeg", "socool.jpeg.pdf.wut", "eexactName"}
 	for _, file := range filesNotToPass {
-		passed := includeFilter.DoesPass(traverser.StoredObject{name: file})
+		passed := includeFilter.DoesPass(traverser.StoredObject{Name: file})
 		a.False(passed)
 	}
 }
@@ -62,13 +62,13 @@ func TestExcludeFilter(t *testing.T) {
 	a := assert.New(t)
 	// set up the filters
 	excludePatternList := parsePatterns("*.pdf;*.jpeg;exactName")
-	excludeFilterList := traverser.buildExcludeFilters(excludePatternList, false)
+	excludeFilterList := traverser.BuildExcludeFilters(excludePatternList, false)
 
 	// test the positive cases
 	filesToPass := []string{"bla.pdfe", "fancy.jjpeg", "socool.png", "eexactName"}
 	for _, file := range filesToPass {
 		dummyProcessor := &dummyProcessor{}
-		err := traverser.processIfPassedFilters(excludeFilterList, traverser.StoredObject{name: file}, dummyProcessor.process)
+		err := traverser.ProcessIfPassedFilters(excludeFilterList, traverser.StoredObject{Name: file}, dummyProcessor.process)
 		a.Nil(err)
 		a.Equal(1, len(dummyProcessor.record))
 	}
@@ -77,8 +77,8 @@ func TestExcludeFilter(t *testing.T) {
 	filesToNotPass := []string{"bla.pdf", "fancy.jpeg", "socool.jpeg.pdf", "exactName"}
 	for _, file := range filesToNotPass {
 		dummyProcessor := &dummyProcessor{}
-		err := traverser.processIfPassedFilters(excludeFilterList, traverser.StoredObject{name: file}, dummyProcessor.process)
-		a.Equal(traverser.ignoredError, err)
+		err := traverser.ProcessIfPassedFilters(excludeFilterList, traverser.StoredObject{Name: file}, dummyProcessor.process)
+		a.Equal(traverser.IgnoredError, err)
 		a.Zero(len(dummyProcessor.record))
 	}
 }

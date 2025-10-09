@@ -88,7 +88,7 @@ func (t *blobVersionsTraverser) Traverse(preprocessor objectMorpher, processor O
 			panic("isBlob should never be set if getting properties is an error")
 		}
 
-		blobPropsAdapter := blobPropertiesResponseAdapter{blobProperties}
+		blobPropsAdapter := BlobPropertiesResponseAdapter{blobProperties}
 		blobURLParts.VersionID = versionID
 		storedObject := NewStoredObject(
 			preprocessor,
@@ -108,7 +108,7 @@ func (t *blobVersionsTraverser) Traverse(preprocessor objectMorpher, processor O
 			t.incrementEnumerationCounter(common.EEntityType.File(), common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
 		}
 
-		err = processIfPassedFilters(filters, storedObject, processor)
+		err = ProcessIfPassedFilters(filters, storedObject, processor)
 		if err != nil {
 			return err
 		}

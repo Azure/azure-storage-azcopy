@@ -42,12 +42,12 @@ type processorTestSuiteHelper struct{}
 // return a list of sample entities
 func (processorTestSuiteHelper) getSampleObjectList() []traverser.StoredObject {
 	return []traverser.StoredObject{
-		{name: "file1", relativePath: "file1", lastModifiedTime: time.Now()},
-		{name: "file2", relativePath: "file2", lastModifiedTime: time.Now()},
-		{name: "file3", relativePath: "sub1/file3", lastModifiedTime: time.Now()},
-		{name: "file4", relativePath: "sub1/file4", lastModifiedTime: time.Now()},
-		{name: "file5", relativePath: "sub1/sub2/file5", lastModifiedTime: time.Now()},
-		{name: "file6", relativePath: "sub1/sub2/file6", lastModifiedTime: time.Now()},
+		{Name: "file1", RelativePath: "file1", LastModifiedTime: time.Now()},
+		{Name: "file2", RelativePath: "file2", LastModifiedTime: time.Now()},
+		{Name: "file3", RelativePath: "sub1/file3", LastModifiedTime: time.Now()},
+		{Name: "file4", RelativePath: "sub1/file4", LastModifiedTime: time.Now()},
+		{Name: "file5", RelativePath: "sub1/sub2/file5", LastModifiedTime: time.Now()},
+		{Name: "file6", RelativePath: "sub1/sub2/file6", LastModifiedTime: time.Now()},
 	}
 }
 
@@ -55,7 +55,7 @@ func (processorTestSuiteHelper) getSampleObjectList() []traverser.StoredObject {
 func (processorTestSuiteHelper) getExpectedTransferFromStoredObjectList(storedObjectList []traverser.StoredObject) []string {
 	expectedTransfers := make([]string, 0)
 	for _, storedObject := range storedObjectList {
-		expectedTransfers = append(expectedTransfers, "/"+storedObject.relativePath)
+		expectedTransfers = append(expectedTransfers, "/"+storedObject.RelativePath)
 	}
 
 	return expectedTransfers
@@ -137,7 +137,7 @@ func TestCopyTransferProcessorSingleFile(t *testing.T) {
 	copyProcessor := newCopyTransferProcessor(processorTestSuiteHelper{}.getCopyJobTemplate(), 2, newRemoteRes(blobURL), newLocalRes(filepath.Join(dstDirName, dstFileName)), nil, nil, false, false)
 
 	// exercise the copy transfer processor
-	storedObject := traverser.newStoredObject(traverser.noPreProccessor, blobList[0], "", common.EEntityType.File(), time.Now(), 0, traverser.noContentProps, traverser.noBlobProps, traverser.noMetadata, "")
+	storedObject := traverser.NewStoredObject(traverser.NoPreProccessor, blobList[0], "", common.EEntityType.File(), time.Now(), 0, traverser.NoContentProps, traverser.NoBlobProps, traverser.NoMetadata, "")
 	err := copyProcessor.scheduleCopyTransfer(storedObject)
 	a.Nil(err)
 

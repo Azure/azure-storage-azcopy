@@ -114,7 +114,7 @@ func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor Ob
 
 	for _, v := range cList {
 		containerURL := t.serviceClient.NewContainerClient(v).URL()
-		containerTraverser := newBlobTraverser(containerURL, t.serviceClient, t.ctx, InitResourceTraverserOptions{
+		containerTraverser := NewBlobTraverser(containerURL, t.serviceClient, t.ctx, InitResourceTraverserOptions{
 			IncrementEnumeration: t.opts.IncrementEnumeration,
 
 			CpkOptions: t.opts.CpkOptions,
@@ -139,7 +139,7 @@ func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor Ob
 	return nil
 }
 
-func newBlobAccountTraverser(serviceClient *blobservice.Client, container string, ctx context.Context, opts InitResourceTraverserOptions, blobOpts ...BlobTraverserOptions) (t *blobAccountTraverser) {
+func NewBlobAccountTraverser(serviceClient *blobservice.Client, container string, ctx context.Context, opts InitResourceTraverserOptions, blobOpts ...BlobTraverserOptions) (t *blobAccountTraverser) {
 	t = &blobAccountTraverser{
 		opts: opts,
 

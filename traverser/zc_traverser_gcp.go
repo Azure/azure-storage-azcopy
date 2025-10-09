@@ -67,10 +67,10 @@ func (t *gcpTraverser) Traverse(preprocessor objectMorpher, processor ObjectProc
 				attrs.Updated,
 				attrs.Size,
 				&gie,
-				noBlobProps,
+				NoBlobProps,
 				gie.NewCommonMetadata(),
 				t.gcpURLParts.BucketName)
-			err = processIfPassedFilters(filters, storedObject,
+			err = ProcessIfPassedFilters(filters, storedObject,
 				processor)
 			if err != nil {
 				return err
@@ -126,11 +126,11 @@ func (t *gcpTraverser) Traverse(preprocessor objectMorpher, processor ObjectProc
 				attrs.Updated,
 				attrs.Size,
 				&oie,
-				noBlobProps,
+				NoBlobProps,
 				oie.NewCommonMetadata(),
 				t.gcpURLParts.BucketName)
 
-			err = processIfPassedFilters(filters,
+			err = ProcessIfPassedFilters(filters,
 				storedObject,
 				processor)
 			_, err = getProcessingError(err)
@@ -141,7 +141,7 @@ func (t *gcpTraverser) Traverse(preprocessor objectMorpher, processor ObjectProc
 	}
 }
 
-func newGCPTraverser(rawURL *url.URL, ctx context.Context, opts InitResourceTraverserOptions) (*gcpTraverser, error) {
+func NewGCPTraverser(rawURL *url.URL, ctx context.Context, opts InitResourceTraverserOptions) (*gcpTraverser, error) {
 	t := &gcpTraverser{
 		rawURL:                      rawURL,
 		ctx:                         ctx,

@@ -48,7 +48,7 @@ type BlobTraverser struct {
 
 	// parallel listing employs the hierarchical listing API which is more expensive
 	// cx should have the option to disable this optimization in the Name of saving costs
-	parallelListing bool
+	ParallelListing bool
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
@@ -234,7 +234,7 @@ func (t *BlobTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 
 		if common.AzcopyScanningLogger != nil {
 			common.AzcopyScanningLogger.Log(common.LogDebug, "Detected the root as a blob.")
-			common.AzcopyScanningLogger.Log(common.LogDebug, fmt.Sprintf("Root entity type: %s", getEntityType(blobProperties.Metadata)))
+			common.AzcopyScanningLogger.Log(common.LogDebug, fmt.Sprintf("Root entity type: %s", GetEntityType(blobProperties.Metadata)))
 		}
 
 		relPath := ""
@@ -242,12 +242,12 @@ func (t *BlobTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			relPath = "\x00" // Because the ste will trim the / suffix from our source, or we may not already have it.
 		}
 
-		blobPropsAdapter := blobPropertiesResponseAdapter{blobProperties}
+		blobPropsAdapter := BlobPropertiesResponseAdapter{blobProperties}
 		storedObject := NewStoredObject(
 			preprocessor,
 			getObjectNameOnly(blobName),
 			relPath,
-			getEntityType(blobPropsAdapter.Metadata),
+			GetEntityType(blobPropsAdapter.Metadata),
 			blobPropsAdapter.LastModified(),
 			blobPropsAdapter.ContentLength(),
 			blobPropsAdapter,
@@ -269,7 +269,7 @@ func (t *BlobTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			t.incrementEnumerationCounter(storedObject.EntityType, common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
 		}
 
-		err := processIfPassedFilters(filters, storedObject, processor)
+		err := ProcessIfPassedFilters(filters, storedObject, processor)
 		_, err = getProcessingError(err)
 
 		// short-circuit if we don't have anything else to scan and permanent delete is not on
@@ -291,7 +291,7 @@ func (t *BlobTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			time.Now(),
 			0,
 			NoContentProps,
-			noBlobProps,
+			NoBlobProps,
 			common.Metadata{},
 			blobURLParts.ContainerName,
 		)
@@ -300,7 +300,7 @@ func (t *BlobTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			t.incrementEnumerationCounter(common.EEntityType.Folder(), common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
 		}
 
-		err := processIfPassedFilters(filters, storedObject, processor)
+		err := ProcessIfPassedFilters(filters, storedObject, processor)
 		_, err = getProcessingError(err)
 		if err != nil {
 			return err
@@ -324,7 +324,7 @@ func (t *BlobTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 	// as a performance optimization, get an extra prefix to do pre-filtering. It's typically the start portion of a blob Name.
 	extraSearchPrefix := FilterSet(filters).GetEnumerationPreFilter(t.recursive)
 
-	if t.parallelListing {
+	if t.ParallelListing {
 		return t.parallelList(containerClient, blobURLParts.ContainerName, searchPrefix, extraSearchPrefix, preprocessor, processor, filters)
 	}
 
@@ -373,7 +373,7 @@ func (t *BlobTraverser) parallelList(containerClient *container.Client, containe
 								goto skipDirAdd // We shouldn't add a blob that isn't a folder as a folder. You either have the folder metadata, or you don't.
 							}
 
-							pbPropAdapter := blobPropertiesResponseAdapter{&pResp}
+							pbPropAdapter := BlobPropertiesResponseAdapter{&pResp}
 							folderRelativePath := strings.TrimPrefix(dName, searchPrefix)
 
 							storedObject := NewStoredObject(
@@ -480,7 +480,7 @@ func (t *BlobTraverser) parallelList(containerClient *container.Client, containe
 		}
 
 		object := item.(StoredObject)
-		processErr := processIfPassedFilters(filters, object, processor)
+		processErr := ProcessIfPassedFilters(filters, object, processor)
 		_, processErr = getProcessingError(processErr)
 		if processErr != nil {
 			return processErr
@@ -490,7 +490,7 @@ func (t *BlobTraverser) parallelList(containerClient *container.Client, containe
 	return nil
 }
 
-func getEntityType(metadata map[string]*string) common.EntityType {
+func GetEntityType(metadata map[string]*string) common.EntityType {
 	// Note: We are just checking keys here, not their corresponding values. Is that safe?
 	if folderValue, isFolder := common.TryReadMetadata(metadata, common.POSIXFolderMeta); isFolder && folderValue != nil && strings.ToLower(*folderValue) == "true" {
 		return common.EEntityType.Folder()
@@ -504,14 +504,14 @@ func (t *BlobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, bl
 	adapter := blobPropertiesAdapter{blobInfo.Properties}
 
 	if common.AzcopyScanningLogger != nil {
-		common.AzcopyScanningLogger.Log(common.LogDebug, fmt.Sprintf("Blob %s entity type: %s", relativePath, getEntityType(blobInfo.Metadata)))
+		common.AzcopyScanningLogger.Log(common.LogDebug, fmt.Sprintf("Blob %s entity type: %s", relativePath, GetEntityType(blobInfo.Metadata)))
 	}
 
 	object := NewStoredObject(
 		preprocessor,
 		getObjectNameOnly(*blobInfo.Name),
 		relativePath,
-		getEntityType(blobInfo.Metadata),
+		GetEntityType(blobInfo.Metadata),
 		adapter.LastModified(),
 		*adapter.BlobProperties.ContentLength,
 		adapter,
@@ -577,7 +577,7 @@ func (t *BlobTraverser) serialList(containerClient *container.Client, containerN
 				t.incrementEnumerationCounter(common.EEntityType.File(), common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
 			}
 
-			processErr := processIfPassedFilters(filters, storedObject, processor)
+			processErr := ProcessIfPassedFilters(filters, storedObject, processor)
 			_, processErr = getProcessingError(processErr)
 			if processErr != nil {
 				return processErr
@@ -589,10 +589,10 @@ func (t *BlobTraverser) serialList(containerClient *container.Client, containerN
 }
 
 type BlobTraverserOptions struct {
-	isDFS *bool
+	IsDFS *bool
 }
 
-func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.Context, opts InitResourceTraverserOptions, blobOpts ...BlobTraverserOptions) (t *BlobTraverser) {
+func NewBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.Context, opts InitResourceTraverserOptions, blobOpts ...BlobTraverserOptions) (t *BlobTraverser) {
 	t = &BlobTraverser{
 		RawURL:                      rawURL,
 		ServiceClient:               serviceClient,
@@ -600,24 +600,24 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		recursive:                   opts.Recursive,
 		include:                     common.EBlobTraverserIncludeOption.FromInputs(opts.PermanentDelete, opts.ListVersions, opts.IncludeDirectoryStubs),
 		incrementEnumerationCounter: opts.IncrementEnumeration,
-		parallelListing:             true,
+		ParallelListing:             true,
 		s2sPreserveSourceTags:       opts.PreserveBlobTags,
 		cpkOptions:                  opts.CpkOptions,
 		preservePermissions:         opts.PreservePermissions,
-		isDFS:                       common.DerefOrZero(common.FirstOrZero(blobOpts).isDFS),
+		isDFS:                       common.DerefOrZero(common.FirstOrZero(blobOpts).IsDFS),
 	}
 
 	disableHierarchicalScanning := strings.ToLower(common.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning()))
 
 	// disableHierarchicalScanning should be true for permanent delete
 	if (disableHierarchicalScanning == "false" || disableHierarchicalScanning == "") && t.include.Deleted() && (t.include.Snapshots() || t.include.Versions()) {
-		t.parallelListing = false
+		t.ParallelListing = false
 		fmt.Println("AZCOPY_DISABLE_HIERARCHICAL_SCAN has been set to true to permanently delete soft-deleted snapshots/versions.")
 	}
 
 	if disableHierarchicalScanning == "true" {
 		// TODO log to frontend log that parallel listing was disabled, once the frontend log PR is merged
-		t.parallelListing = false
+		t.ParallelListing = false
 	}
 	return
 }

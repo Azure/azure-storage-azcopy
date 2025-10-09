@@ -86,7 +86,7 @@ func (t *fileAccountTraverser) Traverse(preprocessor objectMorpher, processor Ob
 
 	for _, v := range shareList {
 		shareURL := t.serviceClient.NewShareClient(v).URL()
-		shareTraverser := newFileTraverser(shareURL, t.serviceClient, t.ctx, InitResourceTraverserOptions{
+		shareTraverser := NewFileTraverser(shareURL, t.serviceClient, t.ctx, InitResourceTraverserOptions{
 			DestResourceType:        t.opts.DestResourceType,
 			Recursive:               true,
 			GetPropertiesInFrontend: t.opts.GetPropertiesInFrontend,
@@ -109,7 +109,7 @@ func (t *fileAccountTraverser) Traverse(preprocessor objectMorpher, processor Ob
 	return nil
 }
 
-func newFileAccountTraverser(serviceClient *service.Client, shareName string, ctx context.Context, opts InitResourceTraverserOptions) (t *fileAccountTraverser) {
+func NewFileAccountTraverser(serviceClient *service.Client, shareName string, ctx context.Context, opts InitResourceTraverserOptions) (t *fileAccountTraverser) {
 	t = &fileAccountTraverser{
 		opts: opts,
 

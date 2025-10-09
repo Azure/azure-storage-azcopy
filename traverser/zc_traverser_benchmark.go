@@ -84,7 +84,7 @@ func (t *benchmarkTraverser) Traverse(preprocessor objectMorpher, processor Obje
 			t.incrementEnumerationCounter(common.EEntityType.File(), common.ESymlinkHandlingType.Skip(), common.DefaultHardlinkHandlingType)
 		}
 
-		err = processIfPassedFilters(filters, NewStoredObject(
+		err = ProcessIfPassedFilters(filters, NewStoredObject(
 			preprocessor,
 			name,
 			relativePath,
@@ -92,8 +92,8 @@ func (t *benchmarkTraverser) Traverse(preprocessor objectMorpher, processor Obje
 			common.BenchmarkLmt,
 			t.bytesPerFile,
 			NoContentProps,
-			noBlobProps,
-			noMetadata,
+			NoBlobProps,
+			NoMetadata,
 			""), processor)
 		_, err = getProcessingError(err)
 		if err != nil {

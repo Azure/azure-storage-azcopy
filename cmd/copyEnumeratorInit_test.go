@@ -48,7 +48,7 @@ func TestValidateSourceDirThatExists(t *testing.T) {
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, dirName).URL()
 	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
-	blobTraverser := traverser.newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, traverser.InitResourceTraverserOptions{
+	blobTraverser := traverser.NewBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, traverser.InitResourceTraverserOptions{
 		Recursive:             true,
 		IncludeDirectoryStubs: true,
 	})
@@ -81,7 +81,7 @@ func TestValidateSourceDirDoesNotExist(t *testing.T) {
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, dirName).URL()
 	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
-	blobTraverser := traverser.newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, traverser.InitResourceTraverserOptions{
+	blobTraverser := traverser.NewBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, traverser.InitResourceTraverserOptions{
 		Recursive:             true,
 		IncludeDirectoryStubs: true,
 	})
@@ -115,7 +115,7 @@ func TestValidateSourceFileExists(t *testing.T) {
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, fileName).URL()
 	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
-	blobTraverser := traverser.newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, traverser.InitResourceTraverserOptions{
+	blobTraverser := traverser.NewBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, traverser.InitResourceTraverserOptions{
 
 		Recursive:             true,
 		IncludeDirectoryStubs: true,
@@ -143,7 +143,7 @@ func TestValidateSourceFileDoesNotExist(t *testing.T) {
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, fileName).URL()
 	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
-	blobTraverser := traverser.newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, traverser.InitResourceTraverserOptions{
+	blobTraverser := traverser.NewBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, traverser.InitResourceTraverserOptions{
 		Recursive:             true,
 		IncludeDirectoryStubs: true,
 	})
@@ -170,7 +170,7 @@ func TestValidateSourceWithWildCard(t *testing.T) {
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, dirName).URL()
 	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
-	blobTraverser := traverser.newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, traverser.InitResourceTraverserOptions{
+	blobTraverser := traverser.NewBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, traverser.InitResourceTraverserOptions{
 		Recursive:             true,
 		IncludeDirectoryStubs: true,
 	})
