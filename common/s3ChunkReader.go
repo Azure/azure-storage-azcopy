@@ -111,8 +111,8 @@ func (cr *S3ChunkReader) BlockingPrefetch(_ io.ReaderAt, isRetry bool) error {
 	if !isRetry {
 		body, err = cr.sourceInfoProvider.GetObjectRange(cr.chunkId.offsetInFile, cr.length)
 	} else {
-		// Retryable path: use WithConservativeRetry to centralize backoff/retry semantics.
-		body, err = WithConservativeRetry(
+		// Retryable path: use WithNetworkRetry to centralize backoff/retry semantics.
+		body, err = WithNetworkRetry(
 			cr.ctx,
 			nil,
 			fmt.Sprintf("BlockingPrefetch %v", cr.chunkId),
