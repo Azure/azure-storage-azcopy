@@ -310,6 +310,64 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	// get the container URL so that we can list the blobs
 	containerClient := t.serviceClient.NewContainerClient(blobURLParts.ContainerName)
 
+	// Handle enumerating folder roots for BlobFS (HNS enabled only)
+	if blobURLParts.BlobName != "" && isDirStub && t.isDFS && t.preservePermissions.IsTruthy() {
+		var dirName string
+		if strings.HasSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING) {
+			dirName = strings.TrimSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)
+		}
+		if azcopyScanningLogger != nil {
+			azcopyScanningLogger.Log(common.LogDebug, fmt.Sprintf("Detected the root as a folder %s.", dirName))
+		}
+		/* Directory stubs can be named like:
+		- `folder/` with `hdi_isfolder`=true
+		- `folder` with `hdi_isfolder`=true */
+		var dirProps *blob.GetPropertiesResponse
+		var err error
+
+		// Get properties for blob folder
+
+		// First try without trailing slash
+		blobDirClient := containerClient.NewBlobClient(dirName)
+		props, err := blobDirClient.GetProperties(t.ctx, &blob.GetPropertiesOptions{CPKInfo: t.cpkOptions.GetCPKInfo()})
+		if err == nil {
+			dirProps = &props
+		} else if !strings.HasSuffix(dirName, common.AZCOPY_PATH_SEPARATOR_STRING) { // If we failed, retry with trailing slash
+			blobDirClient = containerClient.NewBlobClient(dirName + common.AZCOPY_PATH_SEPARATOR_STRING)
+			props, err = blobDirClient.GetProperties(t.ctx, &blob.GetPropertiesOptions{CPKInfo: t.cpkOptions.GetCPKInfo()})
+			if err == nil {
+				dirProps = &props
+			}
+		}
+
+		// After getting the correct props, create the root object
+		if dirProps != nil && t.doesBlobRepresentAFolder(dirProps.Metadata) {
+			dirPropsAdapter := blobPropertiesResponseAdapter{dirProps}
+			storedObject := newStoredObject(
+				preprocessor,
+				"", // empty for root
+				"", // empty for root
+				common.EEntityType.Folder(),
+				dirPropsAdapter.LastModified(),
+				0, // folders have no size
+				dirPropsAdapter,
+				dirPropsAdapter,
+				dirPropsAdapter.Metadata,
+				blobURLParts.ContainerName,
+			)
+
+			if t.incrementEnumerationCounter != nil {
+				t.incrementEnumerationCounter(common.EEntityType.Folder())
+			}
+
+			err = processIfPassedFilters(filters, storedObject, processor)
+			_, err = getProcessingError(err)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
 	// get the search prefix to aid in the listing
 	// example: for a url like https://test.blob.core.windows.net/test/foo/bar/bla
 	// the search prefix would be foo/bar/bla

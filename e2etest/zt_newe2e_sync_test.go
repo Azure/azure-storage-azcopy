@@ -602,6 +602,7 @@ func (s *SyncTestSuite) Scenario_TestSyncBlobFSPreserveRootProperties(svm *Scena
 			CopySyncCommonFlags: CopySyncCommonFlags{
 				Recursive:           pointerTo(true),
 				PreservePermissions: pointerTo(true),
+				PreserveInfo:        pointerTo(true),
 			},
 			PreserveRootProperties: pointerTo(true),
 		},

@@ -336,9 +336,10 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 		}
 
 		// For user to use preserveRootProperties flag, preserveInfo and preservePermissions must be set
-		// Reviewers: is it ok to make the preserveRootProperties flag to depend on  preserveInfo and preservePermissions?
+		// TODO Reviewers: is it ok to make the preserveRootProperties flag to depend on  preserveInfo and preservePermissions?
 		if !cooked.preservePermissions.IsTruthy() && !cooked.preserveInfo {
-			return fmt.Errorf("preserve-root-properties flag needs preserve-info and preserve-permissions flags to be set for full functionality")
+			glcm.Warn("preserve-root-properties flag needs preserve-info and preserve-permissions flags to be set " +
+				"\n for full functionality")
 		}
 	}
 	if err != nil {
@@ -408,6 +409,12 @@ func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
 		glcm.Info("Client Provided Key for encryption/decryption is provided for download scenario. " +
 			"Assuming source is encrypted.")
 		cooked.cpkOptions.IsSourceEncrypted = true
+	}
+
+	// when preserving root properties, we need to include the root in the enumeration so STE can transfer its
+	// properties
+	if cooked.preserveRootProperties {
+		cooked.includeRoot = true
 	}
 
 	return nil
