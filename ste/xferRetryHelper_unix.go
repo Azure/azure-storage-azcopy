@@ -23,23 +23,17 @@
 package ste
 
 import (
-	"errors"
 	"golang.org/x/sys/unix"
-	"net/http"
-	"strings"
+	"syscall"
 )
 
 func init() {
-	platformRetryPolicy = func(response *http.Response, err error) bool {
-		if err == nil {
-			return false
-		}
-
-		if errors.Is(err, unix.EADDRNOTAVAIL) ||
-			strings.Contains(strings.ToLower(err.Error()), strings.ToLower(unix.EADDRNOTAVAIL.Error())) {
-			return true
-		}
-
-		return false
+	platformRetriedErrnos = []syscall.Errno{
+		unix.EADDRNOTAVAIL, // Similar to Windows, on larger loads, allocatable address space can run out.
+		unix.EADDRINUSE,
+		unix.ECONNRESET, // Another device could simply, drop or refuse our connection in between.
+		unix.ECONNREFUSED,
+		unix.ECONNABORTED,
+		unix.ETIMEDOUT, // We could also just get timed out somewhere in between.
 	}
 }
