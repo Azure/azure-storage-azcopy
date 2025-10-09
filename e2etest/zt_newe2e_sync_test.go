@@ -694,4 +694,7 @@ func (s *SyncTestSuite) Scenario_TestSyncFileFilePreserveRootProperties(svm *Sce
 			"root/file.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(true)},
 		},
 	}, false)
+
+	ValidateResource[ObjectResourceManager](svm, dst.GetObject(svm, "root", common.EEntityType.Folder()),
+		ResourceDefinitionObject{ObjectName: pointerTo("root")}, false)
 }

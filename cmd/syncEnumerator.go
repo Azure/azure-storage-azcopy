@@ -328,14 +328,6 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 
 	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo, copyJobTemplate)
 
-	// handle root props transfer before setting up comparator
-	if cca.preserveRootProperties {
-		err = cca.handleRootPropertyTransfer(ctx, sourceTraverser, destinationTraverser, copyJobTemplate)
-		if err != nil {
-			glcm.Warn(fmt.Sprintf("failed to transfer root properties from source to destination: %v", err))
-		}
-	}
-
 	// set up the comparator so that the source/destination can be compared
 	indexer := newObjectIndexer()
 	var comparator objectProcessor
@@ -442,11 +434,4 @@ func quitIfInSync(transferJobInitiated, anyDestinationFileDeleted bool, cca *coo
 			return "The source and destination are now in sync."
 		}, common.EExitCode.Success())
 	}
-}
-
-func (cca *cookedSyncCmdArgs) handleRootPropertyTransfer(ctx context.Context, sourceTraverser ResourceTraverser,
-	destinationTraverser ResourceTraverser, copyJobTemplate *common.CopyJobPartOrderRequest) error {
-
-	return nil
-
 }
