@@ -1,7 +1,6 @@
 package e2etest
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -808,13 +807,12 @@ func (s *BasicFunctionalitySuite) Scenario_JobResume(svm *ScenarioVariationManag
 
 	// Find the Job ID for the above azcopy copy job
 	var jobId string
-	if parsedOut, ok := stdOut.(*AzCopyParsedCopySyncRemoveStdout); ok {
-		if parsedOut.InitMsg.JobID != "" {
-			jobId = parsedOut.InitMsg.JobID
+	if !svm.Dryrun() {
+		if parsedOut, ok := stdOut.(*AzCopyParsedCopySyncRemoveStdout); ok {
+			if parsedOut.InitMsg.JobID != "" {
+				jobId = parsedOut.InitMsg.JobID
+			}
 		}
-	} else {
-		// Will enter during dry runs
-		fmt.Println("failed to cast to AzCopyParsedCopySyncRemoveStdout")
 	}
 
 	resStdOut, _ := RunAzCopy(
