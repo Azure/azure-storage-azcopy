@@ -552,7 +552,7 @@ func (s *SyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationMan
 
 // Scenario_TestSyncPreserveRootProperties validates that when --preserve-root-properties is set, the destination root folder's properties are overwritten
 // with the source root folder properties.
-func (s *SyncTestSuite) Scenario_TestSyncBlobFSPreserveRootProperties(svm *ScenarioVariationManager) {
+func (s *SyncTestSuite) Scenario_TestBlobFSBlobFSPreserveRootProperties(svm *ScenarioVariationManager) {
 	// Use BlobFS (HNS) for ACLs we can validate
 	src := CreateResource[ContainerResourceManager](svm,
 		GetRootResource(svm, common.ELocation.BlobFS()),
@@ -569,7 +569,7 @@ func (s *SyncTestSuite) Scenario_TestSyncBlobFSPreserveRootProperties(svm *Scena
 					},
 				},
 				// Include at least one file under root so the sync enumerates content
-				"root/file.txt": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(0)},
+				"root/file.txt": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("1K"))},
 			},
 		},
 	)
@@ -596,7 +596,7 @@ func (s *SyncTestSuite) Scenario_TestSyncBlobFSPreserveRootProperties(svm *Scena
 		Targets: []ResourceManager{
 			// Sync the directory to the directory
 			src.GetObject(svm, "root", common.EEntityType.Folder()),
-			dst.GetObject(svm, "root", common.EEntityType.File()),
+			dst.GetObject(svm, "root", common.EEntityType.Folder()),
 		},
 		Flags: SyncFlags{
 			CopySyncCommonFlags: CopySyncCommonFlags{
@@ -626,73 +626,72 @@ func (s *SyncTestSuite) Scenario_TestSyncBlobFSPreserveRootProperties(svm *Scena
 
 // Scenario_TestSyncPreserveRootProperties validates that when --preserve-root-properties is set, the destination root folder's properties are overwritten
 // with the source root folder properties.
-//func (s *SyncTestSuite) Scenario_TestSyncPreserveRootProperties(svm *ScenarioVariationManager) {
-//	// Use BlobFS (HNS) for ACLs we can validate
-//	src := CreateResource[ContainerResourceManager](svm,
-//		GetRootResource(svm, common.ELocation.File()),
-//		ResourceDefinitionContainer{
-//			Objects: ObjectResourceMappingFlat{
-//				// Root directory with a specific ACL we will validate later
-//				"root": ResourceDefinitionObject{
-//					ObjectProperties: ObjectProperties{
-//						EntityType: common.EEntityType.Folder(),
-//						FileProperties: FileProperties{
-//							// grant all for group to make it observably different
-//							ACL: pointerTo("user::rwx,group::rwx,other::---"),
-//						},
-//					},
-//				},
-//				// Include at least one file under root so the sync enumerates content
-//				"root/file.txt": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(0)},
-//			},
-//		},
-//	)
-//
-//	dst := CreateResource[ContainerResourceManager](svm,
-//		GetRootResource(svm, common.ELocation.File()),
-//		ResourceDefinitionContainer{
-//			Objects: ObjectResourceMappingFlat{
-//				// Destination root with a different ACL to observe the change after sync
-//				"root": ResourceDefinitionObject{
-//					ObjectProperties: ObjectProperties{
-//						EntityType: common.EEntityType.Folder(),
-//						BlobFSProperties: BlobFSProperties{
-//							ACL: pointerTo("user::rwx,group::---,other::---"),
-//						},
-//					},
-//				},
-//			},
-//		},
-//	)
-//
-//	RunAzCopy(svm, AzCopyCommand{
-//		Verb: AzCopyVerbSync,
-//		Targets: []ResourceManager{
-//			// Sync the directory to the directory
-//			src.GetObject(svm, "root", common.EEntityType.Folder()),
-//			dst.GetObject(svm, "root", common.EEntityType.File()),
-//		},
-//		Flags: SyncFlags{
-//			CopySyncCommonFlags: CopySyncCommonFlags{
-//				Recursive:           pointerTo(true),
-//				PreservePermissions: pointerTo(true),
-//			},
-//			PreserveRootProperties: pointerTo(true),
-//		},
-//	})
-//
-//	// Validate that the destination root folder picked up the source ACL
-//	ValidateResource[ContainerResourceManager](svm, dst, ResourceDefinitionContainer{
-//		Objects: ObjectResourceMappingFlat{
-//			"root": ResourceDefinitionObject{
-//				ObjectProperties: ObjectProperties{
-//					EntityType: common.EEntityType.Folder(),
-//					BlobFSProperties: BlobFSProperties{
-//						ACL: pointerTo("user::rwx,group::rwx,other::---"),
-//					},
-//				},
-//			},
-//			"root/file.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(true)},
-//		},
-//	}, false)
-//}
+func (s *SyncTestSuite) Scenario_TestSyncFileFilePreserveRootProperties(svm *ScenarioVariationManager) {
+	currTime := time.Now()
+	src := CreateResource[ContainerResourceManager](svm,
+		GetRootResource(svm, common.ELocation.File()),
+		ResourceDefinitionContainer{
+			Objects: ObjectResourceMappingFlat{
+				// Root directory with a specific creation time we will validate later
+				"root": ResourceDefinitionObject{
+					ObjectProperties: ObjectProperties{
+						EntityType: common.EEntityType.Folder(),
+						FileProperties: FileProperties{
+							FileCreationTime: pointerTo(currTime),
+						},
+					},
+				},
+				// Include at least one file under root so the sync enumerates content
+				"root/file.txt": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("1K"))},
+			},
+		},
+	)
+
+	dst := CreateResource[ContainerResourceManager](svm,
+		GetRootResource(svm, common.ELocation.File()),
+		ResourceDefinitionContainer{
+			Objects: ObjectResourceMappingFlat{
+				// Destination root with a newer creation time to observe after sync
+				"root": ResourceDefinitionObject{
+					ObjectProperties: ObjectProperties{
+						EntityType: common.EEntityType.Folder(),
+						FileProperties: FileProperties{
+							FileCreationTime: pointerTo(currTime.Add(time.Second * 5)),
+						},
+					},
+				},
+			},
+		},
+	)
+
+	RunAzCopy(svm, AzCopyCommand{
+		Verb: AzCopyVerbSync,
+		Targets: []ResourceManager{
+			// Sync the directory to the directory
+			src.GetObject(svm, "root", common.EEntityType.Folder()),
+			dst.GetObject(svm, "root", common.EEntityType.Folder()),
+		},
+		Flags: SyncFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive:           pointerTo(true),
+				PreservePermissions: pointerTo(true),
+			},
+			PreserveRootProperties: pointerTo(true),
+		},
+	})
+
+	// Validate that the destination root folder picked up the source creation time
+	ValidateResource[ContainerResourceManager](svm, dst, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"root": ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType: common.EEntityType.Folder(),
+					FileProperties: FileProperties{
+						FileCreationTime: pointerTo(currTime),
+					},
+				},
+			},
+			"root/file.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(true)},
+		},
+	}, false)
+}
