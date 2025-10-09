@@ -47,7 +47,7 @@ func (t *blobAccountTraverser) IsDirectory(isSource bool) (bool, error) {
 	return true, nil // Returns true as account traversal is inherently folder-oriented and recursive.
 }
 
-func (t *blobAccountTraverser) listContainers() ([]string, error) {
+func (t *blobAccountTraverser) ListContainers() ([]string, error) {
 	cachedContainers, _, err := t.getListContainers()
 	return cachedContainers, err
 }

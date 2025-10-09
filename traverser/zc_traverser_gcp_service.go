@@ -28,7 +28,7 @@ func (t *gcpServiceTraverser) IsDirectory(isSource bool) (bool, error) {
 	return true, nil //Account traversals are inherently folder based
 }
 
-func (t *gcpServiceTraverser) listContainers() ([]string, error) {
+func (t *gcpServiceTraverser) ListContainers() ([]string, error) {
 
 	if len(t.cachedBuckets) == 0 {
 		bucketList := make([]string, 0)
@@ -61,7 +61,7 @@ func (t *gcpServiceTraverser) listContainers() ([]string, error) {
 }
 
 func (t *gcpServiceTraverser) Traverse(preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) error {
-	bucketList, err := t.listContainers()
+	bucketList, err := t.ListContainers()
 
 	if err != nil {
 		return err
