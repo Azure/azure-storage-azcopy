@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package traverser
 
 import (
 	"context"
@@ -54,7 +54,7 @@ func (t *fileAccountTraverser) listContainers() ([]string, error) {
 			}
 
 			for _, v := range resp.Shares {
-				// Match a pattern for the share name and the share name only
+				// Match a pattern for the share Name and the share Name only
 				if t.sharePattern != "" {
 					if ok, err := containerNameMatchesPattern(*v.Name, t.sharePattern); err != nil {
 						// Break if the pattern is invalid
@@ -76,7 +76,7 @@ func (t *fileAccountTraverser) listContainers() ([]string, error) {
 	}
 }
 
-func (t *fileAccountTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
+func (t *fileAccountTraverser) Traverse(preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) error {
 	// listContainers will return the cached share list if shares have already been listed by this traverser.
 	shareList, err := t.listContainers()
 

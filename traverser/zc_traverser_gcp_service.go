@@ -1,13 +1,14 @@
-package cmd
+package traverser
 
 import (
-	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"google.golang.org/api/iterator"
 	"net/url"
 	"strings"
+
+	gcpUtils "cloud.google.com/go/storage"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"google.golang.org/api/iterator"
 )
 
 type gcpServiceTraverser struct {
@@ -59,7 +60,7 @@ func (t *gcpServiceTraverser) listContainers() ([]string, error) {
 	}
 }
 
-func (t *gcpServiceTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
+func (t *gcpServiceTraverser) Traverse(preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) error {
 	bucketList, err := t.listContainers()
 
 	if err != nil {

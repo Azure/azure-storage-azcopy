@@ -23,17 +23,19 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"path"
 	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -181,8 +183,8 @@ func TestDownloadAccount(t *testing.T) {
 
 	// Traverse the account ahead of time and determine the relative paths for testing.
 	relPaths := make([]string, 0) // Use a map for easy lookup
-	blobTraverser := newBlobAccountTraverser(rawBSC, "", ctx, InitResourceTraverserOptions{})
-	processor := func(object StoredObject) error {
+	blobTraverser := traverser.newBlobAccountTraverser(rawBSC, "", ctx, traverser.InitResourceTraverserOptions{})
+	processor := func(object traverser.StoredObject) error {
 		// Skip non-file types
 		_, ok := object.Metadata[common.POSIXSymlinkMeta]
 		if ok {
@@ -195,7 +197,7 @@ func TestDownloadAccount(t *testing.T) {
 
 		return nil
 	}
-	err := blobTraverser.Traverse(noPreProccessor, processor, []ObjectFilter{})
+	err := blobTraverser.Traverse(traverser.noPreProccessor, processor, []traverser.ObjectFilter{})
 	a.Nil(err)
 
 	// set up a destination
@@ -238,8 +240,8 @@ func TestDownloadAccountWildcard(t *testing.T) {
 
 	// Traverse the account ahead of time and determine the relative paths for testing.
 	relPaths := make([]string, 0) // Use a map for easy lookup
-	blobTraverser := newBlobAccountTraverser(rawBSC, container, ctx, InitResourceTraverserOptions{})
-	processor := func(object StoredObject) error {
+	blobTraverser := traverser.newBlobAccountTraverser(rawBSC, container, ctx, traverser.InitResourceTraverserOptions{})
+	processor := func(object traverser.StoredObject) error {
 		// Skip non-file types
 		_, ok := object.Metadata[common.POSIXSymlinkMeta]
 		if ok {
@@ -251,7 +253,7 @@ func TestDownloadAccountWildcard(t *testing.T) {
 		relPaths = append(relPaths, relPath)
 		return nil
 	}
-	err = blobTraverser.Traverse(noPreProccessor, processor, []ObjectFilter{})
+	err = blobTraverser.Traverse(traverser.noPreProccessor, processor, []traverser.ObjectFilter{})
 	a.Nil(err)
 
 	// set up a destination

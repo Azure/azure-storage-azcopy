@@ -21,10 +21,12 @@
 package cmd
 
 import (
+	"testing"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 	"github.com/stretchr/testify/assert"
 	chk "gopkg.in/check.v1"
-	"testing"
 )
 
 type pathUtilsSuite struct{}
@@ -55,7 +57,7 @@ func TestStripQueryFromSaslessUrl(t *testing.T) {
 		if t.isRemote {
 			loc = common.ELocation.File()
 		}
-		m, q := splitQueryFromSaslessResource(t.full, loc)
+		m, q := traverser.splitQueryFromSaslessResource(t.full, loc)
 		a.Equal(t.expectedMain, m)
 		a.Equal(t.expectedQuery, q)
 	}
@@ -63,7 +65,7 @@ func TestStripQueryFromSaslessUrl(t *testing.T) {
 
 func TestToReversedString(t *testing.T) {
 	a := assert.New(t)
-	traverser := &benchmarkTraverser{}
+	traverser := &traverser.benchmarkTraverser{}
 	a.Equal("1", traverser.toReversedString(1))
 	a.Equal("01", traverser.toReversedString(10))
 	a.Equal("54321", traverser.toReversedString(12345))

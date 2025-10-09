@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package traverser
 
 import (
 	"context"
@@ -42,7 +42,7 @@ type s3ServiceTraverser struct {
 	bucketPattern string
 	cachedBuckets []string
 
-	s3URL    s3URLPartsExtension
+	s3URL    common.S3URLParts
 	s3Client *minio.Client
 }
 
@@ -56,7 +56,7 @@ func (t *s3ServiceTraverser) listContainers() ([]string, error) {
 		bucketInfo, err := t.s3Client.ListBuckets()
 		if err == nil {
 			for _, v := range bucketInfo {
-				// Match a pattern for the bucket name and the bucket name only
+				// Match a pattern for the bucket Name and the bucket Name only
 				if t.bucketPattern != "" {
 					if ok, err := containerNameMatchesPattern(v.Name, t.bucketPattern); err != nil {
 						// Break if the pattern is invalid
@@ -80,7 +80,7 @@ func (t *s3ServiceTraverser) listContainers() ([]string, error) {
 	}
 }
 
-func (t *s3ServiceTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
+func (t *s3ServiceTraverser) Traverse(preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) error {
 	bucketList, err := t.listContainers()
 
 	if err != nil {
@@ -139,7 +139,7 @@ func newS3ServiceTraverser(rawURL *url.URL, ctx context.Context, opts InitResour
 	if err != nil {
 		return
 	} else if !s3URLParts.IsServiceSyntactically() {
-		// Yoink the bucket name off and treat it as the pattern.
+		// Yoink the bucket Name off and treat it as the pattern.
 		t.bucketPattern = s3URLParts.BucketName
 
 		s3URLParts.BucketName = ""
@@ -147,7 +147,7 @@ func newS3ServiceTraverser(rawURL *url.URL, ctx context.Context, opts InitResour
 
 	showS3UrlTypeWarning(s3URLParts)
 
-	t.s3URL = s3URLPartsExtension{s3URLParts}
+	t.s3URL = s3URLParts
 
 	t.s3Client, err = common.CreateS3Client(t.ctx, common.CredentialInfo{
 		CredentialType: common.ECredentialType.S3AccessKey(),
@@ -155,7 +155,7 @@ func newS3ServiceTraverser(rawURL *url.URL, ctx context.Context, opts InitResour
 			Endpoint: t.s3URL.Endpoint,
 		},
 	}, common.CredentialOpOptions{
-		LogError: glcm.Error,
-	}, azcopyScanningLogger)
+		LogError: common.GetLifecycleMgr().Error,
+	}, common.AzcopyScanningLogger)
 	return
 }

@@ -1,3 +1,4 @@
+//go:build !windows
 // +build !windows
 
 // Copyright © Microsoft <wastore@microsoft.com>
@@ -20,7 +21,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package traverser
 
 type attrFilter struct{}
 

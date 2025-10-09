@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package traverser
 
 import (
 	"fmt"
@@ -38,20 +38,20 @@ const ISO8601 = "2006-01-02T15:04:05.0000000Z" // must have 0's for fractional s
 Blob type exclusion is required as a part of the copy enumerators refactor. This would be used in Download and S2S scenarios.
 This map is used effectively as a hash set. If an item exists in the set, it does not pass the filter.
 */
-type excludeBlobTypeFilter struct {
-	blobTypes map[blob.BlobType]bool
+type ExcludeBlobTypeFilter struct {
+	BlobTypes map[blob.BlobType]bool
 }
 
-func (f *excludeBlobTypeFilter) DoesSupportThisOS() (msg string, supported bool) {
+func (f *ExcludeBlobTypeFilter) DoesSupportThisOS() (msg string, supported bool) {
 	return "", true
 }
 
-func (f *excludeBlobTypeFilter) AppliesOnlyToFiles() bool {
+func (f *ExcludeBlobTypeFilter) AppliesOnlyToFiles() bool {
 	return true // there aren't any (real) folders in Blob Storage
 }
 
-func (f *excludeBlobTypeFilter) DoesPass(object StoredObject) bool {
-	if _, ok := f.blobTypes[object.blobType]; !ok {
+func (f *ExcludeBlobTypeFilter) DoesPass(object StoredObject) bool {
+	if _, ok := f.BlobTypes[object.BlobType]; !ok {
 		// For readability purposes, focus on returning false.
 		// Basically, the statement says "If the blob type is not present in the list, the object passes the filters."
 		return true
@@ -114,11 +114,11 @@ func (f *excludeFilter) DoesPass(storedObject StoredObject) bool {
 	if f.targetsPath {
 		// Don't actually support Patterns here.
 		// Isolate the path separator
-		pattern := strings.ReplaceAll(f.pattern, common.AZCOPY_PATH_SEPARATOR_STRING, common.DeterminePathSeparator(storedObject.relativePath))
-		matched = strings.HasPrefix(storedObject.relativePath, pattern)
+		pattern := strings.ReplaceAll(f.pattern, common.AZCOPY_PATH_SEPARATOR_STRING, common.DeterminePathSeparator(storedObject.RelativePath))
+		matched = strings.HasPrefix(storedObject.RelativePath, pattern)
 	} else {
 		var err error
-		matched, err = path.Match(f.pattern, storedObject.name)
+		matched, err = path.Match(f.pattern, storedObject.Name)
 
 		// if the pattern failed to match with an error, then we assume the pattern is invalid
 		// and let it pass
@@ -134,7 +134,7 @@ func (f *excludeFilter) DoesPass(storedObject StoredObject) bool {
 	return true
 }
 
-func buildExcludeFilters(Patterns []string, targetPath bool) []ObjectFilter {
+func BuildExcludeFilters(Patterns []string, targetPath bool) []ObjectFilter {
 	filters := make([]ObjectFilter, 0)
 	for _, pattern := range Patterns {
 		if pattern != "" {
@@ -163,7 +163,7 @@ func (f *IncludeFilter) DoesSupportThisOS() (msg string, supported bool) {
 }
 
 func (f *IncludeFilter) AppliesOnlyToFiles() bool {
-	return true // IncludeFilter is a name-pattern-based filter, and we treat those as relating to FILE names only
+	return true // IncludeFilter is a Name-pattern-based filter, and we treat those as relating to FILE names only
 }
 
 func (f *IncludeFilter) DoesPass(storedObject StoredObject) bool {
@@ -172,7 +172,7 @@ func (f *IncludeFilter) DoesPass(storedObject StoredObject) bool {
 	}
 
 	for _, pattern := range f.patterns {
-		checkItem := storedObject.name
+		checkItem := storedObject.Name
 
 		matched := false
 
@@ -213,7 +213,7 @@ func (f *IncludeFilter) getEnumerationPreFilter() string {
 	}
 }
 
-func buildIncludeFilters(Patterns []string) []ObjectFilter {
+func BuildIncludeFilters(Patterns []string) []ObjectFilter {
 	if len(Patterns) == 0 {
 		return []ObjectFilter{}
 	}
@@ -289,7 +289,7 @@ func (f *regexFilter) DoesPass(storedObject StoredObject) bool {
 		matched := false
 		var err error
 
-		matched, err = regexp.MatchString(pattern, storedObject.relativePath)
+		matched, err = regexp.MatchString(pattern, storedObject.RelativePath)
 		// if pattern fails to match with an error, we assume the pattern is invalid
 		if err != nil {
 			if f.isIncluded { //if include filter then we ignore it
@@ -307,7 +307,7 @@ func (f *regexFilter) DoesPass(storedObject StoredObject) bool {
 	return !f.isIncluded
 }
 
-func buildRegexFilters(patterns []string, isIncluded bool) []ObjectFilter {
+func BuildRegexFilters(patterns []string, isIncluded bool) []ObjectFilter {
 	if len(patterns) == 0 {
 		return []ObjectFilter{}
 	}
@@ -340,12 +340,12 @@ func (f *IncludeAfterDateFilter) AppliesOnlyToFiles() bool {
 
 func (f *IncludeAfterDateFilter) DoesPass(storedObject StoredObject) bool {
 	zeroTime := time.Time{}
-	if storedObject.lastModifiedTime == zeroTime {
+	if storedObject.LastModifiedTime == zeroTime {
 		panic("cannot use IncludeAfterDateFilter on an object for which no Last Modified Time has been retrieved")
 	}
 
-	return storedObject.lastModifiedTime.After(f.Threshold) ||
-		storedObject.lastModifiedTime.Equal(f.Threshold) // >= is easier for users to understand than >
+	return storedObject.LastModifiedTime.After(f.Threshold) ||
+		storedObject.LastModifiedTime.Equal(f.Threshold) // >= is easier for users to understand than >
 }
 
 func (IncludeAfterDateFilter) ParseISO8601(s string, chooseEarliest bool) (time.Time, error) {
@@ -374,12 +374,12 @@ func (f *IncludeBeforeDateFilter) AppliesOnlyToFiles() bool {
 
 func (f *IncludeBeforeDateFilter) DoesPass(storedObject StoredObject) bool {
 	zeroTime := time.Time{}
-	if storedObject.lastModifiedTime == zeroTime {
+	if storedObject.LastModifiedTime == zeroTime {
 		panic("cannot use IncludeBeforeDateFilter on an object for which no Last Modified Time has been retrieved")
 	}
 
-	return storedObject.lastModifiedTime.Before(f.Threshold) ||
-		storedObject.lastModifiedTime.Equal(f.Threshold) // <= is easier for users to understand than <
+	return storedObject.LastModifiedTime.Before(f.Threshold) ||
+		storedObject.LastModifiedTime.Equal(f.Threshold) // <= is easier for users to understand than <
 }
 
 func (_ IncludeBeforeDateFilter) ParseISO8601(s string, chooseEarliest bool) (time.Time, error) {
@@ -390,39 +390,39 @@ func (_ IncludeBeforeDateFilter) FormatAsUTC(t time.Time) string {
 	return formatAsUTC(t)
 }
 
-type permDeleteFilter struct {
-	deleteSnapshots bool
-	deleteVersions  bool
+type PermDeleteFilter struct {
+	DeleteSnapshots bool
+	DeleteVersions  bool
 }
 
-func (s *permDeleteFilter) DoesSupportThisOS() (msg string, supported bool) {
+func (s *PermDeleteFilter) DoesSupportThisOS() (msg string, supported bool) {
 	return "", true
 }
 
-func (s *permDeleteFilter) AppliesOnlyToFiles() bool {
+func (s *PermDeleteFilter) AppliesOnlyToFiles() bool {
 	return false
 }
 
-func (s *permDeleteFilter) DoesPass(storedObject StoredObject) bool {
-	if (s.deleteVersions && s.deleteSnapshots) && storedObject.blobDeleted && (storedObject.blobVersionID != "" || storedObject.blobSnapshotID != "") {
+func (s *PermDeleteFilter) DoesPass(storedObject StoredObject) bool {
+	if (s.DeleteVersions && s.DeleteSnapshots) && storedObject.blobDeleted && (storedObject.BlobVersionID != "" || storedObject.BlobSnapshotID != "") {
 		return true
-	} else if s.deleteSnapshots && storedObject.blobDeleted && storedObject.blobSnapshotID != "" {
+	} else if s.DeleteSnapshots && storedObject.blobDeleted && storedObject.BlobSnapshotID != "" {
 		return true
-	} else if s.deleteVersions && storedObject.blobDeleted && storedObject.blobVersionID != "" {
+	} else if s.DeleteVersions && storedObject.blobDeleted && storedObject.BlobVersionID != "" {
 		return true
 	}
 	return false
 }
 
-func buildIncludeSoftDeleted(permanentDeleteOption common.PermanentDeleteOption) []ObjectFilter {
+func BuildIncludeSoftDeleted(permanentDeleteOption common.PermanentDeleteOption) []ObjectFilter {
 	filters := make([]ObjectFilter, 0)
 	switch permanentDeleteOption {
 	case common.EPermanentDeleteOption.Snapshots():
-		filters = append(filters, &permDeleteFilter{deleteSnapshots: true})
+		filters = append(filters, &PermDeleteFilter{DeleteSnapshots: true})
 	case common.EPermanentDeleteOption.Versions():
-		filters = append(filters, &permDeleteFilter{deleteVersions: true})
+		filters = append(filters, &PermDeleteFilter{DeleteVersions: true})
 	case common.EPermanentDeleteOption.SnapshotsAndVersions():
-		filters = append(filters, &permDeleteFilter{deleteSnapshots: true, deleteVersions: true})
+		filters = append(filters, &PermDeleteFilter{DeleteSnapshots: true, DeleteVersions: true})
 	}
 	return filters
 }

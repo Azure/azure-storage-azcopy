@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package traverser
 
 import (
 	"context"
@@ -38,7 +38,7 @@ type s3Traverser struct {
 	recursive     bool
 	getProperties bool
 
-	s3URLParts s3URLPartsExtension
+	s3URLParts common.S3URLParts
 	s3Client   *minio.Client
 
 	// A generic function to notify that a new stored object has been enumerated
@@ -63,23 +63,23 @@ func (t *s3Traverser) IsDirectory(isSource bool) (bool, error) {
 	return false, nil
 }
 
-func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
+func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) (err error) {
 	p := processor
 	processor = func(storedObject StoredObject) error {
-		t.incrementEnumerationCounter(storedObject.entityType, common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
+		t.incrementEnumerationCounter(storedObject.EntityType, common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
 
 		return p(storedObject)
 	}
 
 	invalidAzureBlobName := func(objectKey string) bool {
-		/* S3 object name is invalid if it ends with period or
+		/* S3 object Name is invalid if it ends with period or
 		   one of virtual directories in path ends with period.
 		   This list is not exhaustive
 		*/
 		return strings.HasSuffix(objectKey, ".") ||
 			strings.Contains(objectKey, "./")
 	}
-	invalidNameErrorMsg := "Skipping S3 object %s, as it is not a valid Blob name. Rename the object and retry the transfer"
+	invalidNameErrorMsg := "Skipping S3 object %s, as it is not a valid Blob Name. Rename the object and retry the transfer"
 	// Check if resource is a single object.
 	if t.s3URLParts.IsObjectSyntactically() && !t.s3URLParts.IsDirectorySyntactically() && !t.s3URLParts.IsBucketSyntactically() {
 		objectPath := strings.Split(t.s3URLParts.ObjectKey, "/")
@@ -97,7 +97,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 		if err == nil {
 			// We had to statObject anyway, get ALL the info.
 			oie := common.ObjectInfoExtension{ObjectInfo: oi}
-			storedObject := newStoredObject(
+			storedObject := NewStoredObject(
 				preprocessor,
 				objectName,
 				"",
@@ -169,7 +169,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			}
 			oie = common.ObjectInfoExtension{ObjectInfo: oi}
 		}
-		storedObject := newStoredObject(
+		storedObject := NewStoredObject(
 			preprocessor,
 			objectName,
 			relativePath,
@@ -203,7 +203,7 @@ func newS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTrave
 	if err != nil {
 		return
 	} else {
-		t.s3URLParts = s3URLPartsExtension{s3URLParts}
+		t.s3URLParts = s3URLParts
 	}
 
 	showS3UrlTypeWarning(s3URLParts)
@@ -215,8 +215,8 @@ func newS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTrave
 			Region:   t.s3URLParts.Region,
 		},
 	}, common.CredentialOpOptions{
-		LogError: glcm.Error,
-	}, azcopyScanningLogger)
+		LogError: common.GetLifecycleMgr().Error,
+	}, common.AzcopyScanningLogger)
 
 	return
 }
@@ -229,7 +229,7 @@ func newS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTrave
 func showS3UrlTypeWarning(s3URLParts common.S3URLParts) {
 	if strings.EqualFold(s3URLParts.Host, "s3.amazonaws.com") {
 		s3UrlWarningOncer.Do(func() {
-			glcm.Info("Instead of transferring from the 's3.amazonaws.com' URL, in this version of AzCopy we recommend you " +
+			common.GetLifecycleMgr().Info("Instead of transferring from the 's3.amazonaws.com' URL, in this version of AzCopy we recommend you " +
 				"use a region-specific endpoint to transfer from one specific region. E.g. s3.us-east-1.amazonaws.com or a virtual-hosted reference to a single bucket.")
 		})
 	}

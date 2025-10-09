@@ -21,14 +21,16 @@
 package cmd
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-	"github.com/stretchr/testify/assert"
-	chk "gopkg.in/check.v1"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
+	"github.com/stretchr/testify/assert"
+	chk "gopkg.in/check.v1"
 )
 
 type genericProcessorSuite struct{}
@@ -38,8 +40,8 @@ var _ = chk.Suite(&genericProcessorSuite{})
 type processorTestSuiteHelper struct{}
 
 // return a list of sample entities
-func (processorTestSuiteHelper) getSampleObjectList() []StoredObject {
-	return []StoredObject{
+func (processorTestSuiteHelper) getSampleObjectList() []traverser.StoredObject {
+	return []traverser.StoredObject{
 		{name: "file1", relativePath: "file1", lastModifiedTime: time.Now()},
 		{name: "file2", relativePath: "file2", lastModifiedTime: time.Now()},
 		{name: "file3", relativePath: "sub1/file3", lastModifiedTime: time.Now()},
@@ -50,7 +52,7 @@ func (processorTestSuiteHelper) getSampleObjectList() []StoredObject {
 }
 
 // given a list of entities, return the relative paths in a list, to help with validations
-func (processorTestSuiteHelper) getExpectedTransferFromStoredObjectList(storedObjectList []StoredObject) []string {
+func (processorTestSuiteHelper) getExpectedTransferFromStoredObjectList(storedObjectList []traverser.StoredObject) []string {
 	expectedTransfers := make([]string, 0)
 	for _, storedObject := range storedObjectList {
 		expectedTransfers = append(expectedTransfers, "/"+storedObject.relativePath)
@@ -135,7 +137,7 @@ func TestCopyTransferProcessorSingleFile(t *testing.T) {
 	copyProcessor := newCopyTransferProcessor(processorTestSuiteHelper{}.getCopyJobTemplate(), 2, newRemoteRes(blobURL), newLocalRes(filepath.Join(dstDirName, dstFileName)), nil, nil, false, false)
 
 	// exercise the copy transfer processor
-	storedObject := newStoredObject(noPreProccessor, blobList[0], "", common.EEntityType.File(), time.Now(), 0, noContentProps, noBlobProps, noMetadata, "")
+	storedObject := traverser.newStoredObject(traverser.noPreProccessor, blobList[0], "", common.EEntityType.File(), time.Now(), 0, traverser.noContentProps, traverser.noBlobProps, traverser.noMetadata, "")
 	err := copyProcessor.scheduleCopyTransfer(storedObject)
 	a.Nil(err)
 

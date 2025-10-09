@@ -23,10 +23,12 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"github.com/stretchr/testify/assert"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
+	"github.com/stretchr/testify/assert"
 
 	chk "gopkg.in/check.v1"
 )
@@ -39,19 +41,19 @@ func TestIncludeFilter(t *testing.T) {
 	a := assert.New(t)
 	// set up the filters
 	includePatternList := parsePatterns("*.pdf;*.jpeg;exactName")
-	includeFilter := buildIncludeFilters(includePatternList)[0]
+	includeFilter := traverser.buildIncludeFilters(includePatternList)[0]
 
 	// test the positive cases
 	filesToPass := []string{"bla.pdf", "fancy.jpeg", "socool.jpeg.pdf", "exactName"}
 	for _, file := range filesToPass {
-		passed := includeFilter.DoesPass(StoredObject{name: file})
+		passed := includeFilter.DoesPass(traverser.StoredObject{name: file})
 		a.True(passed)
 	}
 
 	// test the negative cases
 	filesNotToPass := []string{"bla.pdff", "fancyjpeg", "socool.jpeg.pdf.wut", "eexactName"}
 	for _, file := range filesNotToPass {
-		passed := includeFilter.DoesPass(StoredObject{name: file})
+		passed := includeFilter.DoesPass(traverser.StoredObject{name: file})
 		a.False(passed)
 	}
 }
@@ -60,13 +62,13 @@ func TestExcludeFilter(t *testing.T) {
 	a := assert.New(t)
 	// set up the filters
 	excludePatternList := parsePatterns("*.pdf;*.jpeg;exactName")
-	excludeFilterList := buildExcludeFilters(excludePatternList, false)
+	excludeFilterList := traverser.buildExcludeFilters(excludePatternList, false)
 
 	// test the positive cases
 	filesToPass := []string{"bla.pdfe", "fancy.jjpeg", "socool.png", "eexactName"}
 	for _, file := range filesToPass {
 		dummyProcessor := &dummyProcessor{}
-		err := processIfPassedFilters(excludeFilterList, StoredObject{name: file}, dummyProcessor.process)
+		err := traverser.processIfPassedFilters(excludeFilterList, traverser.StoredObject{name: file}, dummyProcessor.process)
 		a.Nil(err)
 		a.Equal(1, len(dummyProcessor.record))
 	}
@@ -75,8 +77,8 @@ func TestExcludeFilter(t *testing.T) {
 	filesToNotPass := []string{"bla.pdf", "fancy.jpeg", "socool.jpeg.pdf", "exactName"}
 	for _, file := range filesToNotPass {
 		dummyProcessor := &dummyProcessor{}
-		err := processIfPassedFilters(excludeFilterList, StoredObject{name: file}, dummyProcessor.process)
-		a.Equal(ignoredError, err)
+		err := traverser.processIfPassedFilters(excludeFilterList, traverser.StoredObject{name: file}, dummyProcessor.process)
+		a.Equal(traverser.ignoredError, err)
 		a.Zero(len(dummyProcessor.record))
 	}
 }
@@ -111,7 +113,7 @@ func TestDateParsingForIncludeAfter(t *testing.T) {
 	loc, _ := time.LoadLocation("Local")
 
 	for _, x := range examples {
-		t, err := IncludeAfterDateFilter{}.ParseISO8601(x.input, true)
+		t, err := traverser.IncludeAfterDateFilter{}.ParseISO8601(x.input, true)
 		if x.expectedErrorContents == "" {
 			a.Nil(err, x.input)
 			//fmt.Printf("%v -> %v\n", x.input, t)
@@ -152,14 +154,14 @@ func TestDateParsingForIncludeAfter_IsSafeAtDaylightSavingsTransition(t *testing
 	fmt.Println("Testing end of daylight saving at " + dateString + " local time")
 
 	// ask for the earliest of the two ambiguous times
-	parsed, err := IncludeAfterDateFilter{}.ParseISO8601(dateString, true) // we use chooseEarliest=true for includeAfter
+	parsed, err := traverser.IncludeAfterDateFilter{}.ParseISO8601(dateString, true) // we use chooseEarliest=true for includeAfter
 	a.Nil(err)
 	fmt.Printf("For chooseEarliest = true, the times are parsed %v, utcEarly %v, utcLate %v \n", parsed, utcEarlyVersion, utcLateVersion)
 	a.True(parsed.Equal(utcEarlyVersion))
 	a.False(parsed.Equal(utcLateVersion))
 
 	// ask for the latest of the two ambiguous times
-	parsed, err = IncludeAfterDateFilter{}.ParseISO8601(dateString, false) // we test the false case in this test too, just for completeness
+	parsed, err = traverser.IncludeAfterDateFilter{}.ParseISO8601(dateString, false) // we test the false case in this test too, just for completeness
 	a.Nil(err)
 	fmt.Printf("For chooseEarliest = false, the times are parsed %v, utcEarly %v, utcLate %v \n", parsed, utcEarlyVersion, utcLateVersion)
 	a.False(parsed.UTC().Equal(utcEarlyVersion))

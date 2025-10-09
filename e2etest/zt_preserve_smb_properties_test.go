@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -16,7 +16,7 @@ import (
 //	See https://github.com/Azure/azure-storage-azcopy/issues/113 (which incidentally, I'm not observing in the tests above, for reasons unknown)
 func TestProperties_SMBDates(t *testing.T) {
 	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
-		recursive:       true,
+		recursive: true,
 
 		// default, but present for clarity
 		//preserveSMBInfo:        to.Ptr(true),
@@ -48,7 +48,7 @@ func TestProperties_SMBDates(t *testing.T) {
 
 func TestProperties_SMBFlags(t *testing.T) {
 	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileFile(), common.EFromTo.FileLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
-		recursive:       true,
+		recursive: true,
 
 		// default, but present for clarity
 		//preserveSMBInfo:        to.Ptr(true),
@@ -75,7 +75,7 @@ func TestProperties_SMBPermsAndFlagsWithIncludeAfter(t *testing.T) {
 	}
 
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.FileLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
-		recursive:       true,
+		recursive: true,
 
 		// default, but present for clarity
 		//preserveSMBInfo:        to.Ptr(true),
@@ -84,7 +84,7 @@ func TestProperties_SMBPermsAndFlagsWithIncludeAfter(t *testing.T) {
 		beforeRunJob: func(h hookHelper) {
 			// Pause for a includeAfter time
 			time.Sleep(5 * time.Second)
-			h.GetModifiableParameters().includeAfter = time.Now().Format(cmd.ISO8601)
+			h.GetModifiableParameters().includeAfter = time.Now().Format(traverser.ISO8601)
 			// Pause then re-write all the files, so that their LastWriteTime is different from their creation time
 			// So that when validating, our validation can be sure that the right datetime has ended up in the right
 			// field
@@ -124,7 +124,7 @@ func TestProperties_SMBPermsAndFlagsWithSync(t *testing.T) {
 	}
 
 	RunScenarios(t, eOperation.Sync(), eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
-		recursive:       true,
+		recursive: true,
 
 		// default, but present for clarity
 		//preserveSMBInfo:        to.Ptr(true),
@@ -163,7 +163,7 @@ func TestProperties_SMBTimes(t *testing.T) {
 		anonymousAuthOnly,
 		anonymousAuthOnly,
 		params{
-			recursive:       true,
+			recursive: true,
 
 			// default, but present for clarity
 			//preserveSMBInfo:        to.Ptr(true),
@@ -198,8 +198,8 @@ func TestProperties_EnsureContainerBehavior(t *testing.T) {
 		anonymousAuthOnly,
 		anonymousAuthOnly,
 		params{
-			recursive: true,
-			preserveSMBInfo: to.Ptr(true),
+			recursive:              true,
+			preserveSMBInfo:        to.Ptr(true),
 			preserveSMBPermissions: true,
 		},
 		nil,
@@ -229,9 +229,9 @@ func TestProperties_ForceReadOnly(t *testing.T) {
 		anonymousAuthOnly,
 		anonymousAuthOnly,
 		params{
-			recursive:       true,
+			recursive:         true,
 			deleteDestination: common.EDeleteDestination.True(),
-			forceIfReadOnly: true,
+			forceIfReadOnly:   true,
 		},
 		&hooks{
 			beforeRunJob: func(h hookHelper) {

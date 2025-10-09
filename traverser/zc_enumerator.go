@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package traverser
 
 import (
 	"context"
@@ -33,16 +33,18 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
-
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
+
+var EnumerationParallelism = 1
+var EnumerationParallelStatFiles = false
 
 // -------------------------------------- Component Definitions -------------------------------------- \\
 // the following interfaces and structs allow the sync enumerator
@@ -52,57 +54,57 @@ import (
 // we can add more properties if needed, as this is easily extensible
 // ** DO NOT instantiate directly, always use newStoredObject ** (to make sure its fully populated and any preprocessor method runs)
 type StoredObject struct {
-	name                string
-	entityType          common.EntityType
-	lastModifiedTime    time.Time
+	Name                string
+	EntityType          common.EntityType
+	LastModifiedTime    time.Time
 	smbLastModifiedTime time.Time
-	size                int64
-	md5                 []byte
-	blobType            blob.BlobType // will be "None" when unknown or not applicable
+	Size                int64
+	Md5                 []byte
+	BlobType            blob.BlobType // will be "None" when unknown or not applicable
 
 	// all of these will be empty when unknown or not applicable.
-	contentDisposition string
-	cacheControl       string
-	contentLanguage    string
-	contentEncoding    string
-	contentType        string
+	ContentDisposition string
+	CacheControl       string
+	ContentLanguage    string
+	ContentEncoding    string
+	ContentType        string
 
 	// partial path relative to its root directory
-	// example: rootDir=/var/a/b/c fullPath=/var/a/b/c/d/e/f.pdf => relativePath=d/e/f.pdf name=f.pdf
+	// example: rootDir=/var/a/b/c fullPath=/var/a/b/c/d/e/f.pdf => RelativePath=d/e/f.pdf Name=f.pdf
 	// Note 1: sometimes the rootDir given by the user turns out to be a single file
-	// example: rootDir=/var/a/b/c/d/e/f.pdf fullPath=/var/a/b/c/d/e/f.pdf => relativePath=""
+	// example: rootDir=/var/a/b/c/d/e/f.pdf fullPath=/var/a/b/c/d/e/f.pdf => RelativePath=""
 	// in this case, since rootDir already points to the file, relatively speaking the path is nothing.
-	// In this case isSingleSourceFile returns true.
+	// In this case IsSingleSourceFile returns true.
 	// Note 2: The other unusual case is the StoredObject representing the folder properties of the root dir
-	// (if the source is folder-aware). In this case relativePath is also empty.
-	// In this case isSourceRootFolder returns true.
-	relativePath string
+	// (if the source is folder-aware). In this case RelativePath is also empty.
+	// In this case IsSourceRootFolder returns true.
+	RelativePath string
 	// container source, only included by account traversers.
 	ContainerName string
-	// destination container name. Included in the processor after resolving container names.
+	// destination container Name. Included in the processor after resolving container names.
 	DstContainerName string
 	// access tier, only included by blob traverser.
-	blobAccessTier blob.AccessTier
-	archiveStatus  blob.ArchiveStatus
+	BlobAccessTier blob.AccessTier
+	ArchiveStatus  blob.ArchiveStatus
 	// metadata, included in S2S transfers
 	Metadata       common.Metadata
-	blobVersionID  string
-	blobTags       common.BlobTags
-	blobSnapshotID string
+	BlobVersionID  string
+	BlobTags       common.BlobTags
+	BlobSnapshotID string
 	blobDeleted    bool
 
 	// Lease information
-	leaseState    lease.StateType
-	leaseStatus   lease.StatusType
-	leaseDuration lease.DurationType
+	LeaseState    lease.StateType
+	LeaseStatus   lease.StatusType
+	LeaseDuration lease.DurationType
 }
 
-func (s *StoredObject) isMoreRecentThan(storedObject2 StoredObject, preferSMBTime bool) bool {
-	lmtA := s.lastModifiedTime
+func (s *StoredObject) IsMoreRecentThan(storedObject2 StoredObject, preferSMBTime bool) bool {
+	lmtA := s.LastModifiedTime
 	if preferSMBTime && !s.smbLastModifiedTime.IsZero() {
 		lmtA = s.smbLastModifiedTime
 	}
-	lmtB := storedObject2.lastModifiedTime
+	lmtB := storedObject2.LastModifiedTime
 	if preferSMBTime && !storedObject2.smbLastModifiedTime.IsZero() {
 		lmtB = storedObject2.smbLastModifiedTime
 	}
@@ -110,12 +112,12 @@ func (s *StoredObject) isMoreRecentThan(storedObject2 StoredObject, preferSMBTim
 	return lmtA.After(lmtB)
 }
 
-func (s *StoredObject) isSingleSourceFile() bool {
-	return s.relativePath == "" && (s.entityType == common.EEntityType.File() || s.entityType == common.EEntityType.Hardlink() || s.entityType == common.EEntityType.Symlink() || s.entityType == common.EEntityType.Other())
+func (s *StoredObject) IsSingleSourceFile() bool {
+	return s.RelativePath == "" && (s.EntityType == common.EEntityType.File() || s.EntityType == common.EEntityType.Hardlink() || s.EntityType == common.EEntityType.Symlink() || s.EntityType == common.EEntityType.Other())
 }
 
-func (s *StoredObject) isSourceRootFolder() bool {
-	return s.relativePath == "" && s.entityType == common.EEntityType.Folder()
+func (s *StoredObject) IsSourceRootFolder() bool {
+	return s.RelativePath == "" && s.EntityType == common.EEntityType.Folder()
 }
 
 // isCompatibleWithEntitySettings serves as our universal filter for filtering out folders in the cases where we should not
@@ -125,24 +127,24 @@ func (s *StoredObject) isSourceRootFolder() bool {
 // do not pass through that routine.  So we need to make the filtering available in a separate function
 // so that the sync deletion code path(s) can access it.
 func (s *StoredObject) isCompatibleWithEntitySettings(fpo common.FolderPropertyOption, sht common.SymlinkHandlingType, pho common.HardlinkHandlingType) bool {
-	if s.entityType == common.EEntityType.File() {
+	if s.EntityType == common.EEntityType.File() {
 		return true
-	} else if s.entityType == common.EEntityType.Folder() {
+	} else if s.EntityType == common.EEntityType.Folder() {
 		switch fpo {
 		case common.EFolderPropertiesOption.NoFolders():
 			return false
 		case common.EFolderPropertiesOption.AllFoldersExceptRoot():
-			return !s.isSourceRootFolder()
+			return !s.IsSourceRootFolder()
 		case common.EFolderPropertiesOption.AllFolders():
 			return true
 		default:
 			panic("undefined folder properties option")
 		}
-	} else if s.entityType == common.EEntityType.Symlink() {
+	} else if s.EntityType == common.EEntityType.Symlink() {
 		return sht == common.ESymlinkHandlingType.Preserve()
-	} else if s.entityType == common.EEntityType.Hardlink() {
+	} else if s.EntityType == common.EEntityType.Hardlink() {
 		return pho == common.EHardlinkHandlingType.Follow()
-	} else if s.entityType == common.EEntityType.Other() {
+	} else if s.EntityType == common.EEntityType.Other() {
 		return false
 	} else {
 		panic("undefined entity type")
@@ -162,8 +164,8 @@ var ErrorHashNotCompatible = errors.New("hash types do not match")
 var ErrorHashAsyncCalculation = errors.New("hash is calculating asynchronously")
 
 // Returns a func that only calls inner if StoredObject isCompatibleWithFpo
-// We use this, so that we can easily test for compatibility in the sync deletion code (which expects an objectProcessor)
-func newFpoAwareProcessor(fpo common.FolderPropertyOption, inner objectProcessor) objectProcessor {
+// We use this, so that we can easily test for compatibility in the sync deletion code (which expects an ObjectProcessor)
+func NewFpoAwareProcessor(fpo common.FolderPropertyOption, inner ObjectProcessor) ObjectProcessor {
 	return func(s StoredObject) error {
 		if s.isCompatibleWithEntitySettings(fpo, common.ESymlinkHandlingType.Skip(), common.EHardlinkHandlingType.Follow()) {
 			return inner(s)
@@ -186,30 +188,30 @@ func (s *StoredObject) ToNewCopyTransfer(steWillAutoDecompress bool,
 	}
 
 	if steWillAutoDecompress {
-		Destination = stripCompressionExtension(Destination, s.contentEncoding)
+		Destination = stripCompressionExtension(Destination, s.ContentEncoding)
 	}
 
 	t := common.CopyTransfer{
 		Source:             Source,
 		Destination:        Destination,
-		EntityType:         s.entityType,
-		LastModifiedTime:   s.lastModifiedTime,
-		SourceSize:         s.size,
-		ContentType:        s.contentType,
-		ContentEncoding:    s.contentEncoding,
-		ContentDisposition: s.contentDisposition,
-		ContentLanguage:    s.contentLanguage,
-		CacheControl:       s.cacheControl,
-		ContentMD5:         s.md5,
+		EntityType:         s.EntityType,
+		LastModifiedTime:   s.LastModifiedTime,
+		SourceSize:         s.Size,
+		ContentType:        s.ContentType,
+		ContentEncoding:    s.ContentEncoding,
+		ContentDisposition: s.ContentDisposition,
+		ContentLanguage:    s.ContentLanguage,
+		CacheControl:       s.CacheControl,
+		ContentMD5:         s.Md5,
 		Metadata:           s.Metadata,
-		BlobType:           s.blobType,
-		BlobVersionID:      s.blobVersionID,
-		BlobTags:           s.blobTags,
-		BlobSnapshotID:     s.blobSnapshotID,
+		BlobType:           s.BlobType,
+		BlobVersionID:      s.BlobVersionID,
+		BlobTags:           s.BlobTags,
+		BlobSnapshotID:     s.BlobSnapshotID,
 	}
 
 	if preserveBlobTier {
-		t.BlobTier = s.blobAccessTier
+		t.BlobTier = s.BlobAccessTier
 	}
 
 	return t, true
@@ -219,7 +221,7 @@ func (s *StoredObject) ToNewCopyTransfer(steWillAutoDecompress bool,
 // compression indicated by the encoding type.
 // Why remove this extension here, at enumeration time, instead of just doing it
 // in the STE when we are about to save the file?
-// Because by doing it here we get the accurate name in things that
+// Because by doing it here we get the accurate Name in things that
 // directly read the Plan files, like the jobs show command
 func stripCompressionExtension(dest string, contentEncoding string) string {
 	// Ignore error getting compression type. We can't easily report it now, and we don't need to know about the error
@@ -266,35 +268,35 @@ type filePropsProvider interface {
 
 // a constructor is used so that in case the StoredObject has to change, the callers would get a compilation error
 // and it forces all necessary properties to be always supplied and not forgotten
-func newStoredObject(morpher objectMorpher, name string, relativePath string, entityType common.EntityType, lmt time.Time, size int64, props contentPropsProvider, blobProps blobPropsProvider, meta common.Metadata, containerName string) StoredObject {
+func NewStoredObject(morpher objectMorpher, name string, relativePath string, entityType common.EntityType, lmt time.Time, size int64, props contentPropsProvider, blobProps blobPropsProvider, meta common.Metadata, containerName string) StoredObject {
 	obj := StoredObject{
-		name:               name,
-		relativePath:       relativePath,
-		entityType:         entityType,
-		lastModifiedTime:   lmt,
-		size:               size,
-		cacheControl:       props.CacheControl(),
-		contentDisposition: props.ContentDisposition(),
-		contentEncoding:    props.ContentEncoding(),
-		contentLanguage:    props.ContentLanguage(),
-		contentType:        props.ContentType(),
-		md5:                props.ContentMD5(),
-		blobType:           blobProps.BlobType(),
-		blobAccessTier:     blobProps.AccessTier(),
-		archiveStatus:      blobProps.ArchiveStatus(),
+		Name:               name,
+		RelativePath:       relativePath,
+		EntityType:         entityType,
+		LastModifiedTime:   lmt,
+		Size:               size,
+		CacheControl:       props.CacheControl(),
+		ContentDisposition: props.ContentDisposition(),
+		ContentEncoding:    props.ContentEncoding(),
+		ContentLanguage:    props.ContentLanguage(),
+		ContentType:        props.ContentType(),
+		Md5:                props.ContentMD5(),
+		BlobType:           blobProps.BlobType(),
+		BlobAccessTier:     blobProps.AccessTier(),
+		ArchiveStatus:      blobProps.ArchiveStatus(),
 		Metadata:           meta,
 		ContainerName:      containerName,
 		// Additional lease properties. To be used in listing
-		leaseStatus:   blobProps.LeaseStatus(),
-		leaseState:    blobProps.LeaseState(),
-		leaseDuration: blobProps.LeaseDuration(),
+		LeaseStatus:   blobProps.LeaseStatus(),
+		LeaseState:    blobProps.LeaseState(),
+		LeaseDuration: blobProps.LeaseDuration(),
 	}
 
 	// Folders don't have size, and root ones shouldn't have names in the StoredObject. Ensure those rules are consistently followed
 	if entityType == common.EEntityType.Folder() {
-		obj.size = 0
-		if obj.isSourceRootFolder() {
-			obj.name = "" // make these consistent, even from enumerators that pass in an actual name for these (it doesn't really make sense to pass an actual name)
+		obj.Size = 0
+		if obj.IsSourceRootFolder() {
+			obj.Name = "" // make these consistent, even from enumerators that pass in an actual Name for these (it doesn't really make sense to pass an actual Name)
 		}
 	}
 
@@ -309,7 +311,7 @@ func newStoredObject(morpher objectMorpher, name string, relativePath string, en
 // capable of traversing a structured resource like container or local directory
 // pass each StoredObject to the given objectProcessor if it passes all the filters
 type ResourceTraverser interface {
-	Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error
+	Traverse(preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) error
 	IsDirectory(isSource bool) (isDirectory bool, err error)
 	// isDirectory has an isSource flag for a single exception to blob.
 	// Blob should ONLY check remote if it's a source.
@@ -319,7 +321,7 @@ type ResourceTraverser interface {
 
 type AccountTraverser interface {
 	ResourceTraverser
-	listContainers() ([]string, error)
+	ListContainers() ([]string, error)
 }
 
 // basically rename a function and change the order of inputs just to make what's happening clearer
@@ -327,7 +329,7 @@ func containerNameMatchesPattern(containerName, pattern string) (bool, error) {
 	return filepath.Match(pattern, containerName)
 }
 
-// newContainerDecorator constructs an objectMorpher that adds the given container name to StoredObjects
+// newContainerDecorator constructs an objectMorpher that adds the given container Name to StoredObjects
 func newContainerDecorator(containerName string) objectMorpher {
 	return func(object *StoredObject) {
 		object.ContainerName = containerName
@@ -342,7 +344,7 @@ var httpsRecommendationOnce sync.Once
 func recommendHttpsIfNecessary(url url.URL) {
 	if strings.EqualFold(url.Scheme, "http") {
 		httpsRecommendationOnce.Do(func() {
-			glcm.Info(httpsRecommendedNotice)
+			common.GetLifecycleMgr().Info(httpsRecommendedNotice)
 		})
 	}
 }
@@ -406,7 +408,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 
 	// Clean up the resource if it's a local path
 	if resourceLocation == common.ELocation.Local() {
-		resource = common.ResourceString{Value: cleanLocalPath(resource.ValueLocal())}
+		resource = common.ResourceString{Value: CleanLocalPath(resource.ValueLocal())}
 	}
 
 	// Feed list of files channel into new list traverser
@@ -433,7 +435,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 		}
 	}
 
-	options := createClientOptions(azcopyScanningLogger, nil, reauthTok)
+	options := CreateClientOptions(common.AzcopyScanningLogger, nil, reauthTok)
 
 	switch resourceLocation {
 	case common.ELocation.Local():
@@ -441,7 +443,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 
 		// If wildcard is present and this isn't an existing file/folder, glob and feed the globbed list into a list enum.
 		if strings.Contains(resource.ValueLocal(), "*") && (opts.StripTopDir || err != nil) {
-			basePath := getPathBeforeFirstWildcard(resource.ValueLocal())
+			basePath := GetPathBeforeFirstWildcard(resource.ValueLocal())
 			matches, err := filepath.Glob(resource.ValueLocal())
 
 			if err != nil {
@@ -459,7 +461,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 
 			opts.ListOfFiles = globChan
 
-			baseResource := resource.CloneWithValue(cleanLocalPath(basePath))
+			baseResource := resource.CloneWithValue(CleanLocalPath(basePath))
 			output = newListTraverser(baseResource, resourceLocation, ctx, opts)
 		} else {
 			output, _ = newLocalTraverser(resource.ValueLocal(), ctx, opts)
@@ -687,9 +689,9 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 }
 
 // given a StoredObject, process it accordingly. Used for the "real work" of, say, creating a copyTransfer from the object
-type objectProcessor func(storedObject StoredObject) error
+type ObjectProcessor func(storedObject StoredObject) error
 
-// TODO: consider making objectMorpher an interface, not a func, and having newStoredObject take an array of them, instead of just one
+// TODO: consider making objectMorpher an interface, not a func, and having NewStoredObject take an array of them, instead of just one
 //
 //	Might be easier to debug
 //
@@ -734,14 +736,14 @@ type preFilterProvider interface {
 // the following enumerators must be instantiated with configurations
 // they define the work flow in the most generic terms
 
-type syncEnumerator struct {
+type SyncEnumerator struct {
 	// these allow us to go through the source and destination
 	// there is flexibility in which side we scan first, it could be either the source or the destination
 	primaryTraverser   ResourceTraverser
 	secondaryTraverser ResourceTraverser
 
 	// the results from the primary traverser would be stored here
-	objectIndexer *objectIndexer
+	objectIndexer *ObjectIndexer
 
 	// general filters apply to both the primary and secondary traverser
 	filters []ObjectFilter
@@ -749,15 +751,15 @@ type syncEnumerator struct {
 	// the processor that apply only to the secondary traverser
 	// it processes objects as scanning happens
 	// based on the data from the primary traverser stored in the objectIndexer
-	objectComparator objectProcessor
+	objectComparator ObjectProcessor
 
 	// a finalizer that is always called if the enumeration finishes properly
 	finalize func() error
 }
 
-func newSyncEnumerator(primaryTraverser, secondaryTraverser ResourceTraverser, indexer *objectIndexer,
-	filters []ObjectFilter, comparator objectProcessor, finalize func() error) *syncEnumerator {
-	return &syncEnumerator{
+func NewSyncEnumerator(primaryTraverser, secondaryTraverser ResourceTraverser, indexer *ObjectIndexer,
+	filters []ObjectFilter, comparator ObjectProcessor, finalize func() error) *SyncEnumerator {
+	return &SyncEnumerator{
 		primaryTraverser:   primaryTraverser,
 		secondaryTraverser: secondaryTraverser,
 		objectIndexer:      indexer,
@@ -767,7 +769,7 @@ func newSyncEnumerator(primaryTraverser, secondaryTraverser ResourceTraverser, i
 	}
 }
 
-func (e *syncEnumerator) enumerate() (err error) {
+func (e *SyncEnumerator) Enumerate() (err error) {
 	handleAcceptableErrors := func() {
 		switch {
 		case err == nil: // don't do any error checking
@@ -813,13 +815,13 @@ type CopyEnumerator struct {
 	Filters []ObjectFilter
 
 	// receive objects from the traverser and dispatch them for transferring
-	ObjectDispatcher objectProcessor
+	ObjectDispatcher ObjectProcessor
 
 	// a finalizer that is always called if the enumeration finishes properly
 	Finalize func() error
 }
 
-func NewCopyEnumerator(traverser ResourceTraverser, filters []ObjectFilter, objectDispatcher objectProcessor, finalizer func() error) *CopyEnumerator {
+func NewCopyEnumerator(traverser ResourceTraverser, filters []ObjectFilter, objectDispatcher ObjectProcessor, finalizer func() error) *CopyEnumerator {
 	return &CopyEnumerator{
 		Traverser:        traverser,
 		Filters:          filters,
@@ -829,14 +831,14 @@ func NewCopyEnumerator(traverser ResourceTraverser, filters []ObjectFilter, obje
 }
 
 func WarnStdoutAndScanningLog(toLog string) {
-	glcm.Info(toLog)
-	if azcopyScanningLogger != nil {
+	common.GetLifecycleMgr().Info(toLog)
+	if common.AzcopyScanningLogger != nil {
 		// ste.JobsAdmin.LogToJobLog(toLog, pipeline.LogWarning)
-		azcopyScanningLogger.Log(common.LogWarning, toLog)
+		common.AzcopyScanningLogger.Log(common.LogWarning, toLog)
 	}
 }
 
-func (e *CopyEnumerator) enumerate() (err error) {
+func (e *CopyEnumerator) Enumerate() (err error) {
 	err = e.Traverser.Traverse(noPreProccessor, e.ObjectDispatcher, e.Filters)
 	if err != nil {
 		return
@@ -854,10 +856,10 @@ func passedFilters(filters []ObjectFilter, storedObject StoredObject) bool {
 		for _, filter := range filters {
 			msg, supported := filter.DoesSupportThisOS()
 			if !supported {
-				glcm.Error(msg)
+				common.GetLifecycleMgr().Error(msg)
 			}
 
-			if filter.AppliesOnlyToFiles() && (storedObject.entityType != common.EEntityType.File() && storedObject.entityType != common.EEntityType.Hardlink()) {
+			if filter.AppliesOnlyToFiles() && (storedObject.EntityType != common.EEntityType.File() && storedObject.EntityType != common.EEntityType.Hardlink()) {
 				// don't pass folders to filters that only know how to deal with files
 				// As at Feb 2020, we have separate logic to weed out folder properties (and not even send them)
 				// if any filter applies only to files... but that logic runs after this point, so we need this
@@ -887,7 +889,7 @@ func getProcessingError(errin error) (ignored bool, err error) {
 	return false, errin
 }
 
-func processIfPassedFilters(filters []ObjectFilter, storedObject StoredObject, processor objectProcessor) (err error) {
+func processIfPassedFilters(filters []ObjectFilter, storedObject StoredObject, processor ObjectProcessor) (err error) {
 	if passedFilters(filters, storedObject) {
 		err = processor(storedObject)
 	} else {
@@ -903,7 +905,7 @@ func getObjectNameOnly(fullPath string) (nameOnly string) {
 
 	// if there is a path separator and it is not the last character
 	if lastPathSeparator > 0 && lastPathSeparator != len(fullPath)-1 {
-		// then we separate out the name of the StoredObject
+		// then we separate out the Name of the StoredObject
 		nameOnly = fullPath[lastPathSeparator+1:]
 	} else {
 		nameOnly = fullPath
