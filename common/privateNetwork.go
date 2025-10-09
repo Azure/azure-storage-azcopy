@@ -123,7 +123,7 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 		entry := healthy[idx%uint64(len(healthy))]
 		peIP = entry.IP
 		log.Printf("Selected Private endpoint IP: %s Unhealth Status: %d LastTime: %v\n",
-			attempt, idx, peIP, entry.unhealthy, entry.lastChecked)
+			peIP, entry.unhealthy, entry.lastChecked)
 
 		// Skip if still in cooldown
 		if atomic.LoadUint32(&entry.unhealthy) == 1 &&
