@@ -1,9 +1,10 @@
-package cmd
+package traverser
 
 import (
-	"github.com/stretchr/testify/assert"
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestCleanLocalPath(t *testing.T) {
@@ -18,7 +19,7 @@ func TestCleanLocalPath(t *testing.T) {
 	}
 
 	for orig, expected := range testCases {
-		a.Equal(expected, cleanLocalPath(orig))
+		a.Equal(expected, CleanLocalPath(orig))
 	}
 }
 
@@ -45,6 +46,6 @@ func TestCleanLocalPathForWindows(t *testing.T) {
 	}
 
 	for orig, expected := range testCases {
-		a.Equal(expected, cleanLocalPath(orig))
+		a.Equal(expected, CleanLocalPath(orig))
 	}
 }

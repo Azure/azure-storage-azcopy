@@ -33,6 +33,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
+	traverser2 "github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/spf13/cobra"
 
@@ -115,10 +116,10 @@ func (raw rawListCmdArgs) parseProperties() []validProperty {
 
 func (raw rawListCmdArgs) cook() (cookedListCmdArgs, error) {
 	// set up the front end scanning logger
-	azcopyScanningLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "-scanning")
-	azcopyScanningLogger.OpenLog()
+	common.AzcopyScanningLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "-scanning")
+	common.AzcopyScanningLogger.OpenLog()
 	glcm.RegisterCloseFunc(func() {
-		azcopyScanningLogger.CloseLog()
+		common.AzcopyScanningLogger.CloseLog()
 	})
 	cooked = cookedListCmdArgs{}
 	// the expected argument in input is the container sas / or path of virtual directory in the container.
@@ -131,7 +132,7 @@ func (raw rawListCmdArgs) cook() (cookedListCmdArgs, error) {
 	// Only support listing for Azure locations
 	switch cooked.location {
 	case common.ELocation.Blob():
-	case common.ELocation.File(),common.ELocation.FileNFS():
+	case common.ELocation.File(), common.ELocation.FileNFS():
 	case common.ELocation.BlobFS():
 		break
 	default:
@@ -224,7 +225,7 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 
 	var credentialInfo common.CredentialInfo
 
-	source, err := SplitResourceString(cooked.sourcePath, cooked.location)
+	source, err := traverser2.SplitResourceString(cooked.sourcePath, cooked.location)
 	if err != nil {
 		return err
 	}
@@ -253,7 +254,7 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 	// check if user wants to get version id
 	getVersionId := containsProperty(cooked.properties, VersionId)
 
-	traverser, err := InitResourceTraverser(source, cooked.location, ctx, InitResourceTraverserOptions{
+	traverser, err := traverser2.InitResourceTraverser(source, cooked.location, ctx, traverser2.InitResourceTraverserOptions{
 		Credential: &credentialInfo,
 
 		TrailingDotOption: cooked.trailingDot,
@@ -277,7 +278,7 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 	}
 	objectVer := make(map[string]versionIdObject)
 
-	processor := func(object StoredObject) error {
+	processor := func(object traverser2.StoredObject) error {
 		lo := cooked.newListObject(object, level)
 		glcm.Output(func(format common.OutputFormat) string {
 			if format == common.EOutputFormat.Json() {
@@ -296,17 +297,17 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 			if getVersionId {
 				// get new version id object
 				updatedVersionId := versionIdObject{
-					versionId: object.blobVersionID,
-					fileSize:  object.size,
+					versionId: object.BlobVersionID,
+					fileSize:  object.Size,
 				}
 
 				// there exists a current version id of the object
-				if currentVersionId, ok := objectVer[object.relativePath]; ok {
+				if currentVersionId, ok := objectVer[object.RelativePath]; ok {
 					// get current version id time
 					currentVid, _ := time.Parse(versionIdTimeFormat, currentVersionId.versionId)
 
 					// get new version id time
-					newVid, _ := time.Parse(versionIdTimeFormat, object.blobVersionID)
+					newVid, _ := time.Parse(versionIdTimeFormat, object.BlobVersionID)
 
 					// if new vid came after the current vid, then it is the latest version
 					// update the objectVer with the latest version
@@ -315,14 +316,14 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 					if newVid.After(currentVid) {
 						sizeCount -= currentVersionId.fileSize // remove size of current object
 						fileCount--                            // remove current object file count
-						objectVer[object.relativePath] = updatedVersionId
+						objectVer[object.RelativePath] = updatedVersionId
 					}
 				} else {
-					objectVer[object.relativePath] = updatedVersionId
+					objectVer[object.RelativePath] = updatedVersionId
 				}
 			}
 			fileCount++
-			sizeCount += object.size
+			sizeCount += object.Size
 		}
 		return nil
 	}
@@ -373,9 +374,9 @@ func (l AzCopyListObject) String() string {
 	return l.StringEncoding
 }
 
-func (cooked cookedListCmdArgs) newListObject(object StoredObject, level LocationLevel) AzCopyListObject {
-	path := getPath(object.ContainerName, object.relativePath, level, object.entityType)
-	contentLength := sizeToString(object.size, cooked.MachineReadable)
+func (cooked cookedListCmdArgs) newListObject(object traverser2.StoredObject, level LocationLevel) AzCopyListObject {
+	path := getPath(object.ContainerName, object.RelativePath, level, object.EntityType)
+	contentLength := sizeToString(object.Size, cooked.MachineReadable)
 
 	lo := AzCopyListObject{
 		Path:          path,
@@ -389,37 +390,37 @@ func (cooked cookedListCmdArgs) newListObject(object StoredObject, level Locatio
 		propertyStr := string(property)
 		switch property {
 		case LastModifiedTime:
-			lo.LastModifiedTime = to.Ptr(object.lastModifiedTime)
+			lo.LastModifiedTime = to.Ptr(object.LastModifiedTime)
 			builder.WriteString(propertyStr + ": " + lo.LastModifiedTime.String() + "; ")
 		case VersionId:
-			lo.VersionId = object.blobVersionID
+			lo.VersionId = object.BlobVersionID
 			builder.WriteString(propertyStr + ": " + lo.VersionId + "; ")
 		case BlobType:
-			lo.BlobType = object.blobType
+			lo.BlobType = object.BlobType
 			builder.WriteString(propertyStr + ": " + string(lo.BlobType) + "; ")
 		case BlobAccessTier:
-			lo.BlobAccessTier = object.blobAccessTier
+			lo.BlobAccessTier = object.BlobAccessTier
 			builder.WriteString(propertyStr + ": " + string(lo.BlobAccessTier) + "; ")
 		case ContentType:
-			lo.ContentType = object.contentType
+			lo.ContentType = object.ContentType
 			builder.WriteString(propertyStr + ": " + lo.ContentType + "; ")
 		case ContentEncoding:
-			lo.ContentEncoding = object.contentEncoding
+			lo.ContentEncoding = object.ContentEncoding
 			builder.WriteString(propertyStr + ": " + lo.ContentEncoding + "; ")
 		case ContentMD5:
-			lo.ContentMD5 = object.md5
+			lo.ContentMD5 = object.Md5
 			builder.WriteString(propertyStr + ": " + base64.StdEncoding.EncodeToString(lo.ContentMD5) + "; ")
 		case LeaseState:
-			lo.LeaseState = object.leaseState
+			lo.LeaseState = object.LeaseState
 			builder.WriteString(propertyStr + ": " + string(lo.LeaseState) + "; ")
 		case LeaseStatus:
-			lo.LeaseStatus = object.leaseStatus
+			lo.LeaseStatus = object.LeaseStatus
 			builder.WriteString(propertyStr + ": " + string(lo.LeaseStatus) + "; ")
 		case LeaseDuration:
-			lo.LeaseDuration = object.leaseDuration
+			lo.LeaseDuration = object.LeaseDuration
 			builder.WriteString(propertyStr + ": " + string(lo.LeaseDuration) + "; ")
 		case ArchiveStatus:
-			lo.ArchiveStatus = object.archiveStatus
+			lo.ArchiveStatus = object.ArchiveStatus
 			builder.WriteString(propertyStr + ": " + string(lo.ArchiveStatus) + "; ")
 		}
 	}

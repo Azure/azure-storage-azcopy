@@ -22,6 +22,7 @@ package e2etest
 
 import (
 	"fmt"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
@@ -29,7 +30,8 @@ import (
 	datalakedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
+
 	"net/url"
 	"os"
 	"path"
@@ -329,7 +331,7 @@ func (r *resourceBlobContainer) getVersions(a asserter, objectName string) []str
 
 	versions := &timestampSortable{
 		timestamps: make([]string, 0),
-		format:     cmd.ISO8601,
+		format:     traverser.ISO8601,
 		a:          a,
 	}
 
@@ -339,7 +341,7 @@ func (r *resourceBlobContainer) getVersions(a asserter, objectName string) []str
 
 		for _, v := range page.Segment.BlobItems {
 			if v.Name != nil && *v.Name == objectName && v.VersionID != nil {
-				_, err := time.Parse(cmd.ISO8601, *v.VersionID) // Make sure we can parse it
+				_, err := time.Parse(traverser.ISO8601, *v.VersionID) // Make sure we can parse it
 				a.AssertNoErr(err, "parsing timestamp "+*v.VersionID)
 
 				versions.timestamps = append(versions.timestamps, *v.VersionID)

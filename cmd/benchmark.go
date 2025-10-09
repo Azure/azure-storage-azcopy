@@ -30,6 +30,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
@@ -137,7 +138,7 @@ func (raw rawBenchmarkCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		c.src = raw.target
 	} else { // Upload
 		// src must be string, but needs to indicate that its for benchmark and encode what we want
-		c.src = benchmarkSourceHelper{}.ToUrl(raw.fileCount, bytesPerFile, raw.numOfFolders)
+		c.src = traverser.BenchmarkSourceHelper{}.ToUrl(raw.fileCount, bytesPerFile, raw.numOfFolders)
 		c.dst, err = raw.appendVirtualDir(raw.target, virtualDir)
 		if err != nil {
 			return dummyCooked, err
@@ -246,50 +247,6 @@ func (raw rawBenchmarkCmdArgs) createCleanupJobArgs(benchmarkDest common.Resourc
 	return &cooked, err
 }
 
-type benchmarkSourceHelper struct{}
-
-// our code requires sources to be strings. So we may as well do the benchmark sources as URLs
-// so we can identify then as such using a specific domain. ".invalid" is reserved globally for cases where
-// you want a URL that can't possibly be a real one, so we'll use that
-const benchmarkSourceHost = "benchmark.invalid"
-
-func (h benchmarkSourceHelper) ToUrl(fileCount uint, bytesPerFile int64, numOfFolders uint) string {
-	return fmt.Sprintf("https://%s?fc=%d&bpf=%d&nf=%d", benchmarkSourceHost, fileCount, bytesPerFile, numOfFolders)
-}
-
-func (h benchmarkSourceHelper) FromUrl(s string) (fileCount uint, bytesPerFile int64, numOfFolders uint, err error) {
-	// TODO: consider replace with regex?
-
-	expectedPrefix := "https://" + benchmarkSourceHost + "?"
-	if !strings.HasPrefix(s, expectedPrefix) {
-		return 0, 0, 0, errors.New("invalid benchmark source string")
-	}
-	s = strings.TrimPrefix(s, expectedPrefix)
-	pieces := strings.Split(s, "&")
-	if len(pieces) != 3 ||
-		!strings.HasPrefix(pieces[0], "fc=") ||
-		!strings.HasPrefix(pieces[1], "bpf=") ||
-		!strings.HasPrefix(pieces[2], "nf=") {
-		return 0, 0, 0, errors.New("invalid benchmark source string")
-	}
-	pieces[0] = strings.Split(pieces[0], "=")[1]
-	pieces[1] = strings.Split(pieces[1], "=")[1]
-	pieces[2] = strings.Split(pieces[2], "=")[1]
-	fc, err := strconv.ParseUint(pieces[0], 10, 32)
-	if err != nil {
-		return 0, 0, 0, err
-	}
-	bpf, err := strconv.ParseInt(pieces[1], 10, 64)
-	if err != nil {
-		return 0, 0, 0, err
-	}
-	nf, err := strconv.ParseUint(pieces[2], 10, 32)
-	if err != nil {
-		return 0, 0, 0, err
-	}
-	return uint(fc), bpf, uint(nf), nil
-}
-
 func init() {
 	raw := rawBenchmarkCmdArgs{}
 
@@ -321,7 +278,7 @@ func init() {
 
 			glcm.Info("Scanning...")
 
-			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
+			cooked.commandString = ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
 				glcm.Error("failed to perform benchmark command due to error: " + err.Error())
