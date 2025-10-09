@@ -10,6 +10,7 @@ import (
 )
 
 func init() {
+
 	platformRetryPolicy = func(response *http.Response, err error) bool {
 		if err == nil {
 			return false // we have no tests to run against this
@@ -24,6 +25,12 @@ func init() {
 		// This can sometimes happen if we're trying too many connections. It usually resolves itself quickly.
 		if errors.Is(err, windows.WSAEADDRINUSE) ||
 			strings.Contains(strings.ToLower(err.Error()), strings.ToLower(windows.WSAEADDRINUSE.Error())) {
+			return true
+		}
+
+		// It's possible something in between might time us out too, in which case windows will respond WSAETIMEDOUT
+		if errors.Is(err, windows.WSAETIMEDOUT) ||
+			strings.Contains(strings.ToLower(err.Error()), strings.ToLower(windows.WSAETIMEDOUT.Error())) {
 			return true
 		}
 
