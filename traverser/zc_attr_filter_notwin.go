@@ -40,7 +40,7 @@ func (f *attrFilter) DoesPass(storedObject StoredObject) bool {
 	return true
 }
 
-func buildAttrFilters(attributes []string, fullPath string, resultIfMatch bool) []ObjectFilter {
+func BuildAttrFilters(attributes []string, fullPath string, resultIfMatch bool) []ObjectFilter {
 	// ignore this option on Unix systems
 	filters := make([]ObjectFilter, 0)
 	if len(attributes) > 0 {
