@@ -208,11 +208,13 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	if cca.preserveRootProperties {
 		// when preserve-root-properties flag is set, we intend to persist the root, we must tell NewFolderPropertyOption stripTopDir=false.
 		fpo, folderMessage = NewFolderPropertyOption(cca.fromTo, cca.recursive, false, filters, cca.preserveInfo,
-			cca.preservePermissions.IsTruthy(), cca.preservePOSIXProperties, strings.EqualFold(cca.destination.Value, common.Dev_Null), cca.includeDirectoryStubs)
+			cca.preservePermissions.IsTruthy(), cca.preservePOSIXProperties, strings.EqualFold(cca.destination.Value, common.Dev_Null),
+			cca.includeDirectoryStubs)
 	} else {
 		// sync always acts like stripTopDir=true,
 		fpo, folderMessage = NewFolderPropertyOption(cca.fromTo, cca.recursive, !cca.includeRoot, filters, cca.preserveInfo,
-			cca.preservePermissions.IsTruthy(), false, strings.EqualFold(cca.destination.Value, common.Dev_Null), cca.includeDirectoryStubs)
+			cca.preservePermissions.IsTruthy(), false, strings.EqualFold(cca.destination.Value, common.Dev_Null),
+			cca.includeDirectoryStubs)
 	}
 	if !cca.dryrunMode {
 		glcm.Info(folderMessage)

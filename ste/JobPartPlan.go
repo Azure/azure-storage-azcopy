@@ -80,7 +80,6 @@ type JobPartPlanHeader struct {
 	PreservePermissions     common.PreservePermissionsOption
 	PreserveInfo            bool
 	PreservePOSIXProperties bool
-	PreserveRootProperties  bool // If true, root dir props will be transferred to destination root dir
 	// S2SGetPropertiesInBackend represents whether to enable get S3 objects' or Azure files' properties during s2s copy in backend.
 	S2SGetPropertiesInBackend bool
 	// S2SSourceChangeValidation represents whether user wants to check if source has changed after enumerating.
