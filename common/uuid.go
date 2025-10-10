@@ -26,7 +26,7 @@ func NewUUID() (u UUID) {
 	u = UUID{}
 	// Set all bits to randomly (or pseudo-randomly) chosen values.
 	uuid := (*[16]byte)(unsafe.Pointer(&u))[:]
-	_, err := rand.Reader.Read(uuid)
+	_, err := rand.Read(uuid)
 	if err != nil {
 		panic("rand.Read failed")
 	}
