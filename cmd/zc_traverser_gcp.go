@@ -44,7 +44,7 @@ func (t *gcpTraverser) Traverse(preprocessor objectMorpher, processor objectProc
 	p := processor
 	processor = func(storedObject StoredObject) error {
 		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter(storedObject.entityType)
+			t.incrementEnumerationCounter(storedObject.entityType, common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
 		}
 
 		return p(storedObject)
