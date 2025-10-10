@@ -116,7 +116,9 @@ func CreateS3Credential(ctx context.Context, credInfo CredentialInfo, options Cr
 func CreateS3ClientFromProvider(credInfo CredentialInfo) (*minio.Client, error) {
 	if IsPrivateNetworkEnabled() {
 		fmt.Println("Creating S3 Client for Private Network")
-		s3Client, err := createS3ClientForPrivateNetwork(credInfo, nil)
+		// s3Client, err := createS3ClientForPrivateNetwork(credInfo, nil)
+		cred := credentials.New(credInfo.S3CredentialInfo.Provider)
+		s3Client, err := minio.New(credInfo.S3CredentialInfo.Endpoint, &minio.Options{Creds: cred, Secure: true, Region: credInfo.S3CredentialInfo.Region})
 		return s3Client, err
 	}
 	fmt.Println("Creating S3 Client for public access")
