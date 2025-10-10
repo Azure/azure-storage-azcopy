@@ -17,6 +17,7 @@ import (
 	"net/url"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/minio/minio-go/pkg/credentials"
 )
 
@@ -875,7 +876,7 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 		jptm.SetErrorMessage(fullMsg)
 		// If the status code was 403, it means there was an authentication error and we exit.
 		// User can resume the job if completely ordered with a new sas.
-		if status == http.StatusForbidden &&
+		if !buildmode.IsMover && status == http.StatusForbidden &&
 			!jptm.jobPartMgr.(*jobPartMgr).jobMgr.IsDaemon() {
 			// quit right away, since without proper authentication no work can be done
 			// display a clear message
