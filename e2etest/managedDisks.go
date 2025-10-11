@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
 	"net/http"
 	"net/url"
 	"path"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // https://management.azure.com/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/disks/{diskName}/beginGetAccess?api-version=2021-12-01

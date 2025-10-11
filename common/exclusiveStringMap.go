@@ -21,9 +21,10 @@
 package common
 
 import (
-	"github.com/pkg/errors"
 	"strings"
 	"sync"
+
+	"github.com/pkg/errors"
 )
 
 type ExclusiveStringMap struct {

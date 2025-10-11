@@ -22,8 +22,9 @@ package ste
 
 import (
 	"context"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"net/http"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 )
 
 // retryNotificationReceiver should be implemented by code that wishes to be notified when a retry

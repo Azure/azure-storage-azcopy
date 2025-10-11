@@ -24,11 +24,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-
-	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
-	"github.com/Azure/azure-storage-azcopy/v10/testSuite/cmd"
-	"github.com/Azure/azure-storage-azcopy/v10/traverser"
-
 	"log"
 	"net/http"
 	"os"
@@ -38,6 +33,10 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
+	"github.com/Azure/azure-storage-azcopy/v10/testSuite/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 

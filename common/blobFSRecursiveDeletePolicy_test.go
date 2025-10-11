@@ -3,14 +3,15 @@ package common
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"testing"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/stretchr/testify/assert"
-	"net/http"
-	"testing"
 )
 
-type testRecursive struct{
+type testRecursive struct {
 	recursive string
 }
 
@@ -36,7 +37,7 @@ func TestRecursivePolicyExpectTrue(t *testing.T) {
 		"https://xxxx.dfs.core.windows.net/container/path?recursive=false",
 		"https://xxxx.dfs.core.windows.net/container/path?recursive=false&sig=xxxxxx&snapshot=xxxxx&timeout=xxxx",
 		"https://xxxx.dfs.core.windows.net/container/path?sig=xxxxxx&recursive=false&snapshot=xxxxx&timeout=xxxx",
-		"https://xxxx.dfs.core.windows.net/container/path?sig=xxxxxx&snapshot=xxxxx&timeout=xxxx&recursive=false",}
+		"https://xxxx.dfs.core.windows.net/container/path?sig=xxxxxx&snapshot=xxxxx&timeout=xxxx&recursive=false"}
 
 	for _, e := range endpoints {
 		req, err := runtime.NewRequest(ctx, "HEAD", e)
@@ -59,7 +60,7 @@ func TestRecursivePolicyExpectFalse(t *testing.T) {
 		"https://xxxx.dfs.core.windows.net/container/path?recursive=false",
 		"https://xxxx.dfs.core.windows.net/container/path?recursive=false&sig=xxxxxx&snapshot=xxxxx&timeout=xxxx",
 		"https://xxxx.dfs.core.windows.net/container/path?sig=xxxxxx&recursive=false&snapshot=xxxxx&timeout=xxxx",
-		"https://xxxx.dfs.core.windows.net/container/path?sig=xxxxxx&snapshot=xxxxx&timeout=xxxx&recursive=false",}
+		"https://xxxx.dfs.core.windows.net/container/path?sig=xxxxxx&snapshot=xxxxx&timeout=xxxx&recursive=false"}
 
 	for _, e := range endpoints {
 		req, err := runtime.NewRequest(ctx, "HEAD", e)
@@ -69,7 +70,7 @@ func TestRecursivePolicyExpectFalse(t *testing.T) {
 	}
 }
 
-type testEndpoint struct{
+type testEndpoint struct {
 	endpoint string
 }
 
@@ -92,7 +93,7 @@ func TestRecursivePolicyExpectNoChange(t *testing.T) {
 		"https://xxxx.dfs.core.windows.net/container/path?sig=xxxxxx&recursive=false&snapshot=xxxxx&timeout=xxxx",
 		"https://xxxx.dfs.core.windows.net/container/path?sig=xxxxxx&snapshot=xxxxx&timeout=xxxx&recursive=false",
 		"https://xxxx.dfs.core.windows.net/container/path",
-		"https://xxxx.dfs.core.windows.net/container/path?sig=xxxxxx&snapshot=xxxxx&timeout=xxxx",}
+		"https://xxxx.dfs.core.windows.net/container/path?sig=xxxxxx&snapshot=xxxxx&timeout=xxxx"}
 
 	for _, e := range endpoints {
 		policies := []policy.Policy{NewRecursivePolicy(), testEndpoint{e}}

@@ -3,8 +3,9 @@
 package ste
 
 import (
-	"golang.org/x/sys/windows"
 	"syscall"
+
+	"golang.org/x/sys/windows"
 )
 
 func init() {

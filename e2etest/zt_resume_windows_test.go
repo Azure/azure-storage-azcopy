@@ -9,7 +9,7 @@ import (
 func TestResume_FolderState(t *testing.T) {
 	// Create a child file before the folder itself, then persist the properties of the folder upon resume, knowing that we created the folder.
 	RunScenarios(t, eOperation.CopyAndSync()|eOperation.Resume(), eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileFile(), common.EFromTo.FileLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
-		recursive:       true,
+		recursive: true,
 		debugSkipFiles: []string{
 			"a",
 		},
@@ -30,7 +30,7 @@ func TestResume_FolderState(t *testing.T) {
 func TestResume_NoCreateFolder(t *testing.T) {
 	// Don't create the folder "ourselves", and let AzCopy find that out on a resume.
 	RunScenarios(t, eOperation.Copy()|eOperation.Resume(), eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileFile(), common.EFromTo.FileLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
-		recursive:       true,
+		recursive: true,
 		debugSkipFiles: []string{
 			"a",
 			"a/b",

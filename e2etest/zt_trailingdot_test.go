@@ -22,9 +22,10 @@ package e2etest
 
 import (
 	"context"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"runtime"
 	"testing"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func TestTrailingDot_Local(t *testing.T) {

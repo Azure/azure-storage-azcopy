@@ -1,8 +1,9 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"os"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func init() {

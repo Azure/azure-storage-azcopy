@@ -30,6 +30,7 @@ import (
 // The percentage of a CacheLimiter's Limit that is considered
 // the strict limit.
 var cacheLimiterStrictLimitPercentage = float32(0.75)
+
 // Rationale for the level of the strict limit: as at Jan 2018, we are using 0.75 of the total as the strict
 // limit, leaving the other 0.25 of the total accessible under the "relaxed" limit.
 // That last 25% gets use for two things: in downloads it is used for things where we KNOW there's
@@ -82,7 +83,7 @@ func (c *cacheLimiter) TryAdd(count int64, useRelaxedLimit bool) (added bool) {
 	return false
 }
 
-/// WaitUntilAddBytes blocks until it completes a successful call to TryAddBytes
+// / WaitUntilAddBytes blocks until it completes a successful call to TryAddBytes
 func (c *cacheLimiter) WaitUntilAdd(ctx context.Context, count int64, useRelaxedLimit Predicate) error {
 	for {
 		// Proceed if there's room in the cache

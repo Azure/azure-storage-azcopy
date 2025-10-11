@@ -5,12 +5,13 @@ package ste
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"golang.org/x/sys/unix"
 	"io"
 	"os"
 	"syscall"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"golang.org/x/sys/unix"
 )
 
 // CreateFile covers the following UNIX properties:

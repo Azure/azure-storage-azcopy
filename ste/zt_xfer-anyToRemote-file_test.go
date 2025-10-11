@@ -21,10 +21,11 @@
 package ste
 
 import (
+	"testing"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func Test_BlobTierAllowed_TierNotPossible(t *testing.T) {

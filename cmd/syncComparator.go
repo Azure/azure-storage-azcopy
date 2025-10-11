@@ -22,12 +22,11 @@ package cmd
 
 import (
 	"fmt"
+	"reflect"
+	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
-
-	"reflect"
-	"strings"
 )
 
 const (

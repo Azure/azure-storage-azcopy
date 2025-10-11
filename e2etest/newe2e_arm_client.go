@@ -5,12 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
 	"net/http"
 	"net/url"
 	"reflect"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 type ARMSubject interface {

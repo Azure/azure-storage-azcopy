@@ -1,11 +1,12 @@
 package cmd
 
 import (
+	"strings"
+	"testing"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/stretchr/testify/assert"
-	"strings"
-	"testing"
 )
 
 func TestCopyBlobsWithDirectoryStubsS2S(t *testing.T) {
@@ -40,7 +41,7 @@ func TestCopyBlobsWithDirectoryStubsS2S(t *testing.T) {
 	raw.includeDirectoryStubs = true
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobAndDirStubsList), len(mockedRPC.transfers))

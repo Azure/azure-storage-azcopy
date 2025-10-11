@@ -3,11 +3,12 @@ package e2etest
 import (
 	"bytes"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
 	"runtime"
 	"sync"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 type MultiStepUploader struct { // GetTypeOrZero[T] will prove useful.

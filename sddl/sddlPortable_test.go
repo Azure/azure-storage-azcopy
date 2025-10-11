@@ -21,9 +21,10 @@
 package sddl
 
 import (
-	"github.com/stretchr/testify/assert"
 	"regexp"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // this test uses "contoso" SIDs (don't want real SIDs here). The RID portion of the SIDs should also be fake here (e.g. using 9999x as below)

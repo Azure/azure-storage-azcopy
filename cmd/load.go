@@ -1,3 +1,4 @@
+//go:build linux
 // +build linux
 
 // Copyright © Microsoft <wastore@microsoft.com>

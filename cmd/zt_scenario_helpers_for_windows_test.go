@@ -21,10 +21,11 @@
 package cmd
 
 import (
-	"github.com/stretchr/testify/assert"
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // set file attributes to test file
@@ -57,6 +58,6 @@ func (scenarioHelper) setAttributesForLocalFile(filePath string, attrList []stri
 func (s scenarioHelper) setAttributesForLocalFiles(a *assert.Assertions, dirPath string, fileList []string, attrList []string) {
 	for _, fileName := range fileList {
 		err := s.setAttributesForLocalFile(filepath.Join(dirPath, fileName), attrList)
-		a.Nil(err)
+		a.NoError(err)
 	}
 }

@@ -23,6 +23,7 @@ package ste
 import (
 	"bytes"
 	"errors"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 

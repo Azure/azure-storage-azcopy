@@ -21,10 +21,11 @@
 package ste
 
 import (
+	"math"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"math"
 )
 
 type blobFSUploader struct {

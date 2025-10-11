@@ -1,15 +1,17 @@
+//go:build windows
 // +build windows
 
 package ste
 
 import (
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"os"
 	"strings"
 	"syscall"
 	"time"
 	"unsafe"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 
 	"github.com/hillu/go-ntdll"
 

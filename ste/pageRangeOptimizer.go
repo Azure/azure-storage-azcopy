@@ -22,10 +22,11 @@ package ste
 
 import (
 	"context"
+	"strings"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"strings"
 )
 
 // isolate the logic to fetch page ranges for a page blob, and check whether a given range has data

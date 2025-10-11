@@ -6,6 +6,7 @@ package e2etest
 import (
 	"strings"
 	"testing"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"golang.org/x/sys/windows"
 )

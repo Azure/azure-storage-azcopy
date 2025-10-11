@@ -25,13 +25,14 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"fmt"
+	"os"
+	"strings"
+	"testing"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/stretchr/testify/assert"
-	"os"
-	"strings"
-	"testing"
 )
 
 var ctxSender = context.Background()

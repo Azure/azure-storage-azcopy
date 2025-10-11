@@ -21,6 +21,11 @@
 package cmd
 
 import (
+	"net/url"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -29,10 +34,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/stretchr/testify/assert"
-	"net/url"
-	"strings"
-	"testing"
-	"time"
 )
 
 type transferParams struct {
@@ -56,7 +57,7 @@ func (scenarioHelper) generateBlobsFromListWithAccessTier(a *assert.Assertions, 
 	for _, blobName := range blobList {
 		bc := cc.NewBlockBlobClient(blobName)
 		_, err := bc.Upload(ctx, streaming.NopCloser(strings.NewReader(data)), &blockblob.UploadOptions{Tier: accessTier})
-		a.Nil(err)
+		a.NoError(err)
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
@@ -67,7 +68,7 @@ func createNewBlockBlobWithAccessTier(a *assert.Assertions, cc *container.Client
 	bbc, name = getBlockBlobClient(a, cc, prefix)
 
 	_, err := bbc.Upload(ctx, streaming.NopCloser(strings.NewReader(blockBlobDefaultData)), &blockblob.UploadOptions{Tier: accessTier})
-	a.Nil(err)
+	a.NoError(err)
 
 	return
 }
@@ -166,7 +167,7 @@ func TestSetPropertiesSingleBlobForBlobTier(t *testing.T) {
 		raw := getDefaultSetPropertiesRawInput(rawBlobURLWithSAS.String(), transferParams)
 
 		runCopyAndVerify(a, raw, func(err error) {
-			a.Nil(err)
+			a.NoError(err)
 
 			// note that when we are targeting single blobs, the relative path is empty ("") since the root path already points to the blob
 			validateSetPropertiesTransfersAreScheduled(a, true, []string{""}, transferParams, mockedRPC)
@@ -205,7 +206,7 @@ func TestSetPropertiesBlobsUnderContainerForBlobTier(t *testing.T) {
 	raw.includeDirectoryStubs = false // The test target is a DFS account, which coincidentally created our directory stubs. Thus, we mustn't include them, since this is a test of blob.
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobList), len(mockedRPC.transfers))
@@ -220,7 +221,7 @@ func TestSetPropertiesBlobsUnderContainerForBlobTier(t *testing.T) {
 	mockedRPC.reset()
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
@@ -268,7 +269,7 @@ func TestSetPropertiesWithIncludeFlagForBlobTier(t *testing.T) {
 	raw.recursive = true
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateSetPropertiesTransfersAreScheduled(a, true, blobsToInclude, transferParams, mockedRPC)
 	})
 }
@@ -311,7 +312,7 @@ func TestSetPropertiesWithExcludeFlagForBlobTier(t *testing.T) {
 	raw.includeDirectoryStubs = false // The test target is a DFS account, which coincidentally created our directory stubs. Thus, we mustn't include them, since this is a test of blob.
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateSetPropertiesTransfersAreScheduled(a, true, blobList, transferParams, mockedRPC)
 	})
 }
@@ -360,7 +361,7 @@ func TestSetPropertiesWithIncludeAndExcludeFlagForBlobTier(t *testing.T) {
 	raw.recursive = true
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateSetPropertiesTransfersAreScheduled(a, true, blobsToInclude, transferParams, mockedRPC)
 	})
 }
@@ -410,7 +411,7 @@ func TestSetPropertiesListOfBlobsAndVirtualDirsForBlobTier(t *testing.T) {
 	raw.listOfFilesToCopy = scenarioHelper{}.generateListOfFiles(a, listOfFiles)
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobList), len(mockedRPC.transfers))
@@ -424,12 +425,12 @@ func TestSetPropertiesListOfBlobsAndVirtualDirsForBlobTier(t *testing.T) {
 	mockedRPC.reset()
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
 			source, err := url.PathUnescape(transfer.Source)
-			a.Nil(err)
+			a.NoError(err)
 
 			// if the transfer is under the given dir, make sure only the top level files were scheduled
 			if strings.HasPrefix(source, vdirName) {
@@ -499,7 +500,7 @@ func TestSetPropertiesListOfBlobsWithIncludeAndExcludeForBlobTier(t *testing.T) 
 	raw.listOfFilesToCopy = scenarioHelper{}.generateListOfFiles(a, listOfFiles)
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobsToInclude), len(mockedRPC.transfers))
@@ -541,7 +542,7 @@ func TestSetPropertiesSingleBlobWithFromToForBlobTier(t *testing.T) {
 		raw.fromTo = "BlobNone"
 
 		runCopyAndVerify(a, raw, func(err error) {
-			a.Nil(err)
+			a.NoError(err)
 
 			// note that when we are targeting single blobs, the relative path is empty ("") since the root path already points to the blob
 			validateSetPropertiesTransfersAreScheduled(a, true, []string{""}, transferParams, mockedRPC)
@@ -583,7 +584,7 @@ func TestSetPropertiesBlobsUnderContainerWithFromToForBlobTier(t *testing.T) {
 	raw.includeDirectoryStubs = false // The test target is a DFS account, which coincidentally created our directory stubs. Thus, we mustn't include them, since this is a test of blob.
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobList), len(mockedRPC.transfers))
@@ -597,7 +598,7 @@ func TestSetPropertiesBlobsUnderContainerWithFromToForBlobTier(t *testing.T) {
 	mockedRPC.reset()
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
@@ -642,7 +643,7 @@ func TestSetPropertiesBlobsUnderVirtualDirWithFromToForBlobTier(t *testing.T) {
 	raw.recursive = true
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobList), len(mockedRPC.transfers))
@@ -657,7 +658,7 @@ func TestSetPropertiesBlobsUnderVirtualDirWithFromToForBlobTier(t *testing.T) {
 	mockedRPC.reset()
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
@@ -701,7 +702,7 @@ func TestSetPropertiesSingleBlobForMetadata(t *testing.T) {
 		raw := getDefaultSetPropertiesRawInput(rawBlobURLWithSAS.String(), transferParams)
 
 		runCopyAndVerify(a, raw, func(err error) {
-			a.Nil(err)
+			a.NoError(err)
 
 			// note that when we are targeting single blobs, the relative path is empty ("") since the root path already points to the blob
 			validateSetPropertiesTransfersAreScheduled(a, true, []string{""}, transferParams, mockedRPC)
@@ -741,7 +742,7 @@ func TestSetPropertiesSingleBlobForEmptyMetadata(t *testing.T) {
 		raw := getDefaultSetPropertiesRawInput(rawBlobURLWithSAS.String(), transferParams)
 
 		runCopyAndVerify(a, raw, func(err error) {
-			a.Nil(err)
+			a.NoError(err)
 
 			// note that when we are targeting single blobs, the relative path is empty ("") since the root path already points to the blob
 			validateSetPropertiesTransfersAreScheduled(a, true, []string{""}, transferParams, mockedRPC)
@@ -780,7 +781,7 @@ func TestSetPropertiesBlobsUnderContainerForMetadata(t *testing.T) {
 	raw.includeDirectoryStubs = false // The test target is a DFS account, which coincidentally created our directory stubs. Thus, we mustn't include them, since this is a test of blob.
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobList), len(mockedRPC.transfers))
@@ -794,7 +795,7 @@ func TestSetPropertiesBlobsUnderContainerForMetadata(t *testing.T) {
 	mockedRPC.reset()
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
@@ -840,7 +841,7 @@ func TestSetPropertiesWithIncludeFlagForMetadata(t *testing.T) {
 	raw.recursive = true
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateSetPropertiesTransfersAreScheduled(a, true, blobsToInclude, transferParams, mockedRPC)
 	})
 }
@@ -883,7 +884,7 @@ func TestSetPropertiesWithExcludeFlagForMetadata(t *testing.T) {
 	raw.includeDirectoryStubs = false // The test target is a DFS account, which coincidentally created our directory stubs. Thus, we mustn't include them, since this is a test of blob.
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateSetPropertiesTransfersAreScheduled(a, true, blobList, transferParams, mockedRPC)
 	})
 }
@@ -932,7 +933,7 @@ func TestSetPropertiesWithIncludeAndExcludeFlagForMetadata(t *testing.T) {
 	raw.recursive = true
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateSetPropertiesTransfersAreScheduled(a, true, blobsToInclude, transferParams, mockedRPC)
 	})
 }
@@ -982,7 +983,7 @@ func TestSetPropertiesListOfBlobsAndVirtualDirsForMetadata(t *testing.T) {
 	raw.listOfFilesToCopy = scenarioHelper{}.generateListOfFiles(a, listOfFiles)
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobList), len(mockedRPC.transfers))
@@ -996,12 +997,12 @@ func TestSetPropertiesListOfBlobsAndVirtualDirsForMetadata(t *testing.T) {
 	mockedRPC.reset()
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
 			source, err := url.PathUnescape(transfer.Source)
-			a.Nil(err)
+			a.NoError(err)
 
 			// if the transfer is under the given dir, make sure only the top level files were scheduled
 			if strings.HasPrefix(source, vdirName) {
@@ -1071,7 +1072,7 @@ func TestSetPropertiesListOfBlobsWithIncludeAndExcludeForMetadata(t *testing.T) 
 	raw.listOfFilesToCopy = scenarioHelper{}.generateListOfFiles(a, listOfFiles)
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobsToInclude), len(mockedRPC.transfers))
@@ -1113,7 +1114,7 @@ func TestSetPropertiesSingleBlobWithFromToForMetadata(t *testing.T) {
 		raw.fromTo = "BlobNone"
 
 		runCopyAndVerify(a, raw, func(err error) {
-			a.Nil(err)
+			a.NoError(err)
 
 			// note that when we are targeting single blobs, the relative path is empty ("") since the root path already points to the blob
 			validateSetPropertiesTransfersAreScheduled(a, true, []string{""}, transferParams, mockedRPC)
@@ -1155,7 +1156,7 @@ func TestSetPropertiesBlobsUnderContainerWithFromToForMetadata(t *testing.T) {
 	raw.includeDirectoryStubs = false // The test target is a DFS account, which coincidentally created our directory stubs. Thus, we mustn't include them, since this is a test of blob.
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobList), len(mockedRPC.transfers))
@@ -1169,7 +1170,7 @@ func TestSetPropertiesBlobsUnderContainerWithFromToForMetadata(t *testing.T) {
 	mockedRPC.reset()
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
@@ -1214,7 +1215,7 @@ func TestSetPropertiesBlobsUnderVirtualDirWithFromToForMetadata(t *testing.T) {
 	raw.recursive = true
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobList), len(mockedRPC.transfers))
@@ -1229,7 +1230,7 @@ func TestSetPropertiesBlobsUnderVirtualDirWithFromToForMetadata(t *testing.T) {
 	mockedRPC.reset()
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
@@ -1273,7 +1274,7 @@ func TestSetPropertiesSingleBlobForBlobTags(t *testing.T) {
 		raw := getDefaultSetPropertiesRawInput(rawBlobURLWithSAS.String(), transferParams)
 
 		runCopyAndVerify(a, raw, func(err error) {
-			a.Nil(err)
+			a.NoError(err)
 
 			// note that when we are targeting single blobs, the relative path is empty ("") since the root path already points to the blob
 			validateSetPropertiesTransfersAreScheduled(a, true, []string{""}, transferParams, mockedRPC)
@@ -1313,7 +1314,7 @@ func TestSetPropertiesSingleBlobForEmptyBlobTags(t *testing.T) {
 		raw := getDefaultSetPropertiesRawInput(rawBlobURLWithSAS.String(), transferParams)
 
 		runCopyAndVerify(a, raw, func(err error) {
-			a.Nil(err)
+			a.NoError(err)
 
 			// note that when we are targeting single blobs, the relative path is empty ("") since the root path already points to the blob
 			validateSetPropertiesTransfersAreScheduled(a, true, []string{""}, transferParams, mockedRPC)
@@ -1352,7 +1353,7 @@ func TestSetPropertiesBlobsUnderContainerForBlobTags(t *testing.T) {
 	raw.includeDirectoryStubs = false // The test target is a DFS account, which coincidentally created our directory stubs. Thus, we mustn't include them, since this is a test of blob.
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobList), len(mockedRPC.transfers))
@@ -1366,7 +1367,7 @@ func TestSetPropertiesBlobsUnderContainerForBlobTags(t *testing.T) {
 	mockedRPC.reset()
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
@@ -1412,7 +1413,7 @@ func TestSetPropertiesWithIncludeFlagForBlobTags(t *testing.T) {
 	raw.recursive = true
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateSetPropertiesTransfersAreScheduled(a, true, blobsToInclude, transferParams, mockedRPC)
 	})
 }
@@ -1455,7 +1456,7 @@ func TestSetPropertiesWithExcludeFlagForBlobTags(t *testing.T) {
 	raw.includeDirectoryStubs = false // The test target is a DFS account, which coincidentally created our directory stubs. Thus, we mustn't include them, since this is a test of blob.
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateSetPropertiesTransfersAreScheduled(a, true, blobList, transferParams, mockedRPC)
 	})
 }
@@ -1504,7 +1505,7 @@ func TestSetPropertiesWithIncludeAndExcludeFlagForBlobTags(t *testing.T) {
 	raw.recursive = true
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateSetPropertiesTransfersAreScheduled(a, true, blobsToInclude, transferParams, mockedRPC)
 	})
 }
@@ -1554,7 +1555,7 @@ func TestSetPropertiesListOfBlobsAndVirtualDirsForBlobTags(t *testing.T) {
 	raw.listOfFilesToCopy = scenarioHelper{}.generateListOfFiles(a, listOfFiles)
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobList), len(mockedRPC.transfers))
@@ -1568,12 +1569,12 @@ func TestSetPropertiesListOfBlobsAndVirtualDirsForBlobTags(t *testing.T) {
 	mockedRPC.reset()
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
 			source, err := url.PathUnescape(transfer.Source)
-			a.Nil(err)
+			a.NoError(err)
 
 			// if the transfer is under the given dir, make sure only the top level files were scheduled
 			if strings.HasPrefix(source, vdirName) {
@@ -1643,7 +1644,7 @@ func TestSetPropertiesListOfBlobsWithIncludeAndExcludeForBlobTags(t *testing.T) 
 	raw.listOfFilesToCopy = scenarioHelper{}.generateListOfFiles(a, listOfFiles)
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobsToInclude), len(mockedRPC.transfers))
@@ -1685,7 +1686,7 @@ func TestSetPropertiesSingleBlobWithFromToForBlobTags(t *testing.T) {
 		raw.fromTo = "BlobNone"
 
 		runCopyAndVerify(a, raw, func(err error) {
-			a.Nil(err)
+			a.NoError(err)
 
 			// note that when we are targeting single blobs, the relative path is empty ("") since the root path already points to the blob
 			validateSetPropertiesTransfersAreScheduled(a, true, []string{""}, transferParams, mockedRPC)
@@ -1727,7 +1728,7 @@ func TestSetPropertiesBlobsUnderContainerWithFromToForBlobTags(t *testing.T) {
 	raw.includeDirectoryStubs = false // The test target is a DFS account, which coincidentally created our directory stubs. Thus, we mustn't include them, since this is a test of blob.
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobList), len(mockedRPC.transfers))
@@ -1741,7 +1742,7 @@ func TestSetPropertiesBlobsUnderContainerWithFromToForBlobTags(t *testing.T) {
 	mockedRPC.reset()
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
@@ -1786,7 +1787,7 @@ func TestSetPropertiesBlobsUnderVirtualDirWithFromToForBlobTags(t *testing.T) {
 	raw.recursive = true
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobList), len(mockedRPC.transfers))
@@ -1801,7 +1802,7 @@ func TestSetPropertiesBlobsUnderVirtualDirWithFromToForBlobTags(t *testing.T) {
 	mockedRPC.reset()
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {

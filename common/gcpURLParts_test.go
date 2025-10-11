@@ -1,10 +1,11 @@
 package common
 
 import (
-	"github.com/stretchr/testify/assert"
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // This testsuite does not reach GCP service, and runs even with GCP_TESTS=FALSE

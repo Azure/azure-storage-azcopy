@@ -23,9 +23,10 @@ package ste
 import (
 	"context"
 	"fmt"
-	datalakesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
 	"strings"
 	"time"
+
+	datalakesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
@@ -297,7 +298,7 @@ func (u *blobFSSenderBase) SendSymlink(linkData string) error {
 	}
 
 	meta[common.POSIXSymlinkMeta] = to.Ptr("true") // just in case there isn't any metadata
-	blobHeaders := blob.HTTPHeaders{ // translate headers, since those still apply
+	blobHeaders := blob.HTTPHeaders{               // translate headers, since those still apply
 		BlobContentType:        u.creationTimeHeaders.ContentType,
 		BlobContentEncoding:    u.creationTimeHeaders.ContentEncoding,
 		BlobContentLanguage:    u.creationTimeHeaders.ContentLanguage,

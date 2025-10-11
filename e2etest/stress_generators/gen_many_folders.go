@@ -3,15 +3,16 @@ package main
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
+	"strings"
+	"sync"
+	"sync/atomic"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/e2etest"
 	"github.com/google/uuid"
 	"github.com/spf13/pflag"
 	"golang.org/x/sync/semaphore"
-	"math/rand/v2"
-	"strings"
-	"sync"
-	"sync/atomic"
 )
 
 const (

@@ -228,9 +228,9 @@ func (u *azureFileSenderBase) addPermissionsToHeaders(info *TransferInfo, destUR
 		}
 
 		// At this point, we’ve stored the full SDDL string in the security persistence manager
-		// and obtained a PermissionKey that references it.  
-		// To avoid sending an oversized SDDL string,  
-		// we replace the Permission field with an empty string.  
+		// and obtained a PermissionKey that references it.
+		// To avoid sending an oversized SDDL string,
+		// we replace the Permission field with an empty string.
 		// This ensures that only the PermissionKey is sent to the service, not the large SDDL itself.
 		ePermString := ""
 		u.permissionsToApply.Permission = &ePermString

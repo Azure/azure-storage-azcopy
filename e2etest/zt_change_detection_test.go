@@ -69,7 +69,8 @@ func TestChange_DetectFileChangedDuringTransfer(t *testing.T) {
 // TestChange_DefaultToNoDetectionForS2S asserts that, if we DON'T ask for s2s change detection, then the detection
 // WON'T happen for S2S transfers.
 // TODO: remove/modify this test and others in this file, if we change the default
-//   value of s2sSourceChangeValidation in AzCopy.  (For now, this test is here, asserting the current behaviour)
+//
+//	value of s2sSourceChangeValidation in AzCopy.  (For now, this test is here, asserting the current behaviour)
 func TestChange_DefaultToNoDetectionForCopyS2S(t *testing.T) {
 	RunScenarios(t,
 		eOperation.Copy(), // this test only applies to Copy, because Sync does always set s2sSourceChangeValidation = true
