@@ -1,10 +1,11 @@
 package e2etest
 
 import (
+	"os"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"os"
 )
 
 func WorkloadIdentitySetup(a Asserter) {

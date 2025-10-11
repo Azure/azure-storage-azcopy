@@ -23,10 +23,11 @@ package ste
 import (
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // Defines the retry policy rules

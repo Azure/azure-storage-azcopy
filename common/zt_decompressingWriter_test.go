@@ -24,11 +24,12 @@ import (
 	"bytes"
 	"compress/gzip"
 	"compress/zlib"
-	"github.com/stretchr/testify/assert"
 	"io"
 	"math/rand"
 	"sync/atomic"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 type closeableBuffer struct {

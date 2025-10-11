@@ -21,11 +21,12 @@
 package common
 
 import (
-	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"sync"
+
+	gcpUtils "cloud.google.com/go/storage"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
 	"github.com/minio/minio-go"
 	"github.com/minio/minio-go/pkg/credentials"

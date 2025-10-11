@@ -22,9 +22,10 @@ package common
 
 import (
 	"context"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"net/http"
 	"strconv"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 )
 
 // CtxRecursiveKey is used as a context key to apply the recursive query parameter.

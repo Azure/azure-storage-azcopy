@@ -25,13 +25,14 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 	"unsafe"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"

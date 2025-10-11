@@ -21,10 +21,11 @@
 package common
 
 import (
-	"github.com/stretchr/testify/assert"
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestS3URLParse(t *testing.T) {

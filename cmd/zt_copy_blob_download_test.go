@@ -23,17 +23,18 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"path"
 	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )

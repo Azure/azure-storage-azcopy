@@ -21,9 +21,10 @@
 package cmd
 
 import (
-	"github.com/stretchr/testify/assert"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )

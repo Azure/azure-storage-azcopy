@@ -23,6 +23,9 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"testing"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -32,8 +35,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/mock_server"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/stretchr/testify/assert"
-	"testing"
-	"time"
 )
 
 func TestIsSourceDirWithStub(t *testing.T) {

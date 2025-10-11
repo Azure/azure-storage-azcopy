@@ -1,10 +1,11 @@
 package cmd
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/stretchr/testify/assert"
 	"strings"
 	"testing"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestGCPBucketNameToAzureResourceResolverBucketName(t *testing.T) {

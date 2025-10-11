@@ -1,5 +1,5 @@
-// +build !windows
-// +build !linux
+//go:build !windows && !linux
+// +build !windows,!linux
 
 // Copyright © Microsoft <wastore@microsoft.com>
 //

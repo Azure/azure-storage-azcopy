@@ -3,12 +3,13 @@ package e2etest
 import (
 	"bytes"
 	"crypto/md5"
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
 	"math/rand"
 	"strconv"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 type ObjectContentContainer interface {

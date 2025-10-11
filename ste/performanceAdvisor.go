@@ -23,10 +23,11 @@ package ste
 import (
 	"bytes"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"net/http"
 	"runtime"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 type AdviceType struct {

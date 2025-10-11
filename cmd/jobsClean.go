@@ -23,6 +23,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/spf13/cobra"

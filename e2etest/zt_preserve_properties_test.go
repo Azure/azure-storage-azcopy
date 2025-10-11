@@ -21,8 +21,9 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"testing"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )

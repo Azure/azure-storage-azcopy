@@ -57,5 +57,5 @@ func (a *nullAutoPacer) GetTotalTraffic() int64 {
 }
 
 func (a *nullAutoPacer) UpdateTargetBytesPerSecond(_ int64) {
-	
+
 }

@@ -1,10 +1,11 @@
 package azcopy
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/stretchr/testify/assert"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestSortJobs(t *testing.T) {

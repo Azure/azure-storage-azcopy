@@ -21,14 +21,15 @@
 package cmd
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-	"github.com/stretchr/testify/assert"
-	chk "gopkg.in/check.v1"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/stretchr/testify/assert"
+	chk "gopkg.in/check.v1"
 )
 
 type genericProcessorSuite struct{}

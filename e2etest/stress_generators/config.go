@@ -3,15 +3,16 @@ package main
 import (
 	"errors"
 	"fmt"
+	"net/url"
+	"reflect"
+	"strings"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/e2etest"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"net/url"
-	"reflect"
-	"strings"
 )
 
 type GeneratorConfig struct {

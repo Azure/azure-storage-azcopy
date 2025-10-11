@@ -22,10 +22,11 @@ package cmd
 
 import (
 	"context"
+	"testing"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 // ============================================= BLOB TRAVERSER TESTS =======================================

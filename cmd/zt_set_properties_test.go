@@ -21,6 +21,11 @@
 package cmd
 
 import (
+	"net/url"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -29,10 +34,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/stretchr/testify/assert"
-	"net/url"
-	"strings"
-	"testing"
-	"time"
 )
 
 type transferParams struct {

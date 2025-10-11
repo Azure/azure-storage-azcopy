@@ -21,10 +21,11 @@
 package cmd
 
 import (
+	"testing"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestUrlIsContainerOrBlob(t *testing.T) {

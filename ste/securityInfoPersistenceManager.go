@@ -2,8 +2,9 @@ package ste
 
 import (
 	"context"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"sync"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 
 	"github.com/golang/groupcache/lru"
 )
@@ -62,7 +63,7 @@ func (sipm *securityInfoPersistenceManager) PutSDDL(sddlString string, shareClie
 }
 
 func (sipm *securityInfoPersistenceManager) GetSDDLFromID(id string, shareClient *share.Client) (string, error) {
-	
+
 	//GetPermission call only works against the share root, and not against a share snapshot
 	sddlKey := shareClient.URL() + "|ID|" + id
 
@@ -77,7 +78,7 @@ func (sipm *securityInfoPersistenceManager) GetSDDLFromID(id string, shareClient
 	}
 
 	//remove snap if any
-	shareClient, err := shareClient.WithSnapshot("") 
+	shareClient, err := shareClient.WithSnapshot("")
 	if err != nil {
 		return "", err
 	}

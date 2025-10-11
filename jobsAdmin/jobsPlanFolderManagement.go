@@ -23,12 +23,13 @@ package jobsAdmin
 import (
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
 
 // These methods read common.AzcopyJobPlanFolder and common.LogPathFolder to list and remove job plan files and logs.

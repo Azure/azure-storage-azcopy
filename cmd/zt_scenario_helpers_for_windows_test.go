@@ -21,10 +21,11 @@
 package cmd
 
 import (
-	"github.com/stretchr/testify/assert"
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // set file attributes to test file

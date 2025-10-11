@@ -873,6 +873,7 @@ func aceRightsToString(aceRights uint32) string {
 
 // Does the aceType correspond to an object ACE?
 // We don't support object ACEs.
+//
 //nolint:deadcode,unused
 func isObjectAce(aceType byte) bool {
 	switch aceType {

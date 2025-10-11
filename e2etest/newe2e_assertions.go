@@ -2,10 +2,11 @@ package e2etest
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"reflect"
 	"runtime/debug"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 var _ Assertion = NoError{}

@@ -1,10 +1,17 @@
 package cmd
 
 import (
-	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
+	"os"
+	"reflect"
+	"strings"
+	"time"
+
+	gcpUtils "cloud.google.com/go/storage"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -18,12 +25,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"google.golang.org/api/iterator"
-	"net/http"
-	"net/url"
-	"os"
-	"reflect"
-	"strings"
-	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/JeffreyRichter/enum/enum"

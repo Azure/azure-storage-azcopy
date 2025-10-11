@@ -4,14 +4,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	tableservice "github.com/Azure/azure-sdk-for-go/sdk/data/aztables"
-	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
-	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"os"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
+
+	tableservice "github.com/Azure/azure-sdk-for-go/sdk/data/aztables"
+	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 )
 
 var GlobalConfig NewE2EConfig

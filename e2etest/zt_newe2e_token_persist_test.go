@@ -3,6 +3,7 @@ package e2etest
 import (
 	"flag"
 	"fmt"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 

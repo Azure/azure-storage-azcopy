@@ -1,8 +1,9 @@
 package common
 
 import (
-	gcpUtils "cloud.google.com/go/storage"
 	"strings"
+
+	gcpUtils "cloud.google.com/go/storage"
 )
 
 type GCPObjectInfoExtension struct {
@@ -37,7 +38,7 @@ func (gie *GCPObjectInfoExtension) ContentMD5() []byte {
 const gcpMetadataPrefix = "x-goog-meta-"
 const gcpMetadataPrefixLen = len(gcpMetadataPrefix)
 
-//NewCommonMetadata returns a map of user-defined key/value pairs
+// NewCommonMetadata returns a map of user-defined key/value pairs
 func (gie *GCPObjectInfoExtension) NewCommonMetadata() Metadata {
 	md := Metadata{}
 	for k, v := range gie.ObjectInfo.Metadata {

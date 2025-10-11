@@ -21,12 +21,13 @@
 package e2etest
 
 import (
+	"testing"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"testing"
-	"time"
 )
 
 func TestRemove_IncludeAfter(t *testing.T) {
