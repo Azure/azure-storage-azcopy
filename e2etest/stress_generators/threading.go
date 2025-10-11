@@ -2,11 +2,12 @@ package main
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/e2etest"
 	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/e2etest"
 )
 
 /*

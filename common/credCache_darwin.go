@@ -23,8 +23,9 @@ package common
 import (
 	"errors"
 	"fmt"
-	"github.com/keybase/go-keychain"
 	"sync"
+
+	"github.com/keybase/go-keychain"
 )
 
 // For SSH environment, user need unlock login keychain once, to enable AzCopy to Add/Update/Retrieve/Delete key.

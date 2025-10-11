@@ -28,13 +28,13 @@ import (
 
 func TestDecompress_Basic(t *testing.T) {
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobLocal()), eValidate.Auto(), oAuthOnly, anonymousAuthOnly, params{ // Pass flag values that the test requires. The params struct is a superset of Copy and Sync params
-		decompress:   true,
-		recursive: true,
+		decompress: true,
+		recursive:  true,
 	}, &hooks{},
-	 testFiles{ 
-		defaultSize: "1K",
-		shouldTransfer: []interface{}{
-			"compressionTest",
-		},
-	}, EAccountType.Standard(), EAccountType.Standard(), "")
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				"compressionTest",
+			},
+		}, EAccountType.Standard(), EAccountType.Standard(), "")
 }

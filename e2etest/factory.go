@@ -23,6 +23,13 @@ package e2etest
 import (
 	"context"
 	"fmt"
+	"os"
+	"path"
+	"runtime"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -38,12 +45,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/google/uuid"
-	"os"
-	"path"
-	"runtime"
-	"strings"
-	"testing"
-	"time"
 )
 
 // provide convenient methods to get access to test resources such as accounts, containers/shares, directories

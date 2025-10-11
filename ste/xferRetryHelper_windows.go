@@ -4,9 +4,10 @@ package ste
 
 import (
 	"errors"
-	"golang.org/x/sys/windows"
 	"net/http"
 	"strings"
+
+	"golang.org/x/sys/windows"
 )
 
 func init() {

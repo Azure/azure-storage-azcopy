@@ -3,13 +3,14 @@ package e2etest
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
 	"net/http"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 type ARMAsyncResponse[Props any] struct {

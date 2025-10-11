@@ -22,10 +22,11 @@ package ste
 
 import (
 	"fmt"
+	"sync/atomic"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
-	"sync/atomic"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )

@@ -23,8 +23,9 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 
 	"encoding/json"
 

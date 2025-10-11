@@ -29,8 +29,9 @@ const (
 )
 
 // TODO: do we want to keep using atomic, just to be sure this is safe no matter how or where its used?
-//    Or do we want to rely on the assumption, which is correct as at Jan 2018, that its only
-//    used in the single-threaded chunk creation loop and in the epilogue. For now, we are erring on the side of safety.
+//
+//	Or do we want to rely on the assumption, which is correct as at Jan 2018, that its only
+//	used in the single-threaded chunk creation loop and in the epilogue. For now, we are erring on the side of safety.
 func setPutListNeed(target *int32, value int32) {
 	previous := atomic.SwapInt32(target, value)
 	if previous != putListNeedUnknown && previous != value {

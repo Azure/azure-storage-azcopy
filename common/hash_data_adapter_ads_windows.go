@@ -6,12 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"golang.org/x/sys/windows"
 	"io"
 	"os"
 	"path/filepath"
 	"syscall"
 	"time"
+
+	"golang.org/x/sys/windows"
 )
 
 // ===== OS-Specific hash adapter changes =====

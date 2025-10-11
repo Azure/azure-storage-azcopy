@@ -2,12 +2,13 @@ package ste
 
 import (
 	"errors"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
-	"github.com/stretchr/testify/assert"
 	"net/http"
 	"runtime"
 	"syscall"
 	"testing"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestGetShouldRetry(t *testing.T) {

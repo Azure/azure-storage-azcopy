@@ -21,10 +21,11 @@
 package azcopy
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/minio/minio-go"
 	"math"
 	"net/http"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/minio/minio-go"
 )
 
 // processOSSpecificInitialization changes the soft limit for filedescriptor for process

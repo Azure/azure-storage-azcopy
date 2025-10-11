@@ -2,10 +2,11 @@ package e2etest
 
 import (
 	"fmt"
-	"github.com/google/uuid"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 var CommonARMClient *ARMClient

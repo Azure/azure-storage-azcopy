@@ -34,8 +34,8 @@ type sysLogger struct {
 	// minimum loglevel represents the minimum severity of log messages which can be logged to Job Log file.
 	// any message with severity higher than this will be ignored.
 	jobID             JobID
-	minimumLevelToLog LogLevel // The maximum customer-desired log level for this job
-	writer            *syslog.Writer    // The Job's logger
+	minimumLevelToLog LogLevel       // The maximum customer-desired log level for this job
+	writer            *syslog.Writer // The Job's logger
 	logSuffix         string
 	sanitizer         LogSanitizer
 }

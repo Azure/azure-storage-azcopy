@@ -23,13 +23,14 @@ package ste
 import (
 	"bytes"
 	"context"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
 	"net/http"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 type PipelineNetworkStats struct {

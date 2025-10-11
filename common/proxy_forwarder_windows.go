@@ -4,9 +4,10 @@
 package common
 
 import (
-	"github.com/mattn/go-ieproxy"
 	"net/http"
 	"net/url"
+
+	"github.com/mattn/go-ieproxy"
 )
 
 func GetProxyFunc() func(*http.Request) (*url.URL, error) {

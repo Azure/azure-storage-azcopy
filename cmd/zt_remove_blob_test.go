@@ -23,6 +23,13 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"log"
+	"net/url"
+	"os"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
@@ -31,12 +38,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/stretchr/testify/assert"
-	"log"
-	"net/url"
-	"os"
-	"strings"
-	"testing"
-	"time"
 )
 
 func TestRemoveSingleBlob(t *testing.T) {

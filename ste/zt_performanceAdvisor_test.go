@@ -21,10 +21,11 @@
 package ste
 
 import (
+	"testing"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
 	chk "gopkg.in/check.v1"
-	"testing"
 )
 
 func TestPerfAdvisor(t *testing.T) {

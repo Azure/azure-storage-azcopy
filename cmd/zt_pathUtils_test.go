@@ -21,10 +21,11 @@
 package cmd
 
 import (
+	"testing"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
 	chk "gopkg.in/check.v1"
-	"testing"
 )
 
 type pathUtilsSuite struct{}

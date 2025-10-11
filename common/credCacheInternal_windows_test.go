@@ -4,9 +4,10 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"testing"
+
 	"github.com/danieljoos/wincred"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 // Validates the SHA256 hash from LoadToken()

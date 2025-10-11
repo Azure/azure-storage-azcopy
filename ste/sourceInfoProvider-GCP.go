@@ -1,14 +1,15 @@
 package ste
 
 import (
-	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"crypto/md5"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"golang.org/x/oauth2/google"
 	"io"
 	"os"
+
+	gcpUtils "cloud.google.com/go/storage"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"golang.org/x/oauth2/google"
 
 	"net/url"
 	"time"

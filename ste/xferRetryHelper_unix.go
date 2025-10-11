@@ -24,9 +24,10 @@ package ste
 
 import (
 	"errors"
-	"golang.org/x/sys/unix"
 	"net/http"
 	"strings"
+
+	"golang.org/x/sys/unix"
 )
 
 func init() {

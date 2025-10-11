@@ -23,10 +23,11 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"github.com/stretchr/testify/assert"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 
 	chk "gopkg.in/check.v1"
 )

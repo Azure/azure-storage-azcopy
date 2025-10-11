@@ -23,9 +23,10 @@ package ste
 import (
 	"bytes"
 	"fmt"
+	"sync/atomic"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
-	"sync/atomic"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )

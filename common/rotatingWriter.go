@@ -44,13 +44,14 @@ func NewRotatingWriter(filePath string, size uint64) (io.WriteCloser, error) {
 	}
 
 	return &rotatingWriter{
-		file: file,
-		filePath: filePath,
+		file:       file,
+		filePath:   filePath,
 		maxLogSize: size,
 	}, nil
 }
+
 // rotate() takes in a context inform of integer, and rotates log only
-// if the context matches current suffix. 
+// if the context matches current suffix.
 // rotate() should be called with a RLock held. It'll return back with
 // RLock held.
 func (w *rotatingWriter) rotate(suffix int32) error {
@@ -73,7 +74,7 @@ func (w *rotatingWriter) rotate(suffix int32) error {
 	if err := os.Rename(w.filePath, logFileName); err != nil {
 		return err
 	}
-	
+
 	atomic.AddInt32(&w.currentSuffix, 1)
 	atomic.StoreUint64(&w.currentSize, 0)
 
@@ -111,7 +112,7 @@ func (w *rotatingWriter) Write(p []byte) (n int, err error) {
 	atomic.AddUint64(&w.currentSize, -uint64(len(p)))
 
 	if err := w.rotate(currSuffix); err != nil {
-			return 0, err
+		return 0, err
 	}
 
 	atomic.AddUint64(&w.currentSize, uint64(len(p)))

@@ -1,8 +1,9 @@
 package ste
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"os"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func remoteToLocal_symlink(jptm IJobPartTransferMgr, pacer pacer, df downloaderFactory) {

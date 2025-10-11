@@ -3,12 +3,13 @@ package ste
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/go-autorest/autorest/date"
 	"net/http"
 	"strconv"
 	"sync"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/go-autorest/autorest/date"
 )
 
 var (

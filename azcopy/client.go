@@ -21,11 +21,12 @@
 package azcopy
 
 import (
+	"log"
+	"runtime"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"log"
-	"runtime"
 )
 
 type Client struct {

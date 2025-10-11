@@ -21,9 +21,10 @@
 package cmd
 
 import (
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	chk "gopkg.in/check.v1"
-	"testing"
 )
 
 type parseSizeSuite struct{}

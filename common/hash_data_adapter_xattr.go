@@ -8,9 +8,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"golang.org/x/sys/unix"
 	"path/filepath"
 	"strings"
+
+	"golang.org/x/sys/unix"
 )
 
 // ===== OS-Specific hash adapter changes =====
@@ -55,7 +56,7 @@ retry:
 	sz, err := unix.Getxattr(metaFile, strings.TrimPrefix(AzCopyHashDataStream, "."), buf) // MacOS doesn't take well to the dot(?)
 	if err != nil {
 		if err == unix.ERANGE { // But just in case, let's safeguard against it and re-call with a larger buffer.
-			buf = make([]byte, len(buf) * 2)
+			buf = make([]byte, len(buf)*2)
 			goto retry
 		}
 

@@ -57,7 +57,7 @@ func (f localFileSourceInfoProvider) GetUNIXProperties() (common.UnixStatAdapter
 		err = unix.Stat(f.transferInfo.Source, &stat)
 	}
 	if err != nil {
-		return nil, err 	 	
+		return nil, err
 	}
 
 	return StatTAdapter(stat), nil

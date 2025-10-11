@@ -1,3 +1,4 @@
+//go:build windows
 // +build windows
 
 // Copyright © Microsoft <wastore@microsoft.com>
