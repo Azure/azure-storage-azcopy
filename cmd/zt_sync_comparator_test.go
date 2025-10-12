@@ -22,12 +22,13 @@ package cmd
 
 import (
 	"context"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"os"
 	"sort"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
@@ -64,7 +65,7 @@ func TestFileSyncS2SWithSingleFile(t *testing.T) {
 
 		// the destination was created after the source, so no sync should happen
 		runSyncAndVerify(a, raw, func(err error) {
-			a.Nil(err)
+			a.NoError(err)
 
 			// validate that the right number of transfers were scheduled
 			a.Zero(len(mockedRPC.transfers))
@@ -75,7 +76,7 @@ func TestFileSyncS2SWithSingleFile(t *testing.T) {
 		mockedRPC.reset()
 
 		runSyncAndVerify(a, raw, func(err error) {
-			a.Nil(err)
+			a.NoError(err)
 			validateS2SSyncTransfersAreScheduled(a, []string{""}, mockedRPC)
 		})
 	}
@@ -109,7 +110,7 @@ func TestFileSyncS2SWithEmptyDestination(t *testing.T) {
 	// all files at source should be synced to destination
 	expectedList := scenarioHelper{}.addFoldersToList(fileList, false)
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(expectedList), len(mockedRPC.transfers))
@@ -122,7 +123,7 @@ func TestFileSyncS2SWithEmptyDestination(t *testing.T) {
 	raw.recursive = false
 	mockedRPC.reset()
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		a.NotEqual(len(fileList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
@@ -162,7 +163,7 @@ func TestFileSyncS2SWithIdenticalDestination(t *testing.T) {
 
 	// nothing should be sync since the source is older
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Zero(len(mockedRPC.transfers))
@@ -172,7 +173,7 @@ func TestFileSyncS2SWithIdenticalDestination(t *testing.T) {
 	scenarioHelper{}.generateShareFilesFromList(a, srcShareClient, fsc, fileList)
 	mockedRPC.reset()
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateS2SSyncTransfersAreScheduled(a, fileList, mockedRPC)
 	})
 }
@@ -220,7 +221,7 @@ func TestFileSyncS2SWithMismatchedDestination(t *testing.T) {
 	expectedOutput = scenarioHelper{}.convertMapKeysToList(expectedOutputMap)
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateS2SSyncTransfersAreScheduled(a, expectedOutput, mockedRPC)
 
 		// make sure the extra files were deleted
@@ -228,7 +229,7 @@ func TestFileSyncS2SWithMismatchedDestination(t *testing.T) {
 		pager := dstShareClient.NewRootDirectoryClient().NewListFilesAndDirectoriesPager(nil)
 		for pager.More() {
 			listResponse, err := pager.NextPage(ctx)
-			a.Nil(err)
+			a.NoError(err)
 
 			// if ever the extra files are found, note it down
 			for _, file := range listResponse.Segment.Files {
@@ -275,7 +276,7 @@ func TestFileSyncS2SWithIncludeFlag(t *testing.T) {
 
 	// verify that only the files specified by the include flag are synced
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateS2SSyncTransfersAreScheduled(a, filesToInclude, mockedRPC)
 	})
 }
@@ -313,7 +314,7 @@ func TestFileSyncS2SWithExcludeFlag(t *testing.T) {
 
 	// make sure the list doesn't include the files specified by the exclude flag
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateS2SSyncTransfersAreScheduled(a, fileList, mockedRPC)
 	})
 }
@@ -358,7 +359,7 @@ func TestFileSyncS2SWithIncludeAndExcludeFlag(t *testing.T) {
 
 	// verify that only the files specified by the include flag are synced
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateS2SSyncTransfersAreScheduled(a, filesToInclude, mockedRPC)
 	})
 }
@@ -425,14 +426,14 @@ func TestFileSyncS2SShareAndEmptyDir(t *testing.T) {
 	srcShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(a, srcShareName)
 	dirName := "emptydir"
 	_, err := dstShareClient.NewDirectoryClient(dirName).Create(context.Background(), nil)
-	a.Nil(err)
+	a.NoError(err)
 	dstDirURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(a, dstShareName, dirName)
 	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstDirURLWithSAS.String())
 
 	// verify that targeting a directory works fine
 	expectedList := scenarioHelper{}.addFoldersToList(fileList, false)
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(expectedList), len(mockedRPC.transfers))
@@ -446,7 +447,7 @@ func TestFileSyncS2SShareAndEmptyDir(t *testing.T) {
 	mockedRPC.reset()
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		a.NotEqual(len(fileList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
@@ -489,7 +490,7 @@ func TestFileSyncS2SBetweenDirs(t *testing.T) {
 
 	// nothing should be synced since the source is older
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Zero(len(mockedRPC.transfers))
@@ -500,7 +501,7 @@ func TestFileSyncS2SBetweenDirs(t *testing.T) {
 	mockedRPC.reset()
 	expectedList := scenarioHelper{}.shaveOffPrefix(fileList, dirName+common.AZCOPY_PATH_SEPARATOR_STRING)
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateS2SSyncTransfersAreScheduled(a, expectedList, mockedRPC)
 	})
 }
@@ -538,7 +539,7 @@ func TestDryrunSyncFiletoFile(t *testing.T) {
 	raw.deleteDestination = "true"
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateS2SSyncTransfersAreScheduled(a, []string{}, mockedRPC)
 
 		msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)
@@ -590,7 +591,7 @@ func TestDryrunSyncLocaltoFile(t *testing.T) {
 	raw.deleteDestination = "true"
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateS2SSyncTransfersAreScheduled(a, []string{}, mockedRPC)
 
 		msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)
@@ -644,7 +645,7 @@ func TestFileSyncS2SWithIdenticalDestinationTemp(t *testing.T) {
 
 	// nothing should be sync since the source is older
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Zero(len(mockedRPC.transfers))
@@ -656,7 +657,7 @@ func TestFileSyncS2SWithIdenticalDestinationTemp(t *testing.T) {
 	currentTime := time.Now().UTC()
 	newTime := currentTime.Add(-time.Hour).UTC() // give extra hour
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateS2SSyncTransfersAreScheduled(a, fileList, mockedRPC)
 
 		for _, transfer := range mockedRPC.transfers {

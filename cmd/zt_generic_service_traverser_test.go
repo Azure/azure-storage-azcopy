@@ -103,7 +103,7 @@ func TestServiceTraverserWithManyObjects(t *testing.T) {
 	// Invoke the traversal with an indexer so the results are indexed for easy validation
 	localIndexer := newObjectIndexer()
 	err = localTraverser.Traverse(noPreProccessor, localIndexer.store, nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	// construct a blob account traverser
 	rawBSU := scenarioHelper{}.getBlobServiceClientWithSAS(a)
@@ -112,7 +112,7 @@ func TestServiceTraverserWithManyObjects(t *testing.T) {
 	// invoke the blob account traversal with a dummy processor
 	blobDummyProcessor := dummyProcessor{}
 	err = blobAccountTraverser.Traverse(noPreProccessor, blobDummyProcessor.process, nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	// construct a file account traverser
 	rawFSU := scenarioHelper{}.getFileServiceClientWithSAS(a)
@@ -123,7 +123,7 @@ func TestServiceTraverserWithManyObjects(t *testing.T) {
 	// invoke the file account traversal with a dummy processor
 	fileDummyProcessor := dummyProcessor{}
 	err = fileAccountTraverser.Traverse(noPreProccessor, fileDummyProcessor.process, nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	var s3DummyProcessor dummyProcessor
 	var gcpDummyProcessor dummyProcessor
@@ -131,22 +131,22 @@ func TestServiceTraverserWithManyObjects(t *testing.T) {
 		// construct a s3 service traverser
 		accountURL := scenarioHelper{}.getRawS3AccountURL(a, "")
 		s3ServiceTraverser, err := newS3ServiceTraverser(&accountURL, ctx, InitResourceTraverserOptions{})
-		a.Nil(err)
+		a.NoError(err)
 
 		// invoke the s3 service traversal with a dummy processor
 		s3DummyProcessor = dummyProcessor{}
 		err = s3ServiceTraverser.Traverse(noPreProccessor, s3DummyProcessor.process, nil)
-		a.Nil(err)
+		a.NoError(err)
 	}
 
 	if testGCP {
 		gcpAccountURL := scenarioHelper{}.getRawGCPAccountURL(a)
 		gcpServiceTraverser, err := newS3ServiceTraverser(&gcpAccountURL, ctx, InitResourceTraverserOptions{})
-		a.Nil(err)
+		a.NoError(err)
 
 		gcpDummyProcessor = dummyProcessor{}
 		err = gcpServiceTraverser.Traverse(noPreProccessor, gcpDummyProcessor.process, nil)
-		a.Nil(err)
+		a.NoError(err)
 	}
 
 	records := append(blobDummyProcessor.record, fileDummyProcessor.record...)
@@ -274,7 +274,7 @@ func TestServiceTraverserWithWildcards(t *testing.T) {
 	// Invoke the traversal with an indexer so the results are indexed for easy validation
 	localIndexer := newObjectIndexer()
 	err = localTraverser.Traverse(noPreProccessor, localIndexer.store, nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	// construct a blob account traverser
 	rawBSU := scenarioHelper{}.getBlobServiceClientWithSAS(a)
@@ -284,7 +284,7 @@ func TestServiceTraverserWithWildcards(t *testing.T) {
 	// invoke the blob account traversal with a dummy processor
 	blobDummyProcessor := dummyProcessor{}
 	err = blobAccountTraverser.Traverse(noPreProccessor, blobDummyProcessor.process, nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	// construct a file account traverser
 	rawFSU := scenarioHelper{}.getFileServiceClientWithSAS(a)
@@ -296,14 +296,14 @@ func TestServiceTraverserWithWildcards(t *testing.T) {
 	// invoke the file account traversal with a dummy processor
 	fileDummyProcessor := dummyProcessor{}
 	err = fileAccountTraverser.Traverse(noPreProccessor, fileDummyProcessor.process, nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	var s3DummyProcessor dummyProcessor
 	var gcpDummyProcessor dummyProcessor
 	if testS3 {
 		// construct a s3 service traverser
 		accountURL, err := common.NewS3URLParts(scenarioHelper{}.getRawS3AccountURL(a, ""))
-		a.Nil(err)
+		a.NoError(err)
 		accountURL.BucketName = "objectmatch*" // set the container name to contain a wildcard
 
 		urlOut := accountURL.URL()
@@ -312,20 +312,20 @@ func TestServiceTraverserWithWildcards(t *testing.T) {
 		// invoke the s3 service traversal with a dummy processor
 		s3DummyProcessor = dummyProcessor{}
 		err = s3ServiceTraverser.Traverse(noPreProccessor, s3DummyProcessor.process, nil)
-		a.Nil(err)
+		a.NoError(err)
 	}
 	if testGCP {
 		gcpAccountURL, err := common.NewGCPURLParts(scenarioHelper{}.getRawGCPAccountURL(a))
-		a.Nil(err)
+		a.NoError(err)
 		gcpAccountURL.BucketName = "objectmatch*"
 		urlStr := gcpAccountURL.URL()
 
 		gcpServiceTraverser, err := newGCPServiceTraverser(&urlStr, ctx, InitResourceTraverserOptions{})
-		a.Nil(err)
+		a.NoError(err)
 
 		gcpDummyProcessor = dummyProcessor{}
 		err = gcpServiceTraverser.Traverse(noPreProccessor, gcpDummyProcessor.process, nil)
-		a.Nil(err)
+		a.NoError(err)
 	}
 
 	records := append(blobDummyProcessor.record, fileDummyProcessor.record...)

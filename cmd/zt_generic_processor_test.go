@@ -21,14 +21,15 @@
 package cmd
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-	"github.com/stretchr/testify/assert"
-	chk "gopkg.in/check.v1"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/stretchr/testify/assert"
+	chk "gopkg.in/check.v1"
 )
 
 type genericProcessorSuite struct{}
@@ -88,7 +89,7 @@ func TestCopyTransferProcessorMultipleFiles(t *testing.T) {
 		// go through the objects and make sure they are processed without error
 		for _, storedObject := range sampleObjects {
 			err := copyProcessor.scheduleCopyTransfer(storedObject)
-			a.Nil(err)
+			a.NoError(err)
 		}
 
 		// make sure everything has been dispatched apart from the final one
@@ -97,7 +98,7 @@ func TestCopyTransferProcessorMultipleFiles(t *testing.T) {
 		// dispatch final part
 		jobInitiated, err := copyProcessor.dispatchFinalPart()
 		a.True(jobInitiated)
-		a.Nil(err)
+		a.NoError(err)
 
 		// assert the right transfers were scheduled
 		validateCopyTransfersAreScheduled(a, false, false, "", "", processorTestSuiteHelper{}.getExpectedTransferFromStoredObjectList(sampleObjects), mockedRPC)
@@ -137,7 +138,7 @@ func TestCopyTransferProcessorSingleFile(t *testing.T) {
 	// exercise the copy transfer processor
 	storedObject := newStoredObject(noPreProccessor, blobList[0], "", common.EEntityType.File(), time.Now(), 0, noContentProps, noBlobProps, noMetadata, "")
 	err := copyProcessor.scheduleCopyTransfer(storedObject)
-	a.Nil(err)
+	a.NoError(err)
 
 	// no part should have been dispatched
 	a.Equal(common.PartNumber(0), copyProcessor.copyJobTemplate.PartNum)

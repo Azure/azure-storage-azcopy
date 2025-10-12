@@ -148,19 +148,19 @@ func TestIsPublic(t *testing.T) {
 
 	// Create a public container
 	_, err := ctr.Create(ctx, &container.CreateOptions{Access: &publicAccess})
-	a.Nil(err)
+	a.NoError(err)
 
 	// verify that container is public
 	a.True(isPublic(ctx, ctr.URL(), common.CpkOptions{}))
 
 	publicAccess = container.PublicAccessTypeBlob
 	_, err = ctr.SetAccessPolicy(ctx, &container.SetAccessPolicyOptions{Access: &publicAccess})
-	a.Nil(err)
+	a.NoError(err)
 
 	// Verify that blob is public.
 	bb, _ := getBlockBlobClient(a, ctr, "")
 	_, err = bb.UploadBuffer(ctx, []byte("I'm a block blob."), nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	a.True(isPublic(ctx, bb.URL(), common.CpkOptions{}))
 

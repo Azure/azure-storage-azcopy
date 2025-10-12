@@ -176,7 +176,7 @@ func TestBenchmark(t *testing.T) {
 		fromTo: common.EFromTo.BenchmarkBlob(),
 	}
 	benchSIP, err := newBenchmarkSourceInfoProvider(&jptm)
-	a.Nil(err)
+	a.NoError(err)
 
 	_, err = benchSIP.GetMD5(0, 1)
 	a.NotNil(err)
@@ -190,15 +190,15 @@ func TestBlockBlob(t *testing.T) {
 	rawURL := fmt.Sprintf("https://%s.blob.core.windows.net/", accountName)
 
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
-	a.Nil(err)
+	a.NoError(err)
 
 	client, err := blobservice.NewClientWithSharedKeyCredential(rawURL, credential, nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	cName := generateContainerName()
 	cc := client.NewContainerClient(cName)
 	_, err = cc.Create(context.Background(), nil)
-	a.Nil(err)
+	a.NoError(err)
 	defer cc.Delete(context.Background(), nil)
 
 	bName := generateBlobName()
@@ -211,7 +211,7 @@ func TestBlockBlob(t *testing.T) {
 		blobsas.BlobPermissions{Read: true},
 		time.Now().Add(1*time.Hour),
 		nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	jptm := testJobPartTransferManager{
 		info: to.Ptr(TransferInfo{
@@ -222,7 +222,7 @@ func TestBlockBlob(t *testing.T) {
 		fromTo: common.EFromTo.BlobBlob(),
 	}
 	blobSIP, err := newBlobSourceInfoProvider(&jptm)
-	a.Nil(err)
+	a.NoError(err)
 
 	// Get MD5 range within service calculation
 	offset := rand.Int63n(int64(size) - 1)
@@ -232,7 +232,7 @@ func TestBlockBlob(t *testing.T) {
 	}
 	localMd5 := md5.Sum(data[offset : offset+count])
 	computedMd5, err := blobSIP.GetMD5(offset, count)
-	a.Nil(err)
+	a.NoError(err)
 	a.True(bytes.Equal(localMd5[:], computedMd5))
 
 	// Get MD5 range outside service calculation
@@ -243,7 +243,7 @@ func TestBlockBlob(t *testing.T) {
 	}
 	localMd5 = md5.Sum(data[offset : offset+count])
 	computedMd5, err = blobSIP.GetMD5(offset, count)
-	a.Nil(err)
+	a.NoError(err)
 	a.True(bytes.Equal(localMd5[:], computedMd5))
 }
 
@@ -255,31 +255,31 @@ func TestShareFile(t *testing.T) {
 	rawURL := fmt.Sprintf("https://%s.file.core.windows.net/", accountName)
 
 	credential, err := file.NewSharedKeyCredential(accountName, accountKey)
-	a.Nil(err)
+	a.NoError(err)
 
 	client, err := fileservice.NewClientWithSharedKeyCredential(rawURL, credential, nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	sName := generateContainerName()
 	sc := client.NewShareClient(sName)
 	_, err = sc.Create(context.Background(), nil)
-	a.Nil(err)
+	a.NoError(err)
 	defer sc.Delete(context.Background(), nil)
 
 	fName := generateBlobName()
 	fc := sc.NewRootDirectoryClient().NewFileClient(fName)
 	size := 1024 * 1024 * 10
 	_, err = fc.Create(context.Background(), int64(size), nil)
-	a.Nil(err)
+	a.NoError(err)
 	dataReader, data := getDataAndReader(t.Name(), size)
 	err = fc.UploadStream(context.Background(), dataReader, nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	sasURL, err := fc.GetSASURL(
 		filesas.FilePermissions{Read: true},
 		time.Now().Add(1*time.Hour),
 		nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	jptm := testJobPartTransferManager{
 		info: to.Ptr(TransferInfo{
@@ -290,7 +290,7 @@ func TestShareFile(t *testing.T) {
 		fromTo: common.EFromTo.FileBlob(),
 	}
 	fileSIP, err := newFileSourceInfoProvider(&jptm)
-	a.Nil(err)
+	a.NoError(err)
 
 	// Get MD5 range within service calculation
 	offset := rand.Int63n(int64(size) - 1)
@@ -300,7 +300,7 @@ func TestShareFile(t *testing.T) {
 	}
 	localMd5 := md5.Sum(data[offset : offset+count])
 	computedMd5, err := fileSIP.GetMD5(offset, count)
-	a.Nil(err)
+	a.NoError(err)
 	a.True(bytes.Equal(localMd5[:], computedMd5))
 
 	// Get MD5 range outside service calculation
@@ -311,7 +311,7 @@ func TestShareFile(t *testing.T) {
 	}
 	localMd5 = md5.Sum(data[offset : offset+count])
 	computedMd5, err = fileSIP.GetMD5(offset, count)
-	a.Nil(err)
+	a.NoError(err)
 	a.True(bytes.Equal(localMd5[:], computedMd5))
 }
 
@@ -323,30 +323,30 @@ func TestShareDirectory(t *testing.T) {
 	rawURL := fmt.Sprintf("https://%s.file.core.windows.net/", accountName)
 
 	credential, err := file.NewSharedKeyCredential(accountName, accountKey)
-	a.Nil(err)
+	a.NoError(err)
 
 	client, err := fileservice.NewClientWithSharedKeyCredential(rawURL, credential, nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	sName := generateContainerName()
 	sc := client.NewShareClient(sName)
 	_, err = sc.Create(context.Background(), nil)
-	a.Nil(err)
+	a.NoError(err)
 	defer sc.Delete(context.Background(), nil)
 
 	dName := generateBlobName()
 	dc := sc.NewDirectoryClient(dName)
 	_, err = dc.Create(context.Background(), nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	sasURL, err := sc.GetSASURL(
 		filesas.SharePermissions{Read: true},
 		time.Now().Add(1*time.Hour),
 		nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	fileURLParts, err := file.ParseURL(sasURL)
-	a.Nil(err)
+	a.NoError(err)
 	fileURLParts.DirectoryOrFilePath = dName
 	sasURL = fileURLParts.String()
 
@@ -359,7 +359,7 @@ func TestShareDirectory(t *testing.T) {
 		fromTo: common.EFromTo.FileBlob(),
 	}
 	fileSIP, err := newFileSourceInfoProvider(&jptm)
-	a.Nil(err)
+	a.NoError(err)
 
 	_, err = fileSIP.GetMD5(0, 1)
 	a.NotNil(err)
@@ -371,21 +371,21 @@ func TestGCP(t *testing.T) {
 
 	// Setup
 	gcpClient, err := gcpUtils.NewClient(context.Background())
-	a.Nil(err)
+	a.NoError(err)
 	bName := generateContainerName()
 	bucket := gcpClient.Bucket(bName)
 	err = bucket.Create(context.Background(), os.Getenv("GOOGLE_CLOUD_PROJECT"), &gcpUtils.BucketAttrs{})
-	a.Nil(err)
+	a.NoError(err)
 	defer bucket.Delete(context.Background())
 
 	oName := generateBlobName()
 	oc := bucket.Object(oName)
 	size := 1024 * 1024 * 10
 	wc := oc.NewWriter(context.Background())
-	a.Nil(err)
+	a.NoError(err)
 	dataReader, data := getDataAndReader(t.Name(), size)
 	written, err := io.Copy(wc, dataReader)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal(int64(size), written)
 	_ = wc.Close()
 
@@ -400,7 +400,7 @@ func TestGCP(t *testing.T) {
 		fromTo: common.EFromTo.GCPBlob(),
 	}
 	gcpSIP, err := newGCPSourceInfoProvider(&jptm)
-	a.Nil(err)
+	a.NoError(err)
 
 	// Get MD5 range within service calculation
 	offset := rand.Int63n(int64(size) - 1)
@@ -410,7 +410,7 @@ func TestGCP(t *testing.T) {
 	}
 	localMd5 := md5.Sum(data[offset : offset+count])
 	computedMd5, err := gcpSIP.GetMD5(offset, count)
-	a.Nil(err)
+	a.NoError(err)
 	a.True(bytes.Equal(localMd5[:], computedMd5))
 
 	// Get MD5 range outside service calculation
@@ -421,7 +421,7 @@ func TestGCP(t *testing.T) {
 	}
 	localMd5 = md5.Sum(data[offset : offset+count])
 	computedMd5, err = gcpSIP.GetMD5(offset, count)
-	a.Nil(err)
+	a.NoError(err)
 	a.True(bytes.Equal(localMd5[:], computedMd5))
 }
 
@@ -431,14 +431,14 @@ func TestLocal(t *testing.T) {
 	// Setup
 	fName := generateBlobName()
 	f, err := os.CreateTemp("", fName)
-	a.Nil(err)
+	a.NoError(err)
 	defer os.Remove(f.Name())
 
 	size := 1024 * 1024 * 10
-	a.Nil(err)
+	a.NoError(err)
 	dataReader, data := getDataAndReader(t.Name(), size)
 	n, err := io.Copy(f, dataReader)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal(int64(size), n)
 	f.Close()
 
@@ -450,7 +450,7 @@ func TestLocal(t *testing.T) {
 		fromTo: common.EFromTo.LocalBlob(),
 	}
 	localSIP, err := newLocalSourceInfoProvider(&jptm)
-	a.Nil(err)
+	a.NoError(err)
 
 	// Get MD5 range within service calculation
 	offset := rand.Int63n(int64(size) - 1)
@@ -460,7 +460,7 @@ func TestLocal(t *testing.T) {
 	}
 	localMd5 := md5.Sum(data[offset : offset+count])
 	computedMd5, err := localSIP.GetMD5(offset, count)
-	a.Nil(err)
+	a.NoError(err)
 	a.True(bytes.Equal(localMd5[:], computedMd5))
 
 	// Get MD5 range outside service calculation
@@ -471,7 +471,7 @@ func TestLocal(t *testing.T) {
 	}
 	localMd5 = md5.Sum(data[offset : offset+count])
 	computedMd5, err = localSIP.GetMD5(offset, count)
-	a.Nil(err)
+	a.NoError(err)
 	a.True(bytes.Equal(localMd5[:], computedMd5))
 }
 
@@ -481,18 +481,18 @@ func TestS3(t *testing.T) {
 
 	// Setup
 	s3Client, err := createS3ClientWithMinio()
-	a.Nil(err)
+	a.NoError(err)
 	bName := generateContainerName()
 	err = s3Client.MakeBucket(bName, "")
-	a.Nil(err)
+	a.NoError(err)
 	defer s3Client.RemoveBucket(bName)
 
 	oName := generateBlobName()
 	size := 1024 * 1024 * 10
-	a.Nil(err)
+	a.NoError(err)
 	dataReader, data := getDataAndReader(t.Name(), size)
 	n, err := s3Client.PutObjectWithContext(context.Background(), bName, oName, dataReader, int64(size), minio.PutObjectOptions{})
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal(int64(size), n)
 
 	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/%s/%s", "", bName, oName)
@@ -506,7 +506,7 @@ func TestS3(t *testing.T) {
 		fromTo: common.EFromTo.S3Blob(),
 	}
 	s3SIP, err := newS3SourceInfoProvider(&jptm)
-	a.Nil(err)
+	a.NoError(err)
 
 	// Get MD5 range within service calculation
 	offset := rand.Int63n(int64(size) - 1)
@@ -516,7 +516,7 @@ func TestS3(t *testing.T) {
 	}
 	localMd5 := md5.Sum(data[offset : offset+count])
 	computedMd5, err := s3SIP.GetMD5(offset, count)
-	a.Nil(err)
+	a.NoError(err)
 	a.True(bytes.Equal(localMd5[:], computedMd5))
 
 	// Get MD5 range outside service calculation
@@ -527,6 +527,6 @@ func TestS3(t *testing.T) {
 	}
 	localMd5 = md5.Sum(data[offset : offset+count])
 	computedMd5, err = s3SIP.GetMD5(offset, count)
-	a.Nil(err)
+	a.NoError(err)
 	a.True(bytes.Equal(localMd5[:], computedMd5))
 }

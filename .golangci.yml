@@ -1,0 +1,37 @@
+version: "2"
+linters:
+  default: none
+  enable:
+    - bodyclose
+    - contextcheck
+    - cyclop
+    - dupword
+    - durationcheck
+    - errcheck
+    - errname
+    - errorlint
+    - gocritic
+    - gosec
+    - govet
+    - ineffassign
+    - misspell
+    - staticcheck
+    - testifylint
+    - unused
+    - usetesting
+  settings:
+    cyclop:
+      max-complexity: 20
+    gocritic:
+      disabled-checks:
+        - singleCaseSwitch
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+formatters:
+  enable:
+    - goimports

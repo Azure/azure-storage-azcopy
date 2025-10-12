@@ -21,8 +21,9 @@
 package common
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestExclusiveStringMap(t *testing.T) {
@@ -31,7 +32,7 @@ func TestExclusiveStringMap(t *testing.T) {
 
 	addShouldWork := func(v string) {
 		err := m.Add(v)
-		a.Nil(err)
+		a.NoError(err)
 	}
 
 	addShouldErrorOut := func(v string) {

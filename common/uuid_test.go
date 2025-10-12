@@ -21,9 +21,10 @@
 package common
 
 import (
-	"github.com/stretchr/testify/assert"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestGUIDGenerationAndParsing(t *testing.T) {
@@ -36,7 +37,7 @@ func TestGUIDGenerationAndParsing(t *testing.T) {
 		a.False(containsSpace)
 
 		parsed, err := ParseUUID(uuid.String())
-		a.Nil(err)
+		a.NoError(err)
 		a.Equal(uuid, parsed)
 	}
 }

@@ -23,6 +23,8 @@ package ste
 import (
 	"context"
 	"fmt"
+	"testing"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -30,7 +32,6 @@ import (
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-storage-azcopy/v10/mock_server"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestRangeWorthTransferring(t *testing.T) {
@@ -122,14 +123,14 @@ func TestPageRangeOptimizerSinglePage(t *testing.T) {
 	rawURL := fmt.Sprintf("https://%s.blob.core.windows.net/", accountName)
 
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
-	a.Nil(err)
+	a.NoError(err)
 
 	client, err := blobservice.NewClientWithSharedKeyCredential(rawURL, credential,
 		&blobservice.ClientOptions{
 			ClientOptions: azcore.ClientOptions{
 				Transport: srv,
 			}})
-	a.Nil(err)
+	a.NoError(err)
 
 	cName := generateContainerName()
 	cc := client.NewContainerClient(cName)
@@ -169,14 +170,14 @@ func TestPageRangeOptimizerSinglePageFail(t *testing.T) {
 	rawURL := fmt.Sprintf("https://%s.blob.core.windows.net/", accountName)
 
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
-	a.Nil(err)
+	a.NoError(err)
 
 	client, err := blobservice.NewClientWithSharedKeyCredential(rawURL, credential,
 		&blobservice.ClientOptions{
 			ClientOptions: azcore.ClientOptions{
 				Transport: srv,
 			}})
-	a.Nil(err)
+	a.NoError(err)
 
 	cName := generateContainerName()
 	cc := client.NewContainerClient(cName)
@@ -218,14 +219,14 @@ func TestPageRangeOptimizerMultiplePages(t *testing.T) {
 	rawURL := fmt.Sprintf("https://%s.blob.core.windows.net/", accountName)
 
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
-	a.Nil(err)
+	a.NoError(err)
 
 	client, err := blobservice.NewClientWithSharedKeyCredential(rawURL, credential,
 		&blobservice.ClientOptions{
 			ClientOptions: azcore.ClientOptions{
 				Transport: srv,
 			}})
-	a.Nil(err)
+	a.NoError(err)
 
 	cName := generateContainerName()
 	cc := client.NewContainerClient(cName)
@@ -275,14 +276,14 @@ func TestPageRangeOptimizerMultiplePagesFail(t *testing.T) {
 	rawURL := fmt.Sprintf("https://%s.blob.core.windows.net/", accountName)
 
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
-	a.Nil(err)
+	a.NoError(err)
 
 	client, err := blobservice.NewClientWithSharedKeyCredential(rawURL, credential,
 		&blobservice.ClientOptions{
 			ClientOptions: azcore.ClientOptions{
 				Transport: srv,
 			}})
-	a.Nil(err)
+	a.NoError(err)
 
 	cName := generateContainerName()
 	cc := client.NewContainerClient(cName)

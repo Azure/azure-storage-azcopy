@@ -46,12 +46,12 @@ func getE2ETokenCredential(a *assert.Assertions) azcore.TokenCredential {
 		a.NotZero(appID)
 		a.NotZero(clientSecret)
 		cred, err := azidentity.NewClientSecretCredential(tenantId, appID, clientSecret, nil)
-		a.Nil(err)
+		a.NoError(err)
 		return cred
 	} else {
 		tenantId := os.Getenv("tenantId")
 		cred, err := azidentity.NewDefaultAzureCredential(&azidentity.DefaultAzureCredentialOptions{TenantID: tenantId})
-		a.Nil(err)
+		a.NoError(err)
 		return cred
 	}
 }
@@ -62,7 +62,7 @@ func TestSrcAuthPolicy(t *testing.T) {
 	cred = common.NewScopedCredential(cred, common.ECredentialType.OAuthToken())
 	srcAuthPolicy := NewSourceAuthPolicy(cred)
 	req, err := runtime.NewRequest(context.Background(), http.MethodGet, "https://127.0.0.1/")
-	a.Nil(err)
+	a.NoError(err)
 
 	// 1. Do not set copySourceAuthHeader and verify the policy does not add it.
 	_, _ = srcAuthPolicy.Do(req)
@@ -104,7 +104,7 @@ func TestSrcAuthPolicyMultipleRefresh(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		req[i], err = runtime.NewRequest(context.Background(), http.MethodGet, "https://127.0.0.1")
 		req[i].Raw().Header[copySourceAuthHeader] = []string{"InvalidString"} // nolint:staticcheck
-		a.Nil(err)
+		a.NoError(err)
 	}
 
 	var wg sync.WaitGroup

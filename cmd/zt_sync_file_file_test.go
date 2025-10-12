@@ -21,10 +21,11 @@
 package cmd
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/stretchr/testify/assert"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestSyncSourceComparator(t *testing.T) {
@@ -56,7 +57,7 @@ func TestSyncSourceComparator(t *testing.T) {
 	// test the comparator in case a given source object is present at the destination
 	// and it has a later modified time, so the comparator should pass the give object to schedule a transfer
 	err := indexer.store(sampleDestinationObject)
-	a.Nil(err)
+	a.NoError(err)
 	compareErr = sourceComparator.processIfNecessary(StoredObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now().Add(time.Hour), md5: srcMD5})
 	a.Nil(compareErr)
 
@@ -72,7 +73,7 @@ func TestSyncSourceComparator(t *testing.T) {
 	// but is has an earlier modified time compared to the one at the destination
 	// meaning that the source object is considered stale, so no transfer should be scheduled
 	err = indexer.store(sampleDestinationObject)
-	a.Nil(err)
+	a.NoError(err)
 	compareErr = sourceComparator.processIfNecessary(StoredObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now().Add(-time.Hour), md5: srcMD5})
 	a.Nil(compareErr)
 
@@ -122,7 +123,7 @@ func TestSyncSrcCompDisableComparator(t *testing.T) {
 	// meaning that the source object is considered stale, so no transfer should be scheduled
 	for key, dstStoredObject := range destinationStoredObjects {
 		err := indexer.store(dstStoredObject)
-		a.Nil(err)
+		a.NoError(err)
 		compareErr = sourceComparator.processIfNecessary(sourceStoredObjects[key])
 		a.Nil(compareErr)
 		a.Equal(key+1, len(dummyCopyScheduler.record))
@@ -162,7 +163,7 @@ func TestSyncDestinationComparator(t *testing.T) {
 	// and it has a later modified time, since the source data is stale,
 	// no transfer happens
 	err := indexer.store(sampleSourceObject)
-	a.Nil(err)
+	a.NoError(err)
 	compareErr = destinationComparator.processIfNecessary(StoredObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now().Add(time.Hour), md5: destMD5})
 	a.Nil(compareErr)
 
@@ -178,7 +179,7 @@ func TestSyncDestinationComparator(t *testing.T) {
 	// but is has an earlier modified time compared to the one at the source
 	// meaning that the source object should be transferred since the destination object is stale
 	err = indexer.store(sampleSourceObject)
-	a.Nil(err)
+	a.NoError(err)
 	compareErr = destinationComparator.processIfNecessary(StoredObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now().Add(-time.Hour), md5: destMD5})
 	a.Nil(compareErr)
 
@@ -234,7 +235,7 @@ func TestSyncDestCompDisableComparison(t *testing.T) {
 	// no transfer happens
 	for key, srcStoredObject := range sourceStoredObjects {
 		err := indexer.store(srcStoredObject)
-		a.Nil(err)
+		a.NoError(err)
 		compareErr = destinationComparator.processIfNecessary(destinationStoredObjects[key])
 		a.Nil(compareErr)
 		a.Equal(key+1, len(dummyCopyScheduler.record))

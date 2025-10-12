@@ -21,8 +21,9 @@
 package common
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 var fakeTokenInfo = OAuthTokenInfo{
@@ -60,7 +61,7 @@ func TestCredCacheSaveLoadDeleteHas(t *testing.T) {
 	hasCachedToken, err := credCache.HasCachedToken()
 	if hasCachedToken {
 		err = credCache.RemoveCachedToken()
-		a.Nil(err)
+		a.NoError(err)
 	}
 
 	// Ensure no token cached initially.
@@ -69,16 +70,16 @@ func TestCredCacheSaveLoadDeleteHas(t *testing.T) {
 
 	// Test save token.
 	err = credCache.SaveToken(fakeTokenInfo)
-	a.Nil(err)
+	a.NoError(err)
 
 	// Test has cached token, and validate save token.
 	hasCachedToken, err = credCache.HasCachedToken()
-	a.Nil(err)
+	a.NoError(err)
 	a.True(hasCachedToken)
 
 	// Test load token.
 	token, err := credCache.LoadToken()
-	a.Nil(err)
+	a.NoError(err)
 	a.NotNil(token)
 	a.Equal(fakeTokenInfo, *token)
 
@@ -86,15 +87,15 @@ func TestCredCacheSaveLoadDeleteHas(t *testing.T) {
 	cloneTokenWithDiff := fakeTokenInfo // deep copy
 	cloneTokenWithDiff.Tenant = "change the tenant info a little"
 	err = credCache.SaveToken(cloneTokenWithDiff)
-	a.Nil(err)
+	a.NoError(err)
 	token, err = credCache.LoadToken()
-	a.Nil(err)
+	a.NoError(err)
 	a.NotNil(token)
 	a.Equal(cloneTokenWithDiff, *token)
 
 	// Test remove token.
 	err = credCache.RemoveCachedToken()
-	a.Nil(err)
+	a.NoError(err)
 
 	// Test has cached token, and validate remove token.
 	hasCachedToken, err = credCache.HasCachedToken()

@@ -23,17 +23,18 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"path"
 	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -81,12 +82,12 @@ func TestInferredStripTopDirDownload(t *testing.T) {
 
 	// Test inference of striptopdir
 	cooked, err := raw.cook()
-	a.Nil(err)
+	a.NoError(err)
 	a.False(cooked.StripTopDir)
 
 	// Test and ensure only one file is being downloaded
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		a.Equal(1, len(mockedRPC.transfers))
 	})
@@ -108,12 +109,12 @@ func TestInferredStripTopDirDownload(t *testing.T) {
 
 	// Test inference of striptopdir
 	cooked, err = raw.cook()
-	a.Nil(err)
+	a.NoError(err)
 	a.True(cooked.StripTopDir)
 
 	// Test and ensure only 3 files get scheduled, nothing under the sub-directory
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		a.Equal(3, len(mockedRPC.transfers))
 	})
@@ -157,12 +158,12 @@ func TestInferredStripTopDirDownload(t *testing.T) {
 
 	// test cook
 	cooked, err = raw.cook()
-	a.Nil(err)
+	a.NoError(err)
 	a.True(cooked.StripTopDir)
 
 	// Test and ensure only one file got scheduled
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		a.Equal(1, len(mockedRPC.transfers))
 	})
@@ -196,7 +197,7 @@ func TestDownloadAccount(t *testing.T) {
 		return nil
 	}
 	err := blobTraverser.Traverse(noPreProccessor, processor, []ObjectFilter{})
-	a.Nil(err)
+	a.NoError(err)
 
 	// set up a destination
 	dstDirName := scenarioHelper{}.generateLocalDirectory(a)
@@ -213,7 +214,7 @@ func TestDownloadAccount(t *testing.T) {
 	raw.recursive = true
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		validateDownloadTransfersAreScheduled(a, "", "", relPaths, mockedRPC)
 	})
@@ -229,7 +230,7 @@ func TestDownloadAccountWildcard(t *testing.T) {
 	cname := generateName("blah-unique-blah", 63)
 	curl := bsc.NewContainerClient(cname)
 	_, err := curl.Create(ctx, nil)
-	a.Nil(err)
+	a.NoError(err)
 	defer deleteContainer(a, curl)
 	scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, curl, "")
 
@@ -252,7 +253,7 @@ func TestDownloadAccountWildcard(t *testing.T) {
 		return nil
 	}
 	err = blobTraverser.Traverse(noPreProccessor, processor, []ObjectFilter{})
-	a.Nil(err)
+	a.NoError(err)
 
 	// set up a destination
 	dstDirName := scenarioHelper{}.generateLocalDirectory(a)
@@ -269,7 +270,7 @@ func TestDownloadAccountWildcard(t *testing.T) {
 	raw.recursive = true
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		validateDownloadTransfersAreScheduled(a, "", "", relPaths, mockedRPC)
 	})
@@ -307,7 +308,7 @@ func TestDownloadSingleBlobToFile(t *testing.T) {
 
 		// the file was created after the blob, so no sync should happen
 		runCopyAndVerify(a, raw, func(err error) {
-			a.Nil(err)
+			a.NoError(err)
 
 			validateDownloadTransfersAreScheduled(a, "", "", []string{""}, mockedRPC)
 		})
@@ -320,7 +321,7 @@ func TestDownloadSingleBlobToFile(t *testing.T) {
 
 		// the file was created after the blob, so no sync should happen
 		runCopyAndVerify(a, raw, func(err error) {
-			a.Nil(err)
+			a.NoError(err)
 
 			// verify explicitly since the source and destination names will be different:
 			// the source is "" since the given URL points to the blob itself
@@ -342,7 +343,7 @@ func TestDownloadBlobContainer(t *testing.T) {
 	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, cc, "")
 	defer deleteContainer(a, cc)
 	a.NotNil(cc)
-	a.NotEqual(0, len(blobList))
+	a.NotEmpty(blobList)
 
 	// set up the destination with an empty folder
 	dstDirName := scenarioHelper{}.generateLocalDirectory(a)
@@ -361,7 +362,7 @@ func TestDownloadBlobContainer(t *testing.T) {
 	raw.recursive = true
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobList), len(mockedRPC.transfers))
@@ -410,7 +411,7 @@ func TestDownloadBlobVirtualDirectory(t *testing.T) {
 	raw.recursive = true
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobList), len(mockedRPC.transfers))
@@ -444,7 +445,7 @@ func TestDownloadBlobContainerWithPattern(t *testing.T) {
 	blobsToIgnore := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, cc, "")
 	defer deleteContainer(a, cc)
 	a.NotNil(cc)
-	a.NotEqual(0, len(blobsToIgnore))
+	a.NotEmpty(blobsToIgnore)
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"important.pdf", "includeSub/amazing.pdf", "includeSub/wow/amazing.pdf"}
@@ -470,7 +471,7 @@ func TestDownloadBlobContainerWithPattern(t *testing.T) {
 	raw.include = "*.pdf"
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobsToInclude), len(mockedRPC.transfers))
@@ -485,7 +486,7 @@ func TestDownloadBlobContainerWithPattern(t *testing.T) {
 	mockedRPC.reset()
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// only the top pdf should be included
 		a.Equal(1, len(mockedRPC.transfers))
@@ -505,7 +506,7 @@ func TestDownloadBlobContainerWithRegexInclude(t *testing.T) {
 	blobsToIgnore := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, cc, "")
 	defer deleteContainer(a, cc)
 	a.NotNil(cc)
-	a.NotEqual(0, len(blobsToIgnore))
+	a.NotEmpty(blobsToIgnore)
 
 	// add blobs that we wish to include
 	blobsToInclude := []string{"tessssssssssssst.txt", "subOne/tetingessssss.jpeg", "subOne/tessssst/hi.pdf"}
@@ -531,7 +532,7 @@ func TestDownloadBlobContainerWithRegexInclude(t *testing.T) {
 	raw.includeRegex = "es{4,}"
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobsToInclude), len(mockedRPC.transfers))
 		// comparing is names of files match
@@ -559,7 +560,7 @@ func TestDownloadBlobContainerWithMultRegexInclude(t *testing.T) {
 	blobsToIgnore := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, cc, "")
 	defer deleteContainer(a, cc)
 	a.NotNil(cc)
-	a.NotEqual(0, len(blobsToIgnore))
+	a.NotEmpty(blobsToIgnore)
 
 	// add blobs that we wish to include
 	blobsToInclude := []string{"tessssssssssssst.txt", "zxcfile.txt", "subOne/tetingessssss.jpeg", "subOne/subTwo/tessssst.pdf"}
@@ -585,7 +586,7 @@ func TestDownloadBlobContainerWithMultRegexInclude(t *testing.T) {
 	raw.includeRegex = "es{4,};^zxc"
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobsToInclude), len(mockedRPC.transfers))
 		// validate that the right transfers were sent
@@ -638,7 +639,7 @@ func TestDownloadBlobContainerWithEmptyRegex(t *testing.T) {
 	raw.excludeRegex = ""
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobsToInclude), len(mockedRPC.transfers))
 		// do not need to check file names since all files for blobsToInclude are passed bc flags are empty
@@ -684,7 +685,7 @@ func TestDownloadBlobContainerWithRegexExclude(t *testing.T) {
 	raw.excludeRegex = "es{4,}"
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		// validate that only blobsTo
 		a.Equal(len(blobsToInclude), len(mockedRPC.transfers))
 		// comparing is names of files, since not in order need to sort each string and the compare them
@@ -738,7 +739,7 @@ func TestDownloadBlobContainerWithMultRegexExclude(t *testing.T) {
 	raw.excludeRegex = "es{4,};o(g)"
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobsToInclude), len(mockedRPC.transfers))
 		// comparing is names of files, since not in order need to sort each string and the compare them
@@ -788,7 +789,7 @@ func TestDryrunCopyLocalToBlob(t *testing.T) {
 	raw.recursive = true
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		// validate that none where transferred
 		a.Zero(len(mockedRPC.transfers))
 
@@ -836,7 +837,7 @@ func TestDryrunCopyBlobToBlob(t *testing.T) {
 	raw.recursive = true
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		// validate that none where transferred
 		a.Zero(len(mockedRPC.transfers))
 
@@ -883,9 +884,9 @@ func TestDryrunCopyBlobToBlobJson(t *testing.T) {
 	raw.recursive = true
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		// validate that none where transferred
-		a.Zero(len(mockedRPC.transfers))
+		a.Empty(mockedRPC.transfers)
 
 		msg := <-mockedLcm.dryrunLog
 		copyMessage := DryrunTransfer{}
@@ -937,7 +938,7 @@ func TestDryrunCopyS3toBlob(t *testing.T) {
 	raw.recursive = true
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		// validate that none where transferred
 		a.Zero(len(mockedRPC.transfers))
 
@@ -985,7 +986,7 @@ func TestDryrunCopyGCPtoBlob(t *testing.T) {
 	raw.recursive = true
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		// validate that none where transferred
 		a.Zero(len(mockedRPC.transfers))
 
@@ -1066,7 +1067,7 @@ func TestListOfVersions(t *testing.T) {
 	raw.recursive = true
 	raw.listOfVersionIDs = file.Name()
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(2, len(mockedRPC.transfers))

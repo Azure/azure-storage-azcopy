@@ -26,25 +26,25 @@ func Test404DeleteSuccessLogic(t *testing.T) {
 	rawURL := fmt.Sprintf("https://%s.dfs.core.windows.net/", accountName)
 
 	credential, err := azdatalake.NewSharedKeyCredential(accountName, accountKey)
-	a.Nil(err)
+	a.NoError(err)
 
 	client, err := datalakeservice.NewClientWithSharedKeyCredential(rawURL, credential, &datalakeservice.ClientOptions{
 		ClientOptions: azcore.ClientOptions{
 			Transport: NewAzcopyHTTPClient(0),
 		}})
-	a.Nil(err)
+	a.NoError(err)
 
 	cName := generateContainerName()
 	cc := client.NewFileSystemClient(cName)
 	_, err = cc.Create(context.Background(), nil)
-	a.Nil(err)
+	a.NoError(err)
 	defer cc.Delete(context.Background(), nil)
 
 	// Generating the name for a file without actually creating it.
 	sourceName := generateBlobName()
 	sasURL, err := client.GetSASURL(sas.AccountResourceTypes{Container: true}, sas.AccountPermissions{Read: true, Add: true, Create: true, Delete: true, Write: true, List: true},
 		time.Now().Add(1*time.Hour), nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	jptm := &testJobPartTransferManager{
 		info: to.Ptr(TransferInfo{
@@ -57,6 +57,6 @@ func Test404DeleteSuccessLogic(t *testing.T) {
 	jptm.SetStatus(common.ETransferStatus.Started())
 	doDeleteHNSResource(jptm)
 
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal(jptm.status, common.ETransferStatus.Success())
 }

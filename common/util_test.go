@@ -109,14 +109,14 @@ func TestDoWithOverrideReadonlyonAzureFiles(t *testing.T) {
 	rawURL := fmt.Sprintf("https://%s.file.core.windows.net/", acc)
 
 	credential, err := file.NewSharedKeyCredential(acc, key)
-	a.Nil(err)
+	a.NoError(err)
 
 	fsc, err := fileService.NewClientWithSharedKeyCredential(rawURL, credential, nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	sc := fsc.NewShareClient(NewUUID().String())
 	_, err = sc.Create(context.TODO(), nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	defer sc.Delete(context.Background(), nil)
 
@@ -129,7 +129,7 @@ func TestDoWithOverrideReadonlyonAzureFiles(t *testing.T) {
 		},
 	})
 
-	a.Nil(err)
+	a.NoError(err)
 
 	testMeta := make(map[string]*string)
 	testMeta["Testkey"] = to.Ptr("Testvalue")
@@ -148,10 +148,10 @@ func TestDoWithOverrideReadonlyonAzureFiles(t *testing.T) {
 			Metadata: testMeta,
 		})
 	}, f, true)
-	a.Nil(err)
+	a.NoError(err)
 
 	props, err := f.GetProperties(context.TODO(), nil)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal(*props.Metadata["Testkey"], "Testvalue")
-	
+
 }

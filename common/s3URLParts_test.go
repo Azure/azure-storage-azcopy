@@ -21,17 +21,18 @@
 package common
 
 import (
-	"github.com/stretchr/testify/assert"
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestS3URLParse(t *testing.T) {
 	a := assert.New(t)
 	u, _ := url.Parse("http://bucket.s3.amazonaws.com")
 	p, err := NewS3URLParts(*u)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal("bucket.s3.amazonaws.com", p.Host)
 	a.Equal("s3.amazonaws.com", p.Endpoint)
 	a.Equal("bucket", p.BucketName)
@@ -42,7 +43,7 @@ func TestS3URLParse(t *testing.T) {
 
 	u, _ = url.Parse("http://bucket.s3.amazonaws.com/")
 	p, err = NewS3URLParts(*u)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal("bucket", p.BucketName)
 	a.Equal("s3.amazonaws.com", p.Endpoint)
 	a.Equal("", p.ObjectKey)
@@ -52,7 +53,7 @@ func TestS3URLParse(t *testing.T) {
 
 	u, _ = url.Parse("http://bucket.s3-aws-region.amazonaws.com/keydir/keysubdir/keyname")
 	p, err = NewS3URLParts(*u)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal("s3-aws-region.amazonaws.com", p.Endpoint)
 	a.Equal("bucket", p.BucketName)
 	a.Equal("keydir/keysubdir/keyname", p.ObjectKey)
@@ -62,7 +63,7 @@ func TestS3URLParse(t *testing.T) {
 
 	u, _ = url.Parse("http://bucket.s3-aws-region.amazonaws.com/keyname")
 	p, err = NewS3URLParts(*u)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal("s3-aws-region.amazonaws.com", p.Endpoint)
 	a.Equal("bucket", p.BucketName)
 	a.Equal("keyname", p.ObjectKey)
@@ -72,7 +73,7 @@ func TestS3URLParse(t *testing.T) {
 
 	u, _ = url.Parse("http://bucket.s3-aws-region.amazonaws.com/keyname/")
 	p, err = NewS3URLParts(*u)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal("s3-aws-region.amazonaws.com", p.Endpoint)
 	a.Equal("bucket", p.BucketName)
 	a.Equal("keyname/", p.ObjectKey)
@@ -83,7 +84,7 @@ func TestS3URLParse(t *testing.T) {
 	// dual stack
 	u, _ = url.Parse("http://bucket.s3.dualstack.aws-region.amazonaws.com/keyname/")
 	p, err = NewS3URLParts(*u)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal("s3.dualstack.aws-region.amazonaws.com", p.Endpoint)
 	a.Equal("bucket", p.BucketName)
 	a.Equal("keyname/", p.ObjectKey)
@@ -93,7 +94,7 @@ func TestS3URLParse(t *testing.T) {
 
 	u, _ = url.Parse("https://s3.amazonaws.com")
 	p, err = NewS3URLParts(*u)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal("s3.amazonaws.com", p.Endpoint)
 	a.Equal("", p.BucketName)
 	a.Equal("", p.ObjectKey)
@@ -103,7 +104,7 @@ func TestS3URLParse(t *testing.T) {
 
 	u, _ = url.Parse("https://s3.amazonaws.com/")
 	p, err = NewS3URLParts(*u)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal("s3.amazonaws.com", p.Endpoint)
 	a.Equal("", p.BucketName)
 	a.Equal("", p.ObjectKey)
@@ -113,7 +114,7 @@ func TestS3URLParse(t *testing.T) {
 
 	u, _ = url.Parse("https://s3-ap-southeast-1.amazonaws.com/")
 	p, err = NewS3URLParts(*u)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal("s3-ap-southeast-1.amazonaws.com", p.Endpoint)
 	a.Equal("", p.BucketName)
 	a.Equal("", p.ObjectKey)
@@ -123,7 +124,7 @@ func TestS3URLParse(t *testing.T) {
 
 	u, _ = url.Parse("https://s3-ap-southeast-1.amazonaws.com/jiac-art-awsbucket01")
 	p, err = NewS3URLParts(*u)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal("s3-ap-southeast-1.amazonaws.com", p.Endpoint)
 	a.Equal("jiac-art-awsbucket01", p.BucketName)
 	a.Equal("", p.ObjectKey)
@@ -133,7 +134,7 @@ func TestS3URLParse(t *testing.T) {
 
 	u, _ = url.Parse("https://s3-ap-southeast-1.amazonaws.com/jiac-art-awsbucket01/")
 	p, err = NewS3URLParts(*u)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal("s3-ap-southeast-1.amazonaws.com", p.Endpoint)
 	a.Equal("jiac-art-awsbucket01", p.BucketName)
 	a.Equal("", p.ObjectKey)
@@ -143,7 +144,7 @@ func TestS3URLParse(t *testing.T) {
 
 	u, _ = url.Parse("https://s3-ap-southeast-1.amazonaws.com/jiac-art-awsbucket01/Test.pdf")
 	p, err = NewS3URLParts(*u)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal("s3-ap-southeast-1.amazonaws.com", p.Endpoint)
 	a.Equal("jiac-art-awsbucket01", p.BucketName)
 	a.Equal("Test.pdf", p.ObjectKey)
@@ -153,7 +154,7 @@ func TestS3URLParse(t *testing.T) {
 
 	u, _ = url.Parse("https://s3-ap-southeast-1.amazonaws.com/jiac-art-awsbucket01/space+folder/Test.pdf")
 	p, err = NewS3URLParts(*u)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal("s3-ap-southeast-1.amazonaws.com", p.Endpoint)
 	a.Equal("jiac-art-awsbucket01", p.BucketName)
 	a.Equal("space+folder/Test.pdf", p.ObjectKey)
@@ -164,7 +165,7 @@ func TestS3URLParse(t *testing.T) {
 	// Version testing
 	u, _ = url.Parse("https://s3.ap-northeast-2.amazonaws.com/jiac-art-awsbucket02-versionenabled/Test.pdf?versionId=Cy0pgpqHDTR7RlMEwU_BxDVER2QN5lJJ")
 	p, err = NewS3URLParts(*u)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal("s3.ap-northeast-2.amazonaws.com", p.Endpoint)
 	a.Equal("jiac-art-awsbucket02-versionenabled", p.BucketName)
 	a.Equal("Test.pdf", p.ObjectKey)
@@ -175,7 +176,7 @@ func TestS3URLParse(t *testing.T) {
 	// Version and dualstack testing
 	u, _ = url.Parse("https://s3.dualstack.ap-northeast-2.amazonaws.com/jiac-art-awsbucket02-versionenabled/Test.pdf?versionId=Cy0pgpqHDTR7RlMEwU_BxDVER2QN5lJJ")
 	p, err = NewS3URLParts(*u)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal("s3.dualstack.ap-northeast-2.amazonaws.com", p.Endpoint)
 	a.Equal("jiac-art-awsbucket02-versionenabled", p.BucketName)
 	a.Equal("Test.pdf", p.ObjectKey)

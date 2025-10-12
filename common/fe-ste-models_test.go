@@ -21,9 +21,10 @@
 package common_test
 
 import (
+	"testing"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestEnhanceJobStatusInfo(t *testing.T) {
@@ -158,14 +159,14 @@ func TestMetadataResolveInvalidKey(t *testing.T) {
 	mValid := getValidMetadataSample()
 
 	resolvedMetadata, err := mInvalid.ResolveInvalidKey()
-	a.Nil(err)
+	a.NoError(err)
 	validateMapEqual(a, resolvedMetadata,
 		map[string]string{"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRUSTUVWXYZ1234567890_": "v:abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRUSTUVWXYZ1234567890_",
 			"Am": "v:Am", "_123": "v:_123", "rename_1abc": "v:1abc", "rename_key_1abc": "1abc", "rename_a___": "v:a!@#", "rename_key_a___": "a!@#",
 			"rename_a_metadata_samplE": "v:a-metadata-samplE", "rename_key_a_metadata_samplE": "a-metadata-samplE"})
 
 	resolvedMetadata, err = mValid.ResolveInvalidKey()
-	a.Nil(err)
+	a.NoError(err)
 	validateMapEqual(a, resolvedMetadata, map[string]string{"Key": "value"})
 }
 

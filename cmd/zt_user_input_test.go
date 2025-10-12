@@ -21,10 +21,11 @@
 package cmd
 
 import (
+	"testing"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestCPKEncryptionInputTest(t *testing.T) {
@@ -60,5 +61,5 @@ func TestCPKEncryptionInputTest(t *testing.T) {
 	raw2.cpkInfo = true
 
 	_, err := raw2.cook()
-	a.Nil(err)
+	a.NoError(err)
 }

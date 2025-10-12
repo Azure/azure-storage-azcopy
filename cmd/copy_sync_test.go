@@ -26,7 +26,7 @@ func TestCopy_NFSSpecificValidationForFlags(t *testing.T) {
 				fromTo:          "LocalFile",
 			},
 			func(cooked *CookedCopyCmdArgs) {
-				a.Equal(true, cooked.preserveInfo)
+				a.True(cooked.preserveInfo)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
@@ -67,7 +67,7 @@ func TestCopy_NFSSpecificValidationForFlags(t *testing.T) {
 				fromTo:              "LocalFile",
 			},
 			func(cooked *CookedCopyCmdArgs) {
-				a.Equal(true, cooked.preserveInfo)
+				a.True(cooked.preserveInfo)
 				a.Equal(common.PreservePermissionsOption(2), cooked.preservePermissions)
 			},
 		},
@@ -95,7 +95,7 @@ func TestCopy_NFSSpecificValidationForFlags(t *testing.T) {
 				fromTo:              "LocalFile",
 			},
 			func(cooked *CookedCopyCmdArgs) {
-				a.Equal(true, cooked.preserveInfo)
+				a.True(cooked.preserveInfo)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
@@ -121,7 +121,7 @@ func TestCopy_NFSSpecificValidationForFlags(t *testing.T) {
 				fromTo:          "LocalFileNFS",
 			},
 			func(cooked *CookedCopyCmdArgs) {
-				a.Equal(true, cooked.preserveInfo)
+				a.True(cooked.preserveInfo)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
@@ -147,7 +147,7 @@ func TestCopy_NFSSpecificValidationForFlags(t *testing.T) {
 				fromTo:              "LocalFileNFS",
 			},
 			func(cooked *CookedCopyCmdArgs) {
-				a.Equal(true, cooked.preserveInfo)
+				a.True(cooked.preserveInfo)
 				a.Equal(common.PreservePermissionsOption(2), cooked.preservePermissions)
 			},
 		},
@@ -173,7 +173,7 @@ func TestCopy_NFSSpecificValidationForFlags(t *testing.T) {
 				fromTo:          "LocalFileNFS",
 			},
 			func(cooked *CookedCopyCmdArgs) {
-				a.Equal(true, cooked.preserveInfo)
+				a.True(cooked.preserveInfo)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
@@ -186,7 +186,7 @@ func TestCopy_NFSSpecificValidationForFlags(t *testing.T) {
 				fromTo:                 "LocalFileNFS",
 			},
 			func(cooked *CookedCopyCmdArgs) {
-				a.Equal(true, cooked.preserveInfo)
+				a.True(cooked.preserveInfo)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
@@ -224,7 +224,7 @@ func TestCopy_SMBSpecificValidationForFlags(t *testing.T) {
 				fromTo:              "LocalFile",
 			},
 			func(cooked *CookedCopyCmdArgs) {
-				a.Equal(true, cooked.preserveInfo)
+				a.True(cooked.preserveInfo)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 			false,
@@ -252,7 +252,7 @@ func TestCopy_SMBSpecificValidationForFlags(t *testing.T) {
 				fromTo:              "LocalFile",
 			},
 			func(cooked *CookedCopyCmdArgs) {
-				a.Equal(true, cooked.preserveInfo)
+				a.True(cooked.preserveInfo)
 				a.Equal(common.PreservePermissionsOption(2), cooked.preservePermissions)
 			},
 			false,
@@ -294,7 +294,7 @@ func TestCopy_SMBSpecificValidationForFlags(t *testing.T) {
 				fromTo:          "LocalFile",
 			},
 			func(cooked *CookedCopyCmdArgs) {
-				a.Equal(true, cooked.preserveInfo)
+				a.True(cooked.preserveInfo)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 			false,
@@ -308,7 +308,7 @@ func TestCopy_SMBSpecificValidationForFlags(t *testing.T) {
 				fromTo:          "LocalFile",
 			},
 			func(cooked *CookedCopyCmdArgs) {
-				a.Equal(true, cooked.preserveInfo)
+				a.True(cooked.preserveInfo)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 			false,
@@ -337,7 +337,7 @@ func TestCopy_SMBSpecificValidationForFlags(t *testing.T) {
 				fromTo:              "LocalFile",
 			},
 			func(cooked *CookedCopyCmdArgs) {
-				a.Equal(true, cooked.preserveInfo)
+				a.True(cooked.preserveInfo)
 				a.Equal(common.PreservePermissionsOption(2), cooked.preservePermissions)
 			},
 			false,
@@ -377,7 +377,7 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 				deleteDestination: "false",
 			},
 			func(cooked *cookedSyncCmdArgs) {
-				a.Equal(true, cooked.preserveInfo)
+				a.True(cooked.preserveInfo)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
@@ -424,7 +424,7 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 				deleteDestination:   "false",
 			},
 			func(cooked *cookedSyncCmdArgs) {
-				a.Equal(true, cooked.preserveInfo)
+				a.True(cooked.preserveInfo)
 				a.Equal(common.PreservePermissionsOption(2), cooked.preservePermissions)
 			},
 		},
@@ -454,7 +454,7 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 				deleteDestination:   "false",
 			},
 			func(cooked *cookedSyncCmdArgs) {
-				a.Equal(true, cooked.preserveInfo)
+				a.True(cooked.preserveInfo)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
@@ -483,7 +483,7 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 				deleteDestination: "false",
 			},
 			func(cooked *cookedSyncCmdArgs) {
-				a.Equal(true, cooked.preserveInfo)
+				a.True(cooked.preserveInfo)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
@@ -513,7 +513,7 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 				deleteDestination:   "false",
 			},
 			func(cooked *cookedSyncCmdArgs) {
-				a.Equal(true, cooked.preserveInfo)
+				a.True(cooked.preserveInfo)
 				a.Equal(common.PreservePermissionsOption(2), cooked.preservePermissions)
 			},
 		},
@@ -558,7 +558,7 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 				deleteDestination: "false",
 			},
 			func(cooked *cookedSyncCmdArgs) {
-				a.Equal(true, cooked.preserveInfo)
+				a.True(cooked.preserveInfo)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
@@ -588,7 +588,7 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 				deleteDestination:   "false",
 			},
 			func(cooked *cookedSyncCmdArgs) {
-				a.Equal(true, cooked.preserveInfo)
+				a.True(cooked.preserveInfo)
 				a.Equal(common.PreservePermissionsOption(2), cooked.preservePermissions)
 			},
 		},
@@ -618,7 +618,7 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 				deleteDestination:      "false",
 			},
 			func(cooked *cookedSyncCmdArgs) {
-				a.Equal(true, cooked.preserveInfo)
+				a.True(cooked.preserveInfo)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
@@ -632,7 +632,7 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 				deleteDestination: "false",
 			},
 			func(cooked *cookedSyncCmdArgs) {
-				a.Equal(true, cooked.preserveInfo)
+				a.True(cooked.preserveInfo)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
@@ -670,7 +670,7 @@ func TestSync_SMBSpecificValidationForFlags(t *testing.T) {
 				deleteDestination:   "false",
 			},
 			func(cooked *cookedSyncCmdArgs) {
-				a.Equal(true, cooked.preserveInfo)
+				a.True(cooked.preserveInfo)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
@@ -700,7 +700,7 @@ func TestSync_SMBSpecificValidationForFlags(t *testing.T) {
 				deleteDestination:   "false",
 			},
 			func(cooked *cookedSyncCmdArgs) {
-				a.Equal(true, cooked.preserveInfo)
+				a.True(cooked.preserveInfo)
 				a.Equal(common.PreservePermissionsOption(2), cooked.preservePermissions)
 			},
 		},
@@ -745,7 +745,7 @@ func TestSync_SMBSpecificValidationForFlags(t *testing.T) {
 				deleteDestination: "false",
 			},
 			func(cooked *cookedSyncCmdArgs) {
-				a.Equal(true, cooked.preserveInfo)
+				a.True(cooked.preserveInfo)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
@@ -760,7 +760,7 @@ func TestSync_SMBSpecificValidationForFlags(t *testing.T) {
 				deleteDestination: "false",
 			},
 			func(cooked *cookedSyncCmdArgs) {
-				a.Equal(true, cooked.preserveInfo)
+				a.True(cooked.preserveInfo)
 				a.Equal(common.PreservePermissionsOption(0), cooked.preservePermissions)
 			},
 		},
@@ -792,7 +792,7 @@ func TestSync_SMBSpecificValidationForFlags(t *testing.T) {
 				deleteDestination:   "false",
 			},
 			func(cooked *cookedSyncCmdArgs) {
-				a.Equal(true, cooked.preserveInfo)
+				a.True(cooked.preserveInfo)
 				a.Equal(common.PreservePermissionsOption(2), cooked.preservePermissions)
 			},
 		},
