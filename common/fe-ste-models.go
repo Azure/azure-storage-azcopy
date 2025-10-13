@@ -1743,7 +1743,7 @@ var EFolderPropertiesOption = FolderPropertyOption(0)
 type FolderPropertyOption uint8
 
 // no FPO has been selected.  Make sure the zero-like value is "unspecified" so that we detect
-// any code paths that that do not nominate any FPO
+// any code paths that do not nominate any FPO
 func (FolderPropertyOption) Unspecified() FolderPropertyOption { return FolderPropertyOption(0) }
 
 func (FolderPropertyOption) NoFolders() FolderPropertyOption { return FolderPropertyOption(1) }
