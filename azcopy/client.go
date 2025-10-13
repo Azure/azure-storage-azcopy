@@ -21,15 +21,23 @@
 package azcopy
 
 import (
+	"log"
+	"runtime"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"log"
-	"runtime"
+)
+
+const (
+	oauthLoginSessionCacheKeyName     = "AzCopyOAuthTokenCache"
+	oauthLoginSessionCacheServiceName = "AzCopyV10"
+	oauthLoginSessionCacheAccountName = "AzCopyOAuthTokenCache"
 )
 
 type Client struct {
-	CurrentJobID common.JobID // TODO (gapra): In future this should only be set when there is a current job running. On complete, this should be cleared. It can also behave as something we can check to see if a current job is running
+	CurrentJobID      common.JobID                  // TODO (gapra): In future this should only be set when there is a current job running. On complete, this should be cleared. It can also behave as something we can check to see if a current job is running
+	oauthTokenManager *common.UserOAuthTokenManager // OAuth token manager for the current user, used for authentication
 }
 
 type ClientOptions struct {
@@ -51,7 +59,26 @@ func NewClient(opts ClientOptions) (Client, error) {
 	if err != nil {
 		return c, err
 	}
+	// only one UserOAuthTokenManager should exist in azcopy process for current user.
+	// (a given AzcopyJobPlanFolder is mapped to current user)
+	if common.AzcopyJobPlanFolder == "" {
+		panic("invalid state, AzcopyJobPlanFolder should not be an empty string")
+	}
+	cacheName := common.GetEnvironmentVariable(common.EEnvironmentVariable.LoginCacheName())
+
+	c.oauthTokenManager = common.NewUserOAuthTokenManagerInstance(common.CredCacheOptions{
+		DPAPIFilePath: common.AzcopyJobPlanFolder,
+		KeyName:       common.Iff(cacheName != "", cacheName, oauthLoginSessionCacheKeyName),
+		ServiceName:   oauthLoginSessionCacheServiceName,
+		AccountName:   common.Iff(cacheName != "", cacheName, oauthLoginSessionCacheAccountName),
+	})
 	return c, nil
+}
+
+// GetUserOAuthTokenManagerInstance gets or creates OAuthTokenManager for current user.
+// Note: Currently, only support to have TokenManager for one user mapping to one tenantID.
+func (c *Client) GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
+	return c.oauthTokenManager
 }
 
 // Ensure we always have more than 1 OS thread running goroutines, since there are issues with having just 1.

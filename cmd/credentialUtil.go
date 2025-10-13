@@ -39,7 +39,6 @@ import (
 	"github.com/minio/minio-go/pkg/s3utils"
 )
 
-var once sync.Once
 var autoOAuth sync.Once
 
 var sharedKeyDeprecation sync.Once
@@ -52,123 +51,7 @@ func warnIfSharedKeyAuthForDatalake() {
 	})
 }
 
-// only one UserOAuthTokenManager should exists in azcopy-v2 process in cmd(FE) module for current user.
-// (given appAppPathFolder is mapped to current user)
-var currentUserOAuthTokenManager *common.UserOAuthTokenManager
-
-// GetUserOAuthTokenManagerInstance gets or creates OAuthTokenManager for current user.
-// Note: Currently, only support to have TokenManager for one user mapping to one tenantID.
-func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
-	once.Do(func() {
-		if common.AzcopyJobPlanFolder == "" {
-			panic("invalid state, AzcopyJobPlanFolder should not be an empty string")
-		}
-		cacheName := common.GetEnvironmentVariable(common.EEnvironmentVariable.LoginCacheName())
-
-		currentUserOAuthTokenManager = common.NewUserOAuthTokenManagerInstance(common.CredCacheOptions{
-			DPAPIFilePath: common.AzcopyJobPlanFolder,
-			KeyName:       common.Iff(cacheName != "", cacheName, oauthLoginSessionCacheKeyName),
-			ServiceName:   oauthLoginSessionCacheServiceName,
-			AccountName:   common.Iff(cacheName != "", cacheName, oauthLoginSessionCacheAccountName),
-		})
-	})
-
-	return currentUserOAuthTokenManager
-}
-
-/*
- * GetInstanceOAuthTokenInfo returns OAuth token, obtained by auto-login,
- * for current instance of AzCopy.
- */
-func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
-	var err error
-	autoOAuth.Do(func() {
-		var options LoginOptions
-		autoLoginType := strings.ToLower(common.GetEnvironmentVariable(common.EEnvironmentVariable.AutoLoginType()))
-		if autoLoginType == "" {
-			glcm.Info("Autologin not specified.")
-			return
-		}
-
-		if tenantID := common.GetEnvironmentVariable(common.EEnvironmentVariable.TenantID()); tenantID != "" {
-			options.TenantID = tenantID
-		}
-
-		if endpoint := common.GetEnvironmentVariable(common.EEnvironmentVariable.AADEndpoint()); endpoint != "" {
-			options.AADEndpoint = endpoint
-		}
-
-		var loginType common.AutoLoginType
-		err = loginType.Parse(autoLoginType)
-		if err != nil {
-			glcm.Error("Invalid Auto-login type specified: " + autoLoginType)
-			return
-		}
-
-		// Fill up options
-		options.LoginType = loginType
-		switch options.LoginType {
-		case common.EAutoLoginType.SPN():
-			options.ApplicationID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ApplicationID())
-			options.CertificatePath = common.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePath())
-			options.certificatePassword = common.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
-			options.clientSecret = common.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
-		case common.EAutoLoginType.MSI():
-			options.IdentityClientID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityClientID())
-			options.identityObjectID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityObjectID())
-			options.IdentityResourceID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityResourceString())
-		case common.EAutoLoginType.Device():
-		case common.EAutoLoginType.AzCLI():
-		case common.EAutoLoginType.PsCred():
-		case common.EAutoLoginType.Workload():
-		default:
-			glcm.Error("Invalid Auto-login type specified: " + autoLoginType)
-			return
-		}
-
-		options.persistToken = false
-		if err = options.process(); err != nil {
-			glcm.Error(fmt.Sprintf("Failed to perform Auto-login: %v.", err.Error()))
-		}
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	return GetUserOAuthTokenManagerInstance(), nil
-}
-
 var announceOAuthTokenOnce sync.Once
-
-func oAuthTokenExists() (oauthTokenExists bool) {
-	// Note: Environment variable for OAuth token should only be used in testing, or the case user clearly now how to protect
-	// the tokens
-	if common.EnvVarOAuthTokenInfoExists() {
-		announceOAuthTokenOnce.Do(
-			func() {
-				glcm.Info(fmt.Sprintf("%v is set.", common.EnvVarOAuthTokenInfo)) // Log the case when env var is set, as it's rare case.
-			},
-		)
-		oauthTokenExists = true
-	}
-
-	uotm, err := GetOAuthTokenManagerInstance()
-	if err != nil {
-		oauthTokenExists = false
-		return
-	}
-
-	if hasCachedToken, err := uotm.HasCachedToken(); hasCachedToken {
-		oauthTokenExists = true
-	} else if err != nil { //nolint:staticcheck
-		// Log the error if fail to get cached token, as these are unhandled errors, and should not influence the logic flow.
-		// Uncomment for debugging.
-		// glcm.Info(fmt.Sprintf("No cached token found, %v", err))
-	}
-
-	return
-}
 
 var stashedEnvCredType = ""
 
@@ -482,7 +365,12 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 		}
 
 		if strings.HasPrefix(uri.Host, "md-") && mdAccountNeedsOAuth(ctx, uri.String(), cpkOptions) {
-			if !oAuthTokenExists() {
+			var oAuthTokenExists bool
+			oAuthTokenExists, err = Client.GetUserOAuthTokenManagerInstance().OAuthTokenExists(&announceOAuthTokenOnce, &autoOAuth)
+			if err != nil {
+				return common.ECredentialType.Unknown(), false, err
+			}
+			if !oAuthTokenExists {
 				return common.ECredentialType.Unknown(), false,
 					common.NewAzError(common.EAzError.LoginCredMissing(), "No SAS token or OAuth token is present and the resource is not public")
 			}
@@ -497,7 +385,12 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 		return
 	}
 
-	if oAuthTokenExists() {
+	var oAuthTokenExists bool
+	oAuthTokenExists, err = Client.GetUserOAuthTokenManagerInstance().OAuthTokenExists(&announceOAuthTokenOnce, &autoOAuth)
+	if err != nil {
+		return common.ECredentialType.Unknown(), false, err
+	}
+	if oAuthTokenExists {
 		credType = common.ECredentialType.OAuthToken()
 		return
 	}
@@ -525,9 +418,13 @@ func GetCredentialInfoForLocation(ctx context.Context, location common.Location,
 	// get the type
 	credInfo.CredentialType, isPublic, err = getCredentialTypeForLocation(ctx, location, resource, isSource, cpkOptions)
 
+	if err != nil {
+		glcm.Error(err.Error())
+	}
+
 	// flesh out the rest of the fields, for those types that require it
 	if credInfo.CredentialType.IsAzureOAuth() {
-		uotm := GetUserOAuthTokenManagerInstance()
+		uotm := Client.GetUserOAuthTokenManagerInstance()
 
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return credInfo, false, err
@@ -563,6 +460,10 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 		credType = common.ECredentialType.Anonymous()
 		// Log the FromTo types which getCredentialType hasn't solved, in case of miss-use.
 		glcm.Info(fmt.Sprintf("Use anonymous credential by default for from-to '%v'", raw.fromTo))
+	}
+	if err != nil {
+		glcm.Error(err.Error())
+		return
 	}
 
 	return

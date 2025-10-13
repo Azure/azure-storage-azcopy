@@ -286,7 +286,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 
 	var tc azcore.TokenCredential
 	if srcCredType.IsAzureOAuth() || dstCredType.IsAzureOAuth() {
-		uotm := GetUserOAuthTokenManagerInstance()
+		uotm := Client.GetUserOAuthTokenManagerInstance()
 		// Get token from env var or cache.
 		tokenInfo, err := uotm.GetTokenInfo(ctx)
 		if err != nil {
