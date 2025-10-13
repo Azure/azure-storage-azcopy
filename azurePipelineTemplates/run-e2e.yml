@@ -10,7 +10,7 @@ jobs:
     # Creating strategies for GOOS: Windows Server 2019 /macOS X Mojave 10.15/Ubuntu 20.04
     strategy:
       matrix:
-        Ubuntu-20:
+        Ubuntu:
           imageName: 'ubuntu-latest'
           build_name: 'azcopy_linux_amd64'
           display_name: "Linux"
@@ -185,7 +185,7 @@ jobs:
           testResultsFiles: $(System.DefaultWorkingDirectory)/**/$(display_name)_report.xml
           testRunTitle: 'Go on $(display_name)'
 
-      - task: PublishCodeCoverageResults@1
+      - task: PublishCodeCoverageResults@2
         condition: succeededOrFailed()
         inputs:
           codeCoverageTool: Cobertura

@@ -15,7 +15,7 @@ jobs:
     timeoutInMinutes: 360
     strategy:
       matrix:
-        Ubuntu-20:
+        Ubuntu:
           imageName: 'ubuntu-latest'
           type: 'linux'
         MacOS:
@@ -233,7 +233,7 @@ jobs:
           GOCOVERDIR: '$(System.DefaultWorkingDirectory)/coverage'
         condition: succeededOrFailed()
       # Smoke Tests Publishing
-      - task: PublishCodeCoverageResults@1
+      - task: PublishCodeCoverageResults@2
         condition: succeededOrFailed()
         inputs:
           codeCoverageTool: Cobertura
