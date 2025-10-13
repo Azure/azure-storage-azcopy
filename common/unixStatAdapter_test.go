@@ -1,10 +1,11 @@
 package common
 
 import (
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/stretchr/testify/assert"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/stretchr/testify/assert"
 )
 
 func Test_ReadStatFromMetadata(t *testing.T) {
@@ -26,7 +27,7 @@ func Test_ReadStatFromMetadata(t *testing.T) {
 	metadata["posix_ctime"] = to.Ptr("1702376216773153924")
 
 	statAdapter, err := ReadStatFromMetadata(metadata, 1024)
-	a.Nil(err)
+	a.NoError(err)
 	a.NotNil(statAdapter)
 	a.True(statAdapter.Extended())
 	a.Equal(uint32(8191), statAdapter.StatxMask())
@@ -59,7 +60,7 @@ func Test_ReadStatFromMetadata(t *testing.T) {
 	metadata["Posix_ctime"] = to.Ptr("1702376216773153924")
 
 	statAdapter, err = ReadStatFromMetadata(metadata, 1024)
-	a.Nil(err)
+	a.NoError(err)
 	a.NotNil(statAdapter)
 	a.True(statAdapter.Extended())
 	a.Equal(uint32(8191), statAdapter.StatxMask())
@@ -193,7 +194,7 @@ func TestAddReadStatMetadata(t *testing.T) {
 	AddStatToBlobMetadata(statAdapter, metadata)
 
 	adapter, err := ReadStatFromMetadata(metadata, 1024)
-	a.Nil(err)
+	a.NoError(err)
 	a.NotNil(adapter)
 	a.True(adapter.Extended())
 	a.Equal(uint32(8191), adapter.StatxMask())

@@ -21,12 +21,13 @@
 package e2etest
 
 import (
+	"testing"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"testing"
-	"time"
 )
 
 func TestRemove_IncludeAfter(t *testing.T) {
@@ -56,7 +57,7 @@ func TestRemove_IncludeAfter(t *testing.T) {
 				shouldTransfer: recreateFiles,
 			}, true, true, false)
 
-			// And pause again, so that that the write times at the destination wont' just _automatically_ match the source times
+			// And pause again, so that the write times at the destination wont' just _automatically_ match the source times
 			// (due to there being < 1 sec delay between creation and completion of copy). With this delay, we know they only match
 			// if AzCopy really did preserve them
 			time.Sleep(10 * time.Second) // we are assuming here, that the clock skew between source and dest is less than 10 secs

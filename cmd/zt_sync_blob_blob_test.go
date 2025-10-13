@@ -24,14 +24,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"sort"
+	"strings"
+	"testing"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/stretchr/testify/assert"
-	"sort"
-	"strings"
-	"testing"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -67,7 +68,7 @@ func TestSyncS2SWithSingleBlob(t *testing.T) {
 
 		// the destination was created after the source, so no sync should happen
 		runSyncAndVerify(a, raw, func(err error) {
-			a.Nil(err)
+			a.NoError(err)
 
 			// validate that the right number of transfers were scheduled
 			a.Zero(len(mockedRPC.transfers))
@@ -78,7 +79,7 @@ func TestSyncS2SWithSingleBlob(t *testing.T) {
 		mockedRPC.reset()
 
 		runSyncAndVerify(a, raw, func(err error) {
-			a.Nil(err)
+			a.NoError(err)
 			validateS2SSyncTransfersAreScheduled(a, []string{""}, mockedRPC)
 		})
 	}
@@ -111,7 +112,7 @@ func TestSyncS2SWithEmptyDestination(t *testing.T) {
 
 	// all blobs at source should be synced to destination
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobList), len(mockedRPC.transfers))
@@ -124,7 +125,7 @@ func TestSyncS2SWithEmptyDestination(t *testing.T) {
 	raw.recursive = false
 	mockedRPC.reset()
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
@@ -164,7 +165,7 @@ func TestSyncS2SWithIdenticalDestination(t *testing.T) {
 
 	// nothing should be sync since the source is older
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Zero(len(mockedRPC.transfers))
@@ -174,7 +175,7 @@ func TestSyncS2SWithIdenticalDestination(t *testing.T) {
 	scenarioHelper{}.generateBlobsFromList(a, srcContainerClient, blobList, blockBlobDefaultData)
 	mockedRPC.reset()
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateS2SSyncTransfersAreScheduled(a, blobList, mockedRPC)
 	})
 }
@@ -213,7 +214,7 @@ func TestSyncS2SWithMismatchedDestination(t *testing.T) {
 	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateS2SSyncTransfersAreScheduled(a, expectedOutput, mockedRPC)
 
 		// make sure the extra blobs were deleted
@@ -221,7 +222,7 @@ func TestSyncS2SWithMismatchedDestination(t *testing.T) {
 		pager := dstContainerClient.NewListBlobsFlatPager(nil)
 		for pager.More() {
 			listResponse, err := pager.NextPage(ctx)
-			a.Nil(err)
+			a.NoError(err)
 
 			// if ever the extra blobs are found, note it down
 			for _, blob := range listResponse.Segment.BlobItems {
@@ -268,7 +269,7 @@ func TestSyncS2SWithIncludePatternFlag(t *testing.T) {
 
 	// verify that only the blobs specified by the include flag are synced
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateS2SSyncTransfersAreScheduled(a, blobsToInclude, mockedRPC)
 	})
 }
@@ -306,7 +307,7 @@ func TestSyncS2SWithExcludePatternFlag(t *testing.T) {
 
 	// make sure the list doesn't include the blobs specified by the exclude flag
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateS2SSyncTransfersAreScheduled(a, blobList, mockedRPC)
 	})
 }
@@ -351,7 +352,7 @@ func TestSyncS2SWithIncludeAndExcludePatternFlag(t *testing.T) {
 
 	// verify that only the blobs specified by the include flag are synced
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateS2SSyncTransfersAreScheduled(a, blobsToInclude, mockedRPC)
 	})
 }
@@ -389,7 +390,7 @@ func TestSyncS2SWithExcludePathFlag(t *testing.T) {
 
 	// make sure the list doesn't include the blobs specified by the exclude flag
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateS2SSyncTransfersAreScheduled(a, blobList, mockedRPC)
 	})
 
@@ -401,7 +402,7 @@ func TestSyncS2SWithExcludePathFlag(t *testing.T) {
 
 	mockedRPC.reset()
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateS2SSyncTransfersAreScheduled(a, blobList, mockedRPC)
 
 		// make sure the extra blobs were not touched
@@ -480,7 +481,7 @@ func TestSyncS2SMismatchContainerAndBlob(t *testing.T) {
 
 	// type mismatch, we should not get an error
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(mockedRPC.transfers), len(blobList))
@@ -491,7 +492,7 @@ func TestSyncS2SMismatchContainerAndBlob(t *testing.T) {
 
 	// type mismatch again, we should also not get an error
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(mockedRPC.transfers), len(blobList))
@@ -525,7 +526,7 @@ func TestSyncS2SContainerAndEmptyVirtualDir(t *testing.T) {
 
 	// verify that targeting a virtual directory works fine
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobList), len(mockedRPC.transfers))
@@ -539,7 +540,7 @@ func TestSyncS2SContainerAndEmptyVirtualDir(t *testing.T) {
 	mockedRPC.reset()
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
@@ -582,7 +583,7 @@ func TestSyncS2SBetweenVirtualDirs(t *testing.T) {
 
 	// nothing should be synced since the source is older
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Zero(len(mockedRPC.transfers))
@@ -593,7 +594,7 @@ func TestSyncS2SBetweenVirtualDirs(t *testing.T) {
 	mockedRPC.reset()
 	expectedList := scenarioHelper{}.shaveOffPrefix(blobList, vdirName+common.AZCOPY_PATH_SEPARATOR_STRING)
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateS2SSyncTransfersAreScheduled(a, expectedList, mockedRPC)
 	})
 }
@@ -655,7 +656,7 @@ func TestSyncS2SBetweenVirtualDirsWithConflictingBlob(t *testing.T) {
 	scenarioHelper{}.generateBlobsFromList(a, srcContainerClient, []string{vdirName}, blockBlobDefaultData)
 	raw = getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateS2SSyncTransfersAreScheduled(a, []string{""}, mockedRPC)
 	})
 
@@ -669,7 +670,7 @@ func TestSyncS2SBetweenVirtualDirsWithConflictingBlob(t *testing.T) {
 	raw = getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
 	expectedList := scenarioHelper{}.shaveOffPrefix(blobList, vdirName+common.AZCOPY_PATH_SEPARATOR_STRING)
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateS2SSyncTransfersAreScheduled(a, expectedList, mockedRPC)
 	})
 }
@@ -697,7 +698,7 @@ func TestSyncS2SADLSDirectory(t *testing.T) {
 		&blockblob.UploadOptions{
 			Metadata: map[string]*string{"hdi_isfolder": to.Ptr("true")},
 		})
-	a.Nil(err)
+	a.NoError(err)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -715,7 +716,7 @@ func TestSyncS2SADLSDirectory(t *testing.T) {
 	// construct the raw input to simulate user input
 	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Zero(len(mockedRPC.transfers))
@@ -727,7 +728,7 @@ func TestSyncS2SADLSDirectory(t *testing.T) {
 
 	expectedTransfers := scenarioHelper{}.shaveOffPrefix(blobList, vdirName+common.AZCOPY_PATH_SEPARATOR_STRING)
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateS2SSyncTransfersAreScheduled(a, expectedTransfers, mockedRPC)
 	})
 }
@@ -765,7 +766,7 @@ func TestSyncS2SWithIncludeRegexFlag(t *testing.T) {
 
 	// verify that only the blobs specified by the include flag are synced
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobsToInclude), len(mockedRPC.transfers))
 		// comparing is names of files, since not in order need to sort each string and the compare them
@@ -814,7 +815,7 @@ func TestSyncS2SWithExcludeRegexFlag(t *testing.T) {
 
 	// make sure the list doesn't include the blobs specified by the exclude flag
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobList), len(mockedRPC.transfers))
 		// all blobs from the blobList are transferred
@@ -861,7 +862,7 @@ func TestSyncS2SWithIncludeAndExcludeRegexFlag(t *testing.T) {
 
 	// verify that only the blobs specified by the include flag are synced
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobsToInclude), len(mockedRPC.transfers))
 		// comparing is names of files, since not in order need to sort each string and the compare them
@@ -910,7 +911,7 @@ func TestDryrunSyncBlobtoBlob(t *testing.T) {
 	raw.deleteDestination = "true"
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateS2SSyncTransfersAreScheduled(a, []string{}, mockedRPC)
 
 		msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)
@@ -961,7 +962,7 @@ func TestDryrunSyncBlobtoBlobJson(t *testing.T) {
 	raw.deleteDestination = "true"
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateS2SSyncTransfersAreScheduled(a, []string{}, mockedRPC)
 
 		msg := <-mockedLcm.dryrunLog

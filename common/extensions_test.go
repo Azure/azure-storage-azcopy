@@ -2,13 +2,14 @@ package common
 
 import (
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
-	"github.com/stretchr/testify/assert"
 	"math/rand"
 	"net/url"
 	"strings"
 	"testing"
 	"unsafe"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestGenerateFullPath(t *testing.T) {
@@ -78,7 +79,7 @@ func TestURLWithPlusDecodedInPath(t *testing.T) {
 
 	for k, v := range replacementTests {
 		uri, err := url.Parse(k)
-		a.Nil(err)
+		a.NoError(err)
 
 		extension := URLExtension{*uri}.URLWithPlusDecodedInPath()
 
@@ -141,21 +142,20 @@ func TestRedaction(t *testing.T) {
 	}
 }
 
-
 func TestBlockblobBlockIDGeneration(t *testing.T) {
 	a := assert.New(t)
 	// Make sure that for a given JobID, jobPart, an index in job part and a block index,
 	// the blockID generated is consistent.
-	numOfFilesPerDispatchJobPart :=int32(10000) // == cmd.NumOfFilesPerDispatchJobPart
-	maxNumberOfParts := int32(99999) // Depends on our plan file Name, we support max of 99999 parts
-	azCopyBlockLength := 48 // Current size of blocks in AzCopy
+	numOfFilesPerDispatchJobPart := int32(10000) // == cmd.NumOfFilesPerDispatchJobPart
+	maxNumberOfParts := int32(99999)             // Depends on our plan file Name, we support max of 99999 parts
+	azCopyBlockLength := 48                      // Current size of blocks in AzCopy
 
 	placeHolder := "00000" // 5B placeholder
 	jobId := NewUUID()
 	jobIdStr := string((*[16]byte)(unsafe.Pointer(&jobId))[:]) // 16Byte jobID
-	partNum := rand.Int31n(maxNumberOfParts) // 5B partNumber
-	fileIndex  := rand.Int31n(numOfFilesPerDispatchJobPart) // 5Byte index of file in part
-	blockIndex := rand.Int31n(blockblob.MaxBlocks) // 5B blockIndex
+	partNum := rand.Int31n(maxNumberOfParts)                   // 5B partNumber
+	fileIndex := rand.Int31n(numOfFilesPerDispatchJobPart)     // 5Byte index of file in part
+	blockIndex := rand.Int31n(blockblob.MaxBlocks)             // 5B blockIndex
 
 	blockNamePrefix := fmt.Sprintf("%s%s%05d%05d", placeHolder, jobIdStr, partNum, fileIndex)
 	blockName := GenerateBlockBlobBlockID(blockNamePrefix, blockIndex)

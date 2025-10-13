@@ -21,8 +21,9 @@
 package sddl_test
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
 )
@@ -154,7 +155,7 @@ func TestSDDLSplitting(t *testing.T) {
 	for _, v := range tests {
 		res, err := sddl.ParseSDDL(v.input)
 
-		a.Nil(err)
+		a.NoError(err)
 		t.Log("Input: ", v.input, " Expected result: ", v.result.String(), " Actual result: ", res.String())
 		a.Equal(v.result, res)
 	}

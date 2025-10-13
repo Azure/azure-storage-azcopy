@@ -21,14 +21,15 @@
 package cmd
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-	"github.com/stretchr/testify/assert"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestSyncUploadWithExcludeAttrFlag(t *testing.T) {
@@ -62,7 +63,7 @@ func TestSyncUploadWithExcludeAttrFlag(t *testing.T) {
 	raw.excludeFileAttributes = excludeAttrsStr
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateUploadTransfersAreScheduled(a, "", "", fileList, mockedRPC)
 	})
 }
@@ -98,7 +99,7 @@ func TestSyncUploadWithIncludeAttrFlag(t *testing.T) {
 	raw.includeFileAttributes = includeAttrsStr
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateUploadTransfersAreScheduled(a, "", "", filesToInclude, mockedRPC)
 	})
 }
@@ -138,7 +139,7 @@ func TestSyncUploadWithIncludeAndIncludeAttrFlags(t *testing.T) {
 	raw.include = includeString
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateUploadTransfersAreScheduled(a, "", "", fileList[2:], mockedRPC)
 	})
 }
@@ -178,7 +179,7 @@ func TestSyncUploadWithExcludeAndExcludeAttrFlags(t *testing.T) {
 	raw.exclude = excludeString
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateUploadTransfersAreScheduled(a, "", "", commonFileList, mockedRPC)
 	})
 }

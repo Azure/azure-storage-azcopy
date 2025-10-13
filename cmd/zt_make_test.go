@@ -21,8 +21,9 @@
 package cmd
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func runMakeAndVerify(raw rawMakeCmdArgs, verifier func(err error)) {
@@ -54,9 +55,9 @@ func TestMakeBlobContainer(t *testing.T) {
 	}
 
 	runMakeAndVerify(args, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		_, err = cc.GetProperties(ctx, nil)
-		a.Nil(err)
+		a.NoError(err)
 	})
 }
 
@@ -77,7 +78,7 @@ func TestMakeBlobContainerExists(t *testing.T) {
 		a.NotNil(err)
 		a.Equal("the container already exists", err.Error())
 		_, err = cc.GetProperties(ctx, nil)
-		a.Nil(err)
+		a.NoError(err)
 	})
 }
 
@@ -95,9 +96,9 @@ func TestMakeBlobFSFilesystem(t *testing.T) {
 	}
 
 	runMakeAndVerify(args, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		_, err = fsc.GetProperties(ctx, nil)
-		a.Nil(err)
+		a.NoError(err)
 	})
 }
 
@@ -106,7 +107,7 @@ func TestMakeBlobFSFilesystemExists(t *testing.T) {
 	bsc := getDatalakeServiceClient()
 	fsc, name := getFilesystemClient(a, bsc)
 	_, err := fsc.Create(ctx, nil)
-	a.Nil(err)
+	a.NoError(err)
 	defer deleteFilesystem(a, fsc)
 
 	bscSAS := scenarioHelper{}.getDatalakeServiceClientWithSAS(a)
@@ -120,7 +121,7 @@ func TestMakeBlobFSFilesystemExists(t *testing.T) {
 		a.NotNil(err)
 		a.Equal("the filesystem already exists", err.Error())
 		_, err = fsc.GetProperties(ctx, nil)
-		a.Nil(err)
+		a.NoError(err)
 	})
 }
 
@@ -139,9 +140,9 @@ func TestMakeFileShare(t *testing.T) {
 	}
 
 	runMakeAndVerify(args, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		props, err := sc.GetProperties(ctx, nil)
-		a.Nil(err)
+		a.NoError(err)
 		a.EqualValues(102400, *props.Quota)
 	})
 }
@@ -162,9 +163,9 @@ func TestMakeFileShareQuota(t *testing.T) {
 	}
 
 	runMakeAndVerify(args, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		props, err := sc.GetProperties(ctx, nil)
-		a.Nil(err)
+		a.NoError(err)
 		a.EqualValues(args.quota, *props.Quota)
 	})
 }
@@ -174,7 +175,7 @@ func TestMakeFileShareExists(t *testing.T) {
 	fsc := getFileServiceClient()
 	sc, name := getShareClient(a, fsc)
 	_, err := sc.Create(ctx, nil)
-	a.Nil(err)
+	a.NoError(err)
 	defer deleteShare(a, sc)
 
 	fscSAS := scenarioHelper{}.getRawFileServiceURLWithSAS(a)
@@ -189,6 +190,6 @@ func TestMakeFileShareExists(t *testing.T) {
 		a.NotNil(err)
 		a.Equal("the file share already exists", err.Error())
 		_, err = sc.GetProperties(ctx, nil)
-		a.Nil(err)
+		a.NoError(err)
 	})
 }

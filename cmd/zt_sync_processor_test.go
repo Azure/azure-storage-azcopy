@@ -22,10 +22,11 @@ package cmd
 
 import (
 	"context"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -49,11 +50,11 @@ func TestLocalDeleter(t *testing.T) {
 
 	// validate that the file still exists
 	_, err := os.Stat(filepath.Join(dstDirName, dstFileName))
-	a.Nil(err)
+	a.NoError(err)
 
 	// exercise the deleter
 	err = deleter.removeImmediately(StoredObject{relativePath: dstFileName})
-	a.Nil(err)
+	a.NoError(err)
 
 	// validate that the file no longer exists
 	_, err = os.Stat(filepath.Join(dstDirName, dstFileName))
@@ -73,7 +74,7 @@ func TestBlobDeleter(t *testing.T) {
 	// validate that the blob exists
 	bc := cc.NewBlobClient(blobName)
 	_, err := bc.GetProperties(context.Background(), nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	// construct the cooked input to simulate user input
 	rawContainerURL := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
@@ -87,14 +88,14 @@ func TestBlobDeleter(t *testing.T) {
 
 	// set up the blob deleter
 	deleter, err := newSyncDeleteProcessor(cca, common.EFolderPropertiesOption.NoFolders(), sc)
-	a.Nil(err)
+	a.NoError(err)
 
 	// exercise the deleter
 	err = deleter.removeImmediately(StoredObject{relativePath: blobName})
-	a.Nil(err)
+	a.NoError(err)
 
 	// validate that the blob was deleted
-	_, err = bc.GetProperties(context.Background(),nil)
+	_, err = bc.GetProperties(context.Background(), nil)
 	a.NotNil(err)
 }
 
@@ -111,7 +112,7 @@ func TestFileDeleter(t *testing.T) {
 	// validate that the file exists
 	fileClient := shareClient.NewRootDirectoryClient().NewFileClient(fileName)
 	_, err := fileClient.GetProperties(context.Background(), nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	// construct the cooked input to simulate user input
 	rawShareSAS := scenarioHelper{}.getRawShareURLWithSAS(a, shareName)
@@ -125,11 +126,11 @@ func TestFileDeleter(t *testing.T) {
 	sc := common.NewServiceClient(nil, fsc, nil)
 	// set up the file deleter
 	deleter, err := newSyncDeleteProcessor(cca, common.EFolderPropertiesOption.NoFolders(), sc)
-	a.Nil(err)
+	a.NoError(err)
 
 	// exercise the deleter
 	err = deleter.removeImmediately(StoredObject{relativePath: fileName})
-	a.Nil(err)
+	a.NoError(err)
 
 	// validate that the file was deleted
 	_, err = fileClient.GetProperties(context.Background(), nil)

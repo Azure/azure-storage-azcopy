@@ -99,7 +99,7 @@ func (t *TestRunner) SetAllFlags(s *scenario) {
 		return
 	}
 
-	// TODO: TODO: nakulkar-msft there will be many more to add here
+	// TODO: nakulkar-msft there will be many more to add here
 	set("recursive", p.recursive, false)
 	set("as-subdir", !p.invertedAsSubdir, true)
 	set("include-path", p.includePath, "")

@@ -22,10 +22,11 @@ package cmd
 
 import (
 	"context"
+	"testing"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 // ============================================= BLOB TRAVERSER TESTS =======================================
@@ -59,7 +60,7 @@ func TestValidateSourceDirThatExists(t *testing.T) {
 	// dir but recursive flag set - pass
 	cca.Recursive = true
 	err = cca.validateSourceDir(blobTraverser)
-	a.Nil(err)
+	a.NoError(err)
 	a.True(cca.IsSourceDir)
 }
 
@@ -92,7 +93,7 @@ func TestValidateSourceDirDoesNotExist(t *testing.T) {
 	// dir but recursive flag set - pass
 	cca.Recursive = true
 	err = cca.validateSourceDir(blobTraverser)
-	a.Nil(err)
+	a.NoError(err)
 	a.True(cca.IsSourceDir)
 }
 
@@ -121,7 +122,7 @@ func TestValidateSourceFileExists(t *testing.T) {
 
 	cca := CookedCopyCmdArgs{StripTopDir: false, Recursive: false}
 	err := cca.validateSourceDir(blobTraverser)
-	a.Nil(err)
+	a.NoError(err)
 	a.False(cca.IsSourceDir)
 }
 
@@ -176,6 +177,6 @@ func TestValidateSourceWithWildCard(t *testing.T) {
 	// dir but recursive flag not set - fail
 	cca := CookedCopyCmdArgs{StripTopDir: true, Recursive: false}
 	err := cca.validateSourceDir(blobTraverser)
-	a.Nil(err)
+	a.NoError(err)
 	a.False(cca.IsSourceDir)
 }

@@ -23,6 +23,9 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"testing"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -32,8 +35,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/mock_server"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/stretchr/testify/assert"
-	"testing"
-	"time"
 )
 
 func TestIsSourceDirWithStub(t *testing.T) {
@@ -61,7 +62,7 @@ func TestIsSourceDirWithStub(t *testing.T) {
 
 	isDir, err := blobTraverser.IsDirectory(true)
 	a.True(isDir)
-	a.Nil(err)
+	a.NoError(err)
 }
 
 func TestIsSourceDirWithNoStub(t *testing.T) {
@@ -86,7 +87,7 @@ func TestIsSourceDirWithNoStub(t *testing.T) {
 
 	isDir, err := blobTraverser.IsDirectory(true)
 	a.True(isDir)
-	a.Nil(err)
+	a.NoError(err)
 }
 
 func TestIsDestDirWithBlobEP(t *testing.T) {
@@ -111,7 +112,7 @@ func TestIsDestDirWithBlobEP(t *testing.T) {
 
 	isDir, err := blobTraverser.IsDirectory(false)
 	a.True(isDir)
-	a.Nil(err)
+	a.NoError(err)
 
 	//===========================================================
 	dirName = "dest_file"
@@ -124,7 +125,7 @@ func TestIsDestDirWithBlobEP(t *testing.T) {
 
 	isDir, err = blobTraverser.IsDirectory(false)
 	a.False(isDir)
-	a.Nil(err)
+	a.NoError(err)
 }
 
 func TestIsDestDirWithDFSEP(t *testing.T) {
@@ -139,7 +140,7 @@ func TestIsDestDirWithDFSEP(t *testing.T) {
 	parentDirName := "dest_dir"
 	parentDirClient := fileSystemURL.NewDirectoryClient(parentDirName)
 	_, err := parentDirClient.Create(ctx, &datalakedirectory.CreateOptions{AccessConditions: &datalakedirectory.AccessConditions{ModifiedAccessConditions: &datalakedirectory.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETagAny)}}})
-	a.Nil(err)
+	a.NoError(err)
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
@@ -155,11 +156,11 @@ func TestIsDestDirWithDFSEP(t *testing.T) {
 	// isSource, IsDirectory()  should return true.
 	isDir, err := blobTraverser.IsDirectory(true)
 	a.True(isDir)
-	a.Nil(err)
+	a.NoError(err)
 
 	isDir, err = blobTraverser.IsDirectory(false)
 	a.True(isDir)
-	a.Nil(err)
+	a.NoError(err)
 
 	//===================================================================//
 
@@ -195,11 +196,11 @@ func TestIsDestDirWithDFSEP(t *testing.T) {
 	// we should identify it as a directory.
 	isDir, err = blobTraverser.IsDirectory(true)
 	a.True(isDir)
-	a.Nil(err)
+	a.NoError(err)
 
 	isDir, err = blobTraverser.IsDirectory(false)
 	a.True(isDir)
-	a.Nil(err)
+	a.NoError(err)
 
 }
 
@@ -227,7 +228,7 @@ func TestIsSourceFileExists(t *testing.T) {
 
 	isDir, err := blobTraverser.IsDirectory(true)
 	a.False(isDir)
-	a.Nil(err)
+	a.NoError(err)
 }
 
 func TestIsSourceFileDoesNotExist(t *testing.T) {

@@ -23,16 +23,17 @@ package cmd
 import (
 	"bytes"
 	"context"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -74,7 +75,7 @@ func TestSyncDownloadWithSingleFile(t *testing.T) {
 
 		// the file was created after the blob, so no sync should happen
 		runSyncAndVerify(a, raw, func(err error) {
-			a.Nil(err)
+			a.NoError(err)
 
 			// validate that the right number of transfers were scheduled
 			a.Zero(len(mockedRPC.transfers))
@@ -88,7 +89,7 @@ func TestSyncDownloadWithSingleFile(t *testing.T) {
 		mockedRPC.reset()
 
 		runSyncAndVerify(a, raw, func(err error) {
-			a.Nil(err)
+			a.NoError(err)
 
 			validateDownloadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, []string{""}, mockedRPC)
 		})
@@ -123,7 +124,7 @@ func TestSyncDownloadWithEmptyDestination(t *testing.T) {
 	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobList), len(mockedRPC.transfers))
@@ -137,7 +138,7 @@ func TestSyncDownloadWithEmptyDestination(t *testing.T) {
 	mockedRPC.reset()
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
@@ -176,7 +177,7 @@ func TestSyncDownloadWithIdenticalDestination(t *testing.T) {
 	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Zero(len(mockedRPC.transfers))
@@ -187,7 +188,7 @@ func TestSyncDownloadWithIdenticalDestination(t *testing.T) {
 	mockedRPC.reset()
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateDownloadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, blobList, mockedRPC)
 	})
 }
@@ -223,7 +224,7 @@ func TestSyncDownloadWithMismatchedDestination(t *testing.T) {
 	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateDownloadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, expectedOutput, mockedRPC)
 
 		// make sure the extra files were deleted
@@ -274,7 +275,7 @@ func TestSyncDownloadWithIncludePatternFlag(t *testing.T) {
 	raw.include = includeString
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateDownloadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, blobsToInclude, mockedRPC)
 	})
 }
@@ -313,7 +314,7 @@ func TestSyncDownloadWithExcludePatternFlag(t *testing.T) {
 	raw.exclude = excludeString
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateDownloadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, blobList, mockedRPC)
 	})
 }
@@ -359,7 +360,7 @@ func TestSyncDownloadWithIncludeAndExcludePatternFlag(t *testing.T) {
 	raw.exclude = excludeString
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateDownloadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, blobsToInclude, mockedRPC)
 	})
 }
@@ -399,7 +400,7 @@ func TestSyncDownloadWithExcludePathFlag(t *testing.T) {
 	raw.excludePath = excludeString
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateDownloadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, blobList, mockedRPC)
 	})
 
@@ -411,13 +412,13 @@ func TestSyncDownloadWithExcludePathFlag(t *testing.T) {
 
 	mockedRPC.reset()
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateDownloadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, blobList, mockedRPC)
 
 		// make sure the extra files were not touched
 		for _, blobName := range blobsToExclude {
 			_, err := os.Stat(filepath.Join(dstDirName, blobName))
-			a.Nil(err)
+			a.NoError(err)
 		}
 	})
 }
@@ -452,7 +453,7 @@ func TestSyncDownloadWithMissingDestination(t *testing.T) {
 
 	runSyncAndVerify(a, raw, func(err error) {
 		// error should not be nil, but the app should not crash either
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(mockedRPC.transfers), len(blobList), "Expected to transfer the container's worth of blobs")
@@ -482,7 +483,7 @@ func TestSyncDownloadADLSDirectoryTypeMismatch(t *testing.T) {
 		&blockblob.UploadOptions{
 			Metadata: map[string]*string{"hdi_isfolder": to.Ptr("true")},
 		})
-	a.Nil(err)
+	a.NoError(err)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -523,14 +524,14 @@ func TestSyncDownloadWithADLSDirectory(t *testing.T) {
 		&blockblob.UploadOptions{
 			Metadata: map[string]*string{"hdi_isfolder": to.Ptr("true")},
 		})
-	a.Nil(err)
+	a.NoError(err)
 
 	// create an extra blob that represents an empty ADLS directory, which should never be picked up
 	_, err = containerClient.NewBlockBlobClient(adlsDirName+"/neverpickup").Upload(context.Background(), streaming.NopCloser(bytes.NewReader(nil)),
 		&blockblob.UploadOptions{
 			Metadata: map[string]*string{"hdi_isfolder": to.Ptr("true")},
 		})
-	a.Nil(err)
+	a.NoError(err)
 
 	// set up the destination with an empty folder
 	dstDirName := scenarioHelper{}.generateLocalDirectory(a)
@@ -548,7 +549,7 @@ func TestSyncDownloadWithADLSDirectory(t *testing.T) {
 	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(blobList), len(mockedRPC.transfers))
@@ -559,7 +560,7 @@ func TestSyncDownloadWithADLSDirectory(t *testing.T) {
 	mockedRPC.reset()
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {

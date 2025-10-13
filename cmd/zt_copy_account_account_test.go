@@ -21,12 +21,13 @@
 package cmd
 
 import (
+	"strings"
+	"testing"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/stretchr/testify/assert"
-	"strings"
-	"testing"
 )
 
 // test copy
@@ -67,7 +68,7 @@ func TestExcludeContainerFlagCopy(t *testing.T) {
 	raw.excludeContainer = strings.Join(containersToIgnore, ";")
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that each transfer is not of the excluded container names
 		for _, transfer := range mockedRPC.transfers {
@@ -128,7 +129,7 @@ func TestExcludeContainerFlagCopyNegative(t *testing.T) {
 	raw.excludeContainer = strings.Join(containersToIgnore, ";")
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that each transfer is not of the excluded container names
 		for _, transfer := range mockedRPC.transfers {

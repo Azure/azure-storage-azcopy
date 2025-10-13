@@ -21,12 +21,13 @@
 package common
 
 import (
-	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/url"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestCacheIsUsed(t *testing.T) {
@@ -52,7 +53,7 @@ func TestCacheIsUsed(t *testing.T) {
 	fakeMu.Unlock()
 	fooRequest, _ := http.NewRequest("GET", "http://foo.com/a", nil)
 	fooResult1, err := pc.getProxy(fooRequest)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal("http://fooproxy", fooResult1.String())
 
 	fakeMu.Lock()
@@ -60,7 +61,7 @@ func TestCacheIsUsed(t *testing.T) {
 	fakeMu.Unlock()
 	barRequest, _ := http.NewRequest("GET", "http://bar.com/a", nil)
 	barResult1, err := pc.getProxy(barRequest)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal("http://barproxy", barResult1.String())
 
 	fakeMu.Lock()
@@ -79,12 +80,12 @@ func TestCacheIsUsed(t *testing.T) {
 	// lookup URLs with same host portion, but different paths. Expect cache hits.
 	fooRequest, _ = http.NewRequest("GET", "http://foo.com/differentPathFromBefore", nil)
 	fooResult2, err := pc.getProxy(fooRequest)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal(fooResult1.String(), fooResult2.String())
 
 	barRequest, _ = http.NewRequest("GET", "http://bar.com/differentPathFromBefore", nil)
 	barResult2, err := pc.getProxy(barRequest)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal(barResult1.String(), barResult2.String())
 
 	erroringRequest, _ = http.NewRequest("GET", "http://willerror.com/differentPathFromBefore", nil)
@@ -116,7 +117,7 @@ func TestCacheEntriesGetRefreshed(t *testing.T) {
 	fakeMu.Unlock()
 	fooRequest, _ := http.NewRequest("GET", "http://foo.com/a", nil)
 	fooResult1, err := pc.getProxy(fooRequest)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal("http://fooproxy", fooResult1.String())
 
 	// prime the refresh to actually produce a change
@@ -129,7 +130,7 @@ func TestCacheEntriesGetRefreshed(t *testing.T) {
 
 	// read from cache, and check we get the update result
 	fooResult2, err := pc.getProxy(fooRequest)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal("http://updatedFooProxy", fooResult2.String())
 }
 

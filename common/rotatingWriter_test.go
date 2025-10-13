@@ -46,38 +46,38 @@ func TestRotatingWriter(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "")
 	defer os.RemoveAll(tmpDir)
 
-	a.Nil(err)
+	a.NoError(err)
 	logFile := path.Join(tmpDir, logFileNameWithoutSuffix)
-	
+
 	// 1. Create a rotating writer of size 100B
-	w, err := NewRotatingWriter(logFile + ".log", 100)
-	a.Nil(err)
+	w, err := NewRotatingWriter(logFile+".log", 100)
+	a.NoError(err)
 
 	// write 10 bytes and verify there is only one file in tmpDir
 	w.Write([]byte(data[:10]))
 	entries, err := os.ReadDir(tmpDir)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal(1, len(entries))
-	a.Equal(logFileNameWithoutSuffix + ".log", entries[0].Name())
+	a.Equal(logFileNameWithoutSuffix+".log", entries[0].Name())
 
 	// write 90 more bytes and verify there is still only one file
 	w.Write([]byte(data[:90]))
 	entries, err = os.ReadDir(tmpDir)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal(1, len(entries))
-	a.Equal(logFileNameWithoutSuffix + ".log", entries[0].Name())
+	a.Equal(logFileNameWithoutSuffix+".log", entries[0].Name())
 
 	// write 10 more bytes and verify a new log file is created
 	n, err := w.Write([]byte(data[:10]))
 	a.Equal(10, n)
-	a.Nil(err)
+	a.NoError(err)
 
 	entries, err = os.ReadDir(tmpDir)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal(2, len(entries))
 	f := convertToMap(entries)
-	a.Contains(f, logFileNameWithoutSuffix + ".log")
-	a.Contains(f, logFileNameWithoutSuffix + ".0.log")
+	a.Contains(f, logFileNameWithoutSuffix+".log")
+	a.Contains(f, logFileNameWithoutSuffix+".0.log")
 
 	// Write 80 bytes to prepare for next test
 	w.Write([]byte(data[:80]))
@@ -90,7 +90,7 @@ func TestRotatingWriter(t *testing.T) {
 			w.Write([]byte(data[:10]))
 			n, err := w.Write([]byte(data[:10]))
 			a.Equal(10, n)
-			a.Nil(err)
+			a.NoError(err)
 			wg.Done()
 		}()
 	}
@@ -99,20 +99,20 @@ func TestRotatingWriter(t *testing.T) {
 
 	// verify only one new log file is created.
 	entries, err = os.ReadDir(tmpDir)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal(3, len(entries))
 	f = convertToMap(entries)
-	a.Contains(f, logFileNameWithoutSuffix + ".log")
-	a.Contains(f, logFileNameWithoutSuffix + ".0.log")
-	a.Contains(f, logFileNameWithoutSuffix + ".1.log")
-	
+	a.Contains(f, logFileNameWithoutSuffix+".log")
+	a.Contains(f, logFileNameWithoutSuffix+".0.log")
+	a.Contains(f, logFileNameWithoutSuffix+".1.log")
+
 	// close and verify we've 3 log files
 	w.Close()
 	entries, err = os.ReadDir(tmpDir)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal(3, len(entries))
 	f = convertToMap(entries)
-	a.Contains(f, logFileNameWithoutSuffix + ".log")
-	a.Contains(f, logFileNameWithoutSuffix + ".0.log")
-	a.Contains(f, logFileNameWithoutSuffix + ".1.log")
+	a.Contains(f, logFileNameWithoutSuffix+".log")
+	a.Contains(f, logFileNameWithoutSuffix+".0.log")
+	a.Contains(f, logFileNameWithoutSuffix+".1.log")
 }

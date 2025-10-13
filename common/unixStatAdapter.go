@@ -70,7 +70,7 @@ type UnixStatAdapter interface {
 	FileMode() uint32 // Mode may not always be available to check in a Statx call (though it should be, since we requested it.) Best safe than sorry; check Mask!
 	INode() uint64
 	Device() uint64
-	RDevice() uint64 // RDevice is ONLY useful when Mode has S_IFCHR or S_IFBLK; as those determine if the file is a representitive of a block or character device.
+	RDevice() uint64 // RDevice is ONLY useful when Mode has S_IFCHR or S_IFBLK; as those determine if the file is a representative of a block or character device.
 	ATime() time.Time
 	MTime() time.Time
 	CTime() time.Time

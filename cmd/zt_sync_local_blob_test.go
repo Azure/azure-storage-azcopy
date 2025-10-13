@@ -22,14 +22,15 @@ package cmd
 
 import (
 	"context"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -67,7 +68,7 @@ func TestSyncUploadWithSingleFile(t *testing.T) {
 
 		// the blob was created after the file, so no sync should happen
 		runSyncAndVerify(a, raw, func(err error) {
-			a.Nil(err)
+			a.NoError(err)
 
 			// validate that the right number of transfers were scheduled
 			a.Zero(len(mockedRPC.transfers))
@@ -80,7 +81,7 @@ func TestSyncUploadWithSingleFile(t *testing.T) {
 
 		// the file was created after the blob, so the sync should happen
 		runSyncAndVerify(a, raw, func(err error) {
-			a.Nil(err)
+			a.NoError(err)
 
 			// if source and destination already point to files, the relative path is an empty string ""
 			validateUploadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, []string{""}, mockedRPC)
@@ -116,7 +117,7 @@ func TestSyncUploadWithEmptyDestination(t *testing.T) {
 	raw := getDefaultSyncRawInput(srcDirName, rawContainerURLWithSAS.String())
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(fileList), len(mockedRPC.transfers))
@@ -130,7 +131,7 @@ func TestSyncUploadWithEmptyDestination(t *testing.T) {
 	mockedRPC.reset()
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		a.NotEqual(len(fileList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
@@ -170,7 +171,7 @@ func TestSyncUploadWithIdenticalDestination(t *testing.T) {
 	raw := getDefaultSyncRawInput(srcDirName, rawContainerURLWithSAS.String())
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Zero(len(mockedRPC.transfers))
@@ -181,7 +182,7 @@ func TestSyncUploadWithIdenticalDestination(t *testing.T) {
 	mockedRPC.reset()
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateUploadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, fileList, mockedRPC)
 	})
 }
@@ -217,7 +218,7 @@ func TestSyncUploadWithMismatchedDestination(t *testing.T) {
 	raw := getDefaultSyncRawInput(srcDirName, rawContainerURLWithSAS.String())
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateUploadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, expectedOutput, mockedRPC)
 
 		// make sure the extra blobs were deleted
@@ -260,7 +261,7 @@ func TestSyncUploadWithIncludePatternFlag(t *testing.T) {
 	raw.include = includeString
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateUploadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, filesToInclude, mockedRPC)
 	})
 }
@@ -297,7 +298,7 @@ func TestSyncUploadWithExcludePatternFlag(t *testing.T) {
 	raw.exclude = excludeString
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateUploadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, fileList, mockedRPC)
 	})
 }
@@ -341,7 +342,7 @@ func TestSyncUploadWithIncludeAndExcludePatternFlag(t *testing.T) {
 	raw.exclude = excludeString
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateUploadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, filesToInclude, mockedRPC)
 	})
 }
@@ -378,7 +379,7 @@ func TestSyncUploadWithExcludePathFlag(t *testing.T) {
 	raw.excludePath = excludeString
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateUploadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, fileList, mockedRPC)
 	})
 
@@ -390,7 +391,7 @@ func TestSyncUploadWithExcludePathFlag(t *testing.T) {
 
 	mockedRPC.reset()
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateUploadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, fileList, mockedRPC)
 
 		// make sure the extra blobs were not touched
@@ -470,7 +471,7 @@ func TestDryrunSyncLocaltoBlob(t *testing.T) {
 	raw.deleteDestination = "true"
 
 	runSyncAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 		validateS2SSyncTransfersAreScheduled(a, []string{}, mockedRPC)
 
 		msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)

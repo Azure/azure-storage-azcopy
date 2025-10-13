@@ -42,18 +42,18 @@ func Test500FollowedBy412Logic(t *testing.T) {
 	rawURL := fmt.Sprintf("https://%s.blob.core.windows.net/", accountName)
 
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
-	a.Nil(err)
+	a.NoError(err)
 
 	client, err := blobservice.NewClientWithSharedKeyCredential(rawURL, credential, &blobservice.ClientOptions{
 		ClientOptions: azcore.ClientOptions{
 			Transport: NewAzcopyHTTPClient(0),
 		}})
-	a.Nil(err)
+	a.NoError(err)
 
 	cName := generateContainerName()
 	cc := client.NewContainerClient(cName)
 	_, err = cc.Create(context.Background(), nil)
-	a.Nil(err)
+	a.NoError(err)
 	defer cc.Delete(context.Background(), nil)
 
 	sourceName := generateBlobName()
@@ -61,18 +61,18 @@ func Test500FollowedBy412Logic(t *testing.T) {
 	size := 1024 * 1024 * 10
 	dataReader, _ := getDataAndReader(t.Name(), size)
 	_, err = sourceClient.Upload(context.Background(), streaming.NopCloser(dataReader), nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	sasURL, err := cc.NewBlobClient(sourceName).GetSASURL(
 		blobsas.BlobPermissions{Read: true},
 		time.Now().Add(1*time.Hour),
 		nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	destName := generateBlobName()
 	destClient := cc.NewAppendBlobClient(destName)
 	destClient.Create(context.Background(), nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	jptm := testJobPartTransferManager{
 		info: to.Ptr(TransferInfo{
@@ -83,7 +83,7 @@ func Test500FollowedBy412Logic(t *testing.T) {
 		fromTo: common.EFromTo.BlobBlob(),
 	}
 	blobSIP, err := newBlobSourceInfoProvider(&jptm)
-	a.Nil(err)
+	a.NoError(err)
 
 	injectionPolicy := &appendErrorInjectionPolicy{timedOut: false}
 	destClient, err = appendblob.NewClientWithSharedKeyCredential(destClient.URL(), credential, &appendblob.ClientOptions{
@@ -92,7 +92,7 @@ func Test500FollowedBy412Logic(t *testing.T) {
 			Transport:        NewAzcopyHTTPClient(0),
 		},
 	})
-	a.Nil(err)
+	a.NoError(err)
 	base := appendBlobSenderBase{jptm: &jptm, destAppendBlobClient: destClient, sip: blobSIP}
 
 	// Get MD5 range within service calculation
@@ -106,6 +106,6 @@ func Test500FollowedBy412Logic(t *testing.T) {
 			AppendPositionAccessConditions: &appendblob.AppendPositionAccessConditions{AppendPosition: &offset},
 		})
 	errString, err := base.transformAppendConditionMismatchError(timeoutFromCtx, offset, count, err)
-	a.Nil(err)
+	a.NoError(err)
 	a.Empty(errString)
 }

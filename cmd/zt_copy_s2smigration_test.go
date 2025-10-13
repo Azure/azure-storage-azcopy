@@ -23,17 +23,18 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"os"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	datalakedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/directory"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/stretchr/testify/assert"
-	"net/url"
-	"os"
-	"strings"
-	"testing"
-	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -183,7 +184,7 @@ func TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolved(t *testing.T) {
 
 	// bucket should be resolved, and objects should be scheduled for transfer
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(objectList), len(mockedRPC.transfers))
@@ -240,7 +241,7 @@ func TestS2SCopyFromS3ToBlobWithWildcardInSrcAndBucketNameNeedBeResolved(t *test
 
 	// bucket should be resolved, and objects should be scheduled for transfer
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(objectList), len(mockedRPC.transfers))
@@ -350,7 +351,7 @@ func TestS2SCopyFromS3ToBlobWithSpaceInSrcNotEncoded(t *testing.T) {
 
 	// bucket should be resolved, and objects should be scheduled for transfer
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(1, len(mockedRPC.transfers))
@@ -396,7 +397,7 @@ func TestS2SCopyFromS3ToBlobWithSpaceInSrcEncodedAsPlus(t *testing.T) {
 
 	// bucket should be resolved, and objects should be scheduled for transfer
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(1, len(mockedRPC.transfers))
@@ -441,7 +442,7 @@ func TestS2SCopyFromS3ToBlobWithObjectUsingSlashAsSuffix(t *testing.T) {
 
 	// bucket should be resolved, and objects should be scheduled for transfer
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(validateObjectList), len(mockedRPC.transfers))
@@ -490,7 +491,7 @@ func TestS2SCopyFromS3AccountWithBucketInDifferentRegionsAndListUseDefaultEndpoi
 
 	// bucket should be resolved, and objects should be scheduled for transfer
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		validateS2STransfersAreScheduled(a, "", "", validateObjectList, mockedRPC)
 	})
@@ -536,7 +537,7 @@ func TestS2SCopyFromS3AccountWithBucketInDifferentRegionsAndListUseSpecificRegio
 
 	// bucket should be resolved, and objects should be scheduled for transfer
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		validateS2STransfersAreScheduled(a, "", "", objectList2, mockedRPC)
 	})
@@ -574,7 +575,7 @@ func TestS2SCopyFromS3ObjectToBlobContainer(t *testing.T) {
 
 	// bucket should be resolved, and objects should be scheduled for transfer
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(1, len(mockedRPC.transfers))
@@ -590,7 +591,7 @@ func TestS2SCopyFromS3ObjectToBlobContainer(t *testing.T) {
 
 	// bucket should be resolved, and objects should be scheduled for transfer
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(1, len(mockedRPC.transfers))
@@ -631,7 +632,7 @@ func TestS2SCopyFromGCPToBlobWithBucketNameNeedBeResolved(t *testing.T) {
 	raw := getDefaultRawCopyInput(rawSrcGCPBucketURL.String(), rawDstBlobServiceURLWithSAS.String())
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(objectList), len(mockedRPC.transfers))
@@ -682,7 +683,7 @@ func TestS2SCopyFromGCPToBlobWithWildcardInSrcAndBucketNameNeedBeResolved(t *tes
 	rawSrcGCPBucketStrWithWildcard := strings.Replace(rawSrcGCPBucketURL.String(), invalidPrefix, "invalid----*", 1)
 	raw := getDefaultRawCopyInput(rawSrcGCPBucketStrWithWildcard, rawDstBlobServiceURLWithSAS.String())
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(objectList), len(mockedRPC.transfers))
@@ -782,7 +783,7 @@ func TestS2SCopyFromGCPToBlobWithObjectUsingSlashAsSuffix(t *testing.T) {
 
 	// bucket should be resolved, and objects should be scheduled for transfer
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(validateObjectList), len(mockedRPC.transfers))
@@ -821,7 +822,7 @@ func TestS2SCopyFromGCPObjectToBlobContainer(t *testing.T) {
 
 	// bucket should be resolved, and objects should be scheduled for transfer
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(1, len(mockedRPC.transfers))
@@ -837,7 +838,7 @@ func TestS2SCopyFromGCPObjectToBlobContainer(t *testing.T) {
 
 	// bucket should be resolved, and objects should be scheduled for transfer
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(1, len(mockedRPC.transfers))
@@ -876,7 +877,7 @@ func TestS2SCopyFromContainerToContainerPreserveBlobTier(t *testing.T) {
 
 	// bucket should be resolved, and objects should be scheduled for transfer
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		validateS2STransfersAreScheduled(a,
 			"", "/"+srcContainerName, []string{common.AZCOPY_PATH_SEPARATOR_STRING + blobName}, mockedRPC) // common.AZCOPY_PATH_SEPARATOR_STRING added for JobPartPlan file change.
@@ -915,7 +916,7 @@ func TestS2SCopyFromContainerToContainerNoPreserveBlobTier(t *testing.T) {
 
 	// bucket should be resolved, and objects should be scheduled for transfer
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		validateS2STransfersAreScheduled(a,
 			"", "/"+srcContainerName, []string{common.AZCOPY_PATH_SEPARATOR_STRING + blobName}, mockedRPC) // common.AZCOPY_PATH_SEPARATOR_STRING added for JobPartPlan file change.
@@ -957,7 +958,7 @@ func TestS2SCopyFromPageToBlockBlob(t *testing.T) {
 
 	// Run copy command
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		a.Equal(1, len(mockedRPC.transfers))
 
@@ -972,7 +973,7 @@ func TestS2SCopyFromPageToBlockBlob(t *testing.T) {
 
 	// Run copy command
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		a.Equal(2, len(mockedRPC.transfers))
 
@@ -1012,7 +1013,7 @@ func TestS2SCopyFromBlockToPageBlob(t *testing.T) {
 
 	// Run copy command
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		a.Equal(1, len(mockedRPC.transfers))
 
@@ -1027,7 +1028,7 @@ func TestS2SCopyFromBlockToPageBlob(t *testing.T) {
 
 	// Run copy command
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		a.Equal(2, len(mockedRPC.transfers))
 
@@ -1067,7 +1068,7 @@ func TestS2SCopyFromBlockToAppendBlob(t *testing.T) {
 
 	// Run copy command
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		a.Equal(1, len(mockedRPC.transfers))
 
@@ -1082,7 +1083,7 @@ func TestS2SCopyFromBlockToAppendBlob(t *testing.T) {
 
 	// Run copy command
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		a.Equal(2, len(mockedRPC.transfers))
 
@@ -1123,7 +1124,7 @@ func TestS2SCopyFromAppendToBlockBlob(t *testing.T) {
 
 	// Run copy command
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		a.Equal(1, len(mockedRPC.transfers))
 
@@ -1138,7 +1139,7 @@ func TestS2SCopyFromAppendToBlockBlob(t *testing.T) {
 
 	// Run copy command
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		a.Equal(2, len(mockedRPC.transfers))
 
@@ -1179,7 +1180,7 @@ func TestS2SCopyFromPageToAppendBlob(t *testing.T) {
 
 	// Run copy command
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		a.Equal(1, len(mockedRPC.transfers))
 
@@ -1194,7 +1195,7 @@ func TestS2SCopyFromPageToAppendBlob(t *testing.T) {
 
 	// Run copy command
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		a.Equal(2, len(mockedRPC.transfers))
 
@@ -1235,7 +1236,7 @@ func TestS2SCopyFromAppendToPageBlob(t *testing.T) {
 
 	// Run copy command
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		a.Equal(1, len(mockedRPC.transfers))
 
@@ -1250,7 +1251,7 @@ func TestS2SCopyFromAppendToPageBlob(t *testing.T) {
 
 	// Run copy command
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		a.Equal(2, len(mockedRPC.transfers))
 
@@ -1287,7 +1288,7 @@ func TestS2SCopyFromSingleBlobToBlobContainer(t *testing.T) {
 
 	// bucket should be resolved, and objects should be scheduled for transfer
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(1, len(mockedRPC.transfers))
@@ -1303,7 +1304,7 @@ func TestS2SCopyFromSingleBlobToBlobContainer(t *testing.T) {
 
 	// bucket should be resolved, and objects should be scheduled for transfer
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(1, len(mockedRPC.transfers))
@@ -1341,7 +1342,7 @@ func TestS2SCopyFromSingleAzureFileToBlobContainer(t *testing.T) {
 
 	// bucket should be resolved, and objects should be scheduled for transfer
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(1, len(mockedRPC.transfers))
@@ -1368,14 +1369,14 @@ func TestCopyWithDFSResource(t *testing.T) {
 	parentDirNameSource := generateName("dir", 0)
 	parentDirClientSource := fsClientSource.NewDirectoryClient(parentDirNameSource)
 	_, err := parentDirClientSource.Create(ctx, &datalakedirectory.CreateOptions{AccessConditions: &datalakedirectory.AccessConditions{ModifiedAccessConditions: &datalakedirectory.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETagAny)}}})
-	a.Nil(err)
+	a.NoError(err)
 
 	// set up the file
 	fileNameSource := generateName("file", 0)
 	fileClientSource, err := parentDirClientSource.NewFileClient(fileNameSource)
-	a.Nil(err)
+	a.NoError(err)
 	_, err = fileClientSource.Create(ctx, nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	dirClientWithSASSource := serviceClientWithSAS.NewFileSystemClient(fsNameSource).NewDirectoryClient(parentDirNameSource)
 
@@ -1389,7 +1390,7 @@ func TestCopyWithDFSResource(t *testing.T) {
 	parentDirName := generateName("dir", 0)
 	parentDirClient := fsClient.NewDirectoryClient(parentDirName)
 	_, err = parentDirClient.Create(ctx, &datalakedirectory.CreateOptions{AccessConditions: &datalakedirectory.AccessConditions{ModifiedAccessConditions: &datalakedirectory.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETagAny)}}})
-	a.Nil(err)
+	a.NoError(err)
 
 	dirClientWithSAS := serviceClientWithSAS.NewFileSystemClient(fsName).NewDirectoryClient(parentDirName)
 	// =====================================
@@ -1407,7 +1408,7 @@ func TestCopyWithDFSResource(t *testing.T) {
 	mockedRPC.init()
 
 	runCopyAndVerify(a, rawCopy, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(2, len(mockedRPC.transfers))
@@ -1420,13 +1421,13 @@ func TestCopyWithDFSResource(t *testing.T) {
 	// set up the file
 	fileNameSource = generateName("file2", 0)
 	fileClientSource, err = parentDirClientSource.NewFileClient(fileNameSource)
-	a.Nil(err)
+	a.NoError(err)
 	_, err = fileClientSource.Create(ctx, nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	rawSync := getDefaultSyncRawInput(dirClientWithSASSource.DFSURL(), dirClientWithSAS.DFSURL())
 	runSyncAndVerify(a, rawSync, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(2, len(mockedRPC.transfers))

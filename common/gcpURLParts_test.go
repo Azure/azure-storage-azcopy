@@ -1,10 +1,11 @@
 package common
 
 import (
-	"github.com/stretchr/testify/assert"
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // This testsuite does not reach GCP service, and runs even with GCP_TESTS=FALSE
@@ -13,7 +14,7 @@ func TestGCPURLParse(t *testing.T) {
 	a := assert.New(t)
 	u, _ := url.Parse("http://storage.cloud.google.com/bucket")
 	p, err := NewGCPURLParts(*u)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal("storage.cloud.google.com", p.Host)
 	a.Equal("bucket", p.BucketName)
 	a.Equal("", p.ObjectKey)
@@ -21,14 +22,14 @@ func TestGCPURLParse(t *testing.T) {
 
 	u, _ = url.Parse("https://storage.cloud.google.com")
 	p, err = NewGCPURLParts(*u)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal("", p.BucketName)
 	a.Equal("", p.ObjectKey)
 	a.Equal("https://storage.cloud.google.com", p.String())
 
 	u, _ = url.Parse("http://storage.cloud.google.com/bucket/keyname/")
 	p, err = NewGCPURLParts(*u)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal("bucket", p.BucketName)
 	a.Equal("keyname/", p.ObjectKey)
 	a.Equal("http://storage.cloud.google.com/bucket/keyname/", p.String())

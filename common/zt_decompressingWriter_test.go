@@ -24,11 +24,12 @@ import (
 	"bytes"
 	"compress/gzip"
 	"compress/zlib"
-	"github.com/stretchr/testify/assert"
 	"io"
 	"math/rand"
 	"sync/atomic"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 type closeableBuffer struct {
@@ -75,9 +76,9 @@ func TestDecompressingWriter_SuccessCases(t *testing.T) {
 		decWriter := NewDecompressingWriter(destFile, cs.tp)
 		copyBuf := make([]byte, cs.writeBufferSize)
 		_, err := io.CopyBuffer(decWriter, bytes.NewReader(compressedData), copyBuf) // write compressed data to decWriter
-		a.Nil(err)
+		a.NoError(err)
 		err = decWriter.Close()
-		a.Nil(err)
+		a.NoError(err)
 
 		// then:
 		// the data that was written to the underlying destination is correctly decompressed
@@ -105,7 +106,7 @@ func TestDecompressingWriter_EarlyClose(t *testing.T) {
 		destFile := &closeableBuffer{Buffer: &bytes.Buffer{}} // will be a file in real usage, but just a buffer in this test
 		decWriter := NewDecompressingWriter(destFile, tp)
 		n, err := io.CopyN(decWriter, bytes.NewReader(compressedData), sizeBeforeEarlyClose) // process only some of the data
-		a.Nil(err)
+		a.NoError(err)
 		err = decWriter.Close()
 
 		// then:
@@ -127,7 +128,7 @@ func getTestData(a *assert.Assertions, tp CompressionType, originalSize int) (or
 	}
 	_, err := io.Copy(comp, bytes.NewReader(originalData))
 	// write into buf by way of comp
-	a.Nil(err)
+	a.NoError(err)
 	a.Nil(comp.Close())
 	compressedData := compBuf.Bytes()
 	return originalData, compressedData

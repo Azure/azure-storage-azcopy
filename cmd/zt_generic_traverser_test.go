@@ -80,7 +80,7 @@ func TestLocalWildcardOverlap(t *testing.T) {
 	})
 
 	resource, err := SplitResourceString(filepath.Join(tmpDir, "tes*t.txt"), common.ELocation.Local())
-	a.Nil(err)
+	a.NoError(err)
 
 	traverser, err := InitResourceTraverser(resource, common.ELocation.Local(), ctx, InitResourceTraverserOptions{
 		SymlinkHandling:   common.ESymlinkHandlingType.Follow(),
@@ -89,7 +89,7 @@ func TestLocalWildcardOverlap(t *testing.T) {
 		StripTopDir:       true,
 		HardlinkHandling:  common.EHardlinkHandlingType.Follow(),
 	})
-	a.Nil(err)
+	a.NoError(err)
 
 	seenFiles := make(map[string]bool)
 
@@ -97,7 +97,7 @@ func TestLocalWildcardOverlap(t *testing.T) {
 		seenFiles[storedObject.relativePath] = true
 		return nil
 	}, []ObjectFilter{})
-	a.Nil(err)
+	a.NoError(err)
 
 	a.Equal(map[string]bool{
 		"test.txt":  true,
@@ -124,7 +124,7 @@ func TestFilesGetProperties(t *testing.T) {
 
 	scenarioHelper{}.generateShareFilesFromList(a, sc, fsc, []string{fileName})
 	_, err := sc.NewRootDirectoryClient().NewFileClient(fileName).SetHTTPHeaders(ctx, &file.SetHTTPHeadersOptions{HTTPHeaders: &headers})
-	a.Nil(err)
+	a.NoError(err)
 	shareURL := scenarioHelper{}.getRawShareURLWithSAS(a, shareName).String()
 
 	serviceClientWithSAS := scenarioHelper{}.getFileServiceClientWithSASFromURL(a, shareURL)
@@ -151,7 +151,7 @@ func TestFilesGetProperties(t *testing.T) {
 	}
 
 	err = traverser.Traverse(noPreProccessor, processor, nil)
-	a.Nil(err)
+	a.NoError(err)
 	a.True(seenContentType)
 
 	// then test reading from the filename exactly, because that's a different codepath.
@@ -165,7 +165,7 @@ func TestFilesGetProperties(t *testing.T) {
 	})
 
 	err = traverser.Traverse(noPreProccessor, processor, nil)
-	a.Nil(err)
+	a.NoError(err)
 	a.True(seenContentType)
 }
 
@@ -194,10 +194,10 @@ func TestS3GetProperties(t *testing.T) {
 	objectName := generateObjectName()
 	err = client.MakeBucket(bucketName, "")
 	defer deleteBucket(client, bucketName, false)
-	a.Nil(err)
+	a.NoError(err)
 
 	_, err = client.PutObjectWithContext(ctx, bucketName, objectName, strings.NewReader(objectDefaultData), int64(len(objectDefaultData)), headers)
-	a.Nil(err)
+	a.NoError(err)
 
 	// First test against the bucket
 	s3BucketURL := scenarioHelper{}.getRawS3BucketURL(a, "", bucketName)
@@ -207,7 +207,7 @@ func TestS3GetProperties(t *testing.T) {
 		Credential:              &credentialInfo,
 		GetPropertiesInFrontend: true,
 	})
-	a.Nil(err)
+	a.NoError(err)
 
 	// Embed the check into the processor for ease of use
 	seenContentType := false
@@ -223,7 +223,7 @@ func TestS3GetProperties(t *testing.T) {
 	}
 
 	err = traverser.Traverse(noPreProccessor, processor, nil)
-	a.Nil(err)
+	a.NoError(err)
 	a.True(seenContentType)
 
 	// Then, test against the object itself because that's a different codepath.
@@ -235,10 +235,10 @@ func TestS3GetProperties(t *testing.T) {
 		Credential:              &credentialInfo,
 		GetPropertiesInFrontend: true,
 	})
-	a.Nil(err)
+	a.NoError(err)
 
 	err = traverser.Traverse(noPreProccessor, processor, nil)
-	a.Nil(err)
+	a.NoError(err)
 	a.True(seenContentType)
 }
 
@@ -265,25 +265,25 @@ func TestGCPGetProperties(t *testing.T) {
 	bkt := client.Bucket(bucketName)
 	err = bkt.Create(context.Background(), os.Getenv("GOOGLE_CLOUD_PROJECT"), &gcpUtils.BucketAttrs{})
 	defer deleteGCPBucket(client, bucketName, false)
-	a.Nil(err)
+	a.NoError(err)
 
 	reader := strings.NewReader(objectDefaultData)
 	obj := bkt.Object(objectName)
 	wc := obj.NewWriter(ctx)
 	n, err := io.Copy(wc, reader)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal(int64(len(objectDefaultData)), n)
 	err = wc.Close()
-	a.Nil(err)
+	a.NoError(err)
 	_, err = obj.Update(ctx, headers)
-	a.Nil(err)
+	a.NoError(err)
 
 	// First test against the bucket
 	gcpBucketURL := scenarioHelper{}.getRawGCPBucketURL(a, bucketName)
 	traverser, err := newGCPTraverser(&gcpBucketURL, ctx, InitResourceTraverserOptions{
 		GetPropertiesInFrontend: true,
 	})
-	a.Nil(err)
+	a.NoError(err)
 
 	// Embed the check into the processor for ease of use
 	seenContentType := false
@@ -299,7 +299,7 @@ func TestGCPGetProperties(t *testing.T) {
 	}
 
 	err = traverser.Traverse(noPreProccessor, processor, nil)
-	a.Nil(err)
+	a.NoError(err)
 	a.True(seenContentType)
 
 	// Then, test against the object itself because that's a different codepath.
@@ -309,10 +309,10 @@ func TestGCPGetProperties(t *testing.T) {
 	traverser, err = newGCPTraverser(&gcpObjectURL, ctx, InitResourceTraverserOptions{
 		GetPropertiesInFrontend: true,
 	})
-	a.Nil(err)
+	a.NoError(err)
 
 	err = traverser.Traverse(noPreProccessor, processor, nil)
-	a.Nil(err)
+	a.NoError(err)
 	a.True(seenContentType)
 }
 
@@ -337,7 +337,7 @@ func TestWalkWithSymlinks_ToFolder(t *testing.T) {
 	// we just want To value as local
 	fromTo := common.FromToValue(common.ELocation.Local(), common.ELocation.Blob())
 	a.Nil(WalkWithSymlinks(context.TODO(), tmpDir, func(path string, fi os.FileInfo, err error) error {
-		a.Nil(err)
+		a.NoError(err)
 
 		if fi.IsDir() {
 			if fi.Name() == dirLinkName {
@@ -376,7 +376,7 @@ func TestWalkWithSymlinks_ToFile(t *testing.T) {
 	trySymlink(filepath.Join(symlinkTmpDir, symlinkTargetFilenames[0]), filepath.Join(tmpDir, "iPointToTheSameSymlink"), c)
 	fileCount := 0
 	c.Assert(WalkWithSymlinks(tmpDir, func(path string, fi os.FileInfo, err error) error {
-		a.Nil(err)
+		a.NoError(err)
 		if fi.IsDir() {
 			return nil
 		}
@@ -411,7 +411,7 @@ func TestWalkWithSymlinksBreakLoop(t *testing.T) {
 	// we just want To value as local
 	fromTo := common.FromToValue(common.ELocation.Local(), common.ELocation.Blob())
 	a.Nil(WalkWithSymlinks(context.TODO(), tmpDir, func(path string, fi os.FileInfo, err error) error {
-		a.Nil(err)
+		a.NoError(err)
 
 		if fi.IsDir() {
 			return nil
@@ -432,7 +432,7 @@ func TestWalkWithSymlinksDedupe(t *testing.T) {
 	tmpDir := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(tmpDir)
 	symlinkTmpDir, err := os.MkdirTemp(tmpDir, "subdir")
-	a.Nil(err)
+	a.NoError(err)
 
 	scenarioHelper{}.generateLocalFilesFromList(a, tmpDir, fileNames)
 	scenarioHelper{}.generateLocalFilesFromList(a, symlinkTmpDir, fileNames)
@@ -444,7 +444,7 @@ func TestWalkWithSymlinksDedupe(t *testing.T) {
 	// we just want To value as local
 	fromTo := common.FromToValue(common.ELocation.Local(), common.ELocation.Blob())
 	a.Nil(WalkWithSymlinks(context.TODO(), tmpDir, func(path string, fi os.FileInfo, err error) error {
-		a.Nil(err)
+		a.NoError(err)
 
 		if fi.IsDir() {
 			return nil
@@ -478,7 +478,7 @@ func TestWalkWithSymlinksMultitarget(t *testing.T) {
 	// we just want To value as local
 	fromTo := common.FromToValue(common.ELocation.Local(), common.ELocation.Blob())
 	a.Nil(WalkWithSymlinks(context.TODO(), tmpDir, func(path string, fi os.FileInfo, err error) error {
-		a.Nil(err)
+		a.NoError(err)
 
 		if fi.IsDir() {
 			return nil
@@ -503,7 +503,7 @@ func TestWalkWithSymlinksToParentAndChild(t *testing.T) {
 	defer os.RemoveAll(root2)
 
 	child, err := os.MkdirTemp(root2, "childdir")
-	a.Nil(err)
+	a.NoError(err)
 
 	scenarioHelper{}.generateLocalFilesFromList(a, root2, fileNames)
 	scenarioHelper{}.generateLocalFilesFromList(a, child, fileNames)
@@ -514,7 +514,7 @@ func TestWalkWithSymlinksToParentAndChild(t *testing.T) {
 	// we just want To value as local
 	fromTo := common.FromToValue(common.ELocation.Local(), common.ELocation.Blob())
 	a.Nil(WalkWithSymlinks(context.TODO(), root1, func(path string, fi os.FileInfo, err error) error {
-		a.Nil(err)
+		a.NoError(err)
 
 		if fi.IsDir() {
 			return nil
@@ -581,7 +581,7 @@ func TestTraverserWithSingleObject(t *testing.T) {
 		// invoke the local traversal with a dummy processor
 		localDummyProcessor := dummyProcessor{}
 		err := localTraverser.Traverse(noPreProccessor, localDummyProcessor.process, nil)
-		a.Nil(err)
+		a.NoError(err)
 		a.Equal(1, len(localDummyProcessor.record))
 
 		// construct a blob traverser
@@ -593,7 +593,7 @@ func TestTraverserWithSingleObject(t *testing.T) {
 		// invoke the blob traversal with a dummy processor
 		blobDummyProcessor := dummyProcessor{}
 		err = blobTraverser.Traverse(noPreProccessor, blobDummyProcessor.process, nil)
-		a.Nil(err)
+		a.NoError(err)
 		a.Equal(1, len(blobDummyProcessor.record))
 
 		// assert the important info are correct
@@ -617,7 +617,7 @@ func TestTraverserWithSingleObject(t *testing.T) {
 			// invoke the file traversal with a dummy processor
 			fileDummyProcessor := dummyProcessor{}
 			err = azureFileTraverser.Traverse(noPreProccessor, fileDummyProcessor.process, nil)
-			a.Nil(err)
+			a.NoError(err)
 			a.Equal(1, len(fileDummyProcessor.record))
 
 			a.Equal(localDummyProcessor.record[0].relativePath, fileDummyProcessor.record[0].relativePath)
@@ -636,10 +636,10 @@ func TestTraverserWithSingleObject(t *testing.T) {
 			S3Traverser, err := newS3Traverser(&url, ctx, InitResourceTraverserOptions{
 				Credential: &credentialInfo,
 			})
-			a.Nil(err)
+			a.NoError(err)
 
 			err = S3Traverser.Traverse(noPreProccessor, s3DummyProcessor.process, nil)
-			a.Nil(err)
+			a.NoError(err)
 			a.Equal(1, len(s3DummyProcessor.record))
 
 			a.Equal(localDummyProcessor.record[0].relativePath, s3DummyProcessor.record[0].relativePath)
@@ -652,10 +652,10 @@ func TestTraverserWithSingleObject(t *testing.T) {
 			gcpDummyProcessor := dummyProcessor{}
 			gcpURL := scenarioHelper{}.getRawGCPObjectURL(a, bucketNameGCP, storedObjectName)
 			GCPTraverser, err := newGCPTraverser(&gcpURL, ctx, InitResourceTraverserOptions{})
-			a.Nil(err)
+			a.NoError(err)
 
 			err = GCPTraverser.Traverse(noPreProccessor, gcpDummyProcessor.process, nil)
-			a.Nil(err)
+			a.NoError(err)
 			a.Equal(1, len(gcpDummyProcessor.record))
 
 			a.Equal(localDummyProcessor.record[0].relativePath, gcpDummyProcessor.record[0].relativePath)
@@ -728,7 +728,7 @@ func TestTraverserContainerAndLocalDirectory(t *testing.T) {
 		// so that the results are indexed for easy validation
 		localIndexer := newObjectIndexer()
 		err := localTraverser.Traverse(noPreProccessor, localIndexer.store, nil)
-		a.Nil(err)
+		a.NoError(err)
 
 		// construct a blob traverser
 		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
@@ -741,7 +741,7 @@ func TestTraverserContainerAndLocalDirectory(t *testing.T) {
 		// invoke the local traversal with a dummy processor
 		blobDummyProcessor := dummyProcessor{}
 		err = blobTraverser.Traverse(noPreProccessor, blobDummyProcessor.process, nil)
-		a.Nil(err)
+		a.NoError(err)
 
 		// construct an Azure File traverser
 		rawShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(a, shareName).String()
@@ -753,7 +753,7 @@ func TestTraverserContainerAndLocalDirectory(t *testing.T) {
 		// invoke the file traversal with a dummy processor
 		fileDummyProcessor := dummyProcessor{}
 		err = azureFileTraverser.Traverse(noPreProccessor, fileDummyProcessor.process, nil)
-		a.Nil(err)
+		a.NoError(err)
 
 		s3DummyProcessor := dummyProcessor{}
 		gcpDummyProcessor := dummyProcessor{}
@@ -765,18 +765,18 @@ func TestTraverserContainerAndLocalDirectory(t *testing.T) {
 				Credential: &credentialInfo,
 				Recursive:  isRecursiveOn,
 			})
-			a.Nil(err)
+			a.NoError(err)
 			err = S3Traverser.Traverse(noPreProccessor, s3DummyProcessor.process, nil)
-			a.Nil(err)
+			a.NoError(err)
 		}
 		if gcpEnabled {
 			rawGCPURL := scenarioHelper{}.getRawGCPBucketURL(a, bucketNameGCP)
 			GCPTraverser, err := newGCPTraverser(&rawGCPURL, ctx, InitResourceTraverserOptions{
 				Recursive: isRecursiveOn,
 			})
-			a.Nil(err)
+			a.NoError(err)
 			err = GCPTraverser.Traverse(noPreProccessor, gcpDummyProcessor.process, nil)
-			a.Nil(err)
+			a.NoError(err)
 		}
 
 		// make sure the results are as expected
@@ -888,7 +888,7 @@ func TestTraverserWithVirtualAndLocalDirectory(t *testing.T) {
 		// so that the results are indexed for easy validation
 		localIndexer := newObjectIndexer()
 		err := localTraverser.Traverse(noPreProccessor, localIndexer.store, nil)
-		a.Nil(err)
+		a.NoError(err)
 
 		// construct a blob traverser
 		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
@@ -901,7 +901,7 @@ func TestTraverserWithVirtualAndLocalDirectory(t *testing.T) {
 		// invoke the local traversal with a dummy processor
 		blobDummyProcessor := dummyProcessor{}
 		err = blobTraverser.Traverse(noPreProccessor, blobDummyProcessor.process, nil)
-		a.Nil(err)
+		a.NoError(err)
 
 		// construct an Azure File traverser
 		rawFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(a, shareName, virDirName).String()
@@ -913,7 +913,7 @@ func TestTraverserWithVirtualAndLocalDirectory(t *testing.T) {
 		// invoke the file traversal with a dummy processor
 		fileDummyProcessor := dummyProcessor{}
 		err = azureFileTraverser.Traverse(noPreProccessor, fileDummyProcessor.process, nil)
-		a.Nil(err)
+		a.NoError(err)
 
 		localTotalCount := len(localIndexer.indexMap)
 		localFileOnlyCount := 0
@@ -934,9 +934,9 @@ func TestTraverserWithVirtualAndLocalDirectory(t *testing.T) {
 				Credential: &credentialInfo,
 				Recursive:  isRecursiveOn,
 			})
-			a.Nil(err)
+			a.NoError(err)
 			err = S3Traverser.Traverse(noPreProccessor, s3DummyProcessor.process, nil)
-			a.Nil(err)
+			a.NoError(err)
 
 			// check that the results are the same length
 			a.Equal(localFileOnlyCount, len(s3DummyProcessor.record))
@@ -946,9 +946,9 @@ func TestTraverserWithVirtualAndLocalDirectory(t *testing.T) {
 			GCPTraverser, err := newGCPTraverser(&rawGCPURL, ctx, InitResourceTraverserOptions{
 				Recursive: isRecursiveOn,
 			})
-			a.Nil(err)
+			a.NoError(err)
 			err = GCPTraverser.Traverse(noPreProccessor, gcpDummyProcessor.process, nil)
-			a.Nil(err)
+			a.NoError(err)
 
 			a.Equal(localFileOnlyCount, len(gcpDummyProcessor.record))
 		}
@@ -1013,12 +1013,12 @@ func TestSerialAndParallelBlobTraverser(t *testing.T) {
 		// invoke the parallel traversal with a dummy processor
 		parallelDummyProcessor := dummyProcessor{}
 		err := parallelBlobTraverser.Traverse(noPreProccessor, parallelDummyProcessor.process, nil)
-		a.Nil(err)
+		a.NoError(err)
 
 		// invoke the serial traversal with a dummy processor
 		serialDummyProcessor := dummyProcessor{}
 		err = parallelBlobTraverser.Traverse(noPreProccessor, serialDummyProcessor.process, nil)
-		a.Nil(err)
+		a.NoError(err)
 
 		// make sure the results are as expected
 		a.Equal(len(serialDummyProcessor.record), len(parallelDummyProcessor.record))

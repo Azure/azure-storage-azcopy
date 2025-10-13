@@ -25,13 +25,14 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"fmt"
+	"os"
+	"strings"
+	"testing"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/stretchr/testify/assert"
-	"os"
-	"strings"
-	"testing"
 )
 
 var ctxSender = context.Background()
@@ -70,7 +71,7 @@ func CreateNewContainer(t *testing.T, a *assert.Assertions, bsc *blobservice.Cli
 	cc, name = GetContainerClient(t, bsc)
 
 	_, err := cc.Create(ctxSender, nil)
-	a.Nil(err)
+	a.NoError(err)
 	return cc, name
 }
 
@@ -82,7 +83,7 @@ func GetContainerClient(t *testing.T, bsc *blobservice.Client) (container *conta
 
 func DeleteContainer(a *assert.Assertions, cc *container.Client) {
 	_, err := cc.Delete(ctxSender, nil)
-	a.Nil(err)
+	a.NoError(err)
 }
 
 func GenerateBlockIDsList(count int) []string {

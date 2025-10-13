@@ -22,16 +22,17 @@ package cmd
 
 import (
 	"context"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -66,7 +67,7 @@ func TestOverwritePosixProperties(t *testing.T) {
 	raw.recursive = true
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		a.Equal(3, len(mockedRPC.transfers))
 		// trim / and /folder/ off
@@ -85,7 +86,7 @@ func TestOverwritePosixProperties(t *testing.T) {
 	raw.forceWrite = "posixproperties"
 
 	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err)
+		a.NoError(err)
 
 		a.Equal(3, len(mockedRPC.transfers))
 		// trim / and /folder/ off
@@ -98,7 +99,7 @@ func TestOverwritePosixProperties(t *testing.T) {
 	})
 	listBlob, err := pager.NextPage(context.TODO())
 
-	a.Nil(err)
+	a.NoError(err)
 
 	for _, blob := range listBlob.Segment.BlobItems {
 		a.Equal(strconv.FormatInt(newTimeStamp.UnixNano(), 10), blob.Metadata[common.POSIXCTimeMeta])
