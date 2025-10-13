@@ -82,7 +82,7 @@ func SetPrivateNetworkArgs(privateNetworkEnabled bool, privateEndpointIPs []stri
 }
 
 // RoundRobinTransport creates the transport
-func NewRoundRobinTransport(ips []string, host string, cooldownInSecs int, ipRetries int, ipRetryIntervalInMilliSecs int) *RoundRobinTransport {
+func NewRoundRobinTransportOriginal(ips []string, host string, cooldownInSecs int, ipRetries int, ipRetryIntervalInMilliSecs int) *RoundRobinTransport {
 	entries := make([]*IPEntry, len(ips))
 	for i, ip := range ips {
 		entries[i] = &IPEntry{IP: ip, unhealthy: 0, lastChecked: time.Now()}
@@ -104,10 +104,32 @@ func NewRoundRobinTransport(ips []string, host string, cooldownInSecs int, ipRet
 	return rr
 }
 
+func NewRoundRobinTransport(ips []string, host string, cooldownInSecs int, ipRetries int, ipRetryIntervalInMilliSecs int) *RoundRobinTransport {
+	entries := make([]*IPEntry, len(ips))
+	for i, ip := range ips {
+		entries[i] = &IPEntry{IP: ip, unhealthy: 0, lastChecked: time.Now()}
+		log.Printf("PrivateEndpoint%d IPAddress:%s Unhealthy Status:%d LastChecked :%v\n ", i, entries[i].IP, entries[i].unhealthy, entries[i].lastChecked)
+	}
+
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: false, ServerName: host}
+
+	rr := &RoundRobinTransport{
+		ips:             entries,
+		host:            host,
+		transport:       tr,
+		cooldown:        time.Duration(cooldownInSecs) * time.Second,
+		perIPRetries:    ipRetries,
+		perIPRetryDelay: time.Duration(ipRetryIntervalInMilliSecs) * time.Millisecond,
+	}
+	// rr.refreshHealthyPool()
+	return rr
+}
+
 // RoundTrip retries request with different IPs up to rr.maxRetries.
 // For each chosen IP, it will retry the same IP rr.perIPRetries times (with a small delay)
 // before marking the IP unhealthy and moving on to the next IP.
-func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+func (rr *RoundRobinTransport) RoundTripOriginal(req *http.Request) (*http.Response, error) {
 	var lastErr error
 	var peIP string
 
@@ -218,6 +240,60 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 
 	// All attempts exhausted
 	return nil, fmt.Errorf("Request failed after trying all healthy Private Endpoint IPs. Last error from IP %s: %v", peIP, lastErr)
+}
+
+// RoundTrip retries request with different IPs up to rr.maxRetries.
+// For each chosen IP, it will retry the same IP rr.perIPRetries times (with a small delay)
+// before marking the IP unhealthy and moving on to the next IP.
+func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+
+	//peIP := "10.1.0.4"
+
+	peIP := privateNetworkArgs.PrivateEndpointIPs[0]
+
+	// Try the same IP up to perIPRetries times before moving on
+	for ipAttempt := 1; ipAttempt <= 3; ipAttempt++ {
+		// Re-create a fresh clone for each attempt (body-safe for idempotent requests)
+		clonedReq := req.Clone(req.Context())
+
+		// Override destination to PE IP:Port and preserve original Host header
+		clonedReq.URL.Scheme = req.URL.Scheme
+		clonedReq.URL.Host = peIP
+		clonedReq.Host = rr.host
+
+		log.Printf("[Retry=%d] RoundTripSingle: Sending request to PrivateEndpoint IP: %s (Host header: %s)", ipAttempt, clonedReq.URL.Host, clonedReq.Host)
+
+		resp, err := rr.transport.RoundTrip(clonedReq)
+		if err == nil {
+			log.Printf("[Retry=%d] RoundTripSingle SUCCESS using IP %s", ipAttempt, peIP)
+			return resp, nil
+		}
+
+		// Transport-level failure (err != nil). Capture diagnostics.
+		log.Printf("[Retry=%d] RoundTripSingle FAILED using IP %s with Error %v", ipAttempt, peIP, err)
+
+		// If resp is non-nil on error, close body to avoid leaks and capture status for diagnostics.
+		if resp != nil {
+			// best-effort: capture status and close body
+			if resp.Body != nil {
+				b, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+				_ = resp.Body.Close()
+				bodySnippet := strings.TrimSpace(string(b))
+				if bodySnippet != "" {
+					log.Printf("[Retry=%d] RoundTripSingle FAILED using IP %s with Response Error %s:%s", ipAttempt, peIP, resp.Status, bodySnippet)
+				}
+			}
+		}
+		// If we still have per-IP attempts left, wait and retry the same IP
+		if ipAttempt < 3 {
+			log.Printf("[Retry=%d] RoundTripSingle Retrying same IP %s after 10 secs", ipAttempt, peIP)
+			time.Sleep(10 * time.Second)
+			continue
+		}
+	}
+
+	// All attempts exhausted
+	return nil, fmt.Errorf("RoundTripSingle Request failed after trying all healthy Private Endpoint IPs. Last error from IP %s", peIP)
 }
 
 // refreshHealthyPool updates the healthy IP list atomically
