@@ -214,8 +214,6 @@ func NewS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTrave
 			Endpoint: t.s3URLParts.Endpoint,
 			Region:   t.s3URLParts.Region,
 		},
-	}, common.CredentialOpOptions{
-		LogError: common.GetLifecycleMgr().Error,
 	}, common.AzcopyScanningLogger)
 
 	return
