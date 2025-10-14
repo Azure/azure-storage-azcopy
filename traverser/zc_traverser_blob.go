@@ -47,7 +47,7 @@ type BlobTraverser struct {
 	recursive     bool
 
 	// parallel listing employs the hierarchical listing API which is more expensive
-	// cx should have the option to disable this optimization in the Name of saving costs
+	// cx should have the option to disable this optimization for the sake of saving costs
 	ParallelListing bool
 
 	// a generic function to notify that a new stored object has been enumerated
@@ -75,8 +75,8 @@ func (t *BlobTraverser) IsDirectory(isSource bool) (isDirectory bool, err error)
 	}
 
 	// Skip the single blob check if we're checking a destination.
-	// This is an individual exception for blob because blob supports virtual directories and blobs sharing the same Name.
-	// On HNS accounts, we would still perform this test. The user may have provided directory Name without path-separator
+	// This is an individual exception for blob because blob supports virtual directories and blobs sharing the same name.
+	// On HNS accounts, we would still perform this test. The user may have provided directory name without path-separator
 	if isDirDirect { // a container or a path ending in '/' is always directory
 		if blobURLParts.ContainerName != "" && blobURLParts.BlobName == "" {
 			// If it's a container, let's ensure that container exists. Listing is a safe assumption to be valid, because how else would we enumerate?
@@ -321,7 +321,7 @@ func (t *BlobTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 		searchPrefix += common.AZCOPY_PATH_SEPARATOR_STRING
 	}
 
-	// as a performance optimization, get an extra prefix to do pre-filtering. It's typically the start portion of a blob Name.
+	// as a performance optimization, get an extra prefix to do pre-filtering. It's typically the start portion of a blob name.
 	extraSearchPrefix := FilterSet(filters).GetEnumerationPreFilter(t.recursive)
 
 	if t.ParallelListing {
@@ -424,7 +424,7 @@ func (t *BlobTraverser) parallelList(containerClient *container.Client, containe
 
 				storedObject := t.createStoredObjectForBlob(preprocessor, blobInfo, strings.TrimPrefix(*blobInfo.Name, searchPrefix), containerName)
 
-				// edge case, blob Name happens to be the same as root and ends in /
+				// edge case, blob name happens to be the same as root and ends in /
 				if storedObject.RelativePath == "" && strings.HasSuffix(storedObject.Name, "/") {
 					storedObject.RelativePath = "\x00" // Short circuit, letting the backend know we *really* meant root/.
 				}
@@ -559,7 +559,7 @@ func (t *BlobTraverser) serialList(containerClient *container.Client, containerN
 
 			storedObject := t.createStoredObjectForBlob(preprocessor, blobInfo, relativePath, containerName)
 
-			// edge case, blob Name happens to be the same as root and ends in /
+			// edge case, blob name happens to be the same as root and ends in /
 			if storedObject.RelativePath == "" && strings.HasSuffix(storedObject.Name, "/") {
 				storedObject.RelativePath = "\x00" // Short circuit, letting the backend know we *really* meant root/.
 			}

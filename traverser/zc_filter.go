@@ -163,7 +163,7 @@ func (f *IncludeFilter) DoesSupportThisOS() (msg string, supported bool) {
 }
 
 func (f *IncludeFilter) AppliesOnlyToFiles() bool {
-	return true // IncludeFilter is a Name-pattern-based filter, and we treat those as relating to FILE names only
+	return true // IncludeFilter is a name-pattern-based filter, and we treat those as relating to FILE names only
 }
 
 func (f *IncludeFilter) DoesPass(storedObject StoredObject) bool {

@@ -66,7 +66,7 @@ func (t *blobAccountTraverser) getListContainers() ([]string, []string, error) {
 			for _, v := range resp.ContainerItems {
 				// a nil list also returns 0
 				if len(t.cachedContainers) == 0 {
-					// Match a pattern for the container Name and the container Name only.
+					// Match a pattern for the container name and the container name only.
 					if t.containerPattern != "" {
 						if ok, err := containerNameMatchesPattern(*v.Name, t.containerPattern); err != nil {
 							// Break if the pattern is invalid
@@ -83,7 +83,7 @@ func (t *blobAccountTraverser) getListContainers() ([]string, []string, error) {
 					so := StoredObject{ContainerName: *v.Name}
 					for _, f := range t.excludeContainerName {
 						if !f.DoesPass(so) {
-							// Ignore the container if the container Name should be excluded
+							// Ignore the container if the container name should be excluded
 							skippedContainers = append(skippedContainers, *v.Name)
 							continue
 						} else {

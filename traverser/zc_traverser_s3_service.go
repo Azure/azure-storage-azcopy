@@ -56,7 +56,7 @@ func (t *s3ServiceTraverser) ListContainers() ([]string, error) {
 		bucketInfo, err := t.s3Client.ListBuckets()
 		if err == nil {
 			for _, v := range bucketInfo {
-				// Match a pattern for the bucket Name and the bucket Name only
+				// Match a pattern for the bucket name and the bucket name only
 				if t.bucketPattern != "" {
 					if ok, err := containerNameMatchesPattern(v.Name, t.bucketPattern); err != nil {
 						// Break if the pattern is invalid
@@ -139,7 +139,7 @@ func NewS3ServiceTraverser(rawURL *url.URL, ctx context.Context, opts InitResour
 	if err != nil {
 		return
 	} else if !s3URLParts.IsServiceSyntactically() {
-		// Yoink the bucket Name off and treat it as the pattern.
+		// Yoink the bucket name off and treat it as the pattern.
 		t.bucketPattern = s3URLParts.BucketName
 
 		s3URLParts.BucketName = ""

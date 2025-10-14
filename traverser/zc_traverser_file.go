@@ -37,8 +37,8 @@ import (
 
 const trailingDotErrMsg = "File share contains file/directory: %s with a trailing dot. But the trailing dot parameter was set to Disable, meaning these files could be potentially treated in an unsafe manner." +
 	"To avoid this, use --trailing-dot=Enable"
-const invalidNameErrorMsg = "Skipping File share path %s, as it is not a valid Blob or Windows Name. Rename the object and retry the transfer"
-const allDotsErrorMsg = "File/ Directory Name: %s consists of only dots. Using --trailing-dot=Disable is dangerous here. " +
+const invalidNameErrorMsg = "Skipping File share path %s, as it is not a valid Blob or Windows name. Rename the object and retry the transfer"
+const allDotsErrorMsg = "File/ Directory name: %s consists of only dots. Using --trailing-dot=Disable is dangerous here. " +
 	"Retry remove command with default --trailing-dot=Enable"
 
 // allow us to iterate through a path pointing to the file endpoint
@@ -143,7 +143,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			}
 
 			if (t.destination.IsLocal() && runtime.GOOS == "windows") || *t.destination == common.ELocation.Blob() || *t.destination == common.ELocation.BlobFS() {
-				/* Blob or Windows object Name is invalid if it ends with period or
+				/* Blob or Windows object name is invalid if it ends with period or
 				   one of (virtual) directories in path ends with period.
 				   This list is not exhaustive
 				*/
@@ -158,7 +158,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 		return err
 	}
 
-	// We stop remove operations if file/dir Name is only dots
+	// We stop remove operations if file/dir name is only dots
 	checkAllDots := func(path string) bool {
 		return path != "" && strings.Trim(path, ".") == ""
 	}
