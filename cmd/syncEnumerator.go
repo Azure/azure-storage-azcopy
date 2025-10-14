@@ -198,7 +198,6 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 	// verify that the traversers are targeting the same type of resources
 	sourceIsDir, _ := sourceTraverser.IsDirectory(true)
 	destIsDir, err := destinationTraverser.IsDirectory(true)
-
 	var resourceMismatchError = errors.New("trying to sync between different resource types (either file <-> directory or directory <-> file) which is not allowed." +
 		"sync must happen between source and destination of the same type, e.g. either file <-> file or directory <-> directory." +
 		"To make sure target is handled as a directory, add a trailing '/' to the target.")
@@ -526,7 +525,7 @@ func GetSyncEnumeratorWithDestComparator(
 	}
 	destCleanerFunc := newFpoAwareProcessor(fpo, destinationCleaner.removeImmediately)
 
-	if UseSyncOrchestrator && (cca.fromTo == common.EFromTo.S3Blob() || cca.fromTo == common.EFromTo.BlobBlob() || cca.fromTo == common.EFromTo.BlobBlobFS() || cca.fromTo == common.EFromTo.BlobFSBlob() || cca.fromTo == common.EFromTo.BlobFSBlobFS()) {
+	if UseSyncOrchestrator && (cca.fromTo == common.EFromTo.S3Blob() || cca.fromTo == common.EFromTo.BlobBlob() || cca.fromTo == common.EFromTo.BlobFSBlob()) {
 		// newFpoAwareProcessor sets the destCleanerFunc to nil for a non folder aware source destination pair like S3->Blob.
 		// But in case of SyncOrchestrator, S3->Blob sync does recursive deletion for a prefix.
 		// This requires a valid deletion processor to be passed to the comparator.
