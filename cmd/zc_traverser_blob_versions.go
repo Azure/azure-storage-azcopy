@@ -22,9 +22,10 @@ package cmd
 
 import (
 	"context"
+	"strings"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
-	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -105,7 +106,7 @@ func (t *blobVersionsTraverser) Traverse(preprocessor objectMorpher, processor o
 		storedObject.blobVersionID = versionID
 
 		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter(common.EEntityType.File())
+			t.incrementEnumerationCounter(common.EEntityType.File(), common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
 		}
 
 		err = processIfPassedFilters(filters, storedObject, processor)
