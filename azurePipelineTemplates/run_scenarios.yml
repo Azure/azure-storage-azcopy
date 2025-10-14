@@ -28,6 +28,14 @@ steps:
       scriptType: bash
       scriptLocation: inlineScript
       inlineScript: |
+        set -e
+        echo "Logging in to Azure using Federated Credentials..."
+        az login --identity --allow-no-subscriptions
+        echo "Successfully logged in with managed identity"
+
+        # Verify access
+        az account show
+
         echo "========== Building executable =========="
 
         go build -cover -o "${{ parameters.build_name }}"
@@ -101,3 +109,4 @@ steps:
       GOOS: ${{ parameters.goos }}
       GOARCH: ${{ parameters.goarch }}
       CGO_ENABLED: ${{ parameters.cgo_enabled }}
+      NEW_E2E_ENVIRONMENT: "AzurePipeline"
