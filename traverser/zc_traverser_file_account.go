@@ -54,7 +54,7 @@ func (t *fileAccountTraverser) ListContainers() ([]string, error) {
 			}
 
 			for _, v := range resp.Shares {
-				// Match a pattern for the share Name and the share Name only
+				// Match a pattern for the share name and the share name only
 				if t.sharePattern != "" {
 					if ok, err := containerNameMatchesPattern(*v.Name, t.sharePattern); err != nil {
 						// Break if the pattern is invalid

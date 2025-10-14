@@ -43,7 +43,7 @@ func (t *blobVersionsTraverser) IsDirectory(isSource bool) (bool, error) {
 	isDirDirect := UrlIsContainerOrVirtualDirectory(t.rawURL)
 
 	// Skip the single blob check if we're checking a destination.
-	// This is an individual exception for blob because blob supports virtual directories and blobs sharing the same Name.
+	// This is an individual exception for blob because blob supports virtual directories and blobs sharing the same name.
 	if isDirDirect || !isSource {
 		return isDirDirect, nil
 	}

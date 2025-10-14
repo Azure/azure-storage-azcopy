@@ -193,7 +193,7 @@ type ErrorFileInfo struct {
 }
 
 func (s symlinkTargetFileInfo) Name() string {
-	return s.name // override the Name
+	return s.name // override the name
 }
 
 func writeToErrorChannel(errorChannel chan<- ErrorFileInfo, err ErrorFileInfo) {

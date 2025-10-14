@@ -81,7 +81,7 @@ type StoredObject struct {
 	RelativePath string
 	// container source, only included by account traversers.
 	ContainerName string
-	// destination container Name. Included in the processor after resolving container names.
+	// destination container name. Included in the processor after resolving container names.
 	DstContainerName string
 	// access tier, only included by blob traverser.
 	BlobAccessTier blob.AccessTier
@@ -221,7 +221,7 @@ func (s *StoredObject) ToNewCopyTransfer(steWillAutoDecompress bool,
 // compression indicated by the encoding type.
 // Why remove this extension here, at enumeration time, instead of just doing it
 // in the STE when we are about to save the file?
-// Because by doing it here we get the accurate Name in things that
+// Because by doing it here we get the accurate name in things that
 // directly read the Plan files, like the jobs show command
 func stripCompressionExtension(dest string, contentEncoding string) string {
 	// Ignore error getting compression type. We can't easily report it now, and we don't need to know about the error
@@ -296,7 +296,7 @@ func NewStoredObject(morpher objectMorpher, name string, relativePath string, en
 	if entityType == common.EEntityType.Folder() {
 		obj.Size = 0
 		if obj.IsSourceRootFolder() {
-			obj.Name = "" // make these consistent, even from enumerators that pass in an actual Name for these (it doesn't really make sense to pass an actual Name)
+			obj.Name = "" // make these consistent, even from enumerators that pass in an actual name for these (it doesn't really make sense to pass an actual name)
 		}
 	}
 
@@ -329,7 +329,7 @@ func containerNameMatchesPattern(containerName, pattern string) (bool, error) {
 	return filepath.Match(pattern, containerName)
 }
 
-// newContainerDecorator constructs an objectMorpher that adds the given container Name to StoredObjects
+// newContainerDecorator constructs an objectMorpher that adds the given container name to StoredObjects
 func newContainerDecorator(containerName string) objectMorpher {
 	return func(object *StoredObject) {
 		object.ContainerName = containerName
@@ -905,7 +905,7 @@ func getObjectNameOnly(fullPath string) (nameOnly string) {
 
 	// if there is a path separator and it is not the last character
 	if lastPathSeparator > 0 && lastPathSeparator != len(fullPath)-1 {
-		// then we separate out the Name of the StoredObject
+		// then we separate out the name of the StoredObject
 		nameOnly = fullPath[lastPathSeparator+1:]
 	} else {
 		nameOnly = fullPath
