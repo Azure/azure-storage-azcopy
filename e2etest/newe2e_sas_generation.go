@@ -81,7 +81,7 @@ func (vals GenericServiceSignatureValues) withDefaults() GenericServiceSignature
 	SetIfZero(&out.StartTime, time.Now().UTC().Add(-time.Minute*30))
 	SetIfZero(&out.ExpiryTime, time.Now().UTC().Add(time.Minute*30))
 	SetIfZero(&out.Permissions, (&blobsas.ContainerPermissions{
-		Read: true, Add: true, Create: true, Write: true, Delete: true, List: true,
+		Read: true, Add: true, Create: true, Write: true, Delete: true, List: true, Execute: true,
 	}).String())
 
 	return out

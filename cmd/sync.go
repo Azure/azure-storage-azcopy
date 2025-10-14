@@ -335,10 +335,9 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 				"\n Supported combinations: Local<->File, Local<->BlobFS, BlobFS<->File, File<->File, BlobFS<->BlobFS", cooked.fromTo.From(), cooked.fromTo.To())
 		}
 
-		// For user to use preserveRootProperties flag, preserveInfo and preservePermissions must be set
-		// TODO Reviewers: is it ok to make the preserveRootProperties flag to depend on  preserveInfo and preservePermissions?
-		if !cooked.preservePermissions.IsTruthy() && !cooked.preserveInfo {
-			glcm.Warn("preserve-root-properties flag needs preserve-info and preserve-permissions flags to be set " +
+		// For preserve-root-properties to persist the root perms or properties, we need either preserveInfo or preservePermissions flags
+		if !(cooked.preservePermissions.IsTruthy() || cooked.preserveInfo) {
+			glcm.Warn("preserve-root-properties flag needs either preserve-info or preserve-permissions flags to be set " +
 				"\n for full functionality")
 		}
 	}
@@ -411,8 +410,7 @@ func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
 		cooked.cpkOptions.IsSourceEncrypted = true
 	}
 
-	// when preserving root properties, we need to include the root in the enumeration so STE can transfer its
-	// properties
+	// when preserving root properties, we *need* to include the root in the enumeration so STE can transfer its properties
 	if cooked.preserveRootProperties {
 		cooked.includeRoot = true
 	}
@@ -1059,6 +1057,8 @@ func init() {
 
 	syncCmd.PersistentFlags().BoolVar(&raw.preserveRootProperties, "preserve-root-properties", false, "False by default. "+
 		"\n Preserves the root directory and its properties from source to destination. "+
+		"\n To preserve properties, set --preserve-info and"+
+		"\n To preserve permissions specifically, set --preserve-permissions."+
 		"\n When enabled, the destination root properties will be overwritten with the source."+
 		"\n For example, syncing from 'src/file.txt' to 'dest/' will result in 'dest/file.txt' "+
 		"\n with the properties of source on destination.")

@@ -66,6 +66,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
 	preserveProperties := ResolveVariation(svm, []bool{true, false})
 	preservePermissions := ResolveVariation(svm, []bool{true, false})
+	preserveRootProperties := ResolveVariation(svm, []bool{true, false})
 
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
@@ -191,7 +192,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 		AzCopyCommand{
 			Verb:    azCopyVerb,
 			Targets: []ResourceManager{srcDirObj, dst.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{})},
-			Flags: CopyFlags{
+			Flags: SyncFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
 					Recursive: pointerTo(true),
 					FromTo:    pointerTo(common.EFromTo.LocalFileNFS()),
@@ -199,6 +200,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 					PreserveInfo:        pointerTo(preserveProperties),
 					PreservePermissions: pointerTo(preservePermissions),
 				},
+				PreserveRootProperties: pointerTo(preserveRootProperties),
 			},
 		})
 
@@ -210,8 +212,8 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 			obj.ObjectProperties.FileNFSProperties.FileCreationTime = objProp.FileProperties.FileCreationTime
 		}
 	}
-	// Dont validate the root directory in case of sync
-	if azCopyVerb == AzCopyVerbSync {
+	// Dont validate the root directory in case of sync and preserve root properties flag is not set
+	if azCopyVerb == AzCopyVerbSync && !preserveRootProperties {
 		delete(srcObjs, rootDir)
 	}
 
@@ -242,6 +244,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 	}
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
 	preserveProperties := ResolveVariation(svm, []bool{true, false})
+	preserveRootProperties := ResolveVariation(svm, []bool{true, false})
 	//TODO: Not checking for this flag as false as azcopy needs to run by root user
 	// in order to set the owner and group to 0(root)
 	preservePermissions := ResolveVariation(svm, []bool{true})
@@ -360,18 +363,19 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 		AzCopyCommand{
 			Verb:    azCopyVerb,
 			Targets: []ResourceManager{srcDirObj.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{}), dst},
-			Flags: CopyFlags{
+			Flags: SyncFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
 					Recursive:           pointerTo(true),
 					FromTo:              pointerTo(common.EFromTo.FileNFSLocal()),
 					PreservePermissions: pointerTo(preservePermissions),
 					PreserveInfo:        pointerTo(preserveProperties),
 				},
+				PreserveRootProperties: pointerTo(preserveRootProperties),
 			},
 		})
 
-	// Dont validate the root directory in case of sync
-	if azCopyVerb == AzCopyVerbSync {
+	// Dont validate the root directory in case of sync and preserve root properties is not set
+	if azCopyVerb == AzCopyVerbSync && !preserveRootProperties {
 		delete(srcObjs, rootDir)
 	}
 
@@ -421,6 +425,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 
 	preserveProperties := ResolveVariation(svm, []bool{true, false})
 	preservePermissions := ResolveVariation(svm, []bool{true, false})
+	preserveRootProperties := ResolveVariation(svm, []bool{true, false})
 
 	var folderProperties, fileProperties *FileNFSProperties
 	if preserveProperties {
@@ -522,18 +527,19 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 				src.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{}),
 				dst.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{}),
 			},
-			Flags: CopyFlags{
+			Flags: SyncFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
 					Recursive:           pointerTo(true),
 					FromTo:              pointerTo(common.EFromTo.FileNFSFileNFS()),
 					PreservePermissions: pointerTo(preservePermissions),
 					PreserveInfo:        pointerTo(preserveProperties),
 				},
+				PreserveRootProperties: pointerTo(preserveRootProperties),
 			},
 		})
 
-	// Dont validate the root directory in case of sync
-	if azCopyVerb == AzCopyVerbSync {
+	// Dont validate the root directory in case of sync and preserve root properties is not set
+	if azCopyVerb == AzCopyVerbSync && !preserveRootProperties {
 		delete(srcObjs, rootDir)
 	}
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
