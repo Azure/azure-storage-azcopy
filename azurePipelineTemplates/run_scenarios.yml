@@ -29,13 +29,6 @@ steps:
       scriptLocation: inlineScript
       inlineScript: |
         set -e
-        echo "Logging in to Azure using Federated Credentials..."
-        az login --identity --allow-no-subscriptions
-        echo "Successfully logged in with managed identity"
-
-        # Verify access
-        az account show
-
         echo "========== Building executable =========="
 
         go build -cover -o "${{ parameters.build_name }}"
@@ -44,6 +37,10 @@ steps:
           exit 1
         fi
         echo "Executable built successfully: ${{ parameters.build_name }}"
+
+        echo "Logging in to Azure using Federated Credentials..."
+        "./${{ parameters.build_name }}" login --service-principal --application-id "$servicePrincipalId" --tenant-id "$tenantId" --client-secret "$servicePrincipalKey"
+        echo "Successfully logged in..."
 
         ########################################################
         # Scenario 1: Blob → Pipe
