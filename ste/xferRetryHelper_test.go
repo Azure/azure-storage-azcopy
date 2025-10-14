@@ -50,6 +50,17 @@ func TestGetShouldRetry(t *testing.T) {
 		}
 	}
 
+	syscallErrnoTests := func(errs []syscall.Errno, retry bool) []*ResponseRetryPair {
+		out := make([]*ResponseRetryPair, len(errs)*2)
+
+		for k, v := range errs {
+			out[k*2] = ErrorTest(v, retry)
+			out[(k*2)+1] = ErrorTest(errors.New(v.Error()), retry)
+		}
+
+		return out
+	}
+
 	_ = ParseRules
 
 	matrix := []TestEntry{
@@ -70,33 +81,10 @@ func TestGetShouldRetry(t *testing.T) {
 		},
 		{
 			TestCond: func() bool {
-				return runtime.GOOS == "windows"
+				return runtime.GOOS == "windows" || runtime.GOOS == "darwin" || runtime.GOOS == "linux"
 			},
 			Rules: ParseRules("409: ShareAlreadyExists, ShareBeingDeleted, BlobAlreadyExists; 500; 404: BlobNotFound"),
-			Tests: []*ResponseRetryPair{
-				ErrorTest(syscall.Errno(10054), true), // WSAECONNRESET
-				ErrorTest(errors.New("wsarecv: An existing connection was forcibly closed by the remote host."), true),
-				ErrorTest(syscall.Errno(10048), true), // WSAEADDRINUSE
-				ErrorTest(errors.New("Only one usage of each socket address (protocol/network address/port) is normally permitted."), true),
-				ErrorTest(syscall.Errno(10060), true), // WSAETIMEDOUT
-				ErrorTest(errors.New("A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."), true),
-			},
-		},
-		{
-			TestCond: func() bool { return runtime.GOOS == "linux" },
-			Rules:    ParseRules("409: ShareAlreadyExists, ShareBeingDeleted, BlobAlreadyExists; 500; 404: BlobNotFound"),
-			Tests: []*ResponseRetryPair{
-				ErrorTest(syscall.Errno(0x63), true), // EADDRNOTAVAILABLE
-				ErrorTest(errors.New("connect: cannot assign requested address"), true),
-			},
-		},
-		{
-			TestCond: func() bool { return runtime.GOOS == "darwin" },
-			Rules:    ParseRules("409: ShareAlreadyExists, ShareBeingDeleted, BlobAlreadyExists; 500; 404: BlobNotFound"),
-			Tests: []*ResponseRetryPair{
-				ErrorTest(syscall.Errno(0x63), true), // EADDRNOTAVAILABLE
-				ErrorTest(errors.New("connect: cannot assign requested address"), true),
-			},
+			Tests: syscallErrnoTests(platformRetriedErrnos, true),
 		},
 		{ // test full code removal
 			Rules: ParseRules("400; 500; -400"),
