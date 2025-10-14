@@ -622,8 +622,14 @@ func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool
 		}
 
 		// If uploading from Windows or downloading from files, decode unsafe chars if user enables decoding
+
+		// Encoding is intended to handle behavior going between two resources.
+		// For deletions, There isn't an actual "other resource"
+		// So, the path special char does not to be decoded but preserved.
+		// Why? Take an edge case where path contains special char like '%5C' (encoded backslash `\\`)
+		// this will be decoded and error to inconsistent path separators.
 	} else if ((!source && fromTo.From() == common.ELocation.Local() && runtime.GOOS == "windows") ||
-		(!source && fromTo.From() == common.ELocation.File())) && !disableAutoDecoding {
+		(!source && fromTo.From() == common.ELocation.File())) && !disableAutoDecoding && !fromTo.IsDelete() {
 
 		for encoded, c := range reverseEncodedChars {
 			for k, p := range pathParts {
