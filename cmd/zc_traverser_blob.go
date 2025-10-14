@@ -358,8 +358,8 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			)
 
 			if t.incrementEnumerationCounter != nil {
-				t.incrementEnumerationCounter(common.EEntityType.Folder(), common.SymlinkHandlingType().None(),
-					common.HardlinkHandlingType().Follow())
+				t.incrementEnumerationCounter(common.EEntityType.Folder(),
+					common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
 			}
 
 			err = processIfPassedFilters(filters, storedObject, processor)
