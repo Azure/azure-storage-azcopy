@@ -39,7 +39,7 @@ steps:
         echo "Executable built successfully: ${{ parameters.build_name }}"
 
         echo "Logging in to Azure using Federated Credentials..."
-        "./${{ parameters.build_name }}" login --service-principal --application-id "$servicePrincipalId" --tenant-id "$tenantId" --client-secret "$servicePrincipalKey"
+        "./${{ parameters.build_name }}" login --service-principal --application-id "$servicePrincipalId" --tenant-id "$tenantId"
         echo "Successfully logged in..."
 
         ########################################################
