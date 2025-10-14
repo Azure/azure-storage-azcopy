@@ -343,7 +343,6 @@ jobs:
           GOARCH: $(GOARCH)
           CGO_ENABLED: $(CGO_ENABLED)
           build_name: $(build_name)
-          azcopy_msi_app_id: $(AZCOPY_MSI_APP_ID)
 
     #TODO: Add MacOS E2E tests after creating macos pool
           
