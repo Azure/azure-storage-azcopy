@@ -303,7 +303,6 @@ type CopySyncCommonFlags struct {
 	CPKByValue              *bool                        `flag:"cpk-by-value"`
 	IncludePattern          *string                      `flag:"include-pattern"`
 	IncludeDirectoryStubs   *bool                        `flag:"include-directory-stub"`
-	NFS                     *bool                        `flag:"nfs"`
 	PreserveInfo            *bool                        `flag:"preserve-info"`
 	PreserveRootPermissions *bool                        `flag:"preserve-root-permissions"`
 	PreserveSymlinks        *bool                        `flag:"preserve-symlinks"`
