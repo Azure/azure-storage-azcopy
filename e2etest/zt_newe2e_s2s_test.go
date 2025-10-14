@@ -40,7 +40,9 @@ func (s *S2STestSuite) Scenario_BlobDestinationSizes(svm *ScenarioVariationManag
 
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body: body,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *S2STestSuite) Scenario_BlobFile1KB(svm *ScenarioVariationManager) {
@@ -70,7 +72,9 @@ func (s *S2STestSuite) Scenario_BlobFile1KB(svm *ScenarioVariationManager) {
 
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body: body,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *S2STestSuite) Scenario_SingleFileCopyBlobTypeVariations(svm *ScenarioVariationManager) {
@@ -104,7 +108,9 @@ func (s *S2STestSuite) Scenario_SingleFileCopyBlobTypeVariations(svm *ScenarioVa
 				Type: pointerTo(destBlobType),
 			},
 		},
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *S2STestSuite) Scenario_SingleFilePropertyMetadata(svm *ScenarioVariationManager) {
@@ -142,7 +148,9 @@ func (s *S2STestSuite) Scenario_SingleFilePropertyMetadata(svm *ScenarioVariatio
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body:             srcBody,
 		ObjectProperties: srcProps,
-	}, false)
+	}, ValidateResourceOptions{
+		validateObjectContent: false,
+	})
 }
 
 func (s *S2STestSuite) Scenario_BlockBlobBlockBlob(svm *ScenarioVariationManager) {
@@ -175,7 +183,9 @@ func (s *S2STestSuite) Scenario_BlockBlobBlockBlob(svm *ScenarioVariationManager
 				BlockBlobAccessTier: pointerTo(blob.AccessTierCool),
 			},
 		},
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *S2STestSuite) Scenario_BlockBlobBlockBlobNoPreserveTier(svm *ScenarioVariationManager) {
@@ -209,7 +219,9 @@ func (s *S2STestSuite) Scenario_BlockBlobBlockBlobNoPreserveTier(svm *ScenarioVa
 				BlockBlobAccessTier: pointerTo(blob.AccessTierHot),
 			},
 		},
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *S2STestSuite) Scenario_PageBlobToPageBlob(svm *ScenarioVariationManager) {
@@ -241,7 +253,9 @@ func (s *S2STestSuite) Scenario_PageBlobToPageBlob(svm *ScenarioVariationManager
 				Type: pointerTo(blob.BlobTypePageBlob),
 			},
 		},
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *S2STestSuite) Scenario_AppendBlobToAppendBlob(svm *ScenarioVariationManager) {
@@ -273,7 +287,9 @@ func (s *S2STestSuite) Scenario_AppendBlobToAppendBlob(svm *ScenarioVariationMan
 				Type: pointerTo(blob.BlobTypeAppendBlob),
 			},
 		},
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *S2STestSuite) Scenario_OverwriteSingleFile(svm *ScenarioVariationManager) {
@@ -304,7 +320,9 @@ func (s *S2STestSuite) Scenario_OverwriteSingleFile(svm *ScenarioVariationManage
 
 	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, dstFileName, common.EEntityType.File()), ResourceDefinitionObject{
 		Body: srcBody,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *S2STestSuite) Scenario_NonOverwriteSingleFile(svm *ScenarioVariationManager) {
@@ -335,7 +353,9 @@ func (s *S2STestSuite) Scenario_NonOverwriteSingleFile(svm *ScenarioVariationMan
 
 	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, dstFileName, common.EEntityType.File()), ResourceDefinitionObject{
 		Body: dstBody,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *S2STestSuite) Scenario_BlobBlobOAuth(svm *ScenarioVariationManager) {
@@ -364,7 +384,9 @@ func (s *S2STestSuite) Scenario_BlobBlobOAuth(svm *ScenarioVariationManager) {
 
 	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, fileName, common.EEntityType.File()), ResourceDefinitionObject{
 		Body: body,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *S2STestSuite) Scenario_S2SContainerSingleFilePropertyAndMetadata(svm *ScenarioVariationManager) {
@@ -415,7 +437,9 @@ func (s *S2STestSuite) Scenario_S2SContainerSingleFilePropertyAndMetadata(svm *S
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body:             srcBody,
 		ObjectProperties: common.Iff(preserveProperty, srcProps, ObjectProperties{}),
-	}, false)
+	}, ValidateResourceOptions{
+		validateObjectContent: false,
+	})
 }
 
 func (s *S2STestSuite) Scenario_S2SContainerSingleFileStripTopDir(svm *ScenarioVariationManager) {
@@ -455,7 +479,9 @@ func (s *S2STestSuite) Scenario_S2SContainerSingleFileStripTopDir(svm *ScenarioV
 
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body: srcBody,
-	}, false)
+	}, ValidateResourceOptions{
+		validateObjectContent: false,
+	})
 }
 
 func (s *S2STestSuite) Scenario_S2SDirectoryMultipleFiles(svm *ScenarioVariationManager) {
@@ -508,7 +534,9 @@ func (s *S2STestSuite) Scenario_S2SDirectoryMultipleFiles(svm *ScenarioVariation
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: dstObjs,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *S2STestSuite) Scenario_S2SDirectoryMultipleFilesStripTopDirRecursive(svm *ScenarioVariationManager) {
@@ -563,7 +591,9 @@ func (s *S2STestSuite) Scenario_S2SDirectoryMultipleFilesStripTopDirRecursive(sv
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: dstObjs,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *S2STestSuite) Scenario_S2SDirectoryMultipleFilesStripTopDirNonRecursive(svm *ScenarioVariationManager) {
@@ -618,7 +648,9 @@ func (s *S2STestSuite) Scenario_S2SDirectoryMultipleFilesStripTopDirNonRecursive
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: dstObjs,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *S2STestSuite) Scenario_SystemContainerCopy(svm *ScenarioVariationManager) {

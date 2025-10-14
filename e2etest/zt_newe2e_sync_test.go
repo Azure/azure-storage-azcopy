@@ -108,7 +108,9 @@ func (s *SyncTestSuite) Scenario_TestSyncHashStorageModes(a *ScenarioVariationMa
 		},
 	})
 
-	ValidateResource[ContainerResourceManager](a, dest, resourceSpec, true)
+	ValidateResource[ContainerResourceManager](a, dest, resourceSpec, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 
 	// Finally, validate that we're actually storing the hash correctly.
 	// For this, we'll only validate the single hash we expected to conflict, because we already have the hash data for that.
@@ -179,7 +181,9 @@ func (s *SyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariatio
 			"deleteme.txt":      ResourceDefinitionObject{ObjectShouldExist: pointerTo(false)},
 			"also/deleteme.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(false)},
 		},
-	}, false)
+	}, ValidateResourceOptions{
+		validateObjectContent: false,
+	})
 }
 
 // Scenario_TestSyncDeleteDestinationIfNecessary tests that sync is
@@ -268,7 +272,9 @@ func (s *SyncTestSuite) Scenario_TestSyncDeleteDestinationIfNecessary(svm *Scena
 				Body: dstData, // Validate we did not overwrite this one
 			},
 		},
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 // Note : For local sources, the hash is computed by a hashProcessor created in zc_traverser_local, so there is no way
@@ -343,7 +349,9 @@ func (s *SyncTestSuite) Scenario_TestSyncHashTypeSourceHash(svm *ScenarioVariati
 	// All source, dest should match
 	ValidateResource[ContainerResourceManager](svm, dest, ResourceDefinitionContainer{
 		Objects: srcObjs,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 
 	// Only non skipped paths should be in plan file
 	ValidatePlanFiles(svm, stdOut, ExpectedPlanFile{
@@ -429,7 +437,9 @@ func (s *SyncTestSuite) Scenario_TestSyncHashTypeDestinationHash(svm *ScenarioVa
 	// All source, dest should match
 	ValidateResource[ContainerResourceManager](svm, dest, ResourceDefinitionContainer{
 		Objects: srcObjs,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 
 	// Only non skipped paths should be in plan file
 	ValidatePlanFiles(svm, stdOut, ExpectedPlanFile{
@@ -548,7 +558,9 @@ func (s *SyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationMan
 
 	ValidateResource(a, dst, ResourceDefinitionContainer{
 		Objects: srcMap,
-	}, false)
+	}, ValidateResourceOptions{
+		validateObjectContent: false,
+	})
 }
 
 // Scenario_TestSyncPreserveRootProperties validates that when --preserve-root-properties is set, the destination root folder's properties are overwritten
