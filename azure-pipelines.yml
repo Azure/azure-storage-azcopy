@@ -159,6 +159,7 @@ jobs:
         displayName: 'Install dependencies'
       - script: |
           pip install azure-storage-blob==12.12.0
+          pip install azure-storage-blob six
           # set the variable to indicate that the mutex is being acquired
           # note: we set it before acquiring the mutex to ensure we release the mutex. 
           # setting this after can result in an un-broken mutex if someone cancels the pipeline after we acquire the 
