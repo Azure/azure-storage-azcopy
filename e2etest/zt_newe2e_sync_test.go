@@ -662,6 +662,10 @@ func (s *SyncTestSuite) Scenario_TestS2SBlobFSIncludeRootACLS(svm *ScenarioVaria
 // Scenario_TestFileLocalIncludeRootCreationTime checks that the creation time of the source is overwritten on the destination
 // when --include-root is set.
 func (s *SyncTestSuite) Scenario_TestFileLocalIncludeRootCreationTime(svm *ScenarioVariationManager) {
+	if runtime.GOOS != "windows" && runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
 	currTime := time.Now()
 	body := NewRandomObjectContentContainer(SizeFromString("1K"))
 	dst := CreateResource[ContainerResourceManager](svm,
