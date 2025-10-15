@@ -320,30 +320,10 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		if azcopyScanningLogger != nil {
 			azcopyScanningLogger.Log(common.LogDebug, fmt.Sprintf("Detected the root as a folder %s.", dirName))
 		}
-		/* Directory stubs can be named like:
-		- `folder/` with `hdi_isfolder`=true
-		- `folder` with `hdi_isfolder`=true */
-		var dirProps *blob.GetPropertiesResponse
-		var err error
 
-		// Get properties for blob folder
-
-		// First try without trailing slash
-		blobDirClient := containerClient.NewBlobClient(dirName)
-		props, err := blobDirClient.GetProperties(t.ctx, &blob.GetPropertiesOptions{CPKInfo: t.cpkOptions.GetCPKInfo()})
-		if err == nil {
-			dirProps = &props
-		} else if !strings.HasSuffix(dirName, common.AZCOPY_PATH_SEPARATOR_STRING) { // If we failed, retry with trailing slash
-			blobDirClient = containerClient.NewBlobClient(dirName + common.AZCOPY_PATH_SEPARATOR_STRING)
-			props, err = blobDirClient.GetProperties(t.ctx, &blob.GetPropertiesOptions{CPKInfo: t.cpkOptions.GetCPKInfo()})
-			if err == nil {
-				dirProps = &props
-			}
-		}
-
-		// After getting the correct props, create the root object
-		if dirProps != nil && t.doesBlobRepresentAFolder(dirProps.Metadata) {
-			dirPropsAdapter := blobPropertiesResponseAdapter{dirProps}
+		// Use props from previous call to create the root object
+		if blobProperties != nil && t.doesBlobRepresentAFolder(blobProperties.Metadata) {
+			dirPropsAdapter := blobPropertiesResponseAdapter{blobProperties}
 			storedObject := newStoredObject(
 				preprocessor,
 				"", // empty for root

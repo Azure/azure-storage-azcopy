@@ -562,10 +562,9 @@ func (s *SyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationMan
 	})
 }
 
-// Scenario_TestSyncPreserveRootProperties validates with BlobFS ACLs
-// validates that when --preserve-root-properties is set, the destination root folder's properties are overwritten
-// with the source root folder properties.
-func (s *SyncTestSuite) Scenario_TestBlobFSBlobFSPreserveRootProperties(svm *ScenarioVariationManager) {
+// Scenario_TestS2SBlobFSIncludeRootACLS validates root ACLs are included in transfer and
+// preserved on the destination
+func (s *SyncTestSuite) Scenario_TestS2SBlobFSIncludeRootACLS(svm *ScenarioVariationManager) {
 	body := NewRandomObjectContentContainer(SizeFromString("1K"))
 	// Use BlobFS (HNS) for ACLs we can validate
 	dstContainer := CreateResource[ContainerResourceManager](svm,
@@ -627,8 +626,11 @@ func (s *SyncTestSuite) Scenario_TestBlobFSBlobFSPreserveRootProperties(svm *Sce
 	srcObjResMan[fileName] = CreateResource[ObjectResourceManager](svm, srcContainer, fileObj)
 	srcObjs[fileName] = fileObj
 
-	preserveRootProperties := ResolveVariation(svm, []bool{true, false})
-	if !preserveRootProperties {
+	includeRoot := NamedResolveVariation(svm, map[string]bool{
+		"|includeRoot=true":  true,
+		"|includeRoot=false": false,
+	})
+	if !includeRoot {
 		delete(srcObjs, rootDir)
 	}
 	RunAzCopy(svm, AzCopyCommand{
@@ -641,11 +643,10 @@ func (s *SyncTestSuite) Scenario_TestBlobFSBlobFSPreserveRootProperties(svm *Sce
 		},
 		Flags: SyncFlags{
 			CopySyncCommonFlags: CopySyncCommonFlags{
-				Recursive:               pointerTo(true),
-				PreservePermissions:     pointerTo(true),
-				PreservePOSIXProperties: pointerTo(true),
+				Recursive:           pointerTo(true),
+				PreservePermissions: pointerTo(true),
 			},
-			PreserveRootProperties: pointerTo(preserveRootProperties),
+			IncludeRoot: pointerTo(includeRoot),
 		},
 	})
 
@@ -658,10 +659,9 @@ func (s *SyncTestSuite) Scenario_TestBlobFSBlobFSPreserveRootProperties(svm *Sce
 
 }
 
-// Scenario_TestSyncPreserveRootProperties validates preserve-root-properties flag with specific file property.
-// checks when --preserve-root-properties is set, the destination root folder's properties are overwritten
-// with the source root folder properties.
-func (s *SyncTestSuite) Scenario_TestSyncFileLocalPreserveRootProperties(svm *ScenarioVariationManager) {
+// Scenario_TestSyncFileLocalIncludeCreationTime checks that the creation time of the source is overwritten on the destination
+// when --include-root is set.
+func (s *SyncTestSuite) Scenario_TestSyncFileLocalIncludeCreationTime(svm *ScenarioVariationManager) {
 	currTime := time.Now()
 	body := NewRandomObjectContentContainer(SizeFromString("1K"))
 	dst := CreateResource[ContainerResourceManager](svm,
@@ -723,7 +723,7 @@ func (s *SyncTestSuite) Scenario_TestSyncFileLocalPreserveRootProperties(svm *Sc
 				PreservePermissions: pointerTo(true),
 				PreserveInfo:        pointerTo(true),
 			},
-			PreserveRootProperties: pointerTo(true),
+			IncludeRoot: pointerTo(true),
 		},
 	})
 
@@ -746,13 +746,13 @@ func (s *SyncTestSuite) Scenario_TestSyncFileLocalPreserveRootProperties(svm *Sc
 	})
 }
 
-// Scenario_TestFileLocalPreserveRootProps tests preserve-root-properties with Metadata
-// validates that a metadata property on a root directory is overwritten when
-// syncing s2s and uploading  with --preserve-root-properties
-func (s *SyncTestSuite) Scenario_TestFileLocalPreserveRootProps(svm *ScenarioVariationManager) {
+// Scenario_TestFileLocalSyncIncludeRoot tests include-root with Metadata
+// validates that metadata property on a root directory is overwritten when
+// syncing s2s and uploading  with --include-root
+func (s *SyncTestSuite) Scenario_TestFileLocalSyncIncludeRoot(svm *ScenarioVariationManager) {
 	// Scale up from service to object
 	rootDir := "root"
-	preserveRootProperties := ResolveVariation(svm, []bool{true, false})
+	includeRoot := ResolveVariation(svm, []bool{true, false})
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm,
 		ResolveVariation(svm, []common.Location{common.ELocation.File(), common.ELocation.FileNFS()})),
 		ResourceDefinitionContainer{
@@ -798,24 +798,26 @@ func (s *SyncTestSuite) Scenario_TestFileLocalPreserveRootProps(svm *ScenarioVar
 		AzCopyCommand{
 			Verb: AzCopyVerbSync,
 			Targets: []ResourceManager{
-				TryApplySpecificAuthType(srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder()), EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
-					SASTokenOptions: sasOpts,
-				}),
-				TryApplySpecificAuthType(dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder()), EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
-					SASTokenOptions: sasOpts,
-				}),
+				TryApplySpecificAuthType(srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder()),
+					EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+						SASTokenOptions: sasOpts,
+					}),
+				TryApplySpecificAuthType(dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder()),
+					EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+						SASTokenOptions: sasOpts,
+					}),
 			},
 			Flags: SyncFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
 					Recursive:    pointerTo(true),
 					PreserveInfo: pointerTo(true),
 				},
-				PreserveRootProperties: pointerTo(preserveRootProperties),
+				IncludeRoot: pointerTo(includeRoot),
 			},
 		})
 
 	// root directory should not be included in transfer when preserve-root-properties is not set
-	if !preserveRootProperties {
+	if !includeRoot {
 		delete(srcObjs, rootDir)
 	}
 

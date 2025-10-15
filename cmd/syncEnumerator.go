@@ -102,7 +102,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		HardlinkHandling:        cca.hardlinks,
 		SymlinkHandling:         cca.symlinkHandling,
 		FromTo:                  cca.fromTo,
-    StripTopDir:             !cca.preserveRootProperties,
+		StripTopDir:             !cca.includeRoot,
 	})
 
 	if err != nil {
@@ -140,7 +140,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		HardlinkHandling:        common.EHardlinkHandlingType.Follow(),
 		SymlinkHandling:         cca.symlinkHandling,
 		FromTo:                  cca.fromTo,
-    StripTopDir:             !cca.preserveRootProperties,
+		StripTopDir:             !cca.includeRoot,
 	})
 	if err != nil {
 		return nil, err

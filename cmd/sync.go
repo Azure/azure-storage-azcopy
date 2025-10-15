@@ -69,7 +69,6 @@ type rawSyncCmdArgs struct {
 	preservePOSIXProperties bool
 	followSymlinks          bool
 	preserveSymlinks        bool
-	preserveRootProperties  bool
 	backupMode              bool
 	putMd5                  bool
 	md5ValidationOption     string
@@ -137,7 +136,6 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 		deleteDestinationFileIfNecessary: raw.deleteDestinationFileIfNecessary,
 		includeDirectoryStubs:            raw.includeDirectoryStubs,
 		includeRoot:                      raw.includeRoot,
-		preserveRootProperties:           raw.preserveRootProperties,
 	}
 	err = cooked.trailingDot.Parse(raw.trailingDot)
 	if err != nil {
@@ -342,21 +340,6 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 			err = fmt.Errorf("cannot set output level '%s' with dry-run mode", OutputLevel.String())
 		}
 	}
-
-	if cooked.preserveRootProperties {
-		// Both the source and destination must support folders
-		if !cooked.fromTo.AreBothFolderAware() {
-			return fmt.Errorf("preserve-root-properties flag needs both the source and destination resources to be support folders."+
-				"\n Syncing from %s to %s is not supported"+
-				"\n Supported combinations: Local<->File, Local<->BlobFS, BlobFS<->File, File<->File, BlobFS<->BlobFS", cooked.fromTo.From(), cooked.fromTo.To())
-		}
-
-		// For preserve-root-properties to persist the root perms or properties, we need either preserveInfo or preservePermissions flags
-		if !(cooked.preservePermissions.IsTruthy() || cooked.preserveInfo) {
-			glcm.Warn("preserve-root-properties flag needs either preserve-info or preserve-permissions flags to be set " +
-				"\n for full functionality")
-		}
-	}
 	if err != nil {
 		return err
 	}
@@ -425,12 +408,6 @@ func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
 			"Assuming source is encrypted.")
 		cooked.cpkOptions.IsSourceEncrypted = true
 	}
-
-	// when preserving root properties, we *need* to include the root in the enumeration so STE can transfer its properties
-	if cooked.preserveRootProperties {
-		cooked.includeRoot = true
-	}
-
 	return nil
 }
 
@@ -474,7 +451,6 @@ type cookedSyncCmdArgs struct {
 	preservePermissions     common.PreservePermissionsOption
 	preserveInfo            bool
 	preservePOSIXProperties bool
-	preserveRootProperties  bool
 	putMd5                  bool
 	md5ValidationOption     common.HashValidationOption
 	blockSize               int64
@@ -1031,7 +1007,10 @@ func init() {
 			"\n AzCopy will fail if the trailing dot file is the root of the transfer and skip any trailing dot paths encountered during enumeration.")
 
 	syncCmd.PersistentFlags().BoolVar(&raw.includeRoot, "include-root", false, "Disabled by default. "+
-		"\n Enable to include the root directory's properties when persisting properties such as SMB or HNS ACLs")
+		"\n Enable to include the root directory's properties when persisting properties such as SMB or HNS ACLs."+
+		"\n For persisting properties or permissions, use this flag in-tandem with respective preservation flag. Example:"+
+		"\n To preserve properties, set --preserve-info "+
+		"\n To preserve permissions, set --preserve-permissions.")
 
 	syncCmd.PersistentFlags().StringVar(&raw.compareHash, "compare-hash", "None",
 		"Inform sync to rely on hashes as an alternative to LMT. "+
@@ -1090,12 +1069,4 @@ func init() {
 		"Follow by default. Preserve hardlinks for NFS resources. "+
 			"\n This flag is only applicable when the source is Azure NFS file share or the destination is NFS file share. "+
 			"\n Available options: skip, preserve, follow (default 'follow').")
-
-	syncCmd.PersistentFlags().BoolVar(&raw.preserveRootProperties, "preserve-root-properties", false, "False by default. "+
-		"\n Preserves the root directory and its properties from source to destination. "+
-		"\n To preserve properties, set --preserve-info and"+
-		"\n To preserve permissions specifically, set --preserve-permissions."+
-		"\n When enabled, the destination root properties will be overwritten with the source."+
-		"\n For example, syncing from 'src/file.txt' to 'dest/' will result in 'dest/file.txt' "+
-		"\n with the properties of source on destination.")
 }
