@@ -54,10 +54,11 @@ steps:
           "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt" \
           --from-to=BlobPipe --check-md5 FailIfDifferentOrMissing > filename
 
-        if [ $? -eq 0 ]; then
+        scenario1_exit_code=$?
+        if [ $scenario1_exit_code -eq 0 ]; then
           echo "Scenario 1 executed successfully."
         else
-          echo "Scenario 1 failed with exit code $?"
+          echo "Scenario 1 failed with exit code $scenario1_exit_code"
         fi
 
         ########################################################
@@ -84,10 +85,11 @@ steps:
           "https://${{ parameters.orp_destination_account_name }}.blob.core.windows.net/${{ parameters.destination_container_name }}" \
           --recursive
 
-        if [ $? -eq 0 ]; then
+        scenario2_exit_code=$?
+        if [ $scenario2_exit_code -eq 0 ]; then
           echo "Scenario 2 executed successfully."
         else
-          echo "Scenario 2 failed with exit code $?"
+          echo "Scenario 2 failed with exit code $scenario2_exit_code"
         fi
       displayName: "Run Scenarios"
     env:
