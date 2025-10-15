@@ -446,7 +446,7 @@ func (rca resumeCmdArgs) process() error {
 		dstResourceString,
 	)
 	if err != nil {
-		return fmt.Errorf("cannot resume job with JobId %s, could not create service clients %v", jobID, err.Error())
+		return fmt.Errorf("cannot resume job with JobId %s, could not create service clients %v", jobID, err)
 	}
 	// Send resume job request.
 	resumeJobResponse := jobsAdmin.ResumeJobOrder(common.ResumeJobRequest{
