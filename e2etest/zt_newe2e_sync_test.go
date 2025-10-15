@@ -659,9 +659,9 @@ func (s *SyncTestSuite) Scenario_TestS2SBlobFSIncludeRootACLS(svm *ScenarioVaria
 
 }
 
-// Scenario_TestSyncFileLocalIncludeCreationTime checks that the creation time of the source is overwritten on the destination
+// Scenario_TestFileLocalIncludeRootCreationTime checks that the creation time of the source is overwritten on the destination
 // when --include-root is set.
-func (s *SyncTestSuite) Scenario_TestSyncFileLocalIncludeCreationTime(svm *ScenarioVariationManager) {
+func (s *SyncTestSuite) Scenario_TestFileLocalIncludeRootCreationTime(svm *ScenarioVariationManager) {
 	currTime := time.Now()
 	body := NewRandomObjectContentContainer(SizeFromString("1K"))
 	dst := CreateResource[ContainerResourceManager](svm,
@@ -746,10 +746,10 @@ func (s *SyncTestSuite) Scenario_TestSyncFileLocalIncludeCreationTime(svm *Scena
 	})
 }
 
-// Scenario_TestFileLocalSyncIncludeRoot tests include-root with Metadata
+// Scenario_TestFileLocalIncludeRootMetadata tests include-root with Metadata
 // validates that metadata property on a root directory is overwritten when
 // syncing s2s and uploading  with --include-root
-func (s *SyncTestSuite) Scenario_TestFileLocalSyncIncludeRoot(svm *ScenarioVariationManager) {
+func (s *SyncTestSuite) Scenario_TestFileLocalIncludeRootMetadata(svm *ScenarioVariationManager) {
 	// Scale up from service to object
 	rootDir := "root"
 	includeRoot := ResolveVariation(svm, []bool{true, false})
