@@ -24,7 +24,6 @@ steps:
   - task: AzureCLI@2
     inputs:
       azureSubscription: azcopytestworkloadidentity
-      addSpnToEnvironment: true
       scriptType: bash
       scriptLocation: inlineScript
       inlineScript: |
@@ -38,9 +37,9 @@ steps:
         fi
         echo "Executable built successfully: ${{ parameters.build_name }}"
 
-        echo "Logging in to Azure using Federated Credentials..."
-        "./${{ parameters.build_name }}" login --service-principal --application-id "$servicePrincipalId" --tenant-id "$tenantId"
-        echo "Successfully logged in..."
+        # echo "Logging in to Azure using Federated Credentials..."
+        # "./${{ parameters.build_name }}" login --service-principal --application-id "$servicePrincipalId" --tenant-id "$tenantId"
+        # echo "Successfully logged in..."
 
         ########################################################
         # Scenario 1: Blob → Pipe
