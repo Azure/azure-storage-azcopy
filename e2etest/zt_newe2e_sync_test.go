@@ -712,6 +712,14 @@ func (s *SyncTestSuite) Scenario_TestFileLocalIncludeRootCreationTime(svm *Scena
 	// Dont test Local->Local
 	if src.Location().IsLocal() && dst.Location().IsLocal() {
 		svm.InvalidateScenario()
+		return
+	}
+
+	// LocalLinux->File sync with preserveInfo is unsupported.
+	// Because Metadata, which is a DOS attribute that is tested here, is not supported on Linux
+	if src.Location().IsLocal() && runtime.GOOS == "linux" {
+		svm.InvalidateScenario()
+		return
 	}
 
 	RunAzCopy(svm, AzCopyCommand{
@@ -795,6 +803,14 @@ func (s *SyncTestSuite) Scenario_TestFileLocalIncludeRootMetadata(svm *ScenarioV
 	// Dont test Local->Local
 	if srcContainer.Location().IsLocal() && dstContainer.Location().IsLocal() {
 		svm.InvalidateScenario()
+		return
+	}
+
+	// LocalLinux->File sync with preserveInfo is unsupported.
+	// Because Metadata, which is a DOS attribute that is tested here, is not supported on Linux
+	if srcContainer.Location().IsLocal() && runtime.GOOS == "linux" {
+		svm.InvalidateScenario()
+		return
 	}
 
 	RunAzCopy(
