@@ -47,14 +47,14 @@ steps:
         echo "========== Scenario 1: BlobToPipe =========="
 
         echo "Creating container '${{ parameters.container_name }}' in '${{ parameters.storage_account_name }}'"
-        "./${{ parameters.build_name }}" make "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
+        AZCOPY_AUTO_LOGIN_TYPE=AzCLI "./${{ parameters.build_name }}" make "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
 
         echo "Creating a test file and uploading it..."
         echo "Hello, Azure!" > myfile.txt
-        "./${{ parameters.build_name }}" cp myfile.txt "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
+        AZCOPY_AUTO_LOGIN_TYPE=AzCLI "./${{ parameters.build_name }}" cp myfile.txt "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
 
         echo "Copying the file back using BlobPipe..."
-        "./${{ parameters.build_name }}" cp \
+        AZCOPY_AUTO_LOGIN_TYPE=AzCLI "./${{ parameters.build_name }}" cp \
           "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt" \
           --from-to=BlobPipe --check-md5 FailIfDifferentOrMissing > filename
 
@@ -78,12 +78,12 @@ steps:
 
         echo "Creating a test file and uploading to ORP source container..."
         echo "Hello, Azure!" > myfile.txt
-        "./${{ parameters.build_name }}" cp \
+        AZCOPY_AUTO_LOGIN_TYPE=AzCLI "./${{ parameters.build_name }}" cp \
           myfile.txt \
           "https://${{ parameters.orp_source_account_name }}.blob.core.windows.net/${{ parameters.orp_source_container_name }}"
 
         echo "Copying from ORP source to destination container..."
-        "./${{ parameters.build_name }}" cp \
+        AZCOPY_AUTO_LOGIN_TYPE=AzCLI "./${{ parameters.build_name }}" cp \
           "https://${{ parameters.orp_source_account_name }}.blob.core.windows.net/${{ parameters.orp_source_container_name }}" \
           "https://${{ parameters.orp_destination_account_name }}.blob.core.windows.net/${{ parameters.destination_container_name }}" \
           --recursive
@@ -95,7 +95,7 @@ steps:
         fi
 
         echo "Cleaning up Scenario 2..."
-        "./${{ parameters.build_name }}" rm \
+        AZCOPY_AUTO_LOGIN_TYPE=AzCLI "./${{ parameters.build_name }}" rm \
           "https://${{ parameters.orp_destination_account_name }}.blob.core.windows.net/${{ parameters.destination_container_name }}/myfile.txt"
         "./${{ parameters.build_name }}" rm \
           "https://${{ parameters.orp_source_account_name }}.blob.core.windows.net/${{ parameters.orp_source_container_name }}/myfile.txt"
