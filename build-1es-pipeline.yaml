@@ -271,6 +271,7 @@ extends:
                   targetPath: $(System.DefaultWorkingDirectory)/signed
                   artifactName: 'azcopy-linux-signed'
                   displayName: 'Upload Linux Signed'
+                  sbomBuildDropPath: $(System.DefaultWorkingDirectory)/azcopy-linux-signed
 
             variables:
               - group: AZCOPY_SECRET_VAULT
@@ -351,6 +352,7 @@ extends:
                   targetPath: $(System.DefaultWorkingDirectory)/signed
                   artifactName: 'azcopy-windows-signed'
                   displayName: 'Upload Windows Signed'
+                  sbomBuildDropPath: $(System.DefaultWorkingDirectory)/azcopy-windows-signed
                 - output: pipelineArtifact
                   targetPath: $(System.DefaultWorkingDirectory)/binaries
                   artifactName: 'azcopy-binaries-windows'
@@ -454,6 +456,7 @@ extends:
                   targetPath: $(System.DefaultWorkingDirectory)/signed
                   artifactName: 'azcopy-mac-signed'
                   displayName: 'Upload Mac Signed'
+                  sbomBuildDropPath: $(System.DefaultWorkingDirectory)/azcopy-mac-signed
                 - output: pipelineArtifact
                   targetPath: $(System.DefaultWorkingDirectory)/binaries
                   artifactName: 'azcopy-binaries-mac'
@@ -994,9 +997,6 @@ extends:
                 templateContext:
                   type: releaseJob
                   isProduction: true
-                  outputs:
-                    - output:
-                      sbomBuildDropPath: $(Build.ArtifactStagingDirectory)/azcopy-*-signed
                 pool:
                   name: azcopy-pool
                   image: ubuntu22-1espt
