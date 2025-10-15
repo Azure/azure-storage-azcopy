@@ -44,13 +44,6 @@ steps:
 
         echo "Cleaning up Scenario 1..."
         AZCOPY_AUTO_LOGIN_TYPE=AzCLI "./${{ parameters.build_name }}" rm "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt"
-        az storage container delete \
-          --name "${{ parameters.container_name }}" \
-          --account-name "${{ parameters.storage_account_name }}" \
-          --yes
-
-        echo "Creating container '${{ parameters.container_name }}' in '${{ parameters.storage_account_name }}'"
-        AZCOPY_AUTO_LOGIN_TYPE=AzCLI "./${{ parameters.build_name }}" make "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
 
         echo "Creating a test file and uploading it..."
         echo "Hello, Azure!" > myfile.txt
@@ -67,13 +60,6 @@ steps:
           echo "Scenario 1 failed with exit code $?"
         fi
 
-        echo "Cleaning up Scenario 1..."
-        AZCOPY_AUTO_LOGIN_TYPE=AzCLI "./${{ parameters.build_name }}" rm "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt"
-        az storage container delete \
-          --name "${{ parameters.container_name }}" \
-          --account-name "${{ parameters.storage_account_name }}" \
-          --yes
-
         ########################################################
         # Scenario 2: Object Replication Policy Copy
         ########################################################
@@ -82,7 +68,8 @@ steps:
         echo "Cleaning up Scenario 2..."
         AZCOPY_AUTO_LOGIN_TYPE=AzCLI "./${{ parameters.build_name }}" rm \
           "https://${{ parameters.orp_destination_account_name }}.blob.core.windows.net/${{ parameters.destination_container_name }}/myfile.txt"
-        "./${{ parameters.build_name }}" rm \
+
+        AZCOPY_AUTO_LOGIN_TYPE=AzCLI "./${{ parameters.build_name }}" rm \
           "https://${{ parameters.orp_source_account_name }}.blob.core.windows.net/${{ parameters.orp_source_container_name }}/myfile.txt"
 
         echo "Creating a test file and uploading to ORP source container..."
@@ -102,13 +89,6 @@ steps:
         else
           echo "Scenario 2 failed with exit code $?"
         fi
-
-        echo "Cleaning up Scenario 2..."
-        AZCOPY_AUTO_LOGIN_TYPE=AzCLI "./${{ parameters.build_name }}" rm \
-          "https://${{ parameters.orp_destination_account_name }}.blob.core.windows.net/${{ parameters.destination_container_name }}/myfile.txt"
-        "./${{ parameters.build_name }}" rm \
-          "https://${{ parameters.orp_source_account_name }}.blob.core.windows.net/${{ parameters.orp_source_container_name }}/myfile.txt"
-
       displayName: "Run Scenarios"
     env:
       GOOS: ${{ parameters.goos }}
