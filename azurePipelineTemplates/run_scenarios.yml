@@ -19,88 +19,81 @@ parameters:
     type: string
   - name: build_name
     type: string
-  - name: azcopy_msi_app_id
-    type: string
 
 steps:
-  - task: PowerShell@2
-    displayName: "Run Scenarios"
+  - task: AzureCLI@2
     inputs:
-      targetType: 'inline'
-      script: |
-        # Print "Building executable"
-        echo "Building executable"
-        
-        # Set environment variables
-        $build_name = '${{ parameters.build_name }}'
-        $env:GOOS = '${{ parameters.goos }}'
-        $env:GOARCH = '${{ parameters.goarch }}'
-        $env:AZCOPY_AUTO_LOGIN_TYPE = "MSI"
-        $env:AZCOPY_MSI_CLIENT_ID = '${{ parameters.azcopy_msi_app_id }}'
-        $env:CGO_ENABLED = '${{ parameters.cgo_enabled }}'
+      azureSubscription: azcopytestworkloadidentity
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: |
+        set -e
+        echo "========== Building executable =========="
 
-        go build -cover -o $build_name
+        go build -cover -o "${{ parameters.build_name }}"
+        if [ ! -f "./${{ parameters.build_name }}" ]; then
+          echo "Error: Executable not found: ${{ parameters.build_name }}"
+          exit 1
+        fi
+        echo "Executable built successfully: ${{ parameters.build_name }}"
 
-        # Check if the executable was created
-        if (-Not (Test-Path "./$build_name")) {
-            Write-Error "Executable not found: $build_name"
-            exit 1
-        }
-        Write-Output "Executable built successfully: $build_name"
+        ########################################################
+        # Scenario 1: Blob → Pipe
+        ########################################################
+        echo "========== Scenario 1: BlobToPipe =========="
 
-        ######################################################## Scenario 1 ########################################################
+        echo "Cleaning up Scenario 1..."
+        AZCOPY_AUTO_LOGIN_TYPE=AzCLI "./${{ parameters.build_name }}" rm "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt"
 
-        # Right now we dont have this fix available in the older version of AzCopy. So, we are using the latest version of AzCopy to run the scenarios.
-        # We will update this workaround once the fix is available in the older version of AzCopy.
-
-        echo "Scenario 1: Test successful copying from BlobToPipe"
-
-        echo "Creating container '${{ parameters.container_name }}' in storage account '${{ parameters.storage_account_name }}'"
-        & "./$build_name" "make" "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
-
-        echo "Copy a test file from local to the created container"
+        echo "Creating a test file and uploading it..."
         echo "Hello, Azure!" > myfile.txt
-        & "./$build_name" "cp" "myfile.txt" "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
+        AZCOPY_AUTO_LOGIN_TYPE=AzCLI "./${{ parameters.build_name }}" cp myfile.txt "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
 
-        & "./$build_name" "cp" "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt" "--from-to=BlobPipe" "--check-md5" "FailIfDifferentOrMissing" > filename
-        
-        if ($LASTEXITCODE -eq 0) {
-            Write-Output "Successfully executed the scenario."
-        } else {
-            Write-Error "AzCopy command failed with exit code $LASTEXITCODE."
-        }
+        echo "Copying the file back using BlobPipe..."
+        AZCOPY_AUTO_LOGIN_TYPE=AzCLI "./${{ parameters.build_name }}" cp \
+          "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt" \
+          --from-to=BlobPipe --check-md5 FailIfDifferentOrMissing > filename
 
-        # Perform cleanup
-        echo "Perform cleanup"
-        echo "Remove the test file from the container"
-        & "./$build_name" "rm" "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt"
-        echo "Remove the container from the storage account"
-        & az storage container delete --name ${{ parameters.container_name }} --account-name ${{ parameters.storage_account_name }}
+        scenario1_exit_code=$?
+        if [ $scenario1_exit_code -eq 0 ]; then
+          echo "Scenario 1 executed successfully."
+        else
+          echo "Scenario 1 failed with exit code $scenario1_exit_code"
+        fi
 
-        ######################################################## Scenario 2 ########################################################
+        ########################################################
+        # Scenario 2: Object Replication Policy Copy
+        ########################################################
+        echo "========== Scenario 2: ORP Source → Destination =========="
 
-        # Test copying from Object Replication Policy source container to destination container
-        # Assign an object replication policy to a storage account. 
-        # Perform azcopy copy operation to copy the blob to another container.
+        echo "Cleaning up Scenario 2..."
+        AZCOPY_AUTO_LOGIN_TYPE=AzCLI "./${{ parameters.build_name }}" rm \
+          "https://${{ parameters.orp_destination_account_name }}.blob.core.windows.net/${{ parameters.destination_container_name }}/myfile.txt"
 
-        echo "Scenario 2: Test copying from Object Replication Policy source container to destination container"
+        AZCOPY_AUTO_LOGIN_TYPE=AzCLI "./${{ parameters.build_name }}" rm \
+          "https://${{ parameters.orp_source_account_name }}.blob.core.windows.net/${{ parameters.orp_source_container_name }}/myfile.txt"
 
-        echo "Creating a test file named 'myfile.txt' and copying it to the source container '${{ parameters.orp_source_container_name }}' within the storage account '${{ parameters.orp_source_account_name }}', which has the ORP policy applied."
+        echo "Creating a test file and uploading to ORP source container..."
         echo "Hello, Azure!" > myfile.txt
-        & "./$build_name" "cp" "myfile.txt" "https://${{ parameters.orp_source_account_name }}.blob.core.windows.net/${{ parameters.orp_source_container_name }}"
+        AZCOPY_AUTO_LOGIN_TYPE=AzCLI "./${{ parameters.build_name }}" cp \
+          myfile.txt \
+          "https://${{ parameters.orp_source_account_name }}.blob.core.windows.net/${{ parameters.orp_source_container_name }}"
 
-        echo "Copy the test file from the source container to the destination container '${{ parameters.destination_container_name }}' in storage account '${{ parameters.orp_destination_account_name }}'."
-        & "./$build_name" "cp" "https://${{ parameters.orp_source_account_name }}.blob.core.windows.net/${{parameters.orp_source_container_name}}" "https://${{ parameters.orp_destination_account_name }}.blob.core.windows.net/${{parameters.destination_container_name}}" --recursive
+        echo "Copying from ORP source to destination container..."
+        AZCOPY_AUTO_LOGIN_TYPE=AzCLI "./${{ parameters.build_name }}" cp \
+          "https://${{ parameters.orp_source_account_name }}.blob.core.windows.net/${{ parameters.orp_source_container_name }}" \
+          "https://${{ parameters.orp_destination_account_name }}.blob.core.windows.net/${{ parameters.destination_container_name }}" \
+          --recursive
 
-        if ($LASTEXITCODE -eq 0) {
-            Write-Output "Successfully executed the scenario."
-        } else {
-            Write-Error "AzCopy command failed with exit code $LASTEXITCODE."
-        }
-
-        # Perform cleanup
-        echo "Perform cleanup"
-        echo "Remove the test file from the source and destination container"
-        & "./$build_name" "rm" "https://${{ parameters.orp_destination_account_name }}.blob.core.windows.net/${{parameters.destination_container_name}}/myfile.txt"
-        & "./$build_name" "rm" "https://${{ parameters.orp_source_account_name }}.blob.core.windows.net/${{ parameters.orp_source_container_name }}/myfile.txt"
+        scenario2_exit_code=$?
+        if [ $scenario2_exit_code -eq 0 ]; then
+          echo "Scenario 2 executed successfully."
+        else
+          echo "Scenario 2 failed with exit code $scenario2_exit_code"
+        fi
       displayName: "Run Scenarios"
+    env:
+      GOOS: ${{ parameters.goos }}
+      GOARCH: ${{ parameters.goarch }}
+      CGO_ENABLED: ${{ parameters.cgo_enabled }}
+      NEW_E2E_ENVIRONMENT: "AzurePipeline"
