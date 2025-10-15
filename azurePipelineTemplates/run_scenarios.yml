@@ -43,7 +43,7 @@ steps:
         echo "========== Scenario 1: BlobToPipe =========="
 
         echo "Cleaning up Scenario 1..."
-        "./${{ parameters.build_name }}" rm "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt"
+        AZCOPY_AUTO_LOGIN_TYPE=AzCLI "./${{ parameters.build_name }}" rm "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt"
         az storage container delete \
           --name "${{ parameters.container_name }}" \
           --account-name "${{ parameters.storage_account_name }}" \
@@ -68,7 +68,7 @@ steps:
         fi
 
         echo "Cleaning up Scenario 1..."
-        "./${{ parameters.build_name }}" rm "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt"
+        AZCOPY_AUTO_LOGIN_TYPE=AzCLI "./${{ parameters.build_name }}" rm "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt"
         az storage container delete \
           --name "${{ parameters.container_name }}" \
           --account-name "${{ parameters.storage_account_name }}" \
