@@ -130,8 +130,8 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 		idx := atomic.AddUint64(&rr.counter, 1)
 		entry := healthy[idx%uint64(len(healthy))]
 		peIP = entry.IP
-		log.Printf("Selected Private endpoint IP: %s Unhealth Status: %d LastTime: %v\n",
-			peIP, entry.ConnectionStatus, entry.LastChecked)
+		//log.Printf("Selected Private endpoint IP: %s Unhealth Status: %d LastTime: %v\n",
+		// peIP, entry.ConnectionStatus, entry.LastChecked)
 
 		// Skip if still in cooldown
 		if entry.ConnectionStatus == Unhealthy &&
@@ -165,7 +165,7 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 					entry.LastErrMsg = ""
 
 					rr.refreshHealthyPool()
-					log.Printf("[Counter=%d Retry=%d] SUCCESS using IP %s", idx, ipAttempt, peIP)
+					// log.Printf("[Counter=%d Retry=%d] SUCCESS using IP %s", idx, ipAttempt, peIP)
 				}
 				return resp, nil
 			}
@@ -232,7 +232,7 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 func (rr *RoundRobinTransport) refreshHealthyPool() {
 	var healthy []*IPEntry
 	for _, e := range rr.ips {
-		log.Printf("refreshHealthyPool Counter: %d IP Address: %s Unhealthy: %d\n", rr.counter, e.IP, e.ConnectionStatus)
+		// log.Printf("refreshHealthyPool Counter: %d IP Address: %s Unhealthy: %d\n", rr.counter, e.IP, e.ConnectionStatus)
 		if (e.ConnectionStatus == Healthy) || (time.Since(e.LastChecked) >= rr.cooldown) {
 			healthy = append(healthy, e)
 		}
