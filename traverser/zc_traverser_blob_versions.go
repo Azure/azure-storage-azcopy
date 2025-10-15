@@ -18,14 +18,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package traverser
 
 import (
 	"context"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"strings"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -40,7 +40,7 @@ type blobVersionsTraverser struct {
 }
 
 func (t *blobVersionsTraverser) IsDirectory(isSource bool) (bool, error) {
-	isDirDirect := copyHandlerUtil{}.urlIsContainerOrVirtualDirectory(t.rawURL)
+	isDirDirect := UrlIsContainerOrVirtualDirectory(t.rawURL)
 
 	// Skip the single blob check if we're checking a destination.
 	// This is an individual exception for blob because blob supports virtual directories and blobs sharing the same name.
@@ -70,7 +70,7 @@ func (t *blobVersionsTraverser) getBlobProperties(versionID string) (*blob.GetPr
 	return &props, err
 }
 
-func (t *blobVersionsTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
+func (t *blobVersionsTraverser) Traverse(preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) (err error) {
 	blobURLParts, err := blob.ParseURL(t.rawURL)
 	if err != nil {
 		return err
@@ -88,9 +88,9 @@ func (t *blobVersionsTraverser) Traverse(preprocessor objectMorpher, processor o
 			panic("isBlob should never be set if getting properties is an error")
 		}
 
-		blobPropsAdapter := blobPropertiesResponseAdapter{blobProperties}
+		blobPropsAdapter := BlobPropertiesResponseAdapter{blobProperties}
 		blobURLParts.VersionID = versionID
-		storedObject := newStoredObject(
+		storedObject := NewStoredObject(
 			preprocessor,
 			getObjectNameOnly(strings.TrimSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)),
 			"",
@@ -102,13 +102,13 @@ func (t *blobVersionsTraverser) Traverse(preprocessor objectMorpher, processor o
 			blobPropsAdapter.Metadata,
 			blobURLParts.ContainerName,
 		)
-		storedObject.blobVersionID = versionID
+		storedObject.BlobVersionID = versionID
 
 		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter(common.EEntityType.File())
+			t.incrementEnumerationCounter(common.EEntityType.File(), common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
 		}
 
-		err = processIfPassedFilters(filters, storedObject, processor)
+		err = ProcessIfPassedFilters(filters, storedObject, processor)
 		if err != nil {
 			return err
 		}

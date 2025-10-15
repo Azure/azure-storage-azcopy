@@ -18,13 +18,15 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package traverser
 
 import (
 	"context"
 	"fmt"
-	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"strings"
+
+	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // Enumerates an entire blob account, looking into each matching container as it goes
@@ -45,7 +47,7 @@ func (t *blobAccountTraverser) IsDirectory(isSource bool) (bool, error) {
 	return true, nil // Returns true as account traversal is inherently folder-oriented and recursive.
 }
 
-func (t *blobAccountTraverser) listContainers() ([]string, error) {
+func (t *blobAccountTraverser) ListContainers() ([]string, error) {
 	cachedContainers, _, err := t.getListContainers()
 	return cachedContainers, err
 }
@@ -99,11 +101,11 @@ func (t *blobAccountTraverser) getListContainers() ([]string, []string, error) {
 	return t.cachedContainers, skippedContainers, nil
 }
 
-func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
+func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) error {
 	// listContainers will return the cached container list if containers have already been listed by this traverser.
 	cList, skippedContainers, err := t.getListContainers()
 	if len(skippedContainers) > 0 {
-		glcm.Info("Skipped container(s): " + strings.Join(skippedContainers, ", "))
+		common.GetLifecycleMgr().Info("Skipped container(s): " + strings.Join(skippedContainers, ", "))
 	}
 
 	if err != nil {
@@ -112,7 +114,7 @@ func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 
 	for _, v := range cList {
 		containerURL := t.serviceClient.NewContainerClient(v).URL()
-		containerTraverser := newBlobTraverser(containerURL, t.serviceClient, t.ctx, InitResourceTraverserOptions{
+		containerTraverser := NewBlobTraverser(containerURL, t.serviceClient, t.ctx, InitResourceTraverserOptions{
 			IncrementEnumeration: t.opts.IncrementEnumeration,
 
 			CpkOptions: t.opts.CpkOptions,
@@ -121,6 +123,7 @@ func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 			IncludeDirectoryStubs: t.opts.IncludeDirectoryStubs,
 			PreserveBlobTags:      t.opts.PreserveBlobTags,
 			PreservePermissions:   t.opts.PreservePermissions,
+			FromTo:                t.opts.FromTo,
 		}, t.blobOpts...)
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
@@ -136,7 +139,7 @@ func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 	return nil
 }
 
-func newBlobAccountTraverser(serviceClient *blobservice.Client, container string, ctx context.Context, opts InitResourceTraverserOptions, blobOpts ...BlobTraverserOptions) (t *blobAccountTraverser) {
+func NewBlobAccountTraverser(serviceClient *blobservice.Client, container string, ctx context.Context, opts InitResourceTraverserOptions, blobOpts ...BlobTraverserOptions) (t *blobAccountTraverser) {
 	t = &blobAccountTraverser{
 		opts: opts,
 

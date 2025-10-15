@@ -18,10 +18,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package traverser
 
 import (
+	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -34,7 +37,7 @@ type benchmarkTraverser struct {
 }
 
 func newBenchmarkTraverser(source string, incrementEnumerationCounter enumerationCounterFunc) (*benchmarkTraverser, error) {
-	fc, bpf, nf, err := benchmarkSourceHelper{}.FromUrl(source)
+	fc, bpf, nf, err := BenchmarkSourceHelper{}.FromUrl(source)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +65,7 @@ func (*benchmarkTraverser) toReversedString(i uint) string {
 	return string(r)
 }
 
-func (t *benchmarkTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
+func (t *benchmarkTraverser) Traverse(preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) (err error) {
 	if len(filters) > 0 {
 		panic("filters not expected or supported in benchmark traverser") // but we still call processIfPassedFilters below, for consistency with other traversers
 	}
@@ -78,19 +81,19 @@ func (t *benchmarkTraverser) Traverse(preprocessor objectMorpher, processor obje
 		}
 
 		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter(common.EEntityType.File())
+			t.incrementEnumerationCounter(common.EEntityType.File(), common.ESymlinkHandlingType.Skip(), common.DefaultHardlinkHandlingType)
 		}
 
-		err = processIfPassedFilters(filters, newStoredObject(
+		err = ProcessIfPassedFilters(filters, NewStoredObject(
 			preprocessor,
 			name,
 			relativePath,
 			common.EEntityType.File(),
 			common.BenchmarkLmt,
 			t.bytesPerFile,
-			noContentProps,
-			noBlobProps,
-			noMetadata,
+			NoContentProps,
+			NoBlobProps,
+			NoMetadata,
 			""), processor)
 		_, err = getProcessingError(err)
 		if err != nil {
@@ -99,4 +102,48 @@ func (t *benchmarkTraverser) Traverse(preprocessor objectMorpher, processor obje
 	}
 
 	return nil
+}
+
+type BenchmarkSourceHelper struct{}
+
+// our code requires sources to be strings. So we may as well do the benchmark sources as URLs
+// so we can identify then as such using a specific domain. ".invalid" is reserved globally for cases where
+// you want a URL that can't possibly be a real one, so we'll use that
+const BenchmarkSourceHost = "benchmark.invalid"
+
+func (h BenchmarkSourceHelper) ToUrl(fileCount uint, bytesPerFile int64, numOfFolders uint) string {
+	return fmt.Sprintf("https://%s?fc=%d&bpf=%d&nf=%d", BenchmarkSourceHost, fileCount, bytesPerFile, numOfFolders)
+}
+
+func (h BenchmarkSourceHelper) FromUrl(s string) (fileCount uint, bytesPerFile int64, numOfFolders uint, err error) {
+	// TODO: consider replace with regex?
+
+	expectedPrefix := "https://" + BenchmarkSourceHost + "?"
+	if !strings.HasPrefix(s, expectedPrefix) {
+		return 0, 0, 0, errors.New("invalid benchmark source string")
+	}
+	s = strings.TrimPrefix(s, expectedPrefix)
+	pieces := strings.Split(s, "&")
+	if len(pieces) != 3 ||
+		!strings.HasPrefix(pieces[0], "fc=") ||
+		!strings.HasPrefix(pieces[1], "bpf=") ||
+		!strings.HasPrefix(pieces[2], "nf=") {
+		return 0, 0, 0, errors.New("invalid benchmark source string")
+	}
+	pieces[0] = strings.Split(pieces[0], "=")[1]
+	pieces[1] = strings.Split(pieces[1], "=")[1]
+	pieces[2] = strings.Split(pieces[2], "=")[1]
+	fc, err := strconv.ParseUint(pieces[0], 10, 32)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	bpf, err := strconv.ParseInt(pieces[1], 10, 64)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	nf, err := strconv.ParseUint(pieces[2], 10, 32)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	return uint(fc), bpf, uint(nf), nil
 }

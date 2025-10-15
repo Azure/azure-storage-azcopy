@@ -30,6 +30,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
@@ -310,7 +311,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 	}
 
 	// But we don't want to supply a reauth token if we're not using OAuth. That could cause problems if say, a SAS is invalid.
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, common.Iff(srcCredType.IsAzureOAuth(), reauthTok, nil))
+	options := traverser.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, common.Iff(srcCredType.IsAzureOAuth(), reauthTok, nil))
 	// Get job details from the STE
 	getJobDetailsResponse := jobsAdmin.GetJobDetails(common.GetJobDetailsRequest{JobID: jobID})
 	if getJobDetailsResponse.ErrorMsg != "" {
@@ -318,7 +319,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 	}
 
 	var fileSrcClientOptions any
-	if fromTo.From() == common.ELocation.File() || fromTo.From() == common.ELocation.FileNFS() {
+	if fromTo.From().IsFile() {
 		fileSrcClientOptions = &common.FileClientOptions{
 			AllowTrailingDot: getJobDetailsResponse.TrailingDot.IsEnabled(), //Access the trailingDot option of the job
 		}
@@ -332,11 +333,11 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 	if fromTo.IsS2S() && srcCredType.IsAzureOAuth() {
 		srcCred = common.NewScopedCredential(tc, srcCredType)
 	}
-	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred, common.Iff(dstCredType.IsAzureOAuth(), reauthTok, nil))
+	options = traverser.CreateClientOptions(common.AzcopyCurrentJobLogger, srcCred, common.Iff(dstCredType.IsAzureOAuth(), reauthTok, nil))
 	var fileClientOptions any
-	if fromTo.To() == common.ELocation.File() || fromTo.To() == common.ELocation.FileNFS() {
+	if fromTo.To().IsFile() {
 		fileClientOptions = &common.FileClientOptions{
-			AllowSourceTrailingDot: getJobDetailsResponse.TrailingDot.IsEnabled() && fromTo.From() == common.ELocation.File(),
+			AllowSourceTrailingDot: getJobDetailsResponse.TrailingDot.IsEnabled() && fromTo.From().IsFile(),
 			AllowTrailingDot:       getJobDetailsResponse.TrailingDot.IsEnabled(),
 		}
 	}
@@ -411,10 +412,10 @@ func (rca resumeCmdArgs) process() error {
 	// Initialize credential info.
 	credentialInfo := common.CredentialInfo{}
 	// TODO: Replace context with root context
-	srcResourceString, err := SplitResourceString(getJobFromToResponse.Source, getJobFromToResponse.FromTo.From())
+	srcResourceString, err := traverser.SplitResourceString(getJobFromToResponse.Source, getJobFromToResponse.FromTo.From())
 	_ = err // todo
 	srcResourceString.SAS = rca.SourceSAS
-	dstResourceString, err := SplitResourceString(getJobFromToResponse.Destination, getJobFromToResponse.FromTo.To())
+	dstResourceString, err := traverser.SplitResourceString(getJobFromToResponse.Destination, getJobFromToResponse.FromTo.To())
 	_ = err // todo
 	dstResourceString.SAS = rca.DestinationSAS
 

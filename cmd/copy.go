@@ -39,6 +39,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
@@ -255,7 +257,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	}
 	// Strip the SAS from the source and destination whenever there is SAS exists in URL.
 	// Note: SAS could exists in source of S2S copy, even if the credential type is OAuth for destination.
-	cooked.Destination, err = SplitResourceString(tempDest, cooked.FromTo.To())
+	cooked.Destination, err = traverser.SplitResourceString(tempDest, cooked.FromTo.To())
 	if err != nil {
 		return cooked, err
 	}
@@ -270,7 +272,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 			return cooked, err
 		}
 	}
-	cooked.Source, err = SplitResourceString(tempSrc, cooked.FromTo.From())
+	cooked.Source, err = traverser.SplitResourceString(tempSrc, cooked.FromTo.From())
 	if err != nil {
 		return cooked, err
 	}
@@ -325,7 +327,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	if raw.includeBefore != "" {
 		// must set chooseEarliest = false, so that if there's an ambiguous local date, the latest will be returned
 		// (since that's safest for includeBefore.  Better to choose the later time and do more work, than the earlier one and fail to pick up a changed file
-		parsedIncludeBefore, err := IncludeBeforeDateFilter{}.ParseISO8601(raw.includeBefore, false)
+		parsedIncludeBefore, err := traverser.IncludeBeforeDateFilter{}.ParseISO8601(raw.includeBefore, false)
 		if err != nil {
 			return cooked, err
 		}
@@ -335,7 +337,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	if raw.includeAfter != "" {
 		// must set chooseEarliest = true, so that if there's an ambiguous local date, the earliest will be returned
 		// (since that's safest for includeAfter.  Better to choose the earlier time and do more work, than the later one and fail to pick up a changed file
-		parsedIncludeAfter, err := IncludeAfterDateFilter{}.ParseISO8601(raw.includeAfter, true)
+		parsedIncludeAfter, err := traverser.IncludeAfterDateFilter{}.ParseISO8601(raw.includeAfter, true)
 		if err != nil {
 			return cooked, err
 		}
@@ -372,7 +374,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 		glcm.SetOutputFormat(common.EOutputFormat.None())
 	}
 
-	if common.IsNFSCopy() {
+	if cooked.FromTo.IsNFS() {
 		cooked.preserveInfo = raw.preserveInfo && areBothLocationsNFSAware(cooked.FromTo)
 		cooked.preservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
 			true,
@@ -460,7 +462,7 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaults() {
 }
 
 func validateForceIfReadOnly(toForce bool, fromTo common.FromTo) error {
-	targetIsFiles := (fromTo.To() == common.ELocation.File() || fromTo.To() == common.ELocation.FileNFS()) ||
+	targetIsFiles := (fromTo.To().IsFile()) ||
 		fromTo == common.EFromTo.FileTrash()
 	targetIsWindowsFS := fromTo.To() == common.ELocation.Local() &&
 		runtime.GOOS == "windows"
@@ -500,8 +502,10 @@ func validateSymlinkHandlingMode(symlinkHandling common.SymlinkHandlingType, fro
 			return nil // Fine on all OSes that support symlink via the OS package. (Win, MacOS, and Linux do, and that's what we officially support.)
 		case common.EFromTo.BlobBlob(), common.EFromTo.BlobFSBlobFS(), common.EFromTo.BlobBlobFS(), common.EFromTo.BlobFSBlob():
 			return nil // Blob->Blob doesn't involve any local requirements
+		case common.EFromTo.LocalFileNFS(), common.EFromTo.FileNFSLocal(), common.EFromTo.FileNFSFileNFS():
+			return nil // for NFS related transfers symlink preservation is supported.
 		default:
-			return fmt.Errorf("flag --%s can only be used on Blob<->Blob or Local<->Blob", common.PreserveSymlinkFlagName)
+			return fmt.Errorf("flag --%s can only be used on Blob<->Blob, Local<->Blob, Local<->FileNFS, FileNFS<->FileNFS", common.PreserveSymlinkFlagName)
 		}
 	}
 
@@ -751,6 +755,7 @@ type CookedCopyCmdArgs struct {
 	hardlinks                     common.HardlinkHandlingType
 	atomicSkippedSymlinkCount     uint32
 	atomicSkippedSpecialFileCount uint32
+	atomicSkippedHardlinkCount    uint32
 	BlockSizeMB                   float64
 	PutBlobSizeMB                 float64
 	IncludePathPatterns           []string
@@ -825,7 +830,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 
 	// step 1: create client options
 	// note: dstCred is nil, as we could not reauth effectively because stdout is a pipe.
-	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(azcopyScanningLogger, nil, nil)}
+	options := &blockblob.ClientOptions{ClientOptions: traverser.CreateClientOptions(common.AzcopyScanningLogger, nil, nil)}
 
 	// step 2: parse source url
 	u, err := blobResource.FullURL()
@@ -842,7 +847,6 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	if err != nil {
 		return fmt.Errorf("fatal: Could not create client: %s", err.Error())
 	}
-
 	// step 3: start download
 
 	blobStream, err := blobClient.DownloadStream(ctx, &blob.DownloadStreamOptions{
@@ -909,7 +913,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 
 	// step 0: initialize pipeline
 	// Reauthentication is theoretically possible here, since stdin is blocked.
-	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)}
+	options := &blockblob.ClientOptions{ClientOptions: traverser.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)}
 
 	// step 1: parse destination url
 	u, err := blobResource.FullURL()
@@ -1104,7 +1108,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		srcReauth = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, srcReauth)
+	options := traverser.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, srcReauth)
 	var azureFileSpecificOptions any
 	if cca.FromTo.From().IsFile() {
 		azureFileSpecificOptions = &common.FileClientOptions{
@@ -1142,7 +1146,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	if cca.FromTo.IsS2S() && srcCredInfo.CredentialType.IsAzureOAuth() {
 		srcCred = common.NewScopedCredential(srcCredInfo.OAuthTokenInfo.TokenCredential, srcCredInfo.CredentialType)
 	}
-	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred, dstReauthTok)
+	options = traverser.CreateClientOptions(common.AzcopyCurrentJobLogger, srcCred, dstReauthTok)
 	jobPartOrder.DstServiceClient, err = common.GetServiceClientForLocation(
 		cca.FromTo.To(),
 		cca.Destination,
@@ -1174,7 +1178,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	// Check if destination is system container
 	if cca.FromTo.IsS2S() || cca.FromTo.IsUpload() {
-		dstContainerName, err := GetContainerName(cca.Destination.Value, cca.FromTo.To())
+		dstContainerName, err := azcopy.GetContainerName(cca.Destination.Value, cca.FromTo.To())
 		if err != nil {
 			return fmt.Errorf("failed to get container name from destination (is it formatted correctly?): %w", err)
 		}
@@ -1184,19 +1188,23 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	}
 
 	// Check protocol compatibility for File Shares
-	if err := validateProtocolCompatibility(ctx, cca.FromTo, cca.Source, cca.Destination, jobPartOrder.SrcServiceClient, jobPartOrder.DstServiceClient); err != nil {
+	if err := validateProtocolCompatibility(ctx, cca.FromTo,
+		cca.Source,
+		cca.Destination,
+		jobPartOrder.SrcServiceClient,
+		jobPartOrder.DstServiceClient); err != nil {
 		return err
 	}
 
 	switch {
 	case cca.FromTo.IsUpload(), cca.FromTo.IsDownload(), cca.FromTo.IsS2S():
 		// Execute a standard copy command
-		var e *CopyEnumerator
+		var e *traverser.CopyEnumerator
 		e, err = cca.initEnumerator(jobPartOrder, srcCredInfo, ctx)
 		if err != nil {
 			return fmt.Errorf("failed to initialize enumerator: %w", err)
 		}
-		err = e.enumerate()
+		err = e.Enumerate()
 
 	case cca.FromTo.IsDelete():
 		// Delete gets ran through copy, so handle delete
@@ -1210,7 +1218,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 				return fmt.Errorf("failed to initialize enumerator: %w", createErr)
 			}
 
-			err = e.enumerate()
+			err = e.Enumerate()
 		}
 
 	case cca.FromTo.IsSetProperties():
@@ -1219,7 +1227,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		if createErr != nil {
 			return fmt.Errorf("failed to initialize enumerator: %w", createErr)
 		}
-		err = e.enumerate()
+		err = e.Enumerate()
 
 	default:
 		return fmt.Errorf("copy direction %v is not supported", cca.FromTo)
@@ -1380,13 +1388,15 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 				summary.TransfersCompleted,
 				summary.TransfersFailed,
 				summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed+summary.TransfersSkipped),
-				summary.TransfersSkipped, summary.TotalTransfers, scanningString, perfString, throughputString, diskString)
+				summary.TransfersSkipped+atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)+atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount),
+				summary.TotalTransfers, scanningString, perfString, throughputString, diskString)
 		}
 	})
 
 	if jobDone {
 		summary.SkippedSymlinkCount = atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)
 		summary.SkippedSpecialFileCount = atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount)
+		summary.SkippedHardlinkCount = atomic.LoadUint32(&cca.atomicSkippedHardlinkCount)
 
 		exitCode := cca.getSuccessExitCode()
 		if summary.TransfersFailed > 0 || summary.JobStatus == common.EJobStatus.Cancelled() || summary.JobStatus == common.EJobStatus.Cancelling() {
@@ -1418,6 +1428,7 @@ Number of File Transfers Skipped: %v
 Number of Folder Transfers Skipped: %v
 Number of Symbolic Links Skipped: %v
 Number of Hardlinks Converted: %v
+Number of Hardlinks Skipped: %v
 Number of Special Files Skipped: %v
 Total Number of Bytes Transferred: %v
 Final Job Status: %v%s%s
@@ -1436,6 +1447,7 @@ Final Job Status: %v%s%s
 					summary.FoldersSkipped,
 					summary.SkippedSymlinkCount,
 					summary.HardlinksConvertedCount,
+					summary.SkippedHardlinkCount,
 					summary.SkippedSpecialFileCount,
 					summary.TotalBytesTransferred,
 					summary.JobStatus,
@@ -1620,7 +1632,7 @@ func init() {
 			}
 			glcm.Info("Scanning...")
 
-			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
+			cooked.commandString = ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
 				glcm.Error("failed to perform copy command due to error: " + err.Error() + getErrorCodeUrl(err))
@@ -1797,8 +1809,10 @@ func init() {
 		"False by default. 'Preserves' property info gleaned from stat or statx into object metadata.")
 
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSymlinks, common.PreserveSymlinkFlagName, false,
-		"False by default. If enabled, symlink destinations are preserved as the blob content, rather"+
-			"than uploading the file/folder on the other end of the symlink")
+		"Preserve symbolic links when performing copy operations involving NFS resources or blob storages. "+
+			"If enabled, the symlink destination is stored as the blob content instead of uploading the file or folder it points to. "+
+			"This flag is applicable when either the source or destination is an NFS file share. "+
+			"Note: Not supported for Azure Files SMB shares, as symlinks are not supported in those services.")
 
 	cpCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false,
 		"False by default. When overwriting an existing file on Windows or Azure Files, force the overwrite"+

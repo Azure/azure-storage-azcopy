@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package traverser
 
 import (
 	"context"
@@ -45,7 +45,7 @@ func (l *listTraverser) IsDirectory(bool) (bool, error) {
 
 // To kill the traverser, close() the channel under it.
 // Behavior demonstrated: https://play.golang.org/p/OYdvLmNWgwO
-func (l *listTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
+func (l *listTraverser) Traverse(preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) (err error) {
 	// read a channel until it closes to get a list of objects
 
 	childPath, ok := <-l.listReader
@@ -56,7 +56,7 @@ func (l *listTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		//   2. a directory entity that needs to be scanned
 		childTraverser, err := l.childTraverserGenerator(childPath)
 		if err != nil {
-			glcm.Info(fmt.Sprintf("Skipping %s due to error %s", childPath, err))
+			common.GetLifecycleMgr().Info(fmt.Sprintf("Skipping %s due to error %s", childPath, err))
 			continue
 		}
 		// listTraverser will only ever execute on the source
@@ -76,13 +76,13 @@ func (l *listTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		//         the relative path returned by the child traverser would be "grandchild1"
 		//         it should be "child2/grandchild1" instead
 		childPreProcessor := func(object *StoredObject) {
-			object.relativePath = common.GenerateFullPath(childPath, object.relativePath)
+			object.RelativePath = common.GenerateFullPath(childPath, object.RelativePath)
 		}
 		preProcessorForThisChild := preprocessor.FollowedBy(childPreProcessor)
 
 		err = childTraverser.Traverse(preProcessorForThisChild, processor, filters)
 		if err != nil {
-			glcm.Info(fmt.Sprintf("Skipping %s as it cannot be scanned due to error: %s", childPath, err))
+			common.GetLifecycleMgr().Info(fmt.Sprintf("Skipping %s as it cannot be scanned due to error: %s", childPath, err))
 		}
 	}
 
@@ -130,6 +130,7 @@ func newListTraverser(resource common.ResourceString, resourceLocation common.Lo
 			GetPropertiesInFrontend: options.GetPropertiesInFrontend,
 			IncludeDirectoryStubs:   options.IncludeDirectoryStubs,
 			PreserveBlobTags:        options.PreserveBlobTags,
+			FromTo:                  options.FromTo,
 		})
 		if err != nil {
 			return nil, err

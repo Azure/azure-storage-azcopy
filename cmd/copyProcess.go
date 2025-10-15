@@ -12,10 +12,10 @@ import (
 func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 	cooked.jobID = Client.CurrentJobID
 	// set up the front end scanning logger
-	azcopyScanningLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "-scanning")
-	azcopyScanningLogger.OpenLog()
+	common.AzcopyScanningLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "-scanning")
+	common.AzcopyScanningLogger.OpenLog()
 	glcm.RegisterCloseFunc(func() {
-		azcopyScanningLogger.CloseLog()
+		common.AzcopyScanningLogger.CloseLog()
 	})
 
 	// if no logging, set this empty so that we don't display the log location
@@ -166,8 +166,12 @@ func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 	}
 
 	if cooked.preserveInfo && !cooked.preservePermissions.IsTruthy() {
-		if common.IsNFSCopy() {
-			glcm.Info(PreserveNFSPermissionsDisabledMsg)
+		if cooked.FromTo.IsNFS() {
+			// Skip logging this msg for cross-protocol transfers
+			// because --preserve-permissions flag is not applicable.
+			if !(cooked.FromTo == common.EFromTo.FileSMBFileNFS() || cooked.FromTo == common.EFromTo.FileNFSFileSMB()) {
+				glcm.Info(PreserveNFSPermissionsDisabledMsg)
+			}
 		} else {
 			glcm.Info(PreservePermissionsDisabledMsg)
 		}

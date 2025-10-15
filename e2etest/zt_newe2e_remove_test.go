@@ -51,7 +51,9 @@ func (s *RemoveSuite) Scenario_SingleFileRemoveBlobFSEncodedPath(svm *ScenarioVa
 		})
 	ValidateResource[ObjectResourceManager](svm, srcObj, ResourceDefinitionObject{
 		ObjectShouldExist: to.Ptr(false),
-	}, false)
+	}, ValidateResourceOptions{
+		validateObjectContent: false,
+	})
 }
 
 func (s *RemoveSuite) Scenario_EmptySASErrorCodes(svm *ScenarioVariationManager) {
@@ -105,7 +107,9 @@ func (s *RemoveSuite) Scenario_RemoveVirtualDirectory(svm *ScenarioVariationMana
 
 	ValidateResource[ContainerResourceManager](svm, srcContainer, ResourceDefinitionContainer{
 		Objects: srcObjs,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 // Scenario_RemoveFileWithOnlyDotsTrailingDotDisabled tests removing a file with only dots. i.e "...."
@@ -197,7 +201,9 @@ func (s *RemoveSuite) Scenario_RemoveFileWithOnlyDotsEnabled(svm *ScenarioVariat
 	// Validate that relevant file is deleted in File share - does not exist
 	ValidateResource[ObjectResourceManager](svm, srcObject, ResourceDefinitionObject{
 		ObjectShouldExist: pointerTo(false),
-	}, false)
+	}, ValidateResourceOptions{
+		validateObjectContent: false,
+	})
 
 	fileMap := make(map[string]ObjectProperties)
 	fileMap = fileShare.ListObjects(svm, "", true)
@@ -247,7 +253,9 @@ func (s *RemoveSuite) Scenario_RemoveFilesWithExcludePath(svm *ScenarioVariation
 	fileMap = src.ListObjects(svm, "", true)
 	svm.Assert("Only necessary files should be removed",
 		Equal{}, len(fileMap)-1, len(expectedList)) // Minus 1 to remove the directory
-	ValidateResource[ContainerResourceManager](svm, src, ResourceDefinitionContainer{}, true)
+	ValidateResource[ContainerResourceManager](svm, src, ResourceDefinitionContainer{}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 	ValidateDoesNotContainError(svm, stdOut, []string{"unknown flag: --exclude-path"})
 }
 
@@ -287,6 +295,50 @@ func (s *RemoveSuite) Scenario_RemoveBlobsWithExcludePath(svm *ScenarioVariation
 	fileMap := make(map[string]ObjectProperties)
 	fileMap = src.ListObjects(svm, "", true)
 	svm.Assert("Only necessary files should be removed", Equal{}, len(fileMap), len(expectedList))
-	ValidateResource[ContainerResourceManager](svm, src, ResourceDefinitionContainer{}, true)
+	ValidateResource[ContainerResourceManager](svm, src, ResourceDefinitionContainer{}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 	ValidateDoesNotContainError(svm, stdOut, []string{"unknown flag: --exclude-path"})
+}
+
+// Scenario_RemoveFilesWithSpecialChars validates that we correctly remove special chars and do not decode them prematurely
+func (s *RemoveSuite) Scenario_RemoveFilesWithSpecialChars(svm *ScenarioVariationManager) {
+	src := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(),
+		common.ELocation.File()})),
+		ResourceDefinitionContainer{})
+
+	fullList := []string{
+		"sample/sample%5C.json",
+		"test/test%5C.json",
+		"ex%5C",
+		"regular_file.txt",
+
+		// other encoded chars
+		"file%2Ffile.png",
+		"file/file.png",
+		"test/test%aC.json",
+		"test/test%25aC.json",
+	}
+	// create objs
+	for i := range len(fullList) {
+		obj := src.GetObject(svm, fullList[i], common.EEntityType.File())
+		obj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
+	}
+
+	stdOut, _ := RunAzCopy(svm,
+		AzCopyCommand{
+			Verb:    AzCopyVerbRemove,
+			Targets: []ResourceManager{src},
+			Flags: RemoveFlags{
+				Recursive: pointerTo(true),
+			},
+		})
+
+	if !svm.Dryrun() {
+		fileMap := make(map[string]ObjectProperties)
+		fileMap = src.ListObjects(svm, "", true)
+		svm.Assert("All files should be removed", Equal{}, len(fileMap), 0)
+		ValidateResource[ContainerResourceManager](svm, src, ResourceDefinitionContainer{}, ValidateResourceOptions{validateObjectContent: false})
+		ValidateDoesNotContainError(svm, stdOut, []string{"inconsistent path separators. Some are forward, some are back. This is not supported"})
+	}
 }
