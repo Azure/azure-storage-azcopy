@@ -376,7 +376,7 @@ func (u *azureFileSenderBase) DirUrlToString() string {
 	rawURL, err := url.Parse(directoryURL)
 	common.PanicIfErr(err)
 	rawURL.RawQuery = ""
-	// To avoid encoding/decoding
+	// To avoid additional encoding/decoding when constructing the URL string
 	rawURL.RawPath = ""
 	return rawURL.String()
 }
