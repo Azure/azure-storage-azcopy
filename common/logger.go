@@ -34,6 +34,7 @@ import (
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 )
 
+var AzcopyScanningLogger ILoggerResetable
 var AzcopyCurrentJobLogger ILoggerResetable
 
 // TODO: (gapra) I think this should actually be a function on the logger?

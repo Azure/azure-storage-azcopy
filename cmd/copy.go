@@ -39,6 +39,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
@@ -255,7 +257,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	}
 	// Strip the SAS from the source and destination whenever there is SAS exists in URL.
 	// Note: SAS could exists in source of S2S copy, even if the credential type is OAuth for destination.
-	cooked.Destination, err = SplitResourceString(tempDest, cooked.FromTo.To())
+	cooked.Destination, err = traverser.SplitResourceString(tempDest, cooked.FromTo.To())
 	if err != nil {
 		return cooked, err
 	}
@@ -270,7 +272,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 			return cooked, err
 		}
 	}
-	cooked.Source, err = SplitResourceString(tempSrc, cooked.FromTo.From())
+	cooked.Source, err = traverser.SplitResourceString(tempSrc, cooked.FromTo.From())
 	if err != nil {
 		return cooked, err
 	}
@@ -325,7 +327,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	if raw.includeBefore != "" {
 		// must set chooseEarliest = false, so that if there's an ambiguous local date, the latest will be returned
 		// (since that's safest for includeBefore.  Better to choose the later time and do more work, than the earlier one and fail to pick up a changed file
-		parsedIncludeBefore, err := IncludeBeforeDateFilter{}.ParseISO8601(raw.includeBefore, false)
+		parsedIncludeBefore, err := traverser.IncludeBeforeDateFilter{}.ParseISO8601(raw.includeBefore, false)
 		if err != nil {
 			return cooked, err
 		}
@@ -335,7 +337,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	if raw.includeAfter != "" {
 		// must set chooseEarliest = true, so that if there's an ambiguous local date, the earliest will be returned
 		// (since that's safest for includeAfter.  Better to choose the earlier time and do more work, than the later one and fail to pick up a changed file
-		parsedIncludeAfter, err := IncludeAfterDateFilter{}.ParseISO8601(raw.includeAfter, true)
+		parsedIncludeAfter, err := traverser.IncludeAfterDateFilter{}.ParseISO8601(raw.includeAfter, true)
 		if err != nil {
 			return cooked, err
 		}
@@ -828,7 +830,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 
 	// step 1: create client options
 	// note: dstCred is nil, as we could not reauth effectively because stdout is a pipe.
-	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(azcopyScanningLogger, nil, nil)}
+	options := &blockblob.ClientOptions{ClientOptions: traverser.CreateClientOptions(common.AzcopyScanningLogger, nil, nil)}
 
 	// step 2: parse source url
 	u, err := blobResource.FullURL()
@@ -911,7 +913,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 
 	// step 0: initialize pipeline
 	// Reauthentication is theoretically possible here, since stdin is blocked.
-	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)}
+	options := &blockblob.ClientOptions{ClientOptions: traverser.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)}
 
 	// step 1: parse destination url
 	u, err := blobResource.FullURL()
@@ -1106,7 +1108,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		srcReauth = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, srcReauth)
+	options := traverser.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, srcReauth)
 	var azureFileSpecificOptions any
 	if cca.FromTo.From().IsFile() {
 		azureFileSpecificOptions = &common.FileClientOptions{
@@ -1144,7 +1146,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	if cca.FromTo.IsS2S() && srcCredInfo.CredentialType.IsAzureOAuth() {
 		srcCred = common.NewScopedCredential(srcCredInfo.OAuthTokenInfo.TokenCredential, srcCredInfo.CredentialType)
 	}
-	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred, dstReauthTok)
+	options = traverser.CreateClientOptions(common.AzcopyCurrentJobLogger, srcCred, dstReauthTok)
 	jobPartOrder.DstServiceClient, err = common.GetServiceClientForLocation(
 		cca.FromTo.To(),
 		cca.Destination,
@@ -1176,7 +1178,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	// Check if destination is system container
 	if cca.FromTo.IsS2S() || cca.FromTo.IsUpload() {
-		dstContainerName, err := GetContainerName(cca.Destination.Value, cca.FromTo.To())
+		dstContainerName, err := azcopy.GetContainerName(cca.Destination.Value, cca.FromTo.To())
 		if err != nil {
 			return fmt.Errorf("failed to get container name from destination (is it formatted correctly?): %w", err)
 		}
@@ -1197,12 +1199,12 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	switch {
 	case cca.FromTo.IsUpload(), cca.FromTo.IsDownload(), cca.FromTo.IsS2S():
 		// Execute a standard copy command
-		var e *CopyEnumerator
+		var e *traverser.CopyEnumerator
 		e, err = cca.initEnumerator(jobPartOrder, srcCredInfo, ctx)
 		if err != nil {
 			return fmt.Errorf("failed to initialize enumerator: %w", err)
 		}
-		err = e.enumerate()
+		err = e.Enumerate()
 
 	case cca.FromTo.IsDelete():
 		// Delete gets ran through copy, so handle delete
@@ -1216,7 +1218,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 				return fmt.Errorf("failed to initialize enumerator: %w", createErr)
 			}
 
-			err = e.enumerate()
+			err = e.Enumerate()
 		}
 
 	case cca.FromTo.IsSetProperties():
@@ -1225,7 +1227,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		if createErr != nil {
 			return fmt.Errorf("failed to initialize enumerator: %w", createErr)
 		}
-		err = e.enumerate()
+		err = e.Enumerate()
 
 	default:
 		return fmt.Errorf("copy direction %v is not supported", cca.FromTo)
@@ -1630,7 +1632,7 @@ func init() {
 			}
 			glcm.Info("Scanning...")
 
-			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
+			cooked.commandString = ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
 				glcm.Error("failed to perform copy command due to error: " + err.Error() + getErrorCodeUrl(err))
