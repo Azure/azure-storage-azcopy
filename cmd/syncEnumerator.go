@@ -103,6 +103,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		SymlinkHandling:         cca.symlinkHandling,
 		FromTo:                  cca.fromTo,
 		StripTopDir:             !cca.includeRoot,
+		IncludeRoot:             cca.includeRoot,
 	})
 
 	if err != nil {
@@ -141,6 +142,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		SymlinkHandling:         cca.symlinkHandling,
 		FromTo:                  cca.fromTo,
 		StripTopDir:             !cca.includeRoot,
+		IncludeRoot:             cca.includeRoot,
 	})
 	if err != nil {
 		return nil, err
@@ -217,8 +219,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	// decide our folder transfer strategy
 	var fpo common.FolderPropertyOption
 	var folderMessage string
-	// preserve-root-properties works in tandem with includeRoot. When the flag is set, we tell stripTopDir=false.
-	// sync always acts like stripTopDir=true
+	// sync always acts like stripTopDir=true, but if we intend to persist the root, we must tell NewFolderPropertyOption stripTopDir=false.
 	fpo, folderMessage = NewFolderPropertyOption(cca.fromTo, cca.recursive, !cca.includeRoot, filters, cca.preserveInfo,
 		cca.preservePermissions.IsTruthy(), cca.preservePOSIXProperties, strings.EqualFold(cca.destination.Value, common.Dev_Null),
 		cca.includeDirectoryStubs)

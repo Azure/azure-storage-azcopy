@@ -63,6 +63,8 @@ type blobTraverser struct {
 	include common.BlobTraverserIncludeOption
 
 	isDFS bool
+
+	includeRoot bool
 }
 
 var NonErrorDirectoryStubOverlappable = errors.New("The directory stub exists, and can overlap.")
@@ -306,13 +308,8 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		if err != nil {
 			return err
 		}
-	}
-
-	// get the container URL so that we can list the blobs
-	containerClient := t.serviceClient.NewContainerClient(blobURLParts.ContainerName)
-
-	// Handle enumerating folder roots for BlobFS (HNS enabled only)
-	if blobURLParts.BlobName != "" && isDirStub && t.isDFS && t.preservePermissions.IsTruthy() {
+	} else if blobURLParts.BlobName != "" && isDirStub && t.isDFS && t.includeRoot {
+		// Handle enumerating folder roots for BlobFS (HNS enabled only)
 		var dirName string
 		if strings.HasSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING) {
 			dirName = strings.TrimSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)
@@ -349,6 +346,9 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			}
 		}
 	}
+
+	// get the container URL so that we can list the blobs
+	containerClient := t.serviceClient.NewContainerClient(blobURLParts.ContainerName)
 
 	// get the search prefix to aid in the listing
 	// example: for a url like https://test.blob.core.windows.net/test/foo/bar/bla
@@ -650,6 +650,7 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		cpkOptions:                  opts.CpkOptions,
 		preservePermissions:         opts.PreservePermissions,
 		isDFS:                       common.DerefOrZero(common.FirstOrZero(blobOpts).isDFS),
+		includeRoot:                 opts.IncludeRoot,
 	}
 
 	disableHierarchicalScanning := strings.ToLower(common.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning()))

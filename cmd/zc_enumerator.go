@@ -381,6 +381,7 @@ type InitResourceTraverserOptions struct {
 	ListVersions      bool     // Blob
 	HardlinkHandling  common.HardlinkHandlingType
 	FromTo            common.FromTo
+	IncludeRoot       bool
 }
 
 func (o *InitResourceTraverserOptions) PerformChecks() error {
