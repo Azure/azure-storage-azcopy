@@ -37,14 +37,17 @@ steps:
         fi
         echo "Executable built successfully: ${{ parameters.build_name }}"
 
-        # echo "Logging in to Azure using Federated Credentials..."
-        # "./${{ parameters.build_name }}" login --service-principal --application-id "$servicePrincipalId" --tenant-id "$tenantId"
-        # echo "Successfully logged in..."
-
         ########################################################
         # Scenario 1: Blob → Pipe
         ########################################################
         echo "========== Scenario 1: BlobToPipe =========="
+
+        echo "Cleaning up Scenario 1..."
+        "./${{ parameters.build_name }}" rm "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt"
+        az storage container delete \
+          --name "${{ parameters.container_name }}" \
+          --account-name "${{ parameters.storage_account_name }}" \
+          --yes
 
         echo "Creating container '${{ parameters.container_name }}' in '${{ parameters.storage_account_name }}'"
         AZCOPY_AUTO_LOGIN_TYPE=AzCLI "./${{ parameters.build_name }}" make "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
@@ -75,6 +78,12 @@ steps:
         # Scenario 2: Object Replication Policy Copy
         ########################################################
         echo "========== Scenario 2: ORP Source → Destination =========="
+
+        echo "Cleaning up Scenario 2..."
+        AZCOPY_AUTO_LOGIN_TYPE=AzCLI "./${{ parameters.build_name }}" rm \
+          "https://${{ parameters.orp_destination_account_name }}.blob.core.windows.net/${{ parameters.destination_container_name }}/myfile.txt"
+        "./${{ parameters.build_name }}" rm \
+          "https://${{ parameters.orp_source_account_name }}.blob.core.windows.net/${{ parameters.orp_source_container_name }}/myfile.txt"
 
         echo "Creating a test file and uploading to ORP source container..."
         echo "Hello, Azure!" > myfile.txt
