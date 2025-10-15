@@ -44,13 +44,21 @@ type PrivateNetworkConfig struct {
 
 var privateNetworkArgs PrivateNetworkConfig = PrivateNetworkConfig{}
 
+// PE Health Status Enum
+type HealthStatus uint32
+
+const (
+	Healthy HealthStatus = iota
+	Unhealthy
+)
+
 // IPEntry holds one private IP with health info
 type IPEntry struct {
-	IP          string
-	unhealthy   uint32 // 0 = healthy, 1 = unhealthy
-	lastChecked time.Time
-	lastErrCode int
-	lastErrMsg  string
+	IP               string
+	ConnectionStatus HealthStatus // 0 = healthy, 1 = unhealthy
+	LastChecked      time.Time
+	LastErrCode      int
+	LastErrMsg       string
 }
 
 var UnHealthyPrivateEndpoints = make(map[string]IPEntry)
@@ -85,8 +93,8 @@ func SetPrivateNetworkArgs(privateNetworkEnabled bool, privateEndpointIPs []stri
 func NewRoundRobinTransport(ips []string, host string, cooldownInSecs int, ipRetries int, ipRetryIntervalInMilliSecs int) *RoundRobinTransport {
 	entries := make([]*IPEntry, len(ips))
 	for i, ip := range ips {
-		entries[i] = &IPEntry{IP: ip, unhealthy: 0, lastChecked: time.Now()}
-		log.Printf("PrivateEndpoint%d IPAddress:%s Unhealthy Status:%d LastChecked :%v\n ", i, entries[i].IP, entries[i].unhealthy, entries[i].lastChecked)
+		entries[i] = &IPEntry{IP: ip, ConnectionStatus: Healthy, LastChecked: time.Now()}
+		log.Printf("PrivateEndpoint%d IPAddress:%s Unhealthy Status:%d LastChecked :%v\n ", i, entries[i].IP, entries[i].ConnectionStatus, entries[i].LastChecked)
 	}
 
 	tr := http.DefaultTransport.(*http.Transport).Clone()
@@ -123,11 +131,11 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 		entry := healthy[idx%uint64(len(healthy))]
 		peIP = entry.IP
 		log.Printf("Selected Private endpoint IP: %s Unhealth Status: %d LastTime: %v\n",
-			peIP, entry.unhealthy, entry.lastChecked)
+			peIP, entry.ConnectionStatus, entry.LastChecked)
 
 		// Skip if still in cooldown
-		if atomic.LoadUint32(&entry.unhealthy) == 1 &&
-			time.Since(entry.lastChecked) < rr.cooldown {
+		if entry.ConnectionStatus == Unhealthy &&
+			time.Since(entry.LastChecked) < rr.cooldown {
 			log.Printf("[Counter=%d] Skipping Unhealthy IP %s (still in cooldown)", idx, peIP)
 			continue
 		}
@@ -146,15 +154,15 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 
 			resp, err := rr.transport.RoundTrip(clonedReq)
 			if err == nil {
-				if atomic.CompareAndSwapUint32(&entry.unhealthy, 1, 0) {
+				if atomic.CompareAndSwapUint32((*uint32)(&entry.ConnectionStatus), uint32(Unhealthy), uint32(Healthy)) {
 					// remove from global unhealthy map and refresh pool once (state changed)
 					UnHealthyMu.Lock()
 					delete(UnHealthyPrivateEndpoints, entry.IP)
 					UnHealthyMu.Unlock()
 
 					// update diagnostics (clear)
-					entry.lastErrCode = 0
-					entry.lastErrMsg = ""
+					entry.LastErrCode = 0
+					entry.LastErrMsg = ""
 
 					rr.refreshHealthyPool()
 					log.Printf("[Counter=%d Retry=%d] SUCCESS using IP %s", idx, ipAttempt, peIP)
@@ -165,26 +173,26 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 			// Transport-level failure (err != nil). Capture diagnostics.
 			log.Printf("[Counter=%d Retry=%d] FAILED using IP %s with Error %v", idx, ipAttempt, peIP, err)
 
-			// If resp is non-nil on error, close body to avoid leaks and capture status for diagnostics.
+			// If resp is non-nil on error, close body to avoid leaks and capture ConnectionStatus for diagnostics.
 			if resp != nil {
-				// best-effort: capture status and close body
-				entry.lastErrCode = resp.StatusCode
-				entry.lastErrMsg = resp.Status
+				// best-effort: capture ConnectionStatus and close body
+				entry.LastErrCode = resp.StatusCode
+				entry.LastErrMsg = resp.Status
 				if resp.Body != nil {
 					b, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
 					_ = resp.Body.Close()
 					bodySnippet := strings.TrimSpace(string(b))
 					if bodySnippet != "" {
-						entry.lastErrMsg = fmt.Sprintf("%s: %s", resp.Status, bodySnippet)
+						entry.LastErrMsg = fmt.Sprintf("%s: %s", resp.Status, bodySnippet)
 					} else {
-						entry.lastErrMsg = resp.Status
+						entry.LastErrMsg = resp.Status
 					}
 				} else {
-					entry.lastErrMsg = resp.Status
+					entry.LastErrMsg = resp.Status
 				}
 			} else {
-				entry.lastErrCode = 0
-				entry.lastErrMsg = err.Error()
+				entry.LastErrCode = 0
+				entry.LastErrMsg = err.Error()
 			}
 
 			lastErr = err
@@ -199,8 +207,8 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 			// Exhausted per-IP retries: mark the IP unhealthy, record time, update global map and healthy pool,
 			// then break to pick another IP (outer loop continues).
 			// attempt to mark unhealthy: 0 -> 1
-			if atomic.CompareAndSwapUint32(&entry.unhealthy, 0, 1) {
-				entry.lastChecked = time.Now()
+			if atomic.CompareAndSwapUint32((*uint32)(&entry.ConnectionStatus), uint32(Healthy), uint32(Unhealthy)) {
+				entry.LastChecked = time.Now()
 				// populate global unhealthy map and refresh pool on transition
 				UnHealthyMu.Lock()
 				UnHealthyPrivateEndpoints[peIP] = *entry
@@ -208,7 +216,7 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 
 				rr.refreshHealthyPool()
 				log.Printf("[Counter %d] Marked IP %s as unhealthy after %d failed attempts with Error Message: %s",
-					idx, peIP, rr.perIPRetries, entry.lastErrMsg)
+					idx, peIP, rr.perIPRetries, entry.LastErrMsg)
 			}
 			// break inner loop; outer loop will select another IP (or finish if attempts exhausted)
 			break
@@ -224,9 +232,8 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 func (rr *RoundRobinTransport) refreshHealthyPool() {
 	var healthy []*IPEntry
 	for _, e := range rr.ips {
-		log.Printf("refreshHealthyPool Counter: %d IP Address: %s Unhealthy: %d\n", rr.counter, e.IP, e.unhealthy)
-		if atomic.LoadUint32(&e.unhealthy) == 0 ||
-			time.Since(e.lastChecked) >= rr.cooldown {
+		log.Printf("refreshHealthyPool Counter: %d IP Address: %s Unhealthy: %d\n", rr.counter, e.IP, e.ConnectionStatus)
+		if (e.ConnectionStatus == Healthy) || (time.Since(e.LastChecked) >= rr.cooldown) {
 			healthy = append(healthy, e)
 		}
 	}
