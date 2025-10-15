@@ -994,6 +994,9 @@ extends:
                 templateContext:
                   type: releaseJob
                   isProduction: true
+                  outputs:
+                    - output:
+                      sbomBuildDropPath: $(Build.ArtifactStagingDirectory)/azcopy-*-signed
                 pool:
                   name: azcopy-pool
                   image: ubuntu22-1espt
@@ -1017,6 +1020,9 @@ extends:
                       artifactName: ' '
                       itemPattern: 'azcopy-*-signed/**'
                       downloadPath: $(Build.ArtifactStagingDirectory)
+                    outputs:
+                      sbomBuildDropPath: $(Build.ArtifactStagingDirectory)/azcopy-*-signed
+
 
                   - script: |
                       sudo ls -lRt $(Build.ArtifactStagingDirectory)
