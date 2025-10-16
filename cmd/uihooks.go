@@ -39,7 +39,7 @@ import (
 
 // hold a pointer to the global lifecycle controller so that commands could output messages and exit properly
 // only one instance of the formatter should exist
-var glcm = func() (lcmgr *lifecycleMgr) {
+var glcm LifecycleMgr = func() (lcmgr *lifecycleMgr) {
 	lcmgr = &lifecycleMgr{
 		msgQueue:             make(chan outputMessage, 1000),
 		progressCache:        "",
