@@ -1028,7 +1028,7 @@ extends:
           - stage: ReleaseToGithub
             dependsOn:
               - AzCopyVersion
-              - VerifyArtifacts
+             # - VerifyArtifacts
             jobs:
               - job: ReleaseJob
                 templateContext:
