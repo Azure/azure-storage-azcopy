@@ -141,9 +141,11 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm LifecycleMgr) (totalKno
 				summary.TransfersSkipped, summary.TotalTransfers, scanningString, perfString, throughputString, diskString)
 		}
 	}
-	jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(cca.jobID)
-	if exists {
-		jobMan.Log(common.LogInfo, builder(EOutputFormat.Text()))
+	if jobsAdmin.JobsAdmin != nil {
+		jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(cca.jobID)
+		if exists {
+			jobMan.Log(common.LogInfo, builder(EOutputFormat.Text()))
+		}
 	}
 
 	glcm.Progress(builder)

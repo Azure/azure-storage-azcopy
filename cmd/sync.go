@@ -620,9 +620,11 @@ func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm LifecycleMgr, throughpu
 		return fmt.Sprintf("%v Files Scanned at Source, %v Files Scanned at Destination%s",
 			srcScanned, dstScanned, throughputString)
 	}
-	jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(cca.jobID)
-	if exists {
-		jobMan.Log(common.LogInfo, builder(EOutputFormat.Text()))
+	if jobsAdmin.JobsAdmin != nil {
+		jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(cca.jobID)
+		if exists {
+			jobMan.Log(common.LogInfo, builder(EOutputFormat.Text()))
+		}
 	}
 
 	lcm.Progress(builder)
@@ -681,9 +683,11 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm LifecycleMgr) (totalKnown
 			summary.TotalTransfers, perfString, jobsAdmin.ToFixed(throughput, 4), diskString)
 	}
 
-	jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
-	if exists {
-		jobMan.Log(common.LogInfo, builder(EOutputFormat.Text()))
+	if jobsAdmin.JobsAdmin != nil {
+		jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
+		if exists {
+			jobMan.Log(common.LogInfo, builder(EOutputFormat.Text()))
+		}
 	}
 	lcm.Progress(builder)
 
@@ -745,9 +749,11 @@ Final Job Status: %v%s%s
 				screenStats,
 				formatPerfAdvice(summary.PerformanceAdvice))
 
-			jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
-			if exists {
-				jobMan.Log(common.LogInfo, logStats+"\n"+output)
+			if jobsAdmin.JobsAdmin != nil {
+				jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
+				if exists {
+					jobMan.Log(common.LogInfo, logStats+"\n"+output)
+				}
 			}
 
 			return output

@@ -1398,9 +1398,11 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm LifecycleMgr) (totalKnown
 		}
 	}
 
-	jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(cca.jobID)
-	if exists {
-		jobMan.Log(common.LogInfo, builder(EOutputFormat.Text()))
+	if jobsAdmin.JobsAdmin != nil {
+		jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(cca.jobID)
+		if exists {
+			jobMan.Log(common.LogInfo, builder(EOutputFormat.Text()))
+		}
 	}
 
 	lcm.Progress(builder)
@@ -1472,10 +1474,12 @@ Final Job Status: %v%s%s
 				}
 
 				// log to job log
-				jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
-				if exists {
-					// Passing this as LogError ensures the stats are always logged.
-					jobMan.Log(common.LogError, logStats+"\n"+output)
+				if jobsAdmin.JobsAdmin != nil {
+					jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
+					if exists {
+						// Passing this as LogError ensures the stats are always logged.
+						jobMan.Log(common.LogError, logStats+"\n"+output)
+					}
 				}
 				return output
 			}
