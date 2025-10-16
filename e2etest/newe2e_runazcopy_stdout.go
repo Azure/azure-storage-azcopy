@@ -2,9 +2,10 @@ package e2etest
 
 import (
 	"encoding/json"
+	"strings"
+
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"strings"
 )
 
 var _ AzCopyStdout = &AzCopyParsedStdout{}
@@ -168,9 +169,9 @@ func (a *AzCopyParsedCopySyncRemoveStdout) Write(p []byte) (n int, err error) {
 	if a.listenChan == nil {
 		a.listenChan = a.OnParsedLine.SubscribeFunc(func(line common.JsonOutputTemplate) {
 			switch line.MessageType {
-			case common.EOutputMessageType.EndOfJob().String():
+			case cmd.EOutputMessageType.EndOfJob().String():
 				_ = json.Unmarshal([]byte(line.MessageContent), &a.FinalStatus)
-			case common.EOutputMessageType.Init().String():
+			case cmd.EOutputMessageType.Init().String():
 				_ = json.Unmarshal([]byte(line.MessageContent), &a.InitMsg)
 			}
 		})
@@ -207,7 +208,7 @@ func (d *AzCopyParsedDryrunStdout) Write(p []byte) (n int, err error) {
 				continue
 			}
 
-			if out.MessageType != common.EOutputMessageType.Dryrun().String() {
+			if out.MessageType != cmd.EOutputMessageType.Dryrun().String() {
 				continue
 			}
 
@@ -234,7 +235,7 @@ type AzCopyParsedJobsListStdout struct {
 func (a *AzCopyParsedJobsListStdout) Write(p []byte) (n int, err error) {
 	if a.listenChan == nil {
 		a.listenChan = a.OnParsedLine.SubscribeFunc(func(line common.JsonOutputTemplate) {
-			if line.MessageType == common.EOutputMessageType.EndOfJob().String() {
+			if line.MessageType == cmd.EOutputMessageType.EndOfJob().String() {
 				var tx common.ListJobsResponse
 				err = json.Unmarshal([]byte(line.MessageContent), &tx)
 				if err != nil {
@@ -258,7 +259,7 @@ type AzCopyParsedLoginStatusStdout struct {
 func (a *AzCopyParsedLoginStatusStdout) Write(p []byte) (n int, err error) {
 	if a.listenChan == nil {
 		a.listenChan = a.OnParsedLine.SubscribeFunc(func(line common.JsonOutputTemplate) {
-			if line.MessageType == common.EOutputMessageType.LoginStatusInfo().String() {
+			if line.MessageType == cmd.EOutputMessageType.LoginStatusInfo().String() {
 				out := &cmd.LoginStatusOutput{}
 				err = json.Unmarshal([]byte(line.MessageContent), out)
 				if err != nil {
@@ -318,14 +319,14 @@ type AzCopyParsedJobsShowStdout struct {
 func (a *AzCopyParsedJobsShowStdout) Write(p []byte) (n int, err error) {
 	if a.listenChan == nil {
 		a.listenChan = a.OnParsedLine.SubscribeFunc(func(line common.JsonOutputTemplate) {
-			if line.MessageType == common.EOutputMessageType.ListJobTransfers().String() {
+			if line.MessageType == cmd.EOutputMessageType.ListJobTransfers().String() {
 				var tx common.ListJobTransfersResponse
 				err = json.Unmarshal([]byte(line.MessageContent), &tx)
 				if err != nil {
 					return
 				}
 				a.transfers = tx
-			} else if line.MessageType == common.EOutputMessageType.GetJobSummary().String() {
+			} else if line.MessageType == cmd.EOutputMessageType.GetJobSummary().String() {
 				var summary common.ListJobSummaryResponse
 				err = json.Unmarshal([]byte(line.MessageContent), &summary)
 				if err != nil {

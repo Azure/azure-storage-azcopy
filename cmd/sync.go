@@ -335,7 +335,7 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 		return errors.New("cannot use both cpk-by-name and cpk-by-value at the same time")
 	}
 
-	if OutputLevel == common.EOutputVerbosity.Quiet() || OutputLevel == common.EOutputVerbosity.Essential() {
+	if OutputLevel == EOutputVerbosity.Quiet() || OutputLevel == EOutputVerbosity.Essential() {
 		if cooked.deleteDestination == common.EDeleteDestination.Prompt() {
 			err = fmt.Errorf("cannot set output level '%s' with delete-destination option '%s'", OutputLevel.String(), cooked.deleteDestination.String())
 		} else if cooked.dryrunMode {
@@ -370,8 +370,8 @@ func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
 		common.LogToJobLogWithPrefix(LocalToFileShareWarnMsg, common.LogWarning)
 
 		if cooked.dryrunMode {
-			glcm.Dryrun(func(of common.OutputFormat) string {
-				if of == common.EOutputFormat.Json() {
+			glcm.Dryrun(func(of OutputFormat) string {
+				if of == EOutputFormat.Json() {
 					var out struct {
 						Warn string `json:"warn"`
 					}
@@ -550,7 +550,7 @@ func (cca *cookedSyncCmdArgs) waitUntilJobCompletion(blocking bool) {
 	if common.LogPathFolder != "" {
 		logPathFolder = fmt.Sprintf("%s%s%s.log", common.LogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
 	}
-	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), logPathFolder, false, ""))
+	glcm.Init(GetStandardInitOutputBuilder(cca.jobID.String(), logPathFolder, false, ""))
 
 	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
@@ -567,7 +567,7 @@ func (cca *cookedSyncCmdArgs) waitUntilJobCompletion(blocking bool) {
 	}
 }
 
-func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
+func (cca *cookedSyncCmdArgs) Cancel(lcm LifecycleMgr) {
 	// prompt for confirmation, except when enumeration is complete
 	if !cca.isEnumerationComplete {
 		answer := lcm.Prompt("The enumeration (source/destination comparison) is not complete, "+
@@ -597,13 +597,12 @@ type scanningProgressJsonTemplate struct {
 	FilesScannedAtDestination uint64
 }
 
-func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm common.LifecycleMgr, throughput float64) {
-
-	lcm.Progress(func(format common.OutputFormat) string {
+func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm LifecycleMgr, throughput float64) {
+	builder := func(format OutputFormat) string {
 		srcScanned := atomic.LoadUint64(&cca.atomicSourceFilesScanned)
 		dstScanned := atomic.LoadUint64(&cca.atomicDestinationFilesScanned)
 
-		if format == common.EOutputFormat.Json() {
+		if format == EOutputFormat.Json() {
 			jsonOutputTemplate := scanningProgressJsonTemplate{
 				FilesScannedAtSource:      srcScanned,
 				FilesScannedAtDestination: dstScanned,
@@ -620,7 +619,13 @@ func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm common.LifecycleMgr, th
 		}
 		return fmt.Sprintf("%v Files Scanned at Source, %v Files Scanned at Destination%s",
 			srcScanned, dstScanned, throughputString)
-	})
+	}
+	jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(cca.jobID)
+	if exists {
+		jobMan.Log(common.LogInfo, builder(EOutputFormat.Text()))
+	}
+
+	lcm.Progress(builder)
 }
 
 func (cca *cookedSyncCmdArgs) getJsonOfSyncJobSummary(summary common.ListJobSummaryResponse) string {
@@ -632,7 +637,7 @@ func (cca *cookedSyncCmdArgs) getJsonOfSyncJobSummary(summary common.ListJobSumm
 	return string(jsonOutput)
 }
 
-func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint32) {
+func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm LifecycleMgr) (totalKnownCount uint32) {
 	duration := time.Since(cca.jobStartTime) // report the total run time of the job
 	var summary common.ListJobSummaryResponse
 	var throughput float64
@@ -641,7 +646,6 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 	// fetch a job status and compute throughput if the first part was dispatched
 	if cca.firstPartOrdered() {
 		summary = jobsAdmin.GetJobSummary(cca.jobID)
-		lcm = jobsAdmin.GetJobLCMWrapper(cca.jobID)
 		jobDone = summary.JobStatus.IsJobDone()
 		totalKnownCount = summary.TotalTransfers
 
@@ -661,9 +665,8 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 		cca.reportScanningProgress(lcm, throughput)
 		return
 	}
-
-	lcm.Progress(func(format common.OutputFormat) string {
-		if format == common.EOutputFormat.Json() {
+	builder := func(format OutputFormat) string {
+		if format == EOutputFormat.Json() {
 			return cca.getJsonOfSyncJobSummary(summary)
 		}
 
@@ -676,20 +679,26 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 			summary.TransfersFailed,
 			summary.TotalTransfers-summary.TransfersCompleted-summary.TransfersFailed,
 			summary.TotalTransfers, perfString, jobsAdmin.ToFixed(throughput, 4), diskString)
-	})
+	}
+
+	jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
+	if exists {
+		jobMan.Log(common.LogInfo, builder(EOutputFormat.Text()))
+	}
+	lcm.Progress(builder)
 
 	if jobDone {
-		exitCode := common.EExitCode.Success()
+		exitCode := EExitCode.Success()
 		if summary.TransfersFailed > 0 || summary.JobStatus == common.EJobStatus.Cancelled() || summary.JobStatus == common.EJobStatus.Cancelling() {
-			exitCode = common.EExitCode.Error()
+			exitCode = EExitCode.Error()
 		}
 
 		summary.SkippedSymlinkCount = atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)
 		summary.SkippedSpecialFileCount = atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount)
 		summary.SkippedHardlinkCount = atomic.LoadUint32(&cca.atomicSkippedHardlinkCount)
 
-		lcm.Exit(func(format common.OutputFormat) string {
-			if format == common.EOutputFormat.Json() {
+		lcm.Exit(func(format OutputFormat) string {
+			if format == EOutputFormat.Json() {
 				return cca.getJsonOfSyncJobSummary(summary)
 			}
 			screenStats, logStats := formatExtraStats(cca.fromTo, summary.AverageIOPS, summary.AverageE2EMilliseconds, summary.NetworkErrorPercentage, summary.ServerBusyPercentage)
@@ -866,7 +875,7 @@ func init() {
 				glcm.Error("Cannot perform sync due to error: " + err.Error() + getErrorCodeUrl(err))
 			}
 			if cooked.dryrunMode {
-				glcm.Exit(nil, common.EExitCode.Success())
+				glcm.Exit(nil, EExitCode.Success())
 			}
 
 			glcm.SurrenderControl()

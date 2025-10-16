@@ -23,6 +23,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/spf13/cobra"
@@ -62,13 +63,13 @@ func init() {
 			err = handleCleanJobsCommand(withStatus)
 			if err == nil {
 				if withStatus == common.EJobStatus.All() {
-					glcm.Exit(func(format common.OutputFormat) string {
+					glcm.Exit(func(format OutputFormat) string {
 						return "Successfully removed all jobs."
-					}, common.EExitCode.Success())
+					}, EExitCode.Success())
 				} else {
-					glcm.Exit(func(format common.OutputFormat) string {
+					glcm.Exit(func(format OutputFormat) string {
 						return fmt.Sprintf("Successfully removed jobs with status: %s.", withStatus)
-					}, common.EExitCode.Success())
+					}, EExitCode.Success())
 				}
 			} else {
 				glcm.Error(fmt.Sprintf("Failed to remove log/plan files due to error: %s.", err))

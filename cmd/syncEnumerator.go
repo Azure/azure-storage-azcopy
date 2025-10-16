@@ -424,14 +424,14 @@ func IsDestinationCaseInsensitive(fromTo common.FromTo) bool {
 func quitIfInSync(transferJobInitiated, anyDestinationFileDeleted bool, cca *cookedSyncCmdArgs) {
 	if !transferJobInitiated && !anyDestinationFileDeleted {
 		cca.reportScanningProgress(glcm, 0)
-		glcm.Exit(func(format common.OutputFormat) string {
+		glcm.Exit(func(format OutputFormat) string {
 			return "The source and destination are already in sync."
-		}, common.EExitCode.Success())
+		}, EExitCode.Success())
 	} else if !transferJobInitiated && anyDestinationFileDeleted {
 		// some files were deleted but no transfer scheduled
 		cca.reportScanningProgress(glcm, 0)
-		glcm.Exit(func(format common.OutputFormat) string {
+		glcm.Exit(func(format OutputFormat) string {
 			return "The source and destination are now in sync."
-		}, common.EExitCode.Success())
+		}, EExitCode.Success())
 	}
 }

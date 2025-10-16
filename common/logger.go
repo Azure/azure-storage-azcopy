@@ -26,6 +26,7 @@ import (
 	"log"
 	"path"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -259,10 +260,6 @@ func NewDatalakeReadLogFunc(logger ILogger, fullUrl string) func(int32, error, d
 	}
 }
 
-func IsForceLoggingDisabled() bool {
-	return GetLifecycleMgr().IsForceLoggingDisabled()
-}
-
 type S3HTTPTraceLogger struct {
 	logger   ILogger
 	logLevel LogLevel
@@ -295,4 +292,19 @@ func Cause(err error) error {
 		err = cause.Cause()
 	}
 	return err
+}
+
+var disableSyslog bool
+
+func IsForceLoggingDisabled() bool {
+	return disableSyslog
+}
+
+func init() {
+	var err error
+	disableSyslog, err = strconv.ParseBool(GetEnvironmentVariable(EEnvironmentVariable.DisableSyslog()))
+	if err != nil {
+		// By default, we'll retain the current behaviour. i.e. To log in Syslog/WindowsEventLog if not specified by the user
+		disableSyslog = false
+	}
 }

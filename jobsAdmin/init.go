@@ -570,20 +570,6 @@ func ListJobTransfers(r common.ListJobTransfersRequest) common.ListJobTransfersR
 	return ljt
 }
 
-func GetJobLCMWrapper(jobID common.JobID) common.LifecycleMgr {
-	jobmgr, found := JobsAdmin.JobMgr(jobID)
-	lcm := common.GetLifecycleMgr()
-
-	if !found {
-		return lcm
-	}
-
-	return ste.JobLogLCMWrapper{
-		JobManager:   jobmgr,
-		LifecycleMgr: lcm,
-	}
-}
-
 // GetJobDetails api returns the job FromTo info.
 func GetJobDetails(r common.GetJobDetailsRequest) common.GetJobDetailsResponse {
 	jm, found := JobsAdmin.JobMgr(r.JobID)

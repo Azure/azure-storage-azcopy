@@ -53,7 +53,7 @@ func init() {
 		},
 		Run: func(cmd *cobra.Command, args []string) {
 			HandlePauseCommand(commandLineInput)
-			glcm.Exit(nil, common.EExitCode.Success())
+			glcm.Exit(nil, EExitCode.Success())
 		},
 		// hide features not relevant to BFS
 		// TODO remove after preview release
@@ -75,7 +75,7 @@ func HandlePauseCommand(jobIdString string) {
 
 	// TODO : Why isn't the response here used?
 	jobsAdmin.CancelPauseJobOrder(jobID, common.EJobStatus.Paused(), glcm)
-	glcm.Exit(func(format common.OutputFormat) string {
+	glcm.Exit(func(format OutputFormat) string {
 		return "Job " + jobID.String() + " paused successfully"
-	}, common.EExitCode.Success())
+	}, EExitCode.Success())
 }

@@ -371,7 +371,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	// This will only happen in CLI commands, not AzCopy as a library.
 	// if redirection is triggered, avoid printing any output
 	if cooked.isRedirection() {
-		glcm.SetOutputFormat(common.EOutputFormat.None())
+		glcm.SetOutputFormat(EOutputFormat.None())
 	}
 
 	if cooked.FromTo.IsNFS() {
@@ -723,7 +723,7 @@ type CookedCopyCmdArgs struct {
 	// followup/cleanup properties are NOT available on resume, and so should not be used for jobs that may be resumed
 	// TODO: consider find a way to enforce that, or else to allow them to be preserved. Initially, they are just for benchmark jobs, so not a problem immediately because those jobs can't be resumed, by design.
 	followupJobArgs   *CookedCopyCmdArgs
-	priorJobExitCode  *common.ExitCode
+	priorJobExitCode  *ExitCode
 	isCleanupJob      bool // triggers abbreviated status reporting, since we don't want full reporting for cleanup jobs
 	cleanupJobMessage string
 
@@ -793,7 +793,7 @@ func (cca *CookedCopyCmdArgs) process() error {
 		}
 
 		// if no error, the operation is now complete
-		glcm.Exit(nil, common.EExitCode.Success())
+		glcm.Exit(nil, EExitCode.Success())
 	}
 	return cca.processCopyJobPartOrders()
 }
@@ -1264,7 +1264,7 @@ func (cca *CookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
 		if common.LogPathFolder != "" {
 			logPathFolder = fmt.Sprintf("%s%s%s.log", common.LogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
 		}
-		glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(),
+		glcm.Init(GetStandardInitOutputBuilder(cca.jobID.String(),
 			logPathFolder,
 			cca.isCleanupJob,
 			cca.cleanupJobMessage))
@@ -1285,7 +1285,7 @@ func (cca *CookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
 	}
 }
 
-func (cca *CookedCopyCmdArgs) Cancel(lcm common.LifecycleMgr) {
+func (cca *CookedCopyCmdArgs) Cancel(lcm LifecycleMgr) {
 	// prompt for confirmation, except when enumeration is complete
 	if !cca.isEnumerationComplete {
 		answer := lcm.Prompt("The source enumeration is not complete, "+
@@ -1314,14 +1314,14 @@ func (cca *CookedCopyCmdArgs) hasFollowup() bool {
 	return cca.followupJobArgs != nil
 }
 
-func (cca *CookedCopyCmdArgs) launchFollowup(priorJobExitCode common.ExitCode) {
+func (cca *CookedCopyCmdArgs) launchFollowup(priorJobExitCode ExitCode) {
 	go func() {
 		glcm.AllowReinitiateProgressReporting()
 		cca.followupJobArgs.priorJobExitCode = &priorJobExitCode
 		err := cca.followupJobArgs.process()
 		if err == ErrNothingToRemove {
 			glcm.Info("Cleanup completed (nothing needed to be deleted)")
-			glcm.Exit(nil, common.EExitCode.Success())
+			glcm.Exit(nil, EExitCode.Success())
 		} else if err != nil {
 			glcm.Error("failed to perform followup/cleanup job due to error: " + err.Error())
 		}
@@ -1329,20 +1329,17 @@ func (cca *CookedCopyCmdArgs) launchFollowup(priorJobExitCode common.ExitCode) {
 	}()
 }
 
-func (cca *CookedCopyCmdArgs) getSuccessExitCode() common.ExitCode {
+func (cca *CookedCopyCmdArgs) getSuccessExitCode() ExitCode {
 	if cca.priorJobExitCode != nil {
 		return *cca.priorJobExitCode // in a chain of jobs our best case outcome is whatever the predecessor(s) finished with
 	} else {
-		return common.EExitCode.Success()
+		return EExitCode.Success()
 	}
 }
 
-func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint32) {
+func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm LifecycleMgr) (totalKnownCount uint32) {
 	// fetch a job status
 	summary := jobsAdmin.GetJobSummary(cca.jobID)
-	glcmSwapOnce.Do(func() {
-		glcm = jobsAdmin.GetJobLCMWrapper(cca.jobID)
-	})
 	summary.IsCleanupJob = cca.isCleanupJob // only FE knows this, so we can only set it here
 	cleanupStatusString := fmt.Sprintf("Cleanup %v/%v", summary.TransfersCompleted, summary.TotalTransfers)
 
@@ -1363,8 +1360,8 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 
 		return common.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
 	}
-	glcm.Progress(func(format common.OutputFormat) string {
-		if format == common.EOutputFormat.Json() {
+	builder := func(format OutputFormat) string {
+		if format == EOutputFormat.Json() {
 			jsonOutput, err := json.Marshal(summary)
 			common.PanicIfErr(err)
 			return string(jsonOutput)
@@ -1399,7 +1396,14 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 				summary.TransfersSkipped+atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)+atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount),
 				summary.TotalTransfers, scanningString, perfString, throughputString, diskString)
 		}
-	})
+	}
+
+	jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(cca.jobID)
+	if exists {
+		jobMan.Log(common.LogInfo, builder(EOutputFormat.Text()))
+	}
+
+	lcm.Progress(builder)
 
 	if jobDone {
 		summary.SkippedSymlinkCount = atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)
@@ -1408,11 +1412,11 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 
 		exitCode := cca.getSuccessExitCode()
 		if summary.TransfersFailed > 0 || summary.JobStatus == common.EJobStatus.Cancelled() || summary.JobStatus == common.EJobStatus.Cancelling() {
-			exitCode = common.EExitCode.Error()
+			exitCode = EExitCode.Error()
 		}
 
-		builder := func(format common.OutputFormat) string {
-			if format == common.EOutputFormat.Json() {
+		builder := func(format OutputFormat) string {
+			if format == EOutputFormat.Json() {
 				jsonOutput, err := json.Marshal(summary)
 				common.PanicIfErr(err)
 				return string(jsonOutput)
@@ -1478,7 +1482,7 @@ Final Job Status: %v%s%s
 		}
 
 		if cca.hasFollowup() {
-			lcm.Exit(builder, common.EExitCode.NoExit()) // leave the app running to process the followup
+			lcm.Exit(builder, EExitCode.NoExit()) // leave the app running to process the followup
 			cca.launchFollowup(exitCode)
 			lcm.SurrenderControl() // the followup job will run on its own goroutines
 		} else {
@@ -1647,7 +1651,7 @@ func init() {
 			}
 
 			if cooked.dryrunMode {
-				glcm.Exit(nil, common.EExitCode.Success())
+				glcm.Exit(nil, EExitCode.Success())
 			}
 
 			glcm.SurrenderControl()

@@ -194,7 +194,7 @@ func init() {
 			}
 			err = cooked.handleListContainerCommand()
 			if err == nil {
-				glcm.Exit(nil, common.EExitCode.Success())
+				glcm.Exit(nil, EExitCode.Success())
 			} else {
 				glcm.Error(err.Error() + getErrorCodeUrl(err))
 			}
@@ -280,15 +280,15 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 
 	processor := func(object traverser2.StoredObject) error {
 		lo := cooked.newListObject(object, level)
-		glcm.Output(func(format common.OutputFormat) string {
-			if format == common.EOutputFormat.Json() {
+		glcm.Output(func(format OutputFormat) string {
+			if format == EOutputFormat.Json() {
 				jsonOutput, err := json.Marshal(lo)
 				common.PanicIfErr(err)
 				return string(jsonOutput)
 			} else {
 				return lo.String()
 			}
-		}, common.EOutputMessageType.ListObject())
+		}, EOutputMessageType.ListObject())
 
 		// ensure that versioned objects don't get counted multiple times in the tally
 		// 1. only include the size of the latest version of the object in the sizeCount
@@ -336,15 +336,15 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 
 	if cooked.RunningTally {
 		ls := cooked.newListSummary(fileCount, sizeCount)
-		glcm.Output(func(format common.OutputFormat) string {
-			if format == common.EOutputFormat.Json() {
+		glcm.Output(func(format OutputFormat) string {
+			if format == EOutputFormat.Json() {
 				jsonOutput, err := json.Marshal(ls)
 				common.PanicIfErr(err)
 				return string(jsonOutput)
 			} else {
 				return ls.String()
 			}
-		}, common.EOutputMessageType.ListSummary())
+		}, EOutputMessageType.ListSummary())
 	}
 
 	return nil

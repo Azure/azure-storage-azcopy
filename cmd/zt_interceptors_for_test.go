@@ -63,22 +63,22 @@ type mockedLifecycleManager struct {
 	progressLog  chan string
 	exitLog      chan string
 	dryrunLog    chan string
-	outputFormat common.OutputFormat
+	outputFormat OutputFormat
 }
 
 func (m *mockedLifecycleManager) ReportAllJobPartsDone() {
 }
 
-func (m *mockedLifecycleManager) SetOutputVerbosity(mode common.OutputVerbosity) {
+func (m *mockedLifecycleManager) SetOutputVerbosity(mode OutputVerbosity) {
 }
 
-func (m *mockedLifecycleManager) Progress(o common.OutputBuilder) {
+func (m *mockedLifecycleManager) Progress(o OutputBuilder) {
 	select {
-	case m.progressLog <- o(common.EOutputFormat.Text()):
+	case m.progressLog <- o(EOutputFormat.Text()):
 	default:
 	}
 }
-func (*mockedLifecycleManager) Init(common.OutputBuilder) {}
+func (*mockedLifecycleManager) Init(OutputBuilder) {}
 func (m *mockedLifecycleManager) Info(msg string) {
 	select {
 	case m.infoLog <- msg:
@@ -91,13 +91,13 @@ func (m *mockedLifecycleManager) Warn(msg string) {
 	default:
 	}
 }
-func (m *mockedLifecycleManager) Dryrun(o common.OutputBuilder) {
+func (m *mockedLifecycleManager) Dryrun(o OutputBuilder) {
 	select {
 	case m.dryrunLog <- o(m.outputFormat):
 	default:
 	}
 }
-func (m *mockedLifecycleManager) Output(o common.OutputBuilder, e common.OutputMessageType) {
+func (m *mockedLifecycleManager) Output(o OutputBuilder, e OutputMessageType) {
 	select {
 	case m.infoLog <- o(m.outputFormat):
 	default:
@@ -106,9 +106,9 @@ func (m *mockedLifecycleManager) Output(o common.OutputBuilder, e common.OutputM
 func (*mockedLifecycleManager) Prompt(message string, details common.PromptDetails) common.ResponseOption {
 	return common.EResponseOption.Default()
 }
-func (m *mockedLifecycleManager) Exit(o common.OutputBuilder, e common.ExitCode) {
+func (m *mockedLifecycleManager) Exit(o OutputBuilder, e ExitCode) {
 	select {
-	case m.exitLog <- o(common.EOutputFormat.Text()):
+	case m.exitLog <- o(EOutputFormat.Text()):
 	default:
 	}
 }
@@ -122,17 +122,11 @@ func (*mockedLifecycleManager) SurrenderControl()                               
 func (*mockedLifecycleManager) RegisterCloseFunc(func())                        {}
 func (mockedLifecycleManager) AllowReinitiateProgressReporting()                {}
 func (*mockedLifecycleManager) InitiateProgressReporting(common.WorkController) {}
-func (m *mockedLifecycleManager) SetOutputFormat(format common.OutputFormat) {
+func (m *mockedLifecycleManager) SetOutputFormat(format OutputFormat) {
 	m.outputFormat = format
 }
 func (*mockedLifecycleManager) EnableInputWatcher()    {}
 func (*mockedLifecycleManager) EnableCancelFromStdIn() {}
-
-func (*mockedLifecycleManager) SetForceLogging() {}
-
-func (*mockedLifecycleManager) IsForceLoggingDisabled() bool {
-	return false
-}
 
 func (*mockedLifecycleManager) E2EAwaitContinue() {
 	// not implemented in mocked version
