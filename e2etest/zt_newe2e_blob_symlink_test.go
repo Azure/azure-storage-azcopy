@@ -4,7 +4,11 @@ import (
 	"path"
 	"runtime"
 
+<<<<<<< HEAD
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
+=======
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
+>>>>>>> 2fa76948e65b865a1ba2d74b403f348d3c4cfc01
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -217,7 +221,7 @@ func (s *BlobSymlinkSuite) Scenario_TestDirectSourceFollowing(svm *ScenarioVaria
 		})
 	} else if toFollow == nil {
 		ValidateContainsError(svm, stdOut, []string{
-			cmd.ErrorLoneSymlinkSkipped.Error(),
+			traverser.ErrorLoneSymlinkSkipped.Error(),
 		})
 	}
 }

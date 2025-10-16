@@ -1,4 +1,6 @@
-// Copyright © 2017 Microsoft <wastore@microsoft.com>
+//go:build linux || darwin
+
+// Copyright © 2025 Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,47 +20,20 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package ste
 
 import (
-	"testing"
-
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/traverser"
-	"github.com/stretchr/testify/assert"
+	"golang.org/x/sys/unix"
+	"syscall"
 )
 
-func newLocalRes(path string) common.ResourceString {
-	return common.ResourceString{Value: path}
-}
-
-func newRemoteRes(url string) common.ResourceString {
-	r, err := traverser.SplitResourceString(url, common.ELocation.Blob())
-	if err != nil {
-		panic("can't parse resource string")
+func init() {
+	platformRetriedErrnos = []syscall.Errno{
+		unix.EADDRNOTAVAIL, // Similar to Windows, on larger loads, allocatable address space can run out.
+		unix.EADDRINUSE,
+		unix.ECONNRESET, // Another device could simply, drop or refuse our connection in between.
+		unix.ECONNREFUSED,
+		unix.ECONNABORTED,
+		unix.ETIMEDOUT, // We could also just get timed out somewhere in between.
 	}
-	return r
-}
-
-func TestRelativePath(t *testing.T) {
-	a := assert.New(t)
-	// setup
-	cca := CookedCopyCmdArgs{
-		Source:      newLocalRes("a/b/"),
-		Destination: newLocalRes("y/z/"),
-	}
-
-	object := traverser.StoredObject{
-		Name:         "c.txt",
-		EntityType:   1,
-		RelativePath: "c.txt",
-	}
-
-	// execute
-	srcRelPath := cca.MakeEscapedRelativePath(true, false, false, object)
-	destRelPath := cca.MakeEscapedRelativePath(false, true, false, object)
-
-	// assert
-	a.Equal("/c.txt", srcRelPath)
-	a.Equal("/c.txt", destRelPath)
 }
