@@ -16,6 +16,10 @@ import (
 	"unicode"
 )
 
+type JobErrorHandler interface {
+	Error(string)
+}
+
 // only one instance of the formatter should exist
 var lcm = func() (lcmgr *lifecycleMgr) {
 	lcmgr = &lifecycleMgr{

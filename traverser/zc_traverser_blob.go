@@ -157,7 +157,11 @@ retry:
 	if err != nil {
 		return nil, false, false, blobURLParts.BlobName, err
 	}
-	props, err := blobClient.GetProperties(t.ctx, &blob.GetPropertiesOptions{CPKInfo: t.cpkOptions.GetCPKInfo()})
+	cpkInfo, err := t.cpkOptions.GetCPKInfo()
+	if err != nil {
+		return nil, false, false, blobURLParts.BlobName, err
+	}
+	props, err := blobClient.GetProperties(t.ctx, &blob.GetPropertiesOptions{CPKInfo: cpkInfo})
 
 	if err != nil && strings.HasSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING) {
 		// Trim & retry, maybe the directory stub is DFS style.

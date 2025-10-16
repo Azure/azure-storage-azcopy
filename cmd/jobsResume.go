@@ -457,6 +457,7 @@ func (rca resumeCmdArgs) process() error {
 		DstServiceClient: dstServiceClient,
 		IncludeTransfer:  includeTransfer,
 		ExcludeTransfer:  excludeTransfer,
+		JobErrorHandler:  glcm,
 	})
 
 	if !resumeJobResponse.CancelledPauseResumed {

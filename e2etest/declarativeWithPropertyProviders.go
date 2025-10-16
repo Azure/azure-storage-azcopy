@@ -21,8 +21,9 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -177,7 +178,8 @@ func (w with) createObjectProperties() *objectProperties {
 
 	if w.cpkByValue {
 		populated = true
-		cpkInfo := common.GetCpkInfo(w.cpkByValue)
+		cpkInfo, err := common.GetCpkInfo(w.cpkByValue)
+		common.PanicIfErr(err)
 		result.cpkInfo = cpkInfo
 	}
 

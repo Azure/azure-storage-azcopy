@@ -1822,9 +1822,9 @@ type CpkOptions struct {
 	IsSourceEncrypted bool
 }
 
-func (options CpkOptions) GetCPKInfo() *blob.CPKInfo {
+func (options CpkOptions) GetCPKInfo() (*blob.CPKInfo, error) {
 	if !options.IsSourceEncrypted {
-		return nil
+		return nil, nil
 	} else {
 		return GetCpkInfo(options.CpkInfo)
 	}

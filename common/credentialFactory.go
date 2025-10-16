@@ -22,6 +22,7 @@ package common
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -152,9 +153,9 @@ func (f *GCPClientFactory) GetGCPClient(ctx context.Context, credInfo Credential
 	}
 }
 
-func GetCpkInfo(cpkInfo bool) *blob.CPKInfo {
+func GetCpkInfo(cpkInfo bool) (*blob.CPKInfo, error) {
 	if !cpkInfo {
-		return nil
+		return nil, nil
 	}
 
 	// fetch EncryptionKey and EncryptionKeySHA256 from the environment variables
@@ -162,9 +163,8 @@ func GetCpkInfo(cpkInfo bool) *blob.CPKInfo {
 	encryptionKeySHA256 := GetEnvironmentVariable(EEnvironmentVariable.CPKEncryptionKeySHA256())
 	encryptionAlgorithmAES256 := blob.EncryptionAlgorithmTypeAES256
 
-	glcm := GetLifecycleMgr()
 	if encryptionKey == "" || encryptionKeySHA256 == "" {
-		glcm.Error("fatal: failed to fetch cpk encryption key (" + EEnvironmentVariable.CPKEncryptionKey().Name +
+		return nil, errors.New("fatal: failed to fetch cpk encryption key (" + EEnvironmentVariable.CPKEncryptionKey().Name +
 			") or hash (" + EEnvironmentVariable.CPKEncryptionKeySHA256().Name + ") from environment variables")
 	}
 
@@ -172,7 +172,7 @@ func GetCpkInfo(cpkInfo bool) *blob.CPKInfo {
 		EncryptionKey:       &encryptionKey,
 		EncryptionKeySHA256: &encryptionKeySHA256,
 		EncryptionAlgorithm: &encryptionAlgorithmAES256,
-	}
+	}, nil
 }
 
 func GetCpkScopeInfo(cpkScopeInfo string) *blob.CPKScopeInfo {

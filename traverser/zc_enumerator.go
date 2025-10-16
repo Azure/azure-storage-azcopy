@@ -850,13 +850,13 @@ func (e *CopyEnumerator) Enumerate() (err error) {
 
 // -------------------------------------- Helper Funcs -------------------------------------- \\
 
-func passedFilters(filters []ObjectFilter, storedObject StoredObject) bool {
+func passedFilters(filters []ObjectFilter, storedObject StoredObject) (bool, error) {
 	if len(filters) > 0 {
 		// loop through the filters, if any of them fail, then return false
 		for _, filter := range filters {
 			msg, supported := filter.DoesSupportThisOS()
 			if !supported {
-				common.GetLifecycleMgr().Error(msg)
+				return false, errors.New(msg)
 			}
 
 			if filter.AppliesOnlyToFiles() && (storedObject.EntityType != common.EEntityType.File() && storedObject.EntityType != common.EEntityType.Hardlink()) {
@@ -868,12 +868,12 @@ func passedFilters(filters []ObjectFilter, storedObject StoredObject) bool {
 			}
 
 			if !filter.DoesPass(storedObject) {
-				return false
+				return false, nil
 			}
 		}
 	}
 
-	return true
+	return true, nil
 }
 
 // This error should be treated as a flag, that we didn't fail processing, but instead, we just didn't process it.
@@ -890,10 +890,13 @@ func getProcessingError(errin error) (ignored bool, err error) {
 }
 
 func ProcessIfPassedFilters(filters []ObjectFilter, storedObject StoredObject, processor ObjectProcessor) (err error) {
-	if passedFilters(filters, storedObject) {
-		err = processor(storedObject)
-	} else {
-		err = IgnoredError
+	passed, err := passedFilters(filters, storedObject)
+	if err == nil {
+		if passed {
+			err = processor(storedObject)
+		} else {
+			err = IgnoredError
+		}
 	}
 
 	return
