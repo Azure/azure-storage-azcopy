@@ -248,7 +248,7 @@ func validateAndAdjustHardlinksFlag(option *common.HardlinkHandlingType, fromTo 
 
 	// NFS<->SMB special case: force skip
 	if (fromTo == common.EFromTo.FileNFSFileSMB() || fromTo == common.EFromTo.FileSMBFileNFS()) &&
-		*option != common.SkipHardlinkHandlingType {
+		*option == common.PreserveHardlinkHandlingType {
 		return fmt.Errorf(
 			"For NFS->SMB and SMB->NFS transfers, '--hardlinks' must be set to 'skip'. " +
 				"Hardlinked files are not supported between NFS and SMB and will always be skipped. " +
@@ -277,7 +277,7 @@ func validateAndAdjustHardlinksFlag(option *common.HardlinkHandlingType, fromTo 
 			common.EFromTo.FileSMBFileNFS(): true,
 		}
 		if !validPairs[fromTo] {
-			return fmt.Errorf("For S2S transfers, '--hardlinks' is only supported for NFS<->NFS, NFS->SMB, and SMB->NFS.")
+			return fmt.Errorf("for S2S transfers, '--hardlinks' is only supported for NFS<->NFS, NFS->SMB, and SMB->NFS.")
 		}
 	}
 

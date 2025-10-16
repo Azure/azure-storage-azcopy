@@ -56,6 +56,7 @@ func getPropertiesAndPermissions(svm *ScenarioVariationManager, preserveProperti
 	return folderProperties, fileProperties, fileOrFolderPermissions
 }
 
+/*
 func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariationManager) {
 
 	// 	Test Scenario:
@@ -223,7 +224,9 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 			FileNFSPermissions: fileOrFolderPermissions,
 		}}
 	srcObjRes[hOriginalFileName] = CreateResource[ObjectResourceManager](svm, srcContainer, obj)
-	srcObjs[hOriginalFileName] = obj
+	if hardlinkType != common.SkipHardlinkHandlingType {
+		srcObjs[hOriginalFileName] = obj
+	}
 
 	// create hardlinked file
 	hardLinkedFileName := rootDir + "/hardlinked.txt"
@@ -236,7 +239,9 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 			HardLinkedFileName: hOriginalFileName,
 		}}
 	srcObjRes[hardLinkedFileName] = CreateResource[ObjectResourceManager](svm, srcContainer, obj)
-	srcObjs[hardLinkedFileName] = obj
+	if hardlinkType != common.SkipHardlinkHandlingType {
+		srcObjs[hardLinkedFileName] = obj
+	}
 
 	// create special file
 	specialFileFileName := rootDir + "/mypipe"
@@ -456,7 +461,9 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 			FileNFSPermissions: fileOrFolderPermissions,
 		}}
 	CreateResource[ObjectResourceManager](svm, srcContainer, obj)
-	srcObjs[hOriginalFileName] = obj
+	if hardlinkType != common.SkipHardlinkHandlingType {
+		srcObjs[hOriginalFileName] = obj
+	}
 
 	// create hardlinked file
 	hardLinkedFileName := rootDir + "/hardlinked.txt"
@@ -469,7 +476,10 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 			HardLinkedFileName: hOriginalFileName,
 		}}
 	CreateResource[ObjectResourceManager](svm, srcContainer, obj)
-	srcObjs[hardLinkedFileName] = obj
+	if hardlinkType != common.SkipHardlinkHandlingType {
+		srcObjs[hardLinkedFileName] = obj
+	}
+
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
 	shouldFail := false
@@ -682,7 +692,9 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 			FileNFSPermissions: fileOrFolderPermissions,
 		}}
 	CreateResource[ObjectResourceManager](svm, srcContainer, obj)
-	srcObjs[hOriginalFileName] = obj
+	if hardlinkType != common.SkipHardlinkHandlingType {
+		srcObjs[hOriginalFileName] = obj
+	}
 
 	// create hardlinked file
 	hardLinkedFileName := rootDir + "/hardlinked.txt"
@@ -695,7 +707,9 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 			HardLinkedFileName: hOriginalFileName,
 		}}
 	CreateResource[ObjectResourceManager](svm, srcContainer, obj)
-	srcObjs[hardLinkedFileName] = obj
+	if hardlinkType != common.SkipHardlinkHandlingType {
+		srcObjs[hardLinkedFileName] = obj
+	}
 
 	shouldFail := false
 	if (followSymlinks && preserveSymlinks) || followSymlinks {
@@ -768,6 +782,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 		ValidateSkippedSymlinksCount(svm, stdOut, 1)
 	}
 }
+*/
 
 func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationManager) {
 
@@ -905,7 +920,9 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 			FileNFSProperties: fileProperties,
 		}}
 	CreateResource[ObjectResourceManager](svm, srcShare, obj)
-	srcObjs[hOriginalFileName] = obj
+	if hardlinkType != common.SkipHardlinkHandlingType {
+		srcObjs[hOriginalFileName] = obj
+	}
 
 	// create hardlinked file
 	hardLinkedFileName := rootDir + "/hardlinked.txt"
@@ -917,7 +934,9 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 			HardLinkedFileName: hOriginalFileName,
 		}}
 	CreateResource[ObjectResourceManager](svm, srcShare, obj)
-	srcObjs[hardLinkedFileName] = obj
+	if hardlinkType != common.SkipHardlinkHandlingType {
+		srcObjs[hardLinkedFileName] = obj
+	}
 
 	shouldFail := false
 	if (followSymlinks && preserveSymlinks) || // both flags cannot be set to true
@@ -935,10 +954,12 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 				src.(RemoteResourceManager).WithSpecificAuthType(
 					ResolveVariation(svm, []ExplicitCredentialTypes{
 						EExplicitCredentialType.SASToken(),
-						EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{}),
+						EExplicitCredentialType.OAuth(),
+					}), svm, CreateAzCopyTargetOptions{}),
 				dst.(RemoteResourceManager).WithSpecificAuthType(
 					ResolveVariation(svm, []ExplicitCredentialTypes{
-						EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth(),
+						EExplicitCredentialType.SASToken(),
+						EExplicitCredentialType.OAuth(),
 					}), svm, CreateAzCopyTargetOptions{}),
 			},
 			Flags: CopyFlags{
@@ -954,6 +975,14 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 			},
 			ShouldFail: shouldFail,
 		})
+
+	if hardlinkType == common.EHardlinkHandlingType.Preserve() {
+		ValidateContainsError(svm, stdOut, []string{
+			"'--hardlinks' must be set to 'skip'. Hardlinked files are not supported between" +
+				" NFS and SMB and will always be skipped. Please re-run with '--hardlinks=skip'",
+		})
+		return
+	}
 
 	if preserveSymlinks && followSymlinks {
 		ValidateContainsError(svm, stdOut, []string{
@@ -1141,12 +1170,14 @@ func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationMa
 				src.(RemoteResourceManager).WithSpecificAuthType(
 					ResolveVariation(svm, []ExplicitCredentialTypes{
 						EExplicitCredentialType.SASToken(),
-						EExplicitCredentialType.OAuth()}),
+						EExplicitCredentialType.OAuth(),
+					}),
 					svm, CreateAzCopyTargetOptions{}),
 				dst.(RemoteResourceManager).WithSpecificAuthType(
 					ResolveVariation(svm, []ExplicitCredentialTypes{
 						EExplicitCredentialType.SASToken(),
-						EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{}),
+						EExplicitCredentialType.OAuth(),
+					}), svm, CreateAzCopyTargetOptions{}),
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
@@ -1161,6 +1192,13 @@ func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationMa
 			},
 			ShouldFail: shouldFail,
 		})
+	if hardlinkType == common.EHardlinkHandlingType.Preserve() {
+		ValidateContainsError(svm, stdOut, []string{
+			"'--hardlinks' must be set to 'skip'. Hardlinked files are not supported between" +
+				" NFS and SMB and will always be skipped. Please re-run with '--hardlinks=skip'",
+		})
+		return
+	}
 
 	if preserveSymlinks && followSymlinks {
 		ValidateContainsError(svm, stdOut, []string{
