@@ -242,9 +242,7 @@ func (r *resourceBlobContainer) createFiles(a asserter, s *scenario, isSource bo
 		},
 	}
 	if s.fromTo.IsDownload() {
-		var err error
-		options.cpkInfo, err = common.GetCpkInfo(s.p.cpkByValue)
-		a.AssertNoErr(err)
+		options.cpkInfo, _ = common.GetCpkInfo(s.p.cpkByValue)
 		options.cpkScopeInfo = common.GetCpkScopeInfo(s.p.cpkByName)
 	}
 	if isSource {
@@ -286,9 +284,7 @@ func (r *resourceBlobContainer) createFile(a asserter, o *testObject, s *scenari
 	}
 
 	if s.fromTo.IsDownload() || s.fromTo.IsDelete() {
-		var err error
-		options.cpkInfo, err = common.GetCpkInfo(s.p.cpkByValue)
-		a.AssertNoErr(err)
+		options.cpkInfo, _ = common.GetCpkInfo(s.p.cpkByValue)
 		options.cpkScopeInfo = common.GetCpkScopeInfo(s.p.cpkByName)
 	}
 	options.compressToGZ = isSource && s.fromTo.IsDownload() && s.p.decompress

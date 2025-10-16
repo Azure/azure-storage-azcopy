@@ -508,7 +508,7 @@ func (jpm *jobPartMgr) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlob
 }
 
 func (jpm *jobPartMgr) CpkInfo() *blob.CPKInfo {
-	cpkInfo, err := jpm.cpkOptions.GetCPKInfo()
+	cpkInfo, err := common.GetCpkInfo(jpm.cpkOptions.CpkInfo)
 	if err != nil {
 		jpm.GetJobErrorHandler().Error(err.Error())
 	}
@@ -516,7 +516,7 @@ func (jpm *jobPartMgr) CpkInfo() *blob.CPKInfo {
 }
 
 func (jpm *jobPartMgr) CpkScopeInfo() *blob.CPKScopeInfo {
-	return jpm.cpkOptions.GetCPKScopeInfo()
+	return common.GetCpkScopeInfo(jpm.cpkOptions.CpkScopeInfo)
 }
 
 func (jpm *jobPartMgr) IsSourceEncrypted() bool {
