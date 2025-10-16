@@ -561,3 +561,297 @@ func (s *SyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationMan
 		validateObjectContent: false,
 	})
 }
+
+// Scenario_TestS2SBlobFSIncludeRootACLS validates root ACLs are included in transfer and
+// preserved on the destination
+func (s *SyncTestSuite) Scenario_TestS2SBlobFSIncludeRootACLS(svm *ScenarioVariationManager) {
+	body := NewRandomObjectContentContainer(SizeFromString("1K"))
+	// Use BlobFS (HNS) for ACLs we can validate
+	dstContainer := CreateResource[ContainerResourceManager](svm,
+		GetRootResource(svm, common.ELocation.BlobFS()),
+		ResourceDefinitionContainer{
+			Objects: ObjectResourceMappingFlat{
+				// Destination root with a different ACL to observe the change after sync
+				"root": ResourceDefinitionObject{
+					ObjectProperties: ObjectProperties{
+						EntityType: common.EEntityType.Folder(),
+						BlobFSProperties: BlobFSProperties{
+							ACL: pointerTo("user::rwx,group::---,other::---"),
+						},
+					},
+				},
+				"root/file.txt": ResourceDefinitionObject{
+					Body: body,
+					ObjectProperties: ObjectProperties{
+						EntityType: common.EEntityType.File(),
+					},
+				},
+			},
+		},
+	)
+	if !svm.Dryrun() {
+		// Make sure LMT is in the past
+		time.Sleep(time.Second * 5)
+	}
+
+	srcContainer := CreateResource[ContainerResourceManager](svm,
+		GetRootResource(svm, common.ELocation.BlobFS()),
+		ResourceDefinitionContainer{})
+	rootDir := "root"
+
+	srcObjs := make(ObjectResourceMappingFlat)
+	srcObjResMan := make(map[string]ObjectResourceManager)
+	obj := ResourceDefinitionObject{
+		ObjectName: pointerTo(rootDir),
+		ObjectProperties: ObjectProperties{
+			EntityType: common.EEntityType.Folder(),
+			BlobFSProperties: BlobFSProperties{
+				// grant all for group to make it observably different
+				ACL: pointerTo("user::rwx,group::rwx,other::---"),
+			},
+		},
+	}
+	srcObjResMan[rootDir] = CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+	srcObjs[rootDir] = obj
+
+	// create one file under root so sync enumerates content
+	fileName := rootDir + "/file.txt"
+	fileObj := ResourceDefinitionObject{
+		ObjectName: pointerTo(fileName),
+		Body:       body,
+		ObjectProperties: ObjectProperties{
+			EntityType: common.EEntityType.File(),
+		},
+	}
+	srcObjResMan[fileName] = CreateResource[ObjectResourceManager](svm, srcContainer, fileObj)
+	srcObjs[fileName] = fileObj
+
+	includeRoot := NamedResolveVariation(svm, map[string]bool{
+		"|includeRoot=true":  true,
+		"|includeRoot=false": false,
+	})
+	if !includeRoot {
+		delete(srcObjs, rootDir)
+	}
+	RunAzCopy(svm, AzCopyCommand{
+		Verb: AzCopyVerbSync,
+		Targets: []ResourceManager{ // Sync the directory to the directory
+			TryApplySpecificAuthType(srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder()),
+				EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{}), // Need OAuth for full permissions to modify ACLs
+			TryApplySpecificAuthType(dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder()),
+				EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{}),
+		},
+		Flags: SyncFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive:           pointerTo(true),
+				PreservePermissions: pointerTo(true),
+			},
+			IncludeRoot: pointerTo(includeRoot),
+		},
+	})
+
+	// Validate that the destination root folder picked up the source ACL
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: srcObjs,
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
+
+}
+
+// Scenario_TestFileLocalIncludeRootCreationTime checks that the creation time of the source is overwritten on the destination
+// when --include-root is set.
+func (s *SyncTestSuite) Scenario_TestFileLocalIncludeRootCreationTime(svm *ScenarioVariationManager) {
+	if runtime.GOOS != "windows" && runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+	currTime := time.Now()
+	body := NewRandomObjectContentContainer(SizeFromString("1K"))
+	dst := CreateResource[ContainerResourceManager](svm,
+		GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File(), common.ELocation.Local()})),
+		ResourceDefinitionContainer{
+			Objects: ObjectResourceMappingFlat{
+				// Destination root with a newer creation time to observe after sync
+				"root": ResourceDefinitionObject{
+					ObjectProperties: ObjectProperties{
+						EntityType: common.EEntityType.Folder(),
+						FileProperties: FileProperties{
+							FileCreationTime: pointerTo(currTime.Add(time.Second * 10)),
+						},
+					},
+				},
+				"root/file.txt": ResourceDefinitionObject{Body: body},
+			},
+		},
+	)
+
+	if !svm.Dryrun() {
+		time.Sleep(5 * time.Second)
+	}
+
+	src := CreateResource[ContainerResourceManager](svm,
+		GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File(), common.ELocation.Local()})),
+		ResourceDefinitionContainer{
+			Objects: ObjectResourceMappingFlat{
+				// Root directory with a specific creation time we will validate later
+				"root": ResourceDefinitionObject{
+					ObjectProperties: ObjectProperties{
+						EntityType: common.EEntityType.Folder(),
+						FileProperties: FileProperties{
+							FileCreationTime: pointerTo(currTime),
+						},
+					},
+				},
+				// Include at least one file under root so the sync enumerates content
+				"root/file.txt": ResourceDefinitionObject{Body: body},
+			},
+		},
+	)
+
+	// Dont test Local->Local
+	if src.Location().IsLocal() && dst.Location().IsLocal() {
+		svm.InvalidateScenario()
+		return
+	}
+
+	// LocalLinux->File sync with preserveInfo is unsupported.
+	// Because Metadata, which is a DOS attribute that is tested here, is not supported on Linux
+	if src.Location().IsLocal() && runtime.GOOS == "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
+	RunAzCopy(svm, AzCopyCommand{
+		Verb: AzCopyVerbSync,
+		Targets: []ResourceManager{
+			// Sync the directory to the directory
+			src.GetObject(svm, "root", common.EEntityType.Folder()),
+			dst.GetObject(svm, "root", common.EEntityType.Folder()),
+		},
+		Flags: SyncFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive:           pointerTo(true),
+				PreservePermissions: pointerTo(true),
+				PreserveInfo:        pointerTo(true),
+			},
+			IncludeRoot: pointerTo(true),
+		},
+	})
+
+	// Validate that the destination root folder picked up the source creation time
+	ValidateResource[ContainerResourceManager](svm, dst, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"root": ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType: common.EEntityType.Folder(),
+					FileProperties: FileProperties{
+						FileCreationTime: pointerTo(currTime),
+					},
+				},
+			},
+			"root/file.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(true)},
+		},
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+		preserveInfo:          true,
+	})
+}
+
+// Scenario_TestFileLocalIncludeRootMetadata tests include-root with Metadata
+// validates that metadata property on a root directory is overwritten when
+// syncing s2s and uploading  with --include-root
+func (s *SyncTestSuite) Scenario_TestFileLocalIncludeRootMetadata(svm *ScenarioVariationManager) {
+	// Scale up from service to object
+	rootDir := "root"
+	includeRoot := ResolveVariation(svm, []bool{true, false})
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm,
+		ResolveVariation(svm, []common.Location{common.ELocation.File(), common.ELocation.FileNFS()})),
+		ResourceDefinitionContainer{
+			Objects: ObjectResourceMappingFlat{
+				rootDir: ResourceDefinitionObject{
+					ObjectProperties: ObjectProperties{
+						EntityType: common.EEntityType.Folder(),
+						Metadata:   map[string]*string{"Author": pointerTo("Wendi")}, // Different metadata to source
+					},
+				},
+			},
+		})
+
+	if !svm.Dryrun() {
+		// Make sure the LMT is in the past
+		time.Sleep(time.Second * 10)
+	}
+
+	srcObjs := make(ObjectResourceMappingFlat)
+	obj := ResourceDefinitionObject{ObjectName: pointerTo(rootDir),
+		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder(),
+			Metadata: map[string]*string{"Author": pointerTo("Wonw")}}} //Different metadata to destination
+	srcObjs[rootDir] = obj
+	name := rootDir + "/test1.txt"
+	obj = ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
+	srcObjs[name] = obj
+
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm,
+		[]common.Location{common.ELocation.Local(), common.ELocation.File(), common.ELocation.FileNFS()})), ResourceDefinitionContainer{})
+	for _, obj := range srcObjs {
+		CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+	}
+
+	sasOpts := GenericAccountSignatureValues{}
+
+	// Dont test Local->Local
+	if srcContainer.Location().IsLocal() && dstContainer.Location().IsLocal() {
+		svm.InvalidateScenario()
+		return
+	}
+
+	// LocalLinux->File sync with preserveInfo is unsupported.
+	// Because Metadata, which is a DOS attribute that is tested here, is not supported on Linux
+	if srcContainer.Location().IsLocal() && runtime.GOOS == "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
+	RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbSync,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder()),
+					EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+						SASTokenOptions: sasOpts,
+					}),
+				TryApplySpecificAuthType(dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder()),
+					EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+						SASTokenOptions: sasOpts,
+					}),
+			},
+			Flags: SyncFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive:    pointerTo(true),
+					PreserveInfo: pointerTo(true),
+				},
+				IncludeRoot: pointerTo(includeRoot),
+			},
+		})
+
+	// root directory should not be included in transfer when preserve-root-properties is not set
+	if !includeRoot {
+		delete(srcObjs, rootDir)
+	}
+
+	if !svm.Dryrun() {
+		destMap := dstContainer.ListObjects(svm, "", true)
+		props := destMap["root"]
+		// Validate the Author metadata was updated on the destination
+		svm.Assert(DerefOrZero(props.Metadata["Author"]), Equal{}, "Wonw")
+	}
+
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: srcObjs,
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+		preserveInfo:          true,
+	})
+}

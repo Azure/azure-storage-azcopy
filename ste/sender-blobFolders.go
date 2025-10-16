@@ -173,7 +173,7 @@ func (b *blobFolderSender) EnsureFolderExists() error {
 					if err != nil {
 						return fmt.Errorf("%w. When %s", err, where)
 					}
-					return nil
+					return folderPropertiesSetInCreation{}
 				}
 				return fmt.Errorf("when deleting existing blob: %w", err)
 			}
