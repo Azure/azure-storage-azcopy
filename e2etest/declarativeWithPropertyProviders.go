@@ -178,8 +178,7 @@ func (w with) createObjectProperties() *objectProperties {
 
 	if w.cpkByValue {
 		populated = true
-		cpkInfo, err := common.GetCpkInfo(w.cpkByValue)
-		common.PanicIfErr(err)
+		cpkInfo, _ := common.GetCpkInfo(w.cpkByValue)
 		result.cpkInfo = cpkInfo
 	}
 
