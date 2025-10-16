@@ -33,6 +33,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -445,7 +446,7 @@ func newCopyOrSyncCommandResult(rawOutput string) (CopyOrSyncCommandResult, bool
 		return CopyOrSyncCommandResult{}, false
 	}
 	finalLine := lines[len(lines)-2]
-	finalMsg := common.JsonOutputTemplate{}
+	finalMsg := cmd.JsonOutputTemplate{}
 	err := json.Unmarshal([]byte(finalLine), &finalMsg)
 	if err != nil {
 		return CopyOrSyncCommandResult{}, false
@@ -484,7 +485,7 @@ func newJobsShowCommandResult(rawOutput string) JobsShowCommandResult {
 	// parse out the final status
 	// -2 because the last line is empty
 	finalLine := lines[len(lines)-2]
-	finalMsg := common.JsonOutputTemplate{}
+	finalMsg := cmd.JsonOutputTemplate{}
 	err := json.Unmarshal([]byte(finalLine), &finalMsg)
 	if err != nil {
 		panic(err)
