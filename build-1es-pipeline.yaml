@@ -271,7 +271,7 @@ extends:
                   targetPath: $(System.DefaultWorkingDirectory)/signed
                   artifactName: 'azcopy-linux-signed'
                   displayName: 'Upload Linux Signed'
-                  sbomBuildDropPath: $(System.DefaultWorkingDirectory)/azcopy-linux-signed
+                  sbomBuildDropPath: $(Build.ArtifactStagingDirectory)/azcopy-linux-signed
 
             variables:
               - group: AZCOPY_SECRET_VAULT
@@ -352,7 +352,7 @@ extends:
                   targetPath: $(System.DefaultWorkingDirectory)/signed
                   artifactName: 'azcopy-windows-signed'
                   displayName: 'Upload Windows Signed'
-                  sbomBuildDropPath: $(System.DefaultWorkingDirectory)/azcopy-windows-signed
+                  sbomBuildDropPath: $(Build.ArtifactStagingDirectory)/azcopy-windows-signed
                 - output: pipelineArtifact
                   targetPath: $(System.DefaultWorkingDirectory)/binaries
                   artifactName: 'azcopy-binaries-windows'
@@ -456,7 +456,7 @@ extends:
                   targetPath: $(System.DefaultWorkingDirectory)/signed
                   artifactName: 'azcopy-mac-signed'
                   displayName: 'Upload Mac Signed'
-                  sbomBuildDropPath: $(System.DefaultWorkingDirectory)/azcopy-mac-signed
+                  sbomBuildDropPath: $(Build.ArtifactStagingDirectory)/azcopy-mac-signed
                 - output: pipelineArtifact
                   targetPath: $(System.DefaultWorkingDirectory)/binaries
                   artifactName: 'azcopy-binaries-mac'
