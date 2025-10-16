@@ -736,7 +736,6 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		// We will use the parent directory flag as the seed value to avoid redundant checks
 		isDestinationPresent := dir.(minimalStoredObject).isPresentAtDestination
 		finalize := true // Flag to control whether we finalize
-
 		// Before proceeding, check if we need to enumerate the destination
 		if isDestinationPresent &&
 			stra.shouldTrySkippingTargetTraversal(dir.(minimalStoredObject).changeTime, cca.deleteDestination) {
