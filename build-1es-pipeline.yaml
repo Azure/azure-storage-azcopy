@@ -271,7 +271,7 @@ extends:
                   targetPath: $(System.DefaultWorkingDirectory)/signed
                   artifactName: 'azcopy-linux-signed'
                   displayName: 'Upload Linux Signed'
-                  sbomBuildDropPath: $(System.DefaultWorkingDirectory)/signed
+                  sbomBuildDropPath: $(System.DefaultWorkingDirectory)/unsigned
 
             variables:
               - group: AZCOPY_SECRET_VAULT
@@ -361,7 +361,7 @@ extends:
                   targetPath: $(System.DefaultWorkingDirectory)/signed
                   artifactName: 'azcopy-windows-signed'
                   displayName: 'Upload Windows Signed'
-                  sbomBuildDropPath: $(System.DefaultWorkingDirectory)/signed
+                  sbomBuildDropPath: $(System.DefaultWorkingDirectory)/unsigned
                 - output: pipelineArtifact
                   targetPath: $(System.DefaultWorkingDirectory)/binaries
                   artifactName: 'azcopy-binaries-windows'
@@ -474,7 +474,7 @@ extends:
                   targetPath: $(System.DefaultWorkingDirectory)/signed
                   artifactName: 'azcopy-mac-signed'
                   displayName: 'Upload Mac Signed'
-                  sbomBuildDropPath: $(System.DefaultWorkingDirectory)/signed
+                  sbomBuildDropPath: $(System.DefaultWorkingDirectory)/unsigned
                 - output: pipelineArtifact
                   targetPath: $(System.DefaultWorkingDirectory)/binaries
                   artifactName: 'azcopy-binaries-mac'
@@ -598,6 +598,9 @@ extends:
                   artifactName: azcopy-linux-signed
                   targetPath: $(System.DefaultWorkingDirectory)/signed
                   displayName: 'Download Linux Signed'
+              outputs:
+                sbomBuildDropPath: $(System.DefaultWorkingDirectory)/unsigned
+
             variables:
               - name: signed
                 value: '$(System.DefaultWorkingDirectory)/signed'
@@ -628,6 +631,8 @@ extends:
                   artifactName: azcopy-linux-signed
                   targetPath: $(System.DefaultWorkingDirectory)/signed
                   displayName: 'Download Linux Signed'
+              outputs:
+                sbomBuildDropPath: $(System.DefaultWorkingDirectory)/unsigned
             variables:
               - name: signed
                 value: '$(System.DefaultWorkingDirectory)/signed'
@@ -654,6 +659,8 @@ extends:
                   targetPath: $(System.DefaultWorkingDirectory)/signed
                   item_pattern: 'mariner/azcopy-*x86_64.rpm'
                   displayName: 'Download Linux Signed'
+              outputs:
+                sbomBuildDropPath: $(System.DefaultWorkingDirectory)/unsigned
             variables:
               - name: signed
                 value: '$(System.DefaultWorkingDirectory)/signed/mariner'
@@ -679,6 +686,8 @@ extends:
                   targetPath: $(System.DefaultWorkingDirectory)/signed
                   itemPattern: 'azcopy*amd64*.zip'
                   displayName: 'Download Mac Signed'
+              outputs:
+                sbomBuildDropPath: $(System.DefaultWorkingDirectory)/unsigned
 
             variables:
               - name: signed
@@ -715,6 +724,8 @@ extends:
                   targetPath: $(System.DefaultWorkingDirectory)\signed
                   itemPattern: 'azcopy*amd64*.zip'
                   displayName: 'Download Windows Signed'
+              outputs:
+                sbomBuildDropPath: $(System.DefaultWorkingDirectory)/unsigned
 
             variables:
               - name: signed
@@ -753,6 +764,8 @@ extends:
                   targetPath: $(System.DefaultWorkingDirectory)\signed
                   itemPattern: 'azcopy*arm64*.zip'
                   displayName: 'Download Windows Signed'
+              outputs:
+                sbomBuildDropPath: $(System.DefaultWorkingDirectory)/unsigned
 
             variables:
               - name: signed
