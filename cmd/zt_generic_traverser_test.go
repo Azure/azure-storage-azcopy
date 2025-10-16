@@ -337,11 +337,7 @@ func TestWalkWithSymlinks_ToFolder(t *testing.T) {
 	sawLinkTargetDir := false
 	// we just want To value as local
 	fromTo := common.FromToValue(common.ELocation.Local(), common.ELocation.Blob())
-<<<<<<< HEAD
-	a.Nil(WalkWithSymlinks(context.TODO(), tmpDir, func(path string, fi os.FileInfo, err error) error {
-=======
 	a.Nil(traverser2.WalkWithSymlinks(context.TODO(), tmpDir, func(path string, fi os.FileInfo, err error) error {
->>>>>>> 2fa76948e65b865a1ba2d74b403f348d3c4cfc01
 		a.Nil(err)
 
 		if fi.IsDir() {
@@ -415,11 +411,7 @@ func TestWalkWithSymlinksBreakLoop(t *testing.T) {
 	fileCount := 0
 	// we just want To value as local
 	fromTo := common.FromToValue(common.ELocation.Local(), common.ELocation.Blob())
-<<<<<<< HEAD
-	a.Nil(WalkWithSymlinks(context.TODO(), tmpDir, func(path string, fi os.FileInfo, err error) error {
-=======
 	a.Nil(traverser2.WalkWithSymlinks(context.TODO(), tmpDir, func(path string, fi os.FileInfo, err error) error {
->>>>>>> 2fa76948e65b865a1ba2d74b403f348d3c4cfc01
 		a.Nil(err)
 
 		if fi.IsDir() {
@@ -452,11 +444,7 @@ func TestWalkWithSymlinksDedupe(t *testing.T) {
 	fileCount := 0
 	// we just want To value as local
 	fromTo := common.FromToValue(common.ELocation.Local(), common.ELocation.Blob())
-<<<<<<< HEAD
-	a.Nil(WalkWithSymlinks(context.TODO(), tmpDir, func(path string, fi os.FileInfo, err error) error {
-=======
 	a.Nil(traverser2.WalkWithSymlinks(context.TODO(), tmpDir, func(path string, fi os.FileInfo, err error) error {
->>>>>>> 2fa76948e65b865a1ba2d74b403f348d3c4cfc01
 		a.Nil(err)
 
 		if fi.IsDir() {
@@ -490,11 +478,7 @@ func TestWalkWithSymlinksMultitarget(t *testing.T) {
 	fileCount := 0
 	// we just want To value as local
 	fromTo := common.FromToValue(common.ELocation.Local(), common.ELocation.Blob())
-<<<<<<< HEAD
-	a.Nil(WalkWithSymlinks(context.TODO(), tmpDir, func(path string, fi os.FileInfo, err error) error {
-=======
 	a.Nil(traverser2.WalkWithSymlinks(context.TODO(), tmpDir, func(path string, fi os.FileInfo, err error) error {
->>>>>>> 2fa76948e65b865a1ba2d74b403f348d3c4cfc01
 		a.Nil(err)
 
 		if fi.IsDir() {
@@ -530,11 +514,7 @@ func TestWalkWithSymlinksToParentAndChild(t *testing.T) {
 	fileCount := 0
 	// we just want To value as local
 	fromTo := common.FromToValue(common.ELocation.Local(), common.ELocation.Blob())
-<<<<<<< HEAD
-	a.Nil(WalkWithSymlinks(context.TODO(), root1, func(path string, fi os.FileInfo, err error) error {
-=======
 	a.Nil(traverser2.WalkWithSymlinks(context.TODO(), root1, func(path string, fi os.FileInfo, err error) error {
->>>>>>> 2fa76948e65b865a1ba2d74b403f348d3c4cfc01
 		a.Nil(err)
 
 		if fi.IsDir() {

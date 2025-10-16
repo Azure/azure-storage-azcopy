@@ -32,10 +32,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
-<<<<<<< HEAD:cmd/zc_traverser_blob.go
-
-=======
->>>>>>> 2fa76948e65b865a1ba2d74b403f348d3c4cfc01:traverser/zc_traverser_blob.go
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 
 	"github.com/pkg/errors"

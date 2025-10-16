@@ -1,11 +1,8 @@
 package e2etest
 
 import (
-<<<<<<< HEAD
-=======
 	"os"
 	"path/filepath"
->>>>>>> 2fa76948e65b865a1ba2d74b403f348d3c4cfc01
 	"regexp"
 	"strconv"
 	"strings"

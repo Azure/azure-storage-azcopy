@@ -398,11 +398,11 @@ func (b *remoteResourceDeleter) delete(object traverser.StoredObject) error {
 		}
 
 		return nil
-	} else if object.entityType == common.EEntityType.Symlink() {
-		msg := "Deleting extra object: " + object.relativePath
+	} else if object.EntityType == common.EEntityType.Symlink() {
+		msg := "Deleting extra object: " + object.RelativePath
 		glcm.Info(msg)
-		if azcopyScanningLogger != nil {
-			azcopyScanningLogger.Log(common.LogInfo, msg)
+		if common.AzcopyScanningLogger != nil {
+			common.AzcopyScanningLogger.Log(common.LogInfo, msg)
 		}
 
 		var err error
@@ -428,10 +428,10 @@ func (b *remoteResourceDeleter) delete(object traverser.StoredObject) error {
 		}
 
 		if err != nil {
-			msg := fmt.Sprintf("error %s deleting the object %s", err.Error(), object.relativePath)
+			msg := fmt.Sprintf("error %s deleting the object %s", err.Error(), object.RelativePath)
 			glcm.Info(msg + "; check the scanning log file for more details")
-			if azcopyScanningLogger != nil {
-				azcopyScanningLogger.Log(common.LogError, msg+": "+err.Error())
+			if common.AzcopyScanningLogger != nil {
+				common.AzcopyScanningLogger.Log(common.LogError, msg+": "+err.Error())
 			}
 
 			return err

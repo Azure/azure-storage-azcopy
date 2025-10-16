@@ -629,11 +629,7 @@ func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool
 		// Why? Take an edge case where path contains special char like '%5C' (encoded backslash `\\`)
 		// this will be decoded and error to inconsistent path separators.
 	} else if ((!source && fromTo.From() == common.ELocation.Local() && runtime.GOOS == "windows") ||
-<<<<<<< HEAD
-		(!source && fromTo.From() == common.ELocation.File())) && !disableAutoDecoding {
-=======
 		(!source && fromTo.From() == common.ELocation.File())) && !disableAutoDecoding && !fromTo.IsDelete() {
->>>>>>> 2fa76948e65b865a1ba2d74b403f348d3c4cfc01
 
 		for encoded, c := range reverseEncodedChars {
 			for k, p := range pathParts {

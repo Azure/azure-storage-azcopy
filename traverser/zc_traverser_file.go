@@ -320,11 +320,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 	}
 
 	processStoredObject := func(s StoredObject) error {
-<<<<<<< HEAD:cmd/zc_traverser_file.go
-		err := processIfPassedFilters(filters, s, processor)
-=======
 		err := ProcessIfPassedFilters(filters, s, processor)
->>>>>>> 2fa76948e65b865a1ba2d74b403f348d3c4cfc01:traverser/zc_traverser_file.go
 		_, err = getProcessingError(err)
 		return err
 	}
