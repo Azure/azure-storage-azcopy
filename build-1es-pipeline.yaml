@@ -271,7 +271,7 @@ extends:
                   targetPath: $(System.DefaultWorkingDirectory)/signed
                   artifactName: 'azcopy-linux-signed'
                   displayName: 'Upload Linux Signed'
-                  sbomBuildDropPath: $(Build.ArtifactStagingDirectory)/azcopy-linux-signed
+                  sbomBuildDropPath: $(System.DefaultWorkingDirectory)/signed
 
             variables:
               - group: AZCOPY_SECRET_VAULT
@@ -326,12 +326,21 @@ extends:
                   chmod 755 $(amd64)/*
                   rm -rf $(amd64)/*.md
                   mv $(amd64)/* $(signed)
+                  if [ -d "$(amd64)/_manifest" ]; then
+                    mv $(amd64)/_manifest $(signed)/
+                  fi
                   chmod 755 $(arm64)/*
                   rm -rf $(arm64)/*.md
                   mv $(arm64)/* $(signed)
+                  if [ -d "$(arm64)/_manifest" ]; then
+                    mv $(arm64)/_manifest $(signed)/
+                  fi
                   chmod 755 $(mariner)/*
                   rm -rf $(mariner)/*.md
                   mv $(mariner)/* $(signed)/mariner
+                  if [ -d "$(mariner)/_manifest" ]; then
+                    mv $(mariner)/_manifest $(signed)/mariner/
+                  fi
                 displayName: 'Make Artifacts executable'
 
           - job: Windows
@@ -352,7 +361,7 @@ extends:
                   targetPath: $(System.DefaultWorkingDirectory)/signed
                   artifactName: 'azcopy-windows-signed'
                   displayName: 'Upload Windows Signed'
-                  sbomBuildDropPath: $(Build.ArtifactStagingDirectory)/azcopy-windows-signed
+                  sbomBuildDropPath: $(System.DefaultWorkingDirectory)/signed
                 - output: pipelineArtifact
                   targetPath: $(System.DefaultWorkingDirectory)/binaries
                   artifactName: 'azcopy-binaries-windows'
@@ -410,10 +419,19 @@ extends:
                   rm -rf $(windows)/azcopy_windows_v7_arm.exe
                   mv $(windows)/azcopy_windows_amd64.exe $(windows_amd64)/azcopy.exe
                   cp NOTICE.txt $(windows_amd64)
+                  if [ -d "$(windows_amd64)/_manifest" ]; then
+                    mv $(windows_amd64)/_manifest $(windows_amd64)/
+                  fi
                   mv $(windows)/azcopy_windows_arm64.exe $(windows_arm64)/azcopy.exe
                   cp NOTICE.txt $(windows_arm64)
+                  if [ -d "$(windows_arm64)/_manifest" ]; then
+                    mv $(windows_arm64)/_manifest $(windows_arm64)/
+                  fi
                   mv $(windows)/azcopy_windows_386.exe $(windows_386)/azcopy.exe
                   cp NOTICE.txt $(windows_386)
+                  if [ -d "$(windows_386)/_manifest" ]; then
+                    mv $(windows_386)/_manifest $(windows_386)/
+                  fi
                 displayName: 'Copy required files'
 
               - task: ArchiveFiles@2
@@ -456,7 +474,7 @@ extends:
                   targetPath: $(System.DefaultWorkingDirectory)/signed
                   artifactName: 'azcopy-mac-signed'
                   displayName: 'Upload Mac Signed'
-                  sbomBuildDropPath: $(Build.ArtifactStagingDirectory)/azcopy-mac-signed
+                  sbomBuildDropPath: $(System.DefaultWorkingDirectory)/signed
                 - output: pipelineArtifact
                   targetPath: $(System.DefaultWorkingDirectory)/binaries
                   artifactName: 'azcopy-binaries-mac'
@@ -510,7 +528,13 @@ extends:
 
               - script: |
                   mv $(mac)/azcopy* $(signed)/
+                  if [ -d "$(mac)/_manifest" ]; then
+                    mv $(mac)/_manifest $(signed)/
+                  fi
                   mv $(mac-m1)/azcopy* $(signed)/
+                  if [ -d "$(mac-m1)/_manifest" ]; then
+                    mv $(mac-m1)/_manifest $(signed)/
+                  fi
                 displayName: 'Copy required files'
 
               - script: |
