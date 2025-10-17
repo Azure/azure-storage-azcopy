@@ -711,6 +711,7 @@ Number of Special Files Skipped: %v
 Number of Hardlinks Converted: %v
 Number of Hardlinks Skipped: %v
 Total Number of Bytes Transferred: %v
+Total Number of Bytes Skipped: %v
 Total Number of Bytes Enumerated: %v
 Final Job Status: %v%s%s
 `,
@@ -730,6 +731,7 @@ Final Job Status: %v%s%s
 				summary.HardlinksConvertedCount,
 				summary.SkippedHardlinkCount,
 				summary.TotalBytesTransferred,
+				summary.TotalBytesSkipped,
 				summary.TotalBytesEnumerated,
 				summary.JobStatus,
 				screenStats,
