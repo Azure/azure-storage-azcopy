@@ -190,6 +190,7 @@ extends:
                   targetPath: $(System.DefaultWorkingDirectory)\binaries
                   artifactName: 'azcopy-windows-unsigned'
                   displayName: 'Upload Windows Unsigned'
+                  sbomBuildDropPath: $(System.DefaultWorkingDirectory)\binaries
             variables:
               - name: binaries
                 value: '$(System.DefaultWorkingDirectory)\binaries'
@@ -361,7 +362,7 @@ extends:
                   targetPath: $(System.DefaultWorkingDirectory)/signed
                   artifactName: 'azcopy-windows-signed'
                   displayName: 'Upload Windows Signed'
-                  sbomBuildDropPath: $(System.DefaultWorkingDirectory)/unsigned
+                  sbomBuildDropPath: $(System.DefaultWorkingDirectory)/signed
                 - output: pipelineArtifact
                   targetPath: $(System.DefaultWorkingDirectory)/binaries
                   artifactName: 'azcopy-binaries-windows'
@@ -725,7 +726,8 @@ extends:
                   itemPattern: 'azcopy*amd64*.zip'
                   displayName: 'Download Windows Signed'
               outputs:
-                sbomBuildDropPath: $(System.DefaultWorkingDirectory)/unsigned
+                - output: pipelineArtifact
+                  sbomBuildDropPath: $(System.DefaultWorkingDirectory)\unsigned
 
             variables:
               - name: signed
@@ -765,7 +767,8 @@ extends:
                   itemPattern: 'azcopy*arm64*.zip'
                   displayName: 'Download Windows Signed'
               outputs:
-                sbomBuildDropPath: $(System.DefaultWorkingDirectory)/unsigned
+                - output: pipelineArtifact
+                  sbomBuildDropPath: $(System.DefaultWorkingDirectory)\unsigned
 
             variables:
               - name: signed
