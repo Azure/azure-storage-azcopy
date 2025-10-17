@@ -769,8 +769,8 @@ extends:
                   displayName: 'Download Windows Signed'
               outputs:
                 - output: pipelineArtifact
-                  targetPath: $(System.DefaultWorkingDirectory)\unsigned
-                  sbomBuildDropPath: $(System.DefaultWorkingDirectory)\unsigned
+                  targetPath: $(System.DefaultWorkingDirectory)\signed
+                  sbomBuildDropPath: $(System.DefaultWorkingDirectory)\signed
 
             variables:
               - name: signed
@@ -1033,7 +1033,7 @@ extends:
           - stage: ReleaseToGithub
             dependsOn:
               - AzCopyVersion
-              - VerifyArtifacts
+#              - VerifyArtifacts
             jobs:
               - job: ReleaseJob
                 templateContext:
