@@ -712,46 +712,46 @@ extends:
 #                  $(extracted)/azcopy*amd64*/azcopy --version
 #                displayName: 'Verify binary in zip'
 #
-#          - job: Windows_Amd64
-#            timeoutInMinutes: 120
-#            pool:
-#              name: azcopy-pool
-#              image: windows2022-1espt
-#              os: windows
-#            templateContext:
-#              inputs:
-#                - input: pipelineArtifact
-#                  artifactName: azcopy-windows-signed
-#                  targetPath: $(System.DefaultWorkingDirectory)\signed
-#                  itemPattern: 'azcopy*amd64*.zip'
-#                  displayName: 'Download Windows Signed'
-#              outputs:
-#                - output: pipelineArtifact
-#                  targetPath: $(System.DefaultWorkingDirectory)\unsigned
-#                  sbomBuildDropPath: $(System.DefaultWorkingDirectory)\unsigned
-#
-#            variables:
-#              - name: signed
-#                value: '$(System.DefaultWorkingDirectory)\signed'
-#              - name: extracted
-#                value: '$(System.DefaultWorkingDirectory)\extracted'
-#
-#            steps:
-#              - checkout: none
-#
-#              - script: |
-#                  mkdir -p $(extracted)
-#                displayName: 'Create extracted path'
-#
-#              - task: ExtractFiles@1
-#                inputs:
-#                  archiveFilePatterns: '$(signed)\azcopy*amd64*.zip'
-#                  destinationFolder: $(extracted)
-#
-#              - script: |
-#                  cd $(extracted)\azcopy*amd64*
-#                  azcopy.exe --version
-#                displayName: 'Verify exe in zip'
+          - job: Windows_Amd64
+            timeoutInMinutes: 120
+            pool:
+              name: azcopy-pool
+              image: windows2022-1espt
+              os: windows
+            templateContext:
+              inputs:
+                - input: pipelineArtifact
+                  artifactName: azcopy-windows-signed
+                  targetPath: $(System.DefaultWorkingDirectory)\signed
+                  itemPattern: 'azcopy*amd64*.zip'
+                  displayName: 'Download Windows Signed'
+              outputs:
+                - output: pipelineArtifact
+                  targetPath: $(System.DefaultWorkingDirectory)\unsigned
+                  sbomBuildDropPath: $(System.DefaultWorkingDirectory)\unsigned
+
+            variables:
+              - name: signed
+                value: '$(System.DefaultWorkingDirectory)\signed'
+              - name: extracted
+                value: '$(System.DefaultWorkingDirectory)\extracted'
+
+            steps:
+              - checkout: none
+
+              - script: |
+                  mkdir -p $(extracted)
+                displayName: 'Create extracted path'
+
+              - task: ExtractFiles@1
+                inputs:
+                  archiveFilePatterns: '$(signed)\azcopy*amd64*.zip'
+                  destinationFolder: $(extracted)
+
+              - script: |
+                  cd $(extracted)\azcopy*amd64*
+                  azcopy.exe --version
+                displayName: 'Verify exe in zip'
 
           - job: Windows_Arm64
             timeoutInMinutes: 120
