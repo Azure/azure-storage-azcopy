@@ -24,14 +24,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"sort"
+	"strings"
+	"testing"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/stretchr/testify/assert"
-	"sort"
-	"strings"
-	"testing"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -899,7 +900,7 @@ func TestDryrunSyncBlobtoBlob(t *testing.T) {
 		return mockedRPC.intercept(order)
 	}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Text())
+	mockedLcm.SetOutputFormat(EOutputFormat.Text())
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
@@ -950,7 +951,7 @@ func TestDryrunSyncBlobtoBlobJson(t *testing.T) {
 		return mockedRPC.intercept(order)
 	}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Json())
+	mockedLcm.SetOutputFormat(EOutputFormat.Json())
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input

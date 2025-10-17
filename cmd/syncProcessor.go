@@ -85,8 +85,8 @@ func (d *interactiveDeleteProcessor) removeImmediately(object traverser.StoredOb
 	}
 
 	if d.dryrunMode {
-		glcm.Dryrun(func(format common.OutputFormat) string {
-			if format == common.EOutputFormat.Json() {
+		glcm.Dryrun(func(format OutputFormat) string {
+			if format == EOutputFormat.Json() {
 				deleteTarget := common.ELocation.Local()
 				if d.objectTypeToDisplay != LocalFileObjectType {
 					_ = deleteTarget.Parse(d.objectTypeToDisplay)

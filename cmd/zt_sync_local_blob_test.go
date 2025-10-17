@@ -22,14 +22,15 @@ package cmd
 
 import (
 	"context"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -460,7 +461,7 @@ func TestDryrunSyncLocaltoBlob(t *testing.T) {
 		return mockedRPC.intercept(order)
 	}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Text())
+	mockedLcm.SetOutputFormat(EOutputFormat.Text())
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input

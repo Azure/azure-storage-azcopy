@@ -210,9 +210,9 @@ func init() {
 				glcm.Error(err.Error())
 			}
 
-			glcm.Exit(func(format common.OutputFormat) string {
+			glcm.Exit(func(format OutputFormat) string {
 				return "Successfully created the resource."
-			}, common.EExitCode.Success())
+			}, EExitCode.Success())
 		},
 	}
 

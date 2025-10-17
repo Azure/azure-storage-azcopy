@@ -23,6 +23,7 @@ package e2etest
 import (
 	"time"
 
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -64,7 +65,7 @@ func (s *FlagsFunctionalitySuite) Scenario_LogLevelNone(svm *ScenarioVariationMa
 
 	sasOpts := GenericAccountSignatureValues{}
 	logLevel := common.LogLevel.None(common.LogNone)
-	outputType := common.EOutputFormat.Text()
+	outputType := cmd.EOutputFormat.Text()
 
 	stdOut, _ := RunAzCopy(
 		svm,

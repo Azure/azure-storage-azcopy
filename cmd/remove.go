@@ -94,7 +94,7 @@ func init() {
 			}
 
 			if cooked.dryrunMode {
-				glcm.Exit(nil, common.EExitCode.Success())
+				glcm.Exit(nil, EExitCode.Success())
 			}
 
 			glcm.SurrenderControl()

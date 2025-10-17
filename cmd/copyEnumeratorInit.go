@@ -334,12 +334,12 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		}
 
 		if cca.dryrunMode && shouldSendToSte {
-			glcm.Dryrun(func(format common.OutputFormat) string {
+			glcm.Dryrun(func(format OutputFormat) string {
 				src := common.GenerateFullPath(cca.Source.Value, srcRelPath)
 				dst := common.GenerateFullPath(cca.Destination.Value, dstRelPath)
 
 				switch format {
-				case common.EOutputFormat.Json():
+				case EOutputFormat.Json():
 					tx := DryrunTransfer{
 						EntityType:  transfer.EntityType,
 						BlobType:    common.FromBlobType(transfer.BlobType),

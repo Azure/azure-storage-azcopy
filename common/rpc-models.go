@@ -140,6 +140,7 @@ type CopyJobPartOrderRequest struct {
 	// This may not always be the case (for instance, if we opt to use multiple OAuth tokens). At that point, this will likely be it's own CredentialInfo.
 	S2SSourceCredentialType CredentialType // Only Anonymous and OAuth will really be used in response to this, but S3 and GCP will come along too...
 	FileAttributes          FileTransferAttributes
+	JobErrorHandler         JobErrorHandler
 }
 
 // CredentialInfo contains essential credential info which need be transited between modules,
@@ -300,6 +301,7 @@ type ResumeJobRequest struct {
 	DstServiceClient *ServiceClient
 	IncludeTransfer  map[string]int
 	ExcludeTransfer  map[string]int
+	JobErrorHandler  JobErrorHandler
 }
 
 // represents the Details and details of a single transfer

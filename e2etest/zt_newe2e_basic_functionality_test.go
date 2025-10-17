@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -627,7 +628,7 @@ func (*BasicFunctionalitySuite) Scenario_CheckVersion(svm *ScenarioVariationMana
 			CopySyncCommonFlags: CopySyncCommonFlags{
 				GlobalFlags: GlobalFlags{
 					CheckVersion: pointerTo(true),
-					OutputType:   pointerTo(common.EOutputFormat.Text()),
+					OutputType:   pointerTo(cmd.EOutputFormat.Text()),
 				},
 			},
 		},
@@ -667,7 +668,7 @@ func (*BasicFunctionalitySuite) Scenario_DisabledCheckVersion(svm *ScenarioVaria
 			CopySyncCommonFlags: CopySyncCommonFlags{
 				GlobalFlags: GlobalFlags{
 					// CheckVersion: pointerTo(false), default is False
-					OutputType: pointerTo(common.EOutputFormat.Text()),
+					OutputType: pointerTo(cmd.EOutputFormat.Text()),
 				},
 			},
 		},

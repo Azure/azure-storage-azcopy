@@ -5,6 +5,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -140,7 +141,7 @@ func (s *RemoveSuite) Scenario_RemoveFileWithOnlyDotsTrailingDotDisabled(svm *Sc
 				Recursive:   pointerTo(true),
 				FromTo:      pointerTo(common.EFromTo.FileTrash()),
 				GlobalFlags: GlobalFlags{
-					OutputType: pointerTo(common.EOutputFormat.Text()),
+					OutputType: pointerTo(cmd.EOutputFormat.Text()),
 				},
 			},
 			ShouldFail: true, // AzCopy should not continue operation

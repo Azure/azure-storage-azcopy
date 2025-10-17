@@ -2,6 +2,7 @@ package e2etest
 
 import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -29,7 +30,7 @@ func (*DryrunSuite) Scenario_UploadSync_Encoded(a *ScenarioVariationManager) {
 				DryRun: pointerTo(true),
 
 				GlobalFlags: GlobalFlags{
-					OutputType: pointerTo(ResolveVariation(a, []common.OutputFormat{common.EOutputFormat.Json(), common.EOutputFormat.Text()})),
+					OutputType: pointerTo(ResolveVariation(a, []cmd.OutputFormat{cmd.EOutputFormat.Json(), cmd.EOutputFormat.Text()})),
 				},
 			},
 
@@ -62,7 +63,7 @@ func (*DryrunSuite) Scenario_DownloadSync_Encoded(a *ScenarioVariationManager) {
 				DryRun: pointerTo(true),
 
 				GlobalFlags: GlobalFlags{
-					OutputType: pointerTo(ResolveVariation(a, []common.OutputFormat{common.EOutputFormat.Json(), common.EOutputFormat.Text()})),
+					OutputType: pointerTo(ResolveVariation(a, []cmd.OutputFormat{cmd.EOutputFormat.Json(), cmd.EOutputFormat.Text()})),
 				},
 			},
 

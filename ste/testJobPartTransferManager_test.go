@@ -31,6 +31,13 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
+type noopJobErrorHandler struct {
+}
+
+func (j *noopJobErrorHandler) Error(_ string) {
+	// no-op
+}
+
 var _ IJobPartTransferMgr = &testJobPartTransferManager{}
 
 type testJobPartTransferManager struct {
@@ -437,4 +444,9 @@ func (t *testJobPartTransferManager) TransferIndex() (partNum, transferIndex uin
 
 func (t *testJobPartTransferManager) RestartedTransfer() bool {
 	return false
+}
+
+func (t *testJobPartTransferManager) GetJobErrorHandler() common.JobErrorHandler {
+	// TODO: actually implement me if ever wanting to test error handling
+	return &noopJobErrorHandler{}
 }

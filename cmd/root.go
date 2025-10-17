@@ -36,7 +36,6 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
@@ -50,8 +49,8 @@ var outputFormatRaw string
 var outputVerbosityRaw string
 var logVerbosityRaw string
 var cancelFromStdin bool
-var OutputFormat common.OutputFormat
-var OutputLevel common.OutputVerbosity
+var outputFormat OutputFormat
+var OutputLevel OutputVerbosity
 var LogLevel common.LogLevel
 var CapMbps float64
 var SkipVersionCheck bool
@@ -117,7 +116,7 @@ var rootCmd = &cobra.Command{
 			glcm.E2EAwaitContinue()
 		}
 
-		err = OutputFormat.Parse(outputFormatRaw)
+		err = outputFormat.Parse(outputFormatRaw)
 		if err != nil {
 			return err
 		}
@@ -218,6 +217,10 @@ var rootCmd = &cobra.Command{
 func Initialize(resumeJobID common.JobID, isBench bool, shouldWarn bool) (err error) {
 	jobsAdmin.BenchmarkResults = isBench
 	Client, err = azcopy.NewClient(azcopy.ClientOptions{CapMbps: CapMbps})
+	// Run MessagHandler to process messages from Input Watcher
+	if jobsAdmin.JobsAdmin != nil {
+		go jobsAdmin.JobsAdmin.MessageHandler(glcm.MsgHandlerChannel())
+	}
 	if err != nil {
 		return err
 	}
@@ -227,13 +230,11 @@ func Initialize(resumeJobID common.JobID, isBench bool, shouldWarn bool) (err er
 	}
 
 	timeAtPrestart := time.Now()
-	glcm.SetOutputFormat(OutputFormat)
+	glcm.SetOutputFormat(outputFormat)
 	glcm.SetOutputVerbosity(OutputLevel)
 
 	common.AzcopyCurrentJobLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "")
 	common.AzcopyCurrentJobLogger.OpenLog()
-
-	glcm.SetForceLogging()
 
 	if shouldWarn {
 		currPid := os.Getpid()
@@ -269,10 +270,6 @@ func Initialize(resumeJobID common.JobID, isBench bool, shouldWarn bool) (err er
 
 }
 
-// hold a pointer to the global lifecycle controller so that commands could output messages and exit properly
-var glcm = common.GetLifecycleMgr()
-var glcmSwapOnce = &sync.Once{}
-
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 
@@ -282,7 +279,7 @@ func InitializeAndExecute() {
 	if err := Execute(); err != nil {
 		glcm.Error(err.Error())
 	} else {
-		glcm.Exit(nil, common.EExitCode.Success())
+		glcm.Exit(nil, EExitCode.Success())
 	}
 }
 

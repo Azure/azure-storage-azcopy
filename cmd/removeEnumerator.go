@@ -260,7 +260,7 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 func dryrunRemoveSingleDFSResource(ctx context.Context, dsc *service.Client, datalakeURLParts azdatalake.URLParts, recursive bool) error {
 	//deleting a filesystem
 	if datalakeURLParts.PathName == "" {
-		glcm.Dryrun(func(of common.OutputFormat) string {
+		glcm.Dryrun(func(of OutputFormat) string {
 			switch of {
 			case of.Text():
 				return fmt.Sprintf("DRYRUN: remove %s", dsc.NewFileSystemClient(datalakeURLParts.FileSystemName).DFSURL())
@@ -291,7 +291,7 @@ func dryrunRemoveSingleDFSResource(ctx context.Context, dsc *service.Client, dat
 	// then we should short-circuit and simply remove that file
 	resourceType := common.IffNotNil(props.ResourceType, "")
 	if strings.EqualFold(resourceType, "file") {
-		glcm.Dryrun(func(of common.OutputFormat) string {
+		glcm.Dryrun(func(of OutputFormat) string {
 			switch of {
 			case of.Text():
 				return fmt.Sprintf("DRYRUN: remove %s", directoryClient.DFSURL())
@@ -326,7 +326,7 @@ func dryrunRemoveSingleDFSResource(ctx context.Context, dsc *service.Client, dat
 				entityType = "file"
 			}
 
-			glcm.Dryrun(func(of common.OutputFormat) string {
+			glcm.Dryrun(func(of OutputFormat) string {
 				uri := dsc.NewFileSystemClient(datalakeURLParts.FileSystemName).NewFileClient(*v.Name).DFSURL()
 
 				switch of {
