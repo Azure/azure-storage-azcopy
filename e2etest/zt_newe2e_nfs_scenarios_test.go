@@ -56,7 +56,6 @@ func getPropertiesAndPermissions(svm *ScenarioVariationManager, preserveProperti
 	return folderProperties, fileProperties, fileOrFolderPermissions
 }
 
-/*
 func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariationManager) {
 
 	// 	Test Scenario:
@@ -108,6 +107,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 			},
 		},
 	})
+	defer dstContainer.Delete(svm)
 
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(
 		svm, common.ELocation.Local()), ResourceDefinitionContainer{})
@@ -378,6 +378,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 			},
 		},
 	})
+	defer srcContainer.Delete(svm)
 
 	folderProperties, fileProperties, fileOrFolderPermissions := getPropertiesAndPermissions(svm, preserveProperties, preservePermissions)
 	rootDir := "dir_file_copy_test_" + uuid.NewString()
@@ -594,6 +595,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 			},
 		},
 	})
+	defer dstContainer.Delete(svm)
 
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
@@ -604,6 +606,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 			},
 		},
 	})
+	defer srcContainer.Delete(svm)
 
 	folderProperties, fileProperties, fileOrFolderPermissions := getPropertiesAndPermissions(svm, preserveProperties, preservePermissions)
 
@@ -782,7 +785,6 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 		ValidateSkippedSymlinksCount(svm, stdOut, 1)
 	}
 }
-*/
 
 func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationManager) {
 
@@ -830,6 +832,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 			},
 		},
 	})
+	defer dstShare.Delete(svm)
 
 	srcShare := CreateResource[ContainerResourceManager](svm, GetRootResource(svm,
 		ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}),
@@ -842,6 +845,8 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 			},
 		},
 	})
+	defer srcShare.Delete(svm)
+
 	folderProperties, fileProperties, _ := getPropertiesAndPermissions(svm, preserveProperties, preservePermissions)
 
 	rootDir := "dir_file_copy_test_" + uuid.NewString()
@@ -1083,6 +1088,8 @@ func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationMa
 			},
 		},
 	})
+	defer dstShare.Delete(svm)
+
 	// SMB share
 	srcShare := CreateResource[ContainerResourceManager](svm, GetRootResource(svm,
 		ResolveVariation(svm, []common.Location{common.ELocation.File()}),
@@ -1095,6 +1102,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationMa
 			},
 		},
 	})
+	defer srcShare.Delete(svm)
 
 	var folderProperties, fileProperties FileProperties
 	if preserveProperties {
@@ -1263,11 +1271,13 @@ func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForNFS(svm *ScenarioVar
 			},
 		},
 	})
+	defer dstObj1.Delete(svm)
 
 	dstObj2 := CreateResource[ContainerResourceManager](svm, GetRootResource(svm,
 		ResolveVariation(svm, []common.Location{common.ELocation.File()}), GetResourceOptions{
 			PreferredAccount: ResolveVariation(svm, []*string{pointerTo(PremiumFileShareAcct)}),
 		}), ResourceDefinitionContainer{})
+	defer dstObj2.Delete(svm)
 
 	dstShare := ResolveVariation(svm, []ContainerResourceManager{dstObj1, dstObj2})
 
@@ -1360,8 +1370,10 @@ func (s *FilesNFSTestSuite) Scenario_DstShareDoesNotExists(svm *ScenarioVariatio
 
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File()}), GetResourceOptions{}), ResourceDefinitionContainer{})
+	defer dstContainer.Delete(svm)
 
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File()}), GetResourceOptions{}), ResourceDefinitionContainer{})
+	defer srcContainer.Delete(svm)
 
 	rootDir := "dir_file_copy_test_" + uuid.NewString()
 
