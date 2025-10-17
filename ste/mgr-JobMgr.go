@@ -37,17 +37,6 @@ var _ IJobMgr = &jobMgr{}
 
 type PartNumber = common.PartNumber
 
-// InMemoryTransitJobState defines job state transit in memory, and not in JobPartPlan file.
-// Note: InMemoryTransitJobState should only be set when request come from cmd(FE) module to STE module.
-// In memory CredentialInfo is currently maintained per job in STE, as FE could have many-to-one relationship with STE,
-// i.e. different jobs could have different OAuth tokens requested from FE, and these jobs can run at same time in STE.
-// This can be optimized if FE would no more be another module vs STE module.
-type InMemoryTransitJobState struct {
-	CredentialInfo common.CredentialInfo
-	// S2SSourceCredentialType can override the CredentialInfo.CredentialType when being used for the source (e.g. Source Info Provider and when using GetS2SSourceBlobTokenCredential)
-	S2SSourceCredentialType common.CredentialType
-}
-
 type IJobMgr interface {
 	JobID() common.JobID
 	JobPartMgr(partNum PartNumber) (IJobPartMgr, bool)
@@ -77,8 +66,6 @@ type IJobMgr interface {
 	ActiveConnections() int64
 	GetPerfInfo() (displayStrings []string, constraint common.PerfConstraint)
 	// Close()
-	getInMemoryTransitJobState() InMemoryTransitJobState      // get in memory transit job state saved in this job.
-	SetInMemoryTransitJobState(state InMemoryTransitJobState) // set in memory transit job state saved in this job.
 	ChunkStatusLogger() common.ChunkStatusLogger
 	HttpClient() *http.Client
 	PipelineNetworkStats() *PipelineNetworkStats
@@ -311,7 +298,6 @@ type jobMgr struct {
 	partsDone uint32
 	// throughput  common.CountPerSecond // TODO: Set LastCheckedTime to now
 
-	inMemoryTransitJobState InMemoryTransitJobState
 	// list of transfer mentioned to include only then while resuming the job
 	include map[string]int
 	// list of transfer mentioned to exclude while resuming the job
@@ -499,7 +485,6 @@ func (jm *jobMgr) AddJobOrder(order common.CopyJobPartOrderRequest) IJobPartMgr 
 		slicePool:        jm.slicePool,
 		cacheLimiter:     jm.cacheLimiter,
 		fileCountLimiter: jm.fileCountLimiter,
-		credInfo:         order.CredentialInfo,
 		srcIsOAuth:       order.S2SSourceCredentialType.IsAzureOAuth(),
 	}
 	jpm.planMMF = jpm.filename.Map()
@@ -749,16 +734,6 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 			}
 		}
 	}
-}
-
-func (jm *jobMgr) getInMemoryTransitJobState() InMemoryTransitJobState {
-	return jm.inMemoryTransitJobState
-}
-
-// Note: InMemoryTransitJobState should only be set when request come from cmd(FE) module to STE module.
-// And the state should no more be changed inside STE module.
-func (jm *jobMgr) SetInMemoryTransitJobState(state InMemoryTransitJobState) {
-	jm.inMemoryTransitJobState = state
 }
 
 func (jm *jobMgr) Context() context.Context { return jm.ctx }
