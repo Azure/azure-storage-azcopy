@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/spf13/cobra"
@@ -46,7 +47,7 @@ type LoginStatus struct {
 func (options LoginStatusOptions) process() (LoginStatus, error) {
 	// getting current token info and refreshing it with GetTokenInfo()
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	uotm := GetUserOAuthTokenManagerInstance()
+	uotm := Client.GetUserOAuthTokenManagerInstance()
 	tokenInfo, err := uotm.GetTokenInfo(ctx)
 	var status = LoginStatus{
 		Valid: err == nil && !tokenInfo.IsExpired(),

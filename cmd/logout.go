@@ -53,7 +53,7 @@ func RunLogout(options LogoutOptions) error {
 type LogoutOptions struct{}
 
 func (options LogoutOptions) process() error {
-	uotm := GetUserOAuthTokenManagerInstance()
+	uotm := Client.GetUserOAuthTokenManagerInstance()
 	if err := uotm.RemoveCachedToken(); err != nil {
 		return fmt.Errorf("failed to perform logout command, %v", err)
 	}

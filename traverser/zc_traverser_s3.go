@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package traverser
 
 import (
 	"context"
@@ -38,7 +38,7 @@ type s3Traverser struct {
 	recursive     bool
 	getProperties bool
 
-	s3URLParts s3URLPartsExtension
+	s3URLParts common.S3URLParts
 	s3Client   *minio.Client
 
 	// A generic function to notify that a new stored object has been enumerated
@@ -63,10 +63,10 @@ func (t *s3Traverser) IsDirectory(isSource bool) (bool, error) {
 	return false, nil
 }
 
-func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
+func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) (err error) {
 	p := processor
 	processor = func(storedObject StoredObject) error {
-		t.incrementEnumerationCounter(storedObject.entityType, common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
+		t.incrementEnumerationCounter(storedObject.EntityType, common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
 
 		return p(storedObject)
 	}
@@ -97,7 +97,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 		if err == nil {
 			// We had to statObject anyway, get ALL the info.
 			oie := common.ObjectInfoExtension{ObjectInfo: oi}
-			storedObject := newStoredObject(
+			storedObject := NewStoredObject(
 				preprocessor,
 				objectName,
 				"",
@@ -105,11 +105,11 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 				oi.LastModified,
 				oi.Size,
 				&oie,
-				noBlobProps,
+				NoBlobProps,
 				oie.NewCommonMetadata(),
 				t.s3URLParts.BucketName)
 
-			err = processIfPassedFilters(
+			err = ProcessIfPassedFilters(
 				filters,
 				storedObject,
 				processor)
@@ -169,7 +169,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			}
 			oie = common.ObjectInfoExtension{ObjectInfo: oi}
 		}
-		storedObject := newStoredObject(
+		storedObject := NewStoredObject(
 			preprocessor,
 			objectName,
 			relativePath,
@@ -177,11 +177,11 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			objectInfo.LastModified,
 			objectInfo.Size,
 			&oie,
-			noBlobProps,
+			NoBlobProps,
 			oie.NewCommonMetadata(),
 			t.s3URLParts.BucketName)
 
-		err = processIfPassedFilters(filters,
+		err = ProcessIfPassedFilters(filters,
 			storedObject,
 			processor)
 		_, err = getProcessingError(err)
@@ -192,7 +192,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 	return
 }
 
-func newS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTraverserOptions) (t *s3Traverser, err error) {
+func NewS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTraverserOptions) (t *s3Traverser, err error) {
 	t = &s3Traverser{rawURL: rawURL, ctx: ctx, recursive: opts.Recursive, getProperties: opts.GetPropertiesInFrontend,
 		incrementEnumerationCounter: opts.IncrementEnumeration}
 
@@ -203,7 +203,7 @@ func newS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTrave
 	if err != nil {
 		return
 	} else {
-		t.s3URLParts = s3URLPartsExtension{s3URLParts}
+		t.s3URLParts = s3URLParts
 	}
 
 	showS3UrlTypeWarning(s3URLParts)
@@ -214,9 +214,7 @@ func newS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTrave
 			Endpoint: t.s3URLParts.Endpoint,
 			Region:   t.s3URLParts.Region,
 		},
-	}, common.CredentialOpOptions{
-		LogError: glcm.Error,
-	}, azcopyScanningLogger)
+	}, common.AzcopyScanningLogger)
 
 	return
 }
@@ -229,7 +227,7 @@ func newS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTrave
 func showS3UrlTypeWarning(s3URLParts common.S3URLParts) {
 	if strings.EqualFold(s3URLParts.Host, "s3.amazonaws.com") {
 		s3UrlWarningOncer.Do(func() {
-			glcm.Info("Instead of transferring from the 's3.amazonaws.com' URL, in this version of AzCopy we recommend you " +
+			common.GetLifecycleMgr().Info("Instead of transferring from the 's3.amazonaws.com' URL, in this version of AzCopy we recommend you " +
 				"use a region-specific endpoint to transfer from one specific region. E.g. s3.us-east-1.amazonaws.com or a virtual-hosted reference to a single bucket.")
 		})
 	}
