@@ -23,6 +23,8 @@ package ste
 import (
 	"context"
 	"fmt"
+	"testing"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -30,7 +32,6 @@ import (
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-storage-azcopy/v10/mock_server"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestRangeWorthTransferring(t *testing.T) {

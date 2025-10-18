@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/e2etest"
 	"github.com/spf13/cobra"

@@ -1,4 +1,6 @@
+//go:build windows
 // +build windows
+
 // Copyright © Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -22,8 +24,9 @@
 package ste
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func Test_IsParentShareRoot(t *testing.T) {

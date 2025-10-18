@@ -2,13 +2,14 @@ package ste
 
 import (
 	"context"
+	"net/http"
+	"strconv"
+	"testing"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/stretchr/testify/assert"
-	"net/http"
-	"strconv"
-	"testing"
 )
 
 type FunctionTransporter struct {

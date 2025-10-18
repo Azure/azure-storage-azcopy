@@ -23,10 +23,11 @@ package common
 import (
 	"errors"
 	"fmt"
-	"github.com/wastore/keyctl" // forked form "github.com/jsipprell/keyctl", todo: make a release to ensure stability
 	"runtime"
 	"sync"
 	"syscall"
+
+	"github.com/wastore/keyctl" // forked form "github.com/jsipprell/keyctl", todo: make a release to ensure stability
 )
 
 // CredCache manages credential caches.

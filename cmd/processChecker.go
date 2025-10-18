@@ -2,13 +2,14 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"os"
 	"path"
 	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // isProcessRunning checks if a process with the given PID is running.

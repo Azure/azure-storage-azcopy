@@ -23,8 +23,9 @@
 package ste
 
 import (
-	"golang.org/x/sys/unix"
 	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 func init() {

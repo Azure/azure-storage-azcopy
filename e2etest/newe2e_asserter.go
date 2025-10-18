@@ -3,9 +3,10 @@ package e2etest
 import (
 	"context"
 	"fmt"
-	"github.com/google/uuid"
 	"strings"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 var _ Asserter = &FrameworkAsserter{}

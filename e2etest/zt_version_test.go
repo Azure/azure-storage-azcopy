@@ -20,8 +20,6 @@
 package e2etest
 
 import (
-	cmd2 "github.com/Azure/azure-storage-azcopy/v10/testSuite/cmd"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -29,6 +27,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	cmd2 "github.com/Azure/azure-storage-azcopy/v10/testSuite/cmd"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )

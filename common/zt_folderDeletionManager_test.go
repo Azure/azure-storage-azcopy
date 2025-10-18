@@ -22,9 +22,10 @@ package common
 
 import (
 	"context"
-	"github.com/stretchr/testify/assert"
 	"net/url"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func u(str string) *url.URL {
@@ -70,9 +71,9 @@ func TestFolderDeletion_WithChildren(t *testing.T) {
 	a.Equal("other", lastDeletionFolder)
 
 	f.RecordChildDeleted(u("foo/bar/a"))
-	a.Equal(1, deletionCallCount) // no change
-	f.RecordChildDeleted(u("foo/bar/b"))     // last one in its parent
-	a.Equal(2, deletionCallCount) // now deletion happens, since last child gone
+	a.Equal(1, deletionCallCount)        // no change
+	f.RecordChildDeleted(u("foo/bar/b")) // last one in its parent
+	a.Equal(2, deletionCallCount)        // now deletion happens, since last child gone
 	a.Equal("foo/bar", lastDeletionFolder)
 }
 
@@ -96,9 +97,9 @@ func TestFolderDeletion_IsUnaffectedByQueryStringsAndPathEscaping(t *testing.T) 
 	a.Equal("other", lastDeletionFolder)
 
 	f.RecordChildDeleted(u("foo/bar/a"))
-	a.Equal(1, deletionCallCount) // no change
+	a.Equal(1, deletionCallCount)            // no change
 	f.RecordChildDeleted(u("foo/bar/b?SAS")) // last one in its parent
-	a.Equal(2, deletionCallCount) // now deletion happens, since last child gone
+	a.Equal(2, deletionCallCount)            // now deletion happens, since last child gone
 	a.Equal("foo/bar", lastDeletionFolder)
 }
 

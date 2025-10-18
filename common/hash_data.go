@@ -1,10 +1,11 @@
 package common
 
 import (
-	"github.com/JeffreyRichter/enum/enum"
 	"reflect"
 	"sync"
 	"time"
+
+	"github.com/JeffreyRichter/enum/enum"
 )
 
 // AzCopyHashDataStream is used as both the name of a data stream, xattr key, and the suffix of os-agnostic hash data files.

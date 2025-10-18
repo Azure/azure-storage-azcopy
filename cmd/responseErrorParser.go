@@ -1,8 +1,9 @@
 package cmd
 
 import (
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"strings"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 )
 
 // errorURLs - map of error codes that currently have shorthand URLs

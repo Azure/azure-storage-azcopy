@@ -3,12 +3,13 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"net/url"
 	"os"
 	"strings"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/spf13/cobra"
@@ -76,9 +77,9 @@ func listContainer(resourceUrl string, numberOfResources int64) {
 	literalContainerUrl := getContainerURLFromString(*sourceUrl)
 	cc, err := container.NewClientWithNoCredential(literalContainerUrl, &container.ClientOptions{ClientOptions: azcore.ClientOptions{
 		Retry: policy.RetryOptions{
-			MaxRetries: ste.UploadMaxTries,
-			TryTimeout: ste.UploadTryTimeout,
-			RetryDelay: ste.UploadRetryDelay,
+			MaxRetries:    ste.UploadMaxTries,
+			TryTimeout:    ste.UploadTryTimeout,
+			RetryDelay:    ste.UploadRetryDelay,
 			MaxRetryDelay: ste.UploadMaxRetryDelay,
 		},
 	}})

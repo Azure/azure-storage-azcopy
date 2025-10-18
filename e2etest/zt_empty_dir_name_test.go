@@ -1,8 +1,9 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"testing"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func TestEmptyDir_CopySyncS2SBlob(t *testing.T) {

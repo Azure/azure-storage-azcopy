@@ -1,12 +1,13 @@
 package e2etest
 
 import (
+	"strings"
+	"time"
+
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	datalakesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"strings"
-	"time"
 )
 
 // BlobSignatureValues makes both account/service signature values generic for output from GenericSignatureValues

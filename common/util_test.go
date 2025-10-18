@@ -153,5 +153,5 @@ func TestDoWithOverrideReadonlyonAzureFiles(t *testing.T) {
 	props, err := f.GetProperties(context.TODO(), nil)
 	a.Nil(err)
 	a.Equal(*props.Metadata["Testkey"], "Testvalue")
-	
+
 }

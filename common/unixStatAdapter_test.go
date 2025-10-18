@@ -1,10 +1,11 @@
 package common
 
 import (
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/stretchr/testify/assert"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/stretchr/testify/assert"
 )
 
 func Test_ReadStatFromMetadata(t *testing.T) {

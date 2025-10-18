@@ -22,12 +22,13 @@ package cmd
 
 import (
 	"context"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"os"
 	"sort"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"

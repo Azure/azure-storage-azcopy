@@ -23,6 +23,15 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/url"
+	"os"
+	"path"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
@@ -39,14 +48,6 @@ import (
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/stretchr/testify/assert"
-	"io"
-	"net/url"
-	"os"
-	"path"
-	"path/filepath"
-	"runtime"
-	"strings"
-	"time"
 
 	gcpUtils "cloud.google.com/go/storage"
 	"github.com/minio/minio-go"
@@ -75,23 +76,23 @@ var specialNames = []string{
 // note: this is to emulate the list-of-files flag
 func (scenarioHelper) generateListOfFiles(a *assert.Assertions, fileList []string) (path string) {
 	parentDirName, err := os.MkdirTemp("", "AzCopyLocalTest")
-	a.Nil(err)
+	a.NoError(err)
 
 	// create the file
 	path = common.GenerateFullPath(parentDirName, generateName("listy", 0))
 	err = os.MkdirAll(filepath.Dir(path), os.ModePerm)
-	a.Nil(err)
+	a.NoError(err)
 
 	// pipe content into it
 	content := strings.Join(fileList, "\n")
 	err = os.WriteFile(path, []byte(content), common.DEFAULT_FILE_PERM)
-	a.Nil(err)
+	a.NoError(err)
 	return
 }
 
 func (scenarioHelper) generateLocalDirectory(a *assert.Assertions) (dstDirName string) {
 	dstDirName, err := os.MkdirTemp("", "AzCopyLocalTest")
-	a.Nil(err)
+	a.NoError(err)
 	return
 }
 
@@ -114,7 +115,7 @@ func (scenarioHelper) generateLocalFile(filePath string, fileSize int) ([]byte, 
 func (s scenarioHelper) generateLocalFilesFromList(a *assert.Assertions, dirPath string, fileList []string) {
 	for _, fileName := range fileList {
 		_, err := s.generateLocalFile(filepath.Join(dirPath, fileName), defaultFileSize)
-		a.Nil(err)
+		a.NoError(err)
 	}
 
 	// sleep a bit so that the files' lmts are guaranteed to be in the past
@@ -135,7 +136,7 @@ func (s scenarioHelper) generateCommonRemoteScenarioForLocal(a *assert.Assertion
 		for j, name := range batch {
 			fileList[5*i+j] = name
 			_, err := s.generateLocalFile(filepath.Join(dirPath, name), defaultFileSize)
-			a.Nil(err)
+			a.NoError(err)
 		}
 	}
 
@@ -165,15 +166,15 @@ func (scenarioHelper) generateCommonRemoteScenarioForSoftDelete(a *assert.Assert
 			// Create snapshot for blob
 			snapResp, err := blobList[i].CreateSnapshot(ctx, nil)
 			a.NotNil(snapResp)
-			a.Nil(err)
+			a.NoError(err)
 
 			time.Sleep(time.Millisecond * 30)
 
 			// Soft delete snapshot
 			snapshotBlob, err := blobList[i].WithSnapshot(*snapResp.Snapshot)
-			a.Nil(err)
+			a.NoError(err)
 			_, err = snapshotBlob.Delete(ctx, nil)
-			a.Nil(err)
+			a.NoError(err)
 
 			listOfTransfers = append(listOfTransfers, blobNames[i])
 		}
@@ -289,7 +290,7 @@ func (s scenarioHelper) generateBlobContainersAndBlobsFromLists(a *assert.Assert
 	for _, containerName := range containerList {
 		containerClient := serviceClient.NewContainerClient(containerName)
 		_, err := containerClient.Create(ctx, nil)
-		a.Nil(err)
+		a.NoError(err)
 
 		s.generateBlobsFromList(a, containerClient, blobList, data)
 	}
@@ -299,7 +300,7 @@ func (s scenarioHelper) generateFileSharesAndFilesFromLists(a *assert.Assertions
 	for _, shareName := range shareList {
 		shareClient := serviceClient.NewShareClient(shareName)
 		_, err := shareClient.Create(ctx, nil)
-		a.Nil(err)
+		a.NoError(err)
 
 		s.generateShareFilesFromList(a, shareClient, serviceClient, fileList)
 	}
@@ -309,7 +310,7 @@ func (s scenarioHelper) generateFilesystemsAndFilesFromLists(a *assert.Assertion
 	for _, filesystemName := range fsList {
 		fsClient := serviceClient.NewFileSystemClient(filesystemName)
 		_, err := fsClient.Create(ctx, nil)
-		a.Nil(err)
+		a.NoError(err)
 
 		s.generateBFSPathsFromList(a, fsClient, fileList)
 	}
@@ -318,7 +319,7 @@ func (s scenarioHelper) generateFilesystemsAndFilesFromLists(a *assert.Assertion
 func (s scenarioHelper) generateS3BucketsAndObjectsFromLists(a *assert.Assertions, s3Client *minio.Client, bucketList []string, objectList []string, data string) {
 	for _, bucketName := range bucketList {
 		err := s3Client.MakeBucket(bucketName, "")
-		a.Nil(err)
+		a.NoError(err)
 
 		s.generateObjects(a, s3Client, bucketName, objectList)
 	}
@@ -328,7 +329,7 @@ func (s scenarioHelper) generateGCPBucketsAndObjectsFromLists(a *assert.Assertio
 	for _, bucketName := range bucketList {
 		bkt := client.Bucket(bucketName)
 		err := bkt.Create(context.Background(), os.Getenv("GOOGLE_CLOUD_PROJECT"), &gcpUtils.BucketAttrs{})
-		a.Nil(err)
+		a.NoError(err)
 		s.generateGCPObjects(a, client, bucketName, objectList)
 	}
 }
@@ -338,7 +339,7 @@ func (scenarioHelper) generateBlobsFromList(a *assert.Assertions, containerClien
 	for _, blobName := range blobList {
 		blobClient := containerClient.NewBlockBlobClient(blobName)
 		_, err := blobClient.Upload(ctx, streaming.NopCloser(strings.NewReader(data)), nil)
-		a.Nil(err)
+		a.NoError(err)
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
@@ -367,12 +368,12 @@ func (scenarioHelper) generatePageBlobsFromList(a *assert.Assertions, containerC
 				SequenceNumber: to.Ptr(int64(0)),
 				HTTPHeaders:    &blob.HTTPHeaders{BlobContentType: to.Ptr("text/random")},
 			})
-		a.Nil(err)
+		a.NoError(err)
 
 		// Create the page (PUT page)
 		_, err = blobClient.UploadPages(ctx, streaming.NopCloser(strings.NewReader(data)),
 			blob.HTTPRange{Offset: 0, Count: int64(len(data))}, nil)
-		a.Nil(err)
+		a.NoError(err)
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
@@ -387,11 +388,11 @@ func (scenarioHelper) generateAppendBlobsFromList(a *assert.Assertions, containe
 			&appendblob.CreateOptions{
 				HTTPHeaders: &blob.HTTPHeaders{BlobContentType: to.Ptr("text/random")},
 			})
-		a.Nil(err)
+		a.NoError(err)
 
 		// Append a block (PUT block)
 		_, err = blobClient.AppendBlock(ctx, streaming.NopCloser(strings.NewReader(data)), nil)
-		a.Nil(err)
+		a.NoError(err)
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
@@ -401,7 +402,7 @@ func (scenarioHelper) generateAppendBlobsFromList(a *assert.Assertions, containe
 func (scenarioHelper) generateBlockBlobWithAccessTier(a *assert.Assertions, containerClient *container.Client, blobName string, accessTier *blob.AccessTier) {
 	blobClient := containerClient.NewBlockBlobClient(blobName)
 	_, err := blobClient.Upload(ctx, streaming.NopCloser(strings.NewReader(blockBlobDefaultData)), &blockblob.UploadOptions{Tier: accessTier})
-	a.Nil(err)
+	a.NoError(err)
 }
 
 // create the demanded objects
@@ -409,7 +410,7 @@ func (scenarioHelper) generateObjects(a *assert.Assertions, client *minio.Client
 	size := int64(len(objectDefaultData))
 	for _, objectName := range objectList {
 		n, err := client.PutObjectWithContext(ctx, bucketName, objectName, strings.NewReader(objectDefaultData), size, minio.PutObjectOptions{})
-		a.Nil(err)
+		a.NoError(err)
 		a.Equal(size, n)
 	}
 }
@@ -420,10 +421,10 @@ func (scenarioHelper) generateGCPObjects(a *assert.Assertions, client *gcpUtils.
 		wc := client.Bucket(bucketName).Object(objectName).NewWriter(context.Background())
 		reader := strings.NewReader(objectDefaultData)
 		written, err := io.Copy(wc, reader)
-		a.Nil(err)
+		a.NoError(err)
 		a.Equal(size, written)
 		err = wc.Close()
-		a.Nil(err)
+		a.NoError(err)
 	}
 }
 
@@ -432,9 +433,9 @@ func (scenarioHelper) generateFlatFiles(a *assert.Assertions, shareClient *share
 	for _, fileName := range fileList {
 		fileClient := shareClient.NewRootDirectoryClient().NewFileClient(fileName)
 		_, err := fileClient.Create(ctx, int64(len(fileDefaultData)), nil)
-		a.Nil(err)
+		a.NoError(err)
 		err = fileClient.UploadBuffer(ctx, []byte(fileDefaultData), nil)
-		a.Nil(err)
+		a.NoError(err)
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
@@ -517,7 +518,7 @@ func (scenarioHelper) generateShareFilesFromList(a *assert.Assertions, shareClie
 
 		// create the file itself
 		_, err := fileClient.Create(ctx, defaultAzureFileSizeInBytes, nil)
-		a.Nil(err)
+		a.NoError(err)
 	}
 
 	// sleep a bit so that the files' lmts are guaranteed to be in the past
@@ -528,17 +529,17 @@ func (scenarioHelper) generateBFSPathsFromList(a *assert.Assertions, fsClient *f
 	for _, p := range fileList {
 		// TODO : RootDirectoryClient in datalake SDK
 		fc, err := fsClient.NewDirectoryClient("").NewFileClient(p)
-		a.Nil(err)
+		a.NoError(err)
 
 		// Create the file
 		_, err = fc.Create(ctx, nil)
-		a.Nil(err)
+		a.NoError(err)
 
 		_, err = fc.AppendData(ctx, 0, streaming.NopCloser(strings.NewReader(string(make([]byte, defaultBlobFSFileSizeInBytes)))), nil)
-		a.Nil(err)
+		a.NoError(err)
 
 		_, err = fc.FlushData(ctx, defaultBlobFSFileSizeInBytes, &datalakefile.FlushDataOptions{Close: to.Ptr(true)})
-		a.Nil(err)
+		a.NoError(err)
 	}
 }
 
@@ -603,7 +604,7 @@ func (scenarioHelper) addPrefix(list []string, prefix string) []string {
 func (scenarioHelper) getRawContainerURLWithSAS(a *assert.Assertions, containerName string) *url.URL {
 	accountName, accountKey := getAccountAndKey()
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
-	a.Nil(err)
+	a.NoError(err)
 	cc := getContainerClientWithSAS(a, credential, containerName)
 
 	u := cc.URL()
@@ -614,7 +615,7 @@ func (scenarioHelper) getRawContainerURLWithSAS(a *assert.Assertions, containerN
 func (scenarioHelper) getSecondaryRawContainerURLWithSAS(a *assert.Assertions, containerName string) *url.URL {
 	accountName, accountKey := getSecondaryAccountAndKey()
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
-	a.Nil(err)
+	a.NoError(err)
 	cc := getContainerClientWithSAS(a, credential, containerName)
 
 	u := cc.URL()
@@ -625,7 +626,7 @@ func (scenarioHelper) getSecondaryRawContainerURLWithSAS(a *assert.Assertions, c
 func (scenarioHelper) getContainerClientWithSAS(a *assert.Assertions, containerName string) *container.Client {
 	accountName, accountKey := getAccountAndKey()
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
-	a.Nil(err)
+	a.NoError(err)
 	containerURLWithSAS := getContainerClientWithSAS(a, credential, containerName)
 	return containerURLWithSAS
 }
@@ -633,7 +634,7 @@ func (scenarioHelper) getContainerClientWithSAS(a *assert.Assertions, containerN
 func (scenarioHelper) getRawBlobURLWithSAS(a *assert.Assertions, containerName string, blobName string) *url.URL {
 	accountName, accountKey := getAccountAndKey()
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
-	a.Nil(err)
+	a.NoError(err)
 	cc := getContainerClientWithSAS(a, credential, containerName)
 	bc := cc.NewBlockBlobClient(blobName)
 
@@ -645,7 +646,7 @@ func (scenarioHelper) getRawBlobURLWithSAS(a *assert.Assertions, containerName s
 func (scenarioHelper) getSecondaryRawBlobURLWithSAS(a *assert.Assertions, containerName string, blobName string) *url.URL {
 	accountName, accountKey := getSecondaryAccountAndKey()
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
-	a.Nil(err)
+	a.NoError(err)
 	cc := getContainerClientWithSAS(a, credential, containerName)
 	bc := cc.NewBlockBlobClient(blobName)
 
@@ -657,7 +658,7 @@ func (scenarioHelper) getSecondaryRawBlobURLWithSAS(a *assert.Assertions, contai
 func (scenarioHelper) getBlobClientWithSAS(a *assert.Assertions, containerName string, blobName string) *blob.Client {
 	accountName, accountKey := getAccountAndKey()
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
-	a.Nil(err)
+	a.NoError(err)
 	containerURLWithSAS := getContainerClientWithSAS(a, credential, containerName)
 	blobURLWithSAS := containerURLWithSAS.NewBlobClient(blobName)
 	return blobURLWithSAS
@@ -666,7 +667,7 @@ func (scenarioHelper) getBlobClientWithSAS(a *assert.Assertions, containerName s
 func (scenarioHelper) getRawBlobServiceURLWithSAS(a *assert.Assertions) *url.URL {
 	accountName, accountKey := getAccountAndKey()
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
-	a.Nil(err)
+	a.NoError(err)
 
 	u := getBlobServiceClientWithSAS(a, credential).URL()
 	parsedURL, err := url.Parse(u)
@@ -676,7 +677,7 @@ func (scenarioHelper) getRawBlobServiceURLWithSAS(a *assert.Assertions) *url.URL
 func (scenarioHelper) getBlobServiceClientWithSAS(a *assert.Assertions) *blobservice.Client {
 	accountName, accountKey := getAccountAndKey()
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
-	a.Nil(err)
+	a.NoError(err)
 
 	return getBlobServiceClientWithSAS(a, credential)
 }
@@ -684,34 +685,34 @@ func (scenarioHelper) getBlobServiceClientWithSAS(a *assert.Assertions) *blobser
 func (scenarioHelper) getSecondaryBlobServiceClientWithSAS(a *assert.Assertions) *blobservice.Client {
 	accountName, accountKey := getSecondaryAccountAndKey()
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
-	a.Nil(err)
+	a.NoError(err)
 
 	return getBlobServiceClientWithSAS(a, credential)
 }
 
 func (scenarioHelper) getBlobServiceClientWithSASFromURL(a *assert.Assertions, rawURL string) *blobservice.Client {
 	blobURLParts, err := blob.ParseURL(rawURL)
-	a.Nil(err)
+	a.NoError(err)
 	blobURLParts.ContainerName = ""
 	blobURLParts.BlobName = ""
 	blobURLParts.VersionID = ""
 	blobURLParts.Snapshot = ""
 
 	client, err := blobservice.NewClientWithNoCredential(blobURLParts.String(), nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	return client
 }
 
 func (scenarioHelper) getFileServiceClientWithSASFromURL(a *assert.Assertions, rawURL string) *fileservice.Client {
 	fileURLParts, err := sharefile.ParseURL(rawURL)
-	a.Nil(err)
+	a.NoError(err)
 	fileURLParts.ShareName = ""
 	fileURLParts.ShareSnapshot = ""
 	fileURLParts.DirectoryOrFilePath = ""
 
 	client, err := fileservice.NewClientWithNoCredential(fileURLParts.String(), nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	return client
 }
@@ -719,7 +720,7 @@ func (scenarioHelper) getFileServiceClientWithSASFromURL(a *assert.Assertions, r
 func (scenarioHelper) getFileServiceClientWithSAS(a *assert.Assertions) *fileservice.Client {
 	accountName, accountKey := getAccountAndKey()
 	credential, err := sharefile.NewSharedKeyCredential(accountName, accountKey)
-	a.Nil(err)
+	a.NoError(err)
 
 	return getFileServiceClientWithSAS(a, credential)
 }
@@ -727,7 +728,7 @@ func (scenarioHelper) getFileServiceClientWithSAS(a *assert.Assertions) *fileser
 func (scenarioHelper) getDatalakeServiceClientWithSAS(a *assert.Assertions) *datalakeservice.Client {
 	accountName, accountKey := getAccountAndKey()
 	credential, err := azdatalake.NewSharedKeyCredential(accountName, accountKey)
-	a.Nil(err)
+	a.NoError(err)
 
 	return getDatalakeServiceClientWithSAS(a, credential)
 }
@@ -735,11 +736,11 @@ func (scenarioHelper) getDatalakeServiceClientWithSAS(a *assert.Assertions) *dat
 func (scenarioHelper) getBlobServiceClient(a *assert.Assertions) *blobservice.Client {
 	accountName, accountKey := getAccountAndKey()
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
-	a.Nil(err)
+	a.NoError(err)
 	rawURL := fmt.Sprintf("https://%s.blob.core.windows.net", credential.AccountName())
 
 	client, err := blobservice.NewClientWithSharedKeyCredential(rawURL, credential, nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	return client
 }
@@ -755,7 +756,7 @@ func (scenarioHelper) getRawS3AccountURL(a *assert.Assertions, region string) ur
 	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com", common.Iff(region == "", "", "-"+region))
 
 	fullURL, err := url.Parse(rawURL)
-	a.Nil(err)
+	a.NoError(err)
 
 	return *fullURL
 }
@@ -763,7 +764,7 @@ func (scenarioHelper) getRawS3AccountURL(a *assert.Assertions, region string) ur
 func (scenarioHelper) getRawGCPAccountURL(a *assert.Assertions) url.URL {
 	rawURL := "https://storage.cloud.google.com/"
 	fullURL, err := url.Parse(rawURL)
-	a.Nil(err)
+	a.NoError(err)
 	return *fullURL
 }
 
@@ -772,7 +773,7 @@ func (scenarioHelper) getRawS3BucketURL(a *assert.Assertions, region string, buc
 	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/%s", common.Iff(region == "", "", "-"+region), bucketName)
 
 	fullURL, err := url.Parse(rawURL)
-	a.Nil(err)
+	a.NoError(err)
 
 	return *fullURL
 }
@@ -781,7 +782,7 @@ func (scenarioHelper) getRawGCPBucketURL(a *assert.Assertions, bucketName string
 	rawURL := fmt.Sprintf("https://storage.cloud.google.com/%s", bucketName)
 	fmt.Println(rawURL)
 	fullURL, err := url.Parse(rawURL)
-	a.Nil(err)
+	a.NoError(err)
 	return *fullURL
 }
 
@@ -789,7 +790,7 @@ func (scenarioHelper) getRawS3ObjectURL(a *assert.Assertions, region string, buc
 	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/%s/%s", common.Iff(region == "", "", "-"+region), bucketName, objectName)
 
 	fullURL, err := url.Parse(rawURL)
-	a.Nil(err)
+	a.NoError(err)
 
 	return *fullURL
 }
@@ -797,14 +798,14 @@ func (scenarioHelper) getRawS3ObjectURL(a *assert.Assertions, region string, buc
 func (scenarioHelper) getRawGCPObjectURL(a *assert.Assertions, bucketName string, objectName string) url.URL {
 	rawURL := fmt.Sprintf("https://storage.cloud.google.com/%s/%s", bucketName, objectName)
 	fullURL, err := url.Parse(rawURL)
-	a.Nil(err)
+	a.NoError(err)
 	return *fullURL
 }
 
 func (scenarioHelper) getRawFileURLWithSAS(a *assert.Assertions, shareName string, fileName string) *url.URL {
 	accountName, accountKey := getAccountAndKey()
 	credential, err := sharefile.NewSharedKeyCredential(accountName, accountKey)
-	a.Nil(err)
+	a.NoError(err)
 	sc := getShareClientWithSAS(a, credential, shareName)
 	fc := sc.NewRootDirectoryClient().NewFileClient(fileName)
 
@@ -816,7 +817,7 @@ func (scenarioHelper) getRawFileURLWithSAS(a *assert.Assertions, shareName strin
 func (scenarioHelper) getRawShareURLWithSAS(a *assert.Assertions, shareName string) *url.URL {
 	accountName, accountKey := getAccountAndKey()
 	credential, err := sharefile.NewSharedKeyCredential(accountName, accountKey)
-	a.Nil(err)
+	a.NoError(err)
 	sc := getShareClientWithSAS(a, credential, shareName)
 
 	u := sc.URL()
@@ -827,7 +828,7 @@ func (scenarioHelper) getRawShareURLWithSAS(a *assert.Assertions, shareName stri
 func (scenarioHelper) getRawFileServiceURLWithSAS(a *assert.Assertions) *url.URL {
 	accountName, accountKey := getAccountAndKey()
 	credential, err := sharefile.NewSharedKeyCredential(accountName, accountKey)
-	a.Nil(err)
+	a.NoError(err)
 	sc := getFileServiceClientWithSAS(a, credential)
 
 	u := sc.URL()
@@ -854,7 +855,7 @@ func (scenarioHelper) containerExists(containerClient *container.Client) bool {
 func runSyncAndVerify(a *assert.Assertions, raw rawSyncCmdArgs, verifier func(err error)) {
 	// the simulated user input should parse properly
 	cooked, err := raw.cook()
-	a.Nil(err)
+	a.NoError(err)
 
 	// the enumeration ends when process() returns
 	err = cooked.process()

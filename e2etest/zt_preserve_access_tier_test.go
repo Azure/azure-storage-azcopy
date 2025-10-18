@@ -21,10 +21,11 @@
 package e2etest
 
 import (
+	"testing"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"testing"
 )
 
 func TestTier_UploadCold(t *testing.T) {

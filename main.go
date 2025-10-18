@@ -21,9 +21,10 @@
 package main
 
 import (
+	"os"
+
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"os"
 )
 
 // get the lifecycle manager to print messages

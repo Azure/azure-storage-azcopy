@@ -21,9 +21,10 @@
 package ste
 
 import (
-	"github.com/stretchr/testify/assert"
 	"math"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 type tunerStep struct {

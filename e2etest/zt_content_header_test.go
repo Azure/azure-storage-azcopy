@@ -21,8 +21,9 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"testing"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 var fileExtensions = []string{".exe", ".cpp", ".java", ".py", ".go", ".mp3", ".mp4", ".pdf", ".gzip", ".txt", ".dat", ".bat", ".xlsx"}

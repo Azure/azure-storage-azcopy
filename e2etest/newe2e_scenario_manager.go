@@ -1,12 +1,13 @@
 package e2etest
 
 import (
-	"github.com/google/uuid"
 	"reflect"
 	"runtime/debug"
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 type ScenarioManager struct {

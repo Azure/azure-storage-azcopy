@@ -22,13 +22,14 @@ package common_test
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"runtime"
 	"syscall"
 	"testing"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestCreateParentDirectoryIfNotExist(t *testing.T) {

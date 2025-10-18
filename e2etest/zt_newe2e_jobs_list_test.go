@@ -1,9 +1,10 @@
 package e2etest
 
 import (
+	"os"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"os"
 )
 
 func init() {

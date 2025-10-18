@@ -25,6 +25,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"math/rand"
+	"os"
+	"runtime"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -47,13 +55,6 @@ import (
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/stretchr/testify/assert"
-	"io"
-	"math/rand"
-	"os"
-	"runtime"
-	"strings"
-	"testing"
-	"time"
 
 	gcpUtils "cloud.google.com/go/storage"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -351,7 +352,7 @@ func createNewContainer(a *assert.Assertions, bsc *blobservice.Client) (cc *cont
 	_, _ = cc.Delete(ctx, nil)
 
 	_, err := cc.Create(ctx, nil)
-	a.Nil(err)
+	a.NoError(err)
 	return cc, name
 }
 
@@ -362,7 +363,7 @@ func createNewFilesystem(a *assert.Assertions, dsc *datalakeservice.Client) (fsc
 	_, _ = fsc.Delete(ctx, nil)
 
 	_, err := fsc.Create(ctx, nil)
-	a.Nil(err)
+	a.NoError(err)
 	return
 }
 
@@ -371,13 +372,13 @@ func createNewBfsFile(a *assert.Assertions, fsc *filesystem.Client, prefix strin
 
 	// Create the file
 	_, err := fc.Create(ctx, nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	_, err = fc.AppendData(ctx, 0, streaming.NopCloser(strings.NewReader(string(make([]byte, defaultBlobFSFileSizeInBytes)))), nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	_, err = fc.FlushData(ctx, defaultBlobFSFileSizeInBytes, &datalakefile.FlushDataOptions{Close: to.Ptr(true)})
-	a.Nil(err)
+	a.NoError(err)
 	return
 }
 
@@ -385,7 +386,7 @@ func createNewBlockBlob(a *assert.Assertions, cc *container.Client, prefix strin
 	bbc, name = getBlockBlobClient(a, cc, prefix)
 
 	_, err := bbc.Upload(ctx, streaming.NopCloser(strings.NewReader(blockBlobDefaultData)), nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	return
 }
@@ -398,7 +399,7 @@ func createNewDirectoryStub(a *assert.Assertions, cc *container.Client, dirPath 
 		&blockblob.UploadOptions{
 			Metadata: map[string]*string{"hdi_isfolder": to.Ptr("true")},
 		})
-	a.Nil(err)
+	a.NoError(err)
 
 	return
 }
@@ -410,7 +411,7 @@ func createNewShareFile(a *assert.Assertions, sc *share.Client, fsc *fileservice
 	generateParentsForShareFile(a, fc, sc)
 
 	_, err := fc.Create(ctx, defaultAzureFileSizeInBytes, nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	return
 }
@@ -419,7 +420,7 @@ func createNewShare(a *assert.Assertions, fsc *fileservice.Client) (sc *share.Cl
 	sc, name = getShareClient(a, fsc)
 
 	_, err := sc.Create(ctx, nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	return sc, name
 }
@@ -427,14 +428,14 @@ func createNewShare(a *assert.Assertions, fsc *fileservice.Client) (sc *share.Cl
 func generateParentsForShareFile(a *assert.Assertions, fileClient *sharefile.Client, shareClient *share.Client) {
 	t := ste.NewFolderCreationTracker(common.EFolderPropertiesOption.NoFolders(), nil)
 	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRoot(ctx, fileClient, shareClient, t)
-	a.Nil(err)
+	a.NoError(err)
 }
 
 func createNewAppendBlob(a *assert.Assertions, cc *container.Client, prefix string) (abc *appendblob.Client, name string) {
 	abc, name = getAppendBlobClient(a, cc, prefix)
 
 	_, err := abc.Create(ctx, nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	return
 }
@@ -443,19 +444,19 @@ func createNewPageBlob(a *assert.Assertions, cc *container.Client, prefix string
 	pbc, name = getPageBlobClient(a, cc, prefix)
 
 	_, err := pbc.Create(ctx, pageblob.PageBytes*10, nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	return
 }
 
 func deleteContainer(a *assert.Assertions, cc *container.Client) {
 	_, err := cc.Delete(ctx, nil)
-	a.Nil(err)
+	a.NoError(err)
 }
 
 func deleteFilesystem(a *assert.Assertions, fsc *filesystem.Client) {
 	_, err := fsc.Delete(ctx, nil)
-	a.Nil(err)
+	a.NoError(err)
 }
 
 func validateStorageError(a *assert.Assertions, err error, code bloberror.Code) {
@@ -517,7 +518,7 @@ func createGCPClientWithGCSSDK() (*gcpUtils.Client, error) {
 func createNewBucket(a *assert.Assertions, client *minio.Client, o createS3ResOptions) string {
 	bucketName := generateBucketName()
 	err := client.MakeBucket(bucketName, o.Location)
-	a.Nil(err)
+	a.NoError(err)
 
 	return bucketName
 }
@@ -526,20 +527,20 @@ func createNewGCPBucket(a *assert.Assertions, client *gcpUtils.Client) string {
 	bucketName := generateBucketName()
 	bkt := client.Bucket(bucketName)
 	err := bkt.Create(context.Background(), os.Getenv("GOOGLE_CLOUD_PROJECT"), &gcpUtils.BucketAttrs{})
-	a.Nil(err)
+	a.NoError(err)
 
 	return bucketName
 }
 
 func createNewBucketWithName(a *assert.Assertions, client *minio.Client, bucketName string, o createS3ResOptions) {
 	err := client.MakeBucket(bucketName, o.Location)
-	a.Nil(err)
+	a.NoError(err)
 }
 
 func createNewGCPBucketWithName(a *assert.Assertions, client *gcpUtils.Client, bucketName string) {
 	bucket := client.Bucket(bucketName)
 	err := bucket.Create(context.Background(), os.Getenv("GOOGLE_CLOUD_PROJECT"), &gcpUtils.BucketAttrs{})
-	a.Nil(err)
+	a.NoError(err)
 }
 
 func createNewObject(a *assert.Assertions, client *minio.Client, bucketName string, prefix string) (objectKey string) {
@@ -547,7 +548,7 @@ func createNewObject(a *assert.Assertions, client *minio.Client, bucketName stri
 
 	size := int64(len(objectDefaultData))
 	n, err := client.PutObject(bucketName, objectKey, strings.NewReader(objectDefaultData), size, minio.PutObjectOptions{})
-	a.Nil(err)
+	a.NoError(err)
 
 	a.Equal(size, n)
 
@@ -561,10 +562,10 @@ func createNewGCPObject(a *assert.Assertions, client *gcpUtils.Client, bucketNam
 	wc := client.Bucket(bucketName).Object(objectKey).NewWriter(context.Background())
 	reader := strings.NewReader(objectDefaultData)
 	written, err := io.Copy(wc, reader)
-	a.Nil(err)
+	a.NoError(err)
 	a.Equal(size, written)
 	err = wc.Close()
-	a.Nil(err)
+	a.NoError(err)
 	return objectKey
 
 }
@@ -682,7 +683,7 @@ func cleanBlobAccount(a *assert.Assertions, serviceClient *blobservice.Client) {
 	pager := serviceClient.NewListContainersPager(nil)
 	for pager.More() {
 		resp, err := pager.NextPage(ctx)
-		a.Nil(err)
+		a.NoError(err)
 
 		for _, v := range resp.ContainerItems {
 			_, err = serviceClient.NewContainerClient(*v.Name).Delete(ctx, nil)
@@ -695,7 +696,7 @@ func cleanBlobAccount(a *assert.Assertions, serviceClient *blobservice.Client) {
 					}
 				}
 
-				a.Nil(err)
+				a.NoError(err)
 			}
 		}
 	}
@@ -705,7 +706,7 @@ func cleanFileAccount(a *assert.Assertions, serviceClient *fileservice.Client) {
 	pager := serviceClient.NewListSharesPager(nil)
 	for pager.More() {
 		resp, err := pager.NextPage(ctx)
-		a.Nil(err)
+		a.NoError(err)
 
 		for _, v := range resp.Shares {
 			_, err = serviceClient.NewShareClient(*v.Name).Delete(ctx, nil)
@@ -718,7 +719,7 @@ func cleanFileAccount(a *assert.Assertions, serviceClient *fileservice.Client) {
 					}
 				}
 
-				a.Nil(err)
+				a.NoError(err)
 			}
 		}
 	}
@@ -728,13 +729,13 @@ func cleanFileAccount(a *assert.Assertions, serviceClient *fileservice.Client) {
 
 func deleteShare(a *assert.Assertions, sc *share.Client) {
 	_, err := sc.Delete(ctx, &share.DeleteOptions{DeleteSnapshots: to.Ptr(share.DeleteSnapshotsOptionTypeInclude)})
-	a.Nil(err)
+	a.NoError(err)
 }
 
 // Some tests require setting service properties. It can take up to 30 seconds for the new properties to be reflected across all FEs.
 // We will enable the necessary property and try to run the test implementation. If it fails with an error that should be due to
 // those changes not being reflected yet, we will wait 30 seconds and try the test again. If it fails this time for any reason,
-// we fail the test. It is the responsibility of the the testImplFunc to determine which error string indicates the test should be retried.
+// we fail the test. It is the responsibility of the testImplFunc to determine which error string indicates the test should be retried.
 // There can only be one such string. All errors that cannot be due to this detail should be asserted and not returned as an error string.
 func runTestRequiringServiceProperties(a *assert.Assertions, bsc *blobservice.Client, code string,
 	enableServicePropertyFunc func(*assert.Assertions, *blobservice.Client),
@@ -747,7 +748,7 @@ func runTestRequiringServiceProperties(a *assert.Assertions, bsc *blobservice.Cl
 	if err != nil && err.Error() == code {
 		time.Sleep(time.Second * 30)
 		err = testImplFunc(a, bsc)
-		a.Nil(err)
+		a.NoError(err)
 	}
 }
 
@@ -755,19 +756,19 @@ func enableSoftDelete(a *assert.Assertions, bsc *blobservice.Client) {
 	_, err := bsc.SetProperties(ctx, &blobservice.SetPropertiesOptions{
 		DeleteRetentionPolicy: &blobservice.RetentionPolicy{Enabled: to.Ptr(true), Days: to.Ptr(int32(1))},
 	})
-	a.Nil(err)
+	a.NoError(err)
 }
 
 func disableSoftDelete(a *assert.Assertions, bsc *blobservice.Client) {
 	_, err := bsc.SetProperties(ctx, &blobservice.SetPropertiesOptions{
 		DeleteRetentionPolicy: &blobservice.RetentionPolicy{Enabled: to.Ptr(false)},
 	})
-	a.Nil(err)
+	a.NoError(err)
 }
 
 func validateUpload(a *assert.Assertions, bbc *blockblob.Client) {
 	resp, err := bbc.DownloadStream(ctx, nil)
-	a.Nil(err)
+	a.NoError(err)
 	data, _ := io.ReadAll(resp.Body)
 	a.Len(data, 0)
 }
@@ -781,10 +782,10 @@ func getContainerClientWithSAS(a *assert.Assertions, credential *blob.SharedKeyC
 		blobsas.ContainerPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, DeletePreviousVersion: true, List: true, Tag: true},
 		time.Now().Add(48*time.Hour),
 		nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	client, err = container.NewClientWithNoCredential(sasURL, nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	return client
 }
@@ -799,10 +800,10 @@ func getBlobServiceClientWithSAS(a *assert.Assertions, credential *blob.SharedKe
 		blobsas.AccountPermissions{Read: true, List: true, Write: true, Delete: true, DeletePreviousVersion: true, Add: true, Create: true, Update: true, Process: true, Tag: true},
 		time.Now().Add(48*time.Hour),
 		nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	client, err = blobservice.NewClientWithNoCredential(sasURL, nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	return client
 }
@@ -817,10 +818,10 @@ func getFileServiceClientWithSAS(a *assert.Assertions, credential *sharefile.Sha
 		filesas.AccountPermissions{Read: true, List: true, Write: true, Delete: true, Create: true},
 		time.Now().Add(48*time.Hour),
 		nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	client, err = fileservice.NewClientWithNoCredential(sasURL, nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	return client
 }
@@ -834,10 +835,10 @@ func getShareClientWithSAS(a *assert.Assertions, credential *sharefile.SharedKey
 		filesas.SharePermissions{Read: true, Write: true, Create: true, Delete: true, List: true},
 		time.Now().Add(48*time.Hour),
 		nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	client, err = share.NewClientWithNoCredential(sasURL, nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	return client
 }
@@ -852,10 +853,10 @@ func getDatalakeServiceClientWithSAS(a *assert.Assertions, credential *azdatalak
 		datalakesas.AccountPermissions{Read: true, List: true, Write: true, Delete: true, Add: true, Create: true, Update: true, Process: true},
 		time.Now().Add(48*time.Hour),
 		nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	client, err = datalakeservice.NewClientWithNoCredential(sasURL, nil)
-	a.Nil(err)
+	a.NoError(err)
 
 	return client
 }

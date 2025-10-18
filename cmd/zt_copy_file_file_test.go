@@ -21,11 +21,12 @@
 package cmd
 
 import (
+	"strings"
+	"testing"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/stretchr/testify/assert"
-	"strings"
-	"testing"
 )
 
 // regular file->file copy

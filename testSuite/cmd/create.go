@@ -2,10 +2,14 @@ package cmd
 
 import (
 	"bytes"
-	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"crypto/md5"
 	"fmt"
+	"net/url"
+	"os"
+	"time"
+
+	gcpUtils "cloud.google.com/go/storage"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -14,9 +18,6 @@ import (
 	sharedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
-	"net/url"
-	"os"
-	"time"
 
 	"io"
 	"math/rand"
@@ -245,8 +246,8 @@ func createBlob(blobURL string, blobSize uint32, metadata map[string]*string, bl
 	_, err := blobClient.Upload(context.Background(), streaming.NopCloser(strings.NewReader(randomString)),
 		&blockblob.UploadOptions{
 			HTTPHeaders: blobHTTPHeaders,
-			Metadata: metadata,
-			Tier: tier,
+			Metadata:    metadata,
+			Tier:        tier,
 		})
 	if err != nil {
 		fmt.Printf("error uploading the blob %v\n", err)
