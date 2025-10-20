@@ -123,7 +123,6 @@ type lifecycleMgr struct {
 	e2eAllowAwaitContinue bool           // allow the user to send 'continue' from stdin to start the current job
 	e2eAllowAwaitOpen     bool           // allow the user to send 'open' from stdin to allow the opening of the first file
 	closeFunc             func()         // used to close logs before exiting
-	disableSyslog         bool
 	waitForUserResponse   chan bool
 	msgHandlerChannel     chan *common.LCMMsg
 	OutputVerbosityType   OutputVerbosity
