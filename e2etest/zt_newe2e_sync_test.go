@@ -795,7 +795,9 @@ func (s *SyncTestSuite) Scenario_TestFileLocalIncludeRootMetadata(svm *ScenarioV
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm,
 		[]common.Location{common.ELocation.Local(), common.ELocation.File(), common.ELocation.FileNFS()})), ResourceDefinitionContainer{})
 	for _, obj := range srcObjs {
-		CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+		if obj.EntityType != common.EEntityType.Folder() {
+			CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+		}
 	}
 
 	sasOpts := GenericAccountSignatureValues{}
