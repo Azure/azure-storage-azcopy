@@ -3,6 +3,7 @@ package e2etest
 import (
 	"time"
 
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -187,7 +188,7 @@ func (*FNSSuite) Scenario_SyncTrailingSlashDeletion(a *ScenarioVariationManager)
 			CopySyncCommonFlags: CopySyncCommonFlags{
 				Recursive: pointerTo(true),
 				GlobalFlags: GlobalFlags{
-					OutputType: pointerTo(common.EOutputFormat.Text()),
+					OutputType: pointerTo(cmd.EOutputFormat.Text()),
 				},
 				IncludeDirectoryStubs: pointerTo(true),
 			},

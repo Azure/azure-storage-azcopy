@@ -36,7 +36,7 @@ type RemoveJobResult struct {
 }
 
 // RemoveJob removes a job with the specified JobID.
-func (c Client) RemoveJob(opts RemoveJobOptions) (result RemoveJobResult, err error) {
+func (c *Client) RemoveJob(opts RemoveJobOptions) (result RemoveJobResult, err error) {
 	result = RemoveJobResult{}
 	if opts.JobID.IsEmpty() {
 		return result, errors.New("remove job requires the JobID")
