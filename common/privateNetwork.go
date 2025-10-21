@@ -66,9 +66,13 @@ type IPEntry struct {
 //var UnHealthyPrivateEndpoints = make(map[string]IPEntry)
 //var UnHealthyMu sync.RWMutex
 
+// Global variables for external access to private endpoint IPs
+var globalPrivateEndpointIPs []*IPEntry
+var globalIPsMutex sync.RWMutex
+
 // RoundRobinTransport implements http.RoundTripper with retries and cooldowns
 type RoundRobinTransport struct {
-	ips  []*IPEntry
+	//ips  []*IPEntry
 	host string
 	//	healthyIPs      atomic.Value // []*IPEntry, cached healthy list
 	counter         uint64
@@ -95,17 +99,12 @@ func SetPrivateNetworkArgs(privateNetworkEnabled bool, privateEndpointIPs []stri
 
 // RoundRobinTransport creates the transport
 func NewRoundRobinTransport(ips []string, host string, cooldownInSecs int, ipRetries int, ipRetryIntervalInMilliSecs int) *RoundRobinTransport {
-	entries := make([]*IPEntry, len(ips))
-	for i, ip := range ips {
-		entries[i] = &IPEntry{IP: ip, ConnectionStatus: Healthy, LastChecked: time.Now()}
-		log.Printf("PrivateEndpoint%d IPAddress:%s Unhealthy Status:%d LastChecked :%v\n ", i, entries[i].IP, entries[i].ConnectionStatus, entries[i].LastChecked)
-	}
-
+	SetGlobalPrivateEndpointIPs(ips)
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: false, ServerName: host}
 
 	rr := &RoundRobinTransport{
-		ips:             entries,
+		//ips:             globalPrivateEndpointIPs,
 		host:            host,
 		transport:       tr,
 		cooldown:        time.Duration(cooldownInSecs) * time.Second,
@@ -117,7 +116,6 @@ func NewRoundRobinTransport(ips []string, host string, cooldownInSecs int, ipRet
 
 	// Start a goroutine to periodically refresh the healthy pool
 	//go rr.periodicHealthyPoolRefresh()
-
 	return rr
 }
 
@@ -130,14 +128,15 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 
 	//healthy := rr.healthyIPs.Load().([]*IPEntry)
 	//initialHealthyCount := len(healthy)
-	for iter := 0; iter < len(rr.ips); iter++ {
+	numPrivateEndpoints := GetGlobalPrivateEndpointIPCount()
+	for iter := 0; iter < numPrivateEndpoints; iter++ {
 
 		rr.counterLock.Lock()
-		idx := rr.counter % uint64(len(rr.ips))
+		idx := rr.counter % uint64(numPrivateEndpoints)
 		atomic.AddUint64(&rr.counter, 1)
 		rr.counterLock.Unlock()
 
-		entry := rr.ips[idx]
+		entry := globalPrivateEndpointIPs[idx]
 		peIP = entry.IP
 		//log.Printf("Selected Private endpoint IP: %s Unhealth Status: %d LastTime: %v\n",
 		// peIP, entry.ConnectionStatus, entry.LastChecked)
@@ -146,7 +145,8 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 		if entry.ConnectionStatus == Unhealthy {
 			if time.Since(entry.LastChecked) >= rr.cooldown {
 				entry.MarkHealthy()
-				log.Printf("Updating Private Endpoint:%s connection state from UNHEALTHY->HEALTHY after cooldown at %v (LastChecked: %v)", peIP, time.Now(), entry.LastChecked)
+				updateStatus := UpdateGlobalPrivateEndpointIP(idx, entry)
+				log.Printf("Updating Private Endpoint:%s connection state from UNHEALTHY->HEALTHY after cooldown at %v (LastChecked: %v) with Update Status:%s", peIP, time.Now(), entry.LastChecked, updateStatus)
 			} else {
 				log.Printf("[Counter=%d] Skipping Unhealthy IP %s (still in cooldown) (LastChecked: %v)", idx, peIP, entry.LastChecked)
 				continue
@@ -168,7 +168,10 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 			resp, err := rr.transport.RoundTrip(clonedReq)
 			if err == nil {
 				log.Printf("[Counter=%d Retry=%d] SUCCESS using IP %s", idx, ipAttempt, peIP)
-				entry.IncrementNumRequests()
+				//entry.IncrementNumRequests()
+				globalIPsMutex.Lock()
+				defer globalIPsMutex.Unlock()
+				globalPrivateEndpointIPs[idx].IncrementNumRequests()
 				return resp, nil
 			}
 
@@ -215,7 +218,8 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 			// attempt to mark unhealthy: 0 -> 1
 			if atomic.CompareAndSwapUint32((*uint32)(&entry.ConnectionStatus), uint32(Healthy), uint32(Unhealthy)) {
 				entry.MarkUnhealthy(errCode, errMsg)
-				log.Printf("Updating Private Endpoint:%s connection state from HEALTHY->UNHEALTHY after error response with Error Code %d ErrorMsg:%s at %v", peIP, entry.LastErrCode, entry.LastErrMsg, entry.LastChecked)
+				updateStatus := UpdateGlobalPrivateEndpointIP(idx, entry)
+				log.Printf("Updating Private Endpoint:%s connection state from HEALTHY->UNHEALTHY after error response with Error Code %d ErrorMsg:%s at %v Update Status:%s", peIP, entry.LastErrCode, entry.LastErrMsg, entry.LastChecked, updateStatus)
 			}
 			// break inner loop; outer loop will select another IP (or finish if attempts exhausted)
 			break
@@ -264,10 +268,55 @@ func (rr *RoundRobinTransport) Close() {
 }
 
 // GetPrivateEndpointStatus returns a copy of all private IP entries in the round robin transport
-func (rr *RoundRobinTransport) GetPrivateEndpointStatus() []*IPEntry {
-	result := make([]*IPEntry, len(rr.ips))
-	copy(result, rr.ips)
+func GetPrivateEndpointStatus() []*IPEntry {
+	globalIPsMutex.RLock()
+	defer globalIPsMutex.RUnlock()
+
+	if globalPrivateEndpointIPs == nil {
+		return nil
+	}
+
+	// Return a copy to prevent external modifications
+	result := make([]*IPEntry, len(globalPrivateEndpointIPs))
+	copy(result, globalPrivateEndpointIPs)
 	return result
+}
+
+// SetGlobalPrivateEndpointIPs sets the global private endpoint IPs for external access
+func SetGlobalPrivateEndpointIPs(ips []string) {
+	globalIPsMutex.Lock()
+	defer globalIPsMutex.Unlock()
+
+	for i, ip := range ips {
+		globalPrivateEndpointIPs[i] = InitializePrivateEndpointIpEntry(ip)
+		log.Printf("PrivateEndpointIp:%s is set to Healthy\n ", globalPrivateEndpointIPs[i].IP)
+	}
+	log.Printf("Number of Private Endpoints:%d set", len(globalPrivateEndpointIPs))
+}
+
+// GetGlobalPrivateEndpointIPCount returns the number of global private endpoint IPs
+func GetGlobalPrivateEndpointIPCount() int {
+	globalIPsMutex.RLock()
+	defer globalIPsMutex.RUnlock()
+
+	if globalPrivateEndpointIPs == nil {
+		return 0
+	}
+	return len(globalPrivateEndpointIPs)
+}
+
+// UpdateGlobalPrivateEndpointIP updates a specific IP entry in the global list
+func UpdateGlobalPrivateEndpointIP(index uint64, updatedEntry *IPEntry) bool {
+	globalIPsMutex.Lock()
+	defer globalIPsMutex.Unlock()
+
+	if globalPrivateEndpointIPs == nil || index >= uint64(len(globalPrivateEndpointIPs)) || updatedEntry == nil {
+		log.Printf("Updation of PrivateEndpoint List failed for the Index:%d with Length:%d\n ", index, len(globalPrivateEndpointIPs))
+		return false
+	}
+
+	globalPrivateEndpointIPs[index] = updatedEntry
+	return true
 }
 
 // Function to check if private network is enabled or not. By default it should be disabled and return false
@@ -350,6 +399,23 @@ func (entry *IPEntry) MarkUnhealthy(errCode int, errMsg string) {
 	entry.LastErrMsg = errMsg
 	entry.LastChecked = time.Now()
 	log.Printf("Marking Private Endpoint %s as Unhealthy with Error Code: %d Error Message:%s at time %v\n", entry.IP, entry.LastErrCode, entry.LastErrMsg, entry.LastChecked)
+}
+
+// MarkUnhealthy safely marks the IPEntry as unhealthy with error details
+func InitializePrivateEndpointIpEntry(privateEndpointIp string) *IPEntry {
+	defaultErrorCode := 0
+	defaultErrorMessage := ""
+
+	entry := &IPEntry{
+		IP:               privateEndpointIp,
+		ConnectionStatus: Healthy,
+		LastErrCode:      defaultErrorCode,
+		LastErrMsg:       defaultErrorMessage,
+		LastChecked:      time.Now(),
+		NumRequests:      0,
+	}
+	log.Printf("Initializing IPEntry for Private Endpoint %s as Healthy at time %v\n", entry.IP, entry.LastChecked)
+	return entry
 }
 
 // IncrementNumRequests safely increments the NumRequests counter for an IPEntry
