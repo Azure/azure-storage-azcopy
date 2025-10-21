@@ -1057,18 +1057,12 @@ extends:
                     displayName: 'AzCopy Tag Name'
 
                   - task: 1ES.DownloadPipelineArtifact@1
-                    displayName: 'Download Linux, Windows, Mac Build Artifacts'
+                    displayName: 'Download Windows Build Artifacts'
                     inputs:
-                      itemPattern: 'azcopy-*-signed/**'
+                      artifactName: 'azcopy-windows-signed'
                       downloadPath: $(Build.ArtifactStagingDirectory)
                       targetPath: $(System.DefaultWorkingDirectory)\signed
                       BuildDropPath: $(System.DefaultWorkingDirectory)\signed
-
-#                  - task: 1ES.DownloadPipelineArtifact@1
-#                    displayName: 'Download Windows Build Artifacts'
-#                    inputs:
-#                      artifactName: 'azcopy-windows-signed'
-#                      downloadPath: $(Build.ArtifactStagingDirectory)
 
 #                  - task: 1ES.DownloadPipelineArtifact@1
 #                    displayName: 'Download Linux Build Artifacts'
