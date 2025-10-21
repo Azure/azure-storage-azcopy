@@ -4,7 +4,7 @@
 ## Version 10.31.0
 
 ### New Features
-1. `--include-root` flag now allows customers to preserve root properties when used in conjuncction with `--preserve-XXXX` flags. ([#3163](https://github.com/Azure/azure-storage-azcopy/pull/3163))
+1. `--include-root` flag now allows customers to preserve root properties when used in conjunction with `--preserve-XXXX` flags. ([#3163](https://github.com/Azure/azure-storage-azcopy/pull/3163))
 
 ### Bug Fixes
 1. Fixed a bug to retry on various network errors. ([#3237](https://github.com/Azure/azure-storage-azcopy/pull/3237])) ([#3252](https://github.com/Azure/azure-storage-azcopy/pull/3252))
