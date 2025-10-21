@@ -690,22 +690,22 @@ func (s *SyncTestSuite) Scenario_TestFileLocalIncludeRootCreationTime(svm *Scena
 		time.Sleep(5 * time.Second)
 	}
 
-	srcOjbs := make(ObjectResourceMappingFlat)
+	srcObjs := make(ObjectResourceMappingFlat)
 	obj := ResourceDefinitionObject{ObjectName: pointerTo("root"),
 		ObjectProperties: ObjectProperties{
 			EntityType: common.EEntityType.Folder(),
 			FileProperties: FileProperties{
 				FileCreationTime: pointerTo(currTime)}}}
-	srcOjbs["root"] = obj
+	srcObjs["root"] = obj
 	fileObj := ResourceDefinitionObject{ObjectName: pointerTo("root/file.txt"), Body: body}
-	srcOjbs["root/file.txt"] = fileObj
+	srcObjs["root/file.txt"] = fileObj
 	src := CreateResource[ContainerResourceManager](svm,
 		GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File(), common.ELocation.Local()})),
 		ResourceDefinitionContainer{})
 
 	// Test framework is flakily failing because of recreated directories
-	for _, obj := range srcOjbs {
-		if obj.EntityType != common.EEntityType.Folder() {
+	for _, obj := range srcObjs {
+		if obj.ObjectProperties.EntityType != common.EEntityType.Folder() {
 			CreateResource[ObjectResourceManager](svm, src, obj)
 		}
 	}
