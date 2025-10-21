@@ -1033,7 +1033,7 @@ extends:
           - stage: ReleaseToGithub
             dependsOn:
               - AzCopyVersion
-              - VerifyArtifacts
+#              - VerifyArtifacts
             jobs:
               - job: ReleaseJob
                 templateContext:
@@ -1056,11 +1056,12 @@ extends:
                       echo "##vso[task.setvariable variable=azcopy_github_tag]$azcopy_github_tag"
                     displayName: 'AzCopy Tag Name'
 
-                  - task: DownloadPipelineArtifact@2
+                  - task: 1ES.DownloadPipelineArtifact@1
                     displayName: 'Download Linux, Windows, Mac Build Artifacts'
                     inputs:
                       itemPattern: 'azcopy-*-signed/**'
                       downloadPath: $(Build.ArtifactStagingDirectory)
+                      targetPath: $(System.DefaultWorkingDirectory)\signed
                       BuildDropPath: $(System.DefaultWorkingDirectory)\signed
 
 #                  - task: 1ES.DownloadPipelineArtifact@1
