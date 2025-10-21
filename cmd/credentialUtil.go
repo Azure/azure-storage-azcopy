@@ -226,15 +226,15 @@ func logAuthType(ct common.CredentialType, location common.Location, isSource bo
 var authMessagesAlreadyLogged = &sync.Map{}
 
 // isPublic reports true if the Blob URL passed can be read without auth.
-func isPublic(ctx context.Context, blobResourceURL string, cpkOptions common.CpkOptions) (isPublicResource bool) {
+func isPublic(ctx context.Context, blobResourceURL string, cpkOptions common.CpkOptions) (isPublicResource bool, err error) {
 	bURLParts, err := blob.ParseURL(blobResourceURL)
 	if err != nil {
-		return false
+		return false, nil
 	}
 
 	if bURLParts.ContainerName == "" || strings.Contains(bURLParts.ContainerName, "*") {
 		// Service level searches can't possibly be public.
-		return false
+		return false, nil
 	}
 
 	// This request will not be logged. This can fail, and too many Cx do not like this.
@@ -257,19 +257,23 @@ func isPublic(ctx context.Context, blobResourceURL string, cpkOptions common.Cpk
 	// Virtual directory can be public only when its parent container is public.
 	containerClient, _ := container.NewClientWithNoCredential(bURLParts.String(), &container.ClientOptions{ClientOptions: clientOptions})
 	if _, err := containerClient.GetProperties(ctx, nil); err == nil {
-		return true
+		return true, nil
 	}
 
 	// Scenario 2: When resourceURL points to a blob
-	if _, err := blobClient.GetProperties(ctx, &blob.GetPropertiesOptions{CPKInfo: cpkOptions.GetCPKInfo()}); err == nil {
-		return true
+	cpkInfo, err := cpkOptions.GetCPKInfo()
+	if err != nil {
+		return false, err
+	}
+	if _, err := blobClient.GetProperties(ctx, &blob.GetPropertiesOptions{CPKInfo: cpkInfo}); err == nil {
+		return true, nil
 	}
 
-	return false
+	return false, nil
 }
 
 // mdAccountNeedsOAuth pings the passed in md account, and checks if we need additional token with Disk-socpe
-func mdAccountNeedsOAuth(ctx context.Context, blobResourceURL string, cpkOptions common.CpkOptions) bool {
+func mdAccountNeedsOAuth(ctx context.Context, blobResourceURL string, cpkOptions common.CpkOptions) (bool, error) {
 	// This request will not be logged. This can fail, and too many Cx do not like this.
 	clientOptions := ste.NewClientOptions(policy.RetryOptions{
 		MaxRetries:    ste.UploadMaxTries,
@@ -281,9 +285,13 @@ func mdAccountNeedsOAuth(ctx context.Context, blobResourceURL string, cpkOptions
 	}, nil, ste.LogOptions{}, nil, nil)
 
 	blobClient, _ := blob.NewClientWithNoCredential(blobResourceURL, &blob.ClientOptions{ClientOptions: clientOptions})
-	_, err := blobClient.GetProperties(ctx, &blob.GetPropertiesOptions{CPKInfo: cpkOptions.GetCPKInfo()})
+	cpkInfo, err := cpkOptions.GetCPKInfo()
+	if err != nil {
+		return false, err
+	}
+	_, err = blobClient.GetProperties(ctx, &blob.GetPropertiesOptions{CPKInfo: cpkInfo})
 	if err == nil {
-		return false
+		return false, nil
 	}
 
 	var respErr *azcore.ResponseError
@@ -291,11 +299,11 @@ func mdAccountNeedsOAuth(ctx context.Context, blobResourceURL string, cpkOptions
 		if respErr.StatusCode == 401 || respErr.StatusCode == 403 { // *sometimes* the service can return 403s.
 			challenge := respErr.RawResponse.Header.Get("WWW-Authenticate")
 			if strings.Contains(challenge, common.MDResource) {
-				return true
+				return true, nil
 			}
 		}
 	}
-	return false
+	return false, nil
 }
 
 func getCredentialTypeForLocation(ctx context.Context, location common.Location, resource common.ResourceString, isSource bool, cpkOptions common.CpkOptions) (credType common.CredentialType, isPublic bool, err error) {
@@ -358,25 +366,34 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 	// Special blob destinations - public and MD account needing oAuth
 	if location == common.ELocation.Blob() {
 		uri, _ := resource.FullURL()
-		if isSource && resource.SAS == "" && isPublic(ctx, uri.String(), cpkOptions) {
+		public, err = isPublic(ctx, uri.String(), cpkOptions)
+		if err != nil {
+			return common.ECredentialType.Unknown(), false, err
+		}
+		if isSource && resource.SAS == "" && public {
 			credType = common.ECredentialType.Anonymous()
-			public = true
 			return
 		}
 
-		if strings.HasPrefix(uri.Host, "md-") && mdAccountNeedsOAuth(ctx, uri.String(), cpkOptions) {
-			var oAuthTokenExists bool
-			oAuthTokenExists, err = Client.GetUserOAuthTokenManagerInstance().OAuthTokenExists(&announceOAuthTokenOnce, &autoOAuth)
-			if err != nil {
-				return common.ECredentialType.Unknown(), false, err
+		if strings.HasPrefix(uri.Host, "md-") {
+			needsOauth, cpkError := mdAccountNeedsOAuth(ctx, uri.String(), cpkOptions)
+			if cpkError != nil {
+				return common.ECredentialType.Unknown(), false, cpkError
 			}
-			if !oAuthTokenExists {
-				return common.ECredentialType.Unknown(), false,
-					common.NewAzError(common.EAzError.LoginCredMissing(), "No SAS token or OAuth token is present and the resource is not public")
-			}
+			if needsOauth {
+				var oAuthTokenExists bool
+				oAuthTokenExists, err = Client.GetUserOAuthTokenManagerInstance().OAuthTokenExists(&announceOAuthTokenOnce, &autoOAuth)
+				if err != nil {
+					return common.ECredentialType.Unknown(), false, err
+				}
+				if !oAuthTokenExists {
+					return common.ECredentialType.Unknown(), false,
+						common.NewAzError(common.EAzError.LoginCredMissing(), "No SAS token or OAuth token is present and the resource is not public")
+				}
 
-			credType = common.ECredentialType.MDOAuthToken()
-			return
+				credType = common.ECredentialType.MDOAuthToken()
+				return
+			}
 		}
 	}
 

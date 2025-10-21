@@ -89,6 +89,7 @@ type IJobMgr interface {
 	SuccessfulBytesInActiveFiles() uint64
 	CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.CancelPauseResumeResponse
 	IsDaemon() bool
+	GetJobErrorHandler() common.JobErrorHandler
 
 	// Cleanup Functions
 	DeferredCleanupJobMgr()
@@ -99,7 +100,7 @@ type IJobMgr interface {
 func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx context.Context, cpuMon common.CPUMonitor, level common.LogLevel,
 	commandString string, tuner ConcurrencyTuner,
 	pacer PacerAdmin, slicePool common.ByteSlicePooler, cacheLimiter common.CacheLimiter, fileCountLimiter common.CacheLimiter,
-	jobLogger common.ILoggerResetable, daemonMode bool) IJobMgr {
+	jobLogger common.ILoggerResetable, daemonMode bool, jobErrorHandler common.JobErrorHandler) IJobMgr {
 	const channelSize = 100000
 	// PartsChannelSize defines the number of JobParts which can be placed into the
 	// parts channel. Any JobPart which comes from FE and partChannel is full,
@@ -174,6 +175,7 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 		fileCountLimiter: fileCountLimiter,
 		cpuMon:           cpuMon,
 		jstm:             &jstm,
+		jobErrorHandler:  jobErrorHandler,
 		isDaemon:         daemonMode,
 		/*Other fields remain zero-value until this job is scheduled */}
 	jm.Reset(appCtx, commandString)
@@ -321,6 +323,7 @@ type jobMgr struct {
 	cacheLimiter        common.CacheLimiter
 	fileCountLimiter    common.CacheLimiter
 	jstm                *jobStatusManager
+	jobErrorHandler     common.JobErrorHandler
 
 	isDaemon bool /* is it running as service */
 }
@@ -1168,6 +1171,10 @@ func (jm *jobMgr) CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.
 
 func (jm *jobMgr) IsDaemon() bool {
 	return jm.isDaemon
+}
+
+func (jm *jobMgr) GetJobErrorHandler() common.JobErrorHandler {
+	return jm.jobErrorHandler
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

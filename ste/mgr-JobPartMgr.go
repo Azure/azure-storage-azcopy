@@ -71,6 +71,7 @@ type IJobPartMgr interface {
 	SendXferDoneMsg(msg xferDoneMsg)
 	PropertiesToTransfer() common.SetPropertiesFlags
 	ResetFailedTransfersCount() // Resets number of failed transfers after a job is resumed
+	GetJobErrorHandler() common.JobErrorHandler
 }
 
 // NewAzcopyHTTPClient creates a new HTTP client.
@@ -507,7 +508,11 @@ func (jpm *jobPartMgr) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlob
 }
 
 func (jpm *jobPartMgr) CpkInfo() *blob.CPKInfo {
-	return common.GetCpkInfo(jpm.cpkOptions.CpkInfo)
+	cpkInfo, err := common.GetCpkInfo(jpm.cpkOptions.CpkInfo)
+	if err != nil {
+		jpm.GetJobErrorHandler().Error(err.Error())
+	}
+	return cpkInfo
 }
 
 func (jpm *jobPartMgr) CpkScopeInfo() *blob.CPKScopeInfo {
@@ -651,6 +656,10 @@ func (jpm *jobPartMgr) SendXferDoneMsg(msg xferDoneMsg) {
 
 func (jpm *jobPartMgr) ResetFailedTransfersCount() {
 	atomic.StoreUint32(&jpm.atomicTransfersFailed, 0)
+}
+
+func (jpm *jobPartMgr) GetJobErrorHandler() common.JobErrorHandler {
+	return jpm.jobMgr.GetJobErrorHandler()
 }
 
 // TODO: Can we delete this method?
