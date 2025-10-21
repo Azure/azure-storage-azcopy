@@ -286,6 +286,7 @@ func GetPrivateEndpointStatus() []*IPEntry {
 func SetGlobalPrivateEndpointIPs(ips []string) {
 	globalIPsMutex.Lock()
 	defer globalIPsMutex.Unlock()
+	globalPrivateEndpointIPs = make([]*IPEntry, len(ips))
 
 	for i, ip := range ips {
 		globalPrivateEndpointIPs[i] = InitializePrivateEndpointIpEntry(ip)
