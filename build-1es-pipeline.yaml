@@ -249,7 +249,7 @@ extends:
         dependsOn:
           - AzCopyVersion
           - BuildArtifacts
-#        jobs:
+        jobs:
 #          - job: Linux
 #            timeoutInMinutes: 120
 #            pool:
