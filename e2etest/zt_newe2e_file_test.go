@@ -3,12 +3,11 @@ package e2etest
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"math"
 	"os"
 	"strconv"
-
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func init() {
@@ -218,7 +217,7 @@ func (s *FileTestSuite) Scenario_UploadFileProperties(svm *ScenarioVariationMana
 
 func (s *FileTestSuite) Scenario_DownloadPreserveLMTFile(svm *ScenarioVariationManager) {
 	body := NewZeroObjectContentContainer(0)
-	name := "test_upload_preserve_last_mtime"
+	name := "test_download_preserve_last_mtime"
 	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionObject{ObjectName: pointerTo(name), Body: body})
 	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).GetObject(svm, name, common.EEntityType.File())
 
@@ -237,7 +236,6 @@ func (s *FileTestSuite) Scenario_DownloadPreserveLMTFile(svm *ScenarioVariationM
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body: body,
 		ObjectProperties: ObjectProperties{
-
 			LastModifiedTime: srcObjLMT,
 		},
 	}, ValidateResourceOptions{
