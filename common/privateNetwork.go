@@ -207,7 +207,7 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 			lastErr = err
 
 			// If we still have per-IP attempts left, wait and retry the same IP
-			if ipAttempt < rr.perIPRetries {
+			if ipAttempt+1 < rr.perIPRetries {
 				log.Printf("[Counter=%d Retry=%d] Retrying same IP %s after %v", idx, ipAttempt, peIP, rr.perIPRetryDelay)
 				time.Sleep(rr.perIPRetryDelay)
 				continue
