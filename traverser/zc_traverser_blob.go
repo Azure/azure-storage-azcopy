@@ -62,6 +62,8 @@ type BlobTraverser struct {
 	include common.BlobTraverserIncludeOption
 
 	isDFS bool
+
+	includeRoot bool
 }
 
 var NonErrorDirectoryStubOverlappable = errors.New("The directory stub exists, and can overlap.")
@@ -157,7 +159,11 @@ retry:
 	if err != nil {
 		return nil, false, false, blobURLParts.BlobName, err
 	}
-	props, err := blobClient.GetProperties(t.ctx, &blob.GetPropertiesOptions{CPKInfo: t.cpkOptions.GetCPKInfo()})
+	cpkInfo, err := t.cpkOptions.GetCPKInfo()
+	if err != nil {
+		return nil, false, false, blobURLParts.BlobName, err
+	}
+	props, err := blobClient.GetProperties(t.ctx, &blob.GetPropertiesOptions{CPKInfo: cpkInfo})
 
 	if err != nil && strings.HasSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING) {
 		// Trim & retry, maybe the directory stub is DFS style.
@@ -304,6 +310,43 @@ func (t *BlobTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 		_, err = getProcessingError(err)
 		if err != nil {
 			return err
+		}
+	} else if blobURLParts.BlobName != "" && isDirStub && t.isDFS && t.includeRoot {
+		// Handle enumerating folder roots for BlobFS (HNS enabled only)
+		var dirName string
+		if strings.HasSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING) {
+			dirName = strings.TrimSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)
+		}
+		if common.AzcopyScanningLogger != nil {
+			common.AzcopyScanningLogger.Log(common.LogDebug, fmt.Sprintf("Detected the root as a folder %s.", dirName))
+		}
+
+		// Use props from previous call to create the root object
+		if blobProperties != nil && DoesBlobRepresentAFolder(blobProperties.Metadata) {
+			dirPropsAdapter := BlobPropertiesResponseAdapter{blobProperties}
+			storedObject := NewStoredObject(
+				preprocessor,
+				"", // empty for root
+				"", // empty for root
+				common.EEntityType.Folder(),
+				dirPropsAdapter.LastModified(),
+				0, // folders have no size
+				dirPropsAdapter,
+				dirPropsAdapter,
+				dirPropsAdapter.Metadata,
+				blobURLParts.ContainerName,
+			)
+
+			if t.incrementEnumerationCounter != nil {
+				t.incrementEnumerationCounter(common.EEntityType.Folder(),
+					common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
+			}
+
+			err = ProcessIfPassedFilters(filters, storedObject, processor)
+			_, err = getProcessingError(err)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -605,6 +648,7 @@ func NewBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		cpkOptions:                  opts.CpkOptions,
 		preservePermissions:         opts.PreservePermissions,
 		isDFS:                       common.DerefOrZero(common.FirstOrZero(blobOpts).IsDFS),
+		includeRoot:                 opts.IncludeRoot,
 	}
 
 	disableHierarchicalScanning := strings.ToLower(common.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning()))

@@ -2,13 +2,15 @@ package ste
 
 import (
 	"context"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/stretchr/testify/assert"
 	"net/http"
 	"strconv"
 	"testing"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/stretchr/testify/assert"
 )
 
 type FunctionTransporter struct {
@@ -20,6 +22,7 @@ func (f FunctionTransporter) Do(req *http.Request) (*http.Response, error) {
 }
 
 func TestNewRequestPriorityPolicy(t *testing.T) {
+	common.SetUIHooks(common.NewJobUIHooks())
 	reqPrio := 1
 
 	c, err := blob.NewClientWithNoCredential("https://acct.blob.core.windows.net/ct/blob", &blob.ClientOptions{
