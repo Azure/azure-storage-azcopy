@@ -3,11 +3,13 @@ package e2etest
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"math"
 	"os"
 	"strconv"
+	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func init() {
@@ -644,16 +646,16 @@ func (s *FileTestSuite) Scenario_UploadFilesWithQuota(svm *ScenarioVariationMana
 		DerefOrZero(shareResource.GetProperties(svm).FileContainerProperties.Quota),
 		newQuota)
 
+	// sleep a bit to ensure quota change has propagated
+	time.Sleep(5 * time.Second)
+
 	var jobId string
 	if parsedOut, ok := stdOut.(*AzCopyParsedCopySyncRemoveStdout); ok {
 		if parsedOut.InitMsg.JobID != "" {
 			jobId = parsedOut.InitMsg.JobID
 		}
-	} else {
-		// Will enter during dry runs
-		fmt.Println("failed to cast to AzCopyParsedCopySyncRemoveStdout")
 	}
-	resStdOut, _ := RunAzCopy(svm, AzCopyCommand{
+	RunAzCopy(svm, AzCopyCommand{
 		Verb:           AzCopyVerbJobsResume,
 		PositionalArgs: []string{jobId},
 		Environment:    env, // Resume job with same log and job plan folders
@@ -664,10 +666,6 @@ func (s *FileTestSuite) Scenario_UploadFilesWithQuota(svm *ScenarioVariationMana
 			svm.Log("Log directory does not exist: %s", *env.LogLocation)
 		}
 		svm.Log("Log location: %v", DerefOrZero(env.LogLocation))
-	}
-
-	if !svm.Dryrun() {
-		svm.Log("%v", resStdOut)
 	}
 
 	// Validate all files can be uploaded after resume and quota increase
