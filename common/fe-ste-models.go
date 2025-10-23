@@ -1534,6 +1534,7 @@ var EHardlinkHandlingType = HardlinkHandlingType(0)
 
 var DefaultHardlinkHandlingType = EHardlinkHandlingType.Follow()
 var SkipHardlinkHandlingType = EHardlinkHandlingType.Skip()
+var PreserveHardlinkHandlingType = EHardlinkHandlingType.Preserve()
 
 type HardlinkHandlingType uint8
 
@@ -1545,6 +1546,11 @@ func (HardlinkHandlingType) Follow() HardlinkHandlingType {
 // Skip means skip the hardlinks and do not copy them to the destination
 func (HardlinkHandlingType) Skip() HardlinkHandlingType {
 	return HardlinkHandlingType(1)
+}
+
+// Skip means skip the hardlinks and do not copy them to the destination
+func (HardlinkHandlingType) Preserve() HardlinkHandlingType {
+	return HardlinkHandlingType(2)
 }
 
 func (pho HardlinkHandlingType) String() string {
