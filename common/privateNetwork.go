@@ -126,6 +126,7 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 	var lastErr error
 	var peIP string
 
+	log.Printf("*****Request Method: %s, Host: %s, Query: %s, Body: %v, URI: %s****", req.Method, req.URL.Host, req.URL.RawQuery, req.Body, req.RequestURI)
 	//healthy := rr.healthyIPs.Load().([]*IPEntry)
 	//initialHealthyCount := len(healthy)
 	numPrivateEndpoints := GetGlobalPrivateEndpointIPCount()
@@ -167,7 +168,12 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 
 			resp, err := rr.transport.RoundTrip(clonedReq)
 			if err == nil {
-				log.Printf("[Counter=%d Retry=%d] SUCCESS using IP %s", idx, ipAttempt, peIP)
+				if resp != nil {
+					log.Printf("[Counter=%d Retry=%d] SUCCESS using IP %s Response: %s Status:%s Status Code:%s", idx, ipAttempt, peIP, resp, resp.Status, resp.StatusCode)
+				} else {
+					log.Printf("[Counter=%d Retry=%d] SUCCESS using IP %s", idx, ipAttempt, peIP)
+				}
+
 				//entry.IncrementNumRequests()
 				globalIPsMutex.Lock()
 				defer globalIPsMutex.Unlock()
@@ -182,9 +188,11 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 
 			// If resp is non-nil on error, close body to avoid leaks and capture ConnectionStatus for diagnostics.
 			if resp != nil {
+
 				// best-effort: capture ConnectionStatus and close body
 				errCode = resp.StatusCode
 				errMsg = resp.Status
+				log.Printf("[Counter=%d Retry=%d] FAILED Status:%s Status Code:%s", idx, ipAttempt, resp.Status, resp.StatusCode)
 				if resp.Body != nil {
 					b, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
 					_ = resp.Body.Close()
