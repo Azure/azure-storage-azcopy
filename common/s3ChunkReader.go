@@ -106,16 +106,26 @@ func (cr *S3ChunkReader) BlockingPrefetch(_ io.ReaderAt, isRetry bool) error {
 	var n int
 	var readErr error
 	var body io.ReadCloser
+	//var responseBody []byte
 
 	startGet := time.Now()
 	if !isRetry {
-		body, err = cr.sourceInfoProvider.GetObjectRange(cr.chunkId.offsetInFile, cr.length)
-	} else {
-		// Retryable path: use WithNetworkRetry to centralize backoff/retry semantics.
-		body, err = WithNetworkRetry(
+		// body, err = cr.sourceInfoProvider.GetObjectRange(cr.chunkId.offsetInFile, cr.length)
+		body, n, err, readErr = WithoutResponseNetworkRetry(
 			cr.ctx,
 			nil,
-			fmt.Sprintf("BlockingPrefetch %v", cr.chunkId),
+			fmt.Sprintf("GetObjectRange %v", cr.chunkId),
+			&targetBuffer,
+			func() (io.ReadCloser, error) {
+				return cr.sourceInfoProvider.GetObjectRange(cr.chunkId.offsetInFile, cr.length)
+			})
+	} else {
+		// Retryable path: use WithNetworkRetry to centralize backoff/retry semantics.
+		body, n, err, readErr = WithResponseNetworkRetry(
+			cr.ctx,
+			nil,
+			fmt.Sprintf("GetObjectRange %v", cr.chunkId),
+			&targetBuffer,
 			func() (io.ReadCloser, error) {
 				return cr.sourceInfoProvider.GetObjectRange(cr.chunkId.offsetInFile, cr.length)
 			})
@@ -124,22 +134,16 @@ func (cr *S3ChunkReader) BlockingPrefetch(_ io.ReaderAt, isRetry bool) error {
 	GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader:GetObjectRange chunk=%v start=%v end=%v duration=%v err=%v",
 		cr.chunkId, startGet.Format(time.RFC3339Nano), endGet.Format(time.RFC3339Nano), endGet.Sub(startGet), err))
 
-	if err == nil {
-		func() {
-			defer func() {
-				if body != nil {
-					body.Close()
-				}
-			}()
-			n, readErr = io.ReadFull(body, targetBuffer)
-		}()
-	}
-
 	cr.muClose.Lock()
 	// cleanup
 	cr.slicePool.ReturnSlice(targetBuffer)
 	cr.cacheLimiter.Remove(cr.length)
 
+	if body == nil {
+		err = fmt.Errorf("nil body returned from GetObjectRange for chunkId: %v", cr.chunkId)
+		GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: GetObjectRange returned null for the for chunkId: %v", cr.chunkId))
+		return err
+	}
 	if err != nil {
 		GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: GetObjectRange failed for chunkId: %v err %v", cr.chunkId, err))
 		return err
@@ -374,4 +378,8 @@ func (cr *S3ChunkReader) WriteBufferTo(h hash.Hash) {
 	if err != nil {
 		panic("documentation of hash.Hash.Write says it will never return an error")
 	}
+}
+
+func (cr *singleChunkReader) BlockingPrefetchWithRetry() {
+
 }
