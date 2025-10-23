@@ -54,7 +54,7 @@ func (c *Client) GetLoginStatus(_ GetLoginStatusOptions) (LoginStatus, error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	tokenInfo, err := uotm.GetTokenInfo(ctx)
 	if err != nil || tokenInfo.IsExpired() {
-		return LoginStatus{Valid: false}, errors.New("you are currently not logged in. please login using 'azcopy login'")
+		return LoginStatus{Valid: false}, errors.New("you are currently not logged in, please login using 'azcopy login'")
 	}
 	return LoginStatus{
 		Valid:       true,
