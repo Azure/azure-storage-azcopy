@@ -31,10 +31,9 @@ func ValidateTimePtr(a Asserter, name string, expected, real *time.Time) {
 	if expected == nil {
 		return
 	}
-	expectedTime := expected.UTC().Truncate(time.Second)
-	realTime := real.UTC().Truncate(time.Second)
-
-	a.Assert(name+" must match", Equal{Deep: true}, expectedTime, realTime)
+	diff := real.UTC().Sub(expected.UTC()).Abs()
+	withinRange := diff <= time.Second // Allow small difference for e2e testing
+	a.Assert(name+" must be within 1s of each other. LMT diff: "+diff.String(), Equal{}, withinRange, true)
 }
 
 func ValidateMetadata(a Asserter, expected, real common.Metadata) {

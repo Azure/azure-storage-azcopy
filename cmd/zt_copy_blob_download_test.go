@@ -780,7 +780,7 @@ func TestDryrunCopyLocalToBlob(t *testing.T) {
 		return mockedRPC.intercept(order)
 	}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) // text format
+	mockedLcm.SetOutputFormat(EOutputFormat.Text()) // text format
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
@@ -827,7 +827,7 @@ func TestDryrunCopyBlobToBlob(t *testing.T) {
 		return mockedRPC.intercept(order)
 	}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) // text format
+	mockedLcm.SetOutputFormat(EOutputFormat.Text()) // text format
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
@@ -874,7 +874,7 @@ func TestDryrunCopyBlobToBlobJson(t *testing.T) {
 		return mockedRPC.intercept(order)
 	}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Json()) // json format
+	mockedLcm.SetOutputFormat(EOutputFormat.Json()) // json format
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
@@ -928,7 +928,7 @@ func TestDryrunCopyS3toBlob(t *testing.T) {
 		return mockedRPC.intercept(order)
 	}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) // text format
+	mockedLcm.SetOutputFormat(EOutputFormat.Text()) // text format
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
@@ -976,7 +976,7 @@ func TestDryrunCopyGCPtoBlob(t *testing.T) {
 		return mockedRPC.intercept(order)
 	}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) // text format
+	mockedLcm.SetOutputFormat(EOutputFormat.Text()) // text format
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input

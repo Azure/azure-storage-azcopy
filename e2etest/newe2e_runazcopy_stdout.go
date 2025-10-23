@@ -2,9 +2,10 @@ package e2etest
 
 import (
 	"encoding/json"
+	"strings"
+
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"strings"
 )
 
 var _ AzCopyStdout = &AzCopyParsedStdout{}
@@ -66,8 +67,8 @@ func (m *ManySubscriberChannel[T]) Message(data T) {
 
 // AzCopyParsedStdout is still a semi-raw stdout struct.
 type AzCopyParsedStdout struct {
-	Messages     []common.JsonOutputTemplate
-	OnParsedLine ManySubscriberChannel[common.JsonOutputTemplate]
+	Messages     []cmd.JsonOutputTemplate
+	OnParsedLine ManySubscriberChannel[cmd.JsonOutputTemplate]
 }
 
 func (a *AzCopyParsedStdout) RawStdout() []string {
@@ -92,7 +93,7 @@ func (a *AzCopyParsedStdout) Write(p []byte) (n int, err error) {
 		if strings.HasPrefix(v, "WARN") {
 			continue
 		}
-		var out common.JsonOutputTemplate
+		var out cmd.JsonOutputTemplate
 		err = json.Unmarshal([]byte(v), &out)
 		if err != nil {
 			return
@@ -111,7 +112,7 @@ func (a *AzCopyParsedStdout) String() string {
 
 type AzCopyParsedListStdout struct {
 	AzCopyParsedStdout
-	listenChan chan<- common.JsonOutputTemplate
+	listenChan chan<- cmd.JsonOutputTemplate
 
 	Items   map[AzCopyOutputKey]cmd.AzCopyListObject
 	Summary cmd.AzCopyListSummary
@@ -130,7 +131,7 @@ func (a *AzCopyParsedListStdout) InsertObject(obj cmd.AzCopyListObject) {
 
 func (a *AzCopyParsedListStdout) Write(p []byte) (n int, err error) {
 	if a.listenChan == nil {
-		a.listenChan = a.OnParsedLine.SubscribeFunc(func(line common.JsonOutputTemplate) {
+		a.listenChan = a.OnParsedLine.SubscribeFunc(func(line cmd.JsonOutputTemplate) {
 			switch line.MessageType {
 			case "ListObject":
 				var object cmd.AzCopyListObject
@@ -155,22 +156,22 @@ func (a *AzCopyParsedListStdout) Write(p []byte) (n int, err error) {
 
 type AzCopyParsedCopySyncRemoveStdout struct {
 	AzCopyParsedStdout
-	listenChan chan<- common.JsonOutputTemplate
+	listenChan chan<- cmd.JsonOutputTemplate
 
 	JobPlanFolder string
 	LogFolder     string
 
-	InitMsg     common.InitMsgJsonTemplate
+	InitMsg     cmd.InitMsgJsonTemplate
 	FinalStatus common.ListJobSummaryResponse
 }
 
 func (a *AzCopyParsedCopySyncRemoveStdout) Write(p []byte) (n int, err error) {
 	if a.listenChan == nil {
-		a.listenChan = a.OnParsedLine.SubscribeFunc(func(line common.JsonOutputTemplate) {
+		a.listenChan = a.OnParsedLine.SubscribeFunc(func(line cmd.JsonOutputTemplate) {
 			switch line.MessageType {
-			case common.EOutputMessageType.EndOfJob().String():
+			case cmd.EOutputMessageType.EndOfJob().String():
 				_ = json.Unmarshal([]byte(line.MessageContent), &a.FinalStatus)
-			case common.EOutputMessageType.Init().String():
+			case cmd.EOutputMessageType.Init().String():
 				_ = json.Unmarshal([]byte(line.MessageContent), &a.InitMsg)
 			}
 		})
@@ -201,13 +202,13 @@ func (d *AzCopyParsedDryrunStdout) Write(p []byte) (n int, err error) {
 
 			d.Raw[str] = true
 		} else {
-			var out common.JsonOutputTemplate
+			var out cmd.JsonOutputTemplate
 			err = json.Unmarshal([]byte(str), &out)
 			if err != nil {
 				continue
 			}
 
-			if out.MessageType != common.EOutputMessageType.Dryrun().String() {
+			if out.MessageType != cmd.EOutputMessageType.Dryrun().String() {
 				continue
 			}
 
@@ -226,15 +227,15 @@ func (d *AzCopyParsedDryrunStdout) Write(p []byte) (n int, err error) {
 
 type AzCopyParsedJobsListStdout struct {
 	AzCopyParsedStdout
-	listenChan chan<- common.JsonOutputTemplate
+	listenChan chan<- cmd.JsonOutputTemplate
 	JobsCount  int
 	Jobs       []common.JobIDDetails
 }
 
 func (a *AzCopyParsedJobsListStdout) Write(p []byte) (n int, err error) {
 	if a.listenChan == nil {
-		a.listenChan = a.OnParsedLine.SubscribeFunc(func(line common.JsonOutputTemplate) {
-			if line.MessageType == common.EOutputMessageType.EndOfJob().String() {
+		a.listenChan = a.OnParsedLine.SubscribeFunc(func(line cmd.JsonOutputTemplate) {
+			if line.MessageType == cmd.EOutputMessageType.EndOfJob().String() {
 				var tx common.ListJobsResponse
 				err = json.Unmarshal([]byte(line.MessageContent), &tx)
 				if err != nil {
@@ -251,14 +252,14 @@ func (a *AzCopyParsedJobsListStdout) Write(p []byte) (n int, err error) {
 
 type AzCopyParsedLoginStatusStdout struct {
 	AzCopyParsedStdout
-	listenChan chan<- common.JsonOutputTemplate
+	listenChan chan<- cmd.JsonOutputTemplate
 	status     cmd.LoginStatusOutput
 }
 
 func (a *AzCopyParsedLoginStatusStdout) Write(p []byte) (n int, err error) {
 	if a.listenChan == nil {
-		a.listenChan = a.OnParsedLine.SubscribeFunc(func(line common.JsonOutputTemplate) {
-			if line.MessageType == common.EOutputMessageType.LoginStatusInfo().String() {
+		a.listenChan = a.OnParsedLine.SubscribeFunc(func(line cmd.JsonOutputTemplate) {
+			if line.MessageType == cmd.EOutputMessageType.LoginStatusInfo().String() {
 				out := &cmd.LoginStatusOutput{}
 				err = json.Unmarshal([]byte(line.MessageContent), out)
 				if err != nil {
@@ -310,22 +311,22 @@ func (a *AzCopyInteractiveStdout) String() string {
 
 type AzCopyParsedJobsShowStdout struct {
 	AzCopyParsedStdout
-	listenChan chan<- common.JsonOutputTemplate
+	listenChan chan<- cmd.JsonOutputTemplate
 	transfers  common.ListJobTransfersResponse
 	summary    common.ListJobSummaryResponse
 }
 
 func (a *AzCopyParsedJobsShowStdout) Write(p []byte) (n int, err error) {
 	if a.listenChan == nil {
-		a.listenChan = a.OnParsedLine.SubscribeFunc(func(line common.JsonOutputTemplate) {
-			if line.MessageType == common.EOutputMessageType.ListJobTransfers().String() {
+		a.listenChan = a.OnParsedLine.SubscribeFunc(func(line cmd.JsonOutputTemplate) {
+			if line.MessageType == cmd.EOutputMessageType.ListJobTransfers().String() {
 				var tx common.ListJobTransfersResponse
 				err = json.Unmarshal([]byte(line.MessageContent), &tx)
 				if err != nil {
 					return
 				}
 				a.transfers = tx
-			} else if line.MessageType == common.EOutputMessageType.GetJobSummary().String() {
+			} else if line.MessageType == cmd.EOutputMessageType.GetJobSummary().String() {
 				var summary common.ListJobSummaryResponse
 				err = json.Unmarshal([]byte(line.MessageContent), &summary)
 				if err != nil {

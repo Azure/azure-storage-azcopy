@@ -180,7 +180,7 @@ func (args rawLoginArgs) toOptions() (LoginOptions, error) {
 }
 
 func (options LoginOptions) process() error {
-	uotm := GetUserOAuthTokenManagerInstance()
+	uotm := Client.GetUserOAuthTokenManagerInstance()
 	// Persist the token to cache, if login fulfilled successfully.
 
 	switch options.LoginType {

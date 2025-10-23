@@ -111,6 +111,35 @@ func newAzcopyHTTPClient() *http.Client {
 	}
 }
 
+func (uotm *UserOAuthTokenManager) OAuthTokenExists(announceOAuthTokenOnce, autoOAuth *sync.Once) (oauthTokenExists bool, err error) {
+	// Note: Environment variable for OAuth token should only be used in testing, or the case user clearly now how to protect
+	// the tokens
+	if EnvVarOAuthTokenInfoExists() {
+		announceOAuthTokenOnce.Do(
+			func() {
+				lcm.Info(fmt.Sprintf("%v is set.", EnvVarOAuthTokenInfo)) // Log the case when env var is set, as it's rare case.
+			},
+		)
+		oauthTokenExists = true
+	}
+
+	_, err = uotm.AutoLogin(autoOAuth)
+	if err != nil {
+		oauthTokenExists = false
+		return
+	}
+
+	if hasCachedToken, err := uotm.HasCachedToken(); hasCachedToken {
+		oauthTokenExists = true
+	} else if err != nil { //nolint:staticcheck
+		// Log the error if fail to get cached token, as these are unhandled errors, and should not influence the logic flow.
+		// Uncomment for debugging.
+		// glcm.Info(fmt.Sprintf("No cached token found, %v", err))
+	}
+
+	return
+}
+
 // GetTokenInfo gets token info, it follows rule:
 //  1. If there is token passed from environment variable(note this is only for testing purpose),
 //     use token passed from environment variable.
@@ -172,6 +201,113 @@ func (uotm *UserOAuthTokenManager) validateAndPersistLogin(oAuthTokenInfo *OAuth
 	}
 
 	return nil
+}
+
+type LoginOptions struct {
+	TenantID    string
+	AADEndpoint string
+	LoginType   AutoLoginType
+
+	// Managed Identity Options
+	IdentityClientID   string
+	IdentityResourceID string
+	IdentityObjectID   string
+
+	// Service Principal Options
+	ApplicationID       string
+	ClientSecret        string
+	CertificatePath     string
+	CertificatePassword string
+
+	PersistToken bool // Whether to persist the token in the credential cache
+}
+
+type LoginResponse struct {
+}
+
+func (uotm *UserOAuthTokenManager) Login(opts LoginOptions) (LoginResponse, error) {
+	resp := LoginResponse{}
+
+	// Persist the token to cache, if login fulfilled successfully.
+	switch opts.LoginType {
+	case EAutoLoginType.SPN():
+		if opts.CertificatePath != "" {
+			return resp, uotm.CertLogin(opts.TenantID, opts.AADEndpoint, opts.CertificatePath, opts.CertificatePassword, opts.ApplicationID, opts.PersistToken)
+		} else {
+			return resp, uotm.SecretLogin(opts.TenantID, opts.AADEndpoint, opts.ClientSecret, opts.ApplicationID, opts.PersistToken)
+		}
+	case EAutoLoginType.MSI():
+		return resp, uotm.MSILogin(IdentityInfo{
+			ClientID: opts.IdentityClientID,
+			ObjectID: opts.IdentityObjectID,
+			MSIResID: opts.IdentityResourceID,
+		}, opts.PersistToken)
+	case EAutoLoginType.AzCLI():
+		return resp, uotm.AzCliLogin(opts.TenantID, opts.PersistToken)
+	case EAutoLoginType.PsCred():
+		return resp, uotm.PSContextToken(opts.TenantID, opts.PersistToken)
+	case EAutoLoginType.Workload():
+		return resp, uotm.WorkloadIdentityLogin(opts.PersistToken)
+	default:
+		return resp, uotm.UserLogin(opts.TenantID, opts.AADEndpoint, opts.PersistToken)
+		// User fulfills login in browser, and there would be message in browser indicating whether login fulfilled successfully.
+	}
+}
+
+func (uotm *UserOAuthTokenManager) AutoLogin(autoOAuth *sync.Once) (LoginResponse, error) {
+	var resp LoginResponse
+	var err error
+	autoOAuth.Do(func() {
+		var options LoginOptions
+		autoLoginType := strings.ToLower(GetEnvironmentVariable(EEnvironmentVariable.AutoLoginType()))
+		if autoLoginType == "" {
+			lcm.Info("Autologin not specified.")
+			return
+		}
+
+		if tenantID := GetEnvironmentVariable(EEnvironmentVariable.TenantID()); tenantID != "" {
+			options.TenantID = tenantID
+		}
+
+		if endpoint := GetEnvironmentVariable(EEnvironmentVariable.AADEndpoint()); endpoint != "" {
+			options.AADEndpoint = endpoint
+		}
+
+		var loginType AutoLoginType
+		err = loginType.Parse(autoLoginType)
+		if err != nil {
+			err = fmt.Errorf("Invalid Auto-login type specified: %s", autoLoginType)
+			return
+		}
+
+		// Fill up options
+		options.LoginType = loginType
+		switch options.LoginType {
+		case EAutoLoginType.SPN():
+			options.ApplicationID = GetEnvironmentVariable(EEnvironmentVariable.ApplicationID())
+			options.CertificatePath = GetEnvironmentVariable(EEnvironmentVariable.CertificatePath())
+			options.CertificatePassword = GetEnvironmentVariable(EEnvironmentVariable.CertificatePassword())
+			options.ClientSecret = GetEnvironmentVariable(EEnvironmentVariable.ClientSecret())
+		case EAutoLoginType.MSI():
+			options.IdentityClientID = GetEnvironmentVariable(EEnvironmentVariable.ManagedIdentityClientID())
+			options.IdentityObjectID = GetEnvironmentVariable(EEnvironmentVariable.ManagedIdentityObjectID())
+			options.IdentityResourceID = GetEnvironmentVariable(EEnvironmentVariable.ManagedIdentityResourceString())
+		case EAutoLoginType.Device():
+		case EAutoLoginType.AzCLI():
+		case EAutoLoginType.PsCred():
+		case EAutoLoginType.Workload():
+		default:
+			err = fmt.Errorf("Invalid Auto-login type specified: %s", autoLoginType)
+			return
+		}
+
+		options.PersistToken = false
+		if resp, err = uotm.Login(options); err != nil {
+			err = fmt.Errorf("Failed to perform Auto-login: %v.", err)
+			return
+		}
+	})
+	return resp, err
 }
 
 func (uotm *UserOAuthTokenManager) WorkloadIdentityLogin(persist bool) error {

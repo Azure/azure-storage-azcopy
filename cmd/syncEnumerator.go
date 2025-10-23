@@ -103,6 +103,8 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 		HardlinkHandling:        cca.hardlinks,
 		SymlinkHandling:         cca.symlinkHandling,
 		FromTo:                  cca.fromTo,
+		StripTopDir:             !cca.includeRoot,
+		IncludeRoot:             cca.includeRoot,
 	})
 
 	if err != nil {
@@ -140,6 +142,8 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 		HardlinkHandling:        common.EHardlinkHandlingType.Follow(),
 		SymlinkHandling:         cca.symlinkHandling,
 		FromTo:                  cca.fromTo,
+		StripTopDir:             !cca.includeRoot,
+		IncludeRoot:             cca.includeRoot,
 	})
 	if err != nil {
 		return nil, err
@@ -214,8 +218,12 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 	}
 
 	// decide our folder transfer strategy
+	var fpo common.FolderPropertyOption
+	var folderMessage string
 	// sync always acts like stripTopDir=true, but if we intend to persist the root, we must tell NewFolderPropertyOption stripTopDir=false.
-	fpo, folderMessage := NewFolderPropertyOption(cca.fromTo, cca.recursive, !cca.includeRoot, filters, cca.preserveInfo, cca.preservePermissions.IsTruthy(), false, strings.EqualFold(cca.destination.Value, common.Dev_Null), cca.includeDirectoryStubs)
+	fpo, folderMessage = NewFolderPropertyOption(cca.fromTo, cca.recursive, !cca.includeRoot, filters, cca.preserveInfo,
+		cca.preservePermissions.IsTruthy(), cca.preservePOSIXProperties, strings.EqualFold(cca.destination.Value, common.Dev_Null),
+		cca.includeDirectoryStubs)
 	if !cca.dryrunMode {
 		glcm.Info(folderMessage)
 	}
@@ -261,6 +269,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.trailingDot,
 		},
+		JobErrorHandler: glcm,
 	}
 
 	var srcReauthTok *common.ScopedAuthenticator
@@ -423,14 +432,14 @@ func IsDestinationCaseInsensitive(fromTo common.FromTo) bool {
 func quitIfInSync(transferJobInitiated, anyDestinationFileDeleted bool, cca *cookedSyncCmdArgs) {
 	if !transferJobInitiated && !anyDestinationFileDeleted {
 		cca.reportScanningProgress(glcm, 0)
-		glcm.Exit(func(format common.OutputFormat) string {
+		glcm.Exit(func(format OutputFormat) string {
 			return "The source and destination are already in sync."
-		}, common.EExitCode.Success())
+		}, EExitCode.Success())
 	} else if !transferJobInitiated && anyDestinationFileDeleted {
 		// some files were deleted but no transfer scheduled
 		cca.reportScanningProgress(glcm, 0)
-		glcm.Exit(func(format common.OutputFormat) string {
+		glcm.Exit(func(format OutputFormat) string {
 			return "The source and destination are now in sync."
-		}, common.EExitCode.Success())
+		}, EExitCode.Success())
 	}
 }
