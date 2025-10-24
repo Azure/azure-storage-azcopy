@@ -187,8 +187,8 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 					} else {
 						errCode = 0
 						errMsg = ""
+						log.Printf("[Counter=%d Retry=%d] SUCCESS using IP %s without error", idx, ipAttempt, peIP)
 					}
-					log.Printf("[Counter=%d Retry=%d] SUCCESS using IP %s Response: %s Status:%s Status Code:%s", idx, ipAttempt, peIP, resp, resp.Status, resp.StatusCode)
 
 				} else {
 					log.Printf("[Counter=%d Retry=%d] SUCCESS using IP %s", idx, ipAttempt, peIP)
