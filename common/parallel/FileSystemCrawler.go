@@ -22,9 +22,13 @@ package parallel
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
+	"syscall"
+	"unsafe"
 )
 
 type FileSystemEntry struct {
@@ -41,6 +45,33 @@ type failableFileInfo interface {
 type DirReader interface {
 	Readdir(dir *os.File, n int) ([]os.FileInfo, error)
 	Close()
+}
+
+var maxPathLength int
+
+// getMaxPathLength returns the system's maximum path length
+func getMaxPathLength() int {
+	if maxPathLength == 0 {
+		switch runtime.GOOS {
+		case "windows":
+			// TODO: Is there a syscall for this which includes support for long paths?
+			maxPathLength = 260 // Windows MAX_PATH
+		case "darwin":
+			// TODO: Use syscall?
+			maxPathLength = 1024 // macOS PATH_MAX
+		default:
+			// Unix systems - use pathconf
+			pathMax, _, err := syscall.Syscall(syscall.SYS_PATHCONF, 
+				uintptr(unsafe.Pointer(syscall.StringBytePtr("."))), 
+				syscall.PC_PATH_MAX, 0)
+			if err == 0 && pathMax > 0 {
+				maxPathLength = int(pathMax)
+			} else {
+				maxPathLength = 4096 // Unix fallback
+			}
+		}
+	}
+	return maxPathLength
 }
 
 // CrawlLocalDirectory specializes parallel.Crawl to work specifically on a local directory.
@@ -125,6 +156,7 @@ func Walk(appCtx context.Context, root string, parallelism int, parallelStat boo
 // enumerateOneFileSystemDirectory is an implementation of EnumerateOneDirFunc specifically for the local file system
 func enumerateOneFileSystemDirectory(dir Directory, enqueueDir func(Directory), enqueueOutput func(DirectoryEntry, error), r DirReader) error {
 	dirString := dir.(string)
+	maxPathLen := getMaxPathLength()
 
 	d, err := os.Open(dirString) // for directories, we don't need a special open with FILE_FLAG_BACKUP_SEMANTICS, because directory opening uses FindFirst which doesn't need that flag. https://blog.differentpla.net/blog/2007/05/25/findfirstfile-and-se_backup_name
 	if err != nil {
@@ -152,8 +184,18 @@ func enumerateOneFileSystemDirectory(dir Directory, enqueueDir func(Directory), 
 			return nil
 		}
 		for _, childInfo := range list {
+			fullPath := filepath.Join(dirString, childInfo.Name())
+			
+			// Check path length before creating entry
+			if len(fullPath) > maxPathLen {
+				pathErr := fmt.Errorf("path length %d exceeds maximum %d", len(fullPath), maxPathLen)
+				enqueueOutput(
+					FileSystemEntry{fullPath[:maxPathLen-3] + "...", childInfo}, pathErr)
+				continue
+			}
+
 			childEntry := FileSystemEntry{
-				fullPath: filepath.Join(dirString, childInfo.Name()),
+				fullPath: fullPath,
 				info:     childInfo,
 			}
 
