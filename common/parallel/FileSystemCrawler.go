@@ -193,25 +193,22 @@ func enumerateOneFileSystemDirectory(dir Directory, enqueueDir func(Directory), 
 			return nil
 		}
 		for _, childInfo := range list {
+			// Check for failable file info first to avoid segfault
+			if failable, ok := childInfo.(failableFileInfo); ok && failable.Error() != nil {
+				enqueueOutput(FileSystemEntry{dirString, childInfo}, failable.Error())
+				continue
+			}
+
 			fullPath := filepath.Join(dirString, childInfo.Name())
-			
-			// Check path length before creating entry
 			if len(fullPath) > maxPathLen {
-				pathErr := fmt.Errorf("path length %d exceeds maximum %d", len(fullPath), maxPathLen)
-				enqueueOutput(
-					FileSystemEntry{fullPath[:maxPathLen-3] + "...", childInfo}, pathErr)
+				enqueueOutput(FileSystemEntry{fullPath[:maxPathLen-3] + "...", childInfo}, 
+					fmt.Errorf("path length %d exceeds maximum %d", len(fullPath), maxPathLen))
 				continue
 			}
 
 			childEntry := FileSystemEntry{
 				fullPath: fullPath,
 				info:     childInfo,
-			}
-
-			if failable, ok := childInfo.(failableFileInfo); ok && failable.Error() != nil {
-				// while Readdir as a whole did not fail, this particular file info did
-				enqueueOutput(childEntry, failable.Error())
-				continue
 			}
 			isSymlink := childInfo.Mode()&os.ModeSymlink != 0 // for compatibility with filepath.Walk, we do not follow symlinks, but we do enqueue them as output
 			if childInfo.IsDir() && !isSymlink {
