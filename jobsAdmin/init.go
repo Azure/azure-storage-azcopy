@@ -248,7 +248,8 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 	}
 	// Always search the plan files in Azcopy folder,
 	// and resurrect the Job with provided credentials, to ensure SAS and etc get updated.
-	if !JobsAdmin.ResurrectJob(req.JobID, req.SourceSAS, req.DestinationSAS, req.SrcServiceClient, req.DstServiceClient, false) {
+	srcIsOauth := req.S2SSourceCredentialType.IsAzureOAuth()
+	if !JobsAdmin.ResurrectJob(req.JobID, req.SourceSAS, req.DestinationSAS, req.SrcServiceClient, req.DstServiceClient, srcIsOauth) {
 		return common.CancelPauseResumeResponse{
 			CancelledPauseResumed: false,
 			ErrorMsg:              fmt.Sprintf("no job with JobId %v exists", req.JobID),
@@ -364,8 +365,9 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 		// Get credential info from RPC request, and set in InMemoryTransitJobState.
 		jm.SetInMemoryTransitJobState(
 			ste.InMemoryTransitJobState{
-				CredentialInfo: req.CredentialInfo,
-				Provider:       req.Provider,
+				CredentialInfo:          req.CredentialInfo,
+				Provider:                req.Provider,
+				S2SSourceCredentialType: req.S2SSourceCredentialType,
 			})
 
 		// Prevents previous number of failed transfers seeping into a new run
