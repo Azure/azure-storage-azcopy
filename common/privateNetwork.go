@@ -23,7 +23,6 @@ package common
 import (
 	"crypto/tls"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"regexp"
@@ -63,25 +62,19 @@ type IPEntry struct {
 	IpEntryLock      sync.RWMutex
 }
 
-//var UnHealthyPrivateEndpoints = make(map[string]IPEntry)
-//var UnHealthyMu sync.RWMutex
-
 // Global variables for external access to private endpoint IPs
 var globalPrivateEndpointIPs []*IPEntry
 var globalIPsMutex sync.RWMutex
 
 // RoundRobinTransport implements http.RoundTripper with retries and cooldowns
 type RoundRobinTransport struct {
-	//ips  []*IPEntry
-	host string
-	//	healthyIPs      atomic.Value // []*IPEntry, cached healthy list
+	host            string
 	counter         uint64
 	transport       *http.Transport
 	cooldown        time.Duration // how long to wait before retrying unhealthy IP
 	perIPRetries    int           // number of times to retry the same IP before moving on
 	perIPRetryDelay time.Duration // delay between retries to same IP
-	//	stopChan        chan struct{} // channel to stop the periodic refresh goroutine
-	counterLock sync.RWMutex // mutex to protect access to the RoundRobinTransport fields
+	counterLock     sync.RWMutex  // mutex to protect access to the RoundRobinTransport fields
 }
 
 // Set private network arguments
@@ -104,18 +97,12 @@ func NewRoundRobinTransport(ips []string, host string, cooldownInSecs int, ipRet
 	tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: false, ServerName: host}
 
 	rr := &RoundRobinTransport{
-		//ips:             globalPrivateEndpointIPs,
 		host:            host,
 		transport:       tr,
 		cooldown:        time.Duration(cooldownInSecs) * time.Second,
 		perIPRetries:    ipRetries,
 		perIPRetryDelay: time.Duration(ipRetryIntervalInMilliSecs) * time.Millisecond,
-		// stopChan:        make(chan struct{}),
 	}
-	//rr.refreshHealthyPool()
-
-	// Start a goroutine to periodically refresh the healthy pool
-	//go rr.periodicHealthyPoolRefresh()
 	return rr
 }
 
@@ -127,8 +114,6 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 	var peIP string
 
 	log.Printf("*****Request Method: %s, Host: %s, Query: %s, Body: %v, URI: %s****", req.Method, req.URL.Host, req.URL.RawQuery, req.Body, req.RequestURI)
-	//healthy := rr.healthyIPs.Load().([]*IPEntry)
-	//initialHealthyCount := len(healthy)
 	numPrivateEndpoints := GetGlobalPrivateEndpointIPCount()
 	for iter := 0; iter < numPrivateEndpoints; iter++ {
 
@@ -163,13 +148,48 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 			clonedReq.URL.Scheme = req.URL.Scheme
 			clonedReq.URL.Host = peIP
 			clonedReq.Host = rr.host
+			var errCode int
+			var errMsg string
+			var isRetryableErr bool
 
 			log.Printf("[Counter=%d Retry=%d] Sending request to PrivateEndpoint IP: %s (Host header: %s)", idx, ipAttempt, clonedReq.URL.Host, clonedReq.Host)
 
 			resp, err := rr.transport.RoundTrip(clonedReq)
 			if err == nil {
 				if resp != nil {
+					httpS3Err := DetectS3HTTPStatusError(resp)
+					if httpS3Err != nil {
+						errCode = httpS3Err.HTTPStatusError.GetErrorCode()
+						if httpS3Err.S3Error != nil {
+							errMsg = httpS3Err.S3Error.Code + ":" + httpS3Err.S3Error.Message
+							isRetryableErr = IsRetryableS3Error(httpS3Err.S3Error.Code)
+							log.Printf("[Counter=%d Retry=%d] FAILED with S3 Error, Error Code:%d Error Message:%s retryable:%v", idx, ipAttempt, errCode, errMsg, isRetryableErr)
+						} else {
+							errCode = httpS3Err.HTTPStatusError.GetErrorCode()
+							errMsg = httpS3Err.GetErrorMessage()
+							isRetryableErr = httpS3Err.HTTPStatusError.IsRetryable
+							log.Printf("[Counter=%d Retry=%d] FAILED HTTP Error, Error Code:%d Error Message:%s retryable:%v", idx, ipAttempt, errCode, errMsg, isRetryableErr)
+						}
+
+						// Retry if the HTTP or S3 Error is retryable
+						if (ipAttempt+1 < rr.perIPRetries) && isRetryableErr {
+							log.Printf("[Counter=%d Retry=%d] Retrying same IP %s after %v", idx, ipAttempt, peIP, rr.perIPRetryDelay)
+							time.Sleep(rr.perIPRetryDelay)
+							continue
+						}
+
+						// Mark the Private Endpoint as Unhealthy after detecting non retryable HTTP and S3 critical error
+						if atomic.CompareAndSwapUint32((*uint32)(&entry.ConnectionStatus), uint32(Healthy), uint32(Unhealthy)) {
+							entry.MarkUnhealthy(errCode, errMsg)
+							updateStatus := UpdateGlobalPrivateEndpointIP(idx, entry)
+							log.Printf("Updating Private Endpoint:%s connection state from HEALTHY->UNHEALTHY after error response with Error Code %d ErrorMsg:%s at %v Update Status:%s", peIP, entry.LastErrCode, entry.LastErrMsg, entry.LastChecked, updateStatus)
+						}
+					} else {
+						errCode = 0
+						errMsg = ""
+					}
 					log.Printf("[Counter=%d Retry=%d] SUCCESS using IP %s Response: %s Status:%s Status Code:%s", idx, ipAttempt, peIP, resp, resp.Status, resp.StatusCode)
+
 				} else {
 					log.Printf("[Counter=%d Retry=%d] SUCCESS using IP %s", idx, ipAttempt, peIP)
 				}
@@ -183,39 +203,32 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 
 			// Transport-level failure (err != nil). Capture diagnostics.
 			log.Printf("[Counter=%d Retry=%d] FAILED using IP %s with Error %v", idx, ipAttempt, peIP, err)
-			var errCode int
-			var errMsg string
 
 			// If resp is non-nil on error, close body to avoid leaks and capture ConnectionStatus for diagnostics.
 			if resp != nil {
-
-				// best-effort: capture ConnectionStatus and close body
-				errCode = resp.StatusCode
-				errMsg = resp.Status
-				log.Printf("[Counter=%d Retry=%d] FAILED Status:%s Status Code:%s", idx, ipAttempt, resp.Status, resp.StatusCode)
-				if resp.Body != nil {
-					b, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-					_ = resp.Body.Close()
-					bodySnippet := strings.TrimSpace(string(b))
-					if bodySnippet != "" {
-						errMsg = fmt.Sprintf("%s: %s", resp.Status, bodySnippet)
-					} else {
-						errMsg = resp.Status
+				httpS3Err := DetectS3HTTPStatusError(resp)
+				if httpS3Err != nil {
+					errCode = httpS3Err.HTTPStatusError.GetErrorCode()
+					if httpS3Err.S3Error != nil {
+						errMsg = httpS3Err.S3Error.Code + ":" + httpS3Err.S3Error.Message
+						isRetryableErr = IsRetryableS3Error(httpS3Err.S3Error.Code)
+						log.Printf("[Counter=%d Retry=%d] FAILED with S3 Error, Error Code:%d Error Message:%s retryable:%v", idx, ipAttempt, errCode, errMsg, isRetryableErr)
+					} else if httpS3Err.HTTPStatusError != nil {
+						errCode = httpS3Err.HTTPStatusError.GetErrorCode()
+						errMsg = httpS3Err.HTTPStatusError.GetErrorMessage()
+						isRetryableErr = httpS3Err.HTTPStatusError.IsRetryable
+						log.Printf("[Counter=%d Retry=%d] FAILED HTTP Error, Error Code:%d Error Message:%s retryable:%v", idx, ipAttempt, errCode, errMsg, isRetryableErr)
 					}
 				} else {
-					errMsg = resp.Status
+					errCode = 0
+					errMsg = ""
 				}
-				//entry.UpdateIPEntryError(errCode, errMsg)
-			} else {
-				errCode = 0
-				errMsg = err.Error()
-				//entry.UpdateIPEntryError(0, err.Error())
 			}
 
 			lastErr = err
 
 			// If we still have per-IP attempts left, wait and retry the same IP
-			if ipAttempt+1 < rr.perIPRetries {
+			if (ipAttempt+1 < rr.perIPRetries) && isRetryableErr {
 				log.Printf("[Counter=%d Retry=%d] Retrying same IP %s after %v", idx, ipAttempt, peIP, rr.perIPRetryDelay)
 				time.Sleep(rr.perIPRetryDelay)
 				continue
@@ -240,38 +253,8 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 	return nil, fmt.Errorf("Request failed after trying all healthy Private Endpoint IPs. Last error from IP %s: %v", peIP, lastErr)
 }
 
-// refreshHealthyPool updates the healthy IP list atomically
-// func (rr *RoundRobinTransport) refreshHealthyPool() {
-// 	var healthy []*IPEntry
-// 	for _, e := range rr.ips {
-// 		// log.Printf("refreshHealthyPool Counter: %d IP Address: %s Unhealthy: %d\n", rr.counter, e.IP, e.ConnectionStatus)
-// 		if (e.ConnectionStatus == Healthy) || (time.Since(e.LastChecked) >= rr.cooldown) {
-// 			healthy = append(healthy, e)
-// 		}
-// 	}
-// 	log.Printf("refreshHealthyPool Counter: %d Healthy Pool Count: %d\n", rr.counter, len(healthy))
-// 	rr.healthyIPs.Store(healthy)
-// }
-
-// periodicHealthyPoolRefresh runs in a goroutine and refreshes the healthy pool periodically
-// func (rr *RoundRobinTransport) periodicHealthyPoolRefresh() {
-// 	ticker := time.NewTicker(rr.cooldown)
-// 	defer ticker.Stop()
-
-// 	for {
-// 		select {
-// 		case <-ticker.C:
-// 			rr.refreshHealthyPool()
-// 		case <-rr.stopChan:
-// 			log.Printf("Stopping periodic healthy pool refresh goroutine")
-// 			return
-// 		}
-// 	}
-// }
-
 // Close cleans up idle connections and stops the periodic refresh goroutine
 func (rr *RoundRobinTransport) Close() {
-	//close(rr.stopChan)
 	rr.transport.CloseIdleConnections()
 }
 
@@ -294,13 +277,21 @@ func GetPrivateEndpointStatus() []*IPEntry {
 func SetGlobalPrivateEndpointIPs(ips []string) {
 	globalIPsMutex.Lock()
 	defer globalIPsMutex.Unlock()
-	globalPrivateEndpointIPs = make([]*IPEntry, len(ips))
 
-	for i, ip := range ips {
-		globalPrivateEndpointIPs[i] = InitializePrivateEndpointIpEntry(ip)
-		log.Printf("PrivateEndpointIp:%s is set to Healthy\n ", globalPrivateEndpointIPs[i].IP)
+	if len(globalPrivateEndpointIPs) == 0 {
+		globalPrivateEndpointIPs = make([]*IPEntry, len(ips))
+		for i, ip := range ips {
+			globalPrivateEndpointIPs[i] = InitializePrivateEndpointIpEntry(ip)
+			log.Printf("PrivateEndpointIp:%s is set to Healthy\n ", globalPrivateEndpointIPs[i].IP)
+		}
+		log.Printf("Number of Private Endpoints:%d set", len(globalPrivateEndpointIPs))
+	} else {
+		if len(ips) != len(globalPrivateEndpointIPs) {
+			log.Printf("Inconsistent non zero number of Private Endpoints:%d %d", len(globalPrivateEndpointIPs), len(ips))
+		} else {
+			log.Printf("Global Endpoint List is already initial with Private Endpoints:%d ", len(globalPrivateEndpointIPs))
+		}
 	}
-	log.Printf("Number of Private Endpoints:%d set", len(globalPrivateEndpointIPs))
 }
 
 // GetGlobalPrivateEndpointIPCount returns the number of global private endpoint IPs
@@ -338,54 +329,6 @@ func IsPrivateNetworkEnabled() bool {
 		return false
 	}
 }
-
-// GetUnHealthyPrivateEndpoints returns a copy of the global unhealthy endpoints map.
-// The returned map is a shallow copy of IPEntry values (structs are copied),
-// so callers can read/inspect or marshal the returned map without holding locks
-// and without affecting the global map.
-// func GetUnHealthyPrivateEndpoints() map[string]IPEntry {
-// 	UnHealthyMu.RLock()
-// 	defer UnHealthyMu.RUnlock()
-
-// 	if len(UnHealthyPrivateEndpoints) == 0 {
-// 		return nil
-// 	}
-
-// 	copyMap := make(map[string]IPEntry, len(UnHealthyPrivateEndpoints))
-// 	for k, v := range UnHealthyPrivateEndpoints {
-// 		copyMap[k] = v
-// 	}
-// 	return copyMap
-// }
-
-// UpdateIPEntryError safely updates the error code and error message for an IPEntry
-// This function is thread-safe and uses the IPEntry's mutex for synchronization
-// func (entry *IPEntry) UpdateIPEntryError(errCode int, errMsg string) {
-// 	entry.IpEntryLock.Lock()
-// 	defer entry.IpEntryLock.Unlock()
-
-// 	entry.LastErrCode = errCode
-// 	entry.LastErrMsg = errMsg
-// }
-
-// ClearIPEntryError safely clears the error code and error message for an IPEntry
-// This function is thread-safe and uses the IPEntry's mutex for synchronization
-// func (entry *IPEntry) ClearIPEntryError() {
-// 	entry.IpEntryLock.Lock()
-// 	defer entry.IpEntryLock.Unlock()
-
-// 	entry.LastErrCode = 0
-// 	entry.LastErrMsg = ""
-// }
-
-// UpdateLastChecked safely updates the LastChecked timestamp for an IPEntry
-// This function is thread-safe and uses the IPEntry's mutex for synchronization
-// func (entry *IPEntry) UpdateLastChecked() {
-// 	entry.IpEntryLock.Lock()
-// 	defer entry.IpEntryLock.Unlock()
-
-// 	entry.LastChecked = time.Now()
-// }
 
 // MarkHealthy safely marks the IPEntry as healthy
 func (entry *IPEntry) MarkHealthy() {
@@ -433,13 +376,3 @@ func (entry *IPEntry) IncrementNumRequests() {
 	defer entry.IpEntryLock.Unlock()
 	entry.NumRequests++
 }
-
-// UpdateIPEntryError safely updates the error code and error message for an IPEntry
-// This function is thread-safe and uses the IPEntry's mutex for synchronization
-// func (entry *IPEntry) UpdateIPEntryError(errCode int, errMsg string) {
-// 	entry.IpEntryLock.Lock()
-// 	defer entry.IpEntryLock.Unlock()
-
-// 	entry.LastErrCode = errCode
-// 	entry.LastErrMsg = errMsg
-// }
