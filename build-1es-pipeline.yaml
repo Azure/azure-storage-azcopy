@@ -190,7 +190,6 @@ extends:
                   targetPath: $(System.DefaultWorkingDirectory)\binaries
                   artifactName: 'azcopy-windows-unsigned'
                   displayName: 'Upload Windows Unsigned'
-                  sbomBuildDropPath: $(System.DefaultWorkingDirectory)\binaries
             variables:
               - name: binaries
                 value: '$(System.DefaultWorkingDirectory)\binaries'
@@ -362,7 +361,6 @@ extends:
                   targetPath: $(System.DefaultWorkingDirectory)/signed
                   artifactName: 'azcopy-windows-signed'
                   displayName: 'Upload Windows Signed'
-                  sbomBuildDropPath: $(System.DefaultWorkingDirectory)/signed
                 - output: pipelineArtifact
                   targetPath: $(System.DefaultWorkingDirectory)/binaries
                   artifactName: 'azcopy-binaries-windows'
@@ -728,7 +726,6 @@ extends:
               outputs:
                 - output: pipelineArtifact
                   targetPath: $(System.DefaultWorkingDirectory)\signed
-                  sbomBuildDropPath: $(System.DefaultWorkingDirectory)\signed
 
             variables:
               - name: signed
@@ -1062,7 +1059,7 @@ extends:
                       artifactName: 'azcopy-windows-signed'
                       downloadPath: $(Build.ArtifactStagingDirectory)
                       targetPath: $(System.DefaultWorkingDirectory)\signed
-                      BuildDropPath: $(System.DefaultWorkingDirectory)\signed
+#                      BuildDropPath: $(System.DefaultWorkingDirectory)\signed
 
 #                  - task: 1ES.DownloadPipelineArtifact@1
 #                    displayName: 'Download Linux Build Artifacts'
