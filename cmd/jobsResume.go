@@ -261,19 +261,11 @@ type resumeCmdArgs struct {
 
 func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 	ctx context.Context,
-	fromTo common.FromTo,
 	source common.ResourceString,
 	destination common.ResourceString,
+	jobDetails common.GetJobDetailsResponse,
 ) (*common.ServiceClient, *common.ServiceClient, error) {
-	if len(rca.SourceSAS) > 0 && rca.SourceSAS[0] != '?' {
-		rca.SourceSAS = "?" + rca.SourceSAS
-	}
-	if len(rca.DestinationSAS) > 0 && rca.DestinationSAS[0] != '?' {
-		rca.DestinationSAS = "?" + rca.DestinationSAS
-	}
-
-	source.SAS = rca.SourceSAS
-	destination.SAS = rca.DestinationSAS
+	fromTo := jobDetails.FromTo
 
 	srcCredType, isSrcPublic, err := getCredentialTypeForLocation(ctx,
 		fromTo.From(),
@@ -335,24 +327,13 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
 		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
-	jobID, err := common.ParseJobID(rca.jobID)
-	if err != nil {
-		// Error for invalid JobId format
-		return nil, nil, fmt.Errorf("error parsing the jobId %s. Failed with error %w", rca.jobID, err)
-	}
-
 	// But we don't want to supply a reauth token if we're not using OAuth. That could cause problems if say, a SAS is invalid.
 	options := traverser.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, common.Iff(srcCredType.IsAzureOAuth(), reauthTok, nil))
-	// Get job details from the STE
-	getJobDetailsResponse := jobsAdmin.GetJobDetails(common.GetJobDetailsRequest{JobID: jobID})
-	if getJobDetailsResponse.ErrorMsg != "" {
-		glcm.Error(getJobDetailsResponse.ErrorMsg)
-	}
 
 	var fileSrcClientOptions any
 	if fromTo.From().IsFile() {
 		fileSrcClientOptions = &common.FileClientOptions{
-			AllowTrailingDot: getJobDetailsResponse.TrailingDot.IsEnabled(), //Access the trailingDot option of the job
+			AllowTrailingDot: jobDetails.TrailingDot.IsEnabled(), //Access the trailingDot option of the job
 		}
 	}
 	srcServiceClient, err := common.GetServiceClientForLocation(fromTo.From(), source, srcCredType, tc, &options, fileSrcClientOptions)
@@ -368,8 +349,8 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 	var fileClientOptions any
 	if fromTo.To().IsFile() {
 		fileClientOptions = &common.FileClientOptions{
-			AllowSourceTrailingDot: getJobDetailsResponse.TrailingDot.IsEnabled() && fromTo.From().IsFile(),
-			AllowTrailingDot:       getJobDetailsResponse.TrailingDot.IsEnabled(),
+			AllowSourceTrailingDot: jobDetails.TrailingDot.IsEnabled() && fromTo.From().IsFile(),
+			AllowTrailingDot:       jobDetails.TrailingDot.IsEnabled(),
 		}
 	}
 	dstServiceClient, err := common.GetServiceClientForLocation(fromTo.To(), destination, dstCredType, tc, &options, fileClientOptions)
@@ -395,13 +376,13 @@ func (rca resumeCmdArgs) process() error {
 	}
 
 	// Get fromTo info, so we can decide what's the proper credential type to use.
-	getJobFromToResponse := jobsAdmin.GetJobDetails(common.GetJobDetailsRequest{JobID: jobID})
-	if getJobFromToResponse.ErrorMsg != "" {
-		glcm.Error(getJobFromToResponse.ErrorMsg)
+	jobDetails := jobsAdmin.GetJobDetails(common.GetJobDetailsRequest{JobID: jobID})
+	if jobDetails.ErrorMsg != "" {
+		glcm.Error(jobDetails.ErrorMsg)
 	}
 
-	if getJobFromToResponse.FromTo.From() == common.ELocation.Benchmark() ||
-		getJobFromToResponse.FromTo.To() == common.ELocation.Benchmark() {
+	if jobDetails.FromTo.From() == common.ELocation.Benchmark() ||
+		jobDetails.FromTo.To() == common.ELocation.Benchmark() {
 		// Doesn't make sense to resume a benchmark job.
 		// It's not tested, and wouldn't report progress correctly and wouldn't clean up after itself properly
 		return errors.New("resuming benchmark jobs is not supported")
@@ -410,17 +391,18 @@ func (rca resumeCmdArgs) process() error {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// Initialize credential info.
 	// TODO: Replace context with root context
-	srcResourceString, err := traverser.SplitResourceString(getJobFromToResponse.Source, getJobFromToResponse.FromTo.From())
+	srcResourceString, err := traverser.SplitResourceString(jobDetails.Source, jobDetails.FromTo.From())
 	_ = err // todo
-	srcResourceString.SAS = rca.SourceSAS
-	dstResourceString, err := traverser.SplitResourceString(getJobFromToResponse.Destination, getJobFromToResponse.FromTo.To())
+	srcResourceString.SAS = normalizeSAS(rca.SourceSAS)
+	dstResourceString, err := traverser.SplitResourceString(jobDetails.Destination, jobDetails.FromTo.To())
 	_ = err // todo
-	dstResourceString.SAS = rca.DestinationSAS
+	dstResourceString.SAS = normalizeSAS(rca.DestinationSAS)
 
 	srcServiceClient, dstServiceClient, err := rca.getSourceAndDestinationServiceClients(
-		ctx, getJobFromToResponse.FromTo,
+		ctx,
 		srcResourceString,
 		dstResourceString,
+		jobDetails,
 	)
 	if err != nil {
 		return fmt.Errorf("cannot resume job with JobId %s, could not create service clients %v", jobID, err)
@@ -428,8 +410,6 @@ func (rca resumeCmdArgs) process() error {
 	// Send resume job request.
 	resumeJobResponse := jobsAdmin.ResumeJobOrder(common.ResumeJobRequest{
 		JobID:            jobID,
-		SourceSAS:        rca.SourceSAS,
-		DestinationSAS:   rca.DestinationSAS,
 		SrcServiceClient: srcServiceClient,
 		DstServiceClient: dstServiceClient,
 		JobErrorHandler:  glcm,
@@ -443,6 +423,14 @@ func (rca resumeCmdArgs) process() error {
 	controller.waitUntilJobCompletion(true)
 
 	return nil
+}
+
+// normalizeSAS ensures the SAS token starts with "?" if non-empty.
+func normalizeSAS(sas string) string {
+	if sas != "" && sas[0] != '?' {
+		return "?" + sas
+	}
+	return sas
 }
 
 func parseTransfers(arg string) map[string]int {

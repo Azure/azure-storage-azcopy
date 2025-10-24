@@ -295,8 +295,6 @@ type ListJobTransfersRequest struct {
 
 type ResumeJobRequest struct {
 	JobID            JobID
-	SourceSAS        string
-	DestinationSAS   string
 	SrcServiceClient *ServiceClient
 	DstServiceClient *ServiceClient
 	JobErrorHandler  JobErrorHandler
