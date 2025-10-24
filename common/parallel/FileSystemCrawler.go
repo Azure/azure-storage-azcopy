@@ -22,9 +22,13 @@ package parallel
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
+	"syscall"
+	"unsafe"
 )
 
 type FileSystemEntry struct {
@@ -41,6 +45,42 @@ type failableFileInfo interface {
 type DirReader interface {
 	Readdir(dir *os.File, n int) ([]os.FileInfo, error)
 	Close()
+}
+
+var maxPathLength int
+
+const (
+	// Linux syscall numbers and constants
+	sysPathconf = 78    // __NR_pathconf on x86_64 Linux
+	pcPathMax   = 4     // _PC_PATH_MAX
+)
+
+// getMaxPathLength returns the system's maximum path length
+func getMaxPathLength() int {
+	if maxPathLength == 0 {
+		switch runtime.GOOS {
+		case "windows":
+			// TODO: Is there a syscall for this which includes support for long paths?
+			maxPathLength = 260 // Windows MAX_PATH
+		case "darwin":
+			// TODO: Use syscall?
+			maxPathLength = 1024 // macOS PATH_MAX
+		case "linux":
+			// Use pathconf syscall with our defined constants
+			pathMax, _, err := syscall.Syscall(sysPathconf, 
+				uintptr(unsafe.Pointer(syscall.StringBytePtr("."))), 
+				pcPathMax, 0)
+			if err == 0 && pathMax > 0 {
+				maxPathLength = int(pathMax)
+			} else {
+				maxPathLength = 4096 // Linux fallback
+			}
+		default:
+			// Other Unix systems
+			maxPathLength = 4096
+		}
+	}
+	return maxPathLength
 }
 
 // CrawlLocalDirectory specializes parallel.Crawl to work specifically on a local directory.
@@ -125,6 +165,7 @@ func Walk(appCtx context.Context, root string, parallelism int, parallelStat boo
 // enumerateOneFileSystemDirectory is an implementation of EnumerateOneDirFunc specifically for the local file system
 func enumerateOneFileSystemDirectory(dir Directory, enqueueDir func(Directory), enqueueOutput func(DirectoryEntry, error), r DirReader) error {
 	dirString := dir.(string)
+	maxPathLen := getMaxPathLength()
 
 	d, err := os.Open(dirString) // for directories, we don't need a special open with FILE_FLAG_BACKUP_SEMANTICS, because directory opening uses FindFirst which doesn't need that flag. https://blog.differentpla.net/blog/2007/05/25/findfirstfile-and-se_backup_name
 	if err != nil {
@@ -152,15 +193,22 @@ func enumerateOneFileSystemDirectory(dir Directory, enqueueDir func(Directory), 
 			return nil
 		}
 		for _, childInfo := range list {
-			childEntry := FileSystemEntry{
-				fullPath: filepath.Join(dirString, childInfo.Name()),
-				info:     childInfo,
+			// Check for failable file info first to avoid segfault
+			if failable, ok := childInfo.(failableFileInfo); ok && failable.Error() != nil {
+				enqueueOutput(FileSystemEntry{dirString, childInfo}, failable.Error())
+				continue
 			}
 
-			if failable, ok := childInfo.(failableFileInfo); ok && failable.Error() != nil {
-				// while Readdir as a whole did not fail, this particular file info did
-				enqueueOutput(childEntry, failable.Error())
+			fullPath := filepath.Join(dirString, childInfo.Name())
+			if len(fullPath) > maxPathLen {
+				enqueueOutput(FileSystemEntry{fullPath[:maxPathLen-3] + "...", childInfo}, 
+					fmt.Errorf("path length %d exceeds maximum %d", len(fullPath), maxPathLen))
 				continue
+			}
+
+			childEntry := FileSystemEntry{
+				fullPath: fullPath,
+				info:     childInfo,
 			}
 			isSymlink := childInfo.Mode()&os.ModeSymlink != 0 // for compatibility with filepath.Walk, we do not follow symlinks, but we do enqueue them as output
 			if childInfo.IsDir() && !isSymlink {
