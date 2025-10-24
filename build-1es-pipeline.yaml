@@ -1058,7 +1058,7 @@ extends:
                     inputs:
                       artifactName: 'azcopy-windows-signed'
                       downloadPath: $(Build.ArtifactStagingDirectory)
-                      targetPath: $(System.DefaultWorkingDirectory)\signed
+                      targetPath: $(Build.ArtifactStagingDirectory)\signed
 #                      BuildDropPath: $(System.DefaultWorkingDirectory)\signed
 
 #                  - task: 1ES.DownloadPipelineArtifact@1
