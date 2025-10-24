@@ -1286,7 +1286,9 @@ extends:
               - job: RemovePackages
                 timeoutInMinutes: 120
                 pool:
-                  vmImage: 'ubuntu-22.04'
+                  name: azcopy-pool
+                  image: ubuntu22-1espt
+                  os: linux
                 variables:
                   - group: AZCOPY_SECRET_VAULT
                 steps:
