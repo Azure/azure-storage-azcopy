@@ -1324,40 +1324,40 @@ extends:
 
                   - script: |
                       pmc --version
-                      pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo list --limit 1
+                      pmc --auth-type msi --config $(settings.secureFilePath) repo list --limit 1
                       if [ $? -ne 0 ]; then
                         exit 1
                       fi
                     displayName: 'Test PMC installation'
 
                   - script: |
-                      pkg_id_list=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package deb list --name azcopy --version ${{parameters.remove_packages}})
+                      pkg_id_list=$(pmc --auth-type msi --config $(settings.secureFilePath) package deb list --name azcopy --version ${{parameters.remove_packages}})
                       
                       # Loop over all the results and extract the package id for each one
                       for PKG_ID in $(echo "$pkg_id_list" | jq -r '.results[].id'); do
                           echo "Processing Package ID: $PKG_ID"  # Debugging line
-                          pkg_repo_names=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo list --package "$PKG_ID")
+                          pkg_repo_names=$(pmc --auth-type msi --config $(settings.secureFilePath) repo list --package "$PKG_ID")
                       
                           for REPO_NAME in $(echo "$pkg_repo_names" | jq -r '.results[].name'); do
                               echo "Found repo: $REPO_NAME $PKG_ID" # Debugging line
-                              pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --remove-packages $PKG_ID $REPO_NAME
-                              pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo publish $REPO_NAME
+                              pmc --auth-type msi --config $(settings.secureFilePath) repo package update --remove-packages $PKG_ID $REPO_NAME
+                              pmc --auth-type msi) --config $(settings.secureFilePath) repo publish $REPO_NAME
                           done
                       done
                     displayName: 'Remove deb packages from the repository'
 
                   - script: |
-                      pkg_id_list=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package rpm list --name azcopy --version ${{parameters.remove_packages}})
+                      pkg_id_list=$(pmc --auth-type msi --config $(settings.secureFilePath) package rpm list --name azcopy --version ${{parameters.remove_packages}})
                       
                       # Loop over all the results and extract the package id for each one
                       for PKG_ID in $(echo "$pkg_id_list" | jq -r '.results[].id'); do
                           echo "Processing Package ID: $PKG_ID"  # Debugging line
-                          pkg_repo_names=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo list --package "$PKG_ID")
+                          pkg_repo_names=$(pmc --auth-type msi --config $(settings.secureFilePath) repo list --package "$PKG_ID")
                       
                           for REPO_NAME in $(echo "$pkg_repo_names" | jq -r '.results[].name'); do
                               echo "Found repo: $REPO_NAME $PKG_ID" # Debugging line
-                              pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --remove-packages $PKG_ID $REPO_NAME
-                              pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo publish $REPO_NAME
+                              pmc --auth-type msi --config $(settings.secureFilePath) repo package update --remove-packages $PKG_ID $REPO_NAME
+                              pmc --auth-type msi --config $(settings.secureFilePath) repo publish $REPO_NAME
                           done
                       done
                     displayName: 'Remove rpm packages from the repository'
