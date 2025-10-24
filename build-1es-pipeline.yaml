@@ -65,50 +65,50 @@ extends:
         image: windows2022-1espt
         os: windows  # OS of the image. Allowed values: windows, linux, macOS
     stages:
-      - stage: AzCopyVersion
-        jobs:
-          - job: GetAzCopyVersion
-            pool:
-              name: azcopy-pool
-              image: ubuntu22-1espt
-              os: linux
-            steps:
-              - checkout: self
-                displayName: 'Checkout repository'
-
-              - task: GoTool@0
-                env:
-                  GO111MODULE: 'on'
-                inputs:
-                  version: $(AZCOPY_GOLANG_VERSION)
-
-              - script: |
-                  go build -tags "netgo" -o azcopy_bin
-                displayName: 'Build AzCopy'
-
-              - script: |
-                  # Run azcopy --version and capture the output
-                  azcopyOutput=$(./azcopy_bin --version)
-                  # Extract the version part
-                  if echo "$azcopyOutput" | grep -q "azcopy version"; then
-                    version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
-                    if [[ -n "$version" ]]; then
-                      echo "Extracted version: $version"
-                      echo "##vso[task.setvariable variable=azcopy_version;isOutput=true]$version"
-                    else
-                      echo "Unable to extract version from azcopy output"
-                      exit 1
-                    fi
-                  else
-                    echo "azcopy version string not found in output"
-                    exit 1
-                  fi
-                displayName: 'Verify and extract the generated build version'
-                name: SetAzCopyVersion
-
-      - stage: BuildArtifacts
-        dependsOn: AzCopyVersion
-        jobs:
+#      - stage: AzCopyVersion
+#        jobs:
+#          - job: GetAzCopyVersion
+#            pool:
+#              name: azcopy-pool
+#              image: ubuntu22-1espt
+#              os: linux
+#            steps:
+#              - checkout: self
+#                displayName: 'Checkout repository'
+#
+#              - task: GoTool@0
+#                env:
+#                  GO111MODULE: 'on'
+#                inputs:
+#                  version: $(AZCOPY_GOLANG_VERSION)
+#
+#              - script: |
+#                  go build -tags "netgo" -o azcopy_bin
+#                displayName: 'Build AzCopy'
+#
+#              - script: |
+#                  # Run azcopy --version and capture the output
+#                  azcopyOutput=$(./azcopy_bin --version)
+#                  # Extract the version part
+#                  if echo "$azcopyOutput" | grep -q "azcopy version"; then
+#                    version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
+#                    if [[ -n "$version" ]]; then
+#                      echo "Extracted version: $version"
+#                      echo "##vso[task.setvariable variable=azcopy_version;isOutput=true]$version"
+#                    else
+#                      echo "Unable to extract version from azcopy output"
+#                      exit 1
+#                    fi
+#                  else
+#                    echo "azcopy version string not found in output"
+#                    exit 1
+#                  fi
+#                displayName: 'Verify and extract the generated build version'
+#                name: SetAzCopyVersion
+#
+#      - stage: BuildArtifacts
+#        dependsOn: AzCopyVersion
+#        jobs:
 #          - job: Linux_Amd64
 #            timeoutInMinutes: 120
 #            pool:
@@ -176,26 +176,26 @@ extends:
 #                  host_architecture: 'arm64'
 #                  host_suffix: 'arm64'
 #
-          - job: Windows
-            timeoutInMinutes: 120
-            pool:
-              name: azcopy-pool
-              image: windows2022-1espt
-              os: windows
-            # If the pipeline publishes artifacts, use `templateContext` to define the artifacts.
-            # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
-            templateContext:
-              outputs:
-                - output: pipelineArtifact
-                  targetPath: $(System.DefaultWorkingDirectory)\binaries
-                  artifactName: 'azcopy-windows-unsigned'
-                  displayName: 'Upload Windows Unsigned'
-            variables:
-              - name: binaries
-                value: '$(System.DefaultWorkingDirectory)\binaries'
-
-            steps:
-              - template: azurePipelineTemplates/build_windows.yml@self
+#          - job: Windows
+#            timeoutInMinutes: 120
+#            pool:
+#              name: azcopy-pool
+#              image: windows2022-1espt
+#              os: windows
+#            # If the pipeline publishes artifacts, use `templateContext` to define the artifacts.
+#            # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
+#            templateContext:
+#              outputs:
+#                - output: pipelineArtifact
+#                  targetPath: $(System.DefaultWorkingDirectory)\binaries
+#                  artifactName: 'azcopy-windows-unsigned'
+#                  displayName: 'Upload Windows Unsigned'
+#            variables:
+#              - name: binaries
+#                value: '$(System.DefaultWorkingDirectory)\binaries'
+#
+#            steps:
+#              - template: azurePipelineTemplates/build_windows.yml@self
 
 #          - job: MacOS
 #            timeoutInMinutes: 360
@@ -244,11 +244,11 @@ extends:
 #
 #        # BuildArtifacts end here
 #
-      - stage: SignArtifacts
-        dependsOn:
-          - AzCopyVersion
-          - BuildArtifacts
-        jobs:
+#      - stage: SignArtifacts
+#        dependsOn:
+#          - AzCopyVersion
+#          - BuildArtifacts
+#        jobs:
 #          - job: Linux
 #            timeoutInMinutes: 120
 #            pool:
@@ -343,113 +343,113 @@ extends:
 #                  fi
 #                displayName: 'Make Artifacts executable'
 #
-          - job: Windows
-            timeoutInMinutes: 120
-            pool:
-              name: azcopy-pool
-              image: ubuntu22-1espt
-              os: linux
+#          - job: Windows
+#            timeoutInMinutes: 120
+#            pool:
+#              name: azcopy-pool
+#              image: ubuntu22-1espt
+#              os: linux
+#
+#            templateContext:
+#              inputs:
+#                - input: pipelineArtifact
+#                  artifactName: azcopy-windows-unsigned
+#                  targetPath: $(System.DefaultWorkingDirectory)/windows
+#                  displayName: 'Download Windows Unsigned'
+#              outputs:
+#                - output: pipelineArtifact
+#                  targetPath: $(System.DefaultWorkingDirectory)/signed
+#                  artifactName: 'azcopy-windows-signed'
+#                  displayName: 'Upload Windows Signed'
+#                - output: pipelineArtifact
+#                  targetPath: $(System.DefaultWorkingDirectory)/binaries
+#                  artifactName: 'azcopy-binaries-windows'
+#                  displayName: 'Upload Windows Binaries'
+#
+#            variables:
+#              - group: AZCOPY_SECRET_VAULT
+#              - name: windows
+#                value: '$(System.DefaultWorkingDirectory)/windows'
+#              - name: signed
+#                value: '$(System.DefaultWorkingDirectory)/signed'
+#              - name: binaries
+#                value: '$(System.DefaultWorkingDirectory)/binaries'
+#              - name: azcopy_version
+#                value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
+#
+#            steps:
+#              - script: |
+#                  sudo apt-get update
+#                  sudo apt-get install -y zip
+#                displayName: 'Install dependencies'
 
-            templateContext:
-              inputs:
-                - input: pipelineArtifact
-                  artifactName: azcopy-windows-unsigned
-                  targetPath: $(System.DefaultWorkingDirectory)/windows
-                  displayName: 'Download Windows Unsigned'
-              outputs:
-                - output: pipelineArtifact
-                  targetPath: $(System.DefaultWorkingDirectory)/signed
-                  artifactName: 'azcopy-windows-signed'
-                  displayName: 'Upload Windows Signed'
-                - output: pipelineArtifact
-                  targetPath: $(System.DefaultWorkingDirectory)/binaries
-                  artifactName: 'azcopy-binaries-windows'
-                  displayName: 'Upload Windows Binaries'
-
-            variables:
-              - group: AZCOPY_SECRET_VAULT
-              - name: windows
-                value: '$(System.DefaultWorkingDirectory)/windows'
-              - name: signed
-                value: '$(System.DefaultWorkingDirectory)/signed'
-              - name: binaries
-                value: '$(System.DefaultWorkingDirectory)/binaries'
-              - name: azcopy_version
-                value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
-
-            steps:
-              - script: |
-                  sudo apt-get update
-                  sudo apt-get install -y zip
-                displayName: 'Install dependencies'
-
-              - task: UseDotNet@2
-                inputs:
-                  packageType: 'sdk'
-                  version: '9.0.x'
-
-              - template: setup/esrp_sign_windows.yml@self
-                parameters:
-                  FolderPath: $(windows)
-                  ESRP_AZCOPY_WIN_KEY_CODE: $(ESRP_AZCOPY_WIN_KEY_CODE)
-                  Pattern: 'azcopy_windows*'
-
-              - script: |
-                  mkdir -p $(binaries)
-                  mkdir -p $(signed)
-                  chmod 755 $(windows)/*
-                  rm -rf $(windows)/*.md
-                displayName: 'Make Artifacts executable'
-
-              - script: |
-                  windows_amd64="$(System.DefaultWorkingDirectory)/azcopy_windows_amd64_$(azcopy_version)"
-                  echo "##vso[task.setvariable variable=windows_amd64]$windows_amd64"
-                  windows_arm64="$(System.DefaultWorkingDirectory)/azcopy_windows_arm64_$(azcopy_version)"
-                  echo "##vso[task.setvariable variable=windows_arm64]$windows_arm64"
-                  windows_386="$(System.DefaultWorkingDirectory)/azcopy_windows_386_$(azcopy_version)"
-                  echo "##vso[task.setvariable variable=windows_386]$windows_386"
-                  mkdir -p $windows_amd64
-                  mkdir -p $windows_arm64
-                  mkdir -p $windows_386
-                displayName: 'Create required directories'
-
-              - script: |
-                  cp $(windows)/* $(System.DefaultWorkingDirectory)/binaries
-                  rm -rf $(windows)/azcopy_windows_v7_arm.exe
-                  mv $(windows)/azcopy_windows_amd64.exe $(windows_amd64)/azcopy.exe
-                  cp NOTICE.txt $(windows_amd64)
-                  if [ -d "$(windows_amd64)/_manifest" ]; then
-                    mv $(windows_amd64)/_manifest $(windows_amd64)/
-                  fi
-                  mv $(windows)/azcopy_windows_arm64.exe $(windows_arm64)/azcopy.exe
-                  cp NOTICE.txt $(windows_arm64)
-                  if [ -d "$(windows_arm64)/_manifest" ]; then
-                    mv $(windows_arm64)/_manifest $(windows_arm64)/
-                  fi
-                  mv $(windows)/azcopy_windows_386.exe $(windows_386)/azcopy.exe
-                  cp NOTICE.txt $(windows_386)
-                  if [ -d "$(windows_386)/_manifest" ]; then
-                    mv $(windows_386)/_manifest $(windows_386)/
-                  fi
-                displayName: 'Copy required files'
-
-              - task: ArchiveFiles@2
-                displayName: 'Archive Windows 64 bit AMD Build'
-                inputs:
-                  rootFolderOrFile: '$(windows_amd64)'
-                  archiveFile: '$(signed)/azcopy_windows_amd64_$(azcopy_version).zip'
-
-              - task: ArchiveFiles@2
-                displayName: 'Archive Windows 64 bit ARM Build'
-                inputs:
-                  rootFolderOrFile: '$(windows_arm64)'
-                  archiveFile: '$(signed)/azcopy_windows_arm64_$(azcopy_version).zip'
-
-              - task: ArchiveFiles@2
-                displayName: 'Archive Windows 32 bit Build'
-                inputs:
-                  rootFolderOrFile: '$(windows_386)'
-                  archiveFile: '$(signed)/azcopy_windows_386_$(azcopy_version).zip'
+#              - task: UseDotNet@2
+#                inputs:
+#                  packageType: 'sdk'
+#                  version: '9.0.x'
+#
+#              - template: setup/esrp_sign_windows.yml@self
+#                parameters:
+#                  FolderPath: $(windows)
+#                  ESRP_AZCOPY_WIN_KEY_CODE: $(ESRP_AZCOPY_WIN_KEY_CODE)
+#                  Pattern: 'azcopy_windows*'
+#
+#              - script: |
+#                  mkdir -p $(binaries)
+#                  mkdir -p $(signed)
+#                  chmod 755 $(windows)/*
+#                  rm -rf $(windows)/*.md
+#                displayName: 'Make Artifacts executable'
+#
+#              - script: |
+#                  windows_amd64="$(System.DefaultWorkingDirectory)/azcopy_windows_amd64_$(azcopy_version)"
+#                  echo "##vso[task.setvariable variable=windows_amd64]$windows_amd64"
+#                  windows_arm64="$(System.DefaultWorkingDirectory)/azcopy_windows_arm64_$(azcopy_version)"
+#                  echo "##vso[task.setvariable variable=windows_arm64]$windows_arm64"
+#                  windows_386="$(System.DefaultWorkingDirectory)/azcopy_windows_386_$(azcopy_version)"
+#                  echo "##vso[task.setvariable variable=windows_386]$windows_386"
+#                  mkdir -p $windows_amd64
+#                  mkdir -p $windows_arm64
+#                  mkdir -p $windows_386
+#                displayName: 'Create required directories'
+#
+#              - script: |
+#                  cp $(windows)/* $(System.DefaultWorkingDirectory)/binaries
+#                  rm -rf $(windows)/azcopy_windows_v7_arm.exe
+#                  mv $(windows)/azcopy_windows_amd64.exe $(windows_amd64)/azcopy.exe
+#                  cp NOTICE.txt $(windows_amd64)
+#                  if [ -d "$(windows_amd64)/_manifest" ]; then
+#                    mv $(windows_amd64)/_manifest $(windows_amd64)/
+#                  fi
+#                  mv $(windows)/azcopy_windows_arm64.exe $(windows_arm64)/azcopy.exe
+#                  cp NOTICE.txt $(windows_arm64)
+#                  if [ -d "$(windows_arm64)/_manifest" ]; then
+#                    mv $(windows_arm64)/_manifest $(windows_arm64)/
+#                  fi
+#                  mv $(windows)/azcopy_windows_386.exe $(windows_386)/azcopy.exe
+#                  cp NOTICE.txt $(windows_386)
+#                  if [ -d "$(windows_386)/_manifest" ]; then
+#                    mv $(windows_386)/_manifest $(windows_386)/
+#                  fi
+#                displayName: 'Copy required files'
+#
+#              - task: ArchiveFiles@2
+#                displayName: 'Archive Windows 64 bit AMD Build'
+#                inputs:
+#                  rootFolderOrFile: '$(windows_amd64)'
+#                  archiveFile: '$(signed)/azcopy_windows_amd64_$(azcopy_version).zip'
+#
+#              - task: ArchiveFiles@2
+#                displayName: 'Archive Windows 64 bit ARM Build'
+#                inputs:
+#                  rootFolderOrFile: '$(windows_arm64)'
+#                  archiveFile: '$(signed)/azcopy_windows_arm64_$(azcopy_version).zip'
+#
+#              - task: ArchiveFiles@2
+#                displayName: 'Archive Windows 32 bit Build'
+#                inputs:
+#                  rootFolderOrFile: '$(windows_386)'
+#                  archiveFile: '$(signed)/azcopy_windows_386_$(azcopy_version).zip'
 
 #          - job: Mac
 #            timeoutInMinutes: 120
@@ -577,9 +577,9 @@ extends:
 #                displayName:  'Copy signed mac binaries'
 #      # SignArtifacts end here
 
-      - stage: VerifyArtifacts
-        dependsOn: SignArtifacts
-        jobs:
+#      - stage: VerifyArtifacts
+#        dependsOn: SignArtifacts
+#        jobs:
 #          - job: Ubuntu_Amd64
 #            timeoutInMinutes: 120
 #            pool:
@@ -710,45 +710,45 @@ extends:
 #                  $(extracted)/azcopy*amd64*/azcopy --version
 #                displayName: 'Verify binary in zip'
 #
-          - job: Windows_Amd64
-            timeoutInMinutes: 120
-            pool:
-              name: azcopy-pool
-              image: windows2022-1espt
-              os: windows
-            templateContext:
-              inputs:
-                - input: pipelineArtifact
-                  artifactName: azcopy-windows-signed
-                  targetPath: $(System.DefaultWorkingDirectory)\signed
-                  itemPattern: 'azcopy*amd64*.zip'
-                  displayName: 'Download Windows Signed'
-              outputs:
-                - output: pipelineArtifact
-                  targetPath: $(System.DefaultWorkingDirectory)\signed
-
-            variables:
-              - name: signed
-                value: '$(System.DefaultWorkingDirectory)\signed'
-              - name: extracted
-                value: '$(System.DefaultWorkingDirectory)\extracted'
-
-            steps:
-              - checkout: none
-
-              - script: |
-                  mkdir -p $(extracted)
-                displayName: 'Create extracted path'
-
-              - task: ExtractFiles@1
-                inputs:
-                  archiveFilePatterns: '$(signed)\azcopy*amd64*.zip'
-                  destinationFolder: $(extracted)
-
-              - script: |
-                  cd $(extracted)\azcopy*amd64*
-                  azcopy.exe --version
-                displayName: 'Verify exe in zip'
+#          - job: Windows_Amd64
+#            timeoutInMinutes: 120
+#            pool:
+#              name: azcopy-pool
+#              image: windows2022-1espt
+#              os: windows
+#            templateContext:
+#              inputs:
+#                - input: pipelineArtifact
+#                  artifactName: azcopy-windows-signed
+#                  targetPath: $(System.DefaultWorkingDirectory)\signed
+#                  itemPattern: 'azcopy*amd64*.zip'
+#                  displayName: 'Download Windows Signed'
+#              outputs:
+#                - output: pipelineArtifact
+#                  targetPath: $(System.DefaultWorkingDirectory)\signed
+#
+#            variables:
+#              - name: signed
+#                value: '$(System.DefaultWorkingDirectory)\signed'
+#              - name: extracted
+#                value: '$(System.DefaultWorkingDirectory)\extracted'
+#
+#            steps:
+#              - checkout: none
+#
+#              - script: |
+#                  mkdir -p $(extracted)
+#                displayName: 'Create extracted path'
+#
+#              - task: ExtractFiles@1
+#                inputs:
+#                  archiveFilePatterns: '$(signed)\azcopy*amd64*.zip'
+#                  destinationFolder: $(extracted)
+#
+#              - script: |
+#                  cd $(extracted)\azcopy*amd64*
+#                  azcopy.exe --version
+#                displayName: 'Verify exe in zip'
 
 #          - job: Windows_Arm64
 #            timeoutInMinutes: 120
@@ -1026,38 +1026,38 @@ extends:
 #                      remoteImage: azcopycontainers.azurecr.io/azure-azcopy-mariner-arm64.$(azcopy_version):latest
 
 
-      - ${{ if eq(parameters.post_release, true) }}:
-          - stage: ReleaseToGithub
-            dependsOn:
-              - AzCopyVersion
-              - VerifyArtifacts
-            jobs:
-              - job: ReleaseJob
-                templateContext:
-                  type: releaseJob
-                  isProduction: true
-                pool:
-                  name: azcopy-pool
-                  image: ubuntu22-1espt
-                  os: linux
-                variables:
-                  - name: azcopy_version
-                    value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
-                steps:
-                  - checkout: none
-
-                  - script: |
-                      echo "v$(azcopy_version)"
-                      # (~) to be replaced by (-) if azcopy version contains a tilde as this is not supported in github tags
-                      azcopy_github_tag=$(echo $(azcopy_version) | sed 's/~/-/')
-                      echo "##vso[task.setvariable variable=azcopy_github_tag]$azcopy_github_tag"
-                    displayName: 'AzCopy Tag Name'
-
-                  - task: 1ES.DownloadPipelineArtifact@1
-                    displayName: 'Download Windows Build Artifacts'
-                    inputs:
-                      artifactName: 'azcopy-windows-signed'
-                      targetPath: $(Build.ArtifactStagingDirectory)/signed
+#      - ${{ if eq(parameters.post_release, true) }}:
+#          - stage: ReleaseToGithub
+#            dependsOn:
+#              - AzCopyVersion
+#              - VerifyArtifacts
+#            jobs:
+#              - job: ReleaseJob
+#                templateContext:
+#                  type: releaseJob
+#                  isProduction: true
+#                pool:
+#                  name: azcopy-pool
+#                  image: ubuntu22-1espt
+#                  os: linux
+#                variables:
+#                  - name: azcopy_version
+#                    value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
+#                steps:
+#                  - checkout: none
+#
+#                  - script: |
+#                      echo "v$(azcopy_version)"
+#                      # (~) to be replaced by (-) if azcopy version contains a tilde as this is not supported in github tags
+#                      azcopy_github_tag=$(echo $(azcopy_version) | sed 's/~/-/')
+#                      echo "##vso[task.setvariable variable=azcopy_github_tag]$azcopy_github_tag"
+#                    displayName: 'AzCopy Tag Name'
+#
+#                  - task: 1ES.DownloadPipelineArtifact@1
+#                    displayName: 'Download Windows Build Artifacts'
+#                    inputs:
+#                      artifactName: 'azcopy-windows-signed'
+#                      targetPath: $(Build.ArtifactStagingDirectory)/signed
 
 #                  - task: 1ES.DownloadPipelineArtifact@1
 #                    displayName: 'Download Linux Build Artifacts'
@@ -1071,31 +1071,31 @@ extends:
 #                      artifactName: 'azcopy-mac-signed'
 #                      downloadPath: $(Build.ArtifactStagingDirectory)
 
-                  - script: |
-                      sudo ls -lRt $(Build.ArtifactStagingDirectory)
-                    displayName: 'List Artifacts'
-
-                  - task: GithubRelease@1
-                    inputs:
-                      githubConnection: 'azcopy-github-connection'
-                      repositoryName: 'Azure/azure-storage-azcopy'
-                      action: 'edit'
-                      target: '$(Build.SourceVersion)'
-                      tagSource: 'userSpecifiedTag'
-                      title: "AzCopy v$(azcopy_version)"
-                      tag: "v$(azcopy_github_tag)"
-                      changeLogCompareToRelease: 'lastFullRelease'
-                      changeLogType: 'commitBased'
-                      isDraft: ${{ parameters.draft }}
-                      isPreRelease: ${{ parameters.prerelease }}
-                      assets: |
-                        $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/*.deb
-                        $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/*.rpm
-                        $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/*.tar.gz
-                        $(Build.ArtifactStagingDirectory)/azcopy-windows-signed/*.zip
-                        $(Build.ArtifactStagingDirectory)/azcopy-mac-signed/*.zip
-                        $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/mariner/*
-                      assetUploadMode: replace
+#                  - script: |
+#                      sudo ls -lRt $(Build.ArtifactStagingDirectory)
+#                    displayName: 'List Artifacts'
+#
+#                  - task: GithubRelease@1
+#                    inputs:
+#                      githubConnection: 'azcopy-github-connection'
+#                      repositoryName: 'Azure/azure-storage-azcopy'
+#                      action: 'edit'
+#                      target: '$(Build.SourceVersion)'
+#                      tagSource: 'userSpecifiedTag'
+#                      title: "AzCopy v$(azcopy_version)"
+#                      tag: "v$(azcopy_github_tag)"
+#                      changeLogCompareToRelease: 'lastFullRelease'
+#                      changeLogType: 'commitBased'
+#                      isDraft: ${{ parameters.draft }}
+#                      isPreRelease: ${{ parameters.prerelease }}
+#                      assets: |
+#                        $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/*.deb
+#                        $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/*.rpm
+#                        $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/*.tar.gz
+#                        $(Build.ArtifactStagingDirectory)/azcopy-windows-signed/*.zip
+#                        $(Build.ArtifactStagingDirectory)/azcopy-mac-signed/*.zip
+#                        $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/mariner/*
+#                      assetUploadMode: replace
 
 #      - ${{ if eq(parameters.publish_artifacts, true) }}:
 #          - stage: PublishArtifacts
@@ -1286,8 +1286,7 @@ extends:
               - job: RemovePackages
                 timeoutInMinutes: 120
                 pool:
-                  name: azcopy-pool
-                  image: ubuntu22-1espt
+                  vmImage: 'ubuntu-22.04'
                 variables:
                   - group: AZCOPY_SECRET_VAULT
                 steps:
