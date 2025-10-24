@@ -49,6 +49,12 @@ type DirReader interface {
 
 var maxPathLength int
 
+const (
+	// Linux syscall numbers and constants
+	sysPathconf = 78    // __NR_pathconf on x86_64 Linux
+	pcPathMax   = 4     // _PC_PATH_MAX
+)
+
 // getMaxPathLength returns the system's maximum path length
 func getMaxPathLength() int {
 	if maxPathLength == 0 {
@@ -59,16 +65,19 @@ func getMaxPathLength() int {
 		case "darwin":
 			// TODO: Use syscall?
 			maxPathLength = 1024 // macOS PATH_MAX
-		default:
-			// Unix systems - use pathconf
-			pathMax, _, err := syscall.Syscall(syscall.SYS_PATHCONF, 
+		case "linux":
+			// Use pathconf syscall with our defined constants
+			pathMax, _, err := syscall.Syscall(sysPathconf, 
 				uintptr(unsafe.Pointer(syscall.StringBytePtr("."))), 
-				syscall.PC_PATH_MAX, 0)
+				pcPathMax, 0)
 			if err == 0 && pathMax > 0 {
 				maxPathLength = int(pathMax)
 			} else {
-				maxPathLength = 4096 // Unix fallback
+				maxPathLength = 4096 // Linux fallback
 			}
+		default:
+			// Other Unix systems
+			maxPathLength = 4096
 		}
 	}
 	return maxPathLength
