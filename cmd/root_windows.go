@@ -21,11 +21,12 @@
 package cmd
 
 import (
-	"github.com/minio/minio-go"
 	"math"
 	"net/http"
 	"path"
 	"strings"
+
+	"github.com/minio/minio-go/v7"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -54,5 +55,8 @@ func getAzCopyAppPath() string {
 func init() {
 	//Catch everything that uses http.DefaultTransport with ieproxy.GetProxyFunc()
 	http.DefaultTransport.(*http.Transport).Proxy = common.GlobalProxyLookup
-	minio.DefaultTransport.(*http.Transport).Proxy = common.GlobalProxyLookup
+	transport, err := minio.DefaultTransport(true)
+	if err != nil {
+		transport.Proxy = common.GlobalProxyLookup
+	}
 }

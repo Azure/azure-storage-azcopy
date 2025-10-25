@@ -28,8 +28,8 @@ import (
 	gcpUtils "cloud.google.com/go/storage"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
-	"github.com/minio/minio-go"
-	"github.com/minio/minio-go/pkg/credentials"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
 // ==============================================================================================
@@ -62,6 +62,39 @@ func (o CredentialOpOptions) panicError(err error) {
 	}
 }
 
+// Constants for private network transport
+const PeReCheckCooldownTimeInSecs = 3600
+const PeCheckRetries = 3
+const PeCheckIntervalInmilliSecs = 200
+
+func createS3ClientForPrivateNetwork(credInfo CredentialInfo, cred *credentials.Credentials) (*minio.Client, error) {
+	peIP := privateNetworkArgs.PrivateEndpointIPs
+	baseS3Host := credInfo.S3CredentialInfo.Endpoint
+	// Endpoint should contain bucketname : "<bucketname>.s3.<region>.amazonaws.com"
+	s3Host := privateNetworkArgs.BucketName + "." + credInfo.S3CredentialInfo.Endpoint
+	transport := NewRoundRobinTransport(peIP, s3Host, PeReCheckCooldownTimeInSecs, PeCheckRetries, PeCheckIntervalInmilliSecs)
+	var minioCred *credentials.Credentials
+	if cred != nil {
+		minioCred = cred
+	} else {
+		minioCred = credentials.New(credInfo.S3CredentialInfo.Provider)
+	}
+
+	// Create MinIO client
+	client, err := minio.New(baseS3Host, &minio.Options{
+		Creds:        minioCred,
+		Secure:       true,
+		Transport:    transport,
+		Region:       credInfo.S3CredentialInfo.Region,
+		BucketLookup: minio.BucketLookupDNS, // force virtual-hosted style
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create MinIO client: %v", err)
+	}
+	client.SetS3EnableDualstack(false)
+	return client, nil
+}
+
 // CreateS3Credential creates AWS S3 credential according to credential info.
 func CreateS3Credential(ctx context.Context, credInfo CredentialInfo, options CredentialOpOptions) (*credentials.Credentials, error) {
 	switch credInfo.CredentialType {
@@ -80,19 +113,31 @@ func CreateS3Credential(ctx context.Context, credInfo CredentialInfo, options Cr
 	panic("work around the compiling, logic wouldn't reach here")
 }
 
+func CreateS3ClientFromProvider(credInfo CredentialInfo) (*minio.Client, error) {
+	if IsPrivateNetworkEnabled() {
+		fmt.Println("Creating S3 Client for Private Network")
+		s3Client, err := createS3ClientForPrivateNetwork(credInfo, nil)
+		return s3Client, err
+	}
+	fmt.Println("Creating S3 Client for public access")
+	cred := credentials.New(credInfo.S3CredentialInfo.Provider)
+	//s3Client, err := minio.NewWithCredentials(credInfo.S3CredentialInfo.Endpoint, creds, true, credInfo.S3CredentialInfo.Region)
+	s3Client, err := minio.New(credInfo.S3CredentialInfo.Endpoint, &minio.Options{Creds: cred, Secure: true, Region: credInfo.S3CredentialInfo.Region})
+	return s3Client, err
+}
+
 // ==============================================================================================
 // S3 credential related factory methods
 // ==============================================================================================
 func CreateS3Client(ctx context.Context, credInfo CredentialInfo, option CredentialOpOptions, logger ILogger) (*minio.Client, error) {
 	if credInfo.CredentialType == ECredentialType.S3PublicBucket() {
 		cred := credentials.NewStatic("", "", "", credentials.SignatureAnonymous)
-		return minio.NewWithOptions(credInfo.S3CredentialInfo.Endpoint, &minio.Options{Creds: cred, Secure: true, Region: credInfo.S3CredentialInfo.Region})
+		return minio.New(credInfo.S3CredentialInfo.Endpoint, &minio.Options{Creds: cred, Secure: true, Region: credInfo.S3CredentialInfo.Region})
 	}
 	//support custom credential provider
 	if credInfo.S3CredentialInfo.Provider != nil {
 		fmt.Println("Using custom credentials")
-		creds := credentials.New(credInfo.S3CredentialInfo.Provider)
-		s3Client, err := minio.NewWithCredentials(credInfo.S3CredentialInfo.Endpoint, creds, true, credInfo.S3CredentialInfo.Region)
+		s3Client, err := CreateS3ClientFromProvider(credInfo)
 		return s3Client, err
 	}
 	// Support access key
@@ -100,7 +145,12 @@ func CreateS3Client(ctx context.Context, credInfo CredentialInfo, option Credent
 	if err != nil {
 		return nil, err
 	}
-	s3Client, err := minio.NewWithCredentials(credInfo.S3CredentialInfo.Endpoint, credential, true, credInfo.S3CredentialInfo.Region)
+	if IsPrivateNetworkEnabled() {
+		fmt.Println("Creating S3 Client for Private Network")
+		s3Client, err := createS3ClientForPrivateNetwork(credInfo, credential)
+		return s3Client, err
+	}
+	s3Client, err := minio.New(credInfo.S3CredentialInfo.Endpoint, &minio.Options{Creds: credential, Secure: true, Region: credInfo.S3CredentialInfo.Region})
 
 	if logger != nil {
 		s3Client.TraceOn(NewS3HTTPTraceLogger(logger, LogDebug))

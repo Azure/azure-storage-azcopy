@@ -23,6 +23,7 @@ package ste
 import (
 	"context"
 	"crypto/md5"
+	"fmt"
 	"io"
 	"time"
 
@@ -48,6 +49,10 @@ func (p *blobSourceInfoProvider) PreSignedSourceURL() (string, error) {
 
 func (p *blobSourceInfoProvider) RawSource() string {
 	return p.source.URL()
+}
+
+func (p *blobSourceInfoProvider) GetObjectRange(offset, length int64) (io.ReadCloser, error) {
+	return nil, fmt.Errorf("GetObjectRange not implemented for blobSourceInfoProvider")
 }
 
 func (p *blobSourceInfoProvider) ReadLink() (string, error) {

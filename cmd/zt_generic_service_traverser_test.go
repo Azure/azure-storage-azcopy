@@ -80,7 +80,7 @@ func TestServiceTraverserWithManyObjects(t *testing.T) {
 
 			// Ignore errors from cleanup.
 			if testS3 {
-				_ = s3Client.RemoveBucket(v)
+				_ = s3Client.RemoveBucket(ctx, v)
 			}
 			if testGCP {
 				deleteGCPBucket(gcpClient, v, true)
@@ -251,7 +251,7 @@ func TestServiceTraverserWithWildcards(t *testing.T) {
 
 			// Ignore errors from cleanup.
 			if testS3 {
-				_ = s3Client.RemoveBucket(v)
+				_ = s3Client.RemoveBucket(ctx, v)
 			}
 			if testGCP {
 				deleteGCPBucket(gcpClient, v, true)
