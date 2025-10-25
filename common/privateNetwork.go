@@ -131,8 +131,7 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 		if entry.ConnectionStatus == Unhealthy {
 			if time.Since(entry.LastChecked) >= rr.cooldown {
 				entry.MarkHealthy()
-				updateStatus := UpdateGlobalPrivateEndpointIP(idx, entry)
-				log.Printf("Updating Private Endpoint:%s connection state from UNHEALTHY->HEALTHY after cooldown at %v (LastChecked: %v) with Update Status:%s", peIP, time.Now(), entry.LastChecked, updateStatus)
+				log.Printf("Updating Private Endpoint:%s connection state from UNHEALTHY->HEALTHY after cooldown at %v (LastChecked: %v)", peIP, time.Now(), entry.LastChecked)
 			} else {
 				log.Printf("[Counter=%d] Skipping Unhealthy IP %s (still in cooldown) (LastChecked: %v)", idx, peIP, entry.LastChecked)
 				continue
@@ -151,6 +150,7 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 			var errCode int
 			var errMsg string
 			var isRetryableErr bool
+			var isS3AccessDeniedErr bool
 
 			log.Printf("[Counter=%d Retry=%d] Sending request to PrivateEndpoint IP: %s (Host header: %s)", idx, ipAttempt, clonedReq.URL.Host, clonedReq.Host)
 
@@ -163,6 +163,8 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 						if httpS3Err.S3Error != nil {
 							errMsg = httpS3Err.S3Error.Code + ":" + httpS3Err.S3Error.Message
 							isRetryableErr = IsRetryableS3Error(httpS3Err.S3Error.Code)
+							isRetryableErr = httpS3Err.HTTPStatusError.IsRetryable || isRetryableErr
+							isS3AccessDeniedErr = IsAccessDeniedError(httpS3Err.S3Error.Code)
 							log.Printf("[Counter=%d Retry=%d] FAILED with S3 Error, Error Code:%d Error Message:%s retryable:%v", idx, ipAttempt, errCode, errMsg, isRetryableErr)
 						} else {
 							errCode = httpS3Err.HTTPStatusError.GetErrorCode()
@@ -179,10 +181,11 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 						}
 
 						// Mark the Private Endpoint as Unhealthy after detecting non retryable HTTP and S3 critical error
-						if atomic.CompareAndSwapUint32((*uint32)(&entry.ConnectionStatus), uint32(Healthy), uint32(Unhealthy)) {
-							entry.MarkUnhealthy(errCode, errMsg)
-							updateStatus := UpdateGlobalPrivateEndpointIP(idx, entry)
-							log.Printf("Updating Private Endpoint:%s connection state from HEALTHY->UNHEALTHY after error response with Error Code %d ErrorMsg:%s at %v Update Status:%s", peIP, entry.LastErrCode, entry.LastErrMsg, entry.LastChecked, updateStatus)
+						if isS3AccessDeniedErr {
+							if atomic.CompareAndSwapUint32((*uint32)(&entry.ConnectionStatus), uint32(Healthy), uint32(Unhealthy)) {
+								entry.MarkUnhealthy(errCode, errMsg)
+								log.Printf("Updating Private Endpoint:%s connection state from HEALTHY->UNHEALTHY after error response with Error Code %d ErrorMsg:%s at %v", peIP, entry.LastErrCode, entry.LastErrMsg, entry.LastChecked)
+							}
 						}
 					} else {
 						errCode = 0
@@ -194,7 +197,6 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 					log.Printf("[Counter=%d Retry=%d] SUCCESS using IP %s", idx, ipAttempt, peIP)
 				}
 
-				//entry.IncrementNumRequests()
 				globalIPsMutex.Lock()
 				defer globalIPsMutex.Unlock()
 				globalPrivateEndpointIPs[idx].IncrementNumRequests()
@@ -202,6 +204,7 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 			}
 
 			// Transport-level failure (err != nil). Capture diagnostics.
+			isNetworkRetryableErr := IsRetryableNetworkError(err)
 			log.Printf("[Counter=%d Retry=%d] FAILED using IP %s with Error %v", idx, ipAttempt, peIP, err)
 
 			// If resp is non-nil on error, close body to avoid leaks and capture ConnectionStatus for diagnostics.
@@ -212,6 +215,7 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 					if httpS3Err.S3Error != nil {
 						errMsg = httpS3Err.S3Error.Code + ":" + httpS3Err.S3Error.Message
 						isRetryableErr = IsRetryableS3Error(httpS3Err.S3Error.Code)
+						isRetryableErr = httpS3Err.HTTPStatusError.IsRetryable || isRetryableErr
 						log.Printf("[Counter=%d Retry=%d] FAILED with S3 Error, Error Code:%d Error Message:%s retryable:%v", idx, ipAttempt, errCode, errMsg, isRetryableErr)
 					} else if httpS3Err.HTTPStatusError != nil {
 						errCode = httpS3Err.HTTPStatusError.GetErrorCode()
@@ -228,7 +232,7 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 			lastErr = err
 
 			// If we still have per-IP attempts left, wait and retry the same IP
-			if (ipAttempt+1 < rr.perIPRetries) && isRetryableErr {
+			if (ipAttempt+1 < rr.perIPRetries) && (isRetryableErr || isNetworkRetryableErr) {
 				log.Printf("[Counter=%d Retry=%d] Retrying same IP %s after %v", idx, ipAttempt, peIP, rr.perIPRetryDelay)
 				time.Sleep(rr.perIPRetryDelay)
 				continue

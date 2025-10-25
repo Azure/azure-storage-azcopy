@@ -100,6 +100,17 @@ func IsCriticalS3Error(code string) bool {
 	}
 }
 
+// IsCriticalS3Error checks if an S3 error code indicates a critical (non-retryable) condition
+func IsAccessDeniedError(code string) bool {
+	switch code {
+	case S3ErrorAccessDenied,
+		GCPErrorForbidden:
+		return true
+	default:
+		return false
+	}
+}
+
 // ==============================================================================================
 // S3 HTTP Error Wrapper (Modular Design)
 // ==============================================================================================
