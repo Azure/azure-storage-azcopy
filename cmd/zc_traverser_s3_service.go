@@ -26,7 +26,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/minio/minio-go"
+	"github.com/minio/minio-go/v7"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -53,7 +53,7 @@ func (t *s3ServiceTraverser) IsDirectory(isSource bool) (bool, error) {
 func (t *s3ServiceTraverser) listContainers() ([]string, error) {
 	if len(t.cachedBuckets) == 0 {
 		bucketList := make([]string, 0)
-		bucketInfo, err := t.s3Client.ListBuckets()
+		bucketInfo, err := t.s3Client.ListBuckets(t.ctx)
 		if err == nil {
 			for _, v := range bucketInfo {
 				// Match a pattern for the bucket name and the bucket name only
