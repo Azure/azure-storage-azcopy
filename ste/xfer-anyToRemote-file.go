@@ -413,8 +413,8 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 	// If the source is S3, we need to get a pre-signed URL for the source file.
 	// These conditions to decide to go PutBlob path can be improved later for all the sourceTypes.
 	isPrivateNetworkingEnabled := common.IsPrivateNetworkEnabled()
-	isSourceType := jptm.FromTo().From() == common.ELocation.S3()
-	isSourcePrivate := isSourceType && isPrivateNetworkingEnabled
+	isSourceTypeS3 := jptm.FromTo().From() == common.ELocation.S3()
+	isSourcePrivate := isSourceTypeS3 && isPrivateNetworkingEnabled
 
 	if srcInfoProvider.IsLocal() || isSourcePrivate {
 		md5Channel = s.(uploader).Md5Channel()

@@ -110,8 +110,9 @@ func NewRoundRobinTransport(ips []string, host string, cooldownInSecs int, ipRet
 // For each chosen IP, it will retry the same IP rr.perIPRetries times (with a small delay)
 // before marking the IP unhealthy and moving on to the next IP.
 func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	var lastErr error
+	var lastErrMsg string
 	var peIP string
+	var lastErrorCode int
 
 	log.Printf("*****Request Method: %s, Host: %s, Query: %s, Body: %v, URI: %s****", req.Method, req.URL.Host, req.URL.RawQuery, req.Body, req.RequestURI)
 	numPrivateEndpoints := GetGlobalPrivateEndpointIPCount()
@@ -197,8 +198,6 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 					log.Printf("[Counter=%d Retry=%d] SUCCESS using IP %s", idx, ipAttempt, peIP)
 				}
 
-				globalIPsMutex.Lock()
-				defer globalIPsMutex.Unlock()
 				globalPrivateEndpointIPs[idx].IncrementNumRequests()
 				return resp, nil
 			}
@@ -227,9 +226,15 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 					errCode = 0
 					errMsg = ""
 				}
+			} else {
+				// No response - parse error from the error object itself
+				errCode = 0
+				errMsg = err.Error()
+				log.Printf("[Counter=%d Retry=%d] Network error with no response, Error Message:%s retryable:%v", idx, ipAttempt, errMsg, isRetryableErr)
 			}
 
-			lastErr = err
+			lastErrMsg = errMsg
+			lastErrorCode = errCode
 
 			// If we still have per-IP attempts left, wait and retry the same IP
 			if (ipAttempt+1 < rr.perIPRetries) && (isRetryableErr || isNetworkRetryableErr) {
@@ -237,24 +242,21 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 				time.Sleep(rr.perIPRetryDelay)
 				continue
 			}
+		}
 
-			// Exhausted per-IP retries: mark the IP unhealthy, record time, update global map and healthy pool,
-			// then break to pick another IP (outer loop continues).
-			// attempt to mark unhealthy: 0 -> 1
-			if atomic.CompareAndSwapUint32((*uint32)(&entry.ConnectionStatus), uint32(Healthy), uint32(Unhealthy)) {
-				entry.MarkUnhealthy(errCode, errMsg)
-				updateStatus := UpdateGlobalPrivateEndpointIP(idx, entry)
-				log.Printf("Updating Private Endpoint:%s connection state from HEALTHY->UNHEALTHY after error response with Error Code %d ErrorMsg:%s at %v Update Status:%s", peIP, entry.LastErrCode, entry.LastErrMsg, entry.LastChecked, updateStatus)
-			}
-			// break inner loop; outer loop will select another IP (or finish if attempts exhausted)
-			break
+		// Exhausted per-IP retries: mark the IP unhealthy, record time, update global map and healthy pool,
+		// then break to pick another IP (outer loop continues).
+		// attempt to mark unhealthy: 0 -> 1
+		if (lastErrMsg != "") && atomic.CompareAndSwapUint32((*uint32)(&entry.ConnectionStatus), uint32(Healthy), uint32(Unhealthy)) {
+			entry.MarkUnhealthy(lastErrorCode, lastErrMsg)
+			log.Printf("Updating Private Endpoint:%s connection state from HEALTHY->UNHEALTHY after error response with Error Code %d ErrorMsg:%s at %v", peIP, entry.LastErrCode, entry.LastErrMsg, entry.LastChecked)
 		}
 		// continue outer loop to try next IP (if any attempts remain)
 	}
 
 	fmt.Errorf("No healthy Private Endpoint IPs are available")
 	// All attempts exhausted
-	return nil, fmt.Errorf("Request failed after trying all healthy Private Endpoint IPs. Last error from IP %s: %v", peIP, lastErr)
+	return nil, fmt.Errorf("Request failed after trying all healthy Private Endpoint IPs. Last error from IP %s: %v", peIP, lastErrMsg)
 }
 
 // Close cleans up idle connections and stops the periodic refresh goroutine
@@ -307,20 +309,6 @@ func GetGlobalPrivateEndpointIPCount() int {
 		return 0
 	}
 	return len(globalPrivateEndpointIPs)
-}
-
-// UpdateGlobalPrivateEndpointIP updates a specific IP entry in the global list
-func UpdateGlobalPrivateEndpointIP(index uint64, updatedEntry *IPEntry) bool {
-	globalIPsMutex.Lock()
-	defer globalIPsMutex.Unlock()
-
-	if globalPrivateEndpointIPs == nil || index >= uint64(len(globalPrivateEndpointIPs)) || updatedEntry == nil {
-		log.Printf("Updation of PrivateEndpoint List failed for the Index:%d with Length:%d\n ", index, len(globalPrivateEndpointIPs))
-		return false
-	}
-
-	globalPrivateEndpointIPs[index] = updatedEntry
-	return true
 }
 
 // Function to check if private network is enabled or not. By default it should be disabled and return false
