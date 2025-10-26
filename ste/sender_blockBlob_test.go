@@ -33,6 +33,7 @@ import (
 
 func TestGetVerifiedChunkParams(t *testing.T) {
 	a := assert.New(t)
+	common.SetUIHooks(common.NewJobUIHooks())
 	// Mock required params
 	transferInfo := &TransferInfo{
 		BlockSize:  4195352576, // 4001MiB

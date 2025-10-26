@@ -31,6 +31,7 @@ const (
 
 // Flags associated with copy and sync commands
 const (
+	RequestPriorityFlag        = "request-priority"
 	PreserveSMBInfoFlag        = "preserve-smb-info"
 	PreserveSMBPermissionsFlag = "preserve-smb-permissions"
 	PreservePermissionsFlag    = "preserve-permissions"
@@ -65,5 +66,4 @@ const (
 	trustedSuffixesAAD                = "*.core.windows.net;*.core.chinacloudapi.cn;*.core.cloudapi.de;*.core.usgovcloudapi.net;*.storage.azure.net"
 )
 
-const MAX_SYMLINKS_TO_FOLLOW = 40
 const NumOfFilesPerDispatchJobPart = 10000

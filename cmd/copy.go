@@ -39,6 +39,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
@@ -255,7 +257,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	}
 	// Strip the SAS from the source and destination whenever there is SAS exists in URL.
 	// Note: SAS could exists in source of S2S copy, even if the credential type is OAuth for destination.
-	cooked.Destination, err = SplitResourceString(tempDest, cooked.FromTo.To())
+	cooked.Destination, err = traverser.SplitResourceString(tempDest, cooked.FromTo.To())
 	if err != nil {
 		return cooked, err
 	}
@@ -270,7 +272,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 			return cooked, err
 		}
 	}
-	cooked.Source, err = SplitResourceString(tempSrc, cooked.FromTo.From())
+	cooked.Source, err = traverser.SplitResourceString(tempSrc, cooked.FromTo.From())
 	if err != nil {
 		return cooked, err
 	}
@@ -325,7 +327,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	if raw.includeBefore != "" {
 		// must set chooseEarliest = false, so that if there's an ambiguous local date, the latest will be returned
 		// (since that's safest for includeBefore.  Better to choose the later time and do more work, than the earlier one and fail to pick up a changed file
-		parsedIncludeBefore, err := IncludeBeforeDateFilter{}.ParseISO8601(raw.includeBefore, false)
+		parsedIncludeBefore, err := traverser.IncludeBeforeDateFilter{}.ParseISO8601(raw.includeBefore, false)
 		if err != nil {
 			return cooked, err
 		}
@@ -335,7 +337,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	if raw.includeAfter != "" {
 		// must set chooseEarliest = true, so that if there's an ambiguous local date, the earliest will be returned
 		// (since that's safest for includeAfter.  Better to choose the earlier time and do more work, than the later one and fail to pick up a changed file
-		parsedIncludeAfter, err := IncludeAfterDateFilter{}.ParseISO8601(raw.includeAfter, true)
+		parsedIncludeAfter, err := traverser.IncludeAfterDateFilter{}.ParseISO8601(raw.includeAfter, true)
 		if err != nil {
 			return cooked, err
 		}
@@ -369,10 +371,10 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	// This will only happen in CLI commands, not AzCopy as a library.
 	// if redirection is triggered, avoid printing any output
 	if cooked.isRedirection() {
-		glcm.SetOutputFormat(common.EOutputFormat.None())
+		glcm.SetOutputFormat(EOutputFormat.None())
 	}
 
-	if common.IsNFSCopy() {
+	if cooked.FromTo.IsNFS() {
 		cooked.preserveInfo = raw.preserveInfo && areBothLocationsNFSAware(cooked.FromTo)
 		cooked.preservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
 			true,
@@ -460,7 +462,7 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaults() {
 }
 
 func validateForceIfReadOnly(toForce bool, fromTo common.FromTo) error {
-	targetIsFiles := (fromTo.To() == common.ELocation.File() || fromTo.To() == common.ELocation.FileNFS()) ||
+	targetIsFiles := (fromTo.To().IsFile()) ||
 		fromTo == common.EFromTo.FileTrash()
 	targetIsWindowsFS := fromTo.To() == common.ELocation.Local() &&
 		runtime.GOOS == "windows"
@@ -500,8 +502,10 @@ func validateSymlinkHandlingMode(symlinkHandling common.SymlinkHandlingType, fro
 			return nil // Fine on all OSes that support symlink via the OS package. (Win, MacOS, and Linux do, and that's what we officially support.)
 		case common.EFromTo.BlobBlob(), common.EFromTo.BlobFSBlobFS(), common.EFromTo.BlobBlobFS(), common.EFromTo.BlobFSBlob():
 			return nil // Blob->Blob doesn't involve any local requirements
+		case common.EFromTo.LocalFileNFS(), common.EFromTo.FileNFSLocal(), common.EFromTo.FileNFSFileNFS():
+			return nil // for NFS related transfers symlink preservation is supported.
 		default:
-			return fmt.Errorf("flag --%s can only be used on Blob<->Blob or Local<->Blob", common.PreserveSymlinkFlagName)
+			return fmt.Errorf("flag --%s can only be used on Blob<->Blob, Local<->Blob, Local<->FileNFS, FileNFS<->FileNFS", common.PreserveSymlinkFlagName)
 		}
 	}
 
@@ -719,7 +723,7 @@ type CookedCopyCmdArgs struct {
 	// followup/cleanup properties are NOT available on resume, and so should not be used for jobs that may be resumed
 	// TODO: consider find a way to enforce that, or else to allow them to be preserved. Initially, they are just for benchmark jobs, so not a problem immediately because those jobs can't be resumed, by design.
 	followupJobArgs   *CookedCopyCmdArgs
-	priorJobExitCode  *common.ExitCode
+	priorJobExitCode  *ExitCode
 	isCleanupJob      bool // triggers abbreviated status reporting, since we don't want full reporting for cleanup jobs
 	cleanupJobMessage string
 
@@ -751,6 +755,7 @@ type CookedCopyCmdArgs struct {
 	hardlinks                     common.HardlinkHandlingType
 	atomicSkippedSymlinkCount     uint32
 	atomicSkippedSpecialFileCount uint32
+	atomicSkippedHardlinkCount    uint32
 	BlockSizeMB                   float64
 	PutBlobSizeMB                 float64
 	IncludePathPatterns           []string
@@ -788,7 +793,7 @@ func (cca *CookedCopyCmdArgs) process() error {
 		}
 
 		// if no error, the operation is now complete
-		glcm.Exit(nil, common.EExitCode.Success())
+		glcm.Exit(nil, EExitCode.Success())
 	}
 	return cca.processCopyJobPartOrders()
 }
@@ -825,7 +830,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 
 	// step 1: create client options
 	// note: dstCred is nil, as we could not reauth effectively because stdout is a pipe.
-	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(azcopyScanningLogger, nil, nil)}
+	options := &blockblob.ClientOptions{ClientOptions: traverser.CreateClientOptions(common.AzcopyScanningLogger, nil, nil)}
 
 	// step 2: parse source url
 	u, err := blobResource.FullURL()
@@ -842,11 +847,13 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	if err != nil {
 		return fmt.Errorf("fatal: Could not create client: %s", err.Error())
 	}
-
 	// step 3: start download
-
+	cpkInfo, err := cca.CpkOptions.GetCPKInfo()
+	if err != nil {
+		return err
+	}
 	blobStream, err := blobClient.DownloadStream(ctx, &blob.DownloadStreamOptions{
-		CPKInfo:      cca.CpkOptions.GetCPKInfo(),
+		CPKInfo:      cpkInfo,
 		CPKScopeInfo: cca.CpkOptions.GetCPKScopeInfo(),
 	})
 	if err != nil {
@@ -909,7 +916,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 
 	// step 0: initialize pipeline
 	// Reauthentication is theoretically possible here, since stdin is blocked.
-	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)}
+	options := &blockblob.ClientOptions{ClientOptions: traverser.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)}
 
 	// step 1: parse destination url
 	u, err := blobResource.FullURL()
@@ -941,6 +948,10 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	if cca.blockBlobTier != common.EBlockBlobTier.None() {
 		bbAccessTier = to.Ptr(blob.AccessTier(cca.blockBlobTier.String()))
 	}
+	cpkInfo, err := cca.CpkOptions.GetCPKInfo()
+	if err != nil {
+		return err
+	}
 	_, err = blockBlobClient.UploadStream(ctx, os.Stdin, &blockblob.UploadStreamOptions{
 		BlockSize:   blockSize,
 		Concurrency: pipingUploadParallelism,
@@ -954,7 +965,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 			BlobCacheControl:       common.IffNotEmpty(cca.cacheControl),
 		},
 		AccessTier:   bbAccessTier,
-		CPKInfo:      cca.CpkOptions.GetCPKInfo(),
+		CPKInfo:      cpkInfo,
 		CPKScopeInfo: cca.CpkOptions.GetCPKScopeInfo(),
 	})
 
@@ -994,7 +1005,7 @@ func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.
 		jpo.S2SSourceCredentialType = srcCredInfo.CredentialType
 
 		if jpo.S2SSourceCredentialType.IsAzureOAuth() {
-			uotm := GetUserOAuthTokenManagerInstance()
+			uotm := Client.GetUserOAuthTokenManagerInstance()
 			// get token from env var or cache
 			if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 				return srcCredInfo, err
@@ -1013,8 +1024,8 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// Make AUTO default for Azure Files since Azure Files throttles too easily unless user specified concurrency value
 	if jobsAdmin.JobsAdmin != nil &&
-		(cca.FromTo.From().IsFile() || (cca.FromTo.To().IsFile() &&
-			common.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue()) == "")) {
+		(cca.FromTo.From().IsFile() || cca.FromTo.To().IsFile()) &&
+		common.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue()) == "" {
 		jobsAdmin.JobsAdmin.SetConcurrencySettingsToAuto()
 	}
 
@@ -1044,7 +1055,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
 	// the info will be transferred to STE.
 	if cca.credentialInfo.CredentialType.IsAzureOAuth() {
-		uotm := GetUserOAuthTokenManagerInstance()
+		uotm := Client.GetUserOAuthTokenManagerInstance()
 		// Get token from env var or cache.
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return err
@@ -1091,6 +1102,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.trailingDot,
 		},
+		JobErrorHandler: glcm,
 	}
 
 	srcCredInfo, err := cca.getSrcCredential(ctx, &jobPartOrder)
@@ -1104,7 +1116,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		srcReauth = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, srcReauth)
+	options := traverser.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, srcReauth)
 	var azureFileSpecificOptions any
 	if cca.FromTo.From().IsFile() {
 		azureFileSpecificOptions = &common.FileClientOptions{
@@ -1142,7 +1154,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	if cca.FromTo.IsS2S() && srcCredInfo.CredentialType.IsAzureOAuth() {
 		srcCred = common.NewScopedCredential(srcCredInfo.OAuthTokenInfo.TokenCredential, srcCredInfo.CredentialType)
 	}
-	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred, dstReauthTok)
+	options = traverser.CreateClientOptions(common.AzcopyCurrentJobLogger, srcCred, dstReauthTok)
 	jobPartOrder.DstServiceClient, err = common.GetServiceClientForLocation(
 		cca.FromTo.To(),
 		cca.Destination,
@@ -1174,7 +1186,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	// Check if destination is system container
 	if cca.FromTo.IsS2S() || cca.FromTo.IsUpload() {
-		dstContainerName, err := GetContainerName(cca.Destination.Value, cca.FromTo.To())
+		dstContainerName, err := azcopy.GetContainerName(cca.Destination.Value, cca.FromTo.To())
 		if err != nil {
 			return fmt.Errorf("failed to get container name from destination (is it formatted correctly?): %w", err)
 		}
@@ -1184,19 +1196,23 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	}
 
 	// Check protocol compatibility for File Shares
-	if err := validateProtocolCompatibility(ctx, cca.FromTo, cca.Source, cca.Destination, jobPartOrder.SrcServiceClient, jobPartOrder.DstServiceClient); err != nil {
+	if err := validateProtocolCompatibility(ctx, cca.FromTo,
+		cca.Source,
+		cca.Destination,
+		jobPartOrder.SrcServiceClient,
+		jobPartOrder.DstServiceClient); err != nil {
 		return err
 	}
 
 	switch {
 	case cca.FromTo.IsUpload(), cca.FromTo.IsDownload(), cca.FromTo.IsS2S():
 		// Execute a standard copy command
-		var e *CopyEnumerator
+		var e *traverser.CopyEnumerator
 		e, err = cca.initEnumerator(jobPartOrder, srcCredInfo, ctx)
 		if err != nil {
 			return fmt.Errorf("failed to initialize enumerator: %w", err)
 		}
-		err = e.enumerate()
+		err = e.Enumerate()
 
 	case cca.FromTo.IsDelete():
 		// Delete gets ran through copy, so handle delete
@@ -1210,7 +1226,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 				return fmt.Errorf("failed to initialize enumerator: %w", createErr)
 			}
 
-			err = e.enumerate()
+			err = e.Enumerate()
 		}
 
 	case cca.FromTo.IsSetProperties():
@@ -1219,7 +1235,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		if createErr != nil {
 			return fmt.Errorf("failed to initialize enumerator: %w", createErr)
 		}
-		err = e.enumerate()
+		err = e.Enumerate()
 
 	default:
 		return fmt.Errorf("copy direction %v is not supported", cca.FromTo)
@@ -1248,7 +1264,7 @@ func (cca *CookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
 		if common.LogPathFolder != "" {
 			logPathFolder = fmt.Sprintf("%s%s%s.log", common.LogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
 		}
-		glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(),
+		glcm.Init(GetStandardInitOutputBuilder(cca.jobID.String(),
 			logPathFolder,
 			cca.isCleanupJob,
 			cca.cleanupJobMessage))
@@ -1269,7 +1285,7 @@ func (cca *CookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
 	}
 }
 
-func (cca *CookedCopyCmdArgs) Cancel(lcm common.LifecycleMgr) {
+func (cca *CookedCopyCmdArgs) Cancel(lcm LifecycleMgr) {
 	// prompt for confirmation, except when enumeration is complete
 	if !cca.isEnumerationComplete {
 		answer := lcm.Prompt("The source enumeration is not complete, "+
@@ -1298,14 +1314,14 @@ func (cca *CookedCopyCmdArgs) hasFollowup() bool {
 	return cca.followupJobArgs != nil
 }
 
-func (cca *CookedCopyCmdArgs) launchFollowup(priorJobExitCode common.ExitCode) {
+func (cca *CookedCopyCmdArgs) launchFollowup(priorJobExitCode ExitCode) {
 	go func() {
 		glcm.AllowReinitiateProgressReporting()
 		cca.followupJobArgs.priorJobExitCode = &priorJobExitCode
 		err := cca.followupJobArgs.process()
 		if err == ErrNothingToRemove {
 			glcm.Info("Cleanup completed (nothing needed to be deleted)")
-			glcm.Exit(nil, common.EExitCode.Success())
+			glcm.Exit(nil, EExitCode.Success())
 		} else if err != nil {
 			glcm.Error("failed to perform followup/cleanup job due to error: " + err.Error())
 		}
@@ -1313,20 +1329,17 @@ func (cca *CookedCopyCmdArgs) launchFollowup(priorJobExitCode common.ExitCode) {
 	}()
 }
 
-func (cca *CookedCopyCmdArgs) getSuccessExitCode() common.ExitCode {
+func (cca *CookedCopyCmdArgs) getSuccessExitCode() ExitCode {
 	if cca.priorJobExitCode != nil {
 		return *cca.priorJobExitCode // in a chain of jobs our best case outcome is whatever the predecessor(s) finished with
 	} else {
-		return common.EExitCode.Success()
+		return EExitCode.Success()
 	}
 }
 
-func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint32) {
+func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm LifecycleMgr) (totalKnownCount uint32) {
 	// fetch a job status
 	summary := jobsAdmin.GetJobSummary(cca.jobID)
-	glcmSwapOnce.Do(func() {
-		glcm = jobsAdmin.GetJobLCMWrapper(cca.jobID)
-	})
 	summary.IsCleanupJob = cca.isCleanupJob // only FE knows this, so we can only set it here
 	cleanupStatusString := fmt.Sprintf("Cleanup %v/%v", summary.TransfersCompleted, summary.TotalTransfers)
 
@@ -1347,8 +1360,8 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 
 		return common.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
 	}
-	glcm.Progress(func(format common.OutputFormat) string {
-		if format == common.EOutputFormat.Json() {
+	builder := func(format OutputFormat) string {
+		if format == EOutputFormat.Json() {
 			jsonOutput, err := json.Marshal(summary)
 			common.PanicIfErr(err)
 			return string(jsonOutput)
@@ -1380,21 +1393,32 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 				summary.TransfersCompleted,
 				summary.TransfersFailed,
 				summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed+summary.TransfersSkipped),
-				summary.TransfersSkipped, summary.TotalTransfers, scanningString, perfString, throughputString, diskString)
+				summary.TransfersSkipped+atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)+atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount),
+				summary.TotalTransfers, scanningString, perfString, throughputString, diskString)
 		}
-	})
+	}
+
+	if jobsAdmin.JobsAdmin != nil {
+		jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(cca.jobID)
+		if exists {
+			jobMan.Log(common.LogInfo, builder(EOutputFormat.Text()))
+		}
+	}
+
+	lcm.Progress(builder)
 
 	if jobDone {
 		summary.SkippedSymlinkCount = atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)
 		summary.SkippedSpecialFileCount = atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount)
+		summary.SkippedHardlinkCount = atomic.LoadUint32(&cca.atomicSkippedHardlinkCount)
 
 		exitCode := cca.getSuccessExitCode()
 		if summary.TransfersFailed > 0 || summary.JobStatus == common.EJobStatus.Cancelled() || summary.JobStatus == common.EJobStatus.Cancelling() {
-			exitCode = common.EExitCode.Error()
+			exitCode = EExitCode.Error()
 		}
 
-		builder := func(format common.OutputFormat) string {
-			if format == common.EOutputFormat.Json() {
+		builder := func(format OutputFormat) string {
+			if format == EOutputFormat.Json() {
 				jsonOutput, err := json.Marshal(summary)
 				common.PanicIfErr(err)
 				return string(jsonOutput)
@@ -1418,6 +1442,7 @@ Number of File Transfers Skipped: %v
 Number of Folder Transfers Skipped: %v
 Number of Symbolic Links Skipped: %v
 Number of Hardlinks Converted: %v
+Number of Hardlinks Skipped: %v
 Number of Special Files Skipped: %v
 Total Number of Bytes Transferred: %v
 Final Job Status: %v%s%s
@@ -1436,6 +1461,7 @@ Final Job Status: %v%s%s
 					summary.FoldersSkipped,
 					summary.SkippedSymlinkCount,
 					summary.HardlinksConvertedCount,
+					summary.SkippedHardlinkCount,
 					summary.SkippedSpecialFileCount,
 					summary.TotalBytesTransferred,
 					summary.JobStatus,
@@ -1448,17 +1474,19 @@ Final Job Status: %v%s%s
 				}
 
 				// log to job log
-				jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
-				if exists {
-					// Passing this as LogError ensures the stats are always logged.
-					jobMan.Log(common.LogError, logStats+"\n"+output)
+				if jobsAdmin.JobsAdmin != nil {
+					jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
+					if exists {
+						// Passing this as LogError ensures the stats are always logged.
+						jobMan.Log(common.LogError, logStats+"\n"+output)
+					}
 				}
 				return output
 			}
 		}
 
 		if cca.hasFollowup() {
-			lcm.Exit(builder, common.EExitCode.NoExit()) // leave the app running to process the followup
+			lcm.Exit(builder, EExitCode.NoExit()) // leave the app running to process the followup
 			cca.launchFollowup(exitCode)
 			lcm.SurrenderControl() // the followup job will run on its own goroutines
 		} else {
@@ -1620,14 +1648,14 @@ func init() {
 			}
 			glcm.Info("Scanning...")
 
-			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
+			cooked.commandString = ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
 				glcm.Error("failed to perform copy command due to error: " + err.Error() + getErrorCodeUrl(err))
 			}
 
 			if cooked.dryrunMode {
-				glcm.Exit(nil, common.EExitCode.Success())
+				glcm.Exit(nil, EExitCode.Success())
 			}
 
 			glcm.SurrenderControl()
@@ -1797,8 +1825,10 @@ func init() {
 		"False by default. 'Preserves' property info gleaned from stat or statx into object metadata.")
 
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSymlinks, common.PreserveSymlinkFlagName, false,
-		"False by default. If enabled, symlink destinations are preserved as the blob content, rather"+
-			"than uploading the file/folder on the other end of the symlink")
+		"Preserve symbolic links when performing copy operations involving NFS resources or blob storages. "+
+			"If enabled, the symlink destination is stored as the blob content instead of uploading the file or folder it points to. "+
+			"This flag is applicable when either the source or destination is an NFS file share. "+
+			"Note: Not supported for Azure Files SMB shares, as symlinks are not supported in those services.")
 
 	cpCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false,
 		"False by default. When overwriting an existing file on Windows or Azure Files, force the overwrite"+

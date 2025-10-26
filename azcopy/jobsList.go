@@ -43,7 +43,7 @@ type ListJobsResponse struct {
 	Details []JobDetail
 }
 
-func (c Client) ListJobs(opts ListJobsOptions) (result ListJobsResponse, err error) {
+func (c *Client) ListJobs(opts ListJobsOptions) (result ListJobsResponse, err error) {
 	status := common.IffNil(opts.WithStatus, common.EJobStatus.All())
 
 	resp := jobsAdmin.ListJobs(status)

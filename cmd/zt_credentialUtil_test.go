@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
@@ -96,13 +97,14 @@ func TestCheckAuthSafeForTarget(t *testing.T) {
 }
 
 func TestCheckAuthSafeForTargetIsCalledWhenGettingAuthType(t *testing.T) {
+	common.SetUIHooks(common.NewJobUIHooks())
 	common.AzcopyJobPlanFolder = os.TempDir()
 	a := assert.New(t)
 	mockGetCredTypeFromEnvVar := func() common.CredentialType {
 		return common.ECredentialType.OAuthToken() // force it to OAuth, which is the case we want to test
 	}
 
-	res, err := SplitResourceString("http://notblob.example.com", common.ELocation.Blob())
+	res, err := traverser.SplitResourceString("http://notblob.example.com", common.ELocation.Blob())
 	a.NoError(err)
 
 	// Call our core cred type getter function, in a way that will fail the safety check, and assert
@@ -114,12 +116,13 @@ func TestCheckAuthSafeForTargetIsCalledWhenGettingAuthType(t *testing.T) {
 }
 
 func TestCheckAuthSafeForTargetIsCalledWhenGettingAuthTypeMDOAuth(t *testing.T) {
+	common.SetUIHooks(common.NewJobUIHooks())
 	a := assert.New(t)
 	mockGetCredTypeFromEnvVar := func() common.CredentialType {
 		return common.ECredentialType.MDOAuthToken() // force it to OAuth, which is the case we want to test
 	}
 
-	res, err := SplitResourceString("http://notblob.example.com", common.ELocation.Blob())
+	res, err := traverser.SplitResourceString("http://notblob.example.com", common.ELocation.Blob())
 	a.NoError(err)
 
 	// Call our core cred type getter function, in a way that will fail the safety check, and assert

@@ -24,8 +24,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/testSuite/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
+
 	"log"
 	"net/http"
 	"os"
@@ -33,7 +36,6 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
@@ -47,8 +49,8 @@ var outputFormatRaw string
 var outputVerbosityRaw string
 var logVerbosityRaw string
 var cancelFromStdin bool
-var OutputFormat common.OutputFormat
-var OutputLevel common.OutputVerbosity
+var outputFormat OutputFormat
+var OutputLevel OutputVerbosity
 var LogLevel common.LogLevel
 var CapMbps float64
 var SkipVersionCheck bool
@@ -60,10 +62,10 @@ var SkipVersionCheck bool
 var TrustedSuffixes string
 var azcopyAwaitContinue bool
 var azcopyAwaitAllowOpenFiles bool
-var azcopyScanningLogger common.ILoggerResetable
 var isPipeDownload bool
 var retryStatusCodes string
 var debugMemoryProfile string
+var checkAzCopyUpdates bool
 
 // It would be preferable if this was a local variable, since it just gets altered and shot off to the STE
 var debugSkipFiles string
@@ -72,7 +74,7 @@ var Client azcopy.Client
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Version: common.AzcopyVersion,
+	Version: common.AzcopyVersion, // will enable the user to see the version info in the standard posix way: --version
 	Use:     "azcopy",
 	Short:   rootCmdShortDescription,
 	Long:    rootCmdLongDescription,
@@ -114,7 +116,7 @@ var rootCmd = &cobra.Command{
 			glcm.E2EAwaitContinue()
 		}
 
-		err = OutputFormat.Parse(outputFormatRaw)
+		err = outputFormat.Parse(outputFormatRaw)
 		if err != nil {
 			return err
 		}
@@ -185,15 +187,40 @@ var rootCmd = &cobra.Command{
 
 		isBench := cmd.Use == "bench [destination]"
 
-		return Initialize(resumeJobID, isBench)
+		// We only care to warn about multiple AzCopy processes for commands sent to STE
+		sentToSte := []string{"copy [source] [destination]", "sync", "bench [destination]", "resume [jobID]", "remove [resourceURL]", "set-properties [source]"}
+		var shouldWarn bool
+		for _, currCmd := range sentToSte {
+			if cmd.Use == currCmd {
+				shouldWarn = true
+				break
+			}
+		}
+		return Initialize(resumeJobID, isBench, shouldWarn)
+	},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Version checking is done explicitly when the user sets flag
+		if checkAzCopyUpdates && !isPipeDownload {
+			select {
+			// Either wait till this routine completes or timeout and do not print if it exceeds 8s
+			// Spawn a routine to fetch & compare the local application's version against the latest version available
+			case <-beginDetectNewVersion():
+				// noop
+			case <-time.After(time.Second * 8):
+				// don't wait too long
+			}
+		}
+		return nil
 	},
 }
 
-func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
-	currPid := os.Getpid()
-	AsyncWarnMultipleProcesses(cmd.GetAzCopyAppPath(), currPid)
+func Initialize(resumeJobID common.JobID, isBench bool, shouldWarn bool) (err error) {
 	jobsAdmin.BenchmarkResults = isBench
 	Client, err = azcopy.NewClient(azcopy.ClientOptions{CapMbps: CapMbps})
+	// Run MessagHandler to process messages from Input Watcher
+	if jobsAdmin.JobsAdmin != nil {
+		go jobsAdmin.JobsAdmin.MessageHandler(glcm.MsgHandlerChannel())
+	}
 	if err != nil {
 		return err
 	}
@@ -203,13 +230,16 @@ func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
 	}
 
 	timeAtPrestart := time.Now()
-	glcm.SetOutputFormat(OutputFormat)
+	glcm.SetOutputFormat(outputFormat)
 	glcm.SetOutputVerbosity(OutputLevel)
 
 	common.AzcopyCurrentJobLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "")
 	common.AzcopyCurrentJobLogger.OpenLog()
 
-	glcm.SetForceLogging()
+	if shouldWarn {
+		currPid := os.Getpid()
+		AsyncWarnMultipleProcesses(cmd.GetAzCopyAppPath(), currPid)
+	}
 
 	// For benchmarking, try to autotune if possible, otherwise use the default values
 	if jobsAdmin.JobsAdmin != nil && isBench {
@@ -224,7 +254,7 @@ func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
 		}
 
 	}
-	EnumerationParallelism, EnumerationParallelStatFiles = jobsAdmin.JobsAdmin.GetConcurrencySettings()
+	traverser.EnumerationParallelism, traverser.EnumerationParallelStatFiles = jobsAdmin.JobsAdmin.GetConcurrencySettings()
 
 	// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter
 	// Subtract a few seconds, to ensure that this date DEFINITELY falls before the LMT of any file changed while this
@@ -232,26 +262,13 @@ func Initialize(resumeJobID common.JobID, isBench bool) (err error) {
 	// or after this job
 	adjustedTime := timeAtPrestart.Add(-5 * time.Second)
 	startTimeMessage := fmt.Sprintf("ISO 8601 START TIME: to copy files that changed before or after this job started, use the parameter --%s=%s or --%s=%s",
-		common.IncludeBeforeFlagName, IncludeBeforeDateFilter{}.FormatAsUTC(adjustedTime),
-		common.IncludeAfterFlagName, IncludeAfterDateFilter{}.FormatAsUTC(adjustedTime))
+		common.IncludeBeforeFlagName, traverser.IncludeBeforeDateFilter{}.FormatAsUTC(adjustedTime),
+		common.IncludeAfterFlagName, traverser.IncludeAfterDateFilter{}.FormatAsUTC(adjustedTime))
 	common.LogToJobLogWithPrefix(startTimeMessage, common.LogInfo)
-
-	if !SkipVersionCheck && !isPipeDownload {
-		// spawn a routine to fetch and compare the local application's version against the latest version available
-		// if there's a newer version that can be used, then write the suggestion to stderr
-		// however if this takes too long the message won't get printed
-		// Note: this function is necessary for non-help, non-login commands, since they don't reach the corresponding
-		// beginDetectNewVersion call in Execute (below)
-		beginDetectNewVersion()
-	}
 
 	return nil
 
 }
-
-// hold a pointer to the global lifecycle controller so that commands could output messages and exit properly
-var glcm = common.GetLifecycleMgr()
-var glcmSwapOnce = &sync.Once{}
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
@@ -262,31 +279,19 @@ func InitializeAndExecute() {
 	if err := Execute(); err != nil {
 		glcm.Error(err.Error())
 	} else {
-		if !SkipVersionCheck && !isPipeDownload {
-			// In commands like azcopy --version and azcopy --help, they do not reach Initialize() in the PersistentPreRunE
-			// So we set the log path folder here.
-			// This ensures we sure we don't write to user's current directory
-			if common.LogPathFolder == "" {
-				// With this, latest_version.txt is written to app dir
-				common.InitializeFolders()
-			}
-
-			// our commands all control their own life explicitly with the lifecycle manager
-			// only commands that don't explicitly exit actually reach this point (e.g. help commands)
-			select {
-			case <-beginDetectNewVersion():
-				// noop
-			case <-time.After(time.Second * 8):
-				// don't wait too long
-			}
-		}
-		glcm.Exit(nil, common.EExitCode.Success())
+		glcm.Exit(nil, EExitCode.Success())
 	}
 }
 
 func init() {
 	// replace the word "global" to avoid confusion (e.g. it doesn't affect all instances of AzCopy)
 	rootCmd.SetUsageTemplate(strings.Replace((&cobra.Command{}).UsageTemplate(), "Global Flags", "Flags Applying to All Commands", -1))
+
+	// the default value is set as -1 to differentiate from an input 3.
+	// if unspecified, the policy doesn't set the request headers, which will cause the service to default to 3.
+	// an explicit 3 will set the header and potentially upgrade x-ms-version.
+	rootCmd.PersistentFlags().IntVar(&ste.GlobalRequestPriority, RequestPriorityFlag, -1, "Specify a request priority for Azure Storage to utilize in throttling from 0-7; priority is inverted, where 0 is the highest priority, and 7 is the lowest priority. The default is 3.")
+	_ = rootCmd.PersistentFlags().MarkHidden(RequestPriorityFlag) // hide the request priority flag until official release
 
 	rootCmd.PersistentFlags().Float64Var(&CapMbps, "cap-mbps", 0,
 		"Caps the transfer rate, in megabits per second. "+
@@ -309,7 +314,8 @@ func init() {
 
 	rootCmd.PersistentFlags().BoolVar(&SkipVersionCheck, "skip-version-check", false,
 		"Do not perform the version check at startup. \nIntended for automation scenarios & airgapped use.")
-
+	// Deprecated, marked as hidden to not break customers dependent on flag
+	_ = rootCmd.PersistentFlags().MarkHidden("skip-version-check")
 	// Note: this is due to Windows not supporting signals properly
 	rootCmd.PersistentFlags().BoolVar(&cancelFromStdin, "cancel-from-stdin", false,
 		"Used by partner teams to send in `cancel` through stdin to stop a job.")
@@ -334,6 +340,8 @@ func init() {
 	_ = rootCmd.PersistentFlags().MarkHidden("retry-status-codes")
 	rootCmd.PersistentFlags().StringVar(&debugMemoryProfile, "memory-profile", "", "Export pprof memory profile")
 	_ = rootCmd.PersistentFlags().MarkHidden("memory-profile")
+	rootCmd.PersistentFlags().BoolVar(&checkAzCopyUpdates, "check-version", false,
+		"Check if a newer AzCopy version is available.")
 }
 
 // always spins up a new goroutine, because sometimes the aka.ms URL can't be reached (e.g. a constrained environment where
