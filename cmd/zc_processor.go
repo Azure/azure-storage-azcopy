@@ -209,7 +209,7 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject traverser.Stor
 	}
 
 	if s.dryrunMode {
-		glcm.Dryrun(func(format common.OutputFormat) string {
+		glcm.Dryrun(func(format OutputFormat) string {
 			prettySrcRelativePath, prettyDstRelativePath := srcRelativePath, dstRelativePath
 
 			fromTo := s.copyJobTemplate.FromTo
@@ -227,7 +227,7 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject traverser.Stor
 				}
 			}
 
-			if format == common.EOutputFormat.Json() {
+			if format == EOutputFormat.Json() {
 				tx := DryrunTransfer{
 					EntityType:  storedObject.EntityType,
 					BlobType:    common.FromBlobType(storedObject.BlobType),
