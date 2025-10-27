@@ -35,17 +35,29 @@ const (
 	oauthLoginSessionCacheAccountName = "AzCopyOAuthTokenCache"
 )
 
+// It's not pretty that this one is read directly by credential util.
+// But doing otherwise required us passing it around in many places, even though really
+// it can be thought of as an "ambient" property. That's the (weak?) justification for implementing
+// it as a global
+var TrustedSuffixes string
+
 type Client struct {
 	CurrentJobID      common.JobID                  // TODO (gapra): In future this should only be set when there is a current job running. On complete, this should be cleared. It can also behave as something we can check to see if a current job is running
 	oauthTokenManager *common.UserOAuthTokenManager // OAuth token manager for the current user, used for authentication
+	logLevel          common.LogLevel
 }
 
 type ClientOptions struct {
-	CapMbps float64
+	CapMbps         float64
+	TrustedSuffixes string
+	LogLevel        *common.LogLevel
 }
 
 func NewClient(opts ClientOptions) (Client, error) {
-	c := Client{}
+	c := Client{
+		logLevel: common.IffNil(opts.LogLevel, common.ELogLevel.Info()), // Default: Info
+	}
+	TrustedSuffixes = opts.TrustedSuffixes
 	common.InitializeFolders()
 	configureGoMaxProcs()
 	// Perform os specific initialization
@@ -79,6 +91,10 @@ func NewClient(opts ClientOptions) (Client, error) {
 // Note: Currently, only support to have TokenManager for one user mapping to one tenantID.
 func (c *Client) GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
 	return c.oauthTokenManager
+}
+
+func (c *Client) GetLogLevel() common.LogLevel {
+	return c.logLevel
 }
 
 // Ensure we always have more than 1 OS thread running goroutines, since there are issues with having just 1.
