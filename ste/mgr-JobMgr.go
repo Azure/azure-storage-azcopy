@@ -691,6 +691,12 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 			shouldComplete := (haveFinalPart && allKnownPartsDone) || // If we have all of the parts, they should all exit cleanly, so the job can be resumed properly.
 				(isCancelling && !haveFinalPart) // If we're cancelling, it's OK to try to exit early; the user already accepted this job cannot be resumed. Outgoing requests will fail anyway, so nothing can properly clean up.
 			if shouldComplete {
+				//TODO: Add hardlink handling
+
+				fmt.Println("Loaded Hardlink Groups Successfully:")
+				common.HardlinkNode.StopChan()
+				common.HardlinkNode.PrintAll()
+
 				// Inform StatusManager that all parts are done.
 				if jm.jstm.xferDone != nil {
 					close(jm.jstm.xferDone)

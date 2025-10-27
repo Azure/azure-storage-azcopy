@@ -24,7 +24,6 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"hash"
@@ -37,8 +36,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
-	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
@@ -63,25 +60,6 @@ type localTraverser struct {
 	hardlinkHandling  common.HardlinkHandlingType
 	fromTo            common.FromTo
 }
-
-const (
-	StatusPending     string = "Pending"
-	StatusTransferred string = "Transferred"
-	StatusLinked      string = "Linked"
-	StatusFailed      string = "Failed"
-)
-
-type HardlinkGroup struct {
-	Original  string
-	Hardlinks []string
-	Statuses  map[string]string
-}
-
-var (
-	hardlinkGroups sync.Map
-	statusLock     sync.Mutex
-	wg             sync.WaitGroup
-)
 
 func (t *localTraverser) IsDirectory(bool) (bool, error) {
 	if strings.HasSuffix(t.fullPath, "/") {
@@ -797,9 +775,13 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 					if IsHardlink(fileInfo) {
 						entityType = common.EEntityType.Hardlink()
 						if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() {
-							RegisterHardlink(fileInfo)
-							return nil
+							// first occurrence, process it normally subsequent occurrences, skip processing
+							// maintain hardlink mapping which will be processed at the end of the job
+							if isFirstOccurrence := common.HardlinkNode.RegisterHardlink(filePath, fileInfo); !isFirstOccurrence {
+								return nil
+							}
 						}
+						fmt.Println("hardlink to copy", filePath)
 					}
 				}
 
@@ -955,14 +937,7 @@ func NewLocalTraverser(fullPath string, ctx context.Context, opts InitResourceTr
 		fromTo:                      opts.FromTo,
 	}
 
-	go saveToJSONPeriodically("hardlinks.json", 10*time.Second, stopChan)
 	return &traverser, nil
-}
-
-var stopChan = make(chan struct{})
-
-func StopChan() {
-	close(stopChan)
 }
 
 func logSpecialFileWarning(fileName string) {
@@ -1014,70 +989,4 @@ func HandleSymlinkForNFS(fileName string,
 		return true
 	}
 	return false
-}
-
-func RegisterHardlink(fileInfo os.FileInfo) {
-	stat := fileInfo.Sys().(*syscall.Stat_t)
-	inodeKey := fmt.Sprintf("%d-%d", stat.Dev, stat.Ino)
-
-	groupAny, _ := hardlinkGroups.LoadOrStore(inodeKey, &HardlinkGroup{
-		Statuses: make(map[string]string),
-	})
-	group := groupAny.(*HardlinkGroup)
-
-	if group.Original == "" {
-		group.Original = fileInfo.Name()
-		group.Statuses[fileInfo.Name()] = StatusPending
-	} else {
-		group.Hardlinks = append(group.Hardlinks, fileInfo.Name())
-		group.Statuses[fileInfo.Name()] = StatusPending
-	}
-}
-
-// saveToJSON periodically writes all hardlink groups to file
-func saveToJSONPeriodically(filename string, interval time.Duration, stopChan <-chan struct{}) {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			saveNow(filename)
-		case <-stopChan:
-			saveNow(filename)
-			return
-		}
-	}
-}
-
-// saveNow writes current state atomically
-func saveNow(filename string) {
-	statusLock.Lock()
-	defer statusLock.Unlock()
-
-	data := make(map[string]*HardlinkGroup)
-	hardlinkGroups.Range(func(k, v any) bool {
-		data[k.(string)] = v.(*HardlinkGroup)
-		return true
-	})
-
-	tmpFile := filename + ".tmp"
-	f, err := os.Create(tmpFile)
-	if err != nil {
-		fmt.Printf("Error creating temp file: %v\n", err)
-		return
-	}
-	defer f.Close()
-
-	enc := json.NewEncoder(f)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(data); err != nil {
-		fmt.Printf("Error encoding JSON: %v\n", err)
-		return
-	}
-
-	if err := os.Rename(tmpFile, filename); err != nil {
-		fmt.Printf("Error renaming file: %v\n", err)
-	}
-	fmt.Printf("Progress saved to %s\n", filename)
 }

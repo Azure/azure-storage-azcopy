@@ -143,7 +143,7 @@ func (s *StoredObject) isCompatibleWithEntitySettings(fpo common.FolderPropertyO
 	} else if s.EntityType == common.EEntityType.Symlink() {
 		return sht == common.ESymlinkHandlingType.Preserve()
 	} else if s.EntityType == common.EEntityType.Hardlink() {
-		return pho == common.EHardlinkHandlingType.Follow()
+		return pho == common.EHardlinkHandlingType.Follow() || pho == common.EHardlinkHandlingType.Preserve()
 	} else if s.EntityType == common.EEntityType.Other() {
 		return false
 	} else {

@@ -115,6 +115,10 @@ func NewJobLogger(jobID JobID, minimumLevelToLog LogLevel, logFileFolder string,
 	}
 }
 
+func (jl *jobLogger) GetJobID() JobID {
+	return jl.jobID
+}
+
 func (jl *jobLogger) OpenLog() {
 	if jl.minimumLevelToLog == LogNone {
 		return
