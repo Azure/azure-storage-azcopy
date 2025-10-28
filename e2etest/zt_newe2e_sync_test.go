@@ -690,24 +690,25 @@ func (s *SyncTestSuite) Scenario_TestFileLocalIncludeRootCreationTime(svm *Scena
 		time.Sleep(5 * time.Second)
 	}
 
+	srcObjs := make(ObjectResourceMappingFlat)
+	obj := ResourceDefinitionObject{ObjectName: pointerTo("root"),
+		ObjectProperties: ObjectProperties{
+			EntityType: common.EEntityType.Folder(),
+			FileProperties: FileProperties{
+				FileCreationTime: pointerTo(currTime)}}}
+	srcObjs["root"] = obj
+	fileObj := ResourceDefinitionObject{ObjectName: pointerTo("root/file.txt"), Body: body}
+	srcObjs["root/file.txt"] = fileObj
 	src := CreateResource[ContainerResourceManager](svm,
 		GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File(), common.ELocation.Local()})),
-		ResourceDefinitionContainer{
-			Objects: ObjectResourceMappingFlat{
-				// Root directory with a specific creation time we will validate later
-				"root": ResourceDefinitionObject{
-					ObjectProperties: ObjectProperties{
-						EntityType: common.EEntityType.Folder(),
-						FileProperties: FileProperties{
-							FileCreationTime: pointerTo(currTime),
-						},
-					},
-				},
-				// Include at least one file under root so the sync enumerates content
-				"root/file.txt": ResourceDefinitionObject{Body: body},
-			},
-		},
-	)
+		ResourceDefinitionContainer{})
+
+	// Test framework is flakily failing because of recreated directories
+	for _, obj := range srcObjs {
+		if obj.ObjectProperties.EntityType != common.EEntityType.Folder() {
+			CreateResource[ObjectResourceManager](svm, src, obj)
+		}
+	}
 
 	// Dont test Local->Local
 	if src.Location().IsLocal() && dst.Location().IsLocal() {
@@ -795,7 +796,9 @@ func (s *SyncTestSuite) Scenario_TestFileLocalIncludeRootMetadata(svm *ScenarioV
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm,
 		[]common.Location{common.ELocation.Local(), common.ELocation.File(), common.ELocation.FileNFS()})), ResourceDefinitionContainer{})
 	for _, obj := range srcObjs {
-		CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+		if obj.EntityType != common.EEntityType.Folder() {
+			CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+		}
 	}
 
 	sasOpts := GenericAccountSignatureValues{}

@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/spf13/cobra"
@@ -46,7 +47,7 @@ type LoginStatus struct {
 func (options LoginStatusOptions) process() (LoginStatus, error) {
 	// getting current token info and refreshing it with GetTokenInfo()
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	uotm := GetUserOAuthTokenManagerInstance()
+	uotm := Client.GetUserOAuthTokenManagerInstance()
 	tokenInfo, err := uotm.GetTokenInfo(ctx)
 	var status = LoginStatus{
 		Valid: err == nil && !tokenInfo.IsExpired(),
@@ -87,7 +88,7 @@ func init() {
 		},
 		Run: func(cmd *cobra.Command, args []string) {
 			logText := func(format string, a ...any) {
-				if OutputFormat == common.EOutputFormat.None() || OutputFormat == common.EOutputFormat.Text() {
+				if outputFormat == EOutputFormat.None() || outputFormat == EOutputFormat.Text() {
 					glcm.Info(fmt.Sprintf(format, a...))
 				}
 			}
@@ -117,19 +118,19 @@ func init() {
 				logText("You are currently not logged in. Please login using 'azcopy login'")
 			}
 
-			if OutputFormat == common.EOutputFormat.Json() {
+			if outputFormat == EOutputFormat.Json() {
 				glcm.Output(
-					func(_ common.OutputFormat) string {
+					func(_ OutputFormat) string {
 						buf, err := json.Marshal(Info)
 						if err != nil {
 							panic(err)
 						}
 
 						return string(buf)
-					}, common.EOutputMessageType.LoginStatusInfo())
+					}, EOutputMessageType.LoginStatusInfo())
 			}
 
-			glcm.Exit(nil, common.Iff(Info.Valid, common.EExitCode.Success(), common.EExitCode.Error()))
+			glcm.Exit(nil, common.Iff(Info.Valid, EExitCode.Success(), EExitCode.Error()))
 		},
 	}
 

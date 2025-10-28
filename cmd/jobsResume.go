@@ -65,7 +65,7 @@ func (cca *resumeJobController) waitUntilJobCompletion(blocking bool) {
 	if common.LogPathFolder != "" {
 		logPathFolder = fmt.Sprintf("%s%s%s.log", common.LogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
 	}
-	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), logPathFolder, false, ""))
+	glcm.Init(GetStandardInitOutputBuilder(cca.jobID.String(), logPathFolder, false, ""))
 
 	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
@@ -82,7 +82,7 @@ func (cca *resumeJobController) waitUntilJobCompletion(blocking bool) {
 	}
 }
 
-func (cca *resumeJobController) Cancel(lcm common.LifecycleMgr) {
+func (cca *resumeJobController) Cancel(lcm LifecycleMgr) {
 	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
 	if err != nil {
 		lcm.Error("error occurred while cancelling the job " + cca.jobID.String() + ". Failed with error " + err.Error())
@@ -90,12 +90,9 @@ func (cca *resumeJobController) Cancel(lcm common.LifecycleMgr) {
 }
 
 // TODO: can we combine this with the copy one (and the sync one?)
-func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint32) {
+func (cca *resumeJobController) ReportProgressOrExit(lcm LifecycleMgr) (totalKnownCount uint32) {
 	// fetch a job status
 	summary := jobsAdmin.GetJobSummary(cca.jobID)
-	glcmSwapOnce.Do(func() {
-		glcm = jobsAdmin.GetJobLCMWrapper(cca.jobID)
-	})
 	jobDone := summary.JobStatus.IsJobDone()
 	totalKnownCount = summary.TotalTransfers
 
@@ -113,9 +110,8 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 
 		return common.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
 	}
-
-	glcm.Progress(func(format common.OutputFormat) string {
-		if format == common.EOutputFormat.Json() {
+	builder := func(format OutputFormat) string {
+		if format == EOutputFormat.Json() {
 			jsonOutput, err := json.Marshal(summary)
 			common.PanicIfErr(err)
 			return string(jsonOutput)
@@ -144,16 +140,24 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 				summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed+summary.TransfersSkipped),
 				summary.TransfersSkipped, summary.TotalTransfers, scanningString, perfString, throughputString, diskString)
 		}
-	})
+	}
+	if jobsAdmin.JobsAdmin != nil {
+		jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(cca.jobID)
+		if exists {
+			jobMan.Log(common.LogInfo, builder(EOutputFormat.Text()))
+		}
+	}
+
+	glcm.Progress(builder)
 
 	if jobDone {
-		exitCode := common.EExitCode.Success()
+		exitCode := EExitCode.Success()
 		if summary.TransfersFailed > 0 {
-			exitCode = common.EExitCode.Error()
+			exitCode = EExitCode.Error()
 		}
 
-		lcm.Exit(func(format common.OutputFormat) string {
-			if format == common.EOutputFormat.Json() {
+		lcm.Exit(func(format OutputFormat) string {
+			if format == EOutputFormat.Json() {
 				jsonOutput, err := json.Marshal(summary)
 				common.PanicIfErr(err)
 				return string(jsonOutput)
@@ -227,7 +231,7 @@ func init() {
 			if err != nil {
 				glcm.Error(fmt.Sprintf("failed to perform resume command due to error: %s", err.Error()))
 			}
-			glcm.Exit(nil, common.EExitCode.Success())
+			glcm.Exit(nil, EExitCode.Success())
 		},
 	}
 
@@ -266,7 +270,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 	source.SAS = rca.SourceSAS
 	destination.SAS = rca.DestinationSAS
 
-	srcCredType, _, err := getCredentialTypeForLocation(ctx,
+	srcCredType, isSrcPublic, err := getCredentialTypeForLocation(ctx,
 		fromTo.From(),
 		source,
 		true,
@@ -275,7 +279,16 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		return nil, nil, err
 	}
 
-	dstCredType, _, err := getCredentialTypeForLocation(ctx,
+	var errorMsg = ""
+
+	// For an Azure source, if there is no SAS, the cred type is Anonymous and the resource is not Azure public blob, tell the user they need to pass a new SAS.
+	if fromTo.From().IsAzure() && srcCredType == common.ECredentialType.Anonymous() && source.SAS == "" {
+		if !(fromTo.From() == common.ELocation.Blob() && isSrcPublic) {
+			errorMsg += "source-sas"
+		}
+	}
+
+	dstCredType, isDstPublic, err := getCredentialTypeForLocation(ctx,
 		fromTo.To(),
 		destination,
 		false,
@@ -284,9 +297,22 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		return nil, nil, err
 	}
 
+	if fromTo.To().IsAzure() && dstCredType == common.ECredentialType.Anonymous() && destination.SAS == "" {
+		if !(fromTo.To() == common.ELocation.Blob() && isDstPublic) {
+			if errorMsg == "" {
+				errorMsg = "destination-sas"
+			} else {
+				errorMsg += " and destination-sas"
+			}
+		}
+	}
+	if errorMsg != "" {
+		return nil, nil, fmt.Errorf("the %s switch must be provided to resume the job", errorMsg)
+	}
+
 	var tc azcore.TokenCredential
 	if srcCredType.IsAzureOAuth() || dstCredType.IsAzureOAuth() {
-		uotm := GetUserOAuthTokenManagerInstance()
+		uotm := Client.GetUserOAuthTokenManagerInstance()
 		// Get token from env var or cache.
 		tokenInfo, err := uotm.GetTokenInfo(ctx)
 		if err != nil {
@@ -410,7 +436,6 @@ func (rca resumeCmdArgs) process() error {
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// Initialize credential info.
-	credentialInfo := common.CredentialInfo{}
 	// TODO: Replace context with root context
 	srcResourceString, err := traverser.SplitResourceString(getJobFromToResponse.Source, getJobFromToResponse.FromTo.From())
 	_ = err // todo
@@ -419,23 +444,13 @@ func (rca resumeCmdArgs) process() error {
 	_ = err // todo
 	dstResourceString.SAS = rca.DestinationSAS
 
-	// we should stop using credentiaLInfo and use the clients instead. But before we fix
-	// that there will be repeated calls to get Credential type for correctness.
-	if credentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
-		fromTo:      getJobFromToResponse.FromTo,
-		source:      srcResourceString,
-		destination: dstResourceString,
-	}, common.CpkOptions{}); err != nil {
-		return err
-	}
-
 	srcServiceClient, dstServiceClient, err := rca.getSourceAndDestinationServiceClients(
 		ctx, getJobFromToResponse.FromTo,
 		srcResourceString,
 		dstResourceString,
 	)
 	if err != nil {
-		return errors.New("could not create service clients " + err.Error())
+		return fmt.Errorf("cannot resume job with JobId %s, could not create service clients %v", jobID, err)
 	}
 	// Send resume job request.
 	resumeJobResponse := jobsAdmin.ResumeJobOrder(common.ResumeJobRequest{
@@ -444,9 +459,9 @@ func (rca resumeCmdArgs) process() error {
 		DestinationSAS:   rca.DestinationSAS,
 		SrcServiceClient: srcServiceClient,
 		DstServiceClient: dstServiceClient,
-		CredentialInfo:   credentialInfo,
 		IncludeTransfer:  includeTransfer,
 		ExcludeTransfer:  excludeTransfer,
+		JobErrorHandler:  glcm,
 	})
 
 	if !resumeJobResponse.CancelledPauseResumed {
