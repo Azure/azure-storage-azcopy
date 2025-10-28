@@ -154,6 +154,9 @@ func (c *Client) ResumeJob(ctx context.Context, jobID common.JobID, opts ResumeJ
 	// Get final job summary
 	finalSummary := jobsAdmin.GetJobSummary(jobID)
 
+	// Clean up job
+	jobsAdmin.JobsAdmin.JobMgrCleanUp(jobID)
+
 	return ResumeJobResult{
 		ListJobSummaryResponse: finalSummary,
 		ElapsedTime:            rpt.GetElapsedTime(),
