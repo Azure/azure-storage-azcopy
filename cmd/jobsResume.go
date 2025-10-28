@@ -108,6 +108,7 @@ func (rca resumeCmdArgs) process() error {
 	resumeOptions := azcopy.ResumeJobOptions{
 		SourceSAS:      rca.SourceSAS,
 		DestinationSAS: rca.DestinationSAS,
+		Handler:        CLIResumeHandler{},
 	}
 	// Create a context that can be cancelled by Ctrl-C
 	ctx, cancel := context.WithCancel(context.Background())

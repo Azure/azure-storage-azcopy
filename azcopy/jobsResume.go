@@ -296,7 +296,9 @@ func (r *resumeProgressTracker) Start() {
 	if common.LogPathFolder != "" {
 		logPathFolder = fmt.Sprintf("%s%s%s.log", common.LogPathFolder, common.OS_PATH_SEPARATOR, r.jobID)
 	}
-	r.handler.OnStart(JobContext{JobID: r.jobID, LogPath: logPathFolder})
+	if r.handler != nil {
+		r.handler.OnStart(JobContext{JobID: r.jobID, LogPath: logPathFolder})
+	}
 }
 
 func (r *resumeProgressTracker) CheckProgress() (uint32, bool) {
@@ -316,11 +318,13 @@ func (r *resumeProgressTracker) CheckProgress() (uint32, bool) {
 		return common.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
 	}
 	throughput := computeThroughput()
-	r.handler.OnTransferProgress(ResumeJobProgress{
-		ListJobSummaryResponse: summary,
-		Throughput:             throughput,
-		ElapsedTime:            duration,
-	})
+	if r.handler != nil {
+		r.handler.OnTransferProgress(ResumeJobProgress{
+			ListJobSummaryResponse: summary,
+			Throughput:             throughput,
+			ElapsedTime:            duration,
+		})
+	}
 	return totalKnownCount, jobDone
 }
 
