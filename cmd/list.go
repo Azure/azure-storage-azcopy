@@ -253,9 +253,30 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 
 	// check if user wants to get version id
 	getVersionId := containsProperty(cooked.properties, VersionId)
+	var reauthTok *common.ScopedAuthenticator
+	if at, ok := credentialInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok { // We don't need two different tokens here since it gets passed in just the same either way.
+		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
+		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+	}
+
+	options := traverser2.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
+	var fileClientOptions any
+	if cooked.location.IsFile() {
+		fileClientOptions = &common.FileClientOptions{AllowTrailingDot: cooked.trailingDot.IsEnabled()}
+	}
+
+	targetServiceClient, err := common.GetServiceClientForLocation(
+		cooked.location,
+		source,
+		credentialInfo.CredentialType,
+		credentialInfo.OAuthTokenInfo.TokenCredential,
+		&options,
+		fileClientOptions,
+	)
 
 	traverser, err := traverser2.InitResourceTraverser(source, cooked.location, ctx, traverser2.InitResourceTraverserOptions{
-		Credential: &credentialInfo,
+		Client:         targetServiceClient,
+		CredentialType: credentialInfo.CredentialType,
 
 		TrailingDotOption: cooked.trailingDot,
 
