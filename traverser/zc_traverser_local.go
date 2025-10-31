@@ -786,6 +786,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 				}
 
 				relPath := strings.TrimPrefix(strings.TrimPrefix(CleanLocalPath(filePath), CleanLocalPath(t.fullPath)), common.DeterminePathSeparator(t.fullPath))
+
 				if t.symlinkHandling.None() && fileInfo.Mode()&os.ModeSymlink != 0 {
 					WarnStdoutAndScanningLog(fmt.Sprintf("Skipping over symlink at %s because symlinks are not handled (--follow-symlinks or --preserve-symlinks)", common.GenerateFullPath(t.fullPath, relPath)))
 					return nil

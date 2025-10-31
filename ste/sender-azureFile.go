@@ -471,6 +471,7 @@ func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, shareCli
 
 // SendSymlink creates a symbolic link on Azure Files NFS with the given link data.
 func (u *azureFileSenderBase) SendSymlink(linkData string) error {
+	fmt.Println("Linked data-----------------", linkData)
 	jptm := u.jptm
 	info := jptm.Info()
 

@@ -32,7 +32,7 @@ type HardlinkTrie struct {
 	Root     *TrieNode
 	InodeMap map[string][]string // inodeKey -> file paths
 	Status   map[string]FileStatus
-	mu       sync.Mutex
+	Mu       sync.Mutex
 	stopChan chan struct{}
 }
 
@@ -52,8 +52,8 @@ func (ht *HardlinkTrie) StopChan() {
 // Insert a file path and its inodeKey into the Trie.
 // Returns true if this is the first occurrence of the inode.
 func (ht *HardlinkTrie) RegisterHardlink(filePath string, fileInfo os.FileInfo) (isFirst bool) {
-	ht.mu.Lock()
-	defer ht.mu.Unlock()
+	ht.Mu.Lock()
+	defer ht.Mu.Unlock()
 
 	stat, ok := fileInfo.Sys().(*syscall.Stat_t)
 	if !ok {
@@ -67,6 +67,9 @@ func (ht *HardlinkTrie) RegisterHardlink(filePath string, fileInfo os.FileInfo) 
 	node := ht.Root
 
 	for i, part := range parts {
+		if part == "" {
+			continue // skip empty entries (like the first one in absolute paths)
+		}
 		if node.Children == nil {
 			node.Children = make(map[string]*TrieNode)
 		}
@@ -98,11 +101,12 @@ func (ht *HardlinkTrie) RegisterHardlink(filePath string, fileInfo os.FileInfo) 
 }
 
 // Mark file as transferred
-func (ht *HardlinkTrie) MarkDone(filePath string) {
-	ht.mu.Lock()
-	defer ht.mu.Unlock()
+func (ht *HardlinkTrie) MarkStatus(filePath string, status FileStatus) {
+	ht.Mu.Lock()
+	defer ht.Mu.Unlock()
 
-	parts := strings.Split(filePath, "/")
+	parts := strings.Split(strings.TrimPrefix(filePath, "/"), "/")
+
 	node := ht.Root
 	for _, part := range parts {
 		node = node.Children[part]
@@ -111,22 +115,35 @@ func (ht *HardlinkTrie) MarkDone(filePath string) {
 		}
 	}
 	if node.IsFile {
-		fmt.Println("*******Transferred:", filePath)
-		node.Status = StatusTransferred
-		ht.Status[node.InodeKey] = StatusTransferred
+		node.Status = status
+		ht.Status[node.InodeKey] = status
 	}
 }
 
 // Save inode map to JSON periodically
 func (ht *HardlinkTrie) saveJSON(filePath string) error {
-	ht.mu.Lock()
-	defer ht.mu.Unlock()
+	ht.Mu.Lock()
+	defer ht.Mu.Unlock()
 
 	data := make(map[string]map[string]interface{})
 	for inode, paths := range ht.InodeMap {
 		statusMap := make(map[string]FileStatus)
 		for _, p := range paths {
-			statusMap[p] = ht.Status[inode]
+			// Look up this file’s node status from the trie
+			parts := strings.Split(strings.TrimPrefix(p, "/"), "/")
+			node := ht.Root
+			for _, part := range parts {
+				child, ok := node.Children[part]
+				if !ok {
+					continue
+				}
+				node = child
+			}
+			if node != nil && node.IsFile {
+				statusMap[p] = node.Status
+			} else {
+				statusMap[p] = StatusPending // fallback if not found
+			}
 		}
 		data[inode] = map[string]interface{}{
 			"Paths":    paths,
@@ -150,7 +167,6 @@ func SaveToJSONPeriodically(filename string, interval time.Duration) {
 	filepath := path.Join(AzcopyJobPlanFolder, filename)
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
-	fmt.Println("----------Started periodic hardlink state saving to", filepath)
 
 	for {
 		select {
@@ -167,8 +183,8 @@ var HardlinkNode = NewHardlinkTrie()
 
 // PrintAll prints the entire HardlinkTrie contents in a structured format.
 func (t *HardlinkTrie) PrintAll() {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	t.Mu.Lock()
+	defer t.Mu.Unlock()
 
 	fmt.Println("========== HARDLINK TRIE STRUCTURE ==========")
 	printTrie(t.Root, 0)
@@ -185,7 +201,6 @@ func (t *HardlinkTrie) PrintAll() {
 	for path, status := range t.Status {
 		fmt.Printf("%-50s : %v\n", path, status)
 	}
-	fmt.Println("==============================================")
 }
 
 // Helper: Recursively print the Trie

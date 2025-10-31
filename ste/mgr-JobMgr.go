@@ -24,12 +24,16 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"path"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -692,10 +696,13 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 				(isCancelling && !haveFinalPart) // If we're cancelling, it's OK to try to exit early; the user already accepted this job cannot be resumed. Outgoing requests will fail anyway, so nothing can properly clean up.
 			if shouldComplete {
 				//TODO: Add hardlink handling
-
-				fmt.Println("Loaded Hardlink Groups Successfully:")
-				common.HardlinkNode.StopChan()
 				common.HardlinkNode.PrintAll()
+				err := jm.CreateHardlinks(jm.ctx)
+				if err != nil {
+					jm.Log(common.LogError, fmt.Sprintf("Error creating hardlinks: %v", err))
+				}
+				common.HardlinkNode.PrintAll()
+				common.HardlinkNode.StopChan()
 
 				// Inform StatusManager that all parts are done.
 				if jm.jstm.xferDone != nil {
@@ -743,6 +750,185 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 			}
 		}
 	}
+}
+
+func (jm *jobMgr) CreateHardlinks(ctx context.Context) error {
+	//time.Sleep(5 * time.Second) // wait for a while to ensure all prior operations are done
+	jobPart0Mgr, ok := jm.jobPartMgrs.Get(0)
+	if !ok {
+		return fmt.Errorf("failed to find Job %v, Part #0", jm.jobID)
+	}
+
+	serviceClient, err := jobPart0Mgr.DstServiceClient().FileServiceClient()
+	if err != nil {
+		return fmt.Errorf("failed to get destination file service client: %w", err)
+	}
+
+	sourceRoot := string(jobPart0Mgr.Plan().SourceRoot[:jobPart0Mgr.Plan().SourceRootLength])
+	fmt.Println("SourceRoot: ", sourceRoot) // /home/azureuser/spe_dir
+	destURL := string(jobPart0Mgr.Plan().DestinationRoot[:jobPart0Mgr.Plan().DestinationRootLength])
+	fmt.Println("DestinationRoot: ", destURL) // https://seancanaryfilepremium.file.core.windows.net/aznfs3/data
+	dURL, err := file.ParseURL(destURL)
+	if err != nil {
+		return fmt.Errorf("invalid destination URL: %w", err)
+	}
+	fmt.Println("DURL: ", dURL.String())                              // https://seancanaryfilepremium.file.core.windows.net/aznfs3/data
+	fmt.Println("dURL.DirectoryOrFilePath", dURL.DirectoryOrFilePath) //data
+	shareClient := serviceClient.NewShareClient(dURL.ShareName)
+	rootDirClient := shareClient.NewRootDirectoryClient().NewSubdirectoryClient(dURL.DirectoryOrFilePath)
+
+	fmt.Println("========== Starting Hardlink Creation ==========")
+
+	//1. Determine the relative subpath (here: "spe_dir")
+	startSubdir := filepath.Base(sourceRoot)
+
+	pathParts := strings.Split(strings.TrimPrefix(sourceRoot, "/"), "/")
+	fmt.Println("PathParts: ", pathParts) //  [home azureuser spe_dir]
+
+	// Traverse through the trie
+	common.HardlinkNode.Mu.Lock()
+	node := common.HardlinkNode.Root
+	for _, part := range pathParts {
+		next, ok := node.Children[part]
+		if !ok {
+			common.HardlinkNode.Mu.Unlock()
+			return fmt.Errorf("failed to locate node in trie at: %s", part)
+		}
+		node = next
+	}
+	srcStartNode := node
+	common.HardlinkNode.Mu.Unlock()
+
+	fmt.Println("Start node:--------", srcStartNode.Name) //spe_dir
+
+	// 3. Build subdirectory client pointing to the same "hardlink" directory in destination
+	dstStartDirClient := rootDirClient.NewSubdirectoryClient(startSubdir)
+
+	// Create a limited-size worker pool
+	// const workerCount = 16
+	// jobs := make(chan func(), 1000)
+	// var wg sync.WaitGroup
+
+	// Start workers
+	// for i := 0; i < workerCount; i++ {
+	// 	wg.Add(1)
+	// 	go func() {
+	// 		defer wg.Done()
+	// 		for job := range jobs {
+	// 			job()
+	// 		}
+	// 	}()
+	// }
+
+	err = jm.traverseTrieAndCreateHardlinks(ctx, dstStartDirClient, startSubdir, srcStartNode, sourceRoot)
+	if err != nil {
+		return fmt.Errorf("error while creating hardlinks: %w", err)
+	}
+	// close(jobs)
+	// wg.Wait()
+
+	fmt.Println("========== Completed Hardlink Creation ==========")
+	return nil
+}
+
+func (jm *jobMgr) traverseTrieAndCreateHardlinks(
+	ctx context.Context,
+	dstParentDirClient *directory.Client,
+	currentPath string,
+	node *common.TrieNode,
+	sourceRoot string,
+) error {
+	for _, child := range node.Children {
+		if child == nil {
+			continue
+		}
+
+		childPath := path.Join(currentPath, child.Name)
+
+		if child.IsFile {
+			if child.Status != common.StatusTransferred {
+				inodeKey := child.InodeKey
+				common.HardlinkNode.Mu.Lock()
+				paths := common.HardlinkNode.InodeMap[inodeKey]
+				common.HardlinkNode.Mu.Unlock()
+
+				if len(paths) <= 1 {
+					continue // not a hardlink group
+				}
+
+				original := paths[0]
+				relOriginal := getRelativePath(filepath.Dir(sourceRoot), original)
+				targetFileClient := dstParentDirClient.NewFileClient(child.Name)
+
+				fmt.Printf("[Hardlink] Creating hardlink: %s → %s\n", child.Name, relOriginal)
+
+				_, err := targetFileClient.CreateHardLink(ctx, path.Clean(relOriginal), nil)
+				if err != nil {
+					common.HardlinkNode.Mu.Lock()
+					child.Status = common.StatusFailed
+					common.HardlinkNode.Mu.Unlock()
+
+					fmt.Printf("[Hardlink] Failed: %s → %s: %v\n", child.Name, relOriginal, err)
+					jm.Log(common.LogError, fmt.Sprintf("Error creating hardlinks: %v", err))
+
+				} else {
+					common.HardlinkNode.Mu.Lock()
+					child.Status = common.StatusLinked
+					common.HardlinkNode.Mu.Unlock()
+
+					fmt.Printf("[Hardlink] Linked: %s → %s\n", child.Name, relOriginal)
+					jm.Log(common.LogInfo, fmt.Sprintf("Hardlink created: %s -> %s", child.Name, relOriginal))
+				}
+			}
+		} else {
+			// Directory node — descend deeper
+			subDirClient := dstParentDirClient.NewSubdirectoryClient(child.Name)
+			if err := jm.traverseTrieAndCreateHardlinks(ctx, subDirClient, childPath, child, sourceRoot); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func getRelativePath(base, full string) string {
+	rel, err := filepath.Rel(base, full)
+	if err != nil {
+		// fallback in case of error
+		rel = strings.TrimPrefix(full, base)
+	}
+	// Normalize and clean paths
+	rel = filepath.ToSlash(filepath.Clean(rel))
+	// Remove leading "./" if present
+	// if strings.HasPrefix(rel, "./") {
+	// 	rel = rel[2:]
+	// }
+	return rel
+}
+
+func buildDirClientFromTrie(rootDirClient *directory.Client, relDir string) (*directory.Client, error) {
+	if relDir == "" || relDir == "." {
+		return rootDirClient, nil
+	}
+
+	dirParts := strings.Split(strings.TrimPrefix(relDir, "/"), "/")
+	current := rootDirClient
+	for _, segment := range dirParts {
+		fmt.Println("segment-----------", segment)
+		subDir := current.NewSubdirectoryClient(segment)
+		_, err := subDir.GetProperties(context.Background(), nil)
+		if err != nil {
+			// Create directory if it doesn't exist
+			_, err = subDir.Create(context.Background(), nil)
+			if err != nil {
+				//error
+				fmt.Println("Err", err)
+				//return nil,err
+			}
+		}
+		current = subDir
+	}
+	return current, nil
 }
 
 func (jm *jobMgr) Context() context.Context { return jm.ctx }

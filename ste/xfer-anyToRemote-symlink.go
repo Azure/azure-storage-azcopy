@@ -20,6 +20,7 @@
 package ste
 
 import (
+	"fmt"
 	"net/url"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -60,6 +61,7 @@ func anyToRemote_symlink(jptm IJobPartTransferMgr, info *TransferInfo, pacer pac
 		jptm.ReportTransferDone()
 		return
 	}
+	fmt.Println("ReadLink----------", path)
 
 	baseSender, err := senderFactory(jptm, info.Destination, pacer, srcInfoProvider)
 	if err != nil {

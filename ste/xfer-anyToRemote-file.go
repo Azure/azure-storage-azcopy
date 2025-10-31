@@ -202,9 +202,6 @@ func anyToRemote(jptm IJobPartTransferMgr, pacer pacer, senderFactory senderFact
 		if jptm.GetOverwriteOption() == common.EOverwriteOption.PosixProperties() {
 			anyToRemote_fileProperties(jptm, info, pacer, senderFactory, sipf)
 		} else {
-			if info.EntityType == common.EEntityType.Hardlink() {
-				fmt.Println("Hardlink reached here.......", info.Source)
-			}
 			anyToRemote_file(jptm, info, pacer, senderFactory, sipf)
 		}
 	case common.EEntityType.Symlink():
@@ -620,7 +617,7 @@ func commonSenderCompletion(jptm IJobPartTransferMgr, s sender, info *TransferIn
 		// so it must have succeeded. So make sure its not left "in progress" state
 		jptm.SetStatus(common.ETransferStatus.Success())
 		if jptm.Info().EntityType == common.EEntityType.Hardlink() {
-			common.HardlinkNode.MarkDone(info.Source)
+			common.HardlinkNode.MarkStatus(info.Source, common.StatusTransferred)
 		}
 
 		// Final logging

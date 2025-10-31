@@ -406,6 +406,7 @@ func (p *fileSourceInfoProvider) ReadLink() (string, error) {
 	}
 
 	share := fsc.NewShareClient(p.transferInfo.SrcContainer)
+	fmt.Println("Sourth path------", p.transferInfo.SrcFilePath)
 	fileClient := share.NewRootDirectoryClient().NewFileClient(p.transferInfo.SrcFilePath)
 	symlink, err := fileClient.GetSymbolicLink(p.ctx, nil)
 	if err != nil {
