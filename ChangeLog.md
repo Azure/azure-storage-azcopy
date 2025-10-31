@@ -1,17 +1,23 @@
 
 # Change Log
 
-## Version 10.30.1
+## Version 10.31.0
 
-### Bug Fixes 
-1. Fixed `--exclude-path` flag not available in remove operations.([PR #3165](https://github.com/Azure/azure-storage-azcopy/pull/3165)) ([GH Issue #3159](https://github.com/Azure/azure-storage-azcopy/issues/3159))
-2. Fixed regression where AzCopy was not honoring concurrency value in copy operations ([#3192](https://github.com/Azure/azure-storage-azcopy/pull/3192))
-3. Fixed the incorrect JSON output format of the warning message when there are multiple AzCopy processes running. ([PR #3188](https://github.com/Azure/azure-storage-azcopy/pull/3188)) ([GH Issue #3182](https://github.com/Azure/azure-storage-azcopy/issues/3182))
-4. Fixed `latest_version.txt` from being wrongly created in users current directory. ([PR #3179](https://github.com/Azure/azure-storage-azcopy/pull/3179))([GH Issue #3176](https://github.com/Azure/azure-storage-azcopy/issues/3176))
-5. Fixed AzCopy crashing during sync operation from a nil pointer deref in the destination authentication policy. ([PR #3186](https://github.com/Azure/azure-storage-azcopy/pull/3186)) ([GH Issue #3109](https://github.com/Azure/azure-storage-azcopy/issues/3109)) ([GH Issue #3156](https://github.com/Azure/azure-storage-azcopy/issues/3156)) ([GH Issue #3175](https://github.com/Azure/azure-storage-azcopy/issues/3175))
+### New Features
+1. `--include-root` flag now allows customers to preserve root properties when used in conjunction with `--preserve-XXXX` flags. ([#3163](https://github.com/Azure/azure-storage-azcopy/pull/3163))
 
-### Dependency Updates
-1.	Golang 1.24.2 -> 1.24.6 (CVE-2025-47907) ([#3154](https://github.com/Azure/azure-storage-azcopy/issues/3154))
+### Bug Fixes
+1. Fixed a bug to retry on various network errors. ([#3237](https://github.com/Azure/azure-storage-azcopy/pull/3237])) ([#3252](https://github.com/Azure/azure-storage-azcopy/pull/3252))
+2. Fixed a bug where remove would not work on paths with encoded characters. ([#2977](https://github.com/Azure/azure-storage-azcopy/issues/2977))
+3. Fixed a bug where jobs resume would not produce any output for previously failed jobs. ([#3103](https://github.com/Azure/azure-storage-azcopy/pull/3103))
+4. Fixed a bug where FileBlob transfers with EntraID on the source would pass the wrong service version. ([#3242](https://github.com/Azure/azure-storage-azcopy/issues/3242))
+
+## Code Improvements
+1. Refactored traverser related code into its own package. ([#3251](https://github.com/Azure/azure-storage-azcopy/pull/3251))
+2. Refactored OAuth token manager access to use a client-based pattern instead of global singleton access. ([#3260](https://github.com/Azure/azure-storage-azcopy/pull/3260))
+3. Removed unused code related to credential management. ([#3260](https://github.com/Azure/azure-storage-azcopy/pull/3260))
+4. Refactored Lifecycle UI code into the cmd package ([#3262](https://github.com/Azure/azure-storage-azcopy/pull/3262)).
+5. Error handling code is now injected into JobMgr, or appropriately bubbled upwards instead of using global LCM error handling. ([#3262](https://github.com/Azure/azure-storage-azcopy/pull/3262))
 
 ## Version 10.31.0-preview.1
 
@@ -40,6 +46,18 @@
 
 ### Breaking changes
 1. AzCopy no longer checks version by default. ([#3173](https://github.com/Azure/azure-storage-azcopy/pull/3173))
+
+## Version 10.30.1
+
+### Bug Fixes
+1. Fixed `--exclude-path` flag not available in remove operations.([PR #3165](https://github.com/Azure/azure-storage-azcopy/pull/3165)) ([GH Issue #3159](https://github.com/Azure/azure-storage-azcopy/issues/3159))
+2. Fixed regression where AzCopy was not honoring concurrency value in copy operations ([#3192](https://github.com/Azure/azure-storage-azcopy/pull/3192))
+3. Fixed the incorrect JSON output format of the warning message when there are multiple AzCopy processes running. ([PR #3188](https://github.com/Azure/azure-storage-azcopy/pull/3188)) ([GH Issue #3182](https://github.com/Azure/azure-storage-azcopy/issues/3182))
+4. Fixed `latest_version.txt` from being wrongly created in users current directory. ([PR #3179](https://github.com/Azure/azure-storage-azcopy/pull/3179))([GH Issue #3176](https://github.com/Azure/azure-storage-azcopy/issues/3176))
+5. Fixed AzCopy crashing during sync operation from a nil pointer deref in the destination authentication policy. ([PR #3186](https://github.com/Azure/azure-storage-azcopy/pull/3186)) ([GH Issue #3109](https://github.com/Azure/azure-storage-azcopy/issues/3109)) ([GH Issue #3156](https://github.com/Azure/azure-storage-azcopy/issues/3156)) ([GH Issue #3175](https://github.com/Azure/azure-storage-azcopy/issues/3175))
+
+### Dependency Updates
+1.	Golang 1.24.2 -> 1.24.6 (CVE-2025-47907) ([#3154](https://github.com/Azure/azure-storage-azcopy/issues/3154))
 
 ## Version 10.30.0
 ### Breaking changes
