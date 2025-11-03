@@ -50,10 +50,8 @@ func CreateAccount(a Asserter, accountType AccountType, options *CreateAccountOp
 
 	uuidSegments := strings.Split(uuid.NewString(), "-")
 
-	accountARMClient := &ARMStorageAccount{
-		ARMResourceGroup: CommonARMResourceGroup,
-		AccountName:      DerefOrDefault(opts.CustomName, "azcopynewe2e") + uuidSegments[len(uuidSegments)-1],
-	}
+	accountARMClient := CommonARMResourceGroup.
+		NewStorageAccountARMClient(DerefOrDefault(opts.CustomName, "azcopynewe2e") + uuidSegments[len(uuidSegments)-1])
 
 	accountARMDefinition := ARMStorageAccountCreateParams{
 		Location: "West US 2", // todo configurable
