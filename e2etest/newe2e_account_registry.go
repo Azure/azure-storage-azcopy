@@ -129,36 +129,84 @@ const (
 
 func AccountRegistryInitHook(a Asserter) {
 	if GlobalConfig.StaticResources() {
+		// ===== Shorthand accesses =====
 		acctInfo := GlobalConfig.E2EAuthConfig.StaticStgAcctInfo
+		lookupInfo := GlobalConfig.E2EAuthConfig.StaticStgAcctInfo.AccountKeyLookup
+		resGroup := CommonARMClient.
+			NewSubscriptionClient(lookupInfo.SubscriptionID).
+			NewResourceGroupClient(lookupInfo.ResourceGroup)
+		canLookup := GlobalConfig.CanLookupStaticAcctKeys()
 
-		if acctInfo.Standard.AccountName != "" {
-			AccountRegistry[PrimaryStandardAcct] = &AzureAccountResourceManager{
-				InternalAccountName: acctInfo.Standard.AccountName,
-				InternalAccountKey:  acctInfo.Standard.AccountKey,
-				InternalAccountType: EAccountType.Standard(),
+		// ===== Account registration logic =====
+		registerAccount := func(registryKey, acctName, acctKey string, acctType AccountType) {
+			if acctName == "" {
+				return // nothing to do, period
+			}
+
+			resMan := &AzureAccountResourceManager{
+				InternalAccountName: acctName,
+				InternalAccountKey:  acctKey,
+				InternalAccountType: acctType,
+			}
+
+			resourcePrepared := acctKey == ""
+
+			if !resourcePrepared {
+				if canLookup {
+					armClient := resGroup.NewStorageAccountARMClient(acctName)
+					keys, err := armClient.GetKeys()
+
+					if err == nil {
+						resourcePrepared = true
+						resMan.InternalAccountKey = keys.Keys[0].Value
+						// todo: having an arm client doesn't always mean that we've _created_ the account this run. Enable assigning this in case we need it.
+					}
+				}
+
+				// If we still don't have a key, we need to fall back to OAuth.
+				// Notably, a lookup could fail, so we don't want this to be an else.
+				if !resourcePrepared {
+					a.Log("account %s falling back to OAuth-only mode. SAS tests using this account will be converted to OAuth tests.", registryKey)
+					if PrimaryOAuthCache.tc != nil {
+						// todo account side magicks
+						resourcePrepared = true
+					}
+				}
+			}
+
+			if resourcePrepared { // we don't want to add an account that can never work
+				AccountRegistry[registryKey] = resMan
 			}
 		}
-		if acctInfo.HNS.AccountName != "" {
-			AccountRegistry[PrimaryHNSAcct] = &AzureAccountResourceManager{
-				InternalAccountName: acctInfo.HNS.AccountName,
-				InternalAccountKey:  acctInfo.HNS.AccountKey,
-				InternalAccountType: EAccountType.HierarchicalNamespaceEnabled(),
-			}
-		}
-		if acctInfo.PremiumPage.AccountName != "" {
-			AccountRegistry[PremiumPageBlobAcct] = &AzureAccountResourceManager{
-				InternalAccountName: acctInfo.PremiumPage.AccountName,
-				InternalAccountKey:  acctInfo.PremiumPage.AccountKey,
-				InternalAccountType: EAccountType.PremiumPageBlobs(),
-			}
-		}
-		if acctInfo.PremiumFileShare.AccountName != "" {
-			AccountRegistry[PremiumFileShareAcct] = &AzureAccountResourceManager{
-				InternalAccountName: acctInfo.PremiumFileShare.AccountName,
-				InternalAccountKey:  acctInfo.PremiumFileShare.AccountKey,
-				InternalAccountType: EAccountType.PremiumFileShares(),
-			}
-		}
+
+		// ===== Define accounts =====
+		registerAccount(
+			PrimaryStandardAcct,
+			acctInfo.Standard.AccountName,
+			acctInfo.Standard.AccountKey,
+			EAccountType.Standard(),
+		)
+
+		registerAccount(
+			PrimaryHNSAcct,
+			acctInfo.HNS.AccountName,
+			acctInfo.HNS.AccountKey,
+			EAccountType.HierarchicalNamespaceEnabled(),
+		)
+
+		registerAccount(
+			PremiumPageBlobAcct,
+			acctInfo.PremiumPage.AccountName,
+			acctInfo.PremiumPage.AccountKey,
+			EAccountType.PremiumPageBlobs(),
+		)
+
+		registerAccount(
+			PremiumFileShareAcct,
+			acctInfo.PremiumFileShare.AccountName,
+			acctInfo.PremiumFileShare.AccountKey,
+			EAccountType.PremiumFileShares(),
+		)
 	} else {
 		// Create standard accounts
 		AccountRegistry[PrimaryStandardAcct] = CreateAccount(a, EAccountType.Standard(), nil)
