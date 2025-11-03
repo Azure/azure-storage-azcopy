@@ -131,16 +131,27 @@ const (
 
 func AccountRegistryInitHook(a Asserter) {
 	if GlobalConfig.StaticResources() {
+		// ===== Shorthand accesses =====
 		acctInfo := GlobalConfig.E2EAuthConfig.StaticStgAcctInfo
+		lookupInfo := GlobalConfig.E2EAuthConfig.StaticStgAcctInfo.AccountKeyLookup
+		resGroup := CommonARMClient.
+			NewSubscriptionClient(lookupInfo.SubscriptionID).
+			NewResourceGroupClient(lookupInfo.ResourceGroup)
+		canLookup := GlobalConfig.CanLookupStaticAcctKeys()
 
-		if acctInfo.Standard.AccountName != "" {
-			AccountRegistry[PrimaryStandardAcct] = &AzureAccountResourceManager{
-				InternalAccountName: acctInfo.Standard.AccountName,
-				InternalAccountKey:  acctInfo.Standard.AccountKey,
-				InternalAccountType: EAccountType.Standard(),
+		// ===== Account registration logic =====
+		registerAccount := func(registryKey, acctName, acctKey string, acctType AccountType) {
+			if acctName == "" {
+				return // nothing to do, period
 			}
 
-			resourcePrepared := acctKey != ""
+			resMan := &AzureAccountResourceManager{
+				InternalAccountName: acctName,
+				InternalAccountKey:  acctKey,
+				InternalAccountType: acctType,
+			}
+
+			resourcePrepared := acctKey == ""
 
 			if !resourcePrepared {
 				if canLookup {

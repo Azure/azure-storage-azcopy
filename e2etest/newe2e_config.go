@@ -75,6 +75,11 @@ type NewE2EConfig struct {
 				} `env:",required,mutually_exclusive"`
 			}
 
+			AccountKeyLookup struct {
+				SubscriptionID string `env:"NEW_E2E_STATIC_SUBSCRIPTION_ID"`
+				ResourceGroup  string `env:"NEW_E2E_STATIC_RESOURCE_GROUP"`
+			}
+
 			// todo: should we automate this somehow? Currently each of these accounts needs some marginal boilerplate.
 			Standard struct {
 				AccountName string `env:"NEW_E2E_STANDARD_ACCOUNT_NAME,required"`
@@ -125,6 +130,11 @@ func (e NewE2EConfig) DefaultTelemetryDataKey() (string, error) {
 
 func (e NewE2EConfig) StaticResources() bool {
 	return e.E2EAuthConfig.SubscriptionLoginInfo.SubscriptionID == "" // all subscriptionlogininfo options would have to be filled due to required
+}
+
+func (e NewE2EConfig) CanLookupStaticAcctKeys() bool {
+	lookup := e.E2EAuthConfig.StaticStgAcctInfo.AccountKeyLookup
+	return lookup.SubscriptionID != "" && lookup.ResourceGroup != "" && PrimaryOAuthCache.tc != nil
 }
 
 func (e NewE2EConfig) GetSPNOptions() (present bool, tenant, applicationId, secret string) {
