@@ -320,14 +320,11 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 				return err
 			}
 
-			jobInitiated, err := transferScheduler.dispatchFinalPart()
+			_, err := transferScheduler.dispatchFinalPart()
 			// sync cleanly exits if nothing is scheduled.
 			if err != nil && err != NothingScheduledError {
 				return err
 			}
-
-			quitIfInSync(jobInitiated, cca.getDeletionCount() > 0, cca)
-			cca.setScanningComplete()
 			return nil
 		}
 
@@ -346,14 +343,11 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 
 			// let the deletions happen first
 			// otherwise if the final part is executed too quickly, we might quit before deletions could finish
-			jobInitiated, err := transferScheduler.dispatchFinalPart()
+			_, err := transferScheduler.dispatchFinalPart()
 			// sync cleanly exits if nothing is scheduled.
 			if err != nil && err != NothingScheduledError {
 				return err
 			}
-
-			quitIfInSync(jobInitiated, cca.getDeletionCount() > 0, cca)
-			cca.setScanningComplete()
 			return nil
 		}
 
@@ -366,21 +360,5 @@ func IsDestinationCaseInsensitive(fromTo common.FromTo) bool {
 		return true
 	} else {
 		return false
-	}
-
-}
-
-func quitIfInSync(transferJobInitiated, anyDestinationFileDeleted bool, cca *cookedSyncCmdArgs) {
-	if !transferJobInitiated && !anyDestinationFileDeleted {
-		cca.reportScanningProgress(glcm, 0)
-		glcm.Exit(func(format OutputFormat) string {
-			return "The source and destination are already in sync."
-		}, EExitCode.Success())
-	} else if !transferJobInitiated && anyDestinationFileDeleted {
-		// some files were deleted but no transfer scheduled
-		cca.reportScanningProgress(glcm, 0)
-		glcm.Exit(func(format OutputFormat) string {
-			return "The source and destination are now in sync."
-		}, EExitCode.Success())
 	}
 }

@@ -41,7 +41,7 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs,
 	fpo common.FolderPropertyOption,
 	copyJobTemplate *common.CopyJobPartOrderRequest) *copyTransferProcessor {
 	reportFirstPart := func(jobStarted bool) { cca.setFirstPartOrdered() } // for compatibility with the way sync has always worked, we don't check jobStarted here
-	reportFinalPart := func() { cca.isEnumerationComplete = true }
+	reportFinalPart := func() { cca.setScanningComplete() }
 	if cca.dryrunMode {
 		jobsAdmin.ExecuteNewCopyJobPartOrder = getDryrunNewCopyJobPartOrder(copyJobTemplate.SourceRoot.Value, copyJobTemplate.DestinationRoot.Value, cca.fromTo)
 	}
