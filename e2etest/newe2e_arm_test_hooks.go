@@ -34,13 +34,9 @@ func SetupArmClient(a Asserter) {
 
 	uuidSegments := strings.Split(uuid.NewString(), "-")
 
-	CommonARMResourceGroup = &ARMResourceGroup{
-		ARMSubscription: &ARMSubscription{
-			ARMClient:      CommonARMClient,
-			SubscriptionID: GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo.SubscriptionID,
-		},
-		ResourceGroupName: "azcopy-newe2e-" + uuidSegments[len(uuidSegments)-1],
-	}
+	CommonARMResourceGroup = CommonARMClient.
+		NewSubscriptionClient(GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo.SubscriptionID).
+		NewResourceGroupClient("azcopy-newe2e-" + uuidSegments[len(uuidSegments)-1])
 
 	_, err = CommonARMResourceGroup.CreateOrUpdate(ARMResourceGroupCreateParams{
 		Location: "West US", // todo configurable
