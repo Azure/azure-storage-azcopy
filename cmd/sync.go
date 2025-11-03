@@ -110,12 +110,12 @@ type rawSyncCmdArgs struct {
 
 // it is assume that the given url has the SAS stripped, and safe to print
 func validateURLIsNotServiceLevel(url string, location common.Location) error {
-	srcLevel, err := DetermineLocationLevel(url, location, true)
+	srcLevel, err := azcopy.DetermineLocationLevel(url, location, true)
 	if err != nil {
 		return err
 	}
 
-	if srcLevel == ELocationLevel.Service() {
+	if srcLevel == azcopy.ELocationLevel.Service() {
 		return fmt.Errorf("service level URLs (%s) are not supported in sync: ", url)
 	}
 
@@ -143,7 +143,7 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 	if err != nil {
 		return cooked, err
 	}
-	cooked.fromTo, err = ValidateFromTo(raw.src, raw.dst, raw.fromTo)
+	cooked.fromTo, err = azcopy.InferAndValidateFromTo(raw.src, raw.dst, raw.fromTo)
 	if err != nil {
 		return cooked, err
 	}
@@ -202,7 +202,7 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 
 	// NFS/SMB arg processing
 	if cooked.fromTo.IsNFS() {
-		cooked.preserveInfo = raw.preserveInfo && areBothLocationsNFSAware(cooked.fromTo)
+		cooked.preserveInfo = raw.preserveInfo && azcopy.AreBothLocationsNFSAware(cooked.fromTo)
 		//TBD: We will be preserving ACLs and ownership info in case of NFS. (UserID,GroupID and FileMode)
 		// Using the same EPreservePermissionsOption that we have today for NFS as well
 		// Please provide the feedback if we should introduce new EPreservePermissionsOption instead.
@@ -213,7 +213,7 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 			return cooked, err
 		}
 	} else {
-		cooked.preserveInfo = raw.preserveInfo && areBothLocationsSMBAware(cooked.fromTo)
+		cooked.preserveInfo = raw.preserveInfo && azcopy.AreBothLocationsSMBAware(cooked.fromTo)
 		cooked.preservePOSIXProperties = raw.preservePOSIXProperties
 		cooked.preservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
 			raw.preserveOwner,
@@ -280,7 +280,7 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 		}
 	}
 
-	if err = validateForceIfReadOnly(cooked.forceIfReadOnly, cooked.fromTo); err != nil {
+	if err = azcopy.ValidateForceIfReadOnly(cooked.forceIfReadOnly, cooked.fromTo); err != nil {
 		return err
 	}
 
@@ -294,7 +294,7 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 
 	// NFS/SMB validation
 	if cooked.fromTo.IsNFS() {
-		if err := performNFSSpecificValidation(
+		if err := azcopy.PerformNFSSpecificValidation(
 			cooked.fromTo,
 			cooked.preservePermissions,
 			cooked.preserveInfo,
@@ -303,7 +303,7 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 			return err
 		}
 	} else {
-		if err := performSMBSpecificValidation(
+		if err := azcopy.PerformSMBSpecificValidation(
 			cooked.fromTo, cooked.preservePermissions, cooked.preserveInfo,
 			cooked.preservePOSIXProperties); err != nil {
 			return err
@@ -316,11 +316,11 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 		}
 	}
 
-	if err = validatePutMd5(cooked.putMd5, cooked.fromTo); err != nil {
+	if err = azcopy.ValidatePutMd5(cooked.putMd5, cooked.fromTo); err != nil {
 		return err
 	}
 
-	if err = validateMd5Option(cooked.md5ValidationOption, cooked.fromTo); err != nil {
+	if err = azcopy.ValidateMd5Option(cooked.md5ValidationOption, cooked.fromTo); err != nil {
 		return err
 	}
 
@@ -389,11 +389,11 @@ func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
 	// use the globally generated JobID
 	cooked.jobID = Client.CurrentJobID
 
-	cooked.blockSize, err = blockSizeInBytes(cooked.blockSizeMB)
+	cooked.blockSize, err = azcopy.BlockSizeInBytes(cooked.blockSizeMB)
 	if err != nil {
 		return err
 	}
-	cooked.putBlobSize, err = blockSizeInBytes(cooked.putBlobSizeMB)
+	cooked.putBlobSize, err = azcopy.BlockSizeInBytes(cooked.putBlobSizeMB)
 	if err != nil {
 		return err
 	}
@@ -823,7 +823,7 @@ func init() {
 				glcm.EnableCancelFromStdIn()
 			}
 			// We infer FromTo and validate it here since it is critical to a lot of other options parsing below.
-			userFromTo, err := ValidateFromTo(raw.src, raw.dst, raw.fromTo)
+			userFromTo, err := azcopy.InferAndValidateFromTo(raw.src, raw.dst, raw.fromTo)
 			if err != nil {
 				glcm.Error("failed to parse --from-to user input due to error: " + err.Error())
 			}
@@ -880,7 +880,7 @@ func init() {
 
 	//Marking this flag as hidden as we might not support it in the future
 	_ = syncCmd.PersistentFlags().MarkHidden("preserve-smb-info")
-	syncCmd.PersistentFlags().BoolVar(&raw.preserveInfo, PreserveInfoFlag, false,
+	syncCmd.PersistentFlags().BoolVar(&raw.preserveInfo, azcopy.PreserveInfoFlag, false,
 		"Specify this flag if you want to preserve properties during the transfer operation."+
 			"The previously available flag for SMB (--preserve-smb-info) is now redirected to --preserve-info "+
 			"flag for both SMB and NFS operations. The default value is true for Windows when copying to Azure Files SMB"+
@@ -1030,7 +1030,7 @@ func init() {
 
 	// Deprecate the old persist-smb-permissions flag
 	_ = syncCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
-	syncCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default. "+
+	syncCmd.PersistentFlags().BoolVar(&raw.preservePermissions, azcopy.PreservePermissionsFlag, false, "False by default. "+
 		"\nPreserves ACLs between aware resources (Windows and Azure Files SMB or Data Lake Storage to Data Lake Storage)"+
 		"and permissions between aware resources(Linux to Azure Files NFS). "+
 		"\nFor accounts that have a hierarchical namespace, your security principal must be the owning user of the target container or it must be assigned "+

@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/google/uuid"
@@ -52,8 +52,8 @@ func (l *LocalContainerResourceManager) Location() common.Location {
 	return common.ELocation.Local()
 }
 
-func (l *LocalContainerResourceManager) Level() cmd.LocationLevel {
-	return cmd.ELocationLevel.Container()
+func (l *LocalContainerResourceManager) Level() azcopy.LocationLevel {
+	return azcopy.ELocationLevel.Container()
 }
 
 func (l *LocalContainerResourceManager) URI(o ...GetURIOptions) string {
@@ -244,8 +244,8 @@ func (l *LocalObjectResourceManager) Location() common.Location {
 	return common.ELocation.Local()
 }
 
-func (l *LocalObjectResourceManager) Level() cmd.LocationLevel {
-	return cmd.ELocationLevel.Object()
+func (l *LocalObjectResourceManager) Level() azcopy.LocationLevel {
+	return azcopy.ELocationLevel.Object()
 }
 
 func (l *LocalObjectResourceManager) URI(o ...GetURIOptions) string {
