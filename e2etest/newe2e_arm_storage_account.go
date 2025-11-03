@@ -8,21 +8,19 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"net/http"
 	"net/url"
+	"path"
 	"strings"
 )
 
 // ARMStorageAccount implements an API to interface with a singular Azure Storage account via the Storage Resource Provider's REST APIs.
 // https://learn.microsoft.com/en-us/rest/api/storagerp/storage-accounts
 type ARMStorageAccount struct {
-	*ARMResourceGroup
+	ParentSubject[*ARMResourceGroup]
 	AccountName string
 }
 
-func (sa *ARMStorageAccount) ManagementURI() url.URL {
-	baseURI := sa.ARMResourceGroup.ManagementURI()
-	newURI := baseURI.JoinPath("providers/Microsoft.Storage/storageAccounts", sa.AccountName)
-
-	return *newURI
+func (sa *ARMStorageAccount) CanonicalPath() string {
+	return path.Join(sa.ParentSubject.CanonicalPath(), "providers/Microsoft.Storage/storageAccounts", sa.AccountName)
 }
 
 // GetResourceManager should not be called repeatedly; it makes calls to REST APIs and does not cache.
