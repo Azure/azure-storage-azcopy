@@ -2,6 +2,7 @@ package e2etest
 
 import (
 	"fmt"
+	"maps"
 	"reflect"
 	"sync"
 )
@@ -140,6 +141,43 @@ func ListContains[I comparable](item I, in []I) bool {
 	}
 
 	return false
+}
+
+// ListContentsMatch compares two lists and checks that their contents (but not necessarily order) matches
+// i.e. [1, 1, 2] and [1, 2, 1] should return true but
+// [1, 2, 2] and [1, 1, 2] should return false.
+func ListContentsMatch[I comparable](a, b []I) bool {
+	var aM, bM = make(map[I]uint), make(map[I]uint)
+
+	if len(a) != len(b) {
+		return false
+	}
+
+	for _, v := range a {
+		aM[v]++
+	}
+
+	for _, v := range b {
+		bM[v]++
+	}
+
+	return maps.Equal(aM, bM)
+}
+
+func ListOverlaps[I comparable](shouldContain []I, in []I) bool {
+	var comp = make(map[I]bool)
+
+	for _, v := range shouldContain {
+		comp[v] = true
+	}
+
+	for _, v := range in {
+		if _, ok := comp[v]; ok {
+			delete(comp, v)
+		}
+	}
+
+	return len(comp) == 0
 }
 
 func Any[I any](items []I, f func(I) bool) bool {

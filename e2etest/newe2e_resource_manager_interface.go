@@ -188,6 +188,7 @@ type AccountResourceManager interface {
 	AccountName() string
 	AccountType() AccountType
 	AvailableServices() []common.Location
+	AvailableAuthTypes() ExplicitCredentialTypes
 	GetService(Asserter, common.Location) ServiceResourceManager
 }
 
