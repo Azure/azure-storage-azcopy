@@ -2,6 +2,7 @@ package ste
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"mime"
 	"net/http"
@@ -81,6 +82,7 @@ type IJobPartMgr interface {
 // 'ulimit -Hn' is low).
 func NewAzcopyHTTPClient(maxIdleConns int) *http.Client {
 	const concurrentDialsPerCpu = 10 // exact value doesn't matter too much, but too low will be too slow, and too high will reduce the beneficial effect on thread count
+
 	return &http.Client{
 		Transport: &http.Transport{
 			Proxy:                  common.GlobalProxyLookup,
@@ -93,6 +95,9 @@ func NewAzcopyHTTPClient(maxIdleConns int) *http.Client {
 			DisableKeepAlives:      false,
 			DisableCompression:     true, // must disable the auto-decompression of gzipped files, and just download the gzipped version. See https://github.com/Azure/azure-storage-azcopy/issues/374
 			MaxResponseHeaderBytes: 0,
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: common.AllowInsecureCerts,
+			},
 			// ResponseHeaderTimeout:  time.Duration{},
 			// ExpectContinueTimeout:  time.Duration{},
 		},

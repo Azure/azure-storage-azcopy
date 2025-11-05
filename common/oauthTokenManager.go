@@ -22,6 +22,7 @@ package common
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -87,6 +88,8 @@ func NewUserOAuthTokenManagerInstance(credCacheOptions CredCacheOptions) *UserOA
 	}
 }
 
+var AllowInsecureCerts bool
+
 func newAzcopyHTTPClient() *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{
@@ -105,6 +108,9 @@ func newAzcopyHTTPClient() *http.Client {
 			DisableKeepAlives:      false,
 			DisableCompression:     true,
 			MaxResponseHeaderBytes: 0,
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: AllowInsecureCerts,
+			},
 			// ResponseHeaderTimeout:  time.Duration{},
 			// ExpectContinueTimeout:  time.Duration{},
 		},

@@ -22,6 +22,7 @@ package ste
 
 import (
 	"bytes"
+	"crypto/tls"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"net/http"
@@ -346,6 +347,11 @@ func (p *PerformanceAdvisor) GetAdvice() []common.PerformanceAdvice {
 func (p *PerformanceAdvisor) getAzureVmSize() string {
 	client := &http.Client{
 		Timeout: time.Second * 3, // no point in waiting too long, since when it works, it will be almost instant
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: common.AllowInsecureCerts,
+			},
+		},
 	}
 
 	req, err := http.NewRequest("GET", "http://169.254.169.254/metadata/instance/compute/vmSize?api-version=2019-03-11&format=text", nil)
