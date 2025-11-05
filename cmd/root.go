@@ -45,6 +45,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var allowInsecureCerts bool
 var outputFormatRaw string
 var outputVerbosityRaw string
 var logVerbosityRaw string
@@ -342,6 +343,8 @@ func init() {
 	_ = rootCmd.PersistentFlags().MarkHidden("memory-profile")
 	rootCmd.PersistentFlags().BoolVar(&checkAzCopyUpdates, "check-version", false,
 		"Check if a newer AzCopy version is available.")
+	rootCmd.PersistentFlags().BoolVar(&allowInsecureCerts, AllowInsecureCertificatesFlag, false, "Use in combination with a MITM proxy for debugging purposes")
+	_ = rootCmd.PersistentFlags().MarkHidden(AllowInsecureCertificatesFlag)
 }
 
 // always spins up a new goroutine, because sometimes the aka.ms URL can't be reached (e.g. a constrained environment where
