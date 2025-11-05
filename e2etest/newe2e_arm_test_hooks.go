@@ -12,8 +12,8 @@ var CommonARMClient *ARMClient
 var CommonARMResourceGroup *ARMResourceGroup // separated in case needed.
 
 func SetupArmClient(a Asserter) {
-	if GlobalConfig.StaticResources() {
-		return // no setup
+	if PrimaryOAuthCache.tc == nil {
+		return // do not set up the arm client
 	}
 
 	maxRetries := 2
@@ -30,6 +30,10 @@ func SetupArmClient(a Asserter) {
 	CommonARMClient = &ARMClient{
 		OAuth:      spt,
 		HttpClient: http.DefaultClient, // todo if we want something more special
+	}
+
+	if GlobalConfig.StaticResources() {
+		return // do not create the resource group
 	}
 
 	uuidSegments := strings.Split(uuid.NewString(), "-")
