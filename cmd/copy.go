@@ -1196,14 +1196,12 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	}
 
 	// Check protocol compatibility for File Shares
-	if cca.FromTo.From().IsFile() || cca.FromTo.To().IsFile() {
-		if err := validateProtocolCompatibility(ctx, cca.FromTo,
-			cca.Source,
-			cca.Destination,
-			jobPartOrder.SrcServiceClient,
-			jobPartOrder.DstServiceClient); err != nil {
-			return err
-		}
+	if err := validateProtocolCompatibility(ctx, cca.FromTo,
+		cca.Source,
+		cca.Destination,
+		jobPartOrder.SrcServiceClient,
+		jobPartOrder.DstServiceClient); err != nil {
+		return err
 	}
 
 	switch {
