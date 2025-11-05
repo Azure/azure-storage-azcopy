@@ -83,19 +83,19 @@ type NewE2EConfig struct {
 			// todo: should we automate this somehow? Currently each of these accounts needs some marginal boilerplate.
 			Standard struct {
 				AccountName string `env:"NEW_E2E_STANDARD_ACCOUNT_NAME,required"`
-				AccountKey  string `env:"NEW_E2E_STANDARD_ACCOUNT_KEY,required"`
+				AccountKey  string `env:"NEW_E2E_STANDARD_ACCOUNT_KEY"`
 			} `env:",required"`
 			HNS struct {
 				AccountName string `env:"NEW_E2E_HNS_ACCOUNT_NAME,required"`
-				AccountKey  string `env:"NEW_E2E_HNS_ACCOUNT_KEY,required"`
+				AccountKey  string `env:"NEW_E2E_HNS_ACCOUNT_KEY"`
 			} `env:",required"`
 			PremiumPage struct {
 				AccountName string `env:"NEW_E2E_PREMIUM_PAGE_ACCOUNT_NAME,required"`
-				AccountKey  string `env:"NEW_E2E_PREMIUM_PAGE_ACCOUNT_KEY,required"`
+				AccountKey  string `env:"NEW_E2E_PREMIUM_PAGE_ACCOUNT_KEY"`
 			} `env:",required"`
 			PremiumFileShare struct {
 				AccountName string `env:"NEW_E2E_PREMIUM_FILESHARE_ACCOUNT_NAME,required"`
-				AccountKey  string `env:"NEW_E2E_PREMIUM_FILESHARE_ACCOUNT_KEY,required"`
+				AccountKey  string `env:"NEW_E2E_PREMIUM_FILESHARE_ACCOUNT_KEY"`
 			} `env:",required"`
 		} `env:",required,minimum_required=1"`
 	} `env:",required,mutually_exclusive"`

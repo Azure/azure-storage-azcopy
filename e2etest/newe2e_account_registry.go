@@ -149,7 +149,7 @@ func AccountRegistryInitHook(a Asserter) {
 				InternalAccountType: acctType,
 			}
 
-			resourcePrepared := acctKey == ""
+			resourcePrepared := acctKey != ""
 
 			if !resourcePrepared {
 				if canLookup {
