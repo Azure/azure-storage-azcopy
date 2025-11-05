@@ -1,5 +1,9 @@
 module github.com/Azure/azure-storage-azcopy/v10
 
+godebug (
+	x509negativeserial=1
+)
+
 require (
 	cloud.google.com/go/storage v1.45.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.2
