@@ -320,7 +320,10 @@ func validateShareProtocolCompatibility(
 ) error {
 
 	// We can ignore the error if we fail to get the share properties.
-	shareProtocol, _ := getShareProtocolType(ctx, serviceClient, resource, protocol)
+	shareProtocol, err := getShareProtocolType(ctx, serviceClient, resource, protocol)
+	if err != nil {
+		return err
+	}
 
 	if shareProtocol == common.ELocation.File() {
 		if isSource && fromTo.From() != common.ELocation.File() {
@@ -361,6 +364,10 @@ func getShareProtocolType(
 	}
 	shareName := fileURLParts.ShareName
 
+	if serviceClient == nil {
+		return common.ELocation.Unknown(), fmt.Errorf("failed to create file service client: %w", err)
+	}
+
 	fileServiceClient, err := serviceClient.FileServiceClient()
 	if err != nil {
 		return common.ELocation.Unknown(), fmt.Errorf("failed to create file service client: %w", err)
@@ -383,49 +390,16 @@ func getShareProtocolType(
 // Protocol compatibility validation for SMB and NFS transfers
 func validateProtocolCompatibility(ctx context.Context, fromTo common.FromTo, src, dst common.ResourceString, srcClient, dstClient *common.ServiceClient) error {
 
-	getUploadDownloadProtocol := func(fromTo common.FromTo) common.Location {
-		switch fromTo {
-		case common.EFromTo.LocalFile(), common.EFromTo.FileLocal():
-			return common.ELocation.File()
-		case common.EFromTo.LocalFileNFS(), common.EFromTo.FileNFSLocal():
-			return common.ELocation.FileNFS()
-		default:
-			return common.ELocation.Unknown()
-		}
-	}
-
-	var srcProtocol, dstProtocol common.Location
-
-	// S2S Transfers
-	if fromTo.IsS2S() {
-		switch fromTo {
-		case common.EFromTo.FileFile():
-			srcProtocol, dstProtocol = common.ELocation.File(), common.ELocation.File()
-		case common.EFromTo.FileNFSFileNFS():
-			srcProtocol, dstProtocol = common.ELocation.FileNFS(), common.ELocation.FileNFS()
-		case common.EFromTo.FileNFSFileSMB():
-			srcProtocol, dstProtocol = common.ELocation.FileNFS(), common.ELocation.File()
-		case common.EFromTo.FileSMBFileNFS():
-			srcProtocol, dstProtocol = common.ELocation.File(), common.ELocation.FileNFS()
-		}
-
-		// Validate both source and destination
-		if err := validateShareProtocolCompatibility(ctx, src, srcClient, true, srcProtocol, fromTo); err != nil {
+	if fromTo.From().IsFile() {
+		if err := validateShareProtocolCompatibility(ctx, src, srcClient, true, fromTo.From(), fromTo); err != nil {
 			return err
 		}
-		return validateShareProtocolCompatibility(ctx, dst, dstClient, false, dstProtocol, fromTo)
 	}
 
-	// Uploads to File Shares
-	if fromTo.IsUpload() {
-		dstProtocol = getUploadDownloadProtocol(fromTo)
-		return validateShareProtocolCompatibility(ctx, dst, dstClient, false, dstProtocol, fromTo)
-	}
-
-	// Downloads from File Shares
-	if fromTo.IsDownload() {
-		srcProtocol = getUploadDownloadProtocol(fromTo)
-		return validateShareProtocolCompatibility(ctx, src, srcClient, true, srcProtocol, fromTo)
+	if fromTo.To().IsFile() {
+		if err := validateShareProtocolCompatibility(ctx, src, dstClient, false, fromTo.To(), fromTo); err != nil {
+			return err
+		}
 	}
 
 	return nil
