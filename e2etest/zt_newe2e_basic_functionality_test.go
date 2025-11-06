@@ -850,3 +850,55 @@ func (s *BasicFunctionalitySuite) Scenario_JobResume(svm *ScenarioVariationManag
 		svm.Assert("resume completed transfers not equal to 1", Equal{}, resumeParsed.FinalStatus.TransfersCompleted, uint32(1))
 	}
 }
+
+func (s *BasicFunctionalitySuite) Scenario_ValidateThroughput(svm *ScenarioVariationManager) {
+	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
+	// Resolve variation early so name makes sense
+	srcLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob()})
+	// Scale up from service to object
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob()})), ResourceDefinitionContainer{})
+
+	// Scale up from service to object
+	srcDef := ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"abc":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
+			"def":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
+			"foobar": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
+		},
+	}
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, srcLoc), srcDef)
+
+	// no s2s, no local->local
+	if srcContainer.Location().IsRemote() == dstContainer.Location().IsRemote() {
+		svm.InvalidateScenario()
+		return
+	}
+
+	sasOpts := GenericAccountSignatureValues{}
+
+	stdOut, _ := RunAzCopy(
+		svm,
+		AzCopyCommand{
+			// Sync is not included at this moment, because sync requires
+			Verb: azCopyVerb,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+				TryApplySpecificAuthType(dstContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive: pointerTo(true),
+					GlobalFlags: GlobalFlags{
+						OutputType: pointerTo(cmd.EOutputFormat.Text()),
+					},
+				},
+			},
+		})
+
+	// Validate that throughput is displayed in the output (regression test for v10.31.0 throughput display bug)
+	ValidateThroughputOutput(svm, stdOut)
+}
