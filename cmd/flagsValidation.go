@@ -397,7 +397,7 @@ func validateProtocolCompatibility(ctx context.Context, fromTo common.FromTo, sr
 	}
 
 	if fromTo.To().IsFile() {
-		if err := validateShareProtocolCompatibility(ctx, src, dstClient, false, fromTo.To(), fromTo); err != nil {
+		if err := validateShareProtocolCompatibility(ctx, dst, dstClient, false, fromTo.To(), fromTo); err != nil {
 			return err
 		}
 	}
