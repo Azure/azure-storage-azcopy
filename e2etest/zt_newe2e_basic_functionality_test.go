@@ -879,7 +879,6 @@ func (s *BasicFunctionalitySuite) Scenario_ValidateThroughput(svm *ScenarioVaria
 	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
-			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
