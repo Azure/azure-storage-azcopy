@@ -1288,10 +1288,10 @@ extends:
 
                   - script: |
                       pmc --version
-                      pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" repo list --limit 1
-                        if [ $? -ne 0 ]; then
-                          exit 1
-                        fi
+                      pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo list --limit 1
+                      if [ $? -ne 0 ]; then
+                        exit 1
+                      fi
                     displayName: 'Test PMC installation'
 
                   - script: |
