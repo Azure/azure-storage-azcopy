@@ -688,9 +688,6 @@ extends:
                   targetPath: $(System.DefaultWorkingDirectory)\signed
                   itemPattern: 'azcopy*amd64*.zip'
                   displayName: 'Download Windows Signed'
-              outputs:
-                - output: pipelineArtifact
-                  targetPath: $(System.DefaultWorkingDirectory)\signed
 
             variables:
               - name: signed
@@ -729,9 +726,6 @@ extends:
                   targetPath: $(System.DefaultWorkingDirectory)\signed
                   itemPattern: 'azcopy*arm64*.zip'
                   displayName: 'Download Windows Signed'
-              outputs:
-                - output: pipelineArtifact
-                  targetPath: $(System.DefaultWorkingDirectory)\signed
 
             variables:
               - name: signed
