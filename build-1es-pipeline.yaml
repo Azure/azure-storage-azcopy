@@ -1295,6 +1295,13 @@ extends:
                         fi
 
                   - script: |
+                      # Validate remove_packages param
+                      if [[ "${{parameters.remove_packages}}" != " " ]] && [[ -n "${{parameters.remove_packages}}" ]]; then
+                        if ! [[ "${{parameters.remove_packages}}" =~ ^[a-zA-Z0-9._~-]+$ ]]; then 
+                          echo "Error: remove_packages param contains invalid chars. Double check its value." 
+                          exit 1
+                        fi
+                      fi
                       pkg_id_list=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package deb list --name azcopy --version ${{parameters.remove_packages}})
                       
                       # Loop over all the results and extract the package id for each one
