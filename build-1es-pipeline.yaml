@@ -549,7 +549,7 @@ extends:
                       exit 1
                   fi
                 displayName:  'Copy signed mac binaries'
-       SignArtifacts end here
+#       SignArtifacts end here
 
       - stage: VerifyArtifacts
         dependsOn: SignArtifacts
