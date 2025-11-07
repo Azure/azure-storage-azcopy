@@ -1286,13 +1286,19 @@ extends:
                     inputs:
                       secureFile: 'settings.toml'
 
-                  - script: |
-                      pmc --version
-                      pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo list --limit 1
-                      if [ $? -ne 0 ]; then
-                        exit 1
-                      fi
+                  - task: AzureCLI@2
                     displayName: 'Test PMC installation'
+                    inputs:
+                      addSpnToEnvironment: true
+                      azureSubscription: 'azcopy-release'
+                      scriptType: bash
+                      scriptLocation: inlineScript
+                      inlineScript: |
+                        pmc --version
+                        pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" repo list --limit 1
+                        if [ $? -ne 0 ]; then
+                          exit 1
+                        fi
 
                   - script: |
                       pkg_id_list=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package deb list --name azcopy --version ${{parameters.remove_packages}})
