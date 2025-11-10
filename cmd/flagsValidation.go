@@ -365,7 +365,7 @@ func getShareProtocolType(
 	shareName := fileURLParts.ShareName
 
 	if serviceClient == nil {
-		return common.ELocation.Unknown(), fmt.Errorf("failed to create file service client: %w", err)
+		return common.ELocation.Unknown(), fmt.Errorf("service client is nil")
 	}
 
 	fileServiceClient, err := serviceClient.FileServiceClient()
