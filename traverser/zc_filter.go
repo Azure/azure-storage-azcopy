@@ -483,3 +483,41 @@ func parseISO8601(s string, chooseEarliest bool) (time.Time, error) {
 func formatAsUTC(t time.Time) string {
 	return t.UTC().Format(time.RFC3339)
 }
+
+type FilterOptions struct {
+	IncludePatterns   []string
+	ExcludePatterns   []string
+	ExcludePaths      []string
+	IncludeAttributes []string
+	ExcludeAttributes []string
+	IncludeRegex      []string
+	ExcludeRegex      []string
+}
+
+// BuildFilters sets up the filters in a specific order
+func BuildFilters(fromTo common.FromTo, source common.ResourceString, recursive bool, opts FilterOptions) []ObjectFilter {
+	// Note: includeFilters and includeAttrFilters are ANDed
+	// They must both pass to get the file included
+	// Same rule applies to excludeFilters and excludeAttrFilters
+	filters := BuildIncludeFilters(opts.IncludePatterns)
+	if fromTo.From() == common.ELocation.Local() {
+		includeAttrFilters := BuildAttrFilters(opts.IncludeAttributes, source.ValueLocal(), true)
+		filters = append(filters, includeAttrFilters...)
+	}
+
+	filters = append(filters, BuildExcludeFilters(opts.ExcludePatterns, false)...)
+	filters = append(filters, BuildExcludeFilters(opts.ExcludePaths, true)...)
+	if fromTo.From() == common.ELocation.Local() {
+		excludeAttrFilters := BuildAttrFilters(opts.ExcludeAttributes, source.ValueLocal(), false)
+		filters = append(filters, excludeAttrFilters...)
+	}
+	// regex
+	filters = append(filters, BuildRegexFilters(opts.IncludeRegex, true)...)
+	filters = append(filters, BuildRegexFilters(opts.ExcludeRegex, false)...)
+
+	// after making all filters, log any search prefix computed from them
+	if prefixFilter := FilterSet(filters).GetEnumerationPreFilter(recursive); prefixFilter != "" {
+		common.LogToJobLogWithPrefix("Search prefix, which may be used to optimize scanning, is: "+prefixFilter, common.LogInfo) // "May be used" because we don't know here which enumerators will use it
+	}
+	return filters
+}

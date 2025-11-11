@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 	"github.com/stretchr/testify/assert"
@@ -37,7 +38,7 @@ func TestSyncSourceComparator(t *testing.T) {
 
 	// set up the indexer as well as the source comparator
 	indexer := traverser.NewObjectIndexer()
-	sourceComparator := newSyncSourceComparator(indexer, dummyCopyScheduler.process, common.ESyncHashType.None(), false, false)
+	sourceComparator := azcopy.newSyncSourceComparator(indexer, dummyCopyScheduler.process, common.ESyncHashType.None(), false, false)
 
 	// create a sample destination object
 	sampleDestinationObject := traverser.StoredObject{Name: "test", RelativePath: "/usr/test", LastModifiedTime: time.Now(), Md5: destMD5}
@@ -91,7 +92,7 @@ func TestSyncSrcCompDisableComparator(t *testing.T) {
 
 	// set up the indexer as well as the source comparator
 	indexer := traverser.NewObjectIndexer()
-	sourceComparator := newSyncSourceComparator(indexer, dummyCopyScheduler.process, common.ESyncHashType.None(), false, true)
+	sourceComparator := azcopy.newSyncSourceComparator(indexer, dummyCopyScheduler.process, common.ESyncHashType.None(), false, true)
 
 	// test the comparator in case a given source object is not present at the destination
 	// meaning no entry in the index, so the comparator should pass the given object to schedule a transfer
@@ -141,7 +142,7 @@ func TestSyncDestinationComparator(t *testing.T) {
 
 	// set up the indexer as well as the destination comparator
 	indexer := traverser.NewObjectIndexer()
-	destinationComparator := newSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, common.ESyncHashType.None(), false, false)
+	destinationComparator := azcopy.newSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, common.ESyncHashType.None(), false, false)
 
 	// create a sample source object
 	sampleSourceObject := traverser.StoredObject{Name: "test", RelativePath: "/usr/test", LastModifiedTime: time.Now(), Md5: srcMD5}
@@ -199,7 +200,7 @@ func TestSyncDestCompDisableComparison(t *testing.T) {
 
 	// set up the indexer as well as the destination comparator
 	indexer := traverser.NewObjectIndexer()
-	destinationComparator := newSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, common.ESyncHashType.None(), false, true)
+	destinationComparator := azcopy.newSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, common.ESyncHashType.None(), false, true)
 
 	// create a sample source object
 	currTime := time.Now()
