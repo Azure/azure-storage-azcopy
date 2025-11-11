@@ -320,10 +320,7 @@ func validateShareProtocolCompatibility(
 ) error {
 
 	// We can ignore the error if we fail to get the share properties.
-	shareProtocol, err := getShareProtocolType(ctx, serviceClient, resource, protocol)
-	if err != nil {
-		return err
-	}
+	shareProtocol, _ := getShareProtocolType(ctx, serviceClient, resource, protocol)
 
 	if shareProtocol == common.ELocation.File() {
 		if isSource && fromTo.From() != common.ELocation.File() {
