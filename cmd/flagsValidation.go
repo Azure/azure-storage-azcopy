@@ -26,6 +26,7 @@ import (
 	"runtime"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
 )
@@ -320,7 +321,22 @@ func validateShareProtocolCompatibility(
 ) error {
 
 	// We can ignore the error if we fail to get the share properties.
-	shareProtocol, _ := getShareProtocolType(ctx, serviceClient, resource, protocol)
+	fileURLParts, err := file.ParseURL(resource.Value)
+	if err != nil {
+		return fmt.Errorf("failed to parse resource URL: %w", err)
+	}
+	shareName := fileURLParts.ShareName
+
+	if serviceClient == nil {
+		return fmt.Errorf("service client is nil")
+	}
+
+	fileServiceClient, err := serviceClient.FileServiceClient()
+	if err != nil {
+		return fmt.Errorf("failed to create file service client: %w", err)
+	}
+	shareClient := fileServiceClient.NewShareClient(shareName)
+	shareProtocol, _ := getShareProtocolType(ctx, shareName, shareClient, protocol)
 
 	if shareProtocol == common.ELocation.File() {
 		if isSource && fromTo.From() != common.ELocation.File() {
@@ -350,27 +366,10 @@ func validateShareProtocolCompatibility(
 // If retrieval fails, it logs a warning and returns the fallback givenValue ("SMB" or "NFS").
 func getShareProtocolType(
 	ctx context.Context,
-	serviceClient *common.ServiceClient,
-	resource common.ResourceString,
+	shareName string,
+	shareClient *share.Client,
 	givenValue common.Location,
 ) (common.Location, error) {
-
-	fileURLParts, err := file.ParseURL(resource.Value)
-	if err != nil {
-		return common.ELocation.Unknown(), fmt.Errorf("failed to parse resource URL: %w", err)
-	}
-	shareName := fileURLParts.ShareName
-
-	if serviceClient == nil {
-		return common.ELocation.Unknown(), fmt.Errorf("service client is nil")
-	}
-
-	fileServiceClient, err := serviceClient.FileServiceClient()
-	if err != nil {
-		return common.ELocation.Unknown(), fmt.Errorf("failed to create file service client: %w", err)
-	}
-
-	shareClient := fileServiceClient.NewShareClient(shareName)
 	properties, err := shareClient.GetProperties(ctx, nil)
 	if err != nil {
 		glcm.Info(fmt.Sprintf("Warning: Failed to fetch share properties for '%s'. Assuming the share uses '%s' protocol based on --from-to flag.", shareName, givenValue))
