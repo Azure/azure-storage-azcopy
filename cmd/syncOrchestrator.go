@@ -752,11 +752,11 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 				for range fileCount {
 					// We can increment the count of not transferred files as well
-					ptt.options.IncrementNotTransferred(common.EEntityType.File())
+					ptt.options.IncrementNotTransferred(common.EEntityType.File(), cca.symlinkHandling, cca.hardlinks)
 				}
 
 				for range stra.sub_dirs {
-					ptt.options.IncrementNotTransferred(common.EEntityType.Folder())
+					ptt.options.IncrementNotTransferred(common.EEntityType.Folder(), cca.symlinkHandling, cca.hardlinks)
 				}
 
 				dstDirEnumerationSkippedBasedOnCTime.Add(1) // Increment skipped count based on ctime optimization
