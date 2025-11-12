@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // MapFromTags Recursively builds a map[string]string from a reflect.val
@@ -199,9 +201,9 @@ type GlobalFlags struct {
 	CheckVersion     *bool    `flag:"check-version,default:false"`
 
 	// TODO : Flags default seems to be broken; WI#26954065
-	OutputType  *common.OutputFormat    `flag:"output-type,default:json"`
-	LogLevel    *common.LogLevel        `flag:"log-level,default:DEBUG"`
-	OutputLevel *common.OutputVerbosity `flag:"output-level,default:DEFAULT"`
+	OutputType  *cmd.OutputFormat    `flag:"output-type,default:json"`
+	LogLevel    *common.LogLevel     `flag:"log-level,default:DEBUG"`
+	OutputLevel *cmd.OutputVerbosity `flag:"output-level,default:DEFAULT"`
 
 	// TODO: reconsider/reengineer this flag; WI#26475473
 	// DebugSkipFiles []string `flag:"debug-skip-files"`
@@ -302,8 +304,10 @@ type CopySyncCommonFlags struct {
 	CPKByValue              *bool                        `flag:"cpk-by-value"`
 	IncludePattern          *string                      `flag:"include-pattern"`
 	IncludeDirectoryStubs   *bool                        `flag:"include-directory-stub"`
-	NFS                     *bool                        `flag:"nfs"`
 	PreserveInfo            *bool                        `flag:"preserve-info"`
+	PreserveSymlinks        *bool                        `flag:"preserve-symlinks"`
+	FollowSymlinks          *bool                        `flag:"follow-symlinks"`
+	HardlinkType            *common.HardlinkHandlingType `flag:"hardlinks"`
 }
 
 // CopyFlags is a more exclusive struct including flags exclusi

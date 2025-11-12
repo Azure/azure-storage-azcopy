@@ -27,6 +27,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 	"github.com/JeffreyRichter/enum/enum"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -51,18 +52,31 @@ func ValidateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo,
 
 	}
 
+	// Normalize FileSMB cases to corresponding File cases.
+	// This remapping ensures that we can handle FileSMB scenarios without requiring
+	// widespread code changes in AzCopy for the time being.
 	if userFromTo == common.EFromTo.LocalFileSMB() {
 		userFromTo = common.EFromTo.LocalFile()
 	} else if userFromTo == common.EFromTo.FileSMBLocal() {
 		userFromTo = common.EFromTo.FileLocal()
 	} else if userFromTo == common.EFromTo.FileSMBFileSMB() {
 		userFromTo = common.EFromTo.FileFile()
-	}
-
-	if userFromTo == common.EFromTo.FileSMBFileNFS() || userFromTo == common.EFromTo.FileNFSFileSMB() {
-		glcm.Error("The --from-to value of " + userFromTo.String() +
-			" is not supported currently. " +
-			"Copy operations between SMB and NFS file shares are not supported yet.")
+	} else if userFromTo == common.EFromTo.FileSMBBlob() {
+		userFromTo = common.EFromTo.FileBlob()
+	} else if userFromTo == common.EFromTo.BlobFileSMB() {
+		userFromTo = common.EFromTo.BlobFile()
+	} else if userFromTo == common.EFromTo.FileSMBPipe() {
+		userFromTo = common.EFromTo.FilePipe()
+	} else if userFromTo == common.EFromTo.PipeFileSMB() {
+		userFromTo = common.EFromTo.PipeFile()
+	} else if userFromTo == common.EFromTo.FileSMBTrash() {
+		userFromTo = common.EFromTo.FileTrash()
+	} else if userFromTo == common.EFromTo.FileSMBBlobFS() {
+		userFromTo = common.EFromTo.FileBlobFS()
+	} else if userFromTo == common.EFromTo.BlobFSFileSMB() {
+		userFromTo = common.EFromTo.BlobFSFile()
+	} else if userFromTo == common.EFromTo.FileSMBTrash() {
+		userFromTo = common.EFromTo.FileTrash()
 	}
 
 	return userFromTo, nil
@@ -225,7 +239,7 @@ func InferArgumentLocation(arg string) common.Location {
 				return common.ELocation.File()
 			case strings.Contains(host, ".dfs"):
 				return common.ELocation.BlobFS()
-			case strings.Contains(host, benchmarkSourceHost):
+			case strings.Contains(host, traverser.BenchmarkSourceHost):
 				return common.ELocation.Benchmark()
 				// enable targeting an emulator/stack
 			case IPv4Regex.MatchString(host):

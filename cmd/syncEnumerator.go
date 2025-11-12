@@ -31,13 +31,14 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // -------------------------------------- Implemented Enumerators -------------------------------------- \\
 
-func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *syncEnumerator, err error) {
+func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *traverser.SyncEnumerator, err error) {
 
 	srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source, true, cca.cpkOptions)
 
@@ -64,19 +65,27 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
 	dest := cca.fromTo.To()
-	sourceTraverser, err := InitResourceTraverser(cca.source, cca.fromTo.From(), ctx, InitResourceTraverserOptions{
+	sourceTraverser, err := traverser.InitResourceTraverser(cca.source, cca.fromTo.From(), ctx, traverser.InitResourceTraverserOptions{
 		DestResourceType: &dest,
 
 		Credential: &srcCredInfo,
-		IncrementEnumeration: func(entityType common.EntityType) {
+		IncrementEnumeration: func(entityType common.EntityType, symlinkOption common.SymlinkHandlingType, hardlinkHandling common.HardlinkHandlingType) {
 			if entityType == common.EEntityType.File() {
 				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 			}
-			if common.IsNFSCopy() {
+			if cca.fromTo.IsNFS() {
 				if entityType == common.EEntityType.Other() {
 					atomic.AddUint32(&cca.atomicSkippedSpecialFileCount, 1)
 				} else if entityType == common.EEntityType.Symlink() {
-					atomic.AddUint32(&cca.atomicSkippedSymlinkCount, 1)
+					switch symlinkOption {
+					case common.ESymlinkHandlingType.Skip():
+						atomic.AddUint32(&cca.atomicSkippedSymlinkCount, 1)
+					}
+				} else if entityType == common.EEntityType.Hardlink() {
+					switch hardlinkHandling {
+					case common.SkipHardlinkHandlingType:
+						atomic.AddUint32(&cca.atomicSkippedHardlinkCount, 1)
+					}
 				}
 			}
 		},
@@ -92,6 +101,10 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		IncludeDirectoryStubs:   includeDirStubs,
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
 		HardlinkHandling:        cca.hardlinks,
+		SymlinkHandling:         cca.symlinkHandling,
+		FromTo:                  cca.fromTo,
+		StripTopDir:             !cca.includeRoot,
+		IncludeRoot:             cca.includeRoot,
 	})
 
 	if err != nil {
@@ -108,9 +121,9 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	// TODO: enable symlink support in a future release after evaluating the implications
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
-	destinationTraverser, err := InitResourceTraverser(cca.destination, cca.fromTo.To(), ctx, InitResourceTraverserOptions{
+	destinationTraverser, err := traverser.InitResourceTraverser(cca.destination, cca.fromTo.To(), ctx, traverser.InitResourceTraverserOptions{
 		Credential: &dstCredInfo,
-		IncrementEnumeration: func(entityType common.EntityType) {
+		IncrementEnumeration: func(entityType common.EntityType, symlinkOption common.SymlinkHandlingType, hardlinkHandling common.HardlinkHandlingType) {
 			if entityType == common.EEntityType.File() {
 				atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
 			}
@@ -127,6 +140,10 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		IncludeDirectoryStubs:   includeDirStubs,
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
 		HardlinkHandling:        common.EHardlinkHandlingType.Follow(),
+		SymlinkHandling:         cca.symlinkHandling,
+		FromTo:                  cca.fromTo,
+		StripTopDir:             !cca.includeRoot,
+		IncludeRoot:             cca.includeRoot,
 	})
 	if err != nil {
 		return nil, err
@@ -158,9 +175,9 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		*/
 
 		if bloberror.HasCode(err, bloberror.ContainerNotFound) { // We can resolve a missing container. Let's create it.
-			bt := destinationTraverser.(*blobTraverser)
-			sc := bt.serviceClient                                                   // it being a blob traverser is a relatively safe assumption, because
-			bUrlParts, _ := blob.ParseURL(bt.rawURL)                                 // it should totally have succeeded by now anyway
+			bt := destinationTraverser.(*traverser.BlobTraverser)
+			sc := bt.ServiceClient                                                   // it being a blob traverser is a relatively safe assumption, because
+			bUrlParts, _ := blob.ParseURL(bt.RawURL)                                 // it should totally have succeeded by now anyway
 			_, err = sc.NewContainerClient(bUrlParts.ContainerName).Create(ctx, nil) // If it doesn't work out, this will surely bubble up later anyway. It won't be long.
 			if err != nil {
 				glcm.Warn(fmt.Sprintf("Failed to create the missing destination container: %v", err))
@@ -178,31 +195,35 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	// Note: includeFilters and includeAttrFilters are ANDed
 	// They must both pass to get the file included
 	// Same rule applies to excludeFilters and excludeAttrFilters
-	filters := buildIncludeFilters(cca.includePatterns)
+	filters := traverser.BuildIncludeFilters(cca.includePatterns)
 	if cca.fromTo.From() == common.ELocation.Local() {
-		includeAttrFilters := buildAttrFilters(cca.includeFileAttributes, cca.source.ValueLocal(), true)
+		includeAttrFilters := traverser.BuildAttrFilters(cca.includeFileAttributes, cca.source.ValueLocal(), true)
 		filters = append(filters, includeAttrFilters...)
 	}
 
-	filters = append(filters, buildExcludeFilters(cca.excludePatterns, false)...)
-	filters = append(filters, buildExcludeFilters(cca.excludePaths, true)...)
+	filters = append(filters, traverser.BuildExcludeFilters(cca.excludePatterns, false)...)
+	filters = append(filters, traverser.BuildExcludeFilters(cca.excludePaths, true)...)
 	if cca.fromTo.From() == common.ELocation.Local() {
-		excludeAttrFilters := buildAttrFilters(cca.excludeFileAttributes, cca.source.ValueLocal(), false)
+		excludeAttrFilters := traverser.BuildAttrFilters(cca.excludeFileAttributes, cca.source.ValueLocal(), false)
 		filters = append(filters, excludeAttrFilters...)
 	}
 
 	// includeRegex
-	filters = append(filters, buildRegexFilters(cca.includeRegex, true)...)
-	filters = append(filters, buildRegexFilters(cca.excludeRegex, false)...)
+	filters = append(filters, traverser.BuildRegexFilters(cca.includeRegex, true)...)
+	filters = append(filters, traverser.BuildRegexFilters(cca.excludeRegex, false)...)
 
 	// after making all filters, log any search prefix computed from them
-	if prefixFilter := FilterSet(filters).GetEnumerationPreFilter(cca.recursive); prefixFilter != "" {
+	if prefixFilter := traverser.FilterSet(filters).GetEnumerationPreFilter(cca.recursive); prefixFilter != "" {
 		common.LogToJobLogWithPrefix("Search prefix, which may be used to optimize scanning, is: "+prefixFilter, common.LogInfo) // "May be used" because we don't know here which enumerators will use it
 	}
 
 	// decide our folder transfer strategy
+	var fpo common.FolderPropertyOption
+	var folderMessage string
 	// sync always acts like stripTopDir=true, but if we intend to persist the root, we must tell NewFolderPropertyOption stripTopDir=false.
-	fpo, folderMessage := NewFolderPropertyOption(cca.fromTo, cca.recursive, !cca.includeRoot, filters, cca.preserveInfo, cca.preservePermissions.IsTruthy(), false, strings.EqualFold(cca.destination.Value, common.Dev_Null), cca.includeDirectoryStubs)
+	fpo, folderMessage = NewFolderPropertyOption(cca.fromTo, cca.recursive, !cca.includeRoot, filters, cca.preserveInfo,
+		cca.preservePermissions.IsTruthy(), cca.preservePOSIXProperties, strings.EqualFold(cca.destination.Value, common.Dev_Null),
+		cca.includeDirectoryStubs)
 	if !cca.dryrunMode {
 		glcm.Info(folderMessage)
 	}
@@ -248,6 +269,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.trailingDot,
 		},
+		JobErrorHandler: glcm,
 	}
 
 	var srcReauthTok *common.ScopedAuthenticator
@@ -256,11 +278,11 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		srcReauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, srcReauthTok)
+	options := traverser.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, srcReauthTok)
 
 	// Create Source Client.
 	var azureFileSpecificOptions any
-	if cca.fromTo.From() == common.ELocation.File() || cca.fromTo.From() == common.ELocation.FileNFS() {
+	if cca.fromTo.From().IsFile() {
 		azureFileSpecificOptions = &common.FileClientOptions{
 			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
 		}
@@ -279,10 +301,10 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	}
 
 	// Create Destination client
-	if cca.fromTo.To() == common.ELocation.File() || cca.fromTo.To() == common.ELocation.FileNFS() {
+	if cca.fromTo.To().IsFile() {
 		azureFileSpecificOptions = &common.FileClientOptions{
 			AllowTrailingDot:       cca.trailingDot == common.ETrailingDotOption.Enable(),
-			AllowSourceTrailingDot: (cca.trailingDot == common.ETrailingDotOption.Enable() && cca.fromTo.To() == common.ELocation.File()),
+			AllowSourceTrailingDot: (cca.trailingDot == common.ETrailingDotOption.Enable() && cca.fromTo.To().IsFile()),
 		}
 	}
 
@@ -297,7 +319,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		srcTokenCred = common.NewScopedCredential(srcCredInfo.OAuthTokenInfo.TokenCredential, srcCredInfo.CredentialType)
 	}
 
-	options = createClientOptions(common.AzcopyCurrentJobLogger, srcTokenCred, dstReauthTok)
+	options = traverser.CreateClientOptions(common.AzcopyCurrentJobLogger, srcTokenCred, dstReauthTok)
 	copyJobTemplate.DstServiceClient, err = common.GetServiceClientForLocation(
 		cca.fromTo.To(),
 		cca.destination,
@@ -315,8 +337,8 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo, copyJobTemplate)
 
 	// set up the comparator so that the source/destination can be compared
-	indexer := newObjectIndexer()
-	var comparator objectProcessor
+	indexer := traverser.NewObjectIndexer()
+	var comparator traverser.ObjectProcessor
 	var finalize func() error
 
 	switch cca.fromTo {
@@ -328,7 +350,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		if err != nil {
 			return nil, fmt.Errorf("unable to instantiate destination cleaner due to: %s", err.Error())
 		}
-		destCleanerFunc := newFpoAwareProcessor(fpo, destinationCleaner.removeImmediately)
+		destCleanerFunc := traverser.NewFpoAwareProcessor(fpo, destinationCleaner.removeImmediately)
 
 		// when uploading, we can delete remote objects immediately, because as we traverse the remote location
 		// we ALREADY have available a complete map of everything that exists locally
@@ -337,7 +359,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		comparator = newSyncDestinationComparator(indexer, transferScheduler.scheduleCopyTransfer, destCleanerFunc, cca.compareHash, cca.preserveInfo, cca.mirrorMode).processIfNecessary
 		finalize = func() error {
 			// schedule every local file that doesn't exist at the destination
-			err = indexer.traverse(transferScheduler.scheduleCopyTransfer, filters)
+			err = indexer.Traverse(transferScheduler.scheduleCopyTransfer, filters)
 			if err != nil {
 				return err
 			}
@@ -353,9 +375,9 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 			return nil
 		}
 
-		return newSyncEnumerator(sourceTraverser, destinationTraverser, indexer, filters, comparator, finalize), nil
+		return traverser.NewSyncEnumerator(sourceTraverser, destinationTraverser, indexer, filters, comparator, finalize), nil
 	default:
-		indexer.isDestinationCaseInsensitive = IsDestinationCaseInsensitive(cca.fromTo)
+		indexer.IsDestinationCaseInsensitive = IsDestinationCaseInsensitive(cca.fromTo)
 		// in all other cases (download and S2S), the destination is scanned/indexed first
 		// then the source is scanned and filtered based on what the destination contains
 		comparator = newSyncSourceComparator(indexer, transferScheduler.scheduleCopyTransfer, cca.compareHash, cca.preserveInfo, cca.mirrorMode).processIfNecessary
@@ -364,19 +386,19 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 			// remove the extra files at the destination that were not present at the source
 			// we can only know what needs to be deleted when we have FINISHED traversing the remote source
 			// since only then can we know which local files definitely don't exist remotely
-			var deleteScheduler objectProcessor
+			var deleteScheduler traverser.ObjectProcessor
 			switch cca.fromTo.To() {
 			case common.ELocation.Blob(), common.ELocation.File(), common.ELocation.FileNFS(), common.ELocation.BlobFS():
 				deleter, err := newSyncDeleteProcessor(cca, fpo, copyJobTemplate.DstServiceClient)
 				if err != nil {
 					return err
 				}
-				deleteScheduler = newFpoAwareProcessor(fpo, deleter.removeImmediately)
+				deleteScheduler = traverser.NewFpoAwareProcessor(fpo, deleter.removeImmediately)
 			default:
-				deleteScheduler = newFpoAwareProcessor(fpo, newSyncLocalDeleteProcessor(cca, fpo).removeImmediately)
+				deleteScheduler = traverser.NewFpoAwareProcessor(fpo, newSyncLocalDeleteProcessor(cca, fpo).removeImmediately)
 			}
 
-			err = indexer.traverse(deleteScheduler, nil)
+			err = indexer.Traverse(deleteScheduler, nil)
 			if err != nil {
 				return err
 			}
@@ -394,7 +416,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 			return nil
 		}
 
-		return newSyncEnumerator(destinationTraverser, sourceTraverser, indexer, filters, comparator, finalize), nil
+		return traverser.NewSyncEnumerator(destinationTraverser, sourceTraverser, indexer, filters, comparator, finalize), nil
 	}
 }
 
@@ -410,14 +432,14 @@ func IsDestinationCaseInsensitive(fromTo common.FromTo) bool {
 func quitIfInSync(transferJobInitiated, anyDestinationFileDeleted bool, cca *cookedSyncCmdArgs) {
 	if !transferJobInitiated && !anyDestinationFileDeleted {
 		cca.reportScanningProgress(glcm, 0)
-		glcm.Exit(func(format common.OutputFormat) string {
+		glcm.Exit(func(format OutputFormat) string {
 			return "The source and destination are already in sync."
-		}, common.EExitCode.Success())
+		}, EExitCode.Success())
 	} else if !transferJobInitiated && anyDestinationFileDeleted {
 		// some files were deleted but no transfer scheduled
 		cca.reportScanningProgress(glcm, 0)
-		glcm.Exit(func(format common.OutputFormat) string {
+		glcm.Exit(func(format OutputFormat) string {
 			return "The source and destination are now in sync."
-		}, common.EExitCode.Success())
+		}, EExitCode.Success())
 	}
 }

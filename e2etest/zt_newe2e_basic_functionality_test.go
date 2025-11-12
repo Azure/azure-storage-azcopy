@@ -1,10 +1,15 @@
 package e2etest
 
 import (
-	"github.com/stretchr/testify/assert"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
@@ -67,7 +72,9 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFile(svm *ScenarioVariationMana
 
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body: body,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 
 	ValidatePlanFiles(svm, stdOut, ExpectedPlanFile{
 		Objects: map[PlanFilePath]PlanFileObject{
@@ -147,7 +154,9 @@ func (s *BasicFunctionalitySuite) Scenario_MultiFileUploadDownload(svm *Scenario
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: common.Iff[ObjectResourceMapping](asSubdir, ObjectResourceMappingParentFolder{srcContainer.ContainerName(), srcDef.Objects}, srcDef.Objects),
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *BasicFunctionalitySuite) Scenario_EntireDirectory_S2SContainer(svm *ScenarioVariationManager) {
@@ -208,7 +217,9 @@ func (s *BasicFunctionalitySuite) Scenario_EntireDirectory_S2SContainer(svm *Sce
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcObjs,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *BasicFunctionalitySuite) Scenario_EntireDirectory_UploadContainer(svm *ScenarioVariationManager) {
@@ -262,7 +273,9 @@ func (s *BasicFunctionalitySuite) Scenario_EntireDirectory_UploadContainer(svm *
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcObjs,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *BasicFunctionalitySuite) Scenario_EntireDirectory_DownloadContainer(svm *ScenarioVariationManager) {
@@ -316,7 +329,9 @@ func (s *BasicFunctionalitySuite) Scenario_EntireDirectory_DownloadContainer(svm
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcObjs,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 }
 
 func (s *BasicFunctionalitySuite) Scenario_SingleFileUploadDownload_EmptySAS(svm *ScenarioVariationManager) {
@@ -464,7 +479,9 @@ func (s *BasicFunctionalitySuite) Scenario_CopyUnSafeDest(svm *ScenarioVariation
 	ValidateResource[ObjectResourceManager](svm, dstObj,
 		ResourceDefinitionObject{
 			Body: body,
-		}, false)
+		}, ValidateResourceOptions{
+			validateObjectContent: false,
+		})
 }
 
 func (s *BasicFunctionalitySuite) Scenario_TagsPermission(svm *ScenarioVariationManager) {
@@ -601,6 +618,9 @@ func (s *BasicFunctionalitySuite) Scenario_ConcurrencyValueSet(svm *ScenarioVari
 
 // Scenario_CheckVersion test version info is only printed explicitly when --check-version is used.
 func (*BasicFunctionalitySuite) Scenario_CheckVersion(svm *ScenarioVariationManager) {
+	if strings.Contains(common.AzcopyVersion, "preview") {
+		svm.Skip("Check version does not print output for preview versions.")
+	}
 	// The flag usage is `azcopy --check-version` without sub-commands.
 	// So, no need to pass azcopy verb
 	stdout, _ := RunAzCopy(svm, AzCopyCommand{
@@ -608,7 +628,7 @@ func (*BasicFunctionalitySuite) Scenario_CheckVersion(svm *ScenarioVariationMana
 			CopySyncCommonFlags: CopySyncCommonFlags{
 				GlobalFlags: GlobalFlags{
 					CheckVersion: pointerTo(true),
-					OutputType:   pointerTo(common.EOutputFormat.Text()),
+					OutputType:   pointerTo(cmd.EOutputFormat.Text()),
 				},
 			},
 		},
@@ -648,7 +668,7 @@ func (*BasicFunctionalitySuite) Scenario_DisabledCheckVersion(svm *ScenarioVaria
 			CopySyncCommonFlags: CopySyncCommonFlags{
 				GlobalFlags: GlobalFlags{
 					// CheckVersion: pointerTo(false), default is False
-					OutputType: pointerTo(common.EOutputFormat.Text()),
+					OutputType: pointerTo(cmd.EOutputFormat.Text()),
 				},
 			},
 		},
@@ -735,8 +755,149 @@ func (*BasicFunctionalitySuite) Scenario_SkipVersionCheckDisabledBackCompat(svm 
 
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body: body,
-	}, true)
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
 
 	ValidateDoesNotContainError(svm, stdOut, []string{"unknown flag: --skip-version-check"})
 
+}
+
+func (s *BasicFunctionalitySuite) Scenario_JobResume(svm *ScenarioVariationManager) {
+	// Create a service resource manager
+	svc := GetRootResource(svm, common.ELocation.Blob()).(ServiceResourceManager)
+	// Pick a never-before-used name (unix nano to avoid collisions)
+	dstName := "missing" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	// Just get a handle; no network call that creates the container
+	dstContainer := svc.GetContainer(dstName)
+
+	body := NewRandomObjectContentContainer(SizeFromString("10M"))
+	// Scale up from service to object
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local()})), ResourceDefinitionObject{
+		Body: body,
+	})
+
+	// no local->local
+	if srcObj.Location().IsLocal() && dstContainer.Location().IsLocal() {
+		svm.InvalidateScenario()
+		return
+	}
+
+	// Create a single AzCopyEnvironment and reuse it for both runs so logs/plans land in the same /<scenario>/<000> folder.
+	envCtx := FetchAzCopyEnvironmentContext(svm)
+	env := &AzCopyEnvironment{
+		InheritEnvironment: map[string]bool{"*": true},
+	}
+
+	// Build the temp path for that environment and set explicit plan/log locations
+	envTmpPath := envCtx.GetEnvTempPath(env) // -> .../<scenario>/<000>
+	env.JobPlanLocation = pointerTo(filepath.Join(envTmpPath, PlanSubdir))
+	env.LogLocation = pointerTo(filepath.Join(envTmpPath, LogSubdir))
+
+	// Ensure directories exist so azcopy can write to them
+	_ = os.MkdirAll(filepath.Join(envTmpPath, PlanSubdir), 0o777)
+	_ = os.MkdirAll(filepath.Join(envTmpPath, LogSubdir), 0o777)
+
+	stdOut, _ := RunAzCopy(svm, AzCopyCommand{
+		Verb: AzCopyVerbCopy,
+		Targets: []ResourceManager{
+			TryApplySpecificAuthType(srcObj, EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{}),
+			TryApplySpecificAuthType(dstContainer, EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{}),
+		},
+		Flags: CopyFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive: pointerTo(true),
+			},
+		},
+		ShouldFail:  true,
+		Environment: env,
+	})
+
+	// Assertions to check if above copy job failed with final status Failed
+	if !svm.Dryrun() {
+		firstParsed, ok := stdOut.(*AzCopyParsedCopySyncRemoveStdout)
+		svm.Assert("could not parse first job stdout", Equal{}, ok, true)
+		svm.Assert("first run did not show failed status", Equal{}, firstParsed.FinalStatus.JobStatus, common.EJobStatus.Failed())
+		svm.Assert("first run failed transfers not equal to 1", Equal{}, firstParsed.FinalStatus.TransfersFailed, uint32(1))
+	}
+
+	// Create a ContainerResourceManager which will create a container for the azcopy job resume command to succeed
+	dstContainer = CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()})), ResourceDefinitionContainer{ContainerName: pointerTo(dstName)})
+
+	// Find the Job ID for the above azcopy copy job
+	var jobId string
+	if !svm.Dryrun() {
+		if parsedOut, ok := stdOut.(*AzCopyParsedCopySyncRemoveStdout); ok {
+			if parsedOut.InitMsg.JobID != "" {
+				jobId = parsedOut.InitMsg.JobID
+			}
+		}
+	}
+
+	resStdOut, _ := RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb:           AzCopyVerbJobsResume,
+			PositionalArgs: []string{jobId},
+			Environment:    env,
+		})
+
+	// Assertions to check if JobResume succeeded
+	if !svm.Dryrun() {
+		resumeParsed, rok := resStdOut.(*AzCopyParsedCopySyncRemoveStdout)
+		svm.Assert("could not parse resume stdout", Equal{}, rok, true)
+		svm.Assert("resume did not lead to job completion", Equal{}, resumeParsed.FinalStatus.JobStatus, common.EJobStatus.Completed())
+		svm.Assert("resume completed transfers not equal to 1", Equal{}, resumeParsed.FinalStatus.TransfersCompleted, uint32(1))
+	}
+}
+
+func (s *BasicFunctionalitySuite) Scenario_ValidateThroughput(svm *ScenarioVariationManager) {
+	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
+	// Resolve variation early so name makes sense
+	srcLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob()})
+	// Scale up from service to object
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob()})), ResourceDefinitionContainer{})
+
+	// Scale up from service to object
+	srcDef := ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"abc":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
+			"def":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
+			"foobar": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
+		},
+	}
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, srcLoc), srcDef)
+
+	// no s2s, no local->local
+	if srcContainer.Location().IsRemote() == dstContainer.Location().IsRemote() {
+		svm.InvalidateScenario()
+		return
+	}
+
+	sasOpts := GenericAccountSignatureValues{}
+
+	stdOut, _ := RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: azCopyVerb,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+				TryApplySpecificAuthType(dstContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive: pointerTo(true),
+					GlobalFlags: GlobalFlags{
+						OutputType: pointerTo(cmd.EOutputFormat.Text()),
+					},
+				},
+			},
+		})
+
+	// Validate that throughput is displayed in the output (regression test for v10.31.0 throughput display bug)
+	ValidateThroughputOutput(svm, stdOut)
 }

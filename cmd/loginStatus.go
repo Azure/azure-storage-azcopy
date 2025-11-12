@@ -21,12 +21,11 @@
 package cmd
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
+
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/spf13/cobra"
 )
 
@@ -34,35 +33,6 @@ type LoginStatusOptions struct {
 	TenantID    bool
 	AADEndpoint bool
 	Method      bool
-}
-
-type LoginStatus struct {
-	Valid       bool
-	TenantID    string
-	AADEndpoint string
-	AuthMethod  common.AutoLoginType
-}
-
-func (options LoginStatusOptions) process() (LoginStatus, error) {
-	// getting current token info and refreshing it with GetTokenInfo()
-	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	uotm := GetUserOAuthTokenManagerInstance()
-	tokenInfo, err := uotm.GetTokenInfo(ctx)
-	var status = LoginStatus{
-		Valid: err == nil && !tokenInfo.IsExpired(),
-	}
-	if status.Valid {
-		status.TenantID = tokenInfo.Tenant
-		status.AADEndpoint = tokenInfo.ActiveDirectoryEndpoint
-		status.AuthMethod = tokenInfo.LoginType
-		return status, nil
-	} else {
-		return status, errors.New("You are currently not logged in. Please login using 'azcopy login'")
-	}
-}
-
-func RunLoginStatus(options LoginStatusOptions) (LoginStatus, error) {
-	return options.process()
 }
 
 type LoginStatusOutput struct {
@@ -87,11 +57,11 @@ func init() {
 		},
 		Run: func(cmd *cobra.Command, args []string) {
 			logText := func(format string, a ...any) {
-				if OutputFormat == common.EOutputFormat.None() || OutputFormat == common.EOutputFormat.Text() {
+				if outputFormat == EOutputFormat.None() || outputFormat == EOutputFormat.Text() {
 					glcm.Info(fmt.Sprintf(format, a...))
 				}
 			}
-			status, _ := RunLoginStatus(commandLineInput)
+			status, _ := Client.GetLoginStatus(azcopy.GetLoginStatusOptions{})
 			var Info = LoginStatusOutput{
 				Valid: status.Valid,
 			}
@@ -109,27 +79,27 @@ func init() {
 				}
 
 				if commandLineInput.Method {
-					logText(fmt.Sprintf("Authorized using %s", status.AuthMethod))
-					method := status.AuthMethod.String()
+					logText(fmt.Sprintf("Authorized using %s", status.LoginType))
+					method := status.LoginType.String()
 					Info.AuthMethod = &method
 				}
 			} else {
 				logText("You are currently not logged in. Please login using 'azcopy login'")
 			}
 
-			if OutputFormat == common.EOutputFormat.Json() {
+			if outputFormat == EOutputFormat.Json() {
 				glcm.Output(
-					func(_ common.OutputFormat) string {
+					func(_ OutputFormat) string {
 						buf, err := json.Marshal(Info)
 						if err != nil {
 							panic(err)
 						}
 
 						return string(buf)
-					}, common.EOutputMessageType.LoginStatusInfo())
+					}, EOutputMessageType.LoginStatusInfo())
 			}
 
-			glcm.Exit(nil, common.Iff(Info.Valid, common.EExitCode.Success(), common.EExitCode.Error()))
+			glcm.Exit(nil, common.Iff(Info.Valid, EExitCode.Success(), EExitCode.Error()))
 		},
 	}
 

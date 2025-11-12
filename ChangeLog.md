@@ -1,9 +1,55 @@
 
 # Change Log
 
+## Version 10.31.0
+
+### New Features
+1. `--include-root` flag now allows customers to preserve root properties when used in conjunction with `--preserve-XXXX` flags. ([#3163](https://github.com/Azure/azure-storage-azcopy/pull/3163))
+
+### Bug Fixes
+1. Fixed a bug to retry on various network errors. ([#3237](https://github.com/Azure/azure-storage-azcopy/pull/3237])) ([#3252](https://github.com/Azure/azure-storage-azcopy/pull/3252))
+2. Fixed a bug where remove would not work on paths with encoded characters. ([#2977](https://github.com/Azure/azure-storage-azcopy/issues/2977))
+3. Fixed a bug where jobs resume would not produce any output for previously failed jobs. ([#3103](https://github.com/Azure/azure-storage-azcopy/pull/3103))
+4. Fixed a bug where FileBlob transfers with EntraID on the source would pass the wrong service version. ([#3242](https://github.com/Azure/azure-storage-azcopy/issues/3242))
+
+## Code Improvements
+1. Refactored traverser related code into its own package. ([#3251](https://github.com/Azure/azure-storage-azcopy/pull/3251))
+2. Refactored OAuth token manager access to use a client-based pattern instead of global singleton access. ([#3260](https://github.com/Azure/azure-storage-azcopy/pull/3260))
+3. Removed unused code related to credential management. ([#3260](https://github.com/Azure/azure-storage-azcopy/pull/3260))
+4. Refactored Lifecycle UI code into the cmd package ([#3262](https://github.com/Azure/azure-storage-azcopy/pull/3262)).
+5. Error handling code is now injected into JobMgr, or appropriately bubbled upwards instead of using global LCM error handling. ([#3262](https://github.com/Azure/azure-storage-azcopy/pull/3262))
+
+## Version 10.31.0-preview.1
+
+### Dependency updates
+1.	Golang 1.24.4 -> 1.24.6 ([#3154](https://github.com/Azure/azure-storage-azcopy/issues/3154))
+
+### New Features
+1. Azure Files NFS -> Azure Files SMB transfers.
+   - Transfer from Azure Files NFS to Azure Files SMB. (`--from-to=FileNFSFileSMB`)
+2. Azure Files SMB -> Azure Files NFS transfers.
+   - Transfer from Azure Files SMB to Azure Files NFS. (`--from-to=FileSMBFileNFS`)
+3. Symlink support for Azure Files NFS shares.
+   Introduced support for symbolic links in Azure Files NFS shares. 
+   Symlinks can be preserved, skipped, or followed based on command-line flags.  
+   - Preserve symlinks: `--preserve-symlinks=true`
+   - Skip symlinks: default behavior when flags are not provided  
+   - Follow symlinks: `--follow-symlinks=true`
+4. Added a --check-version flag to make version checking an opt in feature. ([#3173](https://github.com/Azure/azure-storage-azcopy/pull/3173))
+
+### Bug Fixes
+1. Fixed a bug to retry on WSAETIMEDOUT on Windows. ([#3195](https://github.com/Azure/azure-storage-azcopy/pull/3195))
+2. Fixed a bug with the folder creation tracker which caused folder creation calls to happen more often than necessary. ([#3151](https://github.com/Azure/azure-storage-azcopy/pull/3151)) 
+3. Fixed a bug to redact x-ams-credential from logs. ([#3206](https://github.com/Azure/azure-storage-azcopy/pull/3206))
+4. Fixed a bug where powershell login would fail with older versions of Az.Accounts. ([#3191](https://github.com/Azure/azure-storage-azcopy/pull/3191))
+5. Fixed a bug where symlink direct targets would be handled as a file instead of a symlink. ([#3222](https://github.com/Azure/azure-storage-azcopy/pull/3222))
+
+### Breaking changes
+1. AzCopy no longer checks version by default. ([#3173](https://github.com/Azure/azure-storage-azcopy/pull/3173))
+
 ## Version 10.30.1
 
-### Bug Fixes 
+### Bug Fixes
 1. Fixed `--exclude-path` flag not available in remove operations.([PR #3165](https://github.com/Azure/azure-storage-azcopy/pull/3165)) ([GH Issue #3159](https://github.com/Azure/azure-storage-azcopy/issues/3159))
 2. Fixed regression where AzCopy was not honoring concurrency value in copy operations ([#3192](https://github.com/Azure/azure-storage-azcopy/pull/3192))
 3. Fixed the incorrect JSON output format of the warning message when there are multiple AzCopy processes running. ([PR #3188](https://github.com/Azure/azure-storage-azcopy/pull/3188)) ([GH Issue #3182](https://github.com/Azure/azure-storage-azcopy/issues/3182))
@@ -12,11 +58,6 @@
 
 ### Dependency Updates
 1.	Golang 1.24.2 -> 1.24.6 (CVE-2025-47907) ([#3154](https://github.com/Azure/azure-storage-azcopy/issues/3154))
-
-## Version 10.31.0-preview.1
-
-### Dependency updates
-1.	Golang 1.24.4 -> 1.24.6 ([#3154](https://github.com/Azure/azure-storage-azcopy/issues/3154))
 
 ## Version 10.30.0
 ### Breaking changes
@@ -1246,3 +1287,4 @@ information, including those needed to set the new headers.
    1. excludedBlobType -> excluded-blob-type
    1. outputRaw (in "list" command) -> output
    1. stdIn-enable (reserved for internal use) -> stdin-enable
+

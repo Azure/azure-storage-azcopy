@@ -91,16 +91,19 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 		}
 	}
 
-	if common.IsNFSCopy() {
+	if cooked.FromTo.IsNFS() {
 		if err := performNFSSpecificValidation(
-			cooked.FromTo, cooked.preservePermissions, cooked.preserveInfo,
-			cooked.SymlinkHandling, cooked.hardlinks); err != nil {
+			cooked.FromTo,
+			cooked.preservePermissions,
+			cooked.preserveInfo,
+			&cooked.hardlinks,
+			cooked.SymlinkHandling); err != nil {
 			return err
 		}
 	} else {
 		if err := performSMBSpecificValidation(
 			cooked.FromTo, cooked.preservePermissions, cooked.preserveInfo,
-			cooked.preservePOSIXProperties, cooked.hardlinks); err != nil {
+			cooked.preservePOSIXProperties); err != nil {
 			return err
 		}
 
@@ -253,7 +256,7 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 		return errors.New("cannot check file attributes on remote objects")
 	}
 
-	if OutputLevel == common.EOutputVerbosity.Quiet() || OutputLevel == common.EOutputVerbosity.Essential() {
+	if OutputLevel == EOutputVerbosity.Quiet() || OutputLevel == EOutputVerbosity.Essential() {
 		if cooked.ForceWrite == common.EOverwriteOption.Prompt() {
 			err = fmt.Errorf("cannot set output level '%s' with overwrite option '%s'", OutputLevel.String(), cooked.ForceWrite.String())
 		} else if cooked.dryrunMode {

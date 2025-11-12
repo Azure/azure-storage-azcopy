@@ -8,9 +8,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 )
 
-var EnumerationParallelism = 1
-var EnumerationParallelStatFiles = false
-
 // addTransfer accepts a new transfer, if the threshold is reached, dispatch a job part order.
 func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer, cca *CookedCopyCmdArgs) error {
 	// Source and destination paths are and should be relative paths.
@@ -74,7 +71,7 @@ func dispatchFinalPart(e *common.CopyJobPartOrderRequest, cca *CookedCopyCmdArgs
 		if common.LogPathFolder != "" {
 			logPathFolder = fmt.Sprintf("%s%s%s.log", common.LogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
 		}
-		glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), logPathFolder, cca.isCleanupJob, cca.cleanupJobMessage))
+		glcm.Init(GetStandardInitOutputBuilder(cca.jobID.String(), logPathFolder, cca.isCleanupJob, cca.cleanupJobMessage))
 
 		if cca.dryrunMode {
 			return nil

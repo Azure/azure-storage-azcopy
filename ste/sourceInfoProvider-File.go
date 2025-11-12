@@ -245,7 +245,7 @@ func (p *fileSourceInfoProvider) getFreshProperties() (shareFilePropertyProvider
 	}
 	share := fsc.NewShareClient(p.transferInfo.SrcContainer)
 	switch p.EntityType() {
-	case common.EEntityType.File(), common.EEntityType.Hardlink():
+	case common.EEntityType.File(), common.EEntityType.Hardlink(), common.EEntityType.Symlink():
 		fileClient := share.NewRootDirectoryClient().NewFileClient(p.transferInfo.SrcFilePath)
 		props, err := fileClient.GetProperties(p.ctx, nil)
 		return &fileGetPropertiesAdapter{props}, err
@@ -309,7 +309,7 @@ func (p *fileSourceInfoProvider) Properties() (*SrcProperties, error) {
 		p.cachedPermissionKey = properties.FilePermissionKey() // We cache this as getting the SDDL is a separate operation.
 
 		switch p.EntityType() {
-		case common.EEntityType.File(), common.EEntityType.Hardlink():
+		case common.EEntityType.File(), common.EEntityType.Hardlink(), common.EEntityType.Symlink():
 			srcProperties = &SrcProperties{
 				SrcHTTPHeaders: common.ResourceHTTPHeaders{
 					ContentType:        properties.ContentType(),
@@ -350,7 +350,7 @@ func (p *fileSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, erro
 
 func (p *fileSourceInfoProvider) GetMD5(offset, count int64) ([]byte, error) {
 	switch p.EntityType() {
-	case common.EEntityType.File():
+	case common.EEntityType.File(), common.EEntityType.Hardlink(), common.EEntityType.Symlink():
 		var rangeGetContentMD5 *bool
 		if count <= common.MaxRangeGetSize {
 			rangeGetContentMD5 = to.Ptr(true)
@@ -397,4 +397,20 @@ func (p *fileSourceInfoProvider) GetNFSPermissions() (TypedNFSPermissionsHolder,
 
 func (p *fileSourceInfoProvider) GetNFSDefaultPerms() (fileMode, owner, group *string, err error) {
 	return nil, nil, nil, nil
+}
+
+func (p *fileSourceInfoProvider) ReadLink() (string, error) {
+	fsc, err := p.jptm.SrcServiceClient().FileServiceClient()
+	if err != nil {
+		return "", fmt.Errorf("failed to get file service client: %w", err)
+	}
+
+	share := fsc.NewShareClient(p.transferInfo.SrcContainer)
+	fileClient := share.NewRootDirectoryClient().NewFileClient(p.transferInfo.SrcFilePath)
+	symlink, err := fileClient.GetSymbolicLink(p.ctx, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to get symlink info: %w", err)
+	}
+
+	return string(*symlink.LinkText), nil
 }

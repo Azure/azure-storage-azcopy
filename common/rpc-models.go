@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	datalake "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 )
 
 // ResourceString represents a source or dest string, that can have
@@ -118,10 +117,6 @@ type CopyJobPartOrderRequest struct {
 	SrcServiceClient *ServiceClient
 	DstServiceClient *ServiceClient
 
-	//These clients are required only in S2S transfers from/to datalake
-	SrcDatalakeClient *datalake.Client
-	DstDatalakeClient *datalake.Client
-
 	Transfers      Transfers
 	LogLevel       LogLevel
 	BlobAttributes BlobTransferAttributes
@@ -145,6 +140,7 @@ type CopyJobPartOrderRequest struct {
 	// This may not always be the case (for instance, if we opt to use multiple OAuth tokens). At that point, this will likely be it's own CredentialInfo.
 	S2SSourceCredentialType CredentialType // Only Anonymous and OAuth will really be used in response to this, but S3 and GCP will come along too...
 	FileAttributes          FileTransferAttributes
+	JobErrorHandler         JobErrorHandler
 }
 
 // CredentialInfo contains essential credential info which need be transited between modules,
@@ -154,12 +150,6 @@ type CredentialInfo struct {
 	OAuthTokenInfo    OAuthTokenInfo
 	S3CredentialInfo  S3CredentialInfo
 	GCPCredentialInfo GCPCredentialInfo
-}
-
-func (c CredentialInfo) WithType(credentialType CredentialType) CredentialInfo {
-	// c is a clone, so this is OK
-	c.CredentialType = credentialType
-	return c
 }
 
 type GCPCredentialInfo struct {
@@ -286,7 +276,8 @@ type ListJobSummaryResponse struct {
 	PerformanceAdvice       []PerformanceAdvice
 	IsCleanupJob            bool
 	SkippedSymlinkCount     uint32 `json:",string"`
-	HardlinksConvertedCount uint32 `json:",string"`
+	HardlinksConvertedCount uint32 `json:",string"` // Hardlinks converted count is only applicable for NFS transfers
+	SkippedHardlinkCount    uint32 `json:",string"` // Skipped hardlinks count is only applicable for NFS transfers
 	SkippedSpecialFileCount uint32 `json:",string"`
 }
 
@@ -310,7 +301,7 @@ type ResumeJobRequest struct {
 	DstServiceClient *ServiceClient
 	IncludeTransfer  map[string]int
 	ExcludeTransfer  map[string]int
-	CredentialInfo   CredentialInfo
+	JobErrorHandler  JobErrorHandler
 }
 
 // represents the Details and details of a single transfer
