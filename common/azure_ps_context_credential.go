@@ -138,25 +138,60 @@ var defaultAzdTokenProvider PSTokenProvider = func(ctx context.Context, opts pol
 	}
 
 	// We're going to get broken on this in Az 14.0 and Az.Accounts 5.0, so we may as well fix it now.
-	cmd += " -AsSecureString | Foreach-Object {[PSCustomObject]@{Token= $($_.Token | ConvertFrom-SecureString -AsPlainText); ExpiresOn = $_.ExpiresOn}} | ConvertTo-Json"
+	cmdWithSecureString := cmd + " -AsSecureString | Foreach-Object {[PSCustomObject]@{Token= $($_.Token | ConvertFrom-SecureString -AsPlainText); ExpiresOn = $_.ExpiresOn}} | ConvertTo-Json"
 
-	cliCmd := exec.CommandContext(ctx, "pwsh", "-Command", cmd)
+	// We keep track of last executed command for error msg
+	lastExecutedCmd := cmdWithSecureString
+
+	cliCmd := exec.CommandContext(ctx, "pwsh", "-Command", cmdWithSecureString)
 	cliCmd.Env = os.Environ()
 	var stderr bytes.Buffer
 	cliCmd.Stderr = &stderr
-
+	var output []uint8
 	output, err := cliCmd.Output()
 	if err != nil {
-		msg := stderr.String()
-		if msg == "" {
-			msg = err.Error()
+		// Retry command to ensure backwards compat for Az.Accounts older than 5.0.0
+		if strings.Contains(stderr.String(), "A parameter cannot be found that matches parameter name 'AsSecureString'") {
+			GetLifecycleMgr().Warn("Your Az.Account powershell commandlet is on an older version. \n We recommend upgrading to (5.0.0+) to improve security" +
+				"and reduce the risk of sensitive credential leaks.")
+			stderr.Reset()
+
+			// Build fallback command without -AsSecureString
+			var fallbackCmd string
+			if opts.TenantID != "" {
+				tenantID := fmt.Sprintf(" -TenantId \"%s\"", opts.TenantID)
+				fallbackCmd = "Get-AzAccessToken -ResourceUrl https://storage.azure.com" + tenantID + " | ConvertTo-Json"
+			} else {
+				fallbackCmd = "Get-AzAccessToken -ResourceUrl https://storage.azure.com | ConvertTo-Json"
+			}
+
+			// Retry with the fallback command
+			cliCmd = exec.CommandContext(ctx, "pwsh", "-Command", fallbackCmd)
+			lastExecutedCmd = fallbackCmd
+			cliCmd.Env = os.Environ()
+			cliCmd.Stderr = &stderr
+
+			output, err = cliCmd.Output()
+			if err != nil {
+				msg := stderr.String()
+				if msg == "" {
+					msg = err.Error()
+				}
+				return nil, errors.New(credNamePSContext + msg)
+			}
+
+		} else { // For other errors, we don't retry but log as usual
+			msg := stderr.String()
+			if msg == "" {
+				msg = err.Error()
+			}
+			return nil, errors.New(credNamePSContext + msg)
 		}
-		return nil, errors.New(credNamePSContext + msg)
 	}
 
 	output = []byte(r.FindString(string(output)))
 	if string(output) == "" {
-		invalidTokenMsg := " Invalid output received while retrieving token with Powershell. Run command \"" + cmd + "\"" +
+		invalidTokenMsg := " Invalid output received while retrieving token with Powershell. Run command \"" + lastExecutedCmd + "\"" +
 			" on powershell and verify that the output is indeed a valid token."
 		return nil, errors.New(credNamePSContext + invalidTokenMsg)
 	}

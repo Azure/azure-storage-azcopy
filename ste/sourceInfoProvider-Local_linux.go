@@ -24,31 +24,40 @@ func (f localFileSourceInfoProvider) HasUNIXProperties() bool {
 }
 
 func (f localFileSourceInfoProvider) GetUNIXProperties() (common.UnixStatAdapter, error) {
-	{ // attempt to call statx, if ENOSYS is returned, statx is unavailable
+	// First try statx
+	{
 		var stat unix.Statx_t
-
 		statxFlags := unix.AT_STATX_SYNC_AS_STAT
 		if f.EntityType() == common.EEntityType.Symlink() {
 			statxFlags |= unix.AT_SYMLINK_NOFOLLOW
 		}
-		// dirfd is a null pointer, because we should only ever be passing relative paths here, and directories will be passed via transferInfo.Source.
-		// AT_SYMLINK_NOFOLLOW is not used, because we automagically resolve symlinks. TODO: Add option to not follow symlinks, and use AT_SYMLINK_NOFOLLOW when resolving is disabled.
-		err := unix.Statx(0, f.transferInfo.Source,
-			statxFlags,
-			unix.STATX_ALL,
-			&stat)
 
-		if err != nil && err != unix.ENOSYS {
-			return nil, err
-		} else if err == nil {
+		err := unix.Statx(0, f.transferInfo.Source, statxFlags, unix.STATX_ALL, &stat)
+
+		if err == nil {
+			// statx worked
 			return StatxTAdapter(stat), nil
+		}
+
+		// Only bail if it's NOT ENOSYS and NOT (symlink+ENOENT)
+		if err != unix.ENOSYS {
+			if !(f.EntityType() == common.EEntityType.Symlink() && err == unix.ENOENT) {
+				return nil, err
+			}
+			// orphan symlink → continue to Lstat
 		}
 	}
 
+	// Fallback: use Lstat for symlinks, Stat for others
 	var stat unix.Stat_t
-	err := unix.Stat(f.transferInfo.Source, &stat)
+	var err error
+	if f.EntityType() == common.EEntityType.Symlink() {
+		err = unix.Lstat(f.transferInfo.Source, &stat)
+	} else {
+		err = unix.Stat(f.transferInfo.Source, &stat)
+	}
 	if err != nil {
-		return nil, err
+		return nil, err 	 	
 	}
 
 	return StatTAdapter(stat), nil
@@ -213,8 +222,12 @@ func (f localFileSourceInfoProvider) GetSDDL() (string, error) {
 	return fSDDL.PortableString(), nil
 }
 
+func (f localFileSourceInfoProvider) getSymlinkHandlingForEntityType() common.SymlinkHandlingType {
+	return common.Iff(f.EntityType() == common.EEntityType.Symlink(), common.ESymlinkHandlingType.Preserve(), common.ESymlinkHandlingType.Follow())
+}
+
 func (f localFileSourceInfoProvider) GetSMBProperties() (TypedSMBPropertyHolder, error) {
-	info, err := common.GetFileInformation(f.jptm.Info().Source, false)
+	info, err := common.GetFileInformation(f.jptm.Info().Source, false, f.getSymlinkHandlingForEntityType())
 
 	return HandleInfo{info}, err
 }
@@ -249,7 +262,7 @@ func (hi HandleInfo) FileAccessTime() time.Time {
 }
 
 func (f localFileSourceInfoProvider) GetNFSProperties() (TypedNFSPropertyHolder, error) {
-	info, err := common.GetFileInformation(f.jptm.Info().Source, true)
+	info, err := common.GetFileInformation(f.jptm.Info().Source, true, f.getSymlinkHandlingForEntityType())
 	return HandleInfo{info}, err
 }
 

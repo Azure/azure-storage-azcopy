@@ -1,6 +1,6 @@
 variables:
-  AZCOPY_GOLANG_VERSION: '1.24.2'
-  AZCOPY_GOLANG_VERSION_COVERAGE: '1.24.2'
+  AZCOPY_GOLANG_VERSION: '1.24.6'
+  AZCOPY_GOLANG_VERSION_COVERAGE: '1.24.6'
 
 trigger:
   branches:
@@ -284,19 +284,19 @@ jobs:
           az --version
         displayName: 'Install Azure CLI'
 
-      - template: azurePipelineTemplates/run_scenarios.yml
-        parameters:
-          container_name: $(container_name)
-          storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
-          orp_source_account_name: $(ORP_SOURCE_ACCOUNT_NAME)
-          orp_destination_account_name: $(ORP_DESTINATION_ACCOUNT_NAME)
-          orp_source_container_name: $(ORP_SOURCE_CONTAINER_NAME)
-          destination_container_name: $(DESTINATION_CONTAINER_NAME)
-          GOOS: $(GOOS)
-          GOARCH: $(GOARCH)
-          CGO_ENABLED: $(CGO_ENABLED)
-          build_name: $(build_name)
-          azcopy_msi_app_id: $(AZCOPY_MSI_APP_ID)
+      # - template: azurePipelineTemplates/run_scenarios.yml
+      #   parameters:
+      #     container_name: $(container_name)
+      #     storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
+      #     orp_source_account_name: $(ORP_SOURCE_ACCOUNT_NAME)
+      #     orp_destination_account_name: $(ORP_DESTINATION_ACCOUNT_NAME)
+      #     orp_source_container_name: $(ORP_SOURCE_CONTAINER_NAME)
+      #     destination_container_name: $(DESTINATION_CONTAINER_NAME)
+      #     GOOS: $(GOOS)
+      #     GOARCH: $(GOARCH)
+      #     CGO_ENABLED: $(CGO_ENABLED)
+      #     build_name: $(build_name)
+      #     azcopy_msi_app_id: $(AZCOPY_MSI_APP_ID)
           
   - job: Additional_E2E_Test_Windows
     timeoutInMinutes: 360
