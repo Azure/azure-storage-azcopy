@@ -104,6 +104,7 @@ func (c *Client) GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManage
 	return c.oauthTokenManager
 }
 
+// GetLogLevel returns the log level of the client.
 func (c *Client) GetLogLevel() common.LogLevel {
 	return c.logLevel
 }
@@ -118,6 +119,7 @@ func configureGoMaxProcs() {
 	}
 }
 
+// JobContext contains initialization context for a job.
 type JobContext struct {
 	JobID   common.JobID
 	LogPath string

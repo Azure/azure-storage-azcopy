@@ -20,8 +20,13 @@
 package cmd
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"runtime"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
@@ -99,6 +104,96 @@ import (
 
 // 	return nil
 // }
+
+func validateShareProtocolCompatibility(
+	ctx context.Context,
+	resource common.ResourceString,
+	serviceClient *common.ServiceClient,
+	isSource bool,
+	protocol common.Location,
+	fromTo common.FromTo,
+) error {
+
+	// We can ignore the error if we fail to get the share properties.
+	fileURLParts, err := file.ParseURL(resource.Value)
+	if err != nil {
+		return fmt.Errorf("failed to parse resource URL: %w", err)
+	}
+	shareName := fileURLParts.ShareName
+
+	if serviceClient == nil {
+		return fmt.Errorf("service client is nil")
+	}
+
+	fileServiceClient, err := serviceClient.FileServiceClient()
+	if err != nil {
+		return fmt.Errorf("failed to create file service client: %w", err)
+	}
+	shareClient := fileServiceClient.NewShareClient(shareName)
+	shareProtocol, _ := getShareProtocolType(ctx, shareName, shareClient, protocol)
+
+	if shareProtocol == common.ELocation.File() {
+		if isSource && fromTo.From() != common.ELocation.File() {
+			return errors.New("the source share has SMB protocol enabled. " +
+				"To copy from a SMB share, use the appropriate --from-to flag value")
+		}
+		if !isSource && fromTo.To() != common.ELocation.File() {
+			return errors.New("the destination share has NFS protocol enabled. " +
+				"To copy to a NFS share, use the appropriate --from-to flag value")
+		}
+	}
+
+	if shareProtocol == common.ELocation.FileNFS() {
+		if isSource && fromTo.From() != common.ELocation.FileNFS() {
+			return errors.New("the source share has NFS protocol enabled. " +
+				"To copy from a NFS share, use the appropriate --from-to flag value")
+		}
+		if !isSource && fromTo.To() != common.ELocation.FileNFS() {
+			return errors.New("the destination share has NFS protocol enabled. " +
+				"To copy to a NFS share, use the appropriate --from-to flag value")
+		}
+	}
+	return nil
+}
+
+// getShareProtocolType returns "SMB", "NFS", or "UNKNOWN" based on the share's enabled protocols.
+// If retrieval fails, it logs a warning and returns the fallback givenValue ("SMB" or "NFS").
+func getShareProtocolType(
+	ctx context.Context,
+	shareName string,
+	shareClient *share.Client,
+	givenValue common.Location,
+) (common.Location, error) {
+	properties, err := shareClient.GetProperties(ctx, nil)
+	if err != nil {
+		glcm.Info(fmt.Sprintf("Warning: Failed to fetch share properties for '%s'. Assuming the share uses '%s' protocol based on --from-to flag.", shareName, givenValue))
+		return givenValue, err
+	}
+
+	if properties.EnabledProtocols == nil || *properties.EnabledProtocols == "SMB" {
+		return common.ELocation.File(), nil // Default assumption
+	}
+
+	return common.ELocation.FileNFS(), nil
+}
+
+// Protocol compatibility validation for SMB and NFS transfers
+func validateProtocolCompatibility(ctx context.Context, fromTo common.FromTo, src, dst common.ResourceString, srcClient, dstClient *common.ServiceClient) error {
+
+	if fromTo.From().IsFile() {
+		if err := validateShareProtocolCompatibility(ctx, src, srcClient, true, fromTo.From(), fromTo); err != nil {
+			return err
+		}
+	}
+
+	if fromTo.To().IsFile() {
+		if err := validateShareProtocolCompatibility(ctx, dst, dstClient, false, fromTo.To(), fromTo); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
 
 // ComputePreserveFlags determines the final preserveInfo and preservePermissions flag values
 // based on user inputs, deprecated flags, and validation rules.
