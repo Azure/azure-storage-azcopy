@@ -1351,7 +1351,7 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm LifecycleMgr) (totalKnown
 
 	var computeThroughput = func() float64 {
 		// compute the average throughput for the last time interval
-		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) / float64(base10Mega))
+		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) / float64(azcopy.Base10Mega))
 		timeElapsed := time.Since(cca.intervalStartTime).Seconds()
 
 		// reset the interval timer and byte count

@@ -152,13 +152,6 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus, 
 }
 
 func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeResponse {
-	// Strip '?' if present as first character of the source sas / destination sas
-	if len(req.SourceSAS) > 0 && req.SourceSAS[0] == '?' {
-		req.SourceSAS = req.SourceSAS[1:]
-	}
-	if len(req.DestinationSAS) > 0 && req.DestinationSAS[0] == '?' {
-		req.DestinationSAS = req.DestinationSAS[1:]
-	}
 	// Always search the plan files in Azcopy folder,
 	// and resurrect the Job with provided credentials, to ensure SAS and etc get updated.
 	if !JobsAdmin.ResurrectJob(req.JobID, req.SrcServiceClient, req.DstServiceClient, false, req.JobErrorHandler) {
@@ -201,8 +194,6 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 		}
 	}
 
-	// After creating the Job mgr, set the include / exclude list of transfer.
-	jm.SetIncludeExclude(req.IncludeTransfer, req.ExcludeTransfer)
 	jpp0 := jpm.Plan()
 	switch jpp0.JobStatus() {
 	// Cannot resume a Job which is in Cancelling state
