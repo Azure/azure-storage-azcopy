@@ -349,11 +349,15 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 		}
 	}
 
+	filterPfx := FilterSet(filters).GetEnumerationPreFilter(t.recursive)
+
 	// Define how to enumerate its contents
 	// This func must be threadsafe/goroutine safe
 	enumerateOneDir := func(dir parallel.Directory, enqueueDir func(parallel.Directory), enqueueOutput func(parallel.DirectoryEntry, error)) error {
 		currentDirectoryClient := dir.(*directory.Client)
-		pager := currentDirectoryClient.NewListFilesAndDirectoriesPager(nil)
+		pager := currentDirectoryClient.NewListFilesAndDirectoriesPager(&directory.ListFilesAndDirectoriesOptions{
+			Prefix: common.Iff(filterPfx != "", &filterPfx, nil),
+		})
 		var marker *string
 		for pager.More() {
 			lResp, err := pager.NextPage(t.ctx)
