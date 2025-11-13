@@ -19,6 +19,10 @@ type OAuthAccountResourceManager struct {
 	accountName          string
 }
 
+func (a *OAuthAccountResourceManager) AvailableAuthTypes() e2etest.ExplicitCredentialTypes {
+	return e2etest.EExplicitCredentialType.OAuth()
+}
+
 func (a *OAuthAccountResourceManager) AccountName() string {
 	return a.accountName
 }
@@ -95,9 +99,9 @@ func (a *OAuthAccountResourceManager) GetService(asserter e2etest.Asserter, loca
 		}
 
 		out = &e2etest.FileServiceResourceManager{
-			InternalAccount: nil,
-			InternalClient:  c,
-			Llocation:       common.ELocation.FileNFS(),
+			InternalAccount:  nil,
+			InternalClient:   c,
+			InternalLocation: common.ELocation.FileNFS(),
 		}
 	default:
 		asserter.Error("Invalid service specified: " + location.String())
