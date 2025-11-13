@@ -217,3 +217,30 @@ func (s *BlobTestSuite) Scenario_DownloadBlobRecursive(svm *ScenarioVariationMan
 		validateObjectContent: true,
 	})
 }
+
+func (s *BlobTestSuite) Scenario_DownloadBlobNoNameDirectory(svm *ScenarioVariationManager) {
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
+	destContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
+
+	srcNoNameDirectory := srcContainer.GetObject(svm, "", common.EEntityType.Folder())
+
+	srcObjs := make(ObjectResourceMappingFlat)
+	obj := ResourceDefinitionObject{ObjectName: pointerTo("file.txt"), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
+	CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+	srcObjs["file.txt"] = obj
+
+	stdOut, _ := RunAzCopy(
+		svm, AzCopyCommand{
+			Verb: AzCopyVerbCopy,
+			Targets: []ResourceManager{
+				srcNoNameDirectory, destContainer,
+			},
+			Flags: CopyFlags{
+				ListOfFiles: []string{"file.txt"},
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive: pointerTo(true),
+				},
+			},
+		})
+	svm.t.Log(stdOut)
+}

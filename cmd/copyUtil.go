@@ -84,6 +84,10 @@ func stripTrailingWildcardOnRemoteSource(source string, location common.Location
 		// Return immediately here because we know this will be safe.
 		return
 	}
+	//if strings.Contains(gURLParts.GetObjectName(), "//") {
+	//	err = errors.New("cannot have an un-named virtual directory (/). " +
+	//		"/n please properly name your virtual directory. https://learn.microsoft.com/en-us/rest/api/storageservices/Naming-and-Referencing-Containers--Blobs--and-Metadata#blob-names ")
+	//}
 
 	// Trim the trailing /*.
 	if strings.HasSuffix(resourceURL.RawPath, "/*") {

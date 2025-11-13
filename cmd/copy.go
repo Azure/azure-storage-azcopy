@@ -390,7 +390,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 			cooked.FromTo)
 	}
 
-	// TODO: Figure out this preservePermissinos stuff
+	// TODO: Figure out this preservePermissions stuff
 	if cooked.preservePermissions.IsTruthy() && cooked.FromTo.From() == common.ELocation.Blob() {
 		// If a user is trying to persist from Blob storage with ACLs, they probably want directories too, because ACLs only exist in HNS.
 		cooked.IncludeDirectoryStubs = true
@@ -1176,6 +1176,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	// Stripping the trailing /* for local occurs much later than stripping the trailing /* for remote resources.
 	// TODO: Move these into the same place for maintainability.
+	// TODO wonw move this to where it happens for remote resources
 	if diff := strings.TrimPrefix(cca.Source.Value, jobPartOrder.SourceRoot.Value); cca.FromTo.From().IsLocal() &&
 		diff == "*" || diff == common.OS_PATH_SEPARATOR+"*" || diff == common.AZCOPY_PATH_SEPARATOR_STRING+"*" {
 		// trim the /*

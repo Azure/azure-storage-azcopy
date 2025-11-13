@@ -109,6 +109,11 @@ func (t *BlobTraverser) IsDirectory(isSource bool) (isDirectory bool, err error)
 		return false, nil
 	}
 
+	// TODO wonw should we check for this error here
+	if bloberror.HasCode(blobErr, bloberror.BlobNotFound) {
+
+	}
+
 	if blobErr == nil {
 		return isDirStub, nil
 	}

@@ -61,6 +61,7 @@ func (l *listTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 		}
 		// listTraverser will only ever execute on the source
 
+		//TODO wonw why isnt the error handled from the file not found?
 		isDir, _ := childTraverser.IsDirectory(true)
 		if !l.recursive && isDir {
 			continue // skip over directories
