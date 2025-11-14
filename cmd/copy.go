@@ -1278,6 +1278,7 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm LifecycleMgr) (totalKnown
 
 		return common.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
 	}
+	throughput := computeThroughput()
 	builder := func(format OutputFormat) string {
 		if format == EOutputFormat.Json() {
 			jsonOutput, err := json.Marshal(summary)
@@ -1296,7 +1297,6 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm LifecycleMgr) (totalKnown
 				scanningString = ""
 			}
 
-			throughput := computeThroughput()
 			throughputString := fmt.Sprintf("2-sec Throughput (Mb/s): %v", jobsAdmin.ToFixed(throughput, 4))
 			if throughput == 0 {
 				// As there would be case when no bits sent from local, e.g. service side copy, when throughput = 0, hide it.
