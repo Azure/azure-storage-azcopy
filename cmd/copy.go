@@ -447,23 +447,6 @@ func validatePreserveOwner(preserve bool, fromTo common.FromTo) error {
 	return nil
 }
 
-func validateSymlinkHandlingMode(symlinkHandling common.SymlinkHandlingType, fromTo common.FromTo) error {
-	if symlinkHandling.Preserve() {
-		switch fromTo {
-		case common.EFromTo.LocalBlob(), common.EFromTo.BlobLocal(), common.EFromTo.BlobFSLocal(), common.EFromTo.LocalBlobFS():
-			return nil // Fine on all OSes that support symlink via the OS package. (Win, MacOS, and Linux do, and that's what we officially support.)
-		case common.EFromTo.BlobBlob(), common.EFromTo.BlobFSBlobFS(), common.EFromTo.BlobBlobFS(), common.EFromTo.BlobFSBlob():
-			return nil // Blob->Blob doesn't involve any local requirements
-		case common.EFromTo.LocalFileNFS(), common.EFromTo.FileNFSLocal(), common.EFromTo.FileNFSFileNFS():
-			return nil // for NFS related transfers symlink preservation is supported.
-		default:
-			return fmt.Errorf("flag --%s can only be used on Blob<->Blob, Local<->Blob, Local<->FileNFS, FileNFS<->FileNFS", common.PreserveSymlinkFlagName)
-		}
-	}
-
-	return nil // other older symlink handling modes can work on all OSes
-}
-
 func validateBackupMode(backupMode bool, fromTo common.FromTo) error {
 	if !backupMode {
 		return nil
@@ -1177,7 +1160,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	}
 
 	if err != nil {
-		if err == ErrNothingToRemove || err == NothingScheduledError {
+		if err == ErrNothingToRemove || err == azcopy.NothingScheduledError {
 			return err // don't wrap it with anything that uses the word "error"
 		} else {
 			return fmt.Errorf("cannot start job due to error %s", err)

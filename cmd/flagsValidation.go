@@ -199,7 +199,7 @@ func validateProtocolCompatibility(ctx context.Context, fromTo common.FromTo, sr
 // based on user inputs, deprecated flags, and validation rules.
 func ComputePreserveFlags(cmd *cobra.Command, userFromTo common.FromTo, preserveInfo, preserveSMBInfo, preservePermissions, preserveSMBPermissions bool) (bool, bool) {
 	// Compute default value
-	preserveInfoDefaultVal := azcopy.GetPreserveInfoFlagDefault(cmd, userFromTo)
+	preserveInfoDefaultVal := azcopy.GetPreserveInfoDefault(userFromTo)
 
 	// Final preserveInfo logic
 	var finalPreserveInfo bool

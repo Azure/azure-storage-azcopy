@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package azcopy
 
 import (
 	"fmt"
@@ -50,7 +50,7 @@ func syncComparatorLog(fileName, status, skipReason string, stdout bool) {
 	}
 
 	if stdout {
-		glcm.Info(out)
+		common.GetLifecycleMgr().Info(out)
 	}
 }
 
