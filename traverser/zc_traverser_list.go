@@ -113,7 +113,8 @@ func newListTraverser(resource common.ResourceString, resourceLocation common.Lo
 		traverser, err := InitResourceTraverser(source, resourceLocation, ctx, InitResourceTraverserOptions{
 			DestResourceType: nil,
 
-			Credential:           options.Credential,
+			Client:               options.Client,
+			CredentialType:       options.CredentialType,
 			IncrementEnumeration: options.IncrementEnumeration,
 
 			ListOfVersionIDs: nil,

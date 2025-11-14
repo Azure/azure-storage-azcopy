@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -23,7 +24,7 @@ func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 		common.LogPathFolder = ""
 	}
 
-	cooked.putBlobSize, err = blockSizeInBytes(cooked.PutBlobSizeMB)
+	cooked.putBlobSize, err = azcopy.BlockSizeInBytes(cooked.PutBlobSizeMB)
 	if err != nil {
 		return err
 	}

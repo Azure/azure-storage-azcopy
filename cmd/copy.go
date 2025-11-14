@@ -26,7 +26,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net/url"
 	"os"
 	"runtime"
@@ -178,29 +177,6 @@ type rawCopyCmdArgs struct {
 	hardlinks    string
 }
 
-// blockSizeInBytes converts a FLOATING POINT number of MiB, to a number of bytes
-// A non-nil error is returned if the conversion is not possible to do accurately (e.g. it comes out of a fractional number of bytes)
-// The purpose of using floating point is to allow specialist users (e.g. those who want small block sizes to tune their read IOPS)
-// to use fractions of a MiB. E.g.
-// 0.25 = 256 KiB
-// 0.015625 = 16 KiB
-func blockSizeInBytes(rawBlockSizeInMiB float64) (int64, error) {
-	if rawBlockSizeInMiB < 0 {
-		return 0, errors.New("negative block size not allowed")
-	}
-	rawSizeInBytes := rawBlockSizeInMiB * 1024 * 1024 // internally we use bytes, but users' convenience the command line uses MiB
-	if rawSizeInBytes > math.MaxInt64 {
-		return 0, errors.New("block size too big for int64")
-	}
-	const epsilon = 0.001 // arbitrarily using a tolerance of 1000th of a byte
-	_, frac := math.Modf(rawSizeInBytes)
-	isWholeNumber := frac < epsilon || frac > 1.0-epsilon // frac is very close to 0 or 1, so rawSizeInBytes is (very close to) an integer
-	if !isWholeNumber {
-		return 0, fmt.Errorf("while fractional numbers of MiB are allowed as the block size, the fraction must result to a whole number of bytes. %.12f MiB resolves to %.3f bytes", rawBlockSizeInMiB, rawSizeInBytes)
-	}
-	return int64(math.Round(rawSizeInBytes)), nil
-}
-
 func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	cooked = CookedCopyCmdArgs{
 		Recursive:                raw.recursive,
@@ -245,7 +221,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	}
 
 	// We infer FromTo and validate it here since it is critical to a lot of other options parsing below.
-	cooked.FromTo, err = ValidateFromTo(raw.src, raw.dst, raw.fromTo)
+	cooked.FromTo, err = azcopy.InferAndValidateFromTo(raw.src, raw.dst, raw.fromTo)
 	if err != nil {
 		return cooked, err
 	}
@@ -375,7 +351,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	}
 
 	if cooked.FromTo.IsNFS() {
-		cooked.preserveInfo = raw.preserveInfo && areBothLocationsNFSAware(cooked.FromTo)
+		cooked.preserveInfo = raw.preserveInfo && azcopy.AreBothLocationsNFSAware(cooked.FromTo)
 		cooked.preservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
 			true,
 			cooked.FromTo)
@@ -383,7 +359,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 			return cooked, err
 		}
 	} else {
-		cooked.preserveInfo = raw.preserveInfo && areBothLocationsSMBAware(cooked.FromTo)
+		cooked.preserveInfo = raw.preserveInfo && azcopy.AreBothLocationsSMBAware(cooked.FromTo)
 		cooked.preservePOSIXProperties = raw.preservePOSIXProperties
 		cooked.preservePermissions = common.NewPreservePermissionsOption(raw.preservePermissions,
 			raw.preserveOwner,
@@ -461,30 +437,6 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaults() {
 	raw.hardlinks = common.DefaultHardlinkHandlingType.String()
 }
 
-func validateForceIfReadOnly(toForce bool, fromTo common.FromTo) error {
-	targetIsFiles := (fromTo.To().IsFile()) ||
-		fromTo == common.EFromTo.FileTrash()
-	targetIsWindowsFS := fromTo.To() == common.ELocation.Local() &&
-		runtime.GOOS == "windows"
-	targetIsOK := targetIsFiles || targetIsWindowsFS
-	if toForce && !targetIsOK {
-		return errors.New("force-if-read-only is only supported when the target is Azure Files or a Windows file system")
-	}
-	return nil
-}
-
-func areBothLocationsPOSIXAware(fromTo common.FromTo) bool {
-	// POSIX properties are stored in blob metadata-- They don't need a special persistence strategy for S2S methods.
-	switch fromTo {
-	case common.EFromTo.BlobLocal(), common.EFromTo.LocalBlob(), common.EFromTo.BlobFSLocal(), common.EFromTo.LocalBlobFS():
-		return runtime.GOOS == "linux"
-	case common.EFromTo.BlobBlob(), common.EFromTo.BlobFSBlobFS(), common.EFromTo.BlobFSBlob(), common.EFromTo.BlobBlobFS():
-		return true
-	default:
-		return false
-	}
-}
-
 func validatePreserveOwner(preserve bool, fromTo common.FromTo) error {
 	if fromTo.IsDownload() {
 		return nil // it can be used in downloads
@@ -524,23 +476,6 @@ func validateBackupMode(backupMode bool, fromTo common.FromTo) error {
 	} else {
 		return errors.New(common.BackupModeFlagName + " mode is only supported for uploads and downloads")
 	}
-}
-
-func validatePutMd5(putMd5 bool, fromTo common.FromTo) error {
-	// In case of S2S transfers, log info message to inform the users that MD5 check doesn't work for S2S Transfers.
-	// This is because we cannot calculate MD5 hash of the data stored at a remote locations.
-	if putMd5 && fromTo.IsS2S() {
-		glcm.Info(" --put-md5 flag to check data consistency between source and destination is not applicable for S2S Transfers (i.e. When both the source and the destination are remote). AzCopy cannot compute MD5 hash of data stored at remote location.")
-	}
-	return nil
-}
-
-func validateMd5Option(option common.HashValidationOption, fromTo common.FromTo) error {
-	hasMd5Validation := option != common.DefaultHashValidationOption
-	if hasMd5Validation && !fromTo.IsDownload() {
-		return fmt.Errorf("check-md5 is set but the job is not a download")
-	}
-	return nil
 }
 
 // Valid tag key and value characters include:
@@ -1196,7 +1131,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	}
 
 	// Check protocol compatibility for File Shares
-	if err := validateProtocolCompatibility(ctx, cca.FromTo,
+	if err := azcopy.ValidateProtocolCompatibility(ctx, cca.FromTo,
 		cca.Source,
 		cca.Destination,
 		jobPartOrder.SrcServiceClient,
@@ -1611,12 +1546,12 @@ func init() {
 					if !stdinPipeIn || err != nil {
 						return fmt.Errorf("fatal: failed to read from Stdin due to error: %s", err)
 					}
-					raw.src = pipeLocation
+					raw.src = azcopy.PipeLocation
 					raw.dst = args[0]
 				} else {
 					// Case 2: BlobPipe. In this case if pipe is missing, content will be echoed on the terminal
 					raw.src = args[0]
-					raw.dst = pipeLocation
+					raw.dst = azcopy.PipeLocation
 				}
 			} else if len(args) == 2 { // normal copy
 				raw.src = args[0]
@@ -1634,7 +1569,7 @@ func init() {
 		},
 		Run: func(cmd *cobra.Command, args []string) {
 			// We infer FromTo and validate it here since it is critical to a lot of other options parsing below.
-			userFromTo, err := ValidateFromTo(raw.src, raw.dst, raw.fromTo)
+			userFromTo, err := azcopy.InferAndValidateFromTo(raw.src, raw.dst, raw.fromTo)
 			if err != nil {
 				glcm.Error("failed to parse --from-to user input due to error: " + err.Error())
 			}
@@ -1730,7 +1665,7 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false,
 		"False by default. Look into sub-directories recursively when uploading from local file system.")
 
-	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", fromToHelp)
+	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", azcopy.FromToHelp)
 
 	cpCmd.PersistentFlags().StringVar(&raw.excludeBlobType, "exclude-blob-type", "",
 		"Optionally specifies the type of blob (BlockBlob/ PageBlob/ AppendBlob) to exclude when copying blobs from the container "+
@@ -1815,7 +1750,7 @@ func init() {
 
 	//Marking this flag as hidden as we might not support it in the future
 	_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-info")
-	cpCmd.PersistentFlags().BoolVar(&raw.preserveInfo, PreserveInfoFlag, false,
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveInfo, azcopy.PreserveInfoFlag, false,
 		"Specify this flag if you want to preserve properties during the transfer operation."+
 			"The previously available flag for SMB (--preserve-smb-info) is now redirected to --preserve-info flag"+
 			"for both SMB and NFS operations. The default value is true for Windows when copying to Azure Files SMB"+
@@ -1978,7 +1913,7 @@ func init() {
 
 	// Deprecate the old persist-smb-permissions flag
 	_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
-	cpCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default."+
+	cpCmd.PersistentFlags().BoolVar(&raw.preservePermissions, azcopy.PreservePermissionsFlag, false, "False by default."+
 		" Preserves ACLs between aware resources (Windows and Azure Files SMB, or Data Lake Storage to Data Lake Storage) and "+
 		"\n permissions between aware resources(Linux to Azure Files NFS). \n"+
 		"For accounts that have a hierarchical namespace, your security principal must be the owning user "+

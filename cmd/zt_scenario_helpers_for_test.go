@@ -23,6 +23,15 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/url"
+	"os"
+	"path"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
@@ -38,15 +47,8 @@ import (
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/stretchr/testify/assert"
-	"io"
-	"net/url"
-	"os"
-	"path"
-	"path/filepath"
-	"runtime"
-	"strings"
-	"time"
 
 	gcpUtils "cloud.google.com/go/storage"
 	"github.com/minio/minio-go"
@@ -1016,7 +1018,7 @@ func getDefaultSetPropertiesRawInput(src string, params transferParams) rawCopyC
 	fromTo := common.EFromTo.BlobNone()
 	srcURL, _ := url.Parse(src)
 
-	srcLocationType := InferArgumentLocation(src)
+	srcLocationType := azcopy.InferArgumentLocation(src)
 	switch srcLocationType {
 	case common.ELocation.Blob():
 		fromTo = common.EFromTo.BlobNone()
