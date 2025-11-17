@@ -457,10 +457,12 @@ func TestSyncS2SMismatchContainerAndBlob(t *testing.T) {
 		a.Equal(len(mockedRPC.deletions), 1)
 	})
 
+	mockedRPC.reset()
 	// reverse the source and destination
 	raw = getDefaultSyncRawInput(dstBlobURLWithSAS.String(), srcContainerURLWithSAS.String())
 
 	// type mismatch again, we should also not get an error
+	// note: no files were actually deleted or transferred previously
 	runSyncAndVerify(a, raw, mockedRPC.intercept, mockedRPC.delete, func(err error) {
 		a.Nil(err)
 

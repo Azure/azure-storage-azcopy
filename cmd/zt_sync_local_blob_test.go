@@ -190,7 +190,7 @@ func TestSyncUploadWithMismatchedDestination(t *testing.T) {
 
 	// set up an the container with half of the files, but later lmts
 	// also add some extra blobs that are not present at the source
-	extraBlobs := []string{"extraFile1.pdf, extraFile2.txt"}
+	extraBlobs := []string{"extraFile1.pdf", "extraFile2.txt"}
 	cc, containerName := createNewContainer(a, bsc)
 	defer deleteContainer(a, cc)
 	scenarioHelper{}.generateBlobsFromList(a, cc, fileList[0:len(fileList)/2], blockBlobDefaultData)
