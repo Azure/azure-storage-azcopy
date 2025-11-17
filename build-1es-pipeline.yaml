@@ -36,6 +36,12 @@ parameters:
     displayName: 'Test PMC Connection without Publishing Artifacts to Linux Repos'
     type: boolean
     default: false
+
+  - name: remove_packages
+    displayName: 'Remove Linux Packages'
+    type: string
+    default: ' '
+
 # Do not trigger this pipeline automatically
 trigger: none
 pr: none
@@ -543,7 +549,7 @@ extends:
                       exit 1
                   fi
                 displayName:  'Copy signed mac binaries'
-      # SignArtifacts end here
+#       SignArtifacts end here
 
       - stage: VerifyArtifacts
         dependsOn: SignArtifacts
@@ -865,7 +871,7 @@ extends:
                       m1_container_url="https://azcopyvnextrelease.blob.core.windows.net/%24web/azcopy-m1-drops/azcopy-$(azcopy_version)-$today"
                     AZCOPY_AUTO_LOGIN_TYPE=AzCLI ./azcopy_bin cp "$(input)/azcopy-binaries-mac/azcopy_darwin_m1_arm64" "$m1_container_url" --recursive --put-md5=true
                     fi
-      # UploadToStorage ends here
+      # UploadToStorage end here
       - ${{ if eq(parameters.publish_docker_image, true) }}:
           - stage: BuildAndPublishDockerImage
             dependsOn:
@@ -923,7 +929,7 @@ extends:
                     inputs:
                       image: azcopycontainers.azurecr.io/azure-azcopy-mariner-x86_64.$(azcopy_docker_version):latest
                       remoteImage: azcopycontainers.azurecr.io/azure-azcopy-mariner-x86_64.$(azcopy_docker_version):latest
-                  
+
               - job: LinuxARM64
                 pool:
                   name: azcopy-arm-pool
@@ -984,7 +990,10 @@ extends:
               - AzCopyVersion
               - VerifyArtifacts
             jobs:
-              - job: Job
+              - job: ReleaseJob
+                templateContext:
+                  type: releaseJob
+                  isProduction: true
                 pool:
                   name: azcopy-pool
                   image: ubuntu22-1espt
@@ -1002,11 +1011,23 @@ extends:
                       echo "##vso[task.setvariable variable=azcopy_github_tag]$azcopy_github_tag"
                     displayName: 'AzCopy Tag Name'
 
-                  - task : DownloadPipelineArtifact@2
-                    displayName: 'Download Linux, Windows, Mac Build Artifacts'
+                  - task: 1ES.DownloadPipelineArtifact@1
+                    displayName: 'Download Windows Build Artifacts'
                     inputs:
-                      itemPattern: 'azcopy-*-signed/**'
-                      downloadPath: $(Build.ArtifactStagingDirectory)
+                      artifactName: 'azcopy-windows-signed'
+                      targetPath: $(Build.ArtifactStagingDirectory)/signed
+
+                  - task: 1ES.DownloadPipelineArtifact@1
+                    displayName: 'Download Linux Build Artifacts'
+                    inputs:
+                      artifactName: 'azcopy-linux-signed'
+                      targetPath: $(Build.ArtifactStagingDirectory)/signed
+
+                  - task: 1ES.DownloadPipelineArtifact@1
+                    displayName: 'Download Mac Build Artifacts'
+                    inputs:
+                      artifactName: 'azcopy-mac-signed'
+                      targetPath: $(Build.ArtifactStagingDirectory)/signed
 
                   - script: |
                       sudo ls -lRt $(Build.ArtifactStagingDirectory)
@@ -1107,10 +1128,10 @@ extends:
                       amd64file=$(ls "$(signed)/mariner/azcopy"*.x86_64.rpm)
                       marinerArmFileName="${arm64file/.arm64.rpm/-cm2.arm64.rpm}"
                       marinerAmdFileName="${amd64file/.x86_64.rpm/-cm2.x86_64.rpm}"
-                      
+
                       mv -v "$(signed)/mariner/azcopy"*.arm64.rpm "$marinerArmFileName"
                       mv -v "$(signed)/mariner/azcopy"*.x86_64.rpm "$marinerAmdFileName"
-                      
+
                       mv "$(signed)/mariner/azcopy"*.rpm "$(signed)/"
                       rm -r "$(signed)/mariner/"
                     displayName: 'Rename Mariner binaries'
@@ -1150,37 +1171,37 @@ extends:
                         inlineScript: |
                           azcopyAmdDeb=`pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload azcopy*.x86_64.deb`
                           echo "Azcopy AMD DEB ID: $azcopyAmdDeb"
-                          
+
                           azcopyAmdRpmFile=$(ls azcopy-* | grep -vE 'cm2\.x86_64\.rpm|arm64\.deb|x86_64\.deb|arm64\.rpm')
                           azcopyAmdRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azcopyAmdRpmFile)
                           echo "Azcopy AMD RPM ID: $azcopyAmdRpm"
-                          
+
                           azcopyArmDeb=`pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload azcopy*.arm64.deb`
                           echo "Azcopy ARM DEB ID: $azcopyArmDeb"
-                          
+
                           azcopyArmRpmFile=$(ls azcopy* | grep -vE 'cm2\.arm64\.rpm|arm64\.deb|x86_64\.deb|x86_64\.rpm')
                           azcopyArmRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azcopyArmRpmFile)
                           echo "Azcopy ARM RPM $azcopyArmRpmFile"
                           echo "Azcopy ARM RPM ID: $azcopyArmRpm"
-                          
+
                           # Find the Mariner RPM file and upload
                           marinerAmdRpmFile=$(ls azcopy-* | grep 'cm2\.x86_64\.rpm')
                           marinerAmdRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $marinerAmdRpmFile)
                           echo "Azcopy mariner AMD RPM $marinerAmdRpmFile"
                           echo "Azcopy mariner AMD RPM ID: $marinerAmdRpm"
-                          
+
                           marinerAarchRpmFile=$(ls azcopy-* | grep 'cm2\.arm64\.rpm')
                           marinerAarchRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $marinerAarchRpmFile)
                           echo "Azcopy mariner ARM RPM: $marinerAarchRpmFile"
                           echo "Azcopy mariner ARM RPM ID: $marinerAarchRpm"
-                          
+
                           is_preview="false"
                           echo "##vso[task.setvariable variable=is_preview]$is_preview"
                           if [[ $marinerAmdRpmFile == *"preview"* ]]; then
                             is_preview="true"
                             echo "##vso[task.setvariable variable=is_preview]$is_preview"
                           fi
-    
+
                           while IFS=, read -r distro archetype repoName releaseName; do
                             # If the package is preview, publish to mariner preview package
                             if [[ $distro == *"Mariner-"* ]]; then
@@ -1216,3 +1237,98 @@ extends:
                                 pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" repo publish $repoName
                               fi
                             done < <(tail -n +3 ../packages.csv)
+
+      - ${{ if ne(parameters.remove_packages, '') }}:
+          - stage: RemovePackagesFromLinuxRepository
+            jobs:
+              - job: RemovePackages
+                timeoutInMinutes: 120
+                pool:
+                  name: azcopy-pool
+                  image: ubuntu22-1espt
+                  os: linux
+                variables:
+                  - group: AZCOPY_SECRET_VAULT
+                steps:
+                  - checkout: none
+
+                  - task: PipAuthenticate@1
+                    inputs:
+                      artifactFeeds: 'DevExGlobalFeed'
+                    displayName: 'Connect to PMC artifact'
+
+                  - script: |
+                      sudo apt-get clean
+                      sudo apt-get update --fix-missing
+                      sudo apt-get install -y tree
+                    displayName: 'Install Dependencies'
+
+                  - script: |
+                      pip install pmc-cli
+                      echo '##vso[task.prependpath]$(HOME)/.local/bin'
+                    displayName: 'Install pmc-cli'
+
+                  - task: DownloadSecureFile@1
+                    name: pmcCertificate
+                    displayName: 'Download pmc pem file'
+                    inputs:
+                      secureFile: 'azstorage-devex-kv-blobfuse-release-pmc1-10102025.pem'
+
+                  - task: DownloadSecureFile@1
+                    name: settings
+                    displayName: 'Download settings.toml file'
+                    inputs:
+                      secureFile: 'settings.toml'
+
+                  - task: AzureCLI@2
+                    displayName: 'Test PMC installation'
+                    inputs:
+                      addSpnToEnvironment: true
+                      azureSubscription: 'azcopy-release'
+                      scriptType: bash
+                      scriptLocation: inlineScript
+                      inlineScript: |
+                        pmc --version
+                        pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" repo list --limit 1
+                        if [ $? -ne 0 ]; then
+                          exit 1
+                        fi
+
+                  - script: |
+                      # Validate remove_packages param
+                      if [[ "${{parameters.remove_packages}}" != " " ]] && [[ -n "${{parameters.remove_packages}}" ]]; then
+                        if ! [[ "${{parameters.remove_packages}}" =~ ^[a-zA-Z0-9._~-]+$ ]]; then 
+                          echo "Error: remove_packages param contains invalid chars. Double check its value." 
+                          exit 1
+                        fi
+                      fi
+                      pkg_id_list=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package deb list --name azcopy --version ${{parameters.remove_packages}})
+                      
+                      # Loop over all the results and extract the package id for each one
+                      for PKG_ID in $(echo "$pkg_id_list" | jq -r '.results[].id'); do
+                          echo "Processing Package ID: $PKG_ID"  # Debugging line
+                          pkg_repo_names=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo list --package "$PKG_ID")
+                      
+                          for REPO_NAME in $(echo "$pkg_repo_names" | jq -r '.results[].name'); do
+                              echo "Found repo: $REPO_NAME $PKG_ID" # Debugging line
+                              pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --remove-packages $PKG_ID $REPO_NAME
+                              pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo publish $REPO_NAME
+                          done
+                      done
+                    displayName: 'Remove deb packages from the repository'
+
+                  - script: |
+                      pkg_id_list=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package rpm list --name azcopy --version ${{parameters.remove_packages}})
+                      
+                      # Loop over all the results and extract the package id for each one
+                      for PKG_ID in $(echo "$pkg_id_list" | jq -r '.results[].id'); do
+                          echo "Processing Package ID: $PKG_ID"  # Debugging line
+                          pkg_repo_names=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo list --package "$PKG_ID")
+                      
+                          for REPO_NAME in $(echo "$pkg_repo_names" | jq -r '.results[].name'); do
+                              echo "Found repo: $REPO_NAME $PKG_ID" # Debugging line
+                              pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --remove-packages $PKG_ID $REPO_NAME
+                              pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo publish $REPO_NAME
+                          done
+                      done
+                    displayName: 'Remove rpm packages from the repository'
