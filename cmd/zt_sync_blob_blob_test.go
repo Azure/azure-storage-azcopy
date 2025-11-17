@@ -454,6 +454,7 @@ func TestSyncS2SMismatchContainerAndBlob(t *testing.T) {
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(len(mockedRPC.transfers), len(blobList))
+		a.Equal(len(mockedRPC.deletions), 1)
 	})
 
 	// reverse the source and destination
@@ -464,7 +465,8 @@ func TestSyncS2SMismatchContainerAndBlob(t *testing.T) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
-		a.Equal(len(mockedRPC.transfers), len(blobList))
+		a.Equal(len(mockedRPC.transfers), 1)
+		a.Equal(len(mockedRPC.deletions), len(blobList))
 	})
 }
 
