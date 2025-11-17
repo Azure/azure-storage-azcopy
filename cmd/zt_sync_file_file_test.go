@@ -38,14 +38,14 @@ func TestSyncSourceComparator(t *testing.T) {
 
 	// set up the indexer as well as the source comparator
 	indexer := traverser.NewObjectIndexer()
-	sourceComparator := azcopy.newSyncSourceComparator(indexer, dummyCopyScheduler.process, common.ESyncHashType.None(), false, false)
+	sourceComparator := azcopy.NewSyncSourceComparator(indexer, dummyCopyScheduler.process, common.ESyncHashType.None(), false, false)
 
 	// create a sample destination object
 	sampleDestinationObject := traverser.StoredObject{Name: "test", RelativePath: "/usr/test", LastModifiedTime: time.Now(), Md5: destMD5}
 
 	// test the comparator in case a given source object is not present at the destination
 	// meaning no entry in the index, so the comparator should pass the given object to schedule a transfer
-	compareErr := sourceComparator.processIfNecessary(traverser.StoredObject{Name: "only_at_source", RelativePath: "only_at_source", LastModifiedTime: time.Now(), Md5: srcMD5})
+	compareErr := sourceComparator.ProcessIfNecessary(traverser.StoredObject{Name: "only_at_source", RelativePath: "only_at_source", LastModifiedTime: time.Now(), Md5: srcMD5})
 	a.Nil(compareErr)
 
 	// check the source object was indeed scheduled
@@ -60,7 +60,7 @@ func TestSyncSourceComparator(t *testing.T) {
 	// and it has a later modified time, so the comparator should pass the give object to schedule a transfer
 	err := indexer.Store(sampleDestinationObject)
 	a.Nil(err)
-	compareErr = sourceComparator.processIfNecessary(traverser.StoredObject{Name: "test", RelativePath: "/usr/test", LastModifiedTime: time.Now().Add(time.Hour), Md5: srcMD5})
+	compareErr = sourceComparator.ProcessIfNecessary(traverser.StoredObject{Name: "test", RelativePath: "/usr/test", LastModifiedTime: time.Now().Add(time.Hour), Md5: srcMD5})
 	a.Nil(compareErr)
 
 	// check the source object was indeed scheduled
@@ -76,7 +76,7 @@ func TestSyncSourceComparator(t *testing.T) {
 	// meaning that the source object is considered stale, so no transfer should be scheduled
 	err = indexer.Store(sampleDestinationObject)
 	a.Nil(err)
-	compareErr = sourceComparator.processIfNecessary(traverser.StoredObject{Name: "test", RelativePath: "/usr/test", LastModifiedTime: time.Now().Add(-time.Hour), Md5: srcMD5})
+	compareErr = sourceComparator.ProcessIfNecessary(traverser.StoredObject{Name: "test", RelativePath: "/usr/test", LastModifiedTime: time.Now().Add(-time.Hour), Md5: srcMD5})
 	a.Nil(compareErr)
 
 	// check no source object was scheduled
@@ -92,11 +92,11 @@ func TestSyncSrcCompDisableComparator(t *testing.T) {
 
 	// set up the indexer as well as the source comparator
 	indexer := traverser.NewObjectIndexer()
-	sourceComparator := azcopy.newSyncSourceComparator(indexer, dummyCopyScheduler.process, common.ESyncHashType.None(), false, true)
+	sourceComparator := azcopy.NewSyncSourceComparator(indexer, dummyCopyScheduler.process, common.ESyncHashType.None(), false, true)
 
 	// test the comparator in case a given source object is not present at the destination
 	// meaning no entry in the index, so the comparator should pass the given object to schedule a transfer
-	compareErr := sourceComparator.processIfNecessary(traverser.StoredObject{Name: "only_at_source", RelativePath: "only_at_source", LastModifiedTime: time.Now(), Md5: srcMD5})
+	compareErr := sourceComparator.ProcessIfNecessary(traverser.StoredObject{Name: "only_at_source", RelativePath: "only_at_source", LastModifiedTime: time.Now(), Md5: srcMD5})
 	a.Nil(compareErr)
 
 	// check the source object was indeed scheduled
@@ -126,7 +126,7 @@ func TestSyncSrcCompDisableComparator(t *testing.T) {
 	for key, dstStoredObject := range destinationStoredObjects {
 		err := indexer.Store(dstStoredObject)
 		a.Nil(err)
-		compareErr = sourceComparator.processIfNecessary(sourceStoredObjects[key])
+		compareErr = sourceComparator.ProcessIfNecessary(sourceStoredObjects[key])
 		a.Nil(compareErr)
 		a.Equal(key+1, len(dummyCopyScheduler.record))
 		a.Zero(len(indexer.IndexMap))
@@ -142,14 +142,14 @@ func TestSyncDestinationComparator(t *testing.T) {
 
 	// set up the indexer as well as the destination comparator
 	indexer := traverser.NewObjectIndexer()
-	destinationComparator := azcopy.newSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, common.ESyncHashType.None(), false, false)
+	destinationComparator := azcopy.NewSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, common.ESyncHashType.None(), false, false)
 
 	// create a sample source object
 	sampleSourceObject := traverser.StoredObject{Name: "test", RelativePath: "/usr/test", LastModifiedTime: time.Now(), Md5: srcMD5}
 
 	// test the comparator in case a given destination object is not present at the source
 	// meaning it is an extra file that needs to be deleted, so the comparator should pass the given object to the destinationCleaner
-	compareErr := destinationComparator.processIfNecessary(traverser.StoredObject{Name: "only_at_dst", RelativePath: "only_at_dst", LastModifiedTime: time.Now(), Md5: destMD5})
+	compareErr := destinationComparator.ProcessIfNecessary(traverser.StoredObject{Name: "only_at_dst", RelativePath: "only_at_dst", LastModifiedTime: time.Now(), Md5: destMD5})
 	a.Nil(compareErr)
 
 	// verify that destination object is being deleted
@@ -166,7 +166,7 @@ func TestSyncDestinationComparator(t *testing.T) {
 	// no transfer happens
 	err := indexer.Store(sampleSourceObject)
 	a.Nil(err)
-	compareErr = destinationComparator.processIfNecessary(traverser.StoredObject{Name: "test", RelativePath: "/usr/test", LastModifiedTime: time.Now().Add(time.Hour), Md5: destMD5})
+	compareErr = destinationComparator.ProcessIfNecessary(traverser.StoredObject{Name: "test", RelativePath: "/usr/test", LastModifiedTime: time.Now().Add(time.Hour), Md5: destMD5})
 	a.Nil(compareErr)
 
 	// verify that the source object is scheduled for transfer
@@ -182,7 +182,7 @@ func TestSyncDestinationComparator(t *testing.T) {
 	// meaning that the source object should be transferred since the destination object is stale
 	err = indexer.Store(sampleSourceObject)
 	a.Nil(err)
-	compareErr = destinationComparator.processIfNecessary(traverser.StoredObject{Name: "test", RelativePath: "/usr/test", LastModifiedTime: time.Now().Add(-time.Hour), Md5: destMD5})
+	compareErr = destinationComparator.ProcessIfNecessary(traverser.StoredObject{Name: "test", RelativePath: "/usr/test", LastModifiedTime: time.Now().Add(-time.Hour), Md5: destMD5})
 	a.Nil(compareErr)
 
 	// verify that there's no transfer & no deletes
@@ -200,7 +200,7 @@ func TestSyncDestCompDisableComparison(t *testing.T) {
 
 	// set up the indexer as well as the destination comparator
 	indexer := traverser.NewObjectIndexer()
-	destinationComparator := azcopy.newSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, common.ESyncHashType.None(), false, true)
+	destinationComparator := azcopy.NewSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, common.ESyncHashType.None(), false, true)
 
 	// create a sample source object
 	currTime := time.Now()
@@ -220,7 +220,7 @@ func TestSyncDestCompDisableComparison(t *testing.T) {
 
 	// test the comparator in case a given destination object is not present at the source
 	// meaning it is an extra file that needs to be deleted, so the comparator should pass the given object to the destinationCleaner
-	compareErr := destinationComparator.processIfNecessary(traverser.StoredObject{Name: "only_at_dst", RelativePath: "only_at_dst", LastModifiedTime: currTime, Md5: destMD5})
+	compareErr := destinationComparator.ProcessIfNecessary(traverser.StoredObject{Name: "only_at_dst", RelativePath: "only_at_dst", LastModifiedTime: currTime, Md5: destMD5})
 	a.Nil(compareErr)
 
 	// verify that destination object is being deleted
@@ -238,7 +238,7 @@ func TestSyncDestCompDisableComparison(t *testing.T) {
 	for key, srcStoredObject := range sourceStoredObjects {
 		err := indexer.Store(srcStoredObject)
 		a.Nil(err)
-		compareErr = destinationComparator.processIfNecessary(destinationStoredObjects[key])
+		compareErr = destinationComparator.ProcessIfNecessary(destinationStoredObjects[key])
 		a.Nil(compareErr)
 		a.Equal(key+1, len(dummyCopyScheduler.record))
 	}
