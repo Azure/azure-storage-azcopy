@@ -23,7 +23,9 @@ package traverser
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"net/url"
+	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -46,6 +48,9 @@ func (l *listTraverser) IsDirectory(bool) (bool, error) {
 // To kill the traverser, close() the channel under it.
 // Behavior demonstrated: https://play.golang.org/p/OYdvLmNWgwO
 func (l *listTraverser) Traverse(preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) (err error) {
+	itemsProcessed := 0
+	itemsSkipped := 0
+	var lastError error
 	// read a channel until it closes to get a list of objects
 
 	childPath, ok := <-l.listReader
@@ -57,12 +62,25 @@ func (l *listTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 		childTraverser, err := l.childTraverserGenerator(childPath)
 		if err != nil {
 			common.GetLifecycleMgr().Info(fmt.Sprintf("Skipping %s due to error %s", childPath, err))
+			itemsSkipped++
+			lastError = err
 			continue
 		}
 		// listTraverser will only ever execute on the source
 
-		//TODO wonw why isnt the error handled from the file not found?
-		isDir, _ := childTraverser.IsDirectory(true)
+		// Handle error when necessary
+		isDir, isDirErr := childTraverser.IsDirectory(true)
+
+		if isDirErr != nil {
+			if bloberror.HasCode(isDirErr, bloberror.BlobNotFound) ||
+				strings.Contains(isDirErr.Error(), common.FILE_NOT_FOUND) {
+				common.GetLifecycleMgr().Info(fmt.Sprintf("Skipping %s: file/directory not found", childPath))
+				itemsSkipped++
+				lastError = isDirErr
+				continue
+			}
+		}
+
 		if !l.recursive && isDir {
 			continue // skip over directories
 		}
@@ -84,6 +102,16 @@ func (l *listTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 		err = childTraverser.Traverse(preProcessorForThisChild, processor, filters)
 		if err != nil {
 			common.GetLifecycleMgr().Info(fmt.Sprintf("Skipping %s as it cannot be scanned due to error: %s", childPath, err))
+			itemsSkipped++
+			lastError = err
+		} else {
+			itemsProcessed++
+		}
+	}
+	// Return err if nothing is processed
+	if itemsProcessed == 0 && itemsSkipped > 0 {
+		if lastError != nil {
+			return fmt.Errorf("failed to process files with --list-of-files. Error: %w", lastError)
 		}
 	}
 

@@ -229,7 +229,10 @@ func (t *BlobTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			return fmt.Errorf("cannot list files due to reason %s", respErr)
 		} else if respErr.StatusCode == 403 { // Some nature of auth error-- Whatever the user is pointing at, they don't have access to, regardless of whether it's a file or a dir stub.
 			return fmt.Errorf("cannot list files due to reason %s", respErr)
-		}
+			// TODO wonw
+		//} else if respErr.StatusCode == 404 {
+		//	return fmt.Errorf("cannot list files due to reason %s", respErr)
+		//}
 	}
 
 	// schedule the blob in two cases:
