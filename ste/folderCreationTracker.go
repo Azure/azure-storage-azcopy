@@ -145,7 +145,7 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 	}
 
 	err := doCreation()
-	if err != nil && !errors.Is(err, common.FolderCreationErrorFolderAlreadyExists{}) {
+	if err != nil && !errors.Is(err, common.FolderCreationErrorAlreadyExists{}) {
 		return err
 	}
 
@@ -155,7 +155,7 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 
 	if err == nil { // first, update our internal status, then,
 		state.Status = EJpptFolderTrackerStatus.FolderCreated()
-	} else if errors.Is(err, common.FolderCreationErrorFolderAlreadyExists{}) {
+	} else if errors.Is(err, common.FolderCreationErrorAlreadyExists{}) {
 		state.Status = EJpptFolderTrackerStatus.FolderExisted()
 	}
 

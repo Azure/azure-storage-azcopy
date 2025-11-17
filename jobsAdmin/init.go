@@ -414,6 +414,7 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 			switch jppt.TransferStatus() {
 			case common.ETransferStatus.NotStarted(),
 				common.ETransferStatus.FolderCreated(),
+				common.ETransferStatus.FolderExisted(),
 				common.ETransferStatus.Started(),
 				common.ETransferStatus.Restarted(),
 				common.ETransferStatus.Cancelled():

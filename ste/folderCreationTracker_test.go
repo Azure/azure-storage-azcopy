@@ -133,11 +133,14 @@ func TestFolderCreationTracker_directoryExists(t *testing.T) {
 	existsIdx := JpptFolderIndex{0, 1}
 	folderCreated := "folderCreated"
 	createdIdx := JpptFolderIndex{1, 1} // cheap validation of job part overlap
+	folderShouldCreate := "folderShouldCreate"
+	shouldCreateIdx := JpptFolderIndex{0, 2}
 
 	plan := &mockedJobPlan{
 		transfers: map[JpptFolderIndex]*JobPartPlanTransfer{
-			existsIdx:  {atomicTransferStatus: common.ETransferStatus.NotStarted()},
-			createdIdx: {atomicTransferStatus: common.ETransferStatus.NotStarted()},
+			existsIdx:       {atomicTransferStatus: common.ETransferStatus.NotStarted()},
+			createdIdx:      {atomicTransferStatus: common.ETransferStatus.NotStarted()},
+			shouldCreateIdx: {atomicTransferStatus: common.ETransferStatus.NotStarted()},
 		},
 	}
 
@@ -149,20 +152,28 @@ func TestFolderCreationTracker_directoryExists(t *testing.T) {
 
 	fct.RegisterPropertiesTransfer(folderExists, existsIdx.PartNum, existsIdx.TransferIndex)
 	fct.RegisterPropertiesTransfer(folderCreated, createdIdx.PartNum, createdIdx.TransferIndex)
+	fct.RegisterPropertiesTransfer(folderShouldCreate, shouldCreateIdx.PartNum, shouldCreateIdx.TransferIndex)
 
 	_ = fct.CreateFolder(folderCreated, func() error {
 		return nil
 	}) // "create" our folder
 	err := fct.CreateFolder(folderExists, func() error {
-		return common.FolderCreationErrorFolderAlreadyExists{}
-	})
-	a.NoError(err, "already exists should be caught")
+		return common.FolderCreationErrorAlreadyExists{}
+	}) // fail creation on not existing
+	a.NoError(err, "already exists should be caught") // ensure we caught that error
+	expectedFailureErr := errors.New("this creation should fail")
+	err = fct.CreateFolder(folderShouldCreate, func() error {
+		return expectedFailureErr
+	}) // ensure that a natural failure should return properly
+	a.Equal(err, expectedFailureErr)
 
 	// validate folder states
-	a.Equal(fct.contents[folderCreated].Status, EJpptFolderTrackerStatus.FolderCreated())
+	a.Equal(fct.contents[folderCreated].Status, EJpptFolderTrackerStatus.FolderCreated()) // Our created folder should be marked as such.
 	a.Equal(plan.transfers[createdIdx].TransferStatus(), common.ETransferStatus.FolderCreated())
-	a.Equal(fct.contents[folderExists].Status, EJpptFolderTrackerStatus.FolderExisted())
+	a.Equal(fct.contents[folderExists].Status, EJpptFolderTrackerStatus.FolderExisted()) // Our existing folder should be marked as such.
 	a.Equal(plan.transfers[existsIdx].TransferStatus(), common.ETransferStatus.FolderExisted())
+	a.Equal(fct.contents[folderShouldCreate].Status, EJpptFolderTrackerStatus.Unseen()) // no status updates should've occurred on a "naturally" failed create.
+	a.Equal(plan.transfers[shouldCreateIdx].TransferStatus(), common.ETransferStatus.NotStarted())
 
 	// validate that re-create doesn't trigger on either
 	err = fct.CreateFolder(folderCreated, func() error {
@@ -175,4 +186,9 @@ func TestFolderCreationTracker_directoryExists(t *testing.T) {
 		return errors.New("should return nil")
 	})
 	a.NoError(err)
+
+	// validate we can still create normally for our naturally failed folder
+	err = fct.CreateFolder(folderShouldCreate, func() error {
+		return nil
+	})
 }

@@ -460,6 +460,11 @@ func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, shareCli
 		recorderURL.RawQuery = ""
 		err = t.CreateFolder(recorderURL.String(), func() error {
 			_, err := currentDirectoryClient.Create(ctx, nil)
+
+			if fileerror.HasCode(err, fileerror.ResourceAlreadyExists) {
+				return common.FolderCreationErrorAlreadyExists{}
+			}
+
 			return err
 		})
 		if verifiedErr := d.verifyAndHandleCreateErrors(err); verifiedErr != nil {

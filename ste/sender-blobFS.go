@@ -23,9 +23,10 @@ package ste
 import (
 	"context"
 	"fmt"
-	datalakesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
 	"strings"
 	"time"
+
+	datalakesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
@@ -221,11 +222,13 @@ func (u *blobFSSenderBase) doEnsureDirExists(directoryClient *directory.Client) 
 	// know which will happen first
 	err = u.jptm.GetFolderCreationTracker().CreateFolder(directoryClient.DFSURL(), func() error {
 		_, err := directoryClient.Create(u.jptm.Context(), &directory.CreateOptions{AccessConditions: &directory.AccessConditions{ModifiedAccessConditions: &directory.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETagAny)}}})
+
+		if datalakeerror.HasCode(err, datalakeerror.PathAlreadyExists) {
+			return common.FolderCreationErrorAlreadyExists{}
+		}
+
 		return err
 	})
-	if datalakeerror.HasCode(err, datalakeerror.PathAlreadyExists) {
-		return nil // not a error as far as we are concerned. It just already exists
-	}
 	return err
 }
 
@@ -297,7 +300,7 @@ func (u *blobFSSenderBase) SendSymlink(linkData string) error {
 	}
 
 	meta[common.POSIXSymlinkMeta] = to.Ptr("true") // just in case there isn't any metadata
-	blobHeaders := blob.HTTPHeaders{ // translate headers, since those still apply
+	blobHeaders := blob.HTTPHeaders{               // translate headers, since those still apply
 		BlobContentType:        u.creationTimeHeaders.ContentType,
 		BlobContentEncoding:    u.creationTimeHeaders.ContentEncoding,
 		BlobContentLanguage:    u.creationTimeHeaders.ContentLanguage,
