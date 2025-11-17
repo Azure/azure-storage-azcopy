@@ -843,7 +843,6 @@ func TestDryrunSyncBlobtoBlob(t *testing.T) {
 	scenarioHelper{}.generateBlobsFromList(a, dstContainerClient, blobsToDelete, blockBlobDefaultData)
 
 	// set up interceptor
-	mockedRPC := interceptor{}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
 	mockedLcm.SetOutputFormat(EOutputFormat.Text())
 	glcm = &mockedLcm
@@ -855,9 +854,8 @@ func TestDryrunSyncBlobtoBlob(t *testing.T) {
 	raw.dryrun = true
 	raw.deleteDestination = "true"
 
-	runSyncAndVerify(a, raw, mockedRPC.intercept, mockedRPC.delete, func(err error) {
+	runSyncAndVerify(a, raw, dryrunNewCopyJobPartOrder, dryrunDelete, func(err error) {
 		a.Nil(err)
-		validateS2SSyncTransfersAreScheduled(a, []string{}, mockedRPC)
 
 		msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)
 		sort.Strings(msg)
@@ -891,7 +889,6 @@ func TestDryrunSyncBlobtoBlobJson(t *testing.T) {
 	scenarioHelper{}.generateBlobsFromList(a, dstContainerClient, blobsToDelete, blockBlobDefaultData)
 
 	// set up interceptor
-	mockedRPC := interceptor{}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
 	mockedLcm.SetOutputFormat(EOutputFormat.Json())
 	glcm = &mockedLcm
@@ -903,9 +900,8 @@ func TestDryrunSyncBlobtoBlobJson(t *testing.T) {
 	raw.dryrun = true
 	raw.deleteDestination = "true"
 
-	runSyncAndVerify(a, raw, mockedRPC.intercept, mockedRPC.delete, func(err error) {
+	runSyncAndVerify(a, raw, dryrunNewCopyJobPartOrder, dryrunDelete, func(err error) {
 		a.Nil(err)
-		validateS2SSyncTransfersAreScheduled(a, []string{}, mockedRPC)
 
 		msg := <-mockedLcm.dryrunLog
 		syncMessage := DryrunTransfer{}
