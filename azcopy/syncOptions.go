@@ -129,6 +129,12 @@ func (s *cookedSyncOptions) applyDefaultsAndInferOptions(opts SyncOptions) (err 
 	// defaults
 	s.recursive = common.IffNil(opts.Recursive, true)
 	s.preserveInfo = common.IffNil(opts.PreserveInfo, GetPreserveInfoDefault(opts.FromTo))
+	// preserve info is only applicable when both locations are NFS or both are SMB
+	if opts.FromTo.IsNFS() {
+		s.preserveInfo = s.preserveInfo && AreBothLocationsNFSAware(opts.FromTo)
+	} else {
+		s.preserveInfo = s.preserveInfo && AreBothLocationsSMBAware(opts.FromTo)
+	}
 	common.LocalHashStorageMode = common.IffNil(opts.LocalHashStorageMode, common.EHashStorageMode.Default())
 	s.s2SPreserveAccessTier = common.IffNil(opts.S2SPreserveAccessTier, true)
 
