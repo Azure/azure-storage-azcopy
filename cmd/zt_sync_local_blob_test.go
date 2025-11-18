@@ -210,10 +210,7 @@ func TestSyncUploadWithMismatchedDestination(t *testing.T) {
 		validateUploadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, expectedOutput, mockedRPC)
 
 		// make sure the extra blobs were deleted
-		for _, blobName := range extraBlobs {
-			exists := scenarioHelper{}.blobExists(cc.NewBlobClient(blobName))
-			a.False(exists)
-		}
+		validateDeleteTransfersAreScheduled(a, extraBlobs, mockedRPC)
 	})
 }
 
