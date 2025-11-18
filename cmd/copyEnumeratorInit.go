@@ -505,7 +505,7 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 	options := traverser.CreateClientOptions(
 		common.LogLevelOverrideLogger{ // override our log level here
 			ILoggerResetable:  common.AzcopyCurrentJobLogger,
-			MinimumLevelToLog: common.Iff(logLevel == common.ELogLevel.Debug(), common.ELogLevel.Debug(), common.ELogLevel.None()),
+			MinimumLevelToLog: common.Iff(LogLevel == common.ELogLevel.Debug(), common.ELogLevel.Debug(), common.ELogLevel.None()),
 		}, nil, reauthTok)
 
 	sc, err := common.GetServiceClientForLocation(
