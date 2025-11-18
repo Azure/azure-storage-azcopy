@@ -45,7 +45,6 @@ type copyTransferProcessor struct {
 	preserveAccessTier     bool
 	folderPropertiesOption common.FolderPropertyOption
 	symlinkHandlingType    common.SymlinkHandlingType
-	dryrunMode             bool
 	hardlinkHandlingType   common.HardlinkHandlingType
 }
 

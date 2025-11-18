@@ -266,7 +266,7 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 		fileClientOptions = &common.FileClientOptions{AllowTrailingDot: cooked.trailingDot.IsEnabled()}
 	}
 
-	targetServiceClient, err := common.GetServiceClientForLocation(
+	targetServiceClient, _ := common.GetServiceClientForLocation(
 		cooked.location,
 		source,
 		credentialInfo.CredentialType,

@@ -114,10 +114,10 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *t
 		return nil, err
 	}
 
+	dstServiceClient, dstCredType, err := azcopy.GetDestinationServiceClient(ctx, cca.destination, cca.fromTo, srcCredType, cca.trailingDot, cca.cpkOptions, uotm)
 	if err != nil {
 		return nil, err
 	}
-	dstServiceClient, dstCredType, err := azcopy.GetDestinationServiceClient(ctx, cca.destination, cca.fromTo, srcCredType, cca.trailingDot, cca.cpkOptions, uotm)
 
 	// TODO: enable symlink support in a future release after evaluating the implications
 	// GetProperties is enabled by default as sync supports both upload and download.
