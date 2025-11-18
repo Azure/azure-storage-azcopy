@@ -220,97 +220,99 @@ func (s *BlobTestSuite) Scenario_DownloadBlobRecursive(svm *ScenarioVariationMan
 }
 
 /*
-TODO wonw: passes as a container
+Scenario_DownloadBlobNoNameDirectory validates we report errors when
+downloading from a blobURL containing an unnamed directory and a wildcard pattern. I.e '//*'
+
+E.g https:/acct.blob/container//* AzCopy and the AzBlob SDK URL parser normalizes the path
+in occurrences - stripTrailingWildCardOnRemoteSources(), Traverser.SplitResourceString()
+
+Which causes the path to not be found. This tests we do not fail silently in that case.
 */
 func (s *BlobTestSuite) Scenario_DownloadBlobNoNameDirectory(svm *ScenarioVariationManager) {
-	noNameBlobDirectory := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionObject{
-		ObjectName: pointerTo(""),
+	// Test uses a two-step upload, download to replicate the leading-slash blob scenario without tripping the SDK’s empty-name validation
+
+	body := NewRandomObjectContentContainer(SizeFromString("1K"))
+	blobContainer := CreateResource[ContainerResourceManager](svm,
+		GetRootResource(svm, common.ELocation.Blob(), GetResourceOptions{PreferredAccount: pointerTo(PrimaryStandardAcct)}),
+		ResourceDefinitionContainer{},
+	)
+
+	srcLocal := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
+	srcFile := CreateResource[ObjectResourceManager](svm, srcLocal, ResourceDefinitionObject{
+		ObjectName: pointerTo("image.png"),
+		Body:       body,
 		ObjectProperties: ObjectProperties{
-			EntityType: common.EEntityType.Folder()},
-		ObjectShouldExist: pointerTo(true),
-		Body:              NewRandomObjectContentContainer(SizeFromString("1K")),
-	}) //todo should i change this to CRM with GetObject?
-
-	localFolder := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionObject{
-		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()},
+			EntityType: common.EEntityType.File(),
+		},
 	})
-	localObjs := make(ObjectResourceMappingFlat)
-	obj := ResourceDefinitionObject{ObjectName: pointerTo("file.txt"), Body: NewRandomObjectContentContainer(SizeFromString("1K")),
-		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()}}
-	CreateResource[ObjectResourceManager](svm, localFolder, obj)
-	localObjs["file.txt"] = obj
 
-	// This test needs a two-step process. Upload the no-name dir (since creating it will fail), download to test
-	stdOut1, _ := RunAzCopy(
-		svm, AzCopyCommand{
-			Verb: AzCopyVerbCopy,
-			Targets: []ResourceManager{
-				localFolder, noNameBlobDirectory,
-			},
-			Flags: CopyFlags{
-				CopySyncCommonFlags: CopySyncCommonFlags{
-					Recursive: pointerTo(true),
-					GlobalFlags: GlobalFlags{
-						OutputType: pointerTo(cmd.EOutputFormat.Text()),
-					},
-				},
-			},
-			ShouldFail: true,
-		})
+	dstLocal := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
 
-	stdOut, _ := RunAzCopy(
-		svm, AzCopyCommand{
-			Verb: AzCopyVerbCopy,
-			Targets: []ResourceManager{
-				localFolder, noNameBlobDirectory,
+	// Upload to https:/acct/container//image.png
+	RunAzCopy(svm, AzCopyCommand{
+		Verb: AzCopyVerbCopy,
+		Targets: []ResourceManager{
+			srcFile,
+			TryApplySpecificAuthType(blobContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{Wildcard: "//image.png"}),
+		},
+		Flags: CopyFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive: pointerTo(true),
 			},
-			Flags: CopyFlags{
-				ListOfFiles: []string{"file.txt"},
-				CopySyncCommonFlags: CopySyncCommonFlags{
-					Recursive: pointerTo(true),
-					GlobalFlags: GlobalFlags{
-						OutputType: pointerTo(cmd.EOutputFormat.Text()),
-					},
-				},
-			},
-			ShouldFail: true,
-		})
-	if !svm.Dryrun() {
-		svm.t.Log(stdOut)
-	}
+		},
+	})
+	ValidateResource[ObjectResourceManager](svm, blobContainer.GetObject(svm, "/image.png", common.EEntityType.File()), ResourceDefinitionObject{
+		Body: body,
+	}, ValidateResourceOptions{validateObjectContent: false})
 
-	// Validate that the stdout contains the missing sas message
+	// Download using list-of-files from https://container//
+	stdOut, _ := RunAzCopy(svm, AzCopyCommand{
+		Verb: AzCopyVerbCopy,
+		Targets: []ResourceManager{
+			TryApplySpecificAuthType(blobContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{Wildcard: "//*"}),
+			dstLocal,
+		},
+		Flags: CopyFlags{
+			ListOfFiles: []string{"image.png"},
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive: pointerTo(true),
+			},
+		},
+		ShouldFail: true,
+	})
 	ValidateMessageOutput(svm, stdOut, "The specified file was not found.", true)
 }
 
-/*
-TODO wonw: passes as a container
-func (s *BlobTestSuite) Scenario_DownloadBlobNoNameDirectory(svm *ScenarioVariationManager) {
-	noNameBlobDirectory := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionObject{
-		ObjectName: pointerTo(""),
+// Scenario_DownloadBlobNamedDirectory validates list-of-files compatible with downloads from *named* virtual directories
+func (s *BlobTestSuite) Scenario_DownloadBlobNamedDirectory(svm *ScenarioVariationManager) {
+	// Test uses a two-step upload, download to replicate the leading-slash blob scenario without tripping the SDK’s empty-name validation
+	body := NewRandomObjectContentContainer(SizeFromString("1K"))
+	srcCont := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
+	namedBlobDirectory := CreateResource[ObjectResourceManager](svm, srcCont, ResourceDefinitionObject{
+		ObjectName: pointerTo("dir"),
 		ObjectProperties: ObjectProperties{
 			EntityType: common.EEntityType.Folder()},
 		ObjectShouldExist: pointerTo(true),
-		Body:              NewRandomObjectContentContainer(SizeFromString("1K")),
-	}) //todo should i change this to CRM with GetObject?
+		Body:              body,
+	})
+
+	srcObjs := make(ObjectResourceMappingFlat)
+	obj := ResourceDefinitionObject{
+		ObjectName:       pointerTo("dir/file.txt"),
+		Body:             body,
+		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()}}
+	CreateResource[ObjectResourceManager](svm, srcCont, obj)
+	srcObjs["dir/file.txt"] = obj
 
 	dstFolder := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionObject{
 		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()},
 	})
 
-	dstFolder.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{EntityType: common.EEntityType.File()})
-
-	srcObjs := make(ObjectResourceMappingFlat)
-	obj := ResourceDefinitionObject{ObjectName: pointerTo("file.txt"), Body: NewRandomObjectContentContainer(SizeFromString("1K")),
-		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()}}
-	CreateResource[ObjectResourceManager](svm, noNameBlobDirectory, obj)
-	srcObjs["file.txt"] = obj
-
-	stdOut, _ := RunAzCopy(
+	RunAzCopy(
 		svm, AzCopyCommand{
 			Verb: AzCopyVerbCopy,
 			Targets: []ResourceManager{
-				srcNoNameDirectory, dstFolder,
+				namedBlobDirectory, dstFolder,
 			},
 			Flags: CopyFlags{
 				ListOfFiles: []string{"file.txt"},
@@ -321,13 +323,112 @@ func (s *BlobTestSuite) Scenario_DownloadBlobNoNameDirectory(svm *ScenarioVariat
 					},
 				},
 			},
-			ShouldFail: true,
+			ShouldFail: false,
 		})
-	if !svm.Dryrun() {
-		svm.t.Log(stdOut)
-	}
+	ValidateResource[ObjectResourceManager](svm, dstFolder,
+		ResourceDefinitionObject{ObjectName: pointerTo("file.txt")},
+		ValidateResourceOptions{validateObjectContent: false})
 
-	// Validate that the stdout contains the missing sas message
-	ValidateMessageOutput(svm, stdOut, "The specified file was not found.", true)
 }
-*/
+
+// Scenario_DownloadBlobNoNameWithoutWildcardDirectory tests downloading blobs with leading slash paths (like "/image.png") and list-of-files
+// work without using a wildcard
+func (s *BlobTestSuite) Scenario_DownloadBlobNoNameWithoutWildcardDirectory(svm *ScenarioVariationManager) {
+	// Test uses a two-step upload, download to replicate the leading-slash blob scenario without tripping the SDK’s empty-name validation
+
+	body := NewRandomObjectContentContainer(SizeFromString("1K"))
+	blobContainer := CreateResource[ContainerResourceManager](svm,
+		GetRootResource(svm, common.ELocation.Blob(), GetResourceOptions{PreferredAccount: pointerTo(PrimaryStandardAcct)}),
+		ResourceDefinitionContainer{},
+	)
+
+	srcLocal := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
+	srcFile := CreateResource[ObjectResourceManager](svm, srcLocal, ResourceDefinitionObject{
+		ObjectName: pointerTo("image.png"),
+		Body:       body,
+		ObjectProperties: ObjectProperties{
+			EntityType: common.EEntityType.File(),
+		},
+	})
+
+	dstLocal := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionObject{
+		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()},
+	})
+
+	// Upload to https:/acct/container//image.png
+	RunAzCopy(svm, AzCopyCommand{
+		Verb: AzCopyVerbCopy,
+		Targets: []ResourceManager{
+			srcFile,
+			TryApplySpecificAuthType(blobContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{Wildcard: "//image.png"}),
+		},
+		Flags: CopyFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive: pointerTo(true),
+			},
+		},
+	})
+	ValidateResource[ObjectResourceManager](svm, blobContainer.GetObject(svm, "/image.png", common.EEntityType.File()), ResourceDefinitionObject{
+		Body: body,
+	}, ValidateResourceOptions{validateObjectContent: false})
+
+	// Download using list-of-files from https://container//
+	RunAzCopy(svm, AzCopyCommand{
+		Verb: AzCopyVerbCopy,
+		Targets: []ResourceManager{
+			TryApplySpecificAuthType(blobContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{Wildcard: "//"}),
+			dstLocal,
+		},
+		Flags: CopyFlags{
+			ListOfFiles: []string{"image.png"},
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive: pointerTo(true),
+				GlobalFlags: GlobalFlags{
+					OutputType: pointerTo(cmd.EOutputFormat.Text()),
+				},
+			},
+		},
+		ShouldFail: false,
+	})
+	ValidateResource[ObjectResourceManager](svm, dstLocal,
+		ResourceDefinitionObject{Body: body},
+		ValidateResourceOptions{validateObjectContent: false})
+}
+
+func (s *BlobTestSuite) Scenario_DownloadBlobObjNoNameDirectory(svm *ScenarioVariationManager) {
+	// Test uses a two-step upload, download upload then download to replicate the leading-slash blob scenario without tripping the SDK’s empty-name validation
+	blobContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
+	localSrc := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionObject{
+		ObjectName:       pointerTo("a.txt"),
+		Body:             NewRandomObjectContentContainer(SizeFromString("1K")),
+		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+	})
+	RunAzCopy(svm, AzCopyCommand{
+		Verb: AzCopyVerbCopy,
+		Targets: []ResourceManager{
+			localSrc,
+			TryApplySpecificAuthType(blobContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{Wildcard: "//a.txt"}),
+		},
+		Flags: CopyFlags{CopySyncCommonFlags: CopySyncCommonFlags{Recursive: pointerTo(true)}},
+	})
+
+	dstLocal := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
+	blobObj := blobContainer.GetObject(svm, "/a.txt", common.EEntityType.File())
+	RunAzCopy(svm, AzCopyCommand{
+		Verb: AzCopyVerbCopy,
+		Targets: []ResourceManager{
+			blobObj,
+			dstLocal,
+		},
+		Flags: CopyFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive: pointerTo(true),
+				FromTo:    pointerTo(common.EFromTo.BlobLocal()),
+				GlobalFlags: GlobalFlags{
+					OutputType: pointerTo(cmd.EOutputFormat.Text()),
+				},
+			},
+		},
+		ShouldFail: true,
+	})
+}
