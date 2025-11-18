@@ -38,6 +38,9 @@ const (
 	PreserveInfoFlag           = "preserve-info"
 	IsNFSProtocolFlag          = "nfs"
 	HardlinksFlag              = "hardlinks"
+
+	// root command flags
+	AllowInsecureCertificatesFlag = "allow-insecure-certs"
 )
 
 const (

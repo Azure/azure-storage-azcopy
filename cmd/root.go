@@ -21,6 +21,7 @@
 package cmd
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 
@@ -328,6 +329,8 @@ func init() {
 	_ = rootCmd.PersistentFlags().MarkHidden("memory-profile")
 	rootCmd.PersistentFlags().BoolVar(&checkAzCopyUpdates, "check-version", false,
 		"Check if a newer AzCopy version is available.")
+	rootCmd.PersistentFlags().BoolVar(&common.AllowInsecureCerts, AllowInsecureCertificatesFlag, false, "Use in combination with a MITM proxy for debugging purposes")
+	_ = rootCmd.PersistentFlags().MarkHidden(AllowInsecureCertificatesFlag)
 }
 
 // always spins up a new goroutine, because sometimes the aka.ms URL can't be reached (e.g. a constrained environment where
@@ -383,6 +386,9 @@ func getGitHubLatestRemoteVersionWithURL(apiEndpoint string) (*Version, error) {
 		IdleConnTimeout:    30 * time.Second,
 		DisableCompression: true,  // GitHub API responses are small
 		DisableKeepAlives:  false, // Connections are reused
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: common.AllowInsecureCerts,
+		},
 	}
 
 	client := &http.Client{
