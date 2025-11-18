@@ -313,7 +313,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 		// if no bytes expected, and we should avoid dividing by 0 (which results in NaN)
 		js.PercentComplete = 100
 	} else {
-		js.PercentComplete = 100 * (float32(js.TotalBytesTransferred) / float32(js.TotalBytesExpected))
+		js.PercentComplete = 100 * (float32(js.TotalBytesTransferred) + float32(js.TotalBytesSkipped)) / float32(js.TotalBytesExpected)
 	}
 	if js.PercentComplete > 100 {
 		js.PercentComplete = 100
@@ -439,6 +439,7 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 			case common.ETransferStatus.SkippedEntityAlreadyExists(),
 				common.ETransferStatus.SkippedBlobHasSnapshots():
 				js.TransfersSkipped++
+				js.TotalBytesSkipped += uint64(jppt.SourceSize)
 				// getting the source and destination for skipped transfer at position - index
 				src, dst, isFolder := jpp.TransferSrcDstStrings(t)
 				js.SkippedTransfers = append(js.SkippedTransfers,
@@ -463,7 +464,7 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 		// if no bytes expected, and we should avoid dividing by 0 (which results in NaN)
 		js.PercentComplete = 100
 	} else {
-		js.PercentComplete = 100 * float32(js.TotalBytesTransferred) / float32(js.TotalBytesExpected)
+		js.PercentComplete = 100 * (float32(js.TotalBytesTransferred) + float32(js.TotalBytesSkipped)) / float32(js.TotalBytesExpected)
 	}
 	if js.PercentComplete > 100 {
 		js.PercentComplete = 100

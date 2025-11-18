@@ -254,6 +254,9 @@ type ListJobSummaryResponse struct {
 	// does not include failed transfers or bytes sent in retries (i.e. no double counting). Includes successful transfers and transfers in progress
 	TotalBytesTransferred uint64 `json:",string"`
 
+	// Includes bytes of data skipped over (i.e. data already exists in blob)
+	TotalBytesSkipped uint64 `json:",string"`
+
 	// sum of the total transfer enumerated so far.
 	TotalBytesEnumerated uint64 `json:",string"`
 	// sum of total bytes expected in the job (i.e. based on our current expectation of which files will be successful)
