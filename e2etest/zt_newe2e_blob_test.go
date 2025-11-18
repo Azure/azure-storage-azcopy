@@ -285,7 +285,6 @@ func (s *BlobTestSuite) Scenario_DownloadBlobNoNameDirectory(svm *ScenarioVariat
 
 // Scenario_DownloadBlobNamedDirectory validates list-of-files compatible with downloads from *named* virtual directories
 func (s *BlobTestSuite) Scenario_DownloadBlobNamedDirectory(svm *ScenarioVariationManager) {
-	// Test uses a two-step upload, download to replicate the leading-slash blob scenario without tripping the SDK’s empty-name validation
 	body := NewRandomObjectContentContainer(SizeFromString("1K"))
 	srcCont := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
 	namedBlobDirectory := CreateResource[ObjectResourceManager](svm, srcCont, ResourceDefinitionObject{
