@@ -1,4 +1,4 @@
-// Copyright © 2017 Microsoft <wastore@microsoft.com>
+// Copyright © 2025 Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,47 +18,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package azcopy
 
-import (
-	"testing"
-
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/traverser"
-	"github.com/stretchr/testify/assert"
+const (
+	PreservePermissionsDisabledMsg    = "Note: The preserve-permissions flag is set to false. As a result, AzCopy will not copy SMB ACLs between the source and destination. For more information, visit: https://aka.ms/AzCopyandAzureFiles."
+	PreserveNFSPermissionsDisabledMsg = "Note: The preserve-permissions flag is set to false. As a result, AzCopy will not copy NFS permissions between the source and destination."
 )
-
-func newLocalRes(path string) common.ResourceString {
-	return common.ResourceString{Value: path}
-}
-
-func newRemoteRes(url string) common.ResourceString {
-	r, err := traverser.SplitResourceString(url, common.ELocation.Blob())
-	if err != nil {
-		panic("can't parse resource string")
-	}
-	return r
-}
-
-func TestRelativePath(t *testing.T) {
-	a := assert.New(t)
-	// setup
-	cca := CookedCopyCmdArgs{
-		Source:      newLocalRes("a/b/"),
-		Destination: newLocalRes("y/z/"),
-	}
-
-	object := traverser.StoredObject{
-		Name:         "c.txt",
-		EntityType:   1,
-		RelativePath: "c.txt",
-	}
-
-	// execute
-	srcRelPath := cca.MakeEscapedRelativePath(true, false, object)
-	destRelPath := cca.MakeEscapedRelativePath(false, true, object)
-
-	// assert
-	a.Equal("/c.txt", srcRelPath)
-	a.Equal("/c.txt", destRelPath)
-}
