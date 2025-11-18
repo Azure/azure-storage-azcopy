@@ -18,19 +18,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package azcopy
 
 import (
 	"context"
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	chk "gopkg.in/check.v1"
 )
@@ -110,7 +108,7 @@ func TestCheckAuthSafeForTargetIsCalledWhenGettingAuthType(t *testing.T) {
 	// Call our core cred type getter function, in a way that will fail the safety check, and assert
 	// that it really does fail.
 	// This checks that our safety check is hooked into the main logic
-	_, _, err = doGetCredentialTypeForLocation(context.Background(), common.ELocation.Blob(), res, true, mockGetCredTypeFromEnvVar, common.CpkOptions{})
+	_, _, err = doGetCredentialTypeForLocation(context.Background(), common.ELocation.Blob(), res, true, mockGetCredTypeFromEnvVar, common.CpkOptions{}, nil)
 	a.NotNil(err)
 	a.True(strings.Contains(err.Error(), "If this URL is in fact an Azure service, you can enable Azure authentication to notblob.example.com."))
 }
@@ -128,7 +126,7 @@ func TestCheckAuthSafeForTargetIsCalledWhenGettingAuthTypeMDOAuth(t *testing.T) 
 	// Call our core cred type getter function, in a way that will fail the safety check, and assert
 	// that it really does fail.
 	// This checks that our safety check is hooked into the main logic
-	_, _, err = doGetCredentialTypeForLocation(context.Background(), common.ELocation.Blob(), res, true, mockGetCredTypeFromEnvVar, common.CpkOptions{})
+	_, _, err = doGetCredentialTypeForLocation(context.Background(), common.ELocation.Blob(), res, true, mockGetCredTypeFromEnvVar, common.CpkOptions{}, nil)
 	a.NotNil(err)
 	a.True(strings.Contains(err.Error(), "If this URL is in fact an Azure service, you can enable Azure authentication to notblob.example.com."))
 }
@@ -138,33 +136,34 @@ func TestCheckAuthSafeForTargetIsCalledWhenGettingAuthTypeMDOAuth(t *testing.T) 
  * Two cases are considered, a blob is public or a container is public.
  */
 func TestIsPublic(t *testing.T) {
-	// TODO: Migrate this test to mocked UT.
-	t.Skip("Public access is sometimes turned off due to organization policy. This test should ideally be migrated to a mocked UT.")
+	/*
+		// TODO: Migrate this test to mocked UT.
+		t.Skip("Public access is sometimes turned off due to organization policy. This test should ideally be migrated to a mocked UT.")
 
-	a := assert.New(t)
-	ctx, _ := context.WithTimeout(context.TODO(), 5*time.Minute)
-	bsc := getBlobServiceClient()
-	ctr, _ := getContainerClient(a, bsc)
-	defer ctr.Delete(ctx, nil)
+		a := assert.New(t)
+		ctx, _ := context.WithTimeout(context.TODO(), 5*time.Minute)
+		bsc := cmd.getBlobServiceClient()
+		ctr, _ := cmd.getContainerClient(a, bsc)
+		defer ctr.Delete(ctx, nil)
 
-	publicAccess := container.PublicAccessTypeContainer
+		publicAccess := container.PublicAccessTypeContainer
 
-	// Create a public container
-	_, err := ctr.Create(ctx, &container.CreateOptions{Access: &publicAccess})
-	a.Nil(err)
+		// Create a public container
+		_, err := ctr.Create(ctx, &container.CreateOptions{Access: &publicAccess})
+		a.Nil(err)
 
-	// verify that container is public
-	a.True(isPublic(ctx, ctr.URL(), common.CpkOptions{}))
+		// verify that container is public
+		a.True(isPublic(ctx, ctr.URL(), common.CpkOptions{}))
 
-	publicAccess = container.PublicAccessTypeBlob
-	_, err = ctr.SetAccessPolicy(ctx, &container.SetAccessPolicyOptions{Access: &publicAccess})
-	a.Nil(err)
+		publicAccess = container.PublicAccessTypeBlob
+		_, err = ctr.SetAccessPolicy(ctx, &container.SetAccessPolicyOptions{Access: &publicAccess})
+		a.Nil(err)
 
-	// Verify that blob is public.
-	bb, _ := getBlockBlobClient(a, ctr, "")
-	_, err = bb.UploadBuffer(ctx, []byte("I'm a block blob."), nil)
-	a.Nil(err)
+		// Verify that blob is public.
+		bb, _ := cmd.getBlockBlobClient(a, ctr, "")
+		_, err = bb.UploadBuffer(ctx, []byte("I'm a block blob."), nil)
+		a.Nil(err)
 
-	a.True(isPublic(ctx, bb.URL(), common.CpkOptions{}))
-
+		a.True(isPublic(ctx, bb.URL(), common.CpkOptions{}))
+	*/
 }
