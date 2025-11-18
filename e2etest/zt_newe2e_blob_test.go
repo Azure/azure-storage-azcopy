@@ -1,6 +1,7 @@
 package e2etest
 
 import (
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"strconv"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -218,29 +219,115 @@ func (s *BlobTestSuite) Scenario_DownloadBlobRecursive(svm *ScenarioVariationMan
 	})
 }
 
+/*
+TODO wonw: passes as a container
+*/
 func (s *BlobTestSuite) Scenario_DownloadBlobNoNameDirectory(svm *ScenarioVariationManager) {
-	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
-	destContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
+	noNameBlobDirectory := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionObject{
+		ObjectName: pointerTo(""),
+		ObjectProperties: ObjectProperties{
+			EntityType: common.EEntityType.Folder()},
+		ObjectShouldExist: pointerTo(true),
+		Body:              NewRandomObjectContentContainer(SizeFromString("1K")),
+	}) //todo should i change this to CRM with GetObject?
 
-	srcNoNameDirectory := srcContainer.GetObject(svm, "", common.EEntityType.Folder())
+	localFolder := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionObject{
+		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()},
+	})
+	localObjs := make(ObjectResourceMappingFlat)
+	obj := ResourceDefinitionObject{ObjectName: pointerTo("file.txt"), Body: NewRandomObjectContentContainer(SizeFromString("1K")),
+		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()}}
+	CreateResource[ObjectResourceManager](svm, localFolder, obj)
+	localObjs["file.txt"] = obj
+
+	// This test needs a two-step process. Upload the no-name dir (since creating it will fail), download to test
+	stdOut1, _ := RunAzCopy(
+		svm, AzCopyCommand{
+			Verb: AzCopyVerbCopy,
+			Targets: []ResourceManager{
+				localFolder, noNameBlobDirectory,
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive: pointerTo(true),
+					GlobalFlags: GlobalFlags{
+						OutputType: pointerTo(cmd.EOutputFormat.Text()),
+					},
+				},
+			},
+			ShouldFail: true,
+		})
+
+	stdOut, _ := RunAzCopy(
+		svm, AzCopyCommand{
+			Verb: AzCopyVerbCopy,
+			Targets: []ResourceManager{
+				localFolder, noNameBlobDirectory,
+			},
+			Flags: CopyFlags{
+				ListOfFiles: []string{"file.txt"},
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive: pointerTo(true),
+					GlobalFlags: GlobalFlags{
+						OutputType: pointerTo(cmd.EOutputFormat.Text()),
+					},
+				},
+			},
+			ShouldFail: true,
+		})
+	if !svm.Dryrun() {
+		svm.t.Log(stdOut)
+	}
+
+	// Validate that the stdout contains the missing sas message
+	ValidateMessageOutput(svm, stdOut, "The specified file was not found.", true)
+}
+
+/*
+TODO wonw: passes as a container
+func (s *BlobTestSuite) Scenario_DownloadBlobNoNameDirectory(svm *ScenarioVariationManager) {
+	noNameBlobDirectory := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionObject{
+		ObjectName: pointerTo(""),
+		ObjectProperties: ObjectProperties{
+			EntityType: common.EEntityType.Folder()},
+		ObjectShouldExist: pointerTo(true),
+		Body:              NewRandomObjectContentContainer(SizeFromString("1K")),
+	}) //todo should i change this to CRM with GetObject?
+
+	dstFolder := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionObject{
+		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()},
+	})
+
+	dstFolder.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{EntityType: common.EEntityType.File()})
 
 	srcObjs := make(ObjectResourceMappingFlat)
-	obj := ResourceDefinitionObject{ObjectName: pointerTo("file.txt"), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
-	CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+	obj := ResourceDefinitionObject{ObjectName: pointerTo("file.txt"), Body: NewRandomObjectContentContainer(SizeFromString("1K")),
+		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()}}
+	CreateResource[ObjectResourceManager](svm, noNameBlobDirectory, obj)
 	srcObjs["file.txt"] = obj
 
 	stdOut, _ := RunAzCopy(
 		svm, AzCopyCommand{
 			Verb: AzCopyVerbCopy,
 			Targets: []ResourceManager{
-				srcNoNameDirectory, destContainer,
+				srcNoNameDirectory, dstFolder,
 			},
 			Flags: CopyFlags{
 				ListOfFiles: []string{"file.txt"},
 				CopySyncCommonFlags: CopySyncCommonFlags{
 					Recursive: pointerTo(true),
+					GlobalFlags: GlobalFlags{
+						OutputType: pointerTo(cmd.EOutputFormat.Text()),
+					},
 				},
 			},
+			ShouldFail: true,
 		})
-	svm.t.Log(stdOut)
+	if !svm.Dryrun() {
+		svm.t.Log(stdOut)
+	}
+
+	// Validate that the stdout contains the missing sas message
+	ValidateMessageOutput(svm, stdOut, "The specified file was not found.", true)
 }
+*/

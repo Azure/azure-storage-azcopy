@@ -84,10 +84,12 @@ func stripTrailingWildcardOnRemoteSource(source string, location common.Location
 		// Return immediately here because we know this will be safe.
 		return
 	}
-	//if strings.Contains(gURLParts.GetObjectName(), "//") {
-	//	err = errors.New("cannot have an un-named virtual directory (/). " +
-	//		"/n please properly name your virtual directory. https://learn.microsoft.com/en-us/rest/api/storageservices/Naming-and-Referencing-Containers--Blobs--and-Metadata#blob-names ")
-	//}
+	//TODO wonw
+	//if strings.HasSuffix(gURLParts.GetObjectName(), "/*") {
+	//	glcm.Warn("Using an un-named virtual directory or leading slash in blob name. " +
+	//		"\n It is not recommended when using AzCopy as the blob SDK normalizes this which  might result in unwanted behavior.")
+	//	gURLParts.SetObjectName("\x00")
+	//} else
 
 	// Trim the trailing /*.
 	if strings.HasSuffix(resourceURL.RawPath, "/*") {

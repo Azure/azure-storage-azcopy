@@ -36,11 +36,6 @@ func (cca *CookedCopyCmdArgs) validateSourceDir(traverser traverser.ResourceTrav
 	// Ensure we're only copying a directory under valid conditions
 	cca.IsSourceDir, err = traverser.IsDirectory(true)
 
-	// TODO wonw For list traverser we could handle a specific blob not found error here
-	// TODO It might be too early
-	if cca.FromTo.From() == common.ELocation.Blob() {
-
-	}
 	if cca.IsSourceDir &&
 		!cca.Recursive && // Copies the folder & everything under it
 		!cca.StripTopDir { // Copies only everything under it

@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	"net/url"
 	"strings"
 
@@ -68,13 +69,15 @@ func (l *listTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 		}
 		// listTraverser will only ever execute on the source
 
-		// Handle error when necessary
+		// Handle error to avoid silent failures
 		isDir, isDirErr := childTraverser.IsDirectory(true)
 
 		if isDirErr != nil {
 			if bloberror.HasCode(isDirErr, bloberror.BlobNotFound) ||
 				strings.Contains(isDirErr.Error(), common.FILE_NOT_FOUND) {
-				common.GetLifecycleMgr().Info(fmt.Sprintf("Skipping %s: file/directory not found", childPath))
+				common.GetLifecycleMgr().Info(fmt.Sprintf("Skipping %s: file/directory not found. ", childPath))
+				bURlParts, _ := blobsas.ParseURL(childTraverser.(*BlobTraverser).RawURL)
+				common.GetLifecycleMgr().Warn(fmt.Sprintf("'%s' path does not exist", bURlParts.ContainerName+"/"+bURlParts.BlobName))
 				itemsSkipped++
 				lastError = isDirErr
 				continue
@@ -111,7 +114,7 @@ func (l *listTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 	// Return err if nothing is processed
 	if itemsProcessed == 0 && itemsSkipped > 0 {
 		if lastError != nil {
-			return fmt.Errorf("failed to process files with --list-of-files. Error: %w", lastError)
+			return fmt.Errorf(": failed to process files. \n Error: %w", lastError)
 		}
 	}
 
