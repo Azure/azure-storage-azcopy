@@ -29,7 +29,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 )
 
-var _ JobProgressTracker = &syncProgressTracker{}
+var _ jobProgressTracker = &syncProgressTracker{}
 
 type syncProgressTracker struct {
 	// NOTE: for the 64 bit atomic functions to work on a 32 bit system, we have to guarantee the right 64-bit alignment
