@@ -37,7 +37,7 @@ import (
 
 // -------------------------------------- Implemented Enumerators -------------------------------------- \\
 
-func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, mgr *JobLifecycleManager) (se *traverser.SyncEnumerator, err error) {
+func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, mgr *jobLifecycleManager) (se *traverser.SyncEnumerator, err error) {
 
 	// TODO: enable symlink support in a future release after evaluating the implications
 	// TODO: Consider passing an errorChannel so that enumeration errors during sync can be conveyed to the caller.

@@ -49,6 +49,7 @@ type CopyTransferProcessor struct {
 	symlinkHandlingType    common.SymlinkHandlingType
 	hardlinkHandlingType   common.HardlinkHandlingType
 
+	dryrunMode                bool
 	dryrunJobPartOrderHandler func(request common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse
 }
 
