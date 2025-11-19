@@ -16,7 +16,7 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 		return err
 	}
 
-	if err = validateSymlinkHandlingMode(cooked.SymlinkHandling, cooked.FromTo); err != nil {
+	if err = azcopy.ValidateSymlinkHandlingMode(cooked.SymlinkHandling, cooked.FromTo); err != nil {
 		return err
 	}
 

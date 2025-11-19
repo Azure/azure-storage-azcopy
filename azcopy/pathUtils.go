@@ -23,6 +23,7 @@ package azcopy
 import (
 	"fmt"
 	"net/url"
+	"runtime"
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
@@ -149,4 +150,77 @@ func DetermineLocationLevel(location string, locationType common.Location, sourc
 
 func StartsWith(s string, t string) bool {
 	return len(s) >= len(t) && strings.EqualFold(s[0:len(t)], t)
+}
+
+// Because some invalid characters weren't being properly encoded by url.PathEscape, we're going to instead manually encode them.
+var encodedInvalidCharacters = map[rune]string{
+	'<':  "%3C",
+	'>':  "%3E",
+	'\\': "%5C",
+	'/':  "%2F",
+	':':  "%3A",
+	'"':  "%22",
+	'|':  "%7C",
+	'?':  "%3F",
+	'*':  "%2A",
+}
+
+var reverseEncodedChars = map[string]rune{
+	"%3C": '<',
+	"%3E": '>',
+	"%5C": '\\',
+	"%2F": '/',
+	"%3A": ':',
+	"%22": '"',
+	"%7C": '|',
+	"%3F": '?',
+	"%2A": '*',
+}
+
+func PathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool, source bool) string {
+	var loc common.Location
+
+	if source {
+		loc = fromTo.From()
+	} else {
+		loc = fromTo.To()
+	}
+	pathParts := strings.Split(path, common.AZCOPY_PATH_SEPARATOR_STRING)
+
+	// If downloading on Windows or uploading to files, encode unsafe characters.
+	if (loc == common.ELocation.Local() && !source && runtime.GOOS == "windows") ||
+		(!source && loc == common.ELocation.File()) {
+		// invalidChars := `<>\/:"|?*` + string(0x00)
+
+		for k, c := range encodedInvalidCharacters {
+			for part, p := range pathParts {
+				pathParts[part] = strings.ReplaceAll(p, string(k), c)
+			}
+		}
+
+		// If uploading from Windows or downloading from files, decode unsafe chars if user enables decoding
+
+		// Encoding is intended to handle behavior going between two resources.
+		// For deletions, There isn't an actual "other resource"
+		// So, the path special char does not to be decoded but preserved.
+		// Why? Take an edge case where path contains special char like '%5C' (encoded backslash `\\`)
+		// this will be decoded and error to inconsistent path separators.
+	} else if ((!source && fromTo.From() == common.ELocation.Local() && runtime.GOOS == "windows") ||
+		(!source && fromTo.From() == common.ELocation.File())) && !disableAutoDecoding && !fromTo.IsDelete() {
+
+		for encoded, c := range reverseEncodedChars {
+			for k, p := range pathParts {
+				pathParts[k] = strings.ReplaceAll(p, encoded, string(c))
+			}
+		}
+	}
+
+	if loc.IsRemote() {
+		for k, p := range pathParts {
+			pathParts[k] = url.PathEscape(p)
+		}
+	}
+
+	path = strings.Join(pathParts, "/")
+	return path
 }

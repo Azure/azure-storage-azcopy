@@ -34,7 +34,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 	"github.com/JeffreyRichter/enum/enum"
-	"github.com/spf13/cobra"
 )
 
 const (
@@ -43,6 +42,7 @@ const (
 	PreservePermissionsFlag                   = "preserve-permissions"
 	PreserveInfoFlag                          = "preserve-info"
 	PreservePOSIXPropertiesIncompatibilityMsg = "to use the --preserve-posix-properties flag, both the source and destination must be POSIX-aware. Valid combinations are: Linux -> Blob, Blob -> Linux, or Blob -> Blob"
+	DstShareDoesNotExists                     = "the destination file share does not exist; please create it manually with the required quota and settings before running the copy —refer to https://learn.microsoft.com/en-us/azure/storage/files/storage-how-to-create-file-share?tabs=azure-portal for SMB or https://learn.microsoft.com/en-us/azure/storage/files/storage-files-quick-create-use-linux for NFS."
 )
 
 var FromToHelp = func() string {
@@ -340,14 +340,14 @@ func AreBothLocationsSMBAware(fromTo common.FromTo) bool {
 	}
 }
 
-// GetPreserveInfoFlagDefault returns the default value for the 'preserve-info' flag
+// GetPreserveInfoDefault returns the default value for the 'preserve-info' flag
 // based on the operating system and the copy type (NFS or SMB).
 // The default value is:
 // - true if it's an NFS copy on Linux or share to share copy on windows or mac and an SMB copy on Windows.
 // - false otherwise.
 //
 // This default behavior ensures that file preservation logic is aligned with the OS and copy type.
-func GetPreserveInfoFlagDefault(cmd *cobra.Command, fromTo common.FromTo) bool {
+func GetPreserveInfoDefault(fromTo common.FromTo) bool {
 	// For Linux systems, if it's an NFS copy, we set the default value of preserveInfo to true.
 	// For Windows systems, if it's an SMB copy, we set the default value of preserveInfo to true.
 	// These default values are important to set here for the logic of file preservation based on the system and copy type.
@@ -586,4 +586,21 @@ func areBothLocationsPOSIXAware(fromTo common.FromTo) bool {
 	default:
 		return false
 	}
+}
+
+func ValidateSymlinkHandlingMode(symlinkHandling common.SymlinkHandlingType, fromTo common.FromTo) error {
+	if symlinkHandling.Preserve() {
+		switch fromTo {
+		case common.EFromTo.LocalBlob(), common.EFromTo.BlobLocal(), common.EFromTo.BlobFSLocal(), common.EFromTo.LocalBlobFS():
+			return nil // Fine on all OSes that support symlink via the OS package. (Win, MacOS, and Linux do, and that's what we officially support.)
+		case common.EFromTo.BlobBlob(), common.EFromTo.BlobFSBlobFS(), common.EFromTo.BlobBlobFS(), common.EFromTo.BlobFSBlob():
+			return nil // Blob->Blob doesn't involve any local requirements
+		case common.EFromTo.LocalFileNFS(), common.EFromTo.FileNFSLocal(), common.EFromTo.FileNFSFileNFS():
+			return nil // for NFS related transfers symlink preservation is supported.
+		default:
+			return fmt.Errorf("flag --%s can only be used on Blob<->Blob, Local<->Blob, Local<->FileNFS, FileNFS<->FileNFS", common.PreserveSymlinkFlagName)
+		}
+	}
+
+	return nil // other older symlink handling modes can work on all OSes
 }
