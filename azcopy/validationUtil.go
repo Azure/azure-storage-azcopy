@@ -265,7 +265,7 @@ func validatePreserveNFSPropertyOption(toPreserve bool, fromTo common.FromTo, fl
 	if toPreserve {
 		// The user cannot preserve permissions between SMB->NFS or NFS->SMB transfers.
 		if flagName == PreservePermissionsFlag && (fromTo == common.EFromTo.FileNFSFileSMB() || fromTo == common.EFromTo.FileSMBFileNFS()) {
-			return fmt.Errorf("--preserve-permissions flag is not supported for cross-protocol transfers (i,e. SMB->NFS, NFS->SMB). Please remove this flag and try again.")
+			return fmt.Errorf("--preserve-permissions flag is not supported for cross-protocol transfers (i.e. SMB->NFS, NFS->SMB). Please remove this flag and try again.")
 		} else if !nfsPermPreserveXfers[fromTo] {
 			return fmt.Errorf("%s is set but the job is not between %s-aware resources", flagName, common.Iff(flagName == PreserveInfoFlag, "permission", "NFS"))
 		} else if (fromTo.IsUpload() || fromTo.IsDownload()) && runtime.GOOS != "linux" {

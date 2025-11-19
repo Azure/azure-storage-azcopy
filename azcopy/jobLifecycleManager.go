@@ -31,7 +31,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 )
 
-type JobProgressTracker interface {
+type jobProgressTracker interface {
 	// Start - calls OnStart
 	Start()
 	// CheckProgress checks the progress of the job and returns the number of transfers completed so far and whether the job is done
@@ -44,7 +44,7 @@ type JobProgressTracker interface {
 	GetElapsedTime() time.Duration
 }
 
-type JobLifecycleManager struct {
+type jobLifecycleManager struct {
 	completionFuncs []func()
 	completionChan  chan struct{}
 	errorChan       chan string
@@ -62,8 +62,8 @@ type JobLifecycleManager struct {
 // - Automatically reduces to 2-minute intervals for large jobs (>1M transfers)
 // - Matches the behavior of AzCopy's lifecycle manager
 // - Logs frequency changes via the Info() method
-func NewJobLifecycleManager(handler *common.JobUIHooks) *JobLifecycleManager {
-	jlcm := &JobLifecycleManager{
+func NewJobLifecycleManager(handler *common.JobUIHooks) *jobLifecycleManager {
+	jlcm := &jobLifecycleManager{
 		completionFuncs: make([]func(), 0),
 		completionChan:  make(chan struct{}, 1),
 		errorChan:       make(chan string, 1),
@@ -74,11 +74,11 @@ func NewJobLifecycleManager(handler *common.JobUIHooks) *JobLifecycleManager {
 	return jlcm
 }
 
-func (j *JobLifecycleManager) RegisterCloseFunc(f func()) {
+func (j *jobLifecycleManager) RegisterCloseFunc(f func()) {
 	j.completionFuncs = append(j.completionFuncs, f)
 }
 
-func (j *JobLifecycleManager) OnComplete() {
+func (j *jobLifecycleManager) OnComplete() {
 	j.mutex.Lock()
 	defer j.mutex.Unlock()
 
@@ -103,7 +103,7 @@ func (j *JobLifecycleManager) OnComplete() {
 }
 
 // TODO : rename interface method to OnError to match other method naming conventions
-func (j *JobLifecycleManager) Error(err string) {
+func (j *jobLifecycleManager) Error(err string) {
 	j.mutex.Lock()
 	defer j.mutex.Unlock()
 
@@ -128,13 +128,13 @@ func (j *JobLifecycleManager) Error(err string) {
 	}
 }
 
-func (j *JobLifecycleManager) GetError() error {
+func (j *jobLifecycleManager) GetError() error {
 	j.mutex.RLock()
 	defer j.mutex.RUnlock()
 	return common.Iff(j.lastError == "", nil, errors.New(j.lastError))
 }
 
-func (j *JobLifecycleManager) Wait() error {
+func (j *jobLifecycleManager) Wait() error {
 	j.mutex.RLock()
 	isDone := j.done
 	lastError := j.lastError
@@ -156,7 +156,7 @@ func (j *JobLifecycleManager) Wait() error {
 	}
 }
 
-func (j *JobLifecycleManager) InitiateProgressReporting(ctx context.Context, reporter JobProgressTracker) {
+func (j *jobLifecycleManager) InitiateProgressReporting(ctx context.Context, reporter jobProgressTracker) {
 	reporter.Start()
 
 	// Start progress reporting in a separate goroutine with adaptive frequency
@@ -243,7 +243,7 @@ func (j *JobLifecycleManager) InitiateProgressReporting(ctx context.Context, rep
 	}()
 }
 
-func (j *JobLifecycleManager) cancelJob(jobID common.JobID) error {
+func (j *jobLifecycleManager) cancelJob(jobID common.JobID) error {
 	if jobID.IsEmpty() {
 		return errors.New("cancel job requires the JobID")
 	}
