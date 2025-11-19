@@ -63,6 +63,11 @@ func (f *nullFolderTracker) StopTracking(folder string) {
 	// noop (because we don't track anything)
 }
 
+func (f *nullFolderTracker) IsFolderAlreadyCreated(folder string) bool {
+	// null tracker doesn't track anything, so always return false
+	return false
+}
+
 type jpptFolderTracker struct {
 	plan                   IJobPartPlanHeader
 	mu                     *sync.RWMutex

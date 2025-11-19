@@ -146,20 +146,29 @@ func (u *blobFSSenderBase) Prologue(state common.PrologueState) (destinationModi
 
 	destinationModified = true
 
-	// create the directory separately
-	// This "burns" an extra IO operation, unfortunately, but its the only way we can make our
-	// folderCreationTracker work, and we need that for our overwrite logic for folders.
-	// (Even tho there's not much in the way of properties to set in ADLS Gen 2 on folders, at least, not
-	// that we support right now, we still run the same folder logic here to be consistent with our other
-	// folder-aware sources).
-	err := u.doEnsureDirExists(u.parentDirClient)
-	if err != nil {
-		u.jptm.FailActiveUpload("Ensuring parent directory exists", err)
-		return
+	// Optimization: Check if parent directory was already created before making API call
+	// This reduces redundant directory creation calls for multiple files in the same directory
+	parentDirURL := u.parentDirClient.DFSURL()
+	tracker := u.jptm.GetFolderCreationTracker()
+	
+	// Only call doEnsureDirExists if the folder hasn't been created yet
+	// This check is safe because the tracker is updated atomically after successful creation
+	if !tracker.IsFolderAlreadyCreated(parentDirURL) {
+		// create the directory separately
+		// This "burns" an extra IO operation, unfortunately, but its the only way we can make our
+		// folderCreationTracker work, and we need that for our overwrite logic for folders.
+		// (Even tho there's not much in the way of properties to set in ADLS Gen 2 on folders, at least, not
+		// that we support right now, we still run the same folder logic here to be consistent with our other
+		// folder-aware sources).
+		err := u.doEnsureDirExists(u.parentDirClient)
+		if err != nil {
+			u.jptm.FailActiveUpload("Ensuring parent directory exists", err)
+			return
+		}
 	}
 
 	// Create file with the source size
-	_, err = u.getFileClient().Create(u.jptm.Context(), &file.CreateOptions{HTTPHeaders: u.creationTimeHeaders}) // "create" actually calls "create path", so if we didn't need to track folder creation, we could just let this call create the folder as needed
+	_, err := u.getFileClient().Create(u.jptm.Context(), &file.CreateOptions{HTTPHeaders: u.creationTimeHeaders}) // "create" actually calls "create path", so if we didn't need to track folder creation, we could just let this call create the folder as needed
 	if err != nil {
 		u.jptm.FailActiveUpload("Creating file", err)
 		return
