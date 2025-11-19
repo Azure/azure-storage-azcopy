@@ -1037,7 +1037,7 @@ extends:
                     inputs:
                       githubConnection: 'azcopy-github-connection'
                       repositoryName: 'Azure/azure-storage-azcopy'
-                      action: 'edit'
+                      action: 'create'
                       target: '$(Build.SourceVersion)'
                       tagSource: 'userSpecifiedTag'
                       title: "AzCopy v$(azcopy_version)"
