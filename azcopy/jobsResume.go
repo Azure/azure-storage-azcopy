@@ -33,23 +33,27 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 )
 
+// ResumeJobOptions contains the optional parameters for resuming a job.
 type ResumeJobOptions struct {
 	SourceSAS      string
 	DestinationSAS string
 	Handler        ResumeJobHandler
 }
 
+// ResumeJobProgress contains the progress information for a resumed job.
 type ResumeJobProgress struct {
 	common.ListJobSummaryResponse
 	Throughput  float64
 	ElapsedTime time.Duration
 }
 
+// ResumeJobHandler defines the interface for handling resume job events.
 type ResumeJobHandler interface {
 	OnStart(ctx JobContext)
 	OnTransferProgress(progress ResumeJobProgress)
 }
 
+// ResumeJobResult contains the result of a resumed job.
 type ResumeJobResult struct {
 	common.ListJobSummaryResponse
 	ElapsedTime time.Duration
@@ -340,4 +344,4 @@ func (r *resumeProgressTracker) GetElapsedTime() time.Duration {
 	return time.Since(r.jobStartTime)
 }
 
-var _ JobProgressTracker = &resumeProgressTracker{}
+var _ jobProgressTracker = &resumeProgressTracker{}

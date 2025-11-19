@@ -47,9 +47,9 @@ type CopyTransferProcessor struct {
 	preserveAccessTier     bool
 	folderPropertiesOption common.FolderPropertyOption
 	symlinkHandlingType    common.SymlinkHandlingType
-	dryrunMode             bool
 	hardlinkHandlingType   common.HardlinkHandlingType
 
+	dryrunMode                bool
 	dryrunJobPartOrderHandler func(request common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse
 }
 
