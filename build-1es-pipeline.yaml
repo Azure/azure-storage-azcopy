@@ -1,5 +1,5 @@
 # For testing, the safest approach is to run the pipeline on a fork of the AzCopy repo. After that validation, changes can
-# be moved to the main pipeline. Do no test by running the prod pipeline in ADO with an already existing version of AzCopy.
+# be moved to the main pipeline. Do not test by running the prod pipeline in ADO with an already existing version of AzCopy.
 variables:
   AZCOPY_GOLANG_VERSION: '1.24.6'
 
