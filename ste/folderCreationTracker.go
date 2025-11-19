@@ -1,6 +1,7 @@
 package ste
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"strings"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
+	"golang.org/x/sync/semaphore"
 )
 
 type FolderCreationTracker common.FolderCreationTracker
@@ -30,12 +32,22 @@ func NewFolderCreationTrackerInt(fpo common.FolderPropertyOption, plan *JobPartP
 	switch fpo {
 	case common.EFolderPropertiesOption.AllFolders(),
 		common.EFolderPropertiesOption.AllFoldersExceptRoot():
+		// Use a semaphore to rate-limit concurrent folder creations when lock is skipped
+		// This prevents overwhelming Azure Storage with too many concurrent requests
+		var rateLimiter *semaphore.Weighted
+		if !lockFolderCreation {
+			// Allow up to 100 concurrent folder creation operations
+			// This balances parallelism with avoiding throttling
+			rateLimiter = semaphore.NewWeighted(100)
+		}
+		
 		return &jpptFolderTracker{ // This prevents a dependency cycle. Reviewers: Are we OK with this? Can you think of a better way to do it?
 			plan:                   plan,
 			mu:                     &sync.RWMutex{},
 			contents:               make(map[string]uint32),
 			unregisteredButCreated: make(map[string]struct{}),
 			lockFolderCreation:     lockFolderCreation,
+			rateLimiter:            rateLimiter,
 		}
 	case common.EFolderPropertiesOption.NoFolders():
 		// can't use simpleFolderTracker here, because when no folders are processed,
@@ -74,6 +86,7 @@ type jpptFolderTracker struct {
 	contents               map[string]uint32
 	unregisteredButCreated map[string]struct{}
 	lockFolderCreation     bool
+	rateLimiter            *semaphore.Weighted // Rate limiter for parallel folder creation
 }
 
 // Public interface - safe for external callers
@@ -119,6 +132,17 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 
 	if folder == common.Dev_Null {
 		return nil // Never persist to dev-null
+	}
+
+	// Rate limit parallel folder creations to prevent overwhelming Azure Storage
+	if f.rateLimiter != nil {
+		// Acquire a semaphore slot before creating the folder
+		// Use context.Background() since we don't have access to the request context here
+		// The doCreation func will use the appropriate context for the actual API call
+		if err := f.rateLimiter.Acquire(context.Background(), 1); err != nil {
+			return err
+		}
+		defer f.rateLimiter.Release(1)
 	}
 
 	if f.lockFolderCreation {
