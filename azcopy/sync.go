@@ -214,7 +214,7 @@ func newSyncer(ctx context.Context, jobID common.JobID, src, dst string, opts Sy
 	if err != nil {
 		return nil, err
 	}
-	syncRemote, err := NewSyncRemoteProvider(ctx, uotm, cookedOpts.source, cookedOpts.destination,
+	syncRemote, err := newSyncRemoteProvider(ctx, uotm, cookedOpts.source, cookedOpts.destination,
 		cookedOpts.fromTo, cookedOpts.cpkOptions, cookedOpts.trailingDot)
 	if err != nil {
 		return nil, err

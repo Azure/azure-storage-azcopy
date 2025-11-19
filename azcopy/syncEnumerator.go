@@ -262,7 +262,7 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 
 		return traverser.NewSyncEnumerator(sourceTraverser, destinationTraverser, indexer, filters, comparator, finalize), nil
 	default:
-		indexer.IsDestinationCaseInsensitive = IsDestinationCaseInsensitive(s.opts.fromTo)
+		indexer.IsDestinationCaseInsensitive = isDestinationCaseInsensitive(s.opts.fromTo)
 		// in all other cases (download and S2S), the destination is scanned/indexed first
 		// then the source is scanned and filtered based on what the destination contains
 		comparator = NewSyncSourceComparator(indexer, transferScheduler.ScheduleCopyTransfer, s.opts.compareHash, s.opts.preserveInfo, s.opts.mirrorMode).ProcessIfNecessary
@@ -287,6 +287,6 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 	}
 }
 
-func IsDestinationCaseInsensitive(fromTo common.FromTo) bool {
+func isDestinationCaseInsensitive(fromTo common.FromTo) bool {
 	return fromTo.IsDownload() && runtime.GOOS == "windows"
 }
