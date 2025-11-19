@@ -18,7 +18,8 @@ type JPPTCompatibleFolderCreationTracker interface {
 }
 
 func NewFolderCreationTracker(fpo common.FolderPropertyOption, plan *JobPartPlanHeader) FolderCreationTracker {
-	skipFolderCreationLock := buildmode.IsMover && plan.FromTo.From() == common.ELocation.Local() &&
+	skipFolderCreationLock := buildmode.IsMover &&
+		(plan.FromTo.From() == common.ELocation.Local() || plan.FromTo.From() == common.ELocation.BlobFS()) &&
 		(plan.FromTo.To() == common.ELocation.File() ||
 			plan.FromTo.To() == common.ELocation.Blob() ||
 			plan.FromTo.To() == common.ELocation.BlobFS())
