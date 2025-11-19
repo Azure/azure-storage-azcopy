@@ -2,6 +2,7 @@ package e2etest
 
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"runtime"
 	"strconv"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -428,6 +429,6 @@ func (s *BlobTestSuite) Scenario_DownloadBlobObjNoNameDirectory(svm *ScenarioVar
 				},
 			},
 		},
-		ShouldFail: true,
+		ShouldFail: runtime.GOOS == "windows",
 	})
 }

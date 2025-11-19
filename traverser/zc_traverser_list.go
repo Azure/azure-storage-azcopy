@@ -62,8 +62,6 @@ func (l *listTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 		childTraverser, err := l.childTraverserGenerator(childPath)
 		if err != nil {
 			common.GetLifecycleMgr().Info(fmt.Sprintf("Skipping %s due to error %s", childPath, err))
-			itemsSkipped++
-			lastError = err
 			continue
 		}
 		// listTraverser will only ever execute on the source
@@ -103,13 +101,11 @@ func (l *listTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 		err = childTraverser.Traverse(preProcessorForThisChild, processor, filters)
 		if err != nil {
 			common.GetLifecycleMgr().Info(fmt.Sprintf("Skipping %s as it cannot be scanned due to error: %s", childPath, err))
-			itemsSkipped++
-			lastError = err
 		} else {
 			itemsProcessed++
 		}
 	}
-	// Return err if nothing is processed
+	// Return 404 err if nothing is processed
 	if itemsProcessed == 0 && itemsSkipped > 0 {
 		if lastError != nil {
 			return fmt.Errorf(": failed to process files. \n Error: %w", lastError)
