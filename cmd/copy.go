@@ -1976,7 +1976,7 @@ func init() {
 	cpCmd.PersistentFlags().Uint32Var(&ste.ADLSFlushThreshold, "flush-threshold", 7500, "Adjust the number of blocks to flush at once on accounts that have a hierarchical namespace.")
 	_ = cpCmd.PersistentFlags().MarkHidden("flush-threshold")
 
-	// Deprecate the old persist-smb-permissions flag
+	// Deprecate the old preserve-smb-permissions flag
 	_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
 	cpCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default."+
 		" Preserves ACLs between aware resources (Windows and Azure Files SMB, or Data Lake Storage to Data Lake Storage) and "+
