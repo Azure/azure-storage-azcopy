@@ -86,6 +86,11 @@ func stripTrailingWildcardOnRemoteSource(source string, location common.Location
 		return
 	}
 
+	if strings.HasSuffix(resourceURL.RawPath, "//*") {
+		if location == common.ELocation.Blob() && strings.HasSuffix(gURLParts.GetObjectName(), "/*") {
+			glcm.Info("Using a leading slash ('/') in blob name is supported in the storage service. \n However, it is not recommended when using AzCopy as it might result in unwanted behavior.")
+		}
+	}
 	// Trim the trailing /*.
 	if strings.HasSuffix(resourceURL.RawPath, "/*") {
 		resourceURL.RawPath = strings.TrimSuffix(resourceURL.RawPath, "/*")

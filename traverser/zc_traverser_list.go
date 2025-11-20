@@ -23,7 +23,9 @@ package traverser
 import (
 	"context"
 	"fmt"
+	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	"net/url"
+	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -46,6 +48,9 @@ func (l *listTraverser) IsDirectory(bool) (bool, error) {
 // To kill the traverser, close() the channel under it.
 // Behavior demonstrated: https://play.golang.org/p/OYdvLmNWgwO
 func (l *listTraverser) Traverse(preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) (err error) {
+	itemsProcessed := 0
+	itemsSkipped := 0
+	var lastError error
 	// read a channel until it closes to get a list of objects
 
 	childPath, ok := <-l.listReader
@@ -61,7 +66,20 @@ func (l *listTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 		}
 		// listTraverser will only ever execute on the source
 
-		isDir, _ := childTraverser.IsDirectory(true)
+		// Handle error to avoid silent failures
+		isDir, isDirErr := childTraverser.IsDirectory(true)
+
+		if isDirErr != nil {
+			if strings.Contains(isDirErr.Error(), common.FILE_NOT_FOUND) {
+				common.GetLifecycleMgr().Info(fmt.Sprintf("Skipping %s: file/directory not found. ", childPath))
+				bURlParts, _ := blobsas.ParseURL(childTraverser.(*BlobTraverser).RawURL)
+				common.GetLifecycleMgr().Info(fmt.Sprintf("'%s' path does not exist. Rename blob name without leading slash", bURlParts.ContainerName+"/"+bURlParts.BlobName))
+				itemsSkipped++
+				lastError = isDirErr
+				continue
+			}
+		}
+
 		if !l.recursive && isDir {
 			continue // skip over directories
 		}
@@ -83,6 +101,14 @@ func (l *listTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 		err = childTraverser.Traverse(preProcessorForThisChild, processor, filters)
 		if err != nil {
 			common.GetLifecycleMgr().Info(fmt.Sprintf("Skipping %s as it cannot be scanned due to error: %s", childPath, err))
+		} else {
+			itemsProcessed++
+		}
+	}
+	// Return 404 err if nothing is processed
+	if itemsProcessed == 0 && itemsSkipped > 0 {
+		if lastError != nil {
+			return fmt.Errorf(": failed to process files. \n Error: %w", lastError)
 		}
 	}
 
