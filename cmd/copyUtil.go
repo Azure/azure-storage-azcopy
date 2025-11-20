@@ -28,6 +28,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -132,7 +133,7 @@ func ConstructCommandStringFromArgs() string {
 	for _, arg := range args {
 		// If the argument starts with http, it is either the remote source or remote destination
 		// If there exists a signature in the argument string it needs to be redacted
-		if startsWith(arg, "http") {
+		if azcopy.StartsWith(arg, "http") {
 			// parse the url
 			argUrl, err := url.Parse(arg)
 			// If there is an error parsing the url, then throw the error
@@ -148,8 +149,4 @@ func ConstructCommandStringFromArgs() string {
 		s.WriteString(" ")
 	}
 	return s.String()
-}
-
-func startsWith(s string, t string) bool {
-	return len(s) >= len(t) && strings.EqualFold(s[0:len(t)], t)
 }

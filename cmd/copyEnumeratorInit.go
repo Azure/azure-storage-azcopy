@@ -79,7 +79,8 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	t, err = traverser.InitResourceTraverser(cca.Source, cca.FromTo.From(), ctx, traverser.InitResourceTraverserOptions{
 		DestResourceType: &dest,
 
-		Credential: &srcCredInfo,
+		Client:         jobPartOrder.SrcServiceClient,
+		CredentialType: srcCredInfo.CredentialType,
 
 		ListOfFiles:      cca.ListOfFilesChannel,
 		ListOfVersionIDs: cca.ListOfVersionIDsChannel,
@@ -130,17 +131,17 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	}
 
 	// Check if the destination is a directory to correctly decide where our files land
-	isDestDir := cca.isDestDirectory(cca.Destination, ctx)
+	isDestDir := cca.isDestDirectory(cca.Destination, jobPartOrder, ctx)
 	if cca.ListOfVersionIDsChannel != nil && (!(cca.FromTo == common.EFromTo.BlobLocal() || cca.FromTo == common.EFromTo.BlobTrash()) || cca.IsSourceDir || !isDestDir) {
 		log.Fatalf("Either source is not a blob or destination is not a local folder")
 	}
-	srcLevel, err := DetermineLocationLevel(cca.Source.Value, cca.FromTo.From(), true)
+	srcLevel, err := azcopy.DetermineLocationLevel(cca.Source.Value, cca.FromTo.From(), true)
 
 	if err != nil {
 		return nil, err
 	}
 
-	dstLevel, err := DetermineLocationLevel(cca.Destination.Value, cca.FromTo.To(), false)
+	dstLevel, err := azcopy.DetermineLocationLevel(cca.Destination.Value, cca.FromTo.To(), false)
 
 	if err != nil {
 		return nil, err
@@ -152,20 +153,20 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	//       1) Account name doesn't get trimmed from the path
 	//       2) List-of-files is not considered an account traverser; therefore containers don't get made.
 	//       Resolve these two issues and service-level list-of-files/include-path will work
-	if cca.ListOfFilesChannel != nil && srcLevel == ELocationLevel.Service() {
+	if cca.ListOfFilesChannel != nil && srcLevel == azcopy.ELocationLevel.Service() {
 		return nil, errors.New("cannot combine list-of-files or include-path with account traversal")
 	}
 
-	if (srcLevel == ELocationLevel.Object() || cca.FromTo.From().IsLocal()) && dstLevel == ELocationLevel.Service() {
+	if (srcLevel == azcopy.ELocationLevel.Object() || cca.FromTo.From().IsLocal()) && dstLevel == azcopy.ELocationLevel.Service() {
 		return nil, errors.New("cannot transfer individual files/folders to the root of a service. Add a container or directory to the destination URL")
 	}
 
-	if srcLevel == ELocationLevel.Container() && dstLevel == ELocationLevel.Service() && !cca.asSubdir {
+	if srcLevel == azcopy.ELocationLevel.Container() && dstLevel == azcopy.ELocationLevel.Service() && !cca.asSubdir {
 		return nil, errors.New("cannot use --as-subdir=false with a service level destination")
 	}
 
 	// When copying a container directly to a container, strip the top directory, unless we're attempting to persist permissions.
-	if srcLevel == ELocationLevel.Container() && dstLevel == ELocationLevel.Container() && cca.FromTo.From().IsRemote() && cca.FromTo.To().IsRemote() {
+	if srcLevel == azcopy.ELocationLevel.Container() && dstLevel == azcopy.ELocationLevel.Container() && cca.FromTo.From().IsRemote() && cca.FromTo.To().IsRemote() {
 		if cca.preservePermissions.IsTruthy() {
 			// if we're preserving permissions, we need to keep the top directory, but with container->container, we don't need to add the container name to the path.
 			// asSubdir is a better option than stripTopDir as stripTopDir disincludes the root.
@@ -211,7 +212,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				seenFailedContainers[dstContainerName] = true
 			}
 		} else if cca.FromTo.From().IsRemote() { // if the destination has implicit container names
-			if acctTraverser, ok := t.(traverser.AccountTraverser); ok && dstLevel == ELocationLevel.Service() {
+			if acctTraverser, ok := t.(traverser.AccountTraverser); ok && dstLevel == azcopy.ELocationLevel.Service() {
 				containers, err := acctTraverser.ListContainers()
 
 				if err != nil {
@@ -300,7 +301,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			// set up the destination container name.
 			cName := dstContainerName
 			// if a destination container name is not specified OR copying service to container/folder, append the src container name.
-			if cName == "" || (srcLevel == ELocationLevel.Service() && dstLevel > ELocationLevel.Service()) {
+			if cName == "" || (srcLevel == azcopy.ELocationLevel.Service() && dstLevel > azcopy.ELocationLevel.Service()) {
 				cName, err = containerResolver.ResolveName(object.ContainerName)
 
 				if err != nil {
@@ -316,11 +317,11 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		}
 
 		// If above the service level, we already know the container name and don't need to supply it to makeEscapedRelativePath
-		if srcLevel != ELocationLevel.Service() {
+		if srcLevel != azcopy.ELocationLevel.Service() {
 			object.ContainerName = ""
 
 			// When copying directly TO a container or object from a container, don't drop under a sub directory
-			if dstLevel >= ELocationLevel.Container() {
+			if dstLevel >= azcopy.ELocationLevel.Container() {
 				object.DstContainerName = ""
 			}
 		}
@@ -386,7 +387,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 // This is condensed down into an individual function as we don't end up reusing the destination traverser at all.
 // This is just for the directory check.
-func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx context.Context) bool {
+func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, jobPartOrder common.CopyJobPartOrderRequest, ctx context.Context) bool {
 	var err error
 	dstCredInfo := common.CredentialInfo{}
 
@@ -399,7 +400,8 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx con
 	}
 
 	rt, err := traverser.InitResourceTraverser(dst, cca.FromTo.To(), ctx, traverser.InitResourceTraverserOptions{
-		Credential: &dstCredInfo,
+		CredentialType: dstCredInfo.CredentialType,
+		Client:         jobPartOrder.DstServiceClient,
 
 		ListOfVersionIDs: cca.ListOfVersionIDsChannel,
 
