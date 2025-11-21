@@ -8,7 +8,6 @@ type FolderCreationTracker interface {
 	CreateFolder(folder string, doCreation func() error) error
 	ShouldSetProperties(folder string, overwrite OverwriteOption, prompter Prompter) bool
 	StopTracking(folder string)
-	IsFolderAlreadyCreated(folder string) bool
 }
 
 type Prompter interface {

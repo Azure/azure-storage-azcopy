@@ -442,83 +442,59 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 					enqueuedDirAsOutput := false // Reset the flag for each directory processed
 
 					if t.include.DirStubs() || t.includeDirectoryOrPrefix {
+						// try to get properties on the directory itself, since it's not listed in BlobItems
 						dName := strings.TrimSuffix(*virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)
-						
-						// Optimization for HNS-enabled (BlobFS) accounts:
-						// In HNS accounts, all virtual directories ARE actual directories, so we can skip
-						// the expensive GetProperties calls to check for hdi_isfolder metadata.
-						// This significantly improves enumeration performance for large folder structures.
-						if t.isDFS {
-							// Directly create the folder object without checking properties
-							folderRelativePath := strings.TrimPrefix(dName, searchPrefix)
-							storedObject := newStoredObject(
-								preprocessor,
-								getObjectNameOnly(dName),
-								folderRelativePath,
-								common.EEntityType.Folder(),
-								time.Time{}, // No timestamp available without GetProperties
-								0,            // Folders have zero size
-								noContentProps,
-								noBlobProps,
-								common.Metadata{},
-								containerName,
-							)
-							enqueueOutput(storedObject, nil)
-							enqueuedDirAsOutput = true
-						} else {
-							// For non-HNS accounts, we need to check if it's a folder stub
-							blobClient := containerClient.NewBlobClient(dName)
-						altNameCheck:
-							pResp, err := blobClient.GetProperties(t.ctx, nil)
-							if err == nil {
-								if !t.doesBlobRepresentAFolder(pResp.Metadata) { // We've picked up on a file *named* the folder, not the folder itself. Does folder/ exist?
-									if !strings.HasSuffix(dName, "/") {
-										blobClient = containerClient.NewBlobClient(dName + common.AZCOPY_PATH_SEPARATOR_STRING) // Tack on the path separator, check.
-										dName += common.AZCOPY_PATH_SEPARATOR_STRING
-										goto altNameCheck // "foo" is a file, what about "foo/"?
-									}
-
-									goto skipDirAdd // We shouldn't add a blob that isn't a folder as a folder. You either have the folder metadata, or you don't.
-								}
-
-								pbPropAdapter := blobPropertiesResponseAdapter{&pResp}
-								folderRelativePath := strings.TrimPrefix(dName, searchPrefix)
-
-								storedObject := newStoredObject(
-									preprocessor,
-									getObjectNameOnly(dName),
-									folderRelativePath,
-									common.EEntityType.Folder(),
-									pbPropAdapter.LastModified(),
-									pbPropAdapter.ContentLength(),
-									pbPropAdapter,
-									pbPropAdapter,
-									pbPropAdapter.Metadata,
-									containerName,
-								)
-								storedObject.tryUpdateTimestampsFromMetadata(pbPropAdapter.Metadata)
-
-								if t.s2sPreserveSourceTags {
-									tResp, err := blobClient.GetTags(t.ctx, nil)
-
-									if err == nil {
-										blobTagsMap := common.BlobTags{}
-										for _, blobTag := range tResp.BlobTagSet {
-											blobTagsMap[url.QueryEscape(*blobTag.Key)] = url.QueryEscape(*blobTag.Value)
-										}
-										storedObject.blobTags = blobTagsMap
-									}
-								}
-
-								enqueueOutput(storedObject, err)
-								enqueuedDirAsOutput = true
-							} else {
-								// There was nothing there, but is there folder/?
+						blobClient := containerClient.NewBlobClient(dName)
+					altNameCheck:
+						pResp, err := blobClient.GetProperties(t.ctx, nil)
+						if err == nil {
+							if !t.doesBlobRepresentAFolder(pResp.Metadata) { // We've picked up on a file *named* the folder, not the folder itself. Does folder/ exist?
 								if !strings.HasSuffix(dName, "/") {
 									blobClient = containerClient.NewBlobClient(dName + common.AZCOPY_PATH_SEPARATOR_STRING) // Tack on the path separator, check.
 									dName += common.AZCOPY_PATH_SEPARATOR_STRING
 									goto altNameCheck // "foo" is a file, what about "foo/"?
 								}
+
+								goto skipDirAdd // We shouldn't add a blob that isn't a folder as a folder. You either have the folder metadata, or you don't.
+							}
+
+							pbPropAdapter := blobPropertiesResponseAdapter{&pResp}
+							folderRelativePath := strings.TrimPrefix(dName, searchPrefix)
+
+							storedObject := newStoredObject(
+								preprocessor,
+								getObjectNameOnly(dName),
+								folderRelativePath,
+								common.EEntityType.Folder(),
+								pbPropAdapter.LastModified(),
+								pbPropAdapter.ContentLength(),
+								pbPropAdapter,
+								pbPropAdapter,
+								pbPropAdapter.Metadata,
+								containerName,
+							)
+							storedObject.tryUpdateTimestampsFromMetadata(pbPropAdapter.Metadata)
+
+							if t.s2sPreserveSourceTags {
+								tResp, err := blobClient.GetTags(t.ctx, nil)
+
+								if err == nil {
+									blobTagsMap := common.BlobTags{}
+									for _, blobTag := range tResp.BlobTagSet {
+										blobTagsMap[url.QueryEscape(*blobTag.Key)] = url.QueryEscape(*blobTag.Value)
+									}
+									storedObject.blobTags = blobTagsMap
+								}
+							}
+
+							enqueueOutput(storedObject, err)
+							enqueuedDirAsOutput = true
+						} else {
+							// There was nothing there, but is there folder/?
+							if !strings.HasSuffix(dName, "/") {
+								blobClient = containerClient.NewBlobClient(dName + common.AZCOPY_PATH_SEPARATOR_STRING) // Tack on the path separator, check.
+								dName += common.AZCOPY_PATH_SEPARATOR_STRING
+								goto altNameCheck // "foo" is a file, what about "foo/"?
 							}
 						}
 					skipDirAdd:
@@ -554,10 +530,8 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 
 			// process the blobs returned in this result segment
 			for _, blobInfo := range lResp.Segment.BlobItems {
-				// For HNS-enabled (BlobFS) accounts, folders are represented as virtual directories
-				// in the BlobPrefixes, not as blobs with hdi_isfolder metadata.
-				// So we only need to check for folder blobs in non-HNS accounts.
-				if !t.isDFS && t.doesBlobRepresentAFolder(blobInfo.Metadata) {
+				// if the blob represents a hdi folder, then skip it
+				if t.doesBlobRepresentAFolder(blobInfo.Metadata) {
 					continue
 				}
 
@@ -710,10 +684,8 @@ func (t *blobTraverser) serialList(containerClient *container.Client, containerN
 		}
 		// process the blobs returned in this result segment
 		for _, blobInfo := range resp.Segment.BlobItems {
-			// For HNS-enabled (BlobFS) accounts, folders are represented as virtual directories
-			// in the BlobPrefixes, not as blobs with hdi_isfolder metadata.
-			// So we only need to check for folder blobs in non-HNS accounts.
-			if !t.isDFS && t.doesBlobRepresentAFolder(blobInfo.Metadata) {
+			// if the blob represents a hdi folder, then skip it
+			if t.doesBlobRepresentAFolder(blobInfo.Metadata) {
 				continue
 			}
 
