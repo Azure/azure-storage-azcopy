@@ -113,7 +113,7 @@ func (raw rawSyncCmdArgs) toOptions() (opts azcopy.SyncOptions, err error) {
 		ForceIfReadOnly:         raw.forceIfReadOnly,
 		BlockSizeMB:             raw.blockSizeMB,
 		PutBlobSizeMB:           raw.putBlobSizeMB,
-		PutMd5:                  raw.putMd5,
+		PutHash:                 raw.putMd5,
 		S2SPreserveAccessTier:   to.Ptr(raw.s2sPreserveAccessTier), // finalize code will ensure this is only set for S2S
 		S2SPreserveBlobTags:     raw.s2sPreserveBlobTags,
 		CpkByName:               raw.cpkScopeInfo,
@@ -138,7 +138,7 @@ func (raw rawSyncCmdArgs) toOptions() (opts azcopy.SyncOptions, err error) {
 	if err != nil {
 		return opts, err
 	}
-	err = opts.CheckMd5.Parse(raw.md5ValidationOption)
+	err = opts.CheckHash.Parse(raw.md5ValidationOption)
 	if err != nil {
 		return opts, err
 	}
