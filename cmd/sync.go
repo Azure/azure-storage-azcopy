@@ -63,7 +63,6 @@ type rawSyncCmdArgs struct {
 	includeDirectoryStubs   bool // Includes hdi_isfolder objects in the sync even w/o preservePermissions.
 	preservePermissions     bool
 	preserveSMBPermissions  bool // deprecated and synonymous with preservePermissions
-	preserveOwner           bool
 	preserveSMBInfo         bool
 	preservePOSIXProperties bool
 	followSymlinks          bool
@@ -105,20 +104,6 @@ type rawSyncCmdArgs struct {
 	hashMetaDir  string
 }
 
-// it is assume that the given url has the SAS stripped, and safe to print
-func validateURLIsNotServiceLevel(url string, location common.Location) error {
-	srcLevel, err := azcopy.DetermineLocationLevel(url, location, true)
-	if err != nil {
-		return err
-	}
-
-	if srcLevel == azcopy.ELocationLevel.Service() {
-		return fmt.Errorf("service level URLs (%s) are not supported in sync: ", url)
-	}
-
-	return nil
-}
-
 func (raw rawSyncCmdArgs) toOptions() (opts azcopy.SyncOptions, err error) {
 	opts = azcopy.SyncOptions{
 		Recursive:               to.Ptr(raw.recursive),
@@ -128,7 +113,7 @@ func (raw rawSyncCmdArgs) toOptions() (opts azcopy.SyncOptions, err error) {
 		ForceIfReadOnly:         raw.forceIfReadOnly,
 		BlockSizeMB:             raw.blockSizeMB,
 		PutBlobSizeMB:           raw.putBlobSizeMB,
-		PutMd5:                  raw.putMd5,
+		PutHash:                 raw.putMd5,
 		S2SPreserveAccessTier:   to.Ptr(raw.s2sPreserveAccessTier), // finalize code will ensure this is only set for S2S
 		S2SPreserveBlobTags:     raw.s2sPreserveBlobTags,
 		CpkByName:               raw.cpkScopeInfo,
@@ -153,7 +138,7 @@ func (raw rawSyncCmdArgs) toOptions() (opts azcopy.SyncOptions, err error) {
 	if err != nil {
 		return opts, err
 	}
-	err = opts.CheckMd5.Parse(raw.md5ValidationOption)
+	err = opts.CheckHash.Parse(raw.md5ValidationOption)
 	if err != nil {
 		return opts, err
 	}
@@ -293,18 +278,14 @@ func init() {
 
 			// if both flags are set, we honor the new flag and ignore the old one
 			if cmd.Flags().Changed("preserve-info") && cmd.Flags().Changed("preserve-smb-info") {
-				raw.preserveInfo = raw.preserveInfo
 			} else if cmd.Flags().Changed("preserve-info") {
-				raw.preserveInfo = raw.preserveInfo
 			} else if cmd.Flags().Changed("preserve-smb-info") {
 				raw.preserveInfo = raw.preserveSMBInfo
 			} else {
 				raw.preserveInfo = azcopy.GetPreserveInfoDefault(userFromTo)
 			}
 			// if transfer is NFS aware, honor the preserve-permissions flag, otherwise honor preserve-smb-permissions flag
-			if azcopy.AreBothLocationsNFSAware(userFromTo) {
-				raw.preservePermissions = raw.preservePermissions
-			} else {
+			if !azcopy.AreBothLocationsNFSAware(userFromTo) {
 				raw.preservePermissions = raw.preservePermissions || raw.preserveSMBPermissions
 			}
 
@@ -410,7 +391,6 @@ Final Job Status: %v%s%s
 					}
 				}, exitCode)
 			}
-
 			// Wait for the user to see the final output before exiting
 			glcm.SurrenderControl()
 		},

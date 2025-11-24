@@ -49,9 +49,9 @@ type SyncOptions struct {
 	IncludeRegex            []string
 	ExcludeRegex            []string
 	DeleteDestination       common.DeleteDestination
-	PutMd5                  bool                        // TODO: (gapra) Should we make this an enum called PutHash for None/MD5? So user can set the HashType?
-	CheckMd5                common.HashValidationOption // TODO (gapra) Same comment as above
-	S2SPreserveAccessTier   *bool                       // Default true
+	PutHash                 bool
+	CheckHash               common.HashValidationOption
+	S2SPreserveAccessTier   *bool // Default true
 	S2SPreserveBlobTags     bool
 	CpkByName               string
 	CpkByValue              bool
@@ -177,7 +177,7 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions, h
 	if err != nil {
 		return SyncResult{}, err
 	}
-	// if we are in dryrun mode, we don't want to actually run the job, so return her
+	// if we are in dryrun mode, we don't want to actually run the job, so return here
 	if s.opts.dryrun {
 		return SyncResult{}, nil
 	}
@@ -214,7 +214,7 @@ func newSyncer(ctx context.Context, jobID common.JobID, src, dst string, opts Sy
 	if err != nil {
 		return nil, err
 	}
-	syncRemote, err := NewSyncRemoteProvider(ctx, uotm, cookedOpts.source, cookedOpts.destination,
+	syncRemote, err := newSyncRemoteProvider(ctx, uotm, cookedOpts.source, cookedOpts.destination,
 		cookedOpts.fromTo, cookedOpts.cpkOptions, cookedOpts.trailingDot)
 	if err != nil {
 		return nil, err

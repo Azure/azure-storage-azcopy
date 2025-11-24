@@ -160,8 +160,8 @@ func (s *cookedSyncOptions) applyDefaultsAndInferOptions(opts SyncOptions) (err 
 		ExcludeRegex:      opts.ExcludeRegex,
 	}
 	s.deleteDestination = opts.DeleteDestination
-	s.putMd5 = opts.PutMd5
-	s.checkMd5 = opts.CheckMd5
+	s.putMd5 = opts.PutHash
+	s.checkMd5 = opts.CheckHash
 	s.s2SPreserveBlobTags = opts.S2SPreserveBlobTags
 	s.cpkOptions = common.CpkOptions{
 		CpkScopeInfo: opts.CpkByName,

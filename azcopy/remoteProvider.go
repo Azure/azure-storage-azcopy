@@ -37,11 +37,11 @@ type remoteProvider struct {
 	dstCredType      common.CredentialType
 }
 
-func NewSyncRemoteProvider(ctx context.Context, uotm *common.UserOAuthTokenManager, src, dst common.ResourceString, fromTo common.FromTo, cpkOptions common.CpkOptions, trailingDot common.TrailingDotOption) (rp *remoteProvider, err error) {
+func newSyncRemoteProvider(ctx context.Context, uotm *common.UserOAuthTokenManager, src, dst common.ResourceString, fromTo common.FromTo, cpkOptions common.CpkOptions, trailingDot common.TrailingDotOption) (rp *remoteProvider, err error) {
 	rp = &remoteProvider{}
 
 	ctx = context.WithValue(ctx, ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	rp.srcServiceClient, rp.srcCredType, err = GetSourceServiceClient(ctx, src, fromTo.From(), trailingDot, cpkOptions, uotm)
+	rp.srcServiceClient, rp.srcCredType, err = getSourceServiceClient(ctx, src, fromTo.From(), trailingDot, cpkOptions, uotm)
 	if err != nil {
 		return rp, err
 	}
@@ -56,7 +56,7 @@ func NewSyncRemoteProvider(ctx context.Context, uotm *common.UserOAuthTokenManag
 			return rp, fmt.Errorf("the source of a %s->%s sync must either be public, or authorized with a SAS token; blob destinations can forward OAuth", fromTo.From(), fromTo.To())
 		}
 	}
-	rp.dstServiceClient, rp.dstCredType, err = GetDestinationServiceClient(ctx, dst, fromTo, rp.srcCredType, trailingDot, cpkOptions, uotm)
+	rp.dstServiceClient, rp.dstCredType, err = getDestinationServiceClient(ctx, dst, fromTo, rp.srcCredType, trailingDot, cpkOptions, uotm)
 	if err != nil {
 		return rp, err
 	}
@@ -69,7 +69,7 @@ func NewSyncRemoteProvider(ctx context.Context, uotm *common.UserOAuthTokenManag
 	return rp, nil
 }
 
-func GetSourceServiceClient(ctx context.Context,
+func getSourceServiceClient(ctx context.Context,
 	source common.ResourceString,
 	loc common.Location,
 	trailingDot common.TrailingDotOption,
@@ -128,7 +128,7 @@ func GetSourceServiceClient(ctx context.Context,
 	return srcServiceClient, srcCredType, nil
 }
 
-func GetDestinationServiceClient(ctx context.Context,
+func getDestinationServiceClient(ctx context.Context,
 	destination common.ResourceString,
 	fromTo common.FromTo,
 	srcCredType common.CredentialType,
