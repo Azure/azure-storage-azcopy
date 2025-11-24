@@ -105,20 +105,6 @@ type rawSyncCmdArgs struct {
 	hashMetaDir  string
 }
 
-// it is assume that the given url has the SAS stripped, and safe to print
-func validateURLIsNotServiceLevel(url string, location common.Location) error {
-	srcLevel, err := azcopy.DetermineLocationLevel(url, location, true)
-	if err != nil {
-		return err
-	}
-
-	if srcLevel == azcopy.ELocationLevel.Service() {
-		return fmt.Errorf("service level URLs (%s) are not supported in sync: ", url)
-	}
-
-	return nil
-}
-
 func (raw rawSyncCmdArgs) toOptions() (opts azcopy.SyncOptions, err error) {
 	opts = azcopy.SyncOptions{
 		Recursive:               to.Ptr(raw.recursive),
@@ -295,16 +281,13 @@ func init() {
 			if cmd.Flags().Changed("preserve-info") && cmd.Flags().Changed("preserve-smb-info") {
 				raw.preserveInfo = raw.preserveInfo
 			} else if cmd.Flags().Changed("preserve-info") {
-				raw.preserveInfo = raw.preserveInfo
 			} else if cmd.Flags().Changed("preserve-smb-info") {
 				raw.preserveInfo = raw.preserveSMBInfo
 			} else {
 				raw.preserveInfo = azcopy.GetPreserveInfoDefault(userFromTo)
 			}
 			// if transfer is NFS aware, honor the preserve-permissions flag, otherwise honor preserve-smb-permissions flag
-			if azcopy.AreBothLocationsNFSAware(userFromTo) {
-				raw.preservePermissions = raw.preservePermissions
-			} else {
+			if !azcopy.AreBothLocationsNFSAware(userFromTo) {
 				raw.preservePermissions = raw.preservePermissions || raw.preserveSMBPermissions
 			}
 
@@ -319,6 +302,9 @@ func init() {
 				} else if raw.dryrun {
 					err = fmt.Errorf("cannot set output level '%s' with dry-run mode", OutputLevel.String())
 				}
+			}
+			if err != nil {
+				glcm.Error("Cannot perform sync due to error: " + err.Error() + getErrorCodeUrl(err))
 			}
 
 			// Create a context that can be cancelled by Ctrl-C
