@@ -301,6 +301,9 @@ func init() {
 					err = fmt.Errorf("cannot set output level '%s' with dry-run mode", OutputLevel.String())
 				}
 			}
+			if err != nil {
+				glcm.Error("Cannot perform sync due to error: " + err.Error())
+			}
 
 			// Create a context that can be cancelled by Ctrl-C
 			ctx, cancel := context.WithCancel(context.Background())
