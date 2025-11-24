@@ -91,10 +91,9 @@ func (t *s3ServiceTraverser) Traverse(preprocessor objectMorpher, processor Obje
 		tmpS3URL := t.s3URL
 		tmpS3URL.BucketName = v
 		urlResult := tmpS3URL.URL()
-		credentialInfo := common.CredentialInfo{CredentialType: common.ECredentialType.S3AccessKey()}
 
 		bucketTraverser, err := NewS3Traverser(&urlResult, t.ctx, InitResourceTraverserOptions{
-			Credential: &credentialInfo,
+			CredentialType: common.ECredentialType.S3AccessKey(),
 
 			Recursive: true,
 
