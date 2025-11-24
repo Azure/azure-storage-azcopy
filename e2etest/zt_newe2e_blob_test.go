@@ -221,13 +221,9 @@ func (s *BlobTestSuite) Scenario_DownloadBlobRecursive(svm *ScenarioVariationMan
 }
 
 /*
-Scenario_DownloadBlobNoNameDirectory validates we report errors when
-downloading from a blobURL containing an unnamed directory and a wildcard pattern. I.e '//*'
-
-E.g https:/acct.blob/container//* AzCopy and the AzBlob SDK URL parser normalizes the path
-in occurrences - stripTrailingWildCardOnRemoteSources(), Traverser.SplitResourceString()
-
-Which causes the path to not be found. This tests we do not fail silently in that case.
+Scenario_DownloadBlobNoNameDirectory validates downloading from a blobURL
+containing an unnamed directory and a wildcard pattern. I.e '//*'
+E.g https:/acct.blob/container//*
 */
 func (s *BlobTestSuite) Scenario_DownloadBlobNoNameDirectory(svm *ScenarioVariationManager) {
 	// Test uses a two-step upload, download to replicate the leading-slash blob scenario without tripping the SDK’s empty-name validation
@@ -267,7 +263,7 @@ func (s *BlobTestSuite) Scenario_DownloadBlobNoNameDirectory(svm *ScenarioVariat
 	}, ValidateResourceOptions{validateObjectContent: false})
 
 	// Download using list-of-files from https://container//
-	stdOut, _ := RunAzCopy(svm, AzCopyCommand{
+	RunAzCopy(svm, AzCopyCommand{
 		Verb: AzCopyVerbCopy,
 		Targets: []ResourceManager{
 			TryApplySpecificAuthType(blobContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{Wildcard: "//*"}),
@@ -279,9 +275,11 @@ func (s *BlobTestSuite) Scenario_DownloadBlobNoNameDirectory(svm *ScenarioVariat
 				Recursive: pointerTo(true),
 			},
 		},
-		ShouldFail: true,
+		ShouldFail: false,
 	})
-	ValidateMessageOutput(svm, stdOut, "The specified file was not found.", true)
+	ValidateResource[ObjectResourceManager](svm, dstLocal.GetObject(svm, "/image.png", common.EEntityType.File()), ResourceDefinitionObject{
+		Body: body,
+	}, ValidateResourceOptions{validateObjectContent: false})
 }
 
 // Scenario_DownloadBlobNamedDirectory validates list-of-files compatible with downloads from *named* virtual directories
