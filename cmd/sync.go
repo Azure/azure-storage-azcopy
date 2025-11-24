@@ -302,7 +302,7 @@ func init() {
 				}
 			}
 			if err != nil {
-				glcm.Error("Cannot perform sync due to error: " + err.Error())
+				glcm.Error("Cannot perform sync due to error: " + err.Error() + getErrorCodeUrl(err))
 			}
 
 			// Create a context that can be cancelled by Ctrl-C

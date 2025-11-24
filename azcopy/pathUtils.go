@@ -21,7 +21,7 @@
 package azcopy
 
 import (
-	errors2 "errors"
+	"errors"
 	"fmt"
 	"net/url"
 	"runtime"
@@ -32,7 +32,6 @@ import (
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
-	"github.com/pkg/errors"
 )
 
 func GetContainerName(path string, location common.Location) (string, error) {
@@ -245,7 +244,7 @@ func StripTrailingWildcardOnRemoteSource(source string, location common.Location
 	if strings.Contains(gURLParts.GetContainerName(), "*") {
 		// Disallow container name search and object specifics
 		if gURLParts.GetObjectName() != "" {
-			err = errors2.New("cannot combine a specific object name with an account-level search")
+			err = errors.New("cannot combine a specific object name with an account-level search")
 			return
 		}
 
@@ -262,7 +261,7 @@ func StripTrailingWildcardOnRemoteSource(source string, location common.Location
 
 	// Ensure there aren't any extra *s floating around.
 	if strings.Contains(resourceURL.RawPath, "*") {
-		err = errors2.New("cannot use wildcards in the path section of the URL except in trailing \"/*\". If you wish to use * in your URL, manually encode it to %2A")
+		err = errors.New("cannot use wildcards in the path section of the URL except in trailing \"/*\". If you wish to use * in your URL, manually encode it to %2A")
 		return
 	}
 
@@ -361,7 +360,7 @@ func NormalizeResourceRoot(resource string, location common.Location) (resourceB
 
 		if gcpURLParts.BucketName == "" || strings.Contains(gcpURLParts.BucketName, "*") {
 			if gcpURLParts.ObjectKey != "" {
-				return resource, errors.New("Cannot combine account-level traversal and specific object names")
+				return resource, errors.New("cannot combine account-level traversal and specific object names")
 			}
 			gcpURLParts.BucketName = ""
 		}
