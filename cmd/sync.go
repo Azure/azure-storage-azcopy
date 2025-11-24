@@ -63,7 +63,6 @@ type rawSyncCmdArgs struct {
 	includeDirectoryStubs   bool // Includes hdi_isfolder objects in the sync even w/o preservePermissions.
 	preservePermissions     bool
 	preserveSMBPermissions  bool // deprecated and synonymous with preservePermissions
-	preserveOwner           bool
 	preserveSMBInfo         bool
 	preservePOSIXProperties bool
 	followSymlinks          bool
@@ -279,7 +278,6 @@ func init() {
 
 			// if both flags are set, we honor the new flag and ignore the old one
 			if cmd.Flags().Changed("preserve-info") && cmd.Flags().Changed("preserve-smb-info") {
-				raw.preserveInfo = raw.preserveInfo
 			} else if cmd.Flags().Changed("preserve-info") {
 			} else if cmd.Flags().Changed("preserve-smb-info") {
 				raw.preserveInfo = raw.preserveSMBInfo
