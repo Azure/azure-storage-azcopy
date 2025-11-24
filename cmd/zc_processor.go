@@ -21,12 +21,9 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
-	"net/url"
 	"strings"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
@@ -48,11 +45,10 @@ type copyTransferProcessor struct {
 	preserveAccessTier     bool
 	folderPropertiesOption common.FolderPropertyOption
 	symlinkHandlingType    common.SymlinkHandlingType
-	dryrunMode             bool
 	hardlinkHandlingType   common.HardlinkHandlingType
 }
 
-func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int, source, destination common.ResourceString, reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier, dryrunMode bool) *copyTransferProcessor {
+func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int, source, destination common.ResourceString, reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier bool) *copyTransferProcessor {
 	return &copyTransferProcessor{
 		numOfTransfersPerPart:     numOfTransfersPerPart,
 		copyJobTemplate:           copyJobTemplate,
@@ -63,109 +59,7 @@ func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, n
 		preserveAccessTier:        preserveAccessTier,
 		folderPropertiesOption:    copyJobTemplate.Fpo,
 		symlinkHandlingType:       copyJobTemplate.SymlinkHandlingType,
-		dryrunMode:                dryrunMode,
 	}
-}
-
-type DryrunTransfer struct {
-	EntityType   common.EntityType
-	BlobType     common.BlobType
-	FromTo       common.FromTo
-	Source       string
-	Destination  string
-	SourceSize   *int64
-	HttpHeaders  blob.HTTPHeaders
-	Metadata     common.Metadata
-	BlobTier     *blob.AccessTier
-	BlobVersion  *string
-	BlobTags     common.BlobTags
-	BlobSnapshot *string
-}
-
-type dryrunTransferSurrogate struct {
-	EntityType         string
-	BlobType           string
-	FromTo             string
-	Source             string
-	Destination        string
-	SourceSize         int64           `json:"SourceSize,omitempty"`
-	ContentType        string          `json:"ContentType,omitempty"`
-	ContentEncoding    string          `json:"ContentEncoding,omitempty"`
-	ContentDisposition string          `json:"ContentDisposition,omitempty"`
-	ContentLanguage    string          `json:"ContentLanguage,omitempty"`
-	CacheControl       string          `json:"CacheControl,omitempty"`
-	ContentMD5         []byte          `json:"ContentMD5,omitempty"`
-	BlobTags           common.BlobTags `json:"BlobTags,omitempty"`
-	Metadata           common.Metadata `json:"Metadata,omitempty"`
-	BlobTier           blob.AccessTier `json:"BlobTier,omitempty"`
-	BlobVersion        string          `json:"BlobVersion,omitempty"`
-	BlobSnapshotID     string          `json:"BlobSnapshotID,omitempty"`
-}
-
-func (d *DryrunTransfer) UnmarshalJSON(bytes []byte) error {
-	var surrogate dryrunTransferSurrogate
-
-	err := json.Unmarshal(bytes, &surrogate)
-	if err != nil {
-		return fmt.Errorf("failed to parse dryrun transfer: %w", err)
-	}
-
-	err = d.FromTo.Parse(surrogate.FromTo)
-	if err != nil {
-		return fmt.Errorf("failed to parse fromto: %w", err)
-	}
-
-	err = d.EntityType.Parse(surrogate.EntityType)
-	if err != nil {
-		return fmt.Errorf("failed to parse entity type: %w", err)
-	}
-
-	err = d.BlobType.Parse(surrogate.BlobType)
-	if err != nil {
-		return fmt.Errorf("failed to parse entity type: %w", err)
-	}
-
-	d.Source = surrogate.Source
-	d.Destination = surrogate.Destination
-
-	d.SourceSize = &surrogate.SourceSize
-	d.HttpHeaders.BlobContentType = &surrogate.ContentType
-	d.HttpHeaders.BlobContentEncoding = &surrogate.ContentEncoding
-	d.HttpHeaders.BlobCacheControl = &surrogate.CacheControl
-	d.HttpHeaders.BlobContentDisposition = &surrogate.ContentDisposition
-	d.HttpHeaders.BlobContentLanguage = &surrogate.ContentLanguage
-	d.HttpHeaders.BlobContentMD5 = surrogate.ContentMD5
-	d.BlobTags = surrogate.BlobTags
-	d.Metadata = surrogate.Metadata
-	d.BlobTier = &surrogate.BlobTier
-	d.BlobVersion = &surrogate.BlobVersion
-	d.BlobSnapshot = &surrogate.BlobSnapshotID
-
-	return nil
-}
-
-func (d DryrunTransfer) MarshalJSON() ([]byte, error) {
-	surrogate := dryrunTransferSurrogate{
-		d.EntityType.String(),
-		d.BlobType.String(),
-		d.FromTo.String(),
-		d.Source,
-		d.Destination,
-		common.IffNotNil(d.SourceSize, 0),
-		common.IffNotNil(d.HttpHeaders.BlobContentType, ""),
-		common.IffNotNil(d.HttpHeaders.BlobContentEncoding, ""),
-		common.IffNotNil(d.HttpHeaders.BlobContentDisposition, ""),
-		common.IffNotNil(d.HttpHeaders.BlobContentLanguage, ""),
-		common.IffNotNil(d.HttpHeaders.BlobCacheControl, ""),
-		d.HttpHeaders.BlobContentMD5,
-		d.BlobTags,
-		d.Metadata,
-		common.IffNotNil(d.BlobTier, ""),
-		common.IffNotNil(d.BlobVersion, ""),
-		common.IffNotNil(d.BlobSnapshot, ""),
-	}
-
-	return json.Marshal(surrogate)
 }
 
 func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject traverser.StoredObject) (err error) {
@@ -206,74 +100,6 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject traverser.Stor
 
 	if !shouldSendToSte {
 		return nil // skip this one
-	}
-
-	if s.dryrunMode {
-		glcm.Dryrun(func(format OutputFormat) string {
-			prettySrcRelativePath, prettyDstRelativePath := srcRelativePath, dstRelativePath
-
-			fromTo := s.copyJobTemplate.FromTo
-			if fromTo.From().IsRemote() {
-				prettySrcRelativePath, err = url.PathUnescape(prettySrcRelativePath)
-				if err != nil {
-					prettySrcRelativePath = srcRelativePath // Fall back, because it's better than failing.
-				}
-			}
-
-			if fromTo.To().IsRemote() {
-				prettyDstRelativePath, err = url.PathUnescape(prettyDstRelativePath)
-				if err != nil {
-					prettyDstRelativePath = dstRelativePath // Fall back, because it's better than failing.
-				}
-			}
-
-			if format == EOutputFormat.Json() {
-				tx := DryrunTransfer{
-					EntityType:  storedObject.EntityType,
-					BlobType:    common.FromBlobType(storedObject.BlobType),
-					FromTo:      s.copyJobTemplate.FromTo,
-					Source:      common.GenerateFullPath(s.copyJobTemplate.SourceRoot.Value, prettySrcRelativePath),
-					Destination: "",
-					SourceSize:  &storedObject.Size,
-					HttpHeaders: blob.HTTPHeaders{
-						BlobCacheControl:       &storedObject.CacheControl,
-						BlobContentDisposition: &storedObject.ContentDisposition,
-						BlobContentEncoding:    &storedObject.ContentEncoding,
-						BlobContentLanguage:    &storedObject.ContentLanguage,
-						BlobContentMD5:         storedObject.Md5,
-						BlobContentType:        &storedObject.ContentType,
-					},
-					Metadata:     storedObject.Metadata,
-					BlobTier:     &storedObject.BlobAccessTier,
-					BlobVersion:  &storedObject.BlobVersionID,
-					BlobTags:     storedObject.BlobTags,
-					BlobSnapshot: &storedObject.BlobSnapshotID,
-				}
-
-				if fromTo.To() != common.ELocation.None() && fromTo.To() != common.ELocation.Unknown() {
-					tx.Destination = common.GenerateFullPath(s.copyJobTemplate.DestinationRoot.Value, prettyDstRelativePath)
-				}
-
-				jsonOutput, err := json.Marshal(tx)
-				common.PanicIfErr(err)
-				return string(jsonOutput)
-			} else {
-				// if remove then To() will equal to common.ELocation.Unknown()
-				if s.copyJobTemplate.FromTo.To() == common.ELocation.Unknown() { // remove
-					return fmt.Sprintf("DRYRUN: remove %v",
-						common.GenerateFullPath(s.copyJobTemplate.SourceRoot.Value, prettySrcRelativePath))
-				}
-				if s.copyJobTemplate.FromTo.To() == common.ELocation.None() { // set-properties
-					return fmt.Sprintf("DRYRUN: set-properties %v",
-						common.GenerateFullPath(s.copyJobTemplate.SourceRoot.Value, prettySrcRelativePath))
-				} else { // copy for sync
-					return fmt.Sprintf("DRYRUN: copy %v to %v",
-						common.GenerateFullPath(s.copyJobTemplate.SourceRoot.Value, prettySrcRelativePath),
-						common.GenerateFullPath(s.copyJobTemplate.DestinationRoot.Value, prettyDstRelativePath))
-				}
-			}
-		})
-		return nil
 	}
 
 	if len(s.copyJobTemplate.Transfers.List) == s.numOfTransfersPerPart {
