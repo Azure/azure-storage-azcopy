@@ -23,7 +23,6 @@ package traverser
 import (
 	"context"
 	"fmt"
-	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	"net/url"
 	"strings"
 
@@ -72,8 +71,6 @@ func (l *listTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 		if isDirErr != nil {
 			if strings.Contains(isDirErr.Error(), common.FILE_NOT_FOUND) {
 				common.GetLifecycleMgr().Info(fmt.Sprintf("Skipping %s: file/directory not found. ", childPath))
-				bURlParts, _ := blobsas.ParseURL(childTraverser.(*BlobTraverser).RawURL)
-				common.GetLifecycleMgr().Info(fmt.Sprintf("'%s' path does not exist. Rename blob name without leading slash", bURlParts.ContainerName+"/"+bURlParts.BlobName))
 				itemsSkipped++
 				lastError = isDirErr
 				continue
@@ -105,10 +102,10 @@ func (l *listTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			itemsProcessed++
 		}
 	}
-	// Return 404 err if nothing is processed
+	// Return err if nothing is processed instead of fai;omg so;emt;y
 	if itemsProcessed == 0 && itemsSkipped > 0 {
 		if lastError != nil {
-			return fmt.Errorf(": failed to process files. \n Error: %w", lastError)
+			return fmt.Errorf("failed to process files: %w", lastError)
 		}
 	}
 
