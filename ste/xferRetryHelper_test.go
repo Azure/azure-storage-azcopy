@@ -2,12 +2,15 @@ package ste
 
 import (
 	"errors"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
-	"github.com/stretchr/testify/assert"
+	"io"
+	"net"
 	"net/http"
 	"runtime"
 	"syscall"
 	"testing"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestGetShouldRetry(t *testing.T) {
@@ -85,6 +88,14 @@ func TestGetShouldRetry(t *testing.T) {
 			},
 			Rules: ParseRules("409: ShareAlreadyExists, ShareBeingDeleted, BlobAlreadyExists; 500; 404: BlobNotFound"),
 			Tests: syscallErrnoTests(platformRetriedErrnos, true),
+		},
+		{
+			Rules: ParseRules("409: ShareAlreadyExists, ShareBeingDeleted, BlobAlreadyExists; 500; 404: BlobNotFound"),
+			Tests: []*ResponseRetryPair{
+				ErrorTest(io.ErrUnexpectedEOF, true),
+				ErrorTest(io.EOF, true),
+				ErrorTest(net.ErrClosed, true),
+			},
 		},
 		{ // test full code removal
 			Rules: ParseRules("400; 500; -400"),
