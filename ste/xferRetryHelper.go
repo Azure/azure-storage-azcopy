@@ -23,11 +23,14 @@ package ste
 import (
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"io"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
 	"syscall"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // Defines the retry policy rules
@@ -96,6 +99,13 @@ func GetShouldRetry(log *LogOptions) RetryFunc {
 					}
 				}
 			}
+		}
+
+		// Check for some OS-agnostic errors that could be retried
+		if errors.Is(err, net.ErrClosed) ||
+			errors.Is(err, io.ErrUnexpectedEOF) ||
+			errors.Is(err, io.EOF) { // Notably, we shouldn't really be getting back EOF...
+			return true
 		}
 
 		// Check if we're in a retriable error defined by the OS specific file
