@@ -2,6 +2,7 @@ package e2etest
 
 import (
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -45,6 +46,10 @@ func (acct *AzureAccountResourceManager) ApplySAS(URI string, loc common.Locatio
 
 	if !opts.AzureOpts.WithSAS {
 		return URI
+	}
+
+	if acct.InternalAccountKey == "" {
+		panic("cannot apply a SAS token from an account without a key")
 	}
 
 	var sasVals GenericSignatureValues
@@ -127,6 +132,20 @@ func (acct *AzureAccountResourceManager) AvailableServices() []common.Location {
 	}
 }
 
+func (acct *AzureAccountResourceManager) AvailableAuthTypes() ExplicitCredentialTypes {
+	out := EExplicitCredentialType.PublicAuth()
+
+	if PrimaryOAuthCache.tc != nil {
+		out = out.With(EExplicitCredentialType.OAuth())
+	}
+
+	if acct.InternalAccountKey != "" {
+		out = out.With(EExplicitCredentialType.SASToken(), EExplicitCredentialType.AcctKey())
+	}
+
+	return out
+}
+
 func (acct *AzureAccountResourceManager) getServiceURL(a Asserter, service common.Location) string {
 	switch service {
 	case common.ELocation.Blob():
@@ -146,9 +165,18 @@ func (acct *AzureAccountResourceManager) GetService(a Asserter, location common.
 
 	switch location {
 	case common.ELocation.Blob():
-		sharedKey, err := blobservice.NewSharedKeyCredential(acct.InternalAccountName, acct.InternalAccountKey)
-		a.NoError("Create shared key", err)
-		client, err := blobservice.NewClientWithSharedKeyCredential(uri, sharedKey, nil)
+		var client *blobservice.Client
+		var err error
+		if acct.InternalAccountKey != "" {
+			var sharedKey *blobservice.SharedKeyCredential
+			sharedKey, err = blobservice.NewSharedKeyCredential(acct.InternalAccountName, acct.InternalAccountKey)
+			a.NoError("Create shared key", err)
+			client, err = blobservice.NewClientWithSharedKeyCredential(uri, sharedKey, nil)
+		} else {
+			// We have no account key/lookup failed, so we must fall back to OAuth
+			client, err = blobservice.NewClient(uri, PrimaryOAuthCache, nil)
+		}
+
 		a.NoError("Create Blob client", err)
 
 		return &BlobServiceResourceManager{
@@ -156,20 +184,36 @@ func (acct *AzureAccountResourceManager) GetService(a Asserter, location common.
 			InternalClient:  client,
 		}
 	case common.ELocation.File(), common.ELocation.FileNFS():
-		sharedKey, err := fileservice.NewSharedKeyCredential(acct.InternalAccountName, acct.InternalAccountKey)
-		a.NoError("Create shared key", err)
-		client, err := fileservice.NewClientWithSharedKeyCredential(uri, sharedKey, &fileservice.ClientOptions{AllowTrailingDot: to.Ptr(true)})
+		var err error
+		var client *fileservice.Client
+		if acct.InternalAccountKey != "" {
+			var sharedKey *fileservice.SharedKeyCredential
+			sharedKey, err = fileservice.NewSharedKeyCredential(acct.InternalAccountName, acct.InternalAccountKey)
+			a.NoError("Create shared key", err)
+			client, err = fileservice.NewClientWithSharedKeyCredential(uri, sharedKey, &fileservice.ClientOptions{AllowTrailingDot: to.Ptr(true)})
+		} else {
+			client, err = fileservice.NewClient(uri, PrimaryOAuthCache, &fileservice.ClientOptions{
+				FileRequestIntent: PtrOf(file.ShareTokenIntentBackup),
+			})
+		}
 		a.NoError("Create File client", err)
 
 		return &FileServiceResourceManager{
-			InternalAccount: acct,
-			InternalClient:  client,
-			Llocation:       location,
+			InternalAccount:  acct,
+			InternalClient:   client,
+			InternalLocation: location,
 		}
 	case common.ELocation.BlobFS():
-		sharedKey, err := blobfscommon.NewSharedKeyCredential(acct.InternalAccountName, acct.InternalAccountKey)
-		client, err := blobfsservice.NewClientWithSharedKeyCredential(uri, sharedKey, nil)
-		a.NoError("Create BlobFS client", err)
+		var err error
+		var client *blobfsservice.Client
+		if acct.InternalAccountKey != "" {
+			var sharedKey *blobfscommon.SharedKeyCredential
+			sharedKey, err = blobfscommon.NewSharedKeyCredential(acct.InternalAccountName, acct.InternalAccountKey)
+			client, err = blobfsservice.NewClientWithSharedKeyCredential(uri, sharedKey, nil)
+			a.NoError("Create BlobFS client", err)
+		} else {
+			client, err = blobfsservice.NewClient(uri, PrimaryOAuthCache, nil)
+		}
 
 		return &BlobFSServiceResourceManager{
 			InternalAccount: acct,

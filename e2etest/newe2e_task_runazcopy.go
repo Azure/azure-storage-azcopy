@@ -217,7 +217,7 @@ func (env *AzCopyEnvironment) DefaultPlanLoc(a ScenarioAsserter, ctx context.Con
 	return *env.JobPlanLocation
 }
 
-func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) string {
+func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager, id int) string {
 	intendedAuthType := EExplicitCredentialType.SASToken()
 	var opts GetURIOptions
 	if tgt, ok := target.(AzCopyTarget); ok {
@@ -234,6 +234,24 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 		intendedAuthType = EExplicitCredentialType.S3()
 	} else if target.Location() == common.ELocation.GCP() {
 		intendedAuthType = EExplicitCredentialType.GCP()
+	}
+
+	if target.Account() != nil {
+		availableTypes := target.Account().AvailableAuthTypes()
+		if !availableTypes.Includes(intendedAuthType) {
+			log := fmt.Sprintf("requested auth type %s is not supported by account %s (target #%d); falling back to ",
+				intendedAuthType.String(), target.Account().AccountName(), id)
+			switch {
+			case availableTypes.Includes(EExplicitCredentialType.OAuth()):
+				intendedAuthType = EExplicitCredentialType.OAuth()
+			case availableTypes.Includes(EExplicitCredentialType.SASToken()):
+				intendedAuthType = EExplicitCredentialType.SASToken()
+			default:
+				intendedAuthType = EExplicitCredentialType.None()
+			}
+			log += intendedAuthType.String()
+			a.Log(log)
+		}
 	}
 
 	switch intendedAuthType {
@@ -355,8 +373,8 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 			out = append(out, v)
 		}
 
-		for _, v := range commandSpec.Targets {
-			out = append(out, commandSpec.applyTargetAuth(a, v))
+		for k, v := range commandSpec.Targets {
+			out = append(out, commandSpec.applyTargetAuth(a, v, k))
 		}
 
 		if commandSpec.Flags == nil {
