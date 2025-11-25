@@ -394,7 +394,6 @@ Final Job Status: %v%s%s
 					}
 				}, exitCode)
 			}
-
 			// Wait for the user to see the final output before exiting
 			glcm.SurrenderControl()
 		},

@@ -179,9 +179,9 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	// Create a Remote resource resolver
 	// Giving it nothing to work with as new names will be added as we traverse.
 	var containerResolver BucketToContainerNameResolver
-	containerResolver = NewS3BucketNameToAzureResourcesResolver(nil)
+	containerResolver = azcopy.NewS3BucketNameToAzureResourcesResolver(nil)
 	if cca.FromTo == common.EFromTo.GCPBlob() {
-		containerResolver = NewGCPBucketNameToAzureResourcesResolver(nil)
+		containerResolver = azcopy.NewGCPBucketNameToAzureResourcesResolver(nil)
 	}
 	existingContainers := make(map[string]bool)
 	var logDstContainerCreateFailureOnce sync.Once
@@ -222,9 +222,9 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				// Resolve all container names up front.
 				// If we were to resolve on-the-fly, then name order would affect the results inconsistently.
 				if cca.FromTo == common.EFromTo.S3Blob() {
-					containerResolver = NewS3BucketNameToAzureResourcesResolver(containers)
+					containerResolver = azcopy.NewS3BucketNameToAzureResourcesResolver(containers)
 				} else if cca.FromTo == common.EFromTo.GCPBlob() {
-					containerResolver = NewGCPBucketNameToAzureResourcesResolver(containers)
+					containerResolver = azcopy.NewGCPBucketNameToAzureResourcesResolver(containers)
 				}
 
 				for _, v := range containers {
@@ -326,8 +326,8 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			}
 		}
 
-		srcRelPath := cca.MakeEscapedRelativePath(true, isDestDir, cca.asSubdir, object)
-		dstRelPath := cca.MakeEscapedRelativePath(false, isDestDir, cca.asSubdir, object)
+		srcRelPath := cca.MakeEscapedRelativePath(true, isDestDir, object)
+		dstRelPath := cca.MakeEscapedRelativePath(false, isDestDir, object)
 
 		transfer, shouldSendToSte := object.ToNewCopyTransfer(cca.autoDecompress && cca.FromTo.IsDownload(), srcRelPath, dstRelPath, cca.s2sPreserveAccessTier.Value(), jobPartOrder.Fpo, cca.SymlinkHandling, cca.hardlinks)
 		if !cca.S2sPreserveBlobTags {
@@ -578,7 +578,7 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 	return
 }
 
-func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool, asSubdir bool, object traverser.StoredObject) (relativePath string) {
+func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool, object traverser.StoredObject) (relativePath string) {
 	// write straight to /dev/null, do not determine a indirect path
 	if !source && cca.Destination.Value == common.Dev_Null {
 		return "" // ignore path encode rules

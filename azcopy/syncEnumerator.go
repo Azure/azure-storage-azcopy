@@ -243,11 +243,10 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 		// when uploading, we can delete remote objects immediately, because as we traverse the remote location
 		// we ALREADY have available a complete map of everything that exists locally
 		// so as soon as we see a remote destination object we can know whether it exists in the local source
-
-		comparator = NewSyncDestinationComparator(indexer, transferScheduler.ScheduleCopyTransfer, deleteScheduler, s.opts.compareHash, s.opts.preserveInfo, s.opts.mirrorMode).ProcessIfNecessary
+		comparator = NewSyncDestinationComparator(indexer, transferScheduler.ScheduleSyncRemoveSetPropertiesTransfer, deleteScheduler, s.opts.compareHash, s.opts.preserveInfo, s.opts.mirrorMode).ProcessIfNecessary
 		finalize = func() error {
 			// schedule every local file that doesn't exist at the destination
-			err = indexer.Traverse(transferScheduler.ScheduleCopyTransfer, filters)
+			err = indexer.Traverse(transferScheduler.ScheduleSyncRemoveSetPropertiesTransfer, filters)
 			if err != nil {
 				return err
 			}
@@ -265,7 +264,7 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 		indexer.IsDestinationCaseInsensitive = isDestinationCaseInsensitive(s.opts.fromTo)
 		// in all other cases (download and S2S), the destination is scanned/indexed first
 		// then the source is scanned and filtered based on what the destination contains
-		comparator = NewSyncSourceComparator(indexer, transferScheduler.ScheduleCopyTransfer, s.opts.compareHash, s.opts.preserveInfo, s.opts.mirrorMode).ProcessIfNecessary
+		comparator = NewSyncSourceComparator(indexer, transferScheduler.ScheduleSyncRemoveSetPropertiesTransfer, s.opts.compareHash, s.opts.preserveInfo, s.opts.mirrorMode).ProcessIfNecessary
 
 		finalize = func() error {
 			err = indexer.Traverse(deleteScheduler, nil)

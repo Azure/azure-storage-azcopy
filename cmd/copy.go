@@ -26,7 +26,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	"runtime"
 	"strconv"
@@ -242,7 +241,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	tempSrc := raw.src
 	// Check if source has a trailing wildcard on a URL
 	if cooked.FromTo.From().IsRemote() {
-		tempSrc, cooked.StripTopDir, err = stripTrailingWildcardOnRemoteSource(raw.src, cooked.FromTo.From())
+		tempSrc, cooked.StripTopDir, err = azcopy.StripTrailingWildcardOnRemoteSource(raw.src, cooked.FromTo.From())
 
 		if err != nil {
 			return cooked, err
@@ -435,94 +434,6 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaults() {
 	raw.forceWrite = common.EOverwriteOption.True().String()
 	raw.preserveOwner = common.PreserveOwnerDefault
 	raw.hardlinks = common.DefaultHardlinkHandlingType.String()
-}
-
-func validatePreserveOwner(preserve bool, fromTo common.FromTo) error {
-	if fromTo.IsDownload() {
-		return nil // it can be used in downloads
-	}
-	if preserve != common.PreserveOwnerDefault {
-		return fmt.Errorf("flag --%s can only be used on downloads", common.PreserveOwnerFlagName)
-	}
-	return nil
-}
-
-func validateBackupMode(backupMode bool, fromTo common.FromTo) error {
-	if !backupMode {
-		return nil
-	}
-	if runtime.GOOS != "windows" {
-		return errors.New(common.BackupModeFlagName + " mode is only supported on Windows")
-	}
-	if fromTo.IsUpload() || fromTo.IsDownload() {
-		return nil
-	} else {
-		return errors.New(common.BackupModeFlagName + " mode is only supported for uploads and downloads")
-	}
-}
-
-// Valid tag key and value characters include:
-// 1. Lowercase and uppercase letters (a-z, A-Z)
-// 2. Digits (0-9)
-// 3. A space ( )
-// 4. Plus (+), minus (-), period (.), solidus (/), colon (:), equals (=), and underscore (_)
-func isValidBlobTagsKeyValue(keyVal string) bool {
-	for _, c := range keyVal {
-		if !((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == ' ' || c == '+' ||
-			c == '-' || c == '.' || c == '/' || c == ':' || c == '=' || c == '_') {
-			return false
-		}
-	}
-	return true
-}
-
-// ValidateBlobTagsKeyValue
-// The tag set may contain at most 10 tags. Tag keys and values are case sensitive.
-// Tag keys must be between 1 and 128 characters, and tag values must be between 0 and 256 characters.
-func validateBlobTagsKeyValue(bt common.BlobTags) error {
-	if len(bt) > 10 {
-		return errors.New("at-most 10 tags can be associated with a blob")
-	}
-	for k, v := range bt {
-		key, err := url.QueryUnescape(k)
-		if err != nil {
-			return err
-		}
-		value, err := url.QueryUnescape(v)
-		if err != nil {
-			return err
-		}
-
-		if key == "" || len(key) > 128 || len(value) > 256 {
-			return errors.New("tag keys must be between 1 and 128 characters, and tag values must be between 0 and 256 characters")
-		}
-
-		if !isValidBlobTagsKeyValue(key) {
-			return errors.New("incorrect character set used in key: " + k)
-		}
-
-		if !isValidBlobTagsKeyValue(value) {
-			return errors.New("incorrect character set used in value: " + v)
-		}
-	}
-	return nil
-}
-
-func validateMetadataString(metadata string) error {
-	if strings.EqualFold(metadata, common.MetadataAndBlobTagsClearFlag) {
-		return nil
-	}
-	metadataMap, err := common.StringToMetadata(metadata)
-	if err != nil {
-		return err
-	}
-	for k := range metadataMap {
-		if strings.ContainsAny(k, " !#$%^&*,<>{}|\\:.()+'\"?/") {
-			return fmt.Errorf("invalid metadata key value '%s': can't have spaces or special characters", k)
-		}
-	}
-
-	return nil
 }
 
 // represents the processed copy command input from the user
@@ -992,7 +903,6 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		AutoDecompress:      cca.autoDecompress,
 		Priority:            common.EJobPriority.Normal(),
 		LogLevel:            LogLevel,
-		ExcludeBlobType:     cca.excludeBlobType,
 		SymlinkHandlingType: cca.SymlinkHandling,
 		BlobAttributes: common.BlobTransferAttributes{
 			BlobType:                 cca.blobType,
@@ -1087,7 +997,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	jobPartOrder.DestinationRoot = cca.Destination
 	jobPartOrder.SourceRoot = cca.Source
-	jobPartOrder.SourceRoot.Value, err = GetResourceRoot(cca.Source.Value, cca.FromTo.From())
+	jobPartOrder.SourceRoot.Value, err = azcopy.NormalizeResourceRoot(cca.Source.Value, cca.FromTo.From())
 	if err != nil {
 		return err
 	}

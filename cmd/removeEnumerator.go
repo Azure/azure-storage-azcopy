@@ -162,7 +162,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *traverser.CopyEnum
 		return nil
 	}
 
-	return traverser.NewCopyEnumerator(sourceTraverser, filters, transferScheduler.ScheduleCopyTransfer, finalize), nil
+	return traverser.NewCopyEnumerator(sourceTraverser, filters, transferScheduler.ScheduleSyncRemoveSetPropertiesTransfer, finalize), nil
 }
 
 // TODO move after ADLS/Blob interop goes public
@@ -209,7 +209,7 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 		if cca.dryrunMode {
 			return dryrunRemoveSingleDFSResource(ctx, dsc, datalakeURLParts, cca.Recursive)
 		} else {
-			err := transferProcessor.ScheduleCopyTransfer(traverser.NewStoredObject(
+			err := transferProcessor.ScheduleSyncRemoveSetPropertiesTransfer(traverser.NewStoredObject(
 				nil,
 				path.Base(datalakeURLParts.PathName),
 				"",
@@ -238,7 +238,7 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 			if cca.dryrunMode {
 				return dryrunRemoveSingleDFSResource(ctx, dsc, datalakeURLParts, cca.Recursive)
 			} else {
-				err := transferProcessor.ScheduleCopyTransfer(traverser.NewStoredObject(
+				err := transferProcessor.ScheduleSyncRemoveSetPropertiesTransfer(traverser.NewStoredObject(
 					nil,
 					path.Base(datalakeURLParts.PathName),
 					childPath,

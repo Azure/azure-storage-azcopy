@@ -69,7 +69,7 @@ func NewCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, n
 	}
 }
 
-func (s *CopyTransferProcessor) ScheduleCopyTransfer(storedObject traverser.StoredObject) (err error) {
+func (s *CopyTransferProcessor) ScheduleSyncRemoveSetPropertiesTransfer(storedObject traverser.StoredObject) (err error) {
 
 	// Escape paths on destinations where the characters are invalid
 	// And re-encode them where the characters are valid.
