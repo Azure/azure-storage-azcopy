@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package azcopy
 
 import (
 	"fmt"
@@ -32,9 +32,11 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-type copyTransferProcessor struct {
+const NumOfFilesPerDispatchJobPart = 10000
+
+type CopyTransferProcessor struct {
 	numOfTransfersPerPart int
-	copyJobTemplate       *common.CopyJobPartOrderRequest
+	CopyJobTemplate       *common.CopyJobPartOrderRequest
 	source                common.ResourceString
 	destination           common.ResourceString
 
@@ -46,12 +48,15 @@ type copyTransferProcessor struct {
 	folderPropertiesOption common.FolderPropertyOption
 	symlinkHandlingType    common.SymlinkHandlingType
 	hardlinkHandlingType   common.HardlinkHandlingType
+
+	dryrunMode                bool
+	dryrunJobPartOrderHandler func(request common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse
 }
 
-func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int, source, destination common.ResourceString, reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier bool) *copyTransferProcessor {
-	return &copyTransferProcessor{
+func NewCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int, source, destination common.ResourceString, reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier bool, dryrun bool, dryrunJobPartOrderHandler func(request common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse) *CopyTransferProcessor {
+	return &CopyTransferProcessor{
 		numOfTransfersPerPart:     numOfTransfersPerPart,
-		copyJobTemplate:           copyJobTemplate,
+		CopyJobTemplate:           copyJobTemplate,
 		source:                    source,
 		destination:               destination,
 		reportFirstPartDispatched: reportFirstPartDispatched,
@@ -59,10 +64,12 @@ func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, n
 		preserveAccessTier:        preserveAccessTier,
 		folderPropertiesOption:    copyJobTemplate.Fpo,
 		symlinkHandlingType:       copyJobTemplate.SymlinkHandlingType,
+		dryrunMode:                dryrun,
+		dryrunJobPartOrderHandler: dryrunJobPartOrderHandler,
 	}
 }
 
-func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject traverser.StoredObject) (err error) {
+func (s *CopyTransferProcessor) ScheduleSyncRemoveSetPropertiesTransfer(storedObject traverser.StoredObject) (err error) {
 
 	// Escape paths on destinations where the characters are invalid
 	// And re-encode them where the characters are valid.
@@ -70,8 +77,8 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject traverser.Stor
 	if storedObject.RelativePath == "\x00" { // Short circuit when we're talking about root/, because the STE is funky about this.
 		srcRelativePath, dstRelativePath = storedObject.RelativePath, storedObject.RelativePath
 	} else {
-		srcRelativePath = pathEncodeRules(storedObject.RelativePath, s.copyJobTemplate.FromTo, false, true)
-		dstRelativePath = pathEncodeRules(storedObject.RelativePath, s.copyJobTemplate.FromTo, false, false)
+		srcRelativePath = PathEncodeRules(storedObject.RelativePath, s.CopyJobTemplate.FromTo, false, true)
+		dstRelativePath = PathEncodeRules(storedObject.RelativePath, s.CopyJobTemplate.FromTo, false, false)
 		if srcRelativePath != "" {
 			srcRelativePath = "/" + srcRelativePath
 		}
@@ -82,10 +89,10 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject traverser.Stor
 
 	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(false, srcRelativePath, dstRelativePath, s.preserveAccessTier, s.folderPropertiesOption, s.symlinkHandlingType, s.hardlinkHandlingType)
 
-	if s.copyJobTemplate.FromTo.To() == common.ELocation.None() {
-		copyTransfer.BlobTier = s.copyJobTemplate.BlobAttributes.BlockBlobTier.ToAccessTierType()
+	if s.CopyJobTemplate.FromTo.To() == common.ELocation.None() {
+		copyTransfer.BlobTier = s.CopyJobTemplate.BlobAttributes.BlockBlobTier.ToAccessTierType()
 
-		metadataString := s.copyJobTemplate.BlobAttributes.Metadata
+		metadataString := s.CopyJobTemplate.BlobAttributes.Metadata
 		metadataMap := common.Metadata{}
 		if len(metadataString) > 0 {
 			for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
@@ -95,14 +102,14 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject traverser.Stor
 		}
 		copyTransfer.Metadata = metadataMap
 
-		copyTransfer.BlobTags = common.ToCommonBlobTagsMap(s.copyJobTemplate.BlobAttributes.BlobTagsString)
+		copyTransfer.BlobTags = common.ToCommonBlobTagsMap(s.CopyJobTemplate.BlobAttributes.BlobTagsString)
 	}
 
 	if !shouldSendToSte {
 		return nil // skip this one
 	}
 
-	if len(s.copyJobTemplate.Transfers.List) == s.numOfTransfersPerPart {
+	if len(s.CopyJobTemplate.Transfers.List) == s.numOfTransfersPerPart {
 		resp := s.sendPartToSte()
 
 		// TODO: If we ever do launch errors outside of the final "no transfers" error, make them output nicer things here.
@@ -111,24 +118,24 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject traverser.Stor
 		}
 
 		// reset the transfers buffer
-		s.copyJobTemplate.Transfers = common.Transfers{}
-		s.copyJobTemplate.PartNum++
+		s.CopyJobTemplate.Transfers = common.Transfers{}
+		s.CopyJobTemplate.PartNum++
 	}
 
 	// only append the transfer after we've checked and dispatched a part
 	// so that there is at least one transfer for the final part
-	s.copyJobTemplate.Transfers.List = append(s.copyJobTemplate.Transfers.List, copyTransfer)
-	s.copyJobTemplate.Transfers.TotalSizeInBytes += uint64(copyTransfer.SourceSize)
+	s.CopyJobTemplate.Transfers.List = append(s.CopyJobTemplate.Transfers.List, copyTransfer)
+	s.CopyJobTemplate.Transfers.TotalSizeInBytes += uint64(copyTransfer.SourceSize)
 
 	switch copyTransfer.EntityType {
 	case common.EEntityType.File():
-		s.copyJobTemplate.Transfers.FileTransferCount++
+		s.CopyJobTemplate.Transfers.FileTransferCount++
 	case common.EEntityType.Folder():
-		s.copyJobTemplate.Transfers.FolderTransferCount++
+		s.CopyJobTemplate.Transfers.FolderTransferCount++
 	case common.EEntityType.Symlink():
-		s.copyJobTemplate.Transfers.SymlinkTransferCount++
+		s.CopyJobTemplate.Transfers.SymlinkTransferCount++
 	case common.EEntityType.Hardlink():
-		s.copyJobTemplate.Transfers.HardlinksConvertedCount++
+		s.CopyJobTemplate.Transfers.HardlinksConvertedCount++
 	}
 
 	return nil
@@ -137,9 +144,9 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject traverser.Stor
 var NothingScheduledError = errors.New("no transfers were scheduled because no files matched the specified criteria")
 var FinalPartCreatedMessage = "Final job part has been created"
 
-func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err error) {
+func (s *CopyTransferProcessor) DispatchFinalPart() (copyJobInitiated bool, err error) {
 	var resp common.CopyJobPartOrderResponse
-	s.copyJobTemplate.IsFinalPart = true
+	s.CopyJobTemplate.IsFinalPart = true
 	resp = s.sendPartToSte()
 
 	if !resp.JobStarted {
@@ -148,7 +155,7 @@ func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err 
 		}
 
 		return false, fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s",
-			s.copyJobTemplate.JobID, s.copyJobTemplate.PartNum, resp.ErrorMsg)
+			s.CopyJobTemplate.JobID, s.CopyJobTemplate.PartNum, resp.ErrorMsg)
 	}
 
 	common.LogToJobLogWithPrefix(FinalPartCreatedMessage, common.LogInfo)
@@ -160,11 +167,15 @@ func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err 
 }
 
 // only test the response on the final dispatch to help diagnose root cause of test failures from 0 transfers
-func (s *copyTransferProcessor) sendPartToSte() common.CopyJobPartOrderResponse {
-	resp := jobsAdmin.ExecuteNewCopyJobPartOrder(*s.copyJobTemplate)
+func (s *CopyTransferProcessor) sendPartToSte() (resp common.CopyJobPartOrderResponse) {
+	if s.dryrunMode {
+		resp = s.dryrunJobPartOrderHandler(*s.CopyJobTemplate)
+	} else {
+		resp = jobsAdmin.ExecuteNewCopyJobPartOrder(*s.CopyJobTemplate)
+	}
 
 	// if the current part order sent to ste is 0, then alert the progress reporting routine
-	if s.copyJobTemplate.PartNum == 0 && s.reportFirstPartDispatched != nil {
+	if s.CopyJobTemplate.PartNum == 0 && s.reportFirstPartDispatched != nil {
 		s.reportFirstPartDispatched(resp.JobStarted)
 	}
 

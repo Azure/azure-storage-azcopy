@@ -177,7 +177,7 @@ var rootCmd = &cobra.Command{
 				break
 			}
 		}
-		isMigratedToLibrary := cmd.Use == "resume [jobID]"
+		isMigratedToLibrary := cmd.Use == "resume [jobID]" || cmd.Use == "sync"
 		return Initialize(isMigratedToLibrary, isBench, shouldWarn)
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -250,8 +250,9 @@ func Initialize(isMigratedToLibrary, isBench, shouldWarn bool) (err error) {
 			glcm.Info(fmt.Sprintf("Cannot auto-tune concurrency because it is fixed by environment variable %s", envVar.Name))
 		}
 	}
-	traverser.EnumerationParallelism, traverser.EnumerationParallelStatFiles = jobsAdmin.JobsAdmin.GetConcurrencySettings()
-
+	if !isMigratedToLibrary {
+		traverser.EnumerationParallelism, traverser.EnumerationParallelStatFiles = jobsAdmin.JobsAdmin.GetConcurrencySettings()
+	}
 	return nil
 
 }

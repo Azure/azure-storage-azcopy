@@ -25,6 +25,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
@@ -107,21 +108,21 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *traverser.Copy
 	filters = append(filters, excludePathFilters...)
 	filters = append(filters, includeSoftDelete...)
 
-	fpo, message := NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, false, false, false, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.IncludeDirectoryStubs)
+	fpo, message := azcopy.NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, false, false, false, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.IncludeDirectoryStubs)
 	// do not print Info message if in dry run mode
 	if !cca.dryrunMode {
 		glcm.Info(message)
 	}
 	common.LogToJobLogWithPrefix(message, common.LogInfo)
 
-	transferScheduler := setPropertiesTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo, targetServiceClient)
+	transferScheduler := setPropertiesTransferProcessor(cca, azcopy.NumOfFilesPerDispatchJobPart, fpo, targetServiceClient)
 
 	finalize := func() error {
-		jobInitiated, err := transferScheduler.dispatchFinalPart()
+		jobInitiated, err := transferScheduler.DispatchFinalPart()
 		if err != nil {
 			if cca.dryrunMode {
 				return nil
-			} else if err == NothingScheduledError {
+			} else if err == azcopy.NothingScheduledError {
 				// No log file needed. Logging begins as a part of awaiting job completion.
 				return ErrNothingToRemove
 			}
@@ -139,5 +140,5 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *traverser.Copy
 
 		return nil
 	}
-	return traverser.NewCopyEnumerator(sourceTraverser, filters, transferScheduler.scheduleCopyTransfer, finalize), nil
+	return traverser.NewCopyEnumerator(sourceTraverser, filters, transferScheduler.ScheduleSyncRemoveSetPropertiesTransfer, finalize), nil
 }

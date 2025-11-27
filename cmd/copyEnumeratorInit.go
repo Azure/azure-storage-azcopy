@@ -180,9 +180,9 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	// Create a Remote resource resolver
 	// Giving it nothing to work with as new names will be added as we traverse.
 	var containerResolver BucketToContainerNameResolver
-	containerResolver = NewS3BucketNameToAzureResourcesResolver(nil)
+	containerResolver = azcopy.NewS3BucketNameToAzureResourcesResolver(nil)
 	if cca.FromTo == common.EFromTo.GCPBlob() {
-		containerResolver = NewGCPBucketNameToAzureResourcesResolver(nil)
+		containerResolver = azcopy.NewGCPBucketNameToAzureResourcesResolver(nil)
 	}
 	existingContainers := make(map[string]bool)
 	var logDstContainerCreateFailureOnce sync.Once
@@ -223,9 +223,9 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				// Resolve all container names up front.
 				// If we were to resolve on-the-fly, then name order would affect the results inconsistently.
 				if cca.FromTo == common.EFromTo.S3Blob() {
-					containerResolver = NewS3BucketNameToAzureResourcesResolver(containers)
+					containerResolver = azcopy.NewS3BucketNameToAzureResourcesResolver(containers)
 				} else if cca.FromTo == common.EFromTo.GCPBlob() {
-					containerResolver = NewGCPBucketNameToAzureResourcesResolver(containers)
+					containerResolver = azcopy.NewGCPBucketNameToAzureResourcesResolver(containers)
 				}
 
 				for _, v := range containers {
@@ -240,7 +240,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					// For file share,if the share does not exist, azcopy will fail, prompting the customer to create
 					// the share manually with the required quota and settings.
 					if fileerror.HasCode(err, fileerror.ShareNotFound) {
-						return nil, fmt.Errorf("%s Destination file share: %s", DstShareDoesNotExists, dstContainerName)
+						return nil, fmt.Errorf("%s Destination file share: %s", azcopy.DstShareDoesNotExists, dstContainerName)
 					}
 
 					// if JobsAdmin is nil, we're probably in testing mode.
@@ -289,7 +289,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// decide our folder transfer strategy
 	var message string
-	jobPartOrder.Fpo, message = NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, cca.preserveInfo,
+	jobPartOrder.Fpo, message = azcopy.NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, cca.preserveInfo,
 		cca.preservePermissions.IsTruthy(), cca.preservePOSIXProperties, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.IncludeDirectoryStubs)
 	if !cca.dryrunMode {
 		glcm.Info(message)
@@ -327,8 +327,8 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			}
 		}
 
-		srcRelPath := cca.MakeEscapedRelativePath(true, isDestDir, cca.asSubdir, object)
-		dstRelPath := cca.MakeEscapedRelativePath(false, isDestDir, cca.asSubdir, object)
+		srcRelPath := cca.MakeEscapedRelativePath(true, isDestDir, object)
+		dstRelPath := cca.MakeEscapedRelativePath(false, isDestDir, object)
 
 		transfer, shouldSendToSte := object.ToNewCopyTransfer(cca.autoDecompress && cca.FromTo.IsDownload(), srcRelPath, dstRelPath, cca.s2sPreserveAccessTier.Value(), jobPartOrder.Fpo, cca.SymlinkHandling, cca.hardlinks)
 		if !cca.S2sPreserveBlobTags {
@@ -579,80 +579,7 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 	return
 }
 
-// Because some invalid characters weren't being properly encoded by url.PathEscape, we're going to instead manually encode them.
-var encodedInvalidCharacters = map[rune]string{
-	'<':  "%3C",
-	'>':  "%3E",
-	'\\': "%5C",
-	'/':  "%2F",
-	':':  "%3A",
-	'"':  "%22",
-	'|':  "%7C",
-	'?':  "%3F",
-	'*':  "%2A",
-}
-
-var reverseEncodedChars = map[string]rune{
-	"%3C": '<',
-	"%3E": '>',
-	"%5C": '\\',
-	"%2F": '/',
-	"%3A": ':',
-	"%22": '"',
-	"%7C": '|',
-	"%3F": '?',
-	"%2A": '*',
-}
-
-func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool, source bool) string {
-	var loc common.Location
-
-	if source {
-		loc = fromTo.From()
-	} else {
-		loc = fromTo.To()
-	}
-	pathParts := strings.Split(path, common.AZCOPY_PATH_SEPARATOR_STRING)
-
-	// If downloading on Windows or uploading to files, encode unsafe characters.
-	if (loc == common.ELocation.Local() && !source && runtime.GOOS == "windows") ||
-		(!source && loc == common.ELocation.File()) {
-		// invalidChars := `<>\/:"|?*` + string(0x00)
-
-		for k, c := range encodedInvalidCharacters {
-			for part, p := range pathParts {
-				pathParts[part] = strings.ReplaceAll(p, string(k), c)
-			}
-		}
-
-		// If uploading from Windows or downloading from files, decode unsafe chars if user enables decoding
-
-		// Encoding is intended to handle behavior going between two resources.
-		// For deletions, There isn't an actual "other resource"
-		// So, the path special char does not to be decoded but preserved.
-		// Why? Take an edge case where path contains special char like '%5C' (encoded backslash `\\`)
-		// this will be decoded and error to inconsistent path separators.
-	} else if ((!source && fromTo.From() == common.ELocation.Local() && runtime.GOOS == "windows") ||
-		(!source && fromTo.From() == common.ELocation.File())) && !disableAutoDecoding && !fromTo.IsDelete() {
-
-		for encoded, c := range reverseEncodedChars {
-			for k, p := range pathParts {
-				pathParts[k] = strings.ReplaceAll(p, encoded, string(c))
-			}
-		}
-	}
-
-	if loc.IsRemote() {
-		for k, p := range pathParts {
-			pathParts[k] = url.PathEscape(p)
-		}
-	}
-
-	path = strings.Join(pathParts, "/")
-	return path
-}
-
-func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool, asSubdir bool, object traverser.StoredObject) (relativePath string) {
+func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool, object traverser.StoredObject) (relativePath string) {
 	// write straight to /dev/null, do not determine a indirect path
 	if !source && cca.Destination.Value == common.Dev_Null {
 		return "" // ignore path encode rules
@@ -683,7 +610,7 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 			}
 		}
 
-		return pathEncodeRules(relativePath, cca.FromTo, cca.disableAutoDecoding, source)
+		return azcopy.PathEncodeRules(relativePath, cca.FromTo, cca.disableAutoDecoding, source)
 	}
 
 	// If it's out here, the object is contained in a folder, or was found via a wildcard, or object.isSourceRootFolder == true
@@ -724,66 +651,5 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 		relativePath = "/" + rootDir + relativePath
 	}
 
-	return pathEncodeRules(relativePath, cca.FromTo, cca.disableAutoDecoding, source)
-}
-
-// we assume that preserveSmbPermissions and preserveSmbInfo have already been validated, such that they are only true if both resource types support them
-func NewFolderPropertyOption(fromTo common.FromTo, recursive, stripTopDir bool, filters []traverser.ObjectFilter,
-	preserveSmbInfo, preservePermissions, preservePosixProperties, isDstNull, includeDirectoryStubs bool) (common.FolderPropertyOption, string) {
-
-	getSuffix := func(willProcess bool) string {
-		willProcessString := common.Iff(willProcess, "will be processed", "will not be processed")
-
-		template := ". For the same reason, %s defined on folders %s"
-		switch {
-		case preservePermissions && preserveSmbInfo:
-			return fmt.Sprintf(template, "properties and permissions", willProcessString)
-		case preserveSmbInfo:
-			return fmt.Sprintf(template, "properties", willProcessString)
-		case preservePermissions:
-			return fmt.Sprintf(template, "permissions", willProcessString)
-		default:
-			return "" // no preserve flags set, so we have nothing to say about them
-		}
-	}
-
-	bothFolderAware := (fromTo.AreBothFolderAware() || preservePosixProperties || preservePermissions || includeDirectoryStubs) && !isDstNull
-	isRemoveFromFolderAware := fromTo == common.EFromTo.FileTrash()
-	if bothFolderAware || isRemoveFromFolderAware {
-		if !recursive {
-			return common.EFolderPropertiesOption.NoFolders(), // doesn't make sense to move folders when not recursive. E.g. if invoked with /* and WITHOUT recursive
-				"Any empty folders will not be processed, because --recursive was not specified" +
-					getSuffix(false)
-		}
-
-		// check filters. Otherwise, if filter was say --include-pattern *.txt, we would transfer properties
-		// (but not contents) for every directory that contained NO text files.  Could make heaps of empty directories
-		// at the destination.
-		filtersOK := true
-		for _, f := range filters {
-			if f.AppliesOnlyToFiles() {
-				filtersOK = false // we have a least one filter that doesn't apply to folders
-			}
-		}
-		if !filtersOK {
-			return common.EFolderPropertiesOption.NoFolders(),
-				"Any empty folders will not be processed, because a file-focused filter is applied" +
-					getSuffix(false)
-		}
-
-		message := "Any empty folders will be processed, because source and destination both support folders"
-		if isRemoveFromFolderAware {
-			message = "Any empty folders will be processed, because deletion is from a folder-aware location"
-		}
-		message += getSuffix(true)
-		if stripTopDir {
-			return common.EFolderPropertiesOption.AllFoldersExceptRoot(), message
-		}
-		return common.EFolderPropertiesOption.AllFolders(), message
-	}
-
-	return common.EFolderPropertiesOption.NoFolders(),
-		"Any empty folders will not be processed, because source and/or destination doesn't have full folder support" +
-			getSuffix(false)
-
+	return azcopy.PathEncodeRules(relativePath, cca.FromTo, cca.disableAutoDecoding, source)
 }

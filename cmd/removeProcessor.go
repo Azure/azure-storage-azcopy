@@ -21,12 +21,12 @@
 package cmd
 
 import (
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 )
 
 // extract the right info from cooked arguments and instantiate a generic copy transfer processor from it
-func newRemoveTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPart int, fpo common.FolderPropertyOption, targetServiceClient *common.ServiceClient) *copyTransferProcessor {
+func newRemoveTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPart int, fpo common.FolderPropertyOption, targetServiceClient *common.ServiceClient) *azcopy.CopyTransferProcessor {
 	copyJobTemplate := &common.CopyJobPartOrderRequest{
 		JobID:                 cca.jobID,
 		CommandString:         cca.commandString,
@@ -54,12 +54,9 @@ func newRemoveTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPart in
 		}
 	}
 	reportFinalPart := func() { cca.isEnumerationComplete = true }
-	if cca.dryrunMode {
-		jobsAdmin.ExecuteNewCopyJobPartOrder = getDryrunNewCopyJobPartOrder(copyJobTemplate.SourceRoot.Value, copyJobTemplate.DestinationRoot.Value, copyJobTemplate.FromTo)
-	}
 
 	// note that the source and destination, along with the template are given to the generic processor's constructor
 	// this means that given an object with a relative path, this processor already knows how to schedule the right kind of transfers
-	return newCopyTransferProcessor(copyJobTemplate, numOfTransfersPerPart, cca.Source, cca.Destination,
-		reportFirstPart, reportFinalPart, false)
+	return azcopy.NewCopyTransferProcessor(copyJobTemplate, numOfTransfersPerPart, cca.Source, cca.Destination,
+		reportFirstPart, reportFinalPart, false, cca.dryrunMode, dryrunNewCopyJobPartOrder)
 }

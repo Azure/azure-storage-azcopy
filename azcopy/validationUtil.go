@@ -29,12 +29,12 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 	"github.com/JeffreyRichter/enum/enum"
-	"github.com/spf13/cobra"
 )
 
 const (
@@ -43,6 +43,7 @@ const (
 	PreservePermissionsFlag                   = "preserve-permissions"
 	PreserveInfoFlag                          = "preserve-info"
 	PreservePOSIXPropertiesIncompatibilityMsg = "to use the --preserve-posix-properties flag, both the source and destination must be POSIX-aware. Valid combinations are: Linux -> Blob, Blob -> Linux, or Blob -> Blob"
+	DstShareDoesNotExists                     = "the destination file share does not exist; please create it manually with the required quota and settings before running the copy —refer to https://learn.microsoft.com/en-us/azure/storage/files/storage-how-to-create-file-share?tabs=azure-portal for SMB or https://learn.microsoft.com/en-us/azure/storage/files/storage-files-quick-create-use-linux for NFS."
 )
 
 var FromToHelp = func() string {
@@ -340,14 +341,14 @@ func AreBothLocationsSMBAware(fromTo common.FromTo) bool {
 	}
 }
 
-// GetPreserveInfoFlagDefault returns the default value for the 'preserve-info' flag
+// GetPreserveInfoDefault returns the default value for the 'preserve-info' flag
 // based on the operating system and the copy type (NFS or SMB).
 // The default value is:
 // - true if it's an NFS copy on Linux or share to share copy on windows or mac and an SMB copy on Windows.
 // - false otherwise.
 //
 // This default behavior ensures that file preservation logic is aligned with the OS and copy type.
-func GetPreserveInfoFlagDefault(cmd *cobra.Command, fromTo common.FromTo) bool {
+func GetPreserveInfoDefault(fromTo common.FromTo) bool {
 	// For Linux systems, if it's an NFS copy, we set the default value of preserveInfo to true.
 	// For Windows systems, if it's an SMB copy, we set the default value of preserveInfo to true.
 	// These default values are important to set here for the logic of file preservation based on the system and copy type.
@@ -586,4 +587,125 @@ func areBothLocationsPOSIXAware(fromTo common.FromTo) bool {
 	default:
 		return false
 	}
+}
+
+func ValidateSymlinkHandlingMode(symlinkHandling common.SymlinkHandlingType, fromTo common.FromTo) error {
+	if symlinkHandling.Preserve() {
+		switch fromTo {
+		case common.EFromTo.LocalBlob(), common.EFromTo.BlobLocal(), common.EFromTo.BlobFSLocal(), common.EFromTo.LocalBlobFS():
+			return nil // Fine on all OSes that support symlink via the OS package. (Win, MacOS, and Linux do, and that's what we officially support.)
+		case common.EFromTo.BlobBlob(), common.EFromTo.BlobFSBlobFS(), common.EFromTo.BlobBlobFS(), common.EFromTo.BlobFSBlob():
+			return nil // Blob->Blob doesn't involve any local requirements
+		case common.EFromTo.LocalFileNFS(), common.EFromTo.FileNFSLocal(), common.EFromTo.FileNFSFileNFS():
+			return nil // for NFS related transfers symlink preservation is supported.
+		default:
+			return fmt.Errorf("flag --%s can only be used on Blob<->Blob, Local<->Blob, Local<->FileNFS, FileNFS<->FileNFS", common.PreserveSymlinkFlagName)
+		}
+	}
+
+	return nil // other older symlink handling modes can work on all OSes
+}
+
+func WarnIfAnyHasWildcard(oncer *sync.Once, paramName string, value []string) {
+	for _, v := range value {
+		WarnIfHasWildcard(oncer, paramName, v)
+	}
+}
+
+func WarnIfHasWildcard(oncer *sync.Once, paramName string, value string) {
+	if strings.Contains(value, "*") || strings.Contains(value, "?") {
+		oncer.Do(func() {
+			common.GetLifecycleMgr().Warn(fmt.Sprintf("*** Warning *** The %s parameter does not support wildcards. The wildcard "+
+				"character provided will be interpreted literally and will not have any wildcard effect. To use wildcards "+
+				"(in filenames only, not paths) use include-pattern or exclude-pattern", paramName))
+		})
+	}
+}
+
+func ValidatePreserveOwner(preserve bool, fromTo common.FromTo) error {
+	if fromTo.IsDownload() {
+		return nil // it can be used in downloads
+	}
+	if preserve != common.PreserveOwnerDefault {
+		return fmt.Errorf("flag --%s can only be used on downloads", common.PreserveOwnerFlagName)
+	}
+	return nil
+}
+
+func ValidateBackupMode(backupMode bool, fromTo common.FromTo) error {
+	if !backupMode {
+		return nil
+	}
+	if runtime.GOOS != "windows" {
+		return errors.New(common.BackupModeFlagName + " mode is only supported on Windows")
+	}
+	if fromTo.IsUpload() || fromTo.IsDownload() {
+		return nil
+	} else {
+		return errors.New(common.BackupModeFlagName + " mode is only supported for uploads and downloads")
+	}
+}
+
+// Valid tag key and value characters include:
+// 1. Lowercase and uppercase letters (a-z, A-Z)
+// 2. Digits (0-9)
+// 3. A space ( )
+// 4. Plus (+), minus (-), period (.), solidus (/), colon (:), equals (=), and underscore (_)
+func isValidBlobTagsKeyValue(keyVal string) bool {
+	for _, c := range keyVal {
+		if !((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == ' ' || c == '+' ||
+			c == '-' || c == '.' || c == '/' || c == ':' || c == '=' || c == '_') {
+			return false
+		}
+	}
+	return true
+}
+
+// ValidateBlobTagsKeyValue
+// The tag set may contain at most 10 tags. Tag keys and values are case sensitive.
+// Tag keys must be between 1 and 128 characters, and tag values must be between 0 and 256 characters.
+func ValidateBlobTagsKeyValue(bt common.BlobTags) error {
+	if len(bt) > 10 {
+		return errors.New("at-most 10 tags can be associated with a blob")
+	}
+	for k, v := range bt {
+		key, err := url.QueryUnescape(k)
+		if err != nil {
+			return err
+		}
+		value, err := url.QueryUnescape(v)
+		if err != nil {
+			return err
+		}
+
+		if key == "" || len(key) > 128 || len(value) > 256 {
+			return errors.New("tag keys must be between 1 and 128 characters, and tag values must be between 0 and 256 characters")
+		}
+
+		if !isValidBlobTagsKeyValue(key) {
+			return errors.New("incorrect character set used in key: " + k)
+		}
+
+		if !isValidBlobTagsKeyValue(value) {
+			return errors.New("incorrect character set used in value: " + v)
+		}
+	}
+	return nil
+}
+
+func ValidateMetadataString(metadata string) error {
+	if strings.EqualFold(metadata, common.MetadataAndBlobTagsClearFlag) {
+		return nil
+	}
+	metadataMap, err := common.StringToMetadata(metadata)
+	if err != nil {
+		return err
+	}
+	for k := range metadataMap {
+		if strings.ContainsAny(k, " !#$%^&*,<>{}|\\:.()+'\"?/") {
+			return fmt.Errorf("invalid metadata key value '%s': can't have spaces or special characters", k)
+		}
+	}
+
+	return nil
 }

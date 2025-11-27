@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
@@ -85,19 +86,19 @@ func TestCopyTransferProcessorMultipleFiles(t *testing.T) {
 	sampleObjects := processorTestSuiteHelper{}.getSampleObjectList()
 	for _, numOfParts := range []int{1, 3} {
 		numOfTransfersPerPart := len(sampleObjects) / numOfParts
-		copyProcessor := newCopyTransferProcessor(processorTestSuiteHelper{}.getCopyJobTemplate(), numOfTransfersPerPart, newRemoteRes(cc.URL()), newLocalRes(dstDirName), nil, nil, false)
+		copyProcessor := azcopy.NewCopyTransferProcessor(processorTestSuiteHelper{}.getCopyJobTemplate(), numOfTransfersPerPart, newRemoteRes(cc.URL()), newLocalRes(dstDirName), nil, nil, false, false, dryrunNewCopyJobPartOrder)
 
 		// go through the objects and make sure they are processed without error
 		for _, storedObject := range sampleObjects {
-			err := copyProcessor.scheduleCopyTransfer(storedObject)
+			err := copyProcessor.ScheduleSyncRemoveSetPropertiesTransfer(storedObject)
 			a.Nil(err)
 		}
 
 		// make sure everything has been dispatched apart from the final one
-		a.Equal(common.PartNumber(numOfParts-1), copyProcessor.copyJobTemplate.PartNum)
+		a.Equal(common.PartNumber(numOfParts-1), copyProcessor.CopyJobTemplate.PartNum)
 
 		// dispatch final part
-		jobInitiated, err := copyProcessor.dispatchFinalPart()
+		jobInitiated, err := copyProcessor.DispatchFinalPart()
 		a.True(jobInitiated)
 		a.Nil(err)
 
@@ -134,18 +135,18 @@ func TestCopyTransferProcessorSingleFile(t *testing.T) {
 
 	// set up the processor
 	blobURL := cc.NewBlobClient(blobList[0]).URL()
-	copyProcessor := newCopyTransferProcessor(processorTestSuiteHelper{}.getCopyJobTemplate(), 2, newRemoteRes(blobURL), newLocalRes(filepath.Join(dstDirName, dstFileName)), nil, nil, false)
+	copyProcessor := azcopy.NewCopyTransferProcessor(processorTestSuiteHelper{}.getCopyJobTemplate(), 2, newRemoteRes(blobURL), newLocalRes(filepath.Join(dstDirName, dstFileName)), nil, nil, false, false, dryrunNewCopyJobPartOrder)
 
 	// exercise the copy transfer processor
 	storedObject := traverser.NewStoredObject(traverser.NoPreProccessor, blobList[0], "", common.EEntityType.File(), time.Now(), 0, traverser.NoContentProps, traverser.NoBlobProps, traverser.NoMetadata, "")
-	err := copyProcessor.scheduleCopyTransfer(storedObject)
+	err := copyProcessor.ScheduleSyncRemoveSetPropertiesTransfer(storedObject)
 	a.Nil(err)
 
 	// no part should have been dispatched
-	a.Equal(common.PartNumber(0), copyProcessor.copyJobTemplate.PartNum)
+	a.Equal(common.PartNumber(0), copyProcessor.CopyJobTemplate.PartNum)
 
 	// dispatch final part
-	jobInitiated, err := copyProcessor.dispatchFinalPart()
+	jobInitiated, err := copyProcessor.DispatchFinalPart()
 	a.True(jobInitiated)
 
 	// In cases of syncing file to file, the source and destination are empty because this info is already in the root
