@@ -23,10 +23,8 @@ package traverser
 import (
 	"context"
 	"fmt"
-	"net/url"
-	"strings"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"net/url"
 )
 
 // a meta traverser that goes through a list of paths (potentially directory entities) and scans them one by one
@@ -47,9 +45,6 @@ func (l *listTraverser) IsDirectory(bool) (bool, error) {
 // To kill the traverser, close() the channel under it.
 // Behavior demonstrated: https://play.golang.org/p/OYdvLmNWgwO
 func (l *listTraverser) Traverse(preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) (err error) {
-	itemsProcessed := 0
-	itemsSkipped := 0
-	var lastError error
 	// read a channel until it closes to get a list of objects
 
 	childPath, ok := <-l.listReader
@@ -65,18 +60,7 @@ func (l *listTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 		}
 		// listTraverser will only ever execute on the source
 
-		// Handle error to avoid silent failures
-		isDir, isDirErr := childTraverser.IsDirectory(true)
-
-		if isDirErr != nil {
-			if strings.Contains(isDirErr.Error(), common.FILE_NOT_FOUND) {
-				common.GetLifecycleMgr().Info(fmt.Sprintf("Skipping %s: file/directory not found. ", childPath))
-				itemsSkipped++
-				lastError = isDirErr
-				continue
-			}
-		}
-
+		isDir, _ := childTraverser.IsDirectory(true)
 		if !l.recursive && isDir {
 			continue // skip over directories
 		}
@@ -98,14 +82,6 @@ func (l *listTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 		err = childTraverser.Traverse(preProcessorForThisChild, processor, filters)
 		if err != nil {
 			common.GetLifecycleMgr().Info(fmt.Sprintf("Skipping %s as it cannot be scanned due to error: %s", childPath, err))
-		} else {
-			itemsProcessed++
-		}
-	}
-	// Return err if nothing is processed instead of fai;omg so;emt;y
-	if itemsProcessed == 0 && itemsSkipped > 0 {
-		if lastError != nil {
-			return fmt.Errorf("failed to process files: %w", lastError)
 		}
 	}
 
