@@ -332,7 +332,7 @@ func init() {
 				}
 
 				glcm.Exit(func(format OutputFormat) string {
-					screenStats, logStats := formatExtraStats(opts.FromTo, summary.AverageIOPS, summary.AverageE2EMilliseconds, summary.NetworkErrorPercentage, summary.ServerBusyPercentage)
+					screenStats, logStats := formatExtraStats(false, summary.AverageIOPS, summary.AverageE2EMilliseconds, summary.NetworkErrorPercentage, summary.ServerBusyPercentage)
 
 					output := fmt.Sprintf(
 						`
