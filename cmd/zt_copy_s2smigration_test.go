@@ -1332,7 +1332,7 @@ func TestCopyWithDFSResource(t *testing.T) {
 	mockedRPC := &interceptor{}
 	mockedRPC.init()
 
-	runOldCopyAndVerify(a, rawCopy, func(err error) {
+	runCopyAndVerify(a, rawCopy, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
