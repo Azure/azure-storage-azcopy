@@ -1028,7 +1028,7 @@ func getDefaultCopyRawInput(src string, dst string) rawCopyCmdArgs {
 		forceWrite:                     common.EOverwriteOption.True().String(),
 		preserveOwner:                  common.PreserveOwnerDefault,
 		asSubdir:                       true,
-		hardlinks: 						common.DefaultHardlinkHandlingType.String(),
+		hardlinks:                      common.DefaultHardlinkHandlingType.String(),
 	}
 }
 
@@ -1053,6 +1053,7 @@ func getDefaultRemoveRawInput(src string) rawCopyCmdArgs {
 		forceWrite:                     common.EOverwriteOption.True().String(),
 		preserveOwner:                  common.PreserveOwnerDefault,
 		includeDirectoryStubs:          true,
+		hardlinks:                      common.DefaultHardlinkHandlingType.String(),
 	}
 }
 
