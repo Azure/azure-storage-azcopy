@@ -33,7 +33,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/spf13/cobra"
 )
 
@@ -197,7 +196,7 @@ func (C CLISyncHandler) OnScanProgress(progress azcopy.SyncScanProgress) {
 		// text output
 		throughputString := ""
 		if progress.Throughput != nil {
-			throughputString = fmt.Sprintf(", 2-sec Throughput (Mb/s): %v", jobsAdmin.ToFixed(*progress.Throughput, 4))
+			throughputString = fmt.Sprintf(", 2-sec Throughput (Mb/s): %v", azcopy.ToFixed(*progress.Throughput, 4))
 		}
 		return fmt.Sprintf("%v Files Scanned at Source, %v Files Scanned at Destination%s",
 			progress.SourceFilesScanned, progress.DestinationFilesScanned, throughputString)
@@ -209,7 +208,7 @@ func (C CLISyncHandler) OnScanProgress(progress azcopy.SyncScanProgress) {
 	glcm.Progress(builder)
 }
 
-func (C CLISyncHandler) OnTransferProgress(progress azcopy.SyncJobProgress) {
+func (C CLISyncHandler) OnTransferProgress(progress azcopy.SyncProgress) {
 	builder := func(format OutputFormat) string {
 		if format == EOutputFormat.Json() {
 			wrapped := common.ListSyncJobSummaryResponse{ListJobSummaryResponse: progress.ListJobSummaryResponse}
@@ -220,18 +219,7 @@ func (C CLISyncHandler) OnTransferProgress(progress azcopy.SyncJobProgress) {
 			return string(jsonOutput)
 		}
 
-		// indicate whether constrained by disk or not
-		perfString, diskString := getPerfDisplayText(progress.PerfStrings, progress.PerfConstraint, progress.ElapsedTime, false)
-
-		return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (Mb/s): %v%s",
-			progress.PercentComplete,
-			progress.TransfersCompleted,
-			progress.TransfersFailed,
-			progress.TotalTransfers-progress.TransfersCompleted-progress.TransfersFailed,
-			progress.TotalTransfers, perfString, jobsAdmin.ToFixed(progress.Throughput, 4), diskString)
-	}
-	if common.AzcopyCurrentJobLogger != nil {
-		common.AzcopyCurrentJobLogger.Log(common.LogInfo, builder(EOutputFormat.Text()))
+		return azcopy.GetSyncProgress(progress)
 	}
 	glcm.Progress(builder)
 }
@@ -332,56 +320,6 @@ func init() {
 				}
 
 				glcm.Exit(func(format OutputFormat) string {
-					screenStats, logStats := formatExtraStats(false, summary.AverageIOPS, summary.AverageE2EMilliseconds, summary.NetworkErrorPercentage, summary.ServerBusyPercentage)
-
-					output := fmt.Sprintf(
-						`
-Job %s Summary
-Files Scanned at Source: %v
-Files Scanned at Destination: %v
-Elapsed Time (Minutes): %v
-Number of Copy Transfers for Files: %v
-Number of Copy Transfers for Folder Properties: %v 
-Number of Symlink Transfers: %v
-Total Number of Copy Transfers: %v
-Number of Copy Transfers Completed: %v
-Number of Copy Transfers Failed: %v
-Number of Deletions at Destination: %v
-Number of Symbolic Links Skipped: %v
-Number of Special Files Skipped: %v
-Number of Hardlinks Converted: %v
-Number of Hardlinks Skipped: %v
-Total Number of Bytes Transferred: %v
-Total Number of Bytes Enumerated: %v
-Final Job Status: %v%s%s
-`,
-						summary.JobID.String(),
-						summary.SourceFilesScanned,
-						summary.DestinationFilesScanned,
-						jobsAdmin.ToFixed(summary.ElapsedTime.Minutes(), 4),
-						summary.FileTransfers,
-						summary.FolderPropertyTransfers,
-						summary.SymlinkTransfers,
-						summary.TotalTransfers,
-						summary.TransfersCompleted,
-						summary.TransfersFailed,
-						summary.DeleteTransfersCompleted,
-						summary.SkippedSymlinkCount,
-						summary.SkippedSpecialFileCount,
-						summary.HardlinksConvertedCount,
-						summary.SkippedHardlinkCount,
-						summary.TotalBytesTransferred,
-						summary.TotalBytesEnumerated,
-						summary.JobStatus,
-						screenStats,
-						formatPerfAdvice(summary.PerformanceAdvice))
-
-					if jobsAdmin.JobsAdmin != nil {
-						jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
-						if exists {
-							jobMan.Log(common.LogInfo, logStats+"\n"+output)
-						}
-					}
 					if format == EOutputFormat.Json() {
 						wrapped := common.ListSyncJobSummaryResponse{ListJobSummaryResponse: summary.ListJobSummaryResponse}
 						wrapped.DeleteTotalTransfers = summary.DeleteTotalTransfers
@@ -390,7 +328,7 @@ Final Job Status: %v%s%s
 						common.PanicIfErr(err)
 						return string(jsonOutput)
 					} else {
-						return output
+						return azcopy.GetSyncResult(summary, false)
 					}
 				}, exitCode)
 			}

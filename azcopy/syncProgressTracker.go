@@ -57,10 +57,10 @@ type syncProgressTracker struct {
 	jobStartTime time.Time
 
 	jobID   common.JobID
-	handler SyncJobHandler
+	handler SyncHandler
 }
 
-func newSyncProgressTracker(jobID common.JobID, handler SyncJobHandler) *syncProgressTracker {
+func newSyncProgressTracker(jobID common.JobID, handler SyncHandler) *syncProgressTracker {
 	return &syncProgressTracker{
 		jobID:   jobID,
 		handler: handler,
@@ -118,25 +118,17 @@ func (s *syncProgressTracker) CheckProgress() (uint32, bool) {
 		s.handler.OnScanProgress(scanProgress)
 		return totalKnownCount, false
 	} else {
-		// else report transfer progress to the user
-		//transferProgress := common.TransferProgress{
-		//	ListJobSummaryResponse:   summary,
-		//	DeleteTotalTransfers:     s.getDeletionCount(),
-		//	DeleteTransfersCompleted: s.getDeletionCount(),
-		//	Throughput:               throughput,
-		//	ElapsedTime:              duration,
-		//	JobType:                  common.EJobType.Sync(),
-		//}
-		//if common.AzcopyCurrentJobLogger != nil {
-		//	common.AzcopyCurrentJobLogger.Log(common.LogInfo, common.GetProgressOutputBuilder(transferProgress)(common.EOutputFormat.Text()))
-		//}
-		s.handler.OnTransferProgress(SyncJobProgress{
+		progress := SyncProgress{
 			ListJobSummaryResponse:   summary,
 			DeleteTotalTransfers:     s.getDeletionCount(),
 			DeleteTransfersCompleted: s.getDeletionCount(),
 			Throughput:               throughput,
 			ElapsedTime:              duration,
-		})
+		}
+		if common.AzcopyCurrentJobLogger != nil {
+			common.AzcopyCurrentJobLogger.Log(common.LogInfo, GetSyncProgress(progress))
+		}
+		s.handler.OnTransferProgress(progress)
 		return totalKnownCount, jobDone
 	}
 }

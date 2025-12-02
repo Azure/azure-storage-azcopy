@@ -72,10 +72,10 @@ type SyncOptions struct {
 	dryrunDeleteHandler              ObjectDeleter
 }
 
-type SyncJobHandler interface {
+type SyncHandler interface {
 	OnStart(ctx JobContext)
 	OnScanProgress(progress SyncScanProgress)
-	OnTransferProgress(progress SyncJobProgress)
+	OnTransferProgress(progress SyncProgress)
 }
 
 type SyncScanProgress struct {
@@ -85,7 +85,7 @@ type SyncScanProgress struct {
 	JobID                   common.JobID
 }
 
-type SyncJobProgress struct {
+type SyncProgress struct {
 	common.ListJobSummaryResponse
 	DeleteTotalTransfers     uint32
 	DeleteTransfersCompleted uint32
@@ -112,7 +112,7 @@ func (s *SyncOptions) SetInternalOptions(dryrun, deleteDestinationFileIfNecessar
 	s.commandString = cmd
 }
 
-func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions, handler SyncJobHandler) (SyncResult, error) {
+func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions, handler SyncHandler) (SyncResult, error) {
 	// Input
 	if src == "" || dest == "" {
 		return SyncResult{}, fmt.Errorf("source and destination must be specified for sync")
@@ -193,14 +193,23 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions, h
 	finalSummary.SkippedSpecialFileCount = s.spt.getSkippedSpecialFileCount()
 	finalSummary.SkippedHardlinkCount = s.spt.getSkippedHardlinkCount()
 
-	return SyncResult{
+	// Clean up job
+	jobsAdmin.JobsAdmin.JobMgrCleanUp(jobID)
+
+	result := SyncResult{
 		SourceFilesScanned:       s.spt.getSourceFilesScanned(),
 		DestinationFilesScanned:  s.spt.getDestinationFilesScanned(),
 		ListJobSummaryResponse:   finalSummary,
 		DeleteTotalTransfers:     s.spt.getDeletionCount(),
 		DeleteTransfersCompleted: s.spt.getDeletionCount(),
 		ElapsedTime:              s.spt.GetElapsedTime(),
-	}, nil
+	}
+
+	if common.AzcopyCurrentJobLogger != nil {
+		common.AzcopyCurrentJobLogger.Log(common.LogInfo, GetSyncResult(result, true))
+	}
+
+	return result, nil
 }
 
 type syncer struct {
@@ -209,7 +218,7 @@ type syncer struct {
 	spt  *syncProgressTracker
 }
 
-func newSyncer(ctx context.Context, jobID common.JobID, src, dst string, opts SyncOptions, handler SyncJobHandler, uotm *common.UserOAuthTokenManager) (s *syncer, err error) {
+func newSyncer(ctx context.Context, jobID common.JobID, src, dst string, opts SyncOptions, handler SyncHandler, uotm *common.UserOAuthTokenManager) (s *syncer, err error) {
 	cookedOpts, err := newCookedSyncOptions(src, dst, opts)
 	if err != nil {
 		return nil, err

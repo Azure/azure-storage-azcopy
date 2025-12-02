@@ -96,12 +96,12 @@ type CopyOptions struct {
 	deleteDestinationFileIfNecessary bool
 }
 
-type CopyJobHandler interface {
+type CopyHandler interface {
 	OnStart(ctx JobContext)
-	OnTransferProgress(progress CopyJobProgress)
+	OnTransferProgress(progress CopyProgress)
 }
 
-type CopyJobProgress struct {
+type CopyProgress struct {
 	common.ListJobSummaryResponse
 	Throughput  float64
 	ElapsedTime time.Duration
@@ -124,7 +124,7 @@ func (c *CopyOptions) SetInternalOptions(listOfFiles string, s2sGetPropertiesInB
 }
 
 // Copy copies the contents from source to destination.
-func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions, handler CopyJobHandler) (CopyResult, error) {
+func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions, handler CopyHandler) (CopyResult, error) {
 	// Input
 	if src == "" || dest == "" {
 		return CopyResult{}, fmt.Errorf("source and destination must be specified for copy")
@@ -217,10 +217,20 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions, h
 		finalSummary.SkippedSymlinkCount = t.tpt.getSkippedSymlinkCount()
 		finalSummary.SkippedSpecialFileCount = t.tpt.getSkippedSpecialFileCount()
 		finalSummary.SkippedHardlinkCount = t.tpt.getSkippedHardlinkCount()
-		return CopyResult{
+
+		// Clean up job
+		jobsAdmin.JobsAdmin.JobMgrCleanUp(jobID)
+
+		result := CopyResult{
 			ListJobSummaryResponse: finalSummary,
 			ElapsedTime:            t.tpt.GetElapsedTime(),
-		}, nil
+		}
+
+		if common.AzcopyCurrentJobLogger != nil {
+			common.AzcopyCurrentJobLogger.Log(common.LogInfo, GetCopyResult(result, true))
+		}
+
+		return result, nil
 	}
 }
 
@@ -230,7 +240,7 @@ type transferExecutor struct {
 	tpt  *transferProgressTracker
 }
 
-func newCopyTransferExecutor(ctx context.Context, jobID common.JobID, src, dst string, opts CopyOptions, handler CopyJobHandler, uotm *common.UserOAuthTokenManager) (t *transferExecutor, err error) {
+func newCopyTransferExecutor(ctx context.Context, jobID common.JobID, src, dst string, opts CopyOptions, handler CopyHandler, uotm *common.UserOAuthTokenManager) (t *transferExecutor, err error) {
 	cookedOpts, err := newCookedCopyOptions(src, dst, opts)
 	if err != nil {
 		return nil, err

@@ -60,7 +60,7 @@ type ResumeJobResult struct {
 }
 
 // ResumeJob resumes a job with the specified JobID.
-func (c *Client) ResumeJob(ctx context.Context, jobID common.JobID, opts ResumeJobOptions) (result ResumeJobResult, err error) {
+func (c *Client) ResumeJob(ctx context.Context, jobID common.JobID, opts ResumeJobOptions) (ResumeJobResult, error) {
 	if jobID.IsEmpty() {
 		return ResumeJobResult{}, errors.New("resume job requires the JobID")
 	}
@@ -161,10 +161,12 @@ func (c *Client) ResumeJob(ctx context.Context, jobID common.JobID, opts ResumeJ
 	// Clean up job
 	jobsAdmin.JobsAdmin.JobMgrCleanUp(jobID)
 
-	return ResumeJobResult{
+	result := ResumeJobResult{
 		ListJobSummaryResponse: finalSummary,
 		ElapsedTime:            rpt.GetElapsedTime(),
-	}, nil
+	}
+
+	return result, nil
 }
 
 // normalizeSAS ensures the SAS token starts with "?" if non-empty.
@@ -323,10 +325,19 @@ func (r *resumeProgressTracker) CheckProgress() (uint32, bool) {
 	}
 	throughput := computeThroughput()
 	if r.handler != nil {
-		r.handler.OnTransferProgress(ResumeJobProgress{
+		progress := CopyProgress{
 			ListJobSummaryResponse: summary,
 			Throughput:             throughput,
 			ElapsedTime:            duration,
+		}
+
+		if common.AzcopyCurrentJobLogger != nil {
+			common.AzcopyCurrentJobLogger.Log(common.LogInfo, GetCopyProgress(progress, false))
+		}
+		r.handler.OnTransferProgress(ResumeJobProgress{
+			ListJobSummaryResponse: progress.ListJobSummaryResponse,
+			Throughput:             progress.Throughput,
+			ElapsedTime:            progress.ElapsedTime,
 		})
 	}
 	return totalKnownCount, jobDone
