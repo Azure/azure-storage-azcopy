@@ -109,7 +109,6 @@ type CookedTransferOptions struct {
 	hardlinks                      common.HardlinkHandlingType
 	forceWrite                     common.OverwriteOption
 	forceIfReadOnly                bool
-	isSourceDir                    bool
 	autoDecompress                 bool
 	blockSize                      int64
 	putBlobSize                    int64
@@ -400,7 +399,7 @@ func getListOfFileChannel(listOfFiles string, includePaths []string) (listChan c
 		}
 
 		// Reset file position for the goroutine to read from the beginning
-		f.Seek(0, 0)
+		_, _ = f.Seek(0, 0)
 	}
 
 	// Prepare UTF-8 byte order marker

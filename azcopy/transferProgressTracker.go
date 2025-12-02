@@ -48,10 +48,6 @@ type transferProgressTracker struct {
 	// used to calculate job summary
 	jobStartTime time.Time
 
-	// this flag is set by the enumerator
-	// it is useful to indicate whether we are simply waiting for the purpose of cancelling
-	isEnumerationComplete bool
-
 	atomicSkippedSymlinkCount     uint32
 	atomicSkippedSpecialFileCount uint32
 	atomicSkippedHardlinkCount    uint32
