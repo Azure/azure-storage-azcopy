@@ -61,8 +61,6 @@ var docCmd = &cobra.Command{
 				glcm.Error(fmt.Sprintf("Cannot generate wiki doc due to error %s, please contact the dev team.", err))
 			}
 			glcm.Info(fmt.Sprintf("GitHub Wiki documentation generated in: %s", docCmdInput.outputLocation))
-		case "default":
-			fallthrough
 		default:
 			// dump the entire command tree's doc into the folder
 			// it will include this command too, which is intended
