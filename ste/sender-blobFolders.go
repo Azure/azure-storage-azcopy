@@ -187,7 +187,7 @@ func (b *blobFolderSender) EnsureFolderExists() error {
 		}
 	}
 
-	// TODO (gapra): figure out better way to deal with hdi_isfolder metadata key capitalization
+	// Always set this metadata in lower case while creating directories
 	if b.metadataToApply["Hdi_isfolder"] != nil {
 		delete(b.metadataToApply, "Hdi_isfolder")
 	}
