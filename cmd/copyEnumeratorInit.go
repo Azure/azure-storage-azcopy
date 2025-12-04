@@ -470,6 +470,7 @@ func (cca *CookedCopyCmdArgs) InitModularFilters() []traverser.ObjectFilter {
 		common.LogToJobLogWithPrefix("Search prefix, which may be used to optimize scanning, is: "+prefixFilter, common.LogInfo) // "May be used" because we don't know here which enumerators will use it
 	}
 
+	// remove specific
 	switch cca.permanentDeleteOption {
 	case common.EPermanentDeleteOption.Snapshots():
 		filters = append(filters, &traverser.PermDeleteFilter{DeleteSnapshots: true})

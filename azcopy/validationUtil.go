@@ -21,10 +21,12 @@
 package azcopy
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"reflect"
 	"regexp"
 	"runtime"
@@ -606,9 +608,10 @@ func ValidateSymlinkHandlingMode(symlinkHandling common.SymlinkHandlingType, fro
 	return nil // other older symlink handling modes can work on all OSes
 }
 
-func WarnIfAnyHasWildcard(oncer *sync.Once, paramName string, value []string) {
+func WarnIfAnyHasWildcard(paramName string, value []string) {
+	anyOncer := &sync.Once{}
 	for _, v := range value {
-		WarnIfHasWildcard(oncer, paramName, v)
+		WarnIfHasWildcard(anyOncer, paramName, v)
 	}
 }
 
@@ -705,6 +708,42 @@ func ValidateMetadataString(metadata string) error {
 		if strings.ContainsAny(k, " !#$%^&*,<>{}|\\:.()+'\"?/") {
 			return fmt.Errorf("invalid metadata key value '%s': can't have spaces or special characters", k)
 		}
+	}
+
+	return nil
+}
+
+// validateListOfFilesFormat checks if the file uses the old JSON format
+func validateListOfFilesFormat(f *os.File) error {
+	scanner := bufio.NewScanner(f)
+	headerLineNum := 0
+	firstLineIsCurlyBrace := false
+	utf8BOM := string([]byte{0xEF, 0xBB, 0xBF})
+	checkBOM := false
+
+	for scanner.Scan() && headerLineNum <= 1 {
+		v := scanner.Text()
+
+		// Check if the UTF-8 BOM is on the first line and remove it if necessary.
+		if !checkBOM {
+			v = strings.TrimPrefix(v, utf8BOM)
+			checkBOM = true
+		}
+
+		cleanedLine := strings.Replace(strings.Replace(v, " ", "", -1), "\t", "", -1)
+		cleanedLine = strings.TrimSuffix(cleanedLine, "[") // don't care which line this is on, could be third line
+
+		if cleanedLine == "{" && headerLineNum == 0 {
+			firstLineIsCurlyBrace = true
+		} else {
+			const jsonStart = "{\"Files\":"
+			jsonStartNoBrace := strings.TrimPrefix(jsonStart, "{")
+			isJson := cleanedLine == jsonStart || firstLineIsCurlyBrace && cleanedLine == jsonStartNoBrace
+			if isJson {
+				return errors.New("The format for list-of-files has changed. The old JSON format is no longer supported")
+			}
+		}
+		headerLineNum++
 	}
 
 	return nil

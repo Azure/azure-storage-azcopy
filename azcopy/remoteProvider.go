@@ -22,6 +22,7 @@ package azcopy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
@@ -37,11 +38,46 @@ type remoteProvider struct {
 	dstCredType      common.CredentialType
 }
 
+func newCopyRemoteProvider(ctx context.Context, uotm *common.UserOAuthTokenManager, src, dst common.ResourceString, fromTo common.FromTo, cpkOptions common.CpkOptions, trailingDot common.TrailingDotOption) (rp *remoteProvider, err error) {
+	rp = &remoteProvider{}
+
+	ctx = context.WithValue(ctx, ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+	var isSrcPublic bool
+	rp.srcServiceClient, rp.srcCredType, isSrcPublic, err = getSourceServiceClient(ctx, src, fromTo, trailingDot, cpkOptions, uotm)
+	if err != nil {
+		return rp, err
+	}
+	if fromTo.IsS2S() && ((rp.srcCredType == common.ECredentialType.OAuthToken() && !fromTo.To().CanForwardOAuthTokens()) || // Blob can forward OAuth tokens; BlobFS inherits this.
+		(rp.srcCredType == common.ECredentialType.Anonymous() && !isSrcPublic && src.SAS == "")) {
+		return rp, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource. Blob and BlobFS additionally support OAuth on both source and destination")
+	}
+
+	rp.dstServiceClient, rp.dstCredType, err = getDestinationServiceClient(ctx, dst, fromTo, rp.srcCredType, trailingDot, cpkOptions, uotm)
+	if err != nil {
+		return rp, err
+	}
+
+	if fromTo.IsS2S() && (rp.srcCredType == common.ECredentialType.SharedKey() || rp.dstCredType == common.ECredentialType.SharedKey()) {
+		return rp, errors.New("shared key auth is not supported for S2S operations")
+	}
+
+	if src.SAS != "" && fromTo.IsS2S() && rp.dstCredType == common.ECredentialType.OAuthToken() {
+		common.GetLifecycleMgr().Info("Authentication: If the source and destination accounts are in the same AAD tenant & the user/spn/msi has appropriate permissions on both, the source SAS token is not required and OAuth can be used round-trip.")
+	}
+
+	// Check protocol compatibility for File Shares
+	if err := ValidateProtocolCompatibility(ctx, fromTo, src, dst, rp.srcServiceClient, rp.dstServiceClient); err != nil {
+		return nil, err
+	}
+
+	return rp, nil
+}
+
 func newSyncRemoteProvider(ctx context.Context, uotm *common.UserOAuthTokenManager, src, dst common.ResourceString, fromTo common.FromTo, cpkOptions common.CpkOptions, trailingDot common.TrailingDotOption) (rp *remoteProvider, err error) {
 	rp = &remoteProvider{}
 
 	ctx = context.WithValue(ctx, ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	rp.srcServiceClient, rp.srcCredType, err = getSourceServiceClient(ctx, src, fromTo.From(), trailingDot, cpkOptions, uotm)
+	rp.srcServiceClient, rp.srcCredType, _, err = getSourceServiceClient(ctx, src, fromTo, trailingDot, cpkOptions, uotm)
 	if err != nil {
 		return rp, err
 	}
@@ -71,51 +107,54 @@ func newSyncRemoteProvider(ctx context.Context, uotm *common.UserOAuthTokenManag
 
 func getSourceServiceClient(ctx context.Context,
 	source common.ResourceString,
-	loc common.Location,
+	fromTo common.FromTo,
 	trailingDot common.TrailingDotOption,
 	cpk common.CpkOptions,
-	uotm *common.UserOAuthTokenManager) (*common.ServiceClient, common.CredentialType, error) {
-	srcCredType, _, err := GetCredentialTypeForLocation(ctx,
-		loc,
+	uotm *common.UserOAuthTokenManager) (*common.ServiceClient, common.CredentialType, bool, error) {
+	srcCredType, public, err := GetCredentialTypeForLocation(ctx,
+		fromTo.From(),
 		source,
 		true,
 		cpk,
 		uotm)
 	if err != nil {
-		return nil, srcCredType, err
+		return nil, srcCredType, public, err
 	}
 	var tc azcore.TokenCredential
 	if srcCredType.IsAzureOAuth() {
 		// Get token from env var or cache.
 		tokenInfo, err := uotm.GetTokenInfo(ctx)
 		if err != nil {
-			return nil, srcCredType, err
+			return nil, srcCredType, public, err
 		}
 
 		tc, err = tokenInfo.GetTokenCredential()
 		if err != nil {
-			return nil, srcCredType, err
+			return nil, srcCredType, public, err
 		}
 	}
 
 	var srcReauthTok *common.ScopedAuthenticator
-	if at, ok := tc.(common.AuthenticateToken); ok { // We don't need two different tokens here since it gets passed in just the same either way.
-		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-		srcReauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+	// If the destination is a pipe, we cannot reauth effectively because stdout is a pipe.
+	if fromTo.To() != common.ELocation.Pipe() {
+		if at, ok := tc.(common.AuthenticateToken); ok { // We don't need two different tokens here since it gets passed in just the same either way.
+			// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
+			srcReauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+		}
 	}
 
 	options := traverser.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, srcReauthTok)
 
 	// Create Source Client.
 	var azureFileSpecificOptions any
-	if loc == common.ELocation.File() || loc == common.ELocation.FileNFS() {
+	if fromTo.From() == common.ELocation.File() || fromTo.From() == common.ELocation.FileNFS() {
 		azureFileSpecificOptions = &common.FileClientOptions{
-			AllowTrailingDot: trailingDot == common.ETrailingDotOption.Enable(),
+			AllowTrailingDot: trailingDot.IsEnabled(),
 		}
 	}
 
 	srcServiceClient, err := common.GetServiceClientForLocation(
-		loc,
+		fromTo.From(),
 		source,
 		srcCredType,
 		tc,
@@ -123,9 +162,9 @@ func getSourceServiceClient(ctx context.Context,
 		azureFileSpecificOptions,
 	)
 	if err != nil {
-		return nil, srcCredType, err
+		return nil, srcCredType, public, err
 	}
-	return srcServiceClient, srcCredType, nil
+	return srcServiceClient, srcCredType, public, nil
 }
 
 func getDestinationServiceClient(ctx context.Context,
@@ -185,8 +224,8 @@ func getDestinationServiceClient(ctx context.Context,
 	var azureFileSpecificOptions any
 	if fromTo.To() == common.ELocation.File() || fromTo.To() == common.ELocation.FileNFS() {
 		azureFileSpecificOptions = &common.FileClientOptions{
-			AllowTrailingDot:       trailingDot == common.ETrailingDotOption.Enable(),
-			AllowSourceTrailingDot: trailingDot == common.ETrailingDotOption.Enable() && fromTo.To() == common.ELocation.File(),
+			AllowTrailingDot:       trailingDot.IsEnabled(),
+			AllowSourceTrailingDot: trailingDot.IsEnabled() && fromTo.From() == common.ELocation.File(),
 		}
 	}
 

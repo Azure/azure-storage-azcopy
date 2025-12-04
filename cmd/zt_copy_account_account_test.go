@@ -21,12 +21,11 @@
 package cmd
 
 import (
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-	"github.com/stretchr/testify/assert"
 	"strings"
 	"testing"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/stretchr/testify/assert"
 )
 
 // test copy
@@ -56,9 +55,6 @@ func TestExcludeContainerFlagCopy(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -66,7 +62,7 @@ func TestExcludeContainerFlagCopy(t *testing.T) {
 	raw.recursive = true
 	raw.excludeContainer = strings.Join(containersToIgnore, ";")
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that each transfer is not of the excluded container names
@@ -117,9 +113,6 @@ func TestExcludeContainerFlagCopyNegative(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -127,7 +120,7 @@ func TestExcludeContainerFlagCopyNegative(t *testing.T) {
 	raw.recursive = true
 	raw.excludeContainer = strings.Join(containersToIgnore, ";")
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that each transfer is not of the excluded container names
