@@ -37,6 +37,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 )
@@ -66,6 +67,7 @@ var (
 	notFoundErrors []string = []string{
 		"ParentNotFound",
 		"BlobNotFound",
+		"PathNotFound",
 		"ResourceNotFound",
 	}
 
@@ -210,6 +212,25 @@ func validateS3Root(sourcePath string) error {
 	return nil
 }
 
+func validateBlobRoot(sourcePath string) error {
+	_, err := blob.ParseURL(sourcePath)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// validateBlobFSRoot validates a BlobFS root URL by converting the DFS endpoint to Blob
+// and then parsing it using the Blob URL parser. This mirrors how BlobFS traversers are initialized.
+func validateBlobFSRoot(sourcePath string) error {
+	r := strings.Replace(sourcePath, ".dfs", ".blob", 1)
+	_, err := blob.ParseURL(r)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // validateAndGetRootObject returns the root object for the sync orchestrator
 // based on the source path and fromTo configuration. This determines the starting
 // point for sync enumeration operations.
@@ -232,6 +253,10 @@ func validateAndGetRootObject(path string, fromTo common.FromTo) (minimalStoredO
 		err = validateLocalRoot(path)
 	case common.ELocation.S3():
 		err = validateS3Root(path)
+	case common.ELocation.Blob():
+		err = validateBlobRoot(path)
+	case common.ELocation.BlobFS():
+		err = validateBlobFSRoot(path)
 	default:
 		err = fmt.Errorf("sync orchestrator is not supported for %s source", fromTo.From().String())
 	}
@@ -508,7 +533,7 @@ func newSyncTraverser(enumerator *syncEnumerator, dir string, comparator objectP
 
 func validate(cca *cookedSyncCmdArgs, orchestratorOptions *SyncOrchestratorOptions) error {
 	switch cca.fromTo {
-	case common.EFromTo.LocalBlob(), common.EFromTo.LocalBlobFS(), common.EFromTo.LocalFile(), common.EFromTo.S3Blob():
+	case common.EFromTo.LocalBlob(), common.EFromTo.LocalBlobFS(), common.EFromTo.LocalFile(), common.EFromTo.S3Blob(), common.EFromTo.BlobBlob(), common.EFromTo.BlobBlobFS(), common.EFromTo.BlobFSBlob(), common.EFromTo.BlobFSBlobFS():
 		// sync orchestrator is supported for these types
 	default:
 		return fmt.Errorf(
@@ -516,7 +541,11 @@ func validate(cca *cookedSyncCmdArgs, orchestratorOptions *SyncOrchestratorOptio
 				"\t- Local->Blob\n" +
 				"\t- Local->BlobFS\n" +
 				"\t- Local->File\n" +
-				"\t- S3->Blob",
+				"\t- S3->Blob\n" +
+				"\t- Blob->Blob\n" +
+				"\t- Blob->BlobFS\n" +
+				"\t- BlobFS->Blob\n" +
+				"\t- BlobFS->BlobFS",
 		)
 	}
 
@@ -707,7 +736,6 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		// We will use the parent directory flag as the seed value to avoid redundant checks
 		isDestinationPresent := dir.(minimalStoredObject).isPresentAtDestination
 		finalize := true // Flag to control whether we finalize
-
 		// Before proceeding, check if we need to enumerate the destination
 		if isDestinationPresent &&
 			stra.shouldTrySkippingTargetTraversal(dir.(minimalStoredObject).changeTime, cca.deleteDestination) {

@@ -141,6 +141,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 				atomic.AddUint64(&cca.atomicSourceFoldersTransferNotRequired, 1)
 			}
 		},
+		ErrorChannel: enumeratorOptions.ErrorChannel,
 	}
 	srcTraverserTemplate := ResourceTraverserTemplate{
 		location: cca.fromTo.From(),
@@ -183,6 +184,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		IncludeDirectoryStubs:   includeDirStubs,
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
 		HardlinkHandling:        common.EHardlinkHandlingType.Follow(),
+		ErrorChannel:            enumeratorOptions.ErrorChannel,
 	}
 	dstTraverserTemplate := ResourceTraverserTemplate{
 		location: cca.fromTo.To(),
@@ -196,7 +198,6 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 	// verify that the traversers are targeting the same type of resources
 	sourceIsDir, _ := sourceTraverser.IsDirectory(true)
 	destIsDir, err := destinationTraverser.IsDirectory(true)
-
 	var resourceMismatchError = errors.New("trying to sync between different resource types (either file <-> directory or directory <-> file) which is not allowed." +
 		"sync must happen between source and destination of the same type, e.g. either file <-> file or directory <-> directory." +
 		"To make sure target is handled as a directory, add a trailing '/' to the target.")
@@ -524,10 +525,12 @@ func GetSyncEnumeratorWithDestComparator(
 	}
 	destCleanerFunc := newFpoAwareProcessor(fpo, destinationCleaner.removeImmediately)
 
-	if UseSyncOrchestrator && cca.fromTo == common.EFromTo.S3Blob() {
+	if UseSyncOrchestrator && (cca.fromTo == common.EFromTo.S3Blob() || cca.fromTo == common.EFromTo.BlobBlob() || cca.fromTo == common.EFromTo.BlobFSBlob()) {
 		// newFpoAwareProcessor sets the destCleanerFunc to nil for a non folder aware source destination pair like S3->Blob.
 		// But in case of SyncOrchestrator, S3->Blob sync does recursive deletion for a prefix.
 		// This requires a valid deletion processor to be passed to the comparator.
+		fmt.Println("Using SyncOrchestrator: setting up deletion processor for S3/Blob to Blob sync")
+
 		destCleanerFunc = destinationCleaner.removeImmediately
 	}
 

@@ -33,6 +33,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 
 	"github.com/pkg/errors"
@@ -353,7 +354,7 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		if !t.include.Deleted() && (isBlob || err != nil) {
 			return err
 		}
-	} else if blobURLParts.BlobName == "" && (t.preservePermissions.IsTruthy() || t.isDFS) {
+	} else if blobURLParts.BlobName == "" && (t.preservePermissions.IsTruthy() || t.isDFS) && !buildmode.IsMover {
 		// If the root is a container and we're copying "folders", we should persist the ACLs there too.
 		// For DFS, we should always include the container root.
 		if azcopyScanningLogger != nil {
@@ -410,7 +411,6 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 func (t *blobTraverser) parallelList(containerClient *container.Client, containerName string, searchPrefix string,
 	extraSearchPrefix string, preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
-
 	emptyPrefix := true
 
 	// Define how to enumerate its contents
@@ -581,7 +581,6 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 	workerContext, cancelWorkers := context.WithCancel(t.ctx)
 	defer cancelWorkers()
 	cCrawled := parallel.Crawl(workerContext, searchPrefix+extraSearchPrefix, enumerateOneDir, EnumerationParallelism)
-
 	for x := range cCrawled {
 		item, workerError := x.Item()
 		if workerError != nil {
