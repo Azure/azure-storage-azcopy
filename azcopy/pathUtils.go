@@ -252,8 +252,14 @@ func StripTrailingWildcardOnRemoteSource(source string, location common.Location
 		return
 	}
 
-	// Trim the trailing /*.
-	if strings.HasSuffix(resourceURL.RawPath, "/*") {
+	// Remove trailing wildcard
+	if strings.HasSuffix(resourceURL.RawPath, "//*") {
+		// Trim just the '*'
+		resourceURL.RawPath = strings.TrimSuffix(resourceURL.RawPath, "*")
+		resourceURL.Path = strings.TrimSuffix(resourceURL.Path, "*")
+		stripTopDir = true
+	} else if strings.HasSuffix(resourceURL.RawPath, "/*") {
+		// Trim the trailing /*.
 		resourceURL.RawPath = strings.TrimSuffix(resourceURL.RawPath, "/*")
 		resourceURL.Path = strings.TrimSuffix(resourceURL.Path, "/*")
 		stripTopDir = true
