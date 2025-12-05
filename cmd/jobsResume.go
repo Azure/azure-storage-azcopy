@@ -31,8 +31,6 @@ import (
 	"syscall"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
 )
@@ -156,7 +154,7 @@ Total Number of Bytes Transferred: %v
 Final Job Status: %v
 `,
 				summary.JobID.String(),
-				jobsAdmin.ToFixed(summary.ElapsedTime.Minutes(), 4),
+				azcopy.ToFixed(summary.ElapsedTime.Minutes(), 4),
 				summary.FileTransfers,
 				summary.FolderPropertyTransfers,
 				summary.SymlinkTransfers,
@@ -189,35 +187,11 @@ func (C CLIResumeHandler) OnTransferProgress(progress azcopy.ResumeJobProgress) 
 			common.PanicIfErr(err)
 			return string(jsonOutput)
 		} else {
-			// if json is not needed, then we generate a message that goes nicely on the same line
-			// display a scanning keyword if the job is not completely ordered
-			var scanningString = " (scanning...)"
-			if progress.CompleteJobOrdered {
-				scanningString = ""
-			}
-
-			throughput := progress.Throughput
-			throughputString := fmt.Sprintf("2-sec Throughput (Mb/s): %v", jobsAdmin.ToFixed(throughput, 4))
-			if throughput == 0 {
-				// As there would be case when no bits sent from local, e.g. service side copy, when throughput = 0, hide it.
-				throughputString = ""
-			}
-
-			// indicate whether constrained by disk or not
-			perfString, diskString := getPerfDisplayText(progress.PerfStrings, progress.PerfConstraint, progress.ElapsedTime, false)
-
-			return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
-				progress.PercentComplete,
-				progress.TransfersCompleted,
-				progress.TransfersFailed,
-				progress.TotalTransfers-(progress.TransfersCompleted+progress.TransfersFailed+progress.TransfersSkipped),
-				progress.TransfersSkipped, progress.TotalTransfers, scanningString, perfString, throughputString, diskString)
-		}
-	}
-	if jobsAdmin.JobsAdmin != nil {
-		jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(progress.JobID)
-		if exists {
-			jobMan.Log(common.LogInfo, builder(EOutputFormat.Text()))
+			return azcopy.GetCopyProgress(azcopy.CopyProgress{
+				ListJobSummaryResponse: progress.ListJobSummaryResponse,
+				Throughput:             progress.Throughput,
+				ElapsedTime:            progress.ElapsedTime,
+			}, false)
 		}
 	}
 
