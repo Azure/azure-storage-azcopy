@@ -44,7 +44,7 @@ func (s *syncer) newSyncTransferProcessor(
 
 	// note that the source and destination, along with the template are given to the generic processor's constructor
 	// this means that given an object with a relative path, this processor already knows how to schedule the right kind of transfers
-	return NewCopyTransferProcessor(copyJobTemplate, numOfTransfersPerPart, s.opts.source, s.opts.destination,
+	return NewCopyTransferProcessor(false, copyJobTemplate, numOfTransfersPerPart, s.opts.source, s.opts.destination,
 		reportFirstPart, reportFinalPart, s.opts.s2SPreserveAccessTier, s.opts.dryrun, s.opts.dryrunJobPartOrderHandler)
 }
 
