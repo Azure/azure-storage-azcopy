@@ -683,13 +683,14 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		err = pt.Traverse(noPreProccessor, stra.processor, enumerator.filters)
 		srcDirEnumerating.Add(-1) // Decrement active directory count
 		log.Printf("Completed source traversal for directory %s", pt_src.Value)
-
+		log.Printf("Err from source traverse %s: %v", pt_src.Value, err)
 		// Release source slot after source traversal is complete
 		if enableThrottling {
 			semaphore.ReleaseSourceSlot()
 		}
 
 		if err != nil {
+			log.Printf("Traverse returned err")
 			errMsg = fmt.Sprintf("primary traversal failed for dir %s : %s\n", pt_src.Value, err)
 			syncOrchestratorLog(common.LogError, errMsg)
 			writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{

@@ -240,6 +240,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 
 		if objectInfo.Err != nil {
 			log.Printf("Inside objectInfo.Err check")
+			log.Printf("cannot list objects, %v", objectInfo.Err)
 			t.writeToS3ErrorChannel(errInfo)
 			return fmt.Errorf("cannot list objects, %v", objectInfo.Err)
 		}
