@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log"
 	"net/http"
 	_ "net/http/pprof"
 	"net/url"
@@ -657,7 +658,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			})
 			return err
 		}
-
+		log.Printf("Created source traverser")
 		// Create destination traverser for current directory
 		st, err := InitResourceTraverser(
 			st_src,
@@ -675,12 +676,13 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			})
 			return err
 		}
-
+		log.Printf("Created destination traverser")
 		// Create sync traverser for this directory
 		stra := newSyncTraverser(enumerator, dir.(minimalStoredObject).relativePath, enumerator.objectComparator)
 
 		err = pt.Traverse(noPreProccessor, stra.processor, enumerator.filters)
 		srcDirEnumerating.Add(-1) // Decrement active directory count
+		log.Printf("Completed source traversal for directory %s", pt_src.Value)
 
 		// Release source slot after source traversal is complete
 		if enableThrottling {

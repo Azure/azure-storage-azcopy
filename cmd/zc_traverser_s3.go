@@ -23,6 +23,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/url"
 	"strings"
 	"sync"
@@ -137,7 +138,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 
 		return p(storedObject)
 	}
-
+	log.Printf("start traverse")
 	invalidAzureBlobName := func(objectKey string) bool {
 		/* S3 object name is invalid if it ends with period or
 		   one of virtual directories in path ends with period.
@@ -213,9 +214,11 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 	// This is because * is both a valid URL path character and a valid portion of an object key in S3.
 	searchPrefix := t.s3URLParts.ObjectKey
 
+	log.Printf("Calling ListObjects")
 	// It's a bucket or virtual directory.
 	listObjectOptions := minio.ListObjectsOptions{Prefix: searchPrefix, Recursive: t.recursive}
 	for objectInfo := range t.s3Client.ListObjects(t.ctx, t.s3URLParts.BucketName, listObjectOptions) {
+		log.Printf("Inside for loop of ListObjects")
 		// re-join the unescaped path.
 		relativePath := strings.TrimPrefix(objectInfo.Key, searchPrefix)
 
@@ -233,8 +236,10 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			S3Path:             t.s3URLParts.ObjectKey,
 			ErrorMsg:           objectInfo.Err,
 		}
+		log.Printf("Error info: %+v", errInfo)
 
 		if objectInfo.Err != nil {
+			log.Printf("Inside objectInfo.Err check")
 			t.writeToS3ErrorChannel(errInfo)
 			return fmt.Errorf("cannot list objects, %v", objectInfo.Err)
 		}
@@ -322,6 +327,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			return
 		}
 	}
+	log.Printf("Outside for loop of ListObjects")
 	return
 }
 
