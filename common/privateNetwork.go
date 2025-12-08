@@ -272,13 +272,18 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 		// continue outer loop to try next IP (if any attempts remain)
 	}
 
+	log.Printf("All Private Endpoint IPs have been attempted")
+
 	// All attempts exhausted - return appropriate error message
 	if !attemptedAnyIP {
+		log.Printf("All private endpoint IPs are unhealthy and in cooldown period. Returning error")
 		return nil, fmt.Errorf("All private endpoint IPs are unhealthy and in cooldown period")
 	}
 	if lastErrMsg == "" {
+		log.Printf("All private endpoint IPs are unhealthy and cannot be used. Returning error")
 		return nil, fmt.Errorf("All private endpoint IPs are unhealthy and cannot be used")
 	}
+	log.Printf("Request failed after trying all private endpoint IPs. Returning error")
 	return nil, fmt.Errorf("Request failed after trying all private endpoint IPs. Last error from IP %s: %v", peIP, lastErrMsg)
 }
 
