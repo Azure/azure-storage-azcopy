@@ -113,9 +113,16 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 	var lastErrMsg string
 	var peIP string
 	var lastErrorCode int
+	var attemptedAnyIP bool
 
 	log.Printf("*****Request Method: %s, Host: %s, Query: %s, Body: %v, URI: %s****", req.Method, req.URL.Host, req.URL.RawQuery, req.Body, req.RequestURI)
 	numPrivateEndpoints := GetGlobalPrivateEndpointIPCount()
+
+	// Check if we have any endpoints at all
+	if numPrivateEndpoints == 0 {
+		return nil, fmt.Errorf("No private endpoint IPs configured")
+	}
+
 	for iter := 0; iter < numPrivateEndpoints; iter++ {
 
 		rr.counterLock.Lock()
@@ -135,9 +142,15 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 				log.Printf("Updating Private Endpoint:%s connection state from UNHEALTHY->HEALTHY after cooldown at %v (LastChecked: %v)", peIP, time.Now(), entry.LastChecked)
 			} else {
 				log.Printf("[Counter=%d] Skipping Unhealthy IP %s (still in cooldown) (LastChecked: %v)", idx, peIP, entry.LastChecked)
+				// Track that this IP was skipped due to being unhealthy
+				lastErrMsg = fmt.Sprintf("IP %s is unhealthy and still in cooldown", peIP)
+				lastErrorCode = entry.LastErrCode
 				continue
 			}
 		}
+
+		// Mark that we're attempting to use this IP
+		attemptedAnyIP = true
 
 		// Try the same IP up to perIPRetries times before moving on
 		for ipAttempt := 0; ipAttempt < rr.perIPRetries; ipAttempt++ {
@@ -188,6 +201,11 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 								log.Printf("Updating Private Endpoint:%s connection state from HEALTHY->UNHEALTHY after error response with Error Code %d ErrorMsg:%s at %v", peIP, entry.LastErrCode, entry.LastErrMsg, entry.LastChecked)
 							}
 						}
+
+						// For any HTTP/S3 error (retryable or not), we should continue to try other IPs or fail
+						lastErrMsg = errMsg
+						lastErrorCode = errCode
+						break // Exit the per-IP retry loop to try next IP
 					} else {
 						errCode = 0
 						errMsg = ""
@@ -254,9 +272,14 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 		// continue outer loop to try next IP (if any attempts remain)
 	}
 
-	fmt.Errorf("No healthy Private Endpoint IPs are available")
-	// All attempts exhausted
-	return nil, fmt.Errorf("Request failed after trying all healthy Private Endpoint IPs. Last error from IP %s: %v", peIP, lastErrMsg)
+	// All attempts exhausted - return appropriate error message
+	if !attemptedAnyIP {
+		return nil, fmt.Errorf("All private endpoint IPs are unhealthy and in cooldown period")
+	}
+	if lastErrMsg == "" {
+		return nil, fmt.Errorf("All private endpoint IPs are unhealthy and cannot be used")
+	}
+	return nil, fmt.Errorf("Request failed after trying all private endpoint IPs. Last error from IP %s: %v", peIP, lastErrMsg)
 }
 
 // Close cleans up idle connections and stops the periodic refresh goroutine
