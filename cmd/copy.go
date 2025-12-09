@@ -1664,7 +1664,7 @@ func init() {
 		"False by default. 'Preserves' property info gleaned from stat or statx into object metadata.")
 
 	cpCmd.PersistentFlags().StringVar(&raw.posixPropertiesStyle, "posix-properties-style", "standard",
-		" `standard` by default. Use this flag to specify the style of POSIX properties to preserve. "+
+		"Accepted values: `standard` (default) and `amlfs`. Use this flag to specify the style of POSIX properties to preserve. "+
 			"\n `amlfs` will preserve POSIX property metadata compatible with Azure Managed Lustre File System."+
 			"\n This flag must be used in-tandem with --preserve-posix-properties.")
 

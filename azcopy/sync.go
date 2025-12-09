@@ -38,6 +38,7 @@ type SyncOptions struct {
 	IncludeDirectoryStubs   bool
 	PreserveInfo            *bool // Default true
 	PreservePosixProperties bool
+	PosixPropertiesStyle    common.PosixPropertiesStyle
 	ForceIfReadOnly         bool
 	BlockSizeMB             float64
 	PutBlobSizeMB           float64

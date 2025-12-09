@@ -142,6 +142,7 @@ func (s *cookedSyncOptions) applyDefaultsAndInferOptions(opts SyncOptions) (err 
 	// 1:1 mappings
 	s.includeDirectoryStubs = opts.IncludeDirectoryStubs
 	s.preservePosixProperties = opts.PreservePosixProperties
+	s.posixPropertiesStyle = opts.PosixPropertiesStyle
 	s.forceIfReadOnly = opts.ForceIfReadOnly
 	s.blockSize, err = BlockSizeInBytes(opts.BlockSizeMB)
 	if err != nil {

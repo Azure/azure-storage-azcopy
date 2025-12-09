@@ -443,8 +443,8 @@ func AddStatToBlobMetadata(s UnixStatAdapter, metadata Metadata, posixStyle Posi
 
 		if StatXReturned(mask, STATX_MODE) {
 			if posixStyle == AMLFSPosixPropertiesStyle {
-				permissions := fmt.Sprintf("%04o", uint64(s.FileMode()))                  // AMLFS uses octal
-				TryAddMetadata(metadata, POSIXModeMeta, permissions[len(permissions)-4:]) // only needs permission bits
+				permissions := fmt.Sprintf("%04o", uint64(s.FileMode())&0777) // AMLFS uses octal and only needs permission bits. Mask off higher order bits.
+				TryAddMetadata(metadata, POSIXModeMeta, permissions)
 				applyMode(os.FileMode(s.FileMode()))
 			} else {
 				TryAddMetadata(metadata, POSIXModeMeta, strconv.FormatUint(uint64(s.FileMode()), 10))
