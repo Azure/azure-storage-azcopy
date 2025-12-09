@@ -594,6 +594,19 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			orchestratorOptions.ToStringMap()))
 
 	var crawlWg sync.WaitGroup // WaitGroup for all directory processing tasks
+	var firstError error       // Capture the first error that occurs
+	var errorMutex sync.Mutex  // Protect access to firstError
+
+	// Helper function to capture the first error that occurs
+	captureError := func(err error) {
+		if err != nil {
+			errorMutex.Lock()
+			if firstError == nil {
+				firstError = err
+			}
+			errorMutex.Unlock()
+		}
+	}
 
 	// syncOneDir processes a single directory by creating source and destination traversers,
 	// enumerating files, comparing them, and scheduling transfers. It also discovers
@@ -616,6 +629,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 				syncOrchestratorLog(
 					common.LogError,
 					fmt.Sprintf("Failed to acquire source slot for dir '%s': %s", dir.(minimalStoredObject).relativePath, err))
+				captureError(err)
 				return err
 			}
 		}
@@ -659,6 +673,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 				ErrorMsg:          errors.New(errMsg),
 				TraverserLocation: cca.fromTo.From(),
 			})
+			captureError(err)
 			return err
 		}
 		log.Printf("Created source traverser")
@@ -677,6 +692,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 				ErrorMsg:          errors.New(errMsg),
 				TraverserLocation: cca.fromTo.To(),
 			})
+			captureError(err)
 			return err
 		}
 		log.Printf("Created destination traverser")
@@ -703,6 +719,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 				TraverserLocation: cca.fromTo.From(),
 			})
 			cca.IncrementSourceFolderEnumerationFailed()
+			captureError(err)
 			return err
 		}
 
@@ -736,6 +753,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 						ErrorMsg:          errors.New(errMsg),
 						TraverserLocation: cca.fromTo.From(),
 					})
+					captureError(err)
 					return err
 				}
 
@@ -766,6 +784,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 					syncOrchestratorLog(common.LogError, errMsg)
 					// Release destination directory count since we're bailing out
 					dstDirEnumerating.Add(-1)
+					captureError(err)
 					return err
 				}
 			}
@@ -807,9 +826,11 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 							ErrorMsg:          errors.New(errMsg),
 							TraverserLocation: cca.fromTo.From(),
 						})
+						captureError(err)
 						return err
 					}
 
+					captureError(err)
 					return err
 				}
 			}
@@ -831,6 +852,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 					ErrorMsg:          errors.New(errMsg),
 					TraverserLocation: cca.fromTo.From(),
 				})
+				captureError(err)
 				return err
 			}
 		}
@@ -884,10 +906,10 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 	}
 
 	// Get the root object to start synchronization
-	root, err := validateAndGetRootObject(cca.source.Value, cca.fromTo)
-	if err != nil {
-		syncOrchestratorLog(common.LogPanic, fmt.Sprintf("Root object creation failed: %s", err))
-		return err
+	root, rootErr := validateAndGetRootObject(cca.source.Value, cca.fromTo)
+	if rootErr != nil {
+		syncOrchestratorLog(common.LogPanic, fmt.Sprintf("Root object creation failed: %s", rootErr))
+		return rootErr
 	}
 
 	// Ensure proper cleanup in ALL scenarios (success, failure, cancellation)
@@ -926,10 +948,17 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 	if finalizeErr != nil {
 		syncOrchestratorLog(common.LogPanic, fmt.Sprintf("Enumerator finalize failed: %v", finalizeErr))
 		// If no previous error, use the finalize error
-		if err == nil {
+		if err == nil && firstError == nil {
 			err = finalizeErr
 		}
 	}
+
+	// Check if we captured any errors from syncOneDir
+	errorMutex.Lock()
+	if firstError != nil && err == nil {
+		err = firstError
+	}
+	errorMutex.Unlock()
 
 	return err
 }
