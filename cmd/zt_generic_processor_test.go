@@ -86,7 +86,7 @@ func TestCopyTransferProcessorMultipleFiles(t *testing.T) {
 	sampleObjects := processorTestSuiteHelper{}.getSampleObjectList()
 	for _, numOfParts := range []int{1, 3} {
 		numOfTransfersPerPart := len(sampleObjects) / numOfParts
-		copyProcessor := azcopy.NewCopyTransferProcessor(processorTestSuiteHelper{}.getCopyJobTemplate(), numOfTransfersPerPart, newRemoteRes(cc.URL()), newLocalRes(dstDirName), nil, nil, false, false, dryrunNewCopyJobPartOrder)
+		copyProcessor := azcopy.NewCopyTransferProcessor(false, processorTestSuiteHelper{}.getCopyJobTemplate(), numOfTransfersPerPart, newRemoteRes(cc.URL()), newLocalRes(dstDirName), nil, nil, false, false, dryrunNewCopyJobPartOrder)
 
 		// go through the objects and make sure they are processed without error
 		for _, storedObject := range sampleObjects {
@@ -135,7 +135,7 @@ func TestCopyTransferProcessorSingleFile(t *testing.T) {
 
 	// set up the processor
 	blobURL := cc.NewBlobClient(blobList[0]).URL()
-	copyProcessor := azcopy.NewCopyTransferProcessor(processorTestSuiteHelper{}.getCopyJobTemplate(), 2, newRemoteRes(blobURL), newLocalRes(filepath.Join(dstDirName, dstFileName)), nil, nil, false, false, dryrunNewCopyJobPartOrder)
+	copyProcessor := azcopy.NewCopyTransferProcessor(false, processorTestSuiteHelper{}.getCopyJobTemplate(), 2, newRemoteRes(blobURL), newLocalRes(filepath.Join(dstDirName, dstFileName)), nil, nil, false, false, dryrunNewCopyJobPartOrder)
 
 	// exercise the copy transfer processor
 	storedObject := traverser.NewStoredObject(traverser.NoPreProccessor, blobList[0], "", common.EEntityType.File(), time.Now(), 0, traverser.NoContentProps, traverser.NoBlobProps, traverser.NoMetadata, "")

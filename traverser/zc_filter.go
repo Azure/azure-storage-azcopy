@@ -60,6 +60,20 @@ func (f *ExcludeBlobTypeFilter) DoesPass(object StoredObject) bool {
 	return false
 }
 
+func buildExcludeBlobTypeFilter(blobTypes []blob.BlobType) []ObjectFilter {
+	ret := make([]ObjectFilter, 0)
+	if len(blobTypes) == 0 {
+		return ret
+	}
+	excludeSet := map[blob.BlobType]bool{}
+
+	for _, v := range blobTypes {
+		excludeSet[v] = true
+	}
+
+	return append(ret, &ExcludeBlobTypeFilter{BlobTypes: excludeSet})
+}
+
 // excludeContainerFilter filters out container names that must be excluded
 type excludeContainerFilter struct {
 	containerNamesList map[string]bool
@@ -85,6 +99,10 @@ func (s *excludeContainerFilter) DoesPass(storedObject StoredObject) bool {
 }
 
 func buildExcludeContainerFilter(containerNames []string) []ObjectFilter {
+	if len(containerNames) == 0 {
+		return make([]ObjectFilter, 0)
+	}
+
 	excludeContainerSet := make(map[string]bool)
 	for _, name := range containerNames {
 		excludeContainerSet[name] = true
@@ -485,6 +503,9 @@ func formatAsUTC(t time.Time) string {
 }
 
 type FilterOptions struct {
+	IncludeBefore     *time.Time
+	IncludeAfter      *time.Time
+	ExcludeBlobTypes  []blob.BlobType
 	IncludePatterns   []string
 	ExcludePatterns   []string
 	ExcludePaths      []string
@@ -496,10 +517,20 @@ type FilterOptions struct {
 
 // BuildFilters sets up the filters in a specific order
 func BuildFilters(fromTo common.FromTo, source common.ResourceString, recursive bool, opts FilterOptions) []ObjectFilter {
+	filters := make([]ObjectFilter, 0)
+
+	if opts.IncludeBefore != nil {
+		filters = append(filters, &IncludeBeforeDateFilter{Threshold: *opts.IncludeBefore})
+	}
+
+	if opts.IncludeAfter != nil {
+		filters = append(filters, &IncludeAfterDateFilter{Threshold: *opts.IncludeAfter})
+	}
+
 	// Note: includeFilters and includeAttrFilters are ANDed
 	// They must both pass to get the file included
 	// Same rule applies to excludeFilters and excludeAttrFilters
-	filters := BuildIncludeFilters(opts.IncludePatterns)
+	filters = append(filters, BuildIncludeFilters(opts.IncludePatterns)...)
 	if fromTo.From() == common.ELocation.Local() {
 		includeAttrFilters := BuildAttrFilters(opts.IncludeAttributes, source.ValueLocal(), true)
 		filters = append(filters, includeAttrFilters...)
@@ -514,6 +545,8 @@ func BuildFilters(fromTo common.FromTo, source common.ResourceString, recursive 
 	// regex
 	filters = append(filters, BuildRegexFilters(opts.IncludeRegex, true)...)
 	filters = append(filters, BuildRegexFilters(opts.ExcludeRegex, false)...)
+
+	filters = append(filters, buildExcludeBlobTypeFilter(opts.ExcludeBlobTypes)...)
 
 	// after making all filters, log any search prefix computed from them
 	if prefixFilter := FilterSet(filters).GetEnumerationPreFilter(recursive); prefixFilter != "" {
