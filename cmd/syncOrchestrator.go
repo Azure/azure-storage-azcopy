@@ -559,7 +559,7 @@ func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator,
 	// Initialize resource limits based on source/destination types
 	initializeLimits(orchestratorOptions)
 	ret = cca.runSyncOrchestrator(enumerator, ctx)
-	log.Printf("Sync orchestrator returning err:  %s", ret)
+	log.Printf("Sync orchestrator returning err:  %v", ret)
 	return ret
 }
 
