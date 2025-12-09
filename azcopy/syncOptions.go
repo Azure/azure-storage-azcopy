@@ -38,6 +38,7 @@ type cookedSyncOptions struct {
 	includeDirectoryStubs   bool
 	preserveInfo            bool
 	preservePosixProperties bool
+	posixPropertiesStyle    common.PosixPropertiesStyle
 	forceIfReadOnly         bool
 	blockSize               int64
 	putBlobSize             int64
@@ -271,7 +272,8 @@ func (s *cookedSyncOptions) validateOptions() (err error) {
 			return err
 		}
 	} else {
-		err = PerformSMBSpecificValidation(s.fromTo, s.preservePermissions, s.preserveInfo, s.preservePosixProperties)
+		err = PerformSMBSpecificValidation(s.fromTo, s.preservePermissions, s.preserveInfo, s.preservePosixProperties,
+			s.posixPropertiesStyle)
 		if err != nil {
 			return err
 		}

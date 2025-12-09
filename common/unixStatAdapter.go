@@ -1,6 +1,8 @@
 package common
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"strconv"
 	"time"
@@ -22,6 +24,8 @@ const ( // POSIX property metadata
 	POSIXSymlinkMeta       = "is_symlink"
 	POSIXOwnerMeta         = "posix_owner"
 	POSIXGroupMeta         = "posix_group"
+	AMLFSOwnerMeta         = "owner"
+	AMLFSGroupMeta         = "group"
 	POSIXModeMeta          = "permissions"
 	POSIXModTimeMeta       = "modtime"
 	LINUXAttributeMeta     = "linux_attribute"
@@ -50,6 +54,8 @@ var AllLinuxProperties = []string{
 	POSIXCTimeMeta,
 	POSIXModTimeMeta,
 	LINUXAttributeMeta,
+	AMLFSOwnerMeta,
+	AMLFSGroupMeta,
 }
 
 //goland:noinspection GoCommentStart
@@ -216,6 +222,14 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 		s.ownerUID = uint32(o)
 	}
 
+	if owner, ok := TryReadMetadata(metadata, AMLFSOwnerMeta); ok {
+		o, err := strconv.ParseUint(*owner, 10, 32)
+		if err != nil {
+			return s, err
+		}
+		s.ownerUID = uint32(o)
+	}
+
 	if group, ok := TryReadMetadata(metadata, POSIXGroupMeta); ok {
 		g, err := strconv.ParseUint(*group, 10, 32)
 		if err != nil {
@@ -224,12 +238,36 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 		s.groupGID = uint32(g)
 	}
 
-	if mode, ok := TryReadMetadata(metadata, POSIXModeMeta); ok {
-		m, err := strconv.ParseUint(*mode, 10, 32)
+	if group, ok := TryReadMetadata(metadata, AMLFSGroupMeta); ok {
+		g, err := strconv.ParseUint(*group, 10, 32)
 		if err != nil {
 			return s, err
 		}
+		s.groupGID = uint32(g)
+	}
 
+	// In cases, the permissions were uploaded in AMLFS style, determine what base to use
+	looksLikeOctal := func(s string) bool {
+		if len(s) < 1 || len(s) > 4 {
+			return false
+		}
+		for _, r := range s {
+			if r < '0' || r > '7' {
+				return false
+			}
+		}
+		return true
+	}
+
+	if modeStr, ok := TryReadMetadata(metadata, POSIXModeMeta); ok {
+		base := 10
+		if looksLikeOctal(*modeStr) {
+			base = 8
+		}
+		m, err := strconv.ParseUint(*modeStr, base, 32)
+		if err != nil {
+			return s, err
+		}
 		s.mode = uint32(m)
 	}
 
@@ -269,9 +307,16 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 		s.accessTime = time.Unix(0, at)
 	}
 
+	// Always store ModTime in standard POSIX style
 	if mtime, ok := TryReadMetadata(metadata, POSIXModTimeMeta); ok {
 		mt, err := strconv.ParseInt(*mtime, 10, 64)
-		if err != nil {
+		if errors.Is(err, strconv.ErrSyntax) {
+			amlfsTime, err := time.Parse(AMLFS_MOD_TIME_LAYOUT, *mtime)
+			if err != nil {
+				return s, fmt.Errorf("could not parse metadata time: %w", err)
+			}
+			mt = amlfsTime.UnixNano()
+		} else if err != nil {
 			return s, err
 		}
 
@@ -342,11 +387,12 @@ func ClearStatFromBlobMetadata(metadata Metadata) {
 	}
 }
 
-func AddStatToBlobMetadata(s UnixStatAdapter, metadata Metadata) {
+func AddStatToBlobMetadata(s UnixStatAdapter, metadata Metadata, posixStyle PosixPropertiesStyle) {
 	if s == nil {
 		return
 	}
 
+	// applyMode extracts the file type (symlink, folder etc) from raw Unix file mode and adds the corresponding metadata
 	applyMode := func(mode os.FileMode) {
 		modes := map[uint32]string{
 			S_IFCHR:  POSIXCharDeviceMeta,
@@ -380,16 +426,30 @@ func AddStatToBlobMetadata(s UnixStatAdapter, metadata Metadata) {
 		}
 
 		if StatXReturned(mask, STATX_UID) {
-			TryAddMetadata(metadata, POSIXOwnerMeta, strconv.FormatUint(uint64(s.Owner()), 10))
+			if posixStyle == AMLFSPosixPropertiesStyle {
+				TryAddMetadata(metadata, AMLFSOwnerMeta, strconv.FormatUint(uint64(s.Owner()), 10))
+			} else {
+				TryAddMetadata(metadata, POSIXOwnerMeta, strconv.FormatUint(uint64(s.Owner()), 10))
+			}
 		}
 
 		if StatXReturned(mask, STATX_GID) {
-			TryAddMetadata(metadata, POSIXGroupMeta, strconv.FormatUint(uint64(s.Group()), 10))
+			if posixStyle == AMLFSPosixPropertiesStyle {
+				TryAddMetadata(metadata, AMLFSGroupMeta, strconv.FormatUint(uint64(s.Group()), 10))
+			} else {
+				TryAddMetadata(metadata, POSIXGroupMeta, strconv.FormatUint(uint64(s.Group()), 10))
+			}
 		}
 
 		if StatXReturned(mask, STATX_MODE) {
-			TryAddMetadata(metadata, POSIXModeMeta, strconv.FormatUint(uint64(s.FileMode()), 10))
-			applyMode(os.FileMode(s.FileMode()))
+			if posixStyle == AMLFSPosixPropertiesStyle {
+				permissions := fmt.Sprintf("%04o", uint64(s.FileMode()))                  // AMLFS uses octal
+				TryAddMetadata(metadata, POSIXModeMeta, permissions[len(permissions)-4:]) // only needs permission bits
+				applyMode(os.FileMode(s.FileMode()))
+			} else {
+				TryAddMetadata(metadata, POSIXModeMeta, strconv.FormatUint(uint64(s.FileMode()), 10))
+				applyMode(os.FileMode(s.FileMode()))
+			}
 		}
 
 		if StatXReturned(mask, STATX_INO) {
@@ -410,7 +470,11 @@ func AddStatToBlobMetadata(s UnixStatAdapter, metadata Metadata) {
 		}
 
 		if StatXReturned(mask, STATX_MTIME) {
-			TryAddMetadata(metadata, POSIXModTimeMeta, strconv.FormatInt(s.MTime().UnixNano(), 10))
+			if posixStyle == AMLFSPosixPropertiesStyle {
+				TryAddMetadata(metadata, POSIXModTimeMeta, s.MTime().Format(AMLFS_MOD_TIME_LAYOUT))
+			} else {
+				TryAddMetadata(metadata, POSIXModTimeMeta, strconv.FormatInt(s.MTime().UnixNano(), 10))
+			}
 		}
 
 		if StatXReturned(mask, STATX_CTIME) {
