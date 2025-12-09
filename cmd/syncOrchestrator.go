@@ -554,6 +554,7 @@ func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator,
 	}
 
 	orchestratorOptions = enumerator.orchestratorOptions
+	var ret error
 
 	// Initialize resource limits based on source/destination types
 	initializeLimits(orchestratorOptions)
