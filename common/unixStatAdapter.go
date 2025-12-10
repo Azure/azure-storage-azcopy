@@ -307,7 +307,7 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 		s.accessTime = time.Unix(0, at)
 	}
 
-	// Always store ModTime in standard POSIX style
+	// ModTime can be stored in either standard (nanoseconds) or AMLFS (formatted string) format
 	if mtime, ok := TryReadMetadata(metadata, POSIXModTimeMeta); ok {
 		mt, err := strconv.ParseInt(*mtime, 10, 64)
 		if errors.Is(err, strconv.ErrSyntax) {
