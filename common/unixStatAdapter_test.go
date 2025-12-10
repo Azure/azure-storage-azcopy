@@ -1,10 +1,12 @@
 package common
 
 import (
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/stretchr/testify/assert"
+	"strconv"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/stretchr/testify/assert"
 )
 
 func Test_ReadStatFromMetadata(t *testing.T) {
@@ -97,7 +99,7 @@ func Test_AddStatToBlobMetadata(t *testing.T) {
 	statAdapter.devID = uint64(2049)
 
 	metadata := make(Metadata)
-	AddStatToBlobMetadata(statAdapter, metadata)
+	AddStatToBlobMetadata(statAdapter, metadata, StandardPosixPropertiesStyle)
 	a.NotEmpty(metadata)
 	a.Contains(metadata, "linux_statx_mask")
 	a.Equal("8191", *metadata["linux_statx_mask"])
@@ -140,7 +142,7 @@ func Test_AddStatToBlobMetadata(t *testing.T) {
 	metadata["Posix_atime"] = to.Ptr("1702478036104313337")
 	metadata["Modtime"] = to.Ptr("1702376209109248073")
 	metadata["Posix_ctime"] = to.Ptr("1702376216773153924")
-	AddStatToBlobMetadata(statAdapter, metadata)
+	AddStatToBlobMetadata(statAdapter, metadata, StandardPosixPropertiesStyle)
 	a.NotEmpty(metadata)
 	a.Contains(metadata, "Linux_statx_mask")
 	a.Equal("8191", *metadata["Linux_statx_mask"])
@@ -190,7 +192,7 @@ func TestAddReadStatMetadata(t *testing.T) {
 	statAdapter.devID = uint64(2049)
 
 	metadata := make(Metadata)
-	AddStatToBlobMetadata(statAdapter, metadata)
+	AddStatToBlobMetadata(statAdapter, metadata, StandardPosixPropertiesStyle)
 
 	adapter, err := ReadStatFromMetadata(metadata, 1024)
 	a.Nil(err)
@@ -209,4 +211,70 @@ func TestAddReadStatMetadata(t *testing.T) {
 	a.Equal(time.Unix(0, int64(1702478036104313337)), adapter.ATime())
 	a.Equal(time.Unix(0, int64(1702376209109248073)), adapter.MTime())
 	a.Equal(time.Unix(0, int64(1702376216773153924)), adapter.CTime())
+}
+
+func Test_AMLFSAddStatToBlobMetadata(t *testing.T) {
+	a := assert.New(t)
+	statAdapter := UnixStatContainer{size: uint64(1024)}
+	statAdapter.statx = true
+	statAdapter.mask = uint32(8191)
+	statAdapter.attributes = uint64(0)
+	statAdapter.ownerUID = uint32(1000)
+	statAdapter.groupGID = uint32(1000)
+	statAdapter.mode = uint32(0664)
+	mTime, err := time.Parse(AMLFS_MOD_TIME_LAYOUT, "2026-01-01 15:04:05 -0700")
+	a.NoError(err)
+	statAdapter.modTime = mTime
+
+	metadata := make(Metadata)
+	AddStatToBlobMetadata(statAdapter, metadata, AMLFSPosixPropertiesStyle)
+	a.NotEmpty(metadata)
+	a.Contains(metadata, "linux_statx_mask")
+	a.Equal("8191", *metadata["linux_statx_mask"])
+	a.Contains(metadata, "owner")
+	a.Equal("1000", *metadata["owner"])
+	a.Contains(metadata, "group")
+	a.Equal("1000", *metadata["group"])
+	a.Contains(metadata, "permissions")
+	a.Equal("0664", *metadata["permissions"])
+	a.Contains(metadata, "modtime")
+	a.Equal("2026-01-01 15:04:05 -0700", *metadata["modtime"])
+}
+
+func Test_AMLFSReadStatFromBlobMetadata(t *testing.T) {
+	a := assert.New(t)
+
+	statAdapter := UnixStatContainer{size: uint64(1024)}
+	statAdapter.statx = true
+	statAdapter.mask = uint32(8191)
+	statAdapter.attributes = uint64(0)
+	statAdapter.ownerUID = uint32(0)
+	statAdapter.groupGID = uint32(0)
+	statAdapter.mode = uint32(0775)
+	mTime, err := time.Parse(AMLFS_MOD_TIME_LAYOUT, "2026-01-01 15:04:05 -0700")
+	a.NoError(err)
+	statAdapter.modTime = mTime
+
+	metadata := make(Metadata)
+	AddStatToBlobMetadata(statAdapter, metadata, AMLFSPosixPropertiesStyle)
+	a.NotEmpty(metadata)
+	a.Contains(metadata, "owner")
+	a.Equal("0", *metadata["owner"])
+	a.Contains(metadata, "group")
+	a.Equal("0", *metadata["group"])
+	a.Contains(metadata, "permissions")
+	a.Equal("0775", *metadata["permissions"])
+	a.Contains(metadata, "modtime")
+	a.Equal("2026-01-01 15:04:05 -0700", *metadata["modtime"])
+
+	adapter, err := ReadStatFromMetadata(metadata, 1024)
+	a.Nil(err)
+	a.NotNil(adapter)
+	a.True(adapter.Extended())
+	a.Equal(uint32(0), adapter.Owner())
+	a.Equal(uint32(0), adapter.Group())
+	permInt, err := strconv.ParseUint("0775", 8, 32)
+	a.NoError(err)
+	a.Equal(uint32(permInt), adapter.FileMode())
+	a.Equal(time.Unix(0, mTime.UnixNano()), adapter.MTime())
 }

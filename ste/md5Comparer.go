@@ -42,8 +42,6 @@ var errMd5Mismatch = errors.New("the MD5 hash of the data, as we received it, di
 	"This means that either there is a data integrity error OR another tool has failed to keep the stored hash up to date. " +
 	"(NOTE In the specific case of downloading a Page Blob that has been used as a VM disk, the VM has probably changed the content since the hash was set. That's normal, and " +
 	"in that specific case you can simply disable the MD5 check. See the documentation for the check-md5 parameter.)")
-
-// TODO: let's add an aka.ms link to the message, that gives more info
 const noMD5Stored = "no MD5 was stored in the Blob/File service against this file. So the downloaded data cannot be MD5-validated."
 
 var errExpectedMd5Missing = errors.New(noMD5Stored + " This application is currently configured to treat missing MD5 hashes as errors")
