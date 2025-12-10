@@ -419,7 +419,7 @@ func PerformSMBSpecificValidation(fromTo common.FromTo,
 		return errors.New(PreservePOSIXPropertiesIncompatibilityMsg)
 	}
 
-	if posixStyle != common.StandardPosixPropertiesStyle && !preservePOSIXProperties {
+	if posixStyle != common.EPosixPropertiesStyle.Standard() && !preservePOSIXProperties {
 		return errors.New(POSIXStyleMisuse)
 	}
 	if err = validatePreserveSMBPropertyOption(preservePermissions.IsTruthy(),
