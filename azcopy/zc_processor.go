@@ -22,7 +22,7 @@ package azcopy
 
 import (
 	"fmt"
-	"strings"
+	"math/rand"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
@@ -37,6 +37,7 @@ const NumOfFilesPerDispatchJobPart = 10000
 type CopyTransferProcessor struct {
 	numOfTransfersPerPart int
 	CopyJobTemplate       *common.CopyJobPartOrderRequest
+	isCopy                bool
 	source                common.ResourceString
 	destination           common.ResourceString
 
@@ -53,10 +54,11 @@ type CopyTransferProcessor struct {
 	dryrunJobPartOrderHandler func(request common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse
 }
 
-func NewCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int, source, destination common.ResourceString, reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier bool, dryrun bool, dryrunJobPartOrderHandler func(request common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse) *CopyTransferProcessor {
+func NewCopyTransferProcessor(isCopy bool, copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int, source, destination common.ResourceString, reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier bool, dryrun bool, dryrunJobPartOrderHandler func(request common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse) *CopyTransferProcessor {
 	return &CopyTransferProcessor{
 		numOfTransfersPerPart:     numOfTransfersPerPart,
 		CopyJobTemplate:           copyJobTemplate,
+		isCopy:                    isCopy,
 		source:                    source,
 		destination:               destination,
 		reportFirstPartDispatched: reportFirstPartDispatched,
@@ -70,7 +72,6 @@ func NewCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, n
 }
 
 func (s *CopyTransferProcessor) ScheduleSyncRemoveSetPropertiesTransfer(storedObject traverser.StoredObject) (err error) {
-
 	// Escape paths on destinations where the characters are invalid
 	// And re-encode them where the characters are valid.
 	var srcRelativePath, dstRelativePath string
@@ -87,21 +88,33 @@ func (s *CopyTransferProcessor) ScheduleSyncRemoveSetPropertiesTransfer(storedOb
 		}
 	}
 
+	return s.scheduleTransfer(srcRelativePath, dstRelativePath, storedObject)
+}
+
+func (s *CopyTransferProcessor) scheduleTransfer(srcRelativePath, dstRelativePath string, storedObject traverser.StoredObject) (err error) {
 	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(false, srcRelativePath, dstRelativePath, s.preserveAccessTier, s.folderPropertiesOption, s.symlinkHandlingType, s.hardlinkHandlingType)
 
+	// set properties specific code
 	if s.CopyJobTemplate.FromTo.To() == common.ELocation.None() {
 		copyTransfer.BlobTier = s.CopyJobTemplate.BlobAttributes.BlockBlobTier.ToAccessTierType()
 
 		metadataString := s.CopyJobTemplate.BlobAttributes.Metadata
 		metadataMap := common.Metadata{}
 		if len(metadataString) > 0 {
-			for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
-				kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
-				metadataMap[kv[0]] = &kv[1]
+			// Use the proper metadata parsing function that handles escaped semicolons
+			parsedMetadata, err := common.StringToMetadata(metadataString)
+			if err != nil {
+				return fmt.Errorf("invalid metadata format: %w", err)
 			}
+			metadataMap = parsedMetadata
 		}
 		copyTransfer.Metadata = metadataMap
 
+		copyTransfer.BlobTags = common.ToCommonBlobTagsMap(s.CopyJobTemplate.BlobAttributes.BlobTagsString)
+	}
+
+	// copy specific code
+	if s.isCopy && !s.CopyJobTemplate.S2SPreserveBlobTags {
 		copyTransfer.BlobTags = common.ToCommonBlobTagsMap(s.CopyJobTemplate.BlobAttributes.BlobTagsString)
 	}
 
@@ -171,6 +184,9 @@ func (s *CopyTransferProcessor) sendPartToSte() (resp common.CopyJobPartOrderRes
 	if s.dryrunMode {
 		resp = s.dryrunJobPartOrderHandler(*s.CopyJobTemplate)
 	} else {
+		if s.isCopy {
+			shuffleTransfers(s.CopyJobTemplate.Transfers.List)
+		}
 		resp = jobsAdmin.ExecuteNewCopyJobPartOrder(*s.CopyJobTemplate)
 	}
 
@@ -180,4 +196,11 @@ func (s *CopyTransferProcessor) sendPartToSte() (resp common.CopyJobPartOrderRes
 	}
 
 	return resp
+}
+
+// shuffleTransfers shuffles the transfers before they are dispatched
+// this is done to avoid hitting the same partition continuously in an append only pattern
+// TODO this should probably be removed after the high throughput block blob feature is implemented on the service side
+func shuffleTransfers(transfers []common.CopyTransfer) {
+	rand.Shuffle(len(transfers), func(i, j int) { transfers[i], transfers[j] = transfers[j], transfers[i] })
 }

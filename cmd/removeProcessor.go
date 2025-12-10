@@ -57,6 +57,6 @@ func newRemoveTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPart in
 
 	// note that the source and destination, along with the template are given to the generic processor's constructor
 	// this means that given an object with a relative path, this processor already knows how to schedule the right kind of transfers
-	return azcopy.NewCopyTransferProcessor(copyJobTemplate, numOfTransfersPerPart, cca.Source, cca.Destination,
+	return azcopy.NewCopyTransferProcessor(false, copyJobTemplate, numOfTransfersPerPart, cca.Source, cca.Destination,
 		reportFirstPart, reportFinalPart, false, cca.dryrunMode, dryrunNewCopyJobPartOrder)
 }

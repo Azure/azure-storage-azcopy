@@ -42,7 +42,7 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 	}
 
 	// warn on exclude unsupported wildcards here. Include have to be later, to cover list-of-files
-	azcopy.WarnIfAnyHasWildcard(excludeWarningOncer, "exclude-path", cooked.ExcludePathPatterns)
+	azcopy.WarnIfAnyHasWildcard("exclude-path", cooked.ExcludePathPatterns)
 
 	// A combined implementation reduces the amount of code duplication present.
 	// However, it _does_ increase the amount of code-intertwining present.

@@ -103,8 +103,8 @@ type SyncResult struct {
 	ElapsedTime              time.Duration
 }
 
-/* AzCopy internal use only. Exposing these as setters to add a hurdle to their use. */
-
+// SetInternalOptions is used to set options that are not meant to be exposed to the user through the public API.
+// Note: This function is intended for internal use only and should not be used in user applications.
 func (s *SyncOptions) SetInternalOptions(dryrun, deleteDestinationFileIfNecessary bool, cmd string, dryrunJobPartOrderHandler func(request common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse, dryrunDeleteHandler ObjectDeleter) {
 	s.dryrun = dryrun
 	s.dryrunJobPartOrderHandler = dryrunJobPartOrderHandler
