@@ -610,6 +610,7 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaults() {
 	raw.forceWrite = common.EOverwriteOption.True().String()
 	raw.preserveOwner = common.PreserveOwnerDefault
 	raw.hardlinks = common.DefaultHardlinkHandlingType.String()
+	raw.posixPropertiesStyle = common.StandardPosixPropertiesStyle.String()
 }
 
 // represents the processed copy command input from the user
@@ -1806,7 +1807,7 @@ Final Job Status: %v%s%s
 	cpCmd.PersistentFlags().BoolVar(&raw.preservePOSIXProperties, "preserve-posix-properties", false,
 		"False by default. 'Preserves' property info gleaned from stat or statx into object metadata.")
 
-	cpCmd.PersistentFlags().StringVar(&raw.posixPropertiesStyle, "posix-properties-style", "standard",
+	cpCmd.PersistentFlags().StringVar(&raw.posixPropertiesStyle, "posix-properties-style", common.StandardPosixPropertiesStyle.String(),
 		"Accepted values: `standard` (default) and `amlfs`. Use this flag to specify the style of POSIX properties to preserve. "+
 			"\n `amlfs` will preserve POSIX property metadata compatible with Azure Managed Lustre File System."+
 			"\n This flag must be used in-tandem with --preserve-posix-properties.")

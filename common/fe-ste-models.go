@@ -1925,6 +1925,9 @@ func (ppt PosixPropertiesStyle) String() string {
 }
 
 func (ppt *PosixPropertiesStyle) Parse(s string) error {
+	if s == "" { // Default to standard when not set
+		s = StandardPosixPropertiesStyle.String()
+	}
 	val, err := enum.ParseInt(reflect.TypeOf(ppt), s, true, true)
 	if err == nil {
 		*ppt = val.(PosixPropertiesStyle)
