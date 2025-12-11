@@ -18,11 +18,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package azcopy
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
@@ -31,28 +30,28 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 )
 
+type ObjectDeleter func(rootPath string, target common.Location, object traverser.StoredObject) error
+
 // extract the right info from cooked arguments and instantiate a generic copy transfer processor from it
-func newSyncTransferProcessor(cca *cookedSyncCmdArgs,
+func (s *syncer) newSyncTransferProcessor(
 	numOfTransfersPerPart int,
-	fpo common.FolderPropertyOption,
-	copyJobTemplate *common.CopyJobPartOrderRequest) *copyTransferProcessor {
-	reportFirstPart := func(jobStarted bool) { cca.setFirstPartOrdered() } // for compatibility with the way sync has always worked, we don't check jobStarted here
-	reportFinalPart := func() { cca.isEnumerationComplete = true }
+	copyJobTemplate *common.CopyJobPartOrderRequest) *CopyTransferProcessor {
+	reportFirstPart := func(jobStarted bool) { s.spt.setFirstPartOrdered() } // for compatibility with the way sync has always worked, we don't check jobStarted here
+	reportFinalPart := func() { s.spt.setScanningComplete() }
 
 	// note that the source and destination, along with the template are given to the generic processor's constructor
 	// this means that given an object with a relative path, this processor already knows how to schedule the right kind of transfers
-	return newCopyTransferProcessor(copyJobTemplate, numOfTransfersPerPart, cca.source, cca.destination,
-		reportFirstPart, reportFinalPart, cca.preserveAccessTier, cca.dryrunMode)
+	return NewCopyTransferProcessor(false, copyJobTemplate, numOfTransfersPerPart, s.opts.source, s.opts.destination,
+		reportFirstPart, reportFinalPart, s.opts.s2SPreserveAccessTier, s.opts.dryrun, s.opts.dryrunJobPartOrderHandler)
 }
 
 // base for delete processors targeting different resources
 type interactiveDeleteProcessor struct {
 	// the plugged-in deleter that performs the actual deletion
-	deleter traverser.ObjectProcessor
+	deleter ObjectDeleter
 
 	// whether we should ask the user for permission the first time we delete a file
 	shouldPromptUser bool
@@ -63,6 +62,7 @@ type interactiveDeleteProcessor struct {
 	// used for prompt message
 	// examples: "blob", "local file", etc.
 	objectTypeToDisplay string
+	target              common.Location
 
 	// used for prompt message
 	// examples: a directory path, or url to container
@@ -70,9 +70,6 @@ type interactiveDeleteProcessor struct {
 
 	// count the deletions that happened
 	incrementDeletionCount func()
-
-	// dryrunMode
-	dryrunMode bool
 }
 
 func (d *interactiveDeleteProcessor) removeImmediately(object traverser.StoredObject) (err error) {
@@ -84,36 +81,10 @@ func (d *interactiveDeleteProcessor) removeImmediately(object traverser.StoredOb
 		return nil
 	}
 
-	if d.dryrunMode {
-		glcm.Dryrun(func(format OutputFormat) string {
-			if format == EOutputFormat.Json() {
-				deleteTarget := common.ELocation.Local()
-				if d.objectTypeToDisplay != LocalFileObjectType {
-					_ = deleteTarget.Parse(d.objectTypeToDisplay)
-				}
-
-				tx := DryrunTransfer{
-					Source:     common.GenerateFullPath(d.objectLocationToDisplay, object.RelativePath),
-					BlobType:   common.FromBlobType(object.BlobType),
-					EntityType: object.EntityType,
-					FromTo:     common.FromToValue(deleteTarget, common.ELocation.Unknown()),
-				}
-
-				jsonOutput, err := json.Marshal(tx)
-				common.PanicIfErr(err)
-				return string(jsonOutput)
-			} else { // remove for sync
-				return fmt.Sprintf("DRYRUN: remove %v",
-					common.GenerateFullPath(d.objectLocationToDisplay, object.RelativePath))
-			}
-		})
-		return nil
-	}
-
-	err = d.deleter(object)
+	err = d.deleter(d.objectLocationToDisplay, d.target, object)
 	if err != nil {
 		msg := fmt.Sprintf("error %s deleting the object %s", err.Error(), object.RelativePath)
-		glcm.Info(msg + "; check the scanning log file for more details")
+		common.GetLifecycleMgr().Info(msg + "; check the scanning log file for more details")
 		if common.AzcopyScanningLogger != nil {
 			common.AzcopyScanningLogger.Log(common.LogError, msg+": "+err.Error())
 		}
@@ -126,7 +97,7 @@ func (d *interactiveDeleteProcessor) removeImmediately(object traverser.StoredOb
 }
 
 func (d *interactiveDeleteProcessor) promptForConfirmation(object traverser.StoredObject) (shouldDelete bool, keepPrompting bool) {
-	answer := glcm.Prompt(fmt.Sprintf("The %s '%s' does not exist at the source. "+
+	answer := common.GetLifecycleMgr().Prompt(fmt.Sprintf("The %s '%s' does not exist at the source. "+
 		"Do you wish to delete it from the destination(%s)?",
 		d.objectTypeToDisplay, object.RelativePath, d.objectLocationToDisplay),
 		common.PromptDetails{
@@ -145,96 +116,81 @@ func (d *interactiveDeleteProcessor) promptForConfirmation(object traverser.Stor
 		// print nothing, since the deleter is expected to log the message when the delete happens
 		return true, true
 	case common.EResponseOption.YesForAll():
-		glcm.Info(fmt.Sprintf("Confirmed. All the extra %ss will be deleted.", d.objectTypeToDisplay))
+		common.GetLifecycleMgr().Info(fmt.Sprintf("Confirmed. All the extra %ss will be deleted.", d.objectTypeToDisplay))
 		return true, false
 	case common.EResponseOption.No():
-		glcm.Info(fmt.Sprintf("Keeping extra %s: %s", d.objectTypeToDisplay, object.RelativePath))
+		common.GetLifecycleMgr().Info(fmt.Sprintf("Keeping extra %s: %s", d.objectTypeToDisplay, object.RelativePath))
 		return false, true
 	case common.EResponseOption.NoForAll():
-		glcm.Info("No deletions will happen from now onwards.")
+		common.GetLifecycleMgr().Info("No deletions will happen from now onwards.")
 		return false, false
 	default:
-		glcm.Info(fmt.Sprintf("Unrecognizable answer, keeping extra %s: %s.", d.objectTypeToDisplay, object.RelativePath))
+		common.GetLifecycleMgr().Info(fmt.Sprintf("Unrecognizable answer, keeping extra %s: %s.", d.objectTypeToDisplay, object.RelativePath))
 		return false, true
 	}
 }
 
-func newInteractiveDeleteProcessor(deleter traverser.ObjectProcessor, deleteDestination common.DeleteDestination,
-	objectTypeToDisplay string, objectLocationToDisplay common.ResourceString, incrementDeletionCounter func(), dryrun bool) *interactiveDeleteProcessor {
-
+func newInteractiveDeleteProcessor(deleter ObjectDeleter, deleteDestination common.DeleteDestination,
+	target common.Location, objectLocationToDisplay common.ResourceString, incrementDeletionCounter func()) *interactiveDeleteProcessor {
+	objectTypeToDisplay := common.Iff(target == common.ELocation.Local(), LocalFileObjectType, target.String())
 	return &interactiveDeleteProcessor{
 		deleter:                 deleter,
 		objectTypeToDisplay:     objectTypeToDisplay,
+		target:                  target,
 		objectLocationToDisplay: objectLocationToDisplay.Value,
 		incrementDeletionCount:  incrementDeletionCounter,
 		shouldPromptUser:        deleteDestination == common.EDeleteDestination.Prompt(),
 		shouldDelete:            deleteDestination == common.EDeleteDestination.True(), // if shouldPromptUser is true, this will start as false, but we will determine its value later
-		dryrunMode:              dryrun,
 	}
 }
 
 const LocalFileObjectType = "local file"
 
-func newSyncLocalDeleteProcessor(cca *cookedSyncCmdArgs, fpo common.FolderPropertyOption) *interactiveDeleteProcessor {
-	localDeleter := localFileDeleter{rootPath: cca.destination.ValueLocal(), fpo: fpo, folderManager: common.NewFolderDeletionManager(context.Background(), fpo, common.AzcopyScanningLogger)}
-	return newInteractiveDeleteProcessor(localDeleter.deleteFile, cca.deleteDestination, LocalFileObjectType, cca.destination, cca.incrementDeletionCount, cca.dryrunMode)
+func NewLocalFileDeleter(fpo common.FolderPropertyOption) localFileDeleter {
+	return localFileDeleter{
+		fpo:           fpo,
+		folderManager: common.NewFolderDeletionManager(context.TODO(), fpo, common.AzcopyScanningLogger),
+	}
 }
 
 type localFileDeleter struct {
-	rootPath      string
 	fpo           common.FolderPropertyOption
 	folderManager common.FolderDeletionManager
 }
 
-func (l *localFileDeleter) getObjectURL(object traverser.StoredObject) *url.URL {
+func (l localFileDeleter) getObjectURL(object traverser.StoredObject) *url.URL {
 	return &url.URL{
 		Scheme: "local",
 		Path:   "/" + strings.ReplaceAll(object.RelativePath, "\\", "/"), // consolidate to forward slashes
 	}
 }
 
-func (l *localFileDeleter) deleteFile(object traverser.StoredObject) error {
+func (l localFileDeleter) Delete(rootPath string, _ common.Location, object traverser.StoredObject) error {
 	objectURI := l.getObjectURL(object)
 	l.folderManager.RecordChildExists(objectURI)
 
 	if object.EntityType == common.EEntityType.File() {
 		msg := "Deleting extra file: " + object.RelativePath
-		glcm.Info(msg)
+		common.GetLifecycleMgr().Info(msg)
 		if common.AzcopyScanningLogger != nil {
 			common.AzcopyScanningLogger.Log(common.LogInfo, msg)
 		}
-		err := os.Remove(common.GenerateFullPath(l.rootPath, object.RelativePath))
+		err := os.Remove(common.GenerateFullPath(rootPath, object.RelativePath))
 		l.folderManager.RecordChildDeleted(objectURI)
 		return err
 	} else if object.EntityType == common.EEntityType.Folder() && l.fpo != common.EFolderPropertiesOption.NoFolders() {
 		msg := "Deleting extra folder: " + object.RelativePath
-		glcm.Info(msg)
+		common.GetLifecycleMgr().Info(msg)
 		if common.AzcopyScanningLogger != nil {
 			common.AzcopyScanningLogger.Log(common.LogInfo, msg)
 		}
 
 		l.folderManager.RequestDeletion(objectURI, func(ctx context.Context, logger common.ILogger) bool {
-			return os.Remove(common.GenerateFullPath(l.rootPath, object.RelativePath)) == nil
+			return os.Remove(common.GenerateFullPath(rootPath, object.RelativePath)) == nil
 		})
 	}
 
 	return nil
-}
-
-func newSyncDeleteProcessor(cca *cookedSyncCmdArgs, fpo common.FolderPropertyOption, dstClient *common.ServiceClient) (*interactiveDeleteProcessor, error) {
-	rawURL, err := cca.destination.FullURL()
-	if err != nil {
-		return nil, err
-	}
-
-	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-
-	deleter, err := newRemoteResourceDeleter(ctx, dstClient, rawURL, cca.fromTo.To(), fpo, cca.forceIfReadOnly)
-	if err != nil {
-		return nil, err
-	}
-
-	return newInteractiveDeleteProcessor(deleter.delete, cca.deleteDestination, cca.fromTo.To().String(), cca.destination, cca.incrementDeletionCount, cca.dryrunMode), nil
 }
 
 type remoteResourceDeleter struct {
@@ -242,13 +198,12 @@ type remoteResourceDeleter struct {
 	containerName   string // name of target container/share/filesystem
 	rootPath        string
 	ctx             context.Context
-	targetLocation  common.Location
 	folderManager   common.FolderDeletionManager
 	folderOption    common.FolderPropertyOption
 	forceIfReadOnly bool
 }
 
-func newRemoteResourceDeleter(ctx context.Context, remoteClient *common.ServiceClient, rawRootURL *url.URL, targetLocation common.Location, fpo common.FolderPropertyOption, forceIfReadOnly bool) (*remoteResourceDeleter, error) {
+func NewRemoteResourceDeleter(ctx context.Context, remoteClient *common.ServiceClient, rawRootURL *url.URL, fpo common.FolderPropertyOption, forceIfReadOnly bool) (*remoteResourceDeleter, error) {
 	containerName, rootPath, err := common.SplitContainerNameFromPath(rawRootURL.String())
 	if err != nil {
 		return nil, err
@@ -258,7 +213,6 @@ func newRemoteResourceDeleter(ctx context.Context, remoteClient *common.ServiceC
 		rootPath:        rootPath,
 		remoteClient:    remoteClient,
 		ctx:             ctx,
-		targetLocation:  targetLocation,
 		folderManager:   common.NewFolderDeletionManager(ctx, fpo, common.AzcopyScanningLogger),
 		folderOption:    fpo,
 		forceIfReadOnly: forceIfReadOnly,
@@ -273,20 +227,20 @@ func (b *remoteResourceDeleter) getObjectURL(objectURL string) (*url.URL, error)
 	return u, nil
 }
 
-func (b *remoteResourceDeleter) delete(object traverser.StoredObject) error {
+func (b *remoteResourceDeleter) Delete(_ string, target common.Location, object traverser.StoredObject) error {
 	/* knarasim: This needs to be taken care of
 	if b.targetLocation == common.ELocation.BlobFS() && object.EntityType == common.EEntityType.Folder() {
 		b.clientOptions.PerCallPolicies = append([]policy.Policy{common.NewRecursivePolicy()}, b.clientOptions.PerCallPolicies...)
 	}
 	*/
 	objectPath := path.Join(b.rootPath, object.RelativePath)
-	if object.RelativePath == "\x00" && b.targetLocation != common.ELocation.Blob() {
+	if object.RelativePath == "\x00" && target != common.ELocation.Blob() {
 		return nil // Do nothing, we don't want to accidentally delete the root.
 	} else if object.RelativePath == "\x00" { // this is acceptable on blob, though. Dir stubs are a thing, and they aren't necessary for normal function.
 		objectPath = b.rootPath
 	}
 
-	if strings.HasSuffix(object.RelativePath, "/") && !strings.HasSuffix(objectPath, "/") && b.targetLocation == common.ELocation.Blob() {
+	if strings.HasSuffix(object.RelativePath, "/") && !strings.HasSuffix(objectPath, "/") && target == common.ELocation.Blob() {
 		// If we were targeting a directory, we still need to be. path.join breaks that.
 		// We also want to defensively code around this, and make sure we are not putting folder// or trying to put a weird URI in to an endpoint that can't do this.
 		objectPath += "/"
@@ -296,7 +250,7 @@ func (b *remoteResourceDeleter) delete(object traverser.StoredObject) error {
 	if object.EntityType == common.EEntityType.File() {
 		// TODO: use b.targetLocation.String() in the next line, instead of "object", if we can make it come out as string
 		msg := "Deleting extra object: " + object.RelativePath
-		glcm.Info(msg)
+		common.GetLifecycleMgr().Info(msg)
 		if common.AzcopyScanningLogger != nil {
 			common.AzcopyScanningLogger.Log(common.LogInfo, msg)
 		}
@@ -304,7 +258,7 @@ func (b *remoteResourceDeleter) delete(object traverser.StoredObject) error {
 		var err error
 		var objURL *url.URL
 
-		switch b.targetLocation {
+		switch target {
 		case common.ELocation.Blob():
 			bsc, _ := sc.BlobServiceClient()
 			var blobClient *blob.Client = bsc.NewContainerClient(b.containerName).NewBlobClient(objectPath)
@@ -349,7 +303,7 @@ func (b *remoteResourceDeleter) delete(object traverser.StoredObject) error {
 
 		if err != nil {
 			msg := fmt.Sprintf("error %s deleting the object %s", err.Error(), object.RelativePath)
-			glcm.Info(msg + "; check the scanning log file for more details")
+			common.GetLifecycleMgr().Info(msg + "; check the scanning log file for more details")
 			if common.AzcopyScanningLogger != nil {
 				common.AzcopyScanningLogger.Log(common.LogError, msg+": "+err.Error())
 			}
@@ -360,7 +314,7 @@ func (b *remoteResourceDeleter) delete(object traverser.StoredObject) error {
 		return nil
 	} else if object.EntityType == common.EEntityType.Symlink() {
 		msg := "Deleting extra object: " + object.RelativePath
-		glcm.Info(msg)
+		common.GetLifecycleMgr().Info(msg)
 		if common.AzcopyScanningLogger != nil {
 			common.AzcopyScanningLogger.Log(common.LogInfo, msg)
 		}
@@ -368,7 +322,7 @@ func (b *remoteResourceDeleter) delete(object traverser.StoredObject) error {
 		var err error
 		var objURL *url.URL
 
-		switch b.targetLocation {
+		switch target {
 		case common.ELocation.FileNFS():
 			fsc, _ := sc.FileServiceClient()
 			fileClient := fsc.NewShareClient(b.containerName).NewRootDirectoryClient().NewFileClient(objectPath)
@@ -389,7 +343,7 @@ func (b *remoteResourceDeleter) delete(object traverser.StoredObject) error {
 
 		if err != nil {
 			msg := fmt.Sprintf("error %s deleting the object %s", err.Error(), object.RelativePath)
-			glcm.Info(msg + "; check the scanning log file for more details")
+			common.GetLifecycleMgr().Info(msg + "; check the scanning log file for more details")
 			if common.AzcopyScanningLogger != nil {
 				common.AzcopyScanningLogger.Log(common.LogError, msg+": "+err.Error())
 			}
@@ -446,7 +400,7 @@ func (b *remoteResourceDeleter) delete(object traverser.StoredObject) error {
 		var deleteFunc func(ctx context.Context, logger common.ILogger) bool
 		var objURL *url.URL
 		var err error
-		switch b.targetLocation {
+		switch target {
 		case common.ELocation.Blob():
 			bsc, _ := sc.BlobServiceClient()
 			blobClient := bsc.NewContainerClient(b.containerName).NewBlobClient(objectPath)

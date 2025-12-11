@@ -1,7 +1,7 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 )
 
 // ResourceTracker tracks resources
@@ -43,12 +43,12 @@ func CreateResource[T ResourceManager](a Asserter, base ResourceManager, def Mat
 	}
 
 	// Create the resource(s)
-	definition.ApplyDefinition(a, base, map[cmd.LocationLevel]func(Asserter, ResourceManager, ResourceDefinition){
-		cmd.ELocationLevel.Container(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
+	definition.ApplyDefinition(a, base, map[azcopy.LocationLevel]func(Asserter, ResourceManager, ResourceDefinition){
+		azcopy.ELocationLevel.Container(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
 			manager.(ContainerResourceManager).Create(a, definition.(ResourceDefinitionContainer).Properties)
 		},
 
-		cmd.ELocationLevel.Object(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
+		azcopy.ELocationLevel.Object(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
 			objDef := definition.(ResourceDefinitionObject)
 			manager.(ObjectResourceManager).Create(a, objDef.Body, objDef.ObjectProperties)
 		},
