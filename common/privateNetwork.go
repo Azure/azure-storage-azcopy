@@ -114,7 +114,7 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 	var peIP string
 	var lastErrorCode int
 
-	log.Printf("*****Request Method: %s, Host: %s, Query: %s, Body: %v, URI: %s****", req.Method, req.URL.Host, req.URL.RawQuery, req.Body, req.RequestURI)
+	//log.Printf("*****Request Method: %s, Host: %s, Query: %s, Body: %v, URI: %s****", req.Method, req.URL.Host, req.URL.RawQuery, req.Body, req.RequestURI)
 	numPrivateEndpoints := GetGlobalPrivateEndpointIPCount()
 	for iter := 0; iter < numPrivateEndpoints; iter++ {
 
@@ -153,7 +153,7 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 			var isRetryableErr bool
 			var isS3AccessDeniedErr bool
 
-			log.Printf("[Counter=%d Retry=%d] Sending request to PrivateEndpoint IP: %s (Host header: %s)", idx, ipAttempt, clonedReq.URL.Host, clonedReq.Host)
+			//log.Printf("[Counter=%d Retry=%d] Sending request to PrivateEndpoint IP: %s (Host header: %s)", idx, ipAttempt, clonedReq.URL.Host, clonedReq.Host)
 
 			resp, err := rr.transport.RoundTrip(clonedReq)
 			if err == nil {
@@ -195,7 +195,7 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 					}
 
 				} else {
-					log.Printf("[Counter=%d Retry=%d] SUCCESS using IP %s", idx, ipAttempt, peIP)
+					//log.Printf("[Counter=%d Retry=%d] SUCCESS using IP %s", idx, ipAttempt, peIP)
 				}
 
 				globalPrivateEndpointIPs[idx].IncrementNumRequests()
