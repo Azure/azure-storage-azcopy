@@ -638,6 +638,11 @@ func (cca *cookedSyncCmdArgs) GetSymlinkSkipped() uint32 {
 	return atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)
 }
 
+// GetSymlinkSkipped returns the number of symbolic links skipped during sync.
+func (cca *cookedSyncCmdArgs) GetHardlinkSkipped() uint32 {
+	return atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)
+}
+
 // GetSpecialFileSkipped returns the number of special files skipped during sync.
 func (cca *cookedSyncCmdArgs) GetSpecialFileSkipped() uint32 {
 	return atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount)

@@ -221,6 +221,10 @@ func (env *AzCopyEnvironment) DefaultPlanLoc(a ScenarioAsserter, ctx context.Con
 	return *env.JobPlanLocation
 }
 
+func (env *AzCopyEnvironment) DefaultSyncOrchestratorTestMode(a ScenarioAsserter, ctx context.Context) string {
+	return string(common.SyncOrchTestModeDefault)
+}
+
 func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager, id int) string {
 	intendedAuthType := EExplicitCredentialType.SASToken()
 	var opts GetURIOptions
@@ -438,6 +442,9 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 					}
 				}
 			}
+			for key, value := range ieMap {
+				fmt.Printf("%s: %v\n", key, value)
+			}
 		}
 
 		return out
@@ -526,6 +533,8 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	}
 	in, err := command.StdinPipe()
 	a.NoError("get stdin pipe", err)
+
+	// fmt.Println("Running AzCopy command: ", strings.Join(command.Args, " "))
 
 	err = command.Start()
 	a.Assert("run command", IsNil{}, err)
