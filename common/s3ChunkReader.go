@@ -8,7 +8,6 @@ import (
 	"hash"
 	"io"
 	"sync"
-	"time"
 )
 
 // IRemoteSourceInfoProvider interface is imported from ste package
@@ -77,7 +76,7 @@ func (cr *S3ChunkReader) unuse() {
 func (cr *S3ChunkReader) BlockingPrefetch(_ io.ReaderAt, isRetry bool) error {
 	cr.use()
 	defer cr.unuse()
-	GetLifecycleMgr().Info(fmt.Sprintf("BlockingPrefetch called for chunkId: %v, length: %d, isRetry: %v", cr.chunkId, cr.length, isRetry))
+	//GetLifecycleMgr().Info(fmt.Sprintf("BlockingPrefetch called for chunkId: %v, length: %d, isRetry: %v", cr.chunkId, cr.length, isRetry))
 
 	if cr.buffer != nil {
 		GetLifecycleMgr().Info(fmt.Sprintf("BlockingPrefetch: Buffer already prefetched for chunkId: %v", cr.chunkId))
@@ -98,7 +97,7 @@ func (cr *S3ChunkReader) BlockingPrefetch(_ io.ReaderAt, isRetry bool) error {
 	}
 
 	targetBuffer := cr.slicePool.RentSlice(cr.length)
-	GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: Allocated buffer of length: %d for chunkId: %v", cr.length, cr.chunkId))
+	//GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: Allocated buffer of length: %d for chunkId: %v", cr.length, cr.chunkId))
 
 	// release close lock for network call
 	cr.muClose.Unlock()
@@ -108,7 +107,7 @@ func (cr *S3ChunkReader) BlockingPrefetch(_ io.ReaderAt, isRetry bool) error {
 	var body io.ReadCloser
 	//var responseBody []byte
 
-	startGet := time.Now()
+	//startGet := time.Now()
 	if !isRetry {
 		// body, err = cr.sourceInfoProvider.GetObjectRange(cr.chunkId.offsetInFile, cr.length)
 		body, n, err, readErr = WithoutResponseNetworkRetry(
@@ -130,9 +129,9 @@ func (cr *S3ChunkReader) BlockingPrefetch(_ io.ReaderAt, isRetry bool) error {
 				return cr.sourceInfoProvider.GetObjectRange(cr.chunkId.offsetInFile, cr.length)
 			})
 	}
-	endGet := time.Now()
-	GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader:GetObjectRange chunk=%v start=%v end=%v duration=%v err=%v",
-		cr.chunkId, startGet.Format(time.RFC3339Nano), endGet.Format(time.RFC3339Nano), endGet.Sub(startGet), err))
+	// endGet := time.Now()
+	// GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader:GetObjectRange chunk=%v start=%v end=%v duration=%v err=%v",
+	// 	cr.chunkId, startGet.Format(time.RFC3339Nano), endGet.Format(time.RFC3339Nano), endGet.Sub(startGet), err))
 
 	cr.muClose.Lock()
 	// cleanup
@@ -159,7 +158,7 @@ func (cr *S3ChunkReader) BlockingPrefetch(_ io.ReaderAt, isRetry bool) error {
 	}
 	// success
 	cr.buffer = targetBuffer
-	GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: Successfully fetched %d bytes from S3 and stored in buffer for chunkId: %v", n, cr.chunkId))
+	//GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: Successfully fetched %d bytes from S3 and stored in buffer for chunkId: %v", n, cr.chunkId))
 	return nil
 }
 
