@@ -159,9 +159,10 @@ type AzCopyEnvironment struct {
 
 	// These fields should almost never be intentionally set by a test writer unless the author really knows what they're doing,
 	// as the fields are automatically controlled.
-	ParentContext *AzCopyEnvironmentContext
-	EnvironmentId *uint
-	RunCount      *uint
+	ParentContext          *AzCopyEnvironmentContext
+	EnvironmentId          *uint
+	RunCount               *uint
+	AzcopyConcurrencyValue *string `env:"AZCOPY_CONCURRENCY_VALUE"`
 }
 
 func (env *AzCopyEnvironment) InheritEnvVar(name string) {
@@ -221,14 +222,10 @@ func (env *AzCopyEnvironment) DefaultPlanLoc(a ScenarioAsserter, ctx context.Con
 }
 
 func (env *AzCopyEnvironment) DefaultSyncOrchestratorTestMode(a ScenarioAsserter, ctx context.Context) string {
-	if env.SyncOrchestratorTestMode == nil {
-		env.SyncOrchestratorTestMode = pointerTo(string(common.SyncOrchTestModeNone))
-	}
-
-	return *env.SyncOrchestratorTestMode
+	return string(common.SyncOrchTestModeDefault)
 }
 
-func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) string {
+func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager, id int) string {
 	intendedAuthType := EExplicitCredentialType.SASToken()
 	var opts GetURIOptions
 	if tgt, ok := target.(AzCopyTarget); ok {
@@ -245,6 +242,24 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 		intendedAuthType = EExplicitCredentialType.S3()
 	} else if target.Location() == common.ELocation.GCP() {
 		intendedAuthType = EExplicitCredentialType.GCP()
+	}
+
+	if target.Account() != nil {
+		availableTypes := target.Account().AvailableAuthTypes()
+		if !availableTypes.Includes(intendedAuthType) {
+			log := fmt.Sprintf("requested auth type %s is not supported by account %s (target #%d); falling back to ",
+				intendedAuthType.String(), target.Account().AccountName(), id)
+			switch {
+			case availableTypes.Includes(EExplicitCredentialType.OAuth()):
+				intendedAuthType = EExplicitCredentialType.OAuth()
+			case availableTypes.Includes(EExplicitCredentialType.SASToken()):
+				intendedAuthType = EExplicitCredentialType.SASToken()
+			default:
+				intendedAuthType = EExplicitCredentialType.None()
+			}
+			log += intendedAuthType.String()
+			a.Log(log)
+		}
 	}
 
 	switch intendedAuthType {
@@ -366,8 +381,8 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 			out = append(out, v)
 		}
 
-		for _, v := range commandSpec.Targets {
-			out = append(out, commandSpec.applyTargetAuth(a, v))
+		for k, v := range commandSpec.Targets {
+			out = append(out, commandSpec.applyTargetAuth(a, v, k))
 		}
 
 		if commandSpec.Flags == nil {
@@ -426,6 +441,9 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 						out = append(out, v)
 					}
 				}
+			}
+			for key, value := range ieMap {
+				fmt.Printf("%s: %v\n", key, value)
 			}
 		}
 
@@ -515,6 +533,8 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	}
 	in, err := command.StdinPipe()
 	a.NoError("get stdin pipe", err)
+
+	// fmt.Println("Running AzCopy command: ", strings.Join(command.Args, " "))
 
 	err = command.Start()
 	a.Assert("run command", IsNil{}, err)
