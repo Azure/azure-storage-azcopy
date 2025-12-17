@@ -238,7 +238,8 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			return fmt.Errorf("cannot list objects, %v", objectInfo.Err)
 		}
 
-		if objectInfo.StorageClass == "" && !t.includeDirectoryOrPrefix {
+		isPotentialDirectory := objectInfo.StorageClass == "" && (strings.HasSuffix(objectInfo.Key, "/") || objectInfo.Size == 0)
+		if isPotentialDirectory && !t.includeDirectoryOrPrefix {
 			// Directories are the only objects without storage classes.
 			// Skip directories if not using sync orchestrator
 			continue
@@ -254,7 +255,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 		objectPath := strings.Split(objectInfo.Key, "/")
 		objectName := objectPath[len(objectPath)-1]
 		var storedObject StoredObject
-		if objectInfo.StorageClass == "" {
+		if isPotentialDirectory && objectInfo.Size == 0 && strings.HasSuffix(objectInfo.Key, "/") {
 
 			// For sync orchestrator, we need to treat directories as objects.
 			storedObject = newStoredObject(
@@ -373,7 +374,7 @@ func newS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTrave
 // For info see: https://github.com/aws/aws-sdk-go/issues/720#issuecomment-243891223
 // Once we change to bucketExists, assuming its reliable, we will be able to re allow this URL type.
 func showS3UrlTypeWarning(s3URLParts common.S3URLParts) {
-	if strings.EqualFold(s3URLParts.Host, "s3.amazonaws.com") {
+	if strings.EqualFold(s3URLParts.Host, "s3."+common.GetS3CompatibleSuffix()) {
 		s3UrlWarningOncer.Do(func() {
 			glcm.Info("Instead of transferring from the 's3.amazonaws.com' URL, in this version of AzCopy we recommend you " +
 				"use a region-specific endpoint to transfer from one specific region. E.g. s3.us-east-1.amazonaws.com or a virtual-hosted reference to a single bucket.")

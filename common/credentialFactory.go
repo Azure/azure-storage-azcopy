@@ -68,6 +68,7 @@ func CreateS3Credential(ctx context.Context, credInfo CredentialInfo, options Cr
 	case ECredentialType.S3PublicBucket():
 		return credentials.NewStatic("", "", "", credentials.SignatureAnonymous), nil
 	case ECredentialType.S3AccessKey():
+		fmt.Println("Using s3accesskey from env var")
 		accessKeyID := GetEnvironmentVariable(EEnvironmentVariable.AWSAccessKeyID())
 		secretAccessKey := GetEnvironmentVariable(EEnvironmentVariable.AWSSecretAccessKey())
 		sessionToken := GetEnvironmentVariable(EEnvironmentVariable.AwsSessionToken())
