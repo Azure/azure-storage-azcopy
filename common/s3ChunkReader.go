@@ -134,29 +134,31 @@ func (cr *S3ChunkReader) BlockingPrefetch(_ io.ReaderAt, isRetry bool) error {
 	// 	cr.chunkId, startGet.Format(time.RFC3339Nano), endGet.Format(time.RFC3339Nano), endGet.Sub(startGet), err))
 
 	cr.muClose.Lock()
-	// cleanup
-	cr.slicePool.ReturnSlice(targetBuffer)
-	cr.cacheLimiter.Remove(cr.length)
 
+	// Check for errors and return buffer only on error (similar to singleChunkReader)
 	if body == nil {
 		err = fmt.Errorf("nil body returned from GetObjectRange for chunkId: %v", cr.chunkId)
 		GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: GetObjectRange returned null for the for chunkId: %v", cr.chunkId))
+		cr.returnSlice(targetBuffer)
 		return err
 	}
 	if err != nil {
 		GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: GetObjectRange failed for chunkId: %v err %v", cr.chunkId, err))
+		cr.returnSlice(targetBuffer)
 		return err
 	}
 	if readErr != nil {
 		GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: ReadFull failed for chunkId: %v readErr: %v", cr.chunkId, readErr))
+		cr.returnSlice(targetBuffer)
 		return readErr
 	}
 	if int64(n) != cr.length {
 		err := fmt.Errorf("bytes read not equal to expected length: got %d expected %d", n, cr.length)
 		GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: Read length mismatch for chunkId: %v err: %v", cr.chunkId, err))
+		cr.returnSlice(targetBuffer)
 		return err
 	}
-	// success
+	// success - keep the buffer, don't return it to pool yet
 	cr.buffer = targetBuffer
 	//GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: Successfully fetched %d bytes from S3 and stored in buffer for chunkId: %v", n, cr.chunkId))
 	return nil
