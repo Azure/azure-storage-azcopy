@@ -142,11 +142,7 @@ func (c cliResumeHandler) OnTransferProgress(progress azcopy.ResumeJobProgress) 
 			common.PanicIfErr(err)
 			return string(jsonOutput)
 		} else {
-			return azcopy.GetCopyProgress(azcopy.CopyProgress{
-				ListJobSummaryResponse: progress.ListJobSummaryResponse,
-				Throughput:             progress.Throughput,
-				ElapsedTime:            progress.ElapsedTime,
-			}, false)
+			return azcopy.GetCopyProgress(azcopy.CopyProgress(progress), false)
 		}
 	}
 
