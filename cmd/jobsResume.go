@@ -70,7 +70,7 @@ func init() {
 			if err != nil {
 				glcm.Error(fmt.Sprintf("failed to perform resume command due to error: %s", err.Error()))
 			}
-			glcm.Exit(nil, EExitCode.Success())
+			glcm.SurrenderControl()
 		},
 	}
 
@@ -106,7 +106,7 @@ func (rca resumeCmdArgs) process() error {
 	resumeOptions := azcopy.ResumeJobOptions{
 		SourceSAS:      rca.SourceSAS,
 		DestinationSAS: rca.DestinationSAS,
-		Handler:        CLIResumeHandler{},
+		Handler:        cliResumeHandler{},
 	}
 	// Create a context that can be cancelled by Ctrl-C
 	ctx, cancel := context.WithCancel(context.Background())
@@ -120,18 +120,47 @@ func (rca resumeCmdArgs) process() error {
 		cancel()
 	}()
 
-	summary, err := Client.ResumeJob(ctx, jobID, resumeOptions)
+	_, err = Client.ResumeJob(ctx, jobID, resumeOptions)
 	if err != nil {
 		return fmt.Errorf("error resuming job %s. failed with error: %v", jobID, err)
 	}
 
+	return nil
+}
+
+type cliResumeHandler struct {
+}
+
+func (c cliResumeHandler) OnStart(ctx azcopy.JobContext) {
+	glcm.Init(GetStandardInitOutputBuilder(ctx.JobID.String(), ctx.LogPath, false, ""))
+}
+
+func (c cliResumeHandler) OnTransferProgress(progress azcopy.ResumeJobProgress) {
+	builder := func(format OutputFormat) string {
+		if format == EOutputFormat.Json() {
+			jsonOutput, err := json.Marshal(progress.ListJobSummaryResponse)
+			common.PanicIfErr(err)
+			return string(jsonOutput)
+		} else {
+			return azcopy.GetCopyProgress(azcopy.CopyProgress{
+				ListJobSummaryResponse: progress.ListJobSummaryResponse,
+				Throughput:             progress.Throughput,
+				ElapsedTime:            progress.ElapsedTime,
+			}, false)
+		}
+	}
+
+	glcm.Progress(builder)
+}
+
+func (c cliResumeHandler) OnComplete(result azcopy.ResumeJobResult) {
 	exitCode := EExitCode.Success()
-	if summary.TransfersFailed > 0 {
+	if result.TransfersFailed > 0 {
 		exitCode = EExitCode.Error()
 	}
 	glcm.Exit(func(format OutputFormat) string {
 		if format == EOutputFormat.Json() {
-			jsonOutput, err := json.Marshal(summary)
+			jsonOutput, err := json.Marshal(result)
 			common.PanicIfErr(err)
 			return string(jsonOutput)
 		} else {
@@ -153,49 +182,22 @@ Number of Folder Transfers Skipped: %v
 Total Number of Bytes Transferred: %v
 Final Job Status: %v
 `,
-				summary.JobID.String(),
-				azcopy.ToFixed(summary.ElapsedTime.Minutes(), 4),
-				summary.FileTransfers,
-				summary.FolderPropertyTransfers,
-				summary.SymlinkTransfers,
-				summary.TotalTransfers,
-				summary.TransfersCompleted-summary.FoldersCompleted,
-				summary.FoldersCompleted,
-				summary.TransfersFailed-summary.FoldersFailed,
-				summary.FoldersFailed,
-				summary.TransfersSkipped-summary.FoldersSkipped,
-				summary.FoldersSkipped,
-				summary.TotalBytesTransferred,
-				summary.JobStatus)
+				result.JobID.String(),
+				azcopy.ToFixed(result.ElapsedTime.Minutes(), 4),
+				result.FileTransfers,
+				result.FolderPropertyTransfers,
+				result.SymlinkTransfers,
+				result.TotalTransfers,
+				result.TransfersCompleted-result.FoldersCompleted,
+				result.FoldersCompleted,
+				result.TransfersFailed-result.FoldersFailed,
+				result.FoldersFailed,
+				result.TransfersSkipped-result.FoldersSkipped,
+				result.FoldersSkipped,
+				result.TotalBytesTransferred,
+				result.JobStatus)
 		}
 	}, exitCode)
-
-	return nil
-}
-
-type CLIResumeHandler struct {
-}
-
-func (C CLIResumeHandler) OnStart(ctx azcopy.JobContext) {
-	glcm.Init(GetStandardInitOutputBuilder(ctx.JobID.String(), ctx.LogPath, false, ""))
-}
-
-func (C CLIResumeHandler) OnTransferProgress(progress azcopy.ResumeJobProgress) {
-	builder := func(format OutputFormat) string {
-		if format == EOutputFormat.Json() {
-			jsonOutput, err := json.Marshal(progress.ListJobSummaryResponse)
-			common.PanicIfErr(err)
-			return string(jsonOutput)
-		} else {
-			return azcopy.GetCopyProgress(azcopy.CopyProgress{
-				ListJobSummaryResponse: progress.ListJobSummaryResponse,
-				Throughput:             progress.Throughput,
-				ElapsedTime:            progress.ElapsedTime,
-			}, false)
-		}
-	}
-
-	glcm.Progress(builder)
 }
 
 func parseTransfers(arg string) map[string]int {

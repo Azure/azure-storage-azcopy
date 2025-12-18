@@ -105,6 +105,7 @@ type rawSyncCmdArgs struct {
 
 func (raw rawSyncCmdArgs) toOptions() (opts azcopy.SyncOptions, err error) {
 	opts = azcopy.SyncOptions{
+		Handler:                 cliSyncHandler{},
 		Recursive:               to.Ptr(raw.recursive),
 		IncludeDirectoryStubs:   raw.includeDirectoryStubs,
 		PreserveInfo:            to.Ptr(raw.preserveInfo),
@@ -169,10 +170,10 @@ func (raw rawSyncCmdArgs) toOptions() (opts azcopy.SyncOptions, err error) {
 	return opts, nil
 }
 
-type CLISyncHandler struct {
+type cliSyncHandler struct {
 }
 
-func (C CLISyncHandler) OnStart(ctx azcopy.JobContext) {
+func (c cliSyncHandler) OnStart(ctx azcopy.JobContext) {
 	glcm.Init(GetStandardInitOutputBuilder(ctx.JobID.String(), ctx.LogPath, false, ""))
 }
 
@@ -181,7 +182,7 @@ type scanningProgressJsonTemplate struct {
 	FilesScannedAtDestination uint64
 }
 
-func (C CLISyncHandler) OnScanProgress(progress azcopy.SyncScanProgress) {
+func (c cliSyncHandler) OnScanProgress(progress azcopy.SyncScanProgress) {
 	builder := func(format OutputFormat) string {
 		if format == EOutputFormat.Json() {
 			jsonOutputTemplate := scanningProgressJsonTemplate{
@@ -208,7 +209,7 @@ func (C CLISyncHandler) OnScanProgress(progress azcopy.SyncScanProgress) {
 	glcm.Progress(builder)
 }
 
-func (C CLISyncHandler) OnTransferProgress(progress azcopy.SyncProgress) {
+func (c cliSyncHandler) OnTransferProgress(progress azcopy.SyncProgress) {
 	builder := func(format OutputFormat) string {
 		if format == EOutputFormat.Json() {
 			wrapped := common.ListSyncJobSummaryResponse{ListJobSummaryResponse: progress.ListJobSummaryResponse}
@@ -222,6 +223,27 @@ func (C CLISyncHandler) OnTransferProgress(progress azcopy.SyncProgress) {
 		return azcopy.GetSyncProgress(progress)
 	}
 	glcm.Progress(builder)
+}
+
+func (c cliSyncHandler) OnComplete(result azcopy.SyncResult) {
+	// Print summary
+	exitCode := EExitCode.Success()
+	if result.TransfersFailed > 0 || result.JobStatus == common.EJobStatus.Cancelled() || result.JobStatus == common.EJobStatus.Cancelling() {
+		exitCode = EExitCode.Error()
+	}
+
+	glcm.Exit(func(format OutputFormat) string {
+		if format == EOutputFormat.Json() {
+			wrapped := common.ListSyncJobSummaryResponse{ListJobSummaryResponse: result.ListJobSummaryResponse}
+			wrapped.DeleteTotalTransfers = result.DeleteTotalTransfers
+			wrapped.DeleteTransfersCompleted = result.DeleteTransfersCompleted
+			jsonOutput, err := json.Marshal(wrapped)
+			common.PanicIfErr(err)
+			return string(jsonOutput)
+		} else {
+			return azcopy.GetSyncResult(result, false)
+		}
+	}, exitCode)
 }
 
 func init() {
@@ -305,32 +327,13 @@ func init() {
 				cancel()
 			}()
 
-			summary, err := Client.Sync(ctx, raw.src, raw.dst, opts, CLISyncHandler{})
+			_, err = Client.Sync(ctx, raw.src, raw.dst, opts)
 			if err != nil {
 				glcm.Error("Cannot perform sync due to error: " + err.Error() + getErrorCodeUrl(err))
 			}
 
 			if raw.dryrun {
 				glcm.Exit(nil, EExitCode.Success())
-			} else {
-				// Print summary
-				exitCode := EExitCode.Success()
-				if summary.TransfersFailed > 0 || summary.JobStatus == common.EJobStatus.Cancelled() || summary.JobStatus == common.EJobStatus.Cancelling() {
-					exitCode = EExitCode.Error()
-				}
-
-				glcm.Exit(func(format OutputFormat) string {
-					if format == EOutputFormat.Json() {
-						wrapped := common.ListSyncJobSummaryResponse{ListJobSummaryResponse: summary.ListJobSummaryResponse}
-						wrapped.DeleteTotalTransfers = summary.DeleteTotalTransfers
-						wrapped.DeleteTransfersCompleted = summary.DeleteTransfersCompleted
-						jsonOutput, err := json.Marshal(wrapped)
-						common.PanicIfErr(err)
-						return string(jsonOutput)
-					} else {
-						return azcopy.GetSyncResult(summary, false)
-					}
-				}, exitCode)
 			}
 			// Wait for the user to see the final output before exiting
 			glcm.SurrenderControl()

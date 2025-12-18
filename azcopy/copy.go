@@ -34,6 +34,8 @@ import (
 
 // CopyOptions contains the optional parameters for the Copy operation.
 type CopyOptions struct {
+	Handler CopyHandler
+
 	IncludeBefore               *time.Time
 	IncludeAfter                *time.Time
 	IncludePatterns             []string
@@ -99,6 +101,7 @@ type CopyOptions struct {
 type CopyHandler interface {
 	OnStart(ctx JobContext)
 	OnTransferProgress(progress CopyProgress)
+	OnComplete(result CopyResult)
 }
 
 type CopyProgress struct {
@@ -124,7 +127,7 @@ func (c *CopyOptions) SetInternalOptions(listOfFiles string, s2sGetPropertiesInB
 }
 
 // Copy copies the contents from source to destination.
-func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions, handler CopyHandler) (CopyResult, error) {
+func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (CopyResult, error) {
 	// Input
 	if src == "" || dest == "" {
 		return CopyResult{}, fmt.Errorf("source and destination must be specified for copy")
@@ -169,7 +172,7 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions, h
 
 	var t *transferExecutor
 	ctx = context.WithValue(ctx, ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	t, err := newCopyTransferExecutor(ctx, jobID, src, dest, opts, handler, c.GetUserOAuthTokenManagerInstance())
+	t, err := newCopyTransferExecutor(ctx, jobID, src, dest, opts, c.GetUserOAuthTokenManagerInstance())
 	if err != nil {
 		return CopyResult{}, err
 	}
@@ -198,6 +201,7 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions, h
 			mgr.InitiateProgressReporting(ctx, t.tpt)
 		}
 		err = enumerator.Enumerate()
+		defer jobsAdmin.JobsAdmin.JobMgrCleanUp(jobID)
 
 		if err != nil {
 			return CopyResult{}, err
@@ -218,9 +222,6 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions, h
 		finalSummary.SkippedSpecialFileCount = t.tpt.getSkippedSpecialFileCount()
 		finalSummary.SkippedHardlinkCount = t.tpt.getSkippedHardlinkCount()
 
-		// Clean up job
-		jobsAdmin.JobsAdmin.JobMgrCleanUp(jobID)
-
 		result := CopyResult{
 			ListJobSummaryResponse: finalSummary,
 			ElapsedTime:            t.tpt.GetElapsedTime(),
@@ -228,6 +229,10 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions, h
 
 		if common.AzcopyCurrentJobLogger != nil {
 			common.AzcopyCurrentJobLogger.Log(common.LogInfo, GetCopyResult(result, true))
+		}
+
+		if opts.Handler != nil {
+			opts.Handler.OnComplete(result)
 		}
 
 		return result, nil
@@ -240,7 +245,7 @@ type transferExecutor struct {
 	tpt  *transferProgressTracker
 }
 
-func newCopyTransferExecutor(ctx context.Context, jobID common.JobID, src, dst string, opts CopyOptions, handler CopyHandler, uotm *common.UserOAuthTokenManager) (t *transferExecutor, err error) {
+func newCopyTransferExecutor(ctx context.Context, jobID common.JobID, src, dst string, opts CopyOptions, uotm *common.UserOAuthTokenManager) (t *transferExecutor, err error) {
 	cookedOpts, err := newCookedCopyOptions(src, dst, opts)
 	if err != nil {
 		return nil, err
@@ -252,7 +257,7 @@ func newCopyTransferExecutor(ctx context.Context, jobID common.JobID, src, dst s
 		return nil, err
 	}
 
-	progressTracker := newTransferProgressTracker(jobID, handler, cookedOpts.fromTo)
+	progressTracker := newTransferProgressTracker(jobID, opts.Handler, cookedOpts.fromTo)
 
 	return &transferExecutor{opts: cookedOpts, trp: copyRemote, tpt: progressTracker}, nil
 }

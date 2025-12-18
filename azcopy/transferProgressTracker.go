@@ -65,7 +65,9 @@ func (tpt *transferProgressTracker) Start() {
 	if common.LogPathFolder != "" {
 		logPathFolder = fmt.Sprintf("%s%s%s.log", common.LogPathFolder, common.OS_PATH_SEPARATOR, tpt.jobID)
 	}
-	tpt.handler.OnStart(JobContext{JobID: tpt.jobID, LogPath: logPathFolder})
+	if tpt.handler != nil {
+		tpt.handler.OnStart(JobContext{JobID: tpt.jobID, LogPath: logPathFolder})
+	}
 }
 
 func (tpt *transferProgressTracker) CheckProgress() (uint32, bool) {
@@ -104,7 +106,9 @@ func (tpt *transferProgressTracker) CheckProgress() (uint32, bool) {
 			isBenchmark := tpt.fromTo.From() == common.ELocation.Benchmark()
 			common.AzcopyCurrentJobLogger.Log(common.LogInfo, GetCopyProgress(progress, isBenchmark))
 		}
-		tpt.handler.OnTransferProgress(progress)
+		if tpt.handler != nil {
+			tpt.handler.OnTransferProgress(progress)
+		}
 		return totalKnownCount, jobDone
 	} else {
 		return 0, false

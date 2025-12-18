@@ -177,6 +177,7 @@ type rawCopyCmdArgs struct {
 
 func (raw *rawCopyCmdArgs) toCopyOptions(cmd *cobra.Command) (opts azcopy.CopyOptions, err error) {
 	opts = azcopy.CopyOptions{
+		Handler:                  cliCopyHandler{},
 		Recursive:                raw.recursive,
 		ForceIfReadOnly:          raw.forceIfReadOnly,
 		AutoDecompress:           raw.autoDecompress,
@@ -1260,15 +1261,15 @@ func isStdinPipeIn() (bool, error) {
 
 var cpCmd *cobra.Command
 
-type CLICopyHandler struct {
+type cliCopyHandler struct {
 }
 
-func (C CLICopyHandler) OnStart(ctx azcopy.JobContext) {
+func (c cliCopyHandler) OnStart(ctx azcopy.JobContext) {
 	glcm.Init(GetStandardInitOutputBuilder(ctx.JobID.String(), ctx.LogPath, false, ""))
 
 }
 
-func (C CLICopyHandler) OnTransferProgress(progress azcopy.CopyProgress) {
+func (c cliCopyHandler) OnTransferProgress(progress azcopy.CopyProgress) {
 	builder := func(format OutputFormat) string {
 		if format == EOutputFormat.Json() {
 			jsonOutput, err := json.Marshal(progress.ListJobSummaryResponse)
@@ -1280,6 +1281,25 @@ func (C CLICopyHandler) OnTransferProgress(progress azcopy.CopyProgress) {
 	}
 
 	glcm.Progress(builder)
+}
+
+func (c cliCopyHandler) OnComplete(result azcopy.CopyResult) {
+	exitCode := EExitCode.Success()
+	if result.TransfersFailed > 0 || result.JobStatus == common.EJobStatus.Cancelled() || result.JobStatus == common.EJobStatus.Cancelling() {
+		exitCode = EExitCode.Error()
+	}
+
+	builder := func(format OutputFormat) string {
+		if format == EOutputFormat.Json() {
+			jsonOutput, err := json.Marshal(result.ListJobSummaryResponse)
+			common.PanicIfErr(err)
+			return string(jsonOutput)
+		} else {
+			return azcopy.GetCopyResult(result, false)
+		}
+	}
+
+	glcm.Exit(builder, exitCode)
 }
 
 // TODO check file size, max is 4.75TB
@@ -1396,29 +1416,12 @@ func init() {
 				cancel()
 			}()
 
-			result, err := Client.Copy(ctx, raw.src, raw.dst, opts, CLICopyHandler{})
+			_, err = Client.Copy(ctx, raw.src, raw.dst, opts)
 			if err != nil {
 				glcm.Error("Cannot perform copy due to error: " + err.Error() + getErrorCodeUrl(err))
 			}
 			if raw.dryrun || userFromTo.IsRedirection() {
 				glcm.Exit(nil, EExitCode.Success())
-			} else {
-				exitCode := EExitCode.Success()
-				if result.TransfersFailed > 0 || result.JobStatus == common.EJobStatus.Cancelled() || result.JobStatus == common.EJobStatus.Cancelling() {
-					exitCode = EExitCode.Error()
-				}
-
-				builder := func(format OutputFormat) string {
-					if format == EOutputFormat.Json() {
-						jsonOutput, err := json.Marshal(result.ListJobSummaryResponse)
-						common.PanicIfErr(err)
-						return string(jsonOutput)
-					} else {
-						return azcopy.GetCopyResult(result, false)
-					}
-				}
-
-				glcm.Exit(builder, exitCode)
 			}
 			// Wait for the user to see the final output before exiting
 			glcm.SurrenderControl()

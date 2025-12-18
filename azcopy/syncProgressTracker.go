@@ -77,7 +77,9 @@ func (spt *syncProgressTracker) Start() {
 	if common.LogPathFolder != "" {
 		logPathFolder = fmt.Sprintf("%s%s%s.log", common.LogPathFolder, common.OS_PATH_SEPARATOR, spt.jobID)
 	}
-	spt.handler.OnStart(JobContext{JobID: spt.jobID, LogPath: logPathFolder})
+	if spt.handler != nil {
+		spt.handler.OnStart(JobContext{JobID: spt.jobID, LogPath: logPathFolder})
+	}
 }
 
 func (s *syncProgressTracker) CheckProgress() (uint32, bool) {
@@ -115,7 +117,9 @@ func (s *syncProgressTracker) CheckProgress() (uint32, bool) {
 			Throughput:              common.Iff(s.firstPartOrdered(), &throughput, nil),
 			JobID:                   s.jobID,
 		}
-		s.handler.OnScanProgress(scanProgress)
+		if s.handler != nil {
+			s.handler.OnScanProgress(scanProgress)
+		}
 		return totalKnownCount, false
 	} else {
 		progress := SyncProgress{
@@ -128,7 +132,9 @@ func (s *syncProgressTracker) CheckProgress() (uint32, bool) {
 		if common.AzcopyCurrentJobLogger != nil {
 			common.AzcopyCurrentJobLogger.Log(common.LogInfo, GetSyncProgress(progress))
 		}
-		s.handler.OnTransferProgress(progress)
+		if s.handler != nil {
+			s.handler.OnTransferProgress(progress)
+		}
 		return totalKnownCount, jobDone
 	}
 }
