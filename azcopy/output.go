@@ -146,7 +146,7 @@ Files Scanned at Source: %v
 Files Scanned at Destination: %v
 Elapsed Time (Minutes): %v
 Number of Copy Transfers for Files: %v
-Number of Copy Transfers for Folder Properties: %v 
+Number of Copy Transfers for Folder Properties: %v
 Number of Symlink Transfers: %v
 Total Number of Copy Transfers: %v
 Number of Copy Transfers Completed: %v
