@@ -31,6 +31,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -350,7 +351,8 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 				lmt.Sub(scheduledTime).Seconds()))
 		}
 
-		if !lmt.Equal(scheduledTime) {
+		// Compare timestamps truncated to seconds to avoid precision issues between different APIs
+		if scheduledTime.Truncate(time.Second) != lmt.Truncate(time.Second) {
 			errorMsg := fmt.Sprintf("File modified since transfer scheduled. Scheduled LMT: %v (Unix: %d), Current LMT: %v (Unix: %d), Difference: %v seconds. "+
 				"This can occur due to: (1) Actual file modification, (2) Timezone/precision differences between source and enumeration, "+
 				"(3) Clock skew between systems, (4) Source system updating metadata without content change",
