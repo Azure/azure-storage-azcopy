@@ -298,6 +298,9 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 	// Build full path for the object relative to current directory
 	so.relativePath = buildChildPath(st.dir, so.relativePath)
 
+	// Debug: Log every object being processed
+	syncOrchestratorLog(common.LogDebug, fmt.Sprintf("Processing object: %s (type: %s, dir: %s)", so.relativePath, so.entityType, st.dir))
+
 	// Thread-safe storage in the indexer first
 	st.enumerator.objectIndexer.rwMutex.Lock()
 	err := st.enumerator.objectIndexer.store(so)
@@ -317,6 +320,8 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 			relativePath: so.relativePath,
 			changeTime:   so.changeTime,
 		})
+		// Debug logging to track subdirectory discovery
+		syncOrchestratorLog(common.LogDebug, fmt.Sprintf("Discovered subdirectory: %s (total subdirs now: %d)", so.relativePath, len(st.sub_dirs)))
 	}
 
 	return nil
@@ -647,6 +652,10 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 		srcDirEnumerating.Add(1) // Increment active directory count
 
+		// Debug logging to track directory processing
+		syncOrchestratorLog(common.LogDebug, fmt.Sprintf("START processing directory: '%s' (queue size: %d, active dirs: src=%d dst=%d)",
+			dir.(minimalStoredObject).relativePath, len(dirQueue), srcDirEnumerating.Load(), dstDirEnumerating.Load()))
+
 		// Build source and destination paths for current directory
 		sync_src := []string{cca.source.Value, dir.(minimalStoredObject).relativePath}
 		sync_dst := []string{cca.destination.Value, dir.(minimalStoredObject).relativePath}
@@ -858,8 +867,10 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		}
 
 		// Enqueue discovered subdirectories for processing
+		syncOrchestratorLog(common.LogDebug, fmt.Sprintf("Processing dir %s: enqueueing %d subdirectories", dir.(minimalStoredObject).relativePath, len(stra.sub_dirs)))
 		for _, sub_dir := range stra.sub_dirs {
 			crawlWg.Add(1) // IMPORTANT: Add to WaitGroup *before* enqueuing
+			syncOrchestratorLog(common.LogDebug, fmt.Sprintf("Enqueueing subdirectory: %s", sub_dir.relativePath))
 			enqueueDir(minimalStoredObject{
 				relativePath:           sub_dir.relativePath,
 				changeTime:             sub_dir.changeTime,

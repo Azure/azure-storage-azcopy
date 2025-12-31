@@ -22,12 +22,10 @@ package common
 
 import (
 	"errors"
-	"fmt"
 	"net"
 	"net/url"
 	"os"
 	"regexp"
-	"strconv"
 	"strings"
 )
 
@@ -84,10 +82,8 @@ func getS3Keyword() string {
 // IsS3URL verifies if a given URL points to S3 URL supported by AzCopy-v10
 func IsS3URL(u url.URL) bool {
 	if _, isS3URL := findS3URLMatches(strings.ToLower(u.Host)); isS3URL {
-		fmt.Println("IsS3URL: TRUE")
 		return true
 	}
-	fmt.Println("IsS3URL: FALSE")
 	return false
 }
 
@@ -100,7 +96,6 @@ func IsS3URL(u url.URL) bool {
 func findS3URLMatches(host string) (matches []string, isS3Host bool) {
 	suffix := GetS3CompatibleSuffix()
 	hostLower := strings.ToLower(host)
-	fmt.Println("findS3URLMatches: host=", hostLower, "configuredSuffix=", suffix)
 
 	// First, optionally allow raw IP endpoints if explicitly enabled. These are always path-style.
 	if m := matchIPHost(hostLower); m != nil {
@@ -142,7 +137,6 @@ func matchAWSHost(hostLower, suffix string) []string {
 		return nil
 	}
 	// Ensure suffix presence (already checked) then return
-	fmt.Println("matchAWSHost: matched", matchSlices)
 	return matchSlices
 }
 
@@ -155,7 +149,6 @@ func matchGoogleHost(hostLower, suffix string) []string {
 	keyword := getS3Keyword() // googleapis
 	region := ""              // unspecified
 	matchSlices := []string{hostLower, "", region, keyword}
-	fmt.Println("matchGoogleHost: synthesized", matchSlices)
 	return matchSlices
 }
 
@@ -192,7 +185,6 @@ func matchIPHost(hostLower string) []string {
 	region := os.Getenv("AZCOPY_S3_IP_REGION") // optional
 	keyword := getS3Keyword()
 	matchSlices := []string{hostLower, "", region, keyword}
-	fmt.Println("matchIPHost: synthesized", matchSlices)
 	return matchSlices
 }
 
@@ -258,22 +250,6 @@ func NewS3URLParts(u url.URL) (S3URLParts, error) {
 	}
 
 	up.UnparsedParams = paramsMap.Encode()
-
-	// Log all S3URLParts fields for debugging
-	logMsg := "S3URLParts: " +
-		"Scheme=" + up.Scheme + ", " +
-		"Host=" + up.Host + ", " +
-		"Endpoint=" + up.Endpoint + ", " +
-		"BucketName=" + up.BucketName + ", " +
-		"ObjectKey=" + up.ObjectKey + ", " +
-		"Version=" + up.Version + ", " +
-		"Region=" + up.Region + ", " +
-		"UnparsedParams=" + up.UnparsedParams + ", " +
-		"isPathStyle=" + strconv.FormatBool(up.isPathStyle) + ", " +
-		"isDualStack=" + strconv.FormatBool(up.isDualStack)
-
-	// Use standard logging
-	println(logMsg)
 
 	return up, nil
 }
