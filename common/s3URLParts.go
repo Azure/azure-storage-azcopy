@@ -116,51 +116,11 @@ func findS3URLMatches(host string) (matches []string, isS3Host bool) {
 			if m := matchAWSHost(hostLower, suffix); m != nil {
 				return m, true
 			}
-		case "oraclecloud.com":
-			if m := matchOCIHost(hostLower, suffix); m != nil {
-				return m, true
-			}
-		case "appdomain.cloud":
-			if m := matchIBMHost(hostLower, suffix); m != nil {
-				return m, true
-			}
-		case "purestorage.com":
-			if m := matchPureHost(hostLower, suffix); m != nil {
-				return m, true
-			}
-		case "seagate.com":
-			if m := matchSeagateHost(hostLower, suffix); m != nil {
-				return m, true
-			}
-		case "impossibleapi.net":
-			if m := matchImpossibleHost(hostLower, suffix); m != nil {
-				return m, true
-			}
 		case "googleapis.com":
 			if m := matchGoogleHost(hostLower, suffix); m != nil {
 				return m, true
 			}
-		case "ecstestdrive.com":
-			if m := matchDellECSHost(hostLower); m != nil { // path-style
-				return m, true
-			}
 		default:
-			// Try each known matcher (extensible) then fall back to AWS regex for custom suffixes
-			if m := matchOCIHost(hostLower, suffix); m != nil {
-				return m, true
-			}
-			if m := matchIBMHost(hostLower, suffix); m != nil {
-				return m, true
-			}
-			if m := matchPureHost(hostLower, suffix); m != nil {
-				return m, true
-			}
-			if m := matchSeagateHost(hostLower, suffix); m != nil {
-				return m, true
-			}
-			if m := matchImpossibleHost(hostLower, suffix); m != nil {
-				return m, true
-			}
 			if m := matchGoogleHost(hostLower, suffix); m != nil {
 				return m, true
 			}
@@ -186,153 +146,6 @@ func matchAWSHost(hostLower, suffix string) []string {
 	return matchSlices
 }
 
-// matchOCIHost matches Oracle OCI object storage S3-compatible hosts:
-//
-//	<tenancy/ns>.compat.objectstorage.<region>.oraclecloud.com
-//	<tenancy/ns>.objectstorage.<region>.oraclecloud.com
-//
-// Bucket provided path-style.
-func matchOCIHost(hostLower, suffix string) []string {
-	if !strings.HasSuffix(hostLower, suffix) {
-		return nil
-	}
-	if !(strings.Contains(hostLower, ".objectstorage.") || strings.Contains(hostLower, ".compat.objectstorage.")) {
-		return nil
-	}
-	parts := strings.Split(hostLower, ".")
-	if len(parts) < 4 {
-		return nil
-	}
-	// Region immediately precedes suffix root (e.g., us-sanjose-1 in objectstorage.us-sanjose-1.oraclecloud.com)
-	regionIdx := len(parts) - 3
-	if regionIdx < 1 {
-		return nil
-	}
-	region := parts[regionIdx]
-	keyword := getS3Keyword() // e.g. oraclecloud
-	matchSlices := []string{hostLower, "", region, keyword}
-	fmt.Println("matchOCIHost: synthesized", matchSlices)
-	return matchSlices
-}
-
-// matchIBMHost matches IBM Cloud Object Storage hosts:
-//
-//	s3.<region>.cloud-object-storage.appdomain.cloud
-//
-// Bucket provided path-style
-func matchIBMHost(hostLower, suffix string) []string {
-	if !strings.HasSuffix(hostLower, suffix) {
-		return nil
-	}
-	if !strings.HasPrefix(hostLower, "s3.") {
-		return nil
-	}
-	if !strings.Contains(hostLower, ".cloud-object-storage.") {
-		return nil
-	}
-	parts := strings.Split(hostLower, ".")
-	if len(parts) < 5 {
-		return nil
-	}
-	region := parts[1]
-	keyword := getS3Keyword() // appdomain
-	matchSlices := []string{hostLower, "", region, keyword}
-	fmt.Println("matchIBMHost: synthesized", matchSlices)
-	return matchSlices
-}
-
-// matchPureHost matches Pure Storage FlashBlade S3-compatible hosts:
-//
-//	<namespace>.<array>.<region>.flashblade-demos.purestorage.com
-//
-// or examples like: azure-bkt-1.fb2.flashblade-demos.purestorage.com
-// Bucket provided path-style; region token precedes 'flashblade-demos'. Last two labels form suffix root and TLD.
-func matchPureHost(hostLower, suffix string) []string {
-	if !strings.HasSuffix(hostLower, suffix) {
-		return nil
-	}
-	if !strings.Contains(hostLower, ".flashblade-demos.") {
-		return nil
-	}
-	parts := strings.Split(hostLower, ".")
-	if len(parts) < 5 {
-		return nil
-	}
-	// Identify 'flashblade-demos' segment and take previous part as region (heuristic)
-	region := ""
-	for i, p := range parts {
-		if p == "flashblade-demos" && i > 0 { // region candidate at i-1
-			region = parts[i-1]
-			break
-		}
-	}
-	if region == "" {
-		return nil
-	}
-	keyword := getS3Keyword() // purestorage
-	matchSlices := []string{hostLower, "", region, keyword}
-	fmt.Println("matchPureHost: synthesized", matchSlices)
-	return matchSlices
-}
-
-// matchSeagateHost matches Seagate Lyve Cloud style hosts:
-//
-//	s3.<region>.<site>.<optionalCluster>.lyve.seagate.com
-//
-// Example: s3.us-west-1.sv15.lyve.seagate.com
-// Bucket provided path-style; region token is first label after s3.
-func matchSeagateHost(hostLower, suffix string) []string {
-	if !strings.HasSuffix(hostLower, suffix) {
-		return nil
-	}
-	if !strings.HasPrefix(hostLower, "s3.") {
-		return nil
-	}
-	if !strings.Contains(hostLower, ".lyve.") {
-		return nil
-	}
-	parts := strings.Split(hostLower, ".")
-	if len(parts) < 5 {
-		return nil
-	}
-	region := parts[1]
-	if region == "" {
-		return nil
-	}
-	keyword := getS3Keyword() // seagate
-	matchSlices := []string{hostLower, "", region, keyword}
-	fmt.Println("matchSeagateHost: synthesized", matchSlices)
-	return matchSlices
-}
-
-// matchImpossibleHost matches impossibleapi.net style endpoints:
-//
-//	<region>.storage.impossibleapi.net
-//
-// Example: eu-west-1.storage.impossibleapi.net
-// Path-style; region is first label. Suffix is impossibleapi.net
-func matchImpossibleHost(hostLower, suffix string) []string {
-	if !strings.HasSuffix(hostLower, suffix) {
-		return nil
-	}
-	parts := strings.Split(hostLower, ".")
-	if len(parts) < 4 {
-		return nil
-	}
-	// Expect layout: <region> storage impossibleapi net
-	if parts[1] != "storage" {
-		return nil
-	}
-	region := parts[0]
-	if region == "" {
-		return nil
-	}
-	keyword := getS3Keyword() // impossibleapi
-	matchSlices := []string{hostLower, "", region, keyword}
-	fmt.Println("matchImpossibleHost: synthesized", matchSlices)
-	return matchSlices
-}
-
 // matchGoogleHost matches Google Cloud Storage path-style endpoint storage.googleapis.com
 // Host form: storage.googleapis.com (no region); bucket and object come from path.
 func matchGoogleHost(hostLower, suffix string) []string {
@@ -344,20 +157,6 @@ func matchGoogleHost(hostLower, suffix string) []string {
 	matchSlices := []string{hostLower, "", region, keyword}
 	fmt.Println("matchGoogleHost: synthesized", matchSlices)
 	return matchSlices
-}
-
-// matchDellECSHost matches Dell EMC ECS test drive style endpoint:
-// object.ecstestdrive.com (no region); bucket & key are path-style.
-// Also supports any host ending with .ecstestdrive.com to allow future regionized or custom subdomains.
-func matchDellECSHost(hostLower string) []string {
-	if hostLower == "object.ecstestdrive.com" || strings.HasSuffix(hostLower, ".ecstestdrive.com") {
-		keyword := "ecstestdrive" // synthetic keyword root
-		region := ""              // not exposed in public test endpoint
-		matchSlices := []string{hostLower, "", region, keyword}
-		fmt.Println("matchDellECSHost: synthesized", matchSlices)
-		return matchSlices
-	}
-	return nil
 }
 
 // matchIPHost detects IPv4 or IPv6 literals (with optional port) for S3-compatible endpoints.

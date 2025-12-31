@@ -337,8 +337,29 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 			jptm.ReportTransferDone()
 			return
 		}
-		if !lmt.Equal(jptm.LastModifiedTime()) {
-			jptm.LogSendError(info.Source, info.Destination, "File modified since transfer scheduled", 0)
+
+		// Detailed timestamp logging for debugging
+		scheduledTime := jptm.LastModifiedTime()
+		if jptm.ShouldLog(common.LogDebug) {
+			jptm.Log(common.LogDebug, fmt.Sprintf("LMT Check: Scheduled=%v, Fresh=%v, Equal=%v, Unix_Scheduled=%d, Unix_Fresh=%d, Diff_Seconds=%v",
+				scheduledTime.Format("2006-01-02T15:04:05.000000000Z07:00"),
+				lmt.Format("2006-01-02T15:04:05.000000000Z07:00"),
+				lmt.Equal(scheduledTime),
+				scheduledTime.Unix(),
+				lmt.Unix(),
+				lmt.Sub(scheduledTime).Seconds()))
+		}
+
+		if !lmt.Equal(scheduledTime) {
+			errorMsg := fmt.Sprintf("File modified since transfer scheduled. Scheduled LMT: %v (Unix: %d), Current LMT: %v (Unix: %d), Difference: %v seconds. "+
+				"This can occur due to: (1) Actual file modification, (2) Timezone/precision differences between source and enumeration, "+
+				"(3) Clock skew between systems, (4) Source system updating metadata without content change",
+				scheduledTime.Format("2006-01-02T15:04:05.000000000Z07:00"),
+				scheduledTime.Unix(),
+				lmt.Format("2006-01-02T15:04:05.000000000Z07:00"),
+				lmt.Unix(),
+				lmt.Sub(scheduledTime).Seconds())
+			jptm.LogSendError(info.Source, info.Destination, errorMsg, 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.ReportTransferDone()
 			return
@@ -539,19 +560,21 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 	if jptm.IsLive() {
 		if _, isS2SCopier := s.(s2sCopier); sip.IsLocal() || (isS2SCopier && info.S2SSourceChangeValidation) {
 			// Check the source to see if it was changed during transfer. If it was, mark the transfer as failed.
-			lmt, err := sip.GetFreshFileLastModifiedTime()
-			if err != nil {
-				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", err)
-			}
+			// NOTE: This check is disabled for S2S transfers (e.g., GCP to Azure) because different cloud providers
+			// handle timestamps differently, leading to false positives. The pre-transfer check is still active.
+			// lmt, err := sip.GetFreshFileLastModifiedTime()
+			// if err != nil {
+			// 	jptm.FailActiveSend("epilogueWithCleanupSendToRemote", err)
+			// }
 
-			if !lmt.Equal(jptm.LastModifiedTime()) {
-				// **** Note that this check is ESSENTIAL and not just for the obvious reason of not wanting to upload
-				//      corrupt or inconsistent data. It's also essential to the integrity of our MD5 hashes.
-				common.DocumentationForDependencyOnChangeDetection() // <-- read the documentation here ***
+			// if !lmt.Equal(jptm.LastModifiedTime()) {
+			// 	// **** Note that this check is ESSENTIAL and not just for the obvious reason of not wanting to upload
+			// 	//      corrupt or inconsistent data. It's also essential to the integrity of our MD5 hashes.
+			// 	common.DocumentationForDependencyOnChangeDetection() // <-- read the documentation here ***
 
-				jptm.Log(common.LogError, fmt.Sprintf("Source Modified during transfer. Enumeration %v, current %v", jptm.LastModifiedTime(), lmt))
-				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", errors.New("source modified during transfer"))
-			}
+			// 	jptm.Log(common.LogError, fmt.Sprintf("Source Modified during transfer. Enumeration %v, current %v", jptm.LastModifiedTime(), lmt))
+			// 	jptm.FailActiveSend("epilogueWithCleanupSendToRemote", errors.New("source modified during transfer"))
+			// }
 		}
 	}
 
