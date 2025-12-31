@@ -342,25 +342,32 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 		// Detailed timestamp logging for debugging
 		scheduledTime := jptm.LastModifiedTime()
 		if jptm.ShouldLog(common.LogDebug) {
-			jptm.Log(common.LogDebug, fmt.Sprintf("LMT Check: Scheduled=%v, Fresh=%v, Equal=%v, Unix_Scheduled=%d, Unix_Fresh=%d, Diff_Seconds=%v",
+			jptm.Log(common.LogDebug, fmt.Sprintf("LMT Check: Scheduled=%v, Fresh=%v, Equal=%v, Unix_Scheduled=%d, Unix_Fresh=%d, Diff_Seconds=%v, Truncated_Equal=%v",
 				scheduledTime.Format("2006-01-02T15:04:05.000000000Z07:00"),
 				lmt.Format("2006-01-02T15:04:05.000000000Z07:00"),
 				lmt.Equal(scheduledTime),
 				scheduledTime.Unix(),
 				lmt.Unix(),
-				lmt.Sub(scheduledTime).Seconds()))
+				lmt.Sub(scheduledTime).Seconds(),
+				scheduledTime.Truncate(time.Second).Equal(lmt.Truncate(time.Second))))
 		}
 
-		// Compare timestamps truncated to seconds to avoid precision issues between different APIs
-		if scheduledTime.Truncate(time.Second) != lmt.Truncate(time.Second) {
+		// Compare timestamps truncated to seconds and normalized to UTC to avoid precision and timezone issues
+		scheduledTrunc := scheduledTime.Truncate(time.Second)
+		lmtTrunc := lmt.Truncate(time.Second)
+
+		if !scheduledTrunc.Equal(lmtTrunc) {
 			errorMsg := fmt.Sprintf("File modified since transfer scheduled. Scheduled LMT: %v (Unix: %d), Current LMT: %v (Unix: %d), Difference: %v seconds. "+
+				"After truncation: Scheduled=%v, Current=%v. "+
 				"This can occur due to: (1) Actual file modification, (2) Timezone/precision differences between source and enumeration, "+
 				"(3) Clock skew between systems, (4) Source system updating metadata without content change",
 				scheduledTime.Format("2006-01-02T15:04:05.000000000Z07:00"),
 				scheduledTime.Unix(),
 				lmt.Format("2006-01-02T15:04:05.000000000Z07:00"),
 				lmt.Unix(),
-				lmt.Sub(scheduledTime).Seconds())
+				lmt.Sub(scheduledTime).Seconds(),
+				scheduledTrunc.Format("2006-01-02T15:04:05Z07:00"),
+				lmtTrunc.Format("2006-01-02T15:04:05Z07:00"))
 			jptm.LogSendError(info.Source, info.Destination, errorMsg, 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.ReportTransferDone()
