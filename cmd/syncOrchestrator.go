@@ -653,8 +653,8 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		srcDirEnumerating.Add(1) // Increment active directory count
 
 		// Debug logging to track directory processing
-		syncOrchestratorLog(common.LogDebug, fmt.Sprintf("START processing directory: '%s' (queue size: %d, active dirs: src=%d dst=%d)",
-			dir.(minimalStoredObject).relativePath, len(dirQueue), srcDirEnumerating.Load(), dstDirEnumerating.Load()))
+		syncOrchestratorLog(common.LogDebug, fmt.Sprintf("START processing directory: '%s' (active dirs: src=%d dst=%d)",
+			dir.(minimalStoredObject).relativePath, srcDirEnumerating.Load(), dstDirEnumerating.Load()))
 
 		// Build source and destination paths for current directory
 		sync_src := []string{cca.source.Value, dir.(minimalStoredObject).relativePath}
