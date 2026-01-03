@@ -73,10 +73,14 @@ func (cr *S3ChunkReader) unuse() {
 	cr.muMaster.Unlock()
 }
 
-func (cr *S3ChunkReader) BlockingPrefetch(_ io.ReaderAt, isRetry bool) error {
+func (cr *S3ChunkReader) BlockingPrefetch(fileReader io.ReaderAt, isRetry bool) error {
 	cr.use()
 	defer cr.unuse()
-	//GetLifecycleMgr().Info(fmt.Sprintf("BlockingPrefetch called for chunkId: %v, length: %d, isRetry: %v", cr.chunkId, cr.length, isRetry))
+
+	return cr.blockingPrefetch(fileReader, isRetry)
+}
+
+func (cr *S3ChunkReader) blockingPrefetch(_ io.ReaderAt, isRetry bool) error {
 
 	if cr.buffer != nil {
 		GetLifecycleMgr().Info(fmt.Sprintf("BlockingPrefetch: Buffer already prefetched for chunkId: %v", cr.chunkId))
@@ -97,7 +101,6 @@ func (cr *S3ChunkReader) BlockingPrefetch(_ io.ReaderAt, isRetry bool) error {
 	}
 
 	targetBuffer := cr.slicePool.RentSlice(cr.length)
-	//GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: Allocated buffer of length: %d for chunkId: %v", cr.length, cr.chunkId))
 
 	// release close lock for network call
 	cr.muClose.Unlock()
@@ -105,33 +108,28 @@ func (cr *S3ChunkReader) BlockingPrefetch(_ io.ReaderAt, isRetry bool) error {
 	var n int
 	var readErr error
 	var body io.ReadCloser
-	//var responseBody []byte
 
-	//startGet := time.Now()
-	if !isRetry {
-		// body, err = cr.sourceInfoProvider.GetObjectRange(cr.chunkId.offsetInFile, cr.length)
-		body, n, err, readErr = WithoutResponseNetworkRetry(
-			cr.ctx,
-			nil,
-			fmt.Sprintf("GetObjectRange %v", cr.chunkId),
-			&targetBuffer,
-			func() (io.ReadCloser, error) {
-				return cr.sourceInfoProvider.GetObjectRange(cr.chunkId.offsetInFile, cr.length)
-			})
-	} else {
-		// Retryable path: use WithNetworkRetry to centralize backoff/retry semantics.
-		body, n, err, readErr = WithResponseNetworkRetry(
-			cr.ctx,
-			nil,
-			fmt.Sprintf("GetObjectRange %v", cr.chunkId),
-			&targetBuffer,
-			func() (io.ReadCloser, error) {
-				return cr.sourceInfoProvider.GetObjectRange(cr.chunkId.offsetInFile, cr.length)
-			})
-	}
-	// endGet := time.Now()
-	// GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader:GetObjectRange chunk=%v start=%v end=%v duration=%v err=%v",
-	// 	cr.chunkId, startGet.Format(time.RFC3339Nano), endGet.Format(time.RFC3339Nano), endGet.Sub(startGet), err))
+	/* For Remote sources like S3, we always use the retryable path
+	// body, err = cr.sourceInfoProvider.GetObjectRange(cr.chunkId.offsetInFile, cr.length)
+	body, n, err, readErr = WithoutResponseNetworkRetry(
+		cr.ctx,
+		nil,
+		fmt.Sprintf("GetObjectRange %v", cr.chunkId),
+		&targetBuffer,
+		func() (io.ReadCloser, error) {
+			return cr.sourceInfoProvider.GetObjectRange(cr.chunkId.offsetInFile, cr.length)
+		})
+	*/
+
+	// Retryable path: use WithNetworkRetry to centralize backoff/retry semantics.
+	body, n, err, readErr = WithResponseNetworkRetry(
+		cr.ctx,
+		nil,
+		fmt.Sprintf("GetObjectRange %v", cr.chunkId),
+		&targetBuffer,
+		func() (io.ReadCloser, error) {
+			return cr.sourceInfoProvider.GetObjectRange(cr.chunkId.offsetInFile, cr.length)
+		})
 
 	cr.muClose.Lock()
 
@@ -160,7 +158,6 @@ func (cr *S3ChunkReader) BlockingPrefetch(_ io.ReaderAt, isRetry bool) error {
 	}
 	// success - keep the buffer, don't return it to pool yet
 	cr.buffer = targetBuffer
-	//GetLifecycleMgr().Info(fmt.Sprintf("S3ChunkReader: Successfully fetched %d bytes from S3 and stored in buffer for chunkId: %v", n, cr.chunkId))
 	return nil
 }
 
@@ -168,8 +165,8 @@ func (cr *S3ChunkReader) retryBlockingPrefetchIfNecessary() error {
 	if cr.buffer != nil {
 		return nil // nothing to do
 	}
-	// For S3, just call BlockingPrefetch again with isRetry=true
-	return cr.BlockingPrefetch(nil, true)
+	// Incase of retries, we again fetch the buffer by performing read from source.
+	return cr.blockingPrefetch(nil, true)
 }
 
 // Seeks within this chunk

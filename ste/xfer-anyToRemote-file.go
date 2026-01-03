@@ -449,7 +449,7 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 						prefetchErr = chunkReader.BlockingPrefetch(srcFile, false)
 					} else {
 						chunkReader = createS3ChunkReader(jptm, srcInfoProvider.(IRemoteSourceInfoProvider), id, adjustedChunkSize, srcFile)
-						prefetchErr = chunkReader.BlockingPrefetch(srcFile, true)
+						prefetchErr = chunkReader.BlockingPrefetch(srcFile, false)
 					}
 
 					if prefetchErr == nil {
