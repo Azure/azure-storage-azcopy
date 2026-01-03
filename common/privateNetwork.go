@@ -21,9 +21,11 @@
 package common
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"regexp"
 	"strings"
@@ -77,6 +79,24 @@ type RoundRobinTransport struct {
 	counterLock     sync.RWMutex  // mutex to protect access to the RoundRobinTransport fields
 }
 
+const (
+	privateNetworkTransportModePool    = "pool"
+	privateNetworkTransportModeDefault = "default"
+)
+
+func resolvePrivateNetworkTransportMode() string {
+	mode := strings.ToLower(strings.TrimSpace(GetEnvironmentVariable(EEnvironmentVariable.PrivateNetworkTransportMode())))
+	switch mode {
+	case privateNetworkTransportModeDefault:
+		return privateNetworkTransportModeDefault
+	case "", privateNetworkTransportModePool:
+		return privateNetworkTransportModePool
+	default:
+		log.Printf("PrivateNetwork: Unrecognized transport mode '%s'. Falling back to '%s'.", mode, privateNetworkTransportModePool)
+		return privateNetworkTransportModePool
+	}
+}
+
 // Set private network arguments
 func SetPrivateNetworkArgs(privateNetworkEnabled bool, privateEndpointIPs []string, bucketName string) {
 	re := regexp.MustCompile(`[^0-9.]`)
@@ -93,7 +113,67 @@ func SetPrivateNetworkArgs(privateNetworkEnabled bool, privateEndpointIPs []stri
 // RoundRobinTransport creates the transport
 func NewRoundRobinTransport(ips []string, host string, cooldownInSecs int, ipRetries int, ipRetryIntervalInMilliSecs int) *RoundRobinTransport {
 	SetGlobalPrivateEndpointIPs(ips)
-	tr := http.DefaultTransport.(*http.Transport).Clone()
+
+	transportMode := resolvePrivateNetworkTransportMode()
+	useConnectionPooling := transportMode == privateNetworkTransportModePool
+
+	// Use the global HTTP client's transport as a base to maintain consistent settings
+	var baseTransport *http.Transport
+	if useConnectionPooling {
+		globalClient := GetGlobalHTTPClient(nil)
+		if globalClient != nil && globalClient.Transport != nil {
+			if gt, ok := globalClient.Transport.(*http.Transport); ok {
+				baseTransport = gt.Clone()
+			}
+		}
+	}
+
+	// Fallback to default transport if global client not available or when pooling is disabled
+	if baseTransport == nil {
+		baseTransport = http.DefaultTransport.(*http.Transport).Clone()
+	}
+
+	tr := baseTransport
+
+	if useConnectionPooling {
+		log.Printf("PrivateNetwork: Using CONNECTION POOLING strategy (MaxConnsPerHost=%d, MaxIdleConnsPerHost=%d from global client)",
+			tr.MaxConnsPerHost, tr.MaxIdleConnsPerHost)
+
+		tr.ForceAttemptHTTP2 = false // Disable HTTP/2 for compatibility
+
+		// For site-to-site VPN (Azure VNet Gateway <-> AWS Transit Gateway):
+		// - Shorter timeout to fail fast on fragmented packets
+		// - Shorter keepalive to detect connection issues faster
+		dialer := &net.Dialer{
+			Timeout:   15 * time.Second, // Reduced from 30s - fail faster on MTU issues
+			KeepAlive: 15 * time.Second, // Reduced from 30s - detect tunnel issues faster
+		}
+
+		// Wrap DialContext to set TCP socket options after connection
+		originalDialContext := dialer.DialContext
+		tr.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+			conn, err := originalDialContext(ctx, network, addr)
+			if err != nil {
+				return nil, err
+			}
+
+			// Use default system TCP buffers (auto-tuned by kernel)
+			if tcpConn, ok := conn.(*net.TCPConn); ok {
+
+				// Disable Nagle's algorithm for lower latency
+				if err := tcpConn.SetNoDelay(true); err != nil {
+					GetLifecycleMgr().Info(fmt.Sprintf("Warning: Failed to set TCP_NODELAY: %v", err))
+				}
+			}
+
+			return conn, nil
+		}
+	} else {
+		log.Printf("PrivateNetwork: Using DEFAULT TRANSPORT strategy without shared pooling (MaxConnsPerHost=%d, MaxIdleConnsPerHost=%d)",
+			tr.MaxConnsPerHost, tr.MaxIdleConnsPerHost)
+	}
+
+	//tr := http.DefaultTransport.(*http.Transport).Clone()
 	tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: false, ServerName: host}
 
 	rr := &RoundRobinTransport{
@@ -124,17 +204,21 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 		rr.counterLock.Unlock()
 
 		entry := globalPrivateEndpointIPs[idx]
+
+		// Read IP and check health status with lock
+		entry.IpEntryLock.RLock()
 		peIP = entry.IP
-		//log.Printf("Selected Private endpoint IP: %s Unhealth Status: %d LastTime: %v\n",
-		// peIP, entry.ConnectionStatus, entry.LastChecked)
+		status := entry.ConnectionStatus
+		lastChecked := entry.LastChecked
+		entry.IpEntryLock.RUnlock()
 
 		// Skip if still in cooldown
-		if entry.ConnectionStatus == Unhealthy {
-			if time.Since(entry.LastChecked) >= rr.cooldown {
+		if status == Unhealthy {
+			if time.Since(lastChecked) >= rr.cooldown {
 				entry.MarkHealthy()
-				log.Printf("Updating Private Endpoint:%s connection state from UNHEALTHY->HEALTHY after cooldown at %v (LastChecked: %v)", peIP, time.Now(), entry.LastChecked)
+				log.Printf("Updating Private Endpoint:%s connection state from UNHEALTHY->HEALTHY after cooldown at %v (LastChecked: %v)", peIP, time.Now(), lastChecked)
 			} else {
-				log.Printf("[Counter=%d] Skipping Unhealthy IP %s (still in cooldown) (LastChecked: %v)", idx, peIP, entry.LastChecked)
+				log.Printf("[Counter=%d] Skipping Unhealthy IP %s (still in cooldown) (LastChecked: %v)", idx, peIP, lastChecked)
 				continue
 			}
 		}
