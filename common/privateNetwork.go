@@ -395,15 +395,15 @@ func GetGlobalPrivateEndpointIPCount() int {
 	return len(globalPrivateEndpointIPs)
 }
 
-// Function to check if private network is enabled or not. By default it should be disabled and return false
-func IsPrivateNetworkEnabled() bool {
-	if privateNetworkArgs.Enabled {
-		//fmt.Printf("Private Networking is enabled with Private Endpoints: %v and BucketName: %s\n", privateNetworkArgs.PrivateEndpointIPs, privateNetworkArgs.BucketName)
-		return true
-	} else {
-		//fmt.Println("Private Networking is not enabled")
+// IsPrivateNetworkTransfer returns true when private networking is enabled and the specified
+// source requires traffic to traverse the private tunnel (currently S3 sources).
+func IsPrivateNetworkTransfer(source Location) bool {
+	if !privateNetworkArgs.Enabled {
 		return false
 	}
+
+	// Currently, only S3 sources are supported for private network transfers
+	return source == ELocation.S3()
 }
 
 // MarkHealthy safely marks the IPEntry as healthy
