@@ -102,7 +102,6 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.DisableSyslog(),
 	EEnvironmentVariable.MimeMapping(),
 	EEnvironmentVariable.DownloadToTempPath(),
-	EEnvironmentVariable.PrivateNetworkTransportMode(),
 }
 
 var EEnvironmentVariable = EnvironmentVariable{}
@@ -486,13 +485,5 @@ func (EnvironmentVariable) DisableBlobTransferResume() EnvironmentVariable {
 		Name:         "AZCOPY_DISABLE_INCOMPLETE_BLOB_TRANSFER",
 		DefaultValue: "false",
 		Description:  "An incomplete transfer to blob endpoint will be resumed from start if set to true",
-	}
-}
-
-func (EnvironmentVariable) PrivateNetworkTransportMode() EnvironmentVariable {
-	return EnvironmentVariable{
-		Name:         "AZCOPY_PRIVATE_NETWORK_TRANSPORT_MODE",
-		DefaultValue: "pool",
-		Description:  "Controls how the private network transport manages connections. Allowed values: 'pool' (default) to reuse the global HTTP connection pool, or 'default' to clone the Go default transport instead.",
 	}
 }
