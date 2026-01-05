@@ -65,6 +65,8 @@ type blobTraverser struct {
 
 	isDFS bool
 
+	includeRoot bool
+
 	errorChannel chan<- TraverserErrorItemInfo
 
 	// includeDirectoryOrPrefix is used to determine if we should enqueue directories or prefixes
@@ -382,6 +384,42 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		_, err = getProcessingError(err)
 		if err != nil {
 			return err
+		}
+	} else if blobURLParts.BlobName != "" && isDirStub && t.isDFS && t.includeRoot {
+		// Handle enumerating folder roots for BlobFS (HNS enabled only)
+		var dirName string
+		if strings.HasSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING) {
+			dirName = strings.TrimSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)
+		}
+		if azcopyScanningLogger != nil {
+			azcopyScanningLogger.Log(common.LogDebug, fmt.Sprintf("Detected the root as a folder %s.", dirName))
+		}
+
+		// Use props from previous call to create the root object
+		if blobProperties != nil && t.doesBlobRepresentAFolder(blobProperties.Metadata) {
+			dirPropsAdapter := blobPropertiesResponseAdapter{blobProperties}
+			storedObject := newStoredObject(
+				preprocessor,
+				"", // empty for root
+				"", // empty for root
+				common.EEntityType.Folder(),
+				dirPropsAdapter.LastModified(),
+				0, // folders have no size
+				dirPropsAdapter,
+				dirPropsAdapter,
+				dirPropsAdapter.Metadata,
+				blobURLParts.ContainerName,
+			)
+
+			if t.incrementEnumerationCounter != nil {
+				t.incrementEnumerationCounter(common.EEntityType.Folder())
+			}
+
+			err = processIfPassedFilters(filters, storedObject, processor)
+			_, err = getProcessingError(err)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -743,6 +781,7 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		cpkOptions:                  opts.CpkOptions,
 		preservePermissions:         opts.PreservePermissions,
 		isDFS:                       common.DerefOrZero(common.FirstOrZero(blobOpts).isDFS),
+		includeRoot:                 opts.IncludeRoot,
 		errorChannel:                opts.ErrorChannel,
 	}
 
