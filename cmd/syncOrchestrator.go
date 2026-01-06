@@ -299,6 +299,13 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 	originalPath := so.relativePath
 	syncOrchestratorLog(common.LogDebug, fmt.Sprintf("[PROCESSOR] Before buildChildPath - dir='%s', originalPath='%s'", st.dir, originalPath))
 
+	// Skip directory placeholder objects that represent the current directory itself
+	// These have empty relativePath after prefix trimming and would cause re-enqueueing of the same directory
+	if originalPath == "" && so.entityType == common.EEntityType.Folder() {
+		syncOrchestratorLog(common.LogDebug, fmt.Sprintf("[PROCESSOR] Skipping self-referential directory placeholder for dir='%s'", st.dir))
+		return nil
+	}
+
 	// Build full path for the object relative to current directory
 	so.relativePath = buildChildPath(st.dir, so.relativePath)
 
