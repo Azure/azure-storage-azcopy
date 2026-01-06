@@ -5,6 +5,7 @@ package traverser
 
 import (
 	"os"
+	"strconv"
 	"syscall"
 )
 
@@ -31,4 +32,10 @@ func IsRegularFile(info os.FileInfo) bool {
 
 func IsSymbolicLink(fileInfo os.FileInfo) bool {
 	return fileInfo.Mode()&os.ModeSymlink == os.ModeSymlink
+}
+
+func getInodeString(fileInfo os.FileInfo) string {
+	stat := fileInfo.Sys().(*syscall.Stat_t) // safe to cast again since IsHardlink succeeded
+	inodeStr := strconv.FormatUint(stat.Ino, 10)
+	return inodeStr
 }

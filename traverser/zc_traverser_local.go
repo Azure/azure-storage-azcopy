@@ -33,11 +33,9 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
@@ -1000,8 +998,7 @@ func HandleHardlinkForNFS(fileInfo os.FileInfo,
 	hardlinkHandlingType common.HardlinkHandlingType,
 	incrementEnumerationCounter enumerationCounterFunc) bool {
 
-	stat := fileInfo.Sys().(*syscall.Stat_t) // safe to cast again since IsHardlink succeeded
-	inodeStr := strconv.FormatUint(stat.Ino, 10)
+	inodeStr := getInodeString(fileInfo)
 
 	if hardlinkHandlingType == hardlinkHandlingType.Skip() {
 		// Log a warning if hardlink handling is skipped
