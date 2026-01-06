@@ -213,10 +213,20 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 	// This is because * is both a valid URL path character and a valid portion of an object key in S3.
 	searchPrefix := t.s3URLParts.ObjectKey
 
+	// Debug: Log the searchPrefix being used
+	if glcm != nil {
+		glcm.Info(fmt.Sprintf("[S3_TRAVERSE_START] bucket=%s, searchPrefix='%s', recursive=%v", t.s3URLParts.BucketName, searchPrefix, t.recursive))
+	}
+
 	// It's a bucket or virtual directory.
 	for objectInfo := range t.s3Client.ListObjectsV2(t.s3URLParts.BucketName, searchPrefix, t.recursive, t.ctx.Done()) {
 		// re-join the unescaped path.
 		relativePath := strings.TrimPrefix(objectInfo.Key, searchPrefix)
+
+		// Debug: Log path transformation
+		if glcm != nil {
+			glcm.Info(fmt.Sprintf("[S3_OBJECT] key='%s' -> relativePath='%s' (searchPrefix='%s')", objectInfo.Key, relativePath, searchPrefix))
+		}
 
 		// Ignoring this object because it is a zero-byte placeholder typically created to simulate a folder in S3-compatible storage.
 		// These objects have an empty RelativePath and are marked as files, but they do not represent actual user data.
@@ -270,6 +280,11 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 				noMetadata,
 				t.s3URLParts.BucketName)
 
+			// Debug: Log folder object being passed to processor
+			if glcm != nil {
+				glcm.Info(fmt.Sprintf("[S3_FOLDER] Passing to processor: name='%s', relativePath='%s'", objectName, relativePath))
+			}
+
 		} else {
 			if strings.HasSuffix(relativePath, "/") {
 				// If a file has a suffix of /, it's still treated as a folder.
@@ -305,6 +320,11 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 				noBlobProps,
 				oie.NewCommonMetadata(),
 				t.s3URLParts.BucketName)
+
+			// Debug: Log file object being passed to processor
+			if glcm != nil {
+				glcm.Info(fmt.Sprintf("[S3_FILE] Passing to processor: name='%s', relativePath='%s', size=%d", objectName, relativePath, objectInfo.Size))
+			}
 		}
 
 		err = processIfPassedFilters(filters,

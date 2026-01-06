@@ -295,11 +295,15 @@ func buildChildPath(baseDir, relativePath string) string {
 // It builds the full path, categorizes objects as files or directories,
 // and stores them in the indexer for later comparison and transfer.
 func (st *SyncTraverser) processor(so StoredObject) error {
+	// Debug: Log original path before transformation
+	originalPath := so.relativePath
+	syncOrchestratorLog(common.LogDebug, fmt.Sprintf("[PROCESSOR] Before buildChildPath - dir='%s', originalPath='%s'", st.dir, originalPath))
+
 	// Build full path for the object relative to current directory
 	so.relativePath = buildChildPath(st.dir, so.relativePath)
 
 	// Debug: Log every object being processed
-	syncOrchestratorLog(common.LogDebug, fmt.Sprintf("Processing object: %s (type: %s, dir: %s)", so.relativePath, so.entityType, st.dir))
+	syncOrchestratorLog(common.LogDebug, fmt.Sprintf("[PROCESSOR] After buildChildPath - finalPath='%s' (type: %s)", so.relativePath, so.entityType))
 
 	// Thread-safe storage in the indexer first
 	st.enumerator.objectIndexer.rwMutex.Lock()
@@ -666,6 +670,9 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		pt_src.Value = strings.Join(sync_src, common.AZCOPY_PATH_SEPARATOR_STRING)
 		st_src.Value = strings.Join(sync_dst, common.AZCOPY_PATH_SEPARATOR_STRING)
 
+		// Debug: Log the full source URL being used for traverser creation
+		syncOrchestratorLog(common.LogDebug, fmt.Sprintf("[TRAVERSER_CREATE] Creating traverser for dir='%s', full source URL='%s'", dir.(minimalStoredObject).relativePath, pt_src.Value))
+
 		// Handle Windows path separators
 		if runtime.GOOS == "windows" {
 			pt_src.Value = strings.ReplaceAll(pt_src.Value, "/", "\\")
@@ -867,10 +874,10 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		}
 
 		// Enqueue discovered subdirectories for processing
-		syncOrchestratorLog(common.LogDebug, fmt.Sprintf("Processing dir %s: enqueueing %d subdirectories", dir.(minimalStoredObject).relativePath, len(stra.sub_dirs)))
-		for _, sub_dir := range stra.sub_dirs {
+		syncOrchestratorLog(common.LogDebug, fmt.Sprintf("[ENQUEUE_START] Parent dir '%s': enqueueing %d subdirectories", dir.(minimalStoredObject).relativePath, len(stra.sub_dirs)))
+		for idx, sub_dir := range stra.sub_dirs {
 			crawlWg.Add(1) // IMPORTANT: Add to WaitGroup *before* enqueuing
-			syncOrchestratorLog(common.LogDebug, fmt.Sprintf("Enqueueing subdirectory: %s", sub_dir.relativePath))
+			syncOrchestratorLog(common.LogDebug, fmt.Sprintf("[ENQUEUE_%d] Subdirectory: '%s' (parent: '%s')", idx, sub_dir.relativePath, dir.(minimalStoredObject).relativePath))
 			enqueueDir(minimalStoredObject{
 				relativePath:           sub_dir.relativePath,
 				changeTime:             sub_dir.changeTime,
