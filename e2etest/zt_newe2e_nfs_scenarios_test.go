@@ -93,6 +93,11 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 		"|preservePermissions=false": false,
 	})
 
+	hardlinkType := NamedResolveVariation(svm, map[string]common.HardlinkHandlingType{
+		"|hardlinks=follow": common.DefaultHardlinkHandlingType,
+		"|hardlinks=skip":   common.SkipHardlinkHandlingType,
+	})
+
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
 	}), ResourceDefinitionContainer{
@@ -102,7 +107,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 			},
 		},
 	})
-
+	defer dstContainer.Delete(svm)
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(
 		svm, common.ELocation.Local()), ResourceDefinitionContainer{})
 
@@ -270,6 +275,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 					PreservePermissions: pointerTo(preservePermissions),
 					PreserveSymlinks:    pointerTo(preserveSymlinks),
 					FollowSymlinks:      pointerTo(followSymlinks),
+					HardlinkType:        pointerTo(hardlinkType),
 				},
 			},
 			ShouldFail: shouldFail,
@@ -304,7 +310,11 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 	if !preserveSymlinks && !followSymlinks {
 		ValidateSkippedSymlinksCount(svm, stdOut, 2)
 	}
-	ValidateHardlinksConvertedCount(svm, stdOut, 2)
+	if hardlinkType == common.SkipHardlinkHandlingType {
+		ValidateHardlinksSkippedCount(svm, stdOut, 2)
+	} else {
+		ValidateHardlinksConvertedCount(svm, stdOut, 2)
+	}
 	ValidateSkippedSpecialFileCount(svm, stdOut, 1)
 }
 
@@ -341,6 +351,11 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 		"|preserveInfo=false": false,
 	})
 
+	hardlinkType := NamedResolveVariation(svm, map[string]common.HardlinkHandlingType{
+		"|hardlinks=follow": common.DefaultHardlinkHandlingType,
+		"|hardlinks=skip":   common.SkipHardlinkHandlingType,
+	})
+
 	//TODO: Not checking for this flag as false as azcopy needs to run by root user
 	// in order to set the owner and group to 0(root)
 	preservePermissions := NamedResolveVariation(svm, map[string]bool{
@@ -358,6 +373,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 			},
 		},
 	})
+	defer srcContainer.Delete(svm)
 
 	folderProperties, fileProperties, fileOrFolderPermissions := getPropertiesAndPermissions(svm, preserveProperties, preservePermissions)
 	rootDir := "dir_file_copy_test_" + uuid.NewString()
@@ -436,7 +452,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 	obj = ResourceDefinitionObject{
 		ObjectName: pointerTo(hOriginalFileName),
 		ObjectProperties: ObjectProperties{
-			EntityType:         common.EEntityType.File(),
+			EntityType:         common.EEntityType.Hardlink(),
 			FileNFSProperties:  fileProperties,
 			FileNFSPermissions: fileOrFolderPermissions,
 		}}
@@ -479,6 +495,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 					PreserveInfo:        pointerTo(preserveProperties),
 					PreserveSymlinks:    pointerTo(preserveSymlinks),
 					FollowSymlinks:      pointerTo(followSymlinks),
+					HardlinkType:        pointerTo(hardlinkType),
 				},
 			},
 			ShouldFail: shouldFail,
@@ -509,7 +526,11 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 		validateObjectContent: true,
 		fromTo:                common.EFromTo.FileNFSLocal(),
 	})
-	ValidateHardlinksConvertedCount(svm, stdOut, 2)
+	if hardlinkType == common.SkipHardlinkHandlingType {
+		ValidateHardlinksSkippedCount(svm, stdOut, 2)
+	} else {
+		ValidateHardlinksConvertedCount(svm, stdOut, 2)
+	}
 
 	if !followSymlinks && !preserveSymlinks {
 		ValidateSkippedSymlinksCount(svm, stdOut, 1)
@@ -550,6 +571,11 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 		"|preservePermissions=false": false,
 	})
 
+	hardlinkType := NamedResolveVariation(svm, map[string]common.HardlinkHandlingType{
+		"|hardlinks=follow": common.DefaultHardlinkHandlingType,
+		"|hardlinks=skip":   common.SkipHardlinkHandlingType,
+	})
+
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
 	}), ResourceDefinitionContainer{
@@ -569,6 +595,8 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 			},
 		},
 	})
+	defer srcContainer.Delete(svm)
+	defer dstContainer.Delete(svm)
 
 	folderProperties, fileProperties, fileOrFolderPermissions := getPropertiesAndPermissions(svm, preserveProperties, preservePermissions)
 
@@ -699,6 +727,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 					PreserveInfo:        pointerTo(preserveProperties),
 					PreserveSymlinks:    pointerTo(preserveSymlinks),
 					FollowSymlinks:      pointerTo(followSymlinks),
+					HardlinkType:        pointerTo(hardlinkType),
 				},
 			},
 			ShouldFail: shouldFail,
@@ -732,7 +761,11 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 		preserveInfo:          preserveProperties,
 	})
 
-	ValidateHardlinksConvertedCount(svm, stdOut, 2)
+	if hardlinkType == common.SkipHardlinkHandlingType {
+		ValidateHardlinksSkippedCount(svm, stdOut, 2)
+	} else {
+		ValidateHardlinksConvertedCount(svm, stdOut, 2)
+	}
 	if !preserveSymlinks && !followSymlinks {
 		ValidateSkippedSymlinksCount(svm, stdOut, 1)
 	}
@@ -768,6 +801,11 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 		"|preservePermissions=false": false,
 	})
 
+	hardlinkType := NamedResolveVariation(svm, map[string]common.HardlinkHandlingType{
+		"|hardlinks=follow": common.DefaultHardlinkHandlingType,
+		"|hardlinks=skip":   common.SkipHardlinkHandlingType,
+	})
+
 	dstShare := CreateResource[ContainerResourceManager](svm, GetRootResource(svm,
 		ResolveVariation(svm, []common.Location{common.ELocation.File()}),
 		GetResourceOptions{
@@ -791,6 +829,9 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 			},
 		},
 	})
+
+	defer dstShare.Delete(svm)
+
 	folderProperties, fileProperties, _ := getPropertiesAndPermissions(svm, preserveProperties, preservePermissions)
 
 	rootDir := "dir_file_copy_test_" + uuid.NewString()
@@ -810,6 +851,8 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 		dst = dstShare
 	}
 	src = srcShare.GetObject(svm, rootDir, common.EEntityType.Folder())
+
+	defer srcShare.Delete(svm)
 
 	// Create destination directories
 	srcObjs := make(ObjectResourceMappingFlat)
@@ -911,7 +954,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 					FromTo:              pointerTo(common.EFromTo.FileNFSFileSMB()),
 					PreservePermissions: pointerTo(preservePermissions),
 					PreserveInfo:        pointerTo(preserveProperties),
-					HardlinkType:        pointerTo(common.EHardlinkHandlingType.Follow()),
+					HardlinkType:        pointerTo(hardlinkType),
 					PreserveSymlinks:    pointerTo(preserveSymlinks),
 					FollowSymlinks:      pointerTo(followSymlinks),
 				},
@@ -961,7 +1004,11 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 		preserveInfo:          preserveProperties,
 	})
 
-	ValidateHardlinksConvertedCount(svm, stdOut, 2)
+	if hardlinkType == common.SkipHardlinkHandlingType {
+		ValidateHardlinksSkippedCount(svm, stdOut, 2)
+	} else {
+		ValidateHardlinksConvertedCount(svm, stdOut, 2)
+	}
 	if !preserveSymlinks && !followSymlinks {
 		ValidateSkippedSymlinksCount(svm, stdOut, 1)
 	}
@@ -997,6 +1044,11 @@ func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationMa
 		"|preservePermissions=false": false,
 	})
 
+	hardlinkType := NamedResolveVariation(svm, map[string]common.HardlinkHandlingType{
+		"|hardlinks=follow": common.DefaultHardlinkHandlingType,
+		"|hardlinks=skip":   common.SkipHardlinkHandlingType,
+	})
+
 	// NFS Share
 	dstShare := CreateResource[ContainerResourceManager](svm, GetRootResource(svm,
 		ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}),
@@ -1009,6 +1061,9 @@ func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationMa
 			},
 		},
 	})
+
+	defer dstShare.Delete(svm)
+
 	// SMB share
 	srcShare := CreateResource[ContainerResourceManager](svm, GetRootResource(svm,
 		ResolveVariation(svm, []common.Location{common.ELocation.File()}),
@@ -1021,6 +1076,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationMa
 			},
 		},
 	})
+	defer srcShare.Delete(svm)
 
 	var folderProperties, fileProperties FileProperties
 	if preserveProperties {
@@ -1111,7 +1167,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationMa
 					PreserveInfo:        pointerTo(true),
 					PreserveSymlinks:    pointerTo(preserveSymlinks),
 					FollowSymlinks:      pointerTo(followSymlinks),
-					HardlinkType:        pointerTo(common.EHardlinkHandlingType.Follow()),
+					HardlinkType:        pointerTo(hardlinkType),
 				},
 			},
 			ShouldFail: shouldFail,

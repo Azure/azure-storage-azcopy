@@ -33,9 +33,11 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
@@ -365,7 +367,6 @@ func WalkWithSymlinks(appCtx context.Context,
 				return nil
 			} else {
 				if fromTo.IsNFS() {
-					LogHardLinkIfDefaultPolicy(fileInfo, hardlinkHandling)
 					if !IsRegularFile(fileInfo) && !fileInfo.IsDir() {
 						// We don't want to process other non-regular files here.
 						if incrementEnumerationCounter != nil {
@@ -691,7 +692,10 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 				}
 			} else if IsHardlink(singleFileInfo) {
 				entityType = common.EEntityType.Hardlink()
-				LogHardLinkIfDefaultPolicy(singleFileInfo, t.hardlinkHandling)
+				if skip := HandleHardlinkForNFS(singleFileInfo,
+					t.hardlinkHandling, t.incrementEnumerationCounter); skip {
+					return nil
+				}
 			} else if IsRegularFile(singleFileInfo) {
 				entityType = common.EEntityType.File()
 			} else {
@@ -715,6 +719,12 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 					entityType = common.EEntityType.Symlink()
 				} else if t.symlinkHandling == common.ESymlinkHandlingType.Skip() {
 					return ErrorLoneSymlinkSkipped
+				}
+			} else if IsHardlink(singleFileInfo) {
+				entityType = common.EEntityType.Hardlink()
+				if skip := HandleHardlinkForNFS(singleFileInfo,
+					t.hardlinkHandling, t.incrementEnumerationCounter); skip {
+					return nil
 				}
 			} else if IsRegularFile(singleFileInfo) {
 				entityType = common.EEntityType.File()
@@ -774,6 +784,10 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 				if t.fromTo.IsNFS() {
 					if IsHardlink(fileInfo) {
 						entityType = common.EEntityType.Hardlink()
+						if skip := HandleHardlinkForNFS(fileInfo,
+							t.hardlinkHandling, t.incrementEnumerationCounter); skip {
+							return nil
+						}
 					}
 				}
 
@@ -955,10 +969,8 @@ func logNFSLinkWarning(fileName,
 	var message string
 	if isSymlink {
 		message = fmt.Sprintf("File '%s' at the source is a symbolic link and will be skipped and not copied", fileName)
-	} else if inodeNo != "" {
-		if hardlinkHandling == common.EHardlinkHandlingType.Skip() {
-			message = fmt.Sprintf("File '%s' with inode '%s' at the source is a hard link, but will be skipped", fileName, inodeNo)
-		}
+	} else if hardlinkHandling == common.EHardlinkHandlingType.Skip() {
+		message = fmt.Sprintf("File '%s' with inode '%s' at the source is a hard link, and will be skipped", fileName, inodeNo)
 	}
 
 	common.AzcopyCurrentJobLogger.Log(common.LogWarning, message)
@@ -976,6 +988,27 @@ func HandleSymlinkForNFS(fileName string,
 		if incrementEnumerationCounter != nil {
 			incrementEnumerationCounter(common.EEntityType.Symlink(),
 				symlinkHandlingType, common.DefaultHardlinkHandlingType)
+		}
+		return true
+	}
+	return false
+}
+
+// HandleHardlinkForNFS processes a hard link based on the specified handling type.
+// It either logs a warning if skip or preserves the hard link based on the hard link handling type.
+func HandleHardlinkForNFS(fileInfo os.FileInfo,
+	hardlinkHandlingType common.HardlinkHandlingType,
+	incrementEnumerationCounter enumerationCounterFunc) bool {
+
+	stat := fileInfo.Sys().(*syscall.Stat_t) // safe to cast again since IsHardlink succeeded
+	inodeStr := strconv.FormatUint(stat.Ino, 10)
+
+	if hardlinkHandlingType == hardlinkHandlingType.Skip() {
+		// Log a warning if hardlink handling is skipped
+		logNFSLinkWarning(fileInfo.Name(), inodeStr, false, hardlinkHandlingType)
+		if incrementEnumerationCounter != nil {
+			incrementEnumerationCounter(common.EEntityType.Hardlink(),
+				common.ESymlinkHandlingType.Skip(), hardlinkHandlingType)
 		}
 		return true
 	}
