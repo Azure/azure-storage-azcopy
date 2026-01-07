@@ -31,8 +31,6 @@ import (
 	"syscall"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
 )
@@ -72,7 +70,7 @@ func init() {
 			if err != nil {
 				glcm.Error(fmt.Sprintf("failed to perform resume command due to error: %s", err.Error()))
 			}
-			glcm.Exit(nil, EExitCode.Success())
+			glcm.SurrenderControl()
 		},
 	}
 
@@ -108,7 +106,7 @@ func (rca resumeCmdArgs) process() error {
 	resumeOptions := azcopy.ResumeJobOptions{
 		SourceSAS:      rca.SourceSAS,
 		DestinationSAS: rca.DestinationSAS,
-		Handler:        CLIResumeHandler{},
+		Handler:        cliResumeHandler{},
 	}
 	// Create a context that can be cancelled by Ctrl-C
 	ctx, cancel := context.WithCancel(context.Background())
@@ -122,18 +120,43 @@ func (rca resumeCmdArgs) process() error {
 		cancel()
 	}()
 
-	summary, err := Client.ResumeJob(ctx, jobID, resumeOptions)
+	_, err = Client.ResumeJob(ctx, jobID, resumeOptions)
 	if err != nil {
 		return fmt.Errorf("error resuming job %s. failed with error: %v", jobID, err)
 	}
 
+	return nil
+}
+
+type cliResumeHandler struct {
+}
+
+func (c cliResumeHandler) OnStart(ctx azcopy.JobContext) {
+	glcm.Init(GetStandardInitOutputBuilder(ctx.JobID.String(), ctx.LogPath, false, ""))
+}
+
+func (c cliResumeHandler) OnTransferProgress(progress azcopy.ResumeJobProgress) {
+	builder := func(format OutputFormat) string {
+		if format == EOutputFormat.Json() {
+			jsonOutput, err := json.Marshal(progress.ListJobSummaryResponse)
+			common.PanicIfErr(err)
+			return string(jsonOutput)
+		} else {
+			return azcopy.GetCopyProgress(azcopy.CopyProgress(progress), false)
+		}
+	}
+
+	glcm.Progress(builder)
+}
+
+func (c cliResumeHandler) OnComplete(result azcopy.ResumeJobResult) {
 	exitCode := EExitCode.Success()
-	if summary.TransfersFailed > 0 {
+	if result.TransfersFailed > 0 {
 		exitCode = EExitCode.Error()
 	}
 	glcm.Exit(func(format OutputFormat) string {
 		if format == EOutputFormat.Json() {
-			jsonOutput, err := json.Marshal(summary)
+			jsonOutput, err := json.Marshal(result)
 			common.PanicIfErr(err)
 			return string(jsonOutput)
 		} else {
@@ -155,73 +178,22 @@ Number of Folder Transfers Skipped: %v
 Total Number of Bytes Transferred: %v
 Final Job Status: %v
 `,
-				summary.JobID.String(),
-				jobsAdmin.ToFixed(summary.ElapsedTime.Minutes(), 4),
-				summary.FileTransfers,
-				summary.FolderPropertyTransfers,
-				summary.SymlinkTransfers,
-				summary.TotalTransfers,
-				summary.TransfersCompleted-summary.FoldersCompleted,
-				summary.FoldersCompleted,
-				summary.TransfersFailed-summary.FoldersFailed,
-				summary.FoldersFailed,
-				summary.TransfersSkipped-summary.FoldersSkipped,
-				summary.FoldersSkipped,
-				summary.TotalBytesTransferred,
-				summary.JobStatus)
+				result.JobID.String(),
+				azcopy.ToFixed(result.ElapsedTime.Minutes(), 4),
+				result.FileTransfers,
+				result.FolderPropertyTransfers,
+				result.SymlinkTransfers,
+				result.TotalTransfers,
+				result.TransfersCompleted-result.FoldersCompleted,
+				result.FoldersCompleted,
+				result.TransfersFailed-result.FoldersFailed,
+				result.FoldersFailed,
+				result.TransfersSkipped-result.FoldersSkipped,
+				result.FoldersSkipped,
+				result.TotalBytesTransferred,
+				result.JobStatus)
 		}
 	}, exitCode)
-
-	return nil
-}
-
-type CLIResumeHandler struct {
-}
-
-func (C CLIResumeHandler) OnStart(ctx azcopy.JobContext) {
-	glcm.Init(GetStandardInitOutputBuilder(ctx.JobID.String(), ctx.LogPath, false, ""))
-}
-
-func (C CLIResumeHandler) OnTransferProgress(progress azcopy.ResumeJobProgress) {
-	builder := func(format OutputFormat) string {
-		if format == EOutputFormat.Json() {
-			jsonOutput, err := json.Marshal(progress.ListJobSummaryResponse)
-			common.PanicIfErr(err)
-			return string(jsonOutput)
-		} else {
-			// if json is not needed, then we generate a message that goes nicely on the same line
-			// display a scanning keyword if the job is not completely ordered
-			var scanningString = " (scanning...)"
-			if progress.CompleteJobOrdered {
-				scanningString = ""
-			}
-
-			throughput := progress.Throughput
-			throughputString := fmt.Sprintf("2-sec Throughput (Mb/s): %v", jobsAdmin.ToFixed(throughput, 4))
-			if throughput == 0 {
-				// As there would be case when no bits sent from local, e.g. service side copy, when throughput = 0, hide it.
-				throughputString = ""
-			}
-
-			// indicate whether constrained by disk or not
-			perfString, diskString := getPerfDisplayText(progress.PerfStrings, progress.PerfConstraint, progress.ElapsedTime, false)
-
-			return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
-				progress.PercentComplete,
-				progress.TransfersCompleted,
-				progress.TransfersFailed,
-				progress.TotalTransfers-(progress.TransfersCompleted+progress.TransfersFailed+progress.TransfersSkipped),
-				progress.TransfersSkipped, progress.TotalTransfers, scanningString, perfString, throughputString, diskString)
-		}
-	}
-	if jobsAdmin.JobsAdmin != nil {
-		jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(progress.JobID)
-		if exists {
-			jobMan.Log(common.LogInfo, builder(EOutputFormat.Text()))
-		}
-	}
-
-	glcm.Progress(builder)
 }
 
 func parseTransfers(arg string) map[string]int {
