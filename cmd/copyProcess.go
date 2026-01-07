@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -23,7 +24,7 @@ func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 		common.LogPathFolder = ""
 	}
 
-	cooked.putBlobSize, err = blockSizeInBytes(cooked.PutBlobSizeMB)
+	cooked.putBlobSize, err = azcopy.BlockSizeInBytes(cooked.PutBlobSizeMB)
 	if err != nil {
 		return err
 	}
@@ -54,7 +55,7 @@ func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 		addToChannel := func(v string, paramName string) {
 			// empty strings should be ignored, otherwise the source root itself is selected
 			if len(v) > 0 {
-				warnIfHasWildcard(includeWarningOncer, paramName, v)
+				azcopy.WarnIfHasWildcard(includeWarningOncer, paramName, v)
 				listChan <- v
 			}
 		}
@@ -170,10 +171,10 @@ func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 			// Skip logging this msg for cross-protocol transfers
 			// because --preserve-permissions flag is not applicable.
 			if !(cooked.FromTo == common.EFromTo.FileSMBFileNFS() || cooked.FromTo == common.EFromTo.FileNFSFileSMB()) {
-				glcm.Info(PreserveNFSPermissionsDisabledMsg)
+				glcm.Info(azcopy.PreserveNFSPermissionsDisabledMsg)
 			}
 		} else {
-			glcm.Info(PreservePermissionsDisabledMsg)
+			glcm.Info(azcopy.PreservePermissionsDisabledMsg)
 		}
 	}
 
