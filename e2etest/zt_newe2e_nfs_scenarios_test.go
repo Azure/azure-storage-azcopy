@@ -287,11 +287,24 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 	}
 
 	// As we cannot set creationTime in linux we will fetch the properties from local and set it to src object properties
+	var hardlinkFileDeleteList []string
 	for objName := range srcObjs {
 		obj := srcObjs[objName]
 		objProp := srcObjRes[objName].GetProperties(svm)
 		if obj.ObjectProperties.FileNFSProperties != nil {
 			obj.ObjectProperties.FileNFSProperties.FileCreationTime = objProp.FileProperties.FileCreationTime
+		}
+		if obj.EntityType == common.EEntityType.Hardlink() {
+			if hardlinkType == common.SkipHardlinkHandlingType {
+				hardlinkFileDeleteList = append(hardlinkFileDeleteList, objName)
+				hardlinkFileDeleteList = append(hardlinkFileDeleteList, obj.HardLinkedFileName)
+			}
+		}
+	}
+
+	if hardlinkType == common.SkipHardlinkHandlingType {
+		for _, objName := range hardlinkFileDeleteList {
+			delete(srcObjs, objName)
 		}
 	}
 
@@ -518,6 +531,23 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 	// Dont validate the root directory in case of sync
 	if azCopyVerb == AzCopyVerbSync {
 		delete(srcObjs, rootDir)
+	}
+
+	var hardlinkFileDeleteList []string
+	for objName := range srcObjs {
+		obj := srcObjs[objName]
+		if obj.EntityType == common.EEntityType.Hardlink() {
+			if hardlinkType == common.SkipHardlinkHandlingType {
+				hardlinkFileDeleteList = append(hardlinkFileDeleteList, objName)
+				hardlinkFileDeleteList = append(hardlinkFileDeleteList, obj.HardLinkedFileName)
+			}
+		}
+	}
+
+	if hardlinkType == common.SkipHardlinkHandlingType {
+		for _, objName := range hardlinkFileDeleteList {
+			delete(srcObjs, objName)
+		}
 	}
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -750,6 +780,23 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 	// Dont validate the root directory in case of sync
 	if azCopyVerb == AzCopyVerbSync {
 		delete(srcObjs, rootDir)
+	}
+
+	var hardlinkFileDeleteList []string
+	for objName := range srcObjs {
+		obj := srcObjs[objName]
+		if obj.EntityType == common.EEntityType.Hardlink() {
+			if hardlinkType == common.SkipHardlinkHandlingType {
+				hardlinkFileDeleteList = append(hardlinkFileDeleteList, objName)
+				hardlinkFileDeleteList = append(hardlinkFileDeleteList, obj.HardLinkedFileName)
+			}
+		}
+	}
+
+	if hardlinkType == common.SkipHardlinkHandlingType {
+		for _, objName := range hardlinkFileDeleteList {
+			delete(srcObjs, objName)
+		}
 	}
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -995,6 +1042,23 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 		delete(srcObjs, rootDir)
 	}
 
+	var hardlinkFileDeleteList []string
+	for objName := range srcObjs {
+		obj := srcObjs[objName]
+		if obj.EntityType == common.EEntityType.Hardlink() {
+			if hardlinkType == common.SkipHardlinkHandlingType {
+				hardlinkFileDeleteList = append(hardlinkFileDeleteList, objName)
+				hardlinkFileDeleteList = append(hardlinkFileDeleteList, obj.HardLinkedFileName)
+			}
+		}
+	}
+
+	if hardlinkType == common.SkipHardlinkHandlingType {
+		for _, objName := range hardlinkFileDeleteList {
+			delete(srcObjs, objName)
+		}
+	}
+
 	ValidateResource[ContainerResourceManager](svm, dstShare, ResourceDefinitionContainer{
 		Objects: srcObjs,
 	}, ValidateResourceOptions{
@@ -1204,6 +1268,23 @@ func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationMa
 	// Dont validate the root directory in case of sync
 	if azCopyVerb == AzCopyVerbSync {
 		delete(srcObjs, rootDir)
+	}
+
+	var hardlinkFileDeleteList []string
+	for objName := range srcObjs {
+		obj := srcObjs[objName]
+		if obj.EntityType == common.EEntityType.Hardlink() {
+			if hardlinkType == common.SkipHardlinkHandlingType {
+				hardlinkFileDeleteList = append(hardlinkFileDeleteList, objName)
+				hardlinkFileDeleteList = append(hardlinkFileDeleteList, obj.HardLinkedFileName)
+			}
+		}
+	}
+
+	if hardlinkType == common.SkipHardlinkHandlingType {
+		for _, objName := range hardlinkFileDeleteList {
+			delete(srcObjs, objName)
+		}
 	}
 
 	ValidateResource[ContainerResourceManager](svm, dstShare, ResourceDefinitionContainer{
