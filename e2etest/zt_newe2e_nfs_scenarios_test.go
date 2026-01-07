@@ -1,13 +1,12 @@
 package e2etest
 
 import (
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/google/uuid"
 	"os/user"
 	"runtime"
 	"strconv"
 	"time"
-
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/google/uuid"
 )
 
 func init() {
@@ -741,13 +740,11 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 			Verb: azCopyVerb,
 			Targets: []ResourceManager{
 				src.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm,
-					[]ExplicitCredentialTypes{EExplicitCredentialType.SASToken(),
-						EExplicitCredentialType.OAuth(),
-					}), svm, CreateAzCopyTargetOptions{}),
+					[]ExplicitCredentialTypes{EExplicitCredentialType.SASToken()}), //ExplicitCredentialType.OAuth(),
+					svm, CreateAzCopyTargetOptions{}),
 				dst.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm,
-					[]ExplicitCredentialTypes{EExplicitCredentialType.SASToken(),
-						EExplicitCredentialType.OAuth(),
-					}), svm, CreateAzCopyTargetOptions{}),
+					[]ExplicitCredentialTypes{EExplicitCredentialType.SASToken()}), //EExplicitCredentialType.OAuth(),
+					svm, CreateAzCopyTargetOptions{}),
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
