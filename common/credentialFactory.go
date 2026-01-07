@@ -63,7 +63,7 @@ func (o CredentialOpOptions) panicError(err error) {
 }
 
 // Constants for private network transport
-const PeReCheckCooldownTimeInSecs = 3600
+const PeReCheckCooldownTimeInSecs = 600 // 10 minutes - time to wait before rechecking an unhealthy private endpoint
 const PeCheckRetries = 3
 const PeCheckIntervalInmilliSecs = 200
 
@@ -114,7 +114,7 @@ func CreateS3Credential(ctx context.Context, credInfo CredentialInfo, options Cr
 }
 
 func CreateS3ClientFromProvider(credInfo CredentialInfo) (*minio.Client, error) {
-	if IsPrivateNetworkEnabled() {
+	if IsPrivateNetworkTransfer(ELocation.S3()) {
 		fmt.Println("Creating S3 Client for Private Network")
 		s3Client, err := createS3ClientForPrivateNetwork(credInfo, nil)
 		return s3Client, err
@@ -145,7 +145,7 @@ func CreateS3Client(ctx context.Context, credInfo CredentialInfo, option Credent
 	if err != nil {
 		return nil, err
 	}
-	if IsPrivateNetworkEnabled() {
+	if IsPrivateNetworkTransfer(ELocation.S3()) {
 		fmt.Println("Creating S3 Client for Private Network")
 		s3Client, err := createS3ClientForPrivateNetwork(credInfo, credential)
 		return s3Client, err

@@ -154,15 +154,20 @@ func ReadAndValidateResponseBody[T any](body T, responseBuffer *[]byte, logger I
 			}
 		}()
 
-		// Read all available data from the body into the caller's buffer
-		// io.ReadFull reads exactly len(buffer) bytes
 		if responseBuffer == nil || *responseBuffer == nil {
 			return 0, fmt.Errorf("responseBuffer cannot be nil")
 		}
 
-		n, readErr := io.ReadFull(readCloser, *responseBuffer)
-		if readErr != nil && readErr != io.ErrUnexpectedEOF {
-			return n, fmt.Errorf("failed to read response body: %w", readErr)
+		// Read all available data from the body into the caller's buffer
+		// io.ReadFull reads exactly len(buffer) bytes
+		n, err := io.ReadFull(readCloser, *responseBuffer)
+
+		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+			return n, fmt.Errorf("failed to read response body: %w", err)
+		}
+
+		if n != len(*responseBuffer) {
+			return n, fmt.Errorf("failed to read complete response body: got %d bytes, expected %d", n, len(*responseBuffer))
 		}
 
 		return n, nil
