@@ -410,13 +410,10 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 	}
 	safeToUseHash := true
 
-	// If the source is S3, we need to get a pre-signed URL for the source file.
-	// These conditions to decide to go PutBlob path can be improved later for all the sourceTypes.
-	isPrivateNetworkingEnabled := common.IsPrivateNetworkEnabled()
-	isSourceTypeS3 := jptm.FromTo().From() == common.ELocation.S3()
-	isSourcePrivate := isSourceTypeS3 && isPrivateNetworkingEnabled
+	// Determine if this is private network transfer, which affects our prefetching strategy.
+	isPrivateNetworkTransfer := common.IsPrivateNetworkTransfer(jptm.FromTo().From())
 
-	if srcInfoProvider.IsLocal() || isSourcePrivate {
+	if srcInfoProvider.IsLocal() || isPrivateNetworkTransfer {
 		md5Channel = s.(uploader).Md5Channel()
 		defer close(md5Channel)
 	}
@@ -433,7 +430,7 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 
 		id := common.NewChunkID(srcPath, startIndex, adjustedChunkSize) // TODO: stop using adjustedChunkSize, below, and use the size that's in the ID
 
-		if srcInfoProvider.IsLocal() || isSourcePrivate {
+		if srcInfoProvider.IsLocal() || isPrivateNetworkTransfer {
 			if jptm.WasCanceled() {
 				prefetchErr = jobCancelledLocalPrefetchErr
 			} else {
@@ -442,14 +439,14 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 				// It's a waste of time to prefetch here, too, if we already know we can't upload.
 				// Furthermore, this prevents prefetchErr changing from under us.
 				if prefetchErr == nil {
-					if !isSourcePrivate {
+					if !isPrivateNetworkTransfer {
 						// create reader and prefetch the data into it
 						chunkReader = createPopulatedChunkReader(jptm, sourceFileFactory, id, adjustedChunkSize, srcFile)
 						// Wait until we have enough RAM, and when we do, prefetch the data for this chunk.
 						prefetchErr = chunkReader.BlockingPrefetch(srcFile, false)
 					} else {
 						chunkReader = createS3ChunkReader(jptm, srcInfoProvider.(IRemoteSourceInfoProvider), id, adjustedChunkSize, srcFile)
-						prefetchErr = chunkReader.BlockingPrefetch(srcFile, true)
+						prefetchErr = chunkReader.BlockingPrefetch(srcFile, false)
 					}
 
 					if prefetchErr == nil {
@@ -482,7 +479,7 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 		jptm.LogChunkStatus(id, common.EWaitReason.WorkerGR())
 		isWholeFile := numChunks == 1
 		var cf chunkFunc
-		if srcInfoProvider.IsLocal() || isSourcePrivate {
+		if srcInfoProvider.IsLocal() || isPrivateNetworkTransfer {
 			if prefetchErr == nil {
 				cf = s.(uploader).GenerateUploadFunc(id, chunkIDCount, chunkReader, isWholeFile)
 			} else {
@@ -507,7 +504,7 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 		panic(fmt.Errorf("difference in the number of chunk calculated %v and actual chunks scheduled %v for src %s of size %v", numChunks, chunkIDCount, srcPath, srcSize))
 	}
 
-	if (srcInfoProvider.IsLocal() || isSourcePrivate) && safeToUseHash {
+	if (srcInfoProvider.IsLocal() || isPrivateNetworkTransfer) && safeToUseHash {
 		md5Channel <- md5Hasher.Sum(nil)
 	}
 }

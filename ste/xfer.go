@@ -101,7 +101,7 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 			// sending from remote = doing an S2S copy
 			switch fromTo.To() {
 			case common.ELocation.Blob():
-				if common.IsPrivateNetworkEnabled() && fromTo.From() == common.ELocation.S3() {
+				if common.IsPrivateNetworkTransfer(fromTo.From()) {
 					common.GetLifecycleMgr().Info("Choosing newBlobUploader for private networking to copy S3 to Blob destination.")
 					return newBlobUploader
 				}
