@@ -171,12 +171,12 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 							isRetryableErr = IsRetryableS3Error(httpS3Err.S3Error.Code)
 							isRetryableErr = httpS3Err.HTTPStatusError.IsRetryable || isRetryableErr
 							isS3AccessDeniedErr = IsAccessDeniedError(httpS3Err.S3Error.Code)
-							log.Printf("[Counter=%d Retry=%d] FAILED with S3 Error, Error Code:%d Error Message:%s retryable:%v", idx, ipAttempt, errCode, errMsg, isRetryableErr)
+							logHTTPError(errCode, "[Counter=%d Retry=%d] FAILED with S3 Error, Error Code:%d Error Message:%s retryable:%v", idx, ipAttempt, errCode, errMsg, isRetryableErr)
 						} else {
 							errCode = httpS3Err.HTTPStatusError.GetErrorCode()
 							errMsg = httpS3Err.GetErrorMessage()
 							isRetryableErr = httpS3Err.HTTPStatusError.IsRetryable
-							log.Printf("[Counter=%d Retry=%d] FAILED HTTP Error, Error Code:%d Error Message:%s retryable:%v", idx, ipAttempt, errCode, errMsg, isRetryableErr)
+							logHTTPError(errCode, "[Counter=%d Retry=%d] FAILED HTTP Error, Error Code:%d Error Message:%s retryable:%v, URL:%s", idx, ipAttempt, errCode, errMsg, isRetryableErr, req.URL.String())
 						}
 
 						// Retry if the HTTP or S3 Error is retryable
@@ -220,12 +220,12 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 						errMsg = httpS3Err.S3Error.Code + ":" + httpS3Err.S3Error.Message
 						isRetryableErr = IsRetryableS3Error(httpS3Err.S3Error.Code)
 						isRetryableErr = httpS3Err.HTTPStatusError.IsRetryable || isRetryableErr
-						log.Printf("[Counter=%d Retry=%d] FAILED with S3 Error, Error Code:%d Error Message:%s retryable:%v", idx, ipAttempt, errCode, errMsg, isRetryableErr)
+						logHTTPError(errCode, "[Counter=%d Retry=%d] FAILED with S3 Error, Error Code:%d Error Message:%s retryable:%v", idx, ipAttempt, errCode, errMsg, isRetryableErr)
 					} else if httpS3Err.HTTPStatusError != nil {
 						errCode = httpS3Err.HTTPStatusError.GetErrorCode()
 						errMsg = httpS3Err.HTTPStatusError.GetErrorMessage()
 						isRetryableErr = httpS3Err.HTTPStatusError.IsRetryable
-						log.Printf("[Counter=%d Retry=%d] FAILED HTTP Error, Error Code:%d Error Message:%s retryable:%v", idx, ipAttempt, errCode, errMsg, isRetryableErr)
+						logHTTPError(errCode, "[Counter=%d Retry=%d] FAILED HTTP Error, Error Code:%d Error Message:%s retryable:%v", idx, ipAttempt, errCode, errMsg, isRetryableErr)
 					}
 				} else {
 					errCode = 0
@@ -372,4 +372,19 @@ func (entry *IPEntry) IncrementNumRequests() {
 	entry.IpEntryLock.Lock()
 	defer entry.IpEntryLock.Unlock()
 	entry.NumRequests++
+}
+
+// Log HTTP error unless it is in the suppress list
+func logHTTPError(errCode int, format string, args ...interface{}) {
+	if shouldSuppressHTTPErrorLog(errCode) {
+		return
+	}
+	log.Printf(format, args...)
+}
+
+// During sync job, the syncOrchestrator calls getObjectProperties on prefix to determine if it is a directory, which will return 404.
+// To avoid flooding the log with expected 404 errors, we suppress logging for such errors.
+// In general, we may not need to log any http errors, instead return those errors to caller to handle appropriately.
+func shouldSuppressHTTPErrorLog(errCode int) bool {
+	return errCode == http.StatusNotFound
 }
