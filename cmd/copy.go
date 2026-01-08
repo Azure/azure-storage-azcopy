@@ -177,6 +177,7 @@ type rawCopyCmdArgs struct {
 
 func (raw *rawCopyCmdArgs) toCopyOptions(cmd *cobra.Command) (opts azcopy.CopyOptions, err error) {
 	opts = azcopy.CopyOptions{
+		Handler:                  cliCopyHandler{},
 		Recursive:                raw.recursive,
 		ForceIfReadOnly:          raw.forceIfReadOnly,
 		AutoDecompress:           raw.autoDecompress,
@@ -1154,7 +1155,6 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm LifecycleMgr) (totalKnown
 	// fetch a job status
 	summary := jobsAdmin.GetJobSummary(cca.jobID)
 	summary.IsCleanupJob = cca.isCleanupJob // only FE knows this, so we can only set it here
-	cleanupStatusString := fmt.Sprintf("Cleanup %v/%v", summary.TransfersCompleted, summary.TotalTransfers)
 
 	jobDone := summary.JobStatus.IsJobDone()
 	totalKnownCount = summary.TotalTransfers
@@ -1180,34 +1180,14 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm LifecycleMgr) (totalKnown
 			common.PanicIfErr(err)
 			return string(jsonOutput)
 		} else {
-			// abbreviated output for cleanup jobs
-			if cca.isCleanupJob {
-				return cleanupStatusString
+			summary.SkippedSymlinkCount = atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)
+			summary.SkippedSpecialFileCount = atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount)
+			progress := azcopy.CopyProgress{
+				ListJobSummaryResponse: summary,
+				Throughput:             throughput,
+				ElapsedTime:            duration,
 			}
-
-			// if json is not needed, then we generate a message that goes nicely on the same line
-			// display a scanning keyword if the job is not completely ordered
-			var scanningString = " (scanning...)"
-			if summary.CompleteJobOrdered {
-				scanningString = ""
-			}
-
-			throughputString := fmt.Sprintf("2-sec Throughput (Mb/s): %v", jobsAdmin.ToFixed(throughput, 4))
-			if throughput == 0 {
-				// As there would be case when no bits sent from local, e.g. service side copy, when throughput = 0, hide it.
-				throughputString = ""
-			}
-
-			// indicate whether constrained by disk or not
-			isBenchmark := cca.FromTo.From() == common.ELocation.Benchmark()
-			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration, isBenchmark)
-			return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
-				summary.PercentComplete,
-				summary.TransfersCompleted,
-				summary.TransfersFailed,
-				summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed+summary.TransfersSkipped),
-				summary.TransfersSkipped+atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)+atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount),
-				summary.TotalTransfers, scanningString, perfString, throughputString, diskString)
+			return azcopy.GetCopyProgress(progress, cca.FromTo.From() == common.ELocation.Benchmark())
 		}
 	}
 
@@ -1236,62 +1216,18 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm LifecycleMgr) (totalKnown
 				common.PanicIfErr(err)
 				return string(jsonOutput)
 			} else {
-				screenStats, logStats := formatExtraStats(cca.FromTo.From() == common.ELocation.Benchmark(), summary.AverageIOPS, summary.AverageE2EMilliseconds, summary.NetworkErrorPercentage, summary.ServerBusyPercentage)
-
-				output := fmt.Sprintf(
-					`
-
-Job %s summary
-Elapsed Time (Minutes): %v
-Number of File Transfers: %v
-Number of Folder Property Transfers: %v
-Number of Symlink Transfers: %v
-Total Number of Transfers: %v
-Number of File Transfers Completed: %v
-Number of Folder Transfers Completed: %v
-Number of File Transfers Failed: %v
-Number of Folder Transfers Failed: %v
-Number of File Transfers Skipped: %v
-Number of Folder Transfers Skipped: %v
-Number of Symbolic Links Skipped: %v
-Number of Hardlinks Converted: %v
-Number of Hardlinks Skipped: %v
-Number of Special Files Skipped: %v
-Total Number of Bytes Transferred: %v
-Final Job Status: %v%s%s
-`,
-					summary.JobID.String(),
-					jobsAdmin.ToFixed(duration.Minutes(), 4),
-					summary.FileTransfers,
-					summary.FolderPropertyTransfers,
-					summary.SymlinkTransfers,
-					summary.TotalTransfers,
-					summary.TransfersCompleted-summary.FoldersCompleted,
-					summary.FoldersCompleted,
-					summary.TransfersFailed-summary.FoldersFailed,
-					summary.FoldersFailed,
-					summary.TransfersSkipped-summary.FoldersSkipped,
-					summary.FoldersSkipped,
-					summary.SkippedSymlinkCount,
-					summary.HardlinksConvertedCount,
-					summary.SkippedHardlinkCount,
-					summary.SkippedSpecialFileCount,
-					summary.TotalBytesTransferred,
-					summary.JobStatus,
-					screenStats,
-					formatPerfAdvice(summary.PerformanceAdvice))
-
-				// abbreviated output for cleanup jobs
-				if cca.isCleanupJob {
-					output = fmt.Sprintf("%s: %s)", cleanupStatusString, summary.JobStatus)
+				result := azcopy.CopyResult{
+					ListJobSummaryResponse: summary,
+					ElapsedTime:            duration,
 				}
+				output := azcopy.GetCopyResult(result, cca.FromTo.From() == common.ELocation.Benchmark())
 
 				// log to job log
 				if jobsAdmin.JobsAdmin != nil {
 					jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
 					if exists {
 						// Passing this as LogError ensures the stats are always logged.
-						jobMan.Log(common.LogError, logStats+"\n"+output)
+						jobMan.Log(common.LogError, azcopy.GetCopyResult(result, true))
 					}
 				}
 				return output
@@ -1310,75 +1246,6 @@ Final Job Status: %v%s%s
 	return
 }
 
-func formatPerfAdvice(advice []common.PerformanceAdvice) string {
-	if len(advice) == 0 {
-		return ""
-	}
-	b := strings.Builder{}
-	b.WriteString("\n\n") // two newlines to separate the perf results from everything else
-	b.WriteString("Performance benchmark results: \n")
-	b.WriteString("Note: " + common.BenchmarkPreviewNotice + "\n")
-	for _, a := range advice {
-		b.WriteString("\n")
-		pri := "Main"
-		if !a.PriorityAdvice {
-			pri = "Additional"
-		}
-		b.WriteString(pri + " Result:\n")
-		b.WriteString("  Code:   " + a.Code + "\n")
-		b.WriteString("  Desc:   " + a.Title + "\n")
-		b.WriteString("  Reason: " + a.Reason + "\n")
-	}
-	b.WriteString("\n")
-	b.WriteString(common.BenchmarkFinalDisclaimer)
-	if runtime.GOOS == "linux" {
-		b.WriteString(common.BenchmarkLinuxExtraDisclaimer)
-	}
-	return b.String()
-}
-
-// format extra stats to include in the log.  If benchmarking, also output them on screen (but not to screen in normal
-// usage because too cluttered)
-func formatExtraStats(isBenchmark bool, avgIOPS int, avgE2EMilliseconds int, networkErrorPercent float32, serverBusyPercent float32) (screenStats, logStats string) {
-	logStats = fmt.Sprintf(
-		`
-
-Diagnostic stats:
-IOPS: %v
-End-to-end ms per request: %v
-Network Errors: %.2f%%
-Server Busy: %.2f%%`,
-		avgIOPS, avgE2EMilliseconds, networkErrorPercent, serverBusyPercent)
-
-	if isBenchmark {
-		screenStats = logStats
-		logStats = "" // since will display in the screen stats, and they get logged too
-	}
-
-	return
-}
-
-// Is disk speed looking like a constraint on throughput?  Ignore the first little-while,
-// to give an (arbitrary) amount of time for things to reach steady-state.
-func getPerfDisplayText(perfDiagnosticStrings []string, constraint common.PerfConstraint, durationOfJob time.Duration, isBench bool) (perfString string, diskString string) {
-	perfString = ""
-	if shouldDisplayPerfStates() {
-		perfString = "[States: " + strings.Join(perfDiagnosticStrings, ", ") + "], "
-	}
-
-	haveBeenRunningLongEnoughToStabilize := durationOfJob.Seconds() > 30                                    // this duration is an arbitrary guesstimate
-	if constraint != common.EPerfConstraint.Unknown() && haveBeenRunningLongEnoughToStabilize && !isBench { // don't display when benchmarking, because we got some spurious slow "disk" constraint reports there - which would be confusing given there is no disk in release 1 of benchmarking
-		diskString = fmt.Sprintf(" (%s may be limiting speed)", constraint)
-	} else {
-		diskString = ""
-	}
-	return
-}
-
-func shouldDisplayPerfStates() bool {
-	return common.GetEnvironmentVariable(common.EEnvironmentVariable.ShowPerfStates()) != ""
-}
-
 func isStdinPipeIn() (bool, error) {
 	// check the Stdin to see if we are uploading or downloading
 	info, err := os.Stdin.Stat()
@@ -1394,47 +1261,45 @@ func isStdinPipeIn() (bool, error) {
 
 var cpCmd *cobra.Command
 
-type CLICopyHandler struct {
+type cliCopyHandler struct {
 }
 
-func (C CLICopyHandler) OnStart(ctx azcopy.JobContext) {
+func (c cliCopyHandler) OnStart(ctx azcopy.JobContext) {
 	glcm.Init(GetStandardInitOutputBuilder(ctx.JobID.String(), ctx.LogPath, false, ""))
 
 }
 
-func (C CLICopyHandler) OnTransferProgress(progress azcopy.CopyJobProgress) {
+func (c cliCopyHandler) OnTransferProgress(progress azcopy.CopyProgress) {
 	builder := func(format OutputFormat) string {
 		if format == EOutputFormat.Json() {
 			jsonOutput, err := json.Marshal(progress.ListJobSummaryResponse)
 			common.PanicIfErr(err)
 			return string(jsonOutput)
 		} else {
-			// if json is not needed, then we generate a message that goes nicely on the same line
-			// display a scanning keyword if the job is not completely ordered
-			var scanningString = " (scanning...)"
-			if progress.CompleteJobOrdered {
-				scanningString = ""
-			}
-
-			throughputString := fmt.Sprintf("2-sec Throughput (Mb/s): %v", jobsAdmin.ToFixed(progress.Throughput, 4))
-			if progress.Throughput == 0 {
-				// As there would be case when no bits sent from local, e.g. service side copy, when throughput = 0, hide it.
-				throughputString = ""
-			}
-
-			// indicate whether constrained by disk or not
-			perfString, diskString := getPerfDisplayText(progress.PerfStrings, progress.PerfConstraint, progress.ElapsedTime, false)
-			return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
-				progress.PercentComplete,
-				progress.TransfersCompleted,
-				progress.TransfersFailed,
-				progress.TotalTransfers-(progress.TransfersCompleted+progress.TransfersFailed+progress.TransfersSkipped),
-				progress.TransfersSkipped+progress.SkippedSymlinkCount+progress.SkippedSpecialFileCount,
-				progress.TotalTransfers, scanningString, perfString, throughputString, diskString)
+			return azcopy.GetCopyProgress(progress, false)
 		}
 	}
 
 	glcm.Progress(builder)
+}
+
+func (c cliCopyHandler) OnComplete(result azcopy.CopyResult) {
+	exitCode := EExitCode.Success()
+	if result.TransfersFailed > 0 || result.JobStatus == common.EJobStatus.Cancelled() || result.JobStatus == common.EJobStatus.Cancelling() {
+		exitCode = EExitCode.Error()
+	}
+
+	builder := func(format OutputFormat) string {
+		if format == EOutputFormat.Json() {
+			jsonOutput, err := json.Marshal(result.ListJobSummaryResponse)
+			common.PanicIfErr(err)
+			return string(jsonOutput)
+		} else {
+			return azcopy.GetCopyResult(result, false)
+		}
+	}
+
+	glcm.Exit(builder, exitCode)
 }
 
 // TODO check file size, max is 4.75TB
@@ -1551,82 +1416,12 @@ func init() {
 				cancel()
 			}()
 
-			result, err := Client.Copy(ctx, raw.src, raw.dst, opts, CLICopyHandler{})
+			_, err = Client.Copy(ctx, raw.src, raw.dst, opts)
 			if err != nil {
 				glcm.Error("Cannot perform copy due to error: " + err.Error() + getErrorCodeUrl(err))
 			}
 			if raw.dryrun || userFromTo.IsRedirection() {
 				glcm.Exit(nil, EExitCode.Success())
-			} else {
-				exitCode := EExitCode.Success()
-				if result.TransfersFailed > 0 || result.JobStatus == common.EJobStatus.Cancelled() || result.JobStatus == common.EJobStatus.Cancelling() {
-					exitCode = EExitCode.Error()
-				}
-
-				builder := func(format OutputFormat) string {
-					if format == EOutputFormat.Json() {
-						jsonOutput, err := json.Marshal(result.ListJobSummaryResponse)
-						common.PanicIfErr(err)
-						return string(jsonOutput)
-					} else {
-						screenStats, logStats := formatExtraStats(false, result.AverageIOPS, result.AverageE2EMilliseconds, result.NetworkErrorPercentage, result.ServerBusyPercentage)
-
-						output := fmt.Sprintf(
-							`
-
-Job %s summary
-Elapsed Time (Minutes): %v
-Number of File Transfers: %v
-Number of Folder Property Transfers: %v
-Number of Symlink Transfers: %v
-Total Number of Transfers: %v
-Number of File Transfers Completed: %v
-Number of Folder Transfers Completed: %v
-Number of File Transfers Failed: %v
-Number of Folder Transfers Failed: %v
-Number of File Transfers Skipped: %v
-Number of Folder Transfers Skipped: %v
-Number of Symbolic Links Skipped: %v
-Number of Hardlinks Converted: %v
-Number of Hardlinks Skipped: %v
-Number of Special Files Skipped: %v
-Total Number of Bytes Transferred: %v
-Final Job Status: %v%s%s
-`,
-							result.JobID.String(),
-							jobsAdmin.ToFixed(result.ElapsedTime.Minutes(), 4),
-							result.FileTransfers,
-							result.FolderPropertyTransfers,
-							result.SymlinkTransfers,
-							result.TotalTransfers,
-							result.TransfersCompleted-result.FoldersCompleted,
-							result.FoldersCompleted,
-							result.TransfersFailed-result.FoldersFailed,
-							result.FoldersFailed,
-							result.TransfersSkipped-result.FoldersSkipped,
-							result.FoldersSkipped,
-							result.SkippedSymlinkCount,
-							result.HardlinksConvertedCount,
-							result.SkippedHardlinkCount,
-							result.SkippedSpecialFileCount,
-							result.TotalBytesTransferred,
-							result.JobStatus,
-							screenStats,
-							formatPerfAdvice(result.PerformanceAdvice))
-
-						// log to job log
-						if jobsAdmin.JobsAdmin != nil {
-							jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(result.JobID)
-							if exists {
-								// Passing this as LogError ensures the stats are always logged.
-								jobMan.Log(common.LogError, logStats+"\n"+output)
-							}
-						}
-						return output
-					}
-				}
-
-				glcm.Exit(builder, exitCode)
 			}
 			// Wait for the user to see the final output before exiting
 			glcm.SurrenderControl()
