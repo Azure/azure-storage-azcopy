@@ -41,26 +41,20 @@ type ResumeJobOptions struct {
 }
 
 // ResumeJobProgress contains the progress information for a resumed job.
-type ResumeJobProgress struct {
-	common.ListJobSummaryResponse
-	Throughput  float64
-	ElapsedTime time.Duration
-}
+type ResumeJobProgress CopyProgress
 
 // ResumeJobHandler defines the interface for handling resume job events.
 type ResumeJobHandler interface {
 	OnStart(ctx JobContext)
 	OnTransferProgress(progress ResumeJobProgress)
+	OnComplete(result ResumeJobResult)
 }
 
 // ResumeJobResult contains the result of a resumed job.
-type ResumeJobResult struct {
-	common.ListJobSummaryResponse
-	ElapsedTime time.Duration
-}
+type ResumeJobResult CopyResult
 
 // ResumeJob resumes a job with the specified JobID.
-func (c *Client) ResumeJob(ctx context.Context, jobID common.JobID, opts ResumeJobOptions) (result ResumeJobResult, err error) {
+func (c *Client) ResumeJob(ctx context.Context, jobID common.JobID, opts ResumeJobOptions) (ResumeJobResult, error) {
 	if jobID.IsEmpty() {
 		return ResumeJobResult{}, errors.New("resume job requires the JobID")
 	}
@@ -144,6 +138,7 @@ func (c *Client) ResumeJob(ctx context.Context, jobID common.JobID, opts ResumeJ
 		DstServiceClient: dstServiceClient,
 		JobErrorHandler:  mgr,
 	})
+	defer jobsAdmin.JobsAdmin.JobMgrCleanUp(jobID)
 
 	if !resumeJobResponse.CancelledPauseResumed {
 		return ResumeJobResult{}, errors.New(resumeJobResponse.ErrorMsg)
@@ -158,13 +153,16 @@ func (c *Client) ResumeJob(ctx context.Context, jobID common.JobID, opts ResumeJ
 	// Get final job summary
 	finalSummary := jobsAdmin.GetJobSummary(jobID)
 
-	// Clean up job
-	jobsAdmin.JobsAdmin.JobMgrCleanUp(jobID)
-
-	return ResumeJobResult{
+	result := ResumeJobResult{
 		ListJobSummaryResponse: finalSummary,
 		ElapsedTime:            rpt.GetElapsedTime(),
-	}, nil
+	}
+
+	if opts.Handler != nil {
+		opts.Handler.OnComplete(result)
+	}
+
+	return result, nil
 }
 
 // normalizeSAS ensures the SAS token starts with "?" if non-empty.
@@ -322,12 +320,16 @@ func (r *resumeProgressTracker) CheckProgress() (uint32, bool) {
 		return common.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
 	}
 	throughput := computeThroughput()
+	progress := CopyProgress{
+		ListJobSummaryResponse: summary,
+		Throughput:             throughput,
+		ElapsedTime:            duration,
+	}
+	if common.AzcopyCurrentJobLogger != nil {
+		common.AzcopyCurrentJobLogger.Log(common.LogInfo, GetCopyProgress(progress, false))
+	}
 	if r.handler != nil {
-		r.handler.OnTransferProgress(ResumeJobProgress{
-			ListJobSummaryResponse: summary,
-			Throughput:             throughput,
-			ElapsedTime:            duration,
-		})
+		r.handler.OnTransferProgress(ResumeJobProgress(progress))
 	}
 	return totalKnownCount, jobDone
 }
