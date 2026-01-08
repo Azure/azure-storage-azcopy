@@ -5,7 +5,6 @@ package traverser
 
 import (
 	"os"
-	"strconv"
 	"syscall"
 	"time"
 	"unsafe"
@@ -85,23 +84,7 @@ func IsSymbolicLink(fileInfo os.FileInfo) bool {
 	return fileInfo.Mode()&os.ModeSymlink == os.ModeSymlink
 }
 
-func getInodeString(filePath string) (string, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-
-	handle := syscall.Handle(file.Fd())
-
-	var info syscall.ByHandleFileInformation
-	err = syscall.GetFileInformationByHandle(handle, &info)
-	if err != nil {
-		return "", err
-	}
-
-	// Combine high + low to form a unique file ID
-	fileID := (uint64(info.FileIndexHigh) << 32) | uint64(info.FileIndexLow)
-
-	return strconv.FormatUint(fileID, 10), nil
+// no windows implementation
+func getInodeString(fileInfo os.FileInfo) string {
+	return ""
 }

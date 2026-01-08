@@ -1,12 +1,14 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/google/uuid"
 	"os/user"
 	"runtime"
 	"strconv"
+	"sync"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/google/uuid"
 )
 
 func init() {
@@ -14,6 +16,76 @@ func init() {
 }
 
 type FilesNFSTestSuite struct{}
+
+var (
+	sharedSMBContainer    ContainerResourceManager
+	sharedSMBOnce         sync.Once
+	srcSharedNFSContainer ContainerResourceManager
+	srcOnce               sync.Once
+	dstSharedNFSContainer ContainerResourceManager
+	dstOnce               sync.Once
+)
+
+func getSharedSMBContainer(svm *ScenarioVariationManager) ContainerResourceManager {
+	sharedSMBOnce.Do(func() {
+		sharedSMBContainer = CreateResource[ContainerResourceManager](
+			svm,
+			GetRootResource(
+				svm,
+				ResolveVariation(svm, []common.Location{common.ELocation.File()}),
+				GetResourceOptions{
+					PreferredAccount: pointerTo(PremiumFileShareAcct),
+				},
+			),
+			ResourceDefinitionContainer{
+				Properties: ContainerProperties{
+					FileContainerProperties: FileContainerProperties{
+						EnabledProtocols: pointerTo("SMB"),
+					},
+				},
+			},
+		)
+	})
+	return sharedSMBContainer
+}
+
+func getSourceSharedNFSContainer(svm *ScenarioVariationManager) ContainerResourceManager {
+	srcOnce.Do(func() {
+		srcSharedNFSContainer = CreateResource[ContainerResourceManager](
+			svm,
+			GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
+				PreferredAccount: pointerTo(PremiumFileShareAcct),
+			}),
+			ResourceDefinitionContainer{
+				Properties: ContainerProperties{
+					FileContainerProperties: FileContainerProperties{
+						EnabledProtocols: pointerTo("NFS"),
+					},
+				},
+			},
+		)
+	})
+	return srcSharedNFSContainer
+}
+
+func getDestinationSharedNFSContainer(svm *ScenarioVariationManager) ContainerResourceManager {
+	dstOnce.Do(func() {
+		dstSharedNFSContainer = CreateResource[ContainerResourceManager](
+			svm,
+			GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
+				PreferredAccount: pointerTo(PremiumFileShareAcct),
+			}),
+			ResourceDefinitionContainer{
+				Properties: ContainerProperties{
+					FileContainerProperties: FileContainerProperties{
+						EnabledProtocols: pointerTo("NFS"),
+					},
+				},
+			},
+		)
+	})
+	return dstSharedNFSContainer
+}
 
 func GetCurrentUIDAndGID(a Asserter) (uid, gid string) {
 
@@ -97,16 +169,8 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 		"|hardlinks=skip":   common.SkipHardlinkHandlingType,
 	})
 
-	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}), GetResourceOptions{
-		PreferredAccount: pointerTo(PremiumFileShareAcct),
-	}), ResourceDefinitionContainer{
-		Properties: ContainerProperties{
-			FileContainerProperties: FileContainerProperties{
-				EnabledProtocols: pointerTo("NFS"),
-			},
-		},
-	})
-	defer dstContainer.Delete(svm)
+	dstContainer := getDestinationSharedNFSContainer(svm)
+
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(
 		svm, common.ELocation.Local()), ResourceDefinitionContainer{})
 
@@ -376,16 +440,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
 
-	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}), GetResourceOptions{
-		PreferredAccount: pointerTo(PremiumFileShareAcct),
-	}), ResourceDefinitionContainer{
-		Properties: ContainerProperties{
-			FileContainerProperties: FileContainerProperties{
-				EnabledProtocols: pointerTo("NFS"),
-			},
-		},
-	})
-	defer srcContainer.Delete(svm)
+	srcContainer := getSourceSharedNFSContainer(svm)
 
 	folderProperties, fileProperties, fileOrFolderPermissions := getPropertiesAndPermissions(svm, preserveProperties, preservePermissions)
 	rootDir := "dir_file_copy_test_" + uuid.NewString()
@@ -605,27 +660,9 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 		"|hardlinks=skip":   common.SkipHardlinkHandlingType,
 	})
 
-	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}), GetResourceOptions{
-		PreferredAccount: pointerTo(PremiumFileShareAcct),
-	}), ResourceDefinitionContainer{
-		Properties: ContainerProperties{
-			FileContainerProperties: FileContainerProperties{
-				EnabledProtocols: pointerTo("NFS"),
-			},
-		},
-	})
+	dstContainer := getDestinationSharedNFSContainer(svm)
 
-	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}), GetResourceOptions{
-		PreferredAccount: pointerTo(PremiumFileShareAcct),
-	}), ResourceDefinitionContainer{
-		Properties: ContainerProperties{
-			FileContainerProperties: FileContainerProperties{
-				EnabledProtocols: pointerTo("NFS"),
-			},
-		},
-	})
-	defer srcContainer.Delete(svm)
-	defer dstContainer.Delete(svm)
+	srcContainer := getSourceSharedNFSContainer(svm)
 
 	folderProperties, fileProperties, fileOrFolderPermissions := getPropertiesAndPermissions(svm, preserveProperties, preservePermissions)
 
@@ -850,31 +887,9 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 		"|hardlinks=skip":   common.SkipHardlinkHandlingType,
 	})
 
-	dstShare := CreateResource[ContainerResourceManager](svm, GetRootResource(svm,
-		ResolveVariation(svm, []common.Location{common.ELocation.File()}),
-		GetResourceOptions{
-			PreferredAccount: pointerTo(PremiumFileShareAcct),
-		}), ResourceDefinitionContainer{
-		Properties: ContainerProperties{
-			FileContainerProperties: FileContainerProperties{
-				EnabledProtocols: pointerTo("SMB"),
-			},
-		},
-	})
+	dstShare := getSharedSMBContainer(svm)
 
-	srcShare := CreateResource[ContainerResourceManager](svm, GetRootResource(svm,
-		ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}),
-		GetResourceOptions{
-			PreferredAccount: pointerTo(PremiumFileShareAcct),
-		}), ResourceDefinitionContainer{
-		Properties: ContainerProperties{
-			FileContainerProperties: FileContainerProperties{
-				EnabledProtocols: pointerTo("NFS"),
-			},
-		},
-	})
-
-	defer dstShare.Delete(svm)
+	srcShare := getSourceSharedNFSContainer(svm)
 
 	folderProperties, fileProperties, _ := getPropertiesAndPermissions(svm, preserveProperties, preservePermissions)
 
@@ -895,8 +910,6 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 		dst = dstShare
 	}
 	src = srcShare.GetObject(svm, rootDir, common.EEntityType.Folder())
-
-	defer srcShare.Delete(svm)
 
 	// Create destination directories
 	srcObjs := make(ObjectResourceMappingFlat)
@@ -1111,33 +1124,9 @@ func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationMa
 	})
 
 	// NFS Share
-	dstShare := CreateResource[ContainerResourceManager](svm, GetRootResource(svm,
-		ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}),
-		GetResourceOptions{
-			PreferredAccount: pointerTo(PremiumFileShareAcct),
-		}), ResourceDefinitionContainer{
-		Properties: ContainerProperties{
-			FileContainerProperties: FileContainerProperties{
-				EnabledProtocols: pointerTo("NFS"),
-			},
-		},
-	})
-
-	defer dstShare.Delete(svm)
-
-	// SMB share
-	srcShare := CreateResource[ContainerResourceManager](svm, GetRootResource(svm,
-		ResolveVariation(svm, []common.Location{common.ELocation.File()}),
-		GetResourceOptions{
-			PreferredAccount: pointerTo(PremiumFileShareAcct),
-		}), ResourceDefinitionContainer{
-		Properties: ContainerProperties{
-			FileContainerProperties: FileContainerProperties{
-				EnabledProtocols: pointerTo("SMB"),
-			},
-		},
-	})
-	defer srcShare.Delete(svm)
+	dstShare := getDestinationSharedNFSContainer(svm)
+	// SMB Share
+	srcShare := getSharedSMBContainer(svm)
 
 	var folderProperties, fileProperties FileProperties
 	if preserveProperties {
