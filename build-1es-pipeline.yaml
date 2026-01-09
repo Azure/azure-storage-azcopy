@@ -1,7 +1,7 @@
 # For testing, the safest approach is to run the pipeline on a fork of the AzCopy repo. After that validation, changes can
 # be moved to the main pipeline. Do not test by running the prod pipeline in ADO with an already existing version of AzCopy.
 variables:
-  AZCOPY_GOLANG_VERSION: '1.24.6'
+  AZCOPY_GOLANG_VERSION: '1.24.11'
 
 parameters:
   - name: publish_to_m1_container
@@ -85,6 +85,7 @@ extends:
                   version: $(AZCOPY_GOLANG_VERSION)
 
               - script: |
+                  echo $GOPROXY
                   go build -tags "netgo" -o azcopy_bin
                 displayName: 'Build AzCopy'
 
