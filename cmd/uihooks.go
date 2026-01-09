@@ -104,6 +104,7 @@ type LifecycleMgr interface {
 	MsgHandlerChannel() <-chan *common.LCMMsg
 	ReportAllJobPartsDone()
 	SetOutputVerbosity(mode OutputVerbosity)
+	SetForceLogging()
 }
 
 // single point of control for all outputs
@@ -703,6 +704,10 @@ func (lcm *lifecycleMgr) ReportAllJobPartsDone() {
 
 func (lcm *lifecycleMgr) SetOutputVerbosity(mode OutputVerbosity) {
 	lcm.OutputVerbosityType = mode
+}
+
+func (lcm *lifecycleMgr) SetForceLogging() {
+	common.SetForceLogging()
 }
 
 func shouldQuietMessage(msgToOutput outputMessage, quietMode OutputVerbosity) bool {
