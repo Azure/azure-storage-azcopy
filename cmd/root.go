@@ -216,7 +216,7 @@ func Initialize(isMigratedToLibrary, isBench, shouldWarn bool) (err error) {
 
 		common.AzcopyCurrentJobLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "")
 		common.AzcopyCurrentJobLogger.OpenLog()
-		common.SetForceLogging()
+		glcm.SetForceLogging()
 		glcm.RegisterCloseFunc(func() {
 			if common.AzcopyCurrentJobLogger != nil {
 				common.AzcopyCurrentJobLogger.CloseLog()
