@@ -519,7 +519,7 @@ func init() {
 
 	// TODO sync does not support all BlobAttributes on the command line, this functionality should be added
 
-	// Deprecate the old persist-smb-permissions flag
+	// Deprecate the old preserve-smb-permissions flag
 	_ = syncCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
 	syncCmd.PersistentFlags().BoolVar(&raw.preservePermissions, azcopy.PreservePermissionsFlag, false, "False by default. "+
 		"\nPreserves ACLs between aware resources (Windows and Azure Files SMB or Data Lake Storage to Data Lake Storage)"+
