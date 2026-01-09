@@ -28,6 +28,7 @@ import (
 	"os/signal"
 	"runtime"
 	"runtime/pprof"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -127,6 +128,7 @@ type lifecycleMgr struct {
 	waitForUserResponse   chan bool
 	msgHandlerChannel     chan *common.LCMMsg
 	OutputVerbosityType   OutputVerbosity
+	disableSysLog         bool
 }
 
 type userInput struct {
@@ -707,7 +709,12 @@ func (lcm *lifecycleMgr) SetOutputVerbosity(mode OutputVerbosity) {
 }
 
 func (lcm *lifecycleMgr) SetForceLogging() {
-	common.SetForceLogging()
+	disableSyslog, err := strconv.ParseBool(common.GetEnvironmentVariable(common.EEnvironmentVariable.DisableSyslog()))
+	if err != nil {
+		// By default, we'll retain the current behaviour. i.e. To log in Syslog/WindowsEventLog if not specified by the user
+		disableSyslog = false
+	}
+	lcm.disableSysLog = disableSyslog
 }
 
 func shouldQuietMessage(msgToOutput outputMessage, quietMode OutputVerbosity) bool {
