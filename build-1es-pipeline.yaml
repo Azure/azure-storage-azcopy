@@ -66,6 +66,10 @@ extends:
         name: azcopy-pool  # Name of your hosted pool
         image: windows2022-1espt
         os: windows  # OS of the image. Allowed values: windows, linux, macOS
+    featureFlags:
+      golang:
+        internalModuleProxy:
+          enabled: true
     stages:
       - stage: AzCopyVersion
         jobs:
