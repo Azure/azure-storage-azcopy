@@ -4,7 +4,7 @@
 ## Version 10.32.0-preview.1
 
 ### Bug Fixes
-1. Fixed a bug where througput was not being displayed for copy and resume. ([#3271](https://github.com/Azure/azure-storage-azcopy/issues/3271))
+1. Fixed a bug where throughput was not being displayed for copy and resume. ([#3271](https://github.com/Azure/azure-storage-azcopy/issues/3271))
 2. Fixed a bug where S3 and GCP transfers would panic. ([#3273](https://github.com/Azure/azure-storage-azcopy/issues/3273))
 
 ## Code Improvements
