@@ -1,6 +1,12 @@
 
 # Change Log
 
+## Version 10.31.1
+
+### Dependency updates
+1.	Golang 1.24.6 -> 1.24.11
+2. golang.org/x/crypto 0.40.0 ->  0.45.0
+
 ## Version 10.31.0
 
 ### New Features
