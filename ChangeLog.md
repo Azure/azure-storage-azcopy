@@ -7,7 +7,7 @@
 1. Fixed a bug where throughput was not being displayed for copy and resume. ([#3271](https://github.com/Azure/azure-storage-azcopy/issues/3271))
 2. Fixed a bug where S3 and GCP transfers would panic. ([#3273](https://github.com/Azure/azure-storage-azcopy/issues/3273))
 
-## Code Improvements
+### Code Improvements
 1. Refactored [copy](https://github.com/Azure/azure-storage-azcopy/pull/3310), [sync](https://github.com/Azure/azure-storage-azcopy/pull/3293), [resume](https://github.com/Azure/azure-storage-azcopy/pull/3289), [login, logout, login status](https://github.com/Azure/azure-storage-azcopy/pull/3266) business logic into the azcopy package. 
 
 ## Version 10.31.1
