@@ -134,6 +134,8 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		IncludeDirectoryStubs:   includeDirStubs,
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
 		HardlinkHandling:        cca.hardlinks,
+		StripTopDir:             !cca.includeRoot,
+		IncludeRoot:             cca.includeRoot,
 		IncrementNotTransferred: func(entityType common.EntityType) {
 			if entityType == common.EEntityType.File() {
 				atomic.AddUint64(&cca.atomicSourceFilesTransferNotRequired, 1)
@@ -184,6 +186,8 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		IncludeDirectoryStubs:   includeDirStubs,
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
 		HardlinkHandling:        common.EHardlinkHandlingType.Follow(),
+		StripTopDir:             !cca.includeRoot,
+		IncludeRoot:             cca.includeRoot,
 		ErrorChannel:            enumeratorOptions.ErrorChannel,
 	}
 	dstTraverserTemplate := ResourceTraverserTemplate{
@@ -273,7 +277,9 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 
 	// decide our folder transfer strategy
 	// sync always acts like stripTopDir=true, but if we intend to persist the root, we must tell NewFolderPropertyOption stripTopDir=false.
-	fpo, folderMessage := NewFolderPropertyOption(cca.fromTo, cca.recursive, !cca.includeRoot, filters, cca.preserveInfo, cca.preservePermissions.IsTruthy(), false, strings.EqualFold(cca.destination.Value, common.Dev_Null), cca.includeDirectoryStubs)
+	fpo, folderMessage := NewFolderPropertyOption(cca.fromTo, cca.recursive, !cca.includeRoot, filters, cca.preserveInfo,
+		cca.preservePermissions.IsTruthy(), cca.preservePOSIXProperties, strings.EqualFold(cca.destination.Value, common.Dev_Null),
+		cca.includeDirectoryStubs)
 	if !cca.dryrunMode {
 		glcm.Info(folderMessage)
 	}
