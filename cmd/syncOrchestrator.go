@@ -485,12 +485,19 @@ func (st *SyncTraverser) finalizeChild(child string, scheduleTransfer bool) erro
 	st.enumerator.objectIndexer.rwMutex.RUnlock()
 
 	if exists {
+		// Debug: Log what we're about to process
+		glcm.Info(fmt.Sprintf("[SYNC_FINALIZE] Processing object: path='%s', type=%s, scheduleTransfer=%v",
+			child, storedObject.entityType, scheduleTransfer))
+
 		// Schedule the file/directory for transfer using the pointer
 		if scheduleTransfer {
+			glcm.Info(fmt.Sprintf("[SYNC_SCHEDULE] Scheduling transfer for: '%s'", child))
 			err := st.enumerator.ctp.scheduleCopyTransfer(storedObject)
 			if err != nil {
+				glcm.Info(fmt.Sprintf("[SYNC_SCHEDULE_ERROR] Failed to schedule transfer for '%s': %v", child, err))
 				return err
 			}
+			glcm.Info(fmt.Sprintf("[SYNC_SCHEDULE_SUCCESS] Successfully scheduled transfer for: '%s'", child))
 		}
 
 		// Remove from indexer to free memory
@@ -501,6 +508,8 @@ func (st *SyncTraverser) finalizeChild(child string, scheduleTransfer bool) erro
 		if enableThrottling {
 			totalFilesInIndexer.Add(-1) // Decrement the count after processing
 		}
+	} else {
+		glcm.Info(fmt.Sprintf("[SYNC_FINALIZE] Object not found in indexer: '%s'", child))
 	}
 
 	return nil
@@ -748,6 +757,10 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 		err = pt.Traverse(noPreProccessor, stra.processor, enumerator.filters)
 		srcDirEnumerating.Add(-1) // Decrement active directory count
+
+		// Debug: Log traversal completion
+		glcm.Info(fmt.Sprintf("[SYNC_TRAVERSAL] Source traversal completed for dir='%s', subdirs found=%d",
+			dir.(minimalStoredObject).relativePath, len(stra.sub_dirs)))
 
 		// Release source slot after source traversal is complete
 		if enableThrottling {
