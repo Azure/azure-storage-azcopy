@@ -354,7 +354,7 @@ func (b *remoteResourceDeleter) Delete(_ string, target common.Location, object 
 		return nil
 	} else if object.EntityType == common.EEntityType.Symlink() {
 		msg := "Deleting extra object: " + object.RelativePath
-		glcm.Info(msg)
+		common.GetLifecycleMgr().Info(msg)
 		if common.AzcopyScanningLogger != nil {
 			common.AzcopyScanningLogger.Log(common.LogInfo, msg)
 		}
@@ -362,7 +362,7 @@ func (b *remoteResourceDeleter) Delete(_ string, target common.Location, object 
 		var err error
 		var objURL *url.URL
 
-		switch b.targetLocation {
+		switch target {
 		case common.ELocation.FileNFS():
 			fsc, _ := sc.FileServiceClient()
 			fileClient := fsc.NewShareClient(b.containerName).NewRootDirectoryClient().NewFileClient(objectPath)
@@ -383,7 +383,7 @@ func (b *remoteResourceDeleter) Delete(_ string, target common.Location, object 
 
 		if err != nil {
 			msg := fmt.Sprintf("error %s deleting the object %s", err.Error(), object.RelativePath)
-			glcm.Info(msg + "; check the scanning log file for more details")
+			common.GetLifecycleMgr().Info(msg + "; check the scanning log file for more details")
 			if common.AzcopyScanningLogger != nil {
 				common.AzcopyScanningLogger.Log(common.LogError, msg+": "+err.Error())
 			}
