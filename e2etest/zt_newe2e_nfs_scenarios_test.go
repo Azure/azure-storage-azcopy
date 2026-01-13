@@ -122,13 +122,12 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 		"|hardlinks=follow": common.DefaultHardlinkHandlingType,
 		"|hardlinks=skip":   common.SkipHardlinkHandlingType,
 	})
-	
 
 	dstContainer := GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
 	}).(ServiceResourceManager).GetContainer("aznfs3")
 	defer dstContainer.Delete(svm)
-	
+
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(
 		svm, common.ELocation.Local()), ResourceDefinitionContainer{})
 
@@ -630,11 +629,11 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 		"|hardlinks=follow": common.DefaultHardlinkHandlingType,
 		"|hardlinks=skip":   common.SkipHardlinkHandlingType,
 	})
-	defer dstContainer.Delete(svm)
 
 	dstContainer := GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
 	}).(ServiceResourceManager).GetContainer("aznfs2")
+	defer dstContainer.Delete(svm)
 
 	srcContainer := GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
@@ -833,10 +832,6 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 	} else {
 		ValidateHardlinksConvertedCount(svm, stdOut, 2)
 	}
-<<<<<<< HEAD
-
-=======
->>>>>>> 7e301cff6067304c40b0d8233bca4dc38face52f
 	if !preserveSymlinks && !followSymlinks {
 		ValidateSkippedSymlinksCount(svm, stdOut, 1)
 	}
@@ -876,13 +871,12 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 		"|hardlinks=follow": common.DefaultHardlinkHandlingType,
 		"|hardlinks=skip":   common.SkipHardlinkHandlingType,
 	})
-	
 
 	dstShare := GetRootResource(svm, common.ELocation.File(), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
 	}).(ServiceResourceManager).GetContainer("03dac432-c575-4036-b245-a15c36e15f61")
 	defer dstShare.Delete(svm)
-	
+
 	srcShare := GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
 	}).(ServiceResourceManager).GetContainer("aznfs3")
