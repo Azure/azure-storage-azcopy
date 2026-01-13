@@ -4,11 +4,11 @@ import (
 	"os/user"
 	"runtime"
 	"strconv"
-	"sync"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/google/uuid"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func init() {
@@ -16,76 +16,6 @@ func init() {
 }
 
 type FilesNFSTestSuite struct{}
-
-var (
-	sharedSMBContainer    ContainerResourceManager
-	sharedSMBOnce         sync.Once
-	srcSharedNFSContainer ContainerResourceManager
-	srcOnce               sync.Once
-	dstSharedNFSContainer ContainerResourceManager
-	dstOnce               sync.Once
-)
-
-func getSharedSMBContainer(svm *ScenarioVariationManager) ContainerResourceManager {
-	sharedSMBOnce.Do(func() {
-		sharedSMBContainer = CreateResource[ContainerResourceManager](
-			svm,
-			GetRootResource(
-				svm,
-				ResolveVariation(svm, []common.Location{common.ELocation.File()}),
-				GetResourceOptions{
-					PreferredAccount: pointerTo(PremiumFileShareAcct),
-				},
-			),
-			ResourceDefinitionContainer{
-				Properties: ContainerProperties{
-					FileContainerProperties: FileContainerProperties{
-						EnabledProtocols: pointerTo("SMB"),
-					},
-				},
-			},
-		)
-	})
-	return sharedSMBContainer
-}
-
-func getSourceSharedNFSContainer(svm *ScenarioVariationManager) ContainerResourceManager {
-	srcOnce.Do(func() {
-		srcSharedNFSContainer = CreateResource[ContainerResourceManager](
-			svm,
-			GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
-				PreferredAccount: pointerTo(PremiumFileShareAcct),
-			}),
-			ResourceDefinitionContainer{
-				Properties: ContainerProperties{
-					FileContainerProperties: FileContainerProperties{
-						EnabledProtocols: pointerTo("NFS"),
-					},
-				},
-			},
-		)
-	})
-	return srcSharedNFSContainer
-}
-
-func getDestinationSharedNFSContainer(svm *ScenarioVariationManager) ContainerResourceManager {
-	dstOnce.Do(func() {
-		dstSharedNFSContainer = CreateResource[ContainerResourceManager](
-			svm,
-			GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
-				PreferredAccount: pointerTo(PremiumFileShareAcct),
-			}),
-			ResourceDefinitionContainer{
-				Properties: ContainerProperties{
-					FileContainerProperties: FileContainerProperties{
-						EnabledProtocols: pointerTo("NFS"),
-					},
-				},
-			},
-		)
-	})
-	return dstSharedNFSContainer
-}
 
 func GetCurrentUIDAndGID(a Asserter) (uid, gid string) {
 
@@ -125,6 +55,30 @@ func getPropertiesAndPermissions(svm *ScenarioVariationManager, preserveProperti
 		}
 	}
 	return folderProperties, fileProperties, fileOrFolderPermissions
+}
+
+func CleanupNFSDirectory(
+	svm *ScenarioVariationManager,
+	container ContainerResourceManager,
+	rootDir string,
+) {
+	if svm.Dryrun() {
+		return
+	}
+	// 1. List all objects under rootDir
+	objs := container.ListObjects(svm, rootDir+"/", true)
+
+	// 2. Delete files, symlinks, hardlinks, special files first
+	for objName, objProp := range objs {
+		if objProp.EntityType != common.EEntityType.Folder() {
+			container.
+				GetObject(svm, objName, objProp.EntityType).
+				Delete(svm)
+		}
+	}
+
+	// 4. Finally delete root directory
+	container.GetObject(svm, rootDir, common.EEntityType.Folder()).Delete(svm)
 }
 
 func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariationManager) {
@@ -169,7 +123,9 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 		"|hardlinks=skip":   common.SkipHardlinkHandlingType,
 	})
 
-	dstContainer := getDestinationSharedNFSContainer(svm)
+	dstContainer := GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
+		PreferredAccount: pointerTo(PremiumFileShareAcct),
+	}).(ServiceResourceManager).GetContainer("aznfs3")
 
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(
 		svm, common.ELocation.Local()), ResourceDefinitionContainer{})
@@ -382,6 +338,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 		validateObjectContent: true,
 		fromTo:                common.EFromTo.LocalFileNFS(),
 	})
+	defer CleanupNFSDirectory(svm, dstContainer, rootDir)
 
 	if !preserveSymlinks && !followSymlinks {
 		ValidateSkippedSymlinksCount(svm, stdOut, 2)
@@ -440,10 +397,13 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
 
-	srcContainer := getSourceSharedNFSContainer(svm)
+	srcContainer := GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
+		PreferredAccount: pointerTo(PremiumFileShareAcct),
+	}).(ServiceResourceManager).GetContainer("aznfs3")
 
 	folderProperties, fileProperties, fileOrFolderPermissions := getPropertiesAndPermissions(svm, preserveProperties, preservePermissions)
 	rootDir := "dir_file_copy_test_" + uuid.NewString()
+	defer CleanupNFSDirectory(svm, srcContainer, rootDir)
 
 	var dst ResourceManager
 	if azCopyVerb == AzCopyVerbSync {
@@ -519,7 +479,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 	obj = ResourceDefinitionObject{
 		ObjectName: pointerTo(hOriginalFileName),
 		ObjectProperties: ObjectProperties{
-			EntityType:         common.EEntityType.Hardlink(),
+			EntityType:         common.EEntityType.File(),
 			FileNFSProperties:  fileProperties,
 			FileNFSPermissions: fileOrFolderPermissions,
 		}}
@@ -660,13 +620,18 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 		"|hardlinks=skip":   common.SkipHardlinkHandlingType,
 	})
 
-	dstContainer := getDestinationSharedNFSContainer(svm)
+	dstContainer := GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
+		PreferredAccount: pointerTo(PremiumFileShareAcct),
+	}).(ServiceResourceManager).GetContainer("aznfs2")
 
-	srcContainer := getSourceSharedNFSContainer(svm)
+	srcContainer := GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
+		PreferredAccount: pointerTo(PremiumFileShareAcct),
+	}).(ServiceResourceManager).GetContainer("aznfs3")
 
 	folderProperties, fileProperties, fileOrFolderPermissions := getPropertiesAndPermissions(svm, preserveProperties, preservePermissions)
 
 	rootDir := "dir_file_copy_test_" + uuid.NewString()
+	defer CleanupNFSDirectory(svm, srcContainer, rootDir)
 
 	var dst, src ResourceManager
 	if azCopyVerb == AzCopyVerbSync {
@@ -777,10 +742,14 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 			Verb: azCopyVerb,
 			Targets: []ResourceManager{
 				src.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm,
-					[]ExplicitCredentialTypes{EExplicitCredentialType.SASToken()}), //ExplicitCredentialType.OAuth(),
+					[]ExplicitCredentialTypes{EExplicitCredentialType.SASToken(),
+						EExplicitCredentialType.OAuth(),
+					}),
 					svm, CreateAzCopyTargetOptions{}),
 				dst.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm,
-					[]ExplicitCredentialTypes{EExplicitCredentialType.SASToken()}), //EExplicitCredentialType.OAuth(),
+					[]ExplicitCredentialTypes{EExplicitCredentialType.SASToken(),
+						EExplicitCredentialType.OAuth(),
+					}),
 					svm, CreateAzCopyTargetOptions{}),
 			},
 			Flags: CopyFlags{
@@ -841,6 +810,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 		preservePermissions:   preservePermissions,
 		preserveInfo:          preserveProperties,
 	})
+	defer CleanupNFSDirectory(svm, dstContainer, rootDir)
 
 	if hardlinkType == common.SkipHardlinkHandlingType {
 		ValidateHardlinksSkippedCount(svm, stdOut, 2)
@@ -887,13 +857,18 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 		"|hardlinks=skip":   common.SkipHardlinkHandlingType,
 	})
 
-	dstShare := getSharedSMBContainer(svm)
+	dstShare := GetRootResource(svm, common.ELocation.File(), GetResourceOptions{
+		PreferredAccount: pointerTo(PremiumFileShareAcct),
+	}).(ServiceResourceManager).GetContainer("03dac432-c575-4036-b245-a15c36e15f61")
 
-	srcShare := getSourceSharedNFSContainer(svm)
+	srcShare := GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
+		PreferredAccount: pointerTo(PremiumFileShareAcct),
+	}).(ServiceResourceManager).GetContainer("aznfs3")
 
 	folderProperties, fileProperties, _ := getPropertiesAndPermissions(svm, preserveProperties, preservePermissions)
 
 	rootDir := "dir_file_copy_test_" + uuid.NewString()
+	defer CleanupNFSDirectory(svm, srcShare, rootDir)
 
 	var dst, src ResourceManager
 	if azCopyVerb == AzCopyVerbSync {
@@ -987,7 +962,8 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 	if (followSymlinks && preserveSymlinks) || // both flags cannot be set to true
 		followSymlinks || // follow symlinks is not supported in NFS
 		preservePermissions || // preserve permissions is not supported in cross-protocol copy
-		preserveSymlinks {
+		preserveSymlinks ||
+		hardlinkType != common.EHardlinkHandlingType.Skip() {
 		shouldFail = true
 	}
 
@@ -999,10 +975,12 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 				src.(RemoteResourceManager).WithSpecificAuthType(
 					ResolveVariation(svm, []ExplicitCredentialTypes{
 						EExplicitCredentialType.SASToken(),
-						EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{}),
+						EExplicitCredentialType.OAuth(),
+					}), svm, CreateAzCopyTargetOptions{}),
 				dst.(RemoteResourceManager).WithSpecificAuthType(
 					ResolveVariation(svm, []ExplicitCredentialTypes{
-						EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth(),
+						EExplicitCredentialType.SASToken(),
+						EExplicitCredentialType.OAuth(),
 					}), svm, CreateAzCopyTargetOptions{}),
 			},
 			Flags: CopyFlags{
@@ -1047,6 +1025,13 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 		return
 	}
 
+	if hardlinkType != common.EHardlinkHandlingType.Skip() {
+		ValidateContainsError(svm, stdOut, []string{
+			"Hardlinked files are not supported between NFS and SMB",
+		})
+		return
+	}
+
 	// Dont validate the root directory in case of sync
 	if azCopyVerb == AzCopyVerbSync {
 		delete(srcObjs, rootDir)
@@ -1077,6 +1062,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 		preservePermissions:   preservePermissions,
 		preserveInfo:          preserveProperties,
 	})
+	defer CleanupNFSDirectory(svm, dstShare, rootDir)
 
 	if hardlinkType == common.SkipHardlinkHandlingType {
 		ValidateHardlinksSkippedCount(svm, stdOut, 2)
@@ -1124,9 +1110,14 @@ func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationMa
 	})
 
 	// NFS Share
-	dstShare := getDestinationSharedNFSContainer(svm)
+	dstShare := GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
+		PreferredAccount: pointerTo(PremiumFileShareAcct),
+	}).(ServiceResourceManager).GetContainer("aznfs3")
+
 	// SMB Share
-	srcShare := getSharedSMBContainer(svm)
+	srcShare := GetRootResource(svm, common.ELocation.File(), GetResourceOptions{
+		PreferredAccount: pointerTo(PremiumFileShareAcct),
+	}).(ServiceResourceManager).GetContainer("03dac432-c575-4036-b245-a15c36e15f61")
 
 	var folderProperties, fileProperties FileProperties
 	if preserveProperties {
@@ -1140,6 +1131,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationMa
 	}
 
 	rootDir := "dir_file_copy_test_" + uuid.NewString()
+	defer CleanupNFSDirectory(svm, srcShare, rootDir)
 
 	var dst, src ResourceManager
 	if azCopyVerb == AzCopyVerbSync {
@@ -1190,7 +1182,8 @@ func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationMa
 	if (followSymlinks && preserveSymlinks) || // both flags cannot be set to true
 		followSymlinks || // follow symlinks is not supported in NFS
 		preservePermissions || // preserve permissions is not supported in cross-protocol copy
-		preserveSymlinks {
+		preserveSymlinks ||
+		hardlinkType != common.EHardlinkHandlingType.Skip() {
 		shouldFail = true
 	}
 
@@ -1202,12 +1195,14 @@ func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationMa
 				src.(RemoteResourceManager).WithSpecificAuthType(
 					ResolveVariation(svm, []ExplicitCredentialTypes{
 						EExplicitCredentialType.SASToken(),
-						EExplicitCredentialType.OAuth()}),
+						EExplicitCredentialType.OAuth(),
+					}),
 					svm, CreateAzCopyTargetOptions{}),
 				dst.(RemoteResourceManager).WithSpecificAuthType(
 					ResolveVariation(svm, []ExplicitCredentialTypes{
 						EExplicitCredentialType.SASToken(),
-						EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{}),
+						EExplicitCredentialType.OAuth(),
+					}), svm, CreateAzCopyTargetOptions{}),
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
@@ -1251,6 +1246,13 @@ func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationMa
 		return
 	}
 
+	if hardlinkType != common.EHardlinkHandlingType.Skip() {
+		ValidateContainsError(svm, stdOut, []string{
+			"'--hardlinks' must be set to 'skip'",
+		})
+		return
+	}
+
 	// Dont validate the root directory in case of sync
 	if azCopyVerb == AzCopyVerbSync {
 		delete(srcObjs, rootDir)
@@ -1281,6 +1283,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationMa
 		preserveInfo:          true,
 		preservePermissions:   preservePermissions,
 	})
+	defer CleanupNFSDirectory(svm, dstShare, rootDir)
 }
 
 func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForNFS(svm *ScenarioVariationManager) {
@@ -1293,41 +1296,23 @@ func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForNFS(svm *ScenarioVar
 
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
 
-	dstObj1 := CreateResource[ContainerResourceManager](svm, GetRootResource(svm,
-		ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}), GetResourceOptions{
-			PreferredAccount: ResolveVariation(svm, []*string{pointerTo(PremiumFileShareAcct)}),
-		}), ResourceDefinitionContainer{
-		Properties: ContainerProperties{
-			FileContainerProperties: FileContainerProperties{
-				EnabledProtocols: pointerTo("NFS"),
-			},
-		},
-	})
+	dstObj1 := GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
+		PreferredAccount: pointerTo(PremiumFileShareAcct),
+	}).(ServiceResourceManager).GetContainer("aznfs3")
 
-	dstObj2 := CreateResource[ContainerResourceManager](svm, GetRootResource(svm,
-		ResolveVariation(svm, []common.Location{common.ELocation.File()}), GetResourceOptions{
-			PreferredAccount: ResolveVariation(svm, []*string{pointerTo(PremiumFileShareAcct)}),
-		}), ResourceDefinitionContainer{})
+	dstObj2 := GetRootResource(svm, common.ELocation.File(), GetResourceOptions{
+		PreferredAccount: pointerTo(PremiumFileShareAcct),
+	}).(ServiceResourceManager).GetContainer("03dac432-c575-4036-b245-a15c36e15f61")
 
 	dstShare := ResolveVariation(svm, []ContainerResourceManager{dstObj1, dstObj2})
 
-	srcObj1 := CreateResource[ContainerResourceManager](svm, GetRootResource(svm,
-		ResolveVariation(svm, []common.Location{common.ELocation.File()}),
-		GetResourceOptions{
-			PreferredAccount: ResolveVariation(svm, []*string{pointerTo(PremiumFileShareAcct)}),
-		}), ResourceDefinitionContainer{})
+	srcObj1 := GetRootResource(svm, common.ELocation.File(), GetResourceOptions{
+		PreferredAccount: pointerTo(PremiumFileShareAcct),
+	}).(ServiceResourceManager).GetContainer("03dac432-c575-4036-b245-a15c36e15f61")
 
-	srcObj2 := CreateResource[ContainerResourceManager](svm, GetRootResource(svm,
-		ResolveVariation(svm, []common.Location{common.ELocation.FileNFS()}),
-		GetResourceOptions{
-			PreferredAccount: ResolveVariation(svm, []*string{pointerTo(PremiumFileShareAcct)}),
-		}), ResourceDefinitionContainer{
-		Properties: ContainerProperties{
-			FileContainerProperties: FileContainerProperties{
-				EnabledProtocols: pointerTo("NFS"),
-			},
-		},
-	})
+	srcObj2 := GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
+		PreferredAccount: pointerTo(PremiumFileShareAcct),
+	}).(ServiceResourceManager).GetContainer("aznfs3")
 
 	srcShare := ResolveVariation(svm, []ContainerResourceManager{srcObj1, srcObj2})
 
