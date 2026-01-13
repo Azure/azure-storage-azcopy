@@ -291,6 +291,9 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			cName := dstContainerName
 			// if a destination container name is not specified OR copying service to container/folder, append the src container name.
 			if cName == "" || (srcLevel == ELocationLevel.Service() && dstLevel > ELocationLevel.Service()) {
+				// Debug: Log before resolution
+				glcm.Info(fmt.Sprintf("[CONTAINER_RESOLVE] Original bucket name: '%s'", object.ContainerName))
+
 				cName, err = containerResolver.ResolveName(object.ContainerName)
 
 				if err != nil {
@@ -300,6 +303,9 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					}
 					return nil
 				}
+
+				// Debug: Log after resolution
+				glcm.Info(fmt.Sprintf("[CONTAINER_RESOLVE] Resolved container name: '%s' -> '%s'", object.ContainerName, cName))
 
 				object.DstContainerName = cName
 			}
