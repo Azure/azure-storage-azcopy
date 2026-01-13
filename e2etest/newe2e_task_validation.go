@@ -15,6 +15,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -103,8 +104,8 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 		return
 	}
 
-	definition.ApplyDefinition(a, target, map[cmd.LocationLevel]func(Asserter, ResourceManager, ResourceDefinition){
-		cmd.ELocationLevel.Container(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
+	definition.ApplyDefinition(a, target, map[azcopy.LocationLevel]func(Asserter, ResourceManager, ResourceDefinition){
+		azcopy.ELocationLevel.Container(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
 			cRes := manager.(ContainerResourceManager)
 
 			canonPathPrefix := cRes.Canon() + ": "
@@ -130,7 +131,7 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 				ValidatePropertyPtr(a, "Quota", vProps.FileContainerProperties.Quota, cProps.FileContainerProperties.Quota)
 			}
 		},
-		cmd.ELocationLevel.Object(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
+		azcopy.ELocationLevel.Object(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
 			objMan := manager.(ObjectResourceManager)
 			objDef := definition.(ResourceDefinitionObject)
 
@@ -580,4 +581,30 @@ func ValidateLogFileRetention(a Asserter, logsDir string, expectedLogFileToRetai
 		}
 	}
 	a.AssertNow("Expected job log files to be retained", Equal{}, cnt, expectedLogFileToRetain)
+}
+
+// ValidateThroughputOutput validates that throughput information is displayed in AzCopy output
+// This is a regression test for the v10.31.0 bug where throughput was hidden when it equaled 0
+func ValidateThroughputOutput(a Asserter, stdout AzCopyStdout) {
+	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
+		return
+	}
+
+	var foundThroughput bool
+	for _, line := range stdout.RawStdout() {
+		// Look for throughput display patterns:
+		// - "2-sec Throughput (Mb/s): X.XXXX" (normal display)
+		// - "Throughput (Mb/s)" (partial match for any throughput display)
+		if strings.Contains(line, "Throughput (Mb/s)") {
+			foundThroughput = true
+			break
+		}
+	}
+
+	if !foundThroughput {
+		fmt.Println("=== AzCopy Output for Throughput Validation ===")
+		fmt.Println(stdout.String())
+		fmt.Println("=== End AzCopy Output ===")
+		a.Error("throughput information not found in azcopy output - this may indicate a regression in throughput display")
+	}
 }

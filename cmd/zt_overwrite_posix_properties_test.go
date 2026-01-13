@@ -22,16 +22,16 @@ package cmd
 
 import (
 	"context"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -56,16 +56,13 @@ func TestOverwritePosixProperties(t *testing.T) {
 	scenarioHelper{}.generateLocalFilesFromList(a, dirPath, files)
 
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	rawBlobURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultRawCopyInput(dirPath, rawBlobURLWithSAS.String())
 	raw.recursive = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		a.Equal(3, len(mockedRPC.transfers))
@@ -84,7 +81,7 @@ func TestOverwritePosixProperties(t *testing.T) {
 	mockedRPC.reset()
 	raw.forceWrite = "posixproperties"
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		a.Equal(3, len(mockedRPC.transfers))

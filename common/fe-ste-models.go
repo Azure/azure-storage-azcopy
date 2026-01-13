@@ -653,6 +653,10 @@ func (l Location) SupportsTrailingDot() bool {
 	return false
 }
 
+func (ft FromTo) IsRedirection() bool {
+	return ft == EFromTo.PipeBlob() || ft == EFromTo.BlobPipe()
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 var EFromTo = FromTo(0)
