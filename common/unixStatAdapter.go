@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -247,24 +248,27 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 	}
 
 	// In cases, the permissions were uploaded in AMLFS style, determine what base to use
-	looksLikeOctal := func(s string) bool {
-		if len(s) < 1 || len(s) > 4 {
-			return false
-		}
-		for _, r := range s {
-			if r < '0' || r > '7' {
-				return false
-			}
-		}
-		return true
-	}
-
 	if modeStr, ok := TryReadMetadata(metadata, POSIXModeMeta); ok {
-		base := 10
-		if looksLikeOctal(*modeStr) {
-			base = 8
+		modeBase := 10
+
+		// AMLFS stores permissions in octal and also sets AMLFS owner/group keys.
+		amlfsStyle := false
+		if _, ok := TryReadMetadata(metadata, AMLFSOwnerMeta); ok {
+			amlfsStyle = true
 		}
-		m, err := strconv.ParseUint(*modeStr, base, 32)
+		if _, ok := TryReadMetadata(metadata, AMLFSGroupMeta); ok {
+			amlfsStyle = true
+		}
+		// AMLFS formatter uses a leading 0 with %04o (e.g., "0755")
+		if strings.HasPrefix(*modeStr, "0") {
+			amlfsStyle = true
+		}
+
+		if amlfsStyle {
+			modeBase = 8 // To persist AMLFS style formatting, we store in base 8
+		}
+
+		m, err := strconv.ParseUint(*modeStr, modeBase, 32)
 		if err != nil {
 			return s, err
 		}

@@ -1905,7 +1905,7 @@ func WarnIfTooManyObjects() {
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 var EPosixPropertiesStyle = PosixPropertiesStyle(0)
 
-var StandardPosixPropertiesStyle = EPosixPropertiesStyle.Standard()
+var StandardPosixPropertiesStyle = EPosixPropertiesStyle.Standard() // Default
 var AMLFSPosixPropertiesStyle = EPosixPropertiesStyle.AMLFS()
 
 type PosixPropertiesStyle uint8

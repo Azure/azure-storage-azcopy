@@ -44,6 +44,39 @@ func TestPOSIX_SpecialFilesToBlob(t *testing.T) {
 	)
 }
 
+// Test that AMLFS style props are correctly uploaded to Blob storage
+func TestPOSIX_UploadAMLFSStyle(t *testing.T) {
+	ptr := func(u uint32) *uint32 {
+		return &u
+	}
+
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.BlobLocal()), // no blobblob since that's just metadata and we already test that
+		eValidate.Auto(),
+		allCredentialTypes, // this relies upon a working source info provider; this validates appropriate creds are supplied to it.
+		anonymousAuthOnly,
+		params{
+			recursive:               true,
+			preservePOSIXProperties: true,
+			symlinkHandling:         common.ESymlinkHandlingType.Preserve(),
+			posixPropertiesStyle:    common.AMLFSPosixPropertiesStyle,
+		},
+		nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				f("a", with{posixProperties: objectUnixStatContainer{mode: ptr(0777), modTime: ptr("2026-01-02 15:04:05 -0700")}}),
+				f("b", with{posixProperties: objectUnixStatContainer{mode: ptr(common.DEFAULT_FILE_PERM)}}),
+				"a",
+			},
+		},
+		EAccountType.Standard(), EAccountType.Standard(), "",
+	)
+}
+
 // *** TESTS DISABLED UNTIL POSIX PROPS HNS PR ***
 
 // Block/char device rep is untested due to difficulty to test
