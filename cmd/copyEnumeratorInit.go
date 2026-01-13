@@ -171,10 +171,22 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		containerResolver = NewGCPBucketNameToAzureResourcesResolver(nil)
 	} else if cca.FromTo == common.EFromTo.S3Blob() {
 		// Check if this is actually a GCP S3-compatible endpoint
+		glcm.Info(fmt.Sprintf("[GCP_DETECT] Checking S3 source URL: '%s'", cca.Source.Value))
 		if parsedURL, err := url.Parse(cca.Source.Value); err == nil {
-			if s3Parts, err := common.NewS3URLParts(*parsedURL); err == nil && s3Parts.IsGoogleCloudStorage() {
-				containerResolver = NewGCPBucketNameToAzureResourcesResolver(nil)
+			if s3Parts, err := common.NewS3URLParts(*parsedURL); err == nil {
+				isGCP := s3Parts.IsGoogleCloudStorage()
+				glcm.Info(fmt.Sprintf("[GCP_DETECT] IsGoogleCloudStorage() returned: %v for endpoint: '%s'", isGCP, s3Parts.Endpoint))
+				if isGCP {
+					glcm.Info("[GCP_DETECT] Using GCPBucketNameToAzureResourcesResolver")
+					containerResolver = NewGCPBucketNameToAzureResourcesResolver(nil)
+				} else {
+					glcm.Info("[GCP_DETECT] Using S3BucketNameToAzureResourcesResolver")
+				}
+			} else {
+				glcm.Info(fmt.Sprintf("[GCP_DETECT] Failed to parse S3URLParts: %v", err))
 			}
+		} else {
+			glcm.Info(fmt.Sprintf("[GCP_DETECT] Failed to parse URL: %v", err))
 		}
 	}
 	existingContainers := make(map[string]bool)
