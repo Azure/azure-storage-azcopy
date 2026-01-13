@@ -72,6 +72,10 @@ var (
 	}
 
 	orchestratorOptions *SyncOrchestratorOptions
+
+	// isGCPSource indicates if the sync source is Google Cloud Storage via S3-compatible API
+	// This is used to handle GCP-specific behaviors like directory placeholder objects
+	isGCPSource bool
 )
 
 type minimalStoredObject struct {
@@ -301,8 +305,9 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 
 	// Skip directory placeholder objects that represent the current directory itself
 	// These have empty relativePath after prefix trimming and would cause re-enqueueing of the same directory
-	if originalPath == "" && so.entityType == common.EEntityType.Folder() {
-		syncOrchestratorLog(common.LogDebug, fmt.Sprintf("[PROCESSOR] Skipping self-referential directory placeholder for dir='%s'", st.dir))
+	// This issue specifically occurs with GCP S3-compatible storage where directory placeholders are returned
+	if originalPath == "" && so.entityType == common.EEntityType.Folder() && isGCPSource {
+		syncOrchestratorLog(common.LogDebug, fmt.Sprintf("[PROCESSOR] Skipping self-referential directory placeholder for dir='%s' (GCP S3-compatible source)", st.dir))
 		return nil
 	}
 
@@ -598,6 +603,16 @@ func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator,
 	}
 
 	orchestratorOptions = enumerator.orchestratorOptions
+
+	// Detect if source is Google Cloud Storage via S3-compatible API
+	isGCPSource = false
+	if orchestratorOptions.fromTo == common.EFromTo.S3Blob() {
+		if parsedURL, err := url.Parse(cca.source.Value); err == nil {
+			if s3Parts, err := common.NewS3URLParts(*parsedURL); err == nil {
+				isGCPSource = s3Parts.IsGoogleCloudStorage()
+			}
+		}
+	}
 
 	// Initialize resource limits based on source/destination types
 	initializeLimits(orchestratorOptions)

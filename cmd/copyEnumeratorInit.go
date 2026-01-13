@@ -169,6 +169,13 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	containerResolver = NewS3BucketNameToAzureResourcesResolver(nil)
 	if cca.FromTo == common.EFromTo.GCPBlob() {
 		containerResolver = NewGCPBucketNameToAzureResourcesResolver(nil)
+	} else if cca.FromTo == common.EFromTo.S3Blob() {
+		// Check if this is actually a GCP S3-compatible endpoint
+		if parsedURL, err := url.Parse(cca.Source.Value); err == nil {
+			if s3Parts, err := common.NewS3URLParts(*parsedURL); err == nil && s3Parts.IsGoogleCloudStorage() {
+				containerResolver = NewGCPBucketNameToAzureResourcesResolver(nil)
+			}
+		}
 	}
 	existingContainers := make(map[string]bool)
 	var logDstContainerCreateFailureOnce sync.Once
@@ -204,7 +211,16 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				// Resolve all container names up front.
 				// If we were to resolve on-the-fly, then name order would affect the results inconsistently.
 				if cca.FromTo == common.EFromTo.S3Blob() {
-					containerResolver = NewS3BucketNameToAzureResourcesResolver(containers)
+					// Check if this is actually a GCP S3-compatible endpoint
+					if parsedURL, err := url.Parse(cca.Source.Value); err == nil {
+						if s3Parts, err := common.NewS3URLParts(*parsedURL); err == nil && s3Parts.IsGoogleCloudStorage() {
+							containerResolver = NewGCPBucketNameToAzureResourcesResolver(containers)
+						} else {
+							containerResolver = NewS3BucketNameToAzureResourcesResolver(containers)
+						}
+					} else {
+						containerResolver = NewS3BucketNameToAzureResourcesResolver(containers)
+					}
 				} else if cca.FromTo == common.EFromTo.GCPBlob() {
 					containerResolver = NewGCPBucketNameToAzureResourcesResolver(containers)
 				}

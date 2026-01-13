@@ -320,6 +320,12 @@ func (p *S3URLParts) IsDirectorySyntactically() bool {
 	return false
 }
 
+// IsGoogleCloudStorage checks if this S3 URL is actually pointing to Google Cloud Storage
+// (via S3-compatible API with HMAC keys). Returns true if the endpoint is storage.googleapis.com.
+func (p *S3URLParts) IsGoogleCloudStorage() bool {
+	return strings.Contains(strings.ToLower(p.Endpoint), "googleapis.com")
+}
+
 type caseInsensitiveValues url.Values // map[string][]string
 func (values caseInsensitiveValues) Get(key string) ([]string, bool) {
 	key = strings.ToLower(key)
