@@ -1552,7 +1552,6 @@ func (HardlinkHandlingType) Skip() HardlinkHandlingType {
 	return HardlinkHandlingType(1)
 }
 
-// Skip means skip the hardlinks and do not copy them to the destination
 func (HardlinkHandlingType) Preserve() HardlinkHandlingType {
 	return HardlinkHandlingType(2)
 }
