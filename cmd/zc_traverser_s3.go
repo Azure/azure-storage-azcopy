@@ -148,6 +148,14 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 		   one of virtual directories in path ends with period.
 		   This list is not exhaustive
 		*/
+
+		/*
+			For GCP with HCMAC, skipping this check to allow namaspace resolution during copy
+		*/
+		if isGCP {
+			return false
+		}
+
 		return strings.HasSuffix(objectKey, ".") ||
 			strings.Contains(objectKey, "./")
 	}
