@@ -131,6 +131,11 @@ func (t *s3Traverser) IsDirectory(isSource bool) (bool, error) {
 }
 
 func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
+	// Debug: Log traverse start with bucket info
+	isGCP := t.s3URLParts.IsGoogleCloudStorage()
+	glcm.Info(fmt.Sprintf("[S3_TRAVERSE] Starting traversal - URL: '%s', Bucket: '%s', Endpoint: '%s', IsGCP: %v, Recursive: %v",
+		t.rawURL.String(), t.s3URLParts.BucketName, t.s3URLParts.Endpoint, isGCP, t.recursive))
+
 	p := processor
 	processor = func(storedObject StoredObject) error {
 		t.incrementEnumerationCounter(storedObject.entityType)
@@ -346,6 +351,8 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 }
 
 func newS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTraverserOptions) (t *s3Traverser, err error) {
+	glcm.Info(fmt.Sprintf("[NEW_S3_TRAVERSER] Creating S3 traverser for URL: '%s'", rawURL.String()))
+
 	t = &s3Traverser{
 		rawURL:                      rawURL,
 		ctx:                         ctx,
@@ -377,6 +384,11 @@ func newS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTrave
 	}
 
 	t.s3URLParts = s3URLPartsExtension{s3URLParts}
+
+	// Debug: Check if this is GCP
+	isGCP := s3URLParts.IsGoogleCloudStorage()
+	glcm.Info(fmt.Sprintf("[NEW_S3_TRAVERSER] Endpoint: '%s', IsGCP: %v, BucketName: '%s'",
+		s3URLParts.Endpoint, isGCP, s3URLParts.BucketName))
 
 	showS3UrlTypeWarning(s3URLParts)
 
