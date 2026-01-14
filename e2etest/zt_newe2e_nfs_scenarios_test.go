@@ -125,7 +125,15 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 
 	dstContainer := GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
-	}).(ServiceResourceManager).GetContainer("aznfs3")
+	}).(ServiceResourceManager).GetContainer("destnfs")
+
+	if !dstContainer.Exists() {
+		dstContainer.Create(svm, ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				EnabledProtocols: pointerTo("NFS"),
+			},
+		})
+	}
 
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(
 		svm, common.ELocation.Local()), ResourceDefinitionContainer{})
@@ -399,7 +407,15 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 
 	srcContainer := GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
-	}).(ServiceResourceManager).GetContainer("aznfs3")
+	}).(ServiceResourceManager).GetContainer("srcnfs")
+
+	if !srcContainer.Exists() {
+		srcContainer.Create(svm, ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				EnabledProtocols: pointerTo("NFS"),
+			},
+		})
+	}
 
 	folderProperties, fileProperties, fileOrFolderPermissions := getPropertiesAndPermissions(svm, preserveProperties, preservePermissions)
 	rootDir := "dir_file_copy_test_" + uuid.NewString()
@@ -622,11 +638,25 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 
 	dstContainer := GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
-	}).(ServiceResourceManager).GetContainer("aznfs2")
+	}).(ServiceResourceManager).GetContainer("dstnfs")
+	if !dstContainer.Exists() {
+		dstContainer.Create(svm, ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				EnabledProtocols: pointerTo("NFS"),
+			},
+		})
+	}
 
 	srcContainer := GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
-	}).(ServiceResourceManager).GetContainer("aznfs3")
+	}).(ServiceResourceManager).GetContainer("srcnfs")
+	if !srcContainer.Exists() {
+		srcContainer.Create(svm, ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				EnabledProtocols: pointerTo("NFS"),
+			},
+		})
+	}
 
 	folderProperties, fileProperties, fileOrFolderPermissions := getPropertiesAndPermissions(svm, preserveProperties, preservePermissions)
 
@@ -859,12 +889,25 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 
 	dstShare := GetRootResource(svm, common.ELocation.File(), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
-	}).(ServiceResourceManager).GetContainer("03dac432-c575-4036-b245-a15c36e15f61")
+	}).(ServiceResourceManager).GetContainer("dstsmb")
+	if !dstShare.Exists() {
+		dstShare.Create(svm, ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				EnabledProtocols: pointerTo("SMB"),
+			},
+		})
+	}
 
 	srcShare := GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
-	}).(ServiceResourceManager).GetContainer("aznfs3")
-
+	}).(ServiceResourceManager).GetContainer("srcnfs")
+	if !srcShare.Exists() {
+		srcShare.Create(svm, ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				EnabledProtocols: pointerTo("NFS"),
+			},
+		})
+	}
 	folderProperties, fileProperties, _ := getPropertiesAndPermissions(svm, preserveProperties, preservePermissions)
 
 	rootDir := "dir_file_copy_test_" + uuid.NewString()
@@ -1112,12 +1155,26 @@ func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationMa
 	// NFS Share
 	dstShare := GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
-	}).(ServiceResourceManager).GetContainer("aznfs3")
+	}).(ServiceResourceManager).GetContainer("dstnfs")
+	if !dstShare.Exists() {
+		dstShare.Create(svm, ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				EnabledProtocols: pointerTo("NFS"),
+			},
+		})
+	}
 
 	// SMB Share
 	srcShare := GetRootResource(svm, common.ELocation.File(), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
-	}).(ServiceResourceManager).GetContainer("03dac432-c575-4036-b245-a15c36e15f61")
+	}).(ServiceResourceManager).GetContainer("srcsmb")
+	if !srcShare.Exists() {
+		srcShare.Create(svm, ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				EnabledProtocols: pointerTo("SMB"),
+			},
+		})
+	}
 
 	var folderProperties, fileProperties FileProperties
 	if preserveProperties {
@@ -1298,21 +1355,48 @@ func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForNFS(svm *ScenarioVar
 
 	dstObj1 := GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
-	}).(ServiceResourceManager).GetContainer("aznfs3")
+	}).(ServiceResourceManager).GetContainer("dstnfs")
+	if !dstObj1.Exists() {
+		dstObj1.Create(svm, ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				EnabledProtocols: pointerTo("NFS"),
+			},
+		})
+	}
 
 	dstObj2 := GetRootResource(svm, common.ELocation.File(), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
-	}).(ServiceResourceManager).GetContainer("03dac432-c575-4036-b245-a15c36e15f61")
-
+	}).(ServiceResourceManager).GetContainer("dstsmb")
+	if !dstObj2.Exists() {
+		dstObj2.Create(svm, ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				EnabledProtocols: pointerTo("SMB"),
+			},
+		})
+	}
 	dstShare := ResolveVariation(svm, []ContainerResourceManager{dstObj1, dstObj2})
 
 	srcObj1 := GetRootResource(svm, common.ELocation.File(), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
-	}).(ServiceResourceManager).GetContainer("03dac432-c575-4036-b245-a15c36e15f61")
+	}).(ServiceResourceManager).GetContainer("srcsmb")
+	if !srcObj1.Exists() {
+		srcObj1.Create(svm, ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				EnabledProtocols: pointerTo("SMB"),
+			},
+		})
+	}
 
 	srcObj2 := GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
-	}).(ServiceResourceManager).GetContainer("aznfs3")
+	}).(ServiceResourceManager).GetContainer("srcnfs")
+	if !srcObj2.Exists() {
+		srcObj2.Create(svm, ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				EnabledProtocols: pointerTo("NFS"),
+			},
+		})
+	}
 
 	srcShare := ResolveVariation(svm, []ContainerResourceManager{srcObj1, srcObj2})
 

@@ -439,10 +439,9 @@ func validateSymlinkFlag(followSymlinks bool, fromTo common.FromTo) error {
 	return nil
 }
 
-// validateHardlinkFlag validates and adjusts the --hardlinks option based on OS,
+// validateHardlinkFlag validates and the --hardlinks options
 // transfer direction (upload, download, S2S), and source/destination types (NFS, SMB, local).
 // Returns an error if the configuration is unsupported.
-// This function will be added as part of Phase-3 which targets to support hardlinks for NFS copy.
 func validateHardlinkFlag(option common.HardlinkHandlingType, fromTo common.FromTo) error {
 	if !fromTo.IsNFS() {
 		return nil
