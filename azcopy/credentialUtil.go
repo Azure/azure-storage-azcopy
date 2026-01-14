@@ -365,7 +365,7 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 	uri, _ := resource.FullURL()
 	if location == common.ELocation.Blob() {
 		if isSource && resource.SAS == "" {
-			public, err := isPublic(ctx, uri.String(), cpkOptions)
+			public, err = isPublic(ctx, uri.String(), cpkOptions)
 			if err != nil {
 				return common.ECredentialType.Unknown(), false, err
 			}
