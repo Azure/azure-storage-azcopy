@@ -35,6 +35,7 @@ func (cca *CookedCopyCmdArgs) validateSourceDir(traverser traverser.ResourceTrav
 	var err error
 	// Ensure we're only copying a directory under valid conditions
 	cca.IsSourceDir, err = traverser.IsDirectory(true)
+
 	if cca.IsSourceDir &&
 		!cca.Recursive && // Copies the folder & everything under it
 		!cca.StripTopDir { // Copies only everything under it

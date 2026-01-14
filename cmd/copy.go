@@ -535,7 +535,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 			cooked.FromTo)
 	}
 
-	// TODO: Figure out this preservePermissinos stuff
+	// TODO: Figure out this preservePermissions stuff
 	if cooked.preservePermissions.IsTruthy() && cooked.FromTo.From() == common.ELocation.Blob() {
 		// If a user is trying to persist from Blob storage with ACLs, they probably want directories too, because ACLs only exist in HNS.
 		cooked.IncludeDirectoryStubs = true
