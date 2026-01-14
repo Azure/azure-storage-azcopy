@@ -266,12 +266,12 @@ func (s *cookedSyncOptions) validateOptions() (err error) {
 	}
 
 	if AreBothLocationsNFSAware(s.fromTo) {
-		err = PerformNFSSpecificValidation(s.fromTo, s.preservePermissions, s.preserveInfo, &s.hardlinks, s.symlinks)
+		err = PerformNFSSpecificValidation(s.fromTo, s.preservePermissions, s.preserveInfo, s.symlinks, s.hardlinks)
 		if err != nil {
 			return err
 		}
 	} else {
-		err = PerformSMBSpecificValidation(s.fromTo, s.preservePermissions, s.preserveInfo, s.preservePosixProperties)
+		err = PerformSMBSpecificValidation(s.fromTo, s.preservePermissions, s.preserveInfo, s.preservePosixProperties, s.hardlinks)
 		if err != nil {
 			return err
 		}

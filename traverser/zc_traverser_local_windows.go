@@ -83,3 +83,8 @@ func IsRegularFile(info os.FileInfo) bool {
 func IsSymbolicLink(fileInfo os.FileInfo) bool {
 	return fileInfo.Mode()&os.ModeSymlink == os.ModeSymlink
 }
+
+// no windows implementation
+func getInodeString(fileInfo os.FileInfo) string {
+	return ""
+}
