@@ -162,9 +162,6 @@ func (*mockedLifecycleManager) MsgHandlerChannel() <-chan *common.LCMMsg {
 	return nil
 }
 
-func (*mockedLifecycleManager) SetForceLogging() {
-}
-
 type dummyProcessor struct {
 	record []traverser.StoredObject
 }
