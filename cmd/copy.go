@@ -1242,10 +1242,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		if err != nil {
 			return fmt.Errorf("failed to initialize enumerator: %w", err)
 		}
-		glcm.Info(fmt.Sprintf("[COPY_START] Starting copy enumeration - Source: %s, Dest: %s, FromTo: %s",
-			cca.Source.Value, cca.Destination.Value, cca.FromTo.String()))
 		err = e.enumerate()
-		glcm.Info(fmt.Sprintf("[COPY_COMPLETE] Copy enumeration completed with error: %v", err))
 
 	case cca.FromTo.IsDelete():
 		// Delete gets ran through copy, so handle delete

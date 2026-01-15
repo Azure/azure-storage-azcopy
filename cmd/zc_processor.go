@@ -172,9 +172,6 @@ func (d DryrunTransfer) MarshalJSON() ([]byte, error) {
 }
 
 func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) (err error) {
-	// Debug: Log transfer scheduling attempt
-	glcm.Info(fmt.Sprintf("[COPY_SCHEDULE] Attempting to schedule transfer: name='%s', relativePath='%s', container='%s', dstContainer='%s', entityType=%s",
-		storedObject.name, storedObject.relativePath, storedObject.ContainerName, storedObject.DstContainerName, storedObject.entityType))
 
 	// Escape paths on destinations where the characters are invalid
 	// And re-encode them where the characters are valid.

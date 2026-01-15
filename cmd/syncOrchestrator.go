@@ -314,9 +314,6 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 	// Build full path for the object relative to current directory
 	so.relativePath = buildChildPath(st.dir, so.relativePath)
 
-	// Debug: Log every object being processed
-	syncOrchestratorLog(common.LogDebug, fmt.Sprintf("[PROCESSOR] After buildChildPath - finalPath='%s' (type: %s)", so.relativePath, so.entityType))
-
 	// Thread-safe storage in the indexer first
 	st.enumerator.objectIndexer.rwMutex.Lock()
 	err := st.enumerator.objectIndexer.store(so)
@@ -336,8 +333,6 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 			relativePath: so.relativePath,
 			changeTime:   so.changeTime,
 		})
-		// Debug logging to track subdirectory discovery
-		syncOrchestratorLog(common.LogDebug, fmt.Sprintf("Discovered subdirectory: %s (total subdirs now: %d)", so.relativePath, len(st.sub_dirs)))
 	}
 
 	return nil
@@ -485,19 +480,12 @@ func (st *SyncTraverser) finalizeChild(child string, scheduleTransfer bool) erro
 	st.enumerator.objectIndexer.rwMutex.RUnlock()
 
 	if exists {
-		// Debug: Log what we're about to process
-		glcm.Info(fmt.Sprintf("[SYNC_FINALIZE] Processing object: path='%s', type=%s, scheduleTransfer=%v",
-			child, storedObject.entityType, scheduleTransfer))
-
 		// Schedule the file/directory for transfer using the pointer
 		if scheduleTransfer {
-			glcm.Info(fmt.Sprintf("[SYNC_SCHEDULE] Scheduling transfer for: '%s'", child))
 			err := st.enumerator.ctp.scheduleCopyTransfer(storedObject)
 			if err != nil {
-				glcm.Info(fmt.Sprintf("[SYNC_SCHEDULE_ERROR] Failed to schedule transfer for '%s': %v", child, err))
 				return err
 			}
-			glcm.Info(fmt.Sprintf("[SYNC_SCHEDULE_SUCCESS] Successfully scheduled transfer for: '%s'", child))
 		}
 
 		// Remove from indexer to free memory
@@ -508,8 +496,6 @@ func (st *SyncTraverser) finalizeChild(child string, scheduleTransfer bool) erro
 		if enableThrottling {
 			totalFilesInIndexer.Add(-1) // Decrement the count after processing
 		}
-	} else {
-		glcm.Info(fmt.Sprintf("[SYNC_FINALIZE] Object not found in indexer: '%s'", child))
 	}
 
 	return nil
@@ -687,10 +673,6 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 		srcDirEnumerating.Add(1) // Increment active directory count
 
-		// Debug logging to track directory processing
-		syncOrchestratorLog(common.LogDebug, fmt.Sprintf("START processing directory: '%s' (active dirs: src=%d dst=%d)",
-			dir.(minimalStoredObject).relativePath, srcDirEnumerating.Load(), dstDirEnumerating.Load()))
-
 		// Build source and destination paths for current directory
 		sync_src := []string{cca.source.Value, dir.(minimalStoredObject).relativePath}
 		sync_dst := []string{cca.destination.Value, dir.(minimalStoredObject).relativePath}
@@ -700,9 +682,6 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 		pt_src.Value = strings.Join(sync_src, common.AZCOPY_PATH_SEPARATOR_STRING)
 		st_src.Value = strings.Join(sync_dst, common.AZCOPY_PATH_SEPARATOR_STRING)
-
-		// Debug: Log the full source URL being used for traverser creation
-		syncOrchestratorLog(common.LogDebug, fmt.Sprintf("[TRAVERSER_CREATE] Creating traverser for dir='%s', full source URL='%s'", dir.(minimalStoredObject).relativePath, pt_src.Value))
 
 		// Handle Windows path separators
 		if runtime.GOOS == "windows" {
@@ -757,10 +736,6 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 		err = pt.Traverse(noPreProccessor, stra.processor, enumerator.filters)
 		srcDirEnumerating.Add(-1) // Decrement active directory count
-
-		// Debug: Log traversal completion
-		glcm.Info(fmt.Sprintf("[SYNC_TRAVERSAL] Source traversal completed for dir='%s', subdirs found=%d",
-			dir.(minimalStoredObject).relativePath, len(stra.sub_dirs)))
 
 		// Release source slot after source traversal is complete
 		if enableThrottling {
@@ -909,10 +884,8 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		}
 
 		// Enqueue discovered subdirectories for processing
-		syncOrchestratorLog(common.LogDebug, fmt.Sprintf("[ENQUEUE_START] Parent dir '%s': enqueueing %d subdirectories", dir.(minimalStoredObject).relativePath, len(stra.sub_dirs)))
-		for idx, sub_dir := range stra.sub_dirs {
+		for _, sub_dir := range stra.sub_dirs {
 			crawlWg.Add(1) // IMPORTANT: Add to WaitGroup *before* enqueuing
-			syncOrchestratorLog(common.LogDebug, fmt.Sprintf("[ENQUEUE_%d] Subdirectory: '%s' (parent: '%s')", idx, sub_dir.relativePath, dir.(minimalStoredObject).relativePath))
 			enqueueDir(minimalStoredObject{
 				relativePath:           sub_dir.relativePath,
 				changeTime:             sub_dir.changeTime,

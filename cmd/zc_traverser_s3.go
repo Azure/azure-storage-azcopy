@@ -131,11 +131,6 @@ func (t *s3Traverser) IsDirectory(isSource bool) (bool, error) {
 }
 
 func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
-	// Debug: Log traverse start with bucket info
-	isGCP := t.s3URLParts.IsGoogleCloudStorage()
-	glcm.Info(fmt.Sprintf("[S3_TRAVERSE] Starting traversal - URL: '%s', Bucket: '%s', Endpoint: '%s', IsGCP: %v, Recursive: %v",
-		t.rawURL.String(), t.s3URLParts.BucketName, t.s3URLParts.Endpoint, isGCP, t.recursive))
-
 	p := processor
 	processor = func(storedObject StoredObject) error {
 		t.incrementEnumerationCounter(storedObject.entityType)
@@ -148,14 +143,6 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 		   one of virtual directories in path ends with period.
 		   This list is not exhaustive
 		*/
-
-		/*
-			For GCP with HCMAC, skipping this check to allow namaspace resolution during copy
-		*/
-		if isGCP {
-			return false
-		}
-
 		return strings.HasSuffix(objectKey, ".") ||
 			strings.Contains(objectKey, "./")
 	}
@@ -226,20 +213,10 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 	// This is because * is both a valid URL path character and a valid portion of an object key in S3.
 	searchPrefix := t.s3URLParts.ObjectKey
 
-	// Debug: Log the searchPrefix being used
-	if glcm != nil {
-		glcm.Info(fmt.Sprintf("[S3_TRAVERSE_START] bucket=%s, searchPrefix='%s', recursive=%v", t.s3URLParts.BucketName, searchPrefix, t.recursive))
-	}
-
 	// It's a bucket or virtual directory.
 	for objectInfo := range t.s3Client.ListObjectsV2(t.s3URLParts.BucketName, searchPrefix, t.recursive, t.ctx.Done()) {
 		// re-join the unescaped path.
 		relativePath := strings.TrimPrefix(objectInfo.Key, searchPrefix)
-
-		// Debug: Log path transformation
-		if glcm != nil {
-			glcm.Info(fmt.Sprintf("[S3_OBJECT] key='%s' -> relativePath='%s' (searchPrefix='%s')", objectInfo.Key, relativePath, searchPrefix))
-		}
 
 		// Ignoring this object because it is a zero-byte placeholder typically created to simulate a folder in S3-compatible storage.
 		// These objects have an empty RelativePath and are marked as files, but they do not represent actual user data.
@@ -293,11 +270,6 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 				noMetadata,
 				t.s3URLParts.BucketName)
 
-			// Debug: Log folder object being passed to processor
-			if glcm != nil {
-				glcm.Info(fmt.Sprintf("[S3_FOLDER] Passing to processor: name='%s', relativePath='%s'", objectName, relativePath))
-			}
-
 		} else {
 			if strings.HasSuffix(relativePath, "/") {
 				// If a file has a suffix of /, it's still treated as a folder.
@@ -333,11 +305,6 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 				noBlobProps,
 				oie.NewCommonMetadata(),
 				t.s3URLParts.BucketName)
-
-			// Debug: Log file object being passed to processor
-			if glcm != nil {
-				glcm.Info(fmt.Sprintf("[S3_FILE] Passing to processor: name='%s', relativePath='%s', size=%d", objectName, relativePath, objectInfo.Size))
-			}
 		}
 
 		err = processIfPassedFilters(filters,
@@ -359,8 +326,6 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 }
 
 func newS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTraverserOptions) (t *s3Traverser, err error) {
-	glcm.Info(fmt.Sprintf("[NEW_S3_TRAVERSER] Creating S3 traverser for URL: '%s'", rawURL.String()))
-
 	t = &s3Traverser{
 		rawURL:                      rawURL,
 		ctx:                         ctx,
@@ -392,11 +357,6 @@ func newS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTrave
 	}
 
 	t.s3URLParts = s3URLPartsExtension{s3URLParts}
-
-	// Debug: Check if this is GCP
-	isGCP := s3URLParts.IsGoogleCloudStorage()
-	glcm.Info(fmt.Sprintf("[NEW_S3_TRAVERSER] Endpoint: '%s', IsGCP: %v, BucketName: '%s'",
-		s3URLParts.Endpoint, isGCP, s3URLParts.BucketName))
 
 	showS3UrlTypeWarning(s3URLParts)
 

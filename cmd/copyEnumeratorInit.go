@@ -169,25 +169,6 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	containerResolver = NewS3BucketNameToAzureResourcesResolver(nil)
 	if cca.FromTo == common.EFromTo.GCPBlob() {
 		containerResolver = NewGCPBucketNameToAzureResourcesResolver(nil)
-	} else if cca.FromTo == common.EFromTo.S3Blob() {
-		// Check if this is actually a GCP S3-compatible endpoint
-		glcm.Info(fmt.Sprintf("[GCP_DETECT] Checking S3 source URL: '%s'", cca.Source.Value))
-		if parsedURL, err := url.Parse(cca.Source.Value); err == nil {
-			if s3Parts, err := common.NewS3URLParts(*parsedURL); err == nil {
-				isGCP := s3Parts.IsGoogleCloudStorage()
-				glcm.Info(fmt.Sprintf("[GCP_DETECT] IsGoogleCloudStorage() returned: %v for endpoint: '%s'", isGCP, s3Parts.Endpoint))
-				if isGCP {
-					glcm.Info("[GCP_DETECT] Using GCPBucketNameToAzureResourcesResolver")
-					containerResolver = NewGCPBucketNameToAzureResourcesResolver(nil)
-				} else {
-					glcm.Info("[GCP_DETECT] Using S3BucketNameToAzureResourcesResolver")
-				}
-			} else {
-				glcm.Info(fmt.Sprintf("[GCP_DETECT] Failed to parse S3URLParts: %v", err))
-			}
-		} else {
-			glcm.Info(fmt.Sprintf("[GCP_DETECT] Failed to parse URL: %v", err))
-		}
 	}
 	existingContainers := make(map[string]bool)
 	var logDstContainerCreateFailureOnce sync.Once
@@ -223,16 +204,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				// Resolve all container names up front.
 				// If we were to resolve on-the-fly, then name order would affect the results inconsistently.
 				if cca.FromTo == common.EFromTo.S3Blob() {
-					// Check if this is actually a GCP S3-compatible endpoint
-					if parsedURL, err := url.Parse(cca.Source.Value); err == nil {
-						if s3Parts, err := common.NewS3URLParts(*parsedURL); err == nil && s3Parts.IsGoogleCloudStorage() {
-							containerResolver = NewGCPBucketNameToAzureResourcesResolver(containers)
-						} else {
-							containerResolver = NewS3BucketNameToAzureResourcesResolver(containers)
-						}
-					} else {
-						containerResolver = NewS3BucketNameToAzureResourcesResolver(containers)
-					}
+					containerResolver = NewS3BucketNameToAzureResourcesResolver(containers)
 				} else if cca.FromTo == common.EFromTo.GCPBlob() {
 					containerResolver = NewGCPBucketNameToAzureResourcesResolver(containers)
 				}
@@ -303,9 +275,6 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			cName := dstContainerName
 			// if a destination container name is not specified OR copying service to container/folder, append the src container name.
 			if cName == "" || (srcLevel == ELocationLevel.Service() && dstLevel > ELocationLevel.Service()) {
-				// Debug: Log before resolution
-				glcm.Info(fmt.Sprintf("[CONTAINER_RESOLVE] Original bucket name: '%s'", object.ContainerName))
-
 				cName, err = containerResolver.ResolveName(object.ContainerName)
 
 				if err != nil {
@@ -315,9 +284,6 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					}
 					return nil
 				}
-
-				// Debug: Log after resolution
-				glcm.Info(fmt.Sprintf("[CONTAINER_RESOLVE] Resolved container name: '%s' -> '%s'", object.ContainerName, cName))
 
 				object.DstContainerName = cName
 			}
