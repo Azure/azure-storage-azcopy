@@ -134,6 +134,7 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 	timeAtPrestart := time.Now()
 	common.AzcopyCurrentJobLogger = common.NewJobLogger(jobID, c.GetLogLevel(), common.LogPathFolder, "")
 	common.AzcopyCurrentJobLogger.OpenLog()
+	common.SetForceLogging()
 	defer common.AzcopyCurrentJobLogger.CloseLog()
 
 	// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter

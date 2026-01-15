@@ -1417,7 +1417,6 @@ func init() {
 			}()
 
 			_, err = Client.Copy(ctx, raw.src, raw.dst, opts)
-			glcm.SetForceLogging()
 			if err != nil {
 				glcm.Error("Cannot perform copy due to error: " + err.Error() + getErrorCodeUrl(err))
 			}

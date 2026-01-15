@@ -28,7 +28,6 @@ import (
 	"os/signal"
 	"runtime"
 	"runtime/pprof"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -105,7 +104,6 @@ type LifecycleMgr interface {
 	MsgHandlerChannel() <-chan *common.LCMMsg
 	ReportAllJobPartsDone()
 	SetOutputVerbosity(mode OutputVerbosity)
-	SetForceLogging()
 }
 
 // single point of control for all outputs
@@ -128,7 +126,6 @@ type lifecycleMgr struct {
 	waitForUserResponse   chan bool
 	msgHandlerChannel     chan *common.LCMMsg
 	OutputVerbosityType   OutputVerbosity
-	disableSysLog         bool
 }
 
 type userInput struct {
@@ -706,15 +703,6 @@ func (lcm *lifecycleMgr) ReportAllJobPartsDone() {
 
 func (lcm *lifecycleMgr) SetOutputVerbosity(mode OutputVerbosity) {
 	lcm.OutputVerbosityType = mode
-}
-
-func (lcm *lifecycleMgr) SetForceLogging() {
-	disableSyslog, err := strconv.ParseBool(common.GetEnvironmentVariable(common.EEnvironmentVariable.DisableSyslog()))
-	if err != nil {
-		// By default, we'll retain the current behaviour. i.e. To log in Syslog/WindowsEventLog if not specified by the user
-		disableSyslog = false
-	}
-	lcm.disableSysLog = disableSyslog
 }
 
 func shouldQuietMessage(msgToOutput outputMessage, quietMode OutputVerbosity) bool {
