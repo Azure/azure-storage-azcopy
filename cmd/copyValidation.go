@@ -6,16 +6,17 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // Note: blockSize, blobTagsMap is set here
 func (cooked *CookedCopyCmdArgs) validate() (err error) {
-	if err = validateForceIfReadOnly(cooked.ForceIfReadOnly, cooked.FromTo); err != nil {
+	if err = azcopy.ValidateForceIfReadOnly(cooked.ForceIfReadOnly, cooked.FromTo); err != nil {
 		return err
 	}
 
-	if err = validateSymlinkHandlingMode(cooked.SymlinkHandling, cooked.FromTo); err != nil {
+	if err = azcopy.ValidateSymlinkHandlingMode(cooked.SymlinkHandling, cooked.FromTo); err != nil {
 		return err
 	}
 
@@ -24,7 +25,7 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 		return errors.New("automatic decompression is only supported for downloads from Blob and Azure Files") // as at Sept 2019, our ADLS Gen 2 Swagger does not include content-encoding for directory (path) listings so we can't support it there
 	}
 
-	cooked.blockSize, err = blockSizeInBytes(cooked.BlockSizeMB)
+	cooked.blockSize, err = azcopy.BlockSizeInBytes(cooked.BlockSizeMB)
 	if err != nil {
 		return err
 	}
@@ -41,7 +42,7 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 	}
 
 	// warn on exclude unsupported wildcards here. Include have to be later, to cover list-of-files
-	warnIfAnyHasWildcard(excludeWarningOncer, "exclude-path", cooked.ExcludePathPatterns)
+	azcopy.WarnIfAnyHasWildcard("exclude-path", cooked.ExcludePathPatterns)
 
 	// A combined implementation reduces the amount of code duplication present.
 	// However, it _does_ increase the amount of code-intertwining present.
@@ -52,7 +53,7 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 	if cooked.FromTo.To() == common.ELocation.None() && strings.EqualFold(cooked.metadata, common.MetadataAndBlobTagsClearFlag) { // in case of Blob, BlobFS and Files
 		glcm.Warn("*** WARNING *** Metadata will be cleared because of input --metadata=clear ")
 	}
-	if err = validateMetadataString(cooked.metadata); err != nil {
+	if err = azcopy.ValidateMetadataString(cooked.metadata); err != nil {
 		return err
 	}
 
@@ -64,7 +65,7 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 	}
 
 	cooked.blobTagsMap = common.ToCommonBlobTagsMap(cooked.blobTags)
-	err = validateBlobTagsKeyValue(cooked.blobTagsMap)
+	err = azcopy.ValidateBlobTagsKeyValue(cooked.blobTagsMap)
 	if err != nil {
 		return err
 	}
@@ -92,7 +93,7 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 	}
 
 	if cooked.FromTo.IsNFS() {
-		if err := performNFSSpecificValidation(
+		if err := azcopy.PerformNFSSpecificValidation(
 			cooked.FromTo,
 			cooked.preservePermissions,
 			cooked.preserveInfo,
@@ -101,18 +102,18 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 			return err
 		}
 	} else {
-		if err := performSMBSpecificValidation(
+		if err := azcopy.PerformSMBSpecificValidation(
 			cooked.FromTo, cooked.preservePermissions, cooked.preserveInfo,
 			cooked.preservePOSIXProperties); err != nil {
 			return err
 		}
 
-		if err = validatePreserveOwner(cooked.preserveOwner, cooked.FromTo); err != nil {
+		if err = azcopy.ValidatePreserveOwner(cooked.preserveOwner, cooked.FromTo); err != nil {
 			return err
 		}
 	}
 
-	if err = validateBackupMode(cooked.backupMode, cooked.FromTo); err != nil {
+	if err = azcopy.ValidateBackupMode(cooked.backupMode, cooked.FromTo); err != nil {
 		return err
 	}
 
@@ -246,10 +247,10 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 		}
 	}
 
-	if err = validatePutMd5(cooked.putMd5, cooked.FromTo); err != nil {
+	if err = azcopy.ValidatePutMd5(cooked.putMd5, cooked.FromTo); err != nil {
 		return err
 	}
-	if err = validateMd5Option(cooked.md5ValidationOption, cooked.FromTo); err != nil {
+	if err = azcopy.ValidateMd5Option(cooked.md5ValidationOption, cooked.FromTo); err != nil {
 		return err
 	}
 	if (len(cooked.IncludeFileAttributes) > 0 || len(cooked.ExcludeFileAttributes) > 0) && cooked.FromTo.From() != common.ELocation.Local() {
