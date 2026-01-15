@@ -640,11 +640,7 @@ func (jpm *jobPartMgr) ReportTransferDone(status common.TransferStatus) (transfe
 	transfersDone = atomic.AddUint32(&jpm.atomicTransfersDone, 1)
 	jpm.updateJobPartProgress(status)
 
-	// Use cached values to avoid accessing potentially unmapped memory
-	common.GetLifecycleMgr().Info(fmt.Sprintf("ReportTransferDone: %d/%d transfers done, status=%v", transfersDone, jpm.cachedNumTransfers, status))
-
 	if transfersDone == jpm.cachedNumTransfers {
-		common.GetLifecycleMgr().Info("ReportTransferDone: ALL transfers complete! Setting job part status")
 		jppi := jobPartProgressInfo{
 			transfersCompleted: int(atomic.LoadUint32(&jpm.atomicTransfersCompleted)),
 			transfersSkipped:   int(atomic.LoadUint32(&jpm.atomicTransfersSkipped)),
