@@ -566,6 +566,11 @@ func (jm *jobMgr) AddJobPart(args *AddJobPartArgs) IJobPartMgr {
 		jpm.planMMF = args.ExistingPlanMMF
 	}
 
+	plan := jpm.planMMF.Plan()
+	jpm.cachedJobID = plan.JobID
+	jpm.cachedPartNum = plan.PartNum
+	jpm.cachedNumTransfers = plan.NumTransfers
+
 	jm.jobPartMgrs.Set(args.PartNum, jpm)
 	jm.setFinalPartOrdered(args.PartNum, jpm.planMMF.Plan().IsFinalPart)
 	jm.setDirection(jpm.Plan().FromTo)
@@ -613,6 +618,11 @@ func (jm *jobMgr) AddJobOrder(order common.CopyJobPartOrderRequest) IJobPartMgr 
 		srcIsOAuth:       order.S2SSourceCredentialType.IsAzureOAuth(),
 	}
 	jpm.planMMF = jpm.filename.Map()
+	// Cache plan values immediately to prevent accessing unmapped memory later
+	plan := jpm.planMMF.Plan()
+	jpm.cachedJobID = plan.JobID
+	jpm.cachedPartNum = plan.PartNum
+	jpm.cachedNumTransfers = plan.NumTransfers
 	jm.jobPartMgrs.Set(order.PartNum, jpm)
 	jm.setFinalPartOrdered(order.PartNum, jpm.planMMF.Plan().IsFinalPart)
 	jm.setDirection(jpm.Plan().FromTo)
