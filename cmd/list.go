@@ -119,7 +119,6 @@ func (raw rawListCmdArgs) cook() (cookedListCmdArgs, error) {
 	// set up the front end scanning logger
 	common.AzcopyScanningLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "-scanning")
 	common.AzcopyScanningLogger.OpenLog()
-	common.SetForceLogging()
 	glcm.RegisterCloseFunc(func() {
 		common.AzcopyScanningLogger.CloseLog()
 	})

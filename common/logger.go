@@ -300,7 +300,7 @@ func IsForceLoggingDisabled() bool {
 	return disableSyslog
 }
 
-func SetForceLogging() {
+func init() {
 	var err error
 	disableSyslog, err = strconv.ParseBool(GetEnvironmentVariable(EEnvironmentVariable.DisableSyslog()))
 	if err != nil {

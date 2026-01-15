@@ -164,7 +164,6 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (
 	// set up the front end scanning logger
 	common.AzcopyScanningLogger = common.NewJobLogger(jobID, c.GetLogLevel(), common.LogPathFolder, "-scanning")
 	common.AzcopyScanningLogger.OpenLog()
-	common.SetForceLogging()
 	defer common.AzcopyScanningLogger.CloseLog()
 
 	// if no logging, set this empty so that we don't display the log location
