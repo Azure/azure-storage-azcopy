@@ -23,9 +23,10 @@ package ste
 import (
 	"context"
 	"fmt"
-	datalakesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
 	"strings"
 	"time"
+
+	datalakesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
@@ -56,7 +57,7 @@ type blobFSSenderBase struct {
 	pacer               pacer
 	creationTimeHeaders *file.HTTPHeaders
 	flushThreshold      int64
-	metadataToSet       common.Metadata
+	metadataToSet       common.SafeMetadata
 }
 
 func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (*blobFSSenderBase, error) {
@@ -108,7 +109,7 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, pacer pac
 		pacer:               pacer,
 		creationTimeHeaders: &headers,
 		flushThreshold:      chunkSize * int64(ADLSFlushThreshold),
-		metadataToSet:       props.SrcMetadata,
+		metadataToSet:       common.SafeMetadata{Metadata: props.SrcMetadata.Clone()},
 	}, nil
 }
 
@@ -252,17 +253,17 @@ func (u *blobFSSenderBase) SetPOSIXProperties() error {
 
 	meta := u.metadataToSet
 	common.AddStatToBlobMetadata(adapter, meta)
-	delete(meta, common.POSIXFolderMeta) // Can't be set on HNS accounts.
+	delete(meta.Metadata, common.POSIXFolderMeta) // Can't be set on HNS accounts.
 
-	_, err = u.blobClient.SetMetadata(u.jptm.Context(), meta, nil)
+	_, err = u.blobClient.SetMetadata(u.jptm.Context(), meta.Metadata, nil)
 	return err
 }
 
 func (u *blobFSSenderBase) SetFolderProperties() error {
 	if u.jptm.Info().PreservePOSIXProperties {
 		return u.SetPOSIXProperties()
-	} else if len(u.metadataToSet) > 0 {
-		_, err := u.blobClient.SetMetadata(u.jptm.Context(), u.metadataToSet, nil)
+	} else if len(u.metadataToSet.Metadata) > 0 {
+		_, err := u.blobClient.SetMetadata(u.jptm.Context(), u.metadataToSet.Metadata, nil)
 		if err != nil {
 			return fmt.Errorf("failed to set metadata: %w", err)
 		}
@@ -288,7 +289,7 @@ func (u *blobFSSenderBase) DirUrlToString() string {
 }
 
 func (u *blobFSSenderBase) SendSymlink(linkData string) error {
-	meta := common.Metadata{} // meta isn't traditionally supported for dfs, but still exists
+	meta := common.SafeMetadata{} // meta isn't traditionally supported for dfs, but still exists
 	adapter, err := u.GetSourcePOSIXProperties()
 	if err != nil {
 		return fmt.Errorf("when polling for POSIX properties: %w", err)
@@ -296,8 +297,8 @@ func (u *blobFSSenderBase) SendSymlink(linkData string) error {
 		common.AddStatToBlobMetadata(adapter, meta)
 	}
 
-	meta[common.POSIXSymlinkMeta] = to.Ptr("true") // just in case there isn't any metadata
-	blobHeaders := blob.HTTPHeaders{ // translate headers, since those still apply
+	meta.Metadata[common.POSIXSymlinkMeta] = to.Ptr("true") // just in case there isn't any metadata
+	blobHeaders := blob.HTTPHeaders{                        // translate headers, since those still apply
 		BlobContentType:        u.creationTimeHeaders.ContentType,
 		BlobContentEncoding:    u.creationTimeHeaders.ContentEncoding,
 		BlobContentLanguage:    u.creationTimeHeaders.ContentLanguage,
@@ -310,7 +311,7 @@ func (u *blobFSSenderBase) SendSymlink(linkData string) error {
 		streaming.NopCloser(strings.NewReader(linkData)),
 		&blockblob.UploadOptions{
 			HTTPHeaders: &blobHeaders,
-			Metadata:    meta,
+			Metadata:    meta.Metadata,
 		})
 
 	return err

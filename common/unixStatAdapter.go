@@ -342,7 +342,7 @@ func ClearStatFromBlobMetadata(metadata Metadata) {
 	}
 }
 
-func AddStatToBlobMetadata(s UnixStatAdapter, metadata Metadata) {
+func AddStatToBlobMetadata(s UnixStatAdapter, metadata SafeMetadata) {
 	if s == nil {
 		return
 	}
