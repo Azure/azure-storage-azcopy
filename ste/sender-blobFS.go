@@ -289,7 +289,7 @@ func (u *blobFSSenderBase) DirUrlToString() string {
 }
 
 func (u *blobFSSenderBase) SendSymlink(linkData string) error {
-	meta := common.SafeMetadata{} // meta isn't traditionally supported for dfs, but still exists
+	meta := common.SafeMetadata{Metadata: make(common.Metadata)} // meta isn't traditionally supported for dfs, but still exists
 	adapter, err := u.GetSourcePOSIXProperties()
 	if err != nil {
 		return fmt.Errorf("when polling for POSIX properties: %w", err)

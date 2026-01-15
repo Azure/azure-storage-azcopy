@@ -93,7 +93,7 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer
 		pacer:                pacer,
 		headersToApply:       props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
 		metadataToApply: common.SafeMetadata{
-			Metadata: props.SrcMetadata,
+			Metadata: props.SrcMetadata.Clone(),
 		},
 		blobTagsToApply:        props.SrcBlobTags,
 		sip:                    srcInfoProvider,

@@ -1239,7 +1239,7 @@ func UnMarshalToCommonMetadata(metadataString string) (map[string]*string, error
 }
 
 func StringToMetadata(metadataString string) (Metadata, error) {
-	metadata := SafeMetadata{}
+	metadata := SafeMetadata{Metadata: make(Metadata)}
 	if len(metadataString) > 0 {
 		cKey := ""
 		cVal := ""
