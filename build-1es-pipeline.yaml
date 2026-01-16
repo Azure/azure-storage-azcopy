@@ -1,3 +1,5 @@
+# For testing, the safest approach is to run the pipeline on a fork of the AzCopy repo. After that validation, changes can
+# be moved to the main pipeline. Do not test by running the prod pipeline in ADO with an already existing version of AzCopy.
 variables:
   AZCOPY_GOLANG_VERSION: '1.24.11'
 
@@ -1037,7 +1039,7 @@ extends:
                     inputs:
                       githubConnection: 'azcopy-github-connection'
                       repositoryName: 'Azure/azure-storage-azcopy'
-                      action: 'edit'
+                      action: 'create' # Will fail if previous release exists
                       target: '$(Build.SourceVersion)'
                       tagSource: 'userSpecifiedTag'
                       title: "AzCopy v$(azcopy_version)"
