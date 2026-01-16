@@ -302,20 +302,22 @@ func NewServiceClient(bsc *blobservice.Client,
 
 // Metadata utility functions to work around GoLang's metadata capitalization
 
-func TryAddMetadata(metadata Metadata, key, value string) {
-	if _, ok := metadata[key]; ok {
+func TryAddMetadata(metadata SafeMetadata, key, value string) {
+	metadata.Mu.Lock()
+	defer metadata.Mu.Unlock()
+	if _, ok := metadata.Metadata[key]; ok {
 		return // Don't overwrite the user's metadata
 	}
 
 	if key != "" {
 		capitalizedKey := strings.ToUpper(string(key[0])) + key[1:]
-		if _, ok := metadata[capitalizedKey]; ok {
+		if _, ok := metadata.Metadata[capitalizedKey]; ok {
 			return
 		}
 	}
 
 	v := value
-	metadata[key] = &v
+	metadata.Metadata[key] = &v
 }
 
 func TryReadMetadata(metadata Metadata, key string) (*string, bool) {

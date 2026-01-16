@@ -38,36 +38,44 @@ func Test_TryAddMetadata(t *testing.T) {
 	a := assert.New(t)
 
 	// Test case 1: metadata is empty
-	metadata := make(Metadata)
-	TryAddMetadata(metadata, "key", "value")
-	a.Equal(1, len(metadata))
-	a.Contains(metadata, "key")
-	a.Equal("value", *metadata["key"])
+	safeMetadata := SafeMetadata{
+		Metadata: make(Metadata),
+	}
+
+	TryAddMetadata(safeMetadata, "key", "value")
+	a.Equal(1, len(safeMetadata.Metadata))
+	a.Contains(safeMetadata.Metadata, "key")
+	a.Equal("value", *safeMetadata.Metadata["key"])
 
 	// Test case 2: metadata contains exact key
-	metadata = make(Metadata)
-	metadata["key"] = to.Ptr("value")
-	TryAddMetadata(metadata, "key", "new_value")
-	a.Equal(1, len(metadata))
-	a.Contains(metadata, "key")
-	a.Equal("value", *metadata["key"])
+	safeMetadata = SafeMetadata{
+		Metadata: make(Metadata),
+	}
+	safeMetadata.Metadata["key"] = to.Ptr("value")
+	TryAddMetadata(safeMetadata, "key", "new_value")
+	a.Equal(1, len(safeMetadata.Metadata))
+	a.Contains(safeMetadata.Metadata, "key")
+	a.Equal("value", *safeMetadata.Metadata["key"])
 
 	// Test case 3: metadata contains key with different case
-	metadata = make(Metadata)
-	metadata["Key"] = to.Ptr("value")
-	TryAddMetadata(metadata, "key", "new_value")
-	a.Equal(1, len(metadata))
-	a.Contains(metadata, "Key")
-	a.Equal("value", *metadata["Key"])
-	a.NotContains(metadata, "key")
-
+	safeMetadata = SafeMetadata{
+		Metadata: make(Metadata),
+	}
+	safeMetadata.Metadata["Key"] = to.Ptr("value")
+	TryAddMetadata(safeMetadata, "key", "new_value")
+	a.Equal(1, len(safeMetadata.Metadata))
+	a.Contains(safeMetadata.Metadata, "Key")
+	a.Equal("value", *safeMetadata.Metadata["Key"])
+	a.NotContains(safeMetadata.Metadata, "key")
 	// Test case 4: metadata is not empty and does not contain key
-	metadata = make(Metadata)
-	metadata["other_key"] = to.Ptr("value")
-	TryAddMetadata(metadata, "key", "new_value")
-	a.Equal(2, len(metadata))
-	a.Contains(metadata, "key")
-	a.Equal("new_value", *metadata["key"])
+	safeMetadata = SafeMetadata{
+		Metadata: make(Metadata),
+	}
+	safeMetadata.Metadata["other_key"] = to.Ptr("value")
+	TryAddMetadata(safeMetadata, "key", "new_value")
+	a.Equal(2, len(safeMetadata.Metadata))
+	a.Contains(safeMetadata.Metadata, "key")
+	a.Equal("new_value", *safeMetadata.Metadata["key"])
 }
 
 func Test_TryReadMetadata(t *testing.T) {
@@ -153,5 +161,5 @@ func TestDoWithOverrideReadonlyonAzureFiles(t *testing.T) {
 	props, err := f.GetProperties(context.TODO(), nil)
 	a.Nil(err)
 	a.Equal(*props.Metadata["Testkey"], "Testvalue")
-	
+
 }

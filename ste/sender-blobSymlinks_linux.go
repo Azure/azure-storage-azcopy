@@ -3,6 +3,7 @@ package ste
 import (
 	"errors"
 	"fmt"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -10,7 +11,7 @@ func (s *blobSymlinkSender) getExtraProperties() error {
 	if s.jptm.Info().PreservePOSIXProperties {
 		if unixSIP, ok := s.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
 			// Clone the metadata before we write to it, we shouldn't be writing to the same metadata as every other blob.
-			s.metadataToApply = s.metadataToApply.Clone()
+			s.metadataToApply = common.SafeMetadata{Metadata: s.metadataToApply.Metadata.Clone()}
 
 			statAdapter, err := unixSIP.GetUNIXProperties()
 			if err != nil {
