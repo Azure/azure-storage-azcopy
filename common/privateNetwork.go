@@ -32,6 +32,23 @@ import (
 	"time"
 )
 
+// Error translation patterns
+var errorTranslationPatterns = map[*regexp.Regexp]string{
+
+	// TCP connection errors
+	regexp.MustCompile(`dial tcp [0-9.]+:`): "The connection to the destination service timed out.",
+}
+
+// TranslateErrorMessage replaces sensitive information (like IP addresses) in error messages
+// with generic placeholders while preserving the meaningful error context
+func TranslateErrorMessage(errorMsg string) string {
+	result := errorMsg
+	for pattern, replacement := range errorTranslationPatterns {
+		result = pattern.ReplaceAllString(result, replacement)
+	}
+	return result
+}
+
 // ==============================================================================================
 // For C2C Private Networking configurations
 // ==============================================================================================
@@ -253,6 +270,7 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 		// then break to pick another IP (outer loop continues).
 		// attempt to mark unhealthy: 0 -> 1
 		if (lastErrMsg != "") && atomic.CompareAndSwapUint32((*uint32)(&entry.ConnectionStatus), uint32(Healthy), uint32(Unhealthy)) {
+			lastErrMsg = TranslateErrorMessage(lastErrMsg)
 			entry.MarkUnhealthy(lastErrorCode, lastErrMsg)
 			log.Printf("Updating Private Endpoint:%s connection state from HEALTHY->UNHEALTHY after error response with Error Code %d ErrorMsg:%s at %v", peIP, entry.LastErrCode, entry.LastErrMsg, entry.LastChecked)
 		}
@@ -261,7 +279,7 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 
 	fmt.Errorf("No healthy Private Endpoint IPs are available")
 	// All attempts exhausted
-	return nil, fmt.Errorf("Request failed after trying all healthy Private Endpoint IPs. Last error from IP %s: %v", peIP, lastErrMsg)
+	return nil, fmt.Errorf("The job failed because access to the Amazon S3 bucket could not be established through any configured private connection. Review the private connection settings and permissions, then try again. Last error: %v", lastErrMsg)
 }
 
 // Close cleans up idle connections and stops the periodic refresh goroutine
