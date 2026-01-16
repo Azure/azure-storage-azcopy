@@ -134,6 +134,7 @@ func (r *resourceLocal) createFiles(a asserter, s *scenario, isSource bool) {
 			fs:                      s.fs.allObjects(isSource),
 			defaultSize:             s.fs.defaultSize,
 			preservePosixProperties: s.p.preservePOSIXProperties,
+			posixPropertiesStyle:    s.p.posixPropertiesStyle,
 		},
 	})
 }

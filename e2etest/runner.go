@@ -135,9 +135,7 @@ func (t *TestRunner) SetAllFlags(s *scenario) {
 	if o == eOperation.Copy() {
 		set("s2s-preserve-access-tier", p.s2sPreserveAccessTier, true)
 		set("preserve-posix-properties", p.preservePOSIXProperties, "")
-		if t.flags["preserve-posix-properties"] != "" {
-			set("posix-properties-style", p.posixPropertiesStyle, common.StandardPosixPropertiesStyle.String())
-		}
+		set("posix-properties-style", p.posixPropertiesStyle.String(), common.StandardPosixPropertiesStyle.String())
 
 		switch p.symlinkHandling {
 		case common.ESymlinkHandlingType.Follow():
@@ -175,7 +173,7 @@ func (t *TestRunner) SetAllFlags(s *scenario) {
 	} else if o == eOperation.Sync() {
 		set("delete-destination", p.deleteDestination.String(), "False")
 		set("preserve-posix-properties", p.preservePOSIXProperties, false)
-		set("posix-properties-style", p.posixPropertiesStyle, common.StandardPosixPropertiesStyle.String())
+		set("posix-properties-style", p.posixPropertiesStyle.String(), common.StandardPosixPropertiesStyle.String())
 		set("compare-hash", p.compareHash.String(), "None")
 		set("local-hash-storage-mode", p.hashStorageMode.String(), common.EHashStorageMode.Default().String())
 		set("hash-meta-dir", p.hashStorageDir, "")
