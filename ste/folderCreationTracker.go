@@ -100,7 +100,7 @@ func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, partNum Pa
 	}
 
 	// if our transfer already has a created status, we should adopt that.
-	if ts := f.fetchTransfer(*state.Index).TransferStatus(); ts == ts.FolderCreated() {
+	if ts := f.fetchTransfer(*state.Index).TransferStatus(); ts == common.ETransferStatus.FolderCreated() {
 		state.Status = EJpptFolderTrackerStatus.FolderCreated()
 	} else {
 		// otherwise, we map onto it whatever we have. This puts the statuses in alignment.
@@ -171,6 +171,7 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 
 	f.debugCheckState(*state)
 
+	f.contents[folder] = state
 	return nil
 }
 
