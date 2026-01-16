@@ -15,8 +15,8 @@ type Prompter interface {
 }
 
 // FolderCreationErrorAlreadyExists is a signalling error that should be
-// returned by doCreation on FolderCreationTracker.CreateFolder for supported folder-creators.
-// This will inform the folder creation tracker to _not_ try to create the folder.
+// returned by doCreation when the folder already exists, allowing the tracker to mark it as
+// FolderExisted rather than FolderCreated.
 type FolderCreationErrorAlreadyExists struct{}
 
 func (f FolderCreationErrorAlreadyExists) Error() string {
