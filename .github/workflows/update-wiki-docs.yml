@@ -20,14 +20,14 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.24.6'
+        go-version: '1.24.11'
 
     - name: Build Binary and generate doc markdown files
       run: |
         mkdir -p output
         go build -o output/azcopy
         cd output
-        ./azcopy doc
+        ./azcopy doc --format wiki
         cd doc
         sed -i 's/\.md//' *
 
