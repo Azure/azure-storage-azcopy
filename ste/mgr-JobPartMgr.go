@@ -20,7 +20,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
-	"github.com/minio/minio-go/pkg/credentials"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
 var _ IJobPartMgr = &jobPartMgr{}
@@ -167,6 +167,12 @@ type jobPartMgr struct {
 	credOption *common.CredentialOpOptions
 	// When the part is schedule to run (inprogress), the below fields are used
 	planMMF *JobPartPlanMMF // This Job part plan's MMF
+
+	// Cached plan values to prevent accessing unmapped memory after UnmapPlanFile()
+	// These are set once during initialization and never change
+	cachedJobID        common.JobID
+	cachedPartNum      PartNumber
+	cachedNumTransfers uint32
 
 	// Additional data shared by all of this Job Part's transfers; initialized when this jobPartMgr is created
 	httpHeaders common.ResourceHTTPHeaders
@@ -634,20 +640,20 @@ func (jpm *jobPartMgr) ReportTransferDone(status common.TransferStatus) (transfe
 	transfersDone = atomic.AddUint32(&jpm.atomicTransfersDone, 1)
 	jpm.updateJobPartProgress(status)
 
-	if transfersDone == jpm.planMMF.Plan().NumTransfers {
+	if transfersDone == jpm.cachedNumTransfers {
 		jppi := jobPartProgressInfo{
 			transfersCompleted: int(atomic.LoadUint32(&jpm.atomicTransfersCompleted)),
 			transfersSkipped:   int(atomic.LoadUint32(&jpm.atomicTransfersSkipped)),
 			transfersFailed:    int(atomic.LoadUint32(&jpm.atomicTransfersFailed)),
 			completionChan:     jpm.closeOnCompletion,
-			partNum:            &(jpm.planMMF.Plan().PartNum),
+			partNum:            &jpm.cachedPartNum,
 		}
 		jpm.Plan().SetJobPartStatus(common.EJobStatus.EnhanceJobStatusInfo(jppi.transfersSkipped > 0,
 			jppi.transfersFailed > 0, jppi.transfersCompleted > 0))
 		jpm.jobMgr.ReportJobPartDone(jppi)
 		jpm.Log(common.LogInfo, fmt.Sprintf("JobID=%v, Part#=%d, TransfersDone=%d of %d",
-			jpm.planMMF.Plan().JobID, jpm.planMMF.Plan().PartNum, transfersDone,
-			jpm.planMMF.Plan().NumTransfers))
+			jpm.cachedJobID, jpm.cachedPartNum, transfersDone,
+			jpm.cachedNumTransfers))
 	}
 	return transfersDone
 }
@@ -675,9 +681,8 @@ func (jpm *jobPartMgr) UnmapPlanFile() {
 		return
 	}
 
-	// Get part information for logging
-	plan := jpm.planMMF.Plan()
-	partNum := plan.PartNum
+	// Use cached part number so we don't touch unmapped memory
+	partNum := jpm.cachedPartNum
 
 	// SELECTIVE UNMAPPING STRATEGY: Preserve Part 0 for job status, unmap Parts 1+ for memory savings
 	if partNum == 0 {

@@ -35,7 +35,7 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-	"github.com/minio/minio-go/pkg/credentials"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
 type SyncEnumeratorOptions struct {
@@ -325,9 +325,9 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 	}
 	//Optional check for custom credential provider
 	var credProvider credentials.Provider = nil
-	creds := ctx.Value(customCreds)
-	if creds != nil {
-		credProvider = creds.(credentials.Provider) //if passed through context, use custom provider
+	steProvider := ctx.Value("customS3CredsForSTE")
+	if steProvider != nil {
+		credProvider = steProvider.(credentials.Provider) // if passed through, use STE custom provider
 		copyJobTemplate.Provider = credProvider
 	}
 
