@@ -31,9 +31,3 @@ const (
 
 	HardlinksFlag = "hardlinks"
 )
-
-const (
-	pipingUploadParallelism = 5
-	pipingDefaultBlockSize  = 8 * 1024 * 1024
-	pipeLocation            = "~pipe~"
-)

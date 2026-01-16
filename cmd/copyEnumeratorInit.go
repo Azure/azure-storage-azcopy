@@ -35,6 +35,7 @@ func (cca *CookedCopyCmdArgs) validateSourceDir(traverser traverser.ResourceTrav
 	var err error
 	// Ensure we're only copying a directory under valid conditions
 	cca.IsSourceDir, err = traverser.IsDirectory(true)
+
 	if cca.IsSourceDir &&
 		!cca.Recursive && // Copies the folder & everything under it
 		!cca.StripTopDir { // Copies only everything under it
@@ -470,6 +471,7 @@ func (cca *CookedCopyCmdArgs) InitModularFilters() []traverser.ObjectFilter {
 		common.LogToJobLogWithPrefix("Search prefix, which may be used to optimize scanning, is: "+prefixFilter, common.LogInfo) // "May be used" because we don't know here which enumerators will use it
 	}
 
+	// remove specific
 	switch cca.permanentDeleteOption {
 	case common.EPermanentDeleteOption.Snapshots():
 		filters = append(filters, &traverser.PermDeleteFilter{DeleteSnapshots: true})

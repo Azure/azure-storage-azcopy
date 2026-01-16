@@ -177,7 +177,7 @@ var rootCmd = &cobra.Command{
 				break
 			}
 		}
-		isMigratedToLibrary := cmd.Use == "resume [jobID]" || cmd.Use == "sync"
+		isMigratedToLibrary := cmd.Use == "resume [jobID]" || cmd.Use == "sync" || cmd.Use == "copy [source] [destination]"
 		return Initialize(isMigratedToLibrary, isBench, shouldWarn)
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
