@@ -22,13 +22,14 @@ package common_test
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"runtime"
 	"syscall"
 	"testing"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestCreateParentDirectoryIfNotExist(t *testing.T) {
@@ -40,7 +41,7 @@ func TestCreateParentDirectoryIfNotExist(t *testing.T) {
 
 	tracker := ste.NewFolderCreationTracker(fpo, func(index ste.JpptFolderIndex) *ste.JobPartPlanTransfer {
 		return plan.Transfer(index.TransferIndex)
-	})
+	}, common.EFromTo.LocalFile())
 	fileName := "stuff.txt"
 
 	// when destination path is defined as "/" in linux, the source file becomes the destination path string
@@ -84,7 +85,7 @@ func TestCreateFileOfSizeWithWriteThroughOption(t *testing.T) {
 	fpo := common.EFolderPropertiesOption.AllFolders()
 	tracker := ste.NewFolderCreationTracker(fpo, func(index ste.JpptFolderIndex) *ste.JobPartPlanTransfer {
 		return plan.Transfer(index.TransferIndex)
-	})
+	}, common.EFromTo.LocalFile())
 
 	_, err := common.CreateFileOfSizeWithWriteThroughOption(destinationPath, 1,
 		false,
