@@ -251,11 +251,11 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 			} else {
 				// No response - parse error from the error object itself
 				errCode = 0
-				errMsg = TranslateErrorMessage(err.Error())
+				errMsg = err.Error()
 				log.Printf("[Counter=%d Retry=%d] Network error with no response, Error Message:%s retryable:%v", idx, ipAttempt, errMsg, isRetryableErr)
 			}
 
-			lastErrMsg = TranslateErrorMessage(errMsg)
+			lastErrMsg = errMsg
 			lastErrorCode = errCode
 
 			// If we still have per-IP attempts left, wait and retry the same IP
@@ -270,6 +270,7 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 		// then break to pick another IP (outer loop continues).
 		// attempt to mark unhealthy: 0 -> 1
 		if (lastErrMsg != "") && atomic.CompareAndSwapUint32((*uint32)(&entry.ConnectionStatus), uint32(Healthy), uint32(Unhealthy)) {
+			lastErrMsg = TranslateErrorMessage(lastErrMsg)
 			entry.MarkUnhealthy(lastErrorCode, lastErrMsg)
 			log.Printf("Updating Private Endpoint:%s connection state from HEALTHY->UNHEALTHY after error response with Error Code %d ErrorMsg:%s at %v", peIP, entry.LastErrCode, entry.LastErrMsg, entry.LastChecked)
 		}
