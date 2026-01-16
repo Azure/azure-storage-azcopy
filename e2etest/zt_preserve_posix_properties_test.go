@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/stretchr/testify/assert"
 )
 
 // Block/char device rep is untested due to difficulty to test
