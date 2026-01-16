@@ -311,7 +311,8 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 		s.accessTime = time.Unix(0, at)
 	}
 
-	// ModTime can be stored in either standard (nanoseconds) or AMLFS (formatted string) format
+	// ModTime can come in either standard (nanoseconds) or AMLFS (formatted string) format
+	// It is stored internally as unix nanoseconds (Time.time type)
 	if mtime, ok := TryReadMetadata(metadata, POSIXModTimeMeta); ok {
 		mt, err := strconv.ParseInt(*mtime, 10, 64)
 		if errors.Is(err, strconv.ErrSyntax) {
@@ -486,9 +487,23 @@ func AddStatToBlobMetadata(s UnixStatAdapter, metadata Metadata, posixStyle Posi
 		}
 	} else {
 		TryAddMetadata(metadata, POSIXNlinkMeta, strconv.FormatUint(s.NLink(), 10))
-		TryAddMetadata(metadata, POSIXOwnerMeta, strconv.FormatUint(uint64(s.Owner()), 10))
-		TryAddMetadata(metadata, POSIXGroupMeta, strconv.FormatUint(uint64(s.Group()), 10))
-		TryAddMetadata(metadata, POSIXModeMeta, strconv.FormatUint(uint64(s.FileMode()), 10))
+
+		// For non-statx (just stat) still respect the posix style
+		if posixStyle == AMLFSPosixPropertiesStyle {
+			TryAddMetadata(metadata, AMLFSOwnerMeta, strconv.FormatUint(uint64(s.Owner()), 10))
+			TryAddMetadata(metadata, AMLFSGroupMeta, strconv.FormatUint(uint64(s.Group()), 10))
+
+			permissions := fmt.Sprintf("%04o", uint64(s.FileMode())&0777) // AMLFS: octal perms only
+			TryAddMetadata(metadata, POSIXModeMeta, permissions)
+			TryAddMetadata(metadata, POSIXModTimeMeta, s.MTime().Format(AMLFS_MOD_TIME_LAYOUT))
+
+		} else {
+			// Use standard style
+			TryAddMetadata(metadata, POSIXOwnerMeta, strconv.FormatUint(uint64(s.Owner()), 10))
+			TryAddMetadata(metadata, POSIXGroupMeta, strconv.FormatUint(uint64(s.Group()), 10))
+			TryAddMetadata(metadata, POSIXModeMeta, strconv.FormatUint(uint64(s.FileMode()), 10))
+			TryAddMetadata(metadata, POSIXModTimeMeta, strconv.FormatInt(s.MTime().UnixNano(), 10))
+		}
 		applyMode(os.FileMode(s.FileMode()))
 		TryAddMetadata(metadata, POSIXINodeMeta, strconv.FormatUint(s.INode(), 10))
 		TryAddMetadata(metadata, POSIXDevMeta, strconv.FormatUint(s.Device(), 10))
@@ -498,7 +513,6 @@ func AddStatToBlobMetadata(s UnixStatAdapter, metadata Metadata, posixStyle Posi
 		}
 
 		TryAddMetadata(metadata, POSIXATimeMeta, strconv.FormatInt(s.ATime().UnixNano(), 10))
-		TryAddMetadata(metadata, POSIXModTimeMeta, strconv.FormatInt(s.MTime().UnixNano(), 10))
 		TryAddMetadata(metadata, POSIXCTimeMeta, strconv.FormatInt(s.CTime().UnixNano(), 10))
 	}
 }

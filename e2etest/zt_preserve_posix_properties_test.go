@@ -49,6 +49,9 @@ func TestPOSIX_UploadAMLFSStyle(t *testing.T) {
 	ptr := func(u uint32) *uint32 {
 		return &u
 	}
+	modTime, err := time.Parse(common.AMLFS_MOD_TIME_LAYOUT, "2026-01-02 15:04:05 -0700")
+	a := assert.New(t)
+	a.NoError(err)
 
 	RunScenarios(
 		t,
@@ -68,7 +71,7 @@ func TestPOSIX_UploadAMLFSStyle(t *testing.T) {
 			defaultSize: "1K",
 			shouldTransfer: []interface{}{
 				folder(""),
-				f("a", with{posixProperties: objectUnixStatContainer{mode: ptr(0777), modTime: ptr("2026-01-02 15:04:05 -0700")}}),
+				f("a", with{posixProperties: objectUnixStatContainer{mode: ptr(0777), modTime: &modTime}}),
 				f("b", with{posixProperties: objectUnixStatContainer{mode: ptr(common.DEFAULT_FILE_PERM)}}),
 				"a",
 			},
