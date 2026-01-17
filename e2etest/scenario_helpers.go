@@ -176,6 +176,14 @@ func (s scenarioHelper) generateLocalFilesFromList(c asserter, options *generate
 			//   file.creationProperties here. (Use all the properties of file.creationProperties that are supported
 			//   by local files. E.g. not contentHeaders or metadata).
 
+			// Apply the specificed file permissions when needed
+			if file.creationProperties.posixProperties != nil && file.creationProperties.posixProperties.mode != nil {
+				mode := *file.creationProperties.posixProperties.mode
+				// Get just permission bits
+				permBits := os.FileMode(mode & 07777)
+				c.AssertNoErr(os.Chmod(destFile, permBits), "set file permissions")
+			}
+
 			if file.creationProperties.smbPermissionsSddl != nil {
 				osScenarioHelper{}.setFileSDDLString(c, destFile, *file.creationProperties.smbPermissionsSddl)
 			}
