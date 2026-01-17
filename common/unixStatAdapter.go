@@ -372,6 +372,7 @@ const ( // Values cloned from x/sys/unix to avoid dependency
 	S_IFDIR  = 0x4000
 	S_IFIFO  = 0x1000
 	S_IFLNK  = 0xa000
+	S_IFREG  = 0x8000
 
 	S_IRUSR = 0x400
 	S_IWUSR = 0x200

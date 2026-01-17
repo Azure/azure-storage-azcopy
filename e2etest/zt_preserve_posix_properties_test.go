@@ -72,9 +72,8 @@ func TestPOSIX_UploadAMLFSStyle(t *testing.T) {
 			defaultSize: "1K",
 			shouldTransfer: []interface{}{
 				folder(""),
-				f("a", with{posixProperties: objectUnixStatContainer{mode: ptr(0777), modTime: &modTime}}),
-				f("b", with{posixProperties: objectUnixStatContainer{mode: ptr(common.DEFAULT_FILE_PERM)}}),
-				"a",
+				f("a", with{posixProperties: objectUnixStatContainer{mode: ptr(common.S_IFREG | common.DEFAULT_FILE_PERM)}}),
+				f("b", with{posixProperties: objectUnixStatContainer{modTime: &modTime}}),
 			},
 		},
 		EAccountType.Standard(), EAccountType.Standard(), "",

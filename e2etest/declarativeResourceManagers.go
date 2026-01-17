@@ -147,8 +147,10 @@ func (r *resourceLocal) createFile(a asserter, o *testObject, s *scenario, isSou
 	scenarioHelper{}.generateLocalFilesFromList(a, &generateLocalFilesFromList{
 		dirPath: r.dirPath,
 		generateFromListOptions: generateFromListOptions{
-			fs:          []*testObject{o},
-			defaultSize: s.fs.defaultSize,
+			fs:                      []*testObject{o},
+			defaultSize:             s.fs.defaultSize,
+			preservePosixProperties: s.p.preservePOSIXProperties,
+			posixPropertiesStyle:    s.p.posixPropertiesStyle,
 		},
 	})
 }
@@ -237,9 +239,11 @@ func (r *resourceBlobContainer) createFiles(a asserter, s *scenario, isSource bo
 		rawSASURL:       *r.rawSasURL,
 		containerClient: r.containerClient,
 		generateFromListOptions: generateFromListOptions{
-			fs:          s.fs.allObjects(isSource),
-			defaultSize: s.fs.defaultSize,
-			accountType: r.accountType,
+			fs:                      s.fs.allObjects(isSource),
+			defaultSize:             s.fs.defaultSize,
+			accountType:             r.accountType,
+			preservePosixProperties: s.p.preservePOSIXProperties,
+			posixPropertiesStyle:    s.p.posixPropertiesStyle,
 		},
 	}
 	if s.fromTo.IsDownload() {
@@ -279,8 +283,10 @@ func (r *resourceBlobContainer) createFile(a asserter, o *testObject, s *scenari
 	options := &generateBlobFromListOptions{
 		containerClient: r.containerClient,
 		generateFromListOptions: generateFromListOptions{
-			fs:          []*testObject{o},
-			defaultSize: s.fs.defaultSize,
+			fs:                      []*testObject{o},
+			defaultSize:             s.fs.defaultSize,
+			preservePosixProperties: s.p.preservePOSIXProperties,
+			posixPropertiesStyle:    s.p.posixPropertiesStyle,
 		},
 	}
 
