@@ -118,6 +118,7 @@ type TransferInfo struct {
 	PreservePermissions     common.PreservePermissionsOption
 	PreserveInfo            bool
 	PreservePOSIXProperties bool
+	PosixPropertiesStyle    common.PosixPropertiesStyle
 	BlobFSRecursiveDelete   bool
 
 	// Paths of targets excluding the container/fileshare name.
@@ -424,6 +425,7 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 		PreservePermissions:            plan.PreservePermissions,
 		PreserveInfo:                   plan.PreserveInfo,
 		PreservePOSIXProperties:        plan.PreservePOSIXProperties,
+		PosixPropertiesStyle:           plan.PosixPropertiesStyle,
 		S2SGetPropertiesInBackend:      s2sGetPropertiesInBackend,
 		S2SSourceChangeValidation:      s2sSourceChangeValidation,
 		S2SInvalidMetadataHandleOption: s2sInvalidMetadataHandleOption,

@@ -23,16 +23,17 @@ package e2etest
 import (
 	"encoding/hex"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
-	bfsfile "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"math"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	bfsfile "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -245,7 +246,7 @@ func (o *objectUnixStatContainer) EquivalentToStatAdapter(s common.UnixStatAdapt
 	return strings.Join(mismatched, ", ")
 }
 
-func (o *objectUnixStatContainer) AddToMetadata(metadata map[string]*string) {
+func (o *objectUnixStatContainer) AddToMetadata(metadata map[string]*string, style common.PosixPropertiesStyle) {
 	if o == nil {
 		return
 	}
@@ -254,7 +255,12 @@ func (o *objectUnixStatContainer) AddToMetadata(metadata map[string]*string) {
 
 	if o.mode != nil { // always overwrite; perhaps it got changed in one of the hooks.
 		mask |= common.STATX_MODE
-		metadata[common.POSIXModeMeta] = to.Ptr(strconv.FormatUint(uint64(*o.mode), 10))
+		// Use style to determine format to store
+		if style == common.AMLFSPosixPropertiesStyle {
+			metadata[common.POSIXModeMeta] = to.Ptr(fmt.Sprintf("%04o", uint64(*o.mode&0777)))
+		} else {
+			metadata[common.POSIXModeMeta] = to.Ptr(strconv.FormatUint(uint64(*o.mode), 10))
+		}
 
 		delete(metadata, common.POSIXFIFOMeta)
 		delete(metadata, common.POSIXSocketMeta)
@@ -273,7 +279,12 @@ func (o *objectUnixStatContainer) AddToMetadata(metadata map[string]*string) {
 
 	if o.modTime != nil {
 		mask |= common.STATX_MTIME
-		metadata[common.POSIXModTimeMeta] = to.Ptr(strconv.FormatInt(o.modTime.UnixNano(), 10))
+		// Use style to determine format to store
+		if style == common.AMLFSPosixPropertiesStyle {
+			metadata[common.POSIXModTimeMeta] = to.Ptr(o.modTime.Format(common.AMLFS_MOD_TIME_LAYOUT))
+		} else {
+			metadata[common.POSIXModTimeMeta] = to.Ptr(strconv.FormatInt(o.modTime.UnixNano(), 10))
+		}
 	}
 
 	metadata[common.LINUXStatxMaskMeta] = to.Ptr(strconv.FormatUint(uint64(mask), 10))
@@ -379,7 +390,7 @@ type testObject struct {
 
 	body []byte
 
-	// info to be used at creation time. Usually, creationInfo and and verificationInfo will be the same
+	// info to be used at creation time. Usually, creationInfo and verificationInfo will be the same
 	// I.e. we expect the creation properties to be preserved. But, for flexibility, they can be set to something different.
 	creationProperties objectProperties
 	// info to be used at verification time. Will be nil if there is no validation (of properties) to be done

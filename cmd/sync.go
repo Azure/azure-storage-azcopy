@@ -64,6 +64,7 @@ type rawSyncCmdArgs struct {
 	preserveSMBPermissions  bool // deprecated and synonymous with preservePermissions
 	preserveSMBInfo         bool
 	preservePOSIXProperties bool
+	posixPropertiesStyle    string
 	followSymlinks          bool
 	preserveSymlinks        bool
 	putMd5                  bool
@@ -161,6 +162,10 @@ func (raw rawSyncCmdArgs) toOptions() (opts azcopy.SyncOptions, err error) {
 		return opts, err
 	}
 	err = opts.Symlinks.Determine(raw.followSymlinks, raw.preserveSymlinks)
+	if err != nil {
+		return opts, err
+	}
+	err = opts.PosixPropertiesStyle.Parse(raw.posixPropertiesStyle)
 	if err != nil {
 		return opts, err
 	}
@@ -379,6 +384,11 @@ func init() {
 
 	syncCmd.PersistentFlags().BoolVar(&raw.preservePOSIXProperties, "preserve-posix-properties", false,
 		"False by default. 'Preserves' property info gleaned from stat or statx into object metadata.")
+
+	syncCmd.PersistentFlags().StringVar(&raw.posixPropertiesStyle, "posix-properties-style", common.StandardPosixPropertiesStyle.String(),
+		"Accepted values: `standard` (default) and `amlfs`. Use this flag to specify the style of POSIX properties to preserve. "+
+			"\n `amlfs` will preserve POSIX property metadata compatible with Azure Managed Lustre File System."+
+			"\n This flag must be used in-tandem with --preserve-posix-properties.")
 
 	// TODO: enable when we support local <-> File
 	syncCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "False by default. "+
