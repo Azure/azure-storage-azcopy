@@ -29,6 +29,13 @@ import (
 	"encoding/binary"
 	"flag"
 	"fmt"
+	"io"
+	"math/rand"
+	"mime"
+	"os"
+	"strings"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
@@ -47,12 +54,6 @@ import (
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
-	"io"
-	"math/rand"
-	"mime"
-	"os"
-	"strings"
-	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
@@ -255,7 +256,7 @@ func createNewAzureFile(c asserter, sc *share.Client, prefix string) (fc *sharef
 }
 
 func newNullFolderCreationTracker() ste.FolderCreationTracker {
-	return ste.NewFolderCreationTracker(common.EFolderPropertiesOption.NoFolders(), nil)
+	return ste.NewFolderCreationTracker(common.EFolderPropertiesOption.NoFolders(), nil, common.EFromTo.Unknown())
 }
 
 func getFileShareClient(c asserter) *share.Client {

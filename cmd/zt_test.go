@@ -25,6 +25,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"math/rand"
+	"os"
+	"runtime"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -47,13 +55,6 @@ import (
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/stretchr/testify/assert"
-	"io"
-	"math/rand"
-	"os"
-	"runtime"
-	"strings"
-	"testing"
-	"time"
 
 	gcpUtils "cloud.google.com/go/storage"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -425,7 +426,7 @@ func createNewShare(a *assert.Assertions, fsc *fileservice.Client) (sc *share.Cl
 }
 
 func generateParentsForShareFile(a *assert.Assertions, fileClient *sharefile.Client, shareClient *share.Client) {
-	t := ste.NewFolderCreationTracker(common.EFolderPropertiesOption.NoFolders(), nil)
+	t := ste.NewFolderCreationTracker(common.EFolderPropertiesOption.NoFolders(), nil, common.EFromTo.Unknown())
 	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRoot(ctx, fileClient, shareClient, t)
 	a.Nil(err)
 }
