@@ -362,15 +362,17 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 	}
 
 	// Special blob destinations - public and MD account needing oAuth
+	uri, _ := resource.FullURL()
 	if location == common.ELocation.Blob() {
-		uri, _ := resource.FullURL()
-		public, err = isPublic(ctx, uri.String(), cpkOptions)
-		if err != nil {
-			return common.ECredentialType.Unknown(), false, err
-		}
-		if isSource && resource.SAS == "" && public {
-			credType = common.ECredentialType.Anonymous()
-			return
+		if isSource && resource.SAS == "" {
+			public, err = isPublic(ctx, uri.String(), cpkOptions)
+			if err != nil {
+				return common.ECredentialType.Unknown(), false, err
+			}
+			if public {
+				credType = common.ECredentialType.Anonymous()
+				return
+			}
 		}
 
 		if strings.HasPrefix(uri.Host, "md-") {
