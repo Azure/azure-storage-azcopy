@@ -27,7 +27,7 @@ jobs:
         mkdir -p output
         go build -o output/azcopy
         cd output
-        ./azcopy doc
+        ./azcopy doc --format wiki
         cd doc
         sed -i 's/\.md//' *
 
