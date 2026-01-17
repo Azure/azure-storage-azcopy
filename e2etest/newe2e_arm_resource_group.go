@@ -3,20 +3,38 @@ package e2etest
 import (
 	"net/http"
 	"net/url"
+	"path"
 )
 
 // ========== Client ==========
 
 type ARMResourceGroup struct {
-	*ARMSubscription
+	ParentSubject[*ARMSubscription]
 	ResourceGroupName string
 }
 
-func (rg *ARMResourceGroup) ManagementURI() url.URL {
-	baseURI := rg.ARMSubscription.ManagementURI()
-	newURI := baseURI.JoinPath("resourcegroups", rg.ResourceGroupName)
+func (rg *ARMResourceGroup) CanonicalPath() string {
+	return path.Join(rg.ParentSubject.CanonicalPath(), "resourcegroups", rg.ResourceGroupName)
+}
 
-	return *newURI
+func (rg *ARMResourceGroup) NewStorageAccountARMClient(acctName string) *ARMStorageAccount {
+	return &ARMStorageAccount{
+		ParentSubject: ParentSubject[*ARMResourceGroup]{
+			parent: rg,
+			root:   rg.root,
+		},
+		AccountName: acctName,
+	}
+}
+
+func (rg *ARMResourceGroup) NewManagedDiskARMClient(diskName string) *ARMManagedDisk {
+	return &ARMManagedDisk{
+		ParentSubject: ParentSubject[*ARMResourceGroup]{
+			parent: rg,
+			root:   rg.root,
+		},
+		DiskName: diskName,
+	}
 }
 
 type ARMResourceGroupCreateParams struct {
