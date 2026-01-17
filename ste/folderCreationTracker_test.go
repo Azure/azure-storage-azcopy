@@ -191,4 +191,7 @@ func TestFolderCreationTracker_directoryExists(t *testing.T) {
 	err = fct.CreateFolder(folderShouldCreate, func() error {
 		return nil
 	})
+	a.NoError(err)
+	a.Equal(fct.contents[folderShouldCreate].Status, EJpptFolderTrackerStatus.FolderCreated())
+	a.Equal(plan.transfers[shouldCreateIdx].TransferStatus(), common.ETransferStatus.FolderCreated())
 }
