@@ -24,7 +24,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"os"
 	"sync"
 	"time"
@@ -38,17 +37,6 @@ var mu sync.Mutex // Prevent inconsistent state between check and update of Tota
 
 type azCopyConfig struct {
 	MIMETypeMapping map[string]string
-}
-
-// round api rounds up the float number after the decimal point.
-func round(num float64) int {
-	return int(num + math.Copysign(0.5, num))
-}
-
-// ToFixed api returns the float number precised up to given decimal places.
-func ToFixed(num float64, precision int) float64 {
-	output := math.Pow(10, float64(precision))
-	return float64(round(num*output)) / output
 }
 
 // MainSTE initializes the Storage Transfer Engine
@@ -152,13 +140,6 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus, 
 }
 
 func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeResponse {
-	// Strip '?' if present as first character of the source sas / destination sas
-	if len(req.SourceSAS) > 0 && req.SourceSAS[0] == '?' {
-		req.SourceSAS = req.SourceSAS[1:]
-	}
-	if len(req.DestinationSAS) > 0 && req.DestinationSAS[0] == '?' {
-		req.DestinationSAS = req.DestinationSAS[1:]
-	}
 	// Always search the plan files in Azcopy folder,
 	// and resurrect the Job with provided credentials, to ensure SAS and etc get updated.
 	if !JobsAdmin.ResurrectJob(req.JobID, req.SrcServiceClient, req.DstServiceClient, false, req.JobErrorHandler) {
@@ -201,8 +182,6 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 		}
 	}
 
-	// After creating the Job mgr, set the include / exclude list of transfer.
-	jm.SetIncludeExclude(req.IncludeTransfer, req.ExcludeTransfer)
 	jpp0 := jpm.Plan()
 	switch jpp0.JobStatus() {
 	// Cannot resume a Job which is in Cancelling state

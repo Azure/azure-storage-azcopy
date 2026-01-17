@@ -30,6 +30,7 @@ import (
 
 var docCmdInput = struct {
 	outputLocation string
+	format         string
 }{}
 
 // docCmd represents the doc command
@@ -51,11 +52,22 @@ var docCmd = &cobra.Command{
 			glcm.Error("The output location is invalid as it is pointing to a file.")
 		}
 
-		// dump the entire command tree's doc into the folder
-		// it will include this command too, which is intended
-		err = doc.GenMarkdownTree(rootCmd, docCmdInput.outputLocation)
-		if err != nil {
-			glcm.Error(fmt.Sprintf("Cannot generate doc due to error %s, please contact the dev team.", err))
+		switch docCmdInput.format {
+		case "wiki":
+			// Generate GitHub Wiki style documentation
+			generator := NewWikiGenerator(docCmdInput.outputLocation)
+			err = generator.Generate(rootCmd)
+			if err != nil {
+				glcm.Error(fmt.Sprintf("Cannot generate wiki doc due to error %s, please contact the dev team.", err))
+			}
+			glcm.Info(fmt.Sprintf("GitHub Wiki documentation generated in: %s", docCmdInput.outputLocation))
+		default:
+			// dump the entire command tree's doc into the folder
+			// it will include this command too, which is intended
+			err = doc.GenMarkdownTree(rootCmd, docCmdInput.outputLocation)
+			if err != nil {
+				glcm.Error(fmt.Sprintf("Cannot generate doc due to error %s, please contact the dev team.", err))
+			}
 		}
 	},
 }
@@ -64,4 +76,6 @@ func init() {
 	rootCmd.AddCommand(docCmd)
 	docCmd.PersistentFlags().StringVar(&docCmdInput.outputLocation, "output-location", "./doc",
 		"where to put the generated markdown files")
+	docCmd.PersistentFlags().StringVar(&docCmdInput.format, "format", "default",
+		"output format: 'default' (cobra standard) or 'wiki' (GitHub Wiki style with tables)")
 }

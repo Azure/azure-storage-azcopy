@@ -21,13 +21,12 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
 	"net/url"
 	"os"
 	"strings"
-	"sync"
 
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -62,63 +61,6 @@ func parsePatterns(pattern string) (cookedPatterns []string) {
 	return
 }
 
-// returns result of stripping and if striptopdir is enabled
-// if nothing happens, the original source is returned
-func stripTrailingWildcardOnRemoteSource(source string, location common.Location) (result string, stripTopDir bool, err error) {
-	result = source
-	resourceURL, err := url.Parse(result)
-	gURLParts := common.NewGenericResourceURLParts(*resourceURL, location)
-
-	if err != nil {
-		err = fmt.Errorf("failed to parse url %s; %w", result, err)
-		return
-	}
-
-	if strings.Contains(gURLParts.GetContainerName(), "*") {
-		// Disallow container name search and object specifics
-		if gURLParts.GetObjectName() != "" {
-			err = errors.New("cannot combine a specific object name with an account-level search")
-			return
-		}
-
-		// Return immediately here because we know this will be safe.
-		return
-	}
-
-	// Trim the trailing /*.
-	if strings.HasSuffix(resourceURL.RawPath, "/*") {
-		resourceURL.RawPath = strings.TrimSuffix(resourceURL.RawPath, "/*")
-		resourceURL.Path = strings.TrimSuffix(resourceURL.Path, "/*")
-		stripTopDir = true
-	}
-
-	// Ensure there aren't any extra *s floating around.
-	if strings.Contains(resourceURL.RawPath, "*") {
-		err = errors.New("cannot use wildcards in the path section of the URL except in trailing \"/*\". If you wish to use * in your URL, manually encode it to %2A")
-		return
-	}
-
-	result = resourceURL.String()
-
-	return
-}
-
-func warnIfAnyHasWildcard(oncer *sync.Once, paramName string, value []string) {
-	for _, v := range value {
-		warnIfHasWildcard(oncer, paramName, v)
-	}
-}
-
-func warnIfHasWildcard(oncer *sync.Once, paramName string, value string) {
-	if strings.Contains(value, "*") || strings.Contains(value, "?") {
-		oncer.Do(func() {
-			glcm.Warn(fmt.Sprintf("*** Warning *** The %s parameter does not support wildcards. The wildcard "+
-				"character provided will be interpreted literally and will not have any wildcard effect. To use wildcards "+
-				"(in filenames only, not paths) use include-pattern or exclude-pattern", paramName))
-		})
-	}
-}
-
 // ConstructCommandStringFromArgs creates the user given commandString from the os Arguments
 // If any argument passed is an http Url and contains the signature, then the signature is redacted
 func ConstructCommandStringFromArgs() string {
@@ -132,7 +74,7 @@ func ConstructCommandStringFromArgs() string {
 	for _, arg := range args {
 		// If the argument starts with http, it is either the remote source or remote destination
 		// If there exists a signature in the argument string it needs to be redacted
-		if startsWith(arg, "http") {
+		if azcopy.StartsWith(arg, "http") {
 			// parse the url
 			argUrl, err := url.Parse(arg)
 			// If there is an error parsing the url, then throw the error
@@ -148,8 +90,4 @@ func ConstructCommandStringFromArgs() string {
 		s.WriteString(" ")
 	}
 	return s.String()
-}
-
-func startsWith(s string, t string) bool {
-	return len(s) >= len(t) && strings.EqualFold(s[0:len(t)], t)
 }
