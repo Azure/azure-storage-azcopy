@@ -213,6 +213,10 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 	// This is because * is both a valid URL path character and a valid portion of an object key in S3.
 	searchPrefix := t.s3URLParts.ObjectKey
 
+	// Check if this is GCS accessed via S3-compatible API (using HMAC keys)
+	// GCS has different behavior for directory markers compared to AWS S3
+	isGCSviaS3 := t.s3URLParts.IsGoogleCloudStorage()
+
 	// It's a bucket or virtual directory.
 	for objectInfo := range t.s3Client.ListObjectsV2(t.s3URLParts.BucketName, searchPrefix, t.recursive, t.ctx.Done()) {
 		// re-join the unescaped path.
@@ -238,7 +242,16 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			return fmt.Errorf("cannot list objects, %v", objectInfo.Err)
 		}
 
-		isPotentialDirectory := objectInfo.StorageClass == "" && (strings.HasSuffix(objectInfo.Key, "/") || objectInfo.Size == 0)
+		// Directory detection logic differs between GCS and AWS S3:
+		// - GCS via S3 API: Use enhanced checks (empty StorageClass + trailing slash or zero size)
+		// - AWS S3: Use standard check (empty StorageClass only)
+		var isPotentialDirectory bool
+		if isGCSviaS3 {
+			isPotentialDirectory = objectInfo.StorageClass == "" && (strings.HasSuffix(objectInfo.Key, "/") || objectInfo.Size == 0)
+		} else {
+			isPotentialDirectory = objectInfo.StorageClass == ""
+		}
+
 		if isPotentialDirectory && !t.includeDirectoryOrPrefix {
 			// Directories are the only objects without storage classes.
 			// Skip directories if not using sync orchestrator
@@ -255,7 +268,16 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 		objectPath := strings.Split(objectInfo.Key, "/")
 		objectName := objectPath[len(objectPath)-1]
 		var storedObject StoredObject
-		if isPotentialDirectory && objectInfo.Size == 0 && strings.HasSuffix(objectInfo.Key, "/") {
+
+		// For GCS via S3 API, use stricter directory detection to avoid false positives
+		var isActualDirectory bool
+		if isGCSviaS3 {
+			isActualDirectory = isPotentialDirectory && objectInfo.Size == 0 && strings.HasSuffix(objectInfo.Key, "/")
+		} else {
+			isActualDirectory = objectInfo.StorageClass == ""
+		}
+
+		if isActualDirectory {
 
 			// For sync orchestrator, we need to treat directories as objects.
 			storedObject = newStoredObject(
