@@ -57,7 +57,7 @@ type blobFSSenderBase struct {
 	pacer               pacer
 	creationTimeHeaders *file.HTTPHeaders
 	flushThreshold      int64
-	metadataToSet       common.SafeMetadata
+	metadataToSet       *common.SafeMetadata
 }
 
 func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (*blobFSSenderBase, error) {
@@ -109,7 +109,7 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, pacer pac
 		pacer:               pacer,
 		creationTimeHeaders: &headers,
 		flushThreshold:      chunkSize * int64(ADLSFlushThreshold),
-		metadataToSet:       common.SafeMetadata{Metadata: props.SrcMetadata.Clone()},
+		metadataToSet:       &common.SafeMetadata{Metadata: props.SrcMetadata.Clone()},
 	}, nil
 }
 
@@ -252,7 +252,7 @@ func (u *blobFSSenderBase) SetPOSIXProperties() error {
 	}
 
 	meta := u.metadataToSet
-	common.AddStatToBlobMetadata(adapter, &meta, u.jptm.Info().PosixPropertiesStyle)
+	common.AddStatToBlobMetadata(adapter, meta, u.jptm.Info().PosixPropertiesStyle)
 	delete(meta.Metadata, common.POSIXFolderMeta) // Can't be set on HNS accounts.
 
 	_, err = u.blobClient.SetMetadata(u.jptm.Context(), meta.Metadata, nil)
@@ -289,12 +289,12 @@ func (u *blobFSSenderBase) DirUrlToString() string {
 }
 
 func (u *blobFSSenderBase) SendSymlink(linkData string) error {
-	meta := common.SafeMetadata{Metadata: make(common.Metadata)} // meta isn't traditionally supported for dfs, but still exists
+	meta := &common.SafeMetadata{Metadata: make(common.Metadata)} // meta isn't traditionally supported for dfs, but still exists
 	adapter, err := u.GetSourcePOSIXProperties()
 	if err != nil {
 		return fmt.Errorf("when polling for POSIX properties: %w", err)
 	} else if adapter != nil { // We don't need POSIX data to send a symlink.
-		common.AddStatToBlobMetadata(adapter, &meta, u.jptm.Info().PosixPropertiesStyle)
+		common.AddStatToBlobMetadata(adapter, meta, u.jptm.Info().PosixPropertiesStyle)
 	}
 
 	meta.Metadata[common.POSIXSymlinkMeta] = to.Ptr("true") // just in case there isn't any metadata

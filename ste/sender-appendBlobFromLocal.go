@@ -36,14 +36,14 @@ func (u *appendBlobUploader) Prologue(ps common.PrologueState) (destinationModif
 	if u.jptm.Info().PreservePOSIXProperties {
 		if unixSIP, ok := u.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
 			// Clone the metadata before we write to it, we shouldn't be writing to the same metadata as every other blob.
-			u.metadataToApply = common.SafeMetadata{Metadata: u.metadataToApply.Metadata.Clone()}
+			u.metadataToApply = &common.SafeMetadata{Metadata: u.metadataToApply.Metadata.Clone()}
 
 			statAdapter, err := unixSIP.GetUNIXProperties()
 			if err != nil {
 				u.jptm.FailActiveSend("GetUNIXProperties", err)
 			}
 
-			common.AddStatToBlobMetadata(statAdapter, &u.metadataToApply, u.jptm.Info().PosixPropertiesStyle)
+			common.AddStatToBlobMetadata(statAdapter, u.metadataToApply, u.jptm.Info().PosixPropertiesStyle)
 		}
 	}
 

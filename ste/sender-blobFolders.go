@@ -19,7 +19,7 @@ type blobFolderSender struct {
 	destinationClient *blockblob.Client // We'll treat all folders as block blobs
 	jptm              IJobPartTransferMgr
 	sip               ISourceInfoProvider
-	metadataToApply   common.SafeMetadata
+	metadataToApply   *common.SafeMetadata
 	headersToApply    blob.HTTPHeaders
 	blobTagsToApply   common.BlobTags
 }
@@ -41,7 +41,7 @@ func newBlobFolderSender(jptm IJobPartTransferMgr, destination string, sip ISour
 		jptm:              jptm,
 		sip:               sip,
 		destinationClient: destinationClient,
-		metadataToApply: common.SafeMetadata{
+		metadataToApply: &common.SafeMetadata{
 			Metadata: props.SrcMetadata.Clone(),
 		}, // We're going to modify it, so we should clone it.
 		headersToApply:  props.SrcHTTPHeaders.ToBlobHTTPHeaders(),

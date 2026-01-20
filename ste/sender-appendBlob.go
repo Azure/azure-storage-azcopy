@@ -49,7 +49,7 @@ type appendBlobSenderBase struct {
 	// When sending local data, they are computed based on
 	// the properties of the local file
 	headersToApply  blob.HTTPHeaders
-	metadataToApply common.SafeMetadata
+	metadataToApply *common.SafeMetadata
 	blobTagsToApply common.BlobTags
 
 	sip ISourceInfoProvider
@@ -92,7 +92,7 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer
 		numChunks:            numChunks,
 		pacer:                pacer,
 		headersToApply:       props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
-		metadataToApply: common.SafeMetadata{
+		metadataToApply: &common.SafeMetadata{
 			Metadata: props.SrcMetadata.Clone(),
 		},
 		blobTagsToApply:        props.SrcBlobTags,

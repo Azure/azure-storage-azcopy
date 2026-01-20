@@ -17,7 +17,7 @@ type blobSymlinkSender struct {
 	jptm              IJobPartTransferMgr
 	sip               ISourceInfoProvider
 	headersToApply    blob.HTTPHeaders
-	metadataToApply   common.SafeMetadata
+	metadataToApply   *common.SafeMetadata
 	destBlobTier      *blob.AccessTier
 	blobTagsToApply   common.BlobTags
 }
@@ -46,7 +46,7 @@ func newBlobSymlinkSender(jptm IJobPartTransferMgr, destination string, sip ISou
 		jptm:              jptm,
 		sip:               sip,
 		destinationClient: destinationClient,
-		metadataToApply:   common.SafeMetadata{Metadata: props.SrcMetadata.Clone()}, // We're going to modify it, so we should clone it.
+		metadataToApply:   &common.SafeMetadata{Metadata: props.SrcMetadata.Clone()}, // We're going to modify it, so we should clone it.
 		headersToApply:    props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
 		blobTagsToApply:   props.SrcBlobTags,
 		destBlobTier:      destBlobTier,

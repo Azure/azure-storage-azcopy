@@ -11,7 +11,7 @@ func (s *blobSymlinkSender) getExtraProperties() error {
 	if s.jptm.Info().PreservePOSIXProperties {
 		if unixSIP, ok := s.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
 			// Clone the metadata before we write to it, we shouldn't be writing to the same metadata as every other blob.
-			s.metadataToApply = common.SafeMetadata{Metadata: s.metadataToApply.Metadata.Clone()}
+			s.metadataToApply = &common.SafeMetadata{Metadata: s.metadataToApply.Metadata.Clone()}
 
 			statAdapter, err := unixSIP.GetUNIXProperties()
 			if err != nil {
@@ -23,7 +23,7 @@ func (s *blobSymlinkSender) getExtraProperties() error {
 				return errors.New("sanity check: GetUNIXProperties did not return symlink properties")
 			}
 
-			common.AddStatToBlobMetadata(statAdapter, &s.metadataToApply, s.jptm.Info().PosixPropertiesStyle)
+			common.AddStatToBlobMetadata(statAdapter, s.metadataToApply, s.jptm.Info().PosixPropertiesStyle)
 		}
 	}
 
