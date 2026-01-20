@@ -101,6 +101,7 @@ func (t *transferExecutor) initCopyEnumerator(ctx context.Context, logLevel comm
 		PreserveInfo:        t.opts.preserveInfo,
 		// We set preservePOSIXProperties if the customer has explicitly asked for this in transfer or if it is just a Posix-property only transfer
 		PreservePOSIXProperties:        t.opts.preservePosixProperties || t.opts.forceWrite == common.EOverwriteOption.PosixProperties(),
+		PosixPropertiesStyle:           t.opts.posixPropertiesStyle,
 		S2SGetPropertiesInBackend:      t.opts.s2sGetPropertiesInBackend,
 		S2SSourceChangeValidation:      t.opts.s2sSourceChangeValidation,
 		DestLengthValidation:           t.opts.checkLength,
@@ -297,7 +298,9 @@ func (t *transferExecutor) initCopyEnumerator(ctx context.Context, logLevel comm
 
 	// folder transfer strategy
 	var folderMessage string
-	jobPartOrder.Fpo, folderMessage = NewFolderPropertyOption(t.opts.fromTo, t.opts.recursive, t.opts.stripTopDir, filters, t.opts.preserveInfo, t.opts.preservePermissions.IsTruthy(), t.opts.preservePosixProperties, strings.EqualFold(t.opts.destination.Value, common.Dev_Null), t.opts.includeDirectoryStubs)
+	jobPartOrder.Fpo, folderMessage = NewFolderPropertyOption(t.opts.fromTo, t.opts.recursive, t.opts.stripTopDir, filters,
+		t.opts.preserveInfo, t.opts.preservePermissions.IsTruthy(), t.opts.preservePosixProperties, strings.EqualFold(t.opts.destination.Value, common.Dev_Null),
+		t.opts.includeDirectoryStubs)
 	if !t.opts.dryrun {
 		common.GetLifecycleMgr().Info(folderMessage)
 	}

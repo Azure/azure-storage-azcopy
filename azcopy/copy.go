@@ -67,6 +67,7 @@ type CopyOptions struct {
 	PreserveOwner               *bool // Default true
 	PreserveInfo                *bool // Custom default logic
 	PreservePosixProperties     bool
+	PosixPropertiesStyle        common.PosixPropertiesStyle
 	Symlinks                    common.SymlinkHandlingType
 	ForceIfReadOnly             bool
 	BackupMode                  bool
