@@ -80,6 +80,8 @@ type JobPartPlanHeader struct {
 	PreservePermissions     common.PreservePermissionsOption
 	PreserveInfo            bool
 	PreservePOSIXProperties bool
+	// PosixPropertiesStyle represents whether to use 'standard' or 'amlfs' style posix properties
+	PosixPropertiesStyle common.PosixPropertiesStyle
 	// S2SGetPropertiesInBackend represents whether to enable get S3 objects' or Azure files' properties during s2s copy in backend.
 	S2SGetPropertiesInBackend bool
 	// S2SSourceChangeValidation represents whether user wants to check if source has changed after enumerating.
