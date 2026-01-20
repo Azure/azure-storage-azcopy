@@ -1,6 +1,7 @@
 package common
 
 import (
+	"strconv"
 	"testing"
 	"time"
 
@@ -100,8 +101,7 @@ func Test_AddStatToBlobMetadata(t *testing.T) {
 	safeMetadata := SafeMetadata{
 		Metadata: make(Metadata),
 	}
-
-	AddStatToBlobMetadata(statAdapter, safeMetadata)
+	AddStatToBlobMetadata(statAdapter, safeMetadata, StandardPosixPropertiesStyle)
 	a.NotEmpty(safeMetadata.Metadata)
 	a.Contains(safeMetadata.Metadata, "linux_statx_mask")
 	a.Equal("8191", *safeMetadata.Metadata["linux_statx_mask"])
@@ -146,7 +146,7 @@ func Test_AddStatToBlobMetadata(t *testing.T) {
 	safeMetadata.Metadata["Posix_atime"] = to.Ptr("1702478036104313337")
 	safeMetadata.Metadata["Modtime"] = to.Ptr("1702376209109248073")
 	safeMetadata.Metadata["Posix_ctime"] = to.Ptr("1702376216773153924")
-	AddStatToBlobMetadata(statAdapter, safeMetadata)
+	AddStatToBlobMetadata(statAdapter, safeMetadata, StandardPosixPropertiesStyle)
 	a.NotEmpty(safeMetadata.Metadata)
 	a.Contains(safeMetadata.Metadata, "Linux_statx_mask")
 	a.Equal("8191", *safeMetadata.Metadata["Linux_statx_mask"])
@@ -198,7 +198,7 @@ func TestAddReadStatMetadata(t *testing.T) {
 	safeMetadata := SafeMetadata{
 		Metadata: make(Metadata),
 	}
-	AddStatToBlobMetadata(statAdapter, safeMetadata)
+	AddStatToBlobMetadata(statAdapter, safeMetadata, StandardPosixPropertiesStyle)
 
 	adapter, err := ReadStatFromMetadata(safeMetadata.Metadata, 1024)
 	a.Nil(err)
@@ -217,4 +217,74 @@ func TestAddReadStatMetadata(t *testing.T) {
 	a.Equal(time.Unix(0, int64(1702478036104313337)), adapter.ATime())
 	a.Equal(time.Unix(0, int64(1702376209109248073)), adapter.MTime())
 	a.Equal(time.Unix(0, int64(1702376216773153924)), adapter.CTime())
+}
+
+func Test_AMLFSAddStatToBlobMetadata(t *testing.T) {
+	a := assert.New(t)
+	statAdapter := UnixStatContainer{size: uint64(1024)}
+	statAdapter.statx = true
+	statAdapter.mask = uint32(8191)
+	statAdapter.attributes = uint64(0)
+	statAdapter.ownerUID = uint32(1000)
+	statAdapter.groupGID = uint32(1000)
+	statAdapter.mode = uint32(0664)
+	mTime, err := time.Parse(AMLFS_MOD_TIME_LAYOUT, "2026-01-01 15:04:05 -0700")
+	a.NoError(err)
+	statAdapter.modTime = mTime
+
+	safeMetadata := SafeMetadata{
+		Metadata: make(Metadata),
+	}
+
+	AddStatToBlobMetadata(statAdapter, safeMetadata, AMLFSPosixPropertiesStyle)
+	a.NotEmpty(safeMetadata.Metadata)
+	a.Contains(safeMetadata.Metadata, "linux_statx_mask")
+	a.Equal("8191", *safeMetadata.Metadata["linux_statx_mask"])
+	a.Contains(safeMetadata.Metadata, "owner")
+	a.Equal("1000", *safeMetadata.Metadata["owner"])
+	a.Contains(safeMetadata.Metadata, "group")
+	a.Equal("1000", *safeMetadata.Metadata["group"])
+	a.Contains(safeMetadata.Metadata, "permissions")
+	a.Equal("0664", *safeMetadata.Metadata["permissions"])
+	a.Contains(safeMetadata.Metadata, "modtime")
+	a.Equal("2026-01-01 15:04:05 -0700", *safeMetadata.Metadata["modtime"])
+}
+
+func Test_AMLFSReadStatFromBlobMetadata(t *testing.T) {
+	a := assert.New(t)
+
+	statAdapter := UnixStatContainer{size: uint64(1024)}
+	statAdapter.statx = true
+	statAdapter.mask = uint32(8191)
+	statAdapter.attributes = uint64(0)
+	statAdapter.ownerUID = uint32(0)
+	statAdapter.groupGID = uint32(0)
+	statAdapter.mode = uint32(0775)
+	mTime, err := time.Parse(AMLFS_MOD_TIME_LAYOUT, "2026-01-01 15:04:05 -0700")
+	a.NoError(err)
+	statAdapter.modTime = mTime
+
+	safeMetadata := SafeMetadata{
+		Metadata: make(Metadata),
+	}
+	AddStatToBlobMetadata(statAdapter, safeMetadata, AMLFSPosixPropertiesStyle)
+	a.NotEmpty(safeMetadata.Metadata)
+	a.Contains(safeMetadata.Metadata, "owner")
+	a.Equal("0", *safeMetadata.Metadata["owner"])
+	a.Contains(safeMetadata.Metadata, "group")
+	a.Equal("0", *safeMetadata.Metadata["group"])
+	a.Contains(safeMetadata.Metadata, "permissions")
+	a.Equal("0775", *safeMetadata.Metadata["permissions"])
+	a.Contains(safeMetadata.Metadata, "modtime")
+	a.Equal("2026-01-01 15:04:05 -0700", *safeMetadata.Metadata["modtime"])
+	adapter, err := ReadStatFromMetadata(safeMetadata.Metadata, 1024)
+	a.Nil(err)
+	a.NotNil(adapter)
+	a.True(adapter.Extended())
+	a.Equal(uint32(0), adapter.Owner())
+	a.Equal(uint32(0), adapter.Group())
+	permInt, err := strconv.ParseUint("0775", 8, 32)
+	a.NoError(err)
+	a.Equal(uint32(permInt), adapter.FileMode())
+	a.Equal(time.Unix(0, mTime.UnixNano()), adapter.MTime())
 }
