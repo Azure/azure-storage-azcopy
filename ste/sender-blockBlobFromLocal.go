@@ -58,7 +58,7 @@ func (s *blockBlobUploader) Prologue(ps common.PrologueState) (destinationModifi
 				s.jptm.FailActiveSend("GetUNIXProperties", err)
 			}
 
-			common.AddStatToBlobMetadata(statAdapter, s.metadataToApply, s.jptm.Info().PosixPropertiesStyle)
+			common.AddStatToBlobMetadata(statAdapter, &s.metadataToApply, s.jptm.Info().PosixPropertiesStyle)
 		}
 	}
 

@@ -42,7 +42,7 @@ func Test_TryAddMetadata(t *testing.T) {
 		Metadata: make(Metadata),
 	}
 
-	TryAddMetadata(safeMetadata, "key", "value")
+	TryAddMetadata(&safeMetadata, "key", "value")
 	a.Equal(1, len(safeMetadata.Metadata))
 	a.Contains(safeMetadata.Metadata, "key")
 	a.Equal("value", *safeMetadata.Metadata["key"])
@@ -52,7 +52,7 @@ func Test_TryAddMetadata(t *testing.T) {
 		Metadata: make(Metadata),
 	}
 	safeMetadata.Metadata["key"] = to.Ptr("value")
-	TryAddMetadata(safeMetadata, "key", "new_value")
+	TryAddMetadata(&safeMetadata, "key", "new_value")
 	a.Equal(1, len(safeMetadata.Metadata))
 	a.Contains(safeMetadata.Metadata, "key")
 	a.Equal("value", *safeMetadata.Metadata["key"])
@@ -62,7 +62,7 @@ func Test_TryAddMetadata(t *testing.T) {
 		Metadata: make(Metadata),
 	}
 	safeMetadata.Metadata["Key"] = to.Ptr("value")
-	TryAddMetadata(safeMetadata, "key", "new_value")
+	TryAddMetadata(&safeMetadata, "key", "new_value")
 	a.Equal(1, len(safeMetadata.Metadata))
 	a.Contains(safeMetadata.Metadata, "Key")
 	a.Equal("value", *safeMetadata.Metadata["Key"])
@@ -72,7 +72,7 @@ func Test_TryAddMetadata(t *testing.T) {
 		Metadata: make(Metadata),
 	}
 	safeMetadata.Metadata["other_key"] = to.Ptr("value")
-	TryAddMetadata(safeMetadata, "key", "new_value")
+	TryAddMetadata(&safeMetadata, "key", "new_value")
 	a.Equal(2, len(safeMetadata.Metadata))
 	a.Contains(safeMetadata.Metadata, "key")
 	a.Equal("new_value", *safeMetadata.Metadata["key"])

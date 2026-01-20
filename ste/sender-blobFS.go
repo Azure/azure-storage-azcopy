@@ -252,7 +252,7 @@ func (u *blobFSSenderBase) SetPOSIXProperties() error {
 	}
 
 	meta := u.metadataToSet
-	common.AddStatToBlobMetadata(adapter, meta, u.jptm.Info().PosixPropertiesStyle)
+	common.AddStatToBlobMetadata(adapter, &meta, u.jptm.Info().PosixPropertiesStyle)
 	delete(meta.Metadata, common.POSIXFolderMeta) // Can't be set on HNS accounts.
 
 	_, err = u.blobClient.SetMetadata(u.jptm.Context(), meta.Metadata, nil)
@@ -294,7 +294,7 @@ func (u *blobFSSenderBase) SendSymlink(linkData string) error {
 	if err != nil {
 		return fmt.Errorf("when polling for POSIX properties: %w", err)
 	} else if adapter != nil { // We don't need POSIX data to send a symlink.
-		common.AddStatToBlobMetadata(adapter, meta, u.jptm.Info().PosixPropertiesStyle)
+		common.AddStatToBlobMetadata(adapter, &meta, u.jptm.Info().PosixPropertiesStyle)
 	}
 
 	meta.Metadata[common.POSIXSymlinkMeta] = to.Ptr("true") // just in case there isn't any metadata

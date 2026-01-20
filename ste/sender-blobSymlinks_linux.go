@@ -23,7 +23,7 @@ func (s *blobSymlinkSender) getExtraProperties() error {
 				return errors.New("sanity check: GetUNIXProperties did not return symlink properties")
 			}
 
-			common.AddStatToBlobMetadata(statAdapter, s.metadataToApply, s.jptm.Info().PosixPropertiesStyle)
+			common.AddStatToBlobMetadata(statAdapter, &s.metadataToApply, s.jptm.Info().PosixPropertiesStyle)
 		}
 	}
 

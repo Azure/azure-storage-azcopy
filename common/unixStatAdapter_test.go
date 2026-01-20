@@ -101,7 +101,7 @@ func Test_AddStatToBlobMetadata(t *testing.T) {
 	safeMetadata := SafeMetadata{
 		Metadata: make(Metadata),
 	}
-	AddStatToBlobMetadata(statAdapter, safeMetadata, StandardPosixPropertiesStyle)
+	AddStatToBlobMetadata(statAdapter, &safeMetadata, StandardPosixPropertiesStyle)
 	a.NotEmpty(safeMetadata.Metadata)
 	a.Contains(safeMetadata.Metadata, "linux_statx_mask")
 	a.Equal("8191", *safeMetadata.Metadata["linux_statx_mask"])
@@ -146,7 +146,7 @@ func Test_AddStatToBlobMetadata(t *testing.T) {
 	safeMetadata.Metadata["Posix_atime"] = to.Ptr("1702478036104313337")
 	safeMetadata.Metadata["Modtime"] = to.Ptr("1702376209109248073")
 	safeMetadata.Metadata["Posix_ctime"] = to.Ptr("1702376216773153924")
-	AddStatToBlobMetadata(statAdapter, safeMetadata, StandardPosixPropertiesStyle)
+	AddStatToBlobMetadata(statAdapter, &safeMetadata, StandardPosixPropertiesStyle)
 	a.NotEmpty(safeMetadata.Metadata)
 	a.Contains(safeMetadata.Metadata, "Linux_statx_mask")
 	a.Equal("8191", *safeMetadata.Metadata["Linux_statx_mask"])
@@ -198,7 +198,7 @@ func TestAddReadStatMetadata(t *testing.T) {
 	safeMetadata := SafeMetadata{
 		Metadata: make(Metadata),
 	}
-	AddStatToBlobMetadata(statAdapter, safeMetadata, StandardPosixPropertiesStyle)
+	AddStatToBlobMetadata(statAdapter, &safeMetadata, StandardPosixPropertiesStyle)
 
 	adapter, err := ReadStatFromMetadata(safeMetadata.Metadata, 1024)
 	a.Nil(err)
@@ -236,7 +236,7 @@ func Test_AMLFSAddStatToBlobMetadata(t *testing.T) {
 		Metadata: make(Metadata),
 	}
 
-	AddStatToBlobMetadata(statAdapter, safeMetadata, AMLFSPosixPropertiesStyle)
+	AddStatToBlobMetadata(statAdapter, &safeMetadata, AMLFSPosixPropertiesStyle)
 	a.NotEmpty(safeMetadata.Metadata)
 	a.Contains(safeMetadata.Metadata, "linux_statx_mask")
 	a.Equal("8191", *safeMetadata.Metadata["linux_statx_mask"])
@@ -267,7 +267,7 @@ func Test_AMLFSReadStatFromBlobMetadata(t *testing.T) {
 	safeMetadata := SafeMetadata{
 		Metadata: make(Metadata),
 	}
-	AddStatToBlobMetadata(statAdapter, safeMetadata, AMLFSPosixPropertiesStyle)
+	AddStatToBlobMetadata(statAdapter, &safeMetadata, AMLFSPosixPropertiesStyle)
 	a.NotEmpty(safeMetadata.Metadata)
 	a.Contains(safeMetadata.Metadata, "owner")
 	a.Equal("0", *safeMetadata.Metadata["owner"])

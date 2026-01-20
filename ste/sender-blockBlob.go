@@ -407,7 +407,7 @@ func (s *blockBlobSenderBase) GenerateCopyMetadata(id common.ChunkID) chunkFunc 
 				s.jptm.FailActiveSend("GetUNIXProperties", err)
 			}
 
-			common.AddStatToBlobMetadata(statAdapter, s.metadataToApply, s.jptm.Info().PosixPropertiesStyle)
+			common.AddStatToBlobMetadata(statAdapter, &s.metadataToApply, s.jptm.Info().PosixPropertiesStyle)
 		}
 		_, err := s.destBlockBlobClient.SetMetadata(s.jptm.Context(), s.metadataToApply.Metadata,
 			&blob.SetMetadataOptions{

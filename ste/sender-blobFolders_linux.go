@@ -14,7 +14,7 @@ func (b *blobFolderSender) getExtraProperties() error {
 				return err
 			}
 
-			common.AddStatToBlobMetadata(statAdapter, b.metadataToApply, b.jptm.Info().PosixPropertiesStyle)
+			common.AddStatToBlobMetadata(statAdapter, &b.metadataToApply, b.jptm.Info().PosixPropertiesStyle)
 		}
 	}
 
