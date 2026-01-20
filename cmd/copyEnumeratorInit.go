@@ -35,6 +35,7 @@ func (cca *CookedCopyCmdArgs) validateSourceDir(traverser traverser.ResourceTrav
 	var err error
 	// Ensure we're only copying a directory under valid conditions
 	cca.IsSourceDir, err = traverser.IsDirectory(true)
+
 	if cca.IsSourceDir &&
 		!cca.Recursive && // Copies the folder & everything under it
 		!cca.StripTopDir { // Copies only everything under it
@@ -59,6 +60,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	jobPartOrder.PreserveInfo = cca.preserveInfo
 	// We set preservePOSIXProperties if the customer has explicitly asked for this in transfer or if it is just a Posix-property only transfer
 	jobPartOrder.PreservePOSIXProperties = cca.preservePOSIXProperties || (cca.ForceWrite == common.EOverwriteOption.PosixProperties())
+	jobPartOrder.PosixPropertiesStyle = cca.posixPropertiesStyle
 
 	// Infer on download so that we get LMT and MD5 on files download
 	// On S2S transfers the following rules apply:

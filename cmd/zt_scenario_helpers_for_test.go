@@ -865,7 +865,7 @@ func runSyncAndVerify(a *assert.Assertions, raw rawSyncCmdArgs, mockTransfer fun
 		Client, err = azcopy.NewClient(azcopy.ClientOptions{CapMbps: CapMbps})
 	}
 	// the enumeration ends when process() returns
-	_, err = Client.Sync(context.TODO(), raw.src, raw.dst, opts, nil)
+	_, err = Client.Sync(context.TODO(), raw.src, raw.dst, opts)
 
 	// the err is passed to verified, which knows whether it is expected or not
 	verifier(err)
@@ -884,7 +884,7 @@ func runCopyAndVerify(a *assert.Assertions, raw rawCopyCmdArgs, mockTransfer fun
 		Client, err = azcopy.NewClient(azcopy.ClientOptions{CapMbps: CapMbps})
 	}
 	// the enumeration ends when process() returns
-	_, err = Client.Copy(context.TODO(), raw.src, raw.dst, opts, nil)
+	_, err = Client.Copy(context.TODO(), raw.src, raw.dst, opts)
 
 	// the err is passed to verified, which knows whether it is expected or not
 	verifier(err)

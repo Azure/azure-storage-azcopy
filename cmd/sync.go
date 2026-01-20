@@ -33,7 +33,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/spf13/cobra"
 )
 
@@ -65,6 +64,7 @@ type rawSyncCmdArgs struct {
 	preserveSMBPermissions  bool // deprecated and synonymous with preservePermissions
 	preserveSMBInfo         bool
 	preservePOSIXProperties bool
+	posixPropertiesStyle    string
 	followSymlinks          bool
 	preserveSymlinks        bool
 	putMd5                  bool
@@ -106,6 +106,7 @@ type rawSyncCmdArgs struct {
 
 func (raw rawSyncCmdArgs) toOptions() (opts azcopy.SyncOptions, err error) {
 	opts = azcopy.SyncOptions{
+		Handler:                 cliSyncHandler{},
 		Recursive:               to.Ptr(raw.recursive),
 		IncludeDirectoryStubs:   raw.includeDirectoryStubs,
 		PreserveInfo:            to.Ptr(raw.preserveInfo),
@@ -164,16 +165,20 @@ func (raw rawSyncCmdArgs) toOptions() (opts azcopy.SyncOptions, err error) {
 	if err != nil {
 		return opts, err
 	}
+	err = opts.PosixPropertiesStyle.Parse(raw.posixPropertiesStyle)
+	if err != nil {
+		return opts, err
+	}
 	// set internal only options
 	cmd := ConstructCommandStringFromArgs()
 	opts.SetInternalOptions(raw.dryrun, raw.deleteDestinationFileIfNecessary, cmd, dryrunNewCopyJobPartOrder, dryrunDelete)
 	return opts, nil
 }
 
-type CLISyncHandler struct {
+type cliSyncHandler struct {
 }
 
-func (C CLISyncHandler) OnStart(ctx azcopy.JobContext) {
+func (c cliSyncHandler) OnStart(ctx azcopy.JobContext) {
 	glcm.Init(GetStandardInitOutputBuilder(ctx.JobID.String(), ctx.LogPath, false, ""))
 }
 
@@ -182,7 +187,7 @@ type scanningProgressJsonTemplate struct {
 	FilesScannedAtDestination uint64
 }
 
-func (C CLISyncHandler) OnScanProgress(progress azcopy.SyncScanProgress) {
+func (c cliSyncHandler) OnScanProgress(progress azcopy.SyncScanProgress) {
 	builder := func(format OutputFormat) string {
 		if format == EOutputFormat.Json() {
 			jsonOutputTemplate := scanningProgressJsonTemplate{
@@ -197,7 +202,7 @@ func (C CLISyncHandler) OnScanProgress(progress azcopy.SyncScanProgress) {
 		// text output
 		throughputString := ""
 		if progress.Throughput != nil {
-			throughputString = fmt.Sprintf(", 2-sec Throughput (Mb/s): %v", jobsAdmin.ToFixed(*progress.Throughput, 4))
+			throughputString = fmt.Sprintf(", 2-sec Throughput (Mb/s): %v", azcopy.ToFixed(*progress.Throughput, 4))
 		}
 		return fmt.Sprintf("%v Files Scanned at Source, %v Files Scanned at Destination%s",
 			progress.SourceFilesScanned, progress.DestinationFilesScanned, throughputString)
@@ -209,7 +214,7 @@ func (C CLISyncHandler) OnScanProgress(progress azcopy.SyncScanProgress) {
 	glcm.Progress(builder)
 }
 
-func (C CLISyncHandler) OnTransferProgress(progress azcopy.SyncJobProgress) {
+func (c cliSyncHandler) OnTransferProgress(progress azcopy.SyncProgress) {
 	builder := func(format OutputFormat) string {
 		if format == EOutputFormat.Json() {
 			wrapped := common.ListSyncJobSummaryResponse{ListJobSummaryResponse: progress.ListJobSummaryResponse}
@@ -220,20 +225,30 @@ func (C CLISyncHandler) OnTransferProgress(progress azcopy.SyncJobProgress) {
 			return string(jsonOutput)
 		}
 
-		// indicate whether constrained by disk or not
-		perfString, diskString := getPerfDisplayText(progress.PerfStrings, progress.PerfConstraint, progress.ElapsedTime, false)
-
-		return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (Mb/s): %v%s",
-			progress.PercentComplete,
-			progress.TransfersCompleted,
-			progress.TransfersFailed,
-			progress.TotalTransfers-progress.TransfersCompleted-progress.TransfersFailed,
-			progress.TotalTransfers, perfString, jobsAdmin.ToFixed(progress.Throughput, 4), diskString)
-	}
-	if common.AzcopyCurrentJobLogger != nil {
-		common.AzcopyCurrentJobLogger.Log(common.LogInfo, builder(EOutputFormat.Text()))
+		return azcopy.GetSyncProgress(progress)
 	}
 	glcm.Progress(builder)
+}
+
+func (c cliSyncHandler) OnComplete(result azcopy.SyncResult) {
+	// Print summary
+	exitCode := EExitCode.Success()
+	if result.TransfersFailed > 0 || result.JobStatus == common.EJobStatus.Cancelled() || result.JobStatus == common.EJobStatus.Cancelling() {
+		exitCode = EExitCode.Error()
+	}
+
+	glcm.Exit(func(format OutputFormat) string {
+		if format == EOutputFormat.Json() {
+			wrapped := common.ListSyncJobSummaryResponse{ListJobSummaryResponse: result.ListJobSummaryResponse}
+			wrapped.DeleteTotalTransfers = result.DeleteTotalTransfers
+			wrapped.DeleteTransfersCompleted = result.DeleteTransfersCompleted
+			jsonOutput, err := json.Marshal(wrapped)
+			common.PanicIfErr(err)
+			return string(jsonOutput)
+		} else {
+			return azcopy.GetSyncResult(result, false)
+		}
+	}, exitCode)
 }
 
 func init() {
@@ -317,82 +332,13 @@ func init() {
 				cancel()
 			}()
 
-			summary, err := Client.Sync(ctx, raw.src, raw.dst, opts, CLISyncHandler{})
+			_, err = Client.Sync(ctx, raw.src, raw.dst, opts)
 			if err != nil {
 				glcm.Error("Cannot perform sync due to error: " + err.Error() + getErrorCodeUrl(err))
 			}
 
 			if raw.dryrun {
 				glcm.Exit(nil, EExitCode.Success())
-			} else {
-				// Print summary
-				exitCode := EExitCode.Success()
-				if summary.TransfersFailed > 0 || summary.JobStatus == common.EJobStatus.Cancelled() || summary.JobStatus == common.EJobStatus.Cancelling() {
-					exitCode = EExitCode.Error()
-				}
-
-				glcm.Exit(func(format OutputFormat) string {
-					screenStats, logStats := formatExtraStats(false, summary.AverageIOPS, summary.AverageE2EMilliseconds, summary.NetworkErrorPercentage, summary.ServerBusyPercentage)
-
-					output := fmt.Sprintf(
-						`
-Job %s Summary
-Files Scanned at Source: %v
-Files Scanned at Destination: %v
-Elapsed Time (Minutes): %v
-Number of Copy Transfers for Files: %v
-Number of Copy Transfers for Folder Properties: %v 
-Number of Symlink Transfers: %v
-Total Number of Copy Transfers: %v
-Number of Copy Transfers Completed: %v
-Number of Copy Transfers Failed: %v
-Number of Deletions at Destination: %v
-Number of Symbolic Links Skipped: %v
-Number of Special Files Skipped: %v
-Number of Hardlinks Converted: %v
-Number of Hardlinks Skipped: %v
-Total Number of Bytes Transferred: %v
-Total Number of Bytes Enumerated: %v
-Final Job Status: %v%s%s
-`,
-						summary.JobID.String(),
-						summary.SourceFilesScanned,
-						summary.DestinationFilesScanned,
-						jobsAdmin.ToFixed(summary.ElapsedTime.Minutes(), 4),
-						summary.FileTransfers,
-						summary.FolderPropertyTransfers,
-						summary.SymlinkTransfers,
-						summary.TotalTransfers,
-						summary.TransfersCompleted,
-						summary.TransfersFailed,
-						summary.DeleteTransfersCompleted,
-						summary.SkippedSymlinkCount,
-						summary.SkippedSpecialFileCount,
-						summary.HardlinksConvertedCount,
-						summary.SkippedHardlinkCount,
-						summary.TotalBytesTransferred,
-						summary.TotalBytesEnumerated,
-						summary.JobStatus,
-						screenStats,
-						formatPerfAdvice(summary.PerformanceAdvice))
-
-					if jobsAdmin.JobsAdmin != nil {
-						jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
-						if exists {
-							jobMan.Log(common.LogInfo, logStats+"\n"+output)
-						}
-					}
-					if format == EOutputFormat.Json() {
-						wrapped := common.ListSyncJobSummaryResponse{ListJobSummaryResponse: summary.ListJobSummaryResponse}
-						wrapped.DeleteTotalTransfers = summary.DeleteTotalTransfers
-						wrapped.DeleteTransfersCompleted = summary.DeleteTransfersCompleted
-						jsonOutput, err := json.Marshal(wrapped)
-						common.PanicIfErr(err)
-						return string(jsonOutput)
-					} else {
-						return output
-					}
-				}, exitCode)
 			}
 			// Wait for the user to see the final output before exiting
 			glcm.SurrenderControl()
@@ -438,6 +384,11 @@ Final Job Status: %v%s%s
 
 	syncCmd.PersistentFlags().BoolVar(&raw.preservePOSIXProperties, "preserve-posix-properties", false,
 		"False by default. 'Preserves' property info gleaned from stat or statx into object metadata.")
+
+	syncCmd.PersistentFlags().StringVar(&raw.posixPropertiesStyle, "posix-properties-style", common.StandardPosixPropertiesStyle.String(),
+		"Accepted values: `standard` (default) and `amlfs`. Use this flag to specify the style of POSIX properties to preserve. "+
+			"\n `amlfs` will preserve POSIX property metadata compatible with Azure Managed Lustre File System."+
+			"\n This flag must be used in-tandem with --preserve-posix-properties.")
 
 	// TODO: enable when we support local <-> File
 	syncCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "False by default. "+

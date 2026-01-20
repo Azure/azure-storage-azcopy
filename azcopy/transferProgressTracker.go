@@ -34,7 +34,7 @@ var _ jobProgressTracker = &transferProgressTracker{}
 type transferProgressTracker struct {
 	jobID   common.JobID
 	fromTo  common.FromTo
-	handler CopyJobHandler
+	handler CopyHandler
 	//jobType      common.JobType
 	isCleanupJob bool
 
@@ -65,7 +65,9 @@ func (tpt *transferProgressTracker) Start() {
 	if common.LogPathFolder != "" {
 		logPathFolder = fmt.Sprintf("%s%s%s.log", common.LogPathFolder, common.OS_PATH_SEPARATOR, tpt.jobID)
 	}
-	tpt.handler.OnStart(JobContext{JobID: tpt.jobID, LogPath: logPathFolder})
+	if tpt.handler != nil {
+		tpt.handler.OnStart(JobContext{JobID: tpt.jobID, LogPath: logPathFolder})
+	}
 }
 
 func (tpt *transferProgressTracker) CheckProgress() (uint32, bool) {
@@ -92,22 +94,21 @@ func (tpt *transferProgressTracker) CheckProgress() (uint32, bool) {
 			return common.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
 		}
 		throughput := computeThroughput()
-		//transferProgress := common.TransferProgress{
-		//	ListJobSummaryResponse: summary,
-		//	Throughput:             throughput,
-		//	ElapsedTime:            duration,
-		//	JobType:                tpt.jobType,
-		//}
-		//if common.AzcopyCurrentJobLogger != nil {
-		//	common.AzcopyCurrentJobLogger.Log(common.LogInfo, common.GetProgressOutputBuilder(transferProgress)(common.EOutputFormat.Text()))
-		//}
 		summary.SkippedSymlinkCount = tpt.getSkippedSymlinkCount()
 		summary.SkippedSpecialFileCount = tpt.getSkippedSpecialFileCount()
-		tpt.handler.OnTransferProgress(CopyJobProgress{
+		progress := CopyProgress{
 			ListJobSummaryResponse: summary,
 			Throughput:             throughput,
 			ElapsedTime:            duration,
-		})
+		}
+
+		if common.AzcopyCurrentJobLogger != nil {
+			isBenchmark := tpt.fromTo.From() == common.ELocation.Benchmark()
+			common.AzcopyCurrentJobLogger.Log(common.LogInfo, GetCopyProgress(progress, isBenchmark))
+		}
+		if tpt.handler != nil {
+			tpt.handler.OnTransferProgress(progress)
+		}
 		return totalKnownCount, jobDone
 	} else {
 		return 0, false
@@ -126,7 +127,7 @@ func (tpt *transferProgressTracker) GetElapsedTime() time.Duration {
 	return time.Since(tpt.jobStartTime)
 }
 
-func newTransferProgressTracker(jobID common.JobID, handler CopyJobHandler, fromTo common.FromTo) *transferProgressTracker {
+func newTransferProgressTracker(jobID common.JobID, handler CopyHandler, fromTo common.FromTo) *transferProgressTracker {
 	return &transferProgressTracker{
 		jobID:        jobID,
 		handler:      handler,
