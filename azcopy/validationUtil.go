@@ -374,8 +374,8 @@ func GetPreserveInfoDefault(fromTo common.FromTo) bool {
 func PerformNFSSpecificValidation(fromTo common.FromTo,
 	preservePermissions common.PreservePermissionsOption,
 	preserveInfo bool,
-	hardlinkHandling *common.HardlinkHandlingType,
-	symlinkHandling common.SymlinkHandlingType) (err error) {
+	symlinkHandling common.SymlinkHandlingType,
+	hardlinkHandling common.HardlinkHandlingType) (err error) {
 
 	// check for unsupported NFS behavior
 	if isUnsupported, err := isUnsupportedPlatformForNFS(fromTo); isUnsupported {
@@ -392,13 +392,12 @@ func PerformNFSSpecificValidation(fromTo common.FromTo,
 		PreservePermissionsFlag); err != nil {
 		return err
 	}
-	// TODO: Add this check in Phase-3 which targets to support hardlinks for NFS copy.
-	// if err = validateAndAdjustHardlinksFlag(hardlinkHandling, fromTo); err != nil {
-	// 	return err
-	// }
 
 	if err = validateSymlinkFlag(symlinkHandling == common.ESymlinkHandlingType.Follow(),
 		fromTo); err != nil {
+		return err
+	}
+	if err = validateHardlinkFlag(hardlinkHandling, fromTo); err != nil {
 		return err
 	}
 	return nil
@@ -408,7 +407,8 @@ func PerformSMBSpecificValidation(fromTo common.FromTo,
 	preservePermissions common.PreservePermissionsOption,
 	preserveInfo bool,
 	preservePOSIXProperties bool,
-	posixStyle common.PosixPropertiesStyle) (err error) {
+	posixStyle common.PosixPropertiesStyle,
+	hardlinkHandling common.HardlinkHandlingType) (err error) {
 
 	if err = validatePreserveSMBPropertyOption(preserveInfo,
 		fromTo,
@@ -427,11 +427,10 @@ func PerformSMBSpecificValidation(fromTo common.FromTo,
 		PreservePermissionsFlag); err != nil {
 		return err
 	}
+	if err = validateHardlinkFlag(hardlinkHandling, fromTo); err != nil {
+		return err
+	}
 
-	// TODO: Add this check in Phase-3 which targets to support hardlinks for NFS copy.
-	// if err = validateAndAdjustHardlinksFlag(hardlinkHandling, fromTo); err != nil {
-	// 	return err
-	// }
 	return nil
 }
 
@@ -443,6 +442,65 @@ func validateSymlinkFlag(followSymlinks bool, fromTo common.FromTo) error {
 			return fmt.Errorf("The '--follow-symlink' flag is only applicable when uploading from local filesystem.")
 		}
 	}
+	return nil
+}
+
+// validateHardlinkFlag validates and the --hardlinks options
+// transfer direction (upload, download, S2S), and source/destination types (NFS, SMB, local).
+// Returns an error if the configuration is unsupported.
+func validateHardlinkFlag(option common.HardlinkHandlingType, fromTo common.FromTo) error {
+	if !fromTo.IsNFS() {
+		return nil
+	}
+
+	// NFS<->SMB special case: force skip
+	if (fromTo == common.EFromTo.FileNFSFileSMB() || fromTo == common.EFromTo.FileSMBFileNFS()) &&
+		option != common.SkipHardlinkHandlingType {
+		return fmt.Errorf(
+			"For NFS->SMB and SMB->NFS transfers, '--hardlinks' must be set to 'skip'. " +
+				"Hardlinked files are not supported between NFS and SMB and will always be skipped. " +
+				"Please re-run with '--hardlinks=skip'.",
+		)
+	}
+
+	// OS check: hardlinks handling only supported on Linux in case of upload and download
+	if runtime.GOOS != "linux" && !fromTo.IsS2S() {
+		return fmt.Errorf("For uploads and downloads, the --hardlinks option is only supported on Linux.")
+	}
+
+	switch {
+	case fromTo.IsDownload():
+		// Must be NFS -> Local Linux
+		if fromTo.From() != common.ELocation.FileNFS() {
+			return fmt.Errorf("For downloads, '--hardlinks' is only supported from an NFS file share to a Linux filesystem.")
+		}
+
+	case fromTo.IsUpload():
+		// Must be Local Linux -> NFS
+		if fromTo.To() != common.ELocation.FileNFS() {
+			return fmt.Errorf("For uploads, '--hardlinks' is only supported from a Linux filesystem to an NFS file share.")
+		}
+
+	case fromTo.IsS2S():
+		// Allowed: NFS<->NFS, NFS->SMB, SMB->NFS
+		validPairs := map[common.FromTo]bool{
+			common.EFromTo.FileNFSFileNFS(): true,
+			common.EFromTo.FileNFSFileSMB(): true,
+			common.EFromTo.FileSMBFileNFS(): true,
+		}
+		if !validPairs[fromTo] {
+			return fmt.Errorf("For S2S transfers, '--hardlinks' is only supported for NFS<->NFS, NFS->SMB, and SMB->NFS.")
+		}
+	}
+
+	// Info messages
+	switch option {
+	case common.SkipHardlinkHandlingType:
+		common.GetLifecycleMgr().Info("The --hardlinks option is set to 'skip'. Hardlinked files will be skipped.")
+	case common.DefaultHardlinkHandlingType:
+		common.GetLifecycleMgr().Info("The --hardlinks option is set to 'follow'. Hardlinked files will be copied as regular files.")
+	}
+
 	return nil
 }
 

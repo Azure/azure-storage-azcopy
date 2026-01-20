@@ -1552,6 +1552,10 @@ func (HardlinkHandlingType) Skip() HardlinkHandlingType {
 	return HardlinkHandlingType(1)
 }
 
+func (HardlinkHandlingType) Preserve() HardlinkHandlingType {
+	return HardlinkHandlingType(2)
+}
+
 func (pho HardlinkHandlingType) String() string {
 	return enum.StringInt(pho, reflect.TypeOf(pho))
 }

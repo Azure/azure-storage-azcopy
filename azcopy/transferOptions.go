@@ -589,12 +589,12 @@ func (c *CookedTransferOptions) validateOptions() (err error) {
 	}
 
 	if c.fromTo.IsNFS() {
-		err = PerformNFSSpecificValidation(c.fromTo, c.preservePermissions, c.preserveInfo, &c.hardlinks, c.symlinks)
+		err = PerformNFSSpecificValidation(c.fromTo, c.preservePermissions, c.preserveInfo, c.symlinks, c.hardlinks)
 		if err != nil {
 			return err
 		}
 	} else {
-		err = PerformSMBSpecificValidation(c.fromTo, c.preservePermissions, c.preserveInfo, c.preservePosixProperties, c.posixPropertiesStyle)
+		err = PerformSMBSpecificValidation(c.fromTo, c.preservePermissions, c.preserveInfo, c.preservePosixProperties, c.hardlinks)
 		if err != nil {
 			return err
 		}
