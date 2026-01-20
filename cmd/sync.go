@@ -1180,8 +1180,8 @@ func init() {
 		"\n If the destination does not support trailing dot files (Windows or Blob Storage), "+
 		"\n AzCopy will fail if the trailing dot file is the root of the transfer and skip any trailing dot paths encountered during enumeration.")
 	syncCmd.PersistentFlags().BoolVar(&raw.includeRoot, "include-root", false, "Disabled by default. "+
-		"\n Enable to include the root directory's properties when persisting properties such as SMB or HNS ACLs")
-
+		"\n Enable to include the root directory's properties when persisting properties such as SMB or HNS ACLs."+
+		"\n For persisting properties or permissions, use this flag in-tandem with respective preservation flag.")
 	syncCmd.PersistentFlags().StringVar(&raw.compareHash, "compare-hash", "None", "Inform sync to rely on hashes as an alternative to LMT. "+
 		"\n Missing hashes at a remote source will throw an error. (None, MD5) Default: None")
 	syncCmd.PersistentFlags().StringVar(&common.LocalHashDir, "hash-meta-dir", "", "When using `--local-hash-storage-mode=HiddenFiles` "+
