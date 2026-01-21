@@ -33,11 +33,14 @@ import (
 
 // SyncOptions contains the optional parameters for the Sync operation.
 type SyncOptions struct {
+	Handler SyncHandler
+
 	FromTo                  common.FromTo
 	Recursive               *bool // Default true
 	IncludeDirectoryStubs   bool
 	PreserveInfo            *bool // Default true
 	PreservePosixProperties bool
+	PosixPropertiesStyle    common.PosixPropertiesStyle
 	ForceIfReadOnly         bool
 	BlockSizeMB             float64
 	PutBlobSizeMB           float64
@@ -72,10 +75,11 @@ type SyncOptions struct {
 	dryrunDeleteHandler              ObjectDeleter
 }
 
-type SyncJobHandler interface {
+type SyncHandler interface {
 	OnStart(ctx JobContext)
 	OnScanProgress(progress SyncScanProgress)
-	OnTransferProgress(progress SyncJobProgress)
+	OnTransferProgress(progress SyncProgress)
+	OnComplete(result SyncResult)
 }
 
 type SyncScanProgress struct {
@@ -85,7 +89,7 @@ type SyncScanProgress struct {
 	JobID                   common.JobID
 }
 
-type SyncJobProgress struct {
+type SyncProgress struct {
 	common.ListJobSummaryResponse
 	DeleteTotalTransfers     uint32
 	DeleteTransfersCompleted uint32
@@ -112,7 +116,7 @@ func (s *SyncOptions) SetInternalOptions(dryrun, deleteDestinationFileIfNecessar
 	s.commandString = cmd
 }
 
-func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions, handler SyncJobHandler) (SyncResult, error) {
+func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (SyncResult, error) {
 	// Input
 	if src == "" || dest == "" {
 		return SyncResult{}, fmt.Errorf("source and destination must be specified for sync")
@@ -157,7 +161,7 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions, h
 
 	var s *syncer
 	ctx = context.WithValue(ctx, ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	s, err := newSyncer(ctx, jobID, src, dest, opts, handler, c.GetUserOAuthTokenManagerInstance())
+	s, err := newSyncer(ctx, jobID, src, dest, opts, c.GetUserOAuthTokenManagerInstance())
 	if err != nil {
 		return SyncResult{}, err
 	}
@@ -173,6 +177,7 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions, h
 		mgr.InitiateProgressReporting(ctx, s.spt)
 	}
 	err = enumerator.Enumerate()
+	defer jobsAdmin.JobsAdmin.JobMgrCleanUp(jobID)
 
 	if err != nil {
 		return SyncResult{}, err
@@ -193,14 +198,24 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions, h
 	finalSummary.SkippedSpecialFileCount = s.spt.getSkippedSpecialFileCount()
 	finalSummary.SkippedHardlinkCount = s.spt.getSkippedHardlinkCount()
 
-	return SyncResult{
+	result := SyncResult{
 		SourceFilesScanned:       s.spt.getSourceFilesScanned(),
 		DestinationFilesScanned:  s.spt.getDestinationFilesScanned(),
 		ListJobSummaryResponse:   finalSummary,
 		DeleteTotalTransfers:     s.spt.getDeletionCount(),
 		DeleteTransfersCompleted: s.spt.getDeletionCount(),
 		ElapsedTime:              s.spt.GetElapsedTime(),
-	}, nil
+	}
+
+	if common.AzcopyCurrentJobLogger != nil {
+		common.AzcopyCurrentJobLogger.Log(common.LogInfo, GetSyncResult(result, true))
+	}
+
+	if opts.Handler != nil {
+		opts.Handler.OnComplete(result)
+	}
+
+	return result, nil
 }
 
 type syncer struct {
@@ -209,7 +224,7 @@ type syncer struct {
 	spt  *syncProgressTracker
 }
 
-func newSyncer(ctx context.Context, jobID common.JobID, src, dst string, opts SyncOptions, handler SyncJobHandler, uotm *common.UserOAuthTokenManager) (s *syncer, err error) {
+func newSyncer(ctx context.Context, jobID common.JobID, src, dst string, opts SyncOptions, uotm *common.UserOAuthTokenManager) (s *syncer, err error) {
 	cookedOpts, err := newCookedSyncOptions(src, dst, opts)
 	if err != nil {
 		return nil, err
@@ -219,6 +234,6 @@ func newSyncer(ctx context.Context, jobID common.JobID, src, dst string, opts Sy
 	if err != nil {
 		return nil, err
 	}
-	progressTracker := newSyncProgressTracker(jobID, handler)
+	progressTracker := newSyncProgressTracker(jobID, opts.Handler)
 	return &syncer{opts: cookedOpts, srp: syncRemote, spt: progressTracker}, nil
 }

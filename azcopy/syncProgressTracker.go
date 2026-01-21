@@ -57,10 +57,10 @@ type syncProgressTracker struct {
 	jobStartTime time.Time
 
 	jobID   common.JobID
-	handler SyncJobHandler
+	handler SyncHandler
 }
 
-func newSyncProgressTracker(jobID common.JobID, handler SyncJobHandler) *syncProgressTracker {
+func newSyncProgressTracker(jobID common.JobID, handler SyncHandler) *syncProgressTracker {
 	return &syncProgressTracker{
 		jobID:   jobID,
 		handler: handler,
@@ -77,7 +77,9 @@ func (spt *syncProgressTracker) Start() {
 	if common.LogPathFolder != "" {
 		logPathFolder = fmt.Sprintf("%s%s%s.log", common.LogPathFolder, common.OS_PATH_SEPARATOR, spt.jobID)
 	}
-	spt.handler.OnStart(JobContext{JobID: spt.jobID, LogPath: logPathFolder})
+	if spt.handler != nil {
+		spt.handler.OnStart(JobContext{JobID: spt.jobID, LogPath: logPathFolder})
+	}
 }
 
 func (s *syncProgressTracker) CheckProgress() (uint32, bool) {
@@ -115,28 +117,24 @@ func (s *syncProgressTracker) CheckProgress() (uint32, bool) {
 			Throughput:              common.Iff(s.firstPartOrdered(), &throughput, nil),
 			JobID:                   s.jobID,
 		}
-		s.handler.OnScanProgress(scanProgress)
+		if s.handler != nil {
+			s.handler.OnScanProgress(scanProgress)
+		}
 		return totalKnownCount, false
 	} else {
-		// else report transfer progress to the user
-		//transferProgress := common.TransferProgress{
-		//	ListJobSummaryResponse:   summary,
-		//	DeleteTotalTransfers:     s.getDeletionCount(),
-		//	DeleteTransfersCompleted: s.getDeletionCount(),
-		//	Throughput:               throughput,
-		//	ElapsedTime:              duration,
-		//	JobType:                  common.EJobType.Sync(),
-		//}
-		//if common.AzcopyCurrentJobLogger != nil {
-		//	common.AzcopyCurrentJobLogger.Log(common.LogInfo, common.GetProgressOutputBuilder(transferProgress)(common.EOutputFormat.Text()))
-		//}
-		s.handler.OnTransferProgress(SyncJobProgress{
+		progress := SyncProgress{
 			ListJobSummaryResponse:   summary,
 			DeleteTotalTransfers:     s.getDeletionCount(),
 			DeleteTransfersCompleted: s.getDeletionCount(),
 			Throughput:               throughput,
 			ElapsedTime:              duration,
-		})
+		}
+		if common.AzcopyCurrentJobLogger != nil {
+			common.AzcopyCurrentJobLogger.Log(common.LogInfo, GetSyncProgress(progress))
+		}
+		if s.handler != nil {
+			s.handler.OnTransferProgress(progress)
+		}
 		return totalKnownCount, jobDone
 	}
 }
