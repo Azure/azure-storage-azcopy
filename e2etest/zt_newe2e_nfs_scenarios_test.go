@@ -57,6 +57,9 @@ func getPropertiesAndPermissions(svm *ScenarioVariationManager, preserveProperti
 	return folderProperties, fileProperties, fileOrFolderPermissions
 }
 
+// These tests are using the same source and desination shares for testing to avoid
+// creating too many share accounts which may lead to throttling by Azure.
+// So in order to avoid conflicts between tests, we cleanup the test directories created during the test run.
 func CleanupNFSDirectory(
 	svm *ScenarioVariationManager,
 	container ContainerResourceManager,
