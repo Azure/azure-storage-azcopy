@@ -145,6 +145,9 @@ type TransferInfo struct {
 
 	VersionID  string
 	SnapshotID string
+
+	// Note: Used for NFS hardlinks only
+	TargetHardlinkFilePath string // used for hardlink transfers
 }
 
 func (i *TransferInfo) IsFilePropertiesTransfer() bool {
@@ -297,7 +300,7 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 		}
 	}
 
-	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetPropertiesInBackend, DestLengthValidation, s2sSourceChangeValidation, s2sInvalidMetadataHandleOption, entityType, versionID, snapshotID, blobTags :=
+	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetPropertiesInBackend, DestLengthValidation, s2sSourceChangeValidation, s2sInvalidMetadataHandleOption, entityType, versionID, snapshotID, blobTags, targetHardlinkFilePath :=
 		plan.TransferSrcPropertiesAndMetadata(jptm.transferIndex)
 	srcSAS, dstSAS := jptm.jobPartMgr.SAS()
 	// If the length of destination SAS is greater than 0
@@ -436,11 +439,12 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 			SrcMetadata:    srcMetadata,
 			SrcBlobTags:    srcBlobTags,
 		},
-		SrcBlobType:       srcBlobType,
-		S2SSrcBlobTier:    srcBlobTier,
-		RehydratePriority: plan.RehydratePriority.ToRehydratePriorityType(),
-		VersionID:         versionID,
-		SnapshotID:        snapshotID,
+		SrcBlobType:            srcBlobType,
+		S2SSrcBlobTier:         srcBlobTier,
+		RehydratePriority:      plan.RehydratePriority.ToRehydratePriorityType(),
+		VersionID:              versionID,
+		SnapshotID:             snapshotID,
+		TargetHardlinkFilePath: targetHardlinkFilePath,
 	}
 }
 

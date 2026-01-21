@@ -594,7 +594,7 @@ func (c *CookedTransferOptions) validateOptions() (err error) {
 			return err
 		}
 	} else {
-		err = PerformSMBSpecificValidation(c.fromTo, c.preservePermissions, c.preserveInfo, c.preservePosixProperties, c.hardlinks)
+		err = PerformSMBSpecificValidation(c.fromTo, c.preservePermissions, c.preserveInfo, c.preservePosixProperties, c.posixPropertiesStyle, c.hardlinks)
 		if err != nil {
 			return err
 		}

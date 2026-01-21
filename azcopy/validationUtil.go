@@ -812,3 +812,11 @@ func validateListOfFilesFormat(f *os.File) error {
 
 	return nil
 }
+
+func GetJobProcessingMode(fromTo common.FromTo) common.JobProcessingMode {
+	if fromTo.IsNFS() {
+		return common.EJobProcessingMode.NFS()
+	} else {
+		return common.EJobProcessingMode.Mixed()
+	}
+}

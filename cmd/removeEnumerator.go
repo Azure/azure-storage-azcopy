@@ -220,6 +220,7 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 				traverser.NoContentProps,
 				nil,
 				"",
+				"",
 			))
 
 			if err != nil {
@@ -248,6 +249,7 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 					traverser.NoContentProps,
 					traverser.NoContentProps,
 					nil,
+					"",
 					"",
 				))
 

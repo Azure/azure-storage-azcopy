@@ -273,7 +273,8 @@ func (s *cookedSyncOptions) validateOptions() (err error) {
 			return err
 		}
 	} else {
-		err = PerformSMBSpecificValidation(s.fromTo, s.preservePermissions, s.preserveInfo, s.preservePosixProperties, s.hardlinks)
+		err = PerformSMBSpecificValidation(s.fromTo, s.preservePermissions,
+			s.preserveInfo, s.preservePosixProperties, s.posixPropertiesStyle, s.hardlinks)
 		if err != nil {
 			return err
 		}

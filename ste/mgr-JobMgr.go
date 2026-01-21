@@ -318,6 +318,11 @@ type jobMgr struct {
 	jobErrorHandler     common.JobErrorHandler
 
 	isDaemon bool /* is it running as service */
+
+	// For FolderAfterFiles processing mode
+	hardlinkPartsMutex    sync.Mutex
+	queuedHardlinkParts   []queuedHardlinkPart
+	allOtherPartsComplete bool
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -663,6 +668,9 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 				close(partProgressInfo.completionChan)
 			}
 
+			// Check if we can process queued hardlink parts after this part completes
+			jm.checkAndProcessHardlinkParts()
+
 			// If the last part is still awaited or other parts all still not complete,
 			// JobPart 0 status is not changed (unless we are cancelling)
 			haveFinalPart = atomic.LoadInt32(&jm.atomicFinalPartOrderedIndicator) == 1
@@ -717,6 +725,12 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 			}
 		}
 	}
+}
+
+// queuedHardlinkPart represents a minimal structure for queued hardlink job parts
+type queuedHardlinkPart struct {
+	partNum  common.PartNumber   // Part number for identification
+	planFile JobPartPlanFileName // Access to plan file for transfers
 }
 
 func (jm *jobMgr) Context() context.Context { return jm.ctx }
@@ -853,7 +867,75 @@ func (jm *jobMgr) ScheduleChunk(priority common.JobPriority, chunkFunc chunkFunc
 // from where this JobPartMgr will be picked by a routine and
 // its transfers will be scheduled
 func (jm *jobMgr) QueueJobParts(jpm IJobPartMgr) {
-	jm.coordinatorChannels.partsChannel <- jpm
+	plan := jpm.Plan()
+
+	// Check if this job uses hardlink processing mode
+	if plan.JobPartType == common.EJobPartType.Hardlink() {
+		// Queue hardlink part structure for later processing
+		jm.hardlinkPartsMutex.Lock()
+		queuedPart := queuedHardlinkPart{
+			partNum:  plan.PartNum,
+			planFile: jpm.(*jobPartMgr).filename,
+		}
+		jm.queuedHardlinkParts = append(jm.queuedHardlinkParts, queuedPart)
+		jm.hardlinkPartsMutex.Unlock()
+
+		jm.Log(common.LogInfo, fmt.Sprintf("Queued hardlink job part %d for later processing", plan.PartNum))
+
+	} else {
+
+		// Default mixed processing OR file parts in FolderAfterFiles mode - send immediately
+		jm.coordinatorChannels.partsChannel <- jpm
+	}
+}
+
+// checkAndProcessHardlinkParts checks if all file parts are complete and processes queued hardlink parts
+func (jm *jobMgr) checkAndProcessHardlinkParts() {
+
+	jm.hardlinkPartsMutex.Lock()
+	defer jm.hardlinkPartsMutex.Unlock()
+
+	// If no hardlink parts are queued, nothing to do
+	if len(jm.queuedHardlinkParts) == 0 {
+		return
+	}
+
+	// Check if all file/mixed parts are complete
+	allFilePartsComplete := true
+	jm.jobPartMgrs.Iterate(true, func(k common.PartNumber, v IJobPartMgr) {
+		plan := v.Plan()
+		// Only check file/mixed parts (not hardlinks)
+		if plan.JobPartType != common.EJobPartType.Hardlink() {
+			status := plan.JobPartStatus()
+			if !status.IsJobDone() {
+				allFilePartsComplete = false
+			}
+		}
+	})
+
+	if allFilePartsComplete {
+		jm.Log(common.LogInfo, fmt.Sprintf("All file parts complete, processing %d queued hardlink parts", len(jm.queuedHardlinkParts)))
+
+		// Process all queued hardlink parts by reconstructing JobPartMgr from minimal structure
+		for _, queuedPart := range jm.queuedHardlinkParts {
+			// Look up the existing JobPartMgr for this part number
+			if hardlinkPartMgr, found := jm.jobPartMgrs.Get(queuedPart.partNum); found {
+				jm.coordinatorChannels.partsChannel <- hardlinkPartMgr
+
+				// if ms := common.CalculateChannelBackPressureDelay(
+				// 	len(jm.coordinatorChannels.partsChannel),
+				// 	cap(jm.coordinatorChannels.partsChannel),
+				// 	common.DefaultProfile); ms > 0 {
+				// 	time.Sleep(time.Duration(ms) * time.Millisecond)
+				// }
+			} else {
+				jm.Log(common.LogError, fmt.Sprintf("Failed to find JobPartMgr for queued hardlink part %d", queuedPart.partNum))
+			}
+		}
+
+		// Clear the queue
+		jm.queuedHardlinkParts = nil
+	}
 }
 
 // deleteJobPartsMgrs remove jobPartMgrs from jobPartToJobPartMgr kv.

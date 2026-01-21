@@ -198,7 +198,7 @@ func anyToRemote(jptm IJobPartTransferMgr, pacer pacer, senderFactory senderFact
 		anyToRemote_folder(jptm, info, pacer, senderFactory, sipf)
 	case common.EEntityType.FileProperties():
 		anyToRemote_fileProperties(jptm, info, pacer, senderFactory, sipf)
-	case common.EEntityType.File(), common.EEntityType.Hardlink():
+	case common.EEntityType.File():
 		if jptm.GetOverwriteOption() == common.EOverwriteOption.PosixProperties() {
 			anyToRemote_fileProperties(jptm, info, pacer, senderFactory, sipf)
 		} else {
@@ -206,6 +206,8 @@ func anyToRemote(jptm IJobPartTransferMgr, pacer pacer, senderFactory senderFact
 		}
 	case common.EEntityType.Symlink():
 		anyToRemote_symlink(jptm, info, pacer, senderFactory, sipf)
+	case common.EEntityType.Hardlink():
+		anyToRemote_hardlink(jptm, info, pacer, senderFactory, sipf)
 	}
 }
 

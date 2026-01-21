@@ -520,3 +520,46 @@ func (u *azureFileSenderBase) SendSymlink(linkData string) error {
 	u.jptm.Log(common.LogDebug, fmt.Sprintf("Created symlink with data: %s", linkData))
 	return nil
 }
+
+// CreateHardlink creates a hard link on Azure Files NFS with the given link data.
+func (u *azureFileSenderBase) CreateHardlink(targetHardlinkFilePath string) error {
+	jptm := u.jptm
+	info := jptm.Info()
+
+	if !jptm.FromTo().IsNFS() {
+		return nil
+	}
+
+	createHardlinkOptions := &file.CreateHardLinkOptions{}
+
+	stage, err := u.addNFSPropertiesToHeaders(info)
+	if err != nil {
+		jptm.FailActiveSend(stage, err)
+		return err
+	}
+
+	stage, err = u.addNFSPermissionsToHeaders(info, u.getFileClient().URL())
+	if err != nil {
+		jptm.FailActiveSend(stage, err)
+		return err
+	}
+
+	err = DoWithCreateHardlinkOnAzureFilesNFS(u.ctx,
+		func() error {
+			_, err := u.getFileClient().CreateHardLink(u.ctx, targetHardlinkFilePath, createHardlinkOptions)
+			return err
+		},
+		u.getFileClient(),
+		u.shareClient,
+		u.pacer,
+		u.jptm)
+
+	// if still failing, give up
+	if err != nil {
+		jptm.FailActiveUpload("Creating hardlink", err)
+		return fmt.Errorf("failed to create hardlink: %w", err)
+	}
+
+	u.jptm.Log(common.LogDebug, fmt.Sprintf("Created hardlink with data: %s", targetHardlinkFilePath))
+	return nil
+}

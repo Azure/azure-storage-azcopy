@@ -13,7 +13,7 @@ import (
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
 // current version of azcopy
 // To be Incremented every time when we release azcopy with changed dataSchema
-const DataSchemaVersion common.Version = 20
+const DataSchemaVersion common.Version = 21
 
 const (
 	CustomHeaderMaxBytes = 256
@@ -110,7 +110,9 @@ type JobPartPlanHeader struct {
 
 	RehydratePriority common.RehydratePriorityType
 
-	SymlinkHandling common.SymlinkHandlingType
+	SymlinkHandling        common.SymlinkHandlingType
+	JobPartType            common.JobPartType // Type of transfers this job part contains
+	TargetHardlinkFilePath [1000]byte         // Target hardlink file path at destination for NFS
 }
 
 // Status returns the job status stored in JobPartPlanHeader in thread-safe manner
@@ -190,7 +192,7 @@ func (jpph *JobPartPlanHeader) getString(offset int64, length int16) string {
 // TransferSrcPropertiesAndMetadata returns the SrcHTTPHeaders, properties and metadata for a transfer at given transferIndex in JobPartOrder
 // TODO: Refactor return type to an object
 func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex uint32) (h common.ResourceHTTPHeaders, metadata common.Metadata, blobType blob.BlobType, blobTier blob.AccessTier,
-	s2sGetPropertiesInBackend bool, DestLengthValidation bool, s2sSourceChangeValidation bool, s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption, entityType common.EntityType, blobVersionID string, blobSnapshotID string, blobTags common.BlobTags) {
+	s2sGetPropertiesInBackend bool, DestLengthValidation bool, s2sSourceChangeValidation bool, s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption, entityType common.EntityType, blobVersionID string, blobSnapshotID string, blobTags common.BlobTags, taregtHardlinkFilePath string) {
 	var err error
 	t := jpph.Transfer(transferIndex)
 
@@ -256,6 +258,11 @@ func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex ui
 		blobTags = common.ToCommonBlobTagsMap(blobTagsString)
 		offset += int64(t.SrcBlobTagsLength) //nolint:ineffassign
 	}
+	if t.TargetHardlinkFilePathLength != 0 {
+		taregtHardlinkFilePath = jpph.getString(offset, t.TargetHardlinkFilePathLength)
+		offset += int64(t.TargetHardlinkFilePathLength) //nolint:ineffassign
+	}
+
 	return
 }
 
@@ -395,7 +402,8 @@ type JobPartPlanTransfer struct {
 	// atomicErrorCode represents the storageError error code of the error with which the transfer got failed.
 	// atomicErrorCode has a default value (0) which means either there was no error or transfer failed because some non storageError.
 	// atomicErrorCode should not be directly accessed anywhere except by transferStatus and setTransferStatus
-	atomicErrorCode int32
+	atomicErrorCode              int32
+	TargetHardlinkFilePathLength int16 // Target hardlink file path at destination for NFS
 }
 
 // TransferStatus returns the transfer's status

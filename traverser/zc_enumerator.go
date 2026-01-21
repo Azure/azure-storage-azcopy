@@ -94,9 +94,10 @@ type StoredObject struct {
 	blobDeleted    bool
 
 	// Lease information
-	LeaseState    lease.StateType
-	LeaseStatus   lease.StatusType
-	LeaseDuration lease.DurationType
+	LeaseState         lease.StateType
+	LeaseStatus        lease.StatusType
+	LeaseDuration      lease.DurationType
+	TargetHardlinkFile string // used only for NFS transfers to indicate the target hardlink file path
 }
 
 func (s *StoredObject) IsMoreRecentThan(storedObject2 StoredObject, preferSMBTime bool) bool {
@@ -143,7 +144,7 @@ func (s *StoredObject) isCompatibleWithEntitySettings(fpo common.FolderPropertyO
 	} else if s.EntityType == common.EEntityType.Symlink() {
 		return sht == common.ESymlinkHandlingType.Preserve()
 	} else if s.EntityType == common.EEntityType.Hardlink() {
-		return pho == common.EHardlinkHandlingType.Follow()
+		return pho == common.EHardlinkHandlingType.Follow() || pho == common.EHardlinkHandlingType.Preserve()
 	} else if s.EntityType == common.EEntityType.Other() {
 		return false
 	} else {
@@ -208,7 +209,10 @@ func (s *StoredObject) ToNewCopyTransfer(steWillAutoDecompress bool,
 		BlobVersionID:      s.BlobVersionID,
 		BlobTags:           s.BlobTags,
 		BlobSnapshotID:     s.BlobSnapshotID,
+		TargetHardlinkFile: s.TargetHardlinkFile,
 	}
+
+	fmt.Println("ToNewCopyTransfer Name:------------", s.Name, " TargetHardlink:", s.TargetHardlinkFile)
 
 	if preserveBlobTier {
 		t.BlobTier = s.BlobAccessTier
@@ -268,8 +272,10 @@ type filePropsProvider interface {
 
 // a constructor is used so that in case the StoredObject has to change, the callers would get a compilation error
 // and it forces all necessary properties to be always supplied and not forgotten
-func NewStoredObject(morpher objectMorpher, name string, relativePath string, entityType common.EntityType, lmt time.Time,
-	size int64, props contentPropsProvider, blobProps blobPropsProvider, meta common.Metadata, containerName string) StoredObject {
+func NewStoredObject(morpher objectMorpher, name string,
+	relativePath string, entityType common.EntityType, lmt time.Time,
+	size int64, props contentPropsProvider, blobProps blobPropsProvider,
+	meta common.Metadata, containerName string, targetHardlinkFile string) StoredObject {
 	obj := StoredObject{
 		Name:               name,
 		RelativePath:       relativePath,
@@ -288,10 +294,13 @@ func NewStoredObject(morpher objectMorpher, name string, relativePath string, en
 		Metadata:           meta,
 		ContainerName:      containerName,
 		// Additional lease properties. To be used in listing
-		LeaseStatus:   blobProps.LeaseStatus(),
-		LeaseState:    blobProps.LeaseState(),
-		LeaseDuration: blobProps.LeaseDuration(),
+		LeaseStatus:        blobProps.LeaseStatus(),
+		LeaseState:         blobProps.LeaseState(),
+		LeaseDuration:      blobProps.LeaseDuration(),
+		TargetHardlinkFile: targetHardlinkFile,
 	}
+
+	fmt.Println("StoredObject Name:------------", obj.Name, " TargetHardlink:", obj.TargetHardlinkFile)
 
 	// Folders don't have size, and root ones shouldn't have names in the StoredObject. Ensure those rules are consistently followed
 	if entityType == common.EEntityType.Folder() {

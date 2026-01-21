@@ -1191,7 +1191,8 @@ type CopyTransfer struct {
 	// Blob index tags categorize data in your storage account utilizing key-value tag attributes
 	BlobTags BlobTags
 
-	BlobSnapshotID string
+	BlobSnapshotID     string
+	TargetHardlinkFile string // used only for NFS transfers to indicate the target hardlink file path
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1937,4 +1938,40 @@ func (ppt *PosixPropertiesStyle) Parse(s string) error {
 		*ppt = val.(PosixPropertiesStyle)
 	}
 	return err
+}
+
+////////////////////////////////////////////////////////////////
+
+var EJobPartType = JobPartType(0)
+
+// JobPartType defines the type of transfers a job part contains
+type JobPartType uint8
+
+func (JobPartType) Mixed() JobPartType    { return JobPartType(0) } // Default - mixed files,folders,symlinks
+func (JobPartType) Hardlink() JobPartType { return JobPartType(1) } // Hardlinks only
+
+func (jpt JobPartType) String() string {
+	return enum.StringInt(jpt, reflect.TypeOf(jpt))
+}
+
+func (jpt *JobPartType) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(jpt), s, true, true)
+	if err == nil {
+		*jpt = val.(JobPartType)
+	}
+	return err
+}
+
+////////////////////////////////////////////////////////////////
+
+var EJobProcessingMode = JobProcessingMode(0)
+
+// JobProcessingMode defines how job parts should be processed
+type JobProcessingMode uint8
+
+func (JobProcessingMode) Mixed() JobProcessingMode { return JobProcessingMode(0) } // Default - process all job parts immediately
+func (JobProcessingMode) NFS() JobProcessingMode   { return JobProcessingMode(1) } // Process file job parts first, then folder job parts
+
+func (jpm JobProcessingMode) String() string {
+	return enum.StringInt(jpm, reflect.TypeOf(jpm))
 }

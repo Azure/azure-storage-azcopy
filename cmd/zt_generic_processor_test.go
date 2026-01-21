@@ -138,7 +138,7 @@ func TestCopyTransferProcessorSingleFile(t *testing.T) {
 	copyProcessor := azcopy.NewCopyTransferProcessor(false, processorTestSuiteHelper{}.getCopyJobTemplate(), 2, newRemoteRes(blobURL), newLocalRes(filepath.Join(dstDirName, dstFileName)), nil, nil, false, false, dryrunNewCopyJobPartOrder)
 
 	// exercise the copy transfer processor
-	storedObject := traverser.NewStoredObject(traverser.NoPreProccessor, blobList[0], "", common.EEntityType.File(), time.Now(), 0, traverser.NoContentProps, traverser.NoBlobProps, traverser.NoMetadata, "")
+	storedObject := traverser.NewStoredObject(traverser.NoPreProccessor, blobList[0], "", common.EEntityType.File(), time.Now(), 0, traverser.NoContentProps, traverser.NoBlobProps, traverser.NoMetadata, "", "")
 	err := copyProcessor.ScheduleSyncRemoveSetPropertiesTransfer(storedObject)
 	a.Nil(err)
 
