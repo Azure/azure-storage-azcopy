@@ -134,6 +134,7 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 
 			if ts == common.ETransferStatus.FolderCreated() ||
 				ts == common.ETransferStatus.FolderExisted() ||
+				ts == common.ETransferStatus.Cancelled() || // fix plan mismatch
 				ts == common.ETransferStatus.Success() {
 				return nil // do not re-create an existing folder
 			}
