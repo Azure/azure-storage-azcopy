@@ -134,8 +134,9 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 
 			if ts == common.ETransferStatus.FolderCreated() ||
 				ts == common.ETransferStatus.FolderExisted() ||
-				ts == common.ETransferStatus.Cancelled() || // fix plan mismatch
-				ts == common.ETransferStatus.Success() {
+				ts == common.ETransferStatus.Cancelled() ||
+				ts == common.ETransferStatus.Success() ||
+				ts == common.ETransferStatus.Failed() {
 				return nil // do not re-create an existing folder
 			}
 		} else {
@@ -185,6 +186,10 @@ func (f *jpptFolderTracker) debugCheckState(state JpptFolderTrackerState) {
 
 	ts := f.fetchTransfer(*state.Index).TransferStatus()
 	passed := true
+
+	if ts == common.ETransferStatus.Failed() {
+		return // For scenarios where the folder was created but a following operation failed
+	}
 
 	switch state.Status {
 	case EJpptFolderTrackerStatus.FolderCreated():
