@@ -1,3 +1,4 @@
+//go:build linux
 // +build linux
 
 package ste
@@ -13,7 +14,7 @@ func (b *blobFolderSender) getExtraProperties() error {
 				return err
 			}
 
-			common.AddStatToBlobMetadata(statAdapter, b.metadataToApply)
+			common.AddStatToBlobMetadata(statAdapter, b.metadataToApply, b.jptm.Info().PosixPropertiesStyle)
 		}
 	}
 

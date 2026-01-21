@@ -45,6 +45,7 @@ const (
 	PreservePermissionsFlag                   = "preserve-permissions"
 	PreserveInfoFlag                          = "preserve-info"
 	PreservePOSIXPropertiesIncompatibilityMsg = "to use the --preserve-posix-properties flag, both the source and destination must be POSIX-aware. Valid combinations are: Linux -> Blob, Blob -> Linux, or Blob -> Blob"
+	POSIXStyleMisuse                          = "to use --posix-properties-style flag, it has to be used with preserve-posix-properties. Please include this preserve flag in your AzCopy command"
 	DstShareDoesNotExists                     = "the destination file share does not exist; please create it manually with the required quota and settings before running the copy —refer to https://learn.microsoft.com/en-us/azure/storage/files/storage-how-to-create-file-share?tabs=azure-portal for SMB or https://learn.microsoft.com/en-us/azure/storage/files/storage-files-quick-create-use-linux for NFS."
 )
 
@@ -406,6 +407,7 @@ func PerformSMBSpecificValidation(fromTo common.FromTo,
 	preservePermissions common.PreservePermissionsOption,
 	preserveInfo bool,
 	preservePOSIXProperties bool,
+	posixStyle common.PosixPropertiesStyle,
 	hardlinkHandling common.HardlinkHandlingType) (err error) {
 
 	if err = validatePreserveSMBPropertyOption(preserveInfo,
@@ -415,6 +417,10 @@ func PerformSMBSpecificValidation(fromTo common.FromTo,
 	}
 	if preservePOSIXProperties && !areBothLocationsPOSIXAware(fromTo) {
 		return errors.New(PreservePOSIXPropertiesIncompatibilityMsg)
+	}
+
+	if posixStyle != common.StandardPosixPropertiesStyle && !preservePOSIXProperties {
+		return errors.New(POSIXStyleMisuse)
 	}
 	if err = validatePreserveSMBPropertyOption(preservePermissions.IsTruthy(),
 		fromTo,

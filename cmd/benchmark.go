@@ -311,7 +311,7 @@ func init() {
 	benchCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "Detect",
 		"Defines the type of blob at the destination. "+
 			"\n Used to allow benchmarking different blob types. \nIdentical to the same-named parameter in the copy command")
-	benchCmd.PersistentFlags().BoolVar(&raw.putMd5, " put-md5", false, "Create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob/file. "+
+	benchCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "Create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob/file. "+
 		"\n (By default the hash is NOT created.) \n Identical to the same-named parameter in the copy command")
 	benchCmd.PersistentFlags().BoolVar(&raw.checkLength, "check-length", true,
 		"Check the length of a file on the destination after the transfer. "+

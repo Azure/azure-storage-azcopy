@@ -130,6 +130,7 @@ type CookedTransferOptions struct {
 	checkLength                    bool
 	preservePermissions            common.PreservePermissionsOption
 	preservePosixProperties        bool
+	posixPropertiesStyle           common.PosixPropertiesStyle
 	backupMode                     bool
 	asSubdir                       bool
 	s2sPreserveProperties          boolDefaultTrue
@@ -312,6 +313,7 @@ func (c *CookedTransferOptions) applyDefaultsAndInferOptions(opts CopyOptions) (
 	c.hardlinks = opts.Hardlinks
 	c.preservePermissions = common.NewPreservePermissionsOption(opts.PreservePermissions, preserveOwner, c.fromTo)
 	c.preservePosixProperties = opts.PreservePosixProperties
+	c.posixPropertiesStyle = opts.PosixPropertiesStyle
 	c.s2sInvalidMetadataHandleOption = opts.S2SHandleInvalidateMetadata
 	c.commandString = opts.commandString
 
@@ -592,7 +594,11 @@ func (c *CookedTransferOptions) validateOptions() (err error) {
 			return err
 		}
 	} else {
-		err = PerformSMBSpecificValidation(c.fromTo, c.preservePermissions, c.preserveInfo, c.preservePosixProperties, c.hardlinks)
+<<<<<<< HEAD
+		err = PerformSMBSpecificValidation(c.fromTo, c.preservePermissions, c.preserveInfo, c.preservePosixProperties,  c.posixPropertiesStyle,c.hardlinks)
+=======
+		err = PerformSMBSpecificValidation(c.fromTo, c.preservePermissions, c.preserveInfo, c.preservePosixProperties, c.posixPropertiesStyle)
+>>>>>>> d5a5c927e91afa72b956223ac3c3a33ab6e5de63
 		if err != nil {
 			return err
 		}
