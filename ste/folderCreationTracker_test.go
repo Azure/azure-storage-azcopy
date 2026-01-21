@@ -191,4 +191,6 @@ func TestFolderCreationTracker_directoryExists(t *testing.T) {
 	err = fct.CreateFolder(folderShouldCreate, func() error {
 		return nil
 	})
+
+	a.NoError(err)
 }

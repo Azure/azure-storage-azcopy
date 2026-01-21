@@ -133,9 +133,10 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 			ts := f.fetchTransfer(*state.Index).TransferStatus()
 
 			if ts == common.ETransferStatus.FolderCreated() ||
-				ts == common.ETransferStatus.FolderExisted() {
+				ts == common.ETransferStatus.FolderExisted() ||
+				ts == common.ETransferStatus.Success() {
 				return nil // do not re-create an existing folder
-			}
+			} // do not create an already existing folder
 		} else {
 			if state.Status != EJpptFolderTrackerStatus.Unseen() {
 				return nil
