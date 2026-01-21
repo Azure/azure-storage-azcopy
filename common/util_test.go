@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -162,4 +163,39 @@ func TestDoWithOverrideReadonlyonAzureFiles(t *testing.T) {
 	a.Nil(err)
 	a.Equal(*props.Metadata["Testkey"], "Testvalue")
 
+}
+
+func Test_TryAddMetadata_Concurrent(t *testing.T) {
+	a := assert.New(t)
+
+	safeMetadata := SafeMetadata{
+		Metadata: make(Metadata),
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// Goroutine 1
+	go func() {
+		defer wg.Done()
+		TryAddMetadata(&safeMetadata, "key", "value1")
+	}()
+
+	// Goroutine 2
+	go func() {
+		defer wg.Done()
+		TryAddMetadata(&safeMetadata, "key", "value2")
+	}()
+
+	wg.Wait()
+
+	// Only one value should exist for the key
+	a.Equal(1, len(safeMetadata.Metadata))
+	a.Contains(safeMetadata.Metadata, "key")
+
+	val := safeMetadata.Metadata["key"]
+	a.NotNil(val)
+
+	// Value should be either value1 or value2 (depends on race timing)
+	a.True(*val == "value1" || *val == "value2")
 }
