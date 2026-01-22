@@ -187,8 +187,12 @@ func (f *jpptFolderTracker) debugCheckState(state JpptFolderTrackerState) {
 	ts := f.fetchTransfer(*state.Index).TransferStatus()
 	passed := true
 
-	if ts == common.ETransferStatus.Failed() {
-		return // For scenarios where the folder was created but a following operation failed
+	// For legit state mismatches, the plan state might differ from the internal state
+	// Plan status can change after folder creation
+	if ts == common.ETransferStatus.Failed() ||
+		ts == common.ETransferStatus.Success() ||
+		ts == common.ETransferStatus.Cancelled() {
+		return
 	}
 
 	switch state.Status {
