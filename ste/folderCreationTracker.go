@@ -39,7 +39,8 @@ func NewFolderCreationTracker(fpo common.FolderPropertyOption, fetcher TransferF
 		fpo == common.EFolderPropertiesOption.AllFoldersExceptRoot(),
 		// create a folder tracker for destinations where we don't want to spam the service with create requests
 		// on folders that already exist
-		fromTo.To().IsRemote():
+		fromTo.To().IsFile(),
+		fromTo.To() == common.ELocation.BlobFS():
 		return &jpptFolderTracker{ // This prevents a dependency cycle. Reviewers: Are we OK with this? Can you think of a better way to do it?
 			fetchTransfer: fetcher,
 			mu:            &sync.Mutex{},
