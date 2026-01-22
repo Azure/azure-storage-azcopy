@@ -111,6 +111,7 @@ func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
 		SymlinkTransfers:        order.Transfers.SymlinkTransferCount,
 		FolderTransfer:          order.Transfers.FolderTransferCount,
 		HardlinksConvertedCount: order.Transfers.HardlinksConvertedCount,
+		HardlinksTransferCount:  order.Transfers.HardlinksTransferCount,
 	})
 
 	return common.CopyJobPartOrderResponse{JobStarted: true}
@@ -386,7 +387,11 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 			case common.EEntityType.Symlink():
 				js.SymlinkTransfers++
 			case common.EEntityType.Hardlink():
-				js.HardlinksConvertedCount++
+				if jpp.HardlinkHandling == common.EHardlinkHandlingType.Preserve() {
+					js.HardlinksTransferCount++
+				} else if jpp.HardlinkHandling == common.EHardlinkHandlingType.Follow() {
+					js.HardlinksConvertedCount++
+				}
 			}
 
 			// check for all completed transfer to calculate the progress percentage at the end

@@ -21,10 +21,13 @@ func (d *CopyJobPartDispatcher) readyForDispatch() bool {
 
 func (d *CopyJobPartDispatcher) appendTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer) error {
 	if e.JobProcessingMode == common.EJobProcessingMode.NFS() &&
-		transfer.EntityType == common.EEntityType.Hardlink() {
+		transfer.EntityType == common.EEntityType.Hardlink() &&
+		e.HardlinkHandlingType == common.EHardlinkHandlingType.Preserve() {
+
 		d.PendingHardlinksTransfers.List = append(d.PendingHardlinksTransfers.List, transfer)
 		d.PendingHardlinksTransfers.TotalSizeInBytes += uint64(transfer.SourceSize)
 		d.PendingHardlinksTransfers.HardlinksTransferCount++
+
 	} else {
 		d.PendingTransfers.List = append(d.PendingTransfers.List, transfer)
 		d.PendingTransfers.TotalSizeInBytes += uint64(transfer.SourceSize)

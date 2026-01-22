@@ -201,11 +201,12 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: s.opts.trailingDot,
 		},
-		JobErrorHandler:   mgr,
-		SrcServiceClient:  s.srp.srcServiceClient,
-		DstServiceClient:  s.srp.dstServiceClient,
-		JobPartType:       common.EJobPartType.Mixed(),
-		JobProcessingMode: GetJobProcessingMode(s.opts.fromTo),
+		JobErrorHandler:      mgr,
+		SrcServiceClient:     s.srp.srcServiceClient,
+		DstServiceClient:     s.srp.dstServiceClient,
+		JobPartType:          common.EJobPartType.Mixed(),
+		JobProcessingMode:    GetJobProcessingMode(s.opts.fromTo),
+		HardlinkHandlingType: s.opts.hardlinks,
 	}
 
 	// transferScheduler is responsible for batching up transfers and sending them to the job service

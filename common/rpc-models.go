@@ -161,6 +161,7 @@ type CopyJobPartOrderRequest struct {
 	JobErrorHandler         JobErrorHandler
 	JobPartType             JobPartType       // Type of transfers this job part contains
 	JobProcessingMode       JobProcessingMode // Defines how job parts should be processed (Mixed or NFS)
+	HardlinkHandlingType    HardlinkHandlingType
 }
 
 // CredentialInfo contains essential credential info which need be transited between modules,
@@ -297,6 +298,7 @@ type ListJobSummaryResponse struct {
 	IsCleanupJob            bool
 	SkippedSymlinkCount     uint32 `json:",string"`
 	HardlinksConvertedCount uint32 `json:",string"` // Hardlinks converted count is only applicable for NFS transfers
+	HardlinksTransferCount  uint32 `json:",string"` // Hardlinks transfer count is only applicable for NFS transfers
 	SkippedHardlinkCount    uint32 `json:",string"` // Skipped hardlinks count is only applicable for NFS transfers
 	SkippedSpecialFileCount uint32 `json:",string"`
 }

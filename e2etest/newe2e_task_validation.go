@@ -271,6 +271,19 @@ func ValidateHardlinksConvertedCount(a Asserter, stdOut AzCopyStdout, expected u
 	return
 }
 
+func ValidateHardlinksTransferCount(a Asserter, stdOut AzCopyStdout, expected uint32) {
+	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
+		return
+	}
+
+	parsedStdout := GetTypeOrAssert[*AzCopyParsedCopySyncRemoveStdout](a, stdOut)
+	hardlinksTransferredCount := parsedStdout.FinalStatus.HardlinksTransferCount
+	if hardlinksTransferredCount != expected {
+		a.Error(fmt.Sprintf("expected hardlink transferred count (%d) received count (%d)", expected, hardlinksTransferredCount))
+	}
+	return
+}
+
 func ValidateHardlinksSkippedCount(a Asserter, stdOut AzCopyStdout, expected uint32) {
 	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
 		return

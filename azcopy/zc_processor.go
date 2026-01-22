@@ -196,15 +196,11 @@ func (s *CopyTransferProcessor) dispatchPart() error {
 func (s *CopyTransferProcessor) appendTransfer(copyTransfer common.CopyTransfer) error {
 
 	if s.processingMode == common.EJobProcessingMode.NFS() &&
-		copyTransfer.EntityType == common.EEntityType.Hardlink() {
+		copyTransfer.EntityType == common.EEntityType.Hardlink() && s.hardlinkHandlingType == common.EHardlinkHandlingType.Preserve() {
 		s.dispatcher.PendingHardlinksTransfers.List = append(s.dispatcher.PendingHardlinksTransfers.List, copyTransfer)
 		// Note: Check on this. Do e need to apped the size for hardlink files. As we will only be creating the hardlink
-		s.dispatcher.PendingHardlinksTransfers.TotalSizeInBytes += uint64(copyTransfer.SourceSize)
-		if s.hardlinkHandlingType == common.EHardlinkHandlingType.Preserve() {
-			s.dispatcher.PendingHardlinksTransfers.HardlinksTransferCount++
-		} else if s.hardlinkHandlingType == common.EHardlinkHandlingType.Follow() {
-			s.dispatcher.PendingHardlinksTransfers.HardlinksConvertedCount++
-		}
+		//s.dispatcher.PendingHardlinksTransfers.TotalSizeInBytes += uint64(copyTransfer.SourceSize)
+		s.dispatcher.PendingHardlinksTransfers.HardlinksTransferCount++
 	} else {
 
 		s.dispatcher.PendingTransfers.List = append(s.dispatcher.PendingTransfers.List, copyTransfer)

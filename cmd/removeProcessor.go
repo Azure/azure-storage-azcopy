@@ -45,7 +45,8 @@ func newRemoveTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPart in
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.trailingDot,
 		},
-		JobErrorHandler: glcm,
+		JobErrorHandler:      glcm,
+		HardlinkHandlingType: cca.hardlinks,
 	}
 
 	reportFirstPart := func(jobStarted bool) {

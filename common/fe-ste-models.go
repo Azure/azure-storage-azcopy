@@ -1540,6 +1540,7 @@ var EHardlinkHandlingType = HardlinkHandlingType(0)
 
 var DefaultHardlinkHandlingType = EHardlinkHandlingType.Follow()
 var SkipHardlinkHandlingType = EHardlinkHandlingType.Skip()
+var PreserveHardlinkHandlingType = EHardlinkHandlingType.Preserve()
 
 type HardlinkHandlingType uint8
 

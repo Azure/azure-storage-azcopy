@@ -1781,7 +1781,7 @@ func init() {
 		"Specifies how hardlinks should be handled. "+
 			"\n This flag is only applicable when downloading from an Azure NFS file share, uploading "+
 			"to an Azure Files NFS share, or performing service-to-service copies involving Azure Files NFS. \n"+
-			"\n The supported option are 'follow' (default), 'skip' and 'preserve'. \n"+
+			"\n The supported options are 'follow' (default), 'skip' and 'preserve'. \n"+
 			"  'follow' means that the hardlinked files are transferred as separate files. \n"+
 			"  'skip' means that all the hardlinked files are skipped. \n"+
 			"  'preserve' means that the first hardlinked file is transferred, and the other files are created as hardlinks to that file at the destination. \n"+

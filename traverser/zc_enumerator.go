@@ -212,8 +212,6 @@ func (s *StoredObject) ToNewCopyTransfer(steWillAutoDecompress bool,
 		TargetHardlinkFile: s.TargetHardlinkFile,
 	}
 
-	fmt.Println("ToNewCopyTransfer Name:------------", s.Name, " TargetHardlink:", s.TargetHardlinkFile)
-
 	if preserveBlobTier {
 		t.BlobTier = s.BlobAccessTier
 	}
@@ -299,8 +297,6 @@ func NewStoredObject(morpher objectMorpher, name string,
 		LeaseDuration:      blobProps.LeaseDuration(),
 		TargetHardlinkFile: targetHardlinkFile,
 	}
-
-	fmt.Println("StoredObject Name:------------", obj.Name, " TargetHardlink:", obj.TargetHardlinkFile)
 
 	// Folders don't have size, and root ones shouldn't have names in the StoredObject. Ensure those rules are consistently followed
 	if entityType == common.EEntityType.Folder() {

@@ -119,8 +119,9 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 	})
 
 	hardlinkType := NamedResolveVariation(svm, map[string]common.HardlinkHandlingType{
-		"|hardlinks=follow": common.DefaultHardlinkHandlingType,
-		"|hardlinks=skip":   common.SkipHardlinkHandlingType,
+		"|hardlinks=follow":   common.DefaultHardlinkHandlingType,
+		"|hardlinks=skip":     common.SkipHardlinkHandlingType,
+		"|hardlinks=preserve": common.PreserveHardlinkHandlingType,
 	})
 
 	dstContainer := GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
@@ -353,8 +354,10 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 	}
 	if hardlinkType == common.SkipHardlinkHandlingType {
 		ValidateHardlinksSkippedCount(svm, stdOut, 2)
-	} else {
+	} else if hardlinkType == common.DefaultHardlinkHandlingType {
 		ValidateHardlinksConvertedCount(svm, stdOut, 2)
+	} else if hardlinkType == common.PreserveHardlinkHandlingType {
+		ValidateHardlinksTransferCount(svm, stdOut, 2)
 	}
 	ValidateSkippedSpecialFileCount(svm, stdOut, 1)
 }

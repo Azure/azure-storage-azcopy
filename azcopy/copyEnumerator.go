@@ -114,6 +114,7 @@ func (t *transferExecutor) initCopyEnumerator(ctx context.Context, logLevel comm
 		DestinationRoot:                t.opts.destination,
 		SourceRoot:                     normalizedSource,
 		JobProcessingMode:              GetJobProcessingMode(t.opts.fromTo),
+		HardlinkHandlingType:           t.opts.hardlinks,
 	}
 
 	// Initialize the source traverser

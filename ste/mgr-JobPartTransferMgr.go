@@ -148,6 +148,7 @@ type TransferInfo struct {
 
 	// Note: Used for NFS hardlinks only
 	TargetHardlinkFilePath string // used for hardlink transfers
+	HardlinkHandlingType   common.HardlinkHandlingType
 }
 
 func (i *TransferInfo) IsFilePropertiesTransfer() bool {
@@ -445,6 +446,7 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 		VersionID:              versionID,
 		SnapshotID:             snapshotID,
 		TargetHardlinkFilePath: targetHardlinkFilePath,
+		HardlinkHandlingType:   plan.HardlinkHandling,
 	}
 }
 
