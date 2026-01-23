@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/minio/minio-go"
+	"github.com/minio/minio-go/v7"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
@@ -110,7 +110,7 @@ func (u *testUploader) uploadToS3() {
 		if err != nil {
 			return err
 		}
-		if _, err := s3Client.PutObject(s3URLPartsForFile.BucketName, s3URLPartsForFile.ObjectKey, f, t.sourceSize, minio.PutObjectOptions{}); err != nil {
+		if _, err := s3Client.PutObject(context.Background(), s3URLPartsForFile.BucketName, s3URLPartsForFile.ObjectKey, f, t.sourceSize, minio.PutObjectOptions{}); err != nil {
 			return err
 		}
 
