@@ -7,7 +7,7 @@
 1. Added support for AMLFS style posix metadata. ([#3317](https://github.com/Azure/azure-storage-azcopy/pull/3317))
 
 ### Bug Fixes
-1. Fixed a bug where hdi_isfolder metadata key would sometimes not be sent in all lowercase, resulting in unexpected behavior service side when fetching properties. ([#3312](https://github.com/Azure/azure-storage-azcopy/pull/3312))
+1. Fixed a bug where hdi_isfolder metadata key would sometimes not be sent in all lowercase, resulting in unexpected behavior on the service side when fetching properties. ([#3312](https://github.com/Azure/azure-storage-azcopy/pull/3312))
 2. Fixed a typo in the `benchmark` command, to allow the `--put-md5` flag to work. ([#3324](https://github.com/Azure/azure-storage-azcopy/issues/3324))
 3. Fixed a bug where network errors would not be retried on. ([#3338](https://github.com/Azure/azure-storage-azcopy/pull/3338))
 4. Fixed a bug where unexpected requests would be logged in syslog. ([#3339](https://github.com/Azure/azure-storage-azcopy/pull/3339))
