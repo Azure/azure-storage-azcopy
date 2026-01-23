@@ -169,6 +169,7 @@ type jobPartMgr struct {
 	planMMF *JobPartPlanMMF // This Job part plan's MMF
 
 	// Cached plan values to prevent accessing unmapped memory after UnmapPlanFile()
+	// this will not impact other non-c2c scenarios, these variables can still be accessed whether unmapping the plan file or not.
 	// These are set once during initialization and never change
 	cachedJobID        common.JobID
 	cachedPartNum      PartNumber
