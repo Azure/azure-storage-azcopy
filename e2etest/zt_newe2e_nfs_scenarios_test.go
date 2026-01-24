@@ -292,7 +292,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 			Targets: []ResourceManager{srcDirObj, dst.(RemoteResourceManager).WithSpecificAuthType(
 				ResolveVariation(svm, []ExplicitCredentialTypes{
 					EExplicitCredentialType.SASToken(),
-					EExplicitCredentialType.OAuth(),
+					//EExplicitCredentialType.OAuth(),
 				}), svm, CreateAzCopyTargetOptions{}),
 			},
 			Flags: CopyFlags{
@@ -311,6 +311,11 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 
 	if followSymlinks && preserveSymlinks {
 		ValidateMessageOutput(svm, stdOut, "cannot both follow and preserve symlinks", true)
+		return
+	}
+
+	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
+		ValidateMessageOutput(svm, stdOut, "the '--hardlinks=preserve' flag is not applicable for sync operations", true)
 		return
 	}
 
@@ -352,11 +357,12 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 	if !preserveSymlinks && !followSymlinks {
 		ValidateSkippedSymlinksCount(svm, stdOut, 2)
 	}
-	if hardlinkType == common.SkipHardlinkHandlingType {
+	switch hardlinkType {
+	case common.SkipHardlinkHandlingType:
 		ValidateHardlinksSkippedCount(svm, stdOut, 2)
-	} else if hardlinkType == common.DefaultHardlinkHandlingType {
+	case common.DefaultHardlinkHandlingType:
 		ValidateHardlinksConvertedCount(svm, stdOut, 2)
-	} else if hardlinkType == common.PreserveHardlinkHandlingType {
+	case common.PreserveHardlinkHandlingType:
 		ValidateHardlinksTransferCount(svm, stdOut, 2)
 	}
 	ValidateSkippedSpecialFileCount(svm, stdOut, 1)

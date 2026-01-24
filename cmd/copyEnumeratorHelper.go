@@ -22,7 +22,7 @@ func (d *CopyJobPartDispatcher) readyForDispatch() bool {
 func (d *CopyJobPartDispatcher) appendTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer) error {
 	if e.JobProcessingMode == common.EJobProcessingMode.NFS() &&
 		transfer.EntityType == common.EEntityType.Hardlink() &&
-		e.HardlinkHandlingType == common.EHardlinkHandlingType.Preserve() {
+		transfer.TargetHardlinkFile != "" {
 
 		d.PendingHardlinksTransfers.List = append(d.PendingHardlinksTransfers.List, transfer)
 		d.PendingHardlinksTransfers.TotalSizeInBytes += uint64(transfer.SourceSize)
@@ -39,7 +39,12 @@ func (d *CopyJobPartDispatcher) appendTransfer(e *common.CopyJobPartOrderRequest
 		case common.EEntityType.Symlink():
 			d.PendingTransfers.SymlinkTransferCount++
 		case common.EEntityType.Hardlink():
-			d.PendingTransfers.HardlinksConvertedCount++
+			if e.HardlinkHandlingType == common.EHardlinkHandlingType.Preserve() {
+				d.PendingTransfers.HardlinksTransferCount++
+			} else if e.HardlinkHandlingType == common.EHardlinkHandlingType.Follow() {
+				d.PendingTransfers.HardlinksConvertedCount++
+			}
+
 		}
 	}
 

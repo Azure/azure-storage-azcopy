@@ -96,7 +96,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *traverser.CopyEnum
 		StripTopDir:             cca.StripTopDir,
 
 		ExcludeContainers: cca.excludeContainer,
-		HardlinkHandling:  common.EHardlinkHandlingType.Follow(),
+		HardlinkHandling:  cca.hardlinks,
 	})
 
 	// report failure to create traverser

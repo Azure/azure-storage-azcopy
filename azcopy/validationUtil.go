@@ -499,6 +499,8 @@ func validateHardlinkFlag(option common.HardlinkHandlingType, fromTo common.From
 		common.GetLifecycleMgr().Info("The --hardlinks option is set to 'skip'. Hardlinked files will be skipped.")
 	case common.DefaultHardlinkHandlingType:
 		common.GetLifecycleMgr().Info("The --hardlinks option is set to 'follow'. Hardlinked files will be copied as regular files.")
+	case common.PreserveHardlinkHandlingType:
+		common.GetLifecycleMgr().Info("The --hardlinks option is set to 'preserve'. Hardlinked files will be preserved as hardlinks at the destination.")
 	}
 
 	return nil

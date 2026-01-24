@@ -717,7 +717,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 				}
 			} else if IsHardlink(singleFileInfo) {
 				// for single hardlink file transfer hardlink file is treated as regular file
-				entityType = common.EEntityType.File()
+				entityType = common.EEntityType.Hardlink()
 				if skip := HandleHardlinkForNFS(singleFileInfo,
 					t.hardlinkHandling, t.incrementEnumerationCounter); skip {
 					return nil
@@ -819,7 +819,6 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 									return err
 								}
 								hardlinkMp.Update(getInodeString(fileInfo), relPath)
-								entityType = common.EEntityType.File()
 							}
 						}
 					}

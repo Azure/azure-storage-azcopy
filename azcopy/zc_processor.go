@@ -81,6 +81,7 @@ func NewCopyTransferProcessor(isCopy bool, copyJobTemplate *common.CopyJobPartOr
 			PendingTransfers:          common.Transfers{},
 			PendingHardlinksTransfers: common.Transfers{},
 		},
+		hardlinkHandlingType: copyJobTemplate.HardlinkHandlingType,
 	}
 	return processor
 }
@@ -194,9 +195,11 @@ func (s *CopyTransferProcessor) dispatchPart() error {
 }
 
 func (s *CopyTransferProcessor) appendTransfer(copyTransfer common.CopyTransfer) error {
-
+	// This is a hardlink transfer in NFS mode, add it to the separate hardlink transfers batch
 	if s.processingMode == common.EJobProcessingMode.NFS() &&
-		copyTransfer.EntityType == common.EEntityType.Hardlink() && s.hardlinkHandlingType == common.EHardlinkHandlingType.Preserve() {
+		copyTransfer.EntityType == common.EEntityType.Hardlink() &&
+		copyTransfer.TargetHardlinkFile != "" {
+
 		s.dispatcher.PendingHardlinksTransfers.List = append(s.dispatcher.PendingHardlinksTransfers.List, copyTransfer)
 		// Note: Check on this. Do e need to apped the size for hardlink files. As we will only be creating the hardlink
 		//s.dispatcher.PendingHardlinksTransfers.TotalSizeInBytes += uint64(copyTransfer.SourceSize)
@@ -214,7 +217,11 @@ func (s *CopyTransferProcessor) appendTransfer(copyTransfer common.CopyTransfer)
 		case common.EEntityType.Symlink():
 			s.dispatcher.PendingTransfers.SymlinkTransferCount++
 		case common.EEntityType.Hardlink():
-			s.dispatcher.PendingTransfers.HardlinksConvertedCount++
+			if s.hardlinkHandlingType == common.EHardlinkHandlingType.Preserve() {
+				s.dispatcher.PendingTransfers.HardlinksTransferCount++
+			} else if s.hardlinkHandlingType == common.EHardlinkHandlingType.Follow() {
+				s.dispatcher.PendingTransfers.HardlinksConvertedCount++
+			}
 		}
 	}
 

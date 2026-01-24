@@ -207,7 +207,7 @@ func anyToRemote(jptm IJobPartTransferMgr, pacer pacer, senderFactory senderFact
 	case common.EEntityType.Symlink():
 		anyToRemote_symlink(jptm, info, pacer, senderFactory, sipf)
 	case common.EEntityType.Hardlink():
-		if jptm.Info().HardlinkHandlingType == common.EHardlinkHandlingType.Preserve() {
+		if jptm.Info().TargetHardlinkFilePath != "" {
 			anyToRemote_hardlink(jptm, info, pacer, senderFactory, sipf)
 		} else {
 			anyToRemote_file(jptm, info, pacer, senderFactory, sipf)
