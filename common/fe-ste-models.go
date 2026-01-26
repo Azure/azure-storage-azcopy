@@ -879,10 +879,13 @@ func (TransferStatus) Started() TransferStatus { return TransferStatus(1) }
 // Transfer successfully completed
 func (TransferStatus) Success() TransferStatus { return TransferStatus(2) }
 
-// Folder was created, but properties have not been persisted yet. Equivalent to Started, but never intended to be set on anything BUT folders.
+// FolderCreated folder was created, but properties have not been persisted yet. Equivalent to Started, but never intended to be set on anything BUT folders.
 func (TransferStatus) FolderCreated() TransferStatus { return TransferStatus(3) }
 
-func (TransferStatus) Restarted() TransferStatus { return TransferStatus(4) }
+// FolderExisted folder already existed before we got to it. A valid state to continue from in overwrite scenarios.
+func (TransferStatus) FolderExisted() TransferStatus { return TransferStatus(4) }
+
+func (TransferStatus) Restarted() TransferStatus { return TransferStatus(5) }
 
 // Transfer failed due to some error.
 func (TransferStatus) Failed() TransferStatus { return TransferStatus(-1) }
