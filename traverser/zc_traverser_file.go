@@ -23,6 +23,7 @@ package traverser
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -262,7 +263,8 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 				RelativePath: relativePath,
 			}, err
 		}
-
+		var targetHardlinkFile string
+		var filePresent bool
 		// NFS handling
 		// Check if the file is a symlink and should be skipped in case of NFS
 		// We don't want to skip the file if we are not using NFS
@@ -284,6 +286,13 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			//set entity tile to hardlink
 			if fullProperties.LinkCount() > int64(1) {
 				f.entityType = common.EEntityType.Hardlink()
+				if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() {
+
+					targetHardlinkFile, filePresent = hardlinkMp.Read(fullProperties.FileID())
+					if !filePresent {
+						hardlinkMp.Update(fullProperties.FileID(), filepath.Join(targetPath, relativePath))
+					}
+				}
 			}
 		} else if f.entityType == common.EEntityType.File() && t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter(f.entityType, t.symlinkHandling, t.hardlinkHandling)
@@ -313,7 +322,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			NoBlobProps,
 			metadata,
 			targetURLParts.ShareName,
-			"",
+			targetHardlinkFile,
 		)
 
 		obj.smbLastModifiedTime = smbLMT

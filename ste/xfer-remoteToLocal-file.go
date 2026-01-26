@@ -43,6 +43,11 @@ func remoteToLocal(jptm IJobPartTransferMgr, pacer pacer, df downloaderFactory) 
 		remoteToLocal_folder(jptm, pacer, df)
 	} else if info.EntityType == common.EEntityType.Symlink() {
 		remoteToLocal_symlink(jptm, pacer, df)
+	} else if info.EntityType == common.EEntityType.Hardlink() &&
+		jptm.Info().TargetHardlinkFilePath != "" {
+		// We are checking the second condition to ensure that this is not the first occurrence of the hardlink in the transfer set
+		// The first hardlink occurrence will be treated as a regular file transfer
+		remoteToLocal_hardlink(jptm, pacer, df)
 	} else {
 		remoteToLocal_file(jptm, pacer, df)
 	}
