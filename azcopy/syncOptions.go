@@ -277,8 +277,7 @@ func (s *cookedSyncOptions) validateOptions() (err error) {
 			return fmt.Errorf("the '--hardlinks=preserve' flag is not applicable for sync operations")
 		}
 	} else {
-		err = PerformSMBSpecificValidation(s.fromTo, s.preservePermissions,
-			s.preserveInfo, s.preservePosixProperties, s.posixPropertiesStyle, s.hardlinks)
+		err = PerformSMBSpecificValidation(s.fromTo, s.preservePermissions, s.preserveInfo, s.preservePosixProperties, s.posixPropertiesStyle, s.hardlinks)
 		if err != nil {
 			return err
 		}

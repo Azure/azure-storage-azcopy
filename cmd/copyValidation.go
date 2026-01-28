@@ -103,8 +103,7 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 	} else {
 		if err := azcopy.PerformSMBSpecificValidation(
 			cooked.FromTo, cooked.preservePermissions, cooked.preserveInfo,
-			cooked.preservePOSIXProperties,
-			cooked.posixPropertiesStyle, cooked.hardlinks); err != nil {
+			cooked.preservePOSIXProperties, cooked.posixPropertiesStyle, cooked.hardlinks); err != nil {
 			return err
 		}
 

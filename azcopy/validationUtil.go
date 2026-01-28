@@ -814,6 +814,7 @@ func validateListOfFilesFormat(f *os.File) error {
 
 	return nil
 }
+<<<<<<< HEAD
 
 func GetJobProcessingMode(fromTo common.FromTo) common.JobProcessingMode {
 	if fromTo.IsNFS() {
@@ -822,3 +823,5 @@ func GetJobProcessingMode(fromTo common.FromTo) common.JobProcessingMode {
 		return common.EJobProcessingMode.Mixed()
 	}
 }
+=======
+>>>>>>> c7bcccf6359b8d5a7d301cc7e710fb0815d05d30

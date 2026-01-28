@@ -696,6 +696,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 					t.hardlinkHandling, t.incrementEnumerationCounter); skip {
 					return nil
 				}
+<<<<<<< HEAD
 
 				if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() {
 					inodeStoreInstance, err := common.GetInodeStore()
@@ -712,6 +713,8 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 						return err
 					}
 				}
+=======
+>>>>>>> c7bcccf6359b8d5a7d301cc7e710fb0815d05d30
 			} else if IsRegularFile(singleFileInfo) {
 				entityType = common.EEntityType.File()
 			} else {
@@ -735,6 +738,12 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 					entityType = common.EEntityType.Symlink()
 				} else if t.symlinkHandling == common.ESymlinkHandlingType.Skip() {
 					return ErrorLoneSymlinkSkipped
+				}
+			} else if IsHardlink(singleFileInfo) {
+				entityType = common.EEntityType.Hardlink()
+				if skip := HandleHardlinkForNFS(singleFileInfo,
+					t.hardlinkHandling, t.incrementEnumerationCounter); skip {
+					return nil
 				}
 			} else if IsRegularFile(singleFileInfo) {
 				entityType = common.EEntityType.File()

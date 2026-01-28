@@ -57,6 +57,12 @@ func getPropertiesAndPermissions(svm *ScenarioVariationManager, preserveProperti
 	return folderProperties, fileProperties, fileOrFolderPermissions
 }
 
+<<<<<<< HEAD
+=======
+// These tests are using the same source and desination shares for testing to avoid
+// creating too many share accounts which may lead to throttling by Azure.
+// So in order to avoid conflicts between tests, we cleanup the test directories created during the test run.
+>>>>>>> c7bcccf6359b8d5a7d301cc7e710fb0815d05d30
 func CleanupNFSDirectory(
 	svm *ScenarioVariationManager,
 	container ContainerResourceManager,
@@ -119,9 +125,14 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 	})
 
 	hardlinkType := NamedResolveVariation(svm, map[string]common.HardlinkHandlingType{
+<<<<<<< HEAD
 		"|hardlinks=follow":   common.DefaultHardlinkHandlingType,
 		"|hardlinks=skip":     common.SkipHardlinkHandlingType,
 		"|hardlinks=preserve": common.PreserveHardlinkHandlingType,
+=======
+		"|hardlinks=follow": common.DefaultHardlinkHandlingType,
+		"|hardlinks=skip":   common.SkipHardlinkHandlingType,
+>>>>>>> c7bcccf6359b8d5a7d301cc7e710fb0815d05d30
 	})
 
 	dstContainer := GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
@@ -360,6 +371,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 	if !preserveSymlinks && !followSymlinks {
 		ValidateSkippedSymlinksCount(svm, stdOut, 2)
 	}
+<<<<<<< HEAD
 	switch hardlinkType {
 	case common.SkipHardlinkHandlingType:
 		ValidateHardlinksSkippedCount(svm, stdOut, 2)
@@ -367,6 +379,12 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 		ValidateHardlinksConvertedCount(svm, stdOut, 2)
 	case common.PreserveHardlinkHandlingType:
 		ValidateHardlinksTransferCount(svm, stdOut, 2)
+=======
+	if hardlinkType == common.SkipHardlinkHandlingType {
+		ValidateHardlinksSkippedCount(svm, stdOut, 2)
+	} else {
+		ValidateHardlinksConvertedCount(svm, stdOut, 2)
+>>>>>>> c7bcccf6359b8d5a7d301cc7e710fb0815d05d30
 	}
 	ValidateSkippedSpecialFileCount(svm, stdOut, 1)
 }
