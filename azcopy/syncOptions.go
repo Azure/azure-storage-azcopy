@@ -272,7 +272,8 @@ func (s *cookedSyncOptions) validateOptions() (err error) {
 		if err != nil {
 			return err
 		}
-		// TODO: Add support for hardlink preservation in NFS sync
+		// TODO: Add support for hardlink preservation in NFS sync later
+		// For now we will error out if user tries to use it
 		if s.hardlinks == common.EHardlinkHandlingType.Preserve() {
 			return fmt.Errorf("the '--hardlinks=preserve' flag is not applicable for sync operations")
 		}

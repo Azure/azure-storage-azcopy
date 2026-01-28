@@ -1974,7 +1974,7 @@ var EJobProcessingMode = JobProcessingMode(0)
 type JobProcessingMode uint8
 
 func (JobProcessingMode) Mixed() JobProcessingMode { return JobProcessingMode(0) } // Default - process all job parts immediately
-func (JobProcessingMode) NFS() JobProcessingMode   { return JobProcessingMode(1) } // Process file job parts first, then folder job parts
+func (JobProcessingMode) NFS() JobProcessingMode   { return JobProcessingMode(1) } // Process mixed job parts first, then hardlink job parts
 
 func (jpm JobProcessingMode) String() string {
 	return enum.StringInt(jpm, reflect.TypeOf(jpm))

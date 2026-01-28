@@ -20,10 +20,7 @@
 package ste
 
 import (
-	"fmt"
 	"net/url"
-	"path"
-	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -104,12 +101,6 @@ func anyToRemote_hardlink(jptm IJobPartTransferMgr, info *TransferInfo, pacer pa
 		}
 	}
 
-	// TODO: support path derivation for FileNFSLocal and FileNFSFileNFS hardlink transfers
-	// targethardlinkPath, err := derivePathForLocalToFileNFS(info.Destination, jptm.Info().TargetHardlinkFilePath)
-	// if err != nil {
-	// 	jptm.FailActiveSend("deriving target hardlink path", err)
-	// 	return
-	// }
 	// write the hardlink
 	err = s.CreateHardlink(jptm.Info().TargetHardlinkFilePath)
 	if err != nil {
@@ -117,46 +108,4 @@ func anyToRemote_hardlink(jptm IJobPartTransferMgr, info *TransferInfo, pacer pa
 	}
 
 	commonSenderCompletion(jptm, baseSender, info)
-}
-
-func derivePathForLocalToFileNFS(urlStr, originalRelPath string) (string, error) {
-	u, err := url.Parse(urlStr)
-	if err != nil {
-		return "", err
-	}
-
-	// Remove leading slash and split
-	// /share/a/b/z/hardlink/file.txt → [share a b z hardlink file.txt]
-	urlParts := strings.Split(strings.TrimPrefix(u.Path, "/"), "/")
-	if len(urlParts) < 2 {
-		return "", fmt.Errorf("invalid URL path")
-	}
-
-	// Drop share name
-	shareRel := urlParts[1:]
-
-	// originalRelPath: z/hh/file.txt
-	origParts := strings.Split(originalRelPath, "/")
-	if len(origParts) == 0 {
-		return "", fmt.Errorf("invalid original path")
-	}
-
-	// Find first occurrence of origParts[0] in shareRel
-	matchIdx := -1
-	for i, p := range shareRel {
-		if p == origParts[0] {
-			matchIdx = i
-			break
-		}
-	}
-	if matchIdx == -1 {
-		return "", fmt.Errorf("no common path element found")
-	}
-
-	// Prefix + remainder
-	result := path.Join(
-		append(shareRel[:matchIdx+1], origParts[1:]...)...,
-	)
-
-	return result, nil
 }

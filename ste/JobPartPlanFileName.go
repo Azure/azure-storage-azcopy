@@ -331,7 +331,6 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			// ChunkNum:                getNumChunks(uint64(order.Transfers.List[t].SourceSize), uint64(data.BlockSize)),
 			TargetHardlinkFilePathLength: int16(len(order.Transfers.List[t].TargetHardlinkFile)),
 		}
-		//copy(jpph.TargetHardlinkFilePath[:], order.Transfers.List[t].TargetHardlinkFile)
 		eof += writeValue(file, &jppt) // Write the transfer entry
 
 		// The NEXT transfer's src/dst string come after THIS transfer's src/dst strings

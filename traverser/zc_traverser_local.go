@@ -696,7 +696,6 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 					t.hardlinkHandling, t.incrementEnumerationCounter); skip {
 					return nil
 				}
-<<<<<<< HEAD
 
 				if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() {
 					inodeStoreInstance, err := common.GetInodeStore()
@@ -713,8 +712,6 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 						return err
 					}
 				}
-=======
->>>>>>> c7bcccf6359b8d5a7d301cc7e710fb0815d05d30
 			} else if IsRegularFile(singleFileInfo) {
 				entityType = common.EEntityType.File()
 			} else {
@@ -907,7 +904,6 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 					}
 				}
 				// NFS handling
-				var targetHardlinkFile string
 				if t.fromTo.IsNFS() {
 					if IsHardlink(fileInfo) {
 						entityType = common.EEntityType.Hardlink()
@@ -977,7 +973,6 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 }
 
 func getRelPath(filePath, basePath string) (string, error) {
-	// basePath is /home/azureuser/spe_dir
 	// we want to compute relative from its parent
 	base := filepath.Dir(basePath)
 

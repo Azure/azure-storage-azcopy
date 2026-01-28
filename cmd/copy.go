@@ -1787,5 +1787,6 @@ func init() {
 			"  'skip' means that all the hardlinked files are skipped. \n"+
 			"  'preserve' means that the first hardlinked file is transferred, and the other files are created as hardlinks to that file at the destination. \n"+
 			"\n Note: \n"+
-			"  When using 'preserve', the source and destination must be on a file system that supports hardlinks. \n")
+			"  When using 'preserve', the source and destination must be on a file system that supports hardlinks. \n"+
+			"Note: This version of AzCopy supports hardlink preservation for copy operations only; sync operations are not supported. \n")
 }

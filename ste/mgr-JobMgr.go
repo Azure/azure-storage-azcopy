@@ -319,7 +319,7 @@ type jobMgr struct {
 
 	isDaemon bool /* is it running as service */
 
-	// For FolderAfterFiles processing mode
+	// For Hardlinks After Files/Folders/Symlinks processing mode
 	hardlinkPartsMutex    sync.Mutex
 	queuedHardlinkParts   []queuedHardlinkPart
 	allOtherPartsComplete bool
@@ -884,7 +884,7 @@ func (jm *jobMgr) QueueJobParts(jpm IJobPartMgr) {
 
 	} else {
 
-		// Default mixed processing OR file parts in FolderAfterFiles mode - send immediately
+		// Default mixed processing mode - send immediately
 		jm.coordinatorChannels.partsChannel <- jpm
 	}
 }
@@ -900,11 +900,11 @@ func (jm *jobMgr) checkAndProcessHardlinkParts() {
 		return
 	}
 
-	// Check if all file/mixed parts are complete
+	// Check if all mixed parts are complete
 	allFilePartsComplete := true
 	jm.jobPartMgrs.Iterate(true, func(k common.PartNumber, v IJobPartMgr) {
 		plan := v.Plan()
-		// Only check file/mixed parts (not hardlinks)
+		// Only check mixed parts (not hardlinks)
 		if plan.JobPartType != common.EJobPartType.Hardlink() {
 			status := plan.JobPartStatus()
 			if !status.IsJobDone() {
@@ -914,20 +914,13 @@ func (jm *jobMgr) checkAndProcessHardlinkParts() {
 	})
 
 	if allFilePartsComplete {
-		jm.Log(common.LogInfo, fmt.Sprintf("All file parts complete, processing %d queued hardlink parts", len(jm.queuedHardlinkParts)))
+		jm.Log(common.LogInfo, fmt.Sprintf("All file/folder/symlink(mixed) parts complete, processing %d queued hardlink parts", len(jm.queuedHardlinkParts)))
 
 		// Process all queued hardlink parts by reconstructing JobPartMgr from minimal structure
 		for _, queuedPart := range jm.queuedHardlinkParts {
 			// Look up the existing JobPartMgr for this part number
 			if hardlinkPartMgr, found := jm.jobPartMgrs.Get(queuedPart.partNum); found {
 				jm.coordinatorChannels.partsChannel <- hardlinkPartMgr
-
-				// if ms := common.CalculateChannelBackPressureDelay(
-				// 	len(jm.coordinatorChannels.partsChannel),
-				// 	cap(jm.coordinatorChannels.partsChannel),
-				// 	common.DefaultProfile); ms > 0 {
-				// 	time.Sleep(time.Duration(ms) * time.Millisecond)
-				// }
 			} else {
 				jm.Log(common.LogError, fmt.Sprintf("Failed to find JobPartMgr for queued hardlink part %d", queuedPart.partNum))
 			}
