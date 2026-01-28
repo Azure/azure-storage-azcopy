@@ -36,7 +36,7 @@ import (
 
 	gcpUtils "cloud.google.com/go/storage"
 
-	"github.com/minio/minio-go"
+	"github.com/minio/minio-go/v7"
 	chk "gopkg.in/check.v1"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -192,11 +192,11 @@ func TestS3GetProperties(t *testing.T) {
 
 	bucketName := generateBucketName()
 	objectName := generateObjectName()
-	err = client.MakeBucket(bucketName, "")
+	err = client.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{Region: ""})
 	defer deleteBucket(client, bucketName, false)
 	a.Nil(err)
 
-	_, err = client.PutObjectWithContext(ctx, bucketName, objectName, strings.NewReader(objectDefaultData), int64(len(objectDefaultData)), headers)
+	_, err = client.PutObject(ctx, bucketName, objectName, strings.NewReader(objectDefaultData), int64(len(objectDefaultData)), headers)
 	a.Nil(err)
 
 	// First test against the bucket

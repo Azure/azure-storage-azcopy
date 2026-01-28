@@ -172,6 +172,18 @@ func IsDestinationNotFoundDuringSync(err error) bool {
 
 func writeSyncErrToChannel(errorChannel chan<- TraverserErrorItemInfo, err SyncOrchErrorInfo) {
 	if errorChannel != nil {
+		// Use defer/recover to handle the case where the channel is closed during cancellation.
+		// This prevents "panic: send on closed channel" when the job is being cancelled.
+		// [TO DO] - BugFix - Identify the root cause for cases when the error channel is closed prematurely and fix it.
+		defer func() {
+			if r := recover(); r != nil {
+				// Channel was closed, log the error instead of panicking
+				syncOrchestratorLog(
+					common.LogError,
+					fmt.Sprintf("Error channel closed, could not send error: %v", err.ErrorMessage()))
+			}
+		}()
+
 		select {
 		case errorChannel <- err:
 		default:

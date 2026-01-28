@@ -247,6 +247,10 @@ func (p *fileSourceInfoProvider) RawSource() string {
 	return p.sourceURL
 }
 
+func (p *fileSourceInfoProvider) GetObjectRange(offset, length int64) (io.ReadCloser, error) {
+	return nil, fmt.Errorf("GetObjectRange not implemented for fileSourceInfoProvider")
+}
+
 func (p *fileSourceInfoProvider) getFreshProperties() (shareFilePropertyProvider, error) {
 	fsc, err := p.jptm.SrcServiceClient().FileServiceClient()
 	if err != nil {
