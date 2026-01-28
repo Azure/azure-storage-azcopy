@@ -124,6 +124,16 @@ func findS3URLMatches(host string) (matches []string, isS3Host bool) {
 			}
 		}
 	}
+
+	// Fallback: If S3_COMPATIBLE_ENDPOINT is set and we haven't matched yet,
+	// allow any FQDN for on-prem S3-compatible appliances (e.g., MinIO, NetApp, Dell EMC, etc.)
+	// This enables support for custom domains like s3.company.com, minio.internal.net, etc.
+	if os.Getenv("S3_COMPATIBLE_ENDPOINT") != "" {
+		if m := matchCustomS3Host(hostLower); m != nil {
+			return m, true
+		}
+	}
+
 	return nil, false
 }
 
@@ -148,6 +158,24 @@ func matchGoogleHost(hostLower, suffix string) []string {
 	}
 	keyword := getS3Keyword() // googleapis
 	region := ""              // unspecified
+	matchSlices := []string{hostLower, "", region, keyword}
+	return matchSlices
+}
+
+// matchCustomS3Host handles arbitrary FQDN hosts for on-prem S3-compatible appliances.
+// This supports custom domains like s3.company.com, minio.internal.net, storage.local, etc.
+// Assumes path-style URLs (bucket in path, not subdomain) for maximum compatibility.
+func matchCustomS3Host(hostLower string) []string {
+	// Basic validation: must look like a hostname (contains at least one dot or is localhost-like)
+	// This prevents matching arbitrary strings while allowing legitimate hostnames
+	if !strings.Contains(hostLower, ".") && hostLower != "localhost" && !strings.Contains(hostLower, ":") {
+		return nil
+	}
+
+	keyword := getS3Keyword()
+	region := "" // Custom endpoints typically don't specify region in hostname
+
+	// Return path-style match (empty bucket capture means bucket comes from URL path)
 	matchSlices := []string{hostLower, "", region, keyword}
 	return matchSlices
 }
