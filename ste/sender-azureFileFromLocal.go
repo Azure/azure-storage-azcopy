@@ -226,3 +226,76 @@ func DoWithCreateSymlinkOnAzureFilesNFS(
 
 	return err
 }
+
+// DoWithCreateHardlinkOnAzureFilesNFS tries to create a hardlink, with retry logic
+// for parent not found and resource already exists.
+func DoWithCreateHardlinkOnAzureFilesNFS(
+	ctx context.Context,
+	action func() error,
+	client *file.Client,
+	shareClient *share.Client,
+	pacer pacer,
+	jptm IJobPartTransferMgr,
+) error {
+	// try the action
+	err := action()
+
+	// did fail because parent is missing?
+	if fileerror.HasCode(err, fileerror.ParentNotFound) {
+		jptm.Log(common.LogInfo,
+			fmt.Sprintf("%s: %s \nAzCopy will create parent directories for the hardlink.",
+				fileerror.ParentNotFound, err.Error()))
+
+		err = AzureFileParentDirCreator{}.CreateParentDirToRoot(ctx,
+			client, shareClient, jptm.GetFolderCreationTracker())
+		if err != nil {
+			jptm.FailActiveUpload("Creating parent directory", err)
+		}
+
+		// retry the action
+		err = action()
+	}
+
+	// did fail because item already exists on the destination?
+	// The destination object can be a hardlink, file or directory.
+	// If it's a hardlink or a file, we will delete it try creating hardlink.
+	// If it's a directory, we will fail.
+	if fileerror.HasCode(err, fileerror.ResourceAlreadyExists) {
+		jptm.Log(common.LogWarning,
+			fmt.Sprintf("%s: %s \nAzCopy will delete and recreate the hardlink.",
+				fileerror.ResourceAlreadyExists, err.Error()))
+
+		// destination hardlink already exists we try to delete the destination hardlink
+		_, delErr := client.Delete(ctx, nil)
+		if delErr != nil {
+			jptm.FailActiveUpload("Deleting existing hardlink", delErr)
+		}
+
+		// retry the action
+		err = action()
+	}
+
+	// did fail because resource type mismatch?
+	// This can happen if the destination is a file or a directory.
+	// We will delete the destination and try creating the hardlink.
+	// If the destination is a directory, the delete will fail and we will fail the transfer.
+	if fileerror.HasCode(err, fileerror.ResourceTypeMismatch) {
+		jptm.Log(common.LogWarning,
+			fmt.Sprintf("%s: %s \nAzCopy will delete the destination resource.",
+				fileerror.ResourceTypeMismatch, err.Error()))
+
+		// destination can be a file
+		if _, delErr := client.Delete(ctx, nil); delErr != nil {
+			// if this fails it means the destination is a directory
+			// we don't support deleting a directory here because it can be recursive and dangerous
+			// so we fail the transfer
+			// customer can manually delete the destination directory and rerun the transfer
+			jptm.FailActiveUpload("Deleting existing resource", delErr)
+		}
+
+		// retry the action
+		err = action()
+	}
+
+	return err
+}

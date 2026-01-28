@@ -23,8 +23,9 @@ package traverser
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"net/url"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // a meta traverser that goes through a list of paths (potentially directory entities) and scans them one by one
@@ -131,6 +132,8 @@ func newListTraverser(resource common.ResourceString, resourceLocation common.Lo
 			IncludeDirectoryStubs:   options.IncludeDirectoryStubs,
 			PreserveBlobTags:        options.PreserveBlobTags,
 			FromTo:                  options.FromTo,
+			HardlinkHandling:        options.HardlinkHandling,
+			BasePath:                source.Value,
 		})
 		if err != nil {
 			return nil, err

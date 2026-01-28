@@ -230,7 +230,9 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		DstFileData: JobPartPlanDstFile{
 			TrailingDot: order.FileAttributes.TrailingDot,
 		},
-		SymlinkHandling: order.SymlinkHandlingType,
+		SymlinkHandling:  order.SymlinkHandlingType,
+		JobPartType:      order.JobPartType,
+		HardlinkHandling: order.HardlinkHandlingType,
 	}
 
 	// Copy any strings into their respective fields
@@ -327,6 +329,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 
 			atomicTransferStatus: common.ETransferStatus.Started(), // Default
 			// ChunkNum:                getNumChunks(uint64(order.Transfers.List[t].SourceSize), uint64(data.BlockSize)),
+			TargetHardlinkFilePathLength: int16(len(order.Transfers.List[t].TargetHardlinkFile)),
 		}
 		eof += writeValue(file, &jppt) // Write the transfer entry
 
@@ -336,7 +339,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		currentSrcStringOffset += int64(jppt.SrcLength + jppt.DstLength + jppt.SrcContentTypeLength +
 			jppt.SrcContentEncodingLength + jppt.SrcContentLanguageLength + jppt.SrcContentDispositionLength +
 			jppt.SrcCacheControlLength + jppt.SrcContentMD5Length + jppt.SrcMetadataLength +
-			jppt.SrcBlobTypeLength + jppt.SrcBlobTierLength + jppt.SrcBlobVersionIDLength + jppt.SrcBlobSnapshotIDLength + jppt.SrcBlobTagsLength)
+			jppt.SrcBlobTypeLength + jppt.SrcBlobTierLength + jppt.SrcBlobVersionIDLength + jppt.SrcBlobSnapshotIDLength + jppt.SrcBlobTagsLength + jppt.TargetHardlinkFilePathLength)
 	}
 
 	// All the transfers were written; now write each transfer's src/dst strings
@@ -419,6 +422,12 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		if len(order.Transfers.List[t].BlobTags) != 0 {
 			blobTagsStr := order.Transfers.List[t].BlobTags.ToString()
 			bytesWritten, err = file.WriteString(blobTagsStr)
+			common.PanicIfErr(err)
+			eof += int64(bytesWritten)
+		}
+		if len(order.Transfers.List[t].TargetHardlinkFile) != 0 {
+			TargetHardlinkFileStr := order.Transfers.List[t].TargetHardlinkFile
+			bytesWritten, err = file.WriteString(TargetHardlinkFileStr)
 			common.PanicIfErr(err)
 			eof += int64(bytesWritten)
 		}

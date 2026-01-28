@@ -92,6 +92,27 @@ type Transfers struct {
 	FolderTransferCount     uint32
 	SymlinkTransferCount    uint32
 	HardlinksConvertedCount uint32
+	HardlinksTransferCount  uint32
+}
+
+// Clone creates a deep copy of the Transfers struct to avoid pointer reference issues
+func (t *Transfers) Clone() Transfers {
+	clone := Transfers{
+		TotalSizeInBytes:        t.TotalSizeInBytes,
+		FileTransferCount:       t.FileTransferCount,
+		FolderTransferCount:     t.FolderTransferCount,
+		SymlinkTransferCount:    t.SymlinkTransferCount,
+		HardlinksConvertedCount: t.HardlinksConvertedCount,
+		HardlinksTransferCount:  t.HardlinksTransferCount,
+	}
+
+	// Deep copy the slice of CopyTransfer
+	if t.List != nil {
+		clone.List = make([]CopyTransfer, len(t.List))
+		copy(clone.List, t.List) // Shallow copy for basic fields (usually sufficient)
+	}
+
+	return clone
 }
 
 // This struct represents the job info (a single part) to be sent to the storage engine
@@ -138,6 +159,9 @@ type CopyJobPartOrderRequest struct {
 	S2SSourceCredentialType CredentialType // Only Anonymous and OAuth will really be used in response to this, but S3 and GCP will come along too...
 	FileAttributes          FileTransferAttributes
 	JobErrorHandler         JobErrorHandler
+	JobPartType             JobPartType       // Type of transfers this job part contains
+	JobProcessingMode       JobProcessingMode // Defines how job parts should be processed (Mixed or NFS)
+	HardlinkHandlingType    HardlinkHandlingType
 }
 
 // CredentialInfo contains essential credential info which need be transited between modules,
@@ -274,6 +298,7 @@ type ListJobSummaryResponse struct {
 	IsCleanupJob            bool
 	SkippedSymlinkCount     uint32 `json:",string"`
 	HardlinksConvertedCount uint32 `json:",string"` // Hardlinks converted count is only applicable for NFS transfers
+	HardlinksTransferCount  uint32 `json:",string"` // Hardlinks transfer count is only applicable for NFS transfers
 	SkippedHardlinkCount    uint32 `json:",string"` // Skipped hardlinks count is only applicable for NFS transfers
 	SkippedSpecialFileCount uint32 `json:",string"`
 }

@@ -59,6 +59,7 @@ type localTraverser struct {
 	hashTargetChannel chan string
 	hardlinkHandling  common.HardlinkHandlingType
 	fromTo            common.FromTo
+	basePath          string
 }
 
 func (t *localTraverser) IsDirectory(bool) (bool, error) {
@@ -610,6 +611,7 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 						NoBlobProps,
 						NoMetadata,
 						"", // Local has no such thing as containers
+						"",
 					),
 					processor, // the original processor is wrapped in the mutex processor.
 				)
@@ -675,7 +677,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 		return fmt.Errorf("failed to scan path %s due to %w", t.fullPath, err)
 	}
 	finalizer, hashingProcessor := t.prepareHashingThreads(preprocessor, processor, filters)
-
+	var targetHardlinkFile string
 	// if the path is a single file, then pass it through the filters and send to processor
 	if isSingleFile {
 
@@ -693,6 +695,22 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 				if skip := HandleHardlinkForNFS(singleFileInfo,
 					t.hardlinkHandling, t.incrementEnumerationCounter); skip {
 					return nil
+				}
+
+				if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() {
+					inodeStoreInstance, err := common.GetInodeStore()
+					if err != nil {
+						return err
+					}
+
+					relPath, err := getRelPath(t.basePath, t.fullPath)
+					if err != nil {
+						return err
+					}
+					targetHardlinkFile, _, err = inodeStoreInstance.GetOrAdd(getInodeString(singleFileInfo), relPath)
+					if err != nil {
+						return err
+					}
 				}
 			} else if IsRegularFile(singleFileInfo) {
 				entityType = common.EEntityType.File()
@@ -747,6 +765,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 				NoBlobProps,
 				NoMetadata,
 				"", // Local has no such thing as containers
+				targetHardlinkFile,
 			),
 			hashingProcessor, // hashingProcessor handles the mutex wrapper
 		)
@@ -786,6 +805,20 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 							t.hardlinkHandling, t.incrementEnumerationCounter); skip {
 							return nil
 						}
+						if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() {
+							inodeStoreInstance, err := common.GetInodeStore()
+							if err != nil {
+								return err
+							}
+							relPath, err := getRelPath(filePath, t.fullPath)
+							if err != nil {
+								return err
+							}
+							targetHardlinkFile, _, err = inodeStoreInstance.GetOrAdd(getInodeString(fileInfo), relPath)
+							if err != nil {
+								return err
+							}
+						}
 					}
 				}
 
@@ -812,6 +845,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 						NoBlobProps,
 						NoMetadata,
 						"", // Local has no such thing as containers
+						targetHardlinkFile,
 					),
 					hashingProcessor, // hashingProcessor handles the mutex wrapper
 				)
@@ -873,6 +907,26 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 				if t.fromTo.IsNFS() {
 					if IsHardlink(fileInfo) {
 						entityType = common.EEntityType.Hardlink()
+						if skip := HandleHardlinkForNFS(fileInfo,
+							t.hardlinkHandling, t.incrementEnumerationCounter); skip {
+							return nil
+						}
+						if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() {
+							inodeStoreInstance, err := common.GetInodeStore()
+							if err != nil {
+								return err
+							}
+							relPath, err := getRelPath(t.basePath, t.fullPath)
+							if err != nil {
+								return err
+							}
+							fmt.Println("Processing hardlink file:", relPath)
+							targetHardlinkFile, _, err = inodeStoreInstance.GetOrAdd(getInodeString(fileInfo), relPath)
+							if err != nil {
+								return err
+							}
+
+						}
 					} else if !IsRegularFile(fileInfo) {
 						entityType = common.EEntityType.Other()
 						if t.incrementEnumerationCounter != nil {
@@ -903,6 +957,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 						NoBlobProps,
 						NoMetadata,
 						"", // Local has no such thing as containers
+						targetHardlinkFile,
 					),
 					hashingProcessor, // hashingProcessor handles the mutex wrapper
 				)
@@ -915,6 +970,18 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 	}
 
 	return finalizer(err)
+}
+
+func getRelPath(filePath, basePath string) (string, error) {
+	// we want to compute relative from its parent
+	base := filepath.Dir(basePath)
+
+	rel, err := filepath.Rel(base, filePath)
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.ToSlash(rel), nil
 }
 
 func NewLocalTraverser(fullPath string, ctx context.Context, opts InitResourceTraverserOptions) (*localTraverser, error) {
@@ -939,6 +1006,7 @@ func NewLocalTraverser(fullPath string, ctx context.Context, opts InitResourceTr
 		stripTopDir:                 opts.StripTopDir,
 		hardlinkHandling:            opts.HardlinkHandling,
 		fromTo:                      opts.FromTo,
+		basePath:                    opts.BasePath,
 	}
 	return &traverser, nil
 }

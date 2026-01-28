@@ -201,6 +201,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 				NoBlobProps,
 				fileProperties.Metadata,
 				targetURLParts.ShareName,
+				"",
 			)
 			// NFS handling for different file types
 			// If the source provided is of NFS type we will check for NFSFileType value and process accordingly
@@ -312,6 +313,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			NoBlobProps,
 			metadata,
 			targetURLParts.ShareName,
+			"",
 		)
 
 		obj.smbLastModifiedTime = smbLMT
