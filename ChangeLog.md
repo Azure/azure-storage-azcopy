@@ -17,6 +17,11 @@
 1. Updated README to clarify supported source-destination pairs and authorization mechanisms. ([#3213](https://github.com/Azure/azure-storage-azcopy/pull/3213))
 2. Updated format of wiki generated docs to improve readability. ([#3311](https://github.com/Azure/azure-storage-azcopy/pull/3311))
 
+### Breaking changes
+1. AzCopy download URLs starting with https://azcopyvnext-awgzd8g7aagqhzhe.b02.azurefd.net/ are no longer supported.
+   Please download AzCopy from the official GitHub Releases page instead.
+   If you rely on an older AzCopy version that is not available on GitHub, please open an issue in the AzCopy repository and request that it be added.
+
 ## Version 10.32.0-preview.1
 
 ### Bug Fixes
