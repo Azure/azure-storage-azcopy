@@ -22,7 +22,9 @@ package common
 
 import (
 	"errors"
+	"net"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 )
@@ -64,6 +66,19 @@ const s3EssentialHostPart = "amazonaws.com"
 
 var s3HostRegex = regexp.MustCompile(s3HostPattern)
 
+func GetS3CompatibleSuffix() string {
+	if os.Getenv("S3_COMPATIBLE_ENDPOINT") != "" {
+		return os.Getenv("S3_COMPATIBLE_ENDPOINT")
+	} else {
+		return "amazonaws.com"
+	}
+}
+
+func getS3Keyword() string {
+	Host := GetS3CompatibleSuffix()
+	return Host[0:strings.LastIndex(Host, ".")]
+}
+
 // IsS3URL verifies if a given URL points to S3 URL supported by AzCopy-v10
 func IsS3URL(u url.URL) bool {
 	if _, isS3URL := findS3URLMatches(strings.ToLower(u.Host)); isS3URL {
@@ -72,12 +87,133 @@ func IsS3URL(u url.URL) bool {
 	return false
 }
 
+// findS3URLMatches identifies whether the given host corresponds to an S3 (or S3-compatible) endpoint
+// and returns a synthesized slice similar to the AWS regex submatches:
+//
+//	[ fullHost, bucketCapture(with trailing '.' if present OR ""), regionOrDualStack, keywordDomainRoot ]
+//
+// For path-style compatible providers where bucket is not in host, bucketCapture is "" so caller treats it as path-style.
 func findS3URLMatches(host string) (matches []string, isS3Host bool) {
-	matchSlices := s3HostRegex.FindStringSubmatch(host) // If match the first element would be entire host, and then follows the sub match strings.
-	if matchSlices == nil || !strings.Contains(host, s3EssentialHostPart) {
-		return nil, false
+	suffix := GetS3CompatibleSuffix()
+	hostLower := strings.ToLower(host)
+
+	// First, optionally allow raw IP endpoints if explicitly enabled. These are always path-style.
+	if m := matchIPHost(hostLower); m != nil {
+		return m, true
 	}
-	return matchSlices, true
+
+	// Dispatcher based on configured suffix (allows per-provider parsing differences)
+	switch {
+	case strings.HasSuffix(hostLower, "."+suffix) || hostLower == suffix:
+		// Pick provider-specific matcher using well-known suffixes
+		switch suffix {
+		case "amazonaws.com":
+			if m := matchAWSHost(hostLower, suffix); m != nil {
+				return m, true
+			}
+		case "googleapis.com":
+			if m := matchGoogleHost(hostLower, suffix); m != nil {
+				return m, true
+			}
+		default:
+			if m := matchGoogleHost(hostLower, suffix); m != nil {
+				return m, true
+			}
+			if m := matchAWSHost(hostLower, suffix); m != nil {
+				return m, true
+			}
+		}
+	}
+
+	// Fallback: If S3_COMPATIBLE_ENDPOINT is set and we haven't matched yet,
+	// allow any FQDN for on-prem S3-compatible appliances (e.g., MinIO, NetApp, Dell EMC, etc.)
+	// This enables support for custom domains like s3.company.com, minio.internal.net, etc.
+	if os.Getenv("S3_COMPATIBLE_ENDPOINT") != "" {
+		if m := matchCustomS3Host(hostLower); m != nil {
+			return m, true
+		}
+	}
+
+	return nil, false
+}
+
+// matchAWSHost uses the legacy AWS regex; requires suffix to be present.
+func matchAWSHost(hostLower, suffix string) []string {
+	if !strings.Contains(hostLower, suffix) {
+		return nil
+	}
+	matchSlices := s3HostRegex.FindStringSubmatch(hostLower)
+	if matchSlices == nil {
+		return nil
+	}
+	// Ensure suffix presence (already checked) then return
+	return matchSlices
+}
+
+// matchGoogleHost matches Google Cloud Storage path-style endpoint storage.googleapis.com
+// Host form: storage.googleapis.com (no region); bucket and object come from path.
+func matchGoogleHost(hostLower, suffix string) []string {
+	if hostLower != "storage."+suffix {
+		return nil
+	}
+	keyword := getS3Keyword() // googleapis
+	region := ""              // unspecified
+	matchSlices := []string{hostLower, "", region, keyword}
+	return matchSlices
+}
+
+// matchCustomS3Host handles arbitrary FQDN hosts for on-prem S3-compatible appliances.
+// This supports custom domains like s3.company.com, minio.internal.net, storage.local, etc.
+// Assumes path-style URLs (bucket in path, not subdomain) for maximum compatibility.
+func matchCustomS3Host(hostLower string) []string {
+	// Basic validation: must look like a hostname (contains at least one dot or is localhost-like)
+	// This prevents matching arbitrary strings while allowing legitimate hostnames
+	if !strings.Contains(hostLower, ".") && hostLower != "localhost" && !strings.Contains(hostLower, ":") {
+		return nil
+	}
+
+	keyword := getS3Keyword()
+	region := "" // Custom endpoints typically don't specify region in hostname
+
+	// Return path-style match (empty bucket capture means bucket comes from URL path)
+	matchSlices := []string{hostLower, "", region, keyword}
+	return matchSlices
+}
+
+// matchIPHost detects IPv4 or IPv6 literals (with optional port) for S3-compatible endpoints.
+// Requires opt-in via AZCOPY_S3_ALLOW_IP=1 (to avoid accidental misclassification of custom domains).
+// Optional region hint can be supplied with AZCOPY_S3_IP_REGION; if absent, region left empty.
+func matchIPHost(hostLower string) []string {
+	if os.Getenv("AZCOPY_S3_ALLOW_IP") != "1" {
+		return nil
+	}
+	hostPort := hostLower
+	// If IPv6 with brackets, strip them before parse.
+	rawHost := hostPort
+	if i := strings.LastIndex(hostPort, ":"); i != -1 { // possible :port OR IPv6
+		// Distinguish IPv6 vs IPv4: IPv6 will have multiple ':'; net.SplitHostPort needs brackets
+		// Easier approach: try SplitHostPort after adding brackets for IPv6 without them is messy. Instead, attempt parse progressively.
+		// We'll manually separate port only for IPv4 host:port or [IPv6]:port
+		if strings.HasPrefix(hostPort, "[") && strings.Contains(hostPort, "]:") {
+			// Form: [IPv6]:port
+			closing := strings.Index(hostPort, "]:")
+			if closing != -1 {
+				rawHost = hostPort[1:closing]
+			}
+		} else if strings.Count(hostPort, ":") == 1 && !strings.Contains(hostPort, "..") { // likely IPv4:port
+			rawHost = hostPort[:i]
+		} else if strings.Count(hostPort, ":") >= 2 && !strings.HasPrefix(hostPort, "[") { // bare IPv6 without port (leave as is)
+			rawHost = hostPort
+		}
+	}
+	ip := net.ParseIP(strings.Trim(rawHost, "[]"))
+	if ip == nil {
+		return nil
+	}
+	region := os.Getenv("AZCOPY_S3_IP_REGION") // optional
+	keyword := getS3Keyword()
+	matchSlices := []string{hostLower, "", region, keyword}
+	return matchSlices
 }
 
 // NewS3URLParts parses a URL initializing S3URLParts' fields. This method overwrites all fields in the S3URLParts object.
@@ -122,6 +258,7 @@ func NewS3URLParts(u url.URL) (S3URLParts, error) {
 		up.Endpoint = host
 	}
 	// Check if dualstack is contained in host name
+	s3KeywordAmazonAWS := getS3Keyword()
 	if matchSlices[2] == s3KeywordDualStack {
 		up.isDualStack = true
 		if matchSlices[3] != s3KeywordAmazonAWS {
@@ -209,6 +346,12 @@ func (p *S3URLParts) IsDirectorySyntactically() bool {
 		return true
 	}
 	return false
+}
+
+// IsGoogleCloudStorage checks if this S3 URL is actually pointing to Google Cloud Storage
+// (via S3-compatible API with HMAC keys). Returns true if the endpoint is storage.googleapis.com.
+func (p *S3URLParts) IsGoogleCloudStorage() bool {
+	return strings.Contains(strings.ToLower(p.Endpoint), "googleapis.com")
 }
 
 type caseInsensitiveValues url.Values // map[string][]string
