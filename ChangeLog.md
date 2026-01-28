@@ -1,7 +1,7 @@
 
 # Change Log
 
-## Version 10.32.0-preview.2
+## Version 10.32.0
 
 ### New Features
 1. Added support for AMLFS style posix metadata. ([#3317](https://github.com/Azure/azure-storage-azcopy/pull/3317))
