@@ -285,6 +285,10 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 		shouldFail = true
 	}
 
+	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
+		shouldFail = true
+	}
+
 	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
@@ -292,7 +296,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 			Targets: []ResourceManager{srcDirObj, dst.(RemoteResourceManager).WithSpecificAuthType(
 				ResolveVariation(svm, []ExplicitCredentialTypes{
 					EExplicitCredentialType.SASToken(),
-					//EExplicitCredentialType.OAuth(),
+					EExplicitCredentialType.OAuth(),
 				}), svm, CreateAzCopyTargetOptions{}),
 			},
 			Flags: CopyFlags{
@@ -308,7 +312,6 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 			},
 			ShouldFail: shouldFail,
 		})
-
 	if followSymlinks && preserveSymlinks {
 		ValidateMessageOutput(svm, stdOut, "cannot both follow and preserve symlinks", true)
 		return

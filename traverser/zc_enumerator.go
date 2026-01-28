@@ -391,6 +391,7 @@ type InitResourceTraverserOptions struct {
 	HardlinkHandling  common.HardlinkHandlingType
 	FromTo            common.FromTo
 	IncludeRoot       bool
+	BasePath          string
 }
 
 func (o *InitResourceTraverserOptions) PerformChecks() error {

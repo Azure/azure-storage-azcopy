@@ -928,9 +928,10 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.trailingDot,
 		},
-		JobErrorHandler:   glcm,
-		JobPartType:       common.EJobPartType.Mixed(), // Default to Mixed, will be determined per part based on transfers
-		JobProcessingMode: azcopy.GetJobProcessingMode(cca.FromTo),
+		JobErrorHandler:      glcm,
+		JobPartType:          common.EJobPartType.Mixed(), // Default to Mixed, will be determined per part based on transfers
+		JobProcessingMode:    azcopy.GetJobProcessingMode(cca.FromTo),
+		HardlinkHandlingType: cca.hardlinks,
 	}
 
 	srcCredInfo, err := cca.getSrcCredential(ctx, &jobPartOrder)

@@ -105,13 +105,13 @@ func anyToRemote_hardlink(jptm IJobPartTransferMgr, info *TransferInfo, pacer pa
 	}
 
 	// TODO: support path derivation for FileNFSLocal and FileNFSFileNFS hardlink transfers
-	targethardlinkPath, err := derivePathForLocalToFileNFS(info.Destination, jptm.Info().TargetHardlinkFilePath)
-	if err != nil {
-		jptm.FailActiveSend("deriving target hardlink path", err)
-		return
-	}
+	// targethardlinkPath, err := derivePathForLocalToFileNFS(info.Destination, jptm.Info().TargetHardlinkFilePath)
+	// if err != nil {
+	// 	jptm.FailActiveSend("deriving target hardlink path", err)
+	// 	return
+	// }
 	// write the hardlink
-	err = s.CreateHardlink(targethardlinkPath)
+	err = s.CreateHardlink(jptm.Info().TargetHardlinkFilePath)
 	if err != nil {
 		jptm.FailActiveSend("creating destination hardlink representative", err)
 	}
