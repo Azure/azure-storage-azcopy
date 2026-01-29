@@ -59,6 +59,7 @@ type localTraverser struct {
 	hashTargetChannel chan string
 	hardlinkHandling  common.HardlinkHandlingType
 	fromTo            common.FromTo
+	basePath          string
 }
 
 func (t *localTraverser) IsDirectory(bool) (bool, error) {
@@ -668,32 +669,6 @@ var (
 	ErrorLoneSymlinkSkipped = errors.New("symlink handling was not specified and defaulted to skip, but the sole file target is a symlink")
 )
 
-var hardlinkMp InodeHardlinkMap = InodeHardlinkMap{
-	mp: make(map[string]string),
-}
-
-type InodeHardlinkMap struct {
-	mu sync.RWMutex
-	mp map[string]string
-}
-
-// read (shared lock)
-func (s *InodeHardlinkMap) Read(key string) (string, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	val, ok := s.mp[key]
-	return val, ok
-}
-
-// update (exclusive lock)
-func (s *InodeHardlinkMap) Update(key, value string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.mp[key] = value
-}
-
 func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) (err error) {
 	singleFileInfo, isSingleFile, err := t.getInfoIfSingleFile()
 	// it fails here if file does not exist
@@ -702,7 +677,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 		return fmt.Errorf("failed to scan path %s due to %w", t.fullPath, err)
 	}
 	finalizer, hashingProcessor := t.prepareHashingThreads(preprocessor, processor, filters)
-
+	var targetHardlinkFile string
 	// if the path is a single file, then pass it through the filters and send to processor
 	if isSingleFile {
 
@@ -716,11 +691,26 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 					return nil
 				}
 			} else if IsHardlink(singleFileInfo) {
-				// for single hardlink file transfer hardlink file is treated as regular file
 				entityType = common.EEntityType.Hardlink()
 				if skip := HandleHardlinkForNFS(singleFileInfo,
 					t.hardlinkHandling, t.incrementEnumerationCounter); skip {
 					return nil
+				}
+
+				if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() {
+					inodeStoreInstance, err := common.GetInodeStore()
+					if err != nil {
+						return err
+					}
+
+					relPath, err := getRelPath(t.basePath, t.fullPath)
+					if err != nil {
+						return err
+					}
+					targetHardlinkFile, _, err = inodeStoreInstance.GetOrAdd(getInodeString(singleFileInfo), relPath)
+					if err != nil {
+						return err
+					}
 				}
 			} else if IsRegularFile(singleFileInfo) {
 				entityType = common.EEntityType.File()
@@ -746,6 +736,12 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 				} else if t.symlinkHandling == common.ESymlinkHandlingType.Skip() {
 					return ErrorLoneSymlinkSkipped
 				}
+			} else if IsHardlink(singleFileInfo) {
+				entityType = common.EEntityType.Hardlink()
+				if skip := HandleHardlinkForNFS(singleFileInfo,
+					t.hardlinkHandling, t.incrementEnumerationCounter); skip {
+					return nil
+				}
 			} else if IsRegularFile(singleFileInfo) {
 				entityType = common.EEntityType.File()
 			} else {
@@ -769,7 +765,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 				NoBlobProps,
 				NoMetadata,
 				"", // Local has no such thing as containers
-				"",
+				targetHardlinkFile,
 			),
 			hashingProcessor, // hashingProcessor handles the mutex wrapper
 		)
@@ -802,8 +798,6 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 				}
 
 				// NFS Handling
-				var targetHardlinkFile string
-				var filePresent bool
 				if t.fromTo.IsNFS() {
 					if IsHardlink(fileInfo) {
 						entityType = common.EEntityType.Hardlink()
@@ -812,13 +806,17 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 							return nil
 						}
 						if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() {
-							targetHardlinkFile, filePresent = hardlinkMp.Read(getInodeString(fileInfo))
-							if !filePresent {
-								relPath, err := getRelPath(filePath, t.fullPath)
-								if err != nil {
-									return err
-								}
-								hardlinkMp.Update(getInodeString(fileInfo), relPath)
+							inodeStoreInstance, err := common.GetInodeStore()
+							if err != nil {
+								return err
+							}
+							relPath, err := getRelPath(filePath, t.fullPath)
+							if err != nil {
+								return err
+							}
+							targetHardlinkFile, _, err = inodeStoreInstance.GetOrAdd(getInodeString(fileInfo), relPath)
+							if err != nil {
+								return err
 							}
 						}
 					}
@@ -906,21 +904,29 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 					}
 				}
 				// NFS handling
-				var targetHardlinkFile string
-				var filePresent bool
 				if t.fromTo.IsNFS() {
 					if IsHardlink(fileInfo) {
 						entityType = common.EEntityType.Hardlink()
-						targetHardlinkFile, filePresent = hardlinkMp.Read(getInodeString(fileInfo))
-						if !filePresent {
-							relPath, err := getRelPath(common.GenerateFullPath(t.fullPath, entry.Name()), t.fullPath)
+						if skip := HandleHardlinkForNFS(fileInfo,
+							t.hardlinkHandling, t.incrementEnumerationCounter); skip {
+							return nil
+						}
+						if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() {
+							inodeStoreInstance, err := common.GetInodeStore()
 							if err != nil {
 								return err
 							}
-							hardlinkMp.Update(getInodeString(fileInfo), relPath)
-							entityType = common.EEntityType.File()
-						}
+							relPath, err := getRelPath(t.basePath, t.fullPath)
+							if err != nil {
+								return err
+							}
+							fmt.Println("Processing hardlink file:", relPath)
+							targetHardlinkFile, _, err = inodeStoreInstance.GetOrAdd(getInodeString(fileInfo), relPath)
+							if err != nil {
+								return err
+							}
 
+						}
 					} else if !IsRegularFile(fileInfo) {
 						entityType = common.EEntityType.Other()
 						if t.incrementEnumerationCounter != nil {
@@ -967,7 +973,6 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 }
 
 func getRelPath(filePath, basePath string) (string, error) {
-	// basePath is /home/azureuser/spe_dir
 	// we want to compute relative from its parent
 	base := filepath.Dir(basePath)
 
@@ -1001,6 +1006,7 @@ func NewLocalTraverser(fullPath string, ctx context.Context, opts InitResourceTr
 		stripTopDir:                 opts.StripTopDir,
 		hardlinkHandling:            opts.HardlinkHandling,
 		fromTo:                      opts.FromTo,
+		basePath:                    opts.BasePath,
 	}
 	return &traverser, nil
 }

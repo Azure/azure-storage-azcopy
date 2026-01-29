@@ -391,6 +391,7 @@ type InitResourceTraverserOptions struct {
 	HardlinkHandling  common.HardlinkHandlingType
 	FromTo            common.FromTo
 	IncludeRoot       bool
+	BasePath          string // need this base path to derive the rel path for hardlink files to be created
 }
 
 func (o *InitResourceTraverserOptions) PerformChecks() error {

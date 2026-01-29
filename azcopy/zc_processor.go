@@ -57,7 +57,7 @@ type CopyTransferProcessor struct {
 
 	dryrunMode                bool
 	dryrunJobPartOrderHandler func(request common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse
-	// Separate tracking for files/folder/symlink and hardlink based on processing mode
+	// Separate tracking for files/folder/symlink vs hardlink based on processing mode
 	dispatcher     syncJobPartDispatcher
 	processingMode common.JobProcessingMode
 }
@@ -137,7 +137,6 @@ func (s *CopyTransferProcessor) scheduleTransfer(srcRelativePath, dstRelativePat
 		return nil // skip this one
 	}
 
-	//added
 	s.dispatchPartIfReady()
 
 	// only append the transfer after we've checked and dispatched a part
@@ -195,15 +194,14 @@ func (s *CopyTransferProcessor) dispatchPart() error {
 }
 
 func (s *CopyTransferProcessor) appendTransfer(copyTransfer common.CopyTransfer) error {
-	// This is a hardlink transfer in NFS mode, add it to the separate hardlink transfers batch
+	// This is a hardlink preserve transfer in NFS mode, add it to the separate hardlink transfers batch
 	if s.processingMode == common.EJobProcessingMode.NFS() &&
 		copyTransfer.EntityType == common.EEntityType.Hardlink() &&
 		copyTransfer.TargetHardlinkFile != "" {
 
 		s.dispatcher.PendingHardlinksTransfers.List = append(s.dispatcher.PendingHardlinksTransfers.List, copyTransfer)
-		// Note: Check on this. Do e need to apped the size for hardlink files. As we will only be creating the hardlink
-		//s.dispatcher.PendingHardlinksTransfers.TotalSizeInBytes += uint64(copyTransfer.SourceSize)
 		s.dispatcher.PendingHardlinksTransfers.HardlinksTransferCount++
+
 	} else {
 
 		s.dispatcher.PendingTransfers.List = append(s.dispatcher.PendingTransfers.List, copyTransfer)
@@ -217,6 +215,7 @@ func (s *CopyTransferProcessor) appendTransfer(copyTransfer common.CopyTransfer)
 		case common.EEntityType.Symlink():
 			s.dispatcher.PendingTransfers.SymlinkTransferCount++
 		case common.EEntityType.Hardlink():
+			// This is the first occurance of a hardlink file which will be copied as a regular file
 			if s.hardlinkHandlingType == common.EHardlinkHandlingType.Preserve() {
 				s.dispatcher.PendingTransfers.HardlinksTransferCount++
 			} else if s.hardlinkHandlingType == common.EHardlinkHandlingType.Follow() {
@@ -232,10 +231,11 @@ var NothingScheduledError = errors.New("no transfers were scheduled because no f
 var FinalPartCreatedMessage = "Final job part has been created"
 
 func (s *CopyTransferProcessor) DispatchFinalPart() (copyJobInitiated bool, err error) {
-	// Handle separate batch mode with remaining file and folder batches
+	// Handle separate batch mode with remaining file/folder/symlink vs hardlink batches
 	if s.processingMode == common.EJobProcessingMode.NFS() {
-		if len(s.dispatcher.PendingTransfers.List) > 0 && len(s.dispatcher.PendingHardlinksTransfers.List) > 0 {
-			// if there are both kinds of transfers pending, first do the file transfers
+		if len(s.dispatcher.PendingTransfers.List) > 0 &&
+			len(s.dispatcher.PendingHardlinksTransfers.List) > 0 {
+			// if there are both kinds of transfers pending, first do the file/folder/symlink transfers
 			s.CopyJobTemplate.Transfers = s.dispatcher.PendingTransfers.Clone()
 			err = s.dispatchPart()
 			if err != nil {
@@ -245,7 +245,7 @@ func (s *CopyTransferProcessor) DispatchFinalPart() (copyJobInitiated bool, err 
 			s.dispatcher.PendingTransfers = common.Transfers{}
 		}
 
-		// Either file or folder transfers are pending. Whatever is pending will be the final part.
+		// Either file/folder/symlink or hardlink transfers are pending. Whatever is pending will be the final part.
 		if len(s.dispatcher.PendingTransfers.List) > 0 {
 			s.CopyJobTemplate.Transfers = s.dispatcher.PendingTransfers.Clone()
 		} else if len(s.dispatcher.PendingHardlinksTransfers.List) > 0 {

@@ -25,7 +25,6 @@ func (d *CopyJobPartDispatcher) appendTransfer(e *common.CopyJobPartOrderRequest
 		transfer.TargetHardlinkFile != "" {
 
 		d.PendingHardlinksTransfers.List = append(d.PendingHardlinksTransfers.List, transfer)
-		d.PendingHardlinksTransfers.TotalSizeInBytes += uint64(transfer.SourceSize)
 		d.PendingHardlinksTransfers.HardlinksTransferCount++
 
 	} else {
@@ -108,49 +107,6 @@ func (d *CopyJobPartDispatcher) dispatchPart(e *common.CopyJobPartOrderRequest, 
 	return nil
 }
 
-// addTransfer accepts a new transfer, if the threshold is reached, dispatch a job part order.
-// func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer, cca *CookedCopyCmdArgs) error {
-// 	// Source and destination paths are and should be relative paths.
-
-// 	// dispatch the transfers once the number reaches NumOfFilesPerDispatchJobPart
-// 	// we do this so that in the case of large transfer, the transfer engine can get started
-// 	// while the frontend is still gathering more transfers
-// 	if len(e.Transfers.List) == azcopy.NumOfFilesPerDispatchJobPart {
-// 		shuffleTransfers(e.Transfers.List)
-// 		resp := jobsAdmin.ExecuteNewCopyJobPartOrder(*e)
-
-// 		if !resp.JobStarted {
-// 			return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNum, resp.ErrorMsg)
-// 		}
-// 		// if the current part order sent to engine is 0, then start fetching the Job Progress summary.
-// 		if e.PartNum == 0 {
-// 			cca.waitUntilJobCompletion(false)
-// 		}
-// 		e.Transfers = common.Transfers{}
-// 		e.PartNum++
-// 	}
-
-// 	// only append the transfer after we've checked and dispatched a part
-// 	// so that there is at least one transfer for the final part
-// 	{
-// 		// Should this block be a function?
-// 		e.Transfers.List = append(e.Transfers.List, transfer)
-// 		e.Transfers.TotalSizeInBytes += uint64(transfer.SourceSize)
-// 		switch transfer.EntityType {
-// 		case common.EEntityType.File():
-// 			e.Transfers.FileTransferCount++
-// 		case common.EEntityType.Folder():
-// 			e.Transfers.FolderTransferCount++
-// 		case common.EEntityType.Symlink():
-// 			e.Transfers.SymlinkTransferCount++
-// 		case common.EEntityType.Hardlink():
-// 			e.Transfers.HardlinksConvertedCount++
-// 		}
-// 	}
-
-// 	return nil
-// }
-
 // this function shuffles the transfers before they are dispatched
 // this is done to avoid hitting the same partition continuously in an append only pattern
 // TODO this should probably be removed after the high throughput block blob feature is implemented on the service side
@@ -164,14 +120,14 @@ func (d *CopyJobPartDispatcher) dispatchFinalPart(e *common.CopyJobPartOrderRequ
 
 	if e.JobProcessingMode == common.EJobProcessingMode.NFS() {
 		if len(d.PendingTransfers.List) > 0 && len(d.PendingHardlinksTransfers.List) > 0 {
-			// if there are both kinds of transfers pending, first do the filmmixed transfers
+			// if there are both kinds of transfers pending, first do the mixed transfers
 			e.Transfers = d.PendingTransfers.Clone()
 			e.JobPartType = common.EJobPartType.Mixed()
 			d.dispatchPart(e, cca)
 			d.PendingTransfers = common.Transfers{}
 		}
 
-		// Either file or folder transfers are pending. Whatever is pending will be the final part.
+		// Either mixed transfer or hardlink transfers are pending. Whatever is pending will be the final part.
 		if len(d.PendingTransfers.List) > 0 {
 			e.Transfers = d.PendingTransfers.Clone()
 			e.JobPartType = common.EJobPartType.Mixed()

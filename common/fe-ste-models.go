@@ -879,10 +879,13 @@ func (TransferStatus) Started() TransferStatus { return TransferStatus(1) }
 // Transfer successfully completed
 func (TransferStatus) Success() TransferStatus { return TransferStatus(2) }
 
-// Folder was created, but properties have not been persisted yet. Equivalent to Started, but never intended to be set on anything BUT folders.
+// FolderCreated folder was created, but properties have not been persisted yet. Equivalent to Started, but never intended to be set on anything BUT folders.
 func (TransferStatus) FolderCreated() TransferStatus { return TransferStatus(3) }
 
-func (TransferStatus) Restarted() TransferStatus { return TransferStatus(4) }
+// FolderExisted folder already existed before we got to it. A valid state to continue from in overwrite scenarios.
+func (TransferStatus) FolderExisted() TransferStatus { return TransferStatus(4) }
+
+func (TransferStatus) Restarted() TransferStatus { return TransferStatus(5) }
 
 // Transfer failed due to some error.
 func (TransferStatus) Failed() TransferStatus { return TransferStatus(-1) }
@@ -1971,7 +1974,7 @@ var EJobProcessingMode = JobProcessingMode(0)
 type JobProcessingMode uint8
 
 func (JobProcessingMode) Mixed() JobProcessingMode { return JobProcessingMode(0) } // Default - process all job parts immediately
-func (JobProcessingMode) NFS() JobProcessingMode   { return JobProcessingMode(1) } // Process file job parts first, then folder job parts
+func (JobProcessingMode) NFS() JobProcessingMode   { return JobProcessingMode(1) } // Process mixed job parts first, then hardlink job parts
 
 func (jpm JobProcessingMode) String() string {
 	return enum.StringInt(jpm, reflect.TypeOf(jpm))
