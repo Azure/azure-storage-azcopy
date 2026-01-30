@@ -1,9 +1,10 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"runtime"
 	"strconv"
+
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -389,6 +390,40 @@ func (s *BlobTestSuite) Scenario_DownloadBlobNoNameWithoutWildcardDirectory(svm 
 		ShouldFail: false,
 	})
 	ValidateResource[ObjectResourceManager](svm, dstLocal,
+		ResourceDefinitionObject{Body: body},
+		ValidateResourceOptions{validateObjectContent: false})
+}
+
+func (s *BlobTestSuite) Scenario_UploadBlobListOfFilesWildcard(svm *ScenarioVariationManager) {
+	blobContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
+	body := NewRandomObjectContentContainer(SizeFromString("1K"))
+	srcLocal := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
+	_ = CreateResource[ObjectResourceManager](svm, srcLocal, ResourceDefinitionObject{
+		ObjectName:       pointerTo("a.txt"),
+		Body:             body,
+		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+	})
+
+	src := TryApplySpecificAuthType(srcLocal, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{Wildcard: "/*"})
+
+	RunAzCopy(svm, AzCopyCommand{
+		Verb: AzCopyVerbCopy,
+		Targets: []ResourceManager{
+			src,
+			blobContainer,
+		},
+		Flags: CopyFlags{
+			ListOfFiles: []string{"a.txt"},
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive: pointerTo(true),
+				GlobalFlags: GlobalFlags{
+					OutputType: pointerTo(cmd.EOutputFormat.Text()),
+				},
+			},
+		},
+		ShouldFail: false,
+	})
+	ValidateResource[ObjectResourceManager](svm, blobContainer.GetObject(svm, "a.txt", common.EEntityType.File()),
 		ResourceDefinitionObject{Body: body},
 		ValidateResourceOptions{validateObjectContent: false})
 }
