@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -900,4 +901,93 @@ func (s *BasicFunctionalitySuite) Scenario_ValidateThroughput(svm *ScenarioVaria
 
 	// Validate that throughput is displayed in the output (regression test for v10.31.0 throughput display bug)
 	ValidateThroughputOutput(svm, stdOut)
+}
+
+// Scenario_TestPutAndCheckMd5 tests:
+// --put-md5 during uploads correctly sets the Content-MD5 header.
+// --check-md5 during downloads correctly validates the MD5 hash.
+func (s *BasicFunctionalitySuite) Scenario_TestPutAndCheckMd5(svm *ScenarioVariationManager) {
+	body := NewRandomObjectContentContainer(SizeFromString("1K"))
+
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Local()),
+		ResourceDefinitionObject{
+			ObjectName: pointerTo("test_putmd5.txt"),
+			Body:       body,
+		})
+
+	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm,
+		[]common.Location{common.ELocation.File(), common.ELocation.Blob()})),
+		ResourceDefinitionContainer{}).
+		GetObject(svm, "test_putmd5.txt", common.EEntityType.File())
+
+	sasOpts := GenericAccountSignatureValues{}
+
+	// First, test put-md5 uploads
+	RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbCopy,
+			Targets: []ResourceManager{ // LocalBlob, LocalFile
+				TryApplySpecificAuthType(srcObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive: pointerTo(true),
+					PutMD5:    pointerTo(true),
+				},
+			},
+		})
+
+	// Calculate expected MD5 from source content
+	var expectedMD5 []byte
+	if !svm.Dryrun() {
+		bytes := body.MD5()
+		expectedMD5 = bytes[:] // convert from [16]bytes to bytes
+	}
+
+	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
+		Body: body,
+		ObjectProperties: ObjectProperties{
+			HTTPHeaders: contentHeaders{
+				contentMD5: expectedMD5,
+			},
+		},
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
+
+	// Next, test --check-md5 downloads
+	stdOut, _ := RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbCopy,
+			Targets: []ResourceManager{ // BlobLocal, FileLocal
+				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+				TryApplySpecificAuthType(srcObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive: pointerTo(true),
+					CheckMD5:  pointerTo(common.EHashValidationOption.FailIfDifferentOrMissing()), // since we upload with put-md5, it should not be missing
+				},
+			},
+			ShouldFail: false,
+		})
+
+	ValidateResource[ObjectResourceManager](svm, srcObj, ResourceDefinitionObject{
+		Body: body,
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
+
+	ValidateDoesNotContainError(svm, stdOut, []string{ste.ErrMd5Mismatch.Error()})
 }
