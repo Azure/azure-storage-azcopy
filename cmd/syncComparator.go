@@ -122,6 +122,11 @@ func newSyncDestinationComparator(
 // if file x from the destination exists at the source, then we'd only transfer it if it is considered stale compared to its counterpart at the source
 // if file x does not exist at the source, then it is considered extra, and will be deleted
 func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredObject) error {
+	if azcopyScanningLogger != nil {
+		azcopyScanningLogger.Log(common.LogInfo,
+			fmt.Sprintf("Sync: preferSMBTime=%v", f.preferSMBTime))
+	}
+	fmt.Sprintf("Sync: preferSMBTime=%v", f.preferSMBTime)
 	var sourceObjectInMap StoredObject
 	var present bool
 
@@ -144,6 +149,7 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 			azcopyScanningLogger.Log(common.LogInfo,
 				fmt.Sprintf("Sync: Evaluating file '%s' - found in both source and destination", destinationObject.relativePath))
 		}
+		fmt.Sprintf("Sync: Evaluating file '%s' - found in both source and destination", destinationObject.relativePath)
 
 		defer func() {
 			if f.sourceIndex.accessUnderLock {
@@ -160,6 +166,7 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 				azcopyScanningLogger.Log(common.LogInfo,
 					fmt.Sprintf("Sync: Using orchestrator options for '%s'", destinationObject.relativePath))
 			}
+			fmt.Sprintf("Sync: Using orchestrator options for '%s'", destinationObject.relativePath)
 			processed, _ := f.processIfNecessaryWithOrchestrator(sourceObjectInMap, destinationObject)
 			if processed {
 				return nil
@@ -171,6 +178,7 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 				azcopyScanningLogger.Log(common.LogInfo,
 					fmt.Sprintf("Sync: Comparison disabled for '%s' - scheduling transfer", sourceObjectInMap.relativePath))
 			}
+			fmt.Sprintf("Sync: Comparison disabled for '%s' - scheduling transfer", sourceObjectInMap.relativePath)
 			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, false)
 			return f.copyTransferScheduler(sourceObjectInMap)
 		}
@@ -180,6 +188,7 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 				azcopyScanningLogger.Log(common.LogInfo,
 					fmt.Sprintf("Sync: Using hash comparison (%s) for '%s'", f.comparisonHashType.String(), sourceObjectInMap.relativePath))
 			}
+			fmt.Sprintf("Sync: Using hash comparison (%s) for '%s'", f.comparisonHashType.String(), sourceObjectInMap.relativePath)
 			switch f.comparisonHashType {
 			case common.ESyncHashType.MD5():
 				if sourceObjectInMap.md5 == nil {
@@ -210,6 +219,7 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 				azcopyScanningLogger.Log(common.LogInfo,
 					fmt.Sprintf("Sync: File '%s' source is newer - scheduling transfer (preferSMBTime=%v)", sourceObjectInMap.relativePath, f.preferSMBTime))
 			}
+			fmt.Sprintf("Sync: File '%s' source is newer - scheduling transfer (preferSMBTime=%v)", sourceObjectInMap.relativePath, f.preferSMBTime)
 			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMT, false)
 			return f.copyTransferScheduler(sourceObjectInMap)
 		} else {
@@ -217,6 +227,7 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 				azcopyScanningLogger.Log(common.LogInfo,
 					fmt.Sprintf("Sync: File '%s' destination is same/newer - skipping (preferSMBTime=%v)", sourceObjectInMap.relativePath, f.preferSMBTime))
 			}
+			fmt.Sprintf("Sync: File '%s' destination is same/newer - skipping (preferSMBTime=%v)", sourceObjectInMap.relativePath, f.preferSMBTime)
 		}
 
 		// if source is not more recent, we skip the transfer
