@@ -537,7 +537,7 @@ func GetSyncEnumeratorWithDestComparator(
 	// when uploading, we can delete remote objects immediately, because as we traverse the remote location
 	// we ALREADY have available a complete map of everything that exists locally
 	// so as soon as we see a remote destination object we can know whether it exists in the local source
-
+	fmt.Println("Using SyncOrchestrator: Calling sync destination Comparator")
 	comparator := newSyncDestinationComparator(
 		indexer,
 		transferScheduler.scheduleCopyTransfer,

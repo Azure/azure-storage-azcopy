@@ -84,8 +84,6 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.CacheProxyLookup(),
 	EEnvironmentVariable.DefaultServiceApiVersion(),
 	EEnvironmentVariable.UserAgentPrefix(),
-	EEnvironmentVariable.AWSAccessKeyID(),
-	EEnvironmentVariable.AWSSecretAccessKey(),
 	EEnvironmentVariable.ClientSecret(),
 	EEnvironmentVariable.CertificatePassword(),
 	EEnvironmentVariable.AutoLoginType(),
@@ -102,6 +100,7 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.DisableSyslog(),
 	EEnvironmentVariable.MimeMapping(),
 	EEnvironmentVariable.DownloadToTempPath(),
+	EEnvironmentVariable.S3CompatibleEndpoint(),
 }
 
 var EEnvironmentVariable = EnvironmentVariable{}
@@ -393,6 +392,13 @@ func (EnvironmentVariable) AWSSecretAccessKey() EnvironmentVariable {
 		Name:        "AWS_SECRET_ACCESS_KEY",
 		Description: "The AWS secret access key for S3 source used in service to service copy.",
 		Hidden:      true,
+	}
+}
+
+func (EnvironmentVariable) S3CompatibleEndpoint() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "S3_COMPATIBLE_ENDPOINT",
+		Description: "The S3 compatible endpoint used for S3 source in service to service copy.",
 	}
 }
 

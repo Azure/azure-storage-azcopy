@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -121,6 +122,11 @@ func newSyncDestinationComparator(
 // if file x from the destination exists at the source, then we'd only transfer it if it is considered stale compared to its counterpart at the source
 // if file x does not exist at the source, then it is considered extra, and will be deleted
 func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredObject) error {
+	if azcopyScanningLogger != nil {
+		azcopyScanningLogger.Log(common.LogInfo,
+			fmt.Sprintf("Sync: preferSMBTime=%v", f.preferSMBTime))
+	}
+	fmt.Sprintf("Sync: preferSMBTime=%v", f.preferSMBTime)
 	var sourceObjectInMap StoredObject
 	var present bool
 
@@ -139,6 +145,12 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 
 	// if the destinationObject is present at source and stale, we transfer the up-to-date version from source
 	if present {
+		if azcopyScanningLogger != nil {
+			azcopyScanningLogger.Log(common.LogInfo,
+				fmt.Sprintf("Sync: Evaluating file '%s' - found in both source and destination", destinationObject.relativePath))
+		}
+		fmt.Sprintf("Sync: Evaluating file '%s' - found in both source and destination", destinationObject.relativePath)
+
 		defer func() {
 			if f.sourceIndex.accessUnderLock {
 				f.sourceIndex.rwMutex.Lock()
@@ -150,6 +162,11 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 		}()
 
 		if f.useOrchestratorOptions {
+			if azcopyScanningLogger != nil {
+				azcopyScanningLogger.Log(common.LogInfo,
+					fmt.Sprintf("Sync: Using orchestrator options for '%s'", destinationObject.relativePath))
+			}
+			fmt.Sprintf("Sync: Using orchestrator options for '%s'", destinationObject.relativePath)
 			processed, _ := f.processIfNecessaryWithOrchestrator(sourceObjectInMap, destinationObject)
 			if processed {
 				return nil
@@ -157,11 +174,21 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 		}
 
 		if f.disableComparison {
+			if azcopyScanningLogger != nil {
+				azcopyScanningLogger.Log(common.LogInfo,
+					fmt.Sprintf("Sync: Comparison disabled for '%s' - scheduling transfer", sourceObjectInMap.relativePath))
+			}
+			fmt.Sprintf("Sync: Comparison disabled for '%s' - scheduling transfer", sourceObjectInMap.relativePath)
 			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, false)
 			return f.copyTransferScheduler(sourceObjectInMap)
 		}
 
 		if f.comparisonHashType != common.ESyncHashType.None() && sourceObjectInMap.entityType == common.EEntityType.File() {
+			if azcopyScanningLogger != nil {
+				azcopyScanningLogger.Log(common.LogInfo,
+					fmt.Sprintf("Sync: Using hash comparison (%s) for '%s'", f.comparisonHashType.String(), sourceObjectInMap.relativePath))
+			}
+			fmt.Sprintf("Sync: Using hash comparison (%s) for '%s'", f.comparisonHashType.String(), sourceObjectInMap.relativePath)
 			switch f.comparisonHashType {
 			case common.ESyncHashType.MD5():
 				if sourceObjectInMap.md5 == nil {
@@ -188,8 +215,19 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonSameHash, false)
 			return nil
 		} else if sourceObjectInMap.isMoreRecentThan(destinationObject, f.preferSMBTime) {
+			if azcopyScanningLogger != nil {
+				azcopyScanningLogger.Log(common.LogInfo,
+					fmt.Sprintf("Sync: File '%s' source is newer - scheduling transfer (preferSMBTime=%v)", sourceObjectInMap.relativePath, f.preferSMBTime))
+			}
+			fmt.Sprintf("Sync: File '%s' source is newer - scheduling transfer (preferSMBTime=%v)", sourceObjectInMap.relativePath, f.preferSMBTime)
 			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMT, false)
 			return f.copyTransferScheduler(sourceObjectInMap)
+		} else {
+			if azcopyScanningLogger != nil {
+				azcopyScanningLogger.Log(common.LogInfo,
+					fmt.Sprintf("Sync: File '%s' destination is same/newer - skipping (preferSMBTime=%v)", sourceObjectInMap.relativePath, f.preferSMBTime))
+			}
+			fmt.Sprintf("Sync: File '%s' destination is same/newer - skipping (preferSMBTime=%v)", sourceObjectInMap.relativePath, f.preferSMBTime)
 		}
 
 		// if source is not more recent, we skip the transfer
@@ -266,12 +304,27 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 
 	dataChanged, metadataChanged := f.compareSourceAndDestinationObject(sourceObjectInMap, destinationObject)
 
+	if azcopyScanningLogger != nil {
+		azcopyScanningLogger.Log(common.LogInfo,
+			fmt.Sprintf("Sync Orchestrator: File '%s' comparison result - dataChanged=%v, metadataChanged=%v",
+				sourceObjectInMap.relativePath, dataChanged, metadataChanged))
+	}
+
 	if dataChanged {
+		if azcopyScanningLogger != nil {
+			azcopyScanningLogger.Log(common.LogInfo,
+				fmt.Sprintf("Sync Orchestrator: File '%s' data changed - scheduling transfer", sourceObjectInMap.relativePath))
+		}
 		return true, f.copyTransferScheduler(sourceObjectInMap)
 	}
 
 	if metadataChanged {
 		// If this is true, it means that metadataOnlySync is enabled and metadata has been changed
+
+		if azcopyScanningLogger != nil {
+			azcopyScanningLogger.Log(common.LogInfo,
+				fmt.Sprintf("Sync Orchestrator: File '%s' metadata changed - scheduling metadata-only transfer", sourceObjectInMap.relativePath))
+		}
 
 		// If metadata has changed for a folder, we can simply transfer
 		// If metadata has changed for a symlink, both mtime and ctime will change
@@ -325,7 +378,33 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 	}
 
 	// Compare last write times
-	if sourceObject.lastWriteTime.Compare(destinationObject.lastWriteTime) != 0 {
+	// For SMB file systems, truncate to 100ns precision (NTFS/SMB resolution)
+	// to handle precision differences between different SMB implementations
+	srcLWT := sourceObject.lastWriteTime
+	dstLWT := destinationObject.lastWriteTime
+	srcLWTOrig := srcLWT
+	dstLWTOrig := dstLWT
+	if f.preferSMBTime {
+		srcLWT = srcLWT.Truncate(100 * time.Nanosecond)
+		dstLWT = dstLWT.Truncate(100 * time.Nanosecond)
+
+		if srcLWTOrig != srcLWT || dstLWTOrig != dstLWT {
+			if azcopyScanningLogger != nil {
+				azcopyScanningLogger.Log(common.LogInfo,
+					fmt.Sprintf("SMB LastWriteTime truncation for '%s': source %v -> %v, dest %v -> %v",
+						sourceObject.relativePath, srcLWTOrig, srcLWT, dstLWTOrig, dstLWT))
+			}
+		}
+	}
+
+	lwtChanged := srcLWT.Compare(dstLWT) != 0
+	if azcopyScanningLogger != nil && f.preferSMBTime {
+		azcopyScanningLogger.Log(common.LogInfo,
+			fmt.Sprintf("LastWriteTime comparison for '%s': source=%v, dest=%v, changed=%v",
+				sourceObject.relativePath, srcLWT, dstLWT, lwtChanged))
+	}
+
+	if lwtChanged {
 		return true, true
 	}
 
@@ -363,11 +442,41 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 	}
 
 	// Compare change times
-	if sourceObject.changeTime.Compare(destinationObject.changeTime) != 0 {
+	// For SMB file systems, truncate to 100ns precision (NTFS/SMB resolution)
+	srcCT := sourceObject.changeTime
+	dstCT := destinationObject.changeTime
+	srcCTOrig := srcCT
+	dstCTOrig := dstCT
+	if f.preferSMBTime {
+		srcCT = srcCT.Truncate(100 * time.Nanosecond)
+		dstCT = dstCT.Truncate(100 * time.Nanosecond)
+
+		if srcCTOrig != srcCT || dstCTOrig != dstCT {
+			if azcopyScanningLogger != nil {
+				azcopyScanningLogger.Log(common.LogInfo,
+					fmt.Sprintf("SMB ChangeTime truncation for '%s': source %v -> %v, dest %v -> %v",
+						sourceObject.relativePath, srcCTOrig, srcCT, dstCTOrig, dstCT))
+			}
+		}
+	}
+
+	ctChanged := srcCT.Compare(dstCT) != 0
+	if azcopyScanningLogger != nil && f.preferSMBTime {
+		azcopyScanningLogger.Log(common.LogInfo,
+			fmt.Sprintf("ChangeTime comparison for '%s': source=%v, dest=%v, metadataChanged=%v",
+				sourceObject.relativePath, srcCT, dstCT, ctChanged))
+	}
+
+	if ctChanged {
 		return false, true
 	}
 
 	// if we reached here, its safe assume that we did valid comparisons and neither data or metadata has changed
+	if azcopyScanningLogger != nil && f.preferSMBTime {
+		azcopyScanningLogger.Log(common.LogInfo,
+			fmt.Sprintf("File '%s' unchanged - skipping (size=%d, LWT=%v, CT=%v)",
+				sourceObject.relativePath, sourceObject.size, srcLWT, srcCT))
+	}
 	return false, false
 }
 
