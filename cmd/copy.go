@@ -199,8 +199,8 @@ func (raw *rawCopyCmdArgs) toCopyOptions(cmd *cobra.Command) (opts azcopy.CopyOp
 		S2SPreserveBlobTags:      raw.s2sPreserveBlobTags,
 		CpkByName:                raw.cpkScopeInfo,
 		CpkByValue:               raw.cpkInfo,
-		PutMd5:                   opts.PutMd5,
-		CheckLength:              opts.CheckLength,
+		PutMd5:                   raw.putMd5, //TODO should this be setting on opts or raw?
+		CheckLength:              raw.CheckLength,
 		PreserveOwner:            common.Iff(cmd.Flags().Changed("preserve-owner"), &raw.preserveOwner, nil),
 		AsSubDir:                 common.Iff(cmd.Flags().Changed("as-subdir"), &raw.asSubdir, nil),
 		IncludeDirectoryStubs:    raw.includeDirectoryStubs,

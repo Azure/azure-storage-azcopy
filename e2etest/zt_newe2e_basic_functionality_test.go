@@ -901,3 +901,63 @@ func (s *BasicFunctionalitySuite) Scenario_ValidateThroughput(svm *ScenarioVaria
 	// Validate that throughput is displayed in the output (regression test for v10.31.0 throughput display bug)
 	ValidateThroughputOutput(svm, stdOut)
 }
+
+// Scenario_BlobUploadWithPutMD5 tests --put-md5 correctly sets the Content-MD5 header on the destination blob.
+func (s *BasicFunctionalitySuite) Scenario_BlobUploadWithPutMD5(svm *ScenarioVariationManager) {
+	// Create a local file with random content
+	body := NewRandomObjectContentContainer(SizeFromString("10K"))
+
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Local()),
+		ResourceDefinitionObject{
+			ObjectName: pointerTo("test_putmd5.txt"),
+			Body:       body,
+		})
+
+	// Create destination blob container and object
+	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm,
+		[]common.Location{common.ELocation.File(), common.ELocation.Blob()})),
+		ResourceDefinitionContainer{}).
+		GetObject(svm, "test_putmd5.txt", common.EEntityType.File())
+
+	sasOpts := GenericAccountSignatureValues{}
+
+	// Run AzCopy with --put-md5 flag
+	RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbCopy,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive: pointerTo(true),
+					PutMD5:    pointerTo(true), // Enable put-md5 flag
+				},
+			},
+		})
+
+	// Calculate expected MD5 from source content
+	var expectedMD5 []byte
+	if !svm.Dryrun() {
+		bytes := body.MD5()
+		expectedMD5 = bytes[:]
+	}
+
+	// Validate that the destination blob has the correct content and MD5 hash
+	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
+		Body: body,
+		ObjectProperties: ObjectProperties{
+			HTTPHeaders: contentHeaders{
+				contentMD5: expectedMD5,
+			},
+		},
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+	})
+}
