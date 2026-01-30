@@ -902,9 +902,8 @@ func (s *BasicFunctionalitySuite) Scenario_ValidateThroughput(svm *ScenarioVaria
 	ValidateThroughputOutput(svm, stdOut)
 }
 
-// Scenario_BlobUploadWithPutMD5 tests --put-md5 correctly sets the Content-MD5 header on the destination blob.
-func (s *BasicFunctionalitySuite) Scenario_BlobUploadWithPutMD5(svm *ScenarioVariationManager) {
-	// Create a local file with random content
+// Scenario_UploadWithPutMD5 tests --put-md5 correctly sets the Content-MD5 header on the destination blob.
+func (s *BasicFunctionalitySuite) Scenario_UploadWithPutMD5(svm *ScenarioVariationManager) {
 	body := NewRandomObjectContentContainer(SizeFromString("10K"))
 
 	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Local()),
@@ -913,7 +912,6 @@ func (s *BasicFunctionalitySuite) Scenario_BlobUploadWithPutMD5(svm *ScenarioVar
 			Body:       body,
 		})
 
-	// Create destination blob container and object
 	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm,
 		[]common.Location{common.ELocation.File(), common.ELocation.Blob()})),
 		ResourceDefinitionContainer{}).
@@ -921,7 +919,6 @@ func (s *BasicFunctionalitySuite) Scenario_BlobUploadWithPutMD5(svm *ScenarioVar
 
 	sasOpts := GenericAccountSignatureValues{}
 
-	// Run AzCopy with --put-md5 flag
 	RunAzCopy(
 		svm,
 		AzCopyCommand{
@@ -937,7 +934,7 @@ func (s *BasicFunctionalitySuite) Scenario_BlobUploadWithPutMD5(svm *ScenarioVar
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
 					Recursive: pointerTo(true),
-					PutMD5:    pointerTo(true), // Enable put-md5 flag
+					PutMD5:    pointerTo(true),
 				},
 			},
 		})
@@ -946,10 +943,9 @@ func (s *BasicFunctionalitySuite) Scenario_BlobUploadWithPutMD5(svm *ScenarioVar
 	var expectedMD5 []byte
 	if !svm.Dryrun() {
 		bytes := body.MD5()
-		expectedMD5 = bytes[:]
+		expectedMD5 = bytes[:] // convert from [16]bytes to bytes
 	}
 
-	// Validate that the destination blob has the correct content and MD5 hash
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body: body,
 		ObjectProperties: ObjectProperties{
