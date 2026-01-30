@@ -1,15 +1,24 @@
 package e2etest
 
-import "net/url"
+import (
+	"path/filepath"
+)
 
 type ARMSubscription struct {
-	*ARMClient
-	SubscriptionID string
+	ParentSubject[*ARMClient] // should be ARMClient
+	SubscriptionID            string
 }
 
-func (s *ARMSubscription) ManagementURI() url.URL {
-	baseURI := s.ARMClient.ManagementURI()
-	newURI := baseURI.JoinPath("subscriptions", s.SubscriptionID)
+func (s *ARMSubscription) CanonicalPath() string {
+	return filepath.Join(s.ParentSubject.CanonicalPath(), "subscriptions", s.SubscriptionID)
+}
 
-	return *newURI
+func (s *ARMSubscription) NewResourceGroupClient(rgName string) *ARMResourceGroup {
+	return &ARMResourceGroup{
+		ParentSubject: ParentSubject[*ARMSubscription]{
+			parent: s,
+			root:   s.root,
+		},
+		ResourceGroupName: rgName,
+	}
 }

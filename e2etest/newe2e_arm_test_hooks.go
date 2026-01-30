@@ -12,8 +12,8 @@ var CommonARMClient *ARMClient
 var CommonARMResourceGroup *ARMResourceGroup // separated in case needed.
 
 func SetupArmClient(a Asserter) {
-	if GlobalConfig.StaticResources() {
-		return // no setup
+	if PrimaryOAuthCache.tc == nil {
+		return // do not set up the arm client
 	}
 
 	maxRetries := 2
@@ -32,15 +32,15 @@ func SetupArmClient(a Asserter) {
 		HttpClient: http.DefaultClient, // todo if we want something more special
 	}
 
+	if GlobalConfig.StaticResources() {
+		return // do not create the resource group
+	}
+
 	uuidSegments := strings.Split(uuid.NewString(), "-")
 
-	CommonARMResourceGroup = &ARMResourceGroup{
-		ARMSubscription: &ARMSubscription{
-			ARMClient:      CommonARMClient,
-			SubscriptionID: GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo.SubscriptionID,
-		},
-		ResourceGroupName: "azcopy-newe2e-" + uuidSegments[len(uuidSegments)-1],
-	}
+	CommonARMResourceGroup = CommonARMClient.
+		NewSubscriptionClient(GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo.SubscriptionID).
+		NewResourceGroupClient("azcopy-newe2e-" + uuidSegments[len(uuidSegments)-1])
 
 	_, err = CommonARMResourceGroup.CreateOrUpdate(ARMResourceGroupCreateParams{
 		Location: "West US", // todo configurable
