@@ -104,15 +104,43 @@ type StoredObject struct {
 
 func (s *StoredObject) isMoreRecentThan(storedObject2 StoredObject, preferSMBTime bool) bool {
 	lmtA := s.lastModifiedTime
+	lmtAOrig := lmtA
 	if preferSMBTime && !s.lastWriteTime.IsZero() {
 		lmtA = s.lastWriteTime
+		lmtAOrig = lmtA
 	}
 	lmtB := storedObject2.lastModifiedTime
+	lmtBOrig := lmtB
 	if preferSMBTime && !storedObject2.lastWriteTime.IsZero() {
 		lmtB = storedObject2.lastWriteTime
+		lmtBOrig = lmtB
 	}
 
-	return lmtA.After(lmtB)
+	// When comparing SMB timestamps, truncate to 100ns precision (NTFS/SMB resolution)
+	// This handles precision differences between different SMB implementations
+	// (e.g., AWS FSx vs Azure Files) that can cause false positives in change detection
+	if preferSMBTime && !lmtA.IsZero() && !lmtB.IsZero() {
+		// Truncate to 100 nanosecond intervals (Windows file time resolution)
+		lmtA = lmtA.Truncate(100 * time.Nanosecond)
+		lmtB = lmtB.Truncate(100 * time.Nanosecond)
+
+		if lmtAOrig != lmtA || lmtBOrig != lmtB {
+			if azcopyScanningLogger != nil {
+				azcopyScanningLogger.Log(common.LogDebug,
+					fmt.Sprintf("SMB timestamp truncation for '%s': source %v -> %v, dest %v -> %v",
+						s.relativePath, lmtAOrig, lmtA, lmtBOrig, lmtB))
+			}
+		}
+	}
+
+	isNewer := lmtA.After(lmtB)
+	if azcopyScanningLogger != nil && preferSMBTime {
+		azcopyScanningLogger.Log(common.LogDebug,
+			fmt.Sprintf("Timestamp comparison for '%s': source=%v, dest=%v, isNewer=%v",
+				s.relativePath, lmtA, lmtB, isNewer))
+	}
+
+	return isNewer
 }
 
 func (s *StoredObject) isSingleSourceFile() bool {

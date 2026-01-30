@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -325,7 +326,33 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 	}
 
 	// Compare last write times
-	if sourceObject.lastWriteTime.Compare(destinationObject.lastWriteTime) != 0 {
+	// For SMB file systems, truncate to 100ns precision (NTFS/SMB resolution)
+	// to handle precision differences between different SMB implementations
+	srcLWT := sourceObject.lastWriteTime
+	dstLWT := destinationObject.lastWriteTime
+	srcLWTOrig := srcLWT
+	dstLWTOrig := dstLWT
+	if f.preferSMBTime {
+		srcLWT = srcLWT.Truncate(100 * time.Nanosecond)
+		dstLWT = dstLWT.Truncate(100 * time.Nanosecond)
+
+		if srcLWTOrig != srcLWT || dstLWTOrig != dstLWT {
+			if azcopyScanningLogger != nil {
+				azcopyScanningLogger.Log(common.LogDebug,
+					fmt.Sprintf("SMB LastWriteTime truncation for '%s': source %v -> %v, dest %v -> %v",
+						sourceObject.relativePath, srcLWTOrig, srcLWT, dstLWTOrig, dstLWT))
+			}
+		}
+	}
+
+	lwtChanged := srcLWT.Compare(dstLWT) != 0
+	if azcopyScanningLogger != nil && f.preferSMBTime {
+		azcopyScanningLogger.Log(common.LogDebug,
+			fmt.Sprintf("LastWriteTime comparison for '%s': source=%v, dest=%v, changed=%v",
+				sourceObject.relativePath, srcLWT, dstLWT, lwtChanged))
+	}
+
+	if lwtChanged {
 		return true, true
 	}
 
@@ -363,11 +390,41 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 	}
 
 	// Compare change times
-	if sourceObject.changeTime.Compare(destinationObject.changeTime) != 0 {
+	// For SMB file systems, truncate to 100ns precision (NTFS/SMB resolution)
+	srcCT := sourceObject.changeTime
+	dstCT := destinationObject.changeTime
+	srcCTOrig := srcCT
+	dstCTOrig := dstCT
+	if f.preferSMBTime {
+		srcCT = srcCT.Truncate(100 * time.Nanosecond)
+		dstCT = dstCT.Truncate(100 * time.Nanosecond)
+
+		if srcCTOrig != srcCT || dstCTOrig != dstCT {
+			if azcopyScanningLogger != nil {
+				azcopyScanningLogger.Log(common.LogDebug,
+					fmt.Sprintf("SMB ChangeTime truncation for '%s': source %v -> %v, dest %v -> %v",
+						sourceObject.relativePath, srcCTOrig, srcCT, dstCTOrig, dstCT))
+			}
+		}
+	}
+
+	ctChanged := srcCT.Compare(dstCT) != 0
+	if azcopyScanningLogger != nil && f.preferSMBTime {
+		azcopyScanningLogger.Log(common.LogDebug,
+			fmt.Sprintf("ChangeTime comparison for '%s': source=%v, dest=%v, metadataChanged=%v",
+				sourceObject.relativePath, srcCT, dstCT, ctChanged))
+	}
+
+	if ctChanged {
 		return false, true
 	}
 
 	// if we reached here, its safe assume that we did valid comparisons and neither data or metadata has changed
+	if azcopyScanningLogger != nil && f.preferSMBTime {
+		azcopyScanningLogger.Log(common.LogInfo,
+			fmt.Sprintf("File '%s' unchanged - skipping (size=%d, LWT=%v, CT=%v)",
+				sourceObject.relativePath, sourceObject.size, srcLWT, srcCT))
+	}
 	return false, false
 }
 
