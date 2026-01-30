@@ -126,7 +126,7 @@ func (s *StoredObject) isMoreRecentThan(storedObject2 StoredObject, preferSMBTim
 
 		if lmtAOrig != lmtA || lmtBOrig != lmtB {
 			if azcopyScanningLogger != nil {
-				azcopyScanningLogger.Log(common.LogDebug,
+				azcopyScanningLogger.Log(common.LogInfo,
 					fmt.Sprintf("SMB timestamp truncation for '%s': source %v -> %v, dest %v -> %v",
 						s.relativePath, lmtAOrig, lmtA, lmtBOrig, lmtB))
 			}
@@ -135,7 +135,7 @@ func (s *StoredObject) isMoreRecentThan(storedObject2 StoredObject, preferSMBTim
 
 	isNewer := lmtA.After(lmtB)
 	if azcopyScanningLogger != nil && preferSMBTime {
-		azcopyScanningLogger.Log(common.LogDebug,
+		azcopyScanningLogger.Log(common.LogInfo,
 			fmt.Sprintf("Timestamp comparison for '%s': source=%v, dest=%v, isNewer=%v",
 				s.relativePath, lmtA, lmtB, isNewer))
 	}
