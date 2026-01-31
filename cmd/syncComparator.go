@@ -252,7 +252,12 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 	sourceObjectInMap StoredObject,
 	destinationObject StoredObject) (bool, error) {
-
+	fmt.Println("processIfNecessaryWithOrchestrator called")
+	fmt.Printf("DEBUG: ProcessIfNecessaryWithOrchestrator - Source: %s, Dest: %s\n",
+		sourceObjectInMap.relativePath, destinationObject.relativePath)
+	fmt.Printf("DEBUG: Source ModTime: %v, Dest ModTime: %v\n",
+		sourceObjectInMap.lastModifiedTime, destinationObject.lastModifiedTime)
+	fmt.Printf("sourceObjectInMap: %+v\n", sourceObjectInMap)
 	if sourceObjectInMap.entityType == common.EEntityType.Hardlink() ||
 		sourceObjectInMap.entityType == common.EEntityType.Other() {
 		// As of now, for hardlinks and special files at source, fallback to the default behavior
@@ -304,13 +309,17 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 
 	dataChanged, metadataChanged := f.compareSourceAndDestinationObject(sourceObjectInMap, destinationObject)
 
+	fmt.Sprintf("Sync Orchestrator: Data change detection for '%s' - dataChanged=%v, metadataChanged=%v", sourceObjectInMap.relativePath, dataChanged, metadataChanged)
+
 	if azcopyScanningLogger != nil {
 		azcopyScanningLogger.Log(common.LogInfo,
 			fmt.Sprintf("Sync Orchestrator: File '%s' comparison result - dataChanged=%v, metadataChanged=%v",
 				sourceObjectInMap.relativePath, dataChanged, metadataChanged))
 	}
+	fmt.Printf("azcopyScanningLogger: %+v\n", azcopyScanningLogger)
 
 	if dataChanged {
+		fmt.Println("Data changed")
 		if azcopyScanningLogger != nil {
 			azcopyScanningLogger.Log(common.LogInfo,
 				fmt.Sprintf("Sync Orchestrator: File '%s' data changed - scheduling transfer", sourceObjectInMap.relativePath))
@@ -320,7 +329,7 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 
 	if metadataChanged {
 		// If this is true, it means that metadataOnlySync is enabled and metadata has been changed
-
+		fmt.Println("Metadata changed")
 		if azcopyScanningLogger != nil {
 			azcopyScanningLogger.Log(common.LogInfo,
 				fmt.Sprintf("Sync Orchestrator: File '%s' metadata changed - scheduling metadata-only transfer", sourceObjectInMap.relativePath))
@@ -364,6 +373,9 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 ) (dataChanged, metadataChanged bool) {
 
 	// Check if data has changed by comparing size and modification time
+	// Log source and destination lastWriteTime for debugging
+	fmt.Printf("lastWriteTime of source = %v, lastWriteTime of destination = %v, preferSMBTime = %v\n",
+		sourceObject.lastWriteTime, destinationObject.lastWriteTime, f.preferSMBTime)
 
 	if sourceObject.entityType != common.EEntityType.Folder() &&
 		sourceObject.size != destinationObject.size {
@@ -384,6 +396,10 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 	dstLWT := destinationObject.lastWriteTime
 	srcLWTOrig := srcLWT
 	dstLWTOrig := dstLWT
+
+	fmt.Printf("LastWriteTime values for '%s': srcLWT=%v, dstLWT=%v, srcLWTOrig=%v, dstLWTOrig=%v\n",
+		sourceObject.relativePath, srcLWT, dstLWT, srcLWTOrig, dstLWTOrig)
+
 	if f.preferSMBTime {
 		srcLWT = srcLWT.Truncate(100 * time.Nanosecond)
 		dstLWT = dstLWT.Truncate(100 * time.Nanosecond)
@@ -447,6 +463,9 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 	dstCT := destinationObject.changeTime
 	srcCTOrig := srcCT
 	dstCTOrig := dstCT
+
+	fmt.Printf("ChangeTime values for '%s': srcCT=%v, dstCT=%v, srcCTOrig=%v, dstCTOrig=%v\n",
+		sourceObject.relativePath, srcCT, dstCT, srcCTOrig, dstCTOrig)
 	if f.preferSMBTime {
 		srcCT = srcCT.Truncate(100 * time.Nanosecond)
 		dstCT = dstCT.Truncate(100 * time.Nanosecond)
