@@ -333,6 +333,35 @@ func (a *azureFilesDownloader) CreateSymlink(jptm IJobPartTransferMgr) error {
 
 func (a *azureFilesDownloader) CreateHardlink(jptm IJobPartTransferMgr) error {
 	// create the link
-	err := os.Link(jptm.Info().TargetHardlinkFilePath, jptm.Info().Destination)
+	oldFullPath := getFullPath(jptm.Info().TargetHardlinkFilePath, jptm.Info().Destination)
+	fmt.Println("------!!!!!!!!!!!!!!-----Path: ", oldFullPath)
+	err := os.Link(oldFullPath, jptm.Info().Destination)
+	if err != nil {
+		fmt.Println(fmt.Errorf("failed to create hardlink from %s to %s: %w", oldFullPath, jptm.Info().Destination, err))
+	}
 	return err
+}
+
+func getFullPath(relativePath, root string) string {
+	// Split paths into segments
+	relParts := strings.Split(relativePath, string(filepath.Separator))
+	fullPathParts := strings.Split(root, string(filepath.Separator))
+
+	// Step 1: Traverse newParts and match segments from oldParts
+	prefixParts := []string{}
+
+	for j := 0; j < len(fullPathParts); j++ {
+		if relParts[0] != fullPathParts[j] {
+			prefixParts = append(prefixParts, fullPathParts[j])
+
+		} else {
+			break
+		}
+	}
+
+	// Step 2: Append the remaining part of oldParts
+	fullParts := append(prefixParts, relParts...)
+
+	// Step 3: Join into full path
+	return filepath.Join(fullParts...)
 }

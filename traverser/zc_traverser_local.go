@@ -920,7 +920,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 							if err != nil {
 								return err
 							}
-							fmt.Println("Processing hardlink file:", relPath)
+
 							targetHardlinkFile, _, err = inodeStoreInstance.GetOrAdd(getInodeString(fileInfo), relPath)
 							if err != nil {
 								return err

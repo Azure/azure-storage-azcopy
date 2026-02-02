@@ -23,7 +23,6 @@ package traverser
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -247,6 +246,8 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			return nil, err
 		}
 		targetPath := strings.TrimSuffix(targetURLParts.DirectoryOrFilePath, common.AZCOPY_PATH_SEPARATOR_STRING)
+		fmt.Println("-----------fileURLParts.DirectoryOrFilePath:", fileURLParts.DirectoryOrFilePath)
+		fmt.Println("-----------targetPath:", targetPath)
 		relativePath := strings.TrimPrefix(fileURLParts.DirectoryOrFilePath, targetPath)
 		relativePath = strings.TrimPrefix(relativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 
@@ -264,7 +265,6 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			}, err
 		}
 		var targetHardlinkFile string
-		var filePresent bool
 		// NFS handling
 		// Check if the file is a symlink and should be skipped in case of NFS
 		// We don't want to skip the file if we are not using NFS
@@ -288,9 +288,15 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 				f.entityType = common.EEntityType.Hardlink()
 				if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() {
 
-					targetHardlinkFile, filePresent = hardlinkMp.Read(fullProperties.FileID())
-					if !filePresent {
-						hardlinkMp.Update(fullProperties.FileID(), filepath.Join(targetPath, relativePath))
+					inodeStoreInstance, err := common.GetInodeStore()
+					if err != nil {
+						return nil, err
+					}
+
+					fmt.Println("-----------Processing hardlink file:", fileURLParts.DirectoryOrFilePath)
+					targetHardlinkFile, _, err = inodeStoreInstance.GetOrAdd(fullProperties.FileID(), fileURLParts.DirectoryOrFilePath)
+					if err != nil {
+						return nil, err
 					}
 				}
 			}
