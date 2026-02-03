@@ -246,8 +246,6 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			return nil, err
 		}
 		targetPath := strings.TrimSuffix(targetURLParts.DirectoryOrFilePath, common.AZCOPY_PATH_SEPARATOR_STRING)
-		fmt.Println("-----------fileURLParts.DirectoryOrFilePath:", fileURLParts.DirectoryOrFilePath)
-		fmt.Println("-----------targetPath:", targetPath)
 		relativePath := strings.TrimPrefix(fileURLParts.DirectoryOrFilePath, targetPath)
 		relativePath = strings.TrimPrefix(relativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 
@@ -293,7 +291,6 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 						return nil, err
 					}
 
-					fmt.Println("-----------Processing hardlink file:", fileURLParts.DirectoryOrFilePath)
 					targetHardlinkFile, _, err = inodeStoreInstance.GetOrAdd(fullProperties.FileID(), fileURLParts.DirectoryOrFilePath)
 					if err != nil {
 						return nil, err
