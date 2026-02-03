@@ -22,6 +22,7 @@ package common
 
 import (
 	"errors"
+	"log"
 	"net"
 	"net/url"
 	"os"
@@ -166,9 +167,28 @@ func matchGoogleHost(hostLower, suffix string) []string {
 // This supports custom domains like s3.company.com, minio.internal.net, storage.local, etc.
 // Assumes path-style URLs (bucket in path, not subdomain) for maximum compatibility.
 func matchCustomS3Host(hostLower string) []string {
-	// Basic validation: must look like a hostname (contains at least one dot or is localhost-like)
-	// This prevents matching arbitrary strings while allowing legitimate hostnames
-	if !strings.Contains(hostLower, ".") && hostLower != "localhost" && !strings.Contains(hostLower, ":") {
+	log.Printf("[matchCustomS3Host] Validating host: %s", hostLower)
+
+	// Use net/url to validate the host format by constructing a test URL
+	testURL, err := url.Parse("https://" + hostLower + "/")
+	if err != nil || testURL.Host == "" {
+		log.Printf("[matchCustomS3Host] Rejected host '%s': invalid URL format (err=%v, host=%s)", hostLower, err, testURL.Host)
+		return nil
+	}
+
+	// Extract hostname (without port) for additional validation
+	host := testURL.Hostname()
+	if host == "" {
+		log.Printf("[matchCustomS3Host] Rejected host '%s': empty hostname after parsing", hostLower)
+		return nil
+	}
+
+	// Must be a valid FQDN (at least two labels like "server.domain") or localhost
+	// Trim leading/trailing dots to handle root zone notation (e.g., "example.com.")
+	// This prevents matching single-label hostnames like "myserver" or "myserver."
+	trimmedHost := strings.Trim(host, ".")
+	if !strings.Contains(trimmedHost, ".") && trimmedHost != "localhost" {
+		log.Printf("[matchCustomS3Host] Rejected host '%s': not a valid FQDN (hostname=%s, trimmed=%s)", hostLower, host, trimmedHost)
 		return nil
 	}
 
@@ -177,6 +197,7 @@ func matchCustomS3Host(hostLower string) []string {
 
 	// Return path-style match (empty bucket capture means bucket comes from URL path)
 	matchSlices := []string{hostLower, "", region, keyword}
+	log.Printf("[matchCustomS3Host] Accepted host '%s' as custom S3 endpoint (hostname=%s, keyword=%s)", hostLower, host, keyword)
 	return matchSlices
 }
 
