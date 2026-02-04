@@ -61,6 +61,7 @@ const (
 	RECOMMENDED_OBJECTS_COUNT = 10000000
 	WARN_MULTIPLE_PROCESSES   = "More than one AzCopy process is running. This is a non-blocking warning, AzCopy will continue the operation. \n But, it is best practice to run a single process per VM." +
 		"\nPlease terminate other instances." // This particular warning message does not abort the whole operation
+	AMLFS_MOD_TIME_LAYOUT = "2006-01-02 15:04:05 -0700"
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -878,10 +879,13 @@ func (TransferStatus) Started() TransferStatus { return TransferStatus(1) }
 // Transfer successfully completed
 func (TransferStatus) Success() TransferStatus { return TransferStatus(2) }
 
-// Folder was created, but properties have not been persisted yet. Equivalent to Started, but never intended to be set on anything BUT folders.
+// FolderCreated folder was created, but properties have not been persisted yet. Equivalent to Started, but never intended to be set on anything BUT folders.
 func (TransferStatus) FolderCreated() TransferStatus { return TransferStatus(3) }
 
-func (TransferStatus) Restarted() TransferStatus { return TransferStatus(4) }
+// FolderExisted folder already existed before we got to it. A valid state to continue from in overwrite scenarios.
+func (TransferStatus) FolderExisted() TransferStatus { return TransferStatus(4) }
+
+func (TransferStatus) Restarted() TransferStatus { return TransferStatus(5) }
 
 // Transfer failed due to some error.
 func (TransferStatus) Failed() TransferStatus { return TransferStatus(-1) }
@@ -1890,7 +1894,7 @@ func (sht *SymlinkHandlingType) Determine(Follow, Preserve bool) error {
 	return nil
 }
 
-// /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 var oncer = sync.Once{}
 
@@ -1899,4 +1903,37 @@ func WarnIfTooManyObjects() {
 		GetLifecycleMgr().Warn(fmt.Sprintf("This job contains more than %d objects, best practice to run less than this.",
 			RECOMMENDED_OBJECTS_COUNT))
 	})
+}
+
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+var EPosixPropertiesStyle = PosixPropertiesStyle(0)
+
+var StandardPosixPropertiesStyle = EPosixPropertiesStyle.Standard() // Default
+var AMLFSPosixPropertiesStyle = EPosixPropertiesStyle.AMLFS()
+
+type PosixPropertiesStyle uint8
+
+// Standard means use the default POSIX properties type
+func (PosixPropertiesStyle) Standard() PosixPropertiesStyle {
+	return PosixPropertiesStyle(0)
+}
+
+// AMLFS means use the Azure Managed Lustre File System POSIX attributes for owner, group ID, mode and modtime
+func (PosixPropertiesStyle) AMLFS() PosixPropertiesStyle {
+	return PosixPropertiesStyle(1)
+}
+
+func (ppt PosixPropertiesStyle) String() string {
+	return enum.StringInt(ppt, reflect.TypeOf(ppt))
+}
+
+func (ppt *PosixPropertiesStyle) Parse(s string) error {
+	if s == "" { // Default to standard when not set
+		s = StandardPosixPropertiesStyle.String()
+	}
+	val, err := enum.ParseInt(reflect.TypeOf(ppt), s, true, true)
+	if err == nil {
+		*ppt = val.(PosixPropertiesStyle)
+	}
+	return err
 }
