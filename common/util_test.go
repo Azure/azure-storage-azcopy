@@ -43,7 +43,7 @@ func Test_TryAddMetadata(t *testing.T) {
 		Metadata: make(Metadata),
 	}
 
-	TryAddMetadata(&safeMetadata, "key", "value")
+	safeMetadata.TryAdd("key", "value")
 	a.Equal(1, len(safeMetadata.Metadata))
 	a.Contains(safeMetadata.Metadata, "key")
 	a.Equal("value", *safeMetadata.Metadata["key"])
@@ -53,7 +53,7 @@ func Test_TryAddMetadata(t *testing.T) {
 		Metadata: make(Metadata),
 	}
 	safeMetadata.Metadata["key"] = to.Ptr("value")
-	TryAddMetadata(&safeMetadata, "key", "new_value")
+	safeMetadata.TryAdd("key", "new_value")
 	a.Equal(1, len(safeMetadata.Metadata))
 	a.Contains(safeMetadata.Metadata, "key")
 	a.Equal("value", *safeMetadata.Metadata["key"])
@@ -63,7 +63,7 @@ func Test_TryAddMetadata(t *testing.T) {
 		Metadata: make(Metadata),
 	}
 	safeMetadata.Metadata["Key"] = to.Ptr("value")
-	TryAddMetadata(&safeMetadata, "key", "new_value")
+	safeMetadata.TryAdd("key", "new_value")
 	a.Equal(1, len(safeMetadata.Metadata))
 	a.Contains(safeMetadata.Metadata, "Key")
 	a.Equal("value", *safeMetadata.Metadata["Key"])
@@ -73,7 +73,7 @@ func Test_TryAddMetadata(t *testing.T) {
 		Metadata: make(Metadata),
 	}
 	safeMetadata.Metadata["other_key"] = to.Ptr("value")
-	TryAddMetadata(&safeMetadata, "key", "new_value")
+	safeMetadata.TryAdd("key", "new_value")
 	a.Equal(2, len(safeMetadata.Metadata))
 	a.Contains(safeMetadata.Metadata, "key")
 	a.Equal("new_value", *safeMetadata.Metadata["key"])
@@ -82,31 +82,39 @@ func Test_TryAddMetadata(t *testing.T) {
 func Test_TryReadMetadata(t *testing.T) {
 	a := assert.New(t)
 	// Test case 1: metadata is empty
-	metadata := make(Metadata)
-	v, ok := TryReadMetadata(metadata, "key")
+	safeMetadata := SafeMetadata{
+		Metadata: make(Metadata),
+	}
+	v, ok := safeMetadata.TryRead("key")
 	a.False(ok)
 	a.Nil(v)
 
 	// Test case 2: metadata contains exact key
-	metadata = make(Metadata)
-	metadata["key"] = to.Ptr("value")
-	v, ok = TryReadMetadata(metadata, "key")
+	safeMetadata = SafeMetadata{
+		Metadata: make(Metadata),
+	}
+	safeMetadata.Metadata["key"] = to.Ptr("value")
+	v, ok = safeMetadata.TryRead("key")
 	a.True(ok)
 	a.NotNil(v)
 	a.Equal("value", *v)
 
 	// Test case 3: metadata contains key with different case
-	metadata = make(Metadata)
-	metadata["Key"] = to.Ptr("value")
-	v, ok = TryReadMetadata(metadata, "key")
+	safeMetadata = SafeMetadata{
+		Metadata: make(Metadata),
+	}
+	safeMetadata.Metadata["Key"] = to.Ptr("value")
+	v, ok = safeMetadata.TryRead("key")
 	a.True(ok)
 	a.NotNil(v)
 	a.Equal("value", *v)
 
 	// Test case 4: metadata is not empty and does not contain key
-	metadata = make(Metadata)
-	metadata["other_key"] = to.Ptr("value")
-	v, ok = TryReadMetadata(metadata, "key")
+	safeMetadata = SafeMetadata{
+		Metadata: make(Metadata),
+	}
+	safeMetadata.Metadata["other_key"] = to.Ptr("value")
+	v, ok = safeMetadata.TryRead("key")
 	a.False(ok)
 	a.Nil(v)
 }
@@ -178,13 +186,13 @@ func Test_TryAddMetadata_Concurrent(t *testing.T) {
 	// Goroutine 1
 	go func() {
 		defer wg.Done()
-		TryAddMetadata(&safeMetadata, "key", "value1")
+		safeMetadata.TryAdd("key", "value1")
 	}()
 
 	// Goroutine 2
 	go func() {
 		defer wg.Done()
-		TryAddMetadata(&safeMetadata, "key", "value2")
+		safeMetadata.TryAdd("key", "value2")
 	}()
 
 	wg.Wait()

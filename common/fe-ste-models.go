@@ -1205,8 +1205,13 @@ const MetadataAndBlobTagsClearFlag = "clear" // clear flag used for metadata and
 type Metadata map[string]*string
 
 type SafeMetadata struct {
-	Mu       sync.Mutex
+	mu       sync.RWMutex
 	Metadata Metadata
+}
+
+type MetadataStore interface {
+	TryAdd(key, value string)
+	TryRead(key string) (*string, bool)
 }
 
 func (m Metadata) Clone() Metadata {

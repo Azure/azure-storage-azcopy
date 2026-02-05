@@ -27,7 +27,11 @@ func Test_ReadStatFromMetadata(t *testing.T) {
 	metadata["modtime"] = to.Ptr("1702376209109248073")
 	metadata["posix_ctime"] = to.Ptr("1702376216773153924")
 
-	statAdapter, err := ReadStatFromMetadata(metadata, 1024)
+	safeMetadata := &SafeMetadata{
+		Metadata: metadata,
+	}
+
+	statAdapter, err := ReadStatFromMetadata(safeMetadata, 1024)
 	a.Nil(err)
 	a.NotNil(statAdapter)
 	a.True(statAdapter.Extended())
@@ -60,7 +64,10 @@ func Test_ReadStatFromMetadata(t *testing.T) {
 	metadata["Modtime"] = to.Ptr("1702376209109248073")
 	metadata["Posix_ctime"] = to.Ptr("1702376216773153924")
 
-	statAdapter, err = ReadStatFromMetadata(metadata, 1024)
+	safeMetadata = &SafeMetadata{
+		Metadata: metadata,
+	}
+	statAdapter, err = ReadStatFromMetadata(safeMetadata, 1024)
 	a.Nil(err)
 	a.NotNil(statAdapter)
 	a.True(statAdapter.Extended())
@@ -200,7 +207,7 @@ func TestAddReadStatMetadata(t *testing.T) {
 	}
 	AddStatToBlobMetadata(statAdapter, &safeMetadata, StandardPosixPropertiesStyle)
 
-	adapter, err := ReadStatFromMetadata(safeMetadata.Metadata, 1024)
+	adapter, err := ReadStatFromMetadata(&safeMetadata, 1024)
 	a.Nil(err)
 	a.NotNil(adapter)
 	a.True(adapter.Extended())
@@ -277,7 +284,7 @@ func Test_AMLFSReadStatFromBlobMetadata(t *testing.T) {
 	a.Equal("0775", *safeMetadata.Metadata["permissions"])
 	a.Contains(safeMetadata.Metadata, "modtime")
 	a.Equal("2026-01-01 15:04:05 -0700", *safeMetadata.Metadata["modtime"])
-	adapter, err := ReadStatFromMetadata(safeMetadata.Metadata, 1024)
+	adapter, err := ReadStatFromMetadata(&safeMetadata, 1024)
 	a.Nil(err)
 	a.NotNil(adapter)
 	a.True(adapter.Extended())

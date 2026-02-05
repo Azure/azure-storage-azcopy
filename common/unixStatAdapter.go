@@ -169,10 +169,10 @@ func (u UnixStatContainer) CTime() time.Time {
 // ReadStatFromMetadata is not fault-tolerant. If any given article does not parse,
 // it will throw an error instead of continuing on, as it may be considered incorrect to attempt to persist the rest of the data.
 // despite this function being used only in Downloads at the current moment, it still attempts to re-create as complete of a UnixStatAdapter as possible.
-func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapter, error) {
+func ReadStatFromMetadata(metadata MetadataStore, contentLength int64) (UnixStatAdapter, error) {
 	s := UnixStatContainer{size: uint64(contentLength)}
 
-	if mask, ok := TryReadMetadata(metadata, LINUXStatxMaskMeta); ok {
+	if mask, ok := metadata.TryRead(LINUXStatxMaskMeta); ok {
 		m, err := strconv.ParseUint(*mask, 10, 32)
 		if err != nil {
 			return s, err
@@ -182,7 +182,7 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 	}
 
 	// cover additional statx properties here
-	if attr, ok := TryReadMetadata(metadata, LINUXAttributeMeta); ok {
+	if attr, ok := metadata.TryRead(LINUXAttributeMeta); ok {
 		a, err := strconv.ParseUint(*attr, 10, 64)
 		if err != nil {
 			return s, err
@@ -190,7 +190,7 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 		s.attributes = a
 	}
 
-	if attr, ok := TryReadMetadata(metadata, LINUXAttributeMaskMeta); ok {
+	if attr, ok := metadata.TryRead(LINUXAttributeMaskMeta); ok {
 		a, err := strconv.ParseUint(*attr, 10, 64)
 		if err != nil {
 			return s, err
@@ -198,7 +198,7 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 		s.attributesMask = a
 	}
 
-	if btime, ok := TryReadMetadata(metadata, LINUXBTimeMeta); ok {
+	if btime, ok := metadata.TryRead(LINUXBTimeMeta); ok {
 		b, err := strconv.ParseInt(*btime, 10, 64)
 		if err != nil {
 			return s, err
@@ -207,7 +207,7 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 	}
 
 	// base stat properties
-	if nlink, ok := TryReadMetadata(metadata, POSIXNlinkMeta); ok {
+	if nlink, ok := metadata.TryRead(POSIXNlinkMeta); ok {
 		n, err := strconv.ParseUint(*nlink, 10, 64)
 		if err != nil {
 			return s, err
@@ -215,7 +215,7 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 		s.numLinks = n
 	}
 
-	if owner, ok := TryReadMetadata(metadata, POSIXOwnerMeta); ok {
+	if owner, ok := metadata.TryRead(POSIXOwnerMeta); ok {
 		o, err := strconv.ParseUint(*owner, 10, 32)
 		if err != nil {
 			return s, err
@@ -223,7 +223,7 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 		s.ownerUID = uint32(o)
 	}
 
-	if owner, ok := TryReadMetadata(metadata, AMLFSOwnerMeta); ok {
+	if owner, ok := metadata.TryRead(AMLFSOwnerMeta); ok {
 		o, err := strconv.ParseUint(*owner, 10, 32)
 		if err != nil {
 			return s, err
@@ -231,7 +231,7 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 		s.ownerUID = uint32(o)
 	}
 
-	if group, ok := TryReadMetadata(metadata, POSIXGroupMeta); ok {
+	if group, ok := metadata.TryRead(POSIXGroupMeta); ok {
 		g, err := strconv.ParseUint(*group, 10, 32)
 		if err != nil {
 			return s, err
@@ -239,7 +239,7 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 		s.groupGID = uint32(g)
 	}
 
-	if group, ok := TryReadMetadata(metadata, AMLFSGroupMeta); ok {
+	if group, ok := metadata.TryRead(AMLFSGroupMeta); ok {
 		g, err := strconv.ParseUint(*group, 10, 32)
 		if err != nil {
 			return s, err
@@ -248,15 +248,15 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 	}
 
 	// In cases, the permissions were uploaded in AMLFS style, determine what base to use
-	if modeStr, ok := TryReadMetadata(metadata, POSIXModeMeta); ok {
+	if modeStr, ok := metadata.TryRead(POSIXModeMeta); ok {
 		modeBase := 10
 
 		// AMLFS stores permissions in octal and also sets AMLFS owner/group keys.
 		amlfsStyle := false
-		if _, ok := TryReadMetadata(metadata, AMLFSOwnerMeta); ok {
+		if _, ok := metadata.TryRead(AMLFSOwnerMeta); ok {
 			amlfsStyle = true
 		}
-		if _, ok := TryReadMetadata(metadata, AMLFSGroupMeta); ok {
+		if _, ok := metadata.TryRead(AMLFSGroupMeta); ok {
 			amlfsStyle = true
 		}
 		// AMLFS formatter uses a leading 0 with %04o (e.g., "0755")
@@ -275,7 +275,7 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 		s.mode = uint32(m)
 	}
 
-	if inode, ok := TryReadMetadata(metadata, POSIXINodeMeta); ok {
+	if inode, ok := metadata.TryRead(POSIXINodeMeta); ok {
 		ino, err := strconv.ParseUint(*inode, 10, 64)
 		if err != nil {
 			return s, err
@@ -284,7 +284,7 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 		s.iNode = ino
 	}
 
-	if dev, ok := TryReadMetadata(metadata, POSIXDevMeta); ok {
+	if dev, ok := metadata.TryRead(POSIXDevMeta); ok {
 		d, err := strconv.ParseUint(*dev, 10, 64)
 		if err != nil {
 			return s, err
@@ -293,7 +293,7 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 		s.devID = d
 	}
 
-	if rdev, ok := TryReadMetadata(metadata, POSIXRDevMeta); ok {
+	if rdev, ok := metadata.TryRead(POSIXRDevMeta); ok {
 		rd, err := strconv.ParseUint(*rdev, 10, 64)
 		if err != nil {
 			return s, err
@@ -302,7 +302,7 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 		s.repDevID = rd
 	}
 
-	if atime, ok := TryReadMetadata(metadata, POSIXATimeMeta); ok {
+	if atime, ok := metadata.TryRead(POSIXATimeMeta); ok {
 		at, err := strconv.ParseInt(*atime, 10, 64)
 		if err != nil {
 			return s, err
@@ -313,7 +313,7 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 
 	// ModTime can come in either standard (nanoseconds) or AMLFS (formatted string) format
 	// It is stored internally as unix nanoseconds (Time.time type)
-	if mtime, ok := TryReadMetadata(metadata, POSIXModTimeMeta); ok {
+	if mtime, ok := metadata.TryRead(POSIXModTimeMeta); ok {
 		mt, err := strconv.ParseInt(*mtime, 10, 64)
 		if errors.Is(err, strconv.ErrSyntax) {
 			amlfsTime, err := time.Parse(AMLFS_MOD_TIME_LAYOUT, *mtime)
@@ -328,7 +328,7 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 		s.modTime = time.Unix(0, mt)
 	}
 
-	if ctime, ok := TryReadMetadata(metadata, POSIXCTimeMeta); ok {
+	if ctime, ok := metadata.TryRead(POSIXCTimeMeta); ok {
 		ct, err := strconv.ParseInt(*ctime, 10, 64)
 		if err != nil {
 			return s, err
@@ -393,7 +393,7 @@ func ClearStatFromBlobMetadata(metadata Metadata) {
 	}
 }
 
-func AddStatToBlobMetadata(s UnixStatAdapter, metadata *SafeMetadata, posixStyle PosixPropertiesStyle) {
+func AddStatToBlobMetadata(s UnixStatAdapter, metadata MetadataStore, posixStyle PosixPropertiesStyle) {
 	if s == nil {
 		return
 	}
@@ -411,7 +411,7 @@ func AddStatToBlobMetadata(s UnixStatAdapter, metadata *SafeMetadata, posixStyle
 
 		for modeToTest, metaToApply := range modes {
 			if mode&os.FileMode(modeToTest) == os.FileMode(modeToTest) {
-				TryAddMetadata(metadata, metaToApply, "true")
+				metadata.TryAdd(metaToApply, "true")
 			}
 		}
 	}
@@ -419,102 +419,101 @@ func AddStatToBlobMetadata(s UnixStatAdapter, metadata *SafeMetadata, posixStyle
 	if s.Extended() { // try to poll the other properties
 		mask := s.StatxMask()
 
-		TryAddMetadata(metadata, LINUXStatxMaskMeta, strconv.FormatUint(uint64(mask), 10))
-		TryAddMetadata(metadata, LINUXAttributeMeta, strconv.FormatUint(s.Attribute()&s.AttributeMask(), 10)) // AttributesMask indicates what attributes are supported by the filesystem
-		TryAddMetadata(metadata, LINUXAttributeMaskMeta, strconv.FormatUint(s.AttributeMask(), 10))
+		metadata.TryAdd(LINUXStatxMaskMeta, strconv.FormatUint(uint64(mask), 10))
+		metadata.TryAdd(LINUXAttributeMeta, strconv.FormatUint(s.Attribute()&s.AttributeMask(), 10)) // AttributesMask indicates what attributes are supported by the filesystem
+		metadata.TryAdd(LINUXAttributeMaskMeta, strconv.FormatUint(s.AttributeMask(), 10))
 
 		if StatXReturned(mask, STATX_BTIME) {
-			TryAddMetadata(metadata, LINUXBTimeMeta, strconv.FormatInt(s.BTime().UnixNano(), 10))
+			metadata.TryAdd(LINUXBTimeMeta, strconv.FormatInt(s.BTime().UnixNano(), 10))
 		}
 
 		if StatXReturned(mask, STATX_NLINK) {
-			TryAddMetadata(metadata, POSIXNlinkMeta, strconv.FormatUint(s.NLink(), 10))
+			metadata.TryAdd(POSIXNlinkMeta, strconv.FormatUint(s.NLink(), 10))
 		}
 
 		if StatXReturned(mask, STATX_UID) {
 			if posixStyle == AMLFSPosixPropertiesStyle {
-				TryAddMetadata(metadata, AMLFSOwnerMeta, strconv.FormatUint(uint64(s.Owner()), 10))
+				metadata.TryAdd(AMLFSOwnerMeta, strconv.FormatUint(uint64(s.Owner()), 10))
 			} else {
-				TryAddMetadata(metadata, POSIXOwnerMeta, strconv.FormatUint(uint64(s.Owner()), 10))
+				metadata.TryAdd(POSIXOwnerMeta, strconv.FormatUint(uint64(s.Owner()), 10))
 			}
 		}
 
 		if StatXReturned(mask, STATX_GID) {
 			if posixStyle == AMLFSPosixPropertiesStyle {
-				TryAddMetadata(metadata, AMLFSGroupMeta, strconv.FormatUint(uint64(s.Group()), 10))
+				metadata.TryAdd(AMLFSGroupMeta, strconv.FormatUint(uint64(s.Group()), 10))
 			} else {
-				TryAddMetadata(metadata, POSIXGroupMeta, strconv.FormatUint(uint64(s.Group()), 10))
+				metadata.TryAdd(POSIXGroupMeta, strconv.FormatUint(uint64(s.Group()), 10))
 			}
 		}
 
 		if StatXReturned(mask, STATX_MODE) {
 			if posixStyle == AMLFSPosixPropertiesStyle {
 				permissions := fmt.Sprintf("%04o", uint64(s.FileMode())&0777) // AMLFS uses octal and only needs permission bits. Mask off higher order bits.
-				TryAddMetadata(metadata, POSIXModeMeta, permissions)
+				metadata.TryAdd(POSIXModeMeta, permissions)
 				applyMode(os.FileMode(s.FileMode()))
 			} else {
-				TryAddMetadata(metadata, POSIXModeMeta, strconv.FormatUint(uint64(s.FileMode()), 10))
+				metadata.TryAdd(POSIXModeMeta, strconv.FormatUint(uint64(s.FileMode()), 10))
 				applyMode(os.FileMode(s.FileMode()))
 			}
 		}
 
 		if StatXReturned(mask, STATX_INO) {
-			TryAddMetadata(metadata, POSIXINodeMeta, strconv.FormatUint(s.INode(), 10))
+			metadata.TryAdd(POSIXINodeMeta, strconv.FormatUint(s.INode(), 10))
 		}
 
 		// This is not optional.
-		TryAddMetadata(metadata, POSIXDevMeta, strconv.FormatUint(s.Device(), 10))
+		metadata.TryAdd(POSIXDevMeta, strconv.FormatUint(s.Device(), 10))
 
 		if StatXReturned(mask, STATX_MODE) && ((s.FileMode()&S_IFCHR) == S_IFCHR || (s.FileMode()&S_IFBLK) == S_IFBLK) {
-			TryAddMetadata(metadata, POSIXRDevMeta, strconv.FormatUint(s.RDevice(), 10))
+			metadata.TryAdd(POSIXRDevMeta, strconv.FormatUint(s.RDevice(), 10))
 		}
 
 		// Sometimes, the filesystem will return ATime, but the vfs layer will overwrite it in the mask. It's still accurate, so we can use it.
 		// e.g. ext4+noatime will still return & properly store atimes, but won't be included in the statx mask.
 		if StatXReturned(mask, STATX_ATIME) || s.ATime().UnixNano() > 0 {
-			TryAddMetadata(metadata, POSIXATimeMeta, strconv.FormatInt(s.ATime().UnixNano(), 10))
+			metadata.TryAdd(POSIXATimeMeta, strconv.FormatInt(s.ATime().UnixNano(), 10))
 		}
 
 		if StatXReturned(mask, STATX_MTIME) {
 			if posixStyle == AMLFSPosixPropertiesStyle {
-				TryAddMetadata(metadata, POSIXModTimeMeta, s.MTime().Format(AMLFS_MOD_TIME_LAYOUT))
+				metadata.TryAdd(POSIXModTimeMeta, s.MTime().Format(AMLFS_MOD_TIME_LAYOUT))
 			} else {
-				TryAddMetadata(metadata, POSIXModTimeMeta, strconv.FormatInt(s.MTime().UnixNano(), 10))
+				metadata.TryAdd(POSIXModTimeMeta, strconv.FormatInt(s.MTime().UnixNano(), 10))
 			}
 		}
 
 		if StatXReturned(mask, STATX_CTIME) {
-			TryAddMetadata(metadata, POSIXCTimeMeta, strconv.FormatInt(s.CTime().UnixNano(), 10))
+			metadata.TryAdd(POSIXCTimeMeta, strconv.FormatInt(s.CTime().UnixNano(), 10))
 		}
 	} else {
-		TryAddMetadata(metadata, POSIXNlinkMeta, strconv.FormatUint(s.NLink(), 10))
+		metadata.TryAdd(POSIXNlinkMeta, strconv.FormatUint(s.NLink(), 10))
 
 		// For non-statx (just stat) still respect the posix style
 		if posixStyle == AMLFSPosixPropertiesStyle {
-			TryAddMetadata(metadata, AMLFSOwnerMeta, strconv.FormatUint(uint64(s.Owner()), 10))
-			TryAddMetadata(metadata, AMLFSGroupMeta, strconv.FormatUint(uint64(s.Group()), 10))
+			metadata.TryAdd(AMLFSOwnerMeta, strconv.FormatUint(uint64(s.Owner()), 10))
+			metadata.TryAdd(AMLFSGroupMeta, strconv.FormatUint(uint64(s.Group()), 10))
 
 			permissions := fmt.Sprintf("%04o", uint64(s.FileMode())&0777) // AMLFS: octal perms only
-			TryAddMetadata(metadata, POSIXModeMeta, permissions)
-			TryAddMetadata(metadata, POSIXModTimeMeta, s.MTime().Format(AMLFS_MOD_TIME_LAYOUT))
-
+			metadata.TryAdd(POSIXModeMeta, permissions)
+			metadata.TryAdd(POSIXModTimeMeta, s.MTime().Format(AMLFS_MOD_TIME_LAYOUT))
 		} else {
 			// Use standard style
-			TryAddMetadata(metadata, POSIXOwnerMeta, strconv.FormatUint(uint64(s.Owner()), 10))
-			TryAddMetadata(metadata, POSIXGroupMeta, strconv.FormatUint(uint64(s.Group()), 10))
-			TryAddMetadata(metadata, POSIXModeMeta, strconv.FormatUint(uint64(s.FileMode()), 10))
-			TryAddMetadata(metadata, POSIXModTimeMeta, strconv.FormatInt(s.MTime().UnixNano(), 10))
+			metadata.TryAdd(POSIXOwnerMeta, strconv.FormatUint(uint64(s.Owner()), 10))
+			metadata.TryAdd(POSIXGroupMeta, strconv.FormatUint(uint64(s.Group()), 10))
+			metadata.TryAdd(POSIXModeMeta, strconv.FormatUint(uint64(s.FileMode()), 10))
+			metadata.TryAdd(POSIXModTimeMeta, strconv.FormatInt(s.MTime().UnixNano(), 10))
 		}
 		applyMode(os.FileMode(s.FileMode()))
-		TryAddMetadata(metadata, POSIXINodeMeta, strconv.FormatUint(s.INode(), 10))
-		TryAddMetadata(metadata, POSIXDevMeta, strconv.FormatUint(s.Device(), 10))
+		metadata.TryAdd(POSIXINodeMeta, strconv.FormatUint(s.INode(), 10))
+		metadata.TryAdd(POSIXDevMeta, strconv.FormatUint(s.Device(), 10))
 
 		if (s.FileMode()&S_IFCHR) == S_IFCHR || (s.FileMode()&S_IFBLK) == S_IFBLK { // this is not relevant unless the file is a block or character device.
-			TryAddMetadata(metadata, POSIXRDevMeta, strconv.FormatUint(s.RDevice(), 10))
+			metadata.TryAdd(POSIXRDevMeta, strconv.FormatUint(s.RDevice(), 10))
 		}
 
-		TryAddMetadata(metadata, POSIXATimeMeta, strconv.FormatInt(s.ATime().UnixNano(), 10))
-		TryAddMetadata(metadata, POSIXCTimeMeta, strconv.FormatInt(s.CTime().UnixNano(), 10))
+		metadata.TryAdd(POSIXATimeMeta, strconv.FormatInt(s.ATime().UnixNano(), 10))
+		metadata.TryAdd(POSIXCTimeMeta, strconv.FormatInt(s.CTime().UnixNano(), 10))
 	}
 }
 
