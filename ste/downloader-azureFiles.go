@@ -22,6 +22,8 @@ package ste
 
 import (
 	"errors"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
@@ -219,4 +221,32 @@ func (bd *azureFilesDownloader) preserveProperties(info *TransferInfo) (string, 
 		}
 	}
 	return "", nil
+}
+
+func getFullPath(relativePath, root string) string {
+	// Split paths into segments
+	relParts := strings.Split(relativePath, string(filepath.Separator))
+	fullPathParts := strings.Split(root, string(filepath.Separator))
+
+	// Traverse fullPathParts and match segments from relParts
+	prefixParts := []string{}
+	var j int
+	for j = 0; j < len(fullPathParts)-1; j++ {
+		if relParts[0] != fullPathParts[j] {
+			prefixParts = append(prefixParts, fullPathParts[j])
+
+		} else {
+			break
+		}
+	}
+	var fullParts []string
+	if j == len(fullPathParts)-1 {
+		fullParts = append(prefixParts, relParts[len(relParts)-1]) // Only append the last part
+	} else {
+		// Append the remaining part of relParts
+		fullParts = append(prefixParts, relParts...)
+	}
+
+	// Join into full path
+	return string(filepath.Separator) + filepath.Join(fullParts...)
 }
