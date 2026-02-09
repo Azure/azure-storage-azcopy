@@ -86,6 +86,7 @@ Number of File Transfers Skipped: %v
 Number of Folder Transfers Skipped: %v
 Number of Symbolic Links Skipped: %v
 Number of Hardlinks Converted: %v
+Number of Hardlinks Transferred: %v
 Number of Hardlinks Skipped: %v
 Number of Special Files Skipped: %v
 Total Number of Bytes Transferred: %v
@@ -105,6 +106,7 @@ Final Job Status: %v%s%s
 		result.FoldersSkipped,
 		result.SkippedSymlinkCount,
 		result.HardlinksConvertedCount,
+		result.HardlinksTransferCount,
 		result.SkippedHardlinkCount,
 		result.SkippedSpecialFileCount,
 		result.TotalBytesTransferred,

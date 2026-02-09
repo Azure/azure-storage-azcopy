@@ -35,6 +35,7 @@ type JobPartCreatedMsg struct {
 	FolderTransfer          uint32
 	SymlinkTransfers        uint32
 	HardlinksConvertedCount uint32
+	HardlinksTransferCount  uint32
 }
 
 type xferDoneMsg = common.TransferDetail
@@ -134,6 +135,7 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 			js.TotalBytesEnumerated += msg.TotalBytesEnumerated
 			js.TotalBytesExpected += msg.TotalBytesEnumerated
 			js.HardlinksConvertedCount += msg.HardlinksConvertedCount
+			js.HardlinksTransferCount += msg.HardlinksTransferCount
 
 		case msg, ok := <-jstm.xferDone:
 			if !ok { // Channel is closed, all transfers have been attended.

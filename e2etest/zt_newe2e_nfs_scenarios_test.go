@@ -122,8 +122,9 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 	})
 
 	hardlinkType := NamedResolveVariation(svm, map[string]common.HardlinkHandlingType{
-		"|hardlinks=follow": common.DefaultHardlinkHandlingType,
-		"|hardlinks=skip":   common.SkipHardlinkHandlingType,
+		"|hardlinks=follow":   common.DefaultHardlinkHandlingType,
+		"|hardlinks=skip":     common.SkipHardlinkHandlingType,
+		"|hardlinks=preserve": common.PreserveHardlinkHandlingType,
 	})
 
 	dstContainer := GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
@@ -287,6 +288,10 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 		shouldFail = true
 	}
 
+	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
+		shouldFail = true
+	}
+
 	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
@@ -310,9 +315,13 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 			},
 			ShouldFail: shouldFail,
 		})
-
 	if followSymlinks && preserveSymlinks {
 		ValidateMessageOutput(svm, stdOut, "cannot both follow and preserve symlinks", true)
+		return
+	}
+
+	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
+		ValidateMessageOutput(svm, stdOut, "the '--hardlinks=preserve' flag is not applicable for sync operations", true)
 		return
 	}
 
@@ -354,10 +363,13 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 	if !preserveSymlinks && !followSymlinks {
 		ValidateSkippedSymlinksCount(svm, stdOut, 2)
 	}
-	if hardlinkType == common.SkipHardlinkHandlingType {
+	switch hardlinkType {
+	case common.SkipHardlinkHandlingType:
 		ValidateHardlinksSkippedCount(svm, stdOut, 2)
-	} else {
+	case common.DefaultHardlinkHandlingType:
 		ValidateHardlinksConvertedCount(svm, stdOut, 2)
+	case common.PreserveHardlinkHandlingType:
+		ValidateHardlinksTransferCount(svm, stdOut, 2)
 	}
 	ValidateSkippedSpecialFileCount(svm, stdOut, 1)
 }
