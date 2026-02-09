@@ -108,7 +108,7 @@ type rawSyncCmdArgs struct {
 	preserveInfo bool
 	hardlinks    string
 	// blobType specifies the type of blob to use at the destination (BlockBlob, PageBlob, AppendBlob).
-	blobType common.BlobType
+	blobType string
 }
 
 // it is assume that the given url has the SAS stripped, and safe to print
@@ -142,7 +142,6 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 		deleteDestinationFileIfNecessary: raw.deleteDestinationFileIfNecessary,
 		includeDirectoryStubs:            raw.includeDirectoryStubs,
 		includeRoot:                      raw.includeRoot,
-		blobType:                         raw.blobType,
 	}
 	err = cooked.trailingDot.Parse(raw.trailingDot)
 	if err != nil {
@@ -248,6 +247,10 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 
 	err = cooked.md5ValidationOption.Parse(raw.md5ValidationOption)
 	if err != nil {
+		return cooked, err
+	}
+
+	if err = cooked.blobType.Parse(raw.blobType); err != nil {
 		return cooked, err
 	}
 
@@ -1158,6 +1161,11 @@ func init() {
 	syncCmd.PersistentFlags().StringVar(&raw.md5ValidationOption, "check-md5", common.DefaultHashValidationOption.String(), "Specifies how strictly MD5 hashes should be validated when downloading. "+
 		"\n This option is only available when downloading. "+
 		"\n Available values include: NoCheck, LogOnly, FailIfDifferent, FailIfDifferentOrMissing. (default 'FailIfDifferent').")
+	syncCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "Detect",
+		"Defines the type of blob at the destination. \n This is used for uploading blobs and when syncing between accounts (default 'Detect')."+
+			"\n  Valid values include 'Detect', 'BlockBlob', 'PageBlob', and 'AppendBlob'. "+
+			"\n When syncing between accounts, a value of 'Detect' causes AzCopy to use the type of source blob to determine the type of the destination blob. "+
+			"\n When uploading a file, 'Detect' determines if the file is a VHD or a VHDX file based on the file extension. If the file is either a VHD or VHDX file, AzCopy treats the file as a page blob.")
 	syncCmd.PersistentFlags().BoolVar(&raw.s2sPreserveAccessTier, "s2s-preserve-access-tier", true, "Preserve access tier during service to service copy. "+
 		"\n Please refer to [Azure Blob storage: hot, cool, and archive access tiers](https://docs.microsoft.com/azure/storage/blobs/storage-blob-storage-tiers) to ensure destination storage account supports setting access tier. "+
 		"\n In the cases that setting access tier is not supported, please use s2sPreserveAccessTier=false to bypass copying access tier (default true). ")
