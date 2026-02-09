@@ -107,6 +107,8 @@ type rawSyncCmdArgs struct {
 	// Opt-in flag to persist additional properties to Azure Files
 	preserveInfo bool
 	hardlinks    string
+	// blobType specifies the type of blob to use at the destination (BlockBlob, PageBlob, AppendBlob).
+	blobType common.BlobType
 }
 
 // it is assume that the given url has the SAS stripped, and safe to print
@@ -140,6 +142,7 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 		deleteDestinationFileIfNecessary: raw.deleteDestinationFileIfNecessary,
 		includeDirectoryStubs:            raw.includeDirectoryStubs,
 		includeRoot:                      raw.includeRoot,
+		blobType:                         raw.blobType,
 	}
 	err = cooked.trailingDot.Parse(raw.trailingDot)
 	if err != nil {
@@ -527,6 +530,9 @@ type cookedSyncCmdArgs struct {
 	cpkByValue    bool
 
 	stripTopDir bool
+
+	// blobType specifies the type of blob to use at the destination (BlockBlob, PageBlob, AppendBlob).
+	blobType common.BlobType
 
 	// cancellation for sync orchestrator
 	orchestratorCancel context.CancelFunc
