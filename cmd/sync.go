@@ -590,6 +590,11 @@ func (cca *cookedSyncCmdArgs) GetDestinationFoldersScanned() uint64 {
 	return atomic.LoadUint64(&cca.atomicDestinationFoldersScanned)
 }
 
+// GetSkippedSpecialFileCount returns the number of special files skipped during scanning.
+func (cca *cookedSyncCmdArgs) GetSkippedSpecialFileCount() uint64 {
+	return uint64(atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount))
+}
+
 func (cca *cookedSyncCmdArgs) IncrementSourceFolderEnumerationFailed() {
 	cca.atomicSourceFolderEnumerationFailed.Add(1)
 }

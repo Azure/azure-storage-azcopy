@@ -120,6 +120,11 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 				} else if entityType == common.EEntityType.Symlink() {
 					atomic.AddUint32(&cca.atomicSkippedSymlinkCount, 1)
 				}
+			} else if cca.fromTo.From() == common.ELocation.S3() {
+				// Track skipped S3 objects (e.g., Archive/Glacier storage class objects)
+				if entityType == common.EEntityType.Other() {
+					atomic.AddUint32(&cca.atomicSkippedSpecialFileCount, 1)
+				}
 			}
 		},
 
