@@ -509,11 +509,11 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 						// This blob prefix enqueue is necessary to track extra objects in target during mirror sync
 						// operations, so that we can delete them if they are not present in source.
 						// Note: We can skip this if deleteDestination is set to false but we don't have that option for blob traverser.
-						dName := strings.TrimSuffix(*virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)
-						folderRelativePath := strings.TrimPrefix(dName, searchPrefix)
+						dName := strings.TrimSuffix(*virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING) // NOTE: this just trims one '/' off the end. So if path is a// it becomes a/, if it is a//// it becomes a///
+						folderRelativePath := strings.TrimPrefix(dName, searchPrefix) // 
 						storedObject := newStoredObject(
 							preprocessor,
-							getObjectNameOnly(dName),
+							getObjectNameOnly(dName), // IF dname is only "" incase of nameless directory then it is ok to have special logic in syncOrchestrator
 							folderRelativePath,
 							common.EEntityType.Folder(),
 							time.Time{},

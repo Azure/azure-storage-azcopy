@@ -284,8 +284,13 @@ func buildChildPath(baseDir, relativePath string) string {
 		strs = []string{relativePath}
 	}
 
+	// if relativePath is "" consider just appending the path separator here
+	if relativePath == "" {
+		return baseDir + common.AZCOPY_PATH_SEPARATOR_STRING
+	}
+
 	childPath := strings.TrimSuffix(
-		strings.Join(strs, common.AZCOPY_PATH_SEPARATOR_STRING),
+		strings.Join(strs, common.AZCOPY_PATH_SEPARATOR_STRING), // this is appending an extra separator if the relative path is s// it is making is s///mx.json
 		common.AZCOPY_PATH_SEPARATOR_STRING)
 
 	return childPath
@@ -294,13 +299,16 @@ func buildChildPath(baseDir, relativePath string) string {
 // processor handles StoredObjects from the source location during traversal.
 // It builds the full path, categorizes objects as files or directories,
 // and stores them in the indexer for later comparison and transfer.
-func (st *SyncTraverser) processor(so StoredObject) error {
+func (st *SyncTraverser) processor(so StoredObject) error {     
 	// Build full path for the object relative to current directory
-	so.relativePath = buildChildPath(st.dir, so.relativePath)
+ 
+	// parent = "a"
+	// relativePath = ""
+	so.relativePath = buildChildPath(st.dir, so.relativePath) // this path is relative to the sync root, with trailing slash removed
 
 	// Thread-safe storage in the indexer first
 	st.enumerator.objectIndexer.rwMutex.Lock()
-	err := st.enumerator.objectIndexer.store(so)
+	err := st.enumerator.objectIndexer.store(so) // TODO see if a// case causes any problems here. SO will have name = ""
 	st.enumerator.objectIndexer.rwMutex.Unlock()
 
 	if err != nil {
@@ -648,7 +656,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		srcDirEnumerating.Add(1) // Increment active directory count
 
 		// Build source and destination paths for current directory
-		sync_src := []string{cca.source.Value, dir.(minimalStoredObject).relativePath}
+		sync_src := []string{cca.source.Value, dir.(minimalStoredObject).relativePath} //building relative path here
 		sync_dst := []string{cca.destination.Value, dir.(minimalStoredObject).relativePath}
 
 		pt_src := cca.source
