@@ -394,7 +394,7 @@ func CookRawSyncCmdArgs(args RawMoverSyncCmdArgs) (cookedSyncCmdArgs, error) {
 		includeDirectoryStubs:   args.IncludeDirectoryStubs,
 		s2sPreserveAccessTier:   args.S2sPreserveAccessTier,
 		s2sPreserveBlobTags:     args.S2sPreserveBlobTags,
-		blobType:                args.BlobType,
+		blobType:                args.BlobType.String(),
 	}
 	return raw.cook()
 }
