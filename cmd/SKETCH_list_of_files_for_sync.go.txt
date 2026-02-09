@@ -1,0 +1,241 @@
+// =============================================================================
+// SKETCH: Adding --list-of-files support to sync command
+// =============================================================================
+// This is NOT actual code - it's a sketch showing what changes would be needed.
+// Delete this file after implementation.
+// =============================================================================
+
+// =============================================================================
+// CHANGE 1: cmd/sync.go - Add field to rawSyncCmdArgs (around line 44)
+// =============================================================================
+
+type rawSyncCmdArgs struct {
+	src       string
+	dst       string
+	recursive bool
+	fromTo    string
+
+	// options from flags
+	blockSizeMB           float64
+	putBlobSizeMB         float64
+	include               string
+	exclude               string
+	excludePath           string
+	includeFileAttributes string
+	excludeFileAttributes string
+	legacyInclude         string // for warning messages only
+	legacyExclude         string // for warning messages only
+	includeRegex          string
+	excludeRegex          string
+	compareHash           string
+	localHashStorageMode  string
+	
+	// ADD THIS NEW FIELD:
+	listOfFilesToCopy     string  // NEW: path to file containing list of files to sync
+
+	// ... rest of existing fields ...
+}
+
+// =============================================================================
+// CHANGE 2: cmd/sync.go - Add field to cookedSyncCmdArgs (around line 414)
+// =============================================================================
+
+type cookedSyncCmdArgs struct {
+	// ... existing fields ...
+	
+	// ADD THESE NEW FIELDS (after excludeRegex):
+	ListOfFiles        string       // NEW: path to list-of-files
+	ListOfFilesChannel chan string  // NEW: channel for streaming file paths
+	
+	// ... rest of existing fields ...
+}
+
+// =============================================================================
+// CHANGE 3: cmd/sync.go - Update toOptions() function (around line 124)
+// =============================================================================
+
+func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
+	cooked = cookedSyncCmdArgs{
+		dryrunMode:                       raw.dryrun,
+		blockSizeMB:                      raw.blockSizeMB,
+		putBlobSizeMB:                    raw.putBlobSizeMB,
+		recursive:                        raw.recursive,
+		forceIfReadOnly:                  raw.forceIfReadOnly,
+		backupMode:                       raw.backupMode,
+		putMd5:                           raw.putMd5,
+		s2sPreserveBlobTags:              raw.s2sPreserveBlobTags,
+		cpkByName:                        raw.cpkScopeInfo,
+		cpkByValue:                       raw.cpkInfo,
+		mirrorMode:                       raw.mirrorMode,
+		deleteDestinationFileIfNecessary: raw.deleteDestinationFileIfNecessary,
+		includeDirectoryStubs:            raw.includeDirectoryStubs,
+		includeRoot:                      raw.includeRoot,
+		ListOfFiles:                      raw.listOfFilesToCopy,  // ADD THIS LINE
+	}
+	// ... rest of function ...
+}
+
+// =============================================================================
+// CHANGE 4: cmd/sync.go - Update validate() to handle list-of-files + delete conflict
+// Add this check in the validate() function (around line 280)
+// =============================================================================
+
+func (cooked *cookedSyncCmdArgs) validate() (err error) {
+	// ... existing validation ...
+
+	// ADD THIS NEW VALIDATION BLOCK:
+	// When list-of-files is used, we cannot safely delete files at destination
+	// because we're only syncing a subset of files
+	if cooked.ListOfFiles != "" {
+		if cooked.deleteDestination != common.EDeleteDestination.False() {
+			glcm.Info("WARNING: --delete-destination is not supported with --list-of-files. " +
+				"Setting delete-destination to false to prevent unintended data loss.")
+			cooked.deleteDestination = common.EDeleteDestination.False()
+		}
+	}
+	
+	// ... rest of existing validation ...
+}
+
+// =============================================================================
+// CHANGE 5: cmd/sync.go - Update processArgs() to read the file and create channel
+// Add this at the end of processArgs() function (around line 360)
+// =============================================================================
+
+func (cooked *cookedSyncCmdArgs) processArgs() (err error) {
+	// ... existing code ...
+
+	// ADD THIS NEW BLOCK AT THE END (similar to copyProcess.go):
+	if cooked.ListOfFiles != "" {
+		listChan := make(chan string)
+		f, err := os.Open(cooked.ListOfFiles)
+		if err != nil {
+			return fmt.Errorf("cannot open %s file passed with the list-of-files flag", cooked.ListOfFiles)
+		}
+
+		// Prepare UTF-8 byte order marker
+		utf8BOM := string([]byte{0xEF, 0xBB, 0xBF})
+
+		go func() {
+			defer close(listChan)
+			defer f.Close()
+
+			scanner := bufio.NewScanner(f)
+			checkBOM := false
+
+			for scanner.Scan() {
+				v := scanner.Text()
+
+				// Strip UTF-8 BOM from first line if present
+				if !checkBOM {
+					v = strings.TrimPrefix(v, utf8BOM)
+					checkBOM = true
+				}
+
+				// Skip empty lines
+				if len(v) > 0 {
+					listChan <- v
+				}
+			}
+		}()
+
+		cooked.ListOfFilesChannel = listChan
+	}
+
+	return nil
+}
+
+// =============================================================================
+// CHANGE 6: cmd/sync.go - Register the flag (around line 1160)
+// Add after the exclude-path flag registration
+// =============================================================================
+
+	syncCmd.PersistentFlags().StringVar(&raw.excludePath, "exclude-path", "",
+		"Exclude these paths when comparing the source against the destination. "+
+			"\n This option does not support wildcard characters (*). "+
+			"\n Checks relative path prefix(For example: myFolder;myFolder/subDirName/file.pdf).")
+
+	// ADD THIS NEW FLAG REGISTRATION:
+	syncCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "",
+		"Defines the location of a text file which contains the list of files to be synced. "+
+			"\n Each file path should be on a separate line, relative to the source root. "+
+			"\n Note: --delete-destination is automatically disabled when using this flag "+
+			"\n to prevent unintended deletion of files not in the list.")
+
+// =============================================================================
+// CHANGE 7: cmd/syncEnumerator.go - Pass ListOfFiles to source traverser
+// Update sourceTraverserOptions (around line 104)
+// =============================================================================
+
+	sourceTraverserOptions := InitResourceTraverserOptions{
+		DestResourceType: &dest,
+
+		Credential: &srcCredInfo,
+		
+		// ADD THIS LINE:
+		ListOfFiles: cca.ListOfFilesChannel,
+		
+		IncrementEnumeration: func(entityType common.EntityType) {
+			// ... existing code ...
+		},
+		// ... rest of existing options ...
+	}
+
+// =============================================================================
+// SUMMARY OF FILES TO MODIFY:
+// =============================================================================
+//
+// 1. cmd/sync.go:
+//    - Add listOfFilesToCopy to rawSyncCmdArgs struct
+//    - Add ListOfFiles and ListOfFilesChannel to cookedSyncCmdArgs struct
+//    - Update toOptions() to copy the value
+//    - Update validate() to disable delete-destination when list-of-files is used
+//    - Update processArgs() to read the file and create the channel
+//    - Add flag registration in init()
+//
+// 2. cmd/syncEnumerator.go:
+//    - Pass ListOfFilesChannel to source InitResourceTraverserOptions
+//
+// =============================================================================
+// IMPORTS TO ADD in cmd/sync.go:
+// =============================================================================
+//
+// import (
+//     "bufio"  // ADD if not already present
+//     // ... existing imports ...
+// )
+//
+// =============================================================================
+// TESTING CONSIDERATIONS:
+// =============================================================================
+//
+// 1. Test basic functionality:
+//    - Create a list.txt with file paths
+//    - Run: azcopy sync "source" "dest" --list-of-files=list.txt
+//    - Verify only listed files are synced
+//
+// 2. Test delete-destination interaction:
+//    - Verify warning message when --delete-destination=true is combined with --list-of-files
+//    - Verify delete-destination is automatically set to false
+//
+// 3. Test with recursive flag:
+//    - Test directories in the list with --recursive=true
+//
+// 4. Test edge cases:
+//    - Empty list file
+//    - Non-existent list file
+//    - Files in list that don't exist at source
+//    - UTF-8 BOM handling
+//
+// =============================================================================
+// POTENTIAL FUTURE ENHANCEMENTS:
+// =============================================================================
+//
+// 1. Add support for --delete-destination with list-of-files by:
+//    - Building a set of files from the list
+//    - Only deleting destination files that ARE in the list but NOT in source
+//    - This is more complex but would be the "complete" implementation
+//
+// 2. Add --include-path support (like copy has) as an alternative to --list-of-files
+//
+// =============================================================================
