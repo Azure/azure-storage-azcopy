@@ -920,7 +920,6 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 							if err != nil {
 								return err
 							}
-
 							targetHardlinkFile, _, err = inodeStoreInstance.GetOrAdd(getInodeString(fileInfo), relPath)
 							if err != nil {
 								return err

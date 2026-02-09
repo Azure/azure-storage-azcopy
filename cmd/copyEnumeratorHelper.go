@@ -110,7 +110,7 @@ func (d *CopyJobPartDispatcher) dispatchPart(e *common.CopyJobPartOrderRequest, 
 // this function shuffles the transfers before they are dispatched
 // this is done to avoid hitting the same partition continuously in an append only pattern
 // TODO this should probably be removed after the high throughput block blob feature is implemented on the service side
-func shuffleTransfers(transfers []common.CopyTransfer) {
+func (d *CopyJobPartDispatcher) shuffleTransfers(transfers []common.CopyTransfer) {
 	rand.Shuffle(len(transfers), func(i, j int) { transfers[i], transfers[j] = transfers[j], transfers[i] })
 }
 

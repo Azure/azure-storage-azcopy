@@ -38,7 +38,7 @@ type md5Comparer struct {
 	logger           transferSpecificLogger
 }
 
-var errMd5Mismatch = errors.New("the MD5 hash of the data, as we received it, did not match the expected value, as found in the Blob/File Service. " +
+var ErrMd5Mismatch = errors.New("the MD5 hash of the data, as we received it, did not match the expected value, as found in the Blob/File Service. " +
 	"This means that either there is a data integrity error OR another tool has failed to keep the stored hash up to date. " +
 	"(NOTE In the specific case of downloading a Page Blob that has been used as a VM disk, the VM has probably changed the content since the hash was set. That's normal, and " +
 	"in that specific case you can simply disable the MD5 check. " +
@@ -85,7 +85,7 @@ func (c *md5Comparer) Check() error {
 		switch c.validationOption {
 		case common.EHashValidationOption.FailIfDifferentOrMissing(),
 			common.EHashValidationOption.FailIfDifferent():
-			return errMd5Mismatch
+			return ErrMd5Mismatch
 		case common.EHashValidationOption.LogOnly():
 			c.logAsDifferent()
 			return nil
@@ -102,5 +102,5 @@ func (c *md5Comparer) logAsMissing() {
 }
 
 func (c *md5Comparer) logAsDifferent() {
-	c.logger.LogAtLevelForCurrentTransfer(common.LogWarning, errMd5Mismatch.Error())
+	c.logger.LogAtLevelForCurrentTransfer(common.LogWarning, ErrMd5Mismatch.Error())
 }
