@@ -1021,19 +1021,19 @@ extends:
                     displayName: 'Download Windows Build Artifacts'
                     inputs:
                       artifactName: 'azcopy-windows-signed'
-                      targetPath: $(Build.ArtifactStagingDirectory)
+                      targetPath: $(Build.ArtifactStagingDirectory)/azcopy-windows-signed
 
                   - task: 1ES.DownloadPipelineArtifact@1
                     displayName: 'Download Linux Build Artifacts'
                     inputs:
                       artifactName: 'azcopy-linux-signed'
-                      targetPath: $(Build.ArtifactStagingDirectory)
+                      targetPath: $(Build.ArtifactStagingDirectory)/azcopy-linux-signed
 
                   - task: 1ES.DownloadPipelineArtifact@1
                     displayName: 'Download Mac Build Artifacts'
                     inputs:
                       artifactName: 'azcopy-mac-signed'
-                      targetPath: $(Build.ArtifactStagingDirectory)
+                      targetPath: $(Build.ArtifactStagingDirectory)/azcopy-mac-signed
 
                   - script: |
                       sudo ls -lRt $(Build.ArtifactStagingDirectory)
