@@ -23,7 +23,6 @@ package common
 import (
 	"errors"
 	"log"
-	"net"
 	"net/url"
 	"os"
 	"regexp"
@@ -97,11 +96,6 @@ func IsS3URL(u url.URL) bool {
 func findS3URLMatches(host string) (matches []string, isS3Host bool) {
 	suffix := GetS3CompatibleSuffix()
 	hostLower := strings.ToLower(host)
-
-	// First, optionally allow raw IP endpoints if explicitly enabled. These are always path-style.
-	if m := matchIPHost(hostLower); m != nil {
-		return m, true
-	}
 
 	// Dispatcher based on configured suffix (allows per-provider parsing differences)
 	switch {
@@ -198,42 +192,6 @@ func matchCustomS3Host(hostLower string) []string {
 	// Return path-style match (empty bucket capture means bucket comes from URL path)
 	matchSlices := []string{hostLower, "", region, keyword}
 	log.Printf("[matchCustomS3Host] Accepted host '%s' as custom S3 endpoint (hostname=%s, keyword=%s)", hostLower, host, keyword)
-	return matchSlices
-}
-
-// matchIPHost detects IPv4 or IPv6 literals (with optional port) for S3-compatible endpoints.
-// Requires opt-in via AZCOPY_S3_ALLOW_IP=1 (to avoid accidental misclassification of custom domains).
-// Optional region hint can be supplied with AZCOPY_S3_IP_REGION; if absent, region left empty.
-func matchIPHost(hostLower string) []string {
-	if os.Getenv("AZCOPY_S3_ALLOW_IP") != "1" {
-		return nil
-	}
-	hostPort := hostLower
-	// If IPv6 with brackets, strip them before parse.
-	rawHost := hostPort
-	if i := strings.LastIndex(hostPort, ":"); i != -1 { // possible :port OR IPv6
-		// Distinguish IPv6 vs IPv4: IPv6 will have multiple ':'; net.SplitHostPort needs brackets
-		// Easier approach: try SplitHostPort after adding brackets for IPv6 without them is messy. Instead, attempt parse progressively.
-		// We'll manually separate port only for IPv4 host:port or [IPv6]:port
-		if strings.HasPrefix(hostPort, "[") && strings.Contains(hostPort, "]:") {
-			// Form: [IPv6]:port
-			closing := strings.Index(hostPort, "]:")
-			if closing != -1 {
-				rawHost = hostPort[1:closing]
-			}
-		} else if strings.Count(hostPort, ":") == 1 && !strings.Contains(hostPort, "..") { // likely IPv4:port
-			rawHost = hostPort[:i]
-		} else if strings.Count(hostPort, ":") >= 2 && !strings.HasPrefix(hostPort, "[") { // bare IPv6 without port (leave as is)
-			rawHost = hostPort
-		}
-	}
-	ip := net.ParseIP(strings.Trim(rawHost, "[]"))
-	if ip == nil {
-		return nil
-	}
-	region := os.Getenv("AZCOPY_S3_IP_REGION") // optional
-	keyword := getS3Keyword()
-	matchSlices := []string{hostLower, "", region, keyword}
 	return matchSlices
 }
 
