@@ -90,7 +90,7 @@ func (d *CopyJobPartDispatcher) addTransfer(e *common.CopyJobPartOrderRequest, t
 // we do this so that in the case of large transfer, the transfer engine can get started
 // while the frontend is still gathering more transfers
 func (d *CopyJobPartDispatcher) dispatchPart(e *common.CopyJobPartOrderRequest, cca *CookedCopyCmdArgs) error {
-	d.shuffleTransfers(e.Transfers.List)
+	shuffleTransfers(e.Transfers.List)
 	resp := jobsAdmin.ExecuteNewCopyJobPartOrder(*e)
 
 	if !resp.JobStarted {
@@ -110,7 +110,7 @@ func (d *CopyJobPartDispatcher) dispatchPart(e *common.CopyJobPartOrderRequest, 
 // this function shuffles the transfers before they are dispatched
 // this is done to avoid hitting the same partition continuously in an append only pattern
 // TODO this should probably be removed after the high throughput block blob feature is implemented on the service side
-func (d *CopyJobPartDispatcher) shuffleTransfers(transfers []common.CopyTransfer) {
+func shuffleTransfers(transfers []common.CopyTransfer) {
 	rand.Shuffle(len(transfers), func(i, j int) { transfers[i], transfers[j] = transfers[j], transfers[i] })
 }
 
@@ -142,7 +142,7 @@ func (d *CopyJobPartDispatcher) dispatchFinalPart(e *common.CopyJobPartOrderRequ
 		}
 	}
 
-	d.shuffleTransfers(e.Transfers.List)
+	shuffleTransfers(e.Transfers.List)
 	e.IsFinalPart = true
 	resp := jobsAdmin.ExecuteNewCopyJobPartOrder(*e)
 

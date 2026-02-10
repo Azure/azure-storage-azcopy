@@ -49,7 +49,7 @@ func GetInodeStore() (*InodeStore, error) {
 func NewInodeStore() (*InodeStore, error) {
 	f, err := os.OpenFile(fmt.Sprintf("%s/inodeStore-%s.txt", filepath.Join(AzcopyJobPlanFolder), NewJobID()), os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open inode store file: %w", err)
 	}
 
 	return &InodeStore{

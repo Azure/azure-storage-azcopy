@@ -6,9 +6,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/google/uuid"
 )
 
 func init() {
@@ -408,8 +407,9 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 	})
 
 	hardlinkType := NamedResolveVariation(svm, map[string]common.HardlinkHandlingType{
-		"|hardlinks=follow": common.DefaultHardlinkHandlingType,
-		"|hardlinks=skip":   common.SkipHardlinkHandlingType,
+		"|hardlinks=follow":   common.DefaultHardlinkHandlingType,
+		"|hardlinks=skip":     common.SkipHardlinkHandlingType,
+		"|hardlinks=preserve": common.PreserveHardlinkHandlingType,
 	})
 
 	//TODO: Not checking for this flag as false as azcopy needs to run by root user
@@ -536,6 +536,10 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 		shouldFail = true
 	}
 
+	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
+		shouldFail = true
+	}
+
 	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
@@ -573,6 +577,11 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 		return
 	}
 
+	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
+		ValidateMessageOutput(svm, stdOut, "the '--hardlinks=preserve' flag is not applicable for sync operations", true)
+		return
+	}
+
 	// Dont validate the root directory in case of sync
 	if azCopyVerb == AzCopyVerbSync {
 		delete(srcObjs, rootDir)
@@ -601,10 +610,14 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 		validateObjectContent: true,
 		fromTo:                common.EFromTo.FileNFSLocal(),
 	})
-	if hardlinkType == common.SkipHardlinkHandlingType {
+
+	switch hardlinkType {
+	case common.SkipHardlinkHandlingType:
 		ValidateHardlinksSkippedCount(svm, stdOut, 2)
-	} else {
+	case common.DefaultHardlinkHandlingType:
 		ValidateHardlinksConvertedCount(svm, stdOut, 2)
+	case common.PreserveHardlinkHandlingType:
+		ValidateHardlinksTransferCount(svm, stdOut, 2)
 	}
 
 	if !followSymlinks && !preserveSymlinks {
@@ -647,8 +660,9 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 	})
 
 	hardlinkType := NamedResolveVariation(svm, map[string]common.HardlinkHandlingType{
-		"|hardlinks=follow": common.DefaultHardlinkHandlingType,
-		"|hardlinks=skip":   common.SkipHardlinkHandlingType,
+		"|hardlinks=follow":   common.DefaultHardlinkHandlingType,
+		"|hardlinks=skip":     common.SkipHardlinkHandlingType,
+		"|hardlinks=preserve": common.PreserveHardlinkHandlingType,
 	})
 
 	dstContainer := GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
@@ -780,6 +794,9 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 	if (followSymlinks && preserveSymlinks) || followSymlinks {
 		shouldFail = true
 	}
+	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
+		shouldFail = true
+	}
 
 	stdOut, _ := RunAzCopy(
 		svm,
@@ -788,13 +805,11 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 			Targets: []ResourceManager{
 				src.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm,
 					[]ExplicitCredentialTypes{EExplicitCredentialType.SASToken(),
-						EExplicitCredentialType.OAuth(),
-					}),
+						EExplicitCredentialType.OAuth()}),
 					svm, CreateAzCopyTargetOptions{}),
 				dst.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm,
 					[]ExplicitCredentialTypes{EExplicitCredentialType.SASToken(),
-						EExplicitCredentialType.OAuth(),
-					}),
+						EExplicitCredentialType.OAuth()}),
 					svm, CreateAzCopyTargetOptions{}),
 			},
 			Flags: CopyFlags{
@@ -822,6 +837,11 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 		ValidateContainsError(svm, stdOut, []string{
 			"The '--follow-symlink' flag is only applicable when uploading from local filesystem.",
 		})
+		return
+	}
+
+	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
+		ValidateMessageOutput(svm, stdOut, "the '--hardlinks=preserve' flag is not applicable for sync operations", true)
 		return
 	}
 
@@ -857,11 +877,15 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 	})
 	defer CleanupNFSDirectory(svm, dstContainer, rootDir)
 
-	if hardlinkType == common.SkipHardlinkHandlingType {
+	switch hardlinkType {
+	case common.SkipHardlinkHandlingType:
 		ValidateHardlinksSkippedCount(svm, stdOut, 2)
-	} else {
+	case common.DefaultHardlinkHandlingType:
 		ValidateHardlinksConvertedCount(svm, stdOut, 2)
+	case common.PreserveHardlinkHandlingType:
+		ValidateHardlinksTransferCount(svm, stdOut, 2)
 	}
+
 	if !preserveSymlinks && !followSymlinks {
 		ValidateSkippedSymlinksCount(svm, stdOut, 1)
 	}
@@ -898,8 +922,9 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 	})
 
 	hardlinkType := NamedResolveVariation(svm, map[string]common.HardlinkHandlingType{
-		"|hardlinks=follow": common.DefaultHardlinkHandlingType,
-		"|hardlinks=skip":   common.SkipHardlinkHandlingType,
+		"|hardlinks=follow":   common.DefaultHardlinkHandlingType,
+		"|hardlinks=skip":     common.SkipHardlinkHandlingType,
+		"|hardlinks=preserve": common.PreserveHardlinkHandlingType,
 	})
 
 	dstShare := GetRootResource(svm, common.ELocation.File(), GetResourceOptions{
@@ -1025,6 +1050,10 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 		shouldFail = true
 	}
 
+	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
+		shouldFail = true
+	}
+
 	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
@@ -1087,6 +1116,11 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 		ValidateContainsError(svm, stdOut, []string{
 			"Hardlinked files are not supported between NFS and SMB",
 		})
+		return
+	}
+
+	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
+		ValidateMessageOutput(svm, stdOut, "the '--hardlinks=preserve' flag is not applicable for sync operations", true)
 		return
 	}
 
@@ -1163,8 +1197,9 @@ func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationMa
 	})
 
 	hardlinkType := NamedResolveVariation(svm, map[string]common.HardlinkHandlingType{
-		"|hardlinks=follow": common.DefaultHardlinkHandlingType,
-		"|hardlinks=skip":   common.SkipHardlinkHandlingType,
+		"|hardlinks=follow":   common.DefaultHardlinkHandlingType,
+		"|hardlinks=skip":     common.SkipHardlinkHandlingType,
+		"|hardlinks=preserve": common.PreserveHardlinkHandlingType,
 	})
 
 	// NFS Share
@@ -1259,6 +1294,10 @@ func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationMa
 		shouldFail = true
 	}
 
+	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
+		shouldFail = true
+	}
+
 	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
@@ -1322,6 +1361,11 @@ func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationMa
 		ValidateContainsError(svm, stdOut, []string{
 			"'--hardlinks' must be set to 'skip'",
 		})
+		return
+	}
+
+	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
+		ValidateMessageOutput(svm, stdOut, "the '--hardlinks=preserve' flag is not applicable for sync operations", true)
 		return
 	}
 
