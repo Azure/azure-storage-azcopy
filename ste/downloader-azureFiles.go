@@ -22,6 +22,7 @@ package ste
 
 import (
 	"errors"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -224,29 +225,31 @@ func (bd *azureFilesDownloader) preserveProperties(info *TransferInfo) (string, 
 }
 
 func getFullPath(relativePath, root string) string {
-	// Split paths into segments
-	relParts := strings.Split(relativePath, string(filepath.Separator))
-	fullPathParts := strings.Split(root, string(filepath.Separator))
+	// 1. Convert backslashes to forward slashes immediately for cross-platform safety
+	rel := filepath.ToSlash(relativePath)
+	rt := filepath.ToSlash(root)
 
-	// Traverse fullPathParts and match segments from relParts
+	// 2. Use "/" for splitting now that we've normalized
+	relParts := strings.Split(rel, "/")
+	fullPathParts := strings.Split(rt, "/")
+
 	prefixParts := []string{}
 	var j int
 	for j = 0; j < len(fullPathParts)-1; j++ {
 		if relParts[0] != fullPathParts[j] {
 			prefixParts = append(prefixParts, fullPathParts[j])
-
 		} else {
 			break
 		}
 	}
+
 	var fullParts []string
 	if j == len(fullPathParts)-1 {
-		fullParts = append(prefixParts, relParts[len(relParts)-1]) // Only append the last part
+		fullParts = append(prefixParts, relParts[len(relParts)-1])
 	} else {
-		// Append the remaining part of relParts
 		fullParts = append(prefixParts, relParts...)
 	}
 
-	// Join into full path
-	return string(filepath.Separator) + filepath.Join(fullParts...)
+	// 3. Use path.Join instead of filepath.Join to force forward slashes
+	return "/" + path.Join(fullParts...)
 }
