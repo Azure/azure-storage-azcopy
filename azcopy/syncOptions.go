@@ -272,6 +272,11 @@ func (s *cookedSyncOptions) validateOptions() (err error) {
 		if err != nil {
 			return err
 		}
+		// TODO: Add support for hardlink preservation in NFS sync later
+		// For now we will error out if user tries to use it
+		if s.hardlinks == common.EHardlinkHandlingType.Preserve() {
+			return fmt.Errorf("the '--hardlinks=preserve' flag is not applicable for sync operations")
+		}
 	} else {
 		err = PerformSMBSpecificValidation(s.fromTo, s.preservePermissions, s.preserveInfo, s.preservePosixProperties, s.posixPropertiesStyle, s.hardlinks)
 		if err != nil {

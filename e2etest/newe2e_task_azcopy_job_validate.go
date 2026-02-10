@@ -2,13 +2,14 @@ package e2etest
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"os"
 	"path"
 	"path/filepath"
 	"reflect"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
 
 // ExpectedPlanFile
@@ -357,7 +358,7 @@ func ValidatePlanFiles(sm *ScenarioVariationManager, stdOut AzCopyStdout, expect
 
 			_, _, blobType, blobTier,
 				propsInBackend, _, _, _, // DstLengthValidation, SourceChangeValidation, InvalidMetadataHandleOption
-				entityType, version, _, tags := plan.TransferSrcPropertiesAndMetadata(i) // missing snapshot ID
+				entityType, version, _, tags, _ := plan.TransferSrcPropertiesAndMetadata(i) // missing snapshot ID
 
 			errPrefix := fmt.Sprintf("object src: %s, dst: %s; ", src, dst)
 
