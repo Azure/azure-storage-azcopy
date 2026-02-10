@@ -66,6 +66,10 @@ extends:
         name: azcopy-pool  # Name of your hosted pool
         image: windows2022-1espt
         os: windows  # OS of the image. Allowed values: windows, linux, macOS
+    featureFlags:
+      golang:
+        internalModuleProxy:
+          enabled: true
     stages:
       - stage: AzCopyVersion
         jobs:
@@ -1017,19 +1021,19 @@ extends:
                     displayName: 'Download Windows Build Artifacts'
                     inputs:
                       artifactName: 'azcopy-windows-signed'
-                      targetPath: $(Build.ArtifactStagingDirectory)/signed
+                      targetPath: $(Build.ArtifactStagingDirectory)/azcopy-windows-signed
 
                   - task: 1ES.DownloadPipelineArtifact@1
                     displayName: 'Download Linux Build Artifacts'
                     inputs:
                       artifactName: 'azcopy-linux-signed'
-                      targetPath: $(Build.ArtifactStagingDirectory)/signed
+                      targetPath: $(Build.ArtifactStagingDirectory)/azcopy-linux-signed
 
                   - task: 1ES.DownloadPipelineArtifact@1
                     displayName: 'Download Mac Build Artifacts'
                     inputs:
                       artifactName: 'azcopy-mac-signed'
-                      targetPath: $(Build.ArtifactStagingDirectory)/signed
+                      targetPath: $(Build.ArtifactStagingDirectory)/azcopy-mac-signed
 
                   - script: |
                       sudo ls -lRt $(Build.ArtifactStagingDirectory)
@@ -1037,9 +1041,9 @@ extends:
 
                   - task: GithubRelease@1
                     inputs:
-                      githubConnection: 'azcopy-github-connection'
-                      repositoryName: 'Azure/azure-storage-azcopy'
-                      action: 'create' # Will fail if previous release exists
+                      githubConnection: 'wonwuakpa-msft-github-rel'
+                      repositoryName: 'wonwuakpa-msft/azure-storage-azcopy'
+                      action: 'create'
                       target: '$(Build.SourceVersion)'
                       tagSource: 'userSpecifiedTag'
                       title: "AzCopy v$(azcopy_version)"
