@@ -107,7 +107,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			} else if cca.FromTo.From() == common.ELocation.S3() {
 				// Track skipped S3 objects (e.g., Archive/Glacier storage class objects)
 				if entityType == common.EEntityType.Other() {
-					atomic.AddUint32(&cca.atomicSkippedArchiveFileCount, 1)
+					atomic.AddUint64(&cca.atomicSkippedArchiveFileCount, 1)
 				}
 			}
 		},

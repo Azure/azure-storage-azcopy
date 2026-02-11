@@ -774,7 +774,7 @@ type CookedCopyCmdArgs struct {
 	hardlinks                     common.HardlinkHandlingType
 	atomicSkippedSymlinkCount     uint32
 	atomicSkippedSpecialFileCount uint32
-	atomicSkippedArchiveFileCount uint32
+	atomicSkippedArchiveFileCount uint64
 	BlockSizeMB                   float64
 	PutBlobSizeMB                 float64
 	IncludePathPatterns           []string
@@ -1435,7 +1435,7 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 	if jobDone {
 		summary.SkippedSymlinkCount = atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)
 		summary.SkippedSpecialFileCount = atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount)
-		summary.SkippedArchiveFileCount = atomic.LoadUint32(&cca.atomicSkippedArchiveFileCount)
+		summary.SkippedArchiveFileCount = atomic.LoadUint64(&cca.atomicSkippedArchiveFileCount)
 
 		exitCode := cca.getSuccessExitCode()
 		if summary.TransfersFailed > 0 || summary.JobStatus == common.EJobStatus.Cancelled() || summary.JobStatus == common.EJobStatus.Cancelling() {

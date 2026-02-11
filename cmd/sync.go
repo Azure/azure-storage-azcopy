@@ -520,7 +520,7 @@ type cookedSyncCmdArgs struct {
 	hardlinks                        common.HardlinkHandlingType
 	atomicSkippedSymlinkCount        uint32
 	atomicSkippedSpecialFileCount    uint32
-	atomicSkippedArchiveFileCount    uint32
+	atomicSkippedArchiveFileCount    uint64
 
 	blockSizeMB   float64
 	putBlobSizeMB float64
@@ -593,7 +593,7 @@ func (cca *cookedSyncCmdArgs) GetDestinationFoldersScanned() uint64 {
 
 // GetSkippedArchiveFileCount returns the number of archive/glacier storage class objects skipped during scanning.
 func (cca *cookedSyncCmdArgs) GetSkippedArchiveFileCount() uint64 {
-	return uint64(atomic.LoadUint32(&cca.atomicSkippedArchiveFileCount))
+	return atomic.LoadUint64(&cca.atomicSkippedArchiveFileCount)
 }
 
 func (cca *cookedSyncCmdArgs) IncrementSourceFolderEnumerationFailed() {
@@ -782,7 +782,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 
 		summary.SkippedSymlinkCount = atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)
 		summary.SkippedSpecialFileCount = atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount)
-		summary.SkippedArchiveFileCount = atomic.LoadUint32(&cca.atomicSkippedArchiveFileCount)
+		summary.SkippedArchiveFileCount = atomic.LoadUint64(&cca.atomicSkippedArchiveFileCount)
 
 		lcm.Exit(func(format common.OutputFormat) string {
 			if format == common.EOutputFormat.Json() {
