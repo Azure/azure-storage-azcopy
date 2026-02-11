@@ -104,6 +104,11 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				} else if entityType == common.EEntityType.Symlink() {
 					atomic.AddUint32(&cca.atomicSkippedSymlinkCount, 1)
 				}
+			} else if cca.FromTo.From() == common.ELocation.S3() {
+				// Track skipped S3 objects (e.g., Archive/Glacier storage class objects)
+				if entityType == common.EEntityType.Other() {
+					atomic.AddUint32(&cca.atomicSkippedArchiveFileCount, 1)
+				}
 			}
 		},
 	})

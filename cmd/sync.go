@@ -520,6 +520,7 @@ type cookedSyncCmdArgs struct {
 	hardlinks                        common.HardlinkHandlingType
 	atomicSkippedSymlinkCount        uint32
 	atomicSkippedSpecialFileCount    uint32
+	atomicSkippedArchiveFileCount    uint32
 
 	blockSizeMB   float64
 	putBlobSizeMB float64
@@ -593,6 +594,11 @@ func (cca *cookedSyncCmdArgs) GetDestinationFoldersScanned() uint64 {
 // GetSkippedSpecialFileCount returns the number of special files skipped during scanning.
 func (cca *cookedSyncCmdArgs) GetSkippedSpecialFileCount() uint64 {
 	return uint64(atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount))
+}
+
+// GetSkippedArchiveFileCount returns the number of archive/glacier storage class objects skipped during scanning.
+func (cca *cookedSyncCmdArgs) GetSkippedArchiveFileCount() uint64 {
+	return uint64(atomic.LoadUint32(&cca.atomicSkippedArchiveFileCount))
 }
 
 func (cca *cookedSyncCmdArgs) IncrementSourceFolderEnumerationFailed() {
@@ -781,6 +787,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 
 		summary.SkippedSymlinkCount = atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)
 		summary.SkippedSpecialFileCount = atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount)
+		summary.SkippedArchiveFileCount = atomic.LoadUint32(&cca.atomicSkippedArchiveFileCount)
 
 		lcm.Exit(func(format common.OutputFormat) string {
 			if format == common.EOutputFormat.Json() {
@@ -916,6 +923,7 @@ Number of Copy Transfers Failed: %v
 Number of Deletions at Destination: %v
 Number of Symbolic Links Skipped: %v
 Number of Special Files Skipped: %v
+Number of Archive/Glacier Objects Skipped: %v
 Number of Hardlinks Converted: %v
 Total Number of Bytes Transferred: %v
 Total Number of Bytes Enumerated: %v
@@ -933,6 +941,7 @@ Final Job Status: %v%s%s
 		cca.atomicDeletionCount,
 		summary.SkippedSymlinkCount,
 		summary.SkippedSpecialFileCount,
+		summary.SkippedArchiveFileCount,
 		summary.HardlinksConvertedCount,
 		summary.TotalBytesTransferred,
 		summary.TotalBytesEnumerated,
@@ -962,6 +971,7 @@ Number of Copy Transfers Failed: ............... %12v
 Number of Deletions at Destination: ............ %12v
 Number of Symbolic Links Skipped: .............. %12v
 Number of Special Files Skipped: ............... %12v
+Number of Archive/Glacier Objects Skipped: ..... %12v
 Number of Hardlinks Converted: ................. %12v
 ------------------------------------------------------------
 Number of Files Not Requiring Transfer: ........ %12v
@@ -994,6 +1004,7 @@ Final Job Status: .............................. %12v
 		cca.atomicDeletionCount,
 		summary.SkippedSymlinkCount,
 		summary.SkippedSpecialFileCount,
+		summary.SkippedArchiveFileCount,
 		summary.HardlinksConvertedCount,
 
 		atomic.LoadUint64(&cca.atomicSourceFilesTransferNotRequired),

@@ -862,6 +862,10 @@ func (cooked *CookedCopyCmdArgs) ToStringMap() map[string]string {
 	if skippedSpecialFiles > 0 {
 		result["skippedSpecialFileCount"] = fmt.Sprintf("%d", skippedSpecialFiles)
 	}
+	skippedArchiveFiles := atomic.LoadUint32(&cooked.atomicSkippedArchiveFileCount)
+	if skippedArchiveFiles > 0 {
+		result["skippedArchiveFileCount"] = fmt.Sprintf("%d", skippedArchiveFiles)
+	}
 
 	// Always mask credential info
 	if cooked.credentialInfo.CredentialType != common.ECredentialType.Unknown() {
