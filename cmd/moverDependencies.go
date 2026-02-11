@@ -348,6 +348,7 @@ type RawMoverSyncCmdArgs struct {
 	IncludeDirectoryStubs   bool
 	S2sPreserveAccessTier   bool
 	S2sPreserveBlobTags     bool
+	BlobType                common.BlobType
 }
 
 type SyncCmdArgsInput struct {
@@ -393,6 +394,7 @@ func CookRawSyncCmdArgs(args RawMoverSyncCmdArgs) (cookedSyncCmdArgs, error) {
 		includeDirectoryStubs:   args.IncludeDirectoryStubs,
 		s2sPreserveAccessTier:   args.S2sPreserveAccessTier,
 		s2sPreserveBlobTags:     args.S2sPreserveBlobTags,
+		blobType:                args.BlobType.String(),
 	}
 	return raw.cook()
 }
