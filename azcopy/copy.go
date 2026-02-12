@@ -22,6 +22,7 @@ package azcopy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -206,6 +207,13 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (
 		defer jobsAdmin.JobsAdmin.JobMgrCleanUp(jobID)
 
 		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
+				// AzCopy run was canceled with (Ctrl + C).
+				err = mgr.Wait()
+				if err != nil {
+					return CopyResult{}, err
+				}
+			}
 			return CopyResult{}, err
 		}
 		// if we are in dryrun mode, we don't want to actually run the job, so return here

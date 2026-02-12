@@ -176,6 +176,7 @@ func (j *jobLifecycleManager) InitiateProgressReporting(ctx context.Context, rep
 
 		cancelCalled := false
 
+		ctxDone := ctx.Done()
 		for {
 			j.mutex.RLock()
 			isDone := j.done
@@ -184,7 +185,6 @@ func (j *jobLifecycleManager) InitiateProgressReporting(ctx context.Context, rep
 			if isDone {
 				break
 			}
-
 			// Time-based progress reporting (exactly like lifecycle manager's logic)
 			select {
 			case <-time.After(wait):
@@ -197,7 +197,10 @@ func (j *jobLifecycleManager) InitiateProgressReporting(ctx context.Context, rep
 						j.OnComplete()
 					}
 				}
-			case <-ctx.Done():
+			case <-ctxDone:
+				if cancelCalled {
+					continue
+				}
 				cancelCalled = true
 				j.handler.Info("Cancellation requested. Beginning clean shutdown...")
 				if !reporter.CompletedEnumeration() {
@@ -224,6 +227,9 @@ func (j *jobLifecycleManager) InitiateProgressReporting(ctx context.Context, rep
 				if err != nil {
 					j.Error("error occurred while cancelling the job " + jobID.String() + ": " + err.Error())
 				}
+				// After cancellation has completed, we disable this case by setting channel to nil.
+				// It can enter the other case (time.After(wait)) to gracefully mark the job as canceled
+				ctxDone = nil
 				continue
 			}
 
@@ -247,6 +253,7 @@ func (j *jobLifecycleManager) cancelJob(jobID common.JobID) error {
 	if jobID.IsEmpty() {
 		return errors.New("cancel job requires the JobID")
 	}
+	j.handler.Info("Canceling job started")
 	resp := jobsAdmin.CancelPauseJobOrder(jobID, common.EJobStatus.Cancelling(), j)
 	if !resp.CancelledPauseResumed {
 		return errors.New(resp.ErrorMsg)

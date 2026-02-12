@@ -221,7 +221,7 @@ func (t *BlobTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 				"If you wish to make use of this blob, we recommend using one of the Azure Storage SDKs")
 		}
 		if respErr.RawResponse == nil {
-			return fmt.Errorf("cannot list files due to reason %s", respErr)
+			return fmt.Errorf("cannot list files due to reason %w", respErr)
 		} else if respErr.StatusCode == 403 { // Some nature of auth error-- Whatever the user is pointing at, they don't have access to, regardless of whether it's a file or a dir stub.
 			return fmt.Errorf("cannot list files due to reason %s", respErr)
 		}
@@ -389,7 +389,7 @@ func (t *BlobTraverser) parallelList(containerClient *container.Client, containe
 		for pager.More() {
 			lResp, err := pager.NextPage(t.ctx)
 			if err != nil {
-				return fmt.Errorf("cannot list files due to reason %s", err)
+				return fmt.Errorf("cannot list files due to reason %w", err)
 			}
 			// queue up the sub virtual directories if recursive is true
 			if t.recursive {
@@ -585,7 +585,7 @@ func (t *BlobTraverser) serialList(containerClient *container.Client, containerN
 	for pager.More() {
 		resp, err := pager.NextPage(t.ctx)
 		if err != nil {
-			return fmt.Errorf("cannot list blobs. Failed with error %s", err.Error())
+			return fmt.Errorf("cannot list blobs. Failed with error %w", err.Error())
 		}
 		// process the blobs returned in this result segment
 		for _, blobInfo := range resp.Segment.BlobItems {
