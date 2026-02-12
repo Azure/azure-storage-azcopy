@@ -246,9 +246,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 				"Objects in archive storage classes must be restored before they can be transferred.",
 				objectInfo.Key, objectInfo.StorageClass)
 			WarnStdoutAndScanningLog(skipMessage)
-			// Increment the file scanned counter since we've scanned this object
-			// (directories cannot have storage classes, so this is definitely a file)
-			t.incrementEnumerationCounter(common.EEntityType.File())
+
 			// Increment the enumeration counter to track this as a skipped object
 			t.incrementEnumerationCounter(common.EEntityType.Other())
 			continue
