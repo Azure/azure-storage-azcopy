@@ -183,9 +183,9 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
 			// AzCopy run was canceled with (Ctrl + C).
-			err = mgr.Wait()
-			if err != nil {
-				return SyncResult{}, err
+			waitErr := mgr.Wait()
+			if waitErr != nil {
+				return SyncResult{}, waitErr
 			}
 		}
 		return SyncResult{}, err

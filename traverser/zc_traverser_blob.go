@@ -585,7 +585,7 @@ func (t *BlobTraverser) serialList(containerClient *container.Client, containerN
 	for pager.More() {
 		resp, err := pager.NextPage(t.ctx)
 		if err != nil {
-			return fmt.Errorf("cannot list blobs. Failed with error %w", err.Error())
+			return fmt.Errorf("cannot list blobs. Failed with error %w", err)
 		}
 		// process the blobs returned in this result segment
 		for _, blobInfo := range resp.Segment.BlobItems {

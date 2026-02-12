@@ -1426,7 +1426,7 @@ func init() {
 				signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 				select { // Handles both cancellations
 				case <-sigChan: // unblocks if OS signal (Ctrl + C) arrives
-				case <-glcm.CancelFromStdinChannel():
+				case <-glcm.CancelFromStdinChannel(): // unblocks if cancel sent to stdin
 				}
 				glcm.Info("Cancellation requested")
 				cancel()
