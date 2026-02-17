@@ -864,6 +864,10 @@ func (cooked *CookedCopyCmdArgs) ToStringMap() map[string]string {
 	if skippedSpecialFiles > 0 {
 		result["skippedSpecialFileCount"] = fmt.Sprintf("%d", skippedSpecialFiles)
 	}
+	skippedArchiveFiles := atomic.LoadUint64(&cooked.atomicSkippedArchiveFileCount)
+	if skippedArchiveFiles > 0 {
+		result["skippedArchiveFileCount"] = fmt.Sprintf("%d", skippedArchiveFiles)
+	}
 
 	// Always mask credential info
 	if cooked.credentialInfo.CredentialType != common.ECredentialType.Unknown() {
@@ -918,6 +922,18 @@ func (cooked *CookedCopyCmdArgs) ToString() string {
 
 func SetJobId(jobId common.JobID) {
 	azcopyCurrentJobID = jobId
+}
+
+func OpenScanningLogger() {
+	// set up the front end scanning logger
+	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, LogLevel, azcopyLogPathFolder, "-scanning")
+	azcopyScanningLogger.OpenLog()
+}
+
+func CloseScanningLogger() {
+	if azcopyScanningLogger != nil {
+		azcopyScanningLogger.CloseLog()
+	}
 }
 
 // ============================================================================

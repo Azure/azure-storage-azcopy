@@ -238,6 +238,20 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			return fmt.Errorf("cannot list objects, %v", objectInfo.Err)
 		}
 
+		// Skip objects in archive storage classes as they cannot be accessed directly
+		// and require restoration before transfer. Attempting to transfer these objects
+		// will result in 403 errors and job failures.
+		if isArchiveStorageClass(objectInfo.StorageClass) {
+			skipMessage := fmt.Sprintf("Skipping S3 object %s as it is in %s storage class. "+
+				"Objects in archive storage classes must be restored before they can be transferred.",
+				objectInfo.Key, objectInfo.StorageClass)
+			WarnStdoutAndScanningLog(skipMessage)
+
+			// Increment the enumeration counter to track this as a skipped object
+			t.incrementEnumerationCounter(common.EEntityType.Other())
+			continue
+		}
+
 		if objectInfo.StorageClass == "" && !t.includeDirectoryOrPrefix {
 			// Directories are the only objects without storage classes.
 			// Skip directories if not using sync orchestrator
@@ -433,4 +447,24 @@ func CreateSharedS3Client(ctx context.Context, s3URLParts common.S3URLParts, cre
 	}, common.CredentialOpOptions{
 		LogError: glcm.Error,
 	}, azcopyScanningLogger)
+}
+
+// isArchiveStorageClass checks if the given storage class is an archive tier
+// that requires restoration before objects can be accessed. Objects in these storage classes
+// cannot be directly downloaded and will result in 403 errors if attempted.
+// This function supports archive storage classes from multiple S3-compatible providers:
+//
+// AWS S3 Glacier storage classes that require restoration:
+// - GLACIER: Glacier Flexible Retrieval (formerly just "Glacier") - requires restoration
+// - DEEP_ARCHIVE: Glacier Deep Archive - requires restoration
+//
+// Note: The following storage classes are NOT included as they provide immediate access:
+// - GLACIER_IR (AWS): Provides millisecond access without restoration
+// - NEARLINE, COLDLINE, ARCHIVE (GCS): All provide immediate access without restoration
+//
+// To add support for additional archive storage classes from other S3-compatible providers
+// that require restoration, add the storage class string to the comparison below.
+func isArchiveStorageClass(storageClass string) bool {
+	// AWS Glacier storage classes that require restoration
+	return storageClass == "GLACIER" || storageClass == "DEEP_ARCHIVE"
 }
