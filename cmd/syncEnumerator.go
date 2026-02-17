@@ -121,6 +121,13 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 					atomic.AddUint32(&cca.atomicSkippedSymlinkCount, 1)
 				}
 			}
+			if cca.fromTo.From() == common.ELocation.S3() {
+				// Track skipped S3 objects (e.g., Archive/Glacier storage class objects)
+				if entityType == common.EEntityType.Other() {
+					atomic.AddUint64(&cca.atomicSkippedArchiveFileCount, 1)
+					atomic.AddUint64(&cca.atomicSourceFilesScanned, 1) // Count skipped archive files as scanned files
+				}
+			}
 		},
 
 		CpkOptions: cca.cpkOptions,
@@ -297,6 +304,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 
 		// flags
 		BlobAttributes: common.BlobTransferAttributes{
+			BlobType:                         cca.blobType,
 			PreserveLastModifiedTime:         cca.preserveInfo, // true by default for sync so that future syncs have this information available
 			PutMd5:                           cca.putMd5,
 			MD5ValidationOption:              cca.md5ValidationOption,
