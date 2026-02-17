@@ -89,33 +89,75 @@ func (f *syncDestinationComparator) ProcessIfNecessary(destinationObject travers
 		sourceObjectInMap, present = f.sourceIndex.IndexMap[lcRelativePath]
 	}
 
-	// if the destinationObject is present at source and stale, we transfer the up-to-date version from source
 	if present {
+		// Clean up the index map once we start processing this path
 		defer delete(f.sourceIndex.IndexMap, destinationObject.RelativePath)
 
+		// 1. FORCE OVERWRITE: If comparison is disabled, schedule transfer immediately
 		if f.disableComparison {
 			syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, false)
 			return f.copyTransferScheduler(sourceObjectInMap)
 		}
 
+		// 2. TYPE & RELATIONSHIP VALIDATION: Handle Hardlinks at Destination
+		// If the destination is a Hardlink, we must verify if the source is still a Hardlink
+		// AND if it points to the same underlying data (Target).
+		if destinationObject.EntityType == common.EEntityType.Hardlink() {
+			switch sourceObjectInMap.EntityType {
+			case common.EEntityType.Hardlink():
+				//fmt.Println("-------TargetHardlink", destinationObject.TargetHardlinkFile, sourceObjectInMap.TargetHardlinkFile)
+				//fmt.Println("------Name", destinationObject.Name, sourceObjectInMap.Name)
+				// Case: Hardlink -> Hardlink
+				// Even if it's still a link, the relationship might have changed (e.g., now links to File A instead of File D)
+				if destinationObject.TargetHardlinkFile != sourceObjectInMap.TargetHardlinkFile {
+
+					syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, "HardlinkTargetMismatch", false)
+
+					// We must delete the 'wrong' link at destination before creating the 'right' one
+					_ = f.destinationCleaner(destinationObject)
+					return f.copyTransferScheduler(sourceObjectInMap)
+				}
+				// If TargetHardlinkFile matches, we fall through to LMT/Hash check to see if the content changed
+
+			case common.EEntityType.File(), common.EEntityType.Symlink(), common.EEntityType.Folder():
+				// Case: Type Mismatch (Hardlink at destination, but something else at source)
+				syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, "EntityTypeMismatch", false)
+
+				// Breaking the relationship: Delete the link and recreate the new entity type
+				_ = f.destinationCleaner(destinationObject)
+				return f.copyTransferScheduler(sourceObjectInMap)
+
+			default:
+				panic("Invalid source entity type for path: " + sourceObjectInMap.RelativePath)
+			}
+		} else if sourceObjectInMap.EntityType == common.EEntityType.Hardlink() {
+			// Case: Destination is a File/Folder, but Source is now a Hardlink
+			syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, "EntityTypeMismatch", false)
+
+			// Delete the independent file/folder to allow link creation
+			_ = f.destinationCleaner(destinationObject)
+			return f.copyTransferScheduler(sourceObjectInMap)
+		}
+
+		// 3. CONTENT VALIDATION: Hash Comparison
+		// If it's a file and hash comparison is enabled, we check data integrity.
 		if f.comparisonHashType != common.ESyncHashType.None() && sourceObjectInMap.EntityType == common.EEntityType.File() {
 			switch f.comparisonHashType {
 			case common.ESyncHashType.MD5():
 				if sourceObjectInMap.Md5 == nil {
+					// Fallback to LMT if hashes are missing
 					if sourceObjectInMap.IsMoreRecentThan(destinationObject, f.preferSMBTime) {
 						syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMTAndMissingHash, false)
 						return f.copyTransferScheduler(sourceObjectInMap)
 					} else {
-						// skip if dest is more recent
 						syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusSkipped, syncSkipReasonTimeAndMissingHash, false)
 						return nil
 					}
 				}
 
+				// If hashes exist but differ, the source is considered "newer/stale"
 				if !reflect.DeepEqual(sourceObjectInMap.Md5, destinationObject.Md5) {
 					syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, false)
-
-					// hash inequality = source "newer" in this model.
 					return f.copyTransferScheduler(sourceObjectInMap)
 				}
 			default:
@@ -124,16 +166,20 @@ func (f *syncDestinationComparator) ProcessIfNecessary(destinationObject travers
 
 			syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusSkipped, syncSkipReasonSameHash, false)
 			return nil
+
+			// 4. CONTENT VALIDATION: Last Modified Time (LMT)
+			// Default sync behavior: check if source is newer than destination
 		} else if sourceObjectInMap.IsMoreRecentThan(destinationObject, f.preferSMBTime) {
 			syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMT, false)
 			return f.copyTransferScheduler(sourceObjectInMap)
 		}
 
-		// skip if dest is more recent
+		// Default: Destination is up-to-date or newer
 		syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusSkipped, syncSkipReasonTime, false)
+
 	} else {
-		// purposefully ignore the error from destinationCleaner
-		// it's a tolerable error, since it just means some extra destination object might hang around a bit longer
+		// 5. CLEANUP: If path is at destination but NOT at source, it is an extra file
+		// This handles the --delete-destination functionality.
 		_ = f.destinationCleaner(destinationObject)
 	}
 

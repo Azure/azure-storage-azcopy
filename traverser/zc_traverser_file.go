@@ -281,8 +281,10 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			if fullProperties.NFSFileType() == string(file.NFSFileTypeSymlink) {
 				f.entityType = common.EEntityType.Symlink()
 			}
+
 			//set entity tile to hardlink
 			if fullProperties.LinkCount() > int64(1) {
+				fmt.Print("\n\n---------Name:", f.name, "\nLinkCount:", fullProperties.LinkCount(), "\nParentID:", fullProperties.ParentID(), "\nFileID:", fullProperties.FileID())
 				f.entityType = common.EEntityType.Hardlink()
 				if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() {
 

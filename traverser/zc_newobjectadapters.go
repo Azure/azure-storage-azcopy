@@ -280,6 +280,10 @@ func (a shareFilePropertiesAdapter) FileID() string {
 	return common.IffNotNil(a.GetPropertiesResponse.ID, "")
 }
 
+func (a shareFilePropertiesAdapter) ParentID() string {
+	return common.IffNotNil(a.GetPropertiesResponse.ParentID, "")
+}
+
 type shareDirectoryPropertiesAdapter struct {
 	*sharedirectory.GetPropertiesResponse
 }
@@ -334,4 +338,8 @@ func (a shareDirectoryPropertiesAdapter) LinkCount() int64 {
 
 func (a shareDirectoryPropertiesAdapter) FileID() string {
 	return common.IffNotNil(a.GetPropertiesResponse.ID, "")
+}
+
+func (a shareDirectoryPropertiesAdapter) ParentID() string {
+	return common.IffNotNil(a.GetPropertiesResponse.ParentID, "")
 }

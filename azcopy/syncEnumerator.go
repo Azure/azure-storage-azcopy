@@ -98,7 +98,7 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 		GetPropertiesInFrontend: true,
 		IncludeDirectoryStubs:   s.opts.includeDirectoryStubs,
 		PreserveBlobTags:        s.opts.s2SPreserveBlobTags,
-		HardlinkHandling:        common.EHardlinkHandlingType.Follow(),
+		HardlinkHandling:        s.opts.hardlinks,
 		SymlinkHandling:         s.opts.symlinks,
 		FromTo:                  s.opts.fromTo,
 		StripTopDir:             !s.opts.includeRoot,

@@ -98,6 +98,7 @@ type StoredObject struct {
 	LeaseStatus        lease.StatusType
 	LeaseDuration      lease.DurationType
 	TargetHardlinkFile string // used only for NFS transfers to indicate the target hardlink file path
+	Inode              string // used only for nfs transfers to identify hardlinked files (files with the same inode are hardlinked together)
 }
 
 func (s *StoredObject) IsMoreRecentThan(storedObject2 StoredObject, preferSMBTime bool) bool {
@@ -266,6 +267,7 @@ type filePropsProvider interface {
 	NFSFileType() string
 	LinkCount() int64
 	FileID() string
+	ParentID() string
 }
 
 // a constructor is used so that in case the StoredObject has to change, the callers would get a compilation error
