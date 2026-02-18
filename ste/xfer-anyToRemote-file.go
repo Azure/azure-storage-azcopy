@@ -91,6 +91,16 @@ func prepareDestAccountInfo(client IBlobClient, jptm IJobPartTransferMgr, ctx co
 	}
 }
 
+// timeEqual compares two timestamps with precision tolerance to handle filesystem precision differences.
+// It truncates both times to the specified precision to handle precision differences.
+// For GCS via S3 API, we use second precision since GCS has timestamp precision differences.
+func timeEqual(t1, t2 time.Time, useSecondPrecision bool) bool {
+	if useSecondPrecision {
+		return t1.Truncate(time.Second).Equal(t2.Truncate(time.Second))
+	}
+	return t1.Equal(t2)
+}
+
 // // TODO: Infer availability based upon blob size as well, for premium page blobs.
 func BlobTierAllowed(destTier *blob.AccessTier) bool {
 	// Note: destTier is guaranteed to be non nil.
@@ -348,32 +358,13 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 			isGCSviaS3 = s3SIP.s3URLPart.IsGoogleCloudStorage()
 		}
 
-		if jptm.ShouldLog(common.LogDebug) {
-			jptm.Log(common.LogDebug, fmt.Sprintf("Pre-transfer LMT Check: Scheduled=%v, Fresh=%v, Equal=%v, Unix_Scheduled=%d, Unix_Fresh=%d, Diff_Seconds=%v, IsGCSviaS3=%v",
-				scheduledTime.Format("2006-01-02T15:04:05.000000000Z07:00"),
-				lmt.Format("2006-01-02T15:04:05.000000000Z07:00"),
-				lmt.Equal(scheduledTime),
-				scheduledTime.Unix(),
-				lmt.Unix(),
-				lmt.Sub(scheduledTime).Seconds(),
-				isGCSviaS3))
-		}
-
 		// For GCS via S3 API, truncate timestamps to seconds to avoid false positives from precision differences
-		var timestampsMatch bool
-		if isGCSviaS3 {
-			scheduledTrunc := scheduledTime.Truncate(time.Second)
-			lmtTrunc := lmt.Truncate(time.Second)
-			timestampsMatch = scheduledTrunc.Equal(lmtTrunc)
-			if jptm.ShouldLog(common.LogDebug) {
-				jptm.Log(common.LogDebug, fmt.Sprintf("GCS S3 truncated comparison: Scheduled=%v, Current=%v, Match=%v",
-					scheduledTrunc.Format("2006-01-02T15:04:05Z07:00"),
-					lmtTrunc.Format("2006-01-02T15:04:05Z07:00"),
-					timestampsMatch))
-			}
-		} else {
-			// For all other sources, use exact timestamp comparison
-			timestampsMatch = lmt.Equal(scheduledTime)
+		timestampsMatch := timeEqual(lmt, scheduledTime, isGCSviaS3)
+		if isGCSviaS3 && jptm.ShouldLog(common.LogDebug) {
+			jptm.Log(common.LogDebug, fmt.Sprintf("GCS S3 truncated comparison: Scheduled=%v, Current=%v, Match=%v",
+				scheduledTime.Truncate(time.Second).Format("2006-01-02T15:04:05Z07:00"),
+				lmt.Truncate(time.Second).Format("2006-01-02T15:04:05Z07:00"),
+				timestampsMatch))
 		}
 
 		if !timestampsMatch {
@@ -628,32 +619,13 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 				isGCSviaS3 = s3SIP.s3URLPart.IsGoogleCloudStorage()
 			}
 
-			if jptm.ShouldLog(common.LogDebug) {
-				jptm.Log(common.LogDebug, fmt.Sprintf("Post-transfer LMT Check: Scheduled=%v, Fresh=%v, Equal=%v, Unix_Scheduled=%d, Unix_Fresh=%d, Diff_Seconds=%v, IsGCSviaS3=%v",
-					scheduledTime.Format("2006-01-02T15:04:05.000000000Z07:00"),
-					lmt.Format("2006-01-02T15:04:05.000000000Z07:00"),
-					lmt.Equal(scheduledTime),
-					scheduledTime.Unix(),
-					lmt.Unix(),
-					lmt.Sub(scheduledTime).Seconds(),
-					isGCSviaS3))
-			}
-
 			// For GCS via S3 API, truncate timestamps to seconds to avoid false positives from precision differences
-			var timestampsMatch bool
-			if isGCSviaS3 {
-				scheduledTrunc := scheduledTime.Truncate(time.Second)
-				lmtTrunc := lmt.Truncate(time.Second)
-				timestampsMatch = scheduledTrunc.Equal(lmtTrunc)
-				if jptm.ShouldLog(common.LogDebug) {
-					jptm.Log(common.LogDebug, fmt.Sprintf("GCS S3 truncated comparison: Scheduled=%v, Current=%v, Match=%v",
-						scheduledTrunc.Format("2006-01-02T15:04:05Z07:00"),
-						lmtTrunc.Format("2006-01-02T15:04:05Z07:00"),
-						timestampsMatch))
-				}
-			} else {
-				// For all other sources, use exact timestamp comparison
-				timestampsMatch = lmt.Equal(scheduledTime)
+			timestampsMatch := timeEqual(lmt, scheduledTime, isGCSviaS3)
+			if isGCSviaS3 && jptm.ShouldLog(common.LogDebug) {
+				jptm.Log(common.LogDebug, fmt.Sprintf("GCS S3 truncated comparison: Scheduled=%v, Current=%v, Match=%v",
+					scheduledTime.Truncate(time.Second).Format("2006-01-02T15:04:05Z07:00"),
+					lmt.Truncate(time.Second).Format("2006-01-02T15:04:05Z07:00"),
+					timestampsMatch))
 			}
 
 			if !timestampsMatch {

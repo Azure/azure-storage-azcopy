@@ -224,15 +224,9 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 	// This is because * is both a valid URL path character and a valid portion of an object key in S3.
 	searchPrefix := t.s3URLParts.ObjectKey
 
-	// Debug logging for S3 traverser
-	fmt.Printf("[DEBUG S3 Traverser] Bucket: %s, SearchPrefix: '%s', Recursive: %v, isGCSviaS3: %v, includeDirectoryOrPrefix: %v\n",
-		t.s3URLParts.BucketName, searchPrefix, t.recursive, isGCSviaS3, t.includeDirectoryOrPrefix)
-
 	// It's a bucket or virtual directory.
 	listObjectOptions := minio.ListObjectsOptions{Prefix: searchPrefix, Recursive: t.recursive}
-	objectCount := 0
 	for objectInfo := range t.s3Client.ListObjects(t.ctx, t.s3URLParts.BucketName, listObjectOptions) {
-		objectCount++
 		// re-join the unescaped path.
 		relativePath := strings.TrimPrefix(objectInfo.Key, searchPrefix)
 
@@ -372,7 +366,6 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			return
 		}
 	}
-	fmt.Printf("[DEBUG S3 Traverser] Finished listing. Total objects from ListObjects: %d\n", objectCount)
 	return
 }
 
