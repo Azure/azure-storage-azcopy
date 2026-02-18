@@ -34,6 +34,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Azure/azure-storage-azcopy/v10/pacer"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -115,14 +116,13 @@ func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, 
 
 	// use the "networking mega" (based on powers of 10, not powers of 2, since that's what mega means in networking context)
 	targetRateInBytesPerSec := int64(targetRateInMegaBitsPerSec * 1000 * 1000 / 8)
-	unusedExpectedCoarseRequestByteCount := int64(0)
-	pacer := ste.NewTokenBucketPacer(targetRateInBytesPerSec, unusedExpectedCoarseRequestByteCount)
+	requestPacer := pacer.New(pacer.NewBandwidthRecorder(targetRateInBytesPerSec, pacer.DefaultBandwidthRecorderWindowSeconds), appCtx)
 	// Note: as at July 2019, we don't currently have a shutdown method/event on JobsAdmin where this pacer
 	// could be shut down. But, it's global anyway, so we just leave it running until application exit.
 	ja := &jobsAdmin{
 		concurrency:        concurrency,
 		jobIDToJobMgr:      newJobIDToJobMgr(),
-		pacer:              pacer,
+		pacer:              requestPacer,
 		slicePool:          common.NewMultiSizeSlicePool(common.MaxBlockBlobBlockSize),
 		cacheLimiter:       common.NewCacheLimiter(maxRamBytesToUse),
 		fileCountLimiter:   common.NewCacheLimiter(int64(concurrency.MaxOpenDownloadFiles)),
@@ -231,7 +231,7 @@ type jobsAdmin struct {
 	jobIDToJobMgr                     jobIDToJobMgr // Thread-safe map from each JobID to its JobInfo
 	// Other global state can be stored in more fields here...
 	appCtx             context.Context
-	pacer              ste.PacerAdmin
+	pacer              pacer.Interface
 	slicePool          common.ByteSlicePooler
 	cacheLimiter       common.CacheLimiter
 	fileCountLimiter   common.CacheLimiter
@@ -313,7 +313,7 @@ func (ja *jobsAdmin) UpdateTargetBandwidth(newTarget int64) {
 	if newTarget < 0 {
 		return
 	}
-	ja.pacer.UpdateTargetBytesPerSecond(newTarget)
+	ja.pacer.RequestHardLimit(newTarget)
 }
 
 /*

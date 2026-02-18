@@ -23,9 +23,10 @@ import (
 	"net/url"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/pacer"
 )
 
-func anyToRemote_symlink(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
+func anyToRemote_symlink(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer.Interface, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
 	// Check if cancelled
 	if jptm.WasCanceled() {
 		/* This is earliest we detect that jptm has been cancelled before we reach destination */

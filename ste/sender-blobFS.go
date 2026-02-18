@@ -27,6 +27,7 @@ import (
 	"time"
 
 	datalakesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
+	"github.com/Azure/azure-storage-azcopy/v10/pacer"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
@@ -54,13 +55,13 @@ type blobFSSenderBase struct {
 	parentDirClient     *directory.Client
 	chunkSize           int64
 	numChunks           uint32
-	pacer               pacer
+	pacer               pacer.Interface
 	creationTimeHeaders *file.HTTPHeaders
 	flushThreshold      int64
 	metadataToSet       common.Metadata
 }
 
-func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (*blobFSSenderBase, error) {
+func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer.Interface, sip ISourceInfoProvider) (*blobFSSenderBase, error) {
 	info := jptm.Info()
 
 	// compute chunk size and number of chunks

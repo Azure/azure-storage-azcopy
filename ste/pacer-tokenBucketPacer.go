@@ -29,29 +29,12 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-// pacer is used by callers whose activity must be controlled to a certain pace
-type pacer interface {
-
-	// RequestTrafficAllocation blocks until the caller is allowed to process byteCount bytes.
-	RequestTrafficAllocation(ctx context.Context, byteCount int64) error
-
-	UpdateTargetBytesPerSecond(newTarget int64)
-
-	// UndoRequest reverses a previous request to process n bytes.  Is used when
-	// the caller did not need all of the allocation they previously requested
-	// e.g. when they asked for enough for a big buffer, but never filled it, they would
-	// call this method to return the unused portion.
-	UndoRequest(byteCount int64)
-
-	Close() error
-}
-
-type PacerAdmin interface {
-	pacer
-
-	// GetTotalTraffic returns the cumulative count of all traffic that has been processed
-	GetTotalTraffic() int64
-}
+//type PacerAdmin interface {
+//	pacer
+//
+//	// GetTotalTraffic returns the cumulative count of all traffic that has been processed
+//	GetTotalTraffic() int64
+//}
 
 const (
 	// How long to sleep in the loop that puts tokens into the bucket

@@ -25,6 +25,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/pacer"
 )
 
 type urlToAppendBlobCopier struct {
@@ -34,7 +35,7 @@ type urlToAppendBlobCopier struct {
 	addFileRequestIntent bool
 }
 
-func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, destination string, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
+func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, destination string, pacer pacer.Interface, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
 	senderBase, err := newAppendBlobSenderBase(jptm, destination, pacer, srcInfoProvider)
 	if err != nil {
 		return nil, err
@@ -61,10 +62,8 @@ func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, destination string, pace
 func (c *urlToAppendBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int32, adjustedChunkSize int64, chunkIsWholeFile bool) chunkFunc {
 	appendBlockFromURL := func() {
 		c.jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
-
-		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
-			c.jptm.FailActiveUpload("Pacing block", err)
-		}
+		
+		<-c.pacer.InitiateUnpaceable(adjustedChunkSize, c.jptm.Context())
 		offset := id.OffsetInFile()
 		token, err := c.jptm.GetS2SSourceTokenCredential(c.jptm.Context())
 		if err != nil {

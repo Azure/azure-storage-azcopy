@@ -6,6 +6,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
+	"github.com/Azure/azure-storage-azcopy/v10/pacer"
 
 	"net/http"
 	"strings"
@@ -18,7 +19,7 @@ var logBlobFSDeleteWarnOnce = &sync.Once{}
 
 const blobFSDeleteWarning = "Displayed file count will be either 1 or based upon list-of-files entries, and thus inaccurate, as deletes are performed recursively service-side."
 
-func DeleteHNSResource(jptm IJobPartTransferMgr, pacer pacer) {
+func DeleteHNSResource(jptm IJobPartTransferMgr, pacer pacer.Interface) {
 	// If the transfer was cancelled, then report the transfer as done.
 	if jptm.WasCanceled() {
 		jptm.ReportTransferDone()

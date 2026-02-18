@@ -25,6 +25,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
+	"github.com/Azure/azure-storage-azcopy/v10/pacer"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -36,7 +37,7 @@ type pageBlobUploader struct {
 	sip        ISourceInfoProvider
 }
 
-func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (sender, error) {
+func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, pacer pacer.Interface, sip ISourceInfoProvider) (sender, error) {
 	senderBase, err := newPageBlobSenderBase(jptm, destination, pacer, sip, nil)
 	if err != nil {
 		return nil, err
@@ -111,9 +112,9 @@ func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int3
 
 		// send it
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
-		body := newPacedRequestBody(jptm.Context(), reader, u.pacer)
+		pacerReq := <-u.pacer.InitiateRequest(reader.Length(), jptm.Context())
 		enrichedContext := withRetryNotification(jptm.Context(), u.filePacer)
-		_, err := u.destPageBlobClient.UploadPages(enrichedContext, body, blob.HTTPRange{Offset: id.OffsetInFile(), Count: reader.Length()},
+		_, err := u.destPageBlobClient.UploadPages(enrichedContext, pacerReq.WrapRequestBody(reader), blob.HTTPRange{Offset: id.OffsetInFile(), Count: reader.Length()},
 			&pageblob.UploadPagesOptions{
 				CPKInfo:      u.jptm.CpkInfo(),
 				CPKScopeInfo: u.jptm.CpkScopeInfo(),

@@ -23,6 +23,7 @@ package ste
 import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/pacer"
 )
 
 type appendBlobUploader struct {
@@ -50,7 +51,7 @@ func (u *appendBlobUploader) Prologue(ps common.PrologueState) (destinationModif
 	return u.appendBlobSenderBase.Prologue(ps)
 }
 
-func newAppendBlobUploader(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (sender, error) {
+func newAppendBlobUploader(jptm IJobPartTransferMgr, destination string, pacer pacer.Interface, sip ISourceInfoProvider) (sender, error) {
 	senderBase, err := newAppendBlobSenderBase(jptm, destination, pacer, sip)
 	if err != nil {
 		return nil, err
@@ -66,11 +67,11 @@ func (u *appendBlobUploader) Md5Channel() chan<- []byte {
 func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
 	appendBlockFromLocal := func() {
 		u.jptm.LogChunkStatus(id, common.EWaitReason.Body())
-		body := newPacedRequestBody(u.jptm.Context(), reader, u.pacer)
+		pacerReq := <-u.pacer.InitiateRequest(reader.Length(), u.jptm.Context())
 		offset := id.OffsetInFile()
 		var timeoutFromCtx bool
 		ctx := withTimeoutNotification(u.jptm.Context(), &timeoutFromCtx)
-		_, err := u.destAppendBlobClient.AppendBlock(ctx, body,
+		_, err := u.destAppendBlobClient.AppendBlock(ctx, pacerReq.WrapRequestBody(reader),
 			&appendblob.AppendBlockOptions{
 				AppendPositionAccessConditions: &appendblob.AppendPositionAccessConditions{AppendPosition: &offset},
 				CPKInfo:                        u.jptm.CpkInfo(),

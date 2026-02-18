@@ -16,6 +16,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	azruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-storage-azcopy/v10/pacer"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -187,7 +188,7 @@ type jobPartMgr struct {
 
 	priority common.JobPriority
 
-	pacer pacer // Pacer is used to cap throughput
+	pacer pacer.Interface // Pacer is used to cap throughput
 
 	slicePool common.ByteSlicePooler
 
