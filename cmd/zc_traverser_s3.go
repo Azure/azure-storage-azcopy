@@ -204,6 +204,17 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 		}
 	}
 
+	// Check if this is GCS accessed via S3-compatible API (using HMAC keys)
+	// GCS has different behavior for directory markers compared to AWS S3
+	isGCSviaS3 := t.s3URLParts.IsGoogleCloudStorage()
+
+	// Strip leading slashes from ObjectKey for GCS - this can happen when URLs have double slashes
+	// (e.g., when sync orchestrator joins "bucket/" with "" resulting in "bucket//")
+	// GCS path-style URLs are more susceptible to this issue
+	if isGCSviaS3 {
+		t.s3URLParts.ObjectKey = strings.TrimLeft(t.s3URLParts.ObjectKey, "/")
+	}
+
 	// Append a trailing slash if it is missing.
 	if !strings.HasSuffix(t.s3URLParts.ObjectKey, "/") && t.s3URLParts.ObjectKey != "" {
 		t.s3URLParts.ObjectKey += "/"
@@ -212,10 +223,6 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 	// Ignore *s in URLs and treat them as normal characters
 	// This is because * is both a valid URL path character and a valid portion of an object key in S3.
 	searchPrefix := t.s3URLParts.ObjectKey
-
-	// Check if this is GCS accessed via S3-compatible API (using HMAC keys)
-	// GCS has different behavior for directory markers compared to AWS S3
-	isGCSviaS3 := t.s3URLParts.IsGoogleCloudStorage()
 
 	// Debug logging for S3 traverser
 	fmt.Printf("[DEBUG S3 Traverser] Bucket: %s, SearchPrefix: '%s', Recursive: %v, isGCSviaS3: %v, includeDirectoryOrPrefix: %v\n",
