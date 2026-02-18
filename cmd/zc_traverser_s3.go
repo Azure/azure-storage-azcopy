@@ -217,9 +217,15 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 	// GCS has different behavior for directory markers compared to AWS S3
 	isGCSviaS3 := t.s3URLParts.IsGoogleCloudStorage()
 
+	// Debug logging for S3 traverser
+	WarnStdoutAndScanningLog(fmt.Sprintf("[DEBUG S3 Traverser] Bucket: %s, SearchPrefix: '%s', Recursive: %v, isGCSviaS3: %v, includeDirectoryOrPrefix: %v",
+		t.s3URLParts.BucketName, searchPrefix, t.recursive, isGCSviaS3, t.includeDirectoryOrPrefix))
+
 	// It's a bucket or virtual directory.
 	listObjectOptions := minio.ListObjectsOptions{Prefix: searchPrefix, Recursive: t.recursive}
+	objectCount := 0
 	for objectInfo := range t.s3Client.ListObjects(t.ctx, t.s3URLParts.BucketName, listObjectOptions) {
+		objectCount++
 		// re-join the unescaped path.
 		relativePath := strings.TrimPrefix(objectInfo.Key, searchPrefix)
 
@@ -359,6 +365,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			return
 		}
 	}
+	WarnStdoutAndScanningLog(fmt.Sprintf("[DEBUG S3 Traverser] Finished listing. Total objects from ListObjects: %d", objectCount))
 	return
 }
 
