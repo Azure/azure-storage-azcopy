@@ -204,6 +204,17 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 		}
 	}
 
+	// Check if this is GCS accessed via S3-compatible API (using HMAC keys)
+	// GCS has different behavior for directory markers compared to AWS S3
+	isGCSviaS3 := t.s3URLParts.IsGoogleCloudStorage()
+
+	// Strip leading slashes from ObjectKey for GCS - this can happen when URLs have double slashes
+	// (e.g., when sync orchestrator joins "bucket/" with "" resulting in "bucket//")
+	// GCS path-style URLs are more susceptible to this issue
+	if isGCSviaS3 {
+		t.s3URLParts.ObjectKey = strings.TrimLeft(t.s3URLParts.ObjectKey, "/")
+	}
+
 	// Append a trailing slash if it is missing.
 	if !strings.HasSuffix(t.s3URLParts.ObjectKey, "/") && t.s3URLParts.ObjectKey != "" {
 		t.s3URLParts.ObjectKey += "/"
@@ -253,7 +264,17 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			continue
 		}
 
-		if objectInfo.StorageClass == "" && !t.includeDirectoryOrPrefix {
+		// Directory detection logic differs between GCS and AWS S3:
+		// - GCS via S3 API: Use enhanced checks (empty StorageClass + trailing slash or zero size)
+		// - AWS S3: Use standard check (empty StorageClass only)
+		var isPotentialDirectory bool
+		if isGCSviaS3 {
+			isPotentialDirectory = objectInfo.StorageClass == "" && (strings.HasSuffix(objectInfo.Key, "/") || objectInfo.Size == 0)
+		} else {
+			isPotentialDirectory = objectInfo.StorageClass == ""
+		}
+
+		if isPotentialDirectory && !t.includeDirectoryOrPrefix {
 			// Directories are the only objects without storage classes.
 			// Skip directories if not using sync orchestrator
 			continue
@@ -269,7 +290,16 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 		objectPath := strings.Split(objectInfo.Key, "/")
 		objectName := objectPath[len(objectPath)-1]
 		var storedObject StoredObject
-		if objectInfo.StorageClass == "" {
+
+		// For GCS via S3 API, use stricter directory detection to avoid false positives
+		var isActualDirectory bool
+		if isGCSviaS3 {
+			isActualDirectory = isPotentialDirectory && objectInfo.Size == 0 && strings.HasSuffix(objectInfo.Key, "/")
+		} else {
+			isActualDirectory = objectInfo.StorageClass == ""
+		}
+
+		if isActualDirectory {
 
 			// For sync orchestrator, we need to treat directories as objects.
 			storedObject = newStoredObject(
@@ -388,7 +418,7 @@ func newS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTrave
 // For info see: https://github.com/aws/aws-sdk-go/issues/720#issuecomment-243891223
 // Once we change to bucketExists, assuming its reliable, we will be able to re allow this URL type.
 func showS3UrlTypeWarning(s3URLParts common.S3URLParts) {
-	if strings.EqualFold(s3URLParts.Host, "s3.amazonaws.com") {
+	if strings.EqualFold(s3URLParts.Host, "s3."+common.GetS3CompatibleSuffix()) {
 		s3UrlWarningOncer.Do(func() {
 			glcm.Info("Instead of transferring from the 's3.amazonaws.com' URL, in this version of AzCopy we recommend you " +
 				"use a region-specific endpoint to transfer from one specific region. E.g. s3.us-east-1.amazonaws.com or a virtual-hosted reference to a single bucket.")
