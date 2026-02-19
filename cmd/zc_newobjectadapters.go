@@ -401,6 +401,9 @@ func (a shareDirectoryFilePropertiesAdapter) ContentMD5() []byte {
 }
 
 func (a shareDirectoryFilePropertiesAdapter) ContentLength() int64 {
+	if a.FileProperty == nil {
+		return 0
+	}
 	return common.IffNotNil(a.FileProperty.ContentLength, 0)
 }
 
