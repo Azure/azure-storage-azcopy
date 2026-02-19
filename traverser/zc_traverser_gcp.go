@@ -70,7 +70,7 @@ func (t *gcpTraverser) Traverse(preprocessor objectMorpher, processor ObjectProc
 				NoBlobProps,
 				gie.NewCommonMetadata(),
 				t.gcpURLParts.BucketName,
-				"")
+				&NFSMetadataContext{})
 			err = ProcessIfPassedFilters(filters, storedObject,
 				processor)
 			if err != nil {
@@ -130,7 +130,7 @@ func (t *gcpTraverser) Traverse(preprocessor objectMorpher, processor ObjectProc
 				NoBlobProps,
 				oie.NewCommonMetadata(),
 				t.gcpURLParts.BucketName,
-				"")
+				&NFSMetadataContext{})
 
 			err = ProcessIfPassedFilters(filters,
 				storedObject,

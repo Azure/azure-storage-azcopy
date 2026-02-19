@@ -108,7 +108,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor ObjectProce
 				NoBlobProps,
 				oie.NewCommonMetadata(),
 				t.s3URLParts.BucketName,
-				"")
+				&NFSMetadataContext{})
 
 			err = ProcessIfPassedFilters(
 				filters,
@@ -181,7 +181,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor ObjectProce
 			NoBlobProps,
 			oie.NewCommonMetadata(),
 			t.s3URLParts.BucketName,
-			"")
+			&NFSMetadataContext{})
 
 		err = ProcessIfPassedFilters(filters,
 			storedObject,

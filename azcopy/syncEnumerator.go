@@ -237,6 +237,9 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 
 	var comparator traverser.ObjectProcessor
 	var finalize func() error
+	nfsOption := &NfsHardlinkManager{
+		pendingHardlinkObjects: traverser.NewObjectIndexer(),
+	}
 
 	switch s.opts.fromTo {
 	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile(), common.EFromTo.LocalFileNFS():
@@ -247,8 +250,15 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 		// when uploading, we can delete remote objects immediately, because as we traverse the remote location
 		// we ALREADY have available a complete map of everything that exists locally
 		// so as soon as we see a remote destination object we can know whether it exists in the local source
-		comparator = NewSyncDestinationComparator(indexer, transferScheduler.ScheduleSyncRemoveSetPropertiesTransfer, deleteScheduler, s.opts.compareHash, s.opts.preserveInfo, s.opts.mirrorMode).ProcessIfNecessary
+		comparatorInstance := NewSyncDestinationComparator(indexer, transferScheduler.ScheduleSyncRemoveSetPropertiesTransfer, deleteScheduler, s.opts.compareHash, s.opts.preserveInfo, s.opts.mirrorMode, nfsOption)
+		comparator = comparatorInstance.ProcessIfNecessary
 		finalize = func() error {
+
+			err = comparatorInstance.ProcessPendingHardlinks()
+			if err != nil {
+				return err
+			}
+
 			// schedule every local file that doesn't exist at the destination
 			err = indexer.Traverse(transferScheduler.ScheduleSyncRemoveSetPropertiesTransfer, filters)
 			if err != nil {

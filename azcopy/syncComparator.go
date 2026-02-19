@@ -71,10 +71,16 @@ type syncDestinationComparator struct {
 
 	preferSMBTime     bool
 	disableComparison bool
+
+	destPendingHardlinkObjects traverser.ObjectIndexer
 }
 
-func NewSyncDestinationComparator(i *traverser.ObjectIndexer, copyScheduler, cleaner traverser.ObjectProcessor, comparisonHashType common.SyncHashType, preferSMBTime, disableComparison bool) *syncDestinationComparator {
-	return &syncDestinationComparator{sourceIndex: i, copyTransferScheduler: copyScheduler, destinationCleaner: cleaner, preferSMBTime: preferSMBTime, disableComparison: disableComparison, comparisonHashType: comparisonHashType}
+type NfsHardlinkManager struct {
+	pendingHardlinkObjects *traverser.ObjectIndexer
+}
+
+func NewSyncDestinationComparator(i *traverser.ObjectIndexer, copyScheduler, cleaner traverser.ObjectProcessor, comparisonHashType common.SyncHashType, preferSMBTime, disableComparison bool, nfsOpts *NfsHardlinkManager) *syncDestinationComparator {
+	return &syncDestinationComparator{sourceIndex: i, copyTransferScheduler: copyScheduler, destinationCleaner: cleaner, preferSMBTime: preferSMBTime, disableComparison: disableComparison, comparisonHashType: comparisonHashType, destPendingHardlinkObjects: *nfsOpts.pendingHardlinkObjects}
 }
 
 // it will only schedule transfers for destination objects that are present in the indexer but stale compared to the entry in the map
@@ -83,6 +89,18 @@ func NewSyncDestinationComparator(i *traverser.ObjectIndexer, copyScheduler, cle
 // if file x from the destination exists at the source, then we'd only transfer it if it is considered stale compared to its counterpart at the source
 // if file x does not exist at the source, then it is considered extra, and will be deleted
 func (f *syncDestinationComparator) ProcessIfNecessary(destinationObject traverser.StoredObject) error {
+
+	if destinationObject.EntityType == common.EEntityType.Hardlink() {
+
+		// we will process hardlinks in a special way because we need to make sure the relationship is not broken.
+		// So we will not directly schedule the copy transfer here, instead we will put it in a separate map and
+		// process it after we have processed all the other objects. This is to make sure we have the complete picture of
+		// what the destination hardlink relationships look like before we decide whether we need to break any of them.
+		f.destPendingHardlinkObjects.IndexMap[destinationObject.RelativePath] = destinationObject
+		fmt.Println("-----------Appened", destinationObject.Name)
+		return nil
+	}
+
 	sourceObjectInMap, present := f.sourceIndex.IndexMap[destinationObject.RelativePath]
 	if !present && f.sourceIndex.IsDestinationCaseInsensitive {
 		lcRelativePath := strings.ToLower(destinationObject.RelativePath)
@@ -99,42 +117,11 @@ func (f *syncDestinationComparator) ProcessIfNecessary(destinationObject travers
 			return f.copyTransferScheduler(sourceObjectInMap)
 		}
 
-		// 2. TYPE & RELATIONSHIP VALIDATION: Handle Hardlinks at Destination
-		// If the destination is a Hardlink, we must verify if the source is still a Hardlink
-		// AND if it points to the same underlying data (Target).
-		if destinationObject.EntityType == common.EEntityType.Hardlink() {
-			switch sourceObjectInMap.EntityType {
-			case common.EEntityType.Hardlink():
-				//fmt.Println("-------TargetHardlink", destinationObject.TargetHardlinkFile, sourceObjectInMap.TargetHardlinkFile)
-				//fmt.Println("------Name", destinationObject.Name, sourceObjectInMap.Name)
-				// Case: Hardlink -> Hardlink
-				// Even if it's still a link, the relationship might have changed (e.g., now links to File A instead of File D)
-				if destinationObject.TargetHardlinkFile != sourceObjectInMap.TargetHardlinkFile {
-
-					syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, "HardlinkTargetMismatch", false)
-
-					// We must delete the 'wrong' link at destination before creating the 'right' one
-					_ = f.destinationCleaner(destinationObject)
-					return f.copyTransferScheduler(sourceObjectInMap)
-				}
-				// If TargetHardlinkFile matches, we fall through to LMT/Hash check to see if the content changed
-
-			case common.EEntityType.File(), common.EEntityType.Symlink(), common.EEntityType.Folder():
-				// Case: Type Mismatch (Hardlink at destination, but something else at source)
-				syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, "EntityTypeMismatch", false)
-
-				// Breaking the relationship: Delete the link and recreate the new entity type
-				_ = f.destinationCleaner(destinationObject)
-				return f.copyTransferScheduler(sourceObjectInMap)
-
-			default:
-				panic("Invalid source entity type for path: " + sourceObjectInMap.RelativePath)
-			}
-		} else if sourceObjectInMap.EntityType == common.EEntityType.Hardlink() {
-			// Case: Destination is a File/Folder, but Source is now a Hardlink
+		if sourceObjectInMap.EntityType == common.EEntityType.Hardlink() {
+			// Case: Destination is a File/Folder/Symlink, but Source is now a Hardlink
 			syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, "EntityTypeMismatch", false)
 
-			// Delete the independent file/folder to allow link creation
+			// Delete the independent file/folder/symlink to allow link creation
 			_ = f.destinationCleaner(destinationObject)
 			return f.copyTransferScheduler(sourceObjectInMap)
 		}
@@ -183,6 +170,78 @@ func (f *syncDestinationComparator) ProcessIfNecessary(destinationObject travers
 		_ = f.destinationCleaner(destinationObject)
 	}
 
+	return nil
+}
+
+func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
+	fmt.Println("Called----------")
+	for _, destPendingHardlink := range f.destPendingHardlinkObjects.IndexMap {
+		sourceObjectInMap, present := f.sourceIndex.IndexMap[destPendingHardlink.RelativePath]
+		if !present {
+			if f.sourceIndex.IsDestinationCaseInsensitive {
+				lcRelativePath := strings.ToLower(destPendingHardlink.RelativePath)
+				sourceObjectInMap, present = f.sourceIndex.IndexMap[lcRelativePath]
+			}
+		}
+
+		if present {
+			// Remove from source index so indexer.Traverse won't double-schedule this object
+			delete(f.sourceIndex.IndexMap, destPendingHardlink.RelativePath)
+			// If the hardlink relationship is preserved, we can just schedule the transfer as normal (it will recreate the link at the destination)
+			if sourceObjectInMap.EntityType == common.EEntityType.Hardlink() {
+
+				//Case: Hardlink -> Hardlink
+				//Even if it's still a link, the relationship might have changed (e.g., now links to File A instead of File D)
+				inodeStoreInstance, err := common.GetInodeStore()
+				if err != nil {
+					return err
+				}
+				fmt.Println("-------Inode", sourceObjectInMap.Inode, destPendingHardlink.Inode)
+				srcAnchorFile, err := inodeStoreInstance.GetAnchor(sourceObjectInMap.Inode)
+				if err != nil {
+					return err
+				}
+				dstAnchorFile, err := inodeStoreInstance.GetAnchor(destPendingHardlink.Inode)
+				if err != nil {
+					return err
+				}
+				// fmt.Println("-------Anchor", srcAnchorFile, dstAnchorFile)
+				// fmt.Println("------Name", sourceObjectInMap.Name)
+				// fmt.Println("TargetHardlink", sourceObjectInMap.TargetHardlinkFile, destPendingHardlink.TargetHardlinkFile)
+				if dstAnchorFile != srcAnchorFile {
+
+					syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, "HardlinkTargetMismatch", false)
+
+					// We must delete the 'wrong' link at destination before creating the 'right' one
+					_ = f.destinationCleaner(destPendingHardlink)
+					if err := f.copyTransferScheduler(sourceObjectInMap); err != nil {
+						return err
+					}
+					continue
+				}
+				// If anchor matches, fall through to LMT/Hash check to see if the content changed
+				if sourceObjectInMap.IsMoreRecentThan(destPendingHardlink, f.preferSMBTime) {
+					syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMT, false)
+					if err := f.copyTransferScheduler(sourceObjectInMap); err != nil {
+						return err
+					}
+				}
+
+			} else {
+				// If the hardlink relationship is broken (e.g. it is now a regular file), we need to delete the old link
+				// and create a new transfer to break the relationship
+				syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, "BreakingHardlinkRelationship", false)
+				_ = f.destinationCleaner(destPendingHardlink)
+				if err := f.copyTransferScheduler(sourceObjectInMap); err != nil {
+					return err
+				}
+			}
+		} else {
+			// If the source hardlink is missing, we should delete the destination hardlink as well to avoid leaving stale links behind
+			syncComparatorLog(destPendingHardlink.RelativePath, syncStatusOverwritten, "SourceMissingForPendingHardlink", false)
+			_ = f.destinationCleaner(destPendingHardlink)
+		}
+	}
 	return nil
 }
 

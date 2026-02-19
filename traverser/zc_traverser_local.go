@@ -611,7 +611,7 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 						NoBlobProps,
 						NoMetadata,
 						"", // Local has no such thing as containers
-						"",
+						&NFSMetadataContext{},
 					),
 					processor, // the original processor is wrapped in the mutex processor.
 				)
@@ -677,7 +677,8 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 		return fmt.Errorf("failed to scan path %s due to %w", t.fullPath, err)
 	}
 	finalizer, hashingProcessor := t.prepareHashingThreads(preprocessor, processor, filters)
-	var targetHardlinkFile string
+	var NfsHardlinkManager NFSMetadataContext
+
 	// if the path is a single file, then pass it through the filters and send to processor
 	if isSingleFile {
 
@@ -707,9 +708,14 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 					if err != nil {
 						return err
 					}
-					targetHardlinkFile, _, err = inodeStoreInstance.GetOrAdd(getInodeString(singleFileInfo), relPath)
+					inode := getInodeString(singleFileInfo)
+					targetHardlinkFile, _, err := inodeStoreInstance.GetOrAdd(inode, relPath)
 					if err != nil {
 						return err
+					}
+					NfsHardlinkManager = NFSMetadataContext{
+						TargetHardlinkFile: targetHardlinkFile,
+						Inode:              inode,
 					}
 				}
 			} else if IsRegularFile(singleFileInfo) {
@@ -765,7 +771,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 				NoBlobProps,
 				NoMetadata,
 				"", // Local has no such thing as containers
-				targetHardlinkFile,
+				&NfsHardlinkManager,
 			),
 			hashingProcessor, // hashingProcessor handles the mutex wrapper
 		)
@@ -814,9 +820,14 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 							if err != nil {
 								return err
 							}
-							targetHardlinkFile, _, err = inodeStoreInstance.GetOrAdd(getInodeString(fileInfo), relPath)
+							inode := getInodeString(fileInfo)
+							targetHardlinkFile, _, err := inodeStoreInstance.GetOrAdd(inode, relPath)
 							if err != nil {
 								return err
+							}
+							NfsHardlinkManager = NFSMetadataContext{
+								TargetHardlinkFile: targetHardlinkFile,
+								Inode:              inode,
 							}
 						}
 					}
@@ -845,7 +856,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 						NoBlobProps,
 						NoMetadata,
 						"", // Local has no such thing as containers
-						targetHardlinkFile,
+						&NfsHardlinkManager,
 					),
 					hashingProcessor, // hashingProcessor handles the mutex wrapper
 				)
@@ -920,9 +931,14 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 							if err != nil {
 								return err
 							}
-							targetHardlinkFile, _, err = inodeStoreInstance.GetOrAdd(getInodeString(fileInfo), relPath)
+							inode := getInodeString(fileInfo)
+							targetHardlinkFile, _, err := inodeStoreInstance.GetOrAdd(inode, relPath)
 							if err != nil {
 								return err
+							}
+							NfsHardlinkManager = NFSMetadataContext{
+								TargetHardlinkFile: targetHardlinkFile,
+								Inode:              inode,
 							}
 
 						}
@@ -956,7 +972,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 						NoBlobProps,
 						NoMetadata,
 						"", // Local has no such thing as containers
-						targetHardlinkFile,
+						&NfsHardlinkManager,
 					),
 					hashingProcessor, // hashingProcessor handles the mutex wrapper
 				)

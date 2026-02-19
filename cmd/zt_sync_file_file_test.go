@@ -142,7 +142,8 @@ func TestSyncDestinationComparator(t *testing.T) {
 
 	// set up the indexer as well as the destination comparator
 	indexer := traverser.NewObjectIndexer()
-	destinationComparator := azcopy.NewSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, common.ESyncHashType.None(), false, false)
+	nfsHardlinkManager := &azcopy.NfsHardlinkManager{}
+	destinationComparator := azcopy.NewSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, common.ESyncHashType.None(), false, false, nfsHardlinkManager)
 
 	// create a sample source object
 	sampleSourceObject := traverser.StoredObject{Name: "test", RelativePath: "/usr/test", LastModifiedTime: time.Now(), Md5: srcMD5}
@@ -200,7 +201,8 @@ func TestSyncDestCompDisableComparison(t *testing.T) {
 
 	// set up the indexer as well as the destination comparator
 	indexer := traverser.NewObjectIndexer()
-	destinationComparator := azcopy.NewSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, common.ESyncHashType.None(), false, true)
+	nfsHardlinkManager := &azcopy.NfsHardlinkManager{}
+	destinationComparator := azcopy.NewSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, common.ESyncHashType.None(), false, true, nfsHardlinkManager)
 
 	// create a sample source object
 	currTime := time.Now()

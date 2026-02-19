@@ -67,6 +67,10 @@ func (s *InodeStore) GetOrAdd(inode, path string) (existingPath string, exists b
 	if ok {
 		// inode seen before → lookup from file
 		p, err := s.lookupFromFile(inode)
+		if err != nil {
+			return "", false, err
+		}
+		err = s.UpdateAnchor(inode, path)
 		return p, true, err
 	}
 
@@ -77,12 +81,16 @@ func (s *InodeStore) GetOrAdd(inode, path string) (existingPath string, exists b
 	// Double-check after acquiring write lock
 	if _, ok := s.set[inode]; ok {
 		p, err := s.lookupFromFile(inode)
+		if err != nil {
+			return "", false, err
+		}
+		err = s.UpdateAnchor(inode, path)
 		return p, true, err
 	}
 
 	// New inode → record it
 	s.set[inode] = struct{}{}
-	_, err = fmt.Fprintf(s.file, "%s %s\n", inode, path)
+	_, err = fmt.Fprintf(s.file, "%s %s %s\n", inode, path, path)
 	if err != nil {
 		return "", false, err
 	}
@@ -103,8 +111,8 @@ func (s *InodeStore) lookupFromFile(inode string) (string, error) {
 	scanner := bufio.NewScanner(s.file)
 	for scanner.Scan() {
 		line := scanner.Text()
-		parts := strings.SplitN(line, " ", 2)
-		if len(parts) != 2 {
+		parts := strings.SplitN(line, " ", 3)
+		if len(parts) != 3 {
 			continue
 		}
 		if parts[0] == inode {
@@ -113,4 +121,109 @@ func (s *InodeStore) lookupFromFile(inode string) (string, error) {
 	}
 
 	return "", fmt.Errorf("inode %s not found in store", inode)
+}
+
+func (s *InodeStore) UpdateAnchor(inode string, newAnchor string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// 1. Create a temporary file to write the updated content
+	tempFileName := s.file.Name() + ".tmp"
+	tempFile, err := os.OpenFile(tempFileName, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to create temp file for update: %w", err)
+	}
+	defer tempFile.Close()
+
+	// 2. Reset pointer of current file to start scanning
+	if _, err := s.file.Seek(0, io.SeekStart); err != nil {
+		return fmt.Errorf("failed to seek original file: %w", err)
+	}
+
+	updated := false
+	scanner := bufio.NewScanner(s.file)
+	writer := bufio.NewWriter(tempFile)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		parts := strings.SplitN(line, " ", 3)
+
+		if len(parts) == 3 && parts[0] == inode {
+			currentAnchor := parts[2]
+
+			// DETERMINISTIC COMPARISON:
+			// Update only if the new anchor is lexicographically smaller than the current one.
+			// This ensures the "alphabetically first" path always wins.
+			fmt.Println("-------Idnode, currentAnchor, newAnchor:", inode, currentAnchor, newAnchor)
+			if newAnchor < currentAnchor {
+				_, err = fmt.Fprintf(writer, "%s %s %s\n", parts[0], parts[1], newAnchor)
+				updated = true
+				fmt.Println("Updated anchor for inode", inode, "to", newAnchor)
+			} else {
+				// Keep existing anchor if it's already "smaller"
+				_, err = fmt.Fprintln(writer, line)
+			}
+		} else {
+			// Write the line as is
+			_, err = fmt.Fprintln(writer, line)
+		}
+
+		if err != nil {
+			return fmt.Errorf("failed to write to temp file: %w", err)
+		}
+	}
+
+	if err := writer.Flush(); err != nil {
+		return err
+	}
+
+	if !updated {
+		os.Remove(tempFileName)
+		return fmt.Errorf("inode %s not found; nothing to update", inode)
+	}
+
+	// 3. Swap files
+	oldName := s.file.Name()
+	s.file.Close() // Must close before renaming on some OSs (Windows)
+
+	if err := os.Rename(tempFileName, oldName); err != nil {
+		return fmt.Errorf("failed to replace old store file: %w", err)
+	}
+
+	// 4. Reopen the file handle for the InodeStore
+	newFile, err := os.OpenFile(oldName, os.O_RDWR|os.O_APPEND, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to reopen store file: %w", err)
+	}
+	s.file = newFile
+
+	return nil
+}
+
+// GetAnchor fetches the current anchor path for a given inode from the disk store.
+func (s *InodeStore) GetAnchor(inode string) (string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if _, err := s.file.Seek(0, io.SeekStart); err != nil {
+		return "", fmt.Errorf("failed to seek inode store: %w", err)
+	}
+
+	scanner := bufio.NewScanner(s.file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		// Format is: <inode> <path> <anchor>
+		parts := strings.SplitN(line, " ", 3)
+
+		if len(parts) == 3 && parts[0] == inode {
+			// Return the anchor (the 3rd field)
+			return parts[2], nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("error reading inode store: %w", err)
+	}
+
+	return "", fmt.Errorf("anchor for inode %s not found", inode)
 }

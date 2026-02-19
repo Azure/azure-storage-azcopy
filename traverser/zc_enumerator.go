@@ -267,7 +267,11 @@ type filePropsProvider interface {
 	NFSFileType() string
 	LinkCount() int64
 	FileID() string
-	ParentID() string
+}
+
+type NFSMetadataContext struct {
+	TargetHardlinkFile string
+	Inode              string
 }
 
 // a constructor is used so that in case the StoredObject has to change, the callers would get a compilation error
@@ -275,7 +279,7 @@ type filePropsProvider interface {
 func NewStoredObject(morpher objectMorpher, name string,
 	relativePath string, entityType common.EntityType, lmt time.Time,
 	size int64, props contentPropsProvider, blobProps blobPropsProvider,
-	meta common.Metadata, containerName string, targetHardlinkFile string) StoredObject {
+	meta common.Metadata, containerName string, nfsOptions *NFSMetadataContext) StoredObject {
 	obj := StoredObject{
 		Name:               name,
 		RelativePath:       relativePath,
@@ -297,7 +301,8 @@ func NewStoredObject(morpher objectMorpher, name string,
 		LeaseStatus:        blobProps.LeaseStatus(),
 		LeaseState:         blobProps.LeaseState(),
 		LeaseDuration:      blobProps.LeaseDuration(),
-		TargetHardlinkFile: targetHardlinkFile,
+		TargetHardlinkFile: nfsOptions.TargetHardlinkFile,
+		Inode:              nfsOptions.Inode,
 	}
 
 	// Folders don't have size, and root ones shouldn't have names in the StoredObject. Ensure those rules are consistently followed

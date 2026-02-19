@@ -201,7 +201,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 				NoBlobProps,
 				fileProperties.Metadata,
 				targetURLParts.ShareName,
-				"",
+				&NFSMetadataContext{},
 			)
 			// NFS handling for different file types
 			// If the source provided is of NFS type we will check for NFSFileType value and process accordingly
@@ -284,7 +284,6 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 
 			//set entity tile to hardlink
 			if fullProperties.LinkCount() > int64(1) {
-				fmt.Print("\n\n---------Name:", f.name, "\nLinkCount:", fullProperties.LinkCount(), "\nParentID:", fullProperties.ParentID(), "\nFileID:", fullProperties.FileID())
 				f.entityType = common.EEntityType.Hardlink()
 				if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() {
 
@@ -327,7 +326,10 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			NoBlobProps,
 			metadata,
 			targetURLParts.ShareName,
-			targetHardlinkFile,
+			&NFSMetadataContext{
+				TargetHardlinkFile: targetHardlinkFile,
+				Inode:              fullProperties.FileID(),
+			},
 		)
 
 		obj.smbLastModifiedTime = smbLMT
