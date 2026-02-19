@@ -77,7 +77,7 @@ steps:
       testRunTitle: '${{ parameters.directory }} Tests'
     env:
       coverage_name: ${{ parameters.coverage_name }}
-  - task: PublishCodeCoverageResults@1
+  - task: PublishCodeCoverageResults@2
     condition: succeededOrFailed()
     inputs:
       codeCoverageTool: Cobertura
