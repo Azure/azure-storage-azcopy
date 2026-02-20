@@ -661,7 +661,10 @@ func (s *scenario) validatePOSIXProperties(f *testObject, metadata map[string]*s
 		adapter = osScenarioHelper{}.GetUnixStatAdapterForFile(s.a, filepath.Join(s.state.dest.(*resourceLocal).dirPath, addedDirAtDest, f.name))
 	case common.ELocation.Blob():
 		var err error
-		adapter, err = common.ReadStatFromMetadata(metadata, 0)
+		safeMetadata := &common.SafeMetadata{
+			Metadata: metadata,
+		}
+		adapter, err = common.ReadStatFromMetadata(safeMetadata, 0)
 		s.a.AssertNoErr(err, "reading stat from metadata")
 	}
 

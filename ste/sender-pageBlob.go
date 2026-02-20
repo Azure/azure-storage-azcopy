@@ -49,7 +49,7 @@ type pageBlobSenderBase struct {
 	// When sending local data, they are computed based on
 	// the properties of the local file
 	headersToApply  blob.HTTPHeaders
-	metadataToApply common.Metadata
+	metadataToApply *common.SafeMetadata
 	blobTagsToApply common.BlobTags
 
 	destBlobTier *blob.AccessTier
@@ -130,7 +130,7 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer p
 		numChunks:              numChunks,
 		pacer:                  pacer,
 		headersToApply:         props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
-		metadataToApply:        props.SrcMetadata,
+		metadataToApply:        &common.SafeMetadata{Metadata: props.SrcMetadata.Clone()},
 		blobTagsToApply:        props.SrcBlobTags,
 		destBlobTier:           destBlobTier,
 		filePacer:              NewNullAutoPacer(), // defer creation of real one to Prologue
@@ -253,7 +253,7 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		&pageblob.CreateOptions{
 			SequenceNumber: to.Ptr(int64(0)),
 			HTTPHeaders:    &s.headersToApply,
-			Metadata:       s.metadataToApply,
+			Metadata:       s.metadataToApply.Metadata,
 			Tier:           destBlobTier,
 			Tags:           blobTags,
 			CPKInfo:        s.jptm.CpkInfo(),

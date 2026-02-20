@@ -23,9 +23,10 @@ package ste
 import (
 	"bytes"
 	"fmt"
+	"sync/atomic"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
-	"sync/atomic"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -50,7 +51,7 @@ func (s *blockBlobUploader) Prologue(ps common.PrologueState) (destinationModifi
 
 		if unixSIP, ok := s.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
 			// Clone the metadata before we write to it, we shouldn't be writing to the same metadata as every other blob.
-			s.metadataToApply = s.metadataToApply.Clone()
+			s.metadataToApply = &common.SafeMetadata{Metadata: s.metadataToApply.Metadata.Clone()}
 
 			statAdapter, err := unixSIP.GetUNIXProperties()
 			if err != nil {
@@ -144,7 +145,7 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, reader commo
 			_, err = u.destBlockBlobClient.Upload(jptm.Context(), streaming.NopCloser(bytes.NewReader(nil)),
 				&blockblob.UploadOptions{
 					HTTPHeaders:  &u.headersToApply,
-					Metadata:     u.metadataToApply,
+					Metadata:     u.metadataToApply.Metadata,
 					Tier:         destBlobTier,
 					Tags:         blobTags,
 					CPKInfo:      jptm.CpkInfo(),
@@ -168,7 +169,7 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, reader commo
 			_, err = u.destBlockBlobClient.Upload(jptm.Context(), body,
 				&blockblob.UploadOptions{
 					HTTPHeaders:  &u.headersToApply,
-					Metadata:     u.metadataToApply,
+					Metadata:     u.metadataToApply.Metadata,
 					Tier:         destBlobTier,
 					Tags:         blobTags,
 					CPKInfo:      jptm.CpkInfo(),
