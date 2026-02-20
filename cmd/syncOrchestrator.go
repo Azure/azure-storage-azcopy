@@ -203,13 +203,24 @@ func validateLocalRoot(path string) error {
 	return nil
 }
 
-// validateFileRoot validates a File root URL.
-func validateFileRoot(sourcePath string) error {
-		_, err := share.ParseURL(sourcePath)
-	if err != nil {
-		return err
-	}
-	return nil
+// validateFileShareRoot validates an Azure Files share root URL
+func validateFileShareRoot(sourcePath string) error {
+    // Parse as a URL to validate format
+    parsedURL, err := url.Parse(sourcePath)
+    if err != nil {
+        return err
+    }
+
+    // Basic validation - should be a valid URL with file.core.windows.net host
+    if parsedURL.Host == "" {
+        return fmt.Errorf("invalid Azure Files URL: missing host")
+    }
+
+    if !strings.Contains(parsedURL.Host, "file.core.windows.net") {
+        return fmt.Errorf("invalid Azure Files URL: expected file.core.windows.net host")
+    }
+
+    return nil
 }
 
 // validateS3Root returns the root object for the sync orchestrator based on the S3 source path.
@@ -282,7 +293,7 @@ func validateAndGetRootObject(path string, fromTo common.FromTo) (minimalStoredO
 	case common.ELocation.BlobFS():
 		err = validateBlobFSRoot(path)
 	case common.ELocation.File():
-		err = validateFileRoot(path)
+		err = validateFileShareRoot(path)
 	default:
 		err = fmt.Errorf("sync orchestrator is not supported for %s source", fromTo.From().String())
 	}
