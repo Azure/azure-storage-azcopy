@@ -328,7 +328,10 @@ func init() {
 			go func() {
 				sigChan := make(chan os.Signal, 1)
 				signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-				<-sigChan
+				select { // Handles both cancellations
+				case <-sigChan: // unblocks if cancellation signal arrives
+				case <-glcm.CancelFromStdinChannel(): // unblocks if canceled from stdin
+				}
 				cancel()
 			}()
 

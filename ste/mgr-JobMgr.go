@@ -1133,6 +1133,7 @@ func (jm *jobMgr) CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.
 		fallthrough
 	case common.EJobStatus.Paused(): // Logically, It's OK to pause an already-paused job
 		jpp0.SetJobStatus(desiredJobStatus)
+		jm.Log(common.LogInfo, fmt.Sprintf("Job status updated: %s", desiredJobStatus))
 		msg := fmt.Sprintf("JobID=%v %s", jobID,
 			common.Iff(desiredJobStatus == common.EJobStatus.Paused(), "paused", "canceled"))
 
