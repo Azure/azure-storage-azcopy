@@ -579,7 +579,9 @@ func (info *TransferInfo) getDownloadPath() string {
 	if downloadToTempPath && info.SourceSize > 0 { // 0-byte files don't need a rename.
 		parent, fileName := filepath.Split(info.Destination)
 		fileName = fmt.Sprintf(azcopyTempDownloadPrefix, info.JobID.String()) + fileName
-		return filepath.Join(parent, fileName)
+		tempPath := filepath.Join(parent, fileName)
+		// Ensure temp path also uses extended path format on Windows for long paths
+		return common.ToExtendedPath(tempPath)
 	}
 	return info.Destination
 }
