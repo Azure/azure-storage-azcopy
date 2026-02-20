@@ -23,8 +23,11 @@ package ste
 import (
 	"bytes"
 	"fmt"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/Azure/azure-storage-azcopy/v10/pacer"
+
 	"sync/atomic"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -36,7 +39,7 @@ type blockBlobUploader struct {
 	md5Channel chan []byte
 }
 
-func newBlockBlobUploader(jptm IJobPartTransferMgr, pacer pacer, sip ISourceInfoProvider) (sender, error) {
+func newBlockBlobUploader(jptm IJobPartTransferMgr, pacer pacer.Interface, sip ISourceInfoProvider) (sender, error) {
 	senderBase, err := newBlockBlobSenderBase(jptm, pacer, sip, nil)
 	if err != nil {
 		return nil, err
@@ -100,8 +103,15 @@ func (u *blockBlobUploader) generatePutBlock(id common.ChunkID, blockIndex int32
 
 		// step 3: put block to remote
 		u.jptm.LogChunkStatus(id, common.EWaitReason.Body())
-		body := newPacedRequestBody(u.jptm.Context(), reader, u.pacer)
-		_, err := u.destBlockBlobClient.StageBlock(u.jptm.Context(), encodedBlockID, body,
+
+		// inject our pacer so our policy picks it up
+		pacerCtx, err := u.pacer.InjectPacer(reader.Length(), u.jptm.FromTo(), u.jptm.Context())
+		if err != nil {
+			u.jptm.FailActiveDownload("Injecting pacer into context", err)
+			return
+		}
+
+		_, err = u.destBlockBlobClient.StageBlock(pacerCtx, encodedBlockID, reader,
 			&blockblob.StageBlockOptions{
 				CPKInfo:      u.jptm.CpkInfo(),
 				CPKScopeInfo: u.jptm.CpkScopeInfo(),
@@ -163,9 +173,15 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, reader commo
 				u.headersToApply.BlobContentMD5 = md5Hash
 			}
 
+			// inject our pacer so our policy picks it up
+			pacerCtx, err := u.pacer.InjectPacer(reader.Length(), u.jptm.FromTo(), jptm.Context())
+			if err != nil {
+				u.jptm.FailActiveDownload("Injecting pacer into context", err)
+				return
+			}
+
 			// Upload the file
-			body := newPacedRequestBody(jptm.Context(), reader, u.pacer)
-			_, err = u.destBlockBlobClient.Upload(jptm.Context(), body,
+			_, err = u.destBlockBlobClient.Upload(pacerCtx, reader,
 				&blockblob.UploadOptions{
 					HTTPHeaders:  &u.headersToApply,
 					Metadata:     u.metadataToApply,

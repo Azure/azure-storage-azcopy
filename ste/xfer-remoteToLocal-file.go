@@ -31,13 +31,14 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/pacer"
 )
 
 const azcopyTempDownloadPrefix string = ".azDownload-%s-"
 
 // xfer.go requires just a single xfer function for the whole job.
 // This routine serves that role for downloads and redirects for each transfer to a file or folder implementation
-func remoteToLocal(jptm IJobPartTransferMgr, pacer pacer, df downloaderFactory) {
+func remoteToLocal(jptm IJobPartTransferMgr, pacer pacer.Interface, df downloaderFactory) {
 	info := jptm.Info()
 	if info.IsFolderPropertiesTransfer() {
 		remoteToLocal_folder(jptm, pacer, df)
@@ -49,7 +50,7 @@ func remoteToLocal(jptm IJobPartTransferMgr, pacer pacer, df downloaderFactory) 
 }
 
 // general-purpose "any remote persistence location" to local, for files
-func remoteToLocal_file(jptm IJobPartTransferMgr, pacer pacer, df downloaderFactory) {
+func remoteToLocal_file(jptm IJobPartTransferMgr, pacer pacer.Interface, df downloaderFactory) {
 
 	info := jptm.Info()
 

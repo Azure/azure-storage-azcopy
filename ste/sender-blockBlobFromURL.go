@@ -22,9 +22,12 @@ package ste
 
 import (
 	"fmt"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-storage-azcopy/v10/pacer"
+
 	"sync/atomic"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -38,7 +41,7 @@ type urlToBlockBlobCopier struct {
 	addFileRequestIntent bool // Necessary for FileBlob Oauth copies
 }
 
-func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
+func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, pacer pacer.Interface, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
 	// Get blob tier, by default set none.
 	var destBlobTier *blob.AccessTier
 	// If the source is block blob, preserve source's blob tier.
@@ -113,9 +116,8 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 		// step 3: put block to remote
 		c.jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
 
-		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
-			c.jptm.FailActiveUpload("Pacing block", err)
-		}
+		<-c.pacer.InitiateUnpaceable(adjustedChunkSize, c.jptm.Context()) // await our bytes being allocated
+
 		token, err := c.jptm.GetS2SSourceTokenCredential(c.jptm.Context())
 		if err != nil {
 			c.jptm.FailActiveS2SCopy("Getting source token credential", err)
@@ -167,9 +169,8 @@ func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, bl
 			destBlobTier = nil
 		}
 
-		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
-			c.jptm.FailActiveUpload("Pacing block", err)
-		}
+		<-c.pacer.InitiateUnpaceable(adjustedChunkSize, c.jptm.Context()) // await our bytes being allocated
+		
 		token, err := c.jptm.GetS2SSourceTokenCredential(c.jptm.Context())
 		if err != nil {
 			c.jptm.FailActiveS2SCopy("Getting source token credential", err)

@@ -10,13 +10,14 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-storage-azcopy/v10/pacer"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 var explainedSkippedRemoveOnce sync.Once
 
-func DeleteBlob(jptm IJobPartTransferMgr, pacer pacer) {
+func DeleteBlob(jptm IJobPartTransferMgr, pacer pacer.Interface) {
 
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.
 	if jptm.WasCanceled() {

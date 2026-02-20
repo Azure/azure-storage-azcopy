@@ -32,6 +32,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
+	"github.com/Azure/azure-storage-azcopy/v10/pacer"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -42,7 +43,7 @@ type pageBlobSenderBase struct {
 	srcSize            int64
 	chunkSize          int64
 	numChunks          uint32
-	pacer              pacer
+	pacer              pacer.Interface
 
 	// Headers and other info that we will apply to the destination
 	// object. For S2S, these come from the source service.
@@ -79,7 +80,7 @@ var (
 	md5NotSupportedInManagedDiskError = errors.New("the Content-MD5 hash is not supported for managed disk uploads")
 )
 
-func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType *blob.AccessTier) (*pageBlobSenderBase, error) {
+func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer.Interface, srcInfoProvider ISourceInfoProvider, inferredAccessTierType *blob.AccessTier) (*pageBlobSenderBase, error) {
 	transferInfo := jptm.Info()
 
 	// compute chunk count

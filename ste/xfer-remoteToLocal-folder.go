@@ -22,10 +22,11 @@ package ste
 
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/pacer"
 )
 
 // general-purpose "any remote persistence location" to local, for folders
-func remoteToLocal_folder(jptm IJobPartTransferMgr, pacer pacer, df downloaderFactory) {
+func remoteToLocal_folder(jptm IJobPartTransferMgr, pacer pacer.Interface, df downloaderFactory) {
 
 	info := jptm.Info()
 

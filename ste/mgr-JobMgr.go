@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/pacer"
 )
 
 var _ IJobMgr = &jobMgr{}
@@ -96,7 +97,7 @@ type IJobMgr interface {
 
 func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx context.Context, cpuMon common.CPUMonitor, level common.LogLevel,
 	commandString string, tuner ConcurrencyTuner,
-	pacer PacerAdmin, slicePool common.ByteSlicePooler, cacheLimiter common.CacheLimiter, fileCountLimiter common.CacheLimiter,
+	pacer pacer.Interface, slicePool common.ByteSlicePooler, cacheLimiter common.CacheLimiter, fileCountLimiter common.CacheLimiter,
 	jobLogger common.ILoggerResetable, daemonMode bool, jobErrorHandler common.JobErrorHandler) IJobMgr {
 	const channelSize = 100000
 	// PartsChannelSize defines the number of JobParts which can be placed into the
@@ -310,7 +311,7 @@ type jobMgr struct {
 	poolSizingChannels  poolSizingChannels
 	concurrencyTuner    ConcurrencyTuner
 	cpuMon              common.CPUMonitor
-	pacer               PacerAdmin
+	pacer               pacer.Interface
 	slicePool           common.ByteSlicePooler
 	cacheLimiter        common.CacheLimiter
 	fileCountLimiter    common.CacheLimiter
