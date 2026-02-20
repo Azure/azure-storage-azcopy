@@ -770,11 +770,12 @@ type CookedCopyCmdArgs struct {
 	// Whether the user wants to preserve the properties of a file...
 	preserveInfo bool
 	// Specifies whether the copy operation is an NFS copy
-	isNFSCopy                     bool
-	hardlinks                     common.HardlinkHandlingType
-	atomicSkippedSymlinkCount     uint32
-	atomicSkippedSpecialFileCount uint32
-	BlockSizeMB                   float64
+	isNFSCopy                        bool
+	hardlinks                        common.HardlinkHandlingType
+	atomicSkippedSymlinkCount        uint32
+	atomicSkippedSpecialFileCount    uint32
+	atomicSkippedArchiveFileCount    uint64
+	BlockSizeMB                      float64
 	PutBlobSizeMB                 float64
 	IncludePathPatterns           []string
 	ListOfFiles                   string
@@ -1434,6 +1435,7 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 	if jobDone {
 		summary.SkippedSymlinkCount = atomic.LoadUint32(&cca.atomicSkippedSymlinkCount)
 		summary.SkippedSpecialFileCount = atomic.LoadUint32(&cca.atomicSkippedSpecialFileCount)
+		summary.SkippedArchiveFileCount = atomic.LoadUint64(&cca.atomicSkippedArchiveFileCount)
 
 		exitCode := cca.getSuccessExitCode()
 		if summary.TransfersFailed > 0 || summary.JobStatus == common.EJobStatus.Cancelled() || summary.JobStatus == common.EJobStatus.Cancelling() {

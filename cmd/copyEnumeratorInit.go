@@ -98,6 +98,9 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 		ExcludeContainers: cca.excludeContainer,
 		IncrementEnumeration: func(entityType common.EntityType) {
+			if entityType == common.EEntityType.SkippedArchiveFile() {
+				atomic.AddUint64(&cca.atomicSkippedArchiveFileCount, 1)
+			}
 			if isNFSCopy {
 				if entityType == common.EEntityType.Other() {
 					atomic.AddUint32(&cca.atomicSkippedSpecialFileCount, 1)

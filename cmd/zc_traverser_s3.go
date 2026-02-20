@@ -245,6 +245,15 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			continue
 		}
 
+		// Skip objects with GLACIER or DEEP_ARCHIVE storage classes.
+		// These objects are not accessible for direct download and must be restored first.
+		if objectInfo.StorageClass == "GLACIER" || objectInfo.StorageClass == "DEEP_ARCHIVE" {
+			WarnStdoutAndScanningLog(fmt.Sprintf("Skipping S3 object %s with storage class %s, as it is not accessible for direct download",
+				objectInfo.Key, objectInfo.StorageClass))
+			t.incrementEnumerationCounter(common.EEntityType.SkippedArchiveFile())
+			continue
+		}
+
 		if invalidAzureBlobName(objectInfo.Key) {
 			//Throw a warning on console and continue
 			WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, objectInfo.Key))

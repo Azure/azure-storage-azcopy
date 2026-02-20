@@ -332,9 +332,10 @@ type ListJobSummaryResponse struct {
 	PerfStrings             []string `json:"-"`
 	PerformanceAdvice       []PerformanceAdvice
 	IsCleanupJob            bool
-	SkippedSymlinkCount     uint32 `json:",string"`
-	HardlinksConvertedCount uint32 `json:",string"`
-	SkippedSpecialFileCount uint32 `json:",string"`
+	SkippedSymlinkCount      uint32 `json:",string"`
+	HardlinksConvertedCount  uint32 `json:",string"`
+	SkippedSpecialFileCount  uint32 `json:",string"`
+	SkippedArchiveFileCount  uint64 `json:",string"`
 }
 
 // wraps the standard ListJobSummaryResponse with sync-specific stats

@@ -113,6 +113,8 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 			} else if entityType == common.EEntityType.Folder() {
 				atomic.AddUint64(&cca.atomicSourceFoldersScanned, 1)
+			} else if entityType == common.EEntityType.SkippedArchiveFile() {
+				atomic.AddUint64(&cca.atomicSkippedArchiveFileCount, 1)
 			}
 			if isNFSCopy {
 				if entityType == common.EEntityType.Other() {

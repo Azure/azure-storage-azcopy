@@ -526,6 +526,7 @@ type cookedSyncCmdArgs struct {
 	hardlinks                        common.HardlinkHandlingType
 	atomicSkippedSymlinkCount        uint32
 	atomicSkippedSpecialFileCount    uint32
+	atomicSkippedArchiveFileCount    uint64
 
 	blockSizeMB   float64
 	putBlobSizeMB float64
@@ -587,6 +588,11 @@ func (cca *cookedSyncCmdArgs) GetSourceFoldersTransferredNotRequired() uint64 {
 // GetSourceFilesScanned returns files scanned at source.
 func (cca *cookedSyncCmdArgs) GetSourceFilesScanned() uint64 {
 	return atomic.LoadUint64(&cca.atomicSourceFilesScanned)
+}
+
+// GetSkippedArchiveFileCount returns the number of archive files skipped during enumeration.
+func (cca *cookedSyncCmdArgs) GetSkippedArchiveFileCount() uint64 {
+	return atomic.LoadUint64(&cca.atomicSkippedArchiveFileCount)
 }
 
 // GetDestinationFilesScanned returns files scanned at destination.
