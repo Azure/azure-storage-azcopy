@@ -154,11 +154,11 @@ func (s *InodeStore) UpdateAnchor(inode string, newAnchor string) error {
 			// DETERMINISTIC COMPARISON:
 			// Update only if the new anchor is lexicographically smaller than the current one.
 			// This ensures the "alphabetically first" path always wins.
-			fmt.Println("-------Idnode, currentAnchor, newAnchor:", inode, currentAnchor, newAnchor)
+			//fmt.Println("-------Idnode, currentAnchor, newAnchor:", inode, currentAnchor, newAnchor)
 			if newAnchor < currentAnchor {
 				_, err = fmt.Fprintf(writer, "%s %s %s\n", parts[0], parts[1], newAnchor)
 				updated = true
-				fmt.Println("Updated anchor for inode", inode, "to", newAnchor)
+				//fmt.Println("Updated anchor for inode", inode, "to", newAnchor)
 			} else {
 				// Keep existing anchor if it's already "smaller"
 				_, err = fmt.Fprintln(writer, line)

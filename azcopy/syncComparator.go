@@ -89,7 +89,8 @@ func NewSyncDestinationComparator(i *traverser.ObjectIndexer, copyScheduler, cle
 // if file x from the destination exists at the source, then we'd only transfer it if it is considered stale compared to its counterpart at the source
 // if file x does not exist at the source, then it is considered extra, and will be deleted
 func (f *syncDestinationComparator) ProcessIfNecessary(destinationObject traverser.StoredObject) error {
-
+	fmt.Println("^^^^^^Processing", destinationObject.Name)
+	fmt.Println("^^^^^EntityType", destinationObject.EntityType)
 	if destinationObject.EntityType == common.EEntityType.Hardlink() {
 
 		// we will process hardlinks in a special way because we need to make sure the relationship is not broken.
@@ -174,8 +175,10 @@ func (f *syncDestinationComparator) ProcessIfNecessary(destinationObject travers
 }
 
 func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
-	fmt.Println("Called----------")
+	fmt.Println("Called*********")
+	fmt.Println("Pending hardlinks to process:", len(f.destPendingHardlinkObjects.IndexMap))
 	for _, destPendingHardlink := range f.destPendingHardlinkObjects.IndexMap {
+
 		sourceObjectInMap, present := f.sourceIndex.IndexMap[destPendingHardlink.RelativePath]
 		if !present {
 			if f.sourceIndex.IsDestinationCaseInsensitive {
@@ -185,6 +188,7 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 		}
 
 		if present {
+			fmt.Println("&&&&&&Found", destPendingHardlink.RelativePath, "in source map")
 			// Remove from source index so indexer.Traverse won't double-schedule this object
 			delete(f.sourceIndex.IndexMap, destPendingHardlink.RelativePath)
 			// If the hardlink relationship is preserved, we can just schedule the transfer as normal (it will recreate the link at the destination)
@@ -196,7 +200,7 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 				if err != nil {
 					return err
 				}
-				fmt.Println("-------Inode", sourceObjectInMap.Inode, destPendingHardlink.Inode)
+				fmt.Println("******Inode", sourceObjectInMap.Inode, destPendingHardlink.Inode)
 				srcAnchorFile, err := inodeStoreInstance.GetAnchor(sourceObjectInMap.Inode)
 				if err != nil {
 					return err
