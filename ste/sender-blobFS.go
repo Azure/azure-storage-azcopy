@@ -253,7 +253,7 @@ func (u *blobFSSenderBase) SetPOSIXProperties() error {
 		return nil
 	}
 
-	meta := u.metadataToSet
+	meta := &common.SafeMetadata{Metadata: u.metadataToSet.Metadata.Clone()}
 	common.AddStatToBlobMetadata(adapter, meta, u.jptm.Info().PosixPropertiesStyle)
 	delete(meta.Metadata, common.POSIXFolderMeta) // Can't be set on HNS accounts.
 
