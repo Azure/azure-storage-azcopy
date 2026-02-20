@@ -3,13 +3,18 @@ package pacer
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"math"
+	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/google/uuid"
 )
+
+var pacerIncorrectBehaviorWarnOnce = &sync.Once{}
 
 type request struct {
 	parent Interface
@@ -17,10 +22,30 @@ type request struct {
 	ctx context.Context
 	id  uuid.UUID
 
-	bodySize       int64
-	totalRequested atomic.Int64
-	allocated      atomic.Int64
-	read           atomic.Int64
+	allocationsFinished *atomic.Bool
+
+	/*
+		I (adreed, 2/18/26) have to do a little justifying to myself as to why this
+		(adding to requestedBudget when we need more budget) is unnecessary to be worrying about.
+
+		The largest block in a block blob or append blob is 4 gigabytes a block (common.MaxBlockBlobBlockSize)
+		Dividing math.MaxInt64 by that yields the reality that it fits into an int64,
+		not just a handful of times, but, 11 whole digits times (21990232255)!
+
+		Append blobs having a maximum block size of 40x less (common.MaxAppendBlobBlockSize),
+		Page blobs, and Azure Files being able to put only 4MB per chunk. (exactly 1000x less, if you ask our code!)
+		ADLS Gen 2 doesn't list a max size in its REST API docs, but we do fall back to similar logic for block blobs, so we can assume that's the max.
+
+		Either way, if a retry adds a requirement for new budget, it very certainly won't do it (10^11)*2.2 times under current retry policies...
+		If it does, call me, so I can laugh at my own hubris, and panic over how to solve that problem.
+	*/
+
+	requestedBudget *atomic.Int64
+	allocatedBudget *atomic.Int64
+	usedBudget      *atomic.Int64
+	readHead        *atomic.Int64
+
+	bodySize int64
 }
 
 func newRequest(parent Interface, bodySize int64, ctx context.Context) Request {
@@ -30,12 +55,21 @@ func newRequest(parent Interface, bodySize int64, ctx context.Context) Request {
 		ctx: ctx,
 		id:  uuid.New(),
 
-		totalRequested: atomic.Int64{},
-		allocated:      atomic.Int64{},
-		read:           atomic.Int64{},
+		allocationsFinished: &atomic.Bool{},
+
+		requestedBudget: &atomic.Int64{},
+		allocatedBudget: &atomic.Int64{},
+		usedBudget:      &atomic.Int64{},
+		readHead:        &atomic.Int64{}, // we can trust our read head is at 0, since the SDK expects it too!
+
+		bodySize: bodySize,
 	}
 
-	out.totalRequested.Store(bodySize)
+	out.allocationsFinished.Store(false)
+	out.requestedBudget.Store(bodySize)
+	out.allocatedBudget.Store(0)
+	out.usedBudget.Store(0)
+	out.readHead.Store(0)
 
 	return out
 }
@@ -45,11 +79,11 @@ func (r *request) ID() uuid.UUID {
 }
 
 func (r *request) RemainingAllocations() int {
-	return int(min(r.totalRequested.Load()-r.allocated.Load(), math.MaxInt))
+	return int(min(r.bodySize-r.allocatedBudget.Load(), math.MaxInt))
 }
 
 func (r *request) RemainingReads() int {
-	return int(min(r.totalRequested.Load()-r.read.Load(), math.MaxInt))
+	return int(min(r.bodySize-r.readHead.Load(), math.MaxInt))
 }
 
 func (r *request) WrapRequestBody(reader io.ReadSeekCloser) io.ReadSeekCloser {
@@ -70,95 +104,128 @@ func (r *request) WrapResponseBody(reader io.ReadCloser) io.ReadCloser {
 }
 
 func (r *request) issueBytes(size int) (remaining int64) {
-	result := r.allocated.Add(int64(size))
+	// allocate as many bytes as both size, and our current request will allow.
+	cRequest := r.requestedBudget.Load()
+	cAlloc := r.allocatedBudget.Load()
 
-	cBodySize := r.totalRequested.Load()
-	if result > cBodySize {
-		r.allocated.Store(cBodySize)
-		return 0
-	}
+	maxAlloc := cRequest - cAlloc
+	sizei64 := min(int64(size), maxAlloc)
 
-	return cBodySize - result
+	return cRequest - r.allocatedBudget.Add(sizei64)
 }
 
 func (r *request) informSeek(newLoc int64) {
-	//readPrior := r.read.Load()
-	//
-	//r.read.Store(newLoc)
-	//r.allocated.Store(newLoc)
-	//
-	//if newLoc < r.totalRequested {
-	//	r.parent.reinitiateRequest(r)
-	//}
+	// We'll never, ever remove request, only add here. Why?
+	// 1) Subtracting request bytes could cause issueBytes to over-issue if it occurs at the right time.
+	// 2) Subtracting request bytes could incorrectly cause our allocator to de-allocate us, which would be extremely bad mid-request.
+	// So, we should calculate if we'll need new bytes with our new location
 
-	// if the amount left to read, after the seek, differs from the amonut we've actually read, we should add what remains to the body length.
-	remReads := r.RemainingReads()
+	cRequest := r.requestedBudget.Load()
+	cRead := r.usedBudget.Load() // we ask about what we've read, not what we've been allocated, as current allocations are "free" under this model.
+	toAllocate := cRequest - cRead
+	newRequirement := r.bodySize - newLoc
 
+	// if we are about to be allocated less than we'll now need, we add what's missing.
+	if toAllocate < newRequirement {
+		fmt.Println("what", toAllocate, newRequirement, r.requestedBudget.Load(), r.usedBudget.Load())
+		// per my rant in the request struct, this'll pretty much always be a safe operation.
+		r.requestedBudget.Add(newRequirement - toAllocate)
+	}
+
+	// make sure we also update our read head for accurate read reporting (even though that's only really used for S2S as of 2/18/26!)
+	r.readHead.Store(newLoc)
 }
 
 func (r *request) requestUse(size int) (allocated int, err error) {
-	// if our body is already fully read, we can never read anything.
-	if r.totalRequested <= r.read.Load() {
-		return 0, errors.New("request has no remaining reads")
-	}
+	// a request to use is not a confirmed use-- readers can always read less than you ask them to, so we request, then confirm.
+	// simultaneously, sometimes size might be larger than we expect! there could be less of the reader remaining than we intend.
 
-	// if no hard limit is being observed, we have been allocated whatever we please!
+	// if the allocator doesn't have a hard limit, we go as fast as we want. the allocator is trying to gauge how many requests is safe to send.
 	if hardLimitRequested, _ := r.parent.HardLimit(); !hardLimitRequested {
-		// But we should still function properly.
-		read, alloc := r.read.Load(), r.allocated.Load()
-		// If read is less than alloc, allocate what's left of that. Theoretically, it should be 0.
-		// If this function were to be called again, alloc - read = size
-		r.allocated.Add(int64(size) - (alloc - read))
+		// if we're doing this, we're going to allocate for ourselves, that way if throughput limiting is suddenly enabled (i.e. via stgexp), the request gets paced normally again.
+		postAllocation := r.allocatedBudget.Add(int64(size))
+		if r.requestedBudget.Load() <= postAllocation { // expand our budget if it's needed (probably not), and de-allocate ourselves, since we're likely finished.
+			r.requestedBudget.Store(postAllocation)
+			r.Discard()
+		}
 
 		return size, nil
 	}
 
-	// if we already have something allocated, immediately return it.
-	allocated = min(int(r.allocated.Load()-r.read.Load()), size)
-	if allocated > 0 {
+	// first, let's return what's available, if anything.
+	available := r.allocatedBudget.Load() - r.usedBudget.Load()
+
+	if available > 0 {
+		allocated = min(int(min(available, math.MaxInt)), size)
 		return
 	}
 
-	// since we have nothing allocated, we gotta wait for it.
-	t := time.NewTicker(time.Second)
-	for {
-		select {
-		case <-t.C:
-		case <-r.ctx.Done():
-			t.Stop()
-			return 0, errors.New("context cancelled while awaiting allocation")
-		}
+	// prepare a function to reanimate ourselves, if needed.
+	reanimate := func() {
+		if r.allocationsFinished.Load() {
+			common.GetLifecycleMgr().Info(fmt.Sprintf("reanimating %s with %d bytes needed", r.id.String(), size))
 
-		allocated = min(int(r.allocated.Load()-r.read.Load()), size)
-		if allocated > 0 {
-			t.Stop()
-			break
+			// ensure we are going to get our portion, in case something weird happened.
+			futureReadBudget := r.requestedBudget.Load() - r.usedBudget.Load()
+			if futureReadBudget < int64(size) {
+				r.requestedBudget.Add(int64(size) - futureReadBudget)
+			}
+
+			// fire off the reanimate request and flip the allocation bit
+			<-r.parent.reinitiateRequest(r)
+			r.allocationsFinished.Store(false)
 		}
 	}
+
+	// then, we wait for a new allocation. this won't be perfectly on pace with the traverser, but 1 second isn't a ton of time to lose for one request.
+	t := time.NewTicker(allocatorTickrate)
+	defer t.Stop()
+	for available == 0 {
+		select {
+		case <-t.C:
+			// no-op, check if we have an allocation (or if we need to reanimate ourselves)
+			available = r.allocatedBudget.Load() - r.usedBudget.Load()
+
+			// try reanimating if we still need bytes but have nothing available
+			if available == 0 {
+				reanimate()
+			}
+		case <-r.ctx.Done():
+			return 0, errors.New("context canceled while checking for allocation")
+		}
+	}
+
+	allocated = min(int(min(available, math.MaxInt)), size)
 
 	return
 }
 
 func (r *request) confirmUse(size int, recordBandwidth bool) {
-	existingRead := r.read.Load()
-	existingAlloc := r.allocated.Load()
-	theoreticalRead := existingRead + int64(size)
+	// while it's incorrect behavior to confirm more than we've ever been allocated,
+	// we'll let it slide and drop a warning in the logs that something *probably* isn't as we expect,
+	// because working is better than not working, even if working incorrectly.
 
-	if theoreticalRead > existingAlloc {
-		panic("sanity check: confirmUse would exceed allocation")
-	} else if theoreticalRead > r.totalRequested {
-		panic("sanity check: confirmUse would exceed body size")
+	afterUse := r.usedBudget.Add(int64(size))
+	r.readHead.Add(int64(size))
+	if r.allocatedBudget.Load() < afterUse { // handle the incorrect scenario
+		pacerIncorrectBehaviorWarnOnce.Do(func() {
+			common.AzcopyCurrentJobLogger.Log(common.LogWarning, "This won't cause issues with your job, but the request pacer has observed incorrect behavior, confirming more bytes than allocated. Please file a bug on the AzCopy github repo if you see this.")
+		})
+
+		r.allocatedBudget.Store(afterUse)
+		if r.requestedBudget.Load() < afterUse {
+			r.requestedBudget.Store(afterUse)
+		}
 	}
 
-	r.read.Add(int64(size))
-
-	if recordBandwidth {
+	if recordBandwidth { // observe the bytes.
 		r.parent.RecordBytes(size)
 	}
 }
 
-func (r *request) discard() {
-	r.informSeek(r.totalRequested) // seek to the end so that no more can be read
+func (r *request) Discard() {
+	// mark ourselves discarded, and use all allocations.
+	r.allocationsFinished.Store(true)
 
 	r.parent.discardRequest(r)
 }

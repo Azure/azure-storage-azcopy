@@ -26,7 +26,7 @@ func (b *bandwidthRecorder) worker(ctx context.Context) {
 		live:   false,
 	}
 
-	state.ticker.Stop()
+	//state.ticker.Stop()
 
 	for {
 		select {

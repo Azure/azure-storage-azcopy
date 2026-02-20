@@ -22,6 +22,7 @@ package ste
 
 import (
 	"fmt"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
@@ -112,9 +113,16 @@ func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int3
 
 		// send it
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
-		pacerReq := <-u.pacer.InitiateRequest(reader.Length(), jptm.Context())
 		enrichedContext := withRetryNotification(jptm.Context(), u.filePacer)
-		_, err := u.destPageBlobClient.UploadPages(enrichedContext, pacerReq.WrapRequestBody(reader), blob.HTTPRange{Offset: id.OffsetInFile(), Count: reader.Length()},
+
+		// inject our pacer so our policy picks it up
+		pacerCtx, err := u.pacer.InjectPacer(reader.Length(), u.jptm.FromTo(), enrichedContext)
+		if err != nil {
+			u.jptm.FailActiveDownload("Injecting pacer into context", err)
+			return
+		}
+
+		_, err = u.destPageBlobClient.UploadPages(pacerCtx, reader, blob.HTTPRange{Offset: id.OffsetInFile(), Count: reader.Length()},
 			&pageblob.UploadPagesOptions{
 				CPKInfo:      u.jptm.CpkInfo(),
 				CPKScopeInfo: u.jptm.CpkScopeInfo(),

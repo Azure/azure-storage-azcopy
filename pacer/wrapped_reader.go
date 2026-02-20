@@ -1,7 +1,6 @@
 package pacer
 
 import (
-	"errors"
 	"fmt"
 	"io"
 )
@@ -14,8 +13,6 @@ type wrappedRSC struct {
 
 func (w *wrappedRSC) Seek(offset int64, whence int) (newLoc int64, err error) {
 	newLoc, err = w.seeker.Seek(offset, whence)
-
-	fmt.Println(newLoc, w.parentReq.(*request).totalRequested)
 
 	if err != nil {
 		return
@@ -32,7 +29,7 @@ type wrappedRC struct {
 
 func (w *wrappedRC) Read(p []byte) (n int, err error) {
 	if w.parentReq.RemainingReads() <= 0 {
-		return 0, errors.New("parent request is already finalized")
+		return 0, nil
 	}
 
 	var allocated int
@@ -51,6 +48,6 @@ func (w *wrappedRC) Read(p []byte) (n int, err error) {
 }
 
 func (w *wrappedRC) Close() error {
-	w.parentReq.discard()
+	w.parentReq.Discard()
 	return w.childReader.Close()
 }

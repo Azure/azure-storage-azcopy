@@ -60,8 +60,15 @@ func (u *blobFSUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32,
 
 		// upload the byte range represented by this chunk
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
-		pacerReq := <-u.pacer.InitiateRequest(reader.Length(), jptm.Context())
-		_, err := u.getFileClient().AppendData(jptm.Context(), id.OffsetInFile(), pacerReq.WrapRequestBody(reader), nil) // note: AppendData is really UpdatePath with "append" action
+
+		// inject our pacer so our policy picks it up
+		pacerCtx, err := u.pacer.InjectPacer(reader.Length(), u.jptm.FromTo(), u.jptm.Context())
+		if err != nil {
+			u.jptm.FailActiveDownload("Injecting pacer into context", err)
+			return
+		}
+
+		_, err = u.getFileClient().AppendData(pacerCtx, id.OffsetInFile(), reader, nil) // note: AppendData is really UpdatePath with "append" action
 		if err != nil {
 			jptm.FailActiveUpload("Uploading range", err)
 			return

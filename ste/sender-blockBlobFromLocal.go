@@ -103,8 +103,15 @@ func (u *blockBlobUploader) generatePutBlock(id common.ChunkID, blockIndex int32
 
 		// step 3: put block to remote
 		u.jptm.LogChunkStatus(id, common.EWaitReason.Body())
-		pacerReq := <-u.pacer.InitiateRequest(reader.Length(), u.jptm.Context())
-		_, err := u.destBlockBlobClient.StageBlock(u.jptm.Context(), encodedBlockID, pacerReq.WrapRequestBody(reader),
+
+		// inject our pacer so our policy picks it up
+		pacerCtx, err := u.pacer.InjectPacer(reader.Length(), u.jptm.FromTo(), u.jptm.Context())
+		if err != nil {
+			u.jptm.FailActiveDownload("Injecting pacer into context", err)
+			return
+		}
+
+		_, err = u.destBlockBlobClient.StageBlock(pacerCtx, encodedBlockID, reader,
 			&blockblob.StageBlockOptions{
 				CPKInfo:      u.jptm.CpkInfo(),
 				CPKScopeInfo: u.jptm.CpkScopeInfo(),
@@ -166,9 +173,15 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, reader commo
 				u.headersToApply.BlobContentMD5 = md5Hash
 			}
 
+			// inject our pacer so our policy picks it up
+			pacerCtx, err := u.pacer.InjectPacer(reader.Length(), u.jptm.FromTo(), jptm.Context())
+			if err != nil {
+				u.jptm.FailActiveDownload("Injecting pacer into context", err)
+				return
+			}
+
 			// Upload the file
-			pacerReq := <-u.pacer.InitiateRequest(reader.Length(), jptm.Context())
-			_, err = u.destBlockBlobClient.Upload(jptm.Context(), pacerReq.WrapRequestBody(reader),
+			_, err = u.destBlockBlobClient.Upload(pacerCtx, reader,
 				&blockblob.UploadOptions{
 					HTTPHeaders:  &u.headersToApply,
 					Metadata:     u.metadataToApply,

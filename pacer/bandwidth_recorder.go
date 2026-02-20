@@ -1,6 +1,7 @@
 package pacer
 
 import (
+	"context"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -18,7 +19,7 @@ type bandwidthRecorder struct {
 	buckets      *bucketRotator
 }
 
-func NewBandwidthRecorder(hardLimit int64, observationSeconds uint64) BandwidthRecorder {
+func NewBandwidthRecorder(hardLimit int64, observationSeconds uint64, ctx context.Context) BandwidthRecorder {
 	out := &bandwidthRecorder{
 		lock:         sync.RWMutex{},
 		control:      make(chan bandwidthRecorderMessage),
@@ -28,6 +29,8 @@ func NewBandwidthRecorder(hardLimit int64, observationSeconds uint64) BandwidthR
 	}
 
 	out.hardLimit.Store(hardLimit)
+
+	go out.worker(ctx)
 
 	return out
 }

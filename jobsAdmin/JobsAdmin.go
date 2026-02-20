@@ -116,7 +116,7 @@ func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, 
 
 	// use the "networking mega" (based on powers of 10, not powers of 2, since that's what mega means in networking context)
 	targetRateInBytesPerSec := int64(targetRateInMegaBitsPerSec * 1000 * 1000 / 8)
-	requestPacer := pacer.New(pacer.NewBandwidthRecorder(targetRateInBytesPerSec, pacer.DefaultBandwidthRecorderWindowSeconds), appCtx)
+	requestPacer := pacer.New(pacer.NewBandwidthRecorder(targetRateInBytesPerSec, pacer.DefaultBandwidthRecorderWindowSeconds, appCtx), appCtx)
 	// Note: as at July 2019, we don't currently have a shutdown method/event on JobsAdmin where this pacer
 	// could be shut down. But, it's global anyway, so we just leave it running until application exit.
 	ja := &jobsAdmin{

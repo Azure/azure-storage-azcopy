@@ -4,11 +4,12 @@ import (
 	"context"
 	"io"
 
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/google/uuid"
 )
 
 const (
-	DefaultBandwidthRecorderWindowSeconds = 60
+	DefaultBandwidthRecorderWindowSeconds = 10
 )
 
 type BandwidthRecorder interface {
@@ -47,7 +48,8 @@ type Interface interface {
 	BandwidthRecorder
 
 	// InitiateRequest asks to initiate a request with a specific size. The request should _not_ be on the wire yet.
-	InitiateRequest(bodySizeBytes int64, ctx context.Context) <-chan Request
+	// Do not call directly, favor InjectPacer.
+	initiateRequest(bodySizeBytes int64, ctx context.Context) <-chan Request
 
 	// InitiateUnpaceable asks to initiate a request which *cannot* be paced and has to act by sheer average (i.e. like S2S).
 	// This comes with a very large caveat! Bandwidth is _not_ recorded, and the hard limit is observed "raw".
@@ -55,6 +57,11 @@ type Interface interface {
 	// This shouldn't wind up being combined, since we don't do S2S transfers at the same time as up/downloads,
 	// But word to the wise: HERE BE DRAGONS.
 	InitiateUnpaceable(bodySizeBytes int64, ctx context.Context) <-chan error
+
+	// InjectPacer updates the context with the key required to inject the pacer.
+	// NewPacerInjectPolicy should be added to the pipeline, following the retry policy, as close to the request execution as possible.
+	// Without it, InjectPacer will be ineffectual.
+	InjectPacer(bodySizeBytes int64, fromTo common.FromTo, ctx context.Context) (context.Context, error)
 
 	discardRequest(request Request)
 	reinitiateRequest(req Request) <-chan any
@@ -67,7 +74,7 @@ type Request interface {
 
 	// RemainingAllocations is how much left this request has to get allocated.
 	RemainingAllocations() int
-	// RemainingReads is how much left this request has to read.
+	// RemainingReads is how much left this request has to read. Should always be larger than RemaningAllocations().
 	RemainingReads() int
 
 	// WrapRequestBody wraps a request body. This, or WrapResponseBody should only be called once.
@@ -83,6 +90,6 @@ type Request interface {
 	requestUse(size int) (allocated int, err error)
 	// confirmUse should be called after reading (or writing) as much as possible from the allocated value of RequestUse. If recordBandwidth is true, it is written to the BandwidthRecorder.
 	confirmUse(size int, recordBandwidth bool)
-	// discard indicates that the Request will probably never be used again, and that we should discard the bandwidth allocation.
-	discard()
+	// Discard indicates that the Request will probably never be used again, and that we should discard the bandwidth allocation.
+	Discard()
 }

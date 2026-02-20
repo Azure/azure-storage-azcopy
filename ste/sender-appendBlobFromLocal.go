@@ -67,11 +67,17 @@ func (u *appendBlobUploader) Md5Channel() chan<- []byte {
 func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
 	appendBlockFromLocal := func() {
 		u.jptm.LogChunkStatus(id, common.EWaitReason.Body())
-		pacerReq := <-u.pacer.InitiateRequest(reader.Length(), u.jptm.Context())
 		offset := id.OffsetInFile()
 		var timeoutFromCtx bool
 		ctx := withTimeoutNotification(u.jptm.Context(), &timeoutFromCtx)
-		_, err := u.destAppendBlobClient.AppendBlock(ctx, pacerReq.WrapRequestBody(reader),
+		// inject our pacer so our policy picks it up
+		pacerCtx, err := u.pacer.InjectPacer(reader.Length(), u.jptm.FromTo(), ctx)
+		if err != nil {
+			u.jptm.FailActiveDownload("Injecting pacer into context", err)
+			return
+		}
+
+		_, err = u.destAppendBlobClient.AppendBlock(pacerCtx, reader,
 			&appendblob.AppendBlockOptions{
 				AppendPositionAccessConditions: &appendblob.AppendPositionAccessConditions{AppendPosition: &offset},
 				CPKInfo:                        u.jptm.CpkInfo(),

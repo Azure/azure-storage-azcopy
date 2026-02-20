@@ -175,7 +175,15 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, destWri
 		// wait until we get the headers back... but we have not yet read its whole body.
 		// The Download method encapsulates any retries that may be necessary to get to the point of receiving response headers.
 		jptm.LogChunkStatus(id, common.EWaitReason.HeaderResponse())
-		enrichedContext := withRetryNotification(jptm.Context(), bd.filePacer)
+
+		// inject our pacer so our policy picks it up
+		pacerCtx, err := pacer.InjectPacer(length, jptm.FromTo(), jptm.Context())
+		if err != nil {
+			jptm.FailActiveDownload("Injecting pacer into context", err)
+			return
+		}
+
+		enrichedContext := withRetryNotification(pacerCtx, bd.filePacer)
 		get, err := bd.source.DownloadStream(enrichedContext, &blob.DownloadStreamOptions{
 			Range:            blob.HTTPRange{Offset: id.OffsetInFile(), Count: length},
 			AccessConditions: accessConditions,
@@ -189,16 +197,21 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, destWri
 
 		// Enqueue the response body to be written out to disk
 		// The retryReader encapsulates any retries that may be necessary while downloading the body
+		blobReadLogFunc := common.NewBlobReadLogFunc(jptm, jptm.Info().Source)
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		retryReader := get.NewRetryReader(enrichedContext, &blob.RetryReaderOptions{
-			MaxRetries:   int32(destWriter.MaxRetryPerDownloadBody()),
-			OnFailedRead: common.NewBlobReadLogFunc(jptm, jptm.Info().Source),
+			MaxRetries: int32(destWriter.MaxRetryPerDownloadBody()),
+			OnFailedRead: func(failureCount int32, lastError error, rnge blob.HTTPRange, willRetry bool) {
+				blobReadLogFunc(failureCount, lastError, rnge, willRetry)
+
+				if willRetry {
+					bd.filePacer.RetryCallback()
+				}
+			},
 		})
 
-		pacerReq := <-pacer.InitiateRequest(length, jptm.Context())
-
 		defer retryReader.Close()
-		err = destWriter.EnqueueChunk(jptm.Context(), id, length, pacerReq.WrapResponseBody(retryReader), true)
+		err = destWriter.EnqueueChunk(pacerCtx, id, length, retryReader, true)
 		if err != nil {
 			jptm.FailActiveDownload("Enqueuing chunk", err)
 			return

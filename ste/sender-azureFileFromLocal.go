@@ -71,8 +71,14 @@ func (u *azureFileUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int
 
 		// upload the byte range represented by this chunk
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
-		pacerReq := <-u.pacer.InitiateRequest(reader.Length(), u.ctx)
-		_, err := u.getFileClient().UploadRange(u.ctx, id.OffsetInFile(), pacerReq.WrapRequestBody(reader), nil)
+		// inject our pacer so our policy picks it up
+		pacerCtx, err := u.pacer.InjectPacer(reader.Length(), u.jptm.FromTo(), u.ctx)
+		if err != nil {
+			u.jptm.FailActiveDownload("Injecting pacer into context", err)
+			return
+		}
+
+		_, err = u.getFileClient().UploadRange(pacerCtx, id.OffsetInFile(), reader, nil)
 		if err != nil {
 			jptm.FailActiveUpload("Uploading range", err)
 			return

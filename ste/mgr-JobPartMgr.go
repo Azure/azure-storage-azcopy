@@ -104,8 +104,14 @@ func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptio
 	// Pipeline will look like
 	// [includeResponsePolicy, newAPIVersionPolicy (ignored), NewTelemetryPolicy, perCall, NewRetryPolicy, perRetry, NewLogPolicy, httpHeaderPolicy, bodyDownloadPolicy]
 	perCallPolicies := []policy.Policy{azruntime.NewRequestIDPolicy(), NewRequestPriorityPolicy(), NewVersionPolicy(), newFileUploadRangeFromURLFixPolicy()}
-	// TODO : Default logging policy is not equivalent to old one. tracing HTTP request
-	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), newLogPolicy(log), newStatsPolicy()}
+	perRetryPolicies := []policy.Policy{
+		newRetryNotificationPolicy(),
+		// pacer inject policy is added here, as log policy and stats policy have actions that care about the lifetime of the request.
+		pacer.NewPacerInjectPolicy(),
+		// TODO : Default logging policy is not equivalent to old one. tracing HTTP request
+		newLogPolicy(log),
+		newStatsPolicy(),
+	}
 	if dstCred != nil {
 		perCallPolicies = append(perRetryPolicies, NewDestReauthPolicy(dstCred))
 	}
