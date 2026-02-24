@@ -1,7 +1,6 @@
 package e2etest
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"regexp"
