@@ -804,6 +804,8 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 				}
 
 				// NFS Handling
+				// Declare nfsCtx locally per file to avoid data races across parallel goroutines.
+				var nfsCtx NFSMetadataContext
 				if t.fromTo.IsNFS() {
 					if IsHardlink(fileInfo) {
 						entityType = common.EEntityType.Hardlink()
@@ -825,7 +827,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 							if err != nil {
 								return err
 							}
-							NfsHardlinkManager = NFSMetadataContext{
+							nfsCtx = NFSMetadataContext{
 								TargetHardlinkFile: targetHardlinkFile,
 								Inode:              inode,
 							}
@@ -856,7 +858,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 						NoBlobProps,
 						NoMetadata,
 						"", // Local has no such thing as containers
-						&NfsHardlinkManager,
+						&nfsCtx,
 					),
 					hashingProcessor, // hashingProcessor handles the mutex wrapper
 				)

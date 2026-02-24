@@ -132,6 +132,12 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 	}
 	jobID := common.NewJobID()
 	c.CurrentJobID = jobID
+
+	// Initialize the inode store for hardlink tracking with the current job ID
+	if err := common.InitInodeStore(jobID); err != nil {
+		return SyncResult{}, fmt.Errorf("failed to initialize inode store: %w", err)
+	}
+
 	timeAtPrestart := time.Now()
 	common.AzcopyCurrentJobLogger = common.NewJobLogger(jobID, c.GetLogLevel(), common.LogPathFolder, "")
 	common.AzcopyCurrentJobLogger.OpenLog()

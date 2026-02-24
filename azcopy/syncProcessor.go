@@ -247,7 +247,7 @@ func (b *remoteResourceDeleter) Delete(_ string, target common.Location, object 
 	}
 
 	sc := b.remoteClient
-	if object.EntityType == common.EEntityType.File() {
+	if object.EntityType == common.EEntityType.File() || object.EntityType == common.EEntityType.Hardlink() {
 		// TODO: use b.targetLocation.String() in the next line, instead of "object", if we can make it come out as string
 		msg := "Deleting extra object: " + object.RelativePath
 		common.GetLifecycleMgr().Info(msg)
