@@ -278,9 +278,16 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 		indexer.IsDestinationCaseInsensitive = isDestinationCaseInsensitive(s.opts.fromTo)
 		// in all other cases (download and S2S), the destination is scanned/indexed first
 		// then the source is scanned and filtered based on what the destination contains
-		comparator = NewSyncSourceComparator(indexer, transferScheduler.ScheduleSyncRemoveSetPropertiesTransfer, s.opts.compareHash, s.opts.preserveInfo, s.opts.mirrorMode).ProcessIfNecessary
+		comparatorInstance := NewSyncSourceComparator(indexer, transferScheduler.ScheduleSyncRemoveSetPropertiesTransfer, s.opts.compareHash, s.opts.preserveInfo, s.opts.mirrorMode)
+		comparator = comparatorInstance.ProcessIfNecessary
 
 		finalize = func() error {
+
+			err = comparatorInstance.ProcessPendingHardlinks()
+			if err != nil {
+				return err
+			}
+
 			err = indexer.Traverse(deleteScheduler, nil)
 			if err != nil {
 				return err
