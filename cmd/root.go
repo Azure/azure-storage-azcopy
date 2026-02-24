@@ -237,6 +237,7 @@ func Initialize(isMigratedToLibrary, isBench, shouldWarn bool) (err error) {
 		// In certain error scenarios in the process checker, we log info.
 		// So, we need to ensure we have an existing logger
 		if common.AzcopyCurrentJobLogger == nil {
+			Client.CurrentJobID = common.NewJobID()
 			common.AzcopyCurrentJobLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "")
 			common.AzcopyCurrentJobLogger.OpenLog()
 			glcm.RegisterCloseFunc(func() {
