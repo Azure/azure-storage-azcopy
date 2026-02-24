@@ -234,6 +234,17 @@ func Initialize(isMigratedToLibrary, isBench, shouldWarn bool) (err error) {
 	}
 
 	if shouldWarn {
+		// In certain error scenarios in the process checker, we log info.
+		// So, we need to ensure we have an existing logger
+		if common.AzcopyCurrentJobLogger == nil {
+			common.AzcopyCurrentJobLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "")
+			common.AzcopyCurrentJobLogger.OpenLog()
+			glcm.RegisterCloseFunc(func() {
+				if common.AzcopyCurrentJobLogger != nil {
+					common.AzcopyCurrentJobLogger.CloseLog()
+				}
+			})
+		}
 		currPid := os.Getpid()
 		AsyncWarnMultipleProcesses(cmd.GetAzCopyAppPath(), currPid)
 	}
