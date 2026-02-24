@@ -96,7 +96,7 @@ func newAzcopyHTTPClient() *http.Client {
 				Timeout:   10 * time.Second,
 				KeepAlive: 10 * time.Second,
 				DualStack: true,
-			}).Dial, /*Context*/
+			}).Dial,                   /*Context*/
 			MaxIdleConns:           0, // No limit
 			MaxIdleConnsPerHost:    1000,
 			IdleConnTimeout:        180 * time.Second,
@@ -259,17 +259,19 @@ func (uotm *UserOAuthTokenManager) AutoLogin(autoOAuth *sync.Once) (LoginRespons
 	var err error
 	autoOAuth.Do(func() {
 		var options LoginOptions
-		autoLoginType := strings.ToLower(GetEnvironmentVariable(EEnvironmentVariable.AutoLoginType()))
-		if autoLoginType == "" {
+		autoLoginType, _, autoLoginOK := EEnvironmentVariable.AutoLoginType().Lookup()
+		autoLoginType = strings.ToLower(autoLoginType)
+
+		if !autoLoginOK {
 			lcm.Info("Autologin not specified.")
 			return
 		}
 
-		if tenantID := GetEnvironmentVariable(EEnvironmentVariable.TenantID()); tenantID != "" {
+		if tenantID, _, ok := EEnvironmentVariable.TenantID().Lookup(); ok {
 			options.TenantID = tenantID
 		}
 
-		if endpoint := GetEnvironmentVariable(EEnvironmentVariable.AADEndpoint()); endpoint != "" {
+		if endpoint, _, ok := EEnvironmentVariable.AADEndpoint().Lookup(); ok {
 			options.AADEndpoint = endpoint
 		}
 
@@ -284,14 +286,14 @@ func (uotm *UserOAuthTokenManager) AutoLogin(autoOAuth *sync.Once) (LoginRespons
 		options.LoginType = loginType
 		switch options.LoginType {
 		case EAutoLoginType.SPN():
-			options.ApplicationID = GetEnvironmentVariable(EEnvironmentVariable.ApplicationID())
-			options.CertificatePath = GetEnvironmentVariable(EEnvironmentVariable.CertificatePath())
-			options.CertificatePassword = GetEnvironmentVariable(EEnvironmentVariable.CertificatePassword())
-			options.ClientSecret = GetEnvironmentVariable(EEnvironmentVariable.ClientSecret())
+			options.ApplicationID = EEnvironmentVariable.ApplicationID().Value()
+			options.CertificatePath = EEnvironmentVariable.CertificatePath().Value()
+			options.CertificatePassword = EEnvironmentVariable.CertificatePassword().Value()
+			options.ClientSecret = EEnvironmentVariable.ClientSecret().Value()
 		case EAutoLoginType.MSI():
-			options.IdentityClientID = GetEnvironmentVariable(EEnvironmentVariable.ManagedIdentityClientID())
-			options.IdentityObjectID = GetEnvironmentVariable(EEnvironmentVariable.ManagedIdentityObjectID())
-			options.IdentityResourceID = GetEnvironmentVariable(EEnvironmentVariable.ManagedIdentityResourceString())
+			options.IdentityClientID = EEnvironmentVariable.ManagedIdentityClientID().Value()
+			options.IdentityObjectID = EEnvironmentVariable.ManagedIdentityObjectID().Value()
+			options.IdentityResourceID = EEnvironmentVariable.ManagedIdentityResourceString().Value()
 		case EAutoLoginType.Device():
 		case EAutoLoginType.AzCLI():
 		case EAutoLoginType.PsCred():
@@ -468,7 +470,7 @@ var stashedEnvOAuthTokenExists = false
 // Note: This is useful for only checking whether the env var exists, please use getTokenInfoFromEnvVar
 // directly in the case getting token info is necessary.
 func EnvVarOAuthTokenInfoExists() bool {
-	if GetEnvironmentVariable(EEnvironmentVariable.OAuthTokenInfo()) == "" && !stashedEnvOAuthTokenExists {
+	if EEnvironmentVariable.OAuthTokenInfo().IsSet() && !stashedEnvOAuthTokenExists {
 		return false
 	}
 	stashedEnvOAuthTokenExists = true
@@ -485,14 +487,14 @@ func IsErrorEnvVarOAuthTokenInfoNotSet(err error) bool {
 
 // getTokenInfoFromEnvVar gets token info from environment variable.
 func (uotm *UserOAuthTokenManager) getTokenInfoFromEnvVar(ctx context.Context) (*OAuthTokenInfo, error) {
-	rawToken := GetEnvironmentVariable(EEnvironmentVariable.OAuthTokenInfo())
-	if rawToken == "" {
+	rawToken, _, tokenOK := EEnvironmentVariable.OAuthTokenInfo().Lookup()
+	if !tokenOK {
 		return nil, errors.New(ErrorCodeEnvVarOAuthTokenInfoNotSet)
 	}
 
 	// Remove the env var after successfully fetching once,
 	// in case of env var is further spreading into child processes unexpectedly.
-	ClearEnvironmentVariable(EEnvironmentVariable.OAuthTokenInfo())
+	EEnvironmentVariable.OAuthTokenInfo().Clear()
 
 	tokenInfo, err := jsonToTokenInfo([]byte(rawToken))
 	if err != nil {

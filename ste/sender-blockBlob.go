@@ -25,13 +25,14 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 	"unsafe"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
@@ -438,7 +439,7 @@ func (s *blockBlobSenderBase) buildCommittedBlockMap() {
 	changedChunkSize := "buildCommittedBlockMap: Chunksize mismatch on uncommitted blocks"
 	list := make(map[int]string)
 
-	if common.GetEnvironmentVariable(common.EEnvironmentVariable.DisableBlobTransferResume()) == "true" {
+	if strings.EqualFold(common.EEnvironmentVariable.DisableBlobTransferResume().Value(), "true") {
 		return
 	}
 

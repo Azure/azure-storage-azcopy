@@ -22,25 +22,26 @@ package common
 
 import (
 	"fmt"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 )
 
 func GetDatalakeSharedKeyCredential() (*azdatalake.SharedKeyCredential, error) {
-	name := GetEnvironmentVariable(EEnvironmentVariable.AccountName())
-	key := GetEnvironmentVariable(EEnvironmentVariable.AccountKey())
+	name, _, nameOK := EEnvironmentVariable.AccountName().Lookup()
+	key, _, keyOK := EEnvironmentVariable.AccountKey().Lookup()
 	// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
-	if name == "" || key == "" {
+	if !nameOK || !keyOK {
 		return nil, fmt.Errorf("ACCOUNT_NAME and ACCOUNT_KEY environment variables must be set before creating the SharedKey credential")
 	}
 	return azdatalake.NewSharedKeyCredential(name, key)
 }
 
 func GetBlobSharedKeyCredential() (*blob.SharedKeyCredential, error) {
-	name := GetEnvironmentVariable(EEnvironmentVariable.AccountName())
-	key := GetEnvironmentVariable(EEnvironmentVariable.AccountKey())
+	name, _, nameOK := EEnvironmentVariable.AccountName().Lookup()
+	key, _, keyOK := EEnvironmentVariable.AccountKey().Lookup()
 	// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
-	if name == "" || key == "" {
+	if !nameOK || !keyOK {
 		return nil, fmt.Errorf("ACCOUNT_NAME and ACCOUNT_KEY environment variables must be set before creating the SharedKey credential")
 	}
 	return blob.NewSharedKeyCredential(name, key)

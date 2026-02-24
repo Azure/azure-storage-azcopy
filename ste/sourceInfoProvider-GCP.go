@@ -1,14 +1,15 @@
 package ste
 
 import (
-	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"crypto/md5"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"golang.org/x/oauth2/google"
 	"io"
 	"os"
+
+	gcpUtils "cloud.google.com/go/storage"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"golang.org/x/oauth2/google"
 
 	"net/url"
 	"time"
@@ -54,9 +55,14 @@ func newGCPSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, er
 	if err != nil {
 		return nil, err
 	}
-	jsonKey, err = os.ReadFile(common.GetEnvironmentVariable(common.EEnvironmentVariable.GoogleAppCredentials()))
+	jsonFileName, varName, ok := common.EEnvironmentVariable.GoogleAppCredentials().Lookup()
+	if !ok {
+		return nil, fmt.Errorf("No JSON key file specified. Please verify you have correctly set %s environment variable", varName)
+	}
+
+	jsonKey, err = os.ReadFile(jsonFileName)
 	if err != nil {
-		return nil, fmt.Errorf("Cannot read JSON key file. Please verify you have correctly set GOOGLE_APPLICATION_CREDENTIALS environment variable")
+		return nil, fmt.Errorf("Cannot read JSON key file. Please verify you have correctly set %s environment variable", varName)
 	}
 	return &p, nil
 }

@@ -240,14 +240,13 @@ func Initialize(isMigratedToLibrary, isBench, shouldWarn bool) (err error) {
 
 	// For benchmarking, try to autotune if possible, otherwise use the default values
 	if jobsAdmin.JobsAdmin != nil && isBench {
-		envVar := common.EEnvironmentVariable.ConcurrencyValue()
-		userValue := common.GetEnvironmentVariable(envVar)
-		if userValue == "" || userValue == "auto" {
+		userValue, varName, userSpecified := common.EEnvironmentVariable.ConcurrencyValue().Lookup()
+		if !userSpecified || userValue == "auto" {
 			jobsAdmin.JobsAdmin.SetConcurrencySettingsToAuto()
 		} else {
 			// Tell user that we can't actually auto tune, because configured value takes precedence
 			// This case happens when benchmarking with a fixed value from the env var
-			glcm.Info(fmt.Sprintf("Cannot auto-tune concurrency because it is fixed by environment variable %s", envVar.Name))
+			glcm.Info(fmt.Sprintf("Cannot auto-tune concurrency because it is fixed by environment variable %s", varName))
 		}
 	}
 	if !isMigratedToLibrary {

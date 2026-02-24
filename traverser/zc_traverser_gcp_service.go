@@ -22,7 +22,7 @@ type gcpServiceTraverser struct {
 	gcpClient *gcpUtils.Client
 }
 
-var projectID = ""
+var projectID = common.EEnvironmentVariable.GoogleCloudProject().Value()
 
 func (t *gcpServiceTraverser) IsDirectory(isSource bool) (bool, error) {
 	return true, nil //Account traversals are inherently folder based
@@ -97,7 +97,6 @@ func (t *gcpServiceTraverser) Traverse(preprocessor objectMorpher, processor Obj
 }
 
 func NewGCPServiceTraverser(rawURL *url.URL, ctx context.Context, opts InitResourceTraverserOptions) (*gcpServiceTraverser, error) {
-	projectID = common.GetEnvironmentVariable(common.EEnvironmentVariable.GoogleCloudProject())
 	t := &gcpServiceTraverser{
 		opts: opts,
 		ctx:  ctx,

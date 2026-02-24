@@ -27,6 +27,7 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/JeffreyRichter/enum/enum"
 )
@@ -36,20 +37,75 @@ type EnvironmentVariable struct {
 	DefaultValue string
 	Description  string
 	Hidden       bool
+
+	// Replaces specifies prior names for this environment variable. These will be looked up when getting the environment variable.
+	Replaces []string
+	// ReplacedBy specifies the name of the environment variable replacing this one.
+	ReplacedBy string
 }
 
-// GetEnvironmentVariable gets the environment variable or its default value
-func GetEnvironmentVariable(env EnvironmentVariable) string {
-	value := os.Getenv(env.Name)
-	if value == "" {
-		return env.DefaultValue
+const (
+	deprecatedEnvironmentVariableWarningFormat = "Deprecated environment variable %s is set. This has been read in place of %s. Please migrate to %s (check `azcopy env` for details.)"
+)
+
+func doDeprecatedEnvWarn(deprecatedName, newName string) {
+	DeprecatedEnvVarsWarnOnce[deprecatedName].Do(func() {
+		GetLifecycleMgr().Warn(fmt.Sprintf(deprecatedEnvironmentVariableWarningFormat,
+			deprecatedName, newName, deprecatedName))
+	})
+}
+
+func (env EnvironmentVariable) Lookup(intentionDeprecatedLookup ...bool) (val, name string, present bool) {
+	// If we have deprecated this env variable, and we're looking it up without intending to, something's wrong. Let the developer know by panicking.
+	if env.ReplacedBy != "" && !FirstOrZero(intentionDeprecatedLookup) {
+		panic(fmt.Sprintf("Unintentional lookup of deprecated environment variable %s (replaced by %s). If this was intentional, add true to GetEnvironmentVariable parameters.", env.Name, env.ReplacedBy))
 	}
-	return value
+
+	// Prefer the "latest" name instead of any older ones, falling back to the older ones, then the default if it is not present.
+	val, ok := os.LookupEnv(env.Name)
+	if ok {
+		if env.ReplacedBy != "" {
+			doDeprecatedEnvWarn(env.Name, env.ReplacedBy)
+		}
+
+		return val, env.Name, true
+	}
+
+	// Check for any of the fallback deprecated names...
+	for _, deprecatedName := range env.Replaces {
+		val, ok = os.LookupEnv(deprecatedName)
+		if ok {
+			doDeprecatedEnvWarn(deprecatedName, env.Name)
+
+			return val, deprecatedName, true
+		}
+	}
+
+	// then, if we haven't found anything viable, fall back to the default. If unset, it will be "".
+	return env.DefaultValue, env.Name, false
 }
 
-// ClearEnvironmentVariable clears the environment variable
-func ClearEnvironmentVariable(variable EnvironmentVariable) {
-	_ = os.Setenv(variable.Name, "")
+// IsSet is a breakout for Lookup's present result, useful in-line.
+func (env EnvironmentVariable) IsSet(intentionDeprecatedLookup ...bool) bool {
+	_, _, ok := env.Lookup(intentionDeprecatedLookup...)
+	return ok
+}
+
+// LookupName is a breakout for Lookup's name result, useful in-line.
+func (env EnvironmentVariable) LookupName(intentionDeprecatedLookup ...bool) string {
+	_, name, _ := env.Lookup(intentionDeprecatedLookup...)
+	return name
+}
+
+// Value is a breakout for Lookup's val result, useful in-line.
+func (env EnvironmentVariable) Value(intentionDeprecatedLookup ...bool) string {
+	val, _, _ := env.Lookup(intentionDeprecatedLookup...)
+	return val
+}
+
+// Clear clears the environment variable
+func (env EnvironmentVariable) Clear() {
+	_ = os.Setenv(env.LookupName(), "")
 }
 
 // This array needs to be updated when a new public environment variable is added
@@ -94,9 +150,43 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.DownloadToTempPath(),
 }
 
-var EEnvironmentVariable = EnvironmentVariable{}
+var DeprecatedEnvVarsWarnOnce = func() map[string]*sync.Once {
+	enumVal := reflect.ValueOf(EEnvironmentVariable)
+	methodCount := enumVal.NumMethod()
+	varType := reflect.TypeOf(EnvironmentVariable{})
 
-func (EnvironmentVariable) UserDir() EnvironmentVariable {
+	out := make(map[string]*sync.Once)
+
+	for idx := range methodCount {
+		methodVal := enumVal.Method(idx)
+		methodType := methodVal.Type()
+
+		// we're looking for our typical environment variable specification. Should be just the enum type in, and just the EnvironmentVariable type out.
+		if !(methodType.NumIn() == 1 && methodType.In(0) == enumVal.Type()) {
+			continue
+		}
+
+		if !(methodType.NumOut() == 1 && methodType.Out(0) == varType) {
+			continue
+		}
+
+		// Call it, pull the resulting type, and earmark it if it is deprecated.
+		results := methodVal.Call([]reflect.Value{enumVal})
+		envVar := results[0].Interface().(EnvironmentVariable)
+
+		if envVar.ReplacedBy != "" {
+			out[envVar.Name] = &sync.Once{}
+		}
+	}
+
+	return out
+}()
+
+type eEnvironmentVariable struct{}
+
+var EEnvironmentVariable = eEnvironmentVariable{}
+
+func (eEnvironmentVariable) UserDir() EnvironmentVariable {
 	// Only used internally, not listed in the environment variables.
 	return EnvironmentVariable{
 		Name: Iff(runtime.GOOS == "windows", "USERPROFILE", "HOME"),
@@ -174,28 +264,28 @@ func ValidAutoLoginTypes() []string {
 	}
 }
 
-func (EnvironmentVariable) AutoLoginType() EnvironmentVariable {
+func (eEnvironmentVariable) AutoLoginType() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_AUTO_LOGIN_TYPE",
 		Description: "Specify the credential type to access Azure Resource without invoking the login command and using the OS secret store, available values are " + strings.Join(ValidAutoLoginTypes(), ", ") + ".",
 	}
 }
 
-func (EnvironmentVariable) TenantID() EnvironmentVariable {
+func (eEnvironmentVariable) TenantID() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_TENANT_ID",
 		Description: "The Azure Active Directory tenant ID to use for OAuth device interactive login. This variable is only used for auto login, please use the command line flag instead when invoking the login command.",
 	}
 }
 
-func (EnvironmentVariable) AADEndpoint() EnvironmentVariable {
+func (eEnvironmentVariable) AADEndpoint() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_ACTIVE_DIRECTORY_ENDPOINT",
 		Description: "The Azure Active Directory endpoint to use. This variable is only used for auto login, please use the command line flag instead when invoking the login command.",
 	}
 }
 
-func (EnvironmentVariable) ApplicationID() EnvironmentVariable {
+func (eEnvironmentVariable) ApplicationID() EnvironmentVariable {
 	// Used for auto-login.
 	return EnvironmentVariable{
 		Name:        "AZCOPY_SPA_APPLICATION_ID",
@@ -203,7 +293,7 @@ func (EnvironmentVariable) ApplicationID() EnvironmentVariable {
 	}
 }
 
-func (EnvironmentVariable) ClientSecret() EnvironmentVariable {
+func (eEnvironmentVariable) ClientSecret() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_SPA_CLIENT_SECRET",
 		Description: "The Azure Active Directory client secret used for Service Principal authentication",
@@ -211,14 +301,14 @@ func (EnvironmentVariable) ClientSecret() EnvironmentVariable {
 	}
 }
 
-func (EnvironmentVariable) CertificatePath() EnvironmentVariable {
+func (eEnvironmentVariable) CertificatePath() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_SPA_CERT_PATH",
 		Description: "The path of the certificate used for Service Principal authentication. This variable is only used for auto login, please use the command line flag instead when invoking the login command.",
 	}
 }
 
-func (EnvironmentVariable) CertificatePassword() EnvironmentVariable {
+func (eEnvironmentVariable) CertificatePassword() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_SPA_CERT_PASSWORD",
 		Description: "The password used to decrypt the certificate used for Service Principal authentication.",
@@ -227,28 +317,28 @@ func (EnvironmentVariable) CertificatePassword() EnvironmentVariable {
 }
 
 // For MSI login
-func (EnvironmentVariable) ManagedIdentityClientID() EnvironmentVariable {
+func (eEnvironmentVariable) ManagedIdentityClientID() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_MSI_CLIENT_ID",
 		Description: "Client ID for User-assigned identity. This variable is only used for auto login, please use the command line flag instead when invoking the login command.",
 	}
 }
 
-func (EnvironmentVariable) ManagedIdentityObjectID() EnvironmentVariable {
+func (eEnvironmentVariable) ManagedIdentityObjectID() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_MSI_OBJECT_ID",
 		Description: "Object ID for user-assigned identity. This parameter is deprecated. Please use client id or resource id.",
 	}
 }
 
-func (EnvironmentVariable) ManagedIdentityResourceString() EnvironmentVariable {
+func (eEnvironmentVariable) ManagedIdentityResourceString() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_MSI_RESOURCE_STRING",
 		Description: "Resource String for user-assigned identity. This variable is only used for auto login, please use the command line flag instead when invoking the login command.",
 	}
 }
 
-func (EnvironmentVariable) ConcurrencyValue() EnvironmentVariable {
+func (eEnvironmentVariable) ConcurrencyValue() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_CONCURRENCY_VALUE",
 		Description: "Overrides how many HTTP connections work on transfers. By default, this number is determined based on the number of logical cores on the machine.",
@@ -256,14 +346,14 @@ func (EnvironmentVariable) ConcurrencyValue() EnvironmentVariable {
 }
 
 // added in so that CPU usage detection can be disabled if advanced users feel it is causing tuning to be too conservative (i.e. not enough concurrency, due to detected CPU usage)
-func (EnvironmentVariable) AutoTuneToCpu() EnvironmentVariable {
+func (eEnvironmentVariable) AutoTuneToCpu() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_TUNE_TO_CPU",
 		Description: "Set to false to prevent AzCopy from taking CPU usage into account when auto-tuning its concurrency level (e.g. in the benchmark command).",
 	}
 }
 
-func (EnvironmentVariable) TransferInitiationPoolSize() EnvironmentVariable {
+func (eEnvironmentVariable) TransferInitiationPoolSize() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_CONCURRENT_FILES",
 		Description: "Overrides the (approximate) number of files that are in progress at any one time, by controlling how many files we concurrently initiate transfers for.",
@@ -272,21 +362,21 @@ func (EnvironmentVariable) TransferInitiationPoolSize() EnvironmentVariable {
 
 const azCopyConcurrentScan = "AZCOPY_CONCURRENT_SCAN"
 
-func (EnvironmentVariable) EnumerationPoolSize() EnvironmentVariable {
+func (eEnvironmentVariable) EnumerationPoolSize() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        azCopyConcurrentScan,
 		Description: "Controls the (max) degree of parallelism used during scanning. Only affects parallelized enumerators, which include Azure Files/Blobs, and local file systems.",
 	}
 }
 
-func (EnvironmentVariable) DisableHierarchicalScanning() EnvironmentVariable {
+func (eEnvironmentVariable) DisableHierarchicalScanning() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_DISABLE_HIERARCHICAL_SCAN",
 		Description: "Applies only when Azure Blobs is the source. Concurrent scanning is faster but employs the hierarchical listing API, which can result in more IOs/cost. Specify 'true' to sacrifice performance but save on cost.",
 	}
 }
 
-func (EnvironmentVariable) ParallelStatFiles() EnvironmentVariable {
+func (eEnvironmentVariable) ParallelStatFiles() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:         "AZCOPY_PARALLEL_STAT_FILES",
 		Description:  "Causes AzCopy to look up file properties on parallel 'threads' when scanning the local file system.  The threads are drawn from the pool defined by " + azCopyConcurrentScan + ".  Setting this to true may improve scanning performance on Linux.  Not needed or recommended on Windows.",
@@ -294,7 +384,7 @@ func (EnvironmentVariable) ParallelStatFiles() EnvironmentVariable {
 	}
 }
 
-func (EnvironmentVariable) OptimizeSparsePageBlobTransfers() EnvironmentVariable {
+func (eEnvironmentVariable) OptimizeSparsePageBlobTransfers() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:         "AZCOPY_OPTIMIZE_SPARSE_PAGE_BLOB",
 		Description:  "Provide a knob to disable the optimizations in case they cause customers any unforeseen issue. Set to any other value than 'true' to disable.",
@@ -302,7 +392,7 @@ func (EnvironmentVariable) OptimizeSparsePageBlobTransfers() EnvironmentVariable
 	}
 }
 
-func (EnvironmentVariable) CacheProxyLookup() EnvironmentVariable {
+func (eEnvironmentVariable) CacheProxyLookup() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:         "AZCOPY_CACHE_PROXY_LOOKUP",
 		Description:  "By default AzCopy on Windows will cache proxy server lookups at hostname level (not taking URL path into account). Set to any other value than 'true' to disable the cache.",
@@ -310,75 +400,75 @@ func (EnvironmentVariable) CacheProxyLookup() EnvironmentVariable {
 	}
 }
 
-func (EnvironmentVariable) LoginCacheName() EnvironmentVariable {
+func (eEnvironmentVariable) LoginCacheName() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_LOGIN_CACHE_NAME",
 		Description: "Do not use in production. Overrides the file name or key name used to cache azcopy's token. Do not use in production. This feature is not documented, intended for testing, and may break. Do not use in production.",
 	}
 }
 
-func (EnvironmentVariable) LogLocation() EnvironmentVariable {
+func (eEnvironmentVariable) LogLocation() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_LOG_LOCATION",
 		Description: "Overrides where the log files are stored, to avoid filling up a disk.",
 	}
 }
 
-func (EnvironmentVariable) JobPlanLocation() EnvironmentVariable {
+func (eEnvironmentVariable) JobPlanLocation() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_JOB_PLAN_LOCATION",
 		Description: "Overrides where the job plan files (used for progress tracking and resuming) are stored, to avoid filling up a disk.",
 	}
 }
 
-func (EnvironmentVariable) BufferGB() EnvironmentVariable {
+func (eEnvironmentVariable) BufferGB() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_BUFFER_GB",
 		Description: "Max number of GB that AzCopy should use for buffering data between network and disk. May include decimal point, e.g. 0.5. The default is based on machine size.",
 	}
 }
 
-func (EnvironmentVariable) AccountName() EnvironmentVariable {
+func (eEnvironmentVariable) AccountName() EnvironmentVariable {
 	return EnvironmentVariable{Name: "ACCOUNT_NAME"}
 }
 
-func (EnvironmentVariable) AccountKey() EnvironmentVariable {
+func (eEnvironmentVariable) AccountKey() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:   "ACCOUNT_KEY",
 		Hidden: true,
 	}
 }
 
-func (EnvironmentVariable) ProfileCPU() EnvironmentVariable {
+func (eEnvironmentVariable) ProfileCPU() EnvironmentVariable {
 	return EnvironmentVariable{Name: "AZCOPY_PROFILE_CPU"}
 }
 
-func (EnvironmentVariable) ProfileMemory() EnvironmentVariable {
+func (eEnvironmentVariable) ProfileMemory() EnvironmentVariable {
 	return EnvironmentVariable{Name: "AZCOPY_PROFILE_MEM"}
 }
 
-func (EnvironmentVariable) PacePageBlobs() EnvironmentVariable {
+func (eEnvironmentVariable) PacePageBlobs() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_PACE_PAGE_BLOBS",
 		Description: "Should throughput for page blobs automatically be adjusted to match Service limits? Default is true. Set to 'false' to disable",
 	}
 }
 
-func (EnvironmentVariable) ShowPerfStates() EnvironmentVariable {
+func (eEnvironmentVariable) ShowPerfStates() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_SHOW_PERF_STATES",
 		Description: "If set, to anything, on-screen output will include counts of chunks by state",
 	}
 }
 
-func (EnvironmentVariable) AWSAccessKeyID() EnvironmentVariable {
+func (eEnvironmentVariable) AWSAccessKeyID() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AWS_ACCESS_KEY_ID",
 		Description: "The AWS access key ID for S3 source used in service to service copy.",
 	}
 }
 
-func (EnvironmentVariable) AWSSecretAccessKey() EnvironmentVariable {
+func (eEnvironmentVariable) AWSSecretAccessKey() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AWS_SECRET_ACCESS_KEY",
 		Description: "The AWS secret access key for S3 source used in service to service copy.",
@@ -387,18 +477,18 @@ func (EnvironmentVariable) AWSSecretAccessKey() EnvironmentVariable {
 }
 
 // AwsSessionToken is temporarily internally reserved, and not exposed to users.
-func (EnvironmentVariable) AwsSessionToken() EnvironmentVariable {
+func (eEnvironmentVariable) AwsSessionToken() EnvironmentVariable {
 	return EnvironmentVariable{Name: "AWS_SESSION_TOKEN"}
 }
 
-func (EnvironmentVariable) GoogleAppCredentials() EnvironmentVariable {
+func (eEnvironmentVariable) GoogleAppCredentials() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "GOOGLE_APPLICATION_CREDENTIALS",
 		Description: "The application credentials required to access GCP resources for service to service copy.",
 	}
 }
 
-func (EnvironmentVariable) GoogleCloudProject() EnvironmentVariable {
+func (eEnvironmentVariable) GoogleCloudProject() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "GOOGLE_CLOUD_PROJECT",
 		Description: "Project ID required for service level traversals in Google Cloud Storage",
@@ -406,16 +496,16 @@ func (EnvironmentVariable) GoogleCloudProject() EnvironmentVariable {
 }
 
 // OAuthTokenInfo is only used for internal integration.
-func (EnvironmentVariable) OAuthTokenInfo() EnvironmentVariable {
+func (eEnvironmentVariable) OAuthTokenInfo() EnvironmentVariable {
 	return EnvironmentVariable{Name: "AZCOPY_OAUTH_TOKEN_INFO"}
 }
 
 // CredentialType is only used for internal integration.
-func (EnvironmentVariable) CredentialType() EnvironmentVariable {
+func (eEnvironmentVariable) CredentialType() EnvironmentVariable {
 	return EnvironmentVariable{Name: "AZCOPY_CRED_TYPE"}
 }
 
-func (EnvironmentVariable) DefaultServiceApiVersion() EnvironmentVariable {
+func (eEnvironmentVariable) DefaultServiceApiVersion() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:         "AZCOPY_DEFAULT_SERVICE_API_VERSION",
 		DefaultValue: "2025-07-05",
@@ -423,29 +513,29 @@ func (EnvironmentVariable) DefaultServiceApiVersion() EnvironmentVariable {
 	}
 }
 
-func (EnvironmentVariable) UserAgentPrefix() EnvironmentVariable {
+func (eEnvironmentVariable) UserAgentPrefix() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_USER_AGENT_PREFIX",
 		Description: "Add a prefix to the default AzCopy User Agent, which is used for telemetry purposes. A space is automatically inserted.",
 	}
 }
 
-func (EnvironmentVariable) RequestTryTimeout() EnvironmentVariable {
+func (eEnvironmentVariable) RequestTryTimeout() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_REQUEST_TRY_TIMEOUT",
 		Description: "Set time (in minutes) for how long AzCopy should try to upload files for each request before AzCopy times out.",
 	}
 }
 
-func (EnvironmentVariable) CPKEncryptionKey() EnvironmentVariable {
+func (eEnvironmentVariable) CPKEncryptionKey() EnvironmentVariable {
 	return EnvironmentVariable{Name: "CPK_ENCRYPTION_KEY", Hidden: true}
 }
 
-func (EnvironmentVariable) CPKEncryptionKeySHA256() EnvironmentVariable {
+func (eEnvironmentVariable) CPKEncryptionKeySHA256() EnvironmentVariable {
 	return EnvironmentVariable{Name: "CPK_ENCRYPTION_KEY_SHA256", Hidden: false}
 }
 
-func (EnvironmentVariable) DisableSyslog() EnvironmentVariable {
+func (eEnvironmentVariable) DisableSyslog() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:         "AZCOPY_DISABLE_SYSLOG",
 		DefaultValue: "false",
@@ -454,7 +544,7 @@ func (EnvironmentVariable) DisableSyslog() EnvironmentVariable {
 	}
 }
 
-func (EnvironmentVariable) MimeMapping() EnvironmentVariable {
+func (eEnvironmentVariable) MimeMapping() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:         "AZCOPY_CONTENT_TYPE_MAP",
 		DefaultValue: "",
@@ -462,7 +552,7 @@ func (EnvironmentVariable) MimeMapping() EnvironmentVariable {
 	}
 }
 
-func (EnvironmentVariable) DownloadToTempPath() EnvironmentVariable {
+func (eEnvironmentVariable) DownloadToTempPath() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:         "AZCOPY_DOWNLOAD_TO_TEMP_PATH",
 		DefaultValue: "true",
@@ -470,7 +560,7 @@ func (EnvironmentVariable) DownloadToTempPath() EnvironmentVariable {
 	}
 }
 
-func (EnvironmentVariable) DisableBlobTransferResume() EnvironmentVariable {
+func (eEnvironmentVariable) DisableBlobTransferResume() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:         "AZCOPY_DISABLE_INCOMPLETE_BLOB_TRANSFER",
 		DefaultValue: "false",

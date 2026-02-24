@@ -22,10 +22,11 @@ package ste
 
 import (
 	"context"
+	"strings"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"strings"
 )
 
 // isolate the logic to fetch page ranges for a page blob, and check whether a given range has data
@@ -51,8 +52,7 @@ func withNoRetryForBlob(ctx context.Context) context.Context {
 func (p *pageRangeOptimizer) fetchPages() {
 	// don't fetch page blob list if optimizations are not desired,
 	// the lack of page list indicates that there's data everywhere
-	if !strings.EqualFold(common.GetEnvironmentVariable(
-		common.EEnvironmentVariable.OptimizeSparsePageBlobTransfers()), "true") {
+	if !strings.EqualFold(common.EEnvironmentVariable.OptimizeSparsePageBlobTransfers().Value(), "true") {
 		return
 	}
 
