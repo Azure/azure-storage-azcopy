@@ -22,9 +22,9 @@ package ste
 
 import (
 	"errors"
+	"net/url"
 	"path"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
@@ -224,32 +224,22 @@ func (bd *azureFilesDownloader) preserveProperties(info *TransferInfo) (string, 
 	return "", nil
 }
 
-func getFullPath(relativePath, root string) string {
-	// 1. Convert backslashes to forward slashes immediately for cross-platform safety
+// getFullPath constructs the full path for a hardlink anchor from its relative path
+// and the destination root. The relativePath is relative to the sync root, and
+// destRoot is the sync destination root (a URL for uploads, a local path for downloads).
+func getFullPath(relativePath, destRoot string) string {
+	// 1. Normalize separators for cross-platform safety
 	rel := filepath.ToSlash(relativePath)
-	rt := filepath.ToSlash(root)
+	rt := filepath.ToSlash(destRoot)
 
-	// 2. Use "/" for splitting now that we've normalized
-	relParts := strings.Split(rel, "/")
-	fullPathParts := strings.Split(rt, "/")
-
-	prefixParts := []string{}
-	var j int
-	for j = 0; j < len(fullPathParts)-1; j++ {
-		if relParts[0] != fullPathParts[j] {
-			prefixParts = append(prefixParts, fullPathParts[j])
-		} else {
-			break
-		}
+	// 2. If destRoot is a URL, extract the path portion after the container name
+	if parsed, err := url.Parse(rt); err == nil && parsed.Scheme != "" {
+		// e.g. https://account.file.core.windows.net/shareName/spe_dir
+		// SplitContainerNameFromPath returns ("shareName", "spe_dir", nil)
+		_, rootDir, _ := common.SplitContainerNameFromPath(rt)
+		return "/" + path.Join(rootDir, rel)
 	}
 
-	var fullParts []string
-	if j == len(fullPathParts)-1 {
-		fullParts = append(prefixParts, relParts[len(relParts)-1])
-	} else {
-		fullParts = append(prefixParts, relParts...)
-	}
-
-	// 3. Use path.Join instead of filepath.Join to force forward slashes
-	return "/" + path.Join(fullParts...)
+	// 3. For local paths (download direction), just join the root with the relative path
+	return filepath.Join(rt, filepath.FromSlash(rel))
 }

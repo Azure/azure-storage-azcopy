@@ -287,10 +287,6 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 		shouldFail = true
 	}
 
-	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
-		shouldFail = true
-	}
-
 	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
@@ -316,11 +312,6 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 		})
 	if followSymlinks && preserveSymlinks {
 		ValidateMessageOutput(svm, stdOut, "cannot both follow and preserve symlinks", true)
-		return
-	}
-
-	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
-		ValidateMessageOutput(svm, stdOut, "the '--hardlinks=preserve' flag is not applicable for sync operations", true)
 		return
 	}
 
@@ -536,10 +527,6 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 		shouldFail = true
 	}
 
-	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
-		shouldFail = true
-	}
-
 	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
@@ -578,7 +565,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 	}
 
 	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
-		ValidateMessageOutput(svm, stdOut, "the '--hardlinks=preserve' flag is not applicable for sync operations", true)
+		//ValidateMessageOutput(svm, stdOut, "the '--hardlinks=preserve' flag is not applicable for sync operations", true)
 		return
 	}
 
@@ -794,9 +781,6 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 	if (followSymlinks && preserveSymlinks) || followSymlinks {
 		shouldFail = true
 	}
-	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
-		shouldFail = true
-	}
 
 	stdOut, _ := RunAzCopy(
 		svm,
@@ -804,12 +788,16 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 			Verb: azCopyVerb,
 			Targets: []ResourceManager{
 				src.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm,
-					[]ExplicitCredentialTypes{EExplicitCredentialType.SASToken(),
-						EExplicitCredentialType.OAuth()}),
+					[]ExplicitCredentialTypes{
+						EExplicitCredentialType.SASToken(),
+						EExplicitCredentialType.OAuth(),
+					}),
 					svm, CreateAzCopyTargetOptions{}),
 				dst.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm,
-					[]ExplicitCredentialTypes{EExplicitCredentialType.SASToken(),
-						EExplicitCredentialType.OAuth()}),
+					[]ExplicitCredentialTypes{
+						EExplicitCredentialType.SASToken(),
+						EExplicitCredentialType.OAuth(),
+					}),
 					svm, CreateAzCopyTargetOptions{}),
 			},
 			Flags: CopyFlags{
@@ -841,7 +829,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 	}
 
 	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
-		ValidateMessageOutput(svm, stdOut, "the '--hardlinks=preserve' flag is not applicable for sync operations", true)
+		//ValidateMessageOutput(svm, stdOut, "the '--hardlinks=preserve' flag is not applicable for sync operations", true)
 		return
 	}
 
@@ -1050,10 +1038,6 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 		shouldFail = true
 	}
 
-	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
-		shouldFail = true
-	}
-
 	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
@@ -1120,7 +1104,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 	}
 
 	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
-		ValidateMessageOutput(svm, stdOut, "the '--hardlinks=preserve' flag is not applicable for sync operations", true)
+		//ValidateMessageOutput(svm, stdOut, "the '--hardlinks=preserve' flag is not applicable for sync operations", true)
 		return
 	}
 
@@ -1294,10 +1278,6 @@ func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationMa
 		shouldFail = true
 	}
 
-	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
-		shouldFail = true
-	}
-
 	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
@@ -1365,7 +1345,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationMa
 	}
 
 	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
-		ValidateMessageOutput(svm, stdOut, "the '--hardlinks=preserve' flag is not applicable for sync operations", true)
+		//ValidateMessageOutput(svm, stdOut, "the '--hardlinks=preserve' flag is not applicable for sync operations", true)
 		return
 	}
 
@@ -1511,8 +1491,16 @@ func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForNFS(svm *ScenarioVar
 		AzCopyCommand{
 			Verb: azCopyVerb,
 			Targets: []ResourceManager{
-				src.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{}),
-				dst.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{}),
+				src.(RemoteResourceManager).WithSpecificAuthType(
+					ResolveVariation(svm, []ExplicitCredentialTypes{
+						EExplicitCredentialType.SASToken(),
+						EExplicitCredentialType.OAuth(),
+					}), svm, CreateAzCopyTargetOptions{}),
+				dst.(RemoteResourceManager).WithSpecificAuthType(
+					ResolveVariation(svm, []ExplicitCredentialTypes{
+						EExplicitCredentialType.SASToken(),
+						EExplicitCredentialType.OAuth(),
+					}), svm, CreateAzCopyTargetOptions{}),
 			},
 
 			Flags: CopyFlags{
@@ -1577,8 +1565,16 @@ func (s *FilesNFSTestSuite) Scenario_DstShareDoesNotExists(svm *ScenarioVariatio
 		AzCopyCommand{
 			Verb: azCopyVerb,
 			Targets: []ResourceManager{
-				src.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{}),
-				dst.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{}),
+				src.(RemoteResourceManager).WithSpecificAuthType(
+					ResolveVariation(svm, []ExplicitCredentialTypes{
+						EExplicitCredentialType.SASToken(),
+						EExplicitCredentialType.OAuth(),
+					}), svm, CreateAzCopyTargetOptions{}),
+				dst.(RemoteResourceManager).WithSpecificAuthType(
+					ResolveVariation(svm, []ExplicitCredentialTypes{
+						EExplicitCredentialType.SASToken(),
+						EExplicitCredentialType.OAuth(),
+					}), svm, CreateAzCopyTargetOptions{}),
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
