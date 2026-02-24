@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
@@ -166,6 +167,20 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
+		// If the command is for resuming a job with a specific JobID,
+		// use the provided JobID to resume the job; otherwise, create a new JobID.
+		var resumeJobID common.JobID
+		if cmd.Use == "resume [jobID]" {
+			// If no argument is passed then it is not valid
+			if len(args) != 1 {
+				return errors.New("this command requires jobId to be passed as argument")
+			}
+			resumeJobID, err = common.ParseJobID(args[0])
+			if err != nil {
+				return err
+			}
+		}
+
 		isBench := cmd.Use == "bench [destination]"
 
 		// We only care to warn about multiple AzCopy processes for commands sent to STE
@@ -178,7 +193,7 @@ var rootCmd = &cobra.Command{
 			}
 		}
 		isMigratedToLibrary := cmd.Use == "resume [jobID]" || cmd.Use == "sync" || cmd.Use == "copy [source] [destination]"
-		return Initialize(isMigratedToLibrary, isBench, shouldWarn)
+		return Initialize(isMigratedToLibrary, isBench, shouldWarn, resumeJobID)
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Version checking is done explicitly when the user sets flag
@@ -196,7 +211,7 @@ var rootCmd = &cobra.Command{
 	},
 }
 
-func Initialize(isMigratedToLibrary, isBench, shouldWarn bool) (err error) {
+func Initialize(isMigratedToLibrary, isBench, shouldWarn bool, resumeJobId common.JobID) (err error) {
 	glcm.SetOutputFormat(outputFormat)
 	glcm.SetOutputVerbosity(OutputLevel)
 	jobsAdmin.BenchmarkResults = isBench
@@ -233,19 +248,21 @@ func Initialize(isMigratedToLibrary, isBench, shouldWarn bool) (err error) {
 		common.LogToJobLogWithPrefix(startTimeMessage, common.LogInfo)
 	}
 
-	if shouldWarn {
-		// In certain error scenarios in the process checker, we log info.
-		// So, we need to ensure we have an existing logger
-		if common.AzcopyCurrentJobLogger == nil {
-			Client.CurrentJobID = common.NewJobID()
-			common.AzcopyCurrentJobLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "")
-			common.AzcopyCurrentJobLogger.OpenLog()
-			glcm.RegisterCloseFunc(func() {
-				if common.AzcopyCurrentJobLogger != nil {
-					common.AzcopyCurrentJobLogger.CloseLog()
-				}
-			})
+	Client.CurrentJobID = resumeJobId
+	if Client.CurrentJobID.IsEmpty() {
+		Client.CurrentJobID = common.NewJobID() // In the case of copy and sync make a new JobID
+	}
+
+	common.AzcopyCurrentJobLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "")
+	common.AzcopyCurrentJobLogger.OpenLog()
+	glcm.RegisterCloseFunc(func() {
+		if common.AzcopyCurrentJobLogger != nil {
+			common.AzcopyCurrentJobLogger.CloseLog()
 		}
+	})
+
+	if shouldWarn {
+		// We start the process checker after creating a job logger
 		currPid := os.Getpid()
 		AsyncWarnMultipleProcesses(cmd.GetAzCopyAppPath(), currPid)
 	}

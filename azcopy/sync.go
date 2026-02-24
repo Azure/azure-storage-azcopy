@@ -130,10 +130,12 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 		syncHandler = common.NewJobUIHooks()
 		common.SetUIHooks(syncHandler)
 	}
-	jobID := common.NewJobID()
-	c.CurrentJobID = jobID
+	var jobID common.JobID
+	if c.CurrentJobID.IsEmpty() {
+		jobID = common.NewJobID()
+		c.CurrentJobID = jobID
+	}
 	timeAtPrestart := time.Now()
-	common.AzcopyCurrentJobLogger = common.NewJobLogger(jobID, c.GetLogLevel(), common.LogPathFolder, "")
 	common.AzcopyCurrentJobLogger.OpenLog()
 	defer common.AzcopyCurrentJobLogger.CloseLog()
 
