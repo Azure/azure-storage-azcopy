@@ -1204,8 +1204,18 @@ const MetadataAndBlobTagsClearFlag = "clear" // clear flag used for metadata and
 
 type Metadata map[string]*string
 
+type SafeMetadata struct {
+	mu       sync.RWMutex
+	Metadata Metadata
+}
+
+type MetadataStore interface {
+	TryAdd(key, value string)
+	TryRead(key string) (*string, bool)
+}
+
 func (m Metadata) Clone() Metadata {
-	out := make(Metadata)
+	out := make(map[string]*string)
 
 	for k, v := range m {
 		out[k] = v
@@ -1225,20 +1235,20 @@ func (m Metadata) Marshal() (string, error) {
 }
 
 // UnMarshalToCommonMetadata unmarshals string to common metadata.
-func UnMarshalToCommonMetadata(metadataString string) (Metadata, error) {
-	var result Metadata
+func UnMarshalToCommonMetadata(metadataString string) (map[string]*string, error) {
+	var result SafeMetadata
 	if metadataString != "" {
-		err := json.Unmarshal([]byte(metadataString), &result)
+		err := json.Unmarshal([]byte(metadataString), &result.Metadata)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	return result, nil
+	return result.Metadata, nil
 }
 
 func StringToMetadata(metadataString string) (Metadata, error) {
-	metadataMap := Metadata{}
+	metadata := SafeMetadata{Metadata: make(Metadata)}
 	if len(metadataString) > 0 {
 		cKey := ""
 		cVal := ""
@@ -1271,7 +1281,7 @@ func StringToMetadata(metadataString string) (Metadata, error) {
 					}
 
 					finalValue := cVal
-					metadataMap[cKey] = &finalValue
+					metadata.Metadata[cKey] = &finalValue
 					cKey = ""
 					cVal = ""
 					keySet = false
@@ -1288,10 +1298,10 @@ func StringToMetadata(metadataString string) (Metadata, error) {
 
 		if cKey != "" {
 			finalValue := cVal
-			metadataMap[cKey] = &finalValue
+			metadata.Metadata[cKey] = &finalValue
 		}
 	}
-	return metadataMap, nil
+	return metadata.Metadata, nil
 }
 
 // isValidMetadataKey checks if the given string is a valid metadata key for Azure.
@@ -1331,8 +1341,8 @@ func isValidMetadataKeyFirstChar(c byte) bool {
 }
 
 func (m Metadata) ExcludeInvalidKey() (retainedMetadata Metadata, excludedMetadata Metadata, invalidKeyExists bool) {
-	retainedMetadata = make(map[string]*string)
-	excludedMetadata = make(map[string]*string)
+	retainedMetadata = make(Metadata)
+	excludedMetadata = make(Metadata)
 	for k, v := range m {
 		if isValidMetadataKey(k) {
 			retainedMetadata[k] = v
@@ -1389,12 +1399,11 @@ var metadataKeyRenameErrStr = "failed to rename invalid metadata key %q"
 // Note: To keep first version simple, whenever collision is found during key resolving, error will be returned.
 // This can be further improved once any user feedback get.
 func (m Metadata) ResolveInvalidKey() (resolvedMetadata Metadata, err error) {
-	resolvedMetadata = make(map[string]*string)
+	resolvedMetadata = make(Metadata)
 
 	hasCollision := func(name string) bool {
 		_, hasCollisionToOrgNames := m[name]
 		_, hasCollisionToNewNames := resolvedMetadata[name]
-
 		return hasCollisionToOrgNames || hasCollisionToNewNames
 	}
 
