@@ -246,25 +246,25 @@ func Initialize(isMigratedToLibrary, isBench, shouldWarn bool, resumeJobId commo
 			common.IncludeBeforeFlagName, traverser.IncludeBeforeDateFilter{}.FormatAsUTC(adjustedTime),
 			common.IncludeAfterFlagName, traverser.IncludeAfterDateFilter{}.FormatAsUTC(adjustedTime))
 		common.LogToJobLogWithPrefix(startTimeMessage, common.LogInfo)
-	}
-
-	Client.CurrentJobID = resumeJobId
-	if Client.CurrentJobID.IsEmpty() {
-		Client.CurrentJobID = common.NewJobID() // In the case of copy and sync make a new JobID
-	}
-
-	common.AzcopyCurrentJobLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "")
-	common.AzcopyCurrentJobLogger.OpenLog()
-	glcm.RegisterCloseFunc(func() {
-		if common.AzcopyCurrentJobLogger != nil {
-			common.AzcopyCurrentJobLogger.CloseLog()
+	} else { // Copy/Resume/Sync cmds
+		Client.CurrentJobID = resumeJobId
+		if Client.CurrentJobID.IsEmpty() {
+			Client.CurrentJobID = common.NewJobID()
 		}
-	})
+
+		// We create logger early so process checker can log errors if any arise
+		common.AzcopyCurrentJobLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "")
+		common.AzcopyCurrentJobLogger.OpenLog()
+		glcm.RegisterCloseFunc(func() {
+			if common.AzcopyCurrentJobLogger != nil {
+				common.AzcopyCurrentJobLogger.CloseLog()
+			}
+		})
+	}
 
 	if shouldWarn {
-		// We start the process checker after creating a job logger
 		currPid := os.Getpid()
-		AsyncWarnMultipleProcesses(cmd.GetAzCopyAppPath(), currPid)
+		AsyncWarnMultipleProcesses(cmd.GetAzCopyAppPath(), currPid) // Start the process checker
 	}
 
 	// For benchmarking, try to autotune if possible, otherwise use the default values
