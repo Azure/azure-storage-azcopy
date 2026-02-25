@@ -197,6 +197,8 @@ func GetSafeParallelismLimit(maxActiveFiles, maxChildCount int64, fromTo common.
 		return min(limit, 48)
 	case common.EFromTo.S3Blob():
 		return min(limit, 64)
+	case common.EFromTo.FileFile():
+		return min(limit, 48)
 	default:
 		return min(limit, 48)
 	}

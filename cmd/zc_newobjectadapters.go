@@ -349,18 +349,30 @@ type shareDirectoryFilePropertiesAdapter struct {
 }
 
 func (a shareDirectoryFilePropertiesAdapter) Metadata() common.Metadata {
+	if a.FileProperty == nil {
+		 return nil
+	}
 	return nil
 }
 
 func (a shareDirectoryFilePropertiesAdapter) LastModified() time.Time {
+	if a.FileProperty == nil {
+		 return time.Time{}
+	}
 	return common.IffNotNil(a.FileProperty.LastModified, time.Time{})
 }
 
 func (a shareDirectoryFilePropertiesAdapter) FileLastWriteTime() time.Time {
+	if a.FileProperty == nil {
+		 return time.Time{}
+	}
 	return common.IffNotNil(a.FileProperty.LastWriteTime, time.Time{})
 }
 
 func (a shareDirectoryFilePropertiesAdapter) FileChangeTime() time.Time {
+	if a.FileProperty == nil {
+		 return time.Time{}
+	}
 	return common.IffNotNil(a.FileProperty.ChangeTime, time.Time{})
 }
 
@@ -389,6 +401,9 @@ func (a shareDirectoryFilePropertiesAdapter) ContentMD5() []byte {
 }
 
 func (a shareDirectoryFilePropertiesAdapter) ContentLength() int64 {
+	if a.FileProperty == nil {
+		return 0
+	}
 	return common.IffNotNil(a.FileProperty.ContentLength, 0)
 }
 
