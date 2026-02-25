@@ -209,18 +209,20 @@ func Initialize(isMigratedToLibrary, isBench, shouldWarn bool) (err error) {
 		return err
 	}
 
+	// Always initialize the logger before process checking so it is available
+	// for logging in AsyncWarnMultipleProcesses. For library commands (copy/sync/resume),
+	// the library will close this logger and replace it with its own job-specific logger.
+	Client.CurrentJobID = common.NewJobID()
+	common.AzcopyCurrentJobLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "")
+	common.AzcopyCurrentJobLogger.OpenLog()
+	glcm.RegisterCloseFunc(func() {
+		if common.AzcopyCurrentJobLogger != nil {
+			common.AzcopyCurrentJobLogger.CloseLog()
+		}
+	})
+
 	if !isMigratedToLibrary {
-		Client.CurrentJobID = common.NewJobID()
-
 		timeAtPrestart := time.Now()
-
-		common.AzcopyCurrentJobLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "")
-		common.AzcopyCurrentJobLogger.OpenLog()
-		glcm.RegisterCloseFunc(func() {
-			if common.AzcopyCurrentJobLogger != nil {
-				common.AzcopyCurrentJobLogger.CloseLog()
-			}
-		})
 
 		// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter
 		// Subtract a few seconds, to ensure that this date DEFINITELY falls before the LMT of any file changed while this

@@ -77,19 +77,27 @@ func Test_MultipleProcessWithMockedLCM(t *testing.T) {
 	}
 }
 
-// Test_WarnMultipleProcesses_NilLogger verifies WarnMultipleProcesses does not panic
-// when AzcopyCurrentJobLogger is nil (e.g., during async startup on Alpine Linux)
-func Test_WarnMultipleProcesses_NilLogger(t *testing.T) {
+// Test_WarnMultipleProcesses_WithLogger verifies WarnMultipleProcesses works correctly
+// when AzcopyCurrentJobLogger is initialized (as Initialize now guarantees)
+func Test_WarnMultipleProcesses_WithLogger(t *testing.T) {
 	a := assert.New(t)
-
-	// Arrange: ensure logger is nil
-	savedLogger := common.AzcopyCurrentJobLogger
-	common.AzcopyCurrentJobLogger = nil
-	defer func() { common.AzcopyCurrentJobLogger = savedLogger }()
 
 	tempDir, err := os.MkdirTemp("", "temp")
 	a.NoError(err)
 	defer os.RemoveAll(tempDir)
+
+	logDir, err := os.MkdirTemp("", "logs")
+	a.NoError(err)
+	defer os.RemoveAll(logDir)
+
+	// Arrange: initialize logger as Initialize() now does unconditionally
+	savedLogger := common.AzcopyCurrentJobLogger
+	common.AzcopyCurrentJobLogger = common.NewJobLogger(common.NewJobID(), common.LogInfo, logDir, "")
+	common.AzcopyCurrentJobLogger.OpenLog()
+	defer func() {
+		common.AzcopyCurrentJobLogger.CloseLog()
+		common.AzcopyCurrentJobLogger = savedLogger
+	}()
 
 	// Act & Assert: should not panic
 	a.NotPanics(func() {

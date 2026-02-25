@@ -133,6 +133,10 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 	jobID := common.NewJobID()
 	c.CurrentJobID = jobID
 	timeAtPrestart := time.Now()
+	// Close any logger that was created during CLI initialization before replacing it
+	if common.AzcopyCurrentJobLogger != nil {
+		common.AzcopyCurrentJobLogger.CloseLog()
+	}
 	common.AzcopyCurrentJobLogger = common.NewJobLogger(jobID, c.GetLogLevel(), common.LogPathFolder, "")
 	common.AzcopyCurrentJobLogger.OpenLog()
 	defer common.AzcopyCurrentJobLogger.CloseLog()

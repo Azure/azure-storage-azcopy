@@ -62,6 +62,10 @@ func (c *Client) ResumeJob(ctx context.Context, jobID common.JobID, opts ResumeJ
 	c.CurrentJobID = jobID
 	timeAtPrestart := time.Now()
 
+	// Close any logger that was created during CLI initialization before replacing it
+	if common.AzcopyCurrentJobLogger != nil {
+		common.AzcopyCurrentJobLogger.CloseLog()
+	}
 	common.AzcopyCurrentJobLogger = common.NewJobLogger(c.CurrentJobID, c.GetLogLevel(), common.LogPathFolder, "")
 	common.AzcopyCurrentJobLogger.OpenLog()
 	defer common.AzcopyCurrentJobLogger.CloseLog()
