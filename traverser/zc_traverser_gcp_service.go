@@ -17,12 +17,11 @@ type gcpServiceTraverser struct {
 	ctx           context.Context
 	bucketPattern string
 	cachedBuckets []string
+	projectID     string
 
 	gcpURL    common.GCPURLParts
 	gcpClient *gcpUtils.Client
 }
-
-var projectID = common.EEnvironmentVariable.GoogleCloudProject().Value()
 
 func (t *gcpServiceTraverser) IsDirectory(isSource bool) (bool, error) {
 	return true, nil //Account traversals are inherently folder based
@@ -32,11 +31,11 @@ func (t *gcpServiceTraverser) ListContainers() ([]string, error) {
 
 	if len(t.cachedBuckets) == 0 {
 		bucketList := make([]string, 0)
-		if projectID == "" {
+		if t.projectID == "" {
 			return nil, fmt.Errorf("ProjectID cannot be empty. Ensure that environment variable GOOGLE_CLOUD_PROJECT is not empty")
 		}
 		ctx := context.Background()
-		it := t.gcpClient.Buckets(ctx, projectID)
+		it := t.gcpClient.Buckets(ctx, t.projectID)
 		for {
 			battrs, err := it.Next()
 			if err == iterator.Done {
@@ -96,10 +95,11 @@ func (t *gcpServiceTraverser) Traverse(preprocessor objectMorpher, processor Obj
 	return nil
 }
 
-func NewGCPServiceTraverser(rawURL *url.URL, ctx context.Context, opts InitResourceTraverserOptions) (*gcpServiceTraverser, error) {
+func NewGCPServiceTraverser(rawURL *url.URL, projectID string, ctx context.Context, opts InitResourceTraverserOptions) (*gcpServiceTraverser, error) {
 	t := &gcpServiceTraverser{
-		opts: opts,
-		ctx:  ctx,
+		opts:      opts,
+		ctx:       ctx,
+		projectID: projectID,
 	}
 	gcpURLParts, err := common.NewGCPURLParts(*rawURL)
 

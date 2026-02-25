@@ -96,7 +96,7 @@ func newAzcopyHTTPClient() *http.Client {
 				Timeout:   10 * time.Second,
 				KeepAlive: 10 * time.Second,
 				DualStack: true,
-			}).Dial,                   /*Context*/
+			}).Dial, /*Context*/
 			MaxIdleConns:           0, // No limit
 			MaxIdleConnsPerHost:    1000,
 			IdleConnTimeout:        180 * time.Second,
@@ -470,7 +470,7 @@ var stashedEnvOAuthTokenExists = false
 // Note: This is useful for only checking whether the env var exists, please use getTokenInfoFromEnvVar
 // directly in the case getting token info is necessary.
 func EnvVarOAuthTokenInfoExists() bool {
-	if EEnvironmentVariable.OAuthTokenInfo().IsSet() && !stashedEnvOAuthTokenExists {
+	if !EEnvironmentVariable.OAuthTokenInfo().IsSet() && !stashedEnvOAuthTokenExists {
 		return false
 	}
 	stashedEnvOAuthTokenExists = true

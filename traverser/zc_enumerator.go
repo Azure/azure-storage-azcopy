@@ -608,7 +608,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
 
-			output, err = NewGCPServiceTraverser(resourceURL, ctx, opts)
+			output, err = NewGCPServiceTraverser(resourceURL, common.EEnvironmentVariable.GoogleCloudProject().Value(), ctx, opts)
 			if err != nil {
 				return nil, err
 			}

@@ -51,14 +51,14 @@ const (
 func doDeprecatedEnvWarn(deprecatedName, newName string) {
 	DeprecatedEnvVarsWarnOnce[deprecatedName].Do(func() {
 		GetLifecycleMgr().Warn(fmt.Sprintf(deprecatedEnvironmentVariableWarningFormat,
-			deprecatedName, newName, deprecatedName))
+			deprecatedName, newName, newName))
 	})
 }
 
 func (env EnvironmentVariable) Lookup(intentionDeprecatedLookup ...bool) (val, name string, present bool) {
 	// If we have deprecated this env variable, and we're looking it up without intending to, something's wrong. Let the developer know by panicking.
 	if env.ReplacedBy != "" && !FirstOrZero(intentionDeprecatedLookup) {
-		panic(fmt.Sprintf("Unintentional lookup of deprecated environment variable %s (replaced by %s). If this was intentional, add true to GetEnvironmentVariable parameters.", env.Name, env.ReplacedBy))
+		panic(fmt.Sprintf("Unintentional lookup of deprecated environment variable %s (replaced by %s). If this was intentional, add true to parameters of the called function.", env.Name, env.ReplacedBy))
 	}
 
 	// Prefer the "latest" name instead of any older ones, falling back to the older ones, then the default if it is not present.
@@ -103,9 +103,21 @@ func (env EnvironmentVariable) Value(intentionDeprecatedLookup ...bool) string {
 	return val
 }
 
-// Clear clears the environment variable
-func (env EnvironmentVariable) Clear() {
-	_ = os.Setenv(env.LookupName(), "")
+// Clear clears the environment variable, and any historical variants.
+// Notably, does not intentionally climb further up in "newness".
+func (env EnvironmentVariable) Clear(intentionDeprecatedClear ...bool) {
+	if !FirstOrZero(intentionDeprecatedClear) && env.ReplacedBy != "" {
+		panic(fmt.Sprintf("Unintentional clear of deprecated environment variable %s (replaced by %s). If this was intentional, add true to parameters of the called function. Note that it will not climb in \"newness\".", env.Name, env.ReplacedBy))
+	}
+
+	_ = os.Unsetenv(env.Name)
+
+	// If we are intentionally clearing a deprecated variable, we care about *probably*, just that variable's name.
+	if !FirstOrZero(intentionDeprecatedClear) {
+		for _, v := range env.Replaces {
+			_ = os.Unsetenv(v)
+		}
+	}
 }
 
 // This array needs to be updated when a new public environment variable is added
@@ -150,12 +162,18 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.DownloadToTempPath(),
 }
 
-var DeprecatedEnvVarsWarnOnce = func() map[string]*sync.Once {
+// Oncer should pretty much always be *sync.Once.
+// But... the interface is replicated, so we can inject *not* a sync.once for testing.
+type Oncer interface {
+	Do(func())
+}
+
+var DeprecatedEnvVarsWarnOnce = func() map[string]Oncer {
 	enumVal := reflect.ValueOf(EEnvironmentVariable)
 	methodCount := enumVal.NumMethod()
 	varType := reflect.TypeOf(EnvironmentVariable{})
 
-	out := make(map[string]*sync.Once)
+	out := make(map[string]Oncer)
 
 	for idx := range methodCount {
 		methodVal := enumVal.Method(idx)
@@ -176,6 +194,9 @@ var DeprecatedEnvVarsWarnOnce = func() map[string]*sync.Once {
 
 		if envVar.ReplacedBy != "" {
 			out[envVar.Name] = &sync.Once{}
+		}
+		for _, v := range envVar.Replaces {
+			out[v] = &sync.Once{}
 		}
 	}
 

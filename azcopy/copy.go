@@ -187,7 +187,7 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (
 		// Make AUTO default for Azure Files since Azure Files throttles too easily unless user specified concurrency value
 		if jobsAdmin.JobsAdmin != nil &&
 			(t.opts.fromTo.From().IsFile() || (t.opts.fromTo.To().IsFile() &&
-				common.EEnvironmentVariable.ConcurrencyValue().IsSet())) {
+				!common.EEnvironmentVariable.ConcurrencyValue().IsSet())) {
 			jobsAdmin.JobsAdmin.SetConcurrencySettingsToAuto()
 		}
 
