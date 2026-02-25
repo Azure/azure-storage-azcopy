@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -30,8 +31,25 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
+// autopacer is a request pacer that automatically tunes based upon the frequency of retries.
+// autopacer paces at the chunk-level, NOT at the read level, and NOT at the
+// If you don't know exactly what you want and why it's this, take a look at pacer.Interface instead.
+// autopacer remains in a state in which the pacer has been merged into the interface, as a way to ease transition to
+// pacer.Interface by avoiding fixing what isn't broken.
 type autopacer interface {
-	pacer
+	// RequestTrafficAllocation blocks until the caller is allowed to process byteCount bytes.
+	RequestTrafficAllocation(ctx context.Context, byteCount int64) error
+
+	UpdateTargetBytesPerSecond(newTarget int64)
+
+	// UndoRequest reverses a previous request to process n bytes.  Is used when
+	// the caller did not need all of the allocation they previously requested
+	// e.g. when they asked for enough for a big buffer, but never filled it, they would
+	// call this method to return the unused portion.
+	UndoRequest(byteCount int64)
+
+	Close() error
+
 	retryNotificationReceiver
 }
 

@@ -22,9 +22,12 @@ package ste
 
 import (
 	"context"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/pacer"
+
 	"net/http"
 )
 
@@ -33,7 +36,7 @@ type urlToAzureFileCopier struct {
 	srcURL string
 }
 
-func newURLToAzureFileCopier(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (sender, error) {
+func newURLToAzureFileCopier(jptm IJobPartTransferMgr, destination string, pacer pacer.Interface, sip ISourceInfoProvider) (sender, error) {
 	srcInfoProvider := sip.(IRemoteSourceInfoProvider) // "downcast" to the type we know it really has
 
 	senderBase, err := newAzureFileSenderBase(jptm, destination, pacer, sip)
@@ -62,9 +65,7 @@ func (u *urlToAzureFileCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 		// upload the range (including application of global pacing. We don't have a separate wait reason for global pacing
 		// so just do it inside the S2SCopyOnWire state)
 		u.jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
-		if err := u.pacer.RequestTrafficAllocation(u.jptm.Context(), adjustedChunkSize); err != nil {
-			u.jptm.FailActiveUpload("Pacing block (global level)", err)
-		}
+		<-u.pacer.InitiateUnpaceable(adjustedChunkSize, u.jptm.Context())
 		// destination auth is OAuth, so we need to use the special policy to add the x-ms-file-request-intent header since the SDK has not yet implemented it.
 		token, err := u.jptm.GetS2SSourceTokenCredential(u.jptm.Context())
 		if err != nil {

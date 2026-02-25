@@ -25,7 +25,10 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-storage-azcopy/v10/pacer"
+
 	"strconv"
 	"strings"
 	"sync"
@@ -48,7 +51,7 @@ type blockBlobSenderBase struct {
 	destBlockBlobClient *blockblob.Client
 	chunkSize           int64
 	numChunks           uint32
-	pacer               pacer
+	pacer               pacer.Interface
 	blockIDs            []string
 	destBlobTier        *blob.AccessTier
 
@@ -152,7 +155,7 @@ func getBlockNamePrefix(jobID common.JobID, partNum uint32, transferIndex uint32
 	return fmt.Sprintf("%s%s%05d%05d", placeHolderPrefix, jobIdStr, partNum, transferIndex)
 }
 
-func newBlockBlobSenderBase(jptm IJobPartTransferMgr, pacer pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType *blob.AccessTier) (*blockBlobSenderBase, error) {
+func newBlockBlobSenderBase(jptm IJobPartTransferMgr, pacer pacer.Interface, srcInfoProvider ISourceInfoProvider, inferredAccessTierType *blob.AccessTier) (*blockBlobSenderBase, error) {
 	// compute chunk count
 	chunkSize, numChunks, err := getVerifiedChunkParams(jptm.Info(), jptm.CacheLimiter().Limit(), jptm.CacheLimiter().StrictLimit())
 	if err != nil {

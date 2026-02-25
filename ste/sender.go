@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-storage-azcopy/v10/pacer"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -109,7 +110,7 @@ type symlinkSender interface {
 	RemoteFileExists() (bool, time.Time, error)
 }
 
-type senderFactory func(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (sender, error)
+type senderFactory func(jptm IJobPartTransferMgr, destination string, pacer pacer.Interface, sip ISourceInfoProvider) (sender, error)
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 // For copying folder properties, many of the ISender of the methods needed to copy one file from URL to a remote location
@@ -213,7 +214,7 @@ func createChunkFunc(setDoneStatusOnExit bool, jptm IJobPartTransferMgr, id comm
 }
 
 // newBlobUploader detects blob type and creates a uploader manually
-func newBlobUploader(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (sender, error) {
+func newBlobUploader(jptm IJobPartTransferMgr, destination string, pacer pacer.Interface, sip ISourceInfoProvider) (sender, error) {
 	override := jptm.BlobTypeOverride()
 	intendedType := override.ToBlobType()
 

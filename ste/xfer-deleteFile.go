@@ -11,11 +11,12 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
+	"github.com/Azure/azure-storage-azcopy/v10/pacer"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-func DeleteFile(jptm IJobPartTransferMgr, _ pacer) {
+func DeleteFile(jptm IJobPartTransferMgr, _ pacer.Interface) {
 
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.
 	if jptm.WasCanceled() {

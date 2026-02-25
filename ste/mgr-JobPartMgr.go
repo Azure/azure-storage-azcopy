@@ -16,6 +16,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	azruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-storage-azcopy/v10/pacer"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -103,8 +104,14 @@ func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptio
 	// Pipeline will look like
 	// [includeResponsePolicy, newAPIVersionPolicy (ignored), NewTelemetryPolicy, perCall, NewRetryPolicy, perRetry, NewLogPolicy, httpHeaderPolicy, bodyDownloadPolicy]
 	perCallPolicies := []policy.Policy{azruntime.NewRequestIDPolicy(), NewRequestPriorityPolicy(), NewVersionPolicy(), newFileUploadRangeFromURLFixPolicy()}
-	// TODO : Default logging policy is not equivalent to old one. tracing HTTP request
-	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), newLogPolicy(log), newStatsPolicy()}
+	perRetryPolicies := []policy.Policy{
+		newRetryNotificationPolicy(),
+		// pacer inject policy is added here, as log policy and stats policy have actions that care about the lifetime of the request.
+		pacer.NewPacerInjectPolicy(),
+		// TODO : Default logging policy is not equivalent to old one. tracing HTTP request
+		newLogPolicy(log),
+		newStatsPolicy(),
+	}
 	if dstCred != nil {
 		perCallPolicies = append(perRetryPolicies, NewDestReauthPolicy(dstCred))
 	}
@@ -187,7 +194,7 @@ type jobPartMgr struct {
 
 	priority common.JobPriority
 
-	pacer pacer // Pacer is used to cap throughput
+	pacer pacer.Interface // Pacer is used to cap throughput
 
 	slicePool common.ByteSlicePooler
 

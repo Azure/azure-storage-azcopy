@@ -34,6 +34,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-storage-azcopy/v10/pacer"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -164,7 +165,7 @@ func ValidateTier(jptm IJobPartTransferMgr, blobTier *blob.AccessTier, client IB
 
 // xfer.go requires just a single xfer function for the whole job.
 // This routine serves that role for uploads and S2S copies, and redirects for each transfer to a file or folder implementation
-func anyToRemote(jptm IJobPartTransferMgr, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
+func anyToRemote(jptm IJobPartTransferMgr, pacer pacer.Interface, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
 	info := jptm.Info()
 	fromTo := jptm.FromTo()
 
@@ -210,7 +211,7 @@ func anyToRemote(jptm IJobPartTransferMgr, pacer pacer, senderFactory senderFact
 }
 
 // anyToRemote_file handles all kinds of sender operations for files - both uploads from local files, and S2S copies
-func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
+func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer.Interface, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
 
 	pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
 	jptm.LogChunkStatus(pseudoId, common.EWaitReason.XferStart())

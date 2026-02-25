@@ -25,6 +25,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-storage-azcopy/v10/pacer"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -37,7 +38,7 @@ type urlToPageBlobCopier struct {
 	addFileRequestIntent     bool
 }
 
-func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
+func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, pacer pacer.Interface, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
 	srcURL, err := srcInfoProvider.PreSignedSourceURL()
 	if err != nil {
 		return nil, err
@@ -146,9 +147,7 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 		// upload the page (including application of global pacing. We don't have a separate wait reason for global pacing
 		// so just do it inside the S2SCopyOnWire state)
 		c.jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
-		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
-			c.jptm.FailActiveUpload("Pacing block (global level)", err)
-		}
+		<-c.pacer.InitiateUnpaceable(adjustedChunkSize, c.jptm.Context())
 		token, err := c.jptm.GetS2SSourceTokenCredential(c.jptm.Context())
 		if err != nil {
 			c.jptm.FailActiveS2SCopy("Getting source token credential", err)

@@ -28,6 +28,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/pacer"
 )
 
 type azureFileUploader struct {
@@ -35,7 +36,7 @@ type azureFileUploader struct {
 	md5Channel chan []byte
 }
 
-func newAzureFilesUploader(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (sender, error) {
+func newAzureFilesUploader(jptm IJobPartTransferMgr, destination string, pacer pacer.Interface, sip ISourceInfoProvider) (sender, error) {
 	senderBase, err := newAzureFileSenderBase(jptm, destination, pacer, sip)
 	if err != nil {
 		return nil, err
@@ -70,8 +71,14 @@ func (u *azureFileUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int
 
 		// upload the byte range represented by this chunk
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
-		body := newPacedRequestBody(u.ctx, reader, u.pacer)
-		_, err := u.getFileClient().UploadRange(u.ctx, id.OffsetInFile(), body, nil)
+		// inject our pacer so our policy picks it up
+		pacerCtx, err := u.pacer.InjectPacer(reader.Length(), u.jptm.FromTo(), u.ctx)
+		if err != nil {
+			u.jptm.FailActiveDownload("Injecting pacer into context", err)
+			return
+		}
+
+		_, err = u.getFileClient().UploadRange(pacerCtx, id.OffsetInFile(), reader, nil)
 		if err != nil {
 			jptm.FailActiveUpload("Uploading range", err)
 			return
@@ -161,7 +168,7 @@ func DoWithCreateSymlinkOnAzureFilesNFS(
 	action func() error,
 	client *file.Client,
 	shareClient *share.Client,
-	pacer pacer,
+	pacer pacer.Interface,
 	jptm IJobPartTransferMgr,
 ) error {
 	// try the action

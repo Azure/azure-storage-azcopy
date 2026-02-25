@@ -22,16 +22,18 @@ package ste
 
 import (
 	"errors"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 	"os"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/pacer"
 )
 
 type blobFSDownloader struct {
-	jptm IJobPartTransferMgr
-	txInfo *TransferInfo
-	srcFileClient   *file.Client
+	jptm          IJobPartTransferMgr
+	txInfo        *TransferInfo
+	srcFileClient *file.Client
 }
 
 func newBlobFSDownloader(jptm IJobPartTransferMgr) (downloader, error) {
@@ -75,7 +77,7 @@ func (bd *blobFSDownloader) Epilogue() {
 
 // Returns a chunk-func for ADLS gen2 downloads
 
-func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer pacer) chunkFunc {
+func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer pacer.Interface) chunkFunc {
 	return createDownloadChunkFunc(jptm, id, func() {
 
 		srcFileClient := bd.srcFileClient
@@ -84,7 +86,15 @@ func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, destW
 		// wait until we get the headers back... but we have not yet read its whole body.
 		// The Download method encapsulates any retries that may be necessary to get to the point of receiving response headers.
 		jptm.LogChunkStatus(id, common.EWaitReason.HeaderResponse())
-		get, err := srcFileClient.DownloadStream(jptm.Context(), &file.DownloadStreamOptions{Range: &file.HTTPRange{Offset: id.OffsetInFile(), Count: length}})
+
+		// inject our pacer so our policy picks it up
+		pacerCtx, err := pacer.InjectPacer(length, jptm.FromTo(), jptm.Context())
+		if err != nil {
+			jptm.FailActiveDownload("Injecting pacer into context", err)
+			return
+		}
+		
+		get, err := srcFileClient.DownloadStream(pacerCtx, &file.DownloadStreamOptions{Range: &file.HTTPRange{Offset: id.OffsetInFile(), Count: length}})
 		if err != nil {
 			jptm.FailActiveDownload("Downloading response body", err) // cancel entire transfer because this chunk has failed
 			return
@@ -100,12 +110,13 @@ func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, destW
 		// step 2: Enqueue the response body to be written out to disk
 		// The retryReader encapsulates any retries that may be necessary while downloading the body
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
-		retryReader := get.NewRetryReader(jptm.Context(), &file.RetryReaderOptions{
-			MaxRetries: MaxRetryPerDownloadBody,
+		retryReader := get.NewRetryReader(pacerCtx, &file.RetryReaderOptions{
+			MaxRetries:   MaxRetryPerDownloadBody,
 			OnFailedRead: common.NewDatalakeReadLogFunc(jptm, srcFileClient.DFSURL()),
 		})
 		defer retryReader.Close()
-		err = destWriter.EnqueueChunk(jptm.Context(), id, length, newPacedResponseBody(jptm.Context(), retryReader, pacer), true)
+
+		err = destWriter.EnqueueChunk(pacerCtx, id, length, retryReader, true)
 		if err != nil {
 			jptm.FailActiveDownload("Enqueuing chunk", err)
 			return

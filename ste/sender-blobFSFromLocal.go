@@ -24,6 +24,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/pacer"
+
 	"math"
 )
 
@@ -32,7 +34,7 @@ type blobFSUploader struct {
 	md5Channel chan []byte
 }
 
-func newBlobFSUploader(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (sender, error) {
+func newBlobFSUploader(jptm IJobPartTransferMgr, destination string, pacer pacer.Interface, sip ISourceInfoProvider) (sender, error) {
 	senderBase, err := newBlobFSSenderBase(jptm, destination, pacer, sip)
 	if err != nil {
 		return nil, err
@@ -58,8 +60,15 @@ func (u *blobFSUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32,
 
 		// upload the byte range represented by this chunk
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
-		body := newPacedRequestBody(jptm.Context(), reader, u.pacer)
-		_, err := u.getFileClient().AppendData(jptm.Context(), id.OffsetInFile(), body, nil) // note: AppendData is really UpdatePath with "append" action
+
+		// inject our pacer so our policy picks it up
+		pacerCtx, err := u.pacer.InjectPacer(reader.Length(), u.jptm.FromTo(), u.jptm.Context())
+		if err != nil {
+			u.jptm.FailActiveDownload("Injecting pacer into context", err)
+			return
+		}
+
+		_, err = u.getFileClient().AppendData(pacerCtx, id.OffsetInFile(), reader, nil) // note: AppendData is really UpdatePath with "append" action
 		if err != nil {
 			jptm.FailActiveUpload("Uploading range", err)
 			return

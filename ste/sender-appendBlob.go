@@ -32,6 +32,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-storage-azcopy/v10/pacer"
 
 	"golang.org/x/sync/semaphore"
 
@@ -43,7 +44,7 @@ type appendBlobSenderBase struct {
 	destAppendBlobClient *appendblob.Client
 	chunkSize            int64
 	numChunks            uint32
-	pacer                pacer
+	pacer                pacer.Interface
 	// Headers and other info that we will apply to the destination
 	// object. For S2S, these come from the source service.
 	// When sending local data, they are computed based on
@@ -59,7 +60,7 @@ type appendBlobSenderBase struct {
 
 type appendBlockFunc = func()
 
-func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, srcInfoProvider ISourceInfoProvider) (*appendBlobSenderBase, error) {
+func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer.Interface, srcInfoProvider ISourceInfoProvider) (*appendBlobSenderBase, error) {
 	transferInfo := jptm.Info()
 
 	// compute chunk count
