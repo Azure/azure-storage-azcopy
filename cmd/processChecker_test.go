@@ -77,6 +77,32 @@ func Test_MultipleProcessWithMockedLCM(t *testing.T) {
 	}
 }
 
+// Test_WarnMultipleProcesses_NilLogger verifies WarnMultipleProcesses does not panic
+// when AzcopyCurrentJobLogger is nil (e.g., during async startup on Alpine Linux)
+func Test_WarnMultipleProcesses_NilLogger(t *testing.T) {
+	a := assert.New(t)
+
+	// Arrange: ensure logger is nil
+	savedLogger := common.AzcopyCurrentJobLogger
+	common.AzcopyCurrentJobLogger = nil
+	defer func() { common.AzcopyCurrentJobLogger = savedLogger }()
+
+	tempDir, err := os.MkdirTemp("", "temp")
+	a.NoError(err)
+	defer os.RemoveAll(tempDir)
+
+	// Act & Assert: should not panic
+	a.NotPanics(func() {
+		WarnMultipleProcesses(tempDir, os.Getpid())
+	})
+
+	// Verify pid file was still created
+	pidsDir := path.Join(tempDir, "pids")
+	dirEntry, err := os.ReadDir(pidsDir)
+	a.NoError(err)
+	a.Equal(1, len(dirEntry), "Should contain 1 .pid file")
+}
+
 func Test_CleanUpStalePids(t *testing.T) {
 	a := assert.New(t)
 
