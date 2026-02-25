@@ -130,8 +130,8 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 		syncHandler = common.NewJobUIHooks()
 		common.SetUIHooks(syncHandler)
 	}
-	var jobID common.JobID
-	if c.CurrentJobID.IsEmpty() {
+	jobID := c.CurrentJobID
+	if jobID.IsEmpty() {
 		jobID = common.NewJobID()
 		c.CurrentJobID = jobID
 	}
