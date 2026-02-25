@@ -1041,7 +1041,7 @@ extends:
 
                   - task: GithubRelease@1
                     inputs:
-                      githubConnection: 'wonwuakpa-msft-github-rel'
+                      githubConnection: 'github.com_wonwuakpa-msft'
                       repositoryName: 'wonwuakpa-msft/azure-storage-azcopy'
                       action: 'create'
                       target: '$(Build.SourceVersion)'
