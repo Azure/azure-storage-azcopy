@@ -148,7 +148,7 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (
 		c.CurrentJobID = jobID
 	}
 	timeAtPrestart := time.Now()
-	if common.AzcopyCurrentJobLogger == nil {
+	if common.AzcopyCurrentJobLogger == nil { // In the unlikely case, logger is not initialized in root.go
 		common.AzcopyCurrentJobLogger = common.NewJobLogger(c.CurrentJobID, c.GetLogLevel(), common.LogPathFolder, "")
 		common.AzcopyCurrentJobLogger.OpenLog()
 	}

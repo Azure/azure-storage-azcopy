@@ -224,18 +224,22 @@ func Initialize(isMigratedToLibrary, isBench, shouldWarn bool, resumeJobId commo
 		return err
 	}
 
-	if !isMigratedToLibrary {
+	Client.CurrentJobID = resumeJobId
+	if Client.CurrentJobID.IsEmpty() {
 		Client.CurrentJobID = common.NewJobID()
+	}
 
+	// We initialize the logger early because it needed for err-handling in the process checker
+	common.AzcopyCurrentJobLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "")
+	common.AzcopyCurrentJobLogger.OpenLog()
+	glcm.RegisterCloseFunc(func() {
+		if common.AzcopyCurrentJobLogger != nil {
+			common.AzcopyCurrentJobLogger.CloseLog()
+		}
+	})
+
+	if !isMigratedToLibrary {
 		timeAtPrestart := time.Now()
-
-		common.AzcopyCurrentJobLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "")
-		common.AzcopyCurrentJobLogger.OpenLog()
-		glcm.RegisterCloseFunc(func() {
-			if common.AzcopyCurrentJobLogger != nil {
-				common.AzcopyCurrentJobLogger.CloseLog()
-			}
-		})
 
 		// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter
 		// Subtract a few seconds, to ensure that this date DEFINITELY falls before the LMT of any file changed while this
@@ -246,20 +250,6 @@ func Initialize(isMigratedToLibrary, isBench, shouldWarn bool, resumeJobId commo
 			common.IncludeBeforeFlagName, traverser.IncludeBeforeDateFilter{}.FormatAsUTC(adjustedTime),
 			common.IncludeAfterFlagName, traverser.IncludeAfterDateFilter{}.FormatAsUTC(adjustedTime))
 		common.LogToJobLogWithPrefix(startTimeMessage, common.LogInfo)
-	} else { // Copy/Resume/Sync cmds
-		Client.CurrentJobID = resumeJobId
-		if Client.CurrentJobID.IsEmpty() {
-			Client.CurrentJobID = common.NewJobID()
-		}
-
-		// We create logger early so process checker can log errors if any arise
-		common.AzcopyCurrentJobLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "")
-		common.AzcopyCurrentJobLogger.OpenLog()
-		glcm.RegisterCloseFunc(func() {
-			if common.AzcopyCurrentJobLogger != nil {
-				common.AzcopyCurrentJobLogger.CloseLog()
-			}
-		})
 	}
 
 	if shouldWarn {
