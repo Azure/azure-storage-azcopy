@@ -3,6 +3,7 @@ package e2etest
 import (
 	"runtime"
 	"strconv"
+	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 
@@ -517,7 +518,7 @@ func (s *BlobTestSuite) Scenario_ListOfFilesIncludePattern(svm *ScenarioVariatio
 	expectedObjs := make(ObjectResourceMappingFlat)
 	for _, folder := range listOfFolders {
 		for _, obj := range files[folder] {
-			if name := *obj.ObjectName; len(name) > 4 && name[len(name)-4:] == ".zip" {
+			if name := *obj.ObjectName; strings.HasSuffix("name", ".zip") {
 				expectedObjs[name] = obj
 			}
 		}
