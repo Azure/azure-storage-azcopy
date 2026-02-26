@@ -210,7 +210,7 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (
 			if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
 				// AzCopy run was canceled with (Ctrl + C).
 				waitErr := mgr.Wait()
-				if err != nil {
+				if waitErr != nil {
 					return CopyResult{}, waitErr
 				}
 			}
