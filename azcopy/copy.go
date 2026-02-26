@@ -142,8 +142,8 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (
 		copyHandler = common.NewJobUIHooks()
 		common.SetUIHooks(copyHandler)
 	}
-	var jobID common.JobID
-	if c.CurrentJobID.IsEmpty() {
+	jobID := c.CurrentJobID
+	if jobID.IsEmpty() {
 		jobID = common.NewJobID()
 		c.CurrentJobID = jobID
 	}

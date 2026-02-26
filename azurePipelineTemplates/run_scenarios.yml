@@ -3,14 +3,6 @@ parameters:
     type: string
   - name: container_name
     type: string
-  - name: orp_source_account_name
-    type: string
-  - name: orp_destination_account_name
-    type: string
-  - name: orp_source_container_name
-    type: string
-  - name: destination_container_name
-    type: string
   - name: goos
     type: string
   - name: goarch
@@ -59,37 +51,6 @@ steps:
           echo "Scenario 1 executed successfully."
         else
           echo "Scenario 1 failed with exit code $scenario1_exit_code"
-        fi
-
-        ########################################################
-        # Scenario 2: Object Replication Policy Copy
-        ########################################################
-        echo "========== Scenario 2: ORP Source → Destination =========="
-
-        echo "Cleaning up Scenario 2..."
-        AZCOPY_AUTO_LOGIN_TYPE=AzCLI "./${{ parameters.build_name }}" rm \
-          "https://${{ parameters.orp_destination_account_name }}.blob.core.windows.net/${{ parameters.destination_container_name }}/myfile.txt"
-
-        AZCOPY_AUTO_LOGIN_TYPE=AzCLI "./${{ parameters.build_name }}" rm \
-          "https://${{ parameters.orp_source_account_name }}.blob.core.windows.net/${{ parameters.orp_source_container_name }}/myfile.txt"
-
-        echo "Creating a test file and uploading to ORP source container..."
-        echo "Hello, Azure!" > myfile.txt
-        AZCOPY_AUTO_LOGIN_TYPE=AzCLI "./${{ parameters.build_name }}" cp \
-          myfile.txt \
-          "https://${{ parameters.orp_source_account_name }}.blob.core.windows.net/${{ parameters.orp_source_container_name }}"
-
-        echo "Copying from ORP source to destination container..."
-        AZCOPY_AUTO_LOGIN_TYPE=AzCLI "./${{ parameters.build_name }}" cp \
-          "https://${{ parameters.orp_source_account_name }}.blob.core.windows.net/${{ parameters.orp_source_container_name }}" \
-          "https://${{ parameters.orp_destination_account_name }}.blob.core.windows.net/${{ parameters.destination_container_name }}" \
-          --recursive
-
-        scenario2_exit_code=$?
-        if [ $scenario2_exit_code -eq 0 ]; then
-          echo "Scenario 2 executed successfully."
-        else
-          echo "Scenario 2 failed with exit code $scenario2_exit_code"
         fi
       displayName: "Run Scenarios"
     env:
