@@ -109,17 +109,22 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 
 		Credential: &srcCredInfo,
 		IncrementEnumeration: func(entityType common.EntityType) {
-			if entityType == common.EEntityType.File() {
+			switch entityType {
+			case common.EEntityType.File(), common.EEntityType.Hardlink():
 				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
-			} else if entityType == common.EEntityType.Folder() {
+			case common.EEntityType.Folder():
 				atomic.AddUint64(&cca.atomicSourceFoldersScanned, 1)
-			}
-			if isNFSCopy {
-				if entityType == common.EEntityType.Other() {
-					atomic.AddUint32(&cca.atomicSkippedSpecialFileCount, 1)
-				} else if entityType == common.EEntityType.Symlink() {
+			case common.EEntityType.Symlink():
+				if common.IsNFSCopy() {
 					atomic.AddUint32(&cca.atomicSkippedSymlinkCount, 1)
 				}
+				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
+			case common.EEntityType.Other():
+				if common.IsNFSCopy() {
+					atomic.AddUint32(&cca.atomicSkippedSpecialFileCount, 1)
+					atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
+				}
+			default:
 			}
 			if cca.fromTo.From() == common.ELocation.S3() {
 				// Track skipped S3 objects (e.g., Archive/Glacier storage class objects)
@@ -127,6 +132,19 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 					atomic.AddUint64(&cca.atomicSkippedArchiveFileCount, 1)
 					atomic.AddUint64(&cca.atomicSourceFilesScanned, 1) // Count skipped archive files as scanned files
 				}
+			}
+		},
+		IncrementEnumerationFailure: func(entityType common.EntityType) {
+			if entityType == common.EEntityType.Folder() {
+				cca.IncrementSourceFolderEnumerationFailed()
+				atomic.AddUint64(&cca.atomicSourceFoldersScanned, 1)
+			}
+			if isNFSCopy {
+				if entityType == common.EEntityType.Other() {
+					atomic.AddUint32(&cca.atomicSkippedSpecialFileCount, 1)
+					atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
+				}
+			default:
 			}
 		},
 
@@ -141,11 +159,16 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		IncludeDirectoryStubs:   includeDirStubs,
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
 		HardlinkHandling:        cca.hardlinks,
+		SymlinkHandling:         cca.symlinkHandling,
 		IncrementNotTransferred: func(entityType common.EntityType) {
-			if entityType == common.EEntityType.File() {
+
+			switch entityType {
+			case common.EEntityType.File(), common.EEntityType.Hardlink(), common.EEntityType.Symlink():
 				atomic.AddUint64(&cca.atomicSourceFilesTransferNotRequired, 1)
-			} else if entityType == common.EEntityType.Folder() {
+			case common.EEntityType.Folder():
 				atomic.AddUint64(&cca.atomicSourceFoldersTransferNotRequired, 1)
+			case common.EEntityType.Other():
+			default:
 			}
 		},
 		ErrorChannel: enumeratorOptions.ErrorChannel,
@@ -192,6 +215,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
 		HardlinkHandling:        common.EHardlinkHandlingType.Follow(),
 		ErrorChannel:            enumeratorOptions.ErrorChannel,
+		SymlinkHandling:         cca.symlinkHandling,
 	}
 	dstTraverserTemplate := ResourceTraverserTemplate{
 		location: cca.fromTo.To(),
@@ -236,15 +260,8 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 			}
 			// At this point, we'll let the destination be written to with the original resource type.
 		}
-	} else if err != nil && fileerror.HasCode(err, fileerror.ShareNotFound) { // We can resolve a missing share. Let's create it.
-		ft := destinationTraverser.(*fileTraverser)
-		sc := ft.serviceClient
-		fUrlParts, _ := file.ParseURL(ft.rawURL)                         // this should have succeeded by now.
-		_, err = sc.NewShareClient(fUrlParts.ShareName).Create(ctx, nil) // If it doesn't work out, this will surely bubble up later anyway. It won't be long.
-		if err != nil {
-			glcm.Warn(fmt.Sprintf("Failed to create the missing destination container: %v", err))
-		}
-		// At this point, we'll let the destination be written to with the original resource type, as it will get created in this transfer.
+	} else if err != nil && fileerror.HasCode(err, fileerror.ShareNotFound) {
+		return nil, fmt.Errorf("%s Destination file share: %s", DstShareDoesNotExists, cca.destination.Value)
 	} else if err == nil && sourceIsDir != destIsDir {
 		// If the destination exists, and isn't blob though, we have to match resource types.
 		return nil, resourceMismatchError
@@ -272,10 +289,8 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 	filters = append(filters, buildRegexFilters(cca.excludeRegex, false)...)
 
 	// after making all filters, log any search prefix computed from them
-	if jobsAdmin.JobsAdmin != nil {
-		if prefixFilter := FilterSet(filters).GetEnumerationPreFilter(cca.recursive); prefixFilter != "" {
-			jobsAdmin.JobsAdmin.LogToJobLog("Search prefix, which may be used to optimize scanning, is: "+prefixFilter, common.LogInfo) // "May be used" because we don't know here which enumerators will use it
-		}
+	if prefixFilter := FilterSet(filters).GetEnumerationPreFilter(cca.recursive); prefixFilter != "" {
+		common.LogToJobLogWithPrefix("Search prefix, which may be used to optimize scanning, is: "+prefixFilter, common.LogInfo) // "May be used" because we don't know here which enumerators will use it
 	}
 
 	// decide our folder transfer strategy
@@ -284,9 +299,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 	if !cca.dryrunMode {
 		glcm.Info(folderMessage)
 	}
-	if jobsAdmin.JobsAdmin != nil {
-		jobsAdmin.JobsAdmin.LogToJobLog(folderMessage, common.LogInfo)
-	}
+	common.LogToJobLogWithPrefix(folderMessage, common.LogInfo)
 
 	if cca.trailingDot == common.ETrailingDotOption.Enable() && !cca.fromTo.BothSupportTrailingDot() {
 		cca.trailingDot = common.ETrailingDotOption.Disable()
@@ -329,7 +342,6 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.trailingDot,
 		},
-		IsNFSCopy: cca.isNFSCopy,
 	}
 	//Optional check for custom credential provider
 	var credProvider credentials.Provider = nil
@@ -349,7 +361,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 
 	// Create Source Client.
 	var azureFileSpecificOptions any
-	if cca.fromTo.From() == common.ELocation.File() {
+	if cca.fromTo.From() == common.ELocation.File() || cca.fromTo.From() == common.ELocation.FileNFS() {
 		azureFileSpecificOptions = &common.FileClientOptions{
 			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
 		}
@@ -368,7 +380,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 	}
 
 	// Create Destination client
-	if cca.fromTo.To() == common.ELocation.File() {
+	if cca.fromTo.To() == common.ELocation.File() || cca.fromTo.To() == common.ELocation.FileNFS() {
 		azureFileSpecificOptions = &common.FileClientOptions{
 			AllowTrailingDot:       cca.trailingDot == common.ETrailingDotOption.Enable(),
 			AllowSourceTrailingDot: (cca.trailingDot == common.ETrailingDotOption.Enable() && cca.fromTo.To() == common.ELocation.File()),
@@ -396,33 +408,9 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		azureFileSpecificOptions,
 	)
 
-	//Protocol compatibility for SMB and NFS
-	// Handles source validation
-	if cca.fromTo.IsS2S() {
-		if cca.fromTo.From() == common.ELocation.File() {
-			if err := validateShareProtocolCompatibility(ctx,
-				cca.fromTo, cca.source, copyJobTemplate.SrcServiceClient, cca.isNFSCopy, true); err != nil {
-				return nil, err
-			}
-		} else if isNFSCopy {
-			return nil, errors.New("NFS copy is not supported for source location " + cca.fromTo.From().String())
-		}
-	}
-
-	// Handle destination validation
-	if (cca.fromTo.IsUpload() || cca.fromTo.IsS2S()) && cca.fromTo.To() == common.ELocation.File() {
-		if err := validateShareProtocolCompatibility(ctx, cca.fromTo,
-			cca.destination,
-			copyJobTemplate.DstServiceClient,
-			cca.isNFSCopy, false); err != nil {
-			return nil, err
-		}
-	} else if cca.fromTo.IsDownload() && cca.fromTo.From() == common.ELocation.File() {
-		if err := validateShareProtocolCompatibility(ctx, cca.fromTo,
-			cca.source, copyJobTemplate.SrcServiceClient,
-			cca.isNFSCopy, true); err != nil {
-			return nil, err
-		}
+	// Check protocol compatibility for File Shares
+	if err := validateProtocolCompatibility(ctx, cca.fromTo, cca.source, cca.destination, copyJobTemplate.SrcServiceClient, copyJobTemplate.DstServiceClient); err != nil {
+		return nil, err
 	}
 
 	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo, copyJobTemplate)
@@ -431,8 +419,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 	indexer := newObjectIndexer()
 
 	switch cca.fromTo {
-	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile():
-
+	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile(), common.EFromTo.LocalFileNFS():
 		// Upload implies transferring from a local disk to a remote resource.
 		// In this scenario, the local disk (source) is scanned/indexed first because it is assumed that local file systems will be faster to enumerate than remote resources
 		// Then the destination is scanned and filtered based on what the destination contains
@@ -600,7 +587,7 @@ func GetSyncEnumeratorWithSrcComparator(
 		// since only then can we know which local files definitely don't exist remotely
 		var deleteScheduler objectProcessor
 		switch cca.fromTo.To() {
-		case common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS():
+		case common.ELocation.Blob(), common.ELocation.File(), common.ELocation.FileNFS(), common.ELocation.BlobFS():
 			deleter, err := newSyncDeleteProcessor(cca, fpo, copyJobTemplate.DstServiceClient)
 			if err != nil {
 				return err

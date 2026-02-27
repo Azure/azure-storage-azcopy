@@ -39,6 +39,10 @@ type JobPartCreatedMsg struct {
 }
 
 type xferDoneMsg = common.TransferDetail
+type listRequest struct {
+	resetLists bool
+}
+
 type jobStatusManager struct {
 	js              common.ListJobSummaryResponse
 	respChan        chan common.ListJobSummaryResponse
@@ -92,8 +96,13 @@ func (jm *jobMgr) SendXferDoneMsg(msg xferDoneMsg) {
 	jm.jstm.xferDone <- msg
 }
 
-func (jm *jobMgr) ListJobSummary() common.ListJobSummaryResponse {
-	if jm.statusMgrClosed() {
+func (jm *jobMgr) ListJobSummary(reset ...bool) common.ListJobSummaryResponse {
+	resetLists := true // default value
+	if len(reset) > 0 {
+		resetLists = reset[0]
+	}
+
+	if !resetLists || jm.statusMgrClosed() {
 		return jm.jstm.js
 	}
 
@@ -187,6 +196,7 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 			case <-jstm.statusMgrDone:
 				// If we time out, no biggie. This isn't world-ending, nor is it essential info. The other side stopped listening by now.
 			}
+
 			// Reset the lists so that they don't keep accumulating and take up excessive memory
 			// There is no need to keep sending the same items over and over again
 			js.FailedTransfers = []common.TransferDetail{}

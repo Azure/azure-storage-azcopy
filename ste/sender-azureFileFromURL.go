@@ -72,7 +72,7 @@ func (u *urlToAzureFileCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 			return
 		}
 		ctx := u.ctx
-		if u.addFileRequestIntent || (token != nil && u.jptm.FromTo().From() == common.ELocation.File()) {
+		if u.addFileRequestIntent || (token != nil && u.jptm.FromTo().From().IsFile()) {
 			ctx = context.WithValue(u.ctx, addFileRequestIntent, true)
 		}
 		ctx = context.WithValue(ctx, removeSourceContentCRC64, true)

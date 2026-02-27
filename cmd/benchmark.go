@@ -23,12 +23,13 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
-	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
+	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
@@ -101,7 +102,7 @@ func (raw rawBenchmarkCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	glcm.Info(common.BenchmarkPreviewNotice)
 
 	dummyCooked := CookedCopyCmdArgs{}
-	virtualDir := "benchmark-" + azcopyCurrentJobID.String() // create unique directory name, so we won't overwrite anything
+	virtualDir := "benchmark-" + Client.CurrentJobID.String() // create unique directory name, so we won't overwrite anything
 
 	if raw.fileCount <= 0 {
 		return dummyCooked, errors.New(common.FileCountParam + " must be greater than zero")
@@ -189,7 +190,7 @@ func (raw rawBenchmarkCmdArgs) appendVirtualDir(target, virtualDir string) (stri
 		p.BlobName = virtualDir
 		return p.String(), err
 
-	case common.ELocation.File():
+	case common.ELocation.File(), common.ELocation.FileNFS():
 		p, err := sharefile.ParseURL(target)
 		if err != nil {
 			return "", fmt.Errorf("error parsing the url %s. Failed with error %s", target, err.Error())
@@ -228,7 +229,7 @@ func (raw rawBenchmarkCmdArgs) createCleanupJobArgs(benchmarkDest common.Resourc
 	switch InferArgumentLocation(rc.src) {
 	case common.ELocation.Blob():
 		rc.fromTo = common.EFromTo.BlobTrash().String()
-	case common.ELocation.File():
+	case common.ELocation.File(), common.ELocation.FileNFS():
 		rc.fromTo = common.EFromTo.FileTrash().String()
 	case common.ELocation.BlobFS():
 		rc.fromTo = common.EFromTo.BlobFSTrash().String()

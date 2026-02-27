@@ -1,6 +1,29 @@
 
 # Change Log
 
+## Version 10.30.0
+### Breaking changes
+1. For transfers involving Azure Files (NFS or SMB), AzCopy will not auto create file shares.
+2. AzCopy binaries and latest version information will now be distributed from Github releases instead of the static website. ([#3014](https://github.com/Azure/azure-storage-azcopy/pull/3014))
+
+### New Features
+1. Azure Files NFS Support via REST. 
+   Support for transferring data between local Linux systems and Azure Files NFS using REST. To use this feature, please explicitly specify the `--from-to` flag. 
+   - Transfer from local Linux to Azure Files NFS. (`--from-to=LocalFileNFS`)
+   - Transfer from Azure Files NFS to local Linux. (`--from-to=FileNFSLocal`)
+   - Transfer between Azure Files NFS shares. (`--from-to=FileNFSFileNFS`)
+2. Added support to retry on copy source error code and status code for service to service copies. ([#3105](https://github.com/Azure/azure-storage-azcopy/pull/3105))
+3. Added support for service to service copies from Azure Files to Blob Storage using EntraID. ([#3053](https://github.com/Azure/azure-storage-azcopy/pull/3053))
+
+### Bug Fixes
+1. Fixed a bug where when copying a file that has already been deleted with `--trailing-dot=Disable` resulted in the wrong error instead of a 404. ([#3092](https://github.com/Azure/azure-storage-azcopy/pull/3092))
+
+### Supportability
+1. Removed the warning message when failing to create a container. This message can be misleading when there is insufficient permissions to create a container and the container already exists. ([#3045](https://github.com/Azure/azure-storage-azcopy/pull/3045))
+2. Improved the error message returned when block size is larger than bandwidth limit. ([#3051](https://github.com/Azure/azure-storage-azcopy/pull/3051))
+3. Warn user if transfer is going to exceed 10M objects. ([#3111](https://github.com/Azure/azure-storage-azcopy/pull/3111))
+4. Warn user if multiple AzCopy processes are running. ([#3128](https://github.com/Azure/azure-storage-azcopy/pull/3128))
+
 ## Version 10.30.0-preview.2
 
 ### Dependency updates

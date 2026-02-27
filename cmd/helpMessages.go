@@ -21,14 +21,16 @@ const copyCmdShortDescription = "Copies source data to a destination location"
 const copyCmdLongDescription = `
 Copies source data to a destination location. The supported directions and forms of authorization are:
   - local <-> Azure Blob (Microsoft Entra ID or Shared access signature (SAS))
-  - local <-> Azure Files (Microsoft Entra ID or Share/directory SAS)
+  - local <-> Azure Files SMB (Microsoft Entra ID or Share/directory SAS)
+  - local <-> Azure Files NFS (Microsoft Entra ID or Share/directory SAS)
   - local <-> Azure Data Lake Storage (Microsoft Entra ID, SAS, or Shared Key)
   - Azure Blob (Microsoft Entra ID, SAS, public) -> Azure Blob (Microsoft Entra ID or SAS)
   - Data Lake Storage (Microsoft Entra ID or SAS) <-> Data Lake Storage (Microsoft Entra ID or SAS)
   - Data Lake Storage (Microsoft Entra ID or SAS) <-> Azure Blob (Microsoft Entra ID or SAS)
-  - Azure Blob (Microsoft Entra ID, SAS or public) -> Azure Files (Microsoft Entra ID or SAS)
-  - Azure Files (Microsoft Entra ID or SAS) -> Azure Files (Microsoft Entra ID or SAS)
-  - Azure Files (Microsoft Entra ID or SAS) -> Azure Blob (Microsoft Entra ID or SAS)
+  - Azure Blob (Microsoft Entra ID, SAS or public) -> Azure Files SMB (Microsoft Entra ID or SAS)
+  - Azure Files SMB (Microsoft Entra ID or SAS) -> Azure Files SMB (Microsoft Entra ID or SAS)
+  - Azure Files SMB (Microsoft Entra ID or SAS) -> Azure Blob (Microsoft Entra ID or SAS)
+  - Azure Files NFS (Microsoft Entra ID or SAS) -> Azure Files NFS (Microsoft Entra ID or SAS)
   - AWS S3 (Access Key) -> Azure Block Blob (Microsoft Entra ID or SAS)
   - Google Cloud Storage (Service Account Key) -> Azure Block Blob (Microsoft Entra ID or SAS)
 

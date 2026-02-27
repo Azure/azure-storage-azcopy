@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"errors"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
@@ -71,8 +72,8 @@ func HandlePauseCommand(jobIdString string) {
 		glcm.Error("invalid jobId string passed. Failed while parsing string to jobId")
 	}
 
-	var pauseJobResponse common.CancelPauseResumeResponse
-	Rpc(common.ERpcCmd.PauseJob(), jobID, &pauseJobResponse)
+	// TODO : Why isn't the response here used?
+	jobsAdmin.CancelPauseJobOrder(jobID, common.EJobStatus.Paused())
 	glcm.Exit(func(format common.OutputFormat) string {
 		return "Job " + jobID.String() + " paused successfully"
 	}, common.EExitCode.Success())

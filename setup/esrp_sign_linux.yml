@@ -5,21 +5,28 @@ parameters:
   DisplayName: ''
 
 steps:
-- task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@1
-  displayName: ${{ parameters.DisplayName }}
-  inputs:
-    ConnectedServiceName: 'PMC ESRP AzCopy Signing'
-    FolderPath: ${{ parameters.FolderPath }}
-    Pattern: ${{ parameters.Pattern }}
-    signConfigType: inlineSignParams
-    VerboseLogin: true
-    inlineOperation: |
-      [
-        {
-          "KeyCode" : "${{ parameters.ESRP_AZCOPY_KEY_CODE }}",
-          "OperationCode" : "LinuxSign",
-          "Parameters" : {},
-          "ToolName" : "sign",
-          "ToolVersion" : "1.0"
-        }
-      ]
+  - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
+    displayName: ${{ parameters.DisplayName }}
+    inputs:
+      ConnectedServiceName: 'azcopy-release'
+      AppRegistrationClientId: $(ESRP_V5_APP_REGISTRATION_CLIENT_ID)
+      AppRegistrationTenantId: $(ESRP_V5_APP_REGISTRATION_TENANT_ID)
+      AuthAKVName: $(ESRP_V5_KEY_VAULT_NAME)
+      AuthCertName: $(ESRP_V5_AUTH_CERT_NAME)
+      AuthSignCertName: $(ESRP_V5_SIGN_CERT_NAME)
+      FolderPath: ${{ parameters.FolderPath }}
+      Pattern: ${{ parameters.Pattern }}
+      ServiceEndpointUrl: 'https://api.esrp.microsoft.com/api/v2'
+      MaxConcurrency: 25
+      signConfigType: inlineSignParams
+      VerboseLogin: true
+      inlineOperation: |
+        [
+          {
+            "KeyCode" : "${{ parameters.ESRP_AZCOPY_KEY_CODE }}",
+            "OperationCode" : "LinuxSign",
+            "Parameters" : {},
+            "ToolName" : "sign",
+            "ToolVersion" : "1.0"
+          }
+        ]
