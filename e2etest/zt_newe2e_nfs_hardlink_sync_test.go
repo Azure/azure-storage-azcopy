@@ -1,7 +1,6 @@
 package e2etest
 
 import (
-	"fmt"
 	"runtime"
 	"time"
 
@@ -70,7 +69,6 @@ func runHardlinkSync(
 				DeleteDestination: pointerTo(deleteDestination),
 			},
 		})
-	fmt.Println("Stdout------------", stdOut)
 	return stdOut
 }
 

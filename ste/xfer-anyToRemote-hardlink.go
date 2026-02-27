@@ -22,6 +22,7 @@ package ste
 import (
 	"net/url"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -102,7 +103,8 @@ func anyToRemote_hardlink(jptm IJobPartTransferMgr, info *TransferInfo, pacer pa
 	}
 
 	// write the hardlink
-	taregtHardlinkFullPath := getFullPath(jptm.Info().TargetHardlinkFilePath, jptm.GetDestinationRoot())
+	targetURLParts, err := file.ParseURL(jptm.Info().Destination)
+	taregtHardlinkFullPath := getFullPath(jptm.Info().TargetHardlinkFilePath, targetURLParts.DirectoryOrFilePath)
 	err = s.CreateHardlink(taregtHardlinkFullPath)
 	if err != nil {
 		jptm.FailActiveSend("creating destination hardlink representative", err)
