@@ -287,7 +287,7 @@ func validateAndGetRootObject(path string, fromTo common.FromTo) (minimalStoredO
 // buildChildPath constructs the full child path by joining the base directory
 // with the relative path, and handles path separator normalization.
 // Ensures consistent path formatting across different operating systems.
-func buildChildPath(baseDir, relativePath string) string {
+func buildChildPath(baseDir, relativePath string, isDirectory bool) string {
 	var strs []string
 
 	if baseDir != "" {
@@ -296,9 +296,11 @@ func buildChildPath(baseDir, relativePath string) string {
 		strs = []string{relativePath}
 	}
 
-	childPath := strings.TrimSuffix(
-		strings.Join(strs, common.AZCOPY_PATH_SEPARATOR_STRING),
-		common.AZCOPY_PATH_SEPARATOR_STRING)
+	childPath := strings.Join(strs, "")
+
+	if isDirectory {
+		childPath += common.AZCOPY_PATH_SEPARATOR_STRING
+	}
 
 	return childPath
 }
@@ -308,7 +310,12 @@ func buildChildPath(baseDir, relativePath string) string {
 // and stores them in the indexer for later comparison and transfer.
 func (st *SyncTraverser) processor(so StoredObject) error {
 	// Build full path for the object relative to current directory
-	so.relativePath = buildChildPath(st.dir, so.relativePath)
+
+	fmt.Printf("processor() - [Before Build Child Path] processing source object dir= '%s' relativepath = '%s'\n", st.dir, so.relativePath)
+
+	isDirectory := so.entityType == common.EEntityType.Folder()
+	so.relativePath = buildChildPath(st.dir, so.relativePath, isDirectory)
+	fmt.Printf("processor() - [After Build Child Path] processing source object dir= '%s' relativepath = '%s'\n", st.dir, so.relativePath)
 
 	// Thread-safe storage in the indexer first
 	st.enumerator.objectIndexer.rwMutex.Lock()
@@ -338,7 +345,11 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 // It builds the full path and passes the object to the main comparator for sync decision making.
 func (st *SyncTraverser) customComparator(so StoredObject) error {
 	// Build full path for destination object
-	so.relativePath = buildChildPath(st.dir, so.relativePath)
+
+	fmt.Printf("SyncTraverser.customComparator() [before BuildChildDir] - comparing destination object dir= '%s' relativepath = '%s'\n", st.dir, so.relativePath)
+
+	isDirectory := so.entityType == common.EEntityType.Folder()
+	so.relativePath = buildChildPath(st.dir, so.relativePath, isDirectory)
 
 	// comparison and deletion from indexer will happen under the lock
 	return st.comparator(so)
@@ -351,13 +362,10 @@ func (st *SyncTraverser) finalize(scheduleTransfer bool) error {
 
 	// Build the directory prefix for matching child objects
 	var dirPrefix string
-	if st.dir == "" {
+	if st.dir == "/" {
 		// Root directory - we need to match items that don't have a parent directory
 		// or items that are direct children of root
 		dirPrefix = ""
-	} else {
-		// Non-root directory - match items that start with "dir/"
-		dirPrefix = st.dir + common.AZCOPY_PATH_SEPARATOR_STRING
 	}
 
 	// Use exclusive lock for the entire operation to prevent concurrent iteration and modification
@@ -666,8 +674,8 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		pt_src := cca.source
 		st_src := cca.destination
 
-		pt_src.Value = strings.Join(sync_src, common.AZCOPY_PATH_SEPARATOR_STRING)
-		st_src.Value = strings.Join(sync_dst, common.AZCOPY_PATH_SEPARATOR_STRING)
+		pt_src.Value = strings.Join(sync_src, "")
+		st_src.Value = strings.Join(sync_dst, "")
 
 		// Handle Windows path separators
 		if runtime.GOOS == "windows" {
@@ -932,6 +940,8 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 	defer cleanupFunc()
 
 	crawlWg.Add(1) // Add the root directory to the WaitGroup
+
+	root.relativePath = common.AZCOPY_PATH_SEPARATOR_STRING // start enumerating from relative path '/'
 
 	// Start parallel crawling with specified concurrency
 	parallel.Crawl(mainCtx, root, syncOneDir, int(crawlParallelism))

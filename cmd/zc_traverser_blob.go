@@ -432,6 +432,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 			// queue up the sub virtual directories if recursive is true or if enqueueDirorPrefix is true
 			if t.recursive || t.includeDirectoryOrPrefix {
 				for _, virtualDir := range lResp.Segment.BlobPrefixes {
+					fmt.Printf("BlobTraverser.parallelList - found virtual directory: %s prefix: %s\n", *virtualDir.Name, searchPrefix)
 					if t.recursive {
 						enqueueDir(*virtualDir.Name)
 						if azcopyScanningLogger != nil {
