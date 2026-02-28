@@ -23,6 +23,8 @@ package e2etest
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
@@ -34,6 +36,7 @@ import (
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/google/uuid"
 	"os"
 	"path"
@@ -59,7 +62,12 @@ func (TestResourceFactory) GetBlobServiceURL(accountType AccountType) *blobservi
 	if err != nil {
 		panic(err)
 	}
-	bsc, err := blobservice.NewClientWithSharedKeyCredential(resourceURL, credential, nil)
+
+	// Add version policy to client options
+	perCallPolicies := []policy.Policy{ste.NewVersionPolicy()}
+	options := &blobservice.ClientOptions{ClientOptions: azcore.ClientOptions{PerCallPolicies: perCallPolicies}}
+
+	bsc, err := blobservice.NewClientWithSharedKeyCredential(resourceURL, credential, options)
 	if err != nil {
 		panic(err)
 	}
@@ -74,7 +82,17 @@ func (TestResourceFactory) GetFileServiceURL(accountType AccountType) *fileservi
 	if err != nil {
 		panic(err)
 	}
-	fsc, err := fileservice.NewClientWithSharedKeyCredential(resourceURL, credential, &fileservice.ClientOptions{AllowTrailingDot: to.Ptr(true)})
+
+	// Add version policy to client options
+	perCallPolicies := []policy.Policy{ste.NewVersionPolicy()}
+	options := &fileservice.ClientOptions{
+		AllowTrailingDot: to.Ptr(true),
+		ClientOptions: azcore.ClientOptions{
+			PerCallPolicies: perCallPolicies,
+		},
+	}
+
+	fsc, err := fileservice.NewClientWithSharedKeyCredential(resourceURL, credential, options)
 	if err != nil {
 		panic(err)
 	}
@@ -89,7 +107,16 @@ func (TestResourceFactory) GetDatalakeServiceURL(accountType AccountType) *datal
 	if err != nil {
 		panic(err)
 	}
-	dsc, err := datalakeservice.NewClientWithSharedKeyCredential(resourceURL, credential, nil)
+
+	// Add version policy to client options
+	perCallPolicies := []policy.Policy{ste.NewVersionPolicy()}
+	options := &datalakeservice.ClientOptions{
+		ClientOptions: azcore.ClientOptions{
+			PerCallPolicies: perCallPolicies,
+		},
+	}
+
+	dsc, err := datalakeservice.NewClientWithSharedKeyCredential(resourceURL, credential, options)
 	if err != nil {
 		panic(err)
 	}
@@ -139,7 +166,12 @@ func (TestResourceFactory) GetContainerURLWithSAS(c asserter, accountType Accoun
 
 	sasURL := rawURL + "?" + qps.Encode()
 
-	client, err := container.NewClientWithNoCredential(sasURL, nil)
+	// Add version policy to client options
+	perCallPolicies := []policy.Policy{ste.NewVersionPolicy()}
+	options := &container.ClientOptions{ClientOptions: azcore.ClientOptions{
+		PerCallPolicies: perCallPolicies}}
+
+	client, err := container.NewClientWithNoCredential(sasURL, options)
 	c.AssertNoErr(err)
 
 	return client
@@ -174,7 +206,9 @@ func (TestResourceFactory) CreateNewContainer(c asserter, publicAccess *containe
 	name = TestResourceNameGenerator{}.GenerateContainerName(c)
 	cc = TestResourceFactory{}.GetBlobServiceURL(accountType).NewContainerClient(name)
 
-	_, err := cc.Create(context.Background(), &container.CreateOptions{Access: publicAccess})
+	// Pass override key to context
+	ctx = context.WithValue(ctx, ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+	_, err := cc.Create(ctx, &container.CreateOptions{Access: publicAccess})
 	c.AssertNoErr(err)
 	return cc, name, TestResourceFactory{}.GetContainerURLWithSAS(c, accountType, name).URL()
 }

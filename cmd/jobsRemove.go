@@ -23,10 +23,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"os"
-	"path"
-	"strings"
-
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
 )
@@ -58,70 +55,16 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			err := handleRemoveSingleJob(commandLineInput.JobID)
+			_, err := Client.RemoveJob(azcopy.RemoveJobOptions{JobID: commandLineInput.JobID})
 			if err == nil {
 				glcm.Exit(func(format common.OutputFormat) string {
 					return fmt.Sprintf("Successfully removed log and job plan files for job %s.", commandLineInput.JobID)
 				}, common.EExitCode.Success())
 			} else {
-				glcm.Error(fmt.Sprintf("Failed to remove log and job plan files for job %s due to error: %s.", commandLineInput.JobID, err))
+				glcm.Error(err.Error())
 			}
 		},
 	}
 
 	jobsCmd.AddCommand(jobsRemoveCmd)
-}
-
-func handleRemoveSingleJob(jobID common.JobID) error {
-	// get rid of the job plan files
-	numPlanFileRemoved, err := removeFilesWithPredicate(common.AzcopyJobPlanFolder, func(s string) bool {
-		if strings.Contains(s, jobID.String()) && strings.Contains(s, ".steV") {
-			return true
-		}
-		return false
-	})
-	if err != nil {
-		return err
-	}
-
-	// get rid of the logs
-	// even though we only have 1 file right now, still scan the directory since we may change the
-	// way we name the logs in the future (with suffix or whatnot)
-	numLogFileRemoved, err := removeFilesWithPredicate(azcopyLogPathFolder, func(s string) bool {
-		if strings.Contains(s, jobID.String()) && strings.HasSuffix(s, ".log") {
-			return true
-		}
-		return false
-	})
-	if err != nil {
-		return err
-	}
-
-	if numLogFileRemoved+numPlanFileRemoved == 0 {
-		return errors.New("cannot find any log or job plan file with the specified ID")
-	}
-
-	return nil
-}
-
-// remove all files whose names are approved by the predicate in the targetFolder
-func removeFilesWithPredicate(targetFolder string, predicate func(string) bool) (int, error) {
-	count := 0
-	files, err := os.ReadDir(targetFolder)
-	if err != nil {
-		return count, err
-	}
-
-	// go through the files and return if any of them fail to be removed
-	for _, singleFile := range files {
-		if predicate(singleFile.Name()) {
-			err := os.Remove(path.Join(targetFolder, singleFile.Name()))
-			if err != nil {
-				return count, err
-			}
-			count += 1
-		}
-	}
-
-	return count, nil
 }
