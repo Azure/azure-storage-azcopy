@@ -333,6 +333,12 @@ func (p *S3URLParts) IsGoogleCloudStorage() bool {
 	return strings.Contains(strings.ToLower(p.Endpoint), "googleapis.com")
 }
 
+// IsS3CompatibleEndpoint returns true if a custom S3-compatible endpoint is configured
+// via the S3_COMPATIBLE_ENDPOINT environment variable.
+func (p *S3URLParts) IsS3CompatibleEndpoint() bool {
+	return os.Getenv("S3_COMPATIBLE_ENDPOINT") != ""
+}
+
 type caseInsensitiveValues url.Values // map[string][]string
 func (values caseInsensitiveValues) Get(key string) ([]string, bool) {
 	key = strings.ToLower(key)
