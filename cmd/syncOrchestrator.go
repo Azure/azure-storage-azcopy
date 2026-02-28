@@ -72,6 +72,10 @@ var (
 	}
 
 	orchestratorOptions *SyncOrchestratorOptions
+
+	// isGCPSource indicates if the sync source is Google Cloud Storage via S3-compatible API
+	// This is used to handle GCP-specific behaviors like directory placeholder objects
+	isGCPSource bool
 )
 
 type minimalStoredObject struct {
@@ -307,6 +311,18 @@ func buildChildPath(baseDir, relativePath string) string {
 // It builds the full path, categorizes objects as files or directories,
 // and stores them in the indexer for later comparison and transfer.
 func (st *SyncTraverser) processor(so StoredObject) error {
+	// Debug: Log original path before transformation
+	originalPath := so.relativePath
+	syncOrchestratorLog(common.LogDebug, fmt.Sprintf("[PROCESSOR] Before buildChildPath - dir='%s', originalPath='%s'", st.dir, originalPath))
+
+	// Skip directory placeholder objects that represent the current directory itself
+	// These have empty relativePath after prefix trimming and would cause re-enqueueing of the same directory
+	// This issue specifically occurs with GCP S3-compatible storage where directory placeholders are returned
+	if originalPath == "" && so.entityType == common.EEntityType.Folder() && isGCPSource {
+		syncOrchestratorLog(common.LogDebug, fmt.Sprintf("[PROCESSOR] Skipping self-referential directory placeholder for dir='%s' (GCP S3-compatible source)", st.dir))
+		return nil
+	}
+
 	// Build full path for the object relative to current directory
 	so.relativePath = buildChildPath(st.dir, so.relativePath)
 
@@ -594,6 +610,16 @@ func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator,
 	}
 
 	orchestratorOptions = enumerator.orchestratorOptions
+
+	// Detect if source is Google Cloud Storage via S3-compatible API
+	isGCPSource = false
+	if orchestratorOptions.fromTo == common.EFromTo.S3Blob() {
+		if parsedURL, err := url.Parse(cca.source.Value); err == nil {
+			if s3Parts, err := common.NewS3URLParts(*parsedURL); err == nil {
+				isGCPSource = s3Parts.IsGoogleCloudStorage()
+			}
+		}
+	}
 
 	// Initialize resource limits based on source/destination types
 	initializeLimits(orchestratorOptions)
