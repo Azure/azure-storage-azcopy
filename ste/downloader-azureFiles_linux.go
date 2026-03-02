@@ -332,11 +332,11 @@ func (a *azureFilesDownloader) CreateSymlink(jptm IJobPartTransferMgr) error {
 }
 
 func (a *azureFilesDownloader) CreateHardlink(jptm IJobPartTransferMgr) error {
-	// create the link
-	oldFullPath := getFullPath(jptm.Info().TargetHardlinkFilePath, jptm.GetDestinationRoot())
-	err := os.Link(oldFullPath, jptm.Info().Destination)
-	if err != nil {
-		fmt.Println(fmt.Errorf("failed to create hardlink from %s to %s: %w", oldFullPath, jptm.Info().Destination, err))
-	}
+	// Build the anchor's full local path by joining the destination root
+	// with the anchor's relative path from the InodeStore.
+
+	destRoot := jptm.GetDestinationRoot()
+	anchorFullPath := filepath.Join(destRoot, jptm.Info().TargetHardlinkFilePath)
+	err := os.Link(anchorFullPath, jptm.Info().Destination)
 	return err
 }
