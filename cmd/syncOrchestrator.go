@@ -275,7 +275,7 @@ func validateAndGetRootObject(path string, fromTo common.FromTo) (minimalStoredO
 
 	if err == nil {
 		return minimalStoredObject{
-			relativePath:           "",
+			relativePath:           common.AZCOPY_PATH_SEPARATOR_STRING, // "/" represents the root directory
 			changeTime:             time.Time{},
 			isPresentAtDestination: true,
 		}, nil
@@ -311,11 +311,8 @@ func buildChildPath(baseDir, relativePath string, isDirectory bool) string {
 func (st *SyncTraverser) processor(so StoredObject) error {
 	// Build full path for the object relative to current directory
 
-	fmt.Printf("processor() - [Before Build Child Path] processing source object dir= '%s' relativepath = '%s'\n", st.dir, so.relativePath)
-
 	isDirectory := so.entityType == common.EEntityType.Folder()
 	so.relativePath = buildChildPath(st.dir, so.relativePath, isDirectory)
-	fmt.Printf("processor() - [After Build Child Path] processing source object dir= '%s' relativepath = '%s'\n", st.dir, so.relativePath)
 
 	// Thread-safe storage in the indexer first
 	st.enumerator.objectIndexer.rwMutex.Lock()
@@ -346,8 +343,6 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 func (st *SyncTraverser) customComparator(so StoredObject) error {
 	// Build full path for destination object
 
-	fmt.Printf("SyncTraverser.customComparator() [before BuildChildDir] - comparing destination object dir= '%s' relativepath = '%s'\n", st.dir, so.relativePath)
-
 	isDirectory := so.entityType == common.EEntityType.Folder()
 	so.relativePath = buildChildPath(st.dir, so.relativePath, isDirectory)
 
@@ -360,13 +355,8 @@ func (st *SyncTraverser) customComparator(so StoredObject) error {
 // This method is called after both source and destination traversals are complete.
 func (st *SyncTraverser) finalize(scheduleTransfer bool) error {
 
-	// Build the directory prefix for matching child objects
-	var dirPrefix string
-	if st.dir == "/" {
-		// Root directory - we need to match items that don't have a parent directory
-		// or items that are direct children of root
-		dirPrefix = ""
-	}
+	// st.dir is always the correct prefix: "/" for root, "/dir1/" for subdirs, etc.
+	dirPrefix := st.dir
 
 	// Use exclusive lock for the entire operation to prevent concurrent iteration and modification
 	st.enumerator.objectIndexer.rwMutex.RLock()
@@ -398,51 +388,26 @@ func (st *SyncTraverser) finalize(scheduleTransfer bool) error {
 // belongsToCurrentDirectory determines if a given path belongs to the current directory
 // being processed by this SyncTraverser instance.
 func (st *SyncTraverser) belongsToCurrentDirectory(path, dirPrefix string) bool {
-	if st.dir == "" {
-		// Root directory case:
-		// - Accept paths that don't contain any separators (direct children)
-		// - Or paths that are exactly what we're looking for at root level
-		if !strings.Contains(path, common.AZCOPY_PATH_SEPARATOR_STRING) {
-			return true
-		}
-		// For root, we might also want to include direct children
-		// Count separators to determine if it's a direct child
-		separatorCount := strings.Count(path, common.AZCOPY_PATH_SEPARATOR_STRING)
-		return separatorCount <= 1 // Direct child or root item
-	} else {
-		// Non-root directory case:
-		// Must start with our directory prefix and be a direct child
-		if !strings.HasPrefix(path, dirPrefix) {
-			return false
-		}
-
-		// Get the remainder after our prefix
-		remainder := path[len(dirPrefix):]
-
-		// If remainder is empty, this is the directory itself
-		if remainder == "" {
-			return true
-		}
-
-		// If remainder contains separators, it's a grandchild, not direct child
-		// We only want direct children
-		return !strings.Contains(remainder, common.AZCOPY_PATH_SEPARATOR_STRING)
+	if !strings.HasPrefix(path, dirPrefix) {
+		return false
 	}
+
+	remainder := path[len(dirPrefix):]
+
+	if remainder == "" {
+		return true
+	}
+
+	// Strip trailing "/" so direct child dirs (remainder="dir1/") aren't rejected
+	trimmed := strings.TrimSuffix(remainder, common.AZCOPY_PATH_SEPARATOR_STRING)
+	return !strings.Contains(trimmed, common.AZCOPY_PATH_SEPARATOR_STRING)
 }
 
 // hasAnyChildChangedSinceLastSync checks if at least 1 child object changed in the current directory
 // since the last successful sync job start time.
 func (st *SyncTraverser) hasAnyChildChangedSinceLastSync() (bool, uint32) {
-	// Build the directory prefix for matching child objects
-	var dirPrefix string
-	if st.dir == "" {
-		// Root directory - we need to match items that don't have a parent directory
-		// or items that are direct children of root
-		dirPrefix = ""
-	} else {
-		// Non-root directory - match items that start with "dir/"
-		dirPrefix = st.dir + common.AZCOPY_PATH_SEPARATOR_STRING
-	}
+	// st.dir is always the correct prefix: "/" for root, "/dir1/" for subdirs, etc.
+	dirPrefix := st.dir
 
 	foundOneChanged := false
 
@@ -486,6 +451,9 @@ func (st *SyncTraverser) finalizeChild(child string, scheduleTransfer bool) erro
 	if exists {
 		// Schedule the file/directory for transfer using the pointer
 		if scheduleTransfer {
+			// Strip leading "/" before scheduling — scheduleCopyTransfer prepends
+			// its own "/" so a leading "/" in relativePath would produce a double-slash in the constructed URL.
+			storedObject.relativePath = strings.TrimPrefix(storedObject.relativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 			err := st.enumerator.ctp.scheduleCopyTransfer(storedObject)
 			if err != nil {
 				return err
@@ -940,8 +908,6 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 	defer cleanupFunc()
 
 	crawlWg.Add(1) // Add the root directory to the WaitGroup
-
-	root.relativePath = common.AZCOPY_PATH_SEPARATOR_STRING // start enumerating from relative path '/'
 
 	// Start parallel crawling with specified concurrency
 	parallel.Crawl(mainCtx, root, syncOneDir, int(crawlParallelism))
