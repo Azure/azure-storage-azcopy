@@ -104,6 +104,7 @@ type IJobPartTransferMgr interface {
 	TransferIndex() (partNum, transferIndex uint32)
 	RestartedTransfer() bool
 	GetJobErrorHandler() common.JobErrorHandler
+	GetSourceRoot() string
 }
 
 // TransferInfo is a per path object that needs to be transferred
@@ -1062,4 +1063,9 @@ func (jptm *jobPartTransferMgr) SuccessfulBytesTransferred() int64 {
 
 func (jptm *jobPartTransferMgr) GetJobErrorHandler() common.JobErrorHandler {
 	return jptm.jobPartMgr.GetJobErrorHandler()
+}
+
+func (jptm *jobPartTransferMgr) GetSourceRoot() string {
+	p := jptm.jobPartMgr.Plan()
+	return string(p.SourceRoot[:p.SourceRootLength])
 }

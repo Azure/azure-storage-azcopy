@@ -331,12 +331,34 @@ func (a *azureFilesDownloader) CreateSymlink(jptm IJobPartTransferMgr) error {
 	return err
 }
 
-func (a *azureFilesDownloader) CreateHardlink(jptm IJobPartTransferMgr) error {
-	// Build the anchor's full local path by joining the destination root
-	// with the anchor's relative path from the InodeStore.
+func (a *azureFilesDownloader) CreateHardlink() error {
+	info := a.jptm.Info()
 
-	destRoot := jptm.GetDestinationRoot()
-	anchorFullPath := filepath.Join(destRoot, jptm.Info().TargetHardlinkFilePath)
-	err := os.Link(anchorFullPath, jptm.Info().Destination)
-	return err
+	// Derive the destination prefix by computing the current file's relative path
+	// within the source root, then stripping that suffix from the full local destination.
+	// This works correctly for both copy and sync, and handles StripTopDir automatically.
+	//
+	// Example (copy, no StripTopDir):
+	//   SrcFilePath  = "meta/spe_dir/hardlink/newlink.txt"
+	//   sourceRoot   = ".../meta/spe_dir"  =>  srcRootDir = "meta/spe_dir"
+	//   fileRelPath  = "hardlink/newlink.txt"
+	//   Destination  = "/home/azureuser/spe_dir/hardlink/newlink.txt"
+	//   destPrefix   = "/home/azureuser/spe_dir/"
+	//   anchor path  = "/home/azureuser/spe_dir/hardlink/hlink.txt"
+	srcRootURLParts, err := file.ParseURL(a.jptm.GetSourceRoot())
+	if err != nil {
+		return fmt.Errorf("parsing source root URL: %w", err)
+	}
+
+	srcRootDir := strings.TrimSuffix(srcRootURLParts.DirectoryOrFilePath, common.AZCOPY_PATH_SEPARATOR_STRING)
+	fileRelPath := strings.TrimPrefix(strings.TrimPrefix(info.SrcFilePath, srcRootDir), common.AZCOPY_PATH_SEPARATOR_STRING)
+
+	// Convert to local path separators and strip from the destination to get the prefix.
+	localFileRelPath := filepath.FromSlash(fileRelPath)
+	destPrefix := strings.TrimSuffix(info.Destination, localFileRelPath)
+
+	// Join the prefix with the targetHardlinkFilePath traversal-root-relative path.
+	targetHardlinkFullPath := filepath.Join(destPrefix, filepath.FromSlash(info.TargetHardlinkFilePath))
+
+	return os.Link(targetHardlinkFullPath, info.Destination)
 }
