@@ -277,8 +277,6 @@ func (s *blockBlobSenderBase) Epilogue() {
 				CPKScopeInfo: s.jptm.CpkScopeInfo(),
 			})
 		if err != nil {
-			jptm.FailActiveSend(common.Iff(blobTags != nil, "Committing block list (with tags)", "Committing block list"), err)
-
 			/*
 				If we get an invalid block list, it's likely one of our blocks was deleted, or GC'd mid-job or something.
 				Knowing which blocks are missing is useful, as up to 50k blocks can exist in a single object.
@@ -330,6 +328,9 @@ func (s *blockBlobSenderBase) Epilogue() {
 					jptm.Log(common.LogError, fmt.Sprintf("Unrecognized blocks: %s", formatBlocklist(extraBlocks)))
 				}
 			}
+
+			// Fail _afterwards_, since this is the action that cancels our context. Unfortunately, doing this would cause us to fail to send the request that'd get us details on the block list.
+			jptm.FailActiveSend(common.Iff(blobTags != nil, "Committing block list (with tags)", "Committing block list"), err)
 
 			return
 		}
