@@ -20,8 +20,12 @@
 package ste
 
 import (
+	"fmt"
 	"net/url"
+	"path"
+	"strings"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -102,9 +106,34 @@ func anyToRemote_hardlink(jptm IJobPartTransferMgr, info *TransferInfo, pacer pa
 	}
 
 	// write the hardlink
-	err = s.CreateHardlink(jptm.Info().TargetHardlinkFilePath)
+	// Derive the target hardlink path full remote path approach:
+	//
+	// 1. Compute the current file's traversal-root-relative path from the local source paths.
+	//    e.g. GetSourceRoot()="/home/azureuser/spe_dir", info.Source=".../spe_dir/hardlink/newlink.txt"
+	//         => fileRelPath = "hardlink/newlink.txt"
+	//
+	// 2. Strip that suffix from the destination URL path to get the dest prefix.
+	//    copy: destURLPath="meta/spe_dir/hardlink/newlink.txt" => destPrefix="meta/spe_dir/"
+	//    sync: destURLPath="spe_dir/hardlink/newlink.txt"      => destPrefix="spe_dir/"
+	//
+	// 3. Join destPrefix + TargetHardlinkFilePath.
+	//    copy: "meta/spe_dir/" + "hardlink/hlink.txt" = "meta/spe_dir/hardlink/hlink.txt" ✓
+	//    sync: "spe_dir/"      + "hardlink/hlink.txt" = "spe_dir/hardlink/hlink.txt"      ✓
+	sourceRoot := strings.TrimSuffix(jptm.GetSourceRoot(), common.AZCOPY_PATH_SEPARATOR_STRING)
+	fileRelPath := strings.TrimPrefix(strings.TrimPrefix(info.Source, sourceRoot), common.AZCOPY_PATH_SEPARATOR_STRING)
+
+	destURLParts, err := file.ParseURL(info.Destination)
 	if err != nil {
-		jptm.FailActiveSend("creating destination hardlink representative", err)
+		jptm.FailActiveSend("Parsing destination URL", err)
+		return
+	}
+	destPrefix := strings.TrimSuffix(destURLParts.DirectoryOrFilePath, fileRelPath)
+	targetHardlinkFullPath := "/" + path.Join(destPrefix, info.TargetHardlinkFilePath)
+	fmt.Println("-----####### targetHardlinkPath", targetHardlinkFullPath)
+	err = s.CreateHardlink(targetHardlinkFullPath)
+	if err != nil {
+		jptm.FailActiveSend("Creating hardlink", err)
+		return
 	}
 
 	commonSenderCompletion(jptm, baseSender, info)

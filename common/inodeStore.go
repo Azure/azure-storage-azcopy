@@ -20,97 +20,168 @@
 package common
 
 import (
-	"bufio"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 )
 
-type InodeStore struct {
-	mu   sync.RWMutex
-	set  map[string]struct{}
-	file *os.File
+// inodeMeta tracks the position and allocated size of an inode's record in the store file.
+type inodeMeta struct {
+	offset   int64 // byte offset of the record in the file
+	capacity int   // total bytes allocated for this record (including trailing \n)
 }
+
+// InodeStore tracks hardlink relationships by inode.
+// Data is stored on disk with exactly one fixed-size record per inode.
+// A small in-memory index (inode → offset + capacity, ~24 bytes per inode)
+// enables O(1) seeks and in-place updates without scanning the file.
+type InodeStore struct {
+	mu       sync.RWMutex
+	index    map[string]*inodeMeta // inode → file metadata
+	file     *os.File
+	fileSize int64 // current logical end of file (avoids Seek calls)
+}
+
+// recordPadding is extra bytes reserved per record to accommodate anchor path changes.
+// If a new anchor exceeds the capacity, the record is relocated to the end of the file.
+const recordPadding = 64
 
 var inodeStoreInstance *InodeStore
 var inodeStoreOnce sync.Once
 
-func GetInodeStore() (*InodeStore, error) {
+// InitInodeStore initializes the global InodeStore singleton with the given jobID.
+// Must be called once before any GetInodeStore calls (typically right after the job ID is created).
+func InitInodeStore(jobID JobID) error {
 	var err error
 	inodeStoreOnce.Do(func() {
-		inodeStoreInstance, err = NewInodeStore()
+		inodeStoreInstance, err = NewInodeStore(jobID)
 	})
-	return inodeStoreInstance, err
+	return err
 }
 
-func NewInodeStore() (*InodeStore, error) {
-	f, err := os.OpenFile(fmt.Sprintf("%s/inodeStore-%s.txt", filepath.Join(AzcopyJobPlanFolder), NewJobID()), os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
+func GetInodeStore() (*InodeStore, error) {
+	if inodeStoreInstance == nil {
+		return nil, fmt.Errorf("InodeStore not initialized; call InitInodeStore first")
+	}
+	return inodeStoreInstance, nil
+}
+
+func NewInodeStore(jobID JobID) (*InodeStore, error) {
+	f, err := os.OpenFile(
+		fmt.Sprintf("%s/inodeStore-%s.txt", filepath.Join(AzcopyJobPlanFolder), jobID.String()),
+		os.O_CREATE|os.O_RDWR, 0644,
+	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open inode store file: %w", err)
 	}
 
 	return &InodeStore{
-		set:  make(map[string]struct{}),
-		file: f,
+		index:    make(map[string]*inodeMeta),
+		file:     f,
+		fileSize: 0,
 	}, nil
 }
 
-func (s *InodeStore) GetOrAdd(inode, path string) (existingPath string, exists bool, err error) {
-	// Fast path: shared lock
-	s.mu.RLock()
-	_, ok := s.set[inode]
-	s.mu.RUnlock()
+// writeRecord writes a padded record at the current end of the file.
+// Returns the offset and capacity. Must be called with s.mu write lock held.
+func (s *InodeStore) writeRecord(inode, firstPath, anchor string) (int64, int, error) {
+	content := fmt.Sprintf("%s %s %s", inode, firstPath, anchor)
+	capacity := len(content) + recordPadding + 1 // +1 for trailing \n
+	padded := content + strings.Repeat(" ", capacity-len(content)-1) + "\n"
 
-	if ok {
-		// inode seen before → lookup from file
-		p, err := s.lookupFromFile(inode)
-		return p, true, err
+	offset := s.fileSize
+	if _, err := s.file.WriteAt([]byte(padded), offset); err != nil {
+		return 0, 0, fmt.Errorf("failed to write record: %w", err)
+	}
+	s.fileSize += int64(capacity)
+	return offset, capacity, nil
+}
+
+// overwriteRecord updates the anchor of an existing record in place.
+// If the new content exceeds the record's capacity, relocates to the end of the file.
+// Must be called with s.mu write lock held.
+func (s *InodeStore) overwriteRecord(meta *inodeMeta, inode, firstPath, newAnchor string) error {
+	content := fmt.Sprintf("%s %s %s", inode, firstPath, newAnchor)
+
+	if len(content)+1 > meta.capacity {
+		// New content doesn't fit — relocate record to end of file (old slot becomes dead space)
+		offset, capacity, err := s.writeRecord(inode, firstPath, newAnchor)
+		if err != nil {
+			return err
+		}
+		meta.offset = offset
+		meta.capacity = capacity
+		return nil
 	}
 
-	// Slow path: exclusive lock
+	padded := content + strings.Repeat(" ", meta.capacity-len(content)-1) + "\n"
+	if _, err := s.file.WriteAt([]byte(padded), meta.offset); err != nil {
+		return fmt.Errorf("failed to overwrite record: %w", err)
+	}
+	return nil
+}
+
+// readRecord reads and parses the record at the given metadata location.
+// Uses position-independent ReadAt so it's safe under RLock with concurrent readers.
+func (s *InodeStore) readRecord(meta *inodeMeta) (firstPath, anchor string, err error) {
+	buf := make([]byte, meta.capacity)
+	if _, err := s.file.ReadAt(buf, meta.offset); err != nil {
+		return "", "", fmt.Errorf("failed to read record at offset %d: %w", meta.offset, err)
+	}
+	line := strings.TrimRight(string(buf), " \n")
+	parts := strings.SplitN(line, " ", 3)
+	if len(parts) != 3 {
+		return "", "", fmt.Errorf("corrupt record at offset %d: %q", meta.offset, line)
+	}
+	return parts[1], parts[2], nil
+}
+
+// GetOrAdd registers a path for the given inode.
+// If the inode is new, writes a record to disk and returns ("", false, nil).
+// If the inode was seen before, returns (firstPath, true, nil) and
+// updates the anchor in place on disk if the new path is lexicographically smaller.
+func (s *InodeStore) GetOrAdd(inode, path string) (existingPath string, exists bool, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Double-check after acquiring write lock
-	if _, ok := s.set[inode]; ok {
-		p, err := s.lookupFromFile(inode)
-		return p, true, err
+	if meta, ok := s.index[inode]; ok {
+		// Inode seen before → read current record from disk
+		firstPath, anchor, err := s.readRecord(meta)
+		if err != nil {
+			return "", false, err
+		}
+		// Update anchor deterministically: keep the lexicographically smallest path.
+		if path < anchor {
+			if err := s.overwriteRecord(meta, inode, firstPath, path); err != nil {
+				return "", false, err
+			}
+		}
+		return firstPath, true, nil
 	}
 
-	// New inode → record it
-	s.set[inode] = struct{}{}
-	_, err = fmt.Fprintf(s.file, "%s %s\n", inode, path)
+	// New inode → write first record to disk
+	offset, capacity, err := s.writeRecord(inode, path, path)
 	if err != nil {
 		return "", false, err
 	}
-
-	// Return empty path for a new inode
+	s.index[inode] = &inodeMeta{offset: offset, capacity: capacity}
 	return "", false, nil
 }
 
-func (s *InodeStore) lookupFromFile(inode string) (string, error) {
-	// We must sync file access
-	s.mu.Lock()
-	defer s.mu.Unlock()
+// GetAnchor returns the current anchor path for the given inode by reading from disk.
+func (s *InodeStore) GetAnchor(inode string) (string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
-	if _, err := s.file.Seek(0, io.SeekStart); err != nil {
+	meta, ok := s.index[inode]
+	if !ok {
+		return "", fmt.Errorf("anchor for inode %s not found", inode)
+	}
+	_, anchor, err := s.readRecord(meta)
+	if err != nil {
 		return "", err
 	}
-
-	scanner := bufio.NewScanner(s.file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		parts := strings.SplitN(line, " ", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		if parts[0] == inode {
-			return parts[1], nil
-		}
-	}
-
-	return "", fmt.Errorf("inode %s not found in store", inode)
+	return anchor, nil
 }

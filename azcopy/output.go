@@ -156,6 +156,7 @@ Number of Copy Transfers Failed: %v
 Number of Deletions at Destination: %v
 Number of Symbolic Links Skipped: %v
 Number of Special Files Skipped: %v
+Number of Hardlinks Transferred: %v
 Number of Hardlinks Converted: %v
 Number of Hardlinks Skipped: %v
 Total Number of Bytes Transferred: %v
@@ -175,6 +176,7 @@ Final Job Status: %v%s%s
 		result.DeleteTransfersCompleted,
 		result.SkippedSymlinkCount,
 		result.SkippedSpecialFileCount,
+		result.HardlinksTransferCount,
 		result.HardlinksConvertedCount,
 		result.SkippedHardlinkCount,
 		result.TotalBytesTransferred,

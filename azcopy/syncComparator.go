@@ -40,6 +40,9 @@ const (
 	syncOverwriteReasonNewerLMTAndMissingHash = "the source lacks an associated hash (please upload with --put-md5 for hash comparison) and is more recent than the destination"
 	syncStatusSkipped                         = "skipped"
 	syncStatusOverwritten                     = "overwritten"
+	syncEntityTypeMismatch                    = "the source and destination have different entity types (file/folder/symlink/hardlink)"
+	syncHardlinkTargetMismatch                = "the source and destination hardlinks point to different targets"
+	syncSourceMissingForPendingHardlink       = "the source hardlink is missing, so the destination hardlink is considered stale and will be deleted"
 )
 
 func syncComparatorLog(fileName, status, skipReason string, stdout bool) {
@@ -71,10 +74,24 @@ type syncDestinationComparator struct {
 
 	preferSMBTime     bool
 	disableComparison bool
+
+	destPendingHardlinkObjects traverser.ObjectIndexer
 }
 
-func NewSyncDestinationComparator(i *traverser.ObjectIndexer, copyScheduler, cleaner traverser.ObjectProcessor, comparisonHashType common.SyncHashType, preferSMBTime, disableComparison bool) *syncDestinationComparator {
-	return &syncDestinationComparator{sourceIndex: i, copyTransferScheduler: copyScheduler, destinationCleaner: cleaner, preferSMBTime: preferSMBTime, disableComparison: disableComparison, comparisonHashType: comparisonHashType}
+func NewSyncDestinationComparator(i *traverser.ObjectIndexer,
+	copyScheduler,
+	cleaner traverser.ObjectProcessor,
+	comparisonHashType common.SyncHashType,
+	preferSMBTime,
+	disableComparison bool,
+	hardlinkIndexer *traverser.ObjectIndexer) *syncDestinationComparator {
+	return &syncDestinationComparator{sourceIndex: i,
+		copyTransferScheduler:      copyScheduler,
+		destinationCleaner:         cleaner,
+		preferSMBTime:              preferSMBTime,
+		disableComparison:          disableComparison,
+		comparisonHashType:         comparisonHashType,
+		destPendingHardlinkObjects: *hardlinkIndexer}
 }
 
 // it will only schedule transfers for destination objects that are present in the indexer but stale compared to the entry in the map
@@ -83,6 +100,17 @@ func NewSyncDestinationComparator(i *traverser.ObjectIndexer, copyScheduler, cle
 // if file x from the destination exists at the source, then we'd only transfer it if it is considered stale compared to its counterpart at the source
 // if file x does not exist at the source, then it is considered extra, and will be deleted
 func (f *syncDestinationComparator) ProcessIfNecessary(destinationObject traverser.StoredObject) error {
+
+	if destinationObject.EntityType == common.EEntityType.Hardlink() {
+
+		// we will process hardlinks in a special way because we need to make sure the relationship is not broken.
+		// So we will not directly schedule the copy transfer here, instead we will put it in a separate map and
+		// process it after we have processed all the other objects. This is to make sure we have the complete picture of
+		// what the destination hardlink relationships look like before we decide whether we need to break any of them.
+		f.destPendingHardlinkObjects.IndexMap[destinationObject.RelativePath] = destinationObject
+		return nil
+	}
+
 	sourceObjectInMap, present := f.sourceIndex.IndexMap[destinationObject.RelativePath]
 	if !present && f.sourceIndex.IsDestinationCaseInsensitive {
 		lcRelativePath := strings.ToLower(destinationObject.RelativePath)
@@ -91,17 +119,31 @@ func (f *syncDestinationComparator) ProcessIfNecessary(destinationObject travers
 
 	// if the destinationObject is present at source and stale, we transfer the up-to-date version from source
 	if present {
+		// Clean up the index map once we start processing this path
 		defer delete(f.sourceIndex.IndexMap, destinationObject.RelativePath)
 
+		// FORCE OVERWRITE: If comparison is disabled, schedule transfer immediately
 		if f.disableComparison {
 			syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, false)
 			return f.copyTransferScheduler(sourceObjectInMap)
 		}
 
+		if sourceObjectInMap.EntityType == common.EEntityType.Hardlink() {
+			// Case: Destination is a File/Folder/Symlink, but Source is now a Hardlink
+			syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncEntityTypeMismatch, false)
+
+			// Delete the independent file/folder/symlink to allow link creation
+			_ = f.destinationCleaner(destinationObject)
+			return f.copyTransferScheduler(sourceObjectInMap)
+		}
+
+		// CONTENT VALIDATION: Hash Comparison
+		// If it's a file and hash comparison is enabled, we check data integrity.
 		if f.comparisonHashType != common.ESyncHashType.None() && sourceObjectInMap.EntityType == common.EEntityType.File() {
 			switch f.comparisonHashType {
 			case common.ESyncHashType.MD5():
 				if sourceObjectInMap.Md5 == nil {
+					// Fallback to LMT if hashes are missing
 					if sourceObjectInMap.IsMoreRecentThan(destinationObject, f.preferSMBTime) {
 						syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMTAndMissingHash, false)
 						return f.copyTransferScheduler(sourceObjectInMap)
@@ -124,6 +166,9 @@ func (f *syncDestinationComparator) ProcessIfNecessary(destinationObject travers
 
 			syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusSkipped, syncSkipReasonSameHash, false)
 			return nil
+
+			// CONTENT VALIDATION: Last Modified Time (LMT)
+			// Default sync behavior: check if source is newer than destination
 		} else if sourceObjectInMap.IsMoreRecentThan(destinationObject, f.preferSMBTime) {
 			syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMT, false)
 			return f.copyTransferScheduler(sourceObjectInMap)
@@ -131,12 +176,71 @@ func (f *syncDestinationComparator) ProcessIfNecessary(destinationObject travers
 
 		// skip if dest is more recent
 		syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusSkipped, syncSkipReasonTime, false)
+
 	} else {
 		// purposefully ignore the error from destinationCleaner
 		// it's a tolerable error, since it just means some extra destination object might hang around a bit longer
 		_ = f.destinationCleaner(destinationObject)
 	}
 
+	return nil
+}
+
+func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
+
+	for _, destHardlinkObj := range f.destPendingHardlinkObjects.IndexMap {
+
+		sourceObjectInMap, present := f.sourceIndex.IndexMap[destHardlinkObj.RelativePath]
+		if !present {
+			if f.sourceIndex.IsDestinationCaseInsensitive {
+				lcRelativePath := strings.ToLower(destHardlinkObj.RelativePath)
+				sourceObjectInMap, present = f.sourceIndex.IndexMap[lcRelativePath]
+			}
+		}
+
+		if present {
+
+			// Remove from source index so indexer.Traverse won't double-schedule this object
+			delete(f.sourceIndex.IndexMap, destHardlinkObj.RelativePath)
+
+			inodeStoreInstance, err := common.GetInodeStore()
+			if err != nil {
+				return err
+			}
+
+			dstAnchorFile, err := inodeStoreInstance.GetAnchor(destHardlinkObj.Inode)
+			if err != nil {
+				return err
+			}
+
+			// If source is a regular file (not in InodeStore), GetAnchor returns ""
+			// which won't match the dest anchor, naturally triggering the mismatch path.
+			srcAnchorFile, _ := inodeStoreInstance.GetAnchor(sourceObjectInMap.Inode)
+
+			if srcAnchorFile != dstAnchorFile {
+				syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncHardlinkTargetMismatch, false)
+
+				// We must delete the 'wrong' link at destination before creating the 'right' one
+				_ = f.destinationCleaner(destHardlinkObj)
+				if err := f.copyTransferScheduler(sourceObjectInMap); err != nil {
+					return err
+				}
+				continue
+			}
+
+			// Anchor matches — check LMT to see if content changed
+			if sourceObjectInMap.IsMoreRecentThan(destHardlinkObj, f.preferSMBTime) {
+				syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMT, false)
+				if err := f.copyTransferScheduler(sourceObjectInMap); err != nil {
+					return err
+				}
+			}
+		} else {
+			// If the source hardlink is missing, we should delete the destination hardlink as well to avoid leaving stale links behind
+			syncComparatorLog(destHardlinkObj.RelativePath, syncStatusOverwritten, syncSourceMissingForPendingHardlink, false)
+			_ = f.destinationCleaner(destHardlinkObj)
+		}
+	}
 	return nil
 }
 

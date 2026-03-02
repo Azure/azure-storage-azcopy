@@ -95,7 +95,7 @@ func (t *benchmarkTraverser) Traverse(preprocessor objectMorpher, processor Obje
 			NoBlobProps,
 			NoMetadata,
 			"",
-			""), processor)
+			&NFSMetadataContext{}), processor)
 		_, err = getProcessingError(err)
 		if err != nil {
 			return err
