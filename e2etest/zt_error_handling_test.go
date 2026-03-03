@@ -27,6 +27,36 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
+func TestError_CancelFromStdin(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.Other(common.EFromTo.BlobLocal()),
+		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			recursive:       true,
+			capMbps:         0.01,        // slow it down so we have time to cancel
+			blockSizeMB:     0.000858307, // arbitrary number to pass AzCopy validations
+			cancelFromStdin: true,
+		},
+		&hooks{beforeRunJob: func(h hookHelper) {
+			go func() {
+				time.Sleep(1 * time.Second) // wait until mid-transfer
+				h.CancelOnly()              // sends "cancel" to stdin
+			}()
+		}},
+		testFiles{
+			defaultSize: "10K",
+			shouldFail: []interface{}{ // failed because it was canceled
+				"file1",
+				"file2",
+			},
+		},
+		EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
 // Purpose: Tests for how we respond to errors. Maybe also resume?
 
 // TODO: include how we clean up destination files/blobs after errors
@@ -83,33 +113,3 @@ func TestError_CanResume(t *testing.T) {
 //			},
 //		})
 //}
-
-func TestError_CancelFromStdin(t *testing.T) {
-	RunScenarios(
-		t,
-		eOperation.Copy(),
-		eTestFromTo.Other(common.EFromTo.BlobLocal()),
-		eValidate.Auto(),
-		anonymousAuthOnly,
-		anonymousAuthOnly,
-		params{
-			recursive:       true,
-			capMbps:         0.01,        // slow it down so we have time to cancel
-			blockSizeMB:     0.000858307, // arbitrary number to pass AzCopy validations
-			cancelFromStdin: true,
-		},
-		&hooks{beforeRunJob: func(h hookHelper) {
-			go func() {
-				time.Sleep(1 * time.Second) // wait until mid-transfer
-				h.CancelOnly()              // sends "cancel" to stdin
-			}()
-		}},
-		testFiles{
-			defaultSize: "10K",
-			shouldFail: []interface{}{ // failed because it was canceled
-				"file1",
-				"file2",
-			},
-		},
-		EAccountType.Standard(), EAccountType.Standard(), "")
-}
