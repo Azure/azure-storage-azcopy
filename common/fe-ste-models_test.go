@@ -21,9 +21,10 @@
 package common_test
 
 import (
+	"testing"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestEnhanceJobStatusInfo(t *testing.T) {

@@ -164,7 +164,7 @@ func newCookedCopyOptions(src, dst string, opts CopyOptions) (c *CookedTransferO
 	// Special handling for list of files  and include paths. This cannot be checked in validateOptions since they are transformed in applyDefaultsAndInferOptions.
 	// A combined implementation reduces the amount of code duplication present.
 	// However, it _does_ increase the amount of code-intertwining present.
-	if opts.listOfFiles != "" && len(opts.IncludePatterns) > 0 {
+	if opts.listOfFiles != "" && len(opts.IncludePaths) > 0 {
 		return nil, errors.New("cannot combine list of files and include path")
 	}
 
