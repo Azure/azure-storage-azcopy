@@ -75,8 +75,9 @@ func (p *blobSourceInfoProvider) GetUNIXProperties() (common.UnixStatAdapter, er
 	if err != nil {
 		return nil, err
 	}
+	safeMetadata := &common.SafeMetadata{Metadata: prop.SrcMetadata}
 
-	return common.ReadStatFromMetadata(prop.SrcMetadata, p.SourceSize())
+	return common.ReadStatFromMetadata(safeMetadata, p.SourceSize())
 }
 
 func (p *blobSourceInfoProvider) HasUNIXProperties() bool {
