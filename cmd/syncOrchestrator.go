@@ -288,6 +288,15 @@ func validateAndGetRootObject(path string, fromTo common.FromTo) (minimalStoredO
 // with the relative path, and handles path separator normalization.
 // Ensures consistent path formatting across different operating systems.
 func buildChildPath(baseDir, relativePath string, isDirectory bool) string {
+	if isDirectory {
+		// Strip any existing trailing slash from relativePath to avoid double-slashes.
+		// The S3 traverser includes trailing slashes in directory relativePaths (e.g. "dir1/")
+		// while the blob traverser does not (e.g. "dir1"). We unconditionally add the
+		// trailing slash below, so strip it first to keep both traversers consistent.
+		// This is a no-op for blob traverser paths and nameless dirs (relativePath="").
+		relativePath = strings.TrimSuffix(relativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
+	}
+
 	var strs []string
 
 	if baseDir != "" {
@@ -302,6 +311,8 @@ func buildChildPath(baseDir, relativePath string, isDirectory bool) string {
 		childPath += common.AZCOPY_PATH_SEPARATOR_STRING
 	}
 
+	childPath = strings.TrimPrefix(childPath, common.AZCOPY_PATH_SEPARATOR_STRING)
+
 	return childPath
 }
 
@@ -313,6 +324,8 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 
 	isDirectory := so.entityType == common.EEntityType.Folder()
 	so.relativePath = buildChildPath(st.dir, so.relativePath, isDirectory)
+
+	fmt.Printf("PROCESSOR - processing %s\n", so.relativePath)
 
 	// Thread-safe storage in the indexer first
 	st.enumerator.objectIndexer.rwMutex.Lock()
@@ -330,7 +343,7 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 
 	if so.entityType == common.EEntityType.Folder() {
 		st.sub_dirs = append(st.sub_dirs, minimalStoredObject{
-			relativePath: so.relativePath,
+			relativePath: common.AZCOPY_PATH_SEPARATOR_STRING + so.relativePath, // we want enumerator to always operate with a leading slash to handle nameless dirs case (ex: ///blob.txt)
 			changeTime:   so.changeTime,
 		})
 	}
@@ -347,6 +360,9 @@ func (st *SyncTraverser) customComparator(so StoredObject) error {
 	so.relativePath = buildChildPath(st.dir, so.relativePath, isDirectory)
 
 	// comparison and deletion from indexer will happen under the lock
+
+	fmt.Printf("COMPARE - comparing %s\n", so.relativePath)
+
 	return st.comparator(so)
 }
 
@@ -376,6 +392,7 @@ func (st *SyncTraverser) finalize(scheduleTransfer bool) error {
 
 	// Process collected items while still holding the lock to prevent concurrent access
 	for _, path := range itemsToProcess {
+		fmt.Printf("FINALIZE - processing %s\n", path)
 		err := st.finalizeChild(path, scheduleTransfer)
 		if err != nil {
 			return err
@@ -451,9 +468,6 @@ func (st *SyncTraverser) finalizeChild(child string, scheduleTransfer bool) erro
 	if exists {
 		// Schedule the file/directory for transfer using the pointer
 		if scheduleTransfer {
-			// Strip leading "/" before scheduling — scheduleCopyTransfer prepends
-			// its own "/" so a leading "/" in relativePath would produce a double-slash in the constructed URL.
-			storedObject.relativePath = strings.TrimPrefix(storedObject.relativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 			err := st.enumerator.ctp.scheduleCopyTransfer(storedObject)
 			if err != nil {
 				return err
