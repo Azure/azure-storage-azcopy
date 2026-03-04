@@ -361,8 +361,8 @@ func (st *SyncTraverser) customComparator(so StoredObject) error {
 // This method is called after both source and destination traversals are complete.
 func (st *SyncTraverser) finalize(scheduleTransfer bool) error {
 
-	// st.dir is always the correct prefix: "/" for root, "/dir1/" for subdirs, etc.
-	dirPrefix := st.dir
+	// st.dir will have leading slash but the paths in the indexer do not
+	dirPrefix := strings.TrimPrefix(st.dir, common.AZCOPY_PATH_SEPARATOR_STRING)
 
 	// Use exclusive lock for the entire operation to prevent concurrent iteration and modification
 	st.enumerator.objectIndexer.rwMutex.RLock()
