@@ -237,8 +237,8 @@ func (lcm *lifecycleMgr) checkAndStartCPUProfiling() {
 	// the value AZCOPY_PROFILE_CPU indicates the path to save CPU profiling data.
 	// e.g. export AZCOPY_PROFILE_CPU="cpu.prof"
 	// For more details, please refer to https://golang.org/pkg/runtime/pprof/
-	cpuProfilePath := common.GetEnvironmentVariable(common.EEnvironmentVariable.ProfileCPU())
-	if cpuProfilePath != "" {
+	cpuProfilePath, _, ok := common.EEnvironmentVariable.ProfileCPU().Lookup()
+	if ok {
 		lcm.Info(fmt.Sprintf("pprof start CPU profiling, and saving profiling data to: %q", cpuProfilePath))
 		f, err := os.Create(cpuProfilePath)
 		if err != nil {
@@ -260,8 +260,8 @@ func (lcm *lifecycleMgr) checkAndTriggerMemoryProfiling() {
 	// the value AZCOPY_PROFILE_MEM indicates the path to save memory profiling data.
 	// e.g. export AZCOPY_PROFILE_MEM="mem.prof"
 	// For more details, please refer to https://golang.org/pkg/runtime/pprof/
-	memProfilePath := common.GetEnvironmentVariable(common.EEnvironmentVariable.ProfileMemory())
-	if memProfilePath != "" {
+	memProfilePath, _, ok := common.EEnvironmentVariable.ProfileMemory().Lookup()
+	if ok {
 		lcm.Info(fmt.Sprintf("pprof start memory profiling, and saving profiling data to: %q", memProfilePath))
 		f, err := os.Create(memProfilePath)
 		if err != nil {

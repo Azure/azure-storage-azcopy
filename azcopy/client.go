@@ -87,13 +87,13 @@ func NewClient(opts ClientOptions) (Client, error) {
 	if common.AzcopyJobPlanFolder == "" {
 		panic("invalid state, AzcopyJobPlanFolder should not be an empty string")
 	}
-	cacheName := common.GetEnvironmentVariable(common.EEnvironmentVariable.LoginCacheName())
+	cacheName, _, specifiedCache := common.EEnvironmentVariable.LoginCacheName().Lookup()
 
 	c.oauthTokenManager = common.NewUserOAuthTokenManagerInstance(common.CredCacheOptions{
 		DPAPIFilePath: common.AzcopyJobPlanFolder,
-		KeyName:       common.Iff(cacheName != "", cacheName, oauthLoginSessionCacheKeyName),
+		KeyName:       common.Iff(specifiedCache, cacheName, oauthLoginSessionCacheKeyName),
 		ServiceName:   oauthLoginSessionCacheServiceName,
-		AccountName:   common.Iff(cacheName != "", cacheName, oauthLoginSessionCacheAccountName),
+		AccountName:   common.Iff(specifiedCache, cacheName, oauthLoginSessionCacheAccountName),
 	})
 	return c, nil
 }

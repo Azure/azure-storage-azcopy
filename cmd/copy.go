@@ -852,7 +852,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// Make AUTO default for Azure Files since Azure Files throttles too easily unless user specified concurrency value
 	if jobsAdmin.JobsAdmin != nil &&
 		(cca.FromTo.From().IsFile() || cca.FromTo.To().IsFile()) &&
-		common.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue()) == "" {
+		!common.EEnvironmentVariable.ConcurrencyValue().IsSet() {
 		jobsAdmin.JobsAdmin.SetConcurrencySettingsToAuto()
 	}
 
