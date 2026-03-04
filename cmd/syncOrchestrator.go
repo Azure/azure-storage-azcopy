@@ -351,8 +351,6 @@ func (st *SyncTraverser) customComparator(so StoredObject) error {
 
 	// comparison and deletion from indexer will happen under the lock
 
-	fmt.Printf("COMPARE - comparing %s\n", so.relativePath)
-
 	return st.comparator(so)
 }
 
