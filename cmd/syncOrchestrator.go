@@ -275,7 +275,7 @@ func validateAndGetRootObject(path string, fromTo common.FromTo) (minimalStoredO
 
 	if err == nil {
 		return minimalStoredObject{
-			relativePath:           common.AZCOPY_PATH_SEPARATOR_STRING, // "/" represents the root directory
+			relativePath:           common.AZCOPY_PATH_SEPARATOR_STRING, // we want enumerator to always operate with a leading slash to handle nameless dirs case (ex: ///blob.txt)
 			changeTime:             time.Time{},
 			isPresentAtDestination: true,
 		}, nil
@@ -289,29 +289,21 @@ func validateAndGetRootObject(path string, fromTo common.FromTo) (minimalStoredO
 // Ensures consistent path formatting across different operating systems.
 func buildChildPath(baseDir, relativePath string, isDirectory bool) string {
 	if isDirectory {
-		// Strip any existing trailing slash from relativePath to avoid double-slashes.
-		// The S3 traverser includes trailing slashes in directory relativePaths (e.g. "dir1/")
-		// while the blob traverser does not (e.g. "dir1"). We unconditionally add the
-		// trailing slash below, so strip it first to keep both traversers consistent.
-		// This is a no-op for blob traverser paths and nameless dirs (relativePath="").
+		// S3 traverser will return relative paths with trailing '/' and blob traverser will not
+		// this line normalizes relative paths such that they will not end with '/' regardless of the traverser implementation
 		relativePath = strings.TrimSuffix(relativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 	}
 
-	var strs []string
-
+	childPath := relativePath
 	if baseDir != "" {
-		strs = []string{baseDir, relativePath}
-	} else {
-		strs = []string{relativePath}
+		childPath = baseDir + relativePath
 	}
-
-	childPath := strings.Join(strs, "")
 
 	if isDirectory {
 		childPath += common.AZCOPY_PATH_SEPARATOR_STRING
 	}
 
-	childPath = strings.TrimPrefix(childPath, common.AZCOPY_PATH_SEPARATOR_STRING)
+	childPath = strings.TrimPrefix(childPath, common.AZCOPY_PATH_SEPARATOR_STRING) // we want to store paths in object indexer without a slash to be in correct format for scheduleTransfer
 
 	return childPath
 }
