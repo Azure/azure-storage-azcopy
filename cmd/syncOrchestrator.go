@@ -325,8 +325,6 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 	isDirectory := so.entityType == common.EEntityType.Folder()
 	so.relativePath = buildChildPath(st.dir, so.relativePath, isDirectory)
 
-	fmt.Printf("PROCESSOR - processing %s\n", so.relativePath)
-
 	// Thread-safe storage in the indexer first
 	st.enumerator.objectIndexer.rwMutex.Lock()
 	err := st.enumerator.objectIndexer.store(so)
@@ -392,7 +390,6 @@ func (st *SyncTraverser) finalize(scheduleTransfer bool) error {
 
 	// Process collected items while still holding the lock to prevent concurrent access
 	for _, path := range itemsToProcess {
-		fmt.Printf("FINALIZE - processing %s\n", path)
 		err := st.finalizeChild(path, scheduleTransfer)
 		if err != nil {
 			return err
