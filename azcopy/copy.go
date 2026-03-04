@@ -142,12 +142,16 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (
 		copyHandler = common.NewJobUIHooks()
 		common.SetUIHooks(copyHandler)
 	}
-	jobID := common.NewJobID()
-	c.CurrentJobID = jobID
+	jobID := c.CurrentJobID
+	if jobID.IsEmpty() {
+		jobID = common.NewJobID()
+		c.CurrentJobID = jobID
+	}
 	timeAtPrestart := time.Now()
-	common.AzcopyCurrentJobLogger = common.NewJobLogger(jobID, c.GetLogLevel(), common.LogPathFolder, "")
-	common.AzcopyCurrentJobLogger.OpenLog()
-
+	if common.AzcopyCurrentJobLogger == nil { // In the unlikely case, logger is not initialized in root.go
+		common.AzcopyCurrentJobLogger = common.NewJobLogger(c.CurrentJobID, c.GetLogLevel(), common.LogPathFolder, "")
+		common.AzcopyCurrentJobLogger.OpenLog()
+	}
 	defer common.AzcopyCurrentJobLogger.CloseLog()
 
 	// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter
