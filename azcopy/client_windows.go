@@ -22,7 +22,7 @@ package azcopy
 
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/minio/minio-go"
+	"github.com/minio/minio-go/v6"
 	"math"
 	"net/http"
 )

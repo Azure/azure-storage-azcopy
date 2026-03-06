@@ -24,7 +24,7 @@ import (
 	"encoding/base64"
 	"strings"
 
-	minio "github.com/minio/minio-go"
+	minio "github.com/minio/minio-go/v6"
 )
 
 type ObjectInfoExtension struct {

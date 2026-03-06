@@ -59,7 +59,7 @@ import (
 	gcpUtils "cloud.google.com/go/storage"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"github.com/minio/minio-go"
+	"github.com/minio/minio-go/v6"
 	"google.golang.org/api/iterator"
 )
 

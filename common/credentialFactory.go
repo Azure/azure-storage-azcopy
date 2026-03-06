@@ -23,14 +23,13 @@ package common
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 
 	gcpUtils "cloud.google.com/go/storage"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
-	"github.com/minio/minio-go"
-	"github.com/minio/minio-go/pkg/credentials"
+	"github.com/minio/minio-go/v6"
+	"github.com/minio/minio-go/v6/pkg/credentials"
 )
 
 // ==============================================================================================
@@ -50,7 +49,7 @@ func CreateS3Credential(ctx context.Context, credInfo CredentialInfo) (*credenti
 		// create and return s3 credential
 		return credentials.NewStaticV4(accessKeyID, secretAccessKey, sessionToken), nil // S3 uses V4 signature
 	default:
-		panic(fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType))
+		return credentials.NewIAM(""), nil
 	}
 }
 

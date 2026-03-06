@@ -53,7 +53,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	gcpUtils "cloud.google.com/go/storage"
-	"github.com/minio/minio-go"
+	"github.com/minio/minio-go/v6"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )

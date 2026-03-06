@@ -45,7 +45,7 @@ import (
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/minio/minio-go"
+	"github.com/minio/minio-go/v6"
 	"github.com/stretchr/testify/assert"
 )
 

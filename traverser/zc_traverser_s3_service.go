@@ -26,7 +26,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/minio/minio-go"
+	"github.com/minio/minio-go/v6"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
