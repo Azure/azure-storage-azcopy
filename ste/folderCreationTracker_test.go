@@ -194,3 +194,48 @@ func TestFolderCreationTracker_directoryExists(t *testing.T) {
 
 	a.NoError(err)
 }
+
+// This test verifies that when a folder's plan transfer status is changed to SkippedEntityAlreadyExists
+// (e.g. by overwrite=false/ifsourcenewer logic) outside the tracker's mutex, a concurrent CreateFolder
+// call for the same folder does not panic. This reproduces the race condition from
+// https://github.com/Azure/azure-storage-azcopy/issues/2834
+func TestFolderCreationTracker_skippedEntityDoesNotPanic(t *testing.T) {
+	a := assert.New(t)
+
+	folder := "folder"
+	idx := JpptFolderIndex{0, 1}
+
+	plan := &mockedJobPlan{
+		transfers: map[JpptFolderIndex]*JobPartPlanTransfer{
+			idx: {atomicTransferStatus: common.ETransferStatus.NotStarted()},
+		},
+	}
+
+	fct := &jpptFolderTracker{
+		fetchTransfer: plan.getFetchTransfer(t),
+		mu:            &sync.Mutex{},
+		contents:      make(map[string]*JpptFolderTrackerState),
+	}
+
+	// Register and create the folder (simulates EnsureFolderExists from a file transfer)
+	fct.RegisterPropertiesTransfer(folder, idx.PartNum, idx.TransferIndex)
+	err := fct.CreateFolder(folder, func() error {
+		return common.FolderCreationErrorAlreadyExists{}
+	})
+	a.NoError(err)
+	a.Equal(common.ETransferStatus.FolderExisted(), plan.transfers[idx].TransferStatus())
+
+	// Simulate what happens when the folder properties transfer sets SkippedEntityAlreadyExists
+	// outside the tracker's mutex (via jptm.SetStatus in anyToRemote_folder)
+	plan.transfers[idx].SetTransferStatus(common.ETransferStatus.SkippedEntityAlreadyExists(), true)
+
+	// A concurrent CreateFolder call (e.g. from a child file transfer creating parent dirs)
+	// should not panic and should return nil without re-creating the folder.
+	a.NotPanics(func() {
+		err = fct.CreateFolder(folder, func() error {
+			a.Fail("folder should not be re-created when plan status is SkippedEntityAlreadyExists")
+			return nil
+		})
+	})
+	a.NoError(err)
+}
