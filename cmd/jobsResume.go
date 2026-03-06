@@ -116,7 +116,10 @@ func (rca resumeCmdArgs) process() error {
 	go func() {
 		sigChan := make(chan os.Signal, 1)
 		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-		<-sigChan
+		select {
+		case <-sigChan:
+		case <-glcm.CancelFromStdinChannel():
+		}
 		cancel()
 	}()
 
