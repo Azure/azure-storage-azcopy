@@ -8,8 +8,6 @@ import (
 	"os/user"
 	"strconv"
 	"strings"
-	"sync"
-	"syscall"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -283,22 +281,8 @@ func (h HandleNFSPermissions) GetFileMode() *string {
 	return to.Ptr(fmt.Sprintf("%#o", fileMode))
 }
 
-var (
-	umask     int
-	umaskOnce sync.Once
-)
-
-// getUmask retrieves the current process's umask without permanently modifying it.
-func getUmask() int {
-	umaskOnce.Do(func() {
-		// Set umask to 0, capture the old value
-		current := syscall.Umask(0)
-		// Restore it immediately
-		syscall.Umask(current)
-		umask = current
-	})
-	return umask
-}
+// getUmask is a package-local alias for common.GetUmask.
+var getUmask = common.GetUmask
 
 // GetNFSDefaultPerms retrieves the default file permissions, owner UID, and group GID
 // for the current user, with permissions adjusted based on the user's umask.
