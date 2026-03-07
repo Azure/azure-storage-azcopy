@@ -330,3 +330,13 @@ func (a *azureFilesDownloader) CreateSymlink(jptm IJobPartTransferMgr) error {
 
 	return err
 }
+
+func (a *azureFilesDownloader) CreateHardlink(jptm IJobPartTransferMgr) error {
+	// create the link
+	oldFullPath := getFullPath(jptm.Info().TargetHardlinkFilePath, jptm.Info().Destination)
+	err := os.Link(oldFullPath, jptm.Info().Destination)
+	if err != nil {
+		fmt.Println(fmt.Errorf("failed to create hardlink from %s to %s: %w", oldFullPath, jptm.Info().Destination, err))
+	}
+	return err
+}
