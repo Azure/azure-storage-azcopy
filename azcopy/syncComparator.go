@@ -76,6 +76,12 @@ type syncDestinationComparator struct {
 	disableComparison bool
 
 	destPendingHardlinkObjects traverser.ObjectIndexer
+
+	// srcPathToInode is a snapshot of the source index built on the first call to
+	// ProcessIfNecessary (before any deletions). It maps each source path → its inode ID.
+	// Used in ProcessPendingHardlinks to check whether a dest anchor path is still a
+	// member of the source inode group, without needing the full nested group map.
+	srcPathToInode map[string]string
 }
 
 func NewSyncDestinationComparator(i *traverser.ObjectIndexer,
@@ -100,6 +106,13 @@ func NewSyncDestinationComparator(i *traverser.ObjectIndexer,
 // if file x from the destination exists at the source, then we'd only transfer it if it is considered stale compared to its counterpart at the source
 // if file x does not exist at the source, then it is considered extra, and will be deleted
 func (f *syncDestinationComparator) ProcessIfNecessary(destinationObject traverser.StoredObject) error {
+
+	// Lazy-init: snapshot the source inode groups the first time we are called.
+	// At this point source traversal is complete and the sourceIndex is fully
+	// populated; no deletions from ProcessIfNecessary have happened yet.
+	if f.srcPathToInode == nil {
+		f.srcPathToInode = buildSrcPathToInode(f.sourceIndex.IndexMap)
+	}
 
 	if destinationObject.EntityType == common.EEntityType.Hardlink() {
 
@@ -186,6 +199,22 @@ func (f *syncDestinationComparator) ProcessIfNecessary(destinationObject travers
 	return nil
 }
 
+// buildSrcPathToInode builds a flat map of source path → inode ID.
+// It is called once from ProcessIfNecessary (see lazy-init above) before any
+// deletions from sourceIndex occur, so every source path is captured.
+// A flat map is sufficient because ProcessPendingHardlinks only needs to answer
+// "does this dest-anchor path exist in the source with inode X?" — no nested
+// group structure is required, and no inner map allocations are needed.
+func buildSrcPathToInode(indexMap map[string]traverser.StoredObject) map[string]string {
+	m := make(map[string]string, len(indexMap))
+	for path, obj := range indexMap {
+		if obj.Inode != "" {
+			m[path] = obj.Inode
+		}
+	}
+	return m
+}
+
 func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 
 	for _, destHardlinkObj := range f.destPendingHardlinkObjects.IndexMap {
@@ -218,23 +247,48 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 			srcAnchorFile, _ := inodeStoreInstance.GetAnchor(sourceObjectInMap.Inode)
 
 			if srcAnchorFile != dstAnchorFile {
-				syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncHardlinkTargetMismatch, false)
+				// Before declaring a mismatch, check if dstAnchorFile is still a member
+				// of the source inode group that this hardlink belongs to.
+				//
+				// Example: dest was synced when the group was {B,C,D} → dstAnchor="B".
+				// A new file "A" was added to the source group → srcAnchor="A".
+				// But B, C, D are still in the same source inode group, so the link
+				// C→B at dest is still valid.  Only a lex-smaller name was introduced.
+				//
+				// f.srcInodeGroups is built from the full source index before any
+				// ProcessIfNecessary deletions, so B is guaranteed to be present even
+				// though it was removed from sourceIndex during dest-B processing.
+				// Check: is the dest anchor path still a member of the source inode group?
+				// srcPathToInode[dstAnchorFile] gives the inode of that path at source
+				// (captured before any deletions). If it matches this hardlink's source
+				// inode, the group is intact — only a lex-smaller name was introduced.
+				fmt.Println("--------destination path", destHardlinkObj.RelativePath)
+				fmt.Println("----------Debug: srcAnchorFile=", srcAnchorFile, " dstAnchorFile=", dstAnchorFile, " sourceObjectInMap.Inode=", sourceObjectInMap.Inode)
+				if f.srcPathToInode[dstAnchorFile] != sourceObjectInMap.Inode {
+					fmt.Println("!!!!!!!!Inode not same", " f.srcPathToInode[dstAnchorFile]=", f.srcPathToInode[dstAnchorFile], " sourceObjectInMap.Inode=", sourceObjectInMap.Inode)
+					// dstAnchor is not in the source group → relationship truly changed.
+					syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncHardlinkTargetMismatch, false)
 
-				// We must delete the 'wrong' link at destination before creating the 'right' one
-				_ = f.destinationCleaner(destHardlinkObj)
-				if err := f.copyTransferScheduler(sourceObjectInMap); err != nil {
-					return err
+					// We must delete the 'wrong' link at destination before creating the 'right' one
+					_ = f.destinationCleaner(destHardlinkObj)
+					if err := f.copyTransferScheduler(sourceObjectInMap); err != nil {
+						return err
+					}
+					continue
 				}
-				continue
+				// else: dstAnchor is still in the source group → fall through to LMT check.
 			}
 
-			// Anchor matches — check LMT to see if content changed
-			if sourceObjectInMap.IsMoreRecentThan(destHardlinkObj, f.preferSMBTime) {
-				syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMT, false)
-				if err := f.copyTransferScheduler(sourceObjectInMap); err != nil {
-					return err
-				}
-			}
+			// The hardlink relationship is intact — skip re-transfer.
+			//
+			// A hardlink transfer calls CreateHardlink(anchorPath); it does not transfer
+			// content.  Content lives in the shared inode and is owned by the anchor file.
+			// If the anchor's content changed, the anchor's own transfer (scheduled
+			// separately as a regular file) already handles that.  Re-creating the link
+			// here would be redundant and would not update any data.
+			// Therefore, LMT comparison is not meaningful for hardlinks when the
+			// relationship is correct, and we always skip.
+			syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusSkipped, syncSkipReasonTime, false)
 		} else {
 			// If the source hardlink is missing, we should delete the destination hardlink as well to avoid leaving stale links behind
 			syncComparatorLog(destHardlinkObj.RelativePath, syncStatusOverwritten, syncSourceMissingForPendingHardlink, false)

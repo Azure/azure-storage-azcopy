@@ -1278,8 +1278,160 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_NestedDirectories(svm *Scenari
 	ValidateHardlinksTransferCount(svm, stdOut, 2)
 }
 
-// ===========================================================================================
-// Hardlink Preserve Copy Scenarios (Local → Azure Files NFS, using `azcopy copy`)
+// Scenario 19: Lex-smaller anchor added to existing group — no false-positive mismatch.
+//
+// Background: dest was synced previously when the hardlink group was {B, C, D}.
+// At that time "B" was the lexicographically smallest name, so it became the anchor
+// at both source and destination.
+//
+// Since then a new file "A" was added to the same inode group on the source.
+// "A" < "B" so the source anchor has shifted to "A", while dest anchor is still "B".
+//
+// Without the fix in ProcessPendingHardlinks this would look like a target mismatch and
+// C and D would be deleted and recreated unnecessarily.
+// With the fix the code checks whether the dest anchor ("B") is still a member of the
+// source inode group — it is — so C and D are left untouched.
+//
+// Source (after A added):
+//
+//	A.txt          (regular file / anchor, nlink=4 — lex-smallest)
+//	B.txt          (hardlink → A.txt)
+//	C.txt          (hardlink → A.txt)
+//	D.txt          (hardlink → A.txt)
+//
+// Destination (before sync — result of a previous sync of {B,C,D}):
+//
+//	B.txt          (regular file / anchor, nlink=3)
+//	C.txt          (hardlink → B.txt)
+//	D.txt          (hardlink → B.txt)
+//
+// Expected after sync:
+//   - A.txt created as regular file (new, was not at dest)
+//   - B.txt deleted (entity-type changed: was File at dest, now Hardlink at source)
+//     and recreated as Hardlink → A.txt
+//   - C.txt and D.txt are NOT touched (the fix prevents unnecessary recreation)
+//   - HardlinksTransferCount == 1  (only B.txt needed a hardlink transfer;
+//     C.txt and D.txt were skipped)
+func (s *FilesNFSTestSuite) Scenario_HardlinkSync_LexSmallerAnchorAdded(svm *ScenarioVariationManager) {
+	if runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainers(svm)
+	defer CleanupNFSDirectory(svm, dstContainer, rootDir)
+
+	nameA := rootDir + "/A.txt"
+	nameB := rootDir + "/B.txt"
+	nameC := rootDir + "/C.txt"
+	nameD := rootDir + "/D.txt"
+
+	// ── Set up destination: previous sync result ─────────────────────────────
+	// B was the anchor when the group was {B, C, D}.
+	dstDir := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+	dstDir.Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Folder()})
+
+	dstB := dstContainer.GetObject(svm, nameB, common.EEntityType.File())
+	dstB.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{})
+	dstB.SetObjectProperties(svm, ObjectProperties{
+		FileNFSProperties: &FileNFSProperties{
+			FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
+			FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
+		},
+	})
+
+	dstC := dstContainer.GetObject(svm, nameC, common.EEntityType.Hardlink())
+	dstC.Create(svm, nil, ObjectProperties{
+		EntityType:         common.EEntityType.Hardlink(),
+		HardLinkedFileName: nameB,
+	})
+
+	dstD := dstContainer.GetObject(svm, nameD, common.EEntityType.Hardlink())
+	dstD.Create(svm, nil, ObjectProperties{
+		EntityType:         common.EEntityType.Hardlink(),
+		HardLinkedFileName: nameB,
+	})
+
+	if !svm.Dryrun() {
+		time.Sleep(5 * time.Second)
+	}
+
+	// ── Set up source: A has been added as lex-smallest member ───────────────
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName:       pointerTo(rootDir),
+		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()},
+	})
+
+	// A is the new anchor at source (lex-smallest); it is a regular file.
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName: pointerTo(nameA),
+		Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
+		ObjectProperties: ObjectProperties{
+			EntityType: common.EEntityType.File(),
+		},
+	})
+
+	// B, C, D are now hardlinks → A on the source.
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName: pointerTo(nameB),
+		ObjectProperties: ObjectProperties{
+			EntityType:         common.EEntityType.Hardlink(),
+			HardLinkedFileName: nameA,
+		},
+	})
+
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName: pointerTo(nameC),
+		ObjectProperties: ObjectProperties{
+			EntityType:         common.EEntityType.Hardlink(),
+			HardLinkedFileName: nameA,
+		},
+	})
+
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName: pointerTo(nameD),
+		ObjectProperties: ObjectProperties{
+			EntityType:         common.EEntityType.Hardlink(),
+			HardLinkedFileName: nameA,
+		},
+	})
+
+	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+
+	stdOut := runHardlinkSync(svm, srcDirObj, dstDir.(RemoteResourceManager), false)
+
+	// ── Validate ─────────────────────────────────────────────────────────────
+	// B C and D were skipped by the fix (dest anchor B is still in the source group).
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			nameA: ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+			},
+			nameB: ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType:         common.EEntityType.Hardlink(),
+					HardLinkedFileName: nameA,
+				},
+			},
+			nameC: ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType:         common.EEntityType.Hardlink(),
+					HardLinkedFileName: nameB,
+				},
+			},
+			nameD: ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType:         common.EEntityType.Hardlink(),
+					HardLinkedFileName: nameB,
+				},
+			},
+		},
+	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS()})
+
+	// Only A needed a hardlink transfer; B C and D were correctly skipped.
+	ValidateHardlinksTransferCount(svm, stdOut, 1)
+}
+
 //
 // These tests exercise the copy-upload direction with --hardlinks=preserve.  Unlike sync,
 // copy does not compare source vs. destination timestamps — it always transfers.  The key

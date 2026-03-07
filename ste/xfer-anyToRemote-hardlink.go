@@ -20,7 +20,6 @@
 package ste
 
 import (
-	"fmt"
 	"net/url"
 	"path"
 	"strings"
@@ -105,31 +104,7 @@ func anyToRemote_hardlink(jptm IJobPartTransferMgr, info *TransferInfo, pacer pa
 		}
 	}
 
-	// write the hardlink
-	// Derive the target hardlink path full remote path approach:
-	//
-	// 1. Compute the current file's traversal-root-relative path from the local source paths.
-	//    e.g. GetSourceRoot()="/home/azureuser/spe_dir", info.Source=".../spe_dir/hardlink/newlink.txt"
-	//         => fileRelPath = "hardlink/newlink.txt"
-	//
-	// 2. Strip that suffix from the destination URL path to get the dest prefix.
-	//    copy: destURLPath="meta/spe_dir/hardlink/newlink.txt" => destPrefix="meta/spe_dir/"
-	//    sync: destURLPath="spe_dir/hardlink/newlink.txt"      => destPrefix="spe_dir/"
-	//
-	// 3. Join destPrefix + TargetHardlinkFilePath.
-	//    copy: "meta/spe_dir/" + "hardlink/hlink.txt" = "meta/spe_dir/hardlink/hlink.txt" ✓
-	//    sync: "spe_dir/"      + "hardlink/hlink.txt" = "spe_dir/hardlink/hlink.txt"      ✓
-	sourceRoot := strings.TrimSuffix(jptm.GetSourceRoot(), common.AZCOPY_PATH_SEPARATOR_STRING)
-	fileRelPath := strings.TrimPrefix(strings.TrimPrefix(info.Source, sourceRoot), common.AZCOPY_PATH_SEPARATOR_STRING)
-
-	destURLParts, err := file.ParseURL(info.Destination)
-	if err != nil {
-		jptm.FailActiveSend("Parsing destination URL", err)
-		return
-	}
-	destPrefix := strings.TrimSuffix(destURLParts.DirectoryOrFilePath, fileRelPath)
-	targetHardlinkFullPath := "/" + path.Join(destPrefix, info.TargetHardlinkFilePath)
-	fmt.Println("-----####### targetHardlinkPath", targetHardlinkFullPath)
+	targetHardlinkFullPath := computeUploadHardlinkTarget(info, jptm)
 	err = s.CreateHardlink(targetHardlinkFullPath)
 	if err != nil {
 		jptm.FailActiveSend("Creating hardlink", err)
@@ -137,4 +112,23 @@ func anyToRemote_hardlink(jptm IJobPartTransferMgr, info *TransferInfo, pacer pa
 	}
 
 	commonSenderCompletion(jptm, baseSender, info)
+}
+
+// computeUploadHardlinkTarget computes the full remote path for the target hardlink
+// when uploading (Local → Azure Files NFS). It derives the destination-side prefix
+// by stripping the current file's traversal-root-relative path from the destination URL,
+// then joins that prefix with info.TargetHardlinkFilePath.
+func computeUploadHardlinkTarget(info *TransferInfo, jptm IJobPartTransferMgr) string {
+
+	sourceRoot := strings.TrimSuffix(jptm.GetSourceRoot(), common.AZCOPY_PATH_SEPARATOR_STRING)
+	fileRelPath := strings.TrimPrefix(strings.TrimPrefix(info.Source, sourceRoot), common.AZCOPY_PATH_SEPARATOR_STRING)
+
+	destURLParts, err := file.ParseURL(info.Destination)
+	if err != nil {
+		jptm.FailActiveSend("Parsing destination URL", err)
+		return ""
+	}
+	destPrefix := strings.TrimSuffix(destURLParts.DirectoryOrFilePath, fileRelPath)
+	targetHardlinkFullPath := "/" + path.Join(destPrefix, info.TargetHardlinkFilePath)
+	return targetHardlinkFullPath
 }

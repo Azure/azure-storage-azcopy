@@ -345,9 +345,21 @@ func (a *azureFilesDownloader) CreateHardlink() error {
 	//   Destination  = "/home/azureuser/spe_dir/hardlink/newlink.txt"
 	//   destPrefix   = "/home/azureuser/spe_dir/"
 	//   anchor path  = "/home/azureuser/spe_dir/hardlink/hlink.txt"
-	srcRootURLParts, err := file.ParseURL(a.jptm.GetSourceRoot())
+	targetHardlinkFullPath, err := computeDownloadHardlinkTarget(info, a.jptm)
 	if err != nil {
-		return fmt.Errorf("parsing source root URL: %w", err)
+		return err
+	}
+	return os.Link(targetHardlinkFullPath, info.Destination)
+}
+
+// computeDownloadHardlinkTarget computes the full local path for the hardlink anchor
+// when downloading (Azure Files NFS → Local). It parses the source root URL to derive
+// the current file's traversal-root-relative path, strips that suffix from the local
+// destination path to get the prefix, then joins with info.TargetHardlinkFilePath.
+func computeDownloadHardlinkTarget(info *TransferInfo, jptm IJobPartTransferMgr) (string, error) {
+	srcRootURLParts, err := file.ParseURL(jptm.GetSourceRoot())
+	if err != nil {
+		return "", fmt.Errorf("parsing source root URL: %w", err)
 	}
 
 	srcRootDir := strings.TrimSuffix(srcRootURLParts.DirectoryOrFilePath, common.AZCOPY_PATH_SEPARATOR_STRING)
@@ -360,5 +372,5 @@ func (a *azureFilesDownloader) CreateHardlink() error {
 	// Join the prefix with the targetHardlinkFilePath traversal-root-relative path.
 	targetHardlinkFullPath := filepath.Join(destPrefix, filepath.FromSlash(info.TargetHardlinkFilePath))
 
-	return os.Link(targetHardlinkFullPath, info.Destination)
+	return targetHardlinkFullPath, nil
 }
