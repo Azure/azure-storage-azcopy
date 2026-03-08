@@ -201,7 +201,7 @@ func GetPerfDisplayText(perfDiagnosticStrings []string, constraint common.PerfCo
 }
 
 func shouldDisplayPerfStates() bool {
-	return common.GetEnvironmentVariable(common.EEnvironmentVariable.ShowPerfStates()) != ""
+	return common.EEnvironmentVariable.ShowPerfStates().IsSet()
 }
 
 // round api rounds up the float number after the decimal point.

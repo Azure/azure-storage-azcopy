@@ -21,16 +21,17 @@
 package ste
 
 import (
+	"net/http"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"net/http"
 )
 
 var (
 	// ServiceAPIVersionOverride is a global variable in package ste which is a key to Service Api Version Value set in the every Job's context.
 	ServiceAPIVersionOverride = serviceAPIVersionOverride{}
 	// DefaultServiceApiVersion is the default value of service api version that is set as value to the ServiceAPIVersionOverride in every Job's context.
-	DefaultServiceApiVersion = common.GetEnvironmentVariable(common.EEnvironmentVariable.DefaultServiceApiVersion())
+	DefaultServiceApiVersion = common.EEnvironmentVariable.DefaultServiceApiVersion().Value()
 )
 
 const (

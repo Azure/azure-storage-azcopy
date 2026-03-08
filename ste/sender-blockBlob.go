@@ -439,7 +439,7 @@ func (s *blockBlobSenderBase) buildCommittedBlockMap() {
 	changedChunkSize := "buildCommittedBlockMap: Chunksize mismatch on uncommitted blocks"
 	list := make(map[int]string)
 
-	if common.GetEnvironmentVariable(common.EEnvironmentVariable.DisableBlobTransferResume()) == "true" {
+	if strings.EqualFold(common.EEnvironmentVariable.DisableBlobTransferResume().Value(), "true") {
 		return
 	}
 

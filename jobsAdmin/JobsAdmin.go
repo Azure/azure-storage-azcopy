@@ -158,11 +158,11 @@ func getMaxRamForChunks() (int64, error) {
 
 	// return the user-specified override value, if any
 	envVar := common.EEnvironmentVariable.BufferGB()
-	overrideString := common.GetEnvironmentVariable(envVar)
-	if overrideString != "" {
+	overrideString, envVarName, overrideStringOK := envVar.Lookup()
+	if overrideStringOK {
 		overrideValue, err := strconv.ParseFloat(overrideString, 64)
 		if err != nil {
-			return 0, fmt.Errorf("Cannot parse environment variable %s, due to error %v", envVar.Name, err)
+			return 0, fmt.Errorf("Cannot parse environment variable %s, due to error %v", envVarName, err)
 		} else {
 			return int64(overrideValue * 1024 * 1024 * 1024), nil
 		}
