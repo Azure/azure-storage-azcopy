@@ -145,16 +145,33 @@ func matchAWSHost(hostLower, suffix string) []string {
 	return matchSlices
 }
 
-// matchGoogleHost matches Google Cloud Storage path-style endpoint storage.googleapis.com
-// Host form: storage.googleapis.com (no region); bucket and object come from path.
+// matchGoogleHost matches Google Cloud Storage path-style endpoints:
+//   - storage.googleapis.com (global, no region)
+//   - storage.<region>.rep.googleapis.com (regional, e.g. storage.us-west2.rep.googleapis.com)
+//
+// Host form: bucket and object come from path (path-style).
 func matchGoogleHost(hostLower, suffix string) []string {
-	if hostLower != "storage."+suffix {
-		return nil
-	}
 	keyword := getS3Keyword() // googleapis
-	region := ""              // unspecified
-	matchSlices := []string{hostLower, "", region, keyword}
-	return matchSlices
+	region := ""
+
+	if hostLower == "storage."+suffix {
+		// Global endpoint: storage.googleapis.com
+		matchSlices := []string{hostLower, "", region, keyword}
+		return matchSlices
+	}
+
+	// Regional endpoint: storage.<region>.rep.googleapis.com
+	repSuffix := ".rep." + suffix
+	prefix := "storage."
+	if strings.HasPrefix(hostLower, prefix) && strings.HasSuffix(hostLower, repSuffix) {
+		region = hostLower[len(prefix) : len(hostLower)-len(repSuffix)]
+		if region != "" {
+			matchSlices := []string{hostLower, "", region, keyword}
+			return matchSlices
+		}
+	}
+
+	return nil
 }
 
 // matchCustomS3Host handles arbitrary FQDN hosts for on-prem S3-compatible appliances.
