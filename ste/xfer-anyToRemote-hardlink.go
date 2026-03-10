@@ -104,15 +104,8 @@ func anyToRemote_hardlink(jptm IJobPartTransferMgr, info *TransferInfo, pacer pa
 		}
 	}
 
-<<<<<<< HEAD
 	targetHardlinkFullPath := computeUploadHardlinkTarget(info, jptm)
 	err = s.CreateHardlink(targetHardlinkFullPath)
-=======
-	// write the hardlink
-	targetURLParts, err := file.ParseURL(jptm.Info().Destination)
-	taregtHardlinkFullPath := getFullPath(jptm.Info().TargetHardlinkFilePath, targetURLParts.DirectoryOrFilePath)
-	err = s.CreateHardlink(taregtHardlinkFullPath)
->>>>>>> 319d5a0f111ff2addb7deed6c6598b28dad88d6c
 	if err != nil {
 		jptm.FailActiveSend("Creating hardlink", err)
 		return
