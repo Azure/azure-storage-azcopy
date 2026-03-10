@@ -1,9 +1,11 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"runtime"
 	"strconv"
+	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -393,6 +395,40 @@ func (s *BlobTestSuite) Scenario_DownloadBlobNoNameWithoutWildcardDirectory(svm 
 		ValidateResourceOptions{validateObjectContent: false})
 }
 
+func (s *BlobTestSuite) Scenario_UploadBlobListOfFilesWildcard(svm *ScenarioVariationManager) {
+	blobContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
+	body := NewRandomObjectContentContainer(SizeFromString("1K"))
+	srcLocal := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
+	_ = CreateResource[ObjectResourceManager](svm, srcLocal, ResourceDefinitionObject{
+		ObjectName:       pointerTo("a.txt"),
+		Body:             body,
+		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+	})
+
+	src := TryApplySpecificAuthType(srcLocal, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{Wildcard: "/*"})
+
+	RunAzCopy(svm, AzCopyCommand{
+		Verb: AzCopyVerbCopy,
+		Targets: []ResourceManager{
+			src,
+			blobContainer,
+		},
+		Flags: CopyFlags{
+			ListOfFiles: []string{"a.txt"},
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive: pointerTo(true),
+				GlobalFlags: GlobalFlags{
+					OutputType: pointerTo(cmd.EOutputFormat.Text()),
+				},
+			},
+		},
+		ShouldFail: false,
+	})
+	ValidateResource[ObjectResourceManager](svm, blobContainer.GetObject(svm, "a.txt", common.EEntityType.File()),
+		ResourceDefinitionObject{Body: body},
+		ValidateResourceOptions{validateObjectContent: false})
+}
+
 func (s *BlobTestSuite) Scenario_DownloadBlobObjNoNameDirectory(svm *ScenarioVariationManager) {
 	// Test uses a two-step upload, download upload then download to replicate the leading-slash blob scenario without tripping the SDK’s empty-name validation
 	blobContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
@@ -428,5 +464,91 @@ func (s *BlobTestSuite) Scenario_DownloadBlobObjNoNameDirectory(svm *ScenarioVar
 			},
 		},
 		ShouldFail: runtime.GOOS == "windows",
+	})
+}
+
+func (s *BlobTestSuite) Scenario_ListOfFilesIncludePattern(svm *ScenarioVariationManager) {
+	// Create destination container in Azure
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
+
+	// Create local source container
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
+
+	// Folder names
+	folders := []string{"A", "B", "C", "D", "E", "F"}
+	// File definitions per folder
+	files := map[string][]ResourceDefinitionObject{
+		"A": {
+			{ObjectName: pointerTo("A/a1.txt"), Body: NewRandomObjectContentContainer(SizeFromString("1K"))},
+			{ObjectName: pointerTo("A/a2.zip"), Body: NewRandomObjectContentContainer(SizeFromString("1K"))},
+		},
+		"B": {
+			{ObjectName: pointerTo("B/b3.txt"), Body: NewRandomObjectContentContainer(SizeFromString("1K"))},
+			{ObjectName: pointerTo("B/b4.zip"), Body: NewRandomObjectContentContainer(SizeFromString("1K"))},
+		},
+		"C": {
+			{ObjectName: pointerTo("C/c5.txt"), Body: NewRandomObjectContentContainer(SizeFromString("1K"))},
+			{ObjectName: pointerTo("C/c6.zip"), Body: NewRandomObjectContentContainer(SizeFromString("1K"))},
+		},
+		"D": {
+			{ObjectName: pointerTo("D/d7.txt"), Body: NewRandomObjectContentContainer(SizeFromString("1K"))},
+			{ObjectName: pointerTo("D/d8.zip"), Body: NewRandomObjectContentContainer(SizeFromString("1K"))},
+		},
+		"E": {
+			{ObjectName: pointerTo("E/e9.txt"), Body: NewRandomObjectContentContainer(SizeFromString("1K"))},
+			{ObjectName: pointerTo("E/e10.zip"), Body: NewRandomObjectContentContainer(SizeFromString("1K"))},
+		},
+		"F": {
+			{ObjectName: pointerTo("F/f11.txt"), Body: NewRandomObjectContentContainer(SizeFromString("1K"))},
+			{ObjectName: pointerTo("F/f12.zip"), Body: NewRandomObjectContentContainer(SizeFromString("1K"))},
+		},
+	}
+
+	// Create all files in local source container
+	for _, folder := range folders {
+		for _, obj := range files[folder] {
+			CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+		}
+	}
+
+	// List of folders to include in list-of-files
+	listOfFolders := []string{"A", "C", "E"}
+
+	// Only .zip files in A, C, E should be transferred
+	expectedObjs := make(ObjectResourceMappingFlat)
+	for _, folder := range listOfFolders {
+		for _, obj := range files[folder] {
+			if name := *obj.ObjectName; strings.HasSuffix("name", ".zip") {
+				expectedObjs[name] = obj
+			}
+		}
+	}
+
+	// Run AzCopy with list-of-files and include-pattern
+	RunAzCopy(svm, AzCopyCommand{
+		Verb: AzCopyVerbCopy,
+		Targets: []ResourceManager{
+			srcContainer,
+			dstContainer.(RemoteResourceManager).WithSpecificAuthType(EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{}),
+		},
+		Flags: CopyFlags{
+			ListOfFiles: listOfFolders,
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive:      pointerTo(true),
+				IncludePattern: pointerTo("*.zip"),
+				GlobalFlags: GlobalFlags{
+					OutputType: pointerTo(cmd.EOutputFormat.Text()),
+				},
+			},
+			AsSubdir: pointerTo(false),
+		},
+		ShouldFail: false,
+	})
+
+	// Validate only .zip files in A, C, E are present in destination
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: expectedObjs,
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
 	})
 }

@@ -188,6 +188,10 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 			ValidatePropertyPtr(a, canonPathPrefix+"Content encoding", vProps.HTTPHeaders.contentEncoding, oProps.HTTPHeaders.contentEncoding)
 			ValidatePropertyPtr(a, canonPathPrefix+"Content language", vProps.HTTPHeaders.contentLanguage, oProps.HTTPHeaders.contentLanguage)
 			ValidatePropertyPtr(a, canonPathPrefix+"Content type", vProps.HTTPHeaders.contentType, oProps.HTTPHeaders.contentType)
+			// Only validate when md5 is set & for remote resource locations
+			if len(vProps.HTTPHeaders.contentMD5) > 0 && !manager.Location().IsLocal() { // Local does not have HTTP headers
+				ValidatePropertyPtr(a, canonPathPrefix+"Content md5", pointerTo(vProps.HTTPHeaders.contentMD5), pointerTo(oProps.HTTPHeaders.contentMD5))
+			}
 
 			switch manager.Location() {
 			case common.ELocation.Blob():

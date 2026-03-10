@@ -56,6 +56,9 @@ func (t *transferExecutor) initCopyEnumerator(ctx context.Context, logLevel comm
 		if diff == "*" ||
 			diff == common.OS_PATH_SEPARATOR+"*" ||
 			diff == common.AZCOPY_PATH_SEPARATOR_STRING+"*" {
+			// trim the /*
+			t.opts.source.Value = normalizedSource.Value
+			// set stripTopDir to true so that --list-of-files/--include-path play nice
 			t.opts.stripTopDir = true
 		}
 	}

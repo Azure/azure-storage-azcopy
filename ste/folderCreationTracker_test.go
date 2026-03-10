@@ -20,6 +20,7 @@
 package ste
 
 import (
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -60,10 +61,9 @@ func TestFolderCreationTracker_directoryCreate(t *testing.T) {
 	}
 
 	fct := &jpptFolderTracker{
-		fetchTransfer:          plan.getFetchTransfer(t),
-		mu:                     &sync.Mutex{},
-		contents:               make(map[string]JpptFolderIndex),
-		unregisteredButCreated: make(map[string]struct{}),
+		fetchTransfer: plan.getFetchTransfer(t),
+		mu:            &sync.Mutex{},
+		contents:      make(map[string]*JpptFolderTrackerState),
 	}
 
 	// 1. Register folder1
@@ -121,4 +121,76 @@ func TestFolderCreationTracker_directoryCreate(t *testing.T) {
 	wg.Wait()
 	a.Equal(int32(1), numOfCreations)
 	a.Equal(common.ETransferStatus.FolderCreated(), plan.transfers[regIdx].atomicTransferStatus)
+}
+
+// This test verifies that we can detect an existing folder, and avoid calling create on it again.
+// this helps to manage azure files' complaint of too many directory creation requests.
+func TestFolderCreationTracker_directoryExists(t *testing.T) {
+	a := assert.New(t)
+
+	// create a plan with one registered and one unregistered folder
+	folderExists := "folderExists"
+	existsIdx := JpptFolderIndex{0, 1}
+	folderCreated := "folderCreated"
+	createdIdx := JpptFolderIndex{1, 1} // cheap validation of job part overlap
+	folderShouldCreate := "folderShouldCreate"
+	shouldCreateIdx := JpptFolderIndex{0, 2}
+
+	plan := &mockedJobPlan{
+		transfers: map[JpptFolderIndex]*JobPartPlanTransfer{
+			existsIdx:       {atomicTransferStatus: common.ETransferStatus.NotStarted()},
+			createdIdx:      {atomicTransferStatus: common.ETransferStatus.NotStarted()},
+			shouldCreateIdx: {atomicTransferStatus: common.ETransferStatus.NotStarted()},
+		},
+	}
+
+	fct := &jpptFolderTracker{
+		fetchTransfer: plan.getFetchTransfer(t),
+		mu:            &sync.Mutex{},
+		contents:      make(map[string]*JpptFolderTrackerState),
+	}
+
+	fct.RegisterPropertiesTransfer(folderExists, existsIdx.PartNum, existsIdx.TransferIndex)
+	fct.RegisterPropertiesTransfer(folderCreated, createdIdx.PartNum, createdIdx.TransferIndex)
+	fct.RegisterPropertiesTransfer(folderShouldCreate, shouldCreateIdx.PartNum, shouldCreateIdx.TransferIndex)
+
+	_ = fct.CreateFolder(folderCreated, func() error {
+		return nil
+	}) // "create" our folder
+	err := fct.CreateFolder(folderExists, func() error {
+		return common.FolderCreationErrorAlreadyExists{}
+	}) // fail creation on not existing
+	a.NoError(err, "already exists should be caught") // ensure we caught that error
+	expectedFailureErr := errors.New("this creation should fail")
+	err = fct.CreateFolder(folderShouldCreate, func() error {
+		return expectedFailureErr
+	}) // ensure that a natural failure should return properly
+	a.Equal(err, expectedFailureErr)
+
+	// validate folder states
+	a.Equal(fct.contents[folderCreated].Status, EJpptFolderTrackerStatus.FolderCreated()) // Our created folder should be marked as such.
+	a.Equal(plan.transfers[createdIdx].TransferStatus(), common.ETransferStatus.FolderCreated())
+	a.Equal(fct.contents[folderExists].Status, EJpptFolderTrackerStatus.FolderExisted()) // Our existing folder should be marked as such.
+	a.Equal(plan.transfers[existsIdx].TransferStatus(), common.ETransferStatus.FolderExisted())
+	a.Equal(fct.contents[folderShouldCreate].Status, EJpptFolderTrackerStatus.Unseen()) // no status updates should've occurred on a "naturally" failed create.
+	a.Equal(plan.transfers[shouldCreateIdx].TransferStatus(), common.ETransferStatus.NotStarted())
+
+	// validate that re-create doesn't trigger on either
+	err = fct.CreateFolder(folderCreated, func() error {
+		a.Fail("created folders shouldn't be re-created")
+		return errors.New("should return nil")
+	})
+	a.NoError(err)
+	err = fct.CreateFolder(folderExists, func() error {
+		a.Fail("existing folders shouldn't be re-created")
+		return errors.New("should return nil")
+	})
+	a.NoError(err)
+
+	// validate we can still create normally for our naturally failed folder
+	err = fct.CreateFolder(folderShouldCreate, func() error {
+		return nil
+	})
+
+	a.NoError(err)
 }

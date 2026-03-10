@@ -199,8 +199,8 @@ func (raw *rawCopyCmdArgs) toCopyOptions(cmd *cobra.Command) (opts azcopy.CopyOp
 		S2SPreserveBlobTags:      raw.s2sPreserveBlobTags,
 		CpkByName:                raw.cpkScopeInfo,
 		CpkByValue:               raw.cpkInfo,
-		PutMd5:                   opts.PutMd5,
-		CheckLength:              opts.CheckLength,
+		PutMd5:                   raw.putMd5,
+		CheckLength:              raw.CheckLength,
 		PreserveOwner:            common.Iff(cmd.Flags().Changed("preserve-owner"), &raw.preserveOwner, nil),
 		AsSubDir:                 common.Iff(cmd.Flags().Changed("as-subdir"), &raw.asSubdir, nil),
 		IncludeDirectoryStubs:    raw.includeDirectoryStubs,
@@ -1420,7 +1420,7 @@ func init() {
 			if opts, err = raw.toCopyOptions(cmd); err != nil {
 				glcm.Error("error parsing the input given by the user. Failed with error " + err.Error() + getErrorCodeUrl(err))
 			}
-			// Create a context that can be cancelled by Ctrl-C
+			// Create a context that can be canceled by Ctrl-C
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
@@ -1428,7 +1428,11 @@ func init() {
 			go func() {
 				sigChan := make(chan os.Signal, 1)
 				signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-				<-sigChan
+				select { // Handles both cancellations
+				case <-sigChan: // unblocks if OS signal (Ctrl + C) arrives
+				case <-glcm.CancelFromStdinChannel(): // unblocks if cancel sent to stdin
+				}
+				glcm.Info("Cancellation requested")
 				cancel()
 			}()
 

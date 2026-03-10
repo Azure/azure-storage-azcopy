@@ -291,7 +291,7 @@ func (s *scenario) assignSourceAndDest() {
 }
 
 func (s *scenario) runAzCopy(logDirectory string) {
-	s.chToStdin = make(chan string) // unubuffered seems the most predictable for our usages
+	s.chToStdin = make(chan string) // unbuffered seems the most predictable for our usages
 	defer close(s.chToStdin)
 
 	tf := s.GetTestFiles()
@@ -380,7 +380,7 @@ func (s *scenario) cancelAzCopy(logDir string) {
 }
 
 func (s *scenario) resumeAzCopy(logDir string) {
-	s.chToStdin = make(chan string) // unubuffered seems the most predictable for our usages
+	s.chToStdin = make(chan string) // unbuffered seems the most predictable for our usages
 	defer close(s.chToStdin)
 
 	r := newTestRunner()
@@ -661,7 +661,10 @@ func (s *scenario) validatePOSIXProperties(f *testObject, metadata map[string]*s
 		adapter = osScenarioHelper{}.GetUnixStatAdapterForFile(s.a, filepath.Join(s.state.dest.(*resourceLocal).dirPath, addedDirAtDest, f.name))
 	case common.ELocation.Blob():
 		var err error
-		adapter, err = common.ReadStatFromMetadata(metadata, 0)
+		safeMetadata := &common.SafeMetadata{
+			Metadata: metadata,
+		}
+		adapter, err = common.ReadStatFromMetadata(safeMetadata, 0)
 		s.a.AssertNoErr(err, "reading stat from metadata")
 	}
 
@@ -937,6 +940,11 @@ func (s *scenario) CreateSourceSnapshot() {
 func (s *scenario) CancelAndResume() {
 	s.a.Assert(s.p.cancelFromStdin, equals(), true, "cancelFromStdin must be set in parameters, to use CancelAndResume")
 	s.needResume = true
+	s.chToStdin <- "cancel"
+}
+
+func (s *scenario) CancelOnly() {
+	s.a.Assert(s.p.cancelFromStdin, equals(), true, "cancelFromStdin must be set in parameters, to use CancelOnly")
 	s.chToStdin <- "cancel"
 }
 

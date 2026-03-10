@@ -447,7 +447,7 @@ func (jm *jobMgr) AddJobPart(args *AddJobPartArgs) IJobPartMgr {
 		var logger common.ILogger = jm
 		jm.initState = &jobMgrInitState{
 			securityInfoPersistenceManager: newSecurityInfoPersistenceManager(jm.ctx),
-			folderCreationTracker:          NewFolderCreationTracker(jpm.Plan().Fpo, NewTransferFetcher(jm)),
+			folderCreationTracker:          NewFolderCreationTracker(jpm.Plan().Fpo, NewTransferFetcher(jm), jpm.Plan().FromTo),
 			folderDeletionManager:          common.NewFolderDeletionManager(jm.ctx, jpm.Plan().Fpo, logger),
 			exclusiveDestinationMapHolder:  &atomic.Value{},
 		}
@@ -493,7 +493,7 @@ func (jm *jobMgr) AddJobOrder(order common.CopyJobPartOrderRequest) IJobPartMgr 
 		var logger common.ILogger = jm
 		jm.initState = &jobMgrInitState{
 			securityInfoPersistenceManager: newSecurityInfoPersistenceManager(jm.ctx),
-			folderCreationTracker:          NewFolderCreationTracker(jpm.Plan().Fpo, NewTransferFetcher(jm)),
+			folderCreationTracker:          NewFolderCreationTracker(jpm.Plan().Fpo, NewTransferFetcher(jm), jpm.Plan().FromTo),
 			folderDeletionManager:          common.NewFolderDeletionManager(jm.ctx, jpm.Plan().Fpo, logger),
 			exclusiveDestinationMapHolder:  &atomic.Value{},
 		}
@@ -1133,6 +1133,7 @@ func (jm *jobMgr) CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.
 		fallthrough
 	case common.EJobStatus.Paused(): // Logically, It's OK to pause an already-paused job
 		jpp0.SetJobStatus(desiredJobStatus)
+		jm.Log(common.LogInfo, fmt.Sprintf("Job status updated: %s", desiredJobStatus))
 		msg := fmt.Sprintf("JobID=%v %s", jobID,
 			common.Iff(desiredJobStatus == common.EJobStatus.Paused(), "paused", "canceled"))
 
