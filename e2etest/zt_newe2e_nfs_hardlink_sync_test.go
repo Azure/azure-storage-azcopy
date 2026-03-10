@@ -1,7 +1,6 @@
 package e2etest
 
 import (
-	"fmt"
 	"runtime"
 	"time"
 
@@ -58,7 +57,7 @@ func runHardlinkSync(
 			Targets: []ResourceManager{srcDirObj, dstDirObj.(RemoteResourceManager).WithSpecificAuthType(
 				ResolveVariation(svm, []ExplicitCredentialTypes{
 					EExplicitCredentialType.SASToken(),
-					//EExplicitCredentialType.OAuth(),
+					EExplicitCredentialType.OAuth(),
 				}), svm, CreateAzCopyTargetOptions{}),
 			},
 			Flags: SyncFlags{
@@ -70,7 +69,7 @@ func runHardlinkSync(
 				DeleteDestination: pointerTo(deleteDestination),
 			},
 		})
-	fmt.Println("--------Stdout", stdOut)
+
 	return stdOut
 }
 
@@ -1567,16 +1566,16 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_LexSmallerAnchorDeleted(svm *S
 // Source:
 //
 //	A.txt  (anchor of A-B group)
-//	B.txt  (hardlink → A)
+//	B.txt  (hardlink)
 //	C.txt  (anchor of C-D group — separate inode)
-//	D.txt  (hardlink → C)
+//	D.txt  (hardlink)
 //
 // Destination (before sync):
 //
 //	A.txt  (anchor of A-B-C-D group)
-//	B.txt  (hardlink → A)
-//	C.txt  (hardlink → A)
-//	D.txt  (hardlink → A)
+//	B.txt  (hardlink)
+//	C.txt  (hardlink)
+//	D.txt  (hardlink)
 //
 // Expected: B skipped (same anchor A); C recreated as new anchor; D recreated as
 // hardlink → C.
@@ -1689,9 +1688,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_GroupSplit(svm *ScenarioVariat
 		},
 	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS()})
 
-	// A re-uploaded (entity-type mismatch), C re-uploaded (anchor, entity-type mismatch),
-	// D recreated as hardlink → C.  B is skipped.  Total hardlink-type transfers = 3.
-	ValidateHardlinksTransferCount(svm, stdOut, 3)
+	// A and B remains unchanged. C and D are recreated (C and D are re-created).
+	ValidateHardlinksTransferCount(svm, stdOut, 2)
 }
 
 // Scenario: GroupMerge — src: A-B-C-D   dst: A-B  C-D
@@ -1849,14 +1847,12 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_GroupMerge(svm *ScenarioVariat
 // Destination (before sync):
 //
 //	A.txt  (anchor of A-B-C-D group)
-//	B.txt  (hardlink → A)
-//	C.txt  (hardlink → A)
-//	D.txt  (hardlink → A)
+//	B.txt  (hardlink)
+//	C.txt  (hardlink)
+//	D.txt  (hardlink)
 //
-// Expected: A re-uploaded as standalone file (entity-type mismatch); B recreated as
-// anchor of the B-C-D group; C and D recreated as hardlinks → B.
-// TODO: this scenario currently exposes a bug where B, C, D are incorrectly skipped
-// instead of being recreated on their own inode.
+// Expected: A re-uploaded as standalone file (entity-type mismatch);
+// B, C, D remain hardlinks to each other (same anchor B) and are skipped.  0 hardlink transfers.
 func (s *FilesNFSTestSuite) Scenario_HardlinkSync_AnchorBecomesFile(svm *ScenarioVariationManager) {
 	if runtime.GOOS != "linux" {
 		svm.InvalidateScenario()
@@ -1965,9 +1961,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_AnchorBecomesFile(svm *Scenari
 	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS()})
 
 	// A re-uploaded as file (entity-type mismatch).
-	// B re-uploaded as anchor, C and D as hardlinks → B.
-	// Total hardlink-type transfers = 3 (B as anchor + C + D).
-	ValidateHardlinksTransferCount(svm, stdOut, 3)
+	// B,C,D are part of the same inode group so no hardlink transfer is needed for them.
+	ValidateHardlinksTransferCount(svm, stdOut, 0)
 }
 
 // Scenario: FileJoinsGroup — src: A-B-C-D   dst: A(file)  B-C-D
@@ -1978,16 +1973,16 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_AnchorBecomesFile(svm *Scenari
 // Source:
 //
 //	A.txt  (anchor of A-B-C-D group)
-//	B.txt  (hardlink → A)
-//	C.txt  (hardlink → A)
-//	D.txt  (hardlink → A)
+//	B.txt  (hardlink)
+//	C.txt  (hardlink)
+//	D.txt  (hardlink)
 //
 // Destination (before sync):
 //
 //	A.txt  (standalone regular file, nlink=1)
 //	B.txt  (anchor of B-C-D group)
-//	C.txt  (hardlink → B)
-//	D.txt  (hardlink → B)
+//	C.txt  (hardlink)
+//	D.txt  (hardlink)
 //
 // Expected: A re-uploaded as anchor (entity-type mismatch); B, C, D recreated as
 // hardlinks → A, joining the merged group.
@@ -2109,9 +2104,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_FileJoinsGroup(svm *ScenarioVa
 		},
 	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS()})
 
-	// A re-uploaded as anchor; B, C, D recreated as hardlinks → A.
-	// Total hardlink-type transfers = 3 (B + C + D as CreateHardlink(A)).
-	ValidateHardlinksTransferCount(svm, stdOut, 3)
+	// Total hardlink-type transfers = 1 (CreateHardlink(A)).
+	ValidateHardlinksTransferCount(svm, stdOut, 1)
 }
 
 //

@@ -339,12 +339,12 @@ func (a *azureFilesDownloader) CreateHardlink() error {
 	// This works correctly for both copy and sync, and handles StripTopDir automatically.
 	//
 	// Example (copy, no StripTopDir):
-	//   SrcFilePath  = "meta/spe_dir/hardlink/newlink.txt"
-	//   sourceRoot   = ".../meta/spe_dir"  =>  srcRootDir = "meta/spe_dir"
-	//   fileRelPath  = "hardlink/newlink.txt"
-	//   Destination  = "/home/azureuser/spe_dir/hardlink/newlink.txt"
-	//   destPrefix   = "/home/azureuser/spe_dir/"
-	//   anchor path  = "/home/azureuser/spe_dir/hardlink/hlink.txt"
+	//   SrcFilePath  = "srcdir/subdir/link.txt"
+	//   sourceRoot   = ".../srcdir"  =>  srcRootDir = "srcdir"
+	//   fileRelPath  = "subdir/link.txt"
+	//   Destination  = "/local/dstdir/subdir/link.txt"
+	//   destPrefix   = "/local/dstdir/"
+	//   anchor path  = "/local/dstdir/subdir/anchor.txt"
 	targetHardlinkFullPath, err := computeDownloadHardlinkTarget(info, a.jptm)
 	if err != nil {
 		return err
