@@ -70,16 +70,8 @@ const PeCheckIntervalInmilliSecs = 200
 func createS3ClientForPrivateNetwork(credInfo CredentialInfo, cred *credentials.Credentials) (*minio.Client, error) {
 	peIP := privateNetworkArgs.PrivateEndpointIPs
 	baseS3Host := credInfo.S3CredentialInfo.Endpoint
-
-	urlParts := S3URLParts{Endpoint: baseS3Host}
-	var s3Host string
-	if urlParts.IsGoogleCloudStorage() {
-		// GCS uses path-style: "storage.googleapis.com/bucketname"
-		s3Host = credInfo.S3CredentialInfo.Endpoint + "/" + privateNetworkArgs.BucketName
-	} else {
-		// S3 uses virtual-hosted style: "<bucketname>.s3.<region>.amazonaws.com"
-		s3Host = privateNetworkArgs.BucketName + "." + credInfo.S3CredentialInfo.Endpoint
-	}
+	// Endpoint should contain bucketname : "<bucketname>.s3.<region>.amazonaws.com"
+	s3Host := privateNetworkArgs.BucketName + "." + credInfo.S3CredentialInfo.Endpoint
 	fmt.Printf("Creating round robin transport for S3 with PE IP: %s, S3 Host: %s, Base S3 Host: %s", peIP, s3Host, baseS3Host)
 	transport := NewRoundRobinTransport(peIP, s3Host, baseS3Host, PeReCheckCooldownTimeInSecs, PeCheckRetries, PeCheckIntervalInmilliSecs)
 	var minioCred *credentials.Credentials
