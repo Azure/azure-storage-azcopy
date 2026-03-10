@@ -81,7 +81,7 @@ func createS3ClientForPrivateNetwork(credInfo CredentialInfo, cred *credentials.
 		s3Host = privateNetworkArgs.BucketName + "." + credInfo.S3CredentialInfo.Endpoint
 	}
 	fmt.Printf("Creating round robin transport for S3 with PE IP: %s, S3 Host: %s, Base S3 Host: %s", peIP, s3Host, baseS3Host)
-	transport := NewRoundRobinTransport(peIP, s3Host, PeReCheckCooldownTimeInSecs, PeCheckRetries, PeCheckIntervalInmilliSecs)
+	transport := NewRoundRobinTransport(peIP, s3Host, baseS3Host, PeReCheckCooldownTimeInSecs, PeCheckRetries, PeCheckIntervalInmilliSecs)
 	var minioCred *credentials.Credentials
 	if cred != nil {
 		minioCred = cred
