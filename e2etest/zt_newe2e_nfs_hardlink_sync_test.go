@@ -1625,10 +1625,11 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_GroupSplit(svm *ScenarioVariat
 		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()},
 	})
 
-	// Group 1: A + B
+	// Group 1: A + B — capture body so we can verify content after the split
+	srcBodyA := NewRandomObjectContentContainer(SizeFromString("1K"))
 	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
 		ObjectName: pointerTo(nameA),
-		Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
+		Body:       srcBodyA,
 		ObjectProperties: ObjectProperties{
 			EntityType: common.EEntityType.File(),
 		},
@@ -1642,10 +1643,11 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_GroupSplit(svm *ScenarioVariat
 		},
 	})
 
-	// Group 2: C + D — independent inode
+	// Group 2: C + D — independent inode; capture body separately
+	srcBodyC := NewRandomObjectContentContainer(SizeFromString("1K"))
 	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
 		ObjectName: pointerTo(nameC),
-		Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
+		Body:       srcBodyC,
 		ObjectProperties: ObjectProperties{
 			EntityType: common.EEntityType.File(),
 		},
@@ -1663,32 +1665,41 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_GroupSplit(svm *ScenarioVariat
 
 	stdOut := runHardlinkSync(svm, srcDirObj, dstDir.(RemoteResourceManager), true)
 
-	// B stays linked to A (same anchor); C is recreated as a new anchor file;
-	// D is recreated as hardlink → C.
+	// A is force-transferred (dest inode of the old A-B-C-D group spans two src inodes;
+	// anchor content must be re-verified for both new sub-groups).
+	// B stays linked to A (non-anchor, relationship intact).
+	// C is recreated as a new standalone anchor; D is recreated as hardlink → C.
+	//
+	// Content validation: A and B must carry srcBodyA; C and D must carry srcBodyC.
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
 			nameA: ResourceDefinitionObject{
+				Body:             srcBodyA,
 				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
 			},
 			nameB: ResourceDefinitionObject{
+				Body: srcBodyA,
 				ObjectProperties: ObjectProperties{
 					EntityType:         common.EEntityType.Hardlink(),
 					HardLinkedFileName: nameA,
 				},
 			},
 			nameC: ResourceDefinitionObject{
+				Body:             srcBodyC,
 				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
 			},
 			nameD: ResourceDefinitionObject{
+				Body: srcBodyC,
 				ObjectProperties: ObjectProperties{
 					EntityType:         common.EEntityType.Hardlink(),
 					HardLinkedFileName: nameC,
 				},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS()})
+	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(), validateObjectContent: true})
 
-	// A and B remains unchanged. C and D are recreated (C and D are re-created).
+	// A force-transferred + C recreated (anchor) + D recreated (hardlink): 3 transfers.
+	// B is skipped (non-anchor, link structure unchanged).
 	ValidateHardlinksTransferCount(svm, stdOut, 2)
 }
 
@@ -1759,6 +1770,11 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_GroupMerge(svm *ScenarioVariat
 	}
 
 	// ── Source: one unified group A-B-C-D ────────────────────────────────────
+	// Capture the source anchor body so we can verify every destination file
+	// carries the same content after the merge (this directly tests the bug
+	// where C and D retained stale content from the old C-D inode).
+	srcBodyA := NewRandomObjectContentContainer(SizeFromString("1K"))
+
 	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
 		ObjectName:       pointerTo(rootDir),
 		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()},
@@ -1766,7 +1782,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_GroupMerge(svm *ScenarioVariat
 
 	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
 		ObjectName: pointerTo(nameA),
-		Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
+		Body:       srcBodyA,
 		ObjectProperties: ObjectProperties{
 			EntityType: common.EEntityType.File(),
 		},
@@ -1800,36 +1816,220 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_GroupMerge(svm *ScenarioVariat
 
 	stdOut := runHardlinkSync(svm, srcDirObj, dstDir.(RemoteResourceManager), true)
 
-	// A and B are identical (same anchor) — skipped.
+	// A is force-transferred (src inode spans two dest groups; anchor content must match source).
+	// B is skipped (non-anchor, relationship intact).
 	// C and D are recreated as hardlinks → A to join the merged group.
+	//
+	// All four files must carry srcBodyA's content: A because it was re-uploaded,
+	// and B, C, D because they are hardlinks that share the same inode as A.
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
 			nameA: ResourceDefinitionObject{
+				Body:             srcBodyA,
 				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
 			},
 			nameB: ResourceDefinitionObject{
+				Body: srcBodyA,
 				ObjectProperties: ObjectProperties{
 					EntityType:         common.EEntityType.Hardlink(),
 					HardLinkedFileName: nameA,
 				},
 			},
 			nameC: ResourceDefinitionObject{
+				Body: srcBodyA,
 				ObjectProperties: ObjectProperties{
 					EntityType:         common.EEntityType.Hardlink(),
 					HardLinkedFileName: nameA,
 				},
 			},
 			nameD: ResourceDefinitionObject{
+				Body: srcBodyA,
 				ObjectProperties: ObjectProperties{
 					EntityType:         common.EEntityType.Hardlink(),
 					HardLinkedFileName: nameA,
 				},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS()})
+	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(), validateObjectContent: true})
 
-	// C and D are recreated as hardlinks → A.  A and B are skipped.
 	ValidateHardlinksTransferCount(svm, stdOut, 2)
+}
+
+// Scenario: ComplexRegrouping — dst: A-B-C  D-E   src: A-D  B-C  E
+//
+// Two inode groups at the destination are completely reshuffled at the source:
+// members migrate between groups and one file becomes standalone.
+//
+// Destination (before sync):
+//
+//	A.txt  (anchor of A-B-C group, nlink=3)
+//	B.txt  (hardlink → A)
+//	C.txt  (hardlink → A)
+//	D.txt  (anchor of D-E group,   nlink=2)
+//	E.txt  (hardlink → D)
+//
+// Source (new state):
+//
+//	A.txt  (anchor of A-D group, nlink=2)
+//	D.txt  (hardlink → A)
+//	B.txt  (anchor of B-C group, nlink=2)
+//	C.txt  (hardlink → B)
+//	E.txt  (standalone regular file, nlink=1)
+//
+// What the comparator does (every dest object is a Hardlink → ProcessPendingHardlinks):
+//
+//	A: src anchor="A", dst anchor="A" → same name, but srcInodeIsMultiGroup AND
+//	   destGroupIsMultiSource both fire → groupStructureChanged → force-transfer A.
+//	B: dst anchor="A", src anchor="B" → (a) dstAnchor still in src but maps to
+//	   a different inode → needsRecreate → delete + re-create as new anchor.
+//	C: dst anchor="A", src anchor="B" → same (a) → delete + re-create as hardlink→B.
+//	D: dst anchor="D" (itself), src anchor="A" → srcInodeIsMultiGroup(inodeA) → needsRecreate
+//	   → delete + re-create as hardlink→A.
+//	E: src EntityType=File (Inode="") → srcAnchorFile="" → entity-type mismatch
+//	   → delete + re-create as standalone file.
+//
+// Expected final state:
+//
+//	A.txt  (File, anchor of A-D group)   — content = srcBodyA
+//	D.txt  (Hardlink → A)                — content = srcBodyA
+//	B.txt  (File, anchor of B-C group)  — content = srcBodyB
+//	C.txt  (Hardlink → B)                — content = srcBodyB
+//	E.txt  (File, standalone)            — content = srcBodyE
+func (s *FilesNFSTestSuite) Scenario_HardlinkSync_ComplexRegrouping(svm *ScenarioVariationManager) {
+	if runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainers(svm)
+	defer CleanupNFSDirectory(svm, dstContainer, rootDir)
+
+	nameA := rootDir + "/A.txt"
+	nameB := rootDir + "/B.txt"
+	nameC := rootDir + "/C.txt"
+	nameD := rootDir + "/D.txt"
+	nameE := rootDir + "/E.txt"
+
+	// ── Destination: group A-B-C and group D-E ───────────────────────────────
+	dstDir := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+	dstDir.Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Folder()})
+
+	dstA := dstContainer.GetObject(svm, nameA, common.EEntityType.File())
+	dstA.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{})
+	dstA.SetObjectProperties(svm, ObjectProperties{
+		FileNFSProperties: &FileNFSProperties{
+			FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
+			FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
+		},
+	})
+
+	dstB := dstContainer.GetObject(svm, nameB, common.EEntityType.Hardlink())
+	dstB.Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Hardlink(), HardLinkedFileName: nameA})
+
+	dstC := dstContainer.GetObject(svm, nameC, common.EEntityType.Hardlink())
+	dstC.Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Hardlink(), HardLinkedFileName: nameA})
+
+	dstD := dstContainer.GetObject(svm, nameD, common.EEntityType.File())
+	dstD.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{})
+	dstD.SetObjectProperties(svm, ObjectProperties{
+		FileNFSProperties: &FileNFSProperties{
+			FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
+			FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
+		},
+	})
+
+	dstE := dstContainer.GetObject(svm, nameE, common.EEntityType.Hardlink())
+	dstE.Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Hardlink(), HardLinkedFileName: nameD})
+
+	if !svm.Dryrun() {
+		time.Sleep(5 * time.Second)
+	}
+
+	// ── Source: group A-D, group B-C, standalone E ───────────────────────────
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName:       pointerTo(rootDir),
+		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()},
+	})
+
+	// Group 1: A (anchor) + D (hardlink)
+	srcBodyA := NewRandomObjectContentContainer(SizeFromString("1K"))
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName:       pointerTo(nameA),
+		Body:             srcBodyA,
+		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+	})
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName: pointerTo(nameD),
+		ObjectProperties: ObjectProperties{
+			EntityType:         common.EEntityType.Hardlink(),
+			HardLinkedFileName: nameA,
+		},
+	})
+
+	// Group 2: B (anchor) + C (hardlink)
+	srcBodyB := NewRandomObjectContentContainer(SizeFromString("1K"))
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName:       pointerTo(nameB),
+		Body:             srcBodyB,
+		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+	})
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName: pointerTo(nameC),
+		ObjectProperties: ObjectProperties{
+			EntityType:         common.EEntityType.Hardlink(),
+			HardLinkedFileName: nameB,
+		},
+	})
+
+	// Standalone: E
+	srcBodyE := NewRandomObjectContentContainer(SizeFromString("1K"))
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName:       pointerTo(nameE),
+		Body:             srcBodyE,
+		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+	})
+
+	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+
+	stdOut := runHardlinkSync(svm, srcDirObj, dstDir.(RemoteResourceManager), true)
+
+	// Validate structure and content.
+	// A and D must share srcBodyA; B and C must share srcBodyB; E carries srcBodyE.
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			nameA: ResourceDefinitionObject{
+				Body:             srcBodyA,
+				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+			},
+			nameD: ResourceDefinitionObject{
+				Body: srcBodyA,
+				ObjectProperties: ObjectProperties{
+					EntityType:         common.EEntityType.Hardlink(),
+					HardLinkedFileName: nameA,
+				},
+			},
+			nameB: ResourceDefinitionObject{
+				Body:             srcBodyB,
+				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+			},
+			nameC: ResourceDefinitionObject{
+				Body: srcBodyB,
+				ObjectProperties: ObjectProperties{
+					EntityType:         common.EEntityType.Hardlink(),
+					HardLinkedFileName: nameB,
+				},
+			},
+			nameE: ResourceDefinitionObject{
+				Body:             srcBodyE,
+				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+			},
+		},
+	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(), validateObjectContent: true})
+
+	// A (force-transferred, groupStructureChanged) + B (new anchor) +
+	// C (hardlink→B) + D (hardlink→A) = 4 hardlink transfers.
+	// E is a File transfer and not counted in the hardlink total.
+	ValidateHardlinksTransferCount(svm, stdOut, 4)
 }
 
 // Scenario: AnchorBecomesFile — src: A(file)  B-C-D   dst: A-B-C-D

@@ -44,6 +44,8 @@ const (
 	syncHardlinkTargetMismatch                = "the source and destination hardlinks point to different targets"
 	syncSourceMissingForPendingHardlink       = "the source hardlink is missing, so the destination hardlink is considered stale and will be deleted"
 	syncSkipReasonHardlinkRelationshipIntact  = "the hardlink relationship is intact; no structural change at destination required"
+	syncOverwriteReasonGroupStructureChanged  = "the hardlink group structure is changing (merge or split); anchor content must be verified"
+	syncOverwriteReasonSizeMismatch           = "the source and destination anchor files differ in size"
 )
 
 func syncComparatorLog(fileName, status, skipReason string, stdout bool) {
@@ -221,13 +223,18 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 	// Build two flat lookup tables to detect structural mismatches between
 	// the source and destination inode groups.
 	//
+	// If one source Inode maps to multiple destination Inodes,
+	// we need to merge them.
 	// srcInodeIsMultiGroup:   src inode → true when its members span >1 dest inode
 	//                         (group merge: two dest groups must be unified at dest)
+
+	// If one destination Inode maps to multiple source Inodes,
+	// we need to break them apart.
 	// destGroupIsMultiSource: dest inode → true when its members map to >1 src inode
 	//                         (group split: one dest group must be broken apart)
 	//
-	// Both use a "first-seen + overflow" pattern to avoid nested map allocations,
-	// keeping heap usage O(distinct inodes) rather than O(distinct inode pairs).
+	// Both use a "first-seen + overflow" pattern to keep heap usage
+	// O(distinct inodes)
 	srcInodeFirstDest := make(map[string]string)
 	srcInodeIsMultiGroup := make(map[string]bool)
 	destInodeFirstSrc := make(map[string]string)
@@ -322,9 +329,78 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 				return err
 			}
 		} else {
-			// Relationship is intact — no transfer needed.
-			// Content is owned by the anchor's own transfer; CreateHardlink carries no data.
-			syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusSkipped, syncSkipReasonHardlinkRelationshipIntact, false)
+			// Relationship is intact — no structural change needed.
+			// However, the anchor file's content may still be stale even when the
+			// link structure is unchanged.  Check and transfer content if necessary.
+			// Non-anchor files carry no content (they link to the anchor), so no
+			// content check is required for them.
+			if sourceObjectInMap.TargetHardlinkFile == "" {
+				// This is the first-seen-file path.  Perform generic content verification.
+				//
+				// groupStructureChanged is true when any file in this inode group is being
+				// recreated (group merge: src inode spans multiple dest inodes, or group split:
+				// dest inode spans multiple src inodes).  In those cases LMT comparison alone
+				// is not a reliable proxy for content equivalence: newly relinked files at the
+				// destination will inherit whatever data the anchor holds, so we must make sure
+				// the anchor carries the source inode's content regardless of timestamps.
+				groupStructureChanged := srcInodeIsMultiGroup[sourceObjectInMap.Inode] ||
+					destGroupIsMultiSource[destHardlinkObj.Inode]
+
+				if f.disableComparison || groupStructureChanged {
+					reason := syncOverwriteReasonNewerHash
+					if groupStructureChanged {
+						reason = syncOverwriteReasonGroupStructureChanged
+					}
+					syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, reason, false)
+					if err := f.copyTransferScheduler(sourceObjectInMap); err != nil {
+						return err
+					}
+
+				} else if f.comparisonHashType != common.ESyncHashType.None() &&
+					sourceObjectInMap.EntityType == common.EEntityType.Hardlink() {
+					switch f.comparisonHashType {
+					case common.ESyncHashType.MD5():
+						if sourceObjectInMap.Md5 == nil {
+							if sourceObjectInMap.IsMoreRecentThan(destHardlinkObj, f.preferSMBTime) {
+								syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMTAndMissingHash, false)
+								if err := f.copyTransferScheduler(sourceObjectInMap); err != nil {
+									return err
+								}
+							} else {
+								syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusSkipped, syncSkipReasonTimeAndMissingHash, false)
+							}
+						} else if !reflect.DeepEqual(sourceObjectInMap.Md5, destHardlinkObj.Md5) {
+							syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, false)
+							if err := f.copyTransferScheduler(sourceObjectInMap); err != nil {
+								return err
+							}
+						} else {
+							syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusSkipped, syncSkipReasonSameHash, false)
+						}
+					default:
+						panic("sanity check: unsupported hash type " + f.comparisonHashType.String())
+					}
+				} else if sourceObjectInMap.Size != destHardlinkObj.Size {
+					// Size mismatch is a reliable, hash-free content signal: if the anchor
+					// files are different sizes, content has definitely changed.  Transfer
+					// unconditionally rather than relying on LMT, which can be misleading
+					// when files are copied, restored, or touched without changing data.
+					syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncOverwriteReasonSizeMismatch, false)
+					if err := f.copyTransferScheduler(sourceObjectInMap); err != nil {
+						return err
+					}
+				} else if sourceObjectInMap.IsMoreRecentThan(destHardlinkObj, f.preferSMBTime) {
+					syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMT, false)
+					if err := f.copyTransferScheduler(sourceObjectInMap); err != nil {
+						return err
+					}
+				} else {
+					syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusSkipped, syncSkipReasonHardlinkRelationshipIntact, false)
+				}
+			} else {
+				// Non-anchor: content is owned by the anchor; only the link structure matters.
+				syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusSkipped, syncSkipReasonHardlinkRelationshipIntact, false)
+			}
 		}
 	}
 	return nil
