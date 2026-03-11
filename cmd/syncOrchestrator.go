@@ -410,8 +410,8 @@ func (st *SyncTraverser) belongsToCurrentDirectory(path, dirPrefix string) bool 
 // hasAnyChildChangedSinceLastSync checks if at least 1 child object changed in the current directory
 // since the last successful sync job start time.
 func (st *SyncTraverser) hasAnyChildChangedSinceLastSync() (bool, uint32) {
-	// st.dir is always the correct prefix: "/" for root, "/dir1/" for subdirs, etc.
-	dirPrefix := st.dir
+	// st.dir will have leading slash but the paths in the indexer do not
+	dirPrefix := strings.TrimPrefix(st.dir, common.AZCOPY_PATH_SEPARATOR_STRING)
 
 	foundOneChanged := false
 
