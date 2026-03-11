@@ -247,24 +247,27 @@ func ReadStatFromMetadata(metadata MetadataStore, contentLength int64) (UnixStat
 		s.groupGID = uint32(g)
 	}
 
-	// In cases, the permissions were uploaded in AMLFS style, determine what base to use
+	// We normalize the mode to have the same internal decimal representation for both posix styles.
+	// AMLFS (base 8), Standard (base 10)
 	if modeStr, ok := metadata.TryRead(POSIXModeMeta); ok {
 		modeBase := 10
 
 		// AMLFS stores permissions in octal and also sets AMLFS owner/group keys.
-		amlfsStyle := false
+
+		// Use multiple indicators to avoid misclassifying standard metadata as AMLFS.
+		amlfsStyle := 0
 		if _, ok := metadata.TryRead(AMLFSOwnerMeta); ok {
-			amlfsStyle = true
+			amlfsStyle++
 		}
 		if _, ok := metadata.TryRead(AMLFSGroupMeta); ok {
-			amlfsStyle = true
+			amlfsStyle++
 		}
 		// AMLFS formatter uses a leading 0 with %04o (e.g., "0755")
-		if strings.HasPrefix(*modeStr, "0") {
-			amlfsStyle = true
+		if len(*modeStr) > 1 && strings.HasPrefix(*modeStr, "0") {
+			amlfsStyle++
 		}
 
-		if amlfsStyle {
+		if amlfsStyle >= 1 {
 			modeBase = 8 // To persist AMLFS style formatting, we store in base 8
 		}
 
@@ -311,8 +314,8 @@ func ReadStatFromMetadata(metadata MetadataStore, contentLength int64) (UnixStat
 		s.accessTime = time.Unix(0, at)
 	}
 
-	// ModTime can come in either standard (nanoseconds) or AMLFS (formatted string) format
-	// It is stored internally as unix nanoseconds (Time.time type)
+	// ModTime can come in either Standard (nanoseconds) or AMLFS (formatted string)
+	// We normalize both formats to store modTime as unix nanoseconds (Time.time type)
 	if mtime, ok := metadata.TryRead(POSIXModTimeMeta); ok {
 		mt, err := strconv.ParseInt(*mtime, 10, 64)
 		if errors.Is(err, strconv.ErrSyntax) {

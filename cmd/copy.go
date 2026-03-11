@@ -589,6 +589,7 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	return cooked, nil
 }
 
+// This method and ones it calls are legacy code not used in copy command flow (as of v10.32)
 func (raw rawCopyCmdArgs) cook() (cooked CookedCopyCmdArgs, err error) {
 	if cooked, err = raw.toOptions(); err != nil {
 		return cooked, err

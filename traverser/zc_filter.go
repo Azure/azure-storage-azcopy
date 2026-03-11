@@ -213,7 +213,7 @@ func (f *IncludeFilter) DoesPass(storedObject StoredObject) bool {
 	return false
 }
 
-// getEnumerationPreFilter returns a prefix, if any, which can be used service-side to pre-select
+// getEnumerationPreFilter returns a prefix, if any, which can be used service-side to preselect
 // things that will pass the filter. E.g. if there's exactly one include pattern, and it is
 // "foo*bar", then this routine will return "foo", since only things starting with "foo" can pass the filters.
 // Service side enumeration code can be given that prefix, to optimize the enumeration.
