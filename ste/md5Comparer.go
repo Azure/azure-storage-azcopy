@@ -42,8 +42,8 @@ var ErrMd5Mismatch = errors.New("the MD5 hash of the data, as we received it, di
 	"This means that either there is a data integrity error OR another tool has failed to keep the stored hash up to date. " +
 	"(NOTE In the specific case of downloading a Page Blob that has been used as a VM disk, the VM has probably changed the content since the hash was set. That's normal, and " +
 	"in that specific case you can simply disable the MD5 check. " +
-	"See the AzCopy options documentation for --check-md5.)" +
-	"Also see Notes section here https://docs.azure.cn/en-us/storage/common/storage-use-azcopy-blobs-download#download-a-blob")
+	"See the AzCopy options documentation for --check-md5.) " +
+	"Also see Notes section here https://learn.microsoft.com/en-us/storage/common/storage-use-azcopy-blobs-download#download-a-blob")
 
 // TODO: let's add an aka.ms link to the message, that gives more info
 const noMD5Stored = "no MD5 was stored in the Blob/File service against this file. So the downloaded data cannot be MD5-validated."
