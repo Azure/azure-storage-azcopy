@@ -25,6 +25,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 )
 
 const IncludeBeforeFlagName = "include-before"
@@ -100,4 +101,30 @@ func CreateDirectoryIfNotExist(directory string, tracker FolderCreationTracker) 
 	} else { // if err is nil, we return err. if err has an error, we return it.
 		return nil
 	}
+}
+
+// EntityTimestamps provides a common interface for file information across platforms
+type ExtendedProperties interface {
+	// GetLastAccessTime returns the last access time
+	GetLastAccessTime() time.Time
+
+	// GetLastWriteTime returns the last write time
+	GetLastWriteTime() time.Time
+
+	// GetChangeTime returns the change time (may be same as write time on some platforms)
+	GetChangeTime() time.Time
+}
+
+type DefaultExtendedProperties struct{}
+
+func (d DefaultExtendedProperties) GetLastAccessTime() time.Time {
+	return time.Time{}
+}
+
+func (d DefaultExtendedProperties) GetLastWriteTime() time.Time {
+	return time.Time{}
+}
+
+func (d DefaultExtendedProperties) GetChangeTime() time.Time {
+	return time.Time{}
 }

@@ -59,7 +59,8 @@ import (
 	gcpUtils "cloud.google.com/go/storage"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"github.com/minio/minio-go"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 	"google.golang.org/api/iterator"
 )
 
@@ -491,7 +492,11 @@ func createS3ClientWithMinio(o createS3ResOptions) (*minio.Client, error) {
 		return nil, fmt.Errorf("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY should be set before creating the S3 client")
 	}
 
-	s3Client, err := minio.NewWithRegion("s3.amazonaws.com", accessKeyID, secretAccessKey, true, o.Location)
+	s3Client, err := minio.New("s3.amazonaws.com", &minio.Options{
+		Creds:  credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
+		Secure: true,
+		Region: o.Location,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -517,7 +522,7 @@ func createGCPClientWithGCSSDK() (*gcpUtils.Client, error) {
 
 func createNewBucket(a *assert.Assertions, client *minio.Client, o createS3ResOptions) string {
 	bucketName := generateBucketName()
-	err := client.MakeBucket(bucketName, o.Location)
+	err := client.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{Region: o.Location})
 	a.Nil(err)
 
 	return bucketName
@@ -533,7 +538,7 @@ func createNewGCPBucket(a *assert.Assertions, client *gcpUtils.Client) string {
 }
 
 func createNewBucketWithName(a *assert.Assertions, client *minio.Client, bucketName string, o createS3ResOptions) {
-	err := client.MakeBucket(bucketName, o.Location)
+	err := client.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{Region: o.Location})
 	a.Nil(err)
 }
 
@@ -547,7 +552,7 @@ func createNewObject(a *assert.Assertions, client *minio.Client, bucketName stri
 	objectKey = prefix + generateObjectName()
 
 	size := int64(len(objectDefaultData))
-	n, err := client.PutObject(bucketName, objectKey, strings.NewReader(objectDefaultData), size, minio.PutObjectOptions{})
+	n, err := client.PutObject(ctx, bucketName, objectKey, strings.NewReader(objectDefaultData), size, minio.PutObjectOptions{})
 	a.Nil(err)
 
 	a.Equal(size, n)
@@ -583,7 +588,7 @@ func deleteBucket(client *minio.Client, bucketName string, waitQuarterMinute boo
 		defer close(objectsCh)
 
 		// List all objects from a bucket-name with a matching prefix.
-		for object := range client.ListObjectsV2(bucketName, "", true, context.Background().Done()) {
+		for object := range client.ListObjects(ctx, bucketName, minio.ListObjectsOptions{Prefix: "", Recursive: true}) {
 			if object.Err != nil {
 				return
 			}
@@ -591,9 +596,11 @@ func deleteBucket(client *minio.Client, bucketName string, waitQuarterMinute boo
 			objectsCh <- object.Key
 		}
 	}()
+	remObjectsCh := make(chan minio.ObjectInfo)
 
 	// List bucket, and delete all the objects in the bucket
-	errChn := client.RemoveObjects(bucketName, objectsCh)
+	errChn := client.RemoveObjects(ctx, bucketName, remObjectsCh, minio.RemoveObjectsOptions{})
+
 	var err error
 
 	for rmObjErr := range errChn {
@@ -603,7 +610,7 @@ func deleteBucket(client *minio.Client, bucketName string, waitQuarterMinute boo
 	}
 
 	// Remove the bucket.
-	err = client.RemoveBucket(bucketName)
+	err = client.RemoveBucket(ctx, bucketName)
 
 	if err != nil {
 		return
@@ -644,7 +651,8 @@ func deleteGCPBucket(client *gcpUtils.Client, bucketName string, waitQuarterMinu
 }
 
 func cleanS3Account(client *minio.Client) {
-	buckets, err := client.ListBuckets()
+	ctx := context.Background()
+	buckets, err := client.ListBuckets(ctx)
 	if err != nil {
 		return
 	}

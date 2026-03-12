@@ -27,7 +27,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/minio/minio-go"
+	"github.com/minio/minio-go/v7"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -54,7 +54,7 @@ func (t *s3Traverser) IsDirectory(isSource bool) (bool, error) {
 		return isDirDirect, nil
 	}
 
-	_, err := t.s3Client.StatObject(t.s3URLParts.BucketName, t.s3URLParts.ObjectKey, minio.StatObjectOptions{})
+	_, err := t.s3Client.StatObject(t.ctx, t.s3URLParts.BucketName, t.s3URLParts.ObjectKey, minio.StatObjectOptions{})
 
 	if err != nil {
 		return true, err
@@ -85,7 +85,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor ObjectProce
 		objectPath := strings.Split(t.s3URLParts.ObjectKey, "/")
 		objectName := objectPath[len(objectPath)-1]
 
-		oi, err := t.s3Client.StatObject(t.s3URLParts.BucketName, t.s3URLParts.ObjectKey, minio.StatObjectOptions{})
+		oi, err := t.s3Client.StatObject(t.ctx, t.s3URLParts.BucketName, t.s3URLParts.ObjectKey, minio.StatObjectOptions{})
 		if invalidAzureBlobName(t.s3URLParts.ObjectKey) {
 			WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, t.s3URLParts.ObjectKey))
 			return common.EAzError.InvalidBlobName()
@@ -132,7 +132,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor ObjectProce
 	searchPrefix := t.s3URLParts.ObjectKey
 
 	// It's a bucket or virtual directory.
-	for objectInfo := range t.s3Client.ListObjectsV2(t.s3URLParts.BucketName, searchPrefix, t.recursive, t.ctx.Done()) {
+	for objectInfo := range t.s3Client.ListObjects(t.ctx, t.s3URLParts.BucketName, minio.ListObjectsOptions{Prefix: searchPrefix, Recursive: t.recursive, UseV1: false}) {
 		if objectInfo.Err != nil {
 			return fmt.Errorf("cannot list objects, %v", objectInfo.Err)
 		}
@@ -163,7 +163,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor ObjectProce
 		// default to empty props, but retrieve real ones if required
 		oie := common.ObjectInfoExtension{ObjectInfo: minio.ObjectInfo{}}
 		if t.getProperties {
-			oi, err := t.s3Client.StatObject(t.s3URLParts.BucketName, objectInfo.Key, minio.StatObjectOptions{})
+			oi, err := t.s3Client.StatObject(t.ctx, t.s3URLParts.BucketName, objectInfo.Key, minio.StatObjectOptions{})
 			if err != nil {
 				return err
 			}
@@ -214,7 +214,7 @@ func NewS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTrave
 			Endpoint: t.s3URLParts.Endpoint,
 			Region:   t.s3URLParts.Region,
 		},
-	}, common.AzcopyScanningLogger)
+	}, common.CredentialOpOptions{}, common.AzcopyScanningLogger)
 
 	return
 }

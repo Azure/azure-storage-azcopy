@@ -37,6 +37,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 )
 
 type FileClientStub interface {
@@ -194,15 +195,64 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		Metadata:    u.metadataToApply,
 	}
 
-	u.addCreationOptions(createOptions)
+	if common.IsNFSCopy() {
+
+		stage, err := u.addNFSPropertiesToHeaders(info)
+		if err != nil {
+			jptm.FailActiveSend(stage, err)
+			return
+		}
+
+		stage, err = u.addNFSPermissionsToHeaders(info, u.getFileClient().URL())
+		if err != nil {
+			jptm.FailActiveSend(stage, err)
+			return
+		}
+		createOptions.NFSProperties = &file.NFSProperties{
+			CreationTime:  u.nfsPropertiesToApply.CreationTime,
+			LastWriteTime: u.nfsPropertiesToApply.LastWriteTime,
+			Owner:         u.nfsPropertiesToApply.Owner,
+			Group:         u.nfsPropertiesToApply.Group,
+			FileMode:      u.nfsPropertiesToApply.FileMode,
+		}
+	} else {
+		stage, err := u.addPermissionsToHeaders(info, u.getFileClient().URL())
+		if err != nil {
+			jptm.FailActiveSend(stage, err)
+			return
+		}
+
+		stage, err = u.addSMBPropertiesToHeaders(info)
+		if err != nil {
+			jptm.FailActiveSend(stage, err)
+			return
+		}
+		createOptions.SMBProperties = &u.smbPropertiesToApply
+		createOptions.Permissions = &u.permissionsToApply
+	}
 
 	// Turn off readonly at creation time (because if its set at creation time, we won't be
 	// able to upload any data to the file!). We'll set it in epilogue, if necessary.
-	// Disable readonly temporarily
-	props := createOptions.SMBProperties
-	if props != nil && props.Attributes != nil {
-		props.Attributes.ReadOnly = false
+	creationProperties := u.smbPropertiesToApply
+	if creationProperties.Attributes != nil {
+		attrsCopy := *u.smbPropertiesToApply.Attributes
+		creationProperties.Attributes = &attrsCopy
+		creationProperties.Attributes.ReadOnly = false
 	}
+
+	// Set last write time to the minimum time to enable retry copy on next sync
+	// The service started updating the last-write-time in March 2021 when the file is modified.
+	// So when we uploaded the ranges, we've unintentionally changed the last-write-time.
+	// This will ensure that the last-write-time is set to the minimum time and epilogue
+	// will set the last-write-time to the correct value.
+	// XDM: Need to confirm this change for NFS.
+	if u.jptm.Info().PreserveInfo && creationProperties.LastWriteTime != nil {
+		minimalLwt := time.Unix(0, 0)
+		creationProperties.LastWriteTime = &minimalLwt
+	}
+
+	// Set this before file creation
+	createOptions.SMBProperties = &creationProperties
 
 	err := common.DoWithOverrideReadOnlyOnAzureFiles(u.ctx,
 		func() (interface{}, error) {
@@ -212,36 +262,21 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		u.jptm.GetForceIfReadOnly())
 
 	if fileerror.HasCode(err, fileerror.ParentNotFound) {
+		parentNotFoundLog := fmt.Sprintf(
+			"%s: %s \n AzCopy is going to create parent directories of the Azure files",
+			fileerror.ParentNotFound, err.Error())
+		if buildmode.IsMover {
+			// Create a concise log message for Mover. This is to avoid bloating up the log files
+			// with the full message for an expected and harmless error. In the scenario of sync orchestrator for sync,
+			// we expect to see a high number of ParentNotFound errors, as we create the parent directories
+			parentNotFoundLog = fmt.Sprintf("ParentNotFound (will be created) for %s. ReqId: %s", u.fileOrDirClient.URL(), ErrorEx{err}.MSRequestID())
+		}
+
 		// Create the parent directories of the file. Note share must be existed, as the files are listed from share or directory.
-		jptm.Log(common.LogError, fmt.Sprintf("%s: %s \n AzCopy is going to create parent directories of the Azure files", fileerror.ParentNotFound, err.Error()))
+		jptm.Log(common.LogError, parentNotFoundLog)
 		err = AzureFileParentDirCreator{}.CreateParentDirToRoot(u.ctx, u.getFileClient(), u.shareClient, u.jptm.GetFolderCreationTracker())
 		if err != nil {
 			u.jptm.FailActiveUpload("Creating parent directory", err)
-		}
-
-		if props != nil && props.Attributes != nil {
-			createOptions.SMBProperties = props
-		}
-		// retrying file creation
-		err = common.DoWithOverrideReadOnlyOnAzureFiles(u.ctx,
-			func() (interface{}, error) {
-				return u.getFileClient().Create(u.ctx, info.SourceSize, createOptions)
-			},
-			u.fileOrDirClient,
-			u.jptm.GetForceIfReadOnly())
-	}
-
-	// In case of NFS there might be a mismatch between the source and destination file types
-	// e.g. source is a file and destination is a symlink with the same name.
-	// In this case, we delete the destination symlink and retry the creation of the file
-	if jptm.FromTo().IsNFS() && fileerror.HasCode(err, fileerror.ResourceTypeMismatch) {
-		jptm.Log(common.LogWarning,
-			fmt.Sprintf("%s: %s \nAzCopy will delete the destination resource.",
-				fileerror.ResourceAlreadyExists, err.Error()))
-
-		// delete the destination object
-		if _, delErr := u.getFileClient().Delete(u.ctx, nil); delErr != nil {
-			jptm.FailActiveUpload("Deleting existing resource", delErr)
 		}
 
 		// retrying file creation
@@ -261,6 +296,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 	return
 }
 
+
 func (u *azureFileSenderBase) Epilogue() {
 	// always set the SMB info again after the file content has been uploaded, for the following reasons:
 	//   0. File attributes such as readOnly and archive need to be passed through another Set Properties call.
@@ -268,21 +304,31 @@ func (u *azureFileSenderBase) Epilogue() {
 	//      This is not trivial but the Files Team has explicitly told us to perform this extra set call.
 	//   2. The service started updating the last-write-time in March 2021 when the file is modified.
 	//      So when we uploaded the ranges, we've unintentionally changed the last-write-time.
-	var opts *file.SetHTTPHeadersOptions
 	if u.jptm.IsLive() && u.jptm.Info().PreserveInfo {
 		// This is an extra round trip, but we can live with that for these relatively rare cases
-		if u.jptm.FromTo().IsNFS() {
-			opts = u.buildSetHTTPHeadersOptions()
+		if common.IsNFSCopy() {
+			_, err := u.getFileClient().SetHTTPHeaders(u.ctx, &file.SetHTTPHeadersOptions{
+				HTTPHeaders: &u.headersToApply,
+				NFSProperties: &file.NFSProperties{
+					CreationTime:  u.nfsPropertiesToApply.CreationTime,
+					LastWriteTime: u.nfsPropertiesToApply.LastWriteTime,
+					FileMode:      u.nfsPropertiesToApply.FileMode,
+					Owner:         u.nfsPropertiesToApply.Owner,
+					Group:         u.nfsPropertiesToApply.Group,
+				},
+			})
+			if err != nil {
+				u.jptm.FailActiveSend("Applying final attribute settings", err)
+			}
 		} else {
-			opts = &file.SetHTTPHeadersOptions{
+			_, err := u.getFileClient().SetHTTPHeaders(u.ctx, &file.SetHTTPHeadersOptions{
 				HTTPHeaders:   &u.headersToApply,
 				Permissions:   &u.permissionsToApply,
 				SMBProperties: &u.smbPropertiesToApply,
+			})
+			if err != nil {
+				u.jptm.FailActiveSend("Applying final attribute settings", err)
 			}
-		}
-		_, err := u.getFileClient().SetHTTPHeaders(u.ctx, opts)
-		if err != nil {
-			u.jptm.FailActiveSend("Applying final attribute settings", err)
 		}
 	}
 }
@@ -325,7 +371,7 @@ func (u *azureFileSenderBase) SetFolderProperties() (err error) {
 	info := u.jptm.Info()
 
 	setPropertiesOptions := &directory.SetPropertiesOptions{}
-	if u.jptm.FromTo().IsNFS() {
+	if common.IsNFSCopy() {
 
 		_, err = u.addNFSPropertiesToHeaders(info)
 		if err != nil {
@@ -376,7 +422,7 @@ func (u *azureFileSenderBase) DirUrlToString() string {
 	rawURL, err := url.Parse(directoryURL)
 	common.PanicIfErr(err)
 	rawURL.RawQuery = ""
-	// To avoid additional encoding/decoding when constructing the URL string
+	// To avoid encoding/decoding
 	rawURL.RawPath = ""
 	return rawURL.String()
 }
@@ -408,9 +454,6 @@ func (AzureFileParentDirCreator) getParentDirectoryClient(uh FileClientStub, sha
 // and there is no permission on directory level, i.e. create directory is a general permission for each level directories for Azure file.
 func (AzureFileParentDirCreator) verifyAndHandleCreateErrors(err error) error {
 	if err != nil {
-		if errors.Is(err, common.FolderCreationErrorAlreadyExists{}) {
-			return nil
-		}
 		var respErr *azcore.ResponseError
 		if errors.As(err, &respErr) && respErr.StatusCode == http.StatusConflict { // Note the ServiceCode actually be AuthenticationFailure when share failed to be created, if want to create share as well.
 			return nil
@@ -463,68 +506,11 @@ func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, shareCli
 		recorderURL.RawQuery = ""
 		err = t.CreateFolder(recorderURL.String(), func() error {
 			_, err := currentDirectoryClient.Create(ctx, nil)
-
-			if fileerror.HasCode(err, fileerror.ResourceAlreadyExists) {
-				return common.FolderCreationErrorAlreadyExists{}
-			}
-
 			return err
 		})
 		if verifiedErr := d.verifyAndHandleCreateErrors(err); verifiedErr != nil {
 			return verifiedErr
 		}
 	}
-	return nil
-}
-
-// SendSymlink creates a symbolic link on Azure Files NFS with the given link data.
-func (u *azureFileSenderBase) SendSymlink(linkData string) error {
-	jptm := u.jptm
-	info := jptm.Info()
-
-	if !jptm.FromTo().IsNFS() {
-		return nil
-	}
-
-	createSymlinkOptions := &file.CreateSymbolicLinkOptions{
-		Metadata: u.metadataToApply,
-	}
-
-	stage, err := u.addNFSPropertiesToHeaders(info)
-	if err != nil {
-		jptm.FailActiveSend(stage, err)
-		return err
-	}
-
-	stage, err = u.addNFSPermissionsToHeaders(info, u.getFileClient().URL())
-	if err != nil {
-		jptm.FailActiveSend(stage, err)
-		return err
-	}
-	createSymlinkOptions.FileNFSProperties = &file.NFSProperties{
-		CreationTime:  u.nfsPropertiesToApply.CreationTime,
-		LastWriteTime: u.nfsPropertiesToApply.LastWriteTime,
-		Owner:         u.nfsPropertiesToApply.Owner,
-		Group:         u.nfsPropertiesToApply.Group,
-		FileMode:      u.nfsPropertiesToApply.FileMode,
-	}
-
-	err = DoWithCreateSymlinkOnAzureFilesNFS(u.ctx,
-		func() error {
-			_, err := u.getFileClient().CreateSymbolicLink(u.ctx, linkData, createSymlinkOptions)
-			return err
-		},
-		u.getFileClient(),
-		u.shareClient,
-		u.pacer,
-		u.jptm)
-
-	// if still failing, give up
-	if err != nil {
-		jptm.FailActiveUpload("Creating symlink", err)
-		return fmt.Errorf("failed to create symlink: %w", err)
-	}
-
-	u.jptm.Log(common.LogDebug, fmt.Sprintf("Created symlink with data: %s", linkData))
 	return nil
 }

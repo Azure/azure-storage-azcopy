@@ -1,52 +1,48 @@
 package ste
 
 import (
-	"errors"
 	"fmt"
 	"net/url"
 	"strings"
 	"sync"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 )
 
 type FolderCreationTracker common.FolderCreationTracker
 
 type JPPTCompatibleFolderCreationTracker interface {
 	FolderCreationTracker
-	RegisterPropertiesTransfer(folder string, partNum PartNumber, transferIndex uint32)
+	RegisterPropertiesTransfer(folder string, transferIndex uint32)
 }
 
-type TransferFetcher = func(index JpptFolderIndex) *JobPartPlanTransfer
-
-func NewTransferFetcher(jobMgr IJobMgr) TransferFetcher {
-	return func(index JpptFolderIndex) *JobPartPlanTransfer {
-		mgr, ok := jobMgr.JobPartMgr(index.PartNum)
-		if !ok {
-			panic(fmt.Errorf("sanity check: failed to fetch job part manager %d", index.PartNum))
+func NewFolderCreationTracker(fpo common.FolderPropertyOption, plan *JobPartPlanHeader) FolderCreationTracker {
+	lockFolderCreation := true
+	if buildmode.IsMover && (plan.FromTo.From() == common.ELocation.Local() || plan.FromTo.From() == common.ELocation.BlobFS()){
+		switch plan.FromTo.To() {
+		case common.ELocation.File(), common.ELocation.FileNFS():
+			lockFolderCreation = false
+		case common.ELocation.Blob(), common.ELocation.BlobFS():
+			lockFolderCreation = false
 		}
-
-		return mgr.Plan().Transfer(index.TransferIndex)
 	}
+
+	return NewFolderCreationTrackerInt(fpo, plan, lockFolderCreation)
 }
 
-// NewFolderCreationTracker creates a folder creation tracker taking in a TransferFetcher (typically created by NewTransferFetcher)
-// A TransferFetcher is used in place of an IJobMgr to make testing easier to implement.
-func NewFolderCreationTracker(fpo common.FolderPropertyOption, fetcher TransferFetcher, fromTo common.FromTo) FolderCreationTracker {
-	switch {
-	// create a folder tracker when we're persisting properties
-	case fpo == common.EFolderPropertiesOption.AllFolders(),
-		fpo == common.EFolderPropertiesOption.AllFoldersExceptRoot(),
-		// create a folder tracker for destinations where we don't want to spam the service with create requests
-		// on folders that already exist
-		fromTo.To().IsFile(),
-		fromTo.To() == common.ELocation.BlobFS():
+func NewFolderCreationTrackerInt(fpo common.FolderPropertyOption, plan *JobPartPlanHeader, lockFolderCreation bool) FolderCreationTracker {
+	switch fpo {
+	case common.EFolderPropertiesOption.AllFolders(),
+		common.EFolderPropertiesOption.AllFoldersExceptRoot():
 		return &jpptFolderTracker{ // This prevents a dependency cycle. Reviewers: Are we OK with this? Can you think of a better way to do it?
-			fetchTransfer: fetcher,
-			mu:            &sync.Mutex{},
-			contents:      make(map[string]*JpptFolderTrackerState),
+			plan:                   plan,
+			mu:                     &sync.RWMutex{},
+			contents:               make(map[string]uint32),
+			unregisteredButCreated: make(map[string]struct{}),
+			lockFolderCreation:     lockFolderCreation,
 		}
-	case fpo == common.EFolderPropertiesOption.NoFolders():
+	case common.EFolderPropertiesOption.NoFolders():
 		// can't use simpleFolderTracker here, because when no folders are processed,
 		// then StopTracking will never be called, so we'll just use more and more memory for the map
 		return &nullFolderTracker{}
@@ -73,14 +69,35 @@ func (f *nullFolderTracker) StopTracking(folder string) {
 }
 
 type jpptFolderTracker struct {
-	// fetchTransfer is used instead of a IJobMgr reference to support testing
-	fetchTransfer func(index JpptFolderIndex) *JobPartPlanTransfer
-	mu            *sync.Mutex
-
-	contents map[string]*JpptFolderTrackerState
+	plan                   IJobPartPlanHeader
+	mu                     *sync.RWMutex
+	contents               map[string]uint32
+	unregisteredButCreated map[string]struct{}
+	lockFolderCreation     bool
 }
 
-func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, partNum PartNumber, transferIndex uint32) {
+// Public interface - safe for external callers
+func (f *jpptFolderTracker) IsFolderAlreadyCreated(folder string) bool {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return f.isFolderAlreadyCreatedUnSafe(folder)
+}
+
+func (f *jpptFolderTracker) isFolderAlreadyCreatedUnSafe(folder string) bool {
+
+	if idx, ok := f.contents[folder]; ok &&
+		f.plan.Transfer(idx).TransferStatus() == (common.ETransferStatus.FolderCreated()) {
+		return true
+	}
+
+	if _, ok := f.unregisteredButCreated[folder]; ok {
+		return true
+	}
+
+	return false
+}
+
+func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, transferIndex uint32) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -88,124 +105,57 @@ func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, partNum Pa
 		return // Never persist to dev-null
 	}
 
-	state, present := f.contents[folder]
+	f.contents[folder] = transferIndex
 
-	if !present {
-		state = &JpptFolderTrackerState{}
-	}
+	// We created it before it was enumerated-- Let's register that now.
+	if _, ok := f.unregisteredButCreated[folder]; ok {
+		f.plan.Transfer(transferIndex).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
 
-	state.Index = &JpptFolderIndex{
-		PartNum:       partNum,
-		TransferIndex: transferIndex,
-	}
-
-	// if our transfer already has a created status, we should adopt that.
-	if ts := f.fetchTransfer(*state.Index).TransferStatus(); ts == common.ETransferStatus.FolderCreated() {
-		state.Status = EJpptFolderTrackerStatus.FolderCreated()
-	} else {
-		// otherwise, we map onto it whatever we have. This puts the statuses in alignment.
-		switch state.Status {
-		case EJpptFolderTrackerStatus.FolderExisted():
-			f.fetchTransfer(*state.Index).SetTransferStatus(common.ETransferStatus.FolderExisted(), false)
-		case EJpptFolderTrackerStatus.FolderCreated():
-			f.fetchTransfer(*state.Index).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
-		}
-	}
-
-	f.debugCheckState(*state)
-
-	if !present {
-		f.contents[folder] = state
+		delete(f.unregisteredButCreated, folder)
 	}
 }
 
 func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
 
 	if folder == common.Dev_Null {
 		return nil // Never persist to dev-null
 	}
 
-	state, ok := f.contents[folder]
+	if f.lockFolderCreation {
+		f.mu.Lock()
+		defer f.mu.Unlock()
 
-	if ok {
-		if state.Index != nil {
-			ts := f.fetchTransfer(*state.Index).TransferStatus()
-
-			if ts == common.ETransferStatus.FolderCreated() ||
-				ts == common.ETransferStatus.FolderExisted() ||
-				ts == common.ETransferStatus.Cancelled() ||
-				ts == common.ETransferStatus.Success() ||
-				ts == common.ETransferStatus.Failed() {
-				return nil // do not re-create an existing folder
-			}
-		} else {
-			if state.Status != EJpptFolderTrackerStatus.Unseen() {
-				return nil
-			}
+		// If the folder was created while we were waiting for the lock, we need to account for that.
+		if f.isFolderAlreadyCreatedUnSafe(folder) {
+			return nil
 		}
 	}
 
 	err := doCreation()
-	if err != nil && !errors.Is(err, common.FolderCreationErrorAlreadyExists{}) {
+	if err != nil {
 		return err
 	}
 
-	if state == nil {
-		state = &JpptFolderTrackerState{}
-	}
+	if !f.lockFolderCreation {
+		f.mu.Lock()
+		defer f.mu.Unlock()
 
-	if err == nil { // first, update our internal status, then,
-		state.Status = EJpptFolderTrackerStatus.FolderCreated()
-	} else if errors.Is(err, common.FolderCreationErrorAlreadyExists{}) {
-		state.Status = EJpptFolderTrackerStatus.FolderExisted()
-	}
-
-	if state.Index != nil {
-		// commit the state if needbe.
-		switch state.Status {
-		case EJpptFolderTrackerStatus.FolderCreated():
-			f.fetchTransfer(*state.Index).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
-		case EJpptFolderTrackerStatus.FolderExisted():
-			f.fetchTransfer(*state.Index).SetTransferStatus(common.ETransferStatus.FolderExisted(), false)
+		// If the folder was created while we were waiting for the lock, we need to account for that.
+		if f.isFolderAlreadyCreatedUnSafe(folder) {
+			return nil
 		}
 	}
 
-	f.debugCheckState(*state)
+	if idx, ok := f.contents[folder]; ok {
+		// overwrite it's transfer status
+		f.plan.Transfer(idx).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
+	} else {
+		// A folder hasn't been hit in traversal yet.
+		// Recording it in memory is OK, because we *cannot* resume a job that hasn't finished traversal.
+		f.unregisteredButCreated[folder] = struct{}{}
+	}
 
-	f.contents[folder] = state
 	return nil
-}
-
-// debugCheckState validates that, if there is a plan file entry, that the plan file state matches the tracker's state.
-// this should be called any time state gets used, to ensure it doesn't go out of sync.
-func (f *jpptFolderTracker) debugCheckState(state JpptFolderTrackerState) {
-	if state.Index == nil {
-		return // nothing to do, current status is in table.
-	}
-
-	ts := f.fetchTransfer(*state.Index).TransferStatus()
-	passed := true
-
-	// For legit state mismatches, the plan state might differ from the internal state
-	// Plan status can change after folder creation
-	if ts == common.ETransferStatus.Failed() ||
-		ts == common.ETransferStatus.Success() ||
-		ts == common.ETransferStatus.Cancelled() {
-		return
-	}
-
-	switch state.Status {
-	case EJpptFolderTrackerStatus.FolderCreated():
-		passed = ts == common.ETransferStatus.FolderCreated()
-	case EJpptFolderTrackerStatus.FolderExisted():
-		passed = ts == common.ETransferStatus.FolderExisted()
-	}
-
-	if !passed {
-		panic(fmt.Sprintf("internal folder state didn't match plan state: (internal: %v) (plan: %v)", state.Status, ts))
-	}
 }
 
 func (f *jpptFolderTracker) ShouldSetProperties(folder string, overwrite common.OverwriteOption, prompter common.Prompter) bool {
@@ -220,21 +170,16 @@ func (f *jpptFolderTracker) ShouldSetProperties(folder string, overwrite common.
 		common.EOverwriteOption.IfSourceNewer(),
 		common.EOverwriteOption.False():
 
-		f.mu.Lock()
-		defer f.mu.Unlock()
+		f.mu.RLock()
+		defer f.mu.RUnlock()
 
 		var created bool
-
-		if state, ok := f.contents[folder]; ok {
-			if state.Index == nil {
-				// This should not happen, ever.
-				// Folder property jobs register with the tracker before they start getting processed.
-				panic(common.NewAzCopyLogSanitizer().SanitizeLogMessage("folder " + folder + " was not registered when properties persistence occurred"))
-			}
-
-			// status should, at this point, be aligned with the job plan status.
-			created = state.Status == EJpptFolderTrackerStatus.FolderCreated()
-			f.debugCheckState(*state)
+		if idx, ok := f.contents[folder]; ok {
+			created = f.plan.Transfer(idx).TransferStatus() == common.ETransferStatus.FolderCreated()
+		} else {
+			// This should not happen, ever.
+			// Folder property jobs register with the tracker before they start getting processed.
+			panic(common.NewAzCopyLogSanitizer().SanitizeLogMessage("folder " + folder + " was not registered when properties persistence occurred"))
 		}
 
 		// prompt only if we didn't create this folder
@@ -276,42 +221,10 @@ func (f *jpptFolderTracker) StopTracking(folder string) {
 		currentContents := ""
 
 		for k, v := range f.contents {
-			currentContents += fmt.Sprintf("K: %s V: %v\n", k, v)
+			currentContents += fmt.Sprintf("K: %s V: %d\n", k, v)
 		}
 
 		// double should never be hit, but *just in case*.
 		panic(common.NewAzCopyLogSanitizer().SanitizeLogMessage("Folder " + folder + " shouldn't finish tracking until it's been recorded\nCurrent Contents:\n" + currentContents))
 	}
-}
-
-// ===== Supporting Types =====
-
-type JpptFolderTrackerStatus uint
-type eJpptFolderTrackerStatus struct{}
-
-var EJpptFolderTrackerStatus eJpptFolderTrackerStatus
-
-// Unseen - brand new folder
-func (eJpptFolderTrackerStatus) Unseen() JpptFolderTrackerStatus {
-	return 0
-}
-
-// FolderExisted - the folder was here before we got to it
-func (eJpptFolderTrackerStatus) FolderExisted() JpptFolderTrackerStatus {
-	return 1
-}
-
-// FolderCreated - the folder was created by us.
-func (eJpptFolderTrackerStatus) FolderCreated() JpptFolderTrackerStatus {
-	return 2
-}
-
-type JpptFolderIndex struct {
-	PartNum       PartNumber
-	TransferIndex uint32
-}
-
-type JpptFolderTrackerState struct {
-	Index  *JpptFolderIndex
-	Status JpptFolderTrackerStatus
 }

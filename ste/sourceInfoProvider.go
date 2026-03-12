@@ -22,6 +22,7 @@ package ste
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"time"
@@ -66,6 +67,10 @@ type IRemoteSourceInfoProvider interface {
 	// RawSource returns raw source
 	RawSource() string
 
+	// GetObjectRange returns a reader for a specific byte range of the remote source object
+	// This is used for chunked reading of remote objects
+	GetObjectRange(offset, length int64) (io.ReadCloser, error)
+
 	// This can be further extended, e.g. add DownloadSourceRange, which can be used to implement download+upload fashion S2S copy.
 }
 
@@ -83,6 +88,7 @@ type IBlobSourceInfoProvider interface {
 type TypedSMBPropertyHolder interface {
 	FileCreationTime() time.Time
 	FileLastWriteTime() time.Time
+	FileChangeTime() time.Time
 	FileAttributes() (*file.NTFSFileAttributes, error)
 }
 
@@ -164,6 +170,10 @@ func (p *defaultRemoteSourceInfoProvider) SourceSize() int64 {
 
 func (p *defaultRemoteSourceInfoProvider) EntityType() common.EntityType {
 	return p.transferInfo.EntityType
+}
+
+func (p *defaultRemoteSourceInfoProvider) GetObjectRange(offset, length int64) (io.ReadCloser, error) {
+	return nil, fmt.Errorf("GetObjectRange not implemented for defaultRemoteSourceInfoProvider")
 }
 
 // formatHTTPRange converts an offset and count to its header format.

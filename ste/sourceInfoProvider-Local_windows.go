@@ -1,15 +1,17 @@
+//go:build windows
 // +build windows
 
 package ste
 
 import (
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"os"
 	"strings"
 	"syscall"
 	"time"
 	"unsafe"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 
 	"github.com/hillu/go-ntdll"
 
@@ -127,6 +129,10 @@ func (hi HandleInfo) FileCreationTime() time.Time {
 
 func (hi HandleInfo) FileLastWriteTime() time.Time {
 	return time.Unix(0, hi.LastWriteTime.Nanoseconds())
+}
+
+func (hi HandleInfo) FileChangeTime() time.Time {
+	return time.Time{} // Windows does not provide change time in ByHandleFileInformation
 }
 
 func (hi HandleInfo) FileAttributes() (*file.NTFSFileAttributes, error) {

@@ -103,8 +103,8 @@ func (u *blobFSUploader) Epilogue() {
 			if err != nil {
 				jptm.FailActiveUpload("Setting POSIX Properties", err)
 			}
-		} else if len(u.metadataToSet.Metadata) > 0 { // but if we aren't writing POSIX properties, let's set metadata to be consistent.
-			_, err := u.blobClient.SetMetadata(u.jptm.Context(), u.metadataToSet.Metadata, nil)
+		} else if len(u.metadataToSet) > 0 { // but if we aren't writing POSIX properties, let's set metadata to be consistent.
+			_, err := u.blobClient.SetMetadata(u.jptm.Context(), u.metadataToSet, nil)
 			if err != nil {
 				jptm.FailActiveUpload("Setting blob metadata", err)
 			}

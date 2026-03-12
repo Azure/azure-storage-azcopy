@@ -345,7 +345,7 @@ func (s *scenario) runAzCopy(logDirectory string) {
 	if result.finalStatus.JobStatus == common.EJobStatus.Cancelled() {
 		for _, v := range result.finalStatus.FailedTransfers {
 			if v.ErrorCode == 403 {
-				s.a.Error("Job " + result.jobID.String() + " authorization failed, perhaps SPN auth or the SAS token is bad?")
+				s.a.Error("Job " + result.jobID.String() + " authorization failed, perhaps SPN auth or the SAS token is bad?. Error message: " + v.ErrorMessage)
 			}
 		}
 	}

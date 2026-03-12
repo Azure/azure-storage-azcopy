@@ -22,23 +22,81 @@ package common
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 
 	gcpUtils "cloud.google.com/go/storage"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
-	"github.com/minio/minio-go"
-	"github.com/minio/minio-go/pkg/credentials"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
 // ==============================================================================================
 // credential factories
 // ==============================================================================================
 
+// CredentialOpOptions contains credential operations' parameters.
+type CredentialOpOptions struct {
+	LogInfo  func(string)
+	LogError func(string)
+	Panic    func(error)
+	CallerID string
+
+	// Used to cancel operations, if fatal error happened during operation.
+	Cancel context.CancelFunc
+}
+
+// callerMessage formats caller message prefix.
+func (o CredentialOpOptions) callerMessage() string {
+	return Iff(o.CallerID == "", o.CallerID, o.CallerID+" ")
+}
+
+// panicError uses built-in panic if no Panic is specified in CredentialOpOptions.
+func (o CredentialOpOptions) panicError(err error) {
+	newErr := fmt.Errorf("%s%v", o.callerMessage(), err)
+	if o.Panic == nil {
+		panic(newErr)
+	} else {
+		o.Panic(newErr)
+	}
+}
+
+// Constants for private network transport
+const PeReCheckCooldownTimeInSecs = 600 // 10 minutes - time to wait before rechecking an unhealthy private endpoint
+const PeCheckRetries = 3
+const PeCheckIntervalInmilliSecs = 200
+
+func createS3ClientForPrivateNetwork(credInfo CredentialInfo, cred *credentials.Credentials) (*minio.Client, error) {
+	peIP := privateNetworkArgs.PrivateEndpointIPs
+	baseS3Host := credInfo.S3CredentialInfo.Endpoint
+	// Endpoint should contain bucketname : "<bucketname>.s3.<region>.amazonaws.com"
+	s3Host := privateNetworkArgs.BucketName + "." + credInfo.S3CredentialInfo.Endpoint
+	transport := NewRoundRobinTransport(peIP, s3Host, PeReCheckCooldownTimeInSecs, PeCheckRetries, PeCheckIntervalInmilliSecs)
+	var minioCred *credentials.Credentials
+	if cred != nil {
+		minioCred = cred
+	} else {
+		minioCred = credentials.New(credInfo.S3CredentialInfo.Provider)
+	}
+
+	// Create MinIO client
+	client, err := minio.New(baseS3Host, &minio.Options{
+		Creds:        minioCred,
+		Secure:       true,
+		Transport:    transport,
+		Region:       credInfo.S3CredentialInfo.Region,
+		BucketLookup: minio.BucketLookupDNS, // force virtual-hosted style
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create MinIO client: %v", err)
+	}
+	client.SetS3EnableDualstack(false)
+	return client, nil
+}
+
 // CreateS3Credential creates AWS S3 credential according to credential info.
-func CreateS3Credential(ctx context.Context, credInfo CredentialInfo) (*credentials.Credentials, error) {
+func CreateS3Credential(ctx context.Context, credInfo CredentialInfo, options CredentialOpOptions) (*credentials.Credentials, error) {
 	switch credInfo.CredentialType {
 	case ECredentialType.S3PublicBucket():
 		return credentials.NewStatic("", "", "", credentials.SignatureAnonymous), nil
@@ -50,24 +108,49 @@ func CreateS3Credential(ctx context.Context, credInfo CredentialInfo) (*credenti
 		// create and return s3 credential
 		return credentials.NewStaticV4(accessKeyID, secretAccessKey, sessionToken), nil // S3 uses V4 signature
 	default:
-		panic(fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType))
+		options.panicError(fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType))
 	}
+	panic("work around the compiling, logic wouldn't reach here")
+}
+
+func CreateS3ClientFromProvider(credInfo CredentialInfo) (*minio.Client, error) {
+	if IsPrivateNetworkTransfer(ELocation.S3()) {
+		fmt.Println("Creating S3 Client for Private Network")
+		s3Client, err := createS3ClientForPrivateNetwork(credInfo, nil)
+		return s3Client, err
+	}
+	fmt.Println("Creating S3 Client for public access")
+	cred := credentials.New(credInfo.S3CredentialInfo.Provider)
+	//s3Client, err := minio.NewWithCredentials(credInfo.S3CredentialInfo.Endpoint, creds, true, credInfo.S3CredentialInfo.Region)
+	s3Client, err := minio.New(credInfo.S3CredentialInfo.Endpoint, &minio.Options{Creds: cred, Secure: true, Region: credInfo.S3CredentialInfo.Region})
+	return s3Client, err
 }
 
 // ==============================================================================================
 // S3 credential related factory methods
 // ==============================================================================================
-func CreateS3Client(ctx context.Context, credInfo CredentialInfo, logger ILogger) (*minio.Client, error) {
+func CreateS3Client(ctx context.Context, credInfo CredentialInfo, option CredentialOpOptions, logger ILogger) (*minio.Client, error) {
 	if credInfo.CredentialType == ECredentialType.S3PublicBucket() {
 		cred := credentials.NewStatic("", "", "", credentials.SignatureAnonymous)
-		return minio.NewWithOptions(credInfo.S3CredentialInfo.Endpoint, &minio.Options{Creds: cred, Secure: true, Region: credInfo.S3CredentialInfo.Region})
+		return minio.New(credInfo.S3CredentialInfo.Endpoint, &minio.Options{Creds: cred, Secure: true, Region: credInfo.S3CredentialInfo.Region})
+	}
+	//support custom credential provider
+	if credInfo.S3CredentialInfo.Provider != nil {
+		fmt.Println("Using custom credentials")
+		s3Client, err := CreateS3ClientFromProvider(credInfo)
+		return s3Client, err
 	}
 	// Support access key
-	credential, err := CreateS3Credential(ctx, credInfo)
+	credential, err := CreateS3Credential(ctx, credInfo, option)
 	if err != nil {
 		return nil, err
 	}
-	s3Client, err := minio.NewWithCredentials(credInfo.S3CredentialInfo.Endpoint, credential, true, credInfo.S3CredentialInfo.Region)
+	if IsPrivateNetworkTransfer(ELocation.S3()) {
+		fmt.Println("Creating S3 Client for Private Network")
+		s3Client, err := createS3ClientForPrivateNetwork(credInfo, credential)
+		return s3Client, err
+	}
+	s3Client, err := minio.New(credInfo.S3CredentialInfo.Endpoint, &minio.Options{Creds: credential, Secure: true, Region: credInfo.S3CredentialInfo.Region})
 
 	if logger != nil {
 		s3Client.TraceOn(NewS3HTTPTraceLogger(logger, LogDebug))
@@ -88,7 +171,7 @@ func NewS3ClientFactory() S3ClientFactory {
 }
 
 // GetS3Client gets S3 client from pool, or create a new S3 client if no client created for specific credInfo.
-func (f *S3ClientFactory) GetS3Client(ctx context.Context, credInfo CredentialInfo, logger ILogger) (*minio.Client, error) {
+func (f *S3ClientFactory) GetS3Client(ctx context.Context, credInfo CredentialInfo, option CredentialOpOptions, logger ILogger) (*minio.Client, error) {
 	f.lock.RLock()
 	s3Client, ok := f.s3Clients[credInfo.S3CredentialInfo]
 	f.lock.RUnlock()
@@ -100,7 +183,7 @@ func (f *S3ClientFactory) GetS3Client(ctx context.Context, credInfo CredentialIn
 	f.lock.Lock()
 	defer f.lock.Unlock()
 	if s3Client, ok := f.s3Clients[credInfo.S3CredentialInfo]; !ok {
-		newS3Client, err := CreateS3Client(ctx, credInfo, logger)
+		newS3Client, err := CreateS3Client(ctx, credInfo, option, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -131,7 +214,7 @@ func NewGCPClientFactory() GCPClientFactory {
 	}
 }
 
-func (f *GCPClientFactory) GetGCPClient(ctx context.Context, credInfo CredentialInfo) (*gcpUtils.Client, error) {
+func (f *GCPClientFactory) GetGCPClient(ctx context.Context, credInfo CredentialInfo, option CredentialOpOptions) (*gcpUtils.Client, error) {
 	f.lock.RLock()
 	gcpClient, ok := f.gcpClients[credInfo.GCPCredentialInfo]
 	f.lock.RUnlock()
@@ -153,9 +236,9 @@ func (f *GCPClientFactory) GetGCPClient(ctx context.Context, credInfo Credential
 	}
 }
 
-func GetCpkInfo(cpkInfo bool) (*blob.CPKInfo, error) {
+func GetCpkInfo(cpkInfo bool) *blob.CPKInfo {
 	if !cpkInfo {
-		return nil, nil
+		return nil
 	}
 
 	// fetch EncryptionKey and EncryptionKeySHA256 from the environment variables
@@ -164,7 +247,7 @@ func GetCpkInfo(cpkInfo bool) (*blob.CPKInfo, error) {
 	encryptionAlgorithmAES256 := blob.EncryptionAlgorithmTypeAES256
 
 	if encryptionKey == "" || encryptionKeySHA256 == "" {
-		return nil, errors.New("fatal: failed to fetch cpk encryption key (" + EEnvironmentVariable.CPKEncryptionKey().Name +
+		panic("fatal: failed to fetch cpk encryption key (" + EEnvironmentVariable.CPKEncryptionKey().Name +
 			") or hash (" + EEnvironmentVariable.CPKEncryptionKeySHA256().Name + ") from environment variables")
 	}
 
@@ -172,7 +255,7 @@ func GetCpkInfo(cpkInfo bool) (*blob.CPKInfo, error) {
 		EncryptionKey:       &encryptionKey,
 		EncryptionKeySHA256: &encryptionKeySHA256,
 		EncryptionAlgorithm: &encryptionAlgorithmAES256,
-	}, nil
+	}
 }
 
 func GetCpkScopeInfo(cpkScopeInfo string) *blob.CPKScopeInfo {
