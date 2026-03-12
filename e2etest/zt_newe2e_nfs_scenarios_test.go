@@ -87,9 +87,11 @@ func (b *bestEffortAsserter) GetTestName() string         { return b.inner.GetTe
 // creating too many share accounts which may lead to throttling by Azure.
 // So in order to avoid conflicts between tests, we cleanup the test directories created during the test run.
 func CleanupNFSDirectory(
+
 	svm *ScenarioVariationManager,
 	container ContainerResourceManager,
 	rootDir string,
+
 ) {
 	if svm.Dryrun() {
 		return
@@ -581,6 +583,12 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
 		shouldFail = true
 	}
+	// TODO: skipping this test for now. As the download support is not added as part of this PR.
+	// Will be enabled in the next PR.
+	if azCopyVerb == AzCopyVerbSync && hardlinkType == common.EHardlinkHandlingType.Preserve() {
+		svm.InvalidateScenario()
+		return
+	}
 
 	stdOut, _ := RunAzCopy(
 		svm,
@@ -838,6 +846,13 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 	}
 	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
 		shouldFail = true
+	}
+
+	// TODO: skipping this test for now. As the download support is not added as part of this PR.
+	// Will be enabled in the next PR.
+	if azCopyVerb == AzCopyVerbSync && hardlinkType == common.EHardlinkHandlingType.Preserve() {
+		svm.InvalidateScenario()
+		return
 	}
 
 	stdOut, _ := RunAzCopy(

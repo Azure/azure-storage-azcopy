@@ -69,7 +69,6 @@ func runHardlinkSync(
 				DeleteDestination: pointerTo(deleteDestination),
 			},
 		})
-
 	return stdOut
 }
 
@@ -165,7 +164,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_InitialSync(svm *ScenarioVaria
 				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS()})
+	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	ValidateHardlinksTransferCount(svm, stdOut, 2)
 }
@@ -255,7 +255,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_SameAnchorNewerSource(svm *Sce
 				},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS()})
+	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	_ = stdOut
 }
@@ -335,7 +336,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_SameAnchorUpToDate(svm *Scenar
 				},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS()})
+	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+		hardlinkHandling: common.PreserveHardlinkHandlingType})
 }
 
 // Scenario 4: Hardlink retarget — source link now points to a different anchor.
@@ -449,7 +451,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_RetargetLink(svm *ScenarioVari
 				},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS()})
+	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	_ = stdOut
 }
@@ -545,7 +548,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_FileBecomesHardlink(svm *Scena
 				},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS()})
+	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	_ = stdOut
 }
@@ -635,7 +639,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_HardlinkBecomesFile(svm *Scena
 				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS()})
+	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	_ = stdOut
 }
@@ -716,7 +721,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_SourceDeleted(svm *ScenarioVar
 				ObjectShouldExist: pointerTo(false),
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS()})
+	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+		hardlinkHandling: common.PreserveHardlinkHandlingType})
 }
 
 // Scenario 8: New hardlink appears — source has a new hardlink file that doesn't exist at dest yet.
@@ -823,7 +829,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_NewLinkAppears(svm *ScenarioVa
 				},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS()})
+	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	_ = stdOut
 }
@@ -946,7 +953,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_MultipleGroups(svm *ScenarioVa
 				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS()})
+	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	// anchor files + links = 4 hardlink transfers
 	ValidateHardlinksTransferCount(svm, stdOut, 4)
@@ -1107,7 +1115,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_MixedChanges(svm *ScenarioVari
 				ObjectShouldExist: pointerTo(false),
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS()})
+	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+		hardlinkHandling: common.PreserveHardlinkHandlingType})
 }
 
 // Scenario 11: Idempotent re-sync — running the same sync twice produces no extra transfers.
@@ -1185,7 +1194,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_IdempotentResync(svm *Scenario
 				},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS()})
+	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+		hardlinkHandling: common.PreserveHardlinkHandlingType})
 }
 
 // Scenario 12: Hardlinks in subdirectories — verifies hardlinks across nested directories work.
@@ -1274,7 +1284,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_NestedDirectories(svm *Scenari
 				},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS()})
+	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	ValidateHardlinksTransferCount(svm, stdOut, 2)
 }
@@ -1295,24 +1306,16 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_NestedDirectories(svm *Scenari
 //
 // Source (after A added):
 //
-//	A.txt          (regular file / anchor, nlink=4 — lex-smallest)
-//	B.txt          (hardlink → A.txt)
-//	C.txt          (hardlink → A.txt)
-//	D.txt          (hardlink → A.txt)
+//	A.txt          (anchor, nlink=4 — lex-smallest)
+//	B.txt          (hardlink)
+//	C.txt          (hardlink)
+//	D.txt          (hardlink)
 //
 // Destination (before sync — result of a previous sync of {B,C,D}):
 //
-//	B.txt          (regular file / anchor, nlink=3)
-//	C.txt          (hardlink → B.txt)
-//	D.txt          (hardlink → B.txt)
-//
-// Expected after sync:
-//   - A.txt created as regular file (new, was not at dest)
-//   - B.txt deleted (entity-type changed: was File at dest, now Hardlink at source)
-//     and recreated as Hardlink → A.txt
-//   - C.txt and D.txt are NOT touched (the fix prevents unnecessary recreation)
-//   - HardlinksTransferCount == 1  (only B.txt needed a hardlink transfer;
-//     C.txt and D.txt were skipped)
+//	B.txt          (anchor, nlink=3)
+//	C.txt          (hardlink)
+//	D.txt          (hardlink)
 func (s *FilesNFSTestSuite) Scenario_HardlinkSync_LexSmallerAnchorAdded(svm *ScenarioVariationManager) {
 	if runtime.GOOS != "linux" {
 		svm.InvalidateScenario()
@@ -1327,6 +1330,10 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_LexSmallerAnchorAdded(svm *Sce
 	nameC := rootDir + "/C.txt"
 	nameD := rootDir + "/D.txt"
 
+	// Shared LMT: truncated to second precision so it survives the FILETIME
+	// round-trip (100 ns resolution) without triggering a spurious LMT mismatch.
+	sharedLMT := time.Now().Add(-5 * time.Minute).Truncate(time.Second)
+
 	// ── Set up destination: previous sync result ─────────────────────────────
 	// B was the anchor when the group was {B, C, D}.
 	dstDir := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
@@ -1336,8 +1343,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_LexSmallerAnchorAdded(svm *Sce
 	dstB.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{})
 	dstB.SetObjectProperties(svm, ObjectProperties{
 		FileNFSProperties: &FileNFSProperties{
-			FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
-			FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
+			FileCreationTime:  pointerTo(sharedLMT),
+			FileLastWriteTime: pointerTo(sharedLMT),
 		},
 	})
 
@@ -1363,12 +1370,15 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_LexSmallerAnchorAdded(svm *Sce
 		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()},
 	})
 
-	// A is the new anchor at source (lex-smallest); it is a regular file.
+	// A is the new anchor at source (lex-smallest).
 	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
 		ObjectName: pointerTo(nameA),
 		Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
 		ObjectProperties: ObjectProperties{
 			EntityType: common.EEntityType.File(),
+			FileNFSProperties: &FileNFSProperties{
+				FileLastWriteTime: pointerTo(sharedLMT),
+			},
 		},
 	})
 
@@ -1406,7 +1416,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_LexSmallerAnchorAdded(svm *Sce
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
 			nameA: ResourceDefinitionObject{
-				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Hardlink()},
 			},
 			nameB: ResourceDefinitionObject{
 				ObjectProperties: ObjectProperties{
@@ -1427,7 +1437,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_LexSmallerAnchorAdded(svm *Sce
 				},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS()})
+	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	// Only A needed a hardlink transfer; B C and D were correctly skipped.
 	ValidateHardlinksTransferCount(svm, stdOut, 1)
@@ -1441,15 +1452,15 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_LexSmallerAnchorAdded(svm *Sce
 // Source:
 //
 //	B.txt  (anchor of B-C-D group)
-//	C.txt  (hardlink → B)
-//	D.txt  (hardlink → B)
+//	C.txt  (hardlink)
+//	D.txt  (hardlink)
 //
 // Destination (before sync):
 //
 //	A.txt  (anchor of A-B-C-D group — the now-deleted lex-smaller anchor)
-//	B.txt  (hardlink → A)
-//	C.txt  (hardlink → A)
-//	D.txt  (hardlink → A)
+//	B.txt  (hardlink)
+//	C.txt  (hardlink)
+//	D.txt  (hardlink)
 //
 // Expected: A deleted; B, C, D skipped (still linked together, no structural change
 // among the survivors).  0 hardlink transfers.
@@ -1467,6 +1478,10 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_LexSmallerAnchorDeleted(svm *S
 	nameC := rootDir + "/C.txt"
 	nameD := rootDir + "/D.txt"
 
+	// Shared LMT: truncated to second precision so it survives the FILETIME
+	// round-trip (100 ns resolution) without triggering a spurious LMT mismatch.
+	sharedLMT := time.Now().Add(-5 * time.Minute).Truncate(time.Second)
+
 	// ── Destination: A is the anchor, B/C/D are hardlinks to A ──────────────
 	dstDir := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 	dstDir.Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Folder()})
@@ -1475,8 +1490,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_LexSmallerAnchorDeleted(svm *S
 	dstA.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{})
 	dstA.SetObjectProperties(svm, ObjectProperties{
 		FileNFSProperties: &FileNFSProperties{
-			FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
-			FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
+			FileCreationTime:  pointerTo(sharedLMT),
+			FileLastWriteTime: pointerTo(sharedLMT),
 		},
 	})
 
@@ -1500,11 +1515,16 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_LexSmallerAnchorDeleted(svm *S
 	})
 
 	// B is the anchor (lex-smallest of the remaining group).
+	// Its FileLastWriteTime matches the destination inode's LMT (set from A's
+	// upload), preventing a spurious LMT-based transfer for the intact group.
 	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
 		ObjectName: pointerTo(nameB),
 		Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
 		ObjectProperties: ObjectProperties{
 			EntityType: common.EEntityType.File(),
+			FileNFSProperties: &FileNFSProperties{
+				FileLastWriteTime: pointerTo(sharedLMT),
+			},
 		},
 	})
 
@@ -1553,7 +1573,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_LexSmallerAnchorDeleted(svm *S
 				},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS()})
+	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	// B, C, D are all skipped — 0 hardlink transfers.
 	ValidateHardlinksTransferCount(svm, stdOut, 0)
@@ -1675,7 +1696,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_GroupSplit(svm *ScenarioVariat
 		Objects: ObjectResourceMappingFlat{
 			nameA: ResourceDefinitionObject{
 				Body:             srcBodyA,
-				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Hardlink()},
 			},
 			nameB: ResourceDefinitionObject{
 				Body: srcBodyA,
@@ -1686,7 +1707,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_GroupSplit(svm *ScenarioVariat
 			},
 			nameC: ResourceDefinitionObject{
 				Body:             srcBodyC,
-				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Hardlink()},
 			},
 			nameD: ResourceDefinitionObject{
 				Body: srcBodyC,
@@ -1696,11 +1717,13 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_GroupSplit(svm *ScenarioVariat
 				},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(), validateObjectContent: true})
+	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+		validateObjectContent: true,
+		hardlinkHandling:      common.PreserveHardlinkHandlingType})
 
 	// A force-transferred + C recreated (anchor) + D recreated (hardlink): 3 transfers.
 	// B is skipped (non-anchor, link structure unchanged).
-	ValidateHardlinksTransferCount(svm, stdOut, 2)
+	ValidateHardlinksTransferCount(svm, stdOut, 3)
 }
 
 // Scenario: GroupMerge — src: A-B-C-D   dst: A-B  C-D
@@ -1710,14 +1733,14 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_GroupSplit(svm *ScenarioVariat
 // Source:
 //
 //	A.txt  (anchor of A-B-C-D group)
-//	B.txt  (hardlink → A)
-//	C.txt  (hardlink → A)
-//	D.txt  (hardlink → A)
+//	B.txt  (hardlink)
+//	C.txt  (hardlink)
+//	D.txt  (hardlink)
 //
 // Destination (before sync):
 //
 //	A.txt  (anchor of A-B group)
-//	B.txt  (hardlink → A)
+//	B.txt  (hardlink->A)
 //	C.txt  (anchor of C-D group — separate inode)
 //	D.txt  (hardlink → C)
 //
@@ -1737,6 +1760,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_GroupMerge(svm *ScenarioVariat
 	nameC := rootDir + "/C.txt"
 	nameD := rootDir + "/D.txt"
 
+	sharedLMT := time.Now().Add(-5 * time.Minute).Truncate(time.Second)
+
 	// ── Destination: two groups (A-B and C-D) ────────────────────────────────
 	dstDir := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 	dstDir.Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Folder()})
@@ -1745,8 +1770,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_GroupMerge(svm *ScenarioVariat
 	dstA.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{})
 	dstA.SetObjectProperties(svm, ObjectProperties{
 		FileNFSProperties: &FileNFSProperties{
-			FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
-			FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
+			FileCreationTime:  pointerTo(sharedLMT),
+			FileLastWriteTime: pointerTo(sharedLMT),
 		},
 	})
 
@@ -1757,8 +1782,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_GroupMerge(svm *ScenarioVariat
 	dstC.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{})
 	dstC.SetObjectProperties(svm, ObjectProperties{
 		FileNFSProperties: &FileNFSProperties{
-			FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
-			FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
+			FileCreationTime:  pointerTo(sharedLMT),
+			FileLastWriteTime: pointerTo(sharedLMT),
 		},
 	})
 
@@ -1785,6 +1810,9 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_GroupMerge(svm *ScenarioVariat
 		Body:       srcBodyA,
 		ObjectProperties: ObjectProperties{
 			EntityType: common.EEntityType.File(),
+			FileNFSProperties: &FileNFSProperties{
+				FileLastWriteTime: pointerTo(sharedLMT),
+			},
 		},
 	})
 
@@ -1816,7 +1844,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_GroupMerge(svm *ScenarioVariat
 
 	stdOut := runHardlinkSync(svm, srcDirObj, dstDir.(RemoteResourceManager), true)
 
-	// A is force-transferred (src inode spans two dest groups; anchor content must match source).
+	// A is force-transferred (src inode spans two dest groups; anchor
+	// content must match source).
 	// B is skipped (non-anchor, relationship intact).
 	// C and D are recreated as hardlinks → A to join the merged group.
 	//
@@ -1826,7 +1855,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_GroupMerge(svm *ScenarioVariat
 		Objects: ObjectResourceMappingFlat{
 			nameA: ResourceDefinitionObject{
 				Body:             srcBodyA,
-				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Hardlink()},
 			},
 			nameB: ResourceDefinitionObject{
 				Body: srcBodyA,
@@ -1850,9 +1879,11 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_GroupMerge(svm *ScenarioVariat
 				},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(), validateObjectContent: true})
+	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+		validateObjectContent: true,
+		hardlinkHandling:      common.PreserveHardlinkHandlingType})
 
-	ValidateHardlinksTransferCount(svm, stdOut, 2)
+	ValidateHardlinksTransferCount(svm, stdOut, 3)
 }
 
 // Scenario: ComplexRegrouping — dst: A-B-C  D-E   src: A-D  B-C  E
@@ -1999,7 +2030,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_ComplexRegrouping(svm *Scenari
 		Objects: ObjectResourceMappingFlat{
 			nameA: ResourceDefinitionObject{
 				Body:             srcBodyA,
-				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Hardlink()},
 			},
 			nameD: ResourceDefinitionObject{
 				Body: srcBodyA,
@@ -2010,7 +2041,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_ComplexRegrouping(svm *Scenari
 			},
 			nameB: ResourceDefinitionObject{
 				Body:             srcBodyB,
-				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Hardlink()},
 			},
 			nameC: ResourceDefinitionObject{
 				Body: srcBodyB,
@@ -2024,7 +2055,9 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_ComplexRegrouping(svm *Scenari
 				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(), validateObjectContent: true})
+	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+		validateObjectContent: true,
+		hardlinkHandling:      common.PreserveHardlinkHandlingType})
 
 	// A (force-transferred, groupStructureChanged) + B (new anchor) +
 	// C (hardlink→B) + D (hardlink→A) = 4 hardlink transfers.
@@ -2052,7 +2085,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_ComplexRegrouping(svm *Scenari
 //	D.txt  (hardlink)
 //
 // Expected: A re-uploaded as standalone file (entity-type mismatch);
-// B, C, D remain hardlinks to each other (same anchor B) and are skipped.  0 hardlink transfers.
+// B, C, D remain hardlinks to each other (same anchor B) and are skipped.
+// 0 hardlink transfers.
 func (s *FilesNFSTestSuite) Scenario_HardlinkSync_AnchorBecomesFile(svm *ScenarioVariationManager) {
 	if runtime.GOOS != "linux" {
 		svm.InvalidateScenario()
@@ -2067,6 +2101,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_AnchorBecomesFile(svm *Scenari
 	nameC := rootDir + "/C.txt"
 	nameD := rootDir + "/D.txt"
 
+	sharedLMT := time.Now().Add(-5 * time.Minute).Truncate(time.Second)
+
 	// ── Destination: one group, A is anchor ──────────────────────────────────
 	dstDir := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 	dstDir.Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Folder()})
@@ -2075,8 +2111,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_AnchorBecomesFile(svm *Scenari
 	dstA.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{})
 	dstA.SetObjectProperties(svm, ObjectProperties{
 		FileNFSProperties: &FileNFSProperties{
-			FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
-			FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
+			FileCreationTime:  pointerTo(sharedLMT),
+			FileLastWriteTime: pointerTo(sharedLMT),
 		},
 	})
 
@@ -2105,6 +2141,9 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_AnchorBecomesFile(svm *Scenari
 		Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
 		ObjectProperties: ObjectProperties{
 			EntityType: common.EEntityType.File(),
+			FileNFSProperties: &FileNFSProperties{
+				FileLastWriteTime: pointerTo(sharedLMT),
+			},
 		},
 	})
 
@@ -2114,6 +2153,9 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_AnchorBecomesFile(svm *Scenari
 		Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
 		ObjectProperties: ObjectProperties{
 			EntityType: common.EEntityType.File(),
+			FileNFSProperties: &FileNFSProperties{
+				FileLastWriteTime: pointerTo(sharedLMT),
+			},
 		},
 	})
 
@@ -2158,7 +2200,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_AnchorBecomesFile(svm *Scenari
 				},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS()})
+	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	// A re-uploaded as file (entity-type mismatch).
 	// B,C,D are part of the same inode group so no hardlink transfer is needed for them.
@@ -2180,14 +2223,11 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_AnchorBecomesFile(svm *Scenari
 // Destination (before sync):
 //
 //	A.txt  (standalone regular file, nlink=1)
-//	B.txt  (anchor of B-C-D group)
+//	B.txt  (anchor of B-C-D group)(hardlink)
 //	C.txt  (hardlink)
 //	D.txt  (hardlink)
 //
-// Expected: A re-uploaded as anchor (entity-type mismatch); B, C, D recreated as
-// hardlinks → A, joining the merged group.
-// TODO: this scenario currently exposes a bug where B, C, D are incorrectly skipped
-// instead of being recreated pointing to A.
+// Expected: A re-uploaded as hardlink (entity-type mismatch);
 func (s *FilesNFSTestSuite) Scenario_HardlinkSync_FileJoinsGroup(svm *ScenarioVariationManager) {
 	if runtime.GOOS != "linux" {
 		svm.InvalidateScenario()
@@ -2206,12 +2246,16 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_FileJoinsGroup(svm *ScenarioVa
 	dstDir := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 	dstDir.Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Folder()})
 
+	// Shared LMT: truncated to second precision so it survives the FILETIME
+	// round-trip (100 ns resolution) without triggering a spurious LMT mismatch.
+	sharedLMT := time.Now().Add(-5 * time.Minute).Truncate(time.Second)
+
 	dstA := dstContainer.GetObject(svm, nameA, common.EEntityType.File())
 	dstA.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{})
 	dstA.SetObjectProperties(svm, ObjectProperties{
 		FileNFSProperties: &FileNFSProperties{
-			FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
-			FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
+			FileCreationTime:  pointerTo(sharedLMT),
+			FileLastWriteTime: pointerTo(sharedLMT),
 		},
 	})
 
@@ -2219,8 +2263,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_FileJoinsGroup(svm *ScenarioVa
 	dstB.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{})
 	dstB.SetObjectProperties(svm, ObjectProperties{
 		FileNFSProperties: &FileNFSProperties{
-			FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
-			FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
+			FileCreationTime:  pointerTo(sharedLMT),
+			FileLastWriteTime: pointerTo(sharedLMT),
 		},
 	})
 
@@ -2245,6 +2289,9 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_FileJoinsGroup(svm *ScenarioVa
 		Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
 		ObjectProperties: ObjectProperties{
 			EntityType: common.EEntityType.File(),
+			FileNFSProperties: &FileNFSProperties{
+				FileLastWriteTime: pointerTo(sharedLMT),
+			},
 		},
 	})
 
@@ -2276,12 +2323,11 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_FileJoinsGroup(svm *ScenarioVa
 
 	stdOut := runHardlinkSync(svm, srcDirObj, dstDir.(RemoteResourceManager), true)
 
-	// A re-uploaded as anchor (entity-type mismatch: dest=File, src=Hardlink-anchor).
-	// B, C, D recreated as hardlinks → A to join the unified group.
+	// A re-uploaded as hardlink (entity-type mismatch: dest=File, src=Hardlink-anchor).
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
 			nameA: ResourceDefinitionObject{
-				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Hardlink()},
 			},
 			nameB: ResourceDefinitionObject{
 				ObjectProperties: ObjectProperties{
@@ -2302,7 +2348,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_FileJoinsGroup(svm *ScenarioVa
 				},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS()})
+	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	// Total hardlink-type transfers = 1 (CreateHardlink(A)).
 	ValidateHardlinksTransferCount(svm, stdOut, 1)
@@ -2480,7 +2527,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_InitialUpload(svm *ScenarioVar
 				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS()})
+	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	ValidateHardlinksTransferCount(svm, stdOut, 2)
 }
@@ -2583,7 +2631,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_MultipleGroups(svm *ScenarioVa
 				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS()})
+	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	ValidateHardlinksTransferCount(svm, stdOut, 4)
 }
@@ -2660,7 +2709,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_NestedDirectories(svm *Scenari
 				},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS()})
+	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	ValidateHardlinksTransferCount(svm, stdOut, 2)
 }
@@ -2740,7 +2790,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_DownloadInitial(svm *ScenarioV
 				},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.FileNFSLocal()})
+	}, ValidateResourceOptions{fromTo: common.EFromTo.FileNFSLocal(),
+		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	ValidateHardlinksTransferCount(svm, stdOut, 2)
 }
@@ -2846,7 +2897,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_DownloadMultipleGroups(svm *Sc
 				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.FileNFSLocal()})
+	}, ValidateResourceOptions{fromTo: common.EFromTo.FileNFSLocal(),
+		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	ValidateHardlinksTransferCount(svm, stdOut, 4)
 }
@@ -2923,7 +2975,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_DownloadNestedDirectories(svm 
 				},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.FileNFSLocal()})
+	}, ValidateResourceOptions{fromTo: common.EFromTo.FileNFSLocal(),
+		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	ValidateHardlinksTransferCount(svm, stdOut, 2)
 }

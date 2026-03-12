@@ -344,7 +344,7 @@ func (a *azureFilesDownloader) CreateHardlink() error {
 	//   fileRelPath  = "subdir/link.txt"
 	//   Destination  = "/local/dstdir/subdir/link.txt"
 	//   destPrefix   = "/local/dstdir/"
-	//   anchor path  = "/local/dstdir/subdir/anchor.txt"
+	//   hardlink target path  = "/local/dstdir/subdir/anchor.txt"
 	targetHardlinkFullPath, err := computeDownloadHardlinkTarget(info, a.jptm)
 	if err != nil {
 		return err
@@ -352,8 +352,8 @@ func (a *azureFilesDownloader) CreateHardlink() error {
 	return os.Link(targetHardlinkFullPath, info.Destination)
 }
 
-// computeDownloadHardlinkTarget computes the full local path for the hardlink anchor
-// when downloading (Azure Files NFS → Local). It parses the source root URL to derive
+// computeDownloadHardlinkTarget computes the full local path for the target hardlink
+// when downloading (Azure Files NFS(remote) → Local). It parses the source root URL to derive
 // the current file's traversal-root-relative path, strips that suffix from the local
 // destination path to get the prefix, then joins with info.TargetHardlinkFilePath.
 func computeDownloadHardlinkTarget(info *TransferInfo, jptm IJobPartTransferMgr) (string, error) {

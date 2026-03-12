@@ -356,8 +356,7 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 						return err
 					}
 
-				} else if f.comparisonHashType != common.ESyncHashType.None() &&
-					sourceObjectInMap.EntityType == common.EEntityType.Hardlink() {
+				} else if f.comparisonHashType != common.ESyncHashType.None() {
 					switch f.comparisonHashType {
 					case common.ESyncHashType.MD5():
 						if sourceObjectInMap.Md5 == nil {
