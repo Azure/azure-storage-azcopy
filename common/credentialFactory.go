@@ -173,6 +173,9 @@ func CreateS3Client(ctx context.Context, credInfo CredentialInfo, option Credent
 	if IsPrivateNetworkTransfer(ELocation.S3()) {
 		fmt.Println("Creating S3 Client for Private Network")
 		s3Client, err := createS3ClientForPrivateNetwork(credInfo, credential)
+		if logger != nil {
+			s3Client.TraceOn(NewS3HTTPTraceLogger(logger, LogDebug))
+		}
 		return s3Client, err
 	}
 	s3Client, err := minio.New(credInfo.S3CredentialInfo.Endpoint, &minio.Options{Creds: credential, Secure: true, Region: credInfo.S3CredentialInfo.Region})
