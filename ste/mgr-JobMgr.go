@@ -163,6 +163,7 @@ type IJobMgr interface {
 	HttpClient() *http.Client
 	PipelineNetworkStats() *PipelineNetworkStats
 	getOverwritePrompter() *overwritePrompter
+	GetJobErrorHandler() common.JobErrorHandler
 	common.ILoggerCloser
 
 	/* Status related functions */
@@ -319,6 +320,19 @@ func (jm *jobMgr) GetChannelStats() ChannelStats {
 
 func (jm *jobMgr) getOverwritePrompter() *overwritePrompter {
 	return jm.overwritePrompter
+}
+
+// jobMgrErrorHandler implements common.JobErrorHandler using the jobMgr logger.
+type jobMgrErrorHandler struct {
+	jm *jobMgr
+}
+
+func (h jobMgrErrorHandler) Error(msg string) {
+	h.jm.Log(common.LogError, msg)
+}
+
+func (jm *jobMgr) GetJobErrorHandler() common.JobErrorHandler {
+	return jobMgrErrorHandler{jm: jm}
 }
 
 func (jm *jobMgr) Reset(appCtx context.Context, commandString string) IJobMgr {

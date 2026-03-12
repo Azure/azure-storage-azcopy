@@ -416,3 +416,33 @@ func IsSystemContainer(containerName string) bool {
 	}
 	return false
 }
+
+// TryReadMetadata reads a metadata value by key, trying both the original key
+// and its capitalized version. Returns the value and true if found, nil and false otherwise.
+func TryReadMetadata(metadata Metadata, key string) (*string, bool) {
+if v, ok := metadata[key]; ok {
+return v, true
+}
+
+if key != "" {
+capitalizedKey := strings.ToUpper(string(key[0])) + key[1:]
+if v, ok := metadata[capitalizedKey]; ok {
+return v, true
+}
+}
+
+return nil, false
+}
+
+// isNFSCopy is a global variable so that we can use it in traversal phase
+var isNFSCopy bool
+
+// SetNFSFlag sets the global isNFSCopy variable to the given value
+func SetNFSFlag(isNFS bool) {
+isNFSCopy = isNFS
+}
+
+// IsNFSCopy returns whether the current operation is an NFS copy
+func IsNFSCopy() bool {
+return isNFSCopy
+}

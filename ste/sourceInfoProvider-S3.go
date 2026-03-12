@@ -81,7 +81,7 @@ func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, err
 			Region:   p.s3URLPart.Region,
 			Provider: p.transferInfo.Provider,
 		},
-	}, jptm)
+	}, common.CredentialOpOptions{}, jptm)
 	if err != nil {
 		return nil, err
 	}

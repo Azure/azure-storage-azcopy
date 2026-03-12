@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package traverser
 
 import (
 	"context"
@@ -26,15 +26,11 @@ import (
 	"net/url"
 	"strings"
 	"sync"
-	"time"
+
+	"github.com/minio/minio-go/v7"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
-	"github.com/minio/minio-go/v7"
-	"github.com/minio/minio-go/v7/pkg/credentials"
 )
-
-const customCreds string = "customS3Creds" //key for custom credentials in stored in context
 
 type s3Traverser struct {
 	rawURL        *url.URL // No pipeline needed for S3
@@ -42,74 +38,11 @@ type s3Traverser struct {
 	recursive     bool
 	getProperties bool
 
-	s3URLParts s3URLPartsExtension
+	s3URLParts common.S3URLParts
 	s3Client   *minio.Client
 
 	// A generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
-
-	errorChannel chan<- TraverserErrorItemInfo
-
-	// includeDirectoryOrPrefix is used to determine if we should enqueue directories or prefixes
-	// in a non-recursive traversal process. If true, prefixes will be enqueued as well even if location
-	// is not folder aware.
-	includeDirectoryOrPrefix bool
-}
-
-// ErrorFileInfo holds information about files and folders that failed enumeration.
-type ErrorS3Info struct {
-	S3Path             string
-	S3Size             int64
-	S3Name             string
-	S3LastModifiedTime time.Time
-	ErrorMsg           error
-	Dir                bool
-}
-
-// Compile-time check to ensure ErrorFileInfo implements TraverserErrorItemInfo
-var _ TraverserErrorItemInfo = (*ErrorS3Info)(nil)
-
-// START - Implementing methods defined in TraverserErrorItemInfo
-
-func (e ErrorS3Info) FullPath() string {
-	return e.S3Path
-}
-
-func (e ErrorS3Info) Name() string {
-	return e.S3Name
-}
-
-func (e ErrorS3Info) Size() int64 {
-	return e.S3Size
-}
-
-func (e ErrorS3Info) LastModifiedTime() time.Time {
-	return e.S3LastModifiedTime
-}
-
-func (e ErrorS3Info) IsDir() bool {
-	return e.Dir
-}
-
-func (e ErrorS3Info) ErrorMessage() error {
-	return e.ErrorMsg
-}
-
-func (e ErrorS3Info) Location() common.Location {
-	return common.ELocation.S3()
-}
-
-// END - Implementing methods defined in TraverserErrorItemInfo
-
-func (t *s3Traverser) writeToS3ErrorChannel(err ErrorS3Info) {
-	if t.errorChannel != nil {
-		select {
-		case t.errorChannel <- err:
-		default:
-			// Channel might be full, log the error instead
-			WarnStdoutAndScanningLog(fmt.Sprintf("Failed to send error to channel: %v", err.ErrorMessage()))
-		}
-	}
 }
 
 func (t *s3Traverser) IsDirectory(isSource bool) (bool, error) {
@@ -130,10 +63,10 @@ func (t *s3Traverser) IsDirectory(isSource bool) (bool, error) {
 	return false, nil
 }
 
-func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
+func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor ObjectProcessor, filters []ObjectFilter) (err error) {
 	p := processor
 	processor = func(storedObject StoredObject) error {
-		t.incrementEnumerationCounter(storedObject.entityType)
+		t.incrementEnumerationCounter(storedObject.EntityType, common.SymlinkHandlingType(0), common.DefaultHardlinkHandlingType)
 
 		return p(storedObject)
 	}
@@ -154,14 +87,6 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 
 		oi, err := t.s3Client.StatObject(t.ctx, t.s3URLParts.BucketName, t.s3URLParts.ObjectKey, minio.StatObjectOptions{})
 		if invalidAzureBlobName(t.s3URLParts.ObjectKey) {
-
-			t.writeToS3ErrorChannel(ErrorS3Info{
-				S3Name:             objectName,
-				S3Path:             t.s3URLParts.ObjectKey,
-				S3LastModifiedTime: oi.LastModified,
-				S3Size:             oi.Size,
-				ErrorMsg:           err,
-			})
 			WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, t.s3URLParts.ObjectKey))
 			return common.EAzError.InvalidBlobName()
 		}
@@ -172,7 +97,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 		if err == nil {
 			// We had to statObject anyway, get ALL the info.
 			oie := common.ObjectInfoExtension{ObjectInfo: oi}
-			storedObject := newStoredObject(
+			storedObject := NewStoredObject(
 				preprocessor,
 				objectName,
 				"",
@@ -180,23 +105,16 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 				oi.LastModified,
 				oi.Size,
 				&oie,
-				noBlobProps,
+				NoBlobProps,
 				oie.NewCommonMetadata(),
 				t.s3URLParts.BucketName)
 
-			err = processIfPassedFilters(
+			err = ProcessIfPassedFilters(
 				filters,
 				storedObject,
 				processor)
 			_, err = getProcessingError(err)
 			if err != nil {
-				t.writeToS3ErrorChannel(ErrorS3Info{
-					S3Name:             objectName,
-					S3Path:             t.s3URLParts.ObjectKey,
-					ErrorMsg:           err,
-					S3LastModifiedTime: oi.LastModified,
-					S3Size:             oi.Size,
-				})
 				return err
 			}
 
@@ -214,153 +132,69 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 	searchPrefix := t.s3URLParts.ObjectKey
 
 	// It's a bucket or virtual directory.
-	listObjectOptions := minio.ListObjectsOptions{Prefix: searchPrefix, Recursive: t.recursive}
-	for objectInfo := range t.s3Client.ListObjects(t.ctx, t.s3URLParts.BucketName, listObjectOptions) {
-		// re-join the unescaped path.
-		relativePath := strings.TrimPrefix(objectInfo.Key, searchPrefix)
-
-		// Ignoring this object because it is a zero-byte placeholder typically created to simulate a folder in S3-compatible storage.
-		// These objects have an empty RelativePath and are marked as files, but they do not represent actual user data.
-		// Including them in processing could lead to incorrect assumptions about file presence or structure.
-		if len(relativePath) == 0 && objectInfo.StorageClass != "" {
-			continue
-		}
-
-		errInfo := ErrorS3Info{
-			S3Name:             objectInfo.Key,
-			S3Size:             objectInfo.Size,
-			S3LastModifiedTime: objectInfo.LastModified,
-			S3Path:             t.s3URLParts.ObjectKey,
-			ErrorMsg:           objectInfo.Err,
-		}
-
+	for objectInfo := range t.s3Client.ListObjects(t.ctx, t.s3URLParts.BucketName, minio.ListObjectsOptions{Prefix: searchPrefix, Recursive: t.recursive, UseV1: false}) {
 		if objectInfo.Err != nil {
-			t.writeToS3ErrorChannel(errInfo)
 			return fmt.Errorf("cannot list objects, %v", objectInfo.Err)
 		}
 
-		// Skip objects in archive storage classes as they cannot be accessed directly
-		// and require restoration before transfer. Attempting to transfer these objects
-		// will result in 403 errors and job failures.
-		if isArchiveStorageClass(objectInfo.StorageClass) {
-			skipMessage := fmt.Sprintf("Skipping S3 object %s as it is in %s storage class. "+
-				"Objects in archive storage classes must be restored before they can be transferred.",
-				objectInfo.Key, objectInfo.StorageClass)
-			WarnStdoutAndScanningLog(skipMessage)
-
-			// Increment the enumeration counter to track this as a skipped object
-			t.incrementEnumerationCounter(common.EEntityType.Other())
-			continue
-		}
-
-		if objectInfo.StorageClass == "" && !t.includeDirectoryOrPrefix {
+		if objectInfo.StorageClass == "" {
 			// Directories are the only objects without storage classes.
-			// Skip directories if not using sync orchestrator
 			continue
 		}
 
 		if invalidAzureBlobName(objectInfo.Key) {
 			//Throw a warning on console and continue
 			WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, objectInfo.Key))
-			t.writeToS3ErrorChannel(errInfo)
 			continue
 		}
 
 		objectPath := strings.Split(objectInfo.Key, "/")
 		objectName := objectPath[len(objectPath)-1]
-		var storedObject StoredObject
-		if objectInfo.StorageClass == "" {
 
-			// For sync orchestrator, we need to treat directories as objects.
-			storedObject = newStoredObject(
-				preprocessor,
-				objectName,
-				relativePath,
-				common.EEntityType.Folder(),
-				objectInfo.LastModified,
-				0,
-				noContentProps,
-				noBlobProps,
-				noMetadata,
-				t.s3URLParts.BucketName)
+		// re-join the unescaped path.
+		relativePath := strings.TrimPrefix(objectInfo.Key, searchPrefix)
 
-		} else {
-			if strings.HasSuffix(relativePath, "/") {
-				// If a file has a suffix of /, it's still treated as a folder.
-				// Thus, akin to the old code. skip it.
-				// XDM: What do we do for SyncOrchrestrator?
-				continue
-			}
-
-			// default to empty props, but retrieve real ones if required
-			oie := common.ObjectInfoExtension{ObjectInfo: minio.ObjectInfo{}}
-			if t.getProperties {
-				oi, err := t.s3Client.StatObject(t.ctx, t.s3URLParts.BucketName, objectInfo.Key, minio.StatObjectOptions{})
-				if err != nil {
-					t.writeToS3ErrorChannel(ErrorS3Info{
-						S3Name:             objectName,
-						S3Path:             t.s3URLParts.ObjectKey,
-						ErrorMsg:           err,
-						S3LastModifiedTime: oi.LastModified,
-						S3Size:             oi.Size,
-					})
-					return err
-				}
-				oie = common.ObjectInfoExtension{ObjectInfo: oi}
-			}
-			storedObject = newStoredObject(
-				preprocessor,
-				objectName,
-				relativePath,
-				common.EEntityType.File(),
-				objectInfo.LastModified,
-				objectInfo.Size,
-				&oie,
-				noBlobProps,
-				oie.NewCommonMetadata(),
-				t.s3URLParts.BucketName)
+		if strings.HasSuffix(relativePath, "/") {
+			// If a file has a suffix of /, it's still treated as a folder.
+			// Thus, akin to the old code. skip it.
+			continue
 		}
 
-		err = processIfPassedFilters(filters,
+		// default to empty props, but retrieve real ones if required
+		oie := common.ObjectInfoExtension{ObjectInfo: minio.ObjectInfo{}}
+		if t.getProperties {
+			oi, err := t.s3Client.StatObject(t.ctx, t.s3URLParts.BucketName, objectInfo.Key, minio.StatObjectOptions{})
+			if err != nil {
+				return err
+			}
+			oie = common.ObjectInfoExtension{ObjectInfo: oi}
+		}
+		storedObject := NewStoredObject(
+			preprocessor,
+			objectName,
+			relativePath,
+			common.EEntityType.File(),
+			objectInfo.LastModified,
+			objectInfo.Size,
+			&oie,
+			NoBlobProps,
+			oie.NewCommonMetadata(),
+			t.s3URLParts.BucketName)
+
+		err = ProcessIfPassedFilters(filters,
 			storedObject,
 			processor)
 		_, err = getProcessingError(err)
 		if err != nil {
-			t.writeToS3ErrorChannel(ErrorS3Info{
-				S3Name:             objectName,
-				S3Path:             t.s3URLParts.ObjectKey,
-				ErrorMsg:           err,
-				S3LastModifiedTime: storedObject.lastModifiedTime,
-				S3Size:             storedObject.size,
-			})
 			return
 		}
 	}
 	return
 }
 
-func newS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTraverserOptions) (t *s3Traverser, err error) {
-	t = &s3Traverser{
-		rawURL:                      rawURL,
-		ctx:                         ctx,
-		recursive:                   opts.Recursive,
-		getProperties:               opts.GetPropertiesInFrontend,
+func NewS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTraverserOptions) (t *s3Traverser, err error) {
+	t = &s3Traverser{rawURL: rawURL, ctx: ctx, recursive: opts.Recursive, getProperties: opts.GetPropertiesInFrontend,
 		incrementEnumerationCounter: opts.IncrementEnumeration}
-
-	if buildmode.IsMover {
-		// If we are using this in context of Mover flow, set getProperties to false.
-		// Individual getProperties have a significant performance impact in traversing S3.
-		// This can be adopted by default but keeping it scoped to Mover flow for now.
-
-		if t.getProperties {
-			// Skipping logging to reduce noise in the logs.
-			// WarnStdoutAndScanningLog("getProperties is being changed to false for S3 traverser for performance improvement.")
-		}
-
-		t.getProperties = false
-	}
-
-	t.includeDirectoryOrPrefix = UseSyncOrchestrator && !t.recursive
 
 	// initialize S3 client and URL parts
 	var s3URLParts common.S3URLParts
@@ -368,16 +202,19 @@ func newS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTrave
 
 	if err != nil {
 		return
+	} else {
+		t.s3URLParts = s3URLParts
 	}
-
-	t.s3URLParts = s3URLPartsExtension{s3URLParts}
 
 	showS3UrlTypeWarning(s3URLParts)
 
-	t.s3Client, err = GetS3TraverserGlobalClientManager().GetS3Client(ctx, s3URLParts, *opts.Credential)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get S3 client from global manager: %w", err)
-	}
+	t.s3Client, err = common.CreateS3Client(t.ctx, common.CredentialInfo{
+		CredentialType: opts.CredentialType,
+		S3CredentialInfo: common.S3CredentialInfo{
+			Endpoint: t.s3URLParts.Endpoint,
+			Region:   t.s3URLParts.Region,
+		},
+	}, common.CredentialOpOptions{}, common.AzcopyScanningLogger)
 
 	return
 }
@@ -390,82 +227,10 @@ func newS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTrave
 func showS3UrlTypeWarning(s3URLParts common.S3URLParts) {
 	if strings.EqualFold(s3URLParts.Host, "s3.amazonaws.com") {
 		s3UrlWarningOncer.Do(func() {
-			glcm.Info("Instead of transferring from the 's3.amazonaws.com' URL, in this version of AzCopy we recommend you " +
+			common.GetLifecycleMgr().Info("Instead of transferring from the 's3.amazonaws.com' URL, in this version of AzCopy we recommend you " +
 				"use a region-specific endpoint to transfer from one specific region. E.g. s3.us-east-1.amazonaws.com or a virtual-hosted reference to a single bucket.")
 		})
 	}
 }
 
 var s3UrlWarningOncer = &sync.Once{}
-
-// Global S3 client manager for reusing clients across operations
-// This is particularly useful for sync orchestrator which creates many traversers for different path prefixes
-// This allows us to avoid creating a new S3 client for each traverser, improving performance and reducing resource usage.
-// This is a singleton instance, so it can be shared across multiple traversers.
-// It uses sync.Once to ensure that the client is created only once, even if multiple traversers are created concurrently.
-var s3TraverserGlobalClientManager = &S3ClientManager{}
-
-type S3ClientManager struct {
-	client *minio.Client
-	once   sync.Once
-	err    error
-}
-
-func (m *S3ClientManager) GetS3Client(ctx context.Context, s3URLParts common.S3URLParts, credInfo common.CredentialInfo) (*minio.Client, error) {
-	m.once.Do(func() {
-		// XDM: Do we need retry here?
-		m.client, m.err = CreateSharedS3Client(ctx, s3URLParts, credInfo.CredentialType)
-	})
-	return m.client, m.err
-}
-
-// GetS3TraverserGlobalClientManager returns the global S3 client manager instance
-// This is particularly useful for sync orchestrator which creates many traversers for different path prefixes
-// This allows us to avoid creating a new S3 client for each traverser, improving performance and reducing resource usage.
-// This is a singleton instance, so it can be shared across multiple traversers.
-// It uses sync.Once to ensure that the client is created only once, even if multiple traversers are created concurrently.
-func GetS3TraverserGlobalClientManager() *S3ClientManager {
-	return s3TraverserGlobalClientManager
-}
-
-// CreateSharedS3Client creates a shared S3 client that can be reused across multiple traversers
-// This is particularly useful for sync orchestrator which creates many traversers for different path prefixes
-func CreateSharedS3Client(ctx context.Context, s3URLParts common.S3URLParts, credentialType common.CredentialType) (*minio.Client, error) {
-	//Optional check for custom credential provider
-	var credProvider credentials.Provider = nil
-	creds := ctx.Value(customCreds)
-	if creds != nil {
-		credProvider = creds.(credentials.Provider) //if passed through context, use custom provider
-	}
-
-	return common.CreateS3Client(ctx, common.CredentialInfo{
-		CredentialType: credentialType,
-		S3CredentialInfo: common.S3CredentialInfo{
-			Endpoint: s3URLParts.Endpoint,
-			Region:   s3URLParts.Region,
-			Provider: credProvider,
-		},
-	}, common.CredentialOpOptions{
-		LogError: glcm.Error,
-	}, azcopyScanningLogger)
-}
-
-// isArchiveStorageClass checks if the given storage class is an archive tier
-// that requires restoration before objects can be accessed. Objects in these storage classes
-// cannot be directly downloaded and will result in 403 errors if attempted.
-// This function supports archive storage classes from multiple S3-compatible providers:
-//
-// AWS S3 Glacier storage classes that require restoration:
-// - GLACIER: Glacier Flexible Retrieval (formerly just "Glacier") - requires restoration
-// - DEEP_ARCHIVE: Glacier Deep Archive - requires restoration
-//
-// Note: The following storage classes are NOT included as they provide immediate access:
-// - GLACIER_IR (AWS): Provides millisecond access without restoration
-// - NEARLINE, COLDLINE, ARCHIVE (GCS): All provide immediate access without restoration
-//
-// To add support for additional archive storage classes from other S3-compatible providers
-// that require restoration, add the storage class string to the comparison below.
-func isArchiveStorageClass(storageClass string) bool {
-	// AWS Glacier storage classes that require restoration
-	return storageClass == "GLACIER" || storageClass == "DEEP_ARCHIVE"
-}

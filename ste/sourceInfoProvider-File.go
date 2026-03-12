@@ -25,6 +25,7 @@ import (
 	"crypto/md5"
 	"fmt"
 	"io"
+	"net/http"
 	"sync"
 	"time"
 
@@ -420,10 +421,31 @@ func (p *fileSourceInfoProvider) ReadLink() (string, error) {
 
 	share := fsc.NewShareClient(p.transferInfo.SrcContainer)
 	fileClient := share.NewRootDirectoryClient().NewFileClient(p.transferInfo.SrcFilePath)
-	symlink, err := fileClient.GetSymbolicLink(p.ctx, nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to get symlink info: %w", err)
-	}
 
-	return string(*symlink.LinkText), nil
+	// Use the file URL and make a raw REST call to get the symbolic link target.
+	// The Azure Files REST API supports GET {url}?restype=symboliclink,
+	// which returns the link target in the x-ms-link-text response header.
+	fileURL := fileClient.URL() + "?restype=symboliclink"
+	req, reqErr := p.newHTTPRequest(fileURL)
+	if reqErr != nil {
+		return "", fmt.Errorf("failed to create symlink request: %w", reqErr)
+	}
+	resp, doErr := NewAzcopyHTTPClient(10).Do(req)
+	if doErr != nil {
+		return "", fmt.Errorf("failed to get symlink info: %w", doErr)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("failed to get symlink info: HTTP %d", resp.StatusCode)
+	}
+	return resp.Header.Get("x-ms-link-text"), nil
+}
+
+func (p *fileSourceInfoProvider) newHTTPRequest(url string) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(p.ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("x-ms-version", "2025-05-05")
+	return req, nil
 }

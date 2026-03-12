@@ -163,6 +163,7 @@ type jobPartMgr struct {
 	srcServiceClient *common.ServiceClient
 	dstServiceClient *common.ServiceClient
 
+	credInfo   common.CredentialInfo
 	srcIsOAuth bool // true if source is authenticated via oauth
 	// When the part is schedule to run (inprogress), the below fields are used
 	planMMF *JobPartPlanMMF // This Job part plan's MMF
@@ -354,7 +355,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 					dst = uri.String()
 				}
 
-				jpptFolderTracker.RegisterPropertiesTransfer(dst, plan.PartNum, t)
+				jpptFolderTracker.RegisterPropertiesTransfer(dst, t)
 			}
 		}
 
@@ -539,11 +540,7 @@ func (jpm *jobPartMgr) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlob
 }
 
 func (jpm *jobPartMgr) CpkInfo() *blob.CPKInfo {
-	cpkInfo, err := common.GetCpkInfo(jpm.cpkOptions.CpkInfo)
-	if err != nil {
-		jpm.GetJobErrorHandler().Error(err.Error())
-	}
-	return cpkInfo
+	return common.GetCpkInfo(jpm.cpkOptions.CpkInfo)
 }
 
 func (jpm *jobPartMgr) CpkScopeInfo() *blob.CPKScopeInfo {
