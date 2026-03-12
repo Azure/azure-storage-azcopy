@@ -70,10 +70,32 @@ const PeCheckIntervalInmilliSecs = 200
 func createS3ClientForPrivateNetwork(credInfo CredentialInfo, cred *credentials.Credentials) (*minio.Client, error) {
 	peIP := privateNetworkArgs.PrivateEndpointIPs
 	baseS3Host := credInfo.S3CredentialInfo.Endpoint
-	// Endpoint should contain bucketname : "<bucketname>.s3.<region>.amazonaws.com"
-	s3Host := privateNetworkArgs.BucketName + "." + credInfo.S3CredentialInfo.Endpoint
-	fmt.Printf("Creating round robin transport for S3 with PE IP: %s, S3 Host: %s, Base S3 Host: %s", peIP, s3Host, baseS3Host)
-	transport := NewRoundRobinTransport(peIP, s3Host, baseS3Host, PeReCheckCooldownTimeInSecs, PeCheckRetries, PeCheckIntervalInmilliSecs)
+	fmt.Printf("[createS3ClientForPrivateNetwork] baseS3Host=%s, BucketName=%s, Region=%s\n", baseS3Host, credInfo.S3CredentialInfo.BucketName, credInfo.S3CredentialInfo.Region)
+
+	urlParts := S3URLParts{Endpoint: baseS3Host}
+	isGCS := urlParts.IsGoogleCloudStorage()
+
+	var s3Host string
+	var tlsHost string          // hostname used for TLS ServerName verification
+	minioEndpoint := baseS3Host // endpoint passed to minio.New()
+	if isGCS {
+		// GCS uses path-style: "storage.googleapis.com/bucketName"
+		s3Host = credInfo.S3CredentialInfo.Endpoint + "/" + credInfo.S3CredentialInfo.BucketName
+		// GCS certs only match exact endpoint (no wildcard), so use baseS3Host for TLS
+		tlsHost = baseS3Host
+		// Minio lib only supports "storage.googleapis.com" as the GCS endpoint
+		// (it has an internal check for that exact host), so override for regional
+		// endpoints like storage.us-west2.rep.googleapis.com.
+		// TLS and RoundRobinTransport still use the actual regional baseS3Host.
+		minioEndpoint = "storage.googleapis.com"
+	} else {
+		// S3 uses virtual-hosted style: "<bucketname>.s3.<region>.amazonaws.com"
+		s3Host = privateNetworkArgs.BucketName + "." + credInfo.S3CredentialInfo.Endpoint
+		// AWS certs support *.s3.<region>.amazonaws.com, so use s3Host for TLS
+		tlsHost = s3Host
+	}
+	fmt.Printf("[createS3ClientForPrivateNetwork] Creating RoundRobinTransport: PE IPs=%v, s3Host=%s, tlsHost=%s, minioEndpoint=%s\n", peIP, s3Host, tlsHost, minioEndpoint)
+	transport := NewRoundRobinTransport(peIP, s3Host, tlsHost, PeReCheckCooldownTimeInSecs, PeCheckRetries, PeCheckIntervalInmilliSecs)
 	var minioCred *credentials.Credentials
 	if cred != nil {
 		minioCred = cred
@@ -82,7 +104,7 @@ func createS3ClientForPrivateNetwork(credInfo CredentialInfo, cred *credentials.
 	}
 
 	// Create MinIO client
-	client, err := minio.New(baseS3Host, &minio.Options{
+	client, err := minio.New(minioEndpoint, &minio.Options{
 		Creds:        minioCred,
 		Secure:       true,
 		Transport:    transport,

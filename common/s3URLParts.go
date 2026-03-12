@@ -145,32 +145,45 @@ func matchAWSHost(hostLower, suffix string) []string {
 	return matchSlices
 }
 
-// matchGoogleHost matches Google Cloud Storage path-style endpoints:
-//   - storage.googleapis.com (global, no region)
-//   - storage.<region>.rep.googleapis.com (regional, e.g. storage.us-west2.rep.googleapis.com)
+// matchGoogleHost matches Google Cloud Storage endpoints in three forms:
+//   - Path-style global:    storage.googleapis.com/bucketName
+//   - Path-style regional:  storage.<region>.rep.googleapis.com/bucketName
+//   - Virtual-hosted style: bucketName.storage.googleapis.com
 //
-// Host form: bucket and object come from path (path-style).
+// Bucket and object come from the path for path-style, or from the host prefix for virtual-hosted.
 func matchGoogleHost(hostLower, suffix string) []string {
+	log.Printf("[matchGoogleHost] hostLower=%s, suffix=%s", hostLower, suffix)
 	keyword := getS3Keyword() // googleapis
-	region := ""
 
-	if hostLower == "storage."+suffix {
-		// Global endpoint: storage.googleapis.com
-		matchSlices := []string{hostLower, "", region, keyword}
-		return matchSlices
+	// Case 1: Global path-style: storage.googleapis.com
+	globalEndpoint := "storage." + suffix
+	if hostLower == globalEndpoint {
+		log.Printf("[matchGoogleHost] Matched Case 1 (global path-style): %s", hostLower)
+		return []string{hostLower, "", "", keyword}
 	}
 
-	// Regional endpoint: storage.<region>.rep.googleapis.com
+	// Case 2: Regional path-style: storage.<region>.rep.googleapis.com
 	repSuffix := ".rep." + suffix
-	prefix := "storage."
-	if strings.HasPrefix(hostLower, prefix) && strings.HasSuffix(hostLower, repSuffix) {
-		region = hostLower[len(prefix) : len(hostLower)-len(repSuffix)]
+	storagePrefix := "storage."
+	if strings.HasPrefix(hostLower, storagePrefix) && strings.HasSuffix(hostLower, repSuffix) {
+		region := hostLower[len(storagePrefix) : len(hostLower)-len(repSuffix)]
 		if region != "" {
-			matchSlices := []string{hostLower, "", region, keyword}
-			return matchSlices
+			log.Printf("[matchGoogleHost] Matched Case 2 (regional path-style): %s, region=%s", hostLower, region)
+			return []string{hostLower, "", region, keyword}
 		}
 	}
 
+	// Case 3: Virtual-hosted style: <bucket>.storage.googleapis.com
+	if strings.HasSuffix(hostLower, "."+globalEndpoint) {
+		bucketWithDot := hostLower[:len(hostLower)-len(globalEndpoint)] // includes trailing "."
+		log.Printf("[matchGoogleHost] Case 3 check: globalEndpoint=%s, bucketWithDot=%s", globalEndpoint, bucketWithDot)
+		if bucketWithDot != "" {
+			log.Printf("[matchGoogleHost] Matched Case 3 (virtual-hosted): %s, bucket=%s", hostLower, bucketWithDot)
+			return []string{hostLower, bucketWithDot, "", keyword}
+		}
+	}
+
+	log.Printf("[matchGoogleHost] No match for host: %s", hostLower)
 	return nil
 }
 

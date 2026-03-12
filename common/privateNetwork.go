@@ -108,11 +108,11 @@ func SetPrivateNetworkArgs(privateNetworkEnabled bool, privateEndpointIPs []stri
 }
 
 // RoundRobinTransport creates the transport
-func NewRoundRobinTransport(ips []string, host string, baseHost string, cooldownInSecs int, ipRetries int, ipRetryIntervalInMilliSecs int) *RoundRobinTransport {
+func NewRoundRobinTransport(ips []string, host string, tlsHost string, cooldownInSecs int, ipRetries int, ipRetryIntervalInMilliSecs int) *RoundRobinTransport {
 	SetGlobalPrivateEndpointIPs(ips)
 
 	tr := http.DefaultTransport.(*http.Transport).Clone()
-	tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: false, ServerName: baseHost}
+	tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: false, ServerName: tlsHost}
 
 	rr := &RoundRobinTransport{
 		host:            host,

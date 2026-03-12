@@ -471,9 +471,10 @@ func CreateSharedS3Client(ctx context.Context, s3URLParts common.S3URLParts, cre
 	return common.CreateS3Client(ctx, common.CredentialInfo{
 		CredentialType: credentialType,
 		S3CredentialInfo: common.S3CredentialInfo{
-			Endpoint: s3URLParts.Endpoint,
-			Region:   s3URLParts.Region,
-			Provider: credProvider,
+			Endpoint:   s3URLParts.Endpoint,
+			Region:     s3URLParts.Region,
+			BucketName: s3URLParts.BucketName,
+			Provider:   credProvider,
 		},
 	}, common.CredentialOpOptions{
 		LogError: glcm.Error,

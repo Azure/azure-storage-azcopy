@@ -77,9 +77,10 @@ func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, err
 	p.s3Client, err = s3ClientFactory.GetS3Client(ctx, common.CredentialInfo{
 		CredentialType: p.credType,
 		S3CredentialInfo: common.S3CredentialInfo{
-			Endpoint: p.s3URLPart.Endpoint,
-			Region:   p.s3URLPart.Region,
-			Provider: p.transferInfo.Provider,
+			Endpoint:   p.s3URLPart.Endpoint,
+			Region:     p.s3URLPart.Region,
+			BucketName: p.s3URLPart.BucketName,
+			Provider:   p.transferInfo.Provider,
 		},
 	}, common.CredentialOpOptions{
 		LogInfo:  func(str string) { p.jptm.Log(common.LogInfo, str) },
