@@ -174,7 +174,10 @@ func CreateS3Client(ctx context.Context, credInfo CredentialInfo, option Credent
 		fmt.Println("Creating S3 Client for Private Network")
 		s3Client, err := createS3ClientForPrivateNetwork(credInfo, credential)
 		if logger != nil {
+			fmt.Println("[CreateS3Client] Enabling S3 client trace logging for private network")
 			s3Client.TraceOn(NewS3HTTPTraceLogger(logger, LogDebug))
+		} else {
+			fmt.Println("[CreateS3Client] Logger is nil, skipping S3 client trace logging for private network")
 		}
 		return s3Client, err
 	}
