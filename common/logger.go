@@ -269,6 +269,7 @@ func NewS3HTTPTraceLogger(logger ILogger, level LogLevel) S3HTTPTraceLogger {
 
 func (e S3HTTPTraceLogger) Write(msg []byte) (n int, err error) {
 	toPrint := string(msg)
+	fmt.Println("[S3Trace]", toPrint)
 	e.logger.Log(e.logLevel, toPrint)
 	return len(toPrint), nil
 }
