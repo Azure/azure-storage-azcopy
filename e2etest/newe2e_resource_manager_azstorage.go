@@ -2,8 +2,9 @@ package e2etest
 
 import (
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"strings"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
@@ -209,11 +210,13 @@ func (acct *AzureAccountResourceManager) GetService(a Asserter, location common.
 		if acct.InternalAccountKey != "" {
 			var sharedKey *blobfscommon.SharedKeyCredential
 			sharedKey, err = blobfscommon.NewSharedKeyCredential(acct.InternalAccountName, acct.InternalAccountKey)
+			a.NoError("Create shared key", err)
 			client, err = blobfsservice.NewClientWithSharedKeyCredential(uri, sharedKey, nil)
-			a.NoError("Create BlobFS client", err)
 		} else {
 			client, err = blobfsservice.NewClient(uri, PrimaryOAuthCache, nil)
 		}
+
+		a.NoError("Create BlobFS client", err)
 
 		return &BlobFSServiceResourceManager{
 			InternalAccount: acct,
