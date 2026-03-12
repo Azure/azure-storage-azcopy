@@ -152,13 +152,11 @@ func matchAWSHost(hostLower, suffix string) []string {
 //
 // Bucket and object come from the path for path-style, or from the host prefix for virtual-hosted.
 func matchGoogleHost(hostLower, suffix string) []string {
-	log.Printf("[matchGoogleHost] hostLower=%s, suffix=%s", hostLower, suffix)
 	keyword := getS3Keyword() // googleapis
 
 	// Case 1: Global path-style: storage.googleapis.com
 	globalEndpoint := "storage." + suffix
 	if hostLower == globalEndpoint {
-		log.Printf("[matchGoogleHost] Matched Case 1 (global path-style): %s", hostLower)
 		return []string{hostLower, "", "", keyword}
 	}
 
@@ -168,7 +166,6 @@ func matchGoogleHost(hostLower, suffix string) []string {
 	if strings.HasPrefix(hostLower, storagePrefix) && strings.HasSuffix(hostLower, repSuffix) {
 		region := hostLower[len(storagePrefix) : len(hostLower)-len(repSuffix)]
 		if region != "" {
-			log.Printf("[matchGoogleHost] Matched Case 2 (regional path-style): %s, region=%s", hostLower, region)
 			return []string{hostLower, "", region, keyword}
 		}
 	}
@@ -176,9 +173,7 @@ func matchGoogleHost(hostLower, suffix string) []string {
 	// Case 3: Virtual-hosted style: <bucket>.storage.googleapis.com
 	if strings.HasSuffix(hostLower, "."+globalEndpoint) {
 		bucketWithDot := hostLower[:len(hostLower)-len(globalEndpoint)] // includes trailing "."
-		log.Printf("[matchGoogleHost] Case 3 check: globalEndpoint=%s, bucketWithDot=%s", globalEndpoint, bucketWithDot)
 		if bucketWithDot != "" {
-			log.Printf("[matchGoogleHost] Matched Case 3 (virtual-hosted): %s, bucket=%s", hostLower, bucketWithDot)
 			return []string{hostLower, bucketWithDot, "", keyword}
 		}
 	}
