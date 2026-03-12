@@ -1,6 +1,11 @@
 
 # Change Log
 
+## Version 10.32.1
+
+### Dependency updates
+1.	Golang 1.24.11 -> 1.24.13
+
 ## Version 10.32.0
 
 ### New Features

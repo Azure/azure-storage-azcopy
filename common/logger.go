@@ -120,6 +120,11 @@ func (jl *jobLogger) OpenLog() {
 		return
 	}
 
+	// If a previously opened Writer exists, we close it to prevent resource leaks
+	if jl.file != nil {
+		jl.file.Close()
+	}
+
 	file, err := NewRotatingWriter(path.Join(jl.logFileFolder, jl.jobID.String()+jl.logFileNameSuffix+".log"), maxLogSize)
 	PanicIfErr(err)
 

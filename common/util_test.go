@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -38,66 +39,82 @@ func Test_TryAddMetadata(t *testing.T) {
 	a := assert.New(t)
 
 	// Test case 1: metadata is empty
-	metadata := make(Metadata)
-	TryAddMetadata(metadata, "key", "value")
-	a.Equal(1, len(metadata))
-	a.Contains(metadata, "key")
-	a.Equal("value", *metadata["key"])
+	safeMetadata := SafeMetadata{
+		Metadata: make(Metadata),
+	}
+
+	safeMetadata.TryAdd("key", "value")
+	a.Equal(1, len(safeMetadata.Metadata))
+	a.Contains(safeMetadata.Metadata, "key")
+	a.Equal("value", *safeMetadata.Metadata["key"])
 
 	// Test case 2: metadata contains exact key
-	metadata = make(Metadata)
-	metadata["key"] = to.Ptr("value")
-	TryAddMetadata(metadata, "key", "new_value")
-	a.Equal(1, len(metadata))
-	a.Contains(metadata, "key")
-	a.Equal("value", *metadata["key"])
+	safeMetadata = SafeMetadata{
+		Metadata: make(Metadata),
+	}
+	safeMetadata.Metadata["key"] = to.Ptr("value")
+	safeMetadata.TryAdd("key", "new_value")
+	a.Equal(1, len(safeMetadata.Metadata))
+	a.Contains(safeMetadata.Metadata, "key")
+	a.Equal("value", *safeMetadata.Metadata["key"])
 
 	// Test case 3: metadata contains key with different case
-	metadata = make(Metadata)
-	metadata["Key"] = to.Ptr("value")
-	TryAddMetadata(metadata, "key", "new_value")
-	a.Equal(1, len(metadata))
-	a.Contains(metadata, "Key")
-	a.Equal("value", *metadata["Key"])
-	a.NotContains(metadata, "key")
-
+	safeMetadata = SafeMetadata{
+		Metadata: make(Metadata),
+	}
+	safeMetadata.Metadata["Key"] = to.Ptr("value")
+	safeMetadata.TryAdd("key", "new_value")
+	a.Equal(1, len(safeMetadata.Metadata))
+	a.Contains(safeMetadata.Metadata, "Key")
+	a.Equal("value", *safeMetadata.Metadata["Key"])
+	a.NotContains(safeMetadata.Metadata, "key")
 	// Test case 4: metadata is not empty and does not contain key
-	metadata = make(Metadata)
-	metadata["other_key"] = to.Ptr("value")
-	TryAddMetadata(metadata, "key", "new_value")
-	a.Equal(2, len(metadata))
-	a.Contains(metadata, "key")
-	a.Equal("new_value", *metadata["key"])
+	safeMetadata = SafeMetadata{
+		Metadata: make(Metadata),
+	}
+	safeMetadata.Metadata["other_key"] = to.Ptr("value")
+	safeMetadata.TryAdd("key", "new_value")
+	a.Equal(2, len(safeMetadata.Metadata))
+	a.Contains(safeMetadata.Metadata, "key")
+	a.Equal("new_value", *safeMetadata.Metadata["key"])
 }
 
 func Test_TryReadMetadata(t *testing.T) {
 	a := assert.New(t)
 	// Test case 1: metadata is empty
-	metadata := make(Metadata)
-	v, ok := TryReadMetadata(metadata, "key")
+	safeMetadata := SafeMetadata{
+		Metadata: make(Metadata),
+	}
+	v, ok := safeMetadata.TryRead("key")
 	a.False(ok)
 	a.Nil(v)
 
 	// Test case 2: metadata contains exact key
-	metadata = make(Metadata)
-	metadata["key"] = to.Ptr("value")
-	v, ok = TryReadMetadata(metadata, "key")
+	safeMetadata = SafeMetadata{
+		Metadata: make(Metadata),
+	}
+	safeMetadata.Metadata["key"] = to.Ptr("value")
+	v, ok = safeMetadata.TryRead("key")
 	a.True(ok)
 	a.NotNil(v)
 	a.Equal("value", *v)
 
 	// Test case 3: metadata contains key with different case
-	metadata = make(Metadata)
-	metadata["Key"] = to.Ptr("value")
-	v, ok = TryReadMetadata(metadata, "key")
+	safeMetadata = SafeMetadata{
+		Metadata: make(Metadata),
+	}
+	safeMetadata.Metadata["Key"] = to.Ptr("value")
+	v, ok = safeMetadata.TryRead("key")
 	a.True(ok)
 	a.NotNil(v)
 	a.Equal("value", *v)
 
 	// Test case 4: metadata is not empty and does not contain key
-	metadata = make(Metadata)
-	metadata["other_key"] = to.Ptr("value")
-	v, ok = TryReadMetadata(metadata, "key")
+	safeMetadata = SafeMetadata{
+		Metadata: make(Metadata),
+	}
+	safeMetadata.Metadata["other_key"] = to.Ptr("value")
+	v, ok = safeMetadata.TryRead("key")
 	a.False(ok)
 	a.Nil(v)
 }
@@ -153,5 +170,40 @@ func TestDoWithOverrideReadonlyonAzureFiles(t *testing.T) {
 	props, err := f.GetProperties(context.TODO(), nil)
 	a.Nil(err)
 	a.Equal(*props.Metadata["Testkey"], "Testvalue")
-	
+
+}
+
+func Test_TryAddMetadata_Concurrent(t *testing.T) {
+	a := assert.New(t)
+
+	safeMetadata := SafeMetadata{
+		Metadata: make(Metadata),
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// Goroutine 1
+	go func() {
+		defer wg.Done()
+		safeMetadata.TryAdd("key", "value1")
+	}()
+
+	// Goroutine 2
+	go func() {
+		defer wg.Done()
+		safeMetadata.TryAdd("key", "value2")
+	}()
+
+	wg.Wait()
+
+	// Only one value should exist for the key
+	a.Equal(1, len(safeMetadata.Metadata))
+	a.Contains(safeMetadata.Metadata, "key")
+
+	val := safeMetadata.Metadata["key"]
+	a.NotNil(val)
+
+	// Value should be either value1 or value2 (depends on race timing)
+	a.True(*val == "value1" || *val == "value2")
 }
