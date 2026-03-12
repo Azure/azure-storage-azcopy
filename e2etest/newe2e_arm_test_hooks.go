@@ -1,11 +1,13 @@
 package e2etest
 
 import (
+	"context"
 	"fmt"
-	"github.com/google/uuid"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 var CommonARMClient *ARMClient
@@ -20,7 +22,7 @@ func SetupArmClient(a Asserter) {
 	var err error
 	var spt *AzCoreAccessToken
 	for i := 0; i < maxRetries; i++ {
-		spt, err = PrimaryOAuthCache.GetAccessToken(AzureManagementResource)
+		spt, err = PrimaryOAuthCache.GetAccessToken(AzureManagementResource, context.TODO())
 		if err == nil {
 			break
 		}

@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/google/uuid"
-	"sync"
-	"time"
 )
 
 const (
@@ -89,7 +90,7 @@ func NewOAuthCache(cred azcore.TokenCredential, tenant string) *OAuthCache {
 
 var OAuthCacheDisabledError = errors.New("the OAuth cache is currently disabled")
 
-func (o *OAuthCache) GetAccessToken(scope string) (*AzCoreAccessToken, error) {
+func (o *OAuthCache) GetAccessToken(scope string, ctx context.Context) (*AzCoreAccessToken, error) {
 	// at this point, operates on backwards compat
 	tok, err := o.GetToken(ctx, policy.TokenRequestOptions{
 		Scopes:    []string{scope},
@@ -187,7 +188,7 @@ type AzCoreAccessToken struct {
 // FreshToken attempts to cleanly get a token.
 func (a *AzCoreAccessToken) FreshToken() (string, error) {
 	if time.Now().Add(time.Minute).After(a.tok.ExpiresOn) {
-		newTok, err := a.parent.GetAccessToken(a.Scope)
+		newTok, err := a.parent.GetAccessToken(a.Scope, context.TODO())
 		if err != nil {
 			return "", fmt.Errorf("failed to refresh token: %w", err)
 		}
