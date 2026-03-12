@@ -21,7 +21,10 @@ package ste
 
 import (
 	"net/url"
+	"path"
+	"strings"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -101,12 +104,31 @@ func anyToRemote_hardlink(jptm IJobPartTransferMgr, info *TransferInfo, pacer pa
 		}
 	}
 
-	// write the hardlink
-	taregtHardlinkFullPath := getFullPath(jptm.Info().TargetHardlinkFilePath, jptm.GetDestinationRoot())
-	err = s.CreateHardlink(taregtHardlinkFullPath)
+	targetHardlinkFullPath := computeUploadHardlinkTarget(info, jptm)
+	err = s.CreateHardlink(targetHardlinkFullPath)
 	if err != nil {
-		jptm.FailActiveSend("creating destination hardlink representative", err)
+		jptm.FailActiveSend("Creating hardlink", err)
+		return
 	}
 
 	commonSenderCompletion(jptm, baseSender, info)
+}
+
+// computeUploadHardlinkTarget computes the full remote path for the target hardlink
+// when uploading (Local → Azure Files NFS). It derives the destination-side prefix
+// by stripping the current file's traversal-root-relative path from the destination URL,
+// then joins that prefix with info.TargetHardlinkFilePath.
+func computeUploadHardlinkTarget(info *TransferInfo, jptm IJobPartTransferMgr) string {
+
+	sourceRoot := strings.TrimSuffix(jptm.GetSourceRoot(), common.AZCOPY_PATH_SEPARATOR_STRING)
+	fileRelPath := strings.TrimPrefix(strings.TrimPrefix(info.Source, sourceRoot), common.AZCOPY_PATH_SEPARATOR_STRING)
+
+	destURLParts, err := file.ParseURL(info.Destination)
+	if err != nil {
+		jptm.FailActiveSend("Parsing destination URL", err)
+		return ""
+	}
+	destPrefix := strings.TrimSuffix(destURLParts.DirectoryOrFilePath, fileRelPath)
+	targetHardlinkFullPath := "/" + path.Join(destPrefix, info.TargetHardlinkFilePath)
+	return targetHardlinkFullPath
 }

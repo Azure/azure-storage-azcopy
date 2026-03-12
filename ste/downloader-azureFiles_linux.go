@@ -331,12 +331,46 @@ func (a *azureFilesDownloader) CreateSymlink(jptm IJobPartTransferMgr) error {
 	return err
 }
 
-func (a *azureFilesDownloader) CreateHardlink(jptm IJobPartTransferMgr) error {
-	// create the link
-	oldFullPath := getFullPath(jptm.Info().TargetHardlinkFilePath, jptm.GetDestinationRoot())
-	err := os.Link(oldFullPath, jptm.Info().Destination)
+func (a *azureFilesDownloader) CreateHardlink() error {
+	info := a.jptm.Info()
+
+	// Derive the destination prefix by computing the current file's relative path
+	// within the source root, then stripping that suffix from the full local destination.
+	// This works correctly for both copy and sync, and handles StripTopDir automatically.
+	//
+	// Example (copy, no StripTopDir):
+	//   SrcFilePath  = "srcdir/subdir/link.txt"
+	//   sourceRoot   = ".../srcdir"  =>  srcRootDir = "srcdir"
+	//   fileRelPath  = "subdir/link.txt"
+	//   Destination  = "/local/dstdir/subdir/link.txt"
+	//   destPrefix   = "/local/dstdir/"
+	//   hardlink target path  = "/local/dstdir/subdir/anchor.txt"
+	targetHardlinkFullPath, err := computeDownloadHardlinkTarget(info, a.jptm)
 	if err != nil {
-		fmt.Println(fmt.Errorf("failed to create hardlink from %s to %s: %w", oldFullPath, jptm.Info().Destination, err))
+		return err
 	}
-	return err
+	return os.Link(targetHardlinkFullPath, info.Destination)
+}
+
+// computeDownloadHardlinkTarget computes the full local path for the target hardlink
+// when downloading (Azure Files NFS(remote) → Local). It parses the source root URL to derive
+// the current file's traversal-root-relative path, strips that suffix from the local
+// destination path to get the prefix, then joins with info.TargetHardlinkFilePath.
+func computeDownloadHardlinkTarget(info *TransferInfo, jptm IJobPartTransferMgr) (string, error) {
+	srcRootURLParts, err := file.ParseURL(jptm.GetSourceRoot())
+	if err != nil {
+		return "", fmt.Errorf("parsing source root URL: %w", err)
+	}
+
+	srcRootDir := strings.TrimSuffix(srcRootURLParts.DirectoryOrFilePath, common.AZCOPY_PATH_SEPARATOR_STRING)
+	fileRelPath := strings.TrimPrefix(strings.TrimPrefix(info.SrcFilePath, srcRootDir), common.AZCOPY_PATH_SEPARATOR_STRING)
+
+	// Convert to local path separators and strip from the destination to get the prefix.
+	localFileRelPath := filepath.FromSlash(fileRelPath)
+	destPrefix := strings.TrimSuffix(info.Destination, localFileRelPath)
+
+	// Join the prefix with the targetHardlinkFilePath traversal-root-relative path.
+	targetHardlinkFullPath := filepath.Join(destPrefix, filepath.FromSlash(info.TargetHardlinkFilePath))
+
+	return targetHardlinkFullPath, nil
 }

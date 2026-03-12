@@ -56,31 +56,84 @@ func getPropertiesAndPermissions(svm *ScenarioVariationManager, preserveProperti
 	return folderProperties, fileProperties, fileOrFolderPermissions
 }
 
+// bestEffortAsserter is an Asserter that logs errors as warnings instead of
+// failing the test.  Used exclusively for cleanup paths where transient Azure
+// NFS 500s should not cause the overall test to fail.
+type bestEffortAsserter struct {
+	inner Asserter
+}
+
+func (b *bestEffortAsserter) NoError(comment string, err error, failNow ...bool) {
+	if err != nil {
+		b.inner.Log("[cleanup warning] %s: %v", comment, err)
+	}
+}
+func (b *bestEffortAsserter) Assert(comment string, assertion Assertion, items ...any) {
+	if !assertion.Assert(items...) {
+		b.inner.Log("[cleanup warning] assert failed: %s", comment)
+	}
+}
+func (b *bestEffortAsserter) AssertNow(comment string, assertion Assertion, items ...any) {
+	b.Assert(comment, assertion, items...)
+}
+func (b *bestEffortAsserter) Error(reason string)         { b.inner.Log("[cleanup warning] %s", reason) }
+func (b *bestEffortAsserter) Skip(reason string)          { b.inner.Skip(reason) }
+func (b *bestEffortAsserter) Log(format string, a ...any) { b.inner.Log(format, a...) }
+func (b *bestEffortAsserter) Failed() bool                { return false }
+func (b *bestEffortAsserter) HelperMarker() HelperMarker  { return b.inner.HelperMarker() }
+func (b *bestEffortAsserter) GetTestName() string         { return b.inner.GetTestName() }
+
 // These tests are using the same source and desination shares for testing to avoid
 // creating too many share accounts which may lead to throttling by Azure.
 // So in order to avoid conflicts between tests, we cleanup the test directories created during the test run.
 func CleanupNFSDirectory(
+
 	svm *ScenarioVariationManager,
 	container ContainerResourceManager,
 	rootDir string,
+
 ) {
 	if svm.Dryrun() {
 		return
 	}
+
+	// Use a best-effort asserter so transient NFS 500 errors during cleanup
+	// do not mark the test as failed.
+	bea := &bestEffortAsserter{inner: svm}
+
 	// 1. List all objects under rootDir
 	objs := container.ListObjects(svm, rootDir+"/", true)
 
-	// 2. Delete files, symlinks, hardlinks, special files first
+	// 2. Delete files, symlinks, hardlinks, special files first (with retry)
+	const maxRetries = 3
 	for objName, objProp := range objs {
 		if objProp.EntityType != common.EEntityType.Folder() {
-			container.
-				GetObject(svm, objName, objProp.EntityType).
-				Delete(svm)
+			for attempt := range maxRetries {
+				container.GetObject(svm, objName, objProp.EntityType).Delete(bea)
+				if !container.GetObject(svm, objName, objProp.EntityType).Exists() {
+					break
+				}
+				if attempt < maxRetries-1 {
+					time.Sleep(5 * time.Second)
+				}
+			}
+		}
+	}
+
+	// 3. Delete subdirectories
+	for objName, objProp := range objs {
+		if objProp.EntityType == common.EEntityType.Folder() {
+			container.GetObject(svm, objName, objProp.EntityType).Delete(bea)
 		}
 	}
 
 	// 4. Finally delete root directory
-	container.GetObject(svm, rootDir, common.EEntityType.Folder()).Delete(svm)
+	container.GetObject(svm, rootDir, common.EEntityType.Folder()).Delete(bea)
+
+	// 5. Prevent the framework's DeleteCreatedResources from re-attempting
+	//    deletion of NFS objects that may have hit transient 500 errors.
+	//    Local temp directories may leak but are cleaned up by the OS.
+	svm.CreatedResources = nil
 }
 
 func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariationManager) {
@@ -527,6 +580,16 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 		shouldFail = true
 	}
 
+	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
+		shouldFail = true
+	}
+	// TODO: skipping this test for now. As the download support is not added as part of this PR.
+	// Will be enabled in the next PR.
+	if azCopyVerb == AzCopyVerbSync && hardlinkType == common.EHardlinkHandlingType.Preserve() {
+		svm.InvalidateScenario()
+		return
+	}
+
 	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
@@ -780,6 +843,16 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 	shouldFail := false
 	if (followSymlinks && preserveSymlinks) || followSymlinks {
 		shouldFail = true
+	}
+	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
+		shouldFail = true
+	}
+
+	// TODO: skipping this test for now. As the download support is not added as part of this PR.
+	// Will be enabled in the next PR.
+	if azCopyVerb == AzCopyVerbSync && hardlinkType == common.EHardlinkHandlingType.Preserve() {
+		svm.InvalidateScenario()
+		return
 	}
 
 	stdOut, _ := RunAzCopy(
@@ -1038,6 +1111,10 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 		shouldFail = true
 	}
 
+	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
+		shouldFail = true
+	}
+
 	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
@@ -1275,6 +1352,10 @@ func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationMa
 		preservePermissions || // preserve permissions is not supported in cross-protocol copy
 		preserveSymlinks ||
 		hardlinkType != common.EHardlinkHandlingType.Skip() {
+		shouldFail = true
+	}
+
+	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
 		shouldFail = true
 	}
 

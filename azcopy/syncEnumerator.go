@@ -237,9 +237,7 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 
 	var comparator traverser.ObjectProcessor
 	var finalize func() error
-	nfsOption := &NfsHardlinkManager{
-		pendingHardlinkObjects: traverser.NewObjectIndexer(),
-	}
+	hardlinkIndexer := traverser.NewObjectIndexer()
 
 	switch s.opts.fromTo {
 	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile(), common.EFromTo.LocalFileNFS():
@@ -250,7 +248,21 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 		// when uploading, we can delete remote objects immediately, because as we traverse the remote location
 		// we ALREADY have available a complete map of everything that exists locally
 		// so as soon as we see a remote destination object we can know whether it exists in the local source
-		comparatorInstance := NewSyncDestinationComparator(indexer, transferScheduler.ScheduleSyncRemoveSetPropertiesTransfer, deleteScheduler, s.opts.compareHash, s.opts.preserveInfo, s.opts.mirrorMode, nfsOption)
+		preferSMBTime := s.opts.preserveInfo
+		if s.opts.fromTo.IsNFS() {
+			// For NFS sync, we want to prefer LMT if the user has chosen to preserve info,
+			// because LMT is more likely to be accurate for determining which file is newer
+			// when syncing from local to Azure Files NFS.
+			preferSMBTime = false
+		}
+
+		comparatorInstance := NewSyncDestinationComparator(indexer,
+			transferScheduler.ScheduleSyncRemoveSetPropertiesTransfer,
+			deleteScheduler,
+			s.opts.compareHash,
+			preferSMBTime,
+			s.opts.mirrorMode,
+			hardlinkIndexer)
 		comparator = comparatorInstance.ProcessIfNecessary
 		finalize = func() error {
 

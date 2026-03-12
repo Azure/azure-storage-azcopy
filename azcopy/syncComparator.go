@@ -40,6 +40,12 @@ const (
 	syncOverwriteReasonNewerLMTAndMissingHash = "the source lacks an associated hash (please upload with --put-md5 for hash comparison) and is more recent than the destination"
 	syncStatusSkipped                         = "skipped"
 	syncStatusOverwritten                     = "overwritten"
+	syncEntityTypeMismatch                    = "the source and destination have different entity types (file/folder/symlink/hardlink)"
+	syncHardlinkTargetMismatch                = "the source and destination hardlinks point to different targets"
+	syncSourceMissingForPendingHardlink       = "the source hardlink is missing, so the destination hardlink is considered stale and will be deleted"
+	syncSkipReasonHardlinkRelationshipIntact  = "the hardlink relationship is intact; no structural change at destination required"
+	syncOverwriteReasonGroupStructureChanged  = "the hardlink group structure is changing (merge or split); anchor content must be verified"
+	syncOverwriteReasonSizeMismatch           = "the source and destination anchor files differ in size"
 )
 
 func syncComparatorLog(fileName, status, skipReason string, stdout bool) {
@@ -73,14 +79,28 @@ type syncDestinationComparator struct {
 	disableComparison bool
 
 	destPendingHardlinkObjects traverser.ObjectIndexer
+
+	// srcPathToInode is a snapshot of the source index built on the first call to
+	// ProcessIfNecessary (before any deletions). It maps each source path → its inode ID.
+	// Used in ProcessPendingHardlinks to check whether a dest anchor path is still a
+	// member of the source inode group, without needing the full nested group map.
+	srcPathToInode map[string]string
 }
 
-type NfsHardlinkManager struct {
-	pendingHardlinkObjects *traverser.ObjectIndexer
-}
-
-func NewSyncDestinationComparator(i *traverser.ObjectIndexer, copyScheduler, cleaner traverser.ObjectProcessor, comparisonHashType common.SyncHashType, preferSMBTime, disableComparison bool, nfsOpts *NfsHardlinkManager) *syncDestinationComparator {
-	return &syncDestinationComparator{sourceIndex: i, copyTransferScheduler: copyScheduler, destinationCleaner: cleaner, preferSMBTime: preferSMBTime, disableComparison: disableComparison, comparisonHashType: comparisonHashType, destPendingHardlinkObjects: *nfsOpts.pendingHardlinkObjects}
+func NewSyncDestinationComparator(i *traverser.ObjectIndexer,
+	copyScheduler,
+	cleaner traverser.ObjectProcessor,
+	comparisonHashType common.SyncHashType,
+	preferSMBTime,
+	disableComparison bool,
+	hardlinkIndexer *traverser.ObjectIndexer) *syncDestinationComparator {
+	return &syncDestinationComparator{sourceIndex: i,
+		copyTransferScheduler:      copyScheduler,
+		destinationCleaner:         cleaner,
+		preferSMBTime:              preferSMBTime,
+		disableComparison:          disableComparison,
+		comparisonHashType:         comparisonHashType,
+		destPendingHardlinkObjects: *hardlinkIndexer}
 }
 
 // it will only schedule transfers for destination objects that are present in the indexer but stale compared to the entry in the map
@@ -89,6 +109,13 @@ func NewSyncDestinationComparator(i *traverser.ObjectIndexer, copyScheduler, cle
 // if file x from the destination exists at the source, then we'd only transfer it if it is considered stale compared to its counterpart at the source
 // if file x does not exist at the source, then it is considered extra, and will be deleted
 func (f *syncDestinationComparator) ProcessIfNecessary(destinationObject traverser.StoredObject) error {
+
+	// Lazy-init: snapshot the source inode groups the first time we are called.
+	// At this point source traversal is complete and the sourceIndex is fully
+	// populated; no deletions from ProcessIfNecessary have happened yet.
+	if f.srcPathToInode == nil {
+		f.srcPathToInode = buildSrcPathToInode(f.sourceIndex.IndexMap)
+	}
 
 	if destinationObject.EntityType == common.EEntityType.Hardlink() {
 
@@ -106,11 +133,12 @@ func (f *syncDestinationComparator) ProcessIfNecessary(destinationObject travers
 		sourceObjectInMap, present = f.sourceIndex.IndexMap[lcRelativePath]
 	}
 
+	// if the destinationObject is present at source and stale, we transfer the up-to-date version from source
 	if present {
 		// Clean up the index map once we start processing this path
 		defer delete(f.sourceIndex.IndexMap, destinationObject.RelativePath)
 
-		// 1. FORCE OVERWRITE: If comparison is disabled, schedule transfer immediately
+		// FORCE OVERWRITE: If comparison is disabled, schedule transfer immediately
 		if f.disableComparison {
 			syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, false)
 			return f.copyTransferScheduler(sourceObjectInMap)
@@ -118,14 +146,14 @@ func (f *syncDestinationComparator) ProcessIfNecessary(destinationObject travers
 
 		if sourceObjectInMap.EntityType == common.EEntityType.Hardlink() {
 			// Case: Destination is a File/Folder/Symlink, but Source is now a Hardlink
-			syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, "EntityTypeMismatch", false)
+			syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncEntityTypeMismatch, false)
 
 			// Delete the independent file/folder/symlink to allow link creation
 			_ = f.destinationCleaner(destinationObject)
 			return f.copyTransferScheduler(sourceObjectInMap)
 		}
 
-		// 3. CONTENT VALIDATION: Hash Comparison
+		// CONTENT VALIDATION: Hash Comparison
 		// If it's a file and hash comparison is enabled, we check data integrity.
 		if f.comparisonHashType != common.ESyncHashType.None() && sourceObjectInMap.EntityType == common.EEntityType.File() {
 			switch f.comparisonHashType {
@@ -136,14 +164,16 @@ func (f *syncDestinationComparator) ProcessIfNecessary(destinationObject travers
 						syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMTAndMissingHash, false)
 						return f.copyTransferScheduler(sourceObjectInMap)
 					} else {
+						// skip if dest is more recent
 						syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusSkipped, syncSkipReasonTimeAndMissingHash, false)
 						return nil
 					}
 				}
 
-				// If hashes exist but differ, the source is considered "newer/stale"
 				if !reflect.DeepEqual(sourceObjectInMap.Md5, destinationObject.Md5) {
 					syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, false)
+
+					// hash inequality = source "newer" in this model.
 					return f.copyTransferScheduler(sourceObjectInMap)
 				}
 			default:
@@ -153,78 +183,223 @@ func (f *syncDestinationComparator) ProcessIfNecessary(destinationObject travers
 			syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusSkipped, syncSkipReasonSameHash, false)
 			return nil
 
-			// 4. CONTENT VALIDATION: Last Modified Time (LMT)
+			// CONTENT VALIDATION: Last Modified Time (LMT)
 			// Default sync behavior: check if source is newer than destination
 		} else if sourceObjectInMap.IsMoreRecentThan(destinationObject, f.preferSMBTime) {
 			syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMT, false)
 			return f.copyTransferScheduler(sourceObjectInMap)
 		}
 
-		// Default: Destination is up-to-date or newer
+		// skip if dest is more recent
 		syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusSkipped, syncSkipReasonTime, false)
 
 	} else {
-		// 5. CLEANUP: If path is at destination but NOT at source, it is an extra file
-		// This handles the --delete-destination functionality.
+		// purposefully ignore the error from destinationCleaner
+		// it's a tolerable error, since it just means some extra destination object might hang around a bit longer
 		_ = f.destinationCleaner(destinationObject)
 	}
 
 	return nil
 }
 
+// buildSrcPathToInode builds a flat map of source path → inode ID.
+// It is called once from ProcessIfNecessary (see lazy-init above) before any
+// deletions from sourceIndex occur, so every source path is captured.
+// A flat map is sufficient because ProcessPendingHardlinks only needs to answer
+// "does this dest-anchor path exist in the source with inode X?" — no nested
+// group structure is required, and no inner map allocations are needed.
+func buildSrcPathToInode(indexMap map[string]traverser.StoredObject) map[string]string {
+	m := make(map[string]string, len(indexMap))
+	for path, obj := range indexMap {
+		if obj.Inode != "" {
+			m[path] = obj.Inode
+		}
+	}
+	return m
+}
+
 func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 
-	for _, destPendingHardlink := range f.destPendingHardlinkObjects.IndexMap {
+	// Build two flat lookup tables to detect structural mismatches between
+	// the source and destination inode groups.
+	//
+	// If one source Inode maps to multiple destination Inodes,
+	// we need to merge them.
+	// srcInodeIsMultiGroup:   src inode → true when its members span >1 dest inode
+	//                         (group merge: two dest groups must be unified at dest)
 
-		sourceObjectInMap, present := f.sourceIndex.IndexMap[destPendingHardlink.RelativePath]
+	// If one destination Inode maps to multiple source Inodes,
+	// we need to break them apart.
+	// destGroupIsMultiSource: dest inode → true when its members map to >1 src inode
+	//                         (group split: one dest group must be broken apart)
+	//
+	// Both use a "first-seen + overflow" pattern to keep heap usage
+	// O(distinct inodes)
+	srcInodeFirstDest := make(map[string]string)
+	srcInodeIsMultiGroup := make(map[string]bool)
+	destInodeFirstSrc := make(map[string]string)
+	destGroupIsMultiSource := make(map[string]bool)
+
+	for _, obj := range f.destPendingHardlinkObjects.IndexMap {
+		if obj.Inode == "" {
+			continue
+		}
+		srcInode := f.srcPathToInode[obj.RelativePath]
+		if srcInode == "" {
+			continue // not present in source; will be deleted below
+		}
+		if first, seen := srcInodeFirstDest[srcInode]; !seen {
+			srcInodeFirstDest[srcInode] = obj.Inode
+		} else if first != obj.Inode {
+			srcInodeIsMultiGroup[srcInode] = true
+		}
+		if first, seen := destInodeFirstSrc[obj.Inode]; !seen {
+			destInodeFirstSrc[obj.Inode] = srcInode
+		} else if first != srcInode {
+			destGroupIsMultiSource[obj.Inode] = true
+		}
+	}
+
+	for _, destHardlinkObj := range f.destPendingHardlinkObjects.IndexMap {
+
+		// Track the actual key used so we delete the correct index entry,
+		// even on case-insensitive file systems where the stored key may be
+		// lowercase while destHardlinkObj.RelativePath is mixed-case.
+		srcKey := destHardlinkObj.RelativePath
+		sourceObjectInMap, present := f.sourceIndex.IndexMap[srcKey]
+		if !present && f.sourceIndex.IsDestinationCaseInsensitive {
+			srcKey = strings.ToLower(destHardlinkObj.RelativePath)
+			sourceObjectInMap, present = f.sourceIndex.IndexMap[srcKey]
+		}
+
 		if !present {
-			if f.sourceIndex.IsDestinationCaseInsensitive {
-				lcRelativePath := strings.ToLower(destPendingHardlink.RelativePath)
-				sourceObjectInMap, present = f.sourceIndex.IndexMap[lcRelativePath]
+			// Path no longer exists at source — delete the stale link.
+			syncComparatorLog(destHardlinkObj.RelativePath, syncStatusOverwritten, syncSourceMissingForPendingHardlink, false)
+			_ = f.destinationCleaner(destHardlinkObj)
+			continue
+		}
+
+		// Delete using srcKey (the key actually found) so the delete always hits.
+		delete(f.sourceIndex.IndexMap, srcKey)
+
+		inodeStoreInstance, err := common.GetInodeStore()
+		if err != nil {
+			return err
+		}
+
+		dstAnchorFile, err := inodeStoreInstance.GetAnchor(destHardlinkObj.Inode)
+		if err != nil {
+			return err
+		}
+		srcAnchorFile, _ := inodeStoreInstance.GetAnchor(sourceObjectInMap.Inode)
+
+		// Determine whether the hardlink must be recreated.
+		//
+		// When srcAnchor == dstAnchor the relationship is identical → always skip.
+		//
+		// When they differ, recreate only if ANY of the following is true:
+		//   (a) dstAnchor still exists in source but belongs to a DIFFERENT inode
+		//       group → true re-target or group split with a live anchor.
+		//   (b) Source group spans multiple dest inodes → group merge, must unify.
+		//   (c) Dest group spans multiple source inodes → group split, must break up.
+		//
+		// Skip (no recreate) when srcAnchor ≠ dstAnchor but none of (a)-(c) apply:
+		//   • dstAnchor was deleted from source (srcInode="") AND group is intact
+		//     → only the anchor name changed; existing links are still valid.
+		//   • dstAnchor is still in the source group (lex-smaller anchor was added)
+		//     AND all group members already share a single dest inode.
+		needsRecreate := false
+		if srcAnchorFile != dstAnchorFile {
+			if srcAnchorFile == "" {
+				// Source is a regular file (not in InodeStore): entity type changed
+				// from hardlink → file. Delete the dest link and re-upload as a file.
+				needsRecreate = true
+			} else {
+				dstAnchorInSrc := f.srcPathToInode[dstAnchorFile]
+				needsRecreate = (dstAnchorInSrc != "" && dstAnchorInSrc != sourceObjectInMap.Inode) || // (a)
+					srcInodeIsMultiGroup[sourceObjectInMap.Inode] || // (b)
+					destGroupIsMultiSource[destHardlinkObj.Inode] // (c)
 			}
 		}
 
-		if present {
-
-			// Remove from source index so indexer.Traverse won't double-schedule this object
-			delete(f.sourceIndex.IndexMap, destPendingHardlink.RelativePath)
-
-			inodeStoreInstance, err := common.GetInodeStore()
-			if err != nil {
+		if needsRecreate {
+			syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncHardlinkTargetMismatch, false)
+			_ = f.destinationCleaner(destHardlinkObj)
+			if err := f.copyTransferScheduler(sourceObjectInMap); err != nil {
 				return err
-			}
-
-			dstAnchorFile, err := inodeStoreInstance.GetAnchor(destPendingHardlink.Inode)
-			if err != nil {
-				return err
-			}
-
-			// If source is a regular file (not in InodeStore), GetAnchor returns ""
-			// which won't match the dest anchor, naturally triggering the mismatch path.
-			srcAnchorFile, _ := inodeStoreInstance.GetAnchor(sourceObjectInMap.Inode)
-
-			if srcAnchorFile != dstAnchorFile {
-				syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, "HardlinkTargetMismatch", false)
-
-				// We must delete the 'wrong' link at destination before creating the 'right' one
-				_ = f.destinationCleaner(destPendingHardlink)
-				if err := f.copyTransferScheduler(sourceObjectInMap); err != nil {
-					return err
-				}
-				continue
-			}
-
-			// Anchor matches — check LMT to see if content changed
-			if sourceObjectInMap.IsMoreRecentThan(destPendingHardlink, f.preferSMBTime) {
-				syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMT, false)
-				if err := f.copyTransferScheduler(sourceObjectInMap); err != nil {
-					return err
-				}
 			}
 		} else {
-			// If the source hardlink is missing, we should delete the destination hardlink as well to avoid leaving stale links behind
-			syncComparatorLog(destPendingHardlink.RelativePath, syncStatusOverwritten, "SourceMissingForPendingHardlink", false)
-			_ = f.destinationCleaner(destPendingHardlink)
+			// Relationship is intact — no structural change needed.
+			// However, the anchor file's content may still be stale even when the
+			// link structure is unchanged.  Check and transfer content if necessary.
+			// Non-anchor files carry no content (they link to the anchor), so no
+			// content check is required for them.
+			if sourceObjectInMap.TargetHardlinkFile == "" {
+				// This is the first-seen-file path.  Perform generic content verification.
+				//
+				// groupStructureChanged is true when any file in this inode group is being
+				// recreated (group merge: src inode spans multiple dest inodes, or group split:
+				// dest inode spans multiple src inodes).  In those cases LMT comparison alone
+				// is not a reliable proxy for content equivalence: newly relinked files at the
+				// destination will inherit whatever data the anchor holds, so we must make sure
+				// the anchor carries the source inode's content regardless of timestamps.
+				groupStructureChanged := srcInodeIsMultiGroup[sourceObjectInMap.Inode] ||
+					destGroupIsMultiSource[destHardlinkObj.Inode]
+
+				if f.disableComparison || groupStructureChanged {
+					reason := syncOverwriteReasonNewerHash
+					if groupStructureChanged {
+						reason = syncOverwriteReasonGroupStructureChanged
+					}
+					syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, reason, false)
+					if err := f.copyTransferScheduler(sourceObjectInMap); err != nil {
+						return err
+					}
+
+				} else if f.comparisonHashType != common.ESyncHashType.None() {
+					switch f.comparisonHashType {
+					case common.ESyncHashType.MD5():
+						if sourceObjectInMap.Md5 == nil {
+							if sourceObjectInMap.IsMoreRecentThan(destHardlinkObj, f.preferSMBTime) {
+								syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMTAndMissingHash, false)
+								if err := f.copyTransferScheduler(sourceObjectInMap); err != nil {
+									return err
+								}
+							} else {
+								syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusSkipped, syncSkipReasonTimeAndMissingHash, false)
+							}
+						} else if !reflect.DeepEqual(sourceObjectInMap.Md5, destHardlinkObj.Md5) {
+							syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, false)
+							if err := f.copyTransferScheduler(sourceObjectInMap); err != nil {
+								return err
+							}
+						} else {
+							syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusSkipped, syncSkipReasonSameHash, false)
+						}
+					default:
+						panic("sanity check: unsupported hash type " + f.comparisonHashType.String())
+					}
+				} else if sourceObjectInMap.Size != destHardlinkObj.Size {
+					// Size mismatch is a reliable, hash-free content signal: if the anchor
+					// files are different sizes, content has definitely changed.  Transfer
+					// unconditionally rather than relying on LMT, which can be misleading
+					// when files are copied, restored, or touched without changing data.
+					syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncOverwriteReasonSizeMismatch, false)
+					if err := f.copyTransferScheduler(sourceObjectInMap); err != nil {
+						return err
+					}
+				} else if sourceObjectInMap.IsMoreRecentThan(destHardlinkObj, f.preferSMBTime) {
+					syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMT, false)
+					if err := f.copyTransferScheduler(sourceObjectInMap); err != nil {
+						return err
+					}
+				} else {
+					syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusSkipped, syncSkipReasonHardlinkRelationshipIntact, false)
+				}
+			} else {
+				// Non-anchor: content is owned by the anchor; only the link structure matters.
+				syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusSkipped, syncSkipReasonHardlinkRelationshipIntact, false)
+			}
 		}
 	}
 	return nil

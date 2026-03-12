@@ -292,7 +292,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 						return nil, err
 					}
 
-					targetHardlinkFile, _, err = inodeStoreInstance.GetOrAdd(fullProperties.FileID(), fileURLParts.DirectoryOrFilePath)
+					targetHardlinkFile, _, err = inodeStoreInstance.GetOrAdd(fullProperties.FileID(), relativePath)
 					if err != nil {
 						return nil, err
 					}

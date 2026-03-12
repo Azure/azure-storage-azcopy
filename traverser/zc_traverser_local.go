@@ -704,12 +704,9 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 						return err
 					}
 
-					relPath, err := getRelPath(t.basePath, t.fullPath)
-					if err != nil {
-						return err
-					}
+					// Use just the filename for single-file traversal — matches StoredObject.RelativePath = "".
 					inode := getInodeString(singleFileInfo)
-					targetHardlinkFile, _, err := inodeStoreInstance.GetOrAdd(inode, relPath)
+					targetHardlinkFile, _, err := inodeStoreInstance.GetOrAdd(inode, singleFileInfo.Name())
 					if err != nil {
 						return err
 					}
@@ -818,12 +815,12 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 							if err != nil {
 								return err
 							}
-							relPath, err := getRelPath(filePath, t.fullPath)
-							if err != nil {
-								return err
-							}
+							// Use the same traversal-root-relative path as StoredObject.RelativePath
+							// so the lexicographic anchor selection is consistent.
+							hlRelPath := strings.TrimPrefix(strings.TrimPrefix(CleanLocalPath(filePath), CleanLocalPath(t.fullPath)), common.DeterminePathSeparator(t.fullPath))
+							hlRelPath = strings.ReplaceAll(hlRelPath, common.DeterminePathSeparator(t.fullPath), common.AZCOPY_PATH_SEPARATOR_STRING)
 							inode := getInodeString(fileInfo)
-							targetHardlinkFile, _, err := inodeStoreInstance.GetOrAdd(inode, relPath)
+							targetHardlinkFile, _, err := inodeStoreInstance.GetOrAdd(inode, hlRelPath)
 							if err != nil {
 								return err
 							}
@@ -929,12 +926,9 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 							if err != nil {
 								return err
 							}
-							relPath, err := getRelPath(t.basePath, t.fullPath)
-							if err != nil {
-								return err
-							}
+							// Use entry.Name() to match StoredObject.RelativePath for non-recursive walk.
 							inode := getInodeString(fileInfo)
-							targetHardlinkFile, _, err := inodeStoreInstance.GetOrAdd(inode, relPath)
+							targetHardlinkFile, _, err := inodeStoreInstance.GetOrAdd(inode, entry.Name())
 							if err != nil {
 								return err
 							}

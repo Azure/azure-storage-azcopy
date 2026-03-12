@@ -882,6 +882,13 @@ func (jm *jobMgr) QueueJobParts(jpm IJobPartMgr) {
 
 		jm.Log(common.LogInfo, fmt.Sprintf("Queued hardlink job part %d for later processing", plan.PartNum))
 
+		// If there are no mixed parts at all (e.g. only hardlink re-creations were
+		// scheduled and every anchor already existed at the destination), no Mixed
+		// part will ever complete and checkAndProcessHardlinkParts would never be
+		// triggered from the jobPartProgress handler.  Call it here so the hardlink
+		// part is dispatched immediately when no mixed work is outstanding.
+		jm.checkAndProcessHardlinkParts()
+
 	} else {
 
 		// Default mixed processing mode - send immediately
