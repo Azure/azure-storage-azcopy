@@ -14,7 +14,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/filesystem"
 	datalakeSAS "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
-	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -78,8 +78,8 @@ func (b *BlobFSServiceResourceManager) Location() common.Location {
 	return common.ELocation.BlobFS()
 }
 
-func (b *BlobFSServiceResourceManager) Level() azcopy.LocationLevel {
-	return azcopy.ELocationLevel.Service()
+func (b *BlobFSServiceResourceManager) Level() cmd.LocationLevel {
+	return cmd.ELocationLevel.Service()
 }
 
 func (b *BlobFSServiceResourceManager) URI(opts ...GetURIOptions) string {
@@ -174,8 +174,8 @@ func (b *BlobFSFileSystemResourceManager) Location() common.Location {
 	return b.Service.Location()
 }
 
-func (b *BlobFSFileSystemResourceManager) Level() azcopy.LocationLevel {
-	return azcopy.ELocationLevel.Container()
+func (b *BlobFSFileSystemResourceManager) Level() cmd.LocationLevel {
+	return cmd.ELocationLevel.Container()
 }
 
 func (b *BlobFSFileSystemResourceManager) URI(opts ...GetURIOptions) string {
@@ -317,8 +317,8 @@ func (b *BlobFSPathResourceProvider) Location() common.Location {
 	return b.Service.Location()
 }
 
-func (b *BlobFSPathResourceProvider) Level() azcopy.LocationLevel {
-	return azcopy.ELocationLevel.Object()
+func (b *BlobFSPathResourceProvider) Level() cmd.LocationLevel {
+	return cmd.ELocationLevel.Object()
 }
 
 func (b *BlobFSPathResourceProvider) URI(opts ...GetURIOptions) string {
@@ -377,10 +377,7 @@ func (b *BlobFSPathResourceProvider) Create(a Asserter, body ObjectContentContai
 	case common.EEntityType.File(), common.EEntityType.Symlink(): // Symlinks just need an extra metadata tag
 		if b.entityType == common.EEntityType.Symlink() && body == nil {
 			body = NewStringObjectContentContainer(properties.SymlinkedFileName)
-		} else if body == nil {
-			body = NewZeroObjectContentContainer(0)
 		}
-
 		_, err := b.getFileClient().Create(ctx, &file.CreateOptions{
 			HTTPHeaders: properties.HTTPHeaders.ToBlobFS(),
 		})
@@ -587,15 +584,15 @@ func (b *BlobFSPathResourceProvider) Download(a Asserter) io.ReadSeeker {
 	return bytes.NewReader(buf.Bytes())
 }
 
+func (b *BlobFSPathResourceProvider) Exists() bool {
+	_, err := b.getFileClient().GetProperties(ctx, nil) // under the hood it's just a path, no special restype flag.
+
+	return err == nil || !datalakeerror.HasCode(err, datalakeerror.PathNotFound, datalakeerror.FileSystemNotFound, datalakeerror.FileSystemBeingDeleted, datalakeerror.ResourceNotFound)
+}
+
 func (b *BlobFSPathResourceProvider) ReadLink(a Asserter) string {
 	reader := b.Download(a)
 	buf, err := io.ReadAll(reader)
 	a.NoError("Read symlink body", err)
 	return string(buf)
-}
-
-func (b *BlobFSPathResourceProvider) Exists() bool {
-	_, err := b.getFileClient().GetProperties(ctx, nil) // under the hood it's just a path, no special restype flag.
-
-	return err == nil || !datalakeerror.HasCode(err, datalakeerror.PathNotFound, datalakeerror.FileSystemNotFound, datalakeerror.FileSystemBeingDeleted, datalakeerror.ResourceNotFound)
 }

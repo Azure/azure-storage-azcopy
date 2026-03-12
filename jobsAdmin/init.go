@@ -24,6 +24,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"sync"
 	"time"
@@ -39,13 +40,21 @@ type azCopyConfig struct {
 	MIMETypeMapping map[string]string
 }
 
+// round api rounds up the float number after the decimal point.
+func round(num float64) int {
+	return int(num + math.Copysign(0.5, num))
+}
+
+// ToFixed api returns the float number precised up to given decimal places.
+func ToFixed(num float64, precision int) float64 {
+	output := math.Pow(10, float64(precision))
+	return float64(round(num*output)) / output
+}
+
 // MainSTE initializes the Storage Transfer Engine
 func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64) error {
 	// Initialize the JobsAdmin, resurrect Job plan files
-	err := initJobsAdmin(steCtx, concurrency, targetRateInMegaBitsPerSec)
-	if err != nil {
-		return err
-	}
+	initJobsAdmin(steCtx, concurrency, targetRateInMegaBitsPerSec)
 	// TODO: We may want to list listen first and terminate if there is already an instance listening
 
 	// if we've a custom mime map
@@ -73,8 +82,9 @@ var ExecuteNewCopyJobPartOrder =
 func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
 	// Get the file name for this Job Part's Plan
 	jppfn := JobsAdmin.NewJobPartPlanFileName(order.JobID, order.PartNum)
-	jppfn.Create(order)                                                                                         // Convert the order to a plan file
-	jm := JobsAdmin.JobMgrEnsureExists(order.JobID, order.LogLevel, order.CommandString, order.JobErrorHandler) // Get a this job part's job manager (create it if it doesn't exist)
+	jppfn.Create(order)                                                                  // Convert the order to a plan file
+	jm := JobsAdmin.JobMgrEnsureExists(order.JobID, order.LogLevel, order.CommandString) // Get a this job part's job manager (create it if it doesn't exist)
+	JobsAdmin.RegisterStatsMonitorIfNotDone()
 
 	if len(order.Transfers.List) == 0 && order.IsFinalPart {
 		/*
@@ -84,6 +94,13 @@ func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
 		 */
 		jm.Log(common.LogWarning, "No transfers were scheduled.")
 	}
+	// Get credential info from RPC request order, and set in InMemoryTransitJobState.
+	jm.SetInMemoryTransitJobState(
+		ste.InMemoryTransitJobState{
+			CredentialInfo:          order.CredentialInfo,
+			S2SSourceCredentialType: order.S2SSourceCredentialType,
+			Provider:                order.Provider,
+		})
 	// Supply no plan MMF because we don't have one, and AddJobPart will create one on its own.
 	// Add this part to the Job and schedule its transfers
 
@@ -103,6 +120,7 @@ func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
 		ScheduleTransfers: true,
 	}
 	jm.AddJobPart(args)
+
 	// Update jobPart Status with the status Manager
 	jm.SendJobPartCreatedMsg(ste.JobPartCreatedMsg{TotalTransfers: uint32(len(order.Transfers.List)),
 		IsFinalPart:             order.IsFinalPart,
@@ -111,6 +129,7 @@ func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
 		SymlinkTransfers:        order.Transfers.SymlinkTransferCount,
 		FolderTransfer:          order.Transfers.FolderTransferCount,
 		HardlinksConvertedCount: order.Transfers.HardlinksConvertedCount,
+		FilePropertyTransfers:   order.Transfers.FilePropertyTransferCount,
 	})
 
 	return common.CopyJobPartOrderResponse{JobStarted: true}
@@ -123,12 +142,12 @@ func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
     * If a job is already paused, it cannot be paused again
 */
 
-func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus, jobErrorHandler common.JobErrorHandler) common.CancelPauseResumeResponse {
+func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) common.CancelPauseResumeResponse {
 	jm, found := JobsAdmin.JobMgr(jobID) // Find Job being paused/canceled
 	if !found {
 		// If the Job is not found, search for Job Plan files in the existing plan file
 		// and resurrect the job
-		if !JobsAdmin.ResurrectJob(jobID, nil, nil, false, jobErrorHandler) {
+		if !JobsAdmin.ResurrectJob(jobID, nil, nil, false) {
 			return common.CancelPauseResumeResponse{
 				CancelledPauseResumed: false,
 				ErrorMsg:              fmt.Sprintf("no active job with JobId %s exists", jobID.String()),
@@ -140,9 +159,17 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus, 
 }
 
 func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeResponse {
+	// Strip '?' if present as first character of the source sas / destination sas
+	if len(req.SourceSAS) > 0 && req.SourceSAS[0] == '?' {
+		req.SourceSAS = req.SourceSAS[1:]
+	}
+	if len(req.DestinationSAS) > 0 && req.DestinationSAS[0] == '?' {
+		req.DestinationSAS = req.DestinationSAS[1:]
+	}
 	// Always search the plan files in Azcopy folder,
 	// and resurrect the Job with provided credentials, to ensure SAS and etc get updated.
-	if !JobsAdmin.ResurrectJob(req.JobID, req.SrcServiceClient, req.DstServiceClient, false, req.JobErrorHandler) {
+	srcIsOauth := req.S2SSourceCredentialType.IsAzureOAuth()
+	if !JobsAdmin.ResurrectJob(req.JobID, req.SrcServiceClient, req.DstServiceClient, srcIsOauth) {
 		return common.CancelPauseResumeResponse{
 			CancelledPauseResumed: false,
 			ErrorMsg:              fmt.Sprintf("no job with JobId %v exists", req.JobID),
@@ -182,6 +209,61 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 		}
 	}
 
+	// If the credential type is is Anonymous, to resume the Job destinationSAS / sourceSAS needs to be provided
+	// Depending on the FromType, sourceSAS or destinationSAS is checked.
+	if req.CredentialInfo.CredentialType == common.ECredentialType.Anonymous() {
+		var errorMsg = ""
+		switch jpm.Plan().FromTo {
+		case common.EFromTo.LocalBlob(),
+			common.EFromTo.LocalFile(),
+			common.EFromTo.LocalFileNFS(),
+			common.EFromTo.S3Blob(),
+			common.EFromTo.GCPBlob():
+			if len(req.DestinationSAS) == 0 {
+				errorMsg = "The destination-sas switch must be provided to resume the job"
+			}
+		case common.EFromTo.BlobLocal(),
+			common.EFromTo.FileLocal(),
+			common.EFromTo.FileNFSLocal(),
+			common.EFromTo.BlobTrash(),
+			common.EFromTo.FileTrash():
+			if len(req.SourceSAS) == 0 {
+				plan := jpm.Plan()
+				if plan.FromTo.From() == common.ELocation.Blob() {
+					src := string(plan.SourceRoot[:plan.SourceRootLength])
+					if common.IsSourcePublicBlob(src, steCtx) {
+						break
+					}
+				}
+
+				errorMsg = "The source-sas switch must be provided to resume the job"
+			}
+		case common.EFromTo.BlobBlob(),
+			common.EFromTo.FileBlob():
+			if len(req.SourceSAS) == 0 ||
+				len(req.DestinationSAS) == 0 {
+
+				plan := jpm.Plan()
+				if plan.FromTo.From() == common.ELocation.Blob() && len(req.DestinationSAS) != 0 {
+					src := string(plan.SourceRoot[:plan.SourceRootLength])
+					if common.IsSourcePublicBlob(src, steCtx) {
+						break
+					}
+				}
+
+				errorMsg = "Both the source-sas and destination-sas switches must be provided to resume the job"
+			}
+		}
+		if len(errorMsg) != 0 {
+			return common.CancelPauseResumeResponse{
+				CancelledPauseResumed: false,
+				ErrorMsg:              fmt.Sprintf("cannot resume job with JobId %s. %s", req.JobID, errorMsg),
+			}
+		}
+	}
+
+	// After creating the Job mgr, set the include / exclude list of transfer.
+	jm.SetIncludeExclude(req.IncludeTransfer, req.ExcludeTransfer)
 	jpp0 := jpm.Plan()
 	switch jpp0.JobStatus() {
 	// Cannot resume a Job which is in Cancelling state
@@ -198,11 +280,17 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 		common.EJobStatus.CompletedWithSkipped(),
 		common.EJobStatus.CompletedWithErrorsAndSkipped(),
 		common.EJobStatus.Cancelled(),
-		common.EJobStatus.Paused(),
-		common.EJobStatus.Failed():
+		common.EJobStatus.Paused():
 		// go func() {
 		// Navigate through transfers and schedule them independently
 		// This is done to avoid FE to get blocked until all the transfers have been scheduled
+		// Get credential info from RPC request, and set in InMemoryTransitJobState.
+		jm.SetInMemoryTransitJobState(
+			ste.InMemoryTransitJobState{
+				CredentialInfo:          req.CredentialInfo,
+				Provider:                req.Provider,
+				S2SSourceCredentialType: req.S2SSourceCredentialType,
+			})
 
 		// Prevents previous number of failed transfers seeping into a new run
 		jm.ResetFailedTransfersCount()
@@ -230,6 +318,7 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 				if jppt.TransferStatus() <= common.ETransferStatus.Failed() {
 					jppt.SetTransferStatus(common.ETransferStatus.Restarted(), true)
 					jppt.SetErrorCode(0, true)
+					jppt.SetErrorMessage("", true)
 				}
 			}
 		})
@@ -245,6 +334,8 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 }
 
 // GetJobSummary api returns the job progress summary of an active job
+// jobID - the ID of the job to retrieve the summary for
+// reset parameter (optional, default true) controls whether failed/skipped transfer lists are reset after retrieval
 /*
 * Return following Properties in Job Progress Summary
 * CompleteJobOrdered - determines whether final part of job has been ordered or not
@@ -255,14 +346,19 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 * PercentageProgress - job progress reported in terms of percentage
 * FailedTransfers - list of transfer after last checkpoint timestamp that failed.
  */
-func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
+func GetJobSummary(jobID common.JobID, reset ...bool) common.ListJobSummaryResponse {
+	resetLists := true // default value
+	if len(reset) > 0 {
+		resetLists = reset[0]
+	}
+
 	// getJobPartMapFromJobPartInfoMap gives the map of partNo to JobPartPlanInfo Pointer for a given JobId
 	jm, found := JobsAdmin.JobMgr(jobID)
 	if !found {
 		// Job with JobId does not exists
 		// Search the plan files in Azcopy folder
 		// and resurrect the Job
-		if !JobsAdmin.ResurrectJob(jobID, nil, nil, false, warnJobErrorHandler{jobID: jobID}) {
+		if !JobsAdmin.ResurrectJob(jobID, nil, nil, false) {
 			return common.ListJobSummaryResponse{
 				ErrorMsg: fmt.Sprintf("no job with JobId %v exists", jobID),
 			}
@@ -272,7 +368,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 		jm, _ = JobsAdmin.JobMgr(jobID)
 	}
 
-	js := jm.ListJobSummary()
+	js := jm.ListJobSummary(resetLists)
 	js.Timestamp = time.Now().UTC()
 	js.JobID = jm.JobID()
 	js.ErrorMsg = ""
@@ -387,13 +483,14 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 				js.SymlinkTransfers++
 			case common.EEntityType.Hardlink():
 				js.HardlinksConvertedCount++
+			case common.EEntityType.FileProperties():
+				js.FilePropertyTransfers++
 			}
 
 			// check for all completed transfer to calculate the progress percentage at the end
 			switch jppt.TransferStatus() {
 			case common.ETransferStatus.NotStarted(),
 				common.ETransferStatus.FolderCreated(),
-				common.ETransferStatus.FolderExisted(),
 				common.ETransferStatus.Started(),
 				common.ETransferStatus.Restarted(),
 				common.ETransferStatus.Cancelled():
@@ -415,7 +512,9 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 						Dst:                dst,
 						IsFolderProperties: isFolder,
 						TransferStatus:     common.ETransferStatus.Failed(),
-						ErrorCode:          jppt.ErrorCode()}) // TODO: Optimize
+						ErrorCode:          jppt.ErrorCode(),
+						ErrorMessage:       jppt.ErrorMessage(),
+					}) // TODO: Optimize
 			case common.ETransferStatus.SkippedEntityAlreadyExists(),
 				common.ETransferStatus.SkippedBlobHasSnapshots():
 				js.TransfersSkipped++
@@ -502,7 +601,7 @@ func ListJobTransfers(r common.ListJobTransfersRequest) common.ListJobTransfersR
 		// Job with JobId does not exists
 		// Search the plan files in Azcopy folder
 		// and resurrect the Job
-		if !JobsAdmin.ResurrectJob(r.JobID, nil, nil, false, warnJobErrorHandler{jobID: r.JobID}) {
+		if !JobsAdmin.ResurrectJob(r.JobID, nil, nil, false) {
 			return common.ListJobTransfersResponse{
 				ErrorMsg: fmt.Sprintf("no job with JobId %v exists", r.JobID),
 			}
@@ -544,10 +643,24 @@ func ListJobTransfers(r common.ListJobTransfersRequest) common.ListJobTransfersR
 			// getting source and destination of a transfer at index index for given jobId and part number.
 			src, dst, isFolder := jpp.TransferSrcDstStrings(t)
 			ljt.Details = append(ljt.Details,
-				common.TransferDetail{Src: src, Dst: dst, IsFolderProperties: isFolder, TransferStatus: transferEntry.TransferStatus(), ErrorCode: transferEntry.ErrorCode()})
+				common.TransferDetail{Src: src, Dst: dst, IsFolderProperties: isFolder, TransferStatus: transferEntry.TransferStatus(), ErrorCode: transferEntry.ErrorCode(), ErrorMessage: transferEntry.ErrorMessage()})
 		}
 	}
 	return ljt
+}
+
+func GetJobLCMWrapper(jobID common.JobID) common.LifecycleMgr {
+	jobmgr, found := JobsAdmin.JobMgr(jobID)
+	lcm := common.GetLifecycleMgr()
+
+	if !found {
+		return lcm
+	}
+
+	return ste.JobLogLCMWrapper{
+		JobManager:   jobmgr,
+		LifecycleMgr: lcm,
+	}
 }
 
 // GetJobDetails api returns the job FromTo info.
@@ -556,7 +669,7 @@ func GetJobDetails(r common.GetJobDetailsRequest) common.GetJobDetailsResponse {
 	if !found {
 		// Job with JobId does not exists.
 		// Search the plan files in Azcopy folder and resurrect the Job.
-		if !JobsAdmin.ResurrectJob(r.JobID, nil, nil, false, warnJobErrorHandler{jobID: r.JobID}) {
+		if !JobsAdmin.ResurrectJob(r.JobID, nil, nil, false) {
 			return common.GetJobDetailsResponse{
 				ErrorMsg: fmt.Sprintf("Job with JobID %v does not exist or is invalid", r.JobID),
 			}
@@ -587,12 +700,4 @@ func GetJobDetails(r common.GetJobDetailsRequest) common.GetJobDetailsResponse {
 		Destination: destination,
 		TrailingDot: jp0.Plan().DstFileData.TrailingDot,
 	}
-}
-
-type warnJobErrorHandler struct {
-	jobID common.JobID
-}
-
-func (w warnJobErrorHandler) Error(err string) {
-	panic("We don't expect errors to be hit for job " + w.jobID.String() + ". error: " + err)
 }

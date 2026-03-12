@@ -240,6 +240,10 @@ func (a shareFilePropertiesAdapter) FileLastWriteTime() time.Time {
 	return common.IffNotNil(a.GetPropertiesResponse.FileLastWriteTime, time.Time{})
 }
 
+func (a shareFilePropertiesAdapter) FileChangeTime() time.Time {
+	return common.IffNotNil(a.GetPropertiesResponse.FileChangeTime, time.Time{})
+}
+
 func (a shareFilePropertiesAdapter) CacheControl() string {
 	return common.IffNotNil(a.GetPropertiesResponse.CacheControl, "")
 }
@@ -296,6 +300,10 @@ func (a shareDirectoryPropertiesAdapter) FileLastWriteTime() time.Time {
 	return common.IffNotNil(a.GetPropertiesResponse.FileLastWriteTime, time.Time{})
 }
 
+func (a shareDirectoryPropertiesAdapter) FileChangeTime() time.Time {
+	return common.IffNotNil(a.GetPropertiesResponse.FileChangeTime, time.Time{})
+}
+
 func (a shareDirectoryPropertiesAdapter) CacheControl() string {
 	return ""
 }
@@ -334,4 +342,64 @@ func (a shareDirectoryPropertiesAdapter) LinkCount() int64 {
 
 func (a shareDirectoryPropertiesAdapter) FileID() string {
 	return common.IffNotNil(a.GetPropertiesResponse.ID, "")
+}
+
+type shareDirectoryFilePropertiesAdapter struct {
+	*sharedirectory.FileProperty
+}
+
+func (a shareDirectoryFilePropertiesAdapter) Metadata() common.Metadata {
+	return nil
+}
+
+func (a shareDirectoryFilePropertiesAdapter) LastModified() time.Time {
+	return common.IffNotNil(a.FileProperty.LastModified, time.Time{})
+}
+
+func (a shareDirectoryFilePropertiesAdapter) FileLastWriteTime() time.Time {
+	return common.IffNotNil(a.FileProperty.LastWriteTime, time.Time{})
+}
+
+func (a shareDirectoryFilePropertiesAdapter) FileChangeTime() time.Time {
+	return common.IffNotNil(a.FileProperty.ChangeTime, time.Time{})
+}
+
+func (a shareDirectoryFilePropertiesAdapter) CacheControl() string {
+	return ""
+}
+
+func (a shareDirectoryFilePropertiesAdapter) ContentDisposition() string {
+	return ""
+}
+
+func (a shareDirectoryFilePropertiesAdapter) ContentEncoding() string {
+	return ""
+}
+
+func (a shareDirectoryFilePropertiesAdapter) ContentLanguage() string {
+	return ""
+}
+
+func (a shareDirectoryFilePropertiesAdapter) ContentType() string {
+	return ""
+}
+
+func (a shareDirectoryFilePropertiesAdapter) ContentMD5() []byte {
+	return make([]byte, 0)
+}
+
+func (a shareDirectoryFilePropertiesAdapter) ContentLength() int64 {
+	return common.IffNotNil(a.FileProperty.ContentLength, 0)
+}
+
+func (a shareDirectoryFilePropertiesAdapter) NFSFileType() string {
+	return ""
+}
+
+func (a shareDirectoryFilePropertiesAdapter) LinkCount() int64 {
+	return 0
+}
+
+func (a shareDirectoryFilePropertiesAdapter) FileID() string {
+	return ""
 }

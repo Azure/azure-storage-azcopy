@@ -17,6 +17,8 @@ import (
 	"net/url"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"	
+	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
 type IJobPartTransferMgr interface {
@@ -145,6 +147,7 @@ type TransferInfo struct {
 
 	VersionID  string
 	SnapshotID string
+	Provider   credentials.Provider //custom Provider
 }
 
 func (i *TransferInfo) IsFilePropertiesTransfer() bool {
@@ -165,8 +168,14 @@ func (i *TransferInfo) IsFolderPropertiesTransfer() bool {
 // The secondary reason is that folder LMT's don't actually tell the user anything particularly useful. Specifically,
 // they do NOT tell you when the folder contents (recursively) were last updated: in Azure Files they are never updated
 // when folder contents change; and in NTFS they are only updated when immediate children are changed (not grandchildren).
-func (i *TransferInfo) ShouldTransferLastWriteTime() bool {
-	return !i.IsFolderPropertiesTransfer()
+//
+// param isDownload indicates whether the transfer is a download or an upload.
+// returns true if the last write time should be transferred, false otherwise.
+func (i *TransferInfo) ShouldTransferLastWriteTime(fromTo common.FromTo) bool {
+	if fromTo.IsDownload() {
+		return !i.IsFolderPropertiesTransfer()
+	}
+	return true
 }
 
 // entityTypeLogIndicator returns a string that can be used in logging to distinguish folder property transfers from "normal" transfers.
@@ -697,6 +706,16 @@ func (jptm *jobPartTransferMgr) SetErrorCode(errorCode int32) {
 	jptm.jobPartPlanTransfer.SetErrorCode(errorCode, false)
 }
 
+// ErrorMessage gets the error message of transfer for given job.
+func (jptm *jobPartTransferMgr) ErrorMessage() string {
+	return jptm.jobPartPlanTransfer.ErrorMessage()
+}
+
+// ErrorMessage updates the error message of transfer for given job.
+func (jptm *jobPartTransferMgr) SetErrorMessage(errorMessage string) {
+	jptm.jobPartPlanTransfer.SetErrorMessage(errorMessage, false)
+}
+
 // TODO: Can we kill this method?
 /*func (jptm *jobPartTransferMgr) ChunksDone() uint32 {
 	return atomic.LoadUint32(&jptm.atomicChunksDone)
@@ -857,9 +876,10 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 		jptm.logTransferError(typ, jptm.Info().Source, jptm.Info().Destination, fullMsg, status)
 		jptm.SetStatus(failureStatus)
 		jptm.SetErrorCode(int32(status)) // TODO: what are the rules about when this needs to be set, and doesn't need to be (e.g. for earlier failures)?
+		jptm.SetErrorMessage(fullMsg)
 		// If the status code was 403, it means there was an authentication error and we exit.
 		// User can resume the job if completely ordered with a new sas.
-		if status == http.StatusForbidden &&
+		if !buildmode.IsMover && status == http.StatusForbidden &&
 			!jptm.jobPartMgr.(*jobPartMgr).jobMgr.IsDaemon() {
 			// quit right away, since without proper authentication no work can be done
 			// display a clear message
@@ -1009,6 +1029,7 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 		TransferStatus:     jptm.jobPartPlanTransfer.TransferStatus(),
 		TransferSize:       uint64(jptm.Info().SourceSize),
 		ErrorCode:          jptm.ErrorCode(),
+		ErrorMessage:       jptm.ErrorMessage(),
 	})
 
 	return jptm.jobPartMgr.ReportTransferDone(jptm.jobPartPlanTransfer.TransferStatus())

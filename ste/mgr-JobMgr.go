@@ -31,11 +31,102 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
 var _ IJobMgr = &jobMgr{}
 
 type PartNumber = common.PartNumber
+
+// ChannelStats represents the current usage statistics for transfer channels
+type ChannelStats struct {
+	PartsChannelUsed          int
+	PartsChannelSize          int
+	NormalTransferChannelUsed int
+	NormalTransferChannelSize int
+	LowTransferChannelUsed    int
+	LowTransferChannelSize    int
+	NormalChunkChannelUsed    int
+	NormalChunkChannelSize    int
+	LowChunkChannelUsed       int
+	LowChunkChannelSize       int
+	PartsCreatedUsed          int
+	PartsCreatedSize          int
+	XferDoneUsed              int
+	XferDoneSize              int
+}
+
+// ChannelSizeConfig holds channel size configurations
+type ChannelSizeConfig struct {
+
+	// PartsChannelSize defines the number of JobParts which can be placed into the
+	// parts channel. Any JobPart which comes from FE and partChannel is full,
+	// has to wait and enumeration of transfer gets blocked till then.
+	// TODO : PartsChannelSize Needs to be discussed and can change.
+	PartsChannelSize int
+
+	// TransferChannelSize defines the buffer size for normal and low priority transfer channels
+	// that queue individual transfer operations. Higher values improve throughput by reducing
+	// blocking when many transfers are being initiated simultaneously.
+	TransferChannelSize int
+
+	// ChunkChannelSize defines the buffer size for normal and low priority chunk channels
+	// that queue chunk processing functions. Larger buffers help maintain steady throughput
+	// by allowing chunk processors to stay busy even during transfer spikes.
+	ChunkChannelSize int
+
+	// PartCreatedChannelSize defines the buffer size for the channel that receives
+	// job part creation notifications. Used for status tracking and coordination
+	// between different components of the transfer engine.
+	PartCreatedChannelSize int
+
+	// XferDoneChannelSize defines the buffer size for the channel that receives
+	// transfer completion notifications. Critical for accurate progress reporting
+	// and final job status determination. Higher values prevent blocking on completion.
+	XferDoneChannelSize int
+
+	// CloseTransferChannelSize defines the buffer size for the channel used to signal
+	// transfer processor goroutines to shut down cleanly. Sized to accommodate
+	// the maximum number of transfer processors that may need to be stopped.
+	CloseTransferChannelSize int
+}
+
+// GetChannelSizeConfig returns channel size configuration based on build mode
+func GetChannelSizeConfig() ChannelSizeConfig {
+	if buildmode.IsMover {
+		return ChannelSizeConfig{
+			PartsChannelSize:         1000,
+			TransferChannelSize:      20000,
+			ChunkChannelSize:         20000,
+			PartCreatedChannelSize:   100,
+			XferDoneChannelSize:      1000,
+			CloseTransferChannelSize: 100,
+		}
+	}
+
+	// Default build uses standard channel sizes
+	return ChannelSizeConfig{
+		PartsChannelSize:         10000,
+		TransferChannelSize:      100000,
+		ChunkChannelSize:         100000,
+		PartCreatedChannelSize:   100,
+		XferDoneChannelSize:      1000,
+		CloseTransferChannelSize: 100,
+	}
+}
+
+// InMemoryTransitJobState defines job state transit in memory, and not in JobPartPlan file.
+// Note: InMemoryTransitJobState should only be set when request come from cmd(FE) module to STE module.
+// In memory CredentialInfo is currently maintained per job in STE, as FE could have many-to-one relationship with STE,
+// i.e. different jobs could have different OAuth tokens requested from FE, and these jobs can run at same time in STE.
+// This can be optimized if FE would no more be another module vs STE module.
+type InMemoryTransitJobState struct {
+	CredentialInfo common.CredentialInfo
+	// S2SSourceCredentialType can override the CredentialInfo.CredentialType when being used for the source (e.g. Source Info Provider and when using GetS2SSourceBlobTokenCredential)
+	S2SSourceCredentialType common.CredentialType
+	Provider                credentials.Provider
+}
 
 type IJobMgr interface {
 	JobID() common.JobID
@@ -43,6 +134,9 @@ type IJobMgr interface {
 	// Throughput() XferThroughput
 	// If existingPlanMMF is nil, a new MMF is opened.
 	AddJobPart(args *AddJobPartArgs) IJobPartMgr
+
+	SetIncludeExclude(map[string]int, map[string]int)
+	IncludeExclude() (map[string]int, map[string]int)
 	ResumeTransfers(appCtx context.Context)
 	ResetFailedTransfersCount()
 	AllTransfersScheduled() bool
@@ -63,6 +157,8 @@ type IJobMgr interface {
 	ActiveConnections() int64
 	GetPerfInfo() (displayStrings []string, constraint common.PerfConstraint)
 	// Close()
+	getInMemoryTransitJobState() InMemoryTransitJobState      // get in memory transit job state saved in this job.
+	SetInMemoryTransitJobState(state InMemoryTransitJobState) // set in memory transit job state saved in this job.
 	ChunkStatusLogger() common.ChunkStatusLogger
 	HttpClient() *http.Client
 	PipelineNetworkStats() *PipelineNetworkStats
@@ -72,7 +168,7 @@ type IJobMgr interface {
 	/* Status related functions */
 	SendJobPartCreatedMsg(msg JobPartCreatedMsg)
 	SendXferDoneMsg(msg xferDoneMsg)
-	ListJobSummary() common.ListJobSummaryResponse
+	ListJobSummary(reset ...bool) common.ListJobSummaryResponse
 	ResurrectSummary(js common.ListJobSummaryResponse)
 
 	/* Ported from jobsAdmin() */
@@ -86,10 +182,12 @@ type IJobMgr interface {
 	SuccessfulBytesInActiveFiles() uint64
 	CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.CancelPauseResumeResponse
 	IsDaemon() bool
-	GetJobErrorHandler() common.JobErrorHandler
 
 	// Cleanup Functions
 	DeferredCleanupJobMgr()
+
+	ChangeLogLevel(level common.LogLevel)
+	GetChannelStats() ChannelStats
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -97,13 +195,9 @@ type IJobMgr interface {
 func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx context.Context, cpuMon common.CPUMonitor, level common.LogLevel,
 	commandString string, tuner ConcurrencyTuner,
 	pacer PacerAdmin, slicePool common.ByteSlicePooler, cacheLimiter common.CacheLimiter, fileCountLimiter common.CacheLimiter,
-	jobLogger common.ILoggerResetable, daemonMode bool, jobErrorHandler common.JobErrorHandler) IJobMgr {
-	const channelSize = 100000
-	// PartsChannelSize defines the number of JobParts which can be placed into the
-	// parts channel. Any JobPart which comes from FE and partChannel is full,
-	// has to wait and enumeration of transfer gets blocked till then.
-	// TODO : PartsChannelSize Needs to be discussed and can change.
-	const PartsChannelSize = 10000
+	jobLogger common.ILoggerResetable, daemonMode bool) IJobMgr {
+
+	config := GetChannelSizeConfig()
 
 	// partsCh is the channel in which all JobParts are put
 	// for scheduling transfers. When the next JobPart order arrives
@@ -111,10 +205,10 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	// puts the JobPartMgr in partchannel
 	// from which each part is picked up one by one
 	// and transfers of that JobPart are scheduled
-	partsCh := make(chan IJobPartMgr, PartsChannelSize)
+	partsCh := make(chan IJobPartMgr, config.PartsChannelSize)
 	// Create normal & low transfer/chunk channels
-	normalTransferCh, normalChunkCh := make(chan IJobPartTransferMgr, channelSize), make(chan chunkFunc, channelSize)
-	lowTransferCh, lowChunkCh := make(chan IJobPartTransferMgr, channelSize), make(chan chunkFunc, channelSize)
+	normalTransferCh, normalChunkCh := make(chan IJobPartTransferMgr, config.TransferChannelSize), make(chan chunkFunc, config.ChunkChannelSize)
+	lowTransferCh, lowChunkCh := make(chan IJobPartTransferMgr, config.TransferChannelSize), make(chan chunkFunc, config.ChunkChannelSize)
 
 	// atomicAllTransfersScheduled is set to 1 since this api is also called when new job part is ordered.
 	enableChunkLogOutput := level == common.LogDebug
@@ -124,8 +218,8 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	var jstm jobStatusManager
 	jstm.respChan = make(chan common.ListJobSummaryResponse)
 	jstm.listReq = make(chan struct{})
-	jstm.partCreated = make(chan JobPartCreatedMsg, 100)
-	jstm.xferDone = make(chan xferDoneMsg, 1000)
+	jstm.partCreated = make(chan JobPartCreatedMsg, config.PartCreatedChannelSize)
+	jstm.xferDone = make(chan xferDoneMsg, config.XferDoneChannelSize)
 	jstm.xferDoneDrained = make(chan struct{})
 	jstm.statusMgrDone = make(chan struct{})
 	// Different logger for each job.
@@ -134,8 +228,8 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 		jobLogger.OpenLog()
 	}
 
-	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(),
-		httpClient:           NewAzcopyHTTPClient(concurrency.MaxIdleConnections),
+	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), include: map[string]int{}, exclude: map[string]int{},
+		httpClient:           common.GetGlobalHTTPClient(jobLogger),
 		logger:               jobLogger,
 		chunkStatusLogger:    common.NewChunkStatusLogger(jobID, cpuMon, common.LogPathFolder, enableChunkLogOutput),
 		concurrency:          concurrency,
@@ -155,7 +249,7 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 			lowTransferCh:    lowTransferCh,
 			normalChunckCh:   normalChunkCh,
 			lowChunkCh:       lowChunkCh,
-			closeTransferCh:  make(chan struct{}, 100),
+			closeTransferCh:  make(chan struct{}, config.CloseTransferChannelSize),
 			scheduleCloseCh:  make(chan struct{}, 1),
 		},
 		poolSizingChannels: poolSizingChannels{ // all deliberately unbuffered, because pool sizer routine works in lock-step with these - processing them as they happen, never catching up on populated buffer later
@@ -172,7 +266,6 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 		fileCountLimiter: fileCountLimiter,
 		cpuMon:           cpuMon,
 		jstm:             &jstm,
-		jobErrorHandler:  jobErrorHandler,
 		isDaemon:         daemonMode,
 		/*Other fields remain zero-value until this job is scheduled */}
 	jm.Reset(appCtx, commandString)
@@ -191,6 +284,37 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	go jm.handleStatusUpdateMessage()
 
 	return &jm
+}
+
+// ChangeLogLevel changes the log level of the job manager's logger.
+// If the logger is not nil, it updates the logger's log level to the specified level.
+//
+// Parameters:
+//   - level: The new log level to set for the logger.
+func (jm *jobMgr) ChangeLogLevel(level common.LogLevel) {
+	if jm.logger != nil {
+		jm.logger.ChangeLogLevel(level)
+	}
+}
+
+// GetChannelStats returns the current usage statistics for all transfer channels
+func (jm *jobMgr) GetChannelStats() ChannelStats {
+	return ChannelStats{
+		PartsChannelUsed:          len(jm.xferChannels.partsChannel),
+		PartsChannelSize:          cap(jm.xferChannels.partsChannel),
+		NormalTransferChannelUsed: len(jm.xferChannels.normalTransferCh),
+		NormalTransferChannelSize: cap(jm.xferChannels.normalTransferCh),
+		LowTransferChannelUsed:    len(jm.xferChannels.lowTransferCh),
+		LowTransferChannelSize:    cap(jm.xferChannels.lowTransferCh),
+		NormalChunkChannelUsed:    len(jm.xferChannels.normalChunckCh),
+		NormalChunkChannelSize:    cap(jm.xferChannels.normalChunckCh),
+		LowChunkChannelUsed:       len(jm.xferChannels.lowChunkCh),
+		LowChunkChannelSize:       cap(jm.xferChannels.lowChunkCh),
+		PartsCreatedUsed:          len(jm.jstm.partCreated),
+		PartsCreatedSize:          cap(jm.jstm.partCreated),
+		XferDoneUsed:              len(jm.jstm.xferDone),
+		XferDoneSize:              cap(jm.jstm.xferDone),
+	}
 }
 
 func (jm *jobMgr) getOverwritePrompter() *overwritePrompter {
@@ -297,6 +421,12 @@ type jobMgr struct {
 	partsDone uint32
 	// throughput  common.CountPerSecond // TODO: Set LastCheckedTime to now
 
+	inMemoryTransitJobState InMemoryTransitJobState
+	// list of transfer mentioned to include only then while resuming the job
+	include map[string]int
+	// list of transfer mentioned to exclude while resuming the job
+	exclude map[string]int
+
 	// only a single instance of the prompter is needed for all transfers
 	overwritePrompter *overwritePrompter
 
@@ -315,7 +445,6 @@ type jobMgr struct {
 	cacheLimiter        common.CacheLimiter
 	fileCountLimiter    common.CacheLimiter
 	jstm                *jobStatusManager
-	jobErrorHandler     common.JobErrorHandler
 
 	isDaemon bool /* is it running as service */
 }
@@ -437,6 +566,11 @@ func (jm *jobMgr) AddJobPart(args *AddJobPartArgs) IJobPartMgr {
 		jpm.planMMF = args.ExistingPlanMMF
 	}
 
+	plan := jpm.planMMF.Plan()
+	jpm.cachedJobID = plan.JobID
+	jpm.cachedPartNum = plan.PartNum
+	jpm.cachedNumTransfers = plan.NumTransfers
+
 	jm.jobPartMgrs.Set(args.PartNum, jpm)
 	jm.setFinalPartOrdered(args.PartNum, jpm.planMMF.Plan().IsFinalPart)
 	jm.setDirection(jpm.Plan().FromTo)
@@ -447,7 +581,7 @@ func (jm *jobMgr) AddJobPart(args *AddJobPartArgs) IJobPartMgr {
 		var logger common.ILogger = jm
 		jm.initState = &jobMgrInitState{
 			securityInfoPersistenceManager: newSecurityInfoPersistenceManager(jm.ctx),
-			folderCreationTracker:          NewFolderCreationTracker(jpm.Plan().Fpo, NewTransferFetcher(jm), jpm.Plan().FromTo),
+			folderCreationTracker:          NewFolderCreationTracker(jpm.Plan().Fpo, jpm.Plan()),
 			folderDeletionManager:          common.NewFolderDeletionManager(jm.ctx, jpm.Plan().Fpo, logger),
 			exclusiveDestinationMapHolder:  &atomic.Value{},
 		}
@@ -480,9 +614,15 @@ func (jm *jobMgr) AddJobOrder(order common.CopyJobPartOrderRequest) IJobPartMgr 
 		slicePool:        jm.slicePool,
 		cacheLimiter:     jm.cacheLimiter,
 		fileCountLimiter: jm.fileCountLimiter,
+		credInfo:         order.CredentialInfo,
 		srcIsOAuth:       order.S2SSourceCredentialType.IsAzureOAuth(),
 	}
 	jpm.planMMF = jpm.filename.Map()
+	// Cache plan values immediately to prevent accessing unmapped memory later
+	plan := jpm.planMMF.Plan()
+	jpm.cachedJobID = plan.JobID
+	jpm.cachedPartNum = plan.PartNum
+	jpm.cachedNumTransfers = plan.NumTransfers
 	jm.jobPartMgrs.Set(order.PartNum, jpm)
 	jm.setFinalPartOrdered(order.PartNum, jpm.planMMF.Plan().IsFinalPart)
 	jm.setDirection(jpm.Plan().FromTo)
@@ -493,7 +633,7 @@ func (jm *jobMgr) AddJobOrder(order common.CopyJobPartOrderRequest) IJobPartMgr 
 		var logger common.ILogger = jm
 		jm.initState = &jobMgrInitState{
 			securityInfoPersistenceManager: newSecurityInfoPersistenceManager(jm.ctx),
-			folderCreationTracker:          NewFolderCreationTracker(jpm.Plan().Fpo, NewTransferFetcher(jm), jpm.Plan().FromTo),
+			folderCreationTracker:          NewFolderCreationTracker(jpm.Plan().Fpo, jpm.Plan()),
 			folderDeletionManager:          common.NewFolderDeletionManager(jm.ctx, jpm.Plan().Fpo, logger),
 			exclusiveDestinationMapHolder:  &atomic.Value{},
 		}
@@ -556,6 +696,18 @@ func (jm *jobMgr) HttpClient() *http.Client {
 
 func (jm *jobMgr) PipelineNetworkStats() *PipelineNetworkStats {
 	return jm.pipelineNetworkStats
+}
+
+// SetIncludeExclude sets the include / exclude list of transfers
+// supplied with resume command to include or exclude mentioned transfers
+func (jm *jobMgr) SetIncludeExclude(include, exclude map[string]int) {
+	jm.include = include
+	jm.exclude = exclude
+}
+
+// Returns the list of transfer mentioned to include / exclude
+func (jm *jobMgr) IncludeExclude() (map[string]int, map[string]int) {
+	return jm.include, jm.exclude
 }
 
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
@@ -659,6 +811,21 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 			jobProgressInfo.transfersSkipped += partProgressInfo.transfersSkipped
 			jobProgressInfo.transfersFailed += partProgressInfo.transfersFailed
 
+			if buildmode.IsMover {
+				// PROGRESSIVE CLEANUP: Unmap completed job part plan files immediately to free memory
+				// Uses selective unmapping: Part 0 is preserved, Parts 1+ are unmapped
+				if partProgressInfo.partNum != nil {
+					partNum := *partProgressInfo.partNum
+					if completedPartMgr, exists := jm.jobPartMgrs.Get(partNum); exists {
+						completedPartMgr.UnmapPlanFile()
+					} else {
+						fmt.Printf("DEBUG: Could not find part manager for part %d\n", partNum)
+					}
+				} else {
+					fmt.Println("DEBUG: Skipping unmap - partNum is nil")
+				}
+			}
+
 			if partProgressInfo.completionChan != nil {
 				close(partProgressInfo.completionChan)
 			}
@@ -719,6 +886,16 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 	}
 }
 
+func (jm *jobMgr) getInMemoryTransitJobState() InMemoryTransitJobState {
+	return jm.inMemoryTransitJobState
+}
+
+// Note: InMemoryTransitJobState should only be set when request come from cmd(FE) module to STE module.
+// And the state should no more be changed inside STE module.
+func (jm *jobMgr) SetInMemoryTransitJobState(state InMemoryTransitJobState) {
+	jm.inMemoryTransitJobState = state
+}
+
 func (jm *jobMgr) Context() context.Context { return jm.ctx }
 func (jm *jobMgr) Cancel() {
 	jm.cancel()
@@ -756,12 +933,12 @@ func (jm *jobMgr) DeferredCleanupJobMgr() {
 
 	jm.Log(common.LogInfo, "DeferredCleanupJobMgr out of sleep")
 
+	// Transfer Thread Cleanup.
+	jm.cleanupTransferRoutine()
+
 	// Call jm.Cancel to signal routines workdone.
 	// This will take care of any jobPartMgr release.
 	jm.Cancel()
-
-	// Transfer Thread Cleanup.
-	jm.cleanupTransferRoutine()
 
 	// Remove JobPartsMgr from jobPartMgr kv.
 	jm.deleteJobPartsMgrs()
@@ -830,6 +1007,15 @@ func (jm *jobMgr) ScheduleTransfer(priority common.JobPriority, jptm IJobPartTra
 	case common.EJobPriority.Normal():
 		// jptm.SetChunkChannel(ja.xferChannels.normalChunckCh)
 		jm.coordinatorChannels.normalTransferCh <- jptm
+
+		// Check the channel "fullness" and decide how much to sleep.
+		// This is to prevent frequent sleep-wake cycles that can slow down the transfer process.
+		if ms := common.CalculateChannelBackPressureDelay(
+			cap(jm.coordinatorChannels.normalTransferCh),
+			len(jm.coordinatorChannels.normalTransferCh),
+			common.TransferChannelProfile); ms > 0 {
+			time.Sleep(time.Duration(ms) * time.Millisecond)
+		}
 	case common.EJobPriority.Low():
 		// jptm.SetChunkChannel(ja.xferChannels.lowChunkCh)
 		jm.coordinatorChannels.lowTransferCh <- jptm
@@ -991,7 +1177,12 @@ func (jm *jobMgr) scheduleJobParts() {
 				go jm.poolSizer()
 				startedPoolSizer = true
 			}
-			jobPart.ScheduleTransfers(jm.Context())
+
+			inMemoryState := jm.getInMemoryTransitJobState()
+			s3provider := inMemoryState.Provider
+			jmctx := jm.Context()
+			ctx := context.WithValue(jmctx, "customS3Creds", s3provider)
+			jobPart.ScheduleTransfers(ctx)
 		}
 	}
 }
@@ -1041,6 +1232,13 @@ func (jm *jobMgr) transferProcessor(workerID int) {
 			// TODO fix preceding space
 			jptm.Log(common.LogDebug, fmt.Sprintf("has worker %d which is processing TRANSFER %d", workerID, jptm.(*jobPartTransferMgr).transferIndex))
 			jptm.StartJobXfer()
+
+			if ms := common.CalculateChannelBackPressureDelay(
+				cap(jm.xferChannels.normalChunckCh),
+				len(jm.xferChannels.normalChunckCh),
+				common.ChunkTransferProfile); ms > 0 {
+				time.Sleep(time.Duration(ms) * time.Millisecond)
+			}
 		}
 	}
 
@@ -1133,7 +1331,6 @@ func (jm *jobMgr) CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.
 		fallthrough
 	case common.EJobStatus.Paused(): // Logically, It's OK to pause an already-paused job
 		jpp0.SetJobStatus(desiredJobStatus)
-		jm.Log(common.LogInfo, fmt.Sprintf("Job status updated: %s", desiredJobStatus))
 		msg := fmt.Sprintf("JobID=%v %s", jobID,
 			common.Iff(desiredJobStatus == common.EJobStatus.Paused(), "paused", "canceled"))
 
@@ -1152,10 +1349,6 @@ func (jm *jobMgr) CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.
 
 func (jm *jobMgr) IsDaemon() bool {
 	return jm.isDaemon
-}
-
-func (jm *jobMgr) GetJobErrorHandler() common.JobErrorHandler {
-	return jm.jobErrorHandler
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

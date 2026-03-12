@@ -18,53 +18,71 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package traverser
+package cmd
 
 import (
 	"strings"
+	"sync"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 )
 
-// the ObjectIndexer is essential for the generic sync enumerator to work
+// the objectIndexer is essential for the generic sync enumerator to work
 // it can serve as a:
-//  1. ObjectProcessor: accumulate a lookup map with given StoredObjects
+//  1. objectProcessor: accumulate a lookup map with given StoredObjects
 //  2. resourceTraverser: go through the entities in the map like a traverser
-type ObjectIndexer struct {
-	IndexMap map[string]StoredObject
+type objectIndexer struct {
+	indexMap map[string]StoredObject
 	counter  int
 
-	// IsDestinationCaseInsensitive is true when the destination is case-insensitive
+	// isDestinationCaseInsensitive is true when the destination is case-insensitive
 	// In Windows, both paths D:\path\to\dir and D:\Path\TO\DiR point to the same resource.
 	// Apple File System (APFS) can be configured to be case-sensitive or case-insensitive.
-	// So for such locations, the key in the IndexMap will be lowercase to avoid infinite syncing.
-	IsDestinationCaseInsensitive bool
+	// So for such locations, the key in the indexMap will be lowercase to avoid infinite syncing.
+	isDestinationCaseInsensitive bool
+
+	// rwMutex is used to synchronize access to the indexMap
+	// XDM: this is exclusively used in SyncOrchestrator as of 08-2025
+	rwMutex sync.RWMutex
+
+	// if this is true, access the indexer with the rwMutex lock
+	accessUnderLock bool
 }
 
-func NewObjectIndexer() *ObjectIndexer {
-	return &ObjectIndexer{IndexMap: make(map[string]StoredObject)}
+func newObjectIndexer() *objectIndexer {
+	indexer := &objectIndexer{
+		indexMap: make(map[string]StoredObject),
+	}
+
+	if UseSyncOrchestrator && buildmode.IsMover {
+		indexer.accessUnderLock = true
+	}
+
+	return indexer
 }
 
 // process the given stored object by indexing it using its relative path
-func (i *ObjectIndexer) Store(storedObject StoredObject) (err error) {
+func (i *objectIndexer) store(storedObject StoredObject) (err error) {
 	// TODO we might buffer too much data in memory, figure out whether we should limit the max number of files
 	// TODO previously we used 10M as the max, but it was proven to be too small for some users
 
 	// It is safe to index all StoredObjects just by relative path, regardless of their entity type, because
 	// no filesystem allows a file and a folder to have the exact same full path.  This is true of
 	// Linux file systems, Windows, Azure Files and ADLS Gen 2 (and logically should be true of all file systems).
-	if i.IsDestinationCaseInsensitive {
-		lcRelativePath := strings.ToLower(storedObject.RelativePath)
-		i.IndexMap[lcRelativePath] = storedObject
+	if i.isDestinationCaseInsensitive {
+		lcRelativePath := strings.ToLower(storedObject.relativePath)
+		i.indexMap[lcRelativePath] = storedObject
 	} else {
-		i.IndexMap[storedObject.RelativePath] = storedObject
+		i.indexMap[storedObject.relativePath] = storedObject
 	}
 	i.counter += 1
 	return
 }
 
 // go through the remaining stored objects in the map to process them
-func (i *ObjectIndexer) Traverse(processor ObjectProcessor, filters []ObjectFilter) (err error) {
-	for _, value := range i.IndexMap {
-		err = ProcessIfPassedFilters(filters, value, processor)
+func (i *objectIndexer) traverse(processor objectProcessor, filters []ObjectFilter) (err error) {
+	for _, value := range i.indexMap {
+		err = processIfPassedFilters(filters, value, processor)
 		_, err = getProcessingError(err)
 		if err != nil {
 			return

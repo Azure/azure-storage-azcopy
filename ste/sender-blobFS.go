@@ -57,7 +57,7 @@ type blobFSSenderBase struct {
 	pacer               pacer
 	creationTimeHeaders *file.HTTPHeaders
 	flushThreshold      int64
-	metadataToSet       *common.SafeMetadata
+	metadataToSet       common.Metadata
 }
 
 func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (*blobFSSenderBase, error) {
@@ -109,7 +109,7 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, pacer pac
 		pacer:               pacer,
 		creationTimeHeaders: &headers,
 		flushThreshold:      chunkSize * int64(ADLSFlushThreshold),
-		metadataToSet:       &common.SafeMetadata{Metadata: props.SrcMetadata.Clone()},
+		metadataToSet:       props.SrcMetadata,
 	}, nil
 }
 
@@ -222,13 +222,11 @@ func (u *blobFSSenderBase) doEnsureDirExists(directoryClient *directory.Client) 
 	// know which will happen first
 	err = u.jptm.GetFolderCreationTracker().CreateFolder(directoryClient.DFSURL(), func() error {
 		_, err := directoryClient.Create(u.jptm.Context(), &directory.CreateOptions{AccessConditions: &directory.AccessConditions{ModifiedAccessConditions: &directory.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETagAny)}}})
-
-		if datalakeerror.HasCode(err, datalakeerror.PathAlreadyExists) {
-			return common.FolderCreationErrorAlreadyExists{}
-		}
-
 		return err
 	})
+	if datalakeerror.HasCode(err, datalakeerror.PathAlreadyExists) {
+		return nil // not a error as far as we are concerned. It just already exists
+	}
 	return err
 }
 
@@ -253,19 +251,19 @@ func (u *blobFSSenderBase) SetPOSIXProperties() error {
 		return nil
 	}
 
-	meta := &common.SafeMetadata{Metadata: u.metadataToSet.Metadata.Clone()}
-	common.AddStatToBlobMetadata(adapter, meta, u.jptm.Info().PosixPropertiesStyle)
-	delete(meta.Metadata, common.POSIXFolderMeta) // Can't be set on HNS accounts.
+	meta := u.metadataToSet.Clone() // clone the metadata to avoid modifying the original
+	common.AddStatToBlobMetadata(adapter, meta)
+	delete(meta, common.POSIXFolderMeta) // Can't be set on HNS accounts.
 
-	_, err = u.blobClient.SetMetadata(u.jptm.Context(), meta.Metadata, nil)
+	_, err = u.blobClient.SetMetadata(u.jptm.Context(), meta, nil)
 	return err
 }
 
 func (u *blobFSSenderBase) SetFolderProperties() error {
 	if u.jptm.Info().PreservePOSIXProperties {
 		return u.SetPOSIXProperties()
-	} else if len(u.metadataToSet.Metadata) > 0 {
-		_, err := u.blobClient.SetMetadata(u.jptm.Context(), u.metadataToSet.Metadata, nil)
+	} else if len(u.metadataToSet) > 0 {
+		_, err := u.blobClient.SetMetadata(u.jptm.Context(), u.metadataToSet, nil)
 		if err != nil {
 			return fmt.Errorf("failed to set metadata: %w", err)
 		}
@@ -291,16 +289,17 @@ func (u *blobFSSenderBase) DirUrlToString() string {
 }
 
 func (u *blobFSSenderBase) SendSymlink(linkData string) error {
-	meta := &common.SafeMetadata{Metadata: make(common.Metadata)} // meta isn't traditionally supported for dfs, but still exists
+	meta := common.Metadata{} // meta isn't traditionally supported for dfs, but still exists
 	adapter, err := u.GetSourcePOSIXProperties()
 	if err != nil {
 		return fmt.Errorf("when polling for POSIX properties: %w", err)
-	} else if adapter != nil { // We don't need POSIX data to send a symlink.
-		common.AddStatToBlobMetadata(adapter, meta, u.jptm.Info().PosixPropertiesStyle)
+	} else if adapter == nil {
+		return nil // No-op
 	}
 
-	meta.Metadata[common.POSIXSymlinkMeta] = to.Ptr("true") // just in case there isn't any metadata
-	blobHeaders := blob.HTTPHeaders{                        // translate headers, since those still apply
+	common.AddStatToBlobMetadata(adapter, meta)
+	meta[common.POSIXSymlinkMeta] = to.Ptr("true") // just in case there isn't any metadata
+	blobHeaders := blob.HTTPHeaders{               // translate headers, since those still apply
 		BlobContentType:        u.creationTimeHeaders.ContentType,
 		BlobContentEncoding:    u.creationTimeHeaders.ContentEncoding,
 		BlobContentLanguage:    u.creationTimeHeaders.ContentLanguage,
@@ -313,8 +312,25 @@ func (u *blobFSSenderBase) SendSymlink(linkData string) error {
 		streaming.NopCloser(strings.NewReader(linkData)),
 		&blockblob.UploadOptions{
 			HTTPHeaders: &blobHeaders,
-			Metadata:    meta.Metadata,
+			Metadata:    meta,
 		})
 
 	return err
+}
+
+func (u *blobFSSenderBase) GenerateCopyMetadata(id common.ChunkID) chunkFunc {
+	return createChunkFunc(true, u.jptm, id, func() {
+
+		if u.jptm.Info().PreservePOSIXProperties { // metadata would be set here
+			err := u.SetPOSIXProperties()
+			if err != nil {
+				u.jptm.FailActiveUpload("Setting POSIX Properties", err)
+			}
+		} else if len(u.metadataToSet) > 0 { // but if we aren't writing POSIX properties, let's set metadata to be consistent.
+			_, err := u.blobClient.SetMetadata(u.jptm.Context(), u.metadataToSet, nil)
+			if err != nil {
+				u.jptm.FailActiveUpload("Setting blob metadata", err)
+			}
+		}
+	})
 }

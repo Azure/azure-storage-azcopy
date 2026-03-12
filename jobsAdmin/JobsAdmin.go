@@ -73,12 +73,12 @@ var JobsAdmin interface {
 
 	// JobMgr returns the specified JobID's JobMgr
 	JobMgr(jobID common.JobID) (ste.IJobMgr, bool)
-	JobMgrEnsureExists(jobID common.JobID, level common.LogLevel, commandString string, jobErrorHandler common.JobErrorHandler) ste.IJobMgr
+	JobMgrEnsureExists(jobID common.JobID, level common.LogLevel, commandString string) ste.IJobMgr
 
 	// AddJobPartMgr associates the specified JobPartMgr with the Jobs Administrator
 	//AddJobPartMgr(appContext context.Context, planFile JobPartPlanFileName) IJobPartMgr
 	/*ScheduleTransfer(jptm IJobPartTransferMgr)*/
-	ResurrectJob(jobId common.JobID, srcServiceClient *common.ServiceClient, dstServiceClient *common.ServiceClient, srcIsOAuth bool, jobErrorHandler common.JobErrorHandler) bool
+	ResurrectJob(jobId common.JobID, srcServiceClient *common.ServiceClient, dstServiceClient *common.ServiceClient, srcIsOAuth bool) bool
 
 	// returns the current value of bytesOverWire.
 	BytesOverWire() int64
@@ -92,10 +92,18 @@ var JobsAdmin interface {
 
 	// JobMgrCleanUp do the JobMgr cleanup.
 	JobMgrCleanUp(jobId common.JobID)
-	MessageHandler(inputChan <-chan *common.LCMMsg)
+
+	// Update bandwidth
+	UpdateTargetBandwidth(newTarget int64)
+
+	// ChangeLogLevel change the log level for specific job.
+	ChangeLogLevel(level common.LogLevel, jobId common.JobID) error
+
+	CurrentConcurrencySettings() ste.ConcurrencySettings
+	RegisterStatsMonitorIfNotDone() // Register the STE stats monitor callback
 }
 
-func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64) error {
+func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64) {
 	if JobsAdmin != nil {
 		panic("initJobsAdmin was already called once")
 	}
@@ -108,10 +116,7 @@ func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, 
 		cpuMon = common.NewCalibratedCpuUsageMonitor()
 	}
 
-	maxRamBytesToUse, err := getMaxRamForChunks()
-	if err != nil {
-		return err
-	}
+	maxRamBytesToUse := getMaxRamForChunks()
 
 	// use the "networking mega" (based on powers of 10, not powers of 2, since that's what mega means in networking context)
 	targetRateInBytesPerSec := int64(targetRateInMegaBitsPerSec * 1000 * 1000 / 8)
@@ -145,7 +150,8 @@ func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, 
 	// Spin up slice pool pruner
 	go ja.slicePoolPruneLoop()
 
-	return nil
+	go ja.messageHandler(common.GetLifecycleMgr().MsgHandlerChannel())
+
 }
 
 // Decide on a max amount of RAM we are willing to use. This functions as a cap, and prevents excessive usage.
@@ -154,7 +160,7 @@ func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, 
 // currently-unused, reusable slices, that is not tracked by cacheLimiter.
 // Also, block sizes that are not powers of two result in extra usage over and above this limit. (E.g. 100 MB blocks each
 // count 100 MB towards this limit, but actually consume 128 MB)
-func getMaxRamForChunks() (int64, error) {
+func getMaxRamForChunks() int64 {
 
 	// return the user-specified override value, if any
 	envVar := common.EEnvironmentVariable.BufferGB()
@@ -162,9 +168,9 @@ func getMaxRamForChunks() (int64, error) {
 	if overrideString != "" {
 		overrideValue, err := strconv.ParseFloat(overrideString, 64)
 		if err != nil {
-			return 0, fmt.Errorf("Cannot parse environment variable %s, due to error %v", envVar.Name, err)
+			common.GetLifecycleMgr().Error(fmt.Sprintf("Cannot parse environment variable %s, due to error %s", envVar.Name, err))
 		} else {
-			return int64(overrideValue * 1024 * 1024 * 1024), nil
+			return int64(overrideValue * 1024 * 1024 * 1024)
 		}
 	}
 
@@ -180,7 +186,7 @@ func getMaxRamForChunks() (int64, error) {
 		gbToUse = maxTotalGB // cap it.
 	}
 	maxRamBytesToUse := int64(gbToUse * 1024 * 1024 * 1024)
-	return maxRamBytesToUse, nil
+	return maxRamBytesToUse
 }
 
 func (ja *jobsAdmin) createConcurrencyTuner() ste.ConcurrencyTuner {
@@ -263,12 +269,12 @@ func (ja *jobsAdmin) JobMgr(jobID common.JobID) (ste.IJobMgr, bool) {
 // JobMgrEnsureExists returns the specified JobID's IJobMgr if it exists or creates it if it doesn't already exit
 // If it does exist, then the appCtx argument is ignored.
 func (ja *jobsAdmin) JobMgrEnsureExists(jobID common.JobID,
-	level common.LogLevel, commandString string, jobErrorHandler common.JobErrorHandler) ste.IJobMgr {
+	level common.LogLevel, commandString string) ste.IJobMgr {
 
 	return ja.jobIDToJobMgr.EnsureExists(jobID,
 		func() ste.IJobMgr {
 			// Return existing or new IJobMgr to caller
-			return ste.NewJobMgr(ja.concurrency, jobID, ja.appCtx, ja.cpuMonitor, level, commandString, ja.concurrencyTuner, ja.pacer, ja.slicePool, ja.cacheLimiter, ja.fileCountLimiter, common.AzcopyCurrentJobLogger, false, jobErrorHandler)
+			return ste.NewJobMgr(ja.concurrency, jobID, ja.appCtx, ja.cpuMonitor, level, commandString, ja.concurrencyTuner, ja.pacer, ja.slicePool, ja.cacheLimiter, ja.fileCountLimiter, common.AzcopyCurrentJobLogger, false)
 		})
 }
 
@@ -281,6 +287,9 @@ func (ja *jobsAdmin) JobMgrCleanUp(jobId common.JobID) {
 	jm, found := ja.JobMgr(jobId)
 
 	if found {
+		// Force collect stats before cleanup.
+		ja.ForceCollectStats()
+
 		/*
 		 * Change log level to Info, so that we can capture these messages in job log file.
 		 * These log messages useful in debuggability and tells till what stage cleanup done.
@@ -333,7 +342,7 @@ func (ja *jobsAdmin) SuccessfulBytesInActiveFiles() uint64 {
 func (ja *jobsAdmin) ResurrectJob(jobId common.JobID,
 	srcServiceClient *common.ServiceClient,
 	dstServiceClient *common.ServiceClient,
-	srcIsOAuth bool, jobErrorHandler common.JobErrorHandler) bool {
+	srcIsOAuth bool) bool {
 	// Search the existing plan files for the PartPlans for the given jobId
 	// only the files which are not empty and have JobId has prefix and DataSchemaVersion as Suffix
 	// are include in the result
@@ -360,7 +369,7 @@ func (ja *jobsAdmin) ResurrectJob(jobId common.JobID,
 			continue
 		}
 		mmf := planFile.Map()
-		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "", jobErrorHandler)
+		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "")
 		args := &ste.AddJobPartArgs{
 			PartNum:           partNum,
 			PlanFile:          planFile,
@@ -435,6 +444,10 @@ func (ja *jobsAdmin) DeleteJob(jobID common.JobID) {
 	ja.DeleteJob(jobID)
 }
 */
+
+func (ja *jobsAdmin) CurrentConcurrencySettings() ste.ConcurrencySettings {
+	return ja.concurrency
+}
 func (ja *jobsAdmin) slicePoolPruneLoop() {
 	// if something in the pool has been unused for this long, we probably don't need it
 	const pruneInterval = 5 * time.Second
@@ -450,6 +463,136 @@ func (ja *jobsAdmin) slicePoolPruneLoop() {
 			break
 		}
 	}
+}
+
+// ChangeLogLevel changes the log level for a specific job identified by jobId.
+// If the job manager for the given jobId is not found, it returns an error.
+//
+// Parameters:
+//   - level: The new log level to set for the job.
+//   - jobId: The identifier of the job whose log level is to be changed.
+//
+// Returns:
+//   - error: An error if the job manager for the given jobId is not found, otherwise nil.
+func (ja *jobsAdmin) ChangeLogLevel(level common.LogLevel, jobId common.JobID) error {
+	jm, found := ja.jobIDToJobMgr.Get(jobId)
+	if !found {
+		err := fmt.Errorf("No JobMgr found with this JobId(%s)", jobId.String())
+		return err
+	} else {
+		jm.ChangeLogLevel(level)
+		return nil
+	}
+}
+
+// getSTEStats creates a callback for STE metrics that provides real-time
+// visibility into the Storage Transfer Engine's internal state
+func getSTEStats() []common.CustomStatEntry {
+	var stats []common.CustomStatEntry
+
+	if JobsAdmin == nil {
+		return stats
+	}
+
+	// Get all job IDs
+	jobIDs := JobsAdmin.JobIDs()
+
+	if len(jobIDs) == 0 {
+		return stats
+	}
+
+	var totalTransfersQueued int64
+	var totalTransfersCompleted uint64
+	var totalTransfersFailed uint64
+	var totalTransfersSkipped uint64
+	var totalPartsChannelSize int
+	var totalPartsChannelUsed int
+	var totalNormalTransferChannelSize int
+	var totalNormalTransferChannelUsed int
+	var totalLowTransferChannelSize int
+	var totalLowTransferChannelUsed int
+	var totalNormalChunkChannelSize int
+	var totalNormalChunkChannelUsed int
+	var totalLowChunkChannelSize int
+	var totalLowChunkChannelUsed int
+	var totalPartsCreatedUsed int
+	var totalPartsCreatedSize int
+	var totalXferDoneUsed int
+	var totalXferDoneSize int
+
+	// Iterate through all jobs to get their metrics
+	for _, jobID := range jobIDs {
+		if jobMgr, exists := JobsAdmin.JobMgr(jobID); exists {
+			totalTransfersQueued += jobMgr.GetTotalNumFilesProcessed()
+
+			jobSummary := jobMgr.ListJobSummary(false)
+			totalTransfersCompleted += uint64(jobSummary.TransfersCompleted)
+			totalTransfersFailed += uint64(jobSummary.TransfersFailed)
+			totalTransfersSkipped += uint64(jobSummary.TransfersSkipped)
+
+			// Get channel statistics through the interface method
+			channelStats := jobMgr.GetChannelStats()
+			totalPartsChannelSize += channelStats.PartsChannelSize
+			totalPartsChannelUsed += channelStats.PartsChannelUsed
+			totalNormalTransferChannelSize += channelStats.NormalTransferChannelSize
+			totalNormalTransferChannelUsed += channelStats.NormalTransferChannelUsed
+			totalLowTransferChannelSize += channelStats.LowTransferChannelSize
+			totalLowTransferChannelUsed += channelStats.LowTransferChannelUsed
+			totalNormalChunkChannelSize += channelStats.NormalChunkChannelSize
+			totalNormalChunkChannelUsed += channelStats.NormalChunkChannelUsed
+			totalLowChunkChannelSize += channelStats.LowChunkChannelSize
+			totalLowChunkChannelUsed += channelStats.LowChunkChannelUsed
+			totalPartsCreatedUsed += channelStats.PartsCreatedUsed
+			totalPartsCreatedSize += channelStats.PartsCreatedSize
+			totalXferDoneUsed += channelStats.XferDoneUsed
+			totalXferDoneSize += channelStats.XferDoneSize
+		}
+	}
+
+	return []common.CustomStatEntry{
+		{Key: "active", Value: fmt.Sprintf("%d", uint64(totalTransfersQueued)-totalTransfersCompleted-totalTransfersFailed-totalTransfersSkipped)},
+		{Key: "done", Value: fmt.Sprintf("%d", totalTransfersCompleted)},
+		{Key: "failed", Value: fmt.Sprintf("%d", totalTransfersFailed)},
+		{Key: "skipped", Value: fmt.Sprintf("%d", totalTransfersSkipped)},
+		{Key: "parts_ch", Value: fmt.Sprintf("%d/%d", totalPartsChannelUsed, totalPartsChannelSize)},
+		{Key: "norm_xfer_ch", Value: fmt.Sprintf("%d/%d", totalNormalTransferChannelUsed, totalNormalTransferChannelSize)},
+		{Key: "low_xfer_ch", Value: fmt.Sprintf("%d/%d", totalLowTransferChannelUsed, totalLowTransferChannelSize)},
+		{Key: "norm_chunk_ch", Value: fmt.Sprintf("%d/%d", totalNormalChunkChannelUsed, totalNormalChunkChannelSize)},
+		{Key: "low_chunk_ch", Value: fmt.Sprintf("%d/%d", totalLowChunkChannelUsed, totalLowChunkChannelSize)},
+		// {Key: "parts_cr_ch", Value: fmt.Sprintf("%d/%d", totalPartsCreatedUsed, totalPartsCreatedSize)},
+		// {Key: "xfer_done_ch", Value: fmt.Sprintf("%d/%d", totalXferDoneUsed, totalXferDoneSize)},
+	}
+}
+
+func (ja *jobsAdmin) RegisterStatsMonitorIfNotDone() {
+
+	if common.GlobalSystemStatsMonitor != nil &&
+		!common.GlobalSystemStatsMonitor.IsCustomStatsCallbackRegistered("ste") {
+
+		concurrency := ja.CurrentConcurrencySettings()
+		concurrencySettings := []common.CustomStatEntry{
+			{Key: "InitialMainPoolSize", Value: fmt.Sprintf("%d", concurrency.InitialMainPoolSize)},
+			{Key: "MaxMainPoolSize", Value: fmt.Sprintf("%d", concurrency.MaxMainPoolSize.Value)},
+			{Key: "TransferInitiationPoolSize", Value: fmt.Sprintf("%d", concurrency.TransferInitiationPoolSize.Value)},
+			{Key: "EnumerationPoolSize", Value: fmt.Sprintf("%d", concurrency.EnumerationPoolSize.Value)},
+			{Key: "ParallelStatFiles", Value: fmt.Sprintf("%v", concurrency.ParallelStatFiles.Value)},
+			{Key: "MaxIdleConnections", Value: fmt.Sprintf("%d", concurrency.MaxIdleConnections)},
+			{Key: "MaxOpenDownloadFiles", Value: fmt.Sprintf("%d", concurrency.MaxOpenDownloadFiles)},
+			{Key: "CheckCpuWhenTuning", Value: fmt.Sprintf("%t", concurrency.CheckCpuWhenTuning.Value)},
+			{Key: "AutoTuneMainPool", Value: fmt.Sprintf("%t", concurrency.AutoTuneMainPool())},
+		}
+		common.GlobalSystemStatsMonitor.LogAdhocCustomStats("Concurrency Settings", concurrencySettings)
+
+		// Register the callback for STE stats
+		common.GlobalSystemStatsMonitor.RegisterCustomStatsCallback(common.STEId, getSTEStats)
+	}
+}
+
+func (ja *jobsAdmin) ForceCollectStats() bool {
+	if common.GlobalSystemStatsMonitor != nil {
+		return common.GlobalSystemStatsMonitor.ForceCollectCustomStats(common.STEId)
+	}
+	return false
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -487,7 +630,7 @@ func (ja *jobsAdmin) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint3
 	return a.GetAdvice()
 }
 
-func (ja *jobsAdmin) MessageHandler(inputChan <-chan *common.LCMMsg) {
+func (ja *jobsAdmin) messageHandler(inputChan <-chan *common.LCMMsg) {
 	toBitsPerSec := func(megaBitsPerSec int64) int64 {
 		return megaBitsPerSec * 1000 * 1000 / 8
 	}

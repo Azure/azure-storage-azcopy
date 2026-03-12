@@ -370,3 +370,7 @@ func (b *MockObjectResourceManager) ReadLink(a Asserter) string {
 func (m *MockObjectResourceManager) Exists() bool {
 	return true
 }
+
+func (b *MockObjectResourceManager) ReadLink(a Asserter) string {
+	return ""
+}

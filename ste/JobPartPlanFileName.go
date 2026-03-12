@@ -9,13 +9,18 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 	"unsafe"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 )
 
 type JobPartPlanFileName string
+
+// planFlushLogOnce ensures we log only once when flushing plan files to remote FS.
+var planFlushLogOnce sync.Once
 
 func (jppfn *JobPartPlanFileName) Exists() bool {
 	_, err := os.Stat(jppfn.GetJobPartPlanPath())
@@ -146,7 +151,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	if err != nil {
 		panic(fmt.Errorf("couldn't create job part plan file %q: %w", jpfn, err))
 	}
-	defer file.Close()
+	//defer file.Close()
 
 	// If block size from the front-end is set to 0
 	// store the block-size as 0. While getting the transfer Info
@@ -423,5 +428,31 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			eof += int64(bytesWritten)
 		}
 	}
+
+	// In case of Mover - C2C, plan files are persisted on Azure File Share.
+	// Ensure data hits the remote filesystem.
+	if buildmode.IsMover && order.FromTo.From().IsRemote() {
+		// TO DO - Remove logging once, this is for testing purpose only.
+		planFlushLogOnce.Do(func() {
+			common.GetLifecycleMgr().Info("Flushing job part plan file(s) to remote filesystem via Sync (Mover build)")
+		})
+
+		if err := file.Sync(); err != nil {
+			common.GetLifecycleMgr().Info(fmt.Sprintf("fsync error: %v", err))
+		}
+		// Ensure file data is durable before dropping page cache, especially on network filesystems.
+		// Prefer fdatasync (data-only) to reduce metadata flush overhead; fall back to fsync log on error.
+		if err := common.Fdatasync(file); err != nil {
+			common.GetLifecycleMgr().Info(fmt.Sprintf("[plan-write] fdatasync failed prior to fadvise: %v", err))
+			if err2 := file.Sync(); err2 != nil {
+				common.GetLifecycleMgr().Info(fmt.Sprintf("[plan-write] fsync also failed prior to fadvise: %v", err2))
+			}
+		}
+	}
+
+	if err := file.Close(); err != nil {
+		common.GetLifecycleMgr().Info(fmt.Sprintf("[plan-write] close failed after fsync or fdatasync: %v", err))
+	}
+
 	// the file is closed to due to defer above
 }
