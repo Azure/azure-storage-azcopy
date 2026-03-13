@@ -159,7 +159,7 @@ func TestFolderCreationTracker_directoryExists(t *testing.T) {
 	}) // "create" our folder
 	err := fct.CreateFolder(folderExists, func() error {
 		return common.FolderCreationErrorAlreadyExists{}
-	}) // fail creation on not existing
+	})                                                // fail creation on not existing
 	a.NoError(err, "already exists should be caught") // ensure we caught that error
 	expectedFailureErr := errors.New("this creation should fail")
 	err = fct.CreateFolder(folderShouldCreate, func() error {
@@ -193,4 +193,46 @@ func TestFolderCreationTracker_directoryExists(t *testing.T) {
 	})
 
 	a.NoError(err)
+}
+
+// Verifies that a subsequent call to createFolder does not panic when the status is
+// SkippedEntityAlreadyExists
+func TestFolderCreationTracker_skippedEntityExits(t *testing.T) {
+	a := assert.New(t)
+
+	folderExists := "folderExists"
+	existsIdx := JpptFolderIndex{0, 0}
+
+	plan := &mockedJobPlan{
+		transfers: map[JpptFolderIndex]*JobPartPlanTransfer{
+			existsIdx: {atomicTransferStatus: common.ETransferStatus.NotStarted()},
+		},
+	}
+
+	fct := &jpptFolderTracker{
+		fetchTransfer: plan.getFetchTransfer(t),
+		mu:            &sync.Mutex{},
+		contents:      make(map[string]*JpptFolderTrackerState),
+	}
+
+	fct.RegisterPropertiesTransfer(folderExists, existsIdx.PartNum, existsIdx.TransferIndex)
+	err := fct.CreateFolder(folderExists, func() error {
+		return common.FolderCreationErrorAlreadyExists{}
+	})
+	a.NoError(err, "already exists should be caught")
+	a.Equal(common.ETransferStatus.FolderExisted(), plan.transfers[existsIdx].TransferStatus())
+
+	// Simulate folder transfer setting properties this happens in any_toremotefolder
+	plan.transfers[existsIdx].SetTransferStatus(common.ETransferStatus.SkippedEntityAlreadyExists(), false)
+
+	folderCreated := false
+	a.NotPanics(func() { // Subsequent call to createFolder should not panic
+		err = fct.CreateFolder(folderExists, func() error {
+			folderCreated = true
+			return nil
+		})
+	})
+	a.NoError(err)
+	a.False(folderCreated, "createFolder should return early without calling doCreation")
+
 }
