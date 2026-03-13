@@ -96,7 +96,9 @@ func createS3ClientForPrivateNetwork(credInfo CredentialInfo, cred *credentials.
 		// AWS certs support *.s3.<region>.amazonaws.com, so use s3Host for TLS
 		tlsHost = s3Host
 	}
-	transport := NewRoundRobinTransport(peIP, s3Host, tlsHost, PeReCheckCooldownTimeInSecs, PeCheckRetries, PeCheckIntervalInmilliSecs)
+	// Force HTTP/1.1 only for GCS regional endpoints that send non-standard HTTP/2 frames
+	forceHTTP11 := isGCS && baseS3Host != "storage.googleapis.com"
+	transport := NewRoundRobinTransport(peIP, s3Host, tlsHost, PeReCheckCooldownTimeInSecs, PeCheckRetries, PeCheckIntervalInmilliSecs, forceHTTP11)
 	var minioCred *credentials.Credentials
 	if cred != nil {
 		minioCred = cred
