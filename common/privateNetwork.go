@@ -112,7 +112,11 @@ func NewRoundRobinTransport(ips []string, host string, tlsHost string, cooldownI
 	SetGlobalPrivateEndpointIPs(ips)
 
 	tr := http.DefaultTransport.(*http.Transport).Clone()
-	tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: false, ServerName: tlsHost}
+	tr.TLSClientConfig = &tls.Config{
+		InsecureSkipVerify: false,
+		ServerName:         tlsHost,
+		NextProtos:         []string{"http/1.1"}, // Force HTTP/1.1 to avoid "unhandled response frame type" warnings from GCS HTTP/2
+	}
 
 	rr := &RoundRobinTransport{
 		host:            host,

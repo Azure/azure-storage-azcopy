@@ -96,7 +96,6 @@ func createS3ClientForPrivateNetwork(credInfo CredentialInfo, cred *credentials.
 		// AWS certs support *.s3.<region>.amazonaws.com, so use s3Host for TLS
 		tlsHost = s3Host
 	}
-	fmt.Printf("[createS3ClientForPrivateNetwork] Creating RoundRobinTransport: PE IPs=%v, s3Host=%s, tlsHost=%s, minioEndpoint=%s\n", peIP, s3Host, tlsHost, minioEndpoint)
 	transport := NewRoundRobinTransport(peIP, s3Host, tlsHost, PeReCheckCooldownTimeInSecs, PeCheckRetries, PeCheckIntervalInmilliSecs)
 	var minioCred *credentials.Credentials
 	if cred != nil {
@@ -173,12 +172,6 @@ func CreateS3Client(ctx context.Context, credInfo CredentialInfo, option Credent
 	if IsPrivateNetworkTransfer(ELocation.S3()) {
 		fmt.Println("Creating S3 Client for Private Network")
 		s3Client, err := createS3ClientForPrivateNetwork(credInfo, credential)
-		if logger != nil {
-			fmt.Println("[CreateS3Client] Enabling S3 client trace logging for private network")
-			s3Client.TraceOn(NewS3HTTPTraceLogger(logger, LogDebug))
-		} else {
-			fmt.Println("[CreateS3Client] Logger is nil, skipping S3 client trace logging for private network")
-		}
 		return s3Client, err
 	}
 	s3Client, err := minio.New(credInfo.S3CredentialInfo.Endpoint, &minio.Options{Creds: credential, Secure: true, Region: credInfo.S3CredentialInfo.Region})
