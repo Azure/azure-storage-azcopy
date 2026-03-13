@@ -68,6 +68,8 @@ func remoteToLocal_hardlink(jptm IJobPartTransferMgr, pacer pacer, df downloader
 		return
 	}
 
+	d.Prologue(jptm)
+
 	dl, ok := d.(hardlinkDownloader)
 	if !ok {
 		jptm.LogDownloadError(info.Source, info.Destination, "downloader implementation does not support hardlinks", 0)
@@ -75,7 +77,7 @@ func remoteToLocal_hardlink(jptm IJobPartTransferMgr, pacer pacer, df downloader
 		jptm.ReportTransferDone()
 		return
 	}
-	err = dl.CreateHardlink(jptm)
+	err = dl.CreateHardlink()
 	if err != nil {
 		jptm.FailActiveSend("creating destination hardlink", err)
 	}

@@ -127,6 +127,3 @@ func (bd *blobFSDownloader) CreateSymlink(jptm IJobPartTransferMgr) error {
 
 	return err
 }
-func (a *blobFSDownloader) CreateHardLink(jptm IJobPartTransferMgr) error {
-	return nil
-}

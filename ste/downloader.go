@@ -71,7 +71,7 @@ type symlinkDownloader interface {
 // hardlinkDownloader is a downloader that can also handle hard links.
 type hardlinkDownloader interface {
 	downloader
-	CreateHardlink(jptm IJobPartTransferMgr) error
+	CreateHardlink() error
 }
 
 // smbPropertyAwareDownloader is a windows and linux triggered interface.
