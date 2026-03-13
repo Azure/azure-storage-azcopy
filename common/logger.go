@@ -269,10 +269,6 @@ func NewS3HTTPTraceLogger(logger ILogger, level LogLevel) S3HTTPTraceLogger {
 
 func (e S3HTTPTraceLogger) Write(msg []byte) (n int, err error) {
 	toPrint := string(msg)
-	// Prefix every line so multi-line HTTP dumps (headers, response) are visible when filtering logs
-	for _, line := range strings.Split(strings.TrimRight(toPrint, "\r\n"), "\n") {
-		fmt.Println("[S3Trace]", strings.TrimRight(line, "\r"))
-	}
 	e.logger.Log(e.logLevel, toPrint)
 	return len(toPrint), nil
 }

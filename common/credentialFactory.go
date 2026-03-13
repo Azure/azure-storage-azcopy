@@ -81,14 +81,14 @@ func createS3ClientForPrivateNetwork(credInfo CredentialInfo, cred *credentials.
 	bucketLookup := minio.BucketLookupDNS // default: virtual-hosted style for AWS
 	if isGCS {
 		// GCS path-style: host is just the endpoint; bucket goes in the URL path (handled by minio BucketLookupPath)
-		s3Host = credInfo.S3CredentialInfo.Endpoint
+		s3Host = "storage.googleapis.com"
 		// GCS certs only match exact endpoint (no wildcard), so use baseS3Host for TLS
 		tlsHost = baseS3Host
 		// Minio lib only supports "storage.googleapis.com" as the GCS endpoint
 		// (it has an internal check for that exact host), so override for regional
 		// endpoints like storage.us-west2.rep.googleapis.com.
 		// TLS and RoundRobinTransport still use the actual regional baseS3Host.
-		minioEndpoint = "storage.googleapis.com"
+		minioEndpoint = s3Host
 		bucketLookup = minio.BucketLookupPath // GCS uses path-style: storage.googleapis.com/bucket
 	} else {
 		// S3 uses virtual-hosted style: "<bucketname>.s3.<region>.amazonaws.com"

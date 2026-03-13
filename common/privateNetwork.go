@@ -176,13 +176,6 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 			var isS3AccessDeniedErr bool
 
 			// log.Printf("[Counter=%d Retry=%d] Sending request to PrivateEndpoint IP: %s (Host header: %s)", idx, ipAttempt, clonedReq.URL.Host, clonedReq.Host)
-			fmt.Printf("[RoundRobinTransport] %s %s://%s%s\n", clonedReq.Method, clonedReq.URL.Scheme, clonedReq.URL.Host, clonedReq.URL.RequestURI())
-			fmt.Printf("[RoundRobinTransport] Host header: %s\n", clonedReq.Host)
-			for name, values := range clonedReq.Header {
-				for _, v := range values {
-					fmt.Printf("[RoundRobinTransport] %s: %s\n", name, v)
-				}
-			}
 
 			resp, err := rr.transport.RoundTrip(clonedReq)
 			if err == nil {
