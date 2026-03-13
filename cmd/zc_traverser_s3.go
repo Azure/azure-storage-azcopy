@@ -208,13 +208,6 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 	// GCS has different behavior for directory markers compared to AWS S3
 	isGCSviaS3 := t.s3URLParts.IsGoogleCloudStorage()
 
-	// Strip leading slashes from ObjectKey for S3-compatible endpoints - this can happen when URLs
-	// have double slashes (e.g., when sync orchestrator joins "bucket/" with "" resulting in "bucket//")
-	// S3-compatible path-style URLs are more susceptible to this issue
-	if t.s3URLParts.IsS3CompatibleEndpoint() {
-		t.s3URLParts.ObjectKey = strings.TrimLeft(t.s3URLParts.ObjectKey, "/")
-	}
-
 	// Append a trailing slash if it is missing.
 	if !strings.HasSuffix(t.s3URLParts.ObjectKey, "/") && t.s3URLParts.ObjectKey != "" {
 		t.s3URLParts.ObjectKey += "/"
@@ -401,6 +394,14 @@ func newS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTrave
 	}
 
 	t.s3URLParts = s3URLPartsExtension{s3URLParts}
+
+	// Strip leading slashes from ObjectKey for S3-compatible endpoints immediately after parsing.
+	// This must happen here (not in Traverse) because IsDirectory() and StatObject calls
+	// use ObjectKey before Traverse() runs. Double slashes can occur when the sync orchestrator
+	// joins a trailing-slash source URL with a directory path (e.g., "bucket/" + "/" + "dir").
+	if t.s3URLParts.IsS3CompatibleEndpoint() {
+		t.s3URLParts.ObjectKey = strings.TrimLeft(t.s3URLParts.ObjectKey, "/")
+	}
 
 	showS3UrlTypeWarning(s3URLParts)
 
