@@ -107,12 +107,24 @@ func SetPrivateNetworkArgs(privateNetworkEnabled bool, privateEndpointIPs []stri
 	privateNetworkArgs.BucketName = bucketName
 }
 
-// RoundRobinTransport creates the transport
-func NewRoundRobinTransport(ips []string, host string, cooldownInSecs int, ipRetries int, ipRetryIntervalInMilliSecs int) *RoundRobinTransport {
+// RoundRobinTransport creates the transport.
+// Set forceHTTP11 to true for GCS regional endpoints that send non-standard HTTP/2 frames,
+// causing Go's "unhandled response frame type" warnings. AWS S3 should use HTTP/2 (false).
+func NewRoundRobinTransport(ips []string, host string, tlsHost string, cooldownInSecs int, ipRetries int, ipRetryIntervalInMilliSecs int, forceHTTP11 bool) *RoundRobinTransport {
 	SetGlobalPrivateEndpointIPs(ips)
 
 	tr := http.DefaultTransport.(*http.Transport).Clone()
-	tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: false, ServerName: host}
+	tlsCfg := &tls.Config{
+		InsecureSkipVerify: false,
+		ServerName:         tlsHost,
+	}
+	if forceHTTP11 {
+		// GCS regional endpoints send proprietary HTTP/2 frames that Go doesn't recognize.
+		// Force HTTP/1.1 to avoid noisy "unhandled response frame type" warnings.
+		tlsCfg.NextProtos = []string{"http/1.1"}
+		tr.ForceAttemptHTTP2 = false
+	}
+	tr.TLSClientConfig = tlsCfg
 
 	rr := &RoundRobinTransport{
 		host:            host,

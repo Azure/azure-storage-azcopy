@@ -27,6 +27,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -65,6 +66,13 @@ func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, err
 		return nil, err
 	}
 
+	// For S3-compatible endpoints (e.g. GCS path-style), the ObjectKey may have a
+	// leading "/" after URL parsing which causes a double-slash in minio's path-style
+	// request URL (bucket//objectKey), resulting in 403 errors.
+	if p.s3URLPart.IsS3CompatibleEndpoint() && strings.HasPrefix(p.s3URLPart.ObjectKey, "/") {
+		p.s3URLPart.ObjectKey = strings.TrimLeft(p.s3URLPart.ObjectKey, "/")
+	}
+
 	if p.transferInfo.Provider != nil { //add check for if we want to use provider case
 		p.credType = common.ECredentialType.S3AccessKey()
 	} else if os.Getenv("AWS_ACCESS_KEY_ID") == "" && os.Getenv("AWS_SECRET_ACCESS_KEY") == "" {
@@ -77,9 +85,10 @@ func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, err
 	p.s3Client, err = s3ClientFactory.GetS3Client(ctx, common.CredentialInfo{
 		CredentialType: p.credType,
 		S3CredentialInfo: common.S3CredentialInfo{
-			Endpoint: p.s3URLPart.Endpoint,
-			Region:   p.s3URLPart.Region,
-			Provider: p.transferInfo.Provider,
+			Endpoint:   p.s3URLPart.Endpoint,
+			Region:     p.s3URLPart.Region,
+			BucketName: p.s3URLPart.BucketName,
+			Provider:   p.transferInfo.Provider,
 		},
 	}, common.CredentialOpOptions{
 		LogInfo:  func(str string) { p.jptm.Log(common.LogInfo, str) },
