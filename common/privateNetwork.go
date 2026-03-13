@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/http/httputil"
 	"regexp"
 	"strings"
 	"sync"
@@ -176,6 +177,9 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 			var isS3AccessDeniedErr bool
 
 			// log.Printf("[Counter=%d Retry=%d] Sending request to PrivateEndpoint IP: %s (Host header: %s)", idx, ipAttempt, clonedReq.URL.Host, clonedReq.Host)
+			if dump, dumpErr := httputil.DumpRequestOut(clonedReq, false); dumpErr == nil {
+				fmt.Printf("[RoundRobinTransport] Actual HTTPS request:\n%s\n", string(dump))
+			}
 
 			resp, err := rr.transport.RoundTrip(clonedReq)
 			if err == nil {
