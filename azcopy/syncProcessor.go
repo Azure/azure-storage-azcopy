@@ -169,7 +169,7 @@ func (l localFileDeleter) Delete(rootPath string, _ common.Location, object trav
 	objectURI := l.getObjectURL(object)
 	l.folderManager.RecordChildExists(objectURI)
 
-	if object.EntityType == common.EEntityType.File() {
+	if object.EntityType == common.EEntityType.File() || object.EntityType == common.EEntityType.Hardlink() {
 		msg := "Deleting extra file: " + object.RelativePath
 		common.GetLifecycleMgr().Info(msg)
 		if common.AzcopyScanningLogger != nil {

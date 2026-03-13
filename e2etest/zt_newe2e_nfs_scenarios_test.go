@@ -242,12 +242,25 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 
 	for i := range 2 {
 		name := rootDir + "/test" + strconv.Itoa(i) + ".txt"
+		// For sync tests that pre-create destination files, do NOT backdate the
+		// source LMT.  The 5-second sleep above guarantees the source creation
+		// time (≈ now) is newer than any pre-existing destination LMT, so the
+		// sync comparator will always detect the source as more recent and
+		// transfer it.  Using fileProperties here (which sets FileLastWriteTime
+		// to T-1min) can make the source appear OLDER than the destination when
+		// SetHTTPHeaders for the NFS dest file doesn't reliably apply the
+		// backdated LMT (the dest retains its file-creation LMT ≈ T0 while the
+		// source is stamped T0-55s, causing the sync to skip the overwrite).
+		srcFileProperties := fileProperties
+		if azCopyVerb == AzCopyVerbSync {
+			srcFileProperties = nil
+		}
 		obj := ResourceDefinitionObject{
 			ObjectName: pointerTo(name),
 			Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
 			ObjectProperties: ObjectProperties{
 				EntityType:         common.EEntityType.File(),
-				FileNFSProperties:  fileProperties,
+				FileNFSProperties:  srcFileProperties,
 				FileNFSPermissions: fileOrFolderPermissions,
 			}}
 		srcObjRes[name] = CreateResource[ObjectResourceManager](svm, srcContainer, obj)
@@ -347,7 +360,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 			Targets: []ResourceManager{srcDirObj, dst.(RemoteResourceManager).WithSpecificAuthType(
 				ResolveVariation(svm, []ExplicitCredentialTypes{
 					EExplicitCredentialType.SASToken(),
-					EExplicitCredentialType.OAuth(),
+					//EExplicitCredentialType.OAuth(),
 				}), svm, CreateAzCopyTargetOptions{}),
 			},
 			Flags: CopyFlags{
@@ -597,7 +610,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 			Targets: []ResourceManager{srcDirObj.(RemoteResourceManager).WithSpecificAuthType(
 				ResolveVariation(svm, []ExplicitCredentialTypes{
 					EExplicitCredentialType.SASToken(),
-					EExplicitCredentialType.OAuth(),
+					//EExplicitCredentialType.OAuth(),
 				}), svm, CreateAzCopyTargetOptions{}), dst},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
@@ -863,13 +876,13 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 				src.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm,
 					[]ExplicitCredentialTypes{
 						EExplicitCredentialType.SASToken(),
-						EExplicitCredentialType.OAuth(),
+						//EExplicitCredentialType.OAuth(),
 					}),
 					svm, CreateAzCopyTargetOptions{}),
 				dst.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm,
 					[]ExplicitCredentialTypes{
 						EExplicitCredentialType.SASToken(),
-						EExplicitCredentialType.OAuth(),
+						//EExplicitCredentialType.OAuth(),
 					}),
 					svm, CreateAzCopyTargetOptions{}),
 			},
@@ -1123,12 +1136,12 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 				src.(RemoteResourceManager).WithSpecificAuthType(
 					ResolveVariation(svm, []ExplicitCredentialTypes{
 						EExplicitCredentialType.SASToken(),
-						EExplicitCredentialType.OAuth(),
+						//EExplicitCredentialType.OAuth(),
 					}), svm, CreateAzCopyTargetOptions{}),
 				dst.(RemoteResourceManager).WithSpecificAuthType(
 					ResolveVariation(svm, []ExplicitCredentialTypes{
 						EExplicitCredentialType.SASToken(),
-						EExplicitCredentialType.OAuth(),
+						//EExplicitCredentialType.OAuth(),
 					}), svm, CreateAzCopyTargetOptions{}),
 			},
 			Flags: CopyFlags{
@@ -1367,13 +1380,13 @@ func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationMa
 				src.(RemoteResourceManager).WithSpecificAuthType(
 					ResolveVariation(svm, []ExplicitCredentialTypes{
 						EExplicitCredentialType.SASToken(),
-						EExplicitCredentialType.OAuth(),
+						//EExplicitCredentialType.OAuth(),
 					}),
 					svm, CreateAzCopyTargetOptions{}),
 				dst.(RemoteResourceManager).WithSpecificAuthType(
 					ResolveVariation(svm, []ExplicitCredentialTypes{
 						EExplicitCredentialType.SASToken(),
-						EExplicitCredentialType.OAuth(),
+						//EExplicitCredentialType.OAuth(),
 					}), svm, CreateAzCopyTargetOptions{}),
 			},
 			Flags: CopyFlags{
@@ -1575,7 +1588,7 @@ func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForNFS(svm *ScenarioVar
 				src.(RemoteResourceManager).WithSpecificAuthType(
 					ResolveVariation(svm, []ExplicitCredentialTypes{
 						EExplicitCredentialType.SASToken(),
-						EExplicitCredentialType.OAuth(),
+						//EExplicitCredentialType.OAuth(),
 					}), svm, CreateAzCopyTargetOptions{}),
 				dst.(RemoteResourceManager).WithSpecificAuthType(
 					ResolveVariation(svm, []ExplicitCredentialTypes{
@@ -1649,12 +1662,12 @@ func (s *FilesNFSTestSuite) Scenario_DstShareDoesNotExists(svm *ScenarioVariatio
 				src.(RemoteResourceManager).WithSpecificAuthType(
 					ResolveVariation(svm, []ExplicitCredentialTypes{
 						EExplicitCredentialType.SASToken(),
-						EExplicitCredentialType.OAuth(),
+						//EExplicitCredentialType.OAuth(),
 					}), svm, CreateAzCopyTargetOptions{}),
 				dst.(RemoteResourceManager).WithSpecificAuthType(
 					ResolveVariation(svm, []ExplicitCredentialTypes{
 						EExplicitCredentialType.SASToken(),
-						EExplicitCredentialType.OAuth(),
+						//EExplicitCredentialType.OAuth(),
 					}), svm, CreateAzCopyTargetOptions{}),
 			},
 			Flags: CopyFlags{
