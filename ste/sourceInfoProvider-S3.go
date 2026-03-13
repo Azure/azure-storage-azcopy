@@ -27,6 +27,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -63,6 +64,20 @@ func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, err
 	p.s3URLPart, err = common.NewS3URLParts(*p.rawSourceURL)
 	if err != nil {
 		return nil, err
+	}
+
+	fmt.Printf("[S3SourceInfoProvider] Source=%s BucketName=%s ObjectKey=%q Endpoint=%s IsS3Compatible=%v\n",
+		p.transferInfo.Source, p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, p.s3URLPart.Endpoint, p.s3URLPart.IsS3CompatibleEndpoint())
+
+	// For S3-compatible endpoints (e.g. GCS path-style), the ObjectKey may have a
+	// leading "/" after URL parsing which causes a double-slash in minio's path-style
+	// request URL (bucket//objectKey), resulting in 403 errors.
+	if p.s3URLPart.IsS3CompatibleEndpoint() {
+		if strings.HasPrefix(p.s3URLPart.ObjectKey, "/") {
+			fmt.Printf("[S3SourceInfoProvider] TRIMMING leading slash from ObjectKey: %q -> %q\n",
+				p.s3URLPart.ObjectKey, strings.TrimLeft(p.s3URLPart.ObjectKey, "/"))
+		}
+		p.s3URLPart.ObjectKey = strings.TrimLeft(p.s3URLPart.ObjectKey, "/")
 	}
 
 	if p.transferInfo.Provider != nil { //add check for if we want to use provider case
