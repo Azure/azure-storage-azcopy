@@ -55,6 +55,7 @@ type fileTraverser struct {
 	destination                 *common.Location
 	hardlinkHandling            common.HardlinkHandlingType
 	symlinkHandling             common.SymlinkHandlingType
+	inodeStore                  *common.InodeStore
 }
 
 func createShareClientFromServiceClient(fileURLParts file.URLParts, client *service.Client) (*share.Client, error) {
@@ -201,7 +202,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 				NoBlobProps,
 				fileProperties.Metadata,
 				targetURLParts.ShareName,
-				&NFSMetadataContext{},
+				nil,
 			)
 			// NFS handling for different file types
 			// If the source provided is of NFS type we will check for NFSFileType value and process accordingly
@@ -286,13 +287,11 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			if fullProperties.LinkCount() > int64(1) {
 				f.entityType = common.EEntityType.Hardlink()
 				if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() {
-
-					inodeStoreInstance, err := common.GetInodeStore()
-					if err != nil {
-						return nil, err
+					if t.inodeStore == nil {
+						return nil, fmt.Errorf("inode store is not initialized; cannot preserve hardlinks")
 					}
 
-					targetHardlinkFile, _, err = inodeStoreInstance.GetOrAdd(fullProperties.FileID(), relativePath)
+					targetHardlinkFile, _, err = t.inodeStore.GetOrAdd(fullProperties.FileID(), relativePath)
 					if err != nil {
 						return nil, err
 					}
@@ -509,6 +508,7 @@ func NewFileTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		destination:                 opts.DestResourceType,
 		hardlinkHandling:            opts.HardlinkHandling,
 		symlinkHandling:             opts.SymlinkHandling,
+		inodeStore:                  opts.InodeStore,
 	}
 	return
 }

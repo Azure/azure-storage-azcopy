@@ -30,6 +30,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
+	"runtime"
 )
 
 // CopyOptions contains the optional parameters for the Copy operation.
@@ -145,11 +146,6 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (
 	jobID := common.NewJobID()
 	c.CurrentJobID = jobID
 
-	// Initialize the inode store for hardlink tracking with the current job ID
-	if err := common.InitInodeStore(jobID); err != nil {
-		return CopyResult{}, fmt.Errorf("failed to initialize inode store: %w", err)
-	}
-
 	timeAtPrestart := time.Now()
 	common.AzcopyCurrentJobLogger = common.NewJobLogger(jobID, c.GetLogLevel(), common.LogPathFolder, "")
 	common.AzcopyCurrentJobLogger.OpenLog()
@@ -248,9 +244,10 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (
 }
 
 type transferExecutor struct {
-	opts *CookedTransferOptions
-	trp  *remoteProvider
-	tpt  *transferProgressTracker
+	opts       *CookedTransferOptions
+	trp        *remoteProvider
+	tpt        *transferProgressTracker
+	inodeStore *common.InodeStore
 }
 
 func newCopyTransferExecutor(ctx context.Context, jobID common.JobID, src, dst string, opts CopyOptions, uotm *common.UserOAuthTokenManager) (t *transferExecutor, err error) {
@@ -265,7 +262,17 @@ func newCopyTransferExecutor(ctx context.Context, jobID common.JobID, src, dst s
 		return nil, err
 	}
 
+	store, err := common.NewInodeStore(jobID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize inode store: %w", err)
+	}
+	// Ensure that resources held by the inode store are eventually released,
+	// even if callers forget to close it explicitly.
+	runtime.SetFinalizer(store, func(s *common.InodeStore) {
+		_ = s.Close()
+	})
+
 	progressTracker := newTransferProgressTracker(jobID, opts.Handler, cookedOpts.fromTo)
 
-	return &transferExecutor{opts: cookedOpts, trp: copyRemote, tpt: progressTracker}, nil
+	return &transferExecutor{opts: cookedOpts, trp: copyRemote, tpt: progressTracker, inodeStore: store}, nil
 }

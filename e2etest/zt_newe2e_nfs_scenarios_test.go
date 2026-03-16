@@ -108,7 +108,7 @@ func CleanupNFSDirectory(
 	const maxRetries = 3
 	for objName, objProp := range objs {
 		if objProp.EntityType != common.EEntityType.Folder() {
-			for attempt := range maxRetries {
+			for attempt := 0; attempt < maxRetries; attempt++ {
 				container.GetObject(svm, objName, objProp.EntityType).Delete(bea)
 				if !container.GetObject(svm, objName, objProp.EntityType).Exists() {
 					break

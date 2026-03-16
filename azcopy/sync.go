@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"time"
+	"runtime"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
@@ -133,11 +134,6 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 	jobID := common.NewJobID()
 	c.CurrentJobID = jobID
 
-	// Initialize the inode store for hardlink tracking with the current job ID
-	if err := common.InitInodeStore(jobID); err != nil {
-		return SyncResult{}, fmt.Errorf("failed to initialize inode store: %w", err)
-	}
-
 	timeAtPrestart := time.Now()
 	common.AzcopyCurrentJobLogger = common.NewJobLogger(jobID, c.GetLogLevel(), common.LogPathFolder, "")
 	common.AzcopyCurrentJobLogger.OpenLog()
@@ -225,9 +221,20 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 }
 
 type syncer struct {
-	opts *cookedSyncOptions
-	srp  *remoteProvider
-	spt  *syncProgressTracker
+	opts       *cookedSyncOptions
+	srp        *remoteProvider
+	spt        *syncProgressTracker
+	inodeStore *common.InodeStore
+}
+
+// Close releases any resources held by the syncer, including the inode store.
+func (s *syncer) Close() error {
+	if s == nil || s.inodeStore == nil {
+		return nil
+	}
+	err := s.inodeStore.Close()
+	s.inodeStore = nil
+	return err
 }
 
 func newSyncer(ctx context.Context, jobID common.JobID, src, dst string, opts SyncOptions, uotm *common.UserOAuthTokenManager) (s *syncer, err error) {
@@ -240,6 +247,17 @@ func newSyncer(ctx context.Context, jobID common.JobID, src, dst string, opts Sy
 	if err != nil {
 		return nil, err
 	}
+	store, err := common.NewInodeStore(jobID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize inode store: %w", err)
+	}
 	progressTracker := newSyncProgressTracker(jobID, opts.Handler)
-	return &syncer{opts: cookedOpts, srp: syncRemote, spt: progressTracker}, nil
+	sync := &syncer{opts: cookedOpts, srp: syncRemote, spt: progressTracker, inodeStore: store}
+
+	// Ensure that resources are eventually released even if the caller forgets to close the syncer.
+	runtime.SetFinalizer(sync, func(s *syncer) {
+		_ = s.Close()
+	})
+
+	return sync, nil
 }

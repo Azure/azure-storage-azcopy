@@ -367,7 +367,16 @@ func computeDownloadHardlinkTarget(info *TransferInfo, jptm IJobPartTransferMgr)
 
 	// Convert to local path separators and strip from the destination to get the prefix.
 	localFileRelPath := filepath.FromSlash(fileRelPath)
-	destPrefix := strings.TrimSuffix(info.Destination, localFileRelPath)
+
+	// Ensure that the destination path actually ends with the expected relative path.
+	if localFileRelPath != "" && !strings.HasSuffix(info.Destination, localFileRelPath) {
+		return "", fmt.Errorf("destination path %q does not end with expected relative path %q", info.Destination, localFileRelPath)
+	}
+	// Derive the destination prefix by removing the relative path suffix from the destination.
+	destPrefix := info.Destination
+	if localFileRelPath != "" {
+		destPrefix = info.Destination[:len(info.Destination)-len(localFileRelPath)]
+	}
 
 	// Join the prefix with the targetHardlinkFilePath traversal-root-relative path.
 	targetHardlinkFullPath := filepath.Join(destPrefix, filepath.FromSlash(info.TargetHardlinkFilePath))

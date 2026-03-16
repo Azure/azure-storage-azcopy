@@ -149,7 +149,7 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 
 			if validateOptions.validateObjectContent &&
 				(objMan.EntityType() == common.EEntityType.File() ||
-					// Only validate hardlink content when hardlinks aren't folllowed.
+					// Only validate hardlink content when hardlinks aren't followed.
 					// When we follow a hardlink, we are essentially treating it as a copy, so the content should be the same as the source. However,
 					// if we preserve hardlinks, we are treating it as a link.
 					(objMan.EntityType() == common.EEntityType.Hardlink() && validateOptions.hardlinkHandling != common.PreserveHardlinkHandlingType)) &&

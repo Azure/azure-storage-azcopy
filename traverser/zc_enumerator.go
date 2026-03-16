@@ -298,11 +298,14 @@ func NewStoredObject(morpher objectMorpher, name string,
 		Metadata:           meta,
 		ContainerName:      containerName,
 		// Additional lease properties. To be used in listing
-		LeaseStatus:        blobProps.LeaseStatus(),
-		LeaseState:         blobProps.LeaseState(),
-		LeaseDuration:      blobProps.LeaseDuration(),
-		TargetHardlinkFile: nfsOptions.TargetHardlinkFile,
-		Inode:              nfsOptions.Inode,
+		LeaseStatus:   blobProps.LeaseStatus(),
+		LeaseState:    blobProps.LeaseState(),
+		LeaseDuration: blobProps.LeaseDuration(),
+	}
+
+	if nfsOptions != nil {
+		obj.TargetHardlinkFile = nfsOptions.TargetHardlinkFile
+		obj.Inode = nfsOptions.Inode
 	}
 
 	// Folders don't have size, and root ones shouldn't have names in the StoredObject. Ensure those rules are consistently followed
@@ -399,6 +402,10 @@ type InitResourceTraverserOptions struct {
 	FromTo            common.FromTo
 	IncludeRoot       bool
 	BasePath          string // need this base path to derive the rel path for hardlink files to be created
+
+	// InodeStore is the per-job store used to track hardlink relationships.
+	// Must be non-nil when HardlinkHandling == Preserve.
+	InodeStore *common.InodeStore
 }
 
 func (o *InitResourceTraverserOptions) PerformChecks() error {
