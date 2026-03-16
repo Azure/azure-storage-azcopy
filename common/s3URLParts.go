@@ -117,15 +117,13 @@ func findS3URLMatches(host string) (matches []string, isS3Host bool) {
 			if m := matchAWSHost(hostLower, suffix); m != nil {
 				return m, true
 			}
-		}
-	}
-
-	// Fallback: If S3_COMPATIBLE_ENDPOINT is set and we haven't matched yet,
-	// allow any FQDN for on-prem S3-compatible appliances (e.g., MinIO, NetApp, Dell EMC, etc.)
-	// This enables support for custom domains like s3.company.com, minio.internal.net, etc.
-	if os.Getenv("S3_COMPATIBLE_ENDPOINT") != "" {
-		if m := matchCustomS3Host(hostLower); m != nil {
-			return m, true
+			// For custom (non-well-known) suffixes, allow any valid FQDN
+			// for on-prem S3-compatible appliances (e.g., MinIO, NetApp, Dell EMC, etc.)
+			if os.Getenv("S3_COMPATIBLE_ENDPOINT") != "" {
+				if m := matchCustomS3Host(hostLower); m != nil {
+					return m, true
+				}
+			}
 		}
 	}
 
@@ -145,9 +143,10 @@ func matchAWSHost(hostLower, suffix string) []string {
 	return matchSlices
 }
 
-// matchGoogleHost matches Google Cloud Storage endpoints in three forms:
+// matchGoogleHost matches Google Cloud Storage endpoints in four forms:
 //   - Path-style global:    storage.googleapis.com/bucketName
 //   - Path-style regional:  storage.<region>.rep.googleapis.com/bucketName
+//   - Path-style PSC:       storage-<psc_name>.p.googleapis.com/bucketName
 //   - Virtual-hosted style: bucketName.storage.googleapis.com
 //
 // Bucket and object come from the path for path-style, or from the host prefix for virtual-hosted.
@@ -170,7 +169,17 @@ func matchGoogleHost(hostLower, suffix string) []string {
 		}
 	}
 
-	// Case 3: Virtual-hosted style: <bucket>.storage.googleapis.com
+	// Case 3: PSC path-style: storage-<psc_id>.p.googleapis.com
+	// Private Service Connect endpoints use this format with no region.
+	pscSuffix := ".p." + suffix
+	if strings.HasPrefix(hostLower, "storage-") && strings.HasSuffix(hostLower, pscSuffix) {
+		pscID := hostLower[len("storage-") : len(hostLower)-len(pscSuffix)]
+		if pscID != "" {
+			return []string{hostLower, "", "", keyword}
+		}
+	}
+
+	// Case 4: Virtual-hosted style: <bucket>.storage.googleapis.com
 	if strings.HasSuffix(hostLower, "."+globalEndpoint) {
 		bucketWithDot := hostLower[:len(hostLower)-len(globalEndpoint)] // includes trailing "."
 		if bucketWithDot != "" {
