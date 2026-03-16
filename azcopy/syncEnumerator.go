@@ -75,6 +75,7 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 		FromTo:                  s.opts.fromTo,
 		StripTopDir:             !s.opts.includeRoot,
 		IncludeRoot:             s.opts.includeRoot,
+		InodeStore:              s.inodeStore,
 	})
 
 	if err != nil {
@@ -103,6 +104,7 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 		FromTo:                  s.opts.fromTo,
 		StripTopDir:             !s.opts.includeRoot,
 		IncludeRoot:             s.opts.includeRoot,
+		InodeStore:              s.inodeStore,
 	})
 	if err != nil {
 		return nil, err
@@ -262,7 +264,8 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 			s.opts.compareHash,
 			preferSMBTime,
 			s.opts.mirrorMode,
-			hardlinkIndexer)
+			hardlinkIndexer,
+			s.inodeStore)
 		comparator = comparatorInstance.ProcessIfNecessary
 		finalize = func() error {
 

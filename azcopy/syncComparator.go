@@ -85,6 +85,8 @@ type syncDestinationComparator struct {
 	// Used in ProcessPendingHardlinks to check whether a dest anchor path is still a
 	// member of the source inode group, without needing the full nested group map.
 	srcPathToInode map[string]string
+
+	inodeStore *common.InodeStore
 }
 
 func NewSyncDestinationComparator(i *traverser.ObjectIndexer,
@@ -93,14 +95,16 @@ func NewSyncDestinationComparator(i *traverser.ObjectIndexer,
 	comparisonHashType common.SyncHashType,
 	preferSMBTime,
 	disableComparison bool,
-	hardlinkIndexer *traverser.ObjectIndexer) *syncDestinationComparator {
+	hardlinkIndexer *traverser.ObjectIndexer,
+	inodeStore *common.InodeStore) *syncDestinationComparator {
 	return &syncDestinationComparator{sourceIndex: i,
 		copyTransferScheduler:      copyScheduler,
 		destinationCleaner:         cleaner,
 		preferSMBTime:              preferSMBTime,
 		disableComparison:          disableComparison,
 		comparisonHashType:         comparisonHashType,
-		destPendingHardlinkObjects: *hardlinkIndexer}
+		destPendingHardlinkObjects: *hardlinkIndexer,
+		inodeStore:                 inodeStore}
 }
 
 // it will only schedule transfers for destination objects that are present in the indexer but stale compared to the entry in the map
@@ -282,16 +286,15 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 		// Delete using srcKey (the key actually found) so the delete always hits.
 		delete(f.sourceIndex.IndexMap, srcKey)
 
-		inodeStoreInstance, err := common.GetInodeStore()
-		if err != nil {
-			return err
+		if f.inodeStore == nil {
+			return fmt.Errorf("inode store is not initialized; cannot process pending hardlinks")
 		}
 
-		dstAnchorFile, err := inodeStoreInstance.GetAnchor(destHardlinkObj.Inode)
+		dstAnchorFile, err := f.inodeStore.GetAnchor(destHardlinkObj.Inode)
 		if err != nil {
 			return err
 		}
-		srcAnchorFile, _ := inodeStoreInstance.GetAnchor(sourceObjectInMap.Inode)
+		srcAnchorFile, _ := f.inodeStore.GetAnchor(sourceObjectInMap.Inode)
 
 		// Determine whether the hardlink must be recreated.
 		//

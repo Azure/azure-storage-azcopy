@@ -60,6 +60,7 @@ type localTraverser struct {
 	hardlinkHandling  common.HardlinkHandlingType
 	fromTo            common.FromTo
 	basePath          string
+	inodeStore        *common.InodeStore
 }
 
 func (t *localTraverser) IsDirectory(bool) (bool, error) {
@@ -699,14 +700,13 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 				}
 
 				if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() {
-					inodeStoreInstance, err := common.GetInodeStore()
-					if err != nil {
-						return err
+					if t.inodeStore == nil {
+						return fmt.Errorf("inode store is not initialized; cannot preserve hardlinks")
 					}
 
 					// Use just the filename for single-file traversal — matches StoredObject.RelativePath = "".
 					inode := getInodeString(singleFileInfo)
-					targetHardlinkFile, _, err := inodeStoreInstance.GetOrAdd(inode, singleFileInfo.Name())
+					targetHardlinkFile, _, err := t.inodeStore.GetOrAdd(inode, singleFileInfo.Name())
 					if err != nil {
 						return err
 					}
@@ -811,16 +811,15 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 							return nil
 						}
 						if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() {
-							inodeStoreInstance, err := common.GetInodeStore()
-							if err != nil {
-								return err
+							if t.inodeStore == nil {
+								return fmt.Errorf("inode store is not initialized; cannot preserve hardlinks")
 							}
 							// Use the same traversal-root-relative path as StoredObject.RelativePath
 							// so the lexicographic anchor selection is consistent.
 							hlRelPath := strings.TrimPrefix(strings.TrimPrefix(CleanLocalPath(filePath), CleanLocalPath(t.fullPath)), common.DeterminePathSeparator(t.fullPath))
 							hlRelPath = strings.ReplaceAll(hlRelPath, common.DeterminePathSeparator(t.fullPath), common.AZCOPY_PATH_SEPARATOR_STRING)
 							inode := getInodeString(fileInfo)
-							targetHardlinkFile, _, err := inodeStoreInstance.GetOrAdd(inode, hlRelPath)
+							targetHardlinkFile, _, err := t.inodeStore.GetOrAdd(inode, hlRelPath)
 							if err != nil {
 								return err
 							}
@@ -922,13 +921,12 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 							return nil
 						}
 						if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() {
-							inodeStoreInstance, err := common.GetInodeStore()
-							if err != nil {
-								return err
+							if t.inodeStore == nil {
+								return fmt.Errorf("inode store is not initialized; cannot preserve hardlinks")
 							}
 							// Use entry.Name() to match StoredObject.RelativePath for non-recursive walk.
 							inode := getInodeString(fileInfo)
-							targetHardlinkFile, _, err := inodeStoreInstance.GetOrAdd(inode, entry.Name())
+							targetHardlinkFile, _, err := t.inodeStore.GetOrAdd(inode, entry.Name())
 							if err != nil {
 								return err
 							}
@@ -1018,6 +1016,7 @@ func NewLocalTraverser(fullPath string, ctx context.Context, opts InitResourceTr
 		hardlinkHandling:            opts.HardlinkHandling,
 		fromTo:                      opts.FromTo,
 		basePath:                    opts.BasePath,
+		inodeStore:                  opts.InodeStore,
 	}
 	return &traverser, nil
 }
