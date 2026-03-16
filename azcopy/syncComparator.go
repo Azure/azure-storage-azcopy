@@ -252,7 +252,11 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 		if obj.Inode == "" {
 			continue
 		}
-		srcInode := f.srcPathToInode[obj.RelativePath]
+		srcKey := obj.RelativePath
+		if f.sourceIndex.IsDestinationCaseInsensitive {
+			srcKey = strings.ToLower(srcKey)
+		}
+		srcInode := f.srcPathToInode[srcKey]
 		if srcInode == "" {
 			continue // not present in source; will be deleted below
 		}
