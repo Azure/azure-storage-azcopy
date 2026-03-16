@@ -105,6 +105,11 @@ func anyToRemote_hardlink(jptm IJobPartTransferMgr, info *TransferInfo, pacer pa
 	}
 
 	targetHardlinkFullPath := computeUploadHardlinkTarget(info, jptm)
+	if targetHardlinkFullPath == "" {
+		// computeUploadHardlinkTarget has already logged the specific error via jptm.FailActiveSend.
+		// Avoid calling CreateHardlink with an empty path, which could cause a secondary, less-informative failure.
+		return
+	}
 	err = s.CreateHardlink(targetHardlinkFullPath)
 	if err != nil {
 		jptm.FailActiveSend("Creating hardlink", err)
