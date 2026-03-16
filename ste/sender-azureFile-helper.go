@@ -145,7 +145,7 @@ func (u *azureFileSenderBase) addNFSPropertiesToHeaders(info *TransferInfo) (sta
 			return "Obtaining NFS properties", err
 		}
 
-		if info.ShouldTransferLastWriteTime() {
+		if info.ShouldTransferLastWriteTime(u.jptm.FromTo()) {
 			lwTime := nfsProps.FileLastWriteTime()
 			u.nfsPropertiesToApply.LastWriteTime = &lwTime
 		}
@@ -267,7 +267,7 @@ func (u *azureFileSenderBase) addSMBPropertiesToHeaders(info *TransferInfo) (sta
 		attribs, _ := smbProps.FileAttributes()
 		u.smbPropertiesToApply.Attributes = attribs
 
-		if info.ShouldTransferLastWriteTime() {
+		if info.ShouldTransferLastWriteTime(u.jptm.FromTo()) {
 			lwTime := smbProps.FileLastWriteTime()
 			u.smbPropertiesToApply.LastWriteTime = &lwTime
 		}

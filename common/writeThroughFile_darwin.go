@@ -1,3 +1,4 @@
+//go:build linux || darwin
 // +build linux darwin
 
 // Copyright © 2017 Microsoft <wastore@microsoft.com>
@@ -56,4 +57,8 @@ func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int
 func SetBackupMode(enable bool, fromTo FromTo) error {
 	// n/a on this platform
 	return nil
+}
+
+func GetExtendedProperties(path string, entityType EntityType) (ExtendedProperties, error) {
+	return DefaultExtendedProperties{}, nil
 }

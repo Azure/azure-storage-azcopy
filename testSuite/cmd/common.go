@@ -1,16 +1,18 @@
 package cmd
 
 import (
-	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"net/http"
 	"os"
 	"strings"
 
-	"github.com/minio/minio-go"
+	gcpUtils "cloud.google.com/go/storage"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -36,7 +38,11 @@ func createS3ClientWithMinio(o createS3ResOptions) *minio.Client {
 		os.Exit(1)
 	}
 
-	s3Client, err := minio.NewWithRegion("s3.amazonaws.com", accessKeyID, secretAccessKey, true, o.Location)
+	s3Client, err := minio.New("s3.amazonaws.com", &minio.Options{
+		Creds:  credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
+		Secure: true,
+		Region: o.Location,
+	})
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)

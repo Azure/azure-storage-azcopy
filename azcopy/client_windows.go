@@ -22,7 +22,7 @@ package azcopy
 
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/minio/minio-go"
+	"github.com/minio/minio-go/v7"
 	"math"
 	"net/http"
 )
@@ -43,5 +43,8 @@ func processOSSpecificInitialization() (int, error) {
 func init() {
 	//Catch everything that uses http.DefaultTransport with ieproxy.GetProxyFunc()
 	http.DefaultTransport.(*http.Transport).Proxy = common.GlobalProxyLookup
-	minio.DefaultTransport.(*http.Transport).Proxy = common.GlobalProxyLookup
+	transport, err := minio.DefaultTransport(true)
+	if err != nil {
+		transport.Proxy = common.GlobalProxyLookup
+	}
 }

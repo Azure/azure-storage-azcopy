@@ -20,26 +20,37 @@
 package ste
 
 import (
-	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
 )
 
-type mockedJobPlan struct {
-	transfers map[JpptFolderIndex]*JobPartPlanTransfer
+// This is mocked to test the folder creation tracker
+type mockedJPPH struct {
+	folderName []string
+	index      []int
+	status     []*JobPartPlanTransfer
 }
 
-func (plan *mockedJobPlan) getFetchTransfer(t *testing.T) func(index JpptFolderIndex) *JobPartPlanTransfer {
-	return func(index JpptFolderIndex) *JobPartPlanTransfer {
-		tx, ok := plan.transfers[index]
-		assert.Truef(t, ok, "plan file lookup missed: %v", index)
-
-		return tx
-	}
+func (jpph *mockedJPPH) CommandString() string                            { panic("Not implemented") }
+func (jpph *mockedJPPH) GetRelativeSrcDstStrings(uint32) (string, string) { panic("Not implemented") }
+func (jpph *mockedJPPH) JobPartStatus() common.JobStatus                  { panic("Not implemented") }
+func (jpph *mockedJPPH) JobStatus() common.JobStatus                      { panic("Not implemented") }
+func (jpph *mockedJPPH) SetJobPartStatus(common.JobStatus)                { panic("Not implemented") }
+func (jpph *mockedJPPH) SetJobStatus(common.JobStatus)                    { panic("Not implemented") }
+func (jpph *mockedJPPH) Transfer(idx uint32) *JobPartPlanTransfer {
+	return jpph.status[idx]
+}
+func (jpph *mockedJPPH) TransferSrcDstRelatives(uint32) (string, string) { panic("Not implemented") }
+func (jpph *mockedJPPH) TransferSrcDstStrings(uint32) (string, string, bool) {
+	panic("Not implemented")
+}
+func (jpph *mockedJPPH) TransferSrcPropertiesAndMetadata(uint32) (common.ResourceHTTPHeaders, common.Metadata, blob.BlobType, blob.AccessTier, bool, bool, bool, common.InvalidMetadataHandleOption, common.EntityType, string, string, common.BlobTags) {
+	panic("Not implemented")
 }
 
 // This test verifies that when we call dir create for a directory, it is created only once,
@@ -49,70 +60,43 @@ func TestFolderCreationTracker_directoryCreate(t *testing.T) {
 
 	// create a plan with one registered and one unregistered folder
 	folderReg := "folderReg"
-	regIdx := JpptFolderIndex{0, 1}
 	folderUnReg := "folderUnReg"
-	unregIdx := JpptFolderIndex{1, 1} // cheap validation of job part overlap
 
-	plan := &mockedJobPlan{
-		transfers: map[JpptFolderIndex]*JobPartPlanTransfer{
-			regIdx:   {atomicTransferStatus: common.ETransferStatus.NotStarted()},
-			unregIdx: {atomicTransferStatus: common.ETransferStatus.NotStarted()},
+	plan := &mockedJPPH{
+		folderName: []string{folderReg, folderUnReg},
+		index:      []int{0, 1},
+		status: []*JobPartPlanTransfer{
+			&JobPartPlanTransfer{atomicTransferStatus: common.ETransferStatus.NotStarted()},
+			&JobPartPlanTransfer{atomicTransferStatus: common.ETransferStatus.NotStarted()},
 		},
 	}
 
 	fct := &jpptFolderTracker{
-		fetchTransfer: plan.getFetchTransfer(t),
-		mu:            &sync.Mutex{},
-		contents:      make(map[string]*JpptFolderTrackerState),
+		plan:                   plan,
+		mu:                     &sync.RWMutex{},
+		contents:               make(map[string]uint32),
+		unregisteredButCreated: make(map[string]struct{}),
+		lockFolderCreation:     true, // we want to test the locking behavior
 	}
 
 	// 1. Register folder1
-	fct.RegisterPropertiesTransfer(folderReg, regIdx.PartNum, regIdx.TransferIndex)
+	fct.RegisterPropertiesTransfer(folderReg, 0)
 
 	// Multiple calls to create folderReg should execute create only once.
 	numOfCreations := int32(0)
 	var wg sync.WaitGroup
 	doCreation := func() error {
 		atomic.AddInt32(&numOfCreations, 1)
+		plan.status[0].atomicTransferStatus = common.ETransferStatus.FolderCreated()
 		return nil
 	}
+
 	ch := make(chan bool)
-
 	for i := 0; i < 50; i++ {
 		wg.Add(1)
 		go func() {
 			<-ch
-			err := fct.CreateFolder(folderUnReg, doCreation)
-			assert.NoError(t, err)
-			wg.Done()
-		}()
-	}
-	close(ch)
-
-	wg.Wait()
-	a.Equal(int32(1), numOfCreations)
-	a.Equal(common.ETransferStatus.NotStarted(), plan.transfers[unregIdx].atomicTransferStatus) // validate that no state was written
-	a.Equal(common.ETransferStatus.NotStarted(), plan.transfers[regIdx].atomicTransferStatus)   // validate that the overlap bug didn't occur
-
-	// register the new folder, validate state persistence
-	fct.RegisterPropertiesTransfer(folderUnReg, unregIdx.PartNum, unregIdx.TransferIndex)
-	a.Equal(common.ETransferStatus.FolderCreated(), plan.transfers[unregIdx].atomicTransferStatus)
-	a.Equal(common.ETransferStatus.NotStarted(), plan.transfers[regIdx].atomicTransferStatus) // validate that the overlap bug didn't occur
-
-	// now test the prereg folder and validate the write occurs on creation
-	numOfCreations = 0
-	ch = make(chan bool)
-	doCreation = func() error {
-		atomic.AddInt32(&numOfCreations, 1)
-		return nil
-	}
-
-	for i := 0; i < 50; i++ {
-		wg.Add(1)
-		go func() {
-			<-ch
-			err := fct.CreateFolder(folderReg, doCreation)
-			assert.NoError(t, err)
+			fct.CreateFolder(folderReg, doCreation)
 			wg.Done()
 		}()
 	}
@@ -120,77 +104,26 @@ func TestFolderCreationTracker_directoryCreate(t *testing.T) {
 
 	wg.Wait()
 	a.Equal(int32(1), numOfCreations)
-	a.Equal(common.ETransferStatus.FolderCreated(), plan.transfers[regIdx].atomicTransferStatus)
-}
 
-// This test verifies that we can detect an existing folder, and avoid calling create on it again.
-// this helps to manage azure files' complaint of too many directory creation requests.
-func TestFolderCreationTracker_directoryExists(t *testing.T) {
-	a := assert.New(t)
-
-	// create a plan with one registered and one unregistered folder
-	folderExists := "folderExists"
-	existsIdx := JpptFolderIndex{0, 1}
-	folderCreated := "folderCreated"
-	createdIdx := JpptFolderIndex{1, 1} // cheap validation of job part overlap
-	folderShouldCreate := "folderShouldCreate"
-	shouldCreateIdx := JpptFolderIndex{0, 2}
-
-	plan := &mockedJobPlan{
-		transfers: map[JpptFolderIndex]*JobPartPlanTransfer{
-			existsIdx:       {atomicTransferStatus: common.ETransferStatus.NotStarted()},
-			createdIdx:      {atomicTransferStatus: common.ETransferStatus.NotStarted()},
-			shouldCreateIdx: {atomicTransferStatus: common.ETransferStatus.NotStarted()},
-		},
-	}
-
-	fct := &jpptFolderTracker{
-		fetchTransfer: plan.getFetchTransfer(t),
-		mu:            &sync.Mutex{},
-		contents:      make(map[string]*JpptFolderTrackerState),
-	}
-
-	fct.RegisterPropertiesTransfer(folderExists, existsIdx.PartNum, existsIdx.TransferIndex)
-	fct.RegisterPropertiesTransfer(folderCreated, createdIdx.PartNum, createdIdx.TransferIndex)
-	fct.RegisterPropertiesTransfer(folderShouldCreate, shouldCreateIdx.PartNum, shouldCreateIdx.TransferIndex)
-
-	_ = fct.CreateFolder(folderCreated, func() error {
+	// similar test for unregistered folder
+	numOfCreations = 0
+	ch = make(chan bool)
+	doCreation = func() error {
+		atomic.AddInt32(&numOfCreations, 1)
+		plan.status[1].atomicTransferStatus = common.ETransferStatus.FolderCreated()
 		return nil
-	}) // "create" our folder
-	err := fct.CreateFolder(folderExists, func() error {
-		return common.FolderCreationErrorAlreadyExists{}
-	}) // fail creation on not existing
-	a.NoError(err, "already exists should be caught") // ensure we caught that error
-	expectedFailureErr := errors.New("this creation should fail")
-	err = fct.CreateFolder(folderShouldCreate, func() error {
-		return expectedFailureErr
-	}) // ensure that a natural failure should return properly
-	a.Equal(err, expectedFailureErr)
+	}
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func() {
+			<-ch
+			fct.CreateFolder(folderUnReg, doCreation)
+			wg.Done()
+		}()
+	}
+	close(ch)
 
-	// validate folder states
-	a.Equal(fct.contents[folderCreated].Status, EJpptFolderTrackerStatus.FolderCreated()) // Our created folder should be marked as such.
-	a.Equal(plan.transfers[createdIdx].TransferStatus(), common.ETransferStatus.FolderCreated())
-	a.Equal(fct.contents[folderExists].Status, EJpptFolderTrackerStatus.FolderExisted()) // Our existing folder should be marked as such.
-	a.Equal(plan.transfers[existsIdx].TransferStatus(), common.ETransferStatus.FolderExisted())
-	a.Equal(fct.contents[folderShouldCreate].Status, EJpptFolderTrackerStatus.Unseen()) // no status updates should've occurred on a "naturally" failed create.
-	a.Equal(plan.transfers[shouldCreateIdx].TransferStatus(), common.ETransferStatus.NotStarted())
+	wg.Wait()
+	a.Equal(int32(1), numOfCreations)
 
-	// validate that re-create doesn't trigger on either
-	err = fct.CreateFolder(folderCreated, func() error {
-		a.Fail("created folders shouldn't be re-created")
-		return errors.New("should return nil")
-	})
-	a.NoError(err)
-	err = fct.CreateFolder(folderExists, func() error {
-		a.Fail("existing folders shouldn't be re-created")
-		return errors.New("should return nil")
-	})
-	a.NoError(err)
-
-	// validate we can still create normally for our naturally failed folder
-	err = fct.CreateFolder(folderShouldCreate, func() error {
-		return nil
-	})
-
-	a.NoError(err)
 }

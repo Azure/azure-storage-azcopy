@@ -74,7 +74,7 @@ func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
 	// Get the file name for this Job Part's Plan
 	jppfn := JobsAdmin.NewJobPartPlanFileName(order.JobID, order.PartNum)
 	jppfn.Create(order)                                                                                         // Convert the order to a plan file
-	jm := JobsAdmin.JobMgrEnsureExists(order.JobID, order.LogLevel, order.CommandString, order.JobErrorHandler) // Get a this job part's job manager (create it if it doesn't exist)
+	jm := JobsAdmin.JobMgrEnsureExists(order.JobID, order.LogLevel, order.CommandString, nil) // Get a this job part's job manager (create it if it doesn't exist)
 
 	if len(order.Transfers.List) == 0 && order.IsFinalPart {
 		/*
@@ -142,7 +142,7 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus, 
 func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeResponse {
 	// Always search the plan files in Azcopy folder,
 	// and resurrect the Job with provided credentials, to ensure SAS and etc get updated.
-	if !JobsAdmin.ResurrectJob(req.JobID, req.SrcServiceClient, req.DstServiceClient, false, req.JobErrorHandler) {
+	if !JobsAdmin.ResurrectJob(req.JobID, req.SrcServiceClient, req.DstServiceClient, false, nil) {
 		return common.CancelPauseResumeResponse{
 			CancelledPauseResumed: false,
 			ErrorMsg:              fmt.Sprintf("no job with JobId %v exists", req.JobID),

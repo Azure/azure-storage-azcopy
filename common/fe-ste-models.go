@@ -1782,7 +1782,7 @@ func (options CpkOptions) GetCPKInfo() (*blob.CPKInfo, error) {
 	if !options.IsSourceEncrypted {
 		return nil, nil
 	} else {
-		return GetCpkInfo(options.CpkInfo)
+		return GetCpkInfo(options.CpkInfo), nil
 	}
 }
 

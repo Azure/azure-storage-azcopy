@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/google/uuid"
@@ -52,8 +52,8 @@ func (l *LocalContainerResourceManager) Location() common.Location {
 	return common.ELocation.Local()
 }
 
-func (l *LocalContainerResourceManager) Level() azcopy.LocationLevel {
-	return azcopy.ELocationLevel.Container()
+func (l *LocalContainerResourceManager) Level() cmd.LocationLevel {
+	return cmd.ELocationLevel.Container()
 }
 
 func (l *LocalContainerResourceManager) URI(o ...GetURIOptions) string {
@@ -244,8 +244,8 @@ func (l *LocalObjectResourceManager) Location() common.Location {
 	return common.ELocation.Local()
 }
 
-func (l *LocalObjectResourceManager) Level() azcopy.LocationLevel {
-	return azcopy.ELocationLevel.Object()
+func (l *LocalObjectResourceManager) Level() cmd.LocationLevel {
+	return cmd.ELocationLevel.Object()
 }
 
 func (l *LocalObjectResourceManager) URI(o ...GetURIOptions) string {
@@ -291,10 +291,10 @@ func (l *LocalObjectResourceManager) CreateParents(a Asserter) {
 
 func (l *LocalObjectResourceManager) Create(a Asserter, body ObjectContentContainer, properties ObjectProperties) {
 	a.HelperMarker().Helper()
+	a.AssertNow("Object must be file to have content", Equal{})
 	if properties.EntityType != l.entityType {
 		l.entityType = properties.EntityType
 	}
-
 	l.CreateParents(a)
 
 	if l.entityType == common.EEntityType.File() {
@@ -305,13 +305,13 @@ func (l *LocalObjectResourceManager) Create(a Asserter, body ObjectContentContai
 			a.NoError("Close file", err)
 		}(f)
 
-		if body != nil {
-			_, err = io.Copy(f, body.Reader())
-			a.NoError("Write file", err)
-		}
+		_, err = io.Copy(f, body.Reader())
+		a.NoError("Write file", err)
 	} else if l.entityType == common.EEntityType.Folder() {
 		err := os.Mkdir(l.getWorkingPath(), 0775)
-		a.NoError("Mkdir", err)
+		if !os.IsExist(err) {
+			a.NoError("Mkdir", err)
+		}
 	} else if l.entityType == common.EEntityType.Symlink() {
 		err := os.Symlink(filepath.Join(l.container.RootPath, properties.SymlinkedFileName), l.getWorkingPath())
 		a.NoError("Create Symlink", err)
@@ -358,22 +358,11 @@ func (l *LocalObjectResourceManager) ListChildren(a Asserter, recursive bool) ma
 
 func (l *LocalObjectResourceManager) GetProperties(a Asserter) ObjectProperties {
 	a.HelperMarker().Helper()
-	var stats fs.FileInfo
-	var err error
-	if l.entityType == common.EEntityType.Symlink() {
-		stats, err = os.Lstat(l.getWorkingPath())
-		if err != nil { // Prevent nil dereferences
-			a.NoError("failed to get stat", err)
-			return ObjectProperties{}
-		}
-	} else {
-		stats, err = os.Stat(l.getWorkingPath())
-		if err != nil { // Prevent nil dereferences
-			a.NoError("failed to get stat", err)
-			return ObjectProperties{}
-		}
+	stats, err := os.Stat(l.getWorkingPath())
+	if err != nil { // Prevent nil dereferences
+		a.NoError("failed to get stat", err)
+		return ObjectProperties{}
 	}
-
 	lmt := common.Iff(stats == nil, nil, PtrOf(stats.ModTime()))
 	out := ObjectProperties{
 		LastModifiedTime: lmt,
@@ -458,14 +447,14 @@ func (l *LocalObjectResourceManager) Download(a Asserter) io.ReadSeeker {
 	return bytes.NewReader(buf.Bytes())
 }
 
+func (l *LocalObjectResourceManager) Exists() bool {
+	_, err := os.Stat(l.getWorkingPath())
+	return err == nil
+}
+
 func (l *LocalObjectResourceManager) ReadLink(a Asserter) string {
 	out, err := os.Readlink(l.getWorkingPath())
 	a.NoError("ReadLink", err)
 
 	return out
-}
-
-func (l *LocalObjectResourceManager) Exists() bool {
-	_, err := os.Stat(l.getWorkingPath())
-	return err == nil
 }

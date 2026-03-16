@@ -99,6 +99,17 @@ func (p *tokenBucketPacer) RequestTrafficAllocation(ctx context.Context, byteCou
 		return nil
 	}
 
+	// Wait until p.targetBytesPerSecond() is positive or zero
+	// A negative value indicates the pacer is temporarily disabled/throttled
+	// Prevents token allocation errors and CPU waste from busy-waiting on invalid targets
+	for p.targetBytesPerSecond() < 0 {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Second * 5): // sleep for five seconds
+		}
+	}
+
 	if targetBytes < byteCount {
 		return errors.New("request size greater than pacer target. ensure --block-size-mb is smaller than --cap-mbps and retry the transfer")
 	}

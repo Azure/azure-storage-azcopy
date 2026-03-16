@@ -19,9 +19,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
-	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
-	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -31,11 +30,10 @@ type BucketToContainerNameResolver interface {
 	ResolveName(bucketName string) (string, error)
 }
 
-func (cca *CookedCopyCmdArgs) validateSourceDir(traverser traverser.ResourceTraverser) error {
+func (cca *CookedCopyCmdArgs) validateSourceDir(traverser ResourceTraverser) error {
 	var err error
 	// Ensure we're only copying a directory under valid conditions
 	cca.IsSourceDir, err = traverser.IsDirectory(true)
-
 	if cca.IsSourceDir &&
 		!cca.Recursive && // Copies the folder & everything under it
 		!cca.StripTopDir { // Copies only everything under it
@@ -49,8 +47,8 @@ func (cca *CookedCopyCmdArgs) validateSourceDir(traverser traverser.ResourceTrav
 	return nil
 }
 
-func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrderRequest, srcCredInfo common.CredentialInfo, ctx context.Context) (*traverser.CopyEnumerator, error) {
-	var t traverser.ResourceTraverser
+func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrderRequest, srcCredInfo common.CredentialInfo, ctx context.Context) (*CopyEnumerator, error) {
+	var traverser ResourceTraverser
 	var err error
 	jobPartOrder.FileAttributes = common.FileTransferAttributes{
 		TrailingDot: cca.trailingDot,
@@ -60,7 +58,6 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	jobPartOrder.PreserveInfo = cca.preserveInfo
 	// We set preservePOSIXProperties if the customer has explicitly asked for this in transfer or if it is just a Posix-property only transfer
 	jobPartOrder.PreservePOSIXProperties = cca.preservePOSIXProperties || (cca.ForceWrite == common.EOverwriteOption.PosixProperties())
-	jobPartOrder.PosixPropertiesStyle = cca.posixPropertiesStyle
 
 	// Infer on download so that we get LMT and MD5 on files download
 	// On S2S transfers the following rules apply:
@@ -78,11 +75,10 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	jobPartOrder.S2SPreserveBlobTags = cca.S2sPreserveBlobTags
 
 	dest := cca.FromTo.To()
-	t, err = traverser.InitResourceTraverser(cca.Source, cca.FromTo.From(), ctx, traverser.InitResourceTraverserOptions{
+	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), ctx, InitResourceTraverserOptions{
 		DestResourceType: &dest,
 
-		Client:         jobPartOrder.SrcServiceClient,
-		CredentialType: srcCredInfo.CredentialType,
+		Credential: &srcCredInfo,
 
 		ListOfFiles:      cca.ListOfFilesChannel,
 		ListOfVersionIDs: cca.ListOfVersionIDsChannel,
@@ -100,24 +96,19 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		IncludeDirectoryStubs:   cca.IncludeDirectoryStubs,
 		PreserveBlobTags:        cca.S2sPreserveBlobTags,
 		StripTopDir:             cca.StripTopDir,
-		HardlinkHandling:        cca.hardlinks,
-		FromTo:                  cca.FromTo,
 
 		ExcludeContainers: cca.excludeContainer,
-		IncrementEnumeration: func(entityType common.EntityType, symlinkOption common.SymlinkHandlingType, hardlinkHandling common.HardlinkHandlingType) {
-			if cca.FromTo.IsNFS() {
+		IncrementEnumeration: func(entityType common.EntityType) {
+			if common.IsNFSCopy() {
 				if entityType == common.EEntityType.Other() {
 					atomic.AddUint32(&cca.atomicSkippedSpecialFileCount, 1)
 				} else if entityType == common.EEntityType.Symlink() {
-					switch symlinkOption {
-					case common.ESymlinkHandlingType.Skip():
-						atomic.AddUint32(&cca.atomicSkippedSymlinkCount, 1)
-					}
-				} else if entityType == common.EEntityType.Hardlink() {
-					switch hardlinkHandling {
-					case common.SkipHardlinkHandlingType:
-						atomic.AddUint32(&cca.atomicSkippedHardlinkCount, 1)
-					}
+					atomic.AddUint32(&cca.atomicSkippedSymlinkCount, 1)
+				}
+			} else if cca.FromTo.From() == common.ELocation.S3() {
+				// Track skipped S3 objects (e.g., Archive/Glacier storage class objects)
+				if entityType == common.EEntityType.Other() {
+					atomic.AddUint64(&cca.atomicSkippedArchiveFileCount, 1)
 				}
 			}
 		},
@@ -127,23 +118,23 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		return nil, err
 	}
 
-	err = cca.validateSourceDir(t)
+	err = cca.validateSourceDir(traverser)
 	if err != nil {
 		return nil, err
 	}
 
 	// Check if the destination is a directory to correctly decide where our files land
-	isDestDir := cca.isDestDirectory(cca.Destination, jobPartOrder, ctx)
+	isDestDir := cca.isDestDirectory(cca.Destination, ctx)
 	if cca.ListOfVersionIDsChannel != nil && (!(cca.FromTo == common.EFromTo.BlobLocal() || cca.FromTo == common.EFromTo.BlobTrash()) || cca.IsSourceDir || !isDestDir) {
 		log.Fatalf("Either source is not a blob or destination is not a local folder")
 	}
-	srcLevel, err := azcopy.DetermineLocationLevel(cca.Source.Value, cca.FromTo.From(), true)
+	srcLevel, err := DetermineLocationLevel(cca.Source.Value, cca.FromTo.From(), true)
 
 	if err != nil {
 		return nil, err
 	}
 
-	dstLevel, err := azcopy.DetermineLocationLevel(cca.Destination.Value, cca.FromTo.To(), false)
+	dstLevel, err := DetermineLocationLevel(cca.Destination.Value, cca.FromTo.To(), false)
 
 	if err != nil {
 		return nil, err
@@ -155,20 +146,20 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	//       1) Account name doesn't get trimmed from the path
 	//       2) List-of-files is not considered an account traverser; therefore containers don't get made.
 	//       Resolve these two issues and service-level list-of-files/include-path will work
-	if cca.ListOfFilesChannel != nil && srcLevel == azcopy.ELocationLevel.Service() {
+	if cca.ListOfFilesChannel != nil && srcLevel == ELocationLevel.Service() {
 		return nil, errors.New("cannot combine list-of-files or include-path with account traversal")
 	}
 
-	if (srcLevel == azcopy.ELocationLevel.Object() || cca.FromTo.From().IsLocal()) && dstLevel == azcopy.ELocationLevel.Service() {
+	if (srcLevel == ELocationLevel.Object() || cca.FromTo.From().IsLocal()) && dstLevel == ELocationLevel.Service() {
 		return nil, errors.New("cannot transfer individual files/folders to the root of a service. Add a container or directory to the destination URL")
 	}
 
-	if srcLevel == azcopy.ELocationLevel.Container() && dstLevel == azcopy.ELocationLevel.Service() && !cca.asSubdir {
+	if srcLevel == ELocationLevel.Container() && dstLevel == ELocationLevel.Service() && !cca.asSubdir {
 		return nil, errors.New("cannot use --as-subdir=false with a service level destination")
 	}
 
 	// When copying a container directly to a container, strip the top directory, unless we're attempting to persist permissions.
-	if srcLevel == azcopy.ELocationLevel.Container() && dstLevel == azcopy.ELocationLevel.Container() && cca.FromTo.From().IsRemote() && cca.FromTo.To().IsRemote() {
+	if srcLevel == ELocationLevel.Container() && dstLevel == ELocationLevel.Container() && cca.FromTo.From().IsRemote() && cca.FromTo.To().IsRemote() {
 		if cca.preservePermissions.IsTruthy() {
 			// if we're preserving permissions, we need to keep the top directory, but with container->container, we don't need to add the container name to the path.
 			// asSubdir is a better option than stripTopDir as stripTopDir disincludes the root.
@@ -181,9 +172,9 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	// Create a Remote resource resolver
 	// Giving it nothing to work with as new names will be added as we traverse.
 	var containerResolver BucketToContainerNameResolver
-	containerResolver = azcopy.NewS3BucketNameToAzureResourcesResolver(nil)
+	containerResolver = NewS3BucketNameToAzureResourcesResolver(nil)
 	if cca.FromTo == common.EFromTo.GCPBlob() {
-		containerResolver = azcopy.NewGCPBucketNameToAzureResourcesResolver(nil)
+		containerResolver = NewGCPBucketNameToAzureResourcesResolver(nil)
 	}
 	existingContainers := make(map[string]bool)
 	var logDstContainerCreateFailureOnce sync.Once
@@ -192,7 +183,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	dstContainerName := ""
 	// Extract the existing destination container name
 	if cca.FromTo.To().IsRemote() {
-		dstContainerName, err = azcopy.GetContainerName(cca.Destination.Value, cca.FromTo.To())
+		dstContainerName, err = GetContainerName(cca.Destination.Value, cca.FromTo.To())
 
 		if err != nil {
 			return nil, err
@@ -214,8 +205,8 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				seenFailedContainers[dstContainerName] = true
 			}
 		} else if cca.FromTo.From().IsRemote() { // if the destination has implicit container names
-			if acctTraverser, ok := t.(traverser.AccountTraverser); ok && dstLevel == azcopy.ELocationLevel.Service() {
-				containers, err := acctTraverser.ListContainers()
+			if acctTraverser, ok := traverser.(AccountTraverser); ok && dstLevel == ELocationLevel.Service() {
+				containers, err := acctTraverser.listContainers()
 
 				if err != nil {
 					return nil, fmt.Errorf("failed to list containers: %w", err)
@@ -224,9 +215,9 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				// Resolve all container names up front.
 				// If we were to resolve on-the-fly, then name order would affect the results inconsistently.
 				if cca.FromTo == common.EFromTo.S3Blob() {
-					containerResolver = azcopy.NewS3BucketNameToAzureResourcesResolver(containers)
+					containerResolver = NewS3BucketNameToAzureResourcesResolver(containers)
 				} else if cca.FromTo == common.EFromTo.GCPBlob() {
-					containerResolver = azcopy.NewGCPBucketNameToAzureResourcesResolver(containers)
+					containerResolver = NewGCPBucketNameToAzureResourcesResolver(containers)
 				}
 
 				for _, v := range containers {
@@ -241,7 +232,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					// For file share,if the share does not exist, azcopy will fail, prompting the customer to create
 					// the share manually with the required quota and settings.
 					if fileerror.HasCode(err, fileerror.ShareNotFound) {
-						return nil, fmt.Errorf("%s Destination file share: %s", azcopy.DstShareDoesNotExists, dstContainerName)
+						return nil, fmt.Errorf("%s Destination file share: %s", DstShareDoesNotExists, dstContainerName)
 					}
 
 					// if JobsAdmin is nil, we're probably in testing mode.
@@ -257,7 +248,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					}
 				}
 			} else {
-				cName, err := azcopy.GetContainerName(cca.Source.Value, cca.FromTo.From())
+				cName, err := GetContainerName(cca.Source.Value, cca.FromTo.From())
 
 				if err != nil || cName == "" {
 					// this will probably never be reached
@@ -290,25 +281,24 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// decide our folder transfer strategy
 	var message string
-	jobPartOrder.Fpo, message = azcopy.NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, cca.preserveInfo,
-		cca.preservePermissions.IsTruthy(), cca.preservePOSIXProperties, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.IncludeDirectoryStubs)
+	jobPartOrder.Fpo, message = NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, cca.preserveInfo, cca.preservePermissions.IsTruthy(), cca.preservePOSIXProperties, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.IncludeDirectoryStubs)
 	if !cca.dryrunMode {
 		glcm.Info(message)
 	}
 	common.LogToJobLogWithPrefix(message, common.LogInfo)
 
-	processor := func(object traverser.StoredObject) error {
+	processor := func(object StoredObject) error {
 		// Start by resolving the name and creating the container
 		if object.ContainerName != "" {
 			// set up the destination container name.
 			cName := dstContainerName
 			// if a destination container name is not specified OR copying service to container/folder, append the src container name.
-			if cName == "" || (srcLevel == azcopy.ELocationLevel.Service() && dstLevel > azcopy.ELocationLevel.Service()) {
+			if cName == "" || (srcLevel == ELocationLevel.Service() && dstLevel > ELocationLevel.Service()) {
 				cName, err = containerResolver.ResolveName(object.ContainerName)
 
 				if err != nil {
 					if _, ok := seenFailedContainers[object.ContainerName]; !ok {
-						traverser.WarnStdoutAndScanningLog(fmt.Sprintf("failed to add transfers from container %s as it has an invalid name. Please manually transfer from this container to one with a valid name.", object.ContainerName))
+						WarnStdoutAndScanningLog(fmt.Sprintf("failed to add transfers from container %s as it has an invalid name. Please manually transfer from this container to one with a valid name.", object.ContainerName))
 						seenFailedContainers[object.ContainerName] = true
 					}
 					return nil
@@ -319,17 +309,17 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		}
 
 		// If above the service level, we already know the container name and don't need to supply it to makeEscapedRelativePath
-		if srcLevel != azcopy.ELocationLevel.Service() {
+		if srcLevel != ELocationLevel.Service() {
 			object.ContainerName = ""
 
 			// When copying directly TO a container or object from a container, don't drop under a sub directory
-			if dstLevel >= azcopy.ELocationLevel.Container() {
+			if dstLevel >= ELocationLevel.Container() {
 				object.DstContainerName = ""
 			}
 		}
 
-		srcRelPath := cca.MakeEscapedRelativePath(true, isDestDir, object)
-		dstRelPath := cca.MakeEscapedRelativePath(false, isDestDir, object)
+		srcRelPath := cca.MakeEscapedRelativePath(true, isDestDir, cca.asSubdir, object)
+		dstRelPath := cca.MakeEscapedRelativePath(false, isDestDir, cca.asSubdir, object)
 
 		transfer, shouldSendToSte := object.ToNewCopyTransfer(cca.autoDecompress && cca.FromTo.IsDownload(), srcRelPath, dstRelPath, cca.s2sPreserveAccessTier.Value(), jobPartOrder.Fpo, cca.SymlinkHandling, cca.hardlinks)
 		if !cca.S2sPreserveBlobTags {
@@ -337,12 +327,12 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		}
 
 		if cca.dryrunMode && shouldSendToSte {
-			glcm.Dryrun(func(format OutputFormat) string {
+			glcm.Dryrun(func(format common.OutputFormat) string {
 				src := common.GenerateFullPath(cca.Source.Value, srcRelPath)
 				dst := common.GenerateFullPath(cca.Destination.Value, dstRelPath)
 
 				switch format {
-				case EOutputFormat.Json():
+				case common.EOutputFormat.Json():
 					tx := DryrunTransfer{
 						EntityType:  transfer.EntityType,
 						BlobType:    common.FromBlobType(transfer.BlobType),
@@ -384,12 +374,12 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		return dispatchFinalPart(&jobPartOrder, cca)
 	}
 
-	return traverser.NewCopyEnumerator(t, filters, processor, finalizer), nil
+	return NewCopyEnumerator(traverser, filters, processor, finalizer), nil
 }
 
 // This is condensed down into an individual function as we don't end up reusing the destination traverser at all.
 // This is just for the directory check.
-func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, jobPartOrder common.CopyJobPartOrderRequest, ctx context.Context) bool {
+func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx context.Context) bool {
 	var err error
 	dstCredInfo := common.CredentialInfo{}
 
@@ -401,9 +391,8 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, jobPart
 		return false
 	}
 
-	rt, err := traverser.InitResourceTraverser(dst, cca.FromTo.To(), ctx, traverser.InitResourceTraverserOptions{
-		CredentialType: dstCredInfo.CredentialType,
-		Client:         jobPartOrder.DstServiceClient,
+	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, InitResourceTraverserOptions{
+		Credential: &dstCredInfo,
 
 		ListOfVersionIDs: cca.ListOfVersionIDsChannel,
 
@@ -414,7 +403,6 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, jobPart
 
 		ExcludeContainers: cca.excludeContainer,
 		HardlinkHandling:  cca.hardlinks,
-		FromTo:            cca.FromTo,
 	})
 
 	if err != nil {
@@ -426,28 +414,43 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, jobPart
 }
 
 // Initialize the modular filters outside of copy to increase readability.
-func (cca *CookedCopyCmdArgs) InitModularFilters() []traverser.ObjectFilter {
-	filters := make([]traverser.ObjectFilter, 0) // same as []ObjectFilter{} under the hood
+func (cca *CookedCopyCmdArgs) InitModularFilters() []ObjectFilter {
+	filters := make([]ObjectFilter, 0) // same as []ObjectFilter{} under the hood
 
 	if cca.IncludeBefore != nil {
-		filters = append(filters, &traverser.IncludeBeforeDateFilter{Threshold: *cca.IncludeBefore})
+		filters = append(filters, &IncludeBeforeDateFilter{Threshold: *cca.IncludeBefore})
 	}
 
 	if cca.IncludeAfter != nil {
-		filters = append(filters, &traverser.IncludeAfterDateFilter{Threshold: *cca.IncludeAfter})
+		filters = append(filters, &IncludeAfterDateFilter{Threshold: *cca.IncludeAfter})
 	}
 
-	filters = append(filters, traverser.BuildIncludeFilters(cca.IncludePatterns)...)
+	if len(cca.IncludePatterns) != 0 {
+		filters = append(filters, &IncludeFilter{patterns: cca.IncludePatterns}) // TODO should this call buildIncludeFilters?
+	}
 
-	filters = append(filters, traverser.BuildExcludeFilters(cca.ExcludePatterns, false)...)
+	if len(cca.ExcludePatterns) != 0 {
+		for _, v := range cca.ExcludePatterns {
+			filters = append(filters, &excludeFilter{pattern: v})
+		}
+	}
 
 	// include-path is not a filter, therefore it does not get handled here.
 	// Check up in cook() around the list-of-files implementation as include-path gets included in the same way.
 
-	filters = append(filters, traverser.BuildExcludeFilters(cca.ExcludePathPatterns, true)...)
+	if len(cca.ExcludePathPatterns) != 0 {
+		for _, v := range cca.ExcludePathPatterns {
+			filters = append(filters, &excludeFilter{pattern: v, targetsPath: true})
+		}
+	}
 
-	filters = append(filters, traverser.BuildRegexFilters(cca.includeRegex, true)...)
-	filters = append(filters, traverser.BuildRegexFilters(cca.excludeRegex, false)...)
+	if len(cca.includeRegex) != 0 {
+		filters = append(filters, &regexFilter{patterns: cca.includeRegex, isIncluded: true})
+	}
+
+	if len(cca.excludeRegex) != 0 {
+		filters = append(filters, &regexFilter{patterns: cca.excludeRegex, isIncluded: false})
+	}
 
 	if len(cca.excludeBlobType) != 0 {
 		excludeSet := map[blob.BlobType]bool{}
@@ -456,30 +459,29 @@ func (cca *CookedCopyCmdArgs) InitModularFilters() []traverser.ObjectFilter {
 			excludeSet[v] = true
 		}
 
-		filters = append(filters, &traverser.ExcludeBlobTypeFilter{BlobTypes: excludeSet})
+		filters = append(filters, &excludeBlobTypeFilter{blobTypes: excludeSet})
 	}
 
 	if len(cca.IncludeFileAttributes) != 0 {
-		filters = append(filters, traverser.BuildAttrFilters(cca.IncludeFileAttributes, cca.Source.ValueLocal(), true)...)
+		filters = append(filters, buildAttrFilters(cca.IncludeFileAttributes, cca.Source.ValueLocal(), true)...)
 	}
 
 	if len(cca.ExcludeFileAttributes) != 0 {
-		filters = append(filters, traverser.BuildAttrFilters(cca.ExcludeFileAttributes, cca.Source.ValueLocal(), false)...)
+		filters = append(filters, buildAttrFilters(cca.ExcludeFileAttributes, cca.Source.ValueLocal(), false)...)
 	}
 
 	// finally, log any search prefix computed from these
-	if prefixFilter := traverser.FilterSet(filters).GetEnumerationPreFilter(cca.Recursive); prefixFilter != "" {
+	if prefixFilter := FilterSet(filters).GetEnumerationPreFilter(cca.Recursive); prefixFilter != "" {
 		common.LogToJobLogWithPrefix("Search prefix, which may be used to optimize scanning, is: "+prefixFilter, common.LogInfo) // "May be used" because we don't know here which enumerators will use it
 	}
 
-	// remove specific
 	switch cca.permanentDeleteOption {
 	case common.EPermanentDeleteOption.Snapshots():
-		filters = append(filters, &traverser.PermDeleteFilter{DeleteSnapshots: true})
+		filters = append(filters, &permDeleteFilter{deleteSnapshots: true})
 	case common.EPermanentDeleteOption.Versions():
-		filters = append(filters, &traverser.PermDeleteFilter{DeleteVersions: true})
+		filters = append(filters, &permDeleteFilter{deleteVersions: true})
 	case common.EPermanentDeleteOption.SnapshotsAndVersions():
-		filters = append(filters, &traverser.PermDeleteFilter{DeleteSnapshots: true, DeleteVersions: true})
+		filters = append(filters, &permDeleteFilter{deleteSnapshots: true, deleteVersions: true})
 	}
 
 	return filters
@@ -505,7 +507,7 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
 
-	options := traverser.CreateClientOptions(
+	options := createClientOptions(
 		common.LogLevelOverrideLogger{ // override our log level here
 			ILoggerResetable:  common.AzcopyCurrentJobLogger,
 			MinimumLevelToLog: common.Iff(LogLevel == common.ELogLevel.Debug(), common.ELogLevel.Debug(), common.ELogLevel.None()),
@@ -581,18 +583,93 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 	return
 }
 
-func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool, object traverser.StoredObject) (relativePath string) {
+// Because some invalid characters weren't being properly encoded by url.PathEscape, we're going to instead manually encode them.
+var encodedInvalidCharacters = map[rune]string{
+	'<':  "%3C",
+	'>':  "%3E",
+	'\\': "%5C",
+	'/':  "%2F",
+	':':  "%3A",
+	'"':  "%22",
+	'|':  "%7C",
+	'?':  "%3F",
+	'*':  "%2A",
+}
+
+var reverseEncodedChars = map[string]rune{
+	"%3C": '<',
+	"%3E": '>',
+	"%5C": '\\',
+	"%2F": '/',
+	"%3A": ':',
+	"%22": '"',
+	"%7C": '|',
+	"%3F": '?',
+	"%2A": '*',
+}
+
+func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool, source bool) string {
+	var loc common.Location
+
+	if source {
+		loc = fromTo.From()
+	} else {
+		loc = fromTo.To()
+	}
+	pathParts := strings.Split(path, common.AZCOPY_PATH_SEPARATOR_STRING)
+
+	var targetCheck bool
+	if buildmode.IsMover {
+		// XDM: AutoEncoding for Local->FileNFS is not required as NFS target supports these characters in file names.
+		// Ideally this should be the default behavior for all AzCopy builds, but this will be done post discussion with the team.
+		targetCheck = (loc == common.ELocation.File())
+	} else {
+		targetCheck = (loc == common.ELocation.File() || loc == common.ELocation.FileNFS())
+	}
+
+	// If downloading on Windows or uploading to files, encode unsafe characters.
+	if (loc == common.ELocation.Local() && !source && runtime.GOOS == "windows") || (!source && targetCheck) {
+		// invalidChars := `<>\/:"|?*` + string(0x00)
+
+		for k, c := range encodedInvalidCharacters {
+			for part, p := range pathParts {
+				pathParts[part] = strings.ReplaceAll(p, string(k), c)
+			}
+		}
+
+		// If uploading from Windows or downloading from files, decode unsafe chars if user enables decoding
+	} else if ((!source && fromTo.From() == common.ELocation.Local() && runtime.GOOS == "windows") ||
+		(!source && (fromTo.From() == common.ELocation.File() || fromTo.From() == common.ELocation.FileNFS()))) && !disableAutoDecoding {
+
+		for encoded, c := range reverseEncodedChars {
+			for k, p := range pathParts {
+				pathParts[k] = strings.ReplaceAll(p, encoded, string(c))
+			}
+		}
+	}
+
+	if loc.IsRemote() {
+		for k, p := range pathParts {
+			pathParts[k] = url.PathEscape(p)
+		}
+	}
+
+	path = strings.Join(pathParts, "/")
+	return path
+}
+
+func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool, asSubdir bool, object StoredObject) (relativePath string) {
 	// write straight to /dev/null, do not determine a indirect path
 	if !source && cca.Destination.Value == common.Dev_Null {
 		return "" // ignore path encode rules
 	}
 
-	if object.RelativePath == "\x00" { // Short circuit, our relative path is requesting root/
+	if object.relativePath == "\x00" { // Short circuit, our relative path is requesting root/
 		return "\x00"
 	}
 
 	// source is a EXACT path to the file
-	if object.IsSingleSourceFile() {
+	if object.isSingleSourceFile() {
 		// If we're finding an object from the source, it returns "" if it's already got it.
 		// If we're finding an object on the destination and we get "", we need to hand it the object name (if it's pointing to a folder)
 		if source {
@@ -603,23 +680,23 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 				// but our dest does not point to a specific file, it just points to a directory,
 				// and so relativePath needs the _name_ of the source.
 				processedVID := ""
-				if len(object.BlobVersionID) > 0 {
-					processedVID = strings.ReplaceAll(object.BlobVersionID, ":", "-") + "-"
+				if len(object.blobVersionID) > 0 {
+					processedVID = strings.ReplaceAll(object.blobVersionID, ":", "-") + "-"
 				}
-				relativePath += "/" + processedVID + object.Name
+				relativePath += "/" + processedVID + object.name
 			} else {
 				relativePath = ""
 			}
 		}
 
-		return azcopy.PathEncodeRules(relativePath, cca.FromTo, cca.disableAutoDecoding, source)
+		return pathEncodeRules(relativePath, cca.FromTo, cca.disableAutoDecoding, source)
 	}
 
 	// If it's out here, the object is contained in a folder, or was found via a wildcard, or object.isSourceRootFolder == true
-	if object.IsSourceRootFolder() {
+	if object.isSourceRootFolder() {
 		relativePath = "" // otherwise we get "/" from the line below, and that breaks some clients, e.g. blobFS
 	} else {
-		relativePath = "/" + strings.Replace(object.RelativePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+		relativePath = "/" + strings.Replace(object.relativePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
 	}
 
 	if common.Iff(source, object.ContainerName, object.DstContainerName) != "" {
@@ -653,5 +730,68 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 		relativePath = "/" + rootDir + relativePath
 	}
 
-	return azcopy.PathEncodeRules(relativePath, cca.FromTo, cca.disableAutoDecoding, source)
+	return pathEncodeRules(relativePath, cca.FromTo, cca.disableAutoDecoding, source)
+}
+
+// we assume that preserveSmbPermissions and preserveSmbInfo have already been validated, such that they are only true if both resource types support them
+func NewFolderPropertyOption(fromTo common.FromTo, recursive, stripTopDir bool, filters []ObjectFilter, preserveSmbInfo, preservePermissions, preservePosixProperties, isDstNull, includeDirectoryStubs bool) (common.FolderPropertyOption, string) {
+
+	getSuffix := func(willProcess bool) string {
+		willProcessString := common.Iff(willProcess, "will be processed", "will not be processed")
+
+		template := ". For the same reason, %s defined on folders %s"
+		switch {
+		case preservePermissions && preserveSmbInfo:
+			return fmt.Sprintf(template, "properties and permissions", willProcessString)
+		case preserveSmbInfo:
+			return fmt.Sprintf(template, "properties", willProcessString)
+		case preservePermissions:
+			return fmt.Sprintf(template, "permissions", willProcessString)
+		default:
+			return "" // no preserve flags set, so we have nothing to say about them
+		}
+	}
+
+	bothFolderAware := (fromTo.AreBothFolderAware() || preservePosixProperties || preservePermissions || includeDirectoryStubs) && !isDstNull
+	isRemoveFromFolderAware := fromTo == common.EFromTo.FileTrash()
+	if bothFolderAware || isRemoveFromFolderAware {
+		if !UseSyncOrchestrator && !recursive {
+			// doesn't make sense to move folders when not recursive. E.g. if invoked with /* and WITHOUT recursive
+			// XDM: Only exception is if we are executing sync orchestrator, in which case we will process empty folders
+			// and allow for directory stubs to be created
+			return common.EFolderPropertiesOption.NoFolders(),
+				"Any empty folders will not be processed, because --recursive was not specified" +
+					getSuffix(false)
+		}
+
+		// check filters. Otherwise, if filter was say --include-pattern *.txt, we would transfer properties
+		// (but not contents) for every directory that contained NO text files.  Could make heaps of empty directories
+		// at the destination.
+		filtersOK := true
+		for _, f := range filters {
+			if f.AppliesOnlyToFiles() {
+				filtersOK = false // we have a least one filter that doesn't apply to folders
+			}
+		}
+		if !filtersOK {
+			return common.EFolderPropertiesOption.NoFolders(),
+				"Any empty folders will not be processed, because a file-focused filter is applied" +
+					getSuffix(false)
+		}
+
+		message := "Any empty folders will be processed, because source and destination both support folders"
+		if isRemoveFromFolderAware {
+			message = "Any empty folders will be processed, because deletion is from a folder-aware location"
+		}
+		message += getSuffix(true)
+		if stripTopDir {
+			return common.EFolderPropertiesOption.AllFoldersExceptRoot(), message
+		}
+		return common.EFolderPropertiesOption.AllFolders(), message
+	}
+
+	return common.EFolderPropertiesOption.NoFolders(),
+		"Any empty folders will not be processed, because source and/or destination doesn't have full folder support" +
+			getSuffix(false)
+
 }
