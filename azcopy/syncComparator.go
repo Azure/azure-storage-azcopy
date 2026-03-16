@@ -614,6 +614,10 @@ func (f *syncSourceComparator) ProcessPendingHardlinks() error {
 			continue
 		}
 
+		if f.inodeStore == nil {
+			return fmt.Errorf("inodeStore is nil while processing pending hardlinks")
+		}
+
 		var srcAnchorFile string
 		if sourceObject.Inode != "" {
 			var err error
@@ -625,7 +629,14 @@ func (f *syncSourceComparator) ProcessPendingHardlinks() error {
 		// GetAnchor returns "" when the dest object is not in the InodeStore
 		// (e.g. it is a regular file), which naturally triggers the entity-type
 		// mismatch path below.
-		dstAnchorFile, _ := f.inodeStore.GetAnchor(destinationObjectInMap.Inode)
+		var dstAnchorFile string
+		if destinationObjectInMap.Inode != "" {
+			var err error
+			dstAnchorFile, err = f.inodeStore.GetAnchor(destinationObjectInMap.Inode)
+			if err != nil {
+				return err
+			}
+		}
 
 		// groupIntact: the src inode group maps 1:1 onto a single dest inode group.
 		groupIntact := !srcInodeIsMultiGroup[sourceObject.Inode] &&
