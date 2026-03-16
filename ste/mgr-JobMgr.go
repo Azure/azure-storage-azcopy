@@ -716,10 +716,20 @@ func (jm *jobMgr) ResumeTransfers(appCtx context.Context) {
 	// Since while creating the JobMgr, atomicAllTransfersScheduled is set to true
 	// reset it to false while resuming it
 	jm.ResetAllTransfersScheduled()
-	jm.jobPartMgrs.Iterate(false, func(p common.PartNumber, jpm IJobPartMgr) {
+
+	// In mover builds, use READ lock (not write lock) to iterate jobPartMgrs while queuing to partsChannel.
+	// A write lock here would deadlock when partsChannel fills up (capacity 1000):
+	//   - ResumeTransfers holds write lock, blocks on partsChannel send
+	//   - reportJobPartDoneHandler needs read lock via Get(0), blocks on write lock
+	//   - scheduleJobParts blocks on unbuffered jobPartProgress, waiting for reportJobPartDoneHandler
+	// Read lock avoids this because RWMutex allows concurrent readers.
+	// No writers exist at this point — all AddJobPart/AddJobOrder calls completed in ResurrectJob (step 1).
+	partCount := 0
+	jm.jobPartMgrs.Iterate(buildmode.IsMover, func(p common.PartNumber, jpm IJobPartMgr) {
 		jm.QueueJobParts(jpm)
-		// jpm.ScheduleTransfers(jm.ctx, includeTransfer, excludeTransfer)
+		partCount++
 	})
+	common.GetLifecycleMgr().Info(fmt.Sprintf("[RESUME] JobId=%s: all %d parts queued successfully", jm.jobID, partCount))
 }
 
 // When a previously job is resumed, ResetFailedTransfersCount
@@ -778,7 +788,6 @@ func (jm *jobMgr) ReportJobPartDone(progressInfo jobPartProgressInfo) {
 }
 
 func (jm *jobMgr) reportJobPartDoneHandler() {
-	var haveFinalPart bool
 	var jobProgressInfo jobPartProgressInfo
 	shouldLog := jm.ShouldLog(common.LogInfo)
 
@@ -832,7 +841,7 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 
 			// If the last part is still awaited or other parts all still not complete,
 			// JobPart 0 status is not changed (unless we are cancelling)
-			haveFinalPart = atomic.LoadInt32(&jm.atomicFinalPartOrderedIndicator) == 1
+			haveFinalPart := atomic.LoadInt32(&jm.atomicFinalPartOrderedIndicator) == 1
 			allKnownPartsDone := partsDone == jm.jobPartMgrs.Count()
 			isCancelling := jobStatus == common.EJobStatus.Cancelling()
 			shouldComplete := (haveFinalPart && allKnownPartsDone) || // If we have all of the parts, they should all exit cleanly, so the job can be resumed properly.
@@ -1170,7 +1179,6 @@ func (jm *jobMgr) scheduleJobParts() {
 			return
 
 		case jobPart := <-jm.xferChannels.partsChannel:
-
 			if !startedPoolSizer {
 				// spin up a GR to coordinate dynamic sizing of the main pool
 				// It will automatically spin up the right number of chunk processors

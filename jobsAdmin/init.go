@@ -239,6 +239,9 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 }
 
 func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeResponse {
+	resumeOrderStart := time.Now()
+
+
 	// Strip '?' if present as first character of the source sas / destination sas
 	if len(req.SourceSAS) > 0 && req.SourceSAS[0] == '?' {
 		req.SourceSAS = req.SourceSAS[1:]
@@ -255,6 +258,8 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 			ErrorMsg:              fmt.Sprintf("no job with JobId %v exists", req.JobID),
 		}
 	}
+
+
 	// If the job manager was not found, then Job was resurrected
 	// Get the Job manager again for given JobId
 	jm, _ := JobsAdmin.JobMgr(req.JobID)
@@ -274,11 +279,13 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 	}
 	// If the job has not been ordered completely, then job cannot be resumed
 	if !completeJobOrdered(jm) {
+
 		return common.CancelPauseResumeResponse{
 			CancelledPauseResumed: false,
 			ErrorMsg:              fmt.Sprintf("cannot resume job with JobId %s . It hasn't been ordered completely", req.JobID),
 		}
 	}
+
 
 	var jr common.CancelPauseResumeResponse
 	jpm, found := jm.JobPartMgr(0)
@@ -343,6 +350,7 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 	// After creating the Job mgr, set the include / exclude list of transfer.
 	jm.SetIncludeExclude(req.IncludeTransfer, req.ExcludeTransfer)
 	jpp0 := jpm.Plan()
+
 	switch jpp0.JobStatus() {
 	// Cannot resume a Job which is in Cancelling state
 	// Cancelling is an intermediary state. The reason we accept and process it here, rather than returning an error,
@@ -387,12 +395,8 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 		// Iterate through all transfer of the Job Parts and reset the transfer status
 		jm.IterateJobParts(true, func(partNum common.PartNumber, jpm ste.IJobPartMgr) {
 			jpp := jpm.Plan()
-			// Iterate through this job part's transfers
 			for t := uint32(0); t < jpp.NumTransfers; t++ {
-				// transferHeader represents the memory map transfer header of transfer at index position for given job and part number
 				jppt := jpp.Transfer(t)
-				// If the transfer status is less than -1, it means the transfer failed because of some reason.
-				// Transfer Status needs to reset.
 				if jppt.TransferStatus() <= common.ETransferStatus.Failed() {
 					jppt.SetTransferStatus(common.ETransferStatus.Restarted(), true)
 					jppt.SetErrorCode(0, true)
@@ -401,13 +405,16 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 			}
 		})
 
+		resumeTransfersStart := time.Now()
 		jm.ResumeTransfers(steCtx) // Reschedule all job part's transfers
+		common.GetLifecycleMgr().Info(fmt.Sprintf("[RESUME] JobId=%s: ResumeTransfers took %dms", req.JobID, time.Since(resumeTransfersStart).Milliseconds()))
 		// }()
 		jr = common.CancelPauseResumeResponse{
 			CancelledPauseResumed: true,
 			ErrorMsg:              "",
 		}
 	}
+	common.GetLifecycleMgr().Info(fmt.Sprintf("[RESUME] JobId=%s: ResumeJobOrder total elapsed=%dms", req.JobID, time.Since(resumeOrderStart).Milliseconds()))
 	return jr
 }
 
