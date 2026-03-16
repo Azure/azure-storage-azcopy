@@ -472,6 +472,7 @@ func (f *syncSourceComparator) ProcessIfNecessary(sourceObject traverser.StoredO
 	if present {
 		defer delete(f.destinationIndex.IndexMap, relPath)
 
+		// if destination is stale, schedule source for transfer
 		if f.disableComparison {
 			syncComparatorLog(sourceObject.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, false)
 			return f.copyTransferScheduler(sourceObject)
@@ -498,6 +499,7 @@ func (f *syncSourceComparator) ProcessIfNecessary(sourceObject traverser.StoredO
 					return nil
 				}
 				if !reflect.DeepEqual(sourceObject.Md5, destinationObjectInMap.Md5) {
+					// hash inequality = source "newer" in this model.
 					syncComparatorLog(sourceObject.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, false)
 					return f.copyTransferScheduler(sourceObject)
 				}
@@ -507,10 +509,12 @@ func (f *syncSourceComparator) ProcessIfNecessary(sourceObject traverser.StoredO
 			syncComparatorLog(sourceObject.RelativePath, syncStatusSkipped, syncSkipReasonSameHash, false)
 			return nil
 		} else if sourceObject.IsMoreRecentThan(destinationObjectInMap, f.preferSMBTime) {
+			// if destination is stale, schedule source
 			syncComparatorLog(sourceObject.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMT, false)
 			return f.copyTransferScheduler(sourceObject)
 		}
 
+		// skip if dest is more recent
 		syncComparatorLog(sourceObject.RelativePath, syncStatusSkipped, syncSkipReasonTime, false)
 		return nil
 	}

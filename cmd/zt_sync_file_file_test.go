@@ -33,12 +33,13 @@ import (
 func TestSyncSourceComparator(t *testing.T) {
 	a := assert.New(t)
 	dummyCopyScheduler := dummyProcessor{}
+	dummyCleaner := dummyProcessor{}
 	srcMD5 := []byte{'s'}
 	destMD5 := []byte{'d'}
 
 	// set up the indexer as well as the source comparator
 	indexer := traverser.NewObjectIndexer()
-	sourceComparator := azcopy.NewSyncSourceComparator(indexer, dummyCopyScheduler.process, common.ESyncHashType.None(), false, false)
+	sourceComparator := azcopy.NewSyncSourceComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, common.ESyncHashType.None(), false, false)
 
 	// create a sample destination object
 	sampleDestinationObject := traverser.StoredObject{Name: "test", RelativePath: "/usr/test", LastModifiedTime: time.Now(), Md5: destMD5}
@@ -87,12 +88,13 @@ func TestSyncSourceComparator(t *testing.T) {
 func TestSyncSrcCompDisableComparator(t *testing.T) {
 	a := assert.New(t)
 	dummyCopyScheduler := dummyProcessor{}
+	dummyCleaner := dummyProcessor{}
 	srcMD5 := []byte{'s'}
 	destMD5 := []byte{'d'}
 
 	// set up the indexer as well as the source comparator
 	indexer := traverser.NewObjectIndexer()
-	sourceComparator := azcopy.NewSyncSourceComparator(indexer, dummyCopyScheduler.process, common.ESyncHashType.None(), false, true)
+	sourceComparator := azcopy.NewSyncSourceComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, common.ESyncHashType.None(), false, true)
 
 	// test the comparator in case a given source object is not present at the destination
 	// meaning no entry in the index, so the comparator should pass the given object to schedule a transfer
