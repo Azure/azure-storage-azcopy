@@ -30,6 +30,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
+	"runtime"
 )
 
 // CopyOptions contains the optional parameters for the Copy operation.
@@ -265,6 +266,11 @@ func newCopyTransferExecutor(ctx context.Context, jobID common.JobID, src, dst s
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize inode store: %w", err)
 	}
+	// Ensure that resources held by the inode store are eventually released,
+	// even if callers forget to close it explicitly.
+	runtime.SetFinalizer(store, func(s *common.InodeStore) {
+		_ = s.Close()
+	})
 
 	progressTracker := newTransferProgressTracker(jobID, opts.Handler, cookedOpts.fromTo)
 
