@@ -561,7 +561,11 @@ func (f *syncSourceComparator) ProcessPendingHardlinks() error {
 		if obj.Inode == "" {
 			continue
 		}
-		destInode := f.dstPathToInode[obj.RelativePath]
+		lookupPath := obj.RelativePath
+		if f.IsDestinationCaseInsensitive() {
+			lookupPath = strings.ToLower(lookupPath)
+		}
+		destInode := f.dstPathToInode[lookupPath]
 		if destInode == "" {
 			continue // not present in destination; will be transferred below
 		}
