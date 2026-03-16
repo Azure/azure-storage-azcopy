@@ -260,7 +260,7 @@ func (t *BlobTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			blobPropsAdapter,
 			blobPropsAdapter.Metadata,
 			blobURLParts.ContainerName,
-			&NFSMetadataContext{},
+			nil,
 		)
 
 		if t.s2sPreserveSourceTags {
