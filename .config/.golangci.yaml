@@ -10,9 +10,6 @@ linters:
       - legacy
       - std-error-handling
     paths:
-      - third_party$
-      - builtin$
-      - examples$
       - e2etest
       - testSuite
     rules:
@@ -24,10 +21,3 @@ linters:
         linters:
           - staticcheck
         text: "S1008:"
-  formatters:
-    exclusions:
-      generated: lax
-      paths:
-        - third_party$
-        - builtin$
-        - examples$
