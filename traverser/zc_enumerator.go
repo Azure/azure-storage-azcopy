@@ -301,8 +301,11 @@ func NewStoredObject(morpher objectMorpher, name string,
 		LeaseStatus:        blobProps.LeaseStatus(),
 		LeaseState:         blobProps.LeaseState(),
 		LeaseDuration:      blobProps.LeaseDuration(),
-		TargetHardlinkFile: nfsOptions.TargetHardlinkFile,
-		Inode:              nfsOptions.Inode,
+	}
+
+	if nfsOptions != nil {
+		obj.TargetHardlinkFile = nfsOptions.TargetHardlinkFile
+		obj.Inode = nfsOptions.Inode
 	}
 
 	// Folders don't have size, and root ones shouldn't have names in the StoredObject. Ensure those rules are consistently followed
