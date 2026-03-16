@@ -446,17 +446,20 @@ type syncSourceComparator struct {
 	// its inode ID and is used in ProcessPendingHardlinks to reason about whether
 	// the source anchor is still present in the destination group.
 	dstPathToInode map[string]string
+
+	inodeStore *common.InodeStore
 }
 
-func NewSyncSourceComparator(i *traverser.ObjectIndexer, copyScheduler, cleaner traverser.ObjectProcessor, comparisonHashType common.SyncHashType, preferSMBTime, disableComparison bool) *syncSourceComparator {
+func NewSyncSourceComparator(i *traverser.ObjectIndexer, copyScheduler, cleaner traverser.ObjectProcessor, comparisonHashType common.SyncHashType, preferSMBTime, disableComparison bool, inodeStore *common.InodeStore) *syncSourceComparator {
 	return &syncSourceComparator{
 		destinationIndex:          i,
 		copyTransferScheduler:     copyScheduler,
 		destinationCleaner:        cleaner,
-		preferSMBTime:             preferSMBTime,
+		preferSMBTime:              preferSMBTime,
 		disableComparison:         disableComparison,
 		comparisonHashType:        comparisonHashType,
 		srcPendingHardlinkObjects: traverser.ObjectIndexer{IndexMap: make(map[string]traverser.StoredObject)},
+		inodeStore:                inodeStore,
 	}
 }
 
@@ -607,19 +610,18 @@ func (f *syncSourceComparator) ProcessPendingHardlinks() error {
 			continue
 		}
 
-		inodeStoreInstance, err := common.GetInodeStore()
-		if err != nil {
-			return err
-		}
-
-		srcAnchorFile, err := inodeStoreInstance.GetAnchor(sourceObject.Inode)
-		if err != nil {
-			return err
+		var srcAnchorFile string
+		if sourceObject.Inode != "" {
+			var err error
+			srcAnchorFile, err = f.inodeStore.GetAnchor(sourceObject.Inode)
+			if err != nil {
+				return err
+			}
 		}
 		// GetAnchor returns "" when the dest object is not in the InodeStore
 		// (e.g. it is a regular file), which naturally triggers the entity-type
 		// mismatch path below.
-		dstAnchorFile, _ := inodeStoreInstance.GetAnchor(destinationObjectInMap.Inode)
+		dstAnchorFile, _ := f.inodeStore.GetAnchor(destinationObjectInMap.Inode)
 
 		// groupIntact: the src inode group maps 1:1 onto a single dest inode group.
 		groupIntact := !srcInodeIsMultiGroup[sourceObject.Inode] &&
