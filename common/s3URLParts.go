@@ -75,8 +75,16 @@ func GetS3CompatibleSuffix() string {
 }
 
 func getS3Keyword() string {
-	Host := GetS3CompatibleSuffix()
-	return Host[0:strings.LastIndex(Host, ".")]
+	suffix := strings.ToLower(GetS3CompatibleSuffix())
+
+	switch {
+	case strings.HasSuffix(suffix, "googleapis.com"):
+		return "googleapis"
+	case strings.HasSuffix(suffix, "amazonaws.com"):
+		return "amazonaws"
+	default:
+		return "custom"
+	}
 }
 
 // IsS3URL verifies if a given URL points to S3 URL supported by AzCopy-v10
@@ -195,38 +203,35 @@ func matchGoogleHost(hostLower, suffix string) []string {
 // This supports custom domains like s3.company.com, minio.internal.net, storage.local, etc.
 // Assumes path-style URLs (bucket in path, not subdomain) for maximum compatibility.
 func matchCustomS3Host(hostLower string) []string {
-	log.Printf("[matchCustomS3Host] Validating host: %s", hostLower)
-
-	// Use net/url to validate the host format by constructing a test URL
-	testURL, err := url.Parse("https://" + hostLower + "/")
-	if err != nil || testURL.Host == "" {
-		log.Printf("[matchCustomS3Host] Rejected host '%s': invalid URL format (err=%v, host=%s)", hostLower, err, testURL.Host)
+	hostLower = strings.ToLower(hostLower)
+	if hostLower == "" {
 		return nil
 	}
 
-	// Extract hostname (without port) for additional validation
-	host := testURL.Hostname()
-	if host == "" {
-		log.Printf("[matchCustomS3Host] Rejected host '%s': empty hostname after parsing", hostLower)
-		return nil
-	}
-
-	// Must be a valid FQDN (at least two labels like "server.domain") or localhost
-	// Trim leading/trailing dots to handle root zone notation (e.g., "example.com.")
-	// This prevents matching single-label hostnames like "myserver" or "myserver."
-	trimmedHost := strings.Trim(host, ".")
-	if !strings.Contains(trimmedHost, ".") && trimmedHost != "localhost" {
-		log.Printf("[matchCustomS3Host] Rejected host '%s': not a valid FQDN (hostname=%s, trimmed=%s)", hostLower, host, trimmedHost)
+	configuredHost := strings.ToLower(os.Getenv("S3_COMPATIBLE_ENDPOINT"))
+	if configuredHost == "" {
 		return nil
 	}
 
 	keyword := getS3Keyword()
-	region := "" // Custom endpoints typically don't specify region in hostname
+	region := ""
 
-	// Return path-style match (empty bucket capture means bucket comes from URL path)
-	matchSlices := []string{hostLower, "", region, keyword}
-	log.Printf("[matchCustomS3Host] Accepted host '%s' as custom S3 endpoint (hostname=%s, keyword=%s)", hostLower, host, keyword)
-	return matchSlices
+	// Path-style: exact endpoint host
+	if hostLower == configuredHost {
+		return []string{hostLower, "", region, keyword}
+	}
+
+	// Virtual-hosted style: <bucket>.<configuredHost>
+	suffix := "." + configuredHost
+	if strings.HasSuffix(hostLower, suffix) {
+		bucketPart := strings.TrimSuffix(hostLower, suffix)
+		if bucketPart != "" && !strings.Contains(bucketPart, "..") {
+			return []string{hostLower, bucketPart + ".", region, keyword}
+		}
+	}
+
+	log.Printf("[matchCustomS3Host] Rejected host '%s': does not match configured endpoint '%s'", hostLower, configuredHost)
+	return nil
 }
 
 // NewS3URLParts parses a URL initializing S3URLParts' fields. This method overwrites all fields in the S3URLParts object.
