@@ -291,7 +291,10 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 		if err != nil {
 			return err
 		}
-		srcAnchorFile, _ := inodeStoreInstance.GetAnchor(sourceObjectInMap.Inode)
+		srcAnchorFile, err := inodeStoreInstance.GetAnchor(sourceObjectInMap.Inode)
+		if err != nil {
+			return err
+		}
 
 		// Determine whether the hardlink must be recreated.
 		//
