@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"time"
+	"runtime"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
@@ -226,6 +227,16 @@ type syncer struct {
 	inodeStore *common.InodeStore
 }
 
+// Close releases any resources held by the syncer, including the inode store.
+func (s *syncer) Close() error {
+	if s == nil || s.inodeStore == nil {
+		return nil
+	}
+	err := s.inodeStore.Close()
+	s.inodeStore = nil
+	return err
+}
+
 func newSyncer(ctx context.Context, jobID common.JobID, src, dst string, opts SyncOptions, uotm *common.UserOAuthTokenManager) (s *syncer, err error) {
 	cookedOpts, err := newCookedSyncOptions(src, dst, opts)
 	if err != nil {
@@ -241,5 +252,12 @@ func newSyncer(ctx context.Context, jobID common.JobID, src, dst string, opts Sy
 		return nil, fmt.Errorf("failed to initialize inode store: %w", err)
 	}
 	progressTracker := newSyncProgressTracker(jobID, opts.Handler)
-	return &syncer{opts: cookedOpts, srp: syncRemote, spt: progressTracker, inodeStore: store}, nil
+	sync := &syncer{opts: cookedOpts, srp: syncRemote, spt: progressTracker, inodeStore: store}
+
+	// Ensure that resources are eventually released even if the caller forgets to close the syncer.
+	runtime.SetFinalizer(sync, func(s *syncer) {
+		_ = s.Close()
+	})
+
+	return sync, nil
 }
