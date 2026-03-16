@@ -132,15 +132,19 @@ func (f *syncDestinationComparator) ProcessIfNecessary(destinationObject travers
 	}
 
 	sourceObjectInMap, present := f.sourceIndex.IndexMap[destinationObject.RelativePath]
+	srcKey := destinationObject.RelativePath
 	if !present && f.sourceIndex.IsDestinationCaseInsensitive {
 		lcRelativePath := strings.ToLower(destinationObject.RelativePath)
 		sourceObjectInMap, present = f.sourceIndex.IndexMap[lcRelativePath]
+		if present {
+			srcKey = lcRelativePath
+		}
 	}
 
 	// if the destinationObject is present at source and stale, we transfer the up-to-date version from source
 	if present {
 		// Clean up the index map once we start processing this path
-		defer delete(f.sourceIndex.IndexMap, destinationObject.RelativePath)
+		defer delete(f.sourceIndex.IndexMap, srcKey)
 
 		// FORCE OVERWRITE: If comparison is disabled, schedule transfer immediately
 		if f.disableComparison {
@@ -294,7 +298,10 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 		if err != nil {
 			return err
 		}
-		srcAnchorFile, _ := f.inodeStore.GetAnchor(sourceObjectInMap.Inode)
+		srcAnchorFile, err := f.inodeStore.GetAnchor(sourceObjectInMap.Inode)
+		if err != nil {
+			return err
+		}
 
 		// Determine whether the hardlink must be recreated.
 		//
