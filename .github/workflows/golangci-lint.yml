@@ -35,16 +35,13 @@ jobs:
 
           # Optional: golangci-lint command line arguments.
           args: |
+            --config=.config/.golangci.yaml
             --tests=false
             --max-issues-per-linter=0 
-            --exclude-rules='
-              - path: azbfs/zz_generated_*'
-              - path: e2etest
-              - linters:
-                - staticcheck
-              text: S1008'
             --max-same-issues=0 
             --timeout 5m0s
+            --skip-files=azbfs/zz_generated_* 
+            --skip-dirs=e2etest
 
           # Optional: show only new issues if it's a pull request. The default value is `false`.
           # only-new-issues: true

@@ -1,0 +1,33 @@
+version: "2"
+run:
+  tests: false
+linters:
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+      - e2etest
+      - testSuite
+    rules:
+      - path: e2etest
+        linters:
+          - staticcheck
+        text: "S1008:"
+      - path: azbfs/zz_generated_*
+        linters:
+          - staticcheck
+        text: "S1008:"
+  formatters:
+    exclusions:
+      generated: lax
+      paths:
+        - third_party$
+        - builtin$
+        - examples$
