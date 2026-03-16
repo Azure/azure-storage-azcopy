@@ -612,7 +612,7 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 						NoBlobProps,
 						NoMetadata,
 						"", // Local has no such thing as containers
-						&NFSMetadataContext{},
+						nil,
 					),
 					processor, // the original processor is wrapped in the mutex processor.
 				)

@@ -106,7 +106,7 @@ func (t *blobVersionsTraverser) Traverse(preprocessor objectMorpher, processor O
 			blobPropsAdapter,
 			blobPropsAdapter.Metadata,
 			blobURLParts.ContainerName,
-			&NFSMetadataContext{},
+			nil,
 		)
 		storedObject.BlobVersionID = versionID
 
