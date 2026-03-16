@@ -255,3 +255,11 @@ func (s *InodeStore) GetAnchor(inode string) (string, error) {
 	}
 	return anchor, nil
 }
+
+// Close releases the resources held by the InodeStore, including the backing file.
+func (s *InodeStore) Close() error {
+	if s == nil || s.file == nil {
+		return nil
+	}
+	return s.file.Close()
+}
