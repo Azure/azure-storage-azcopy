@@ -349,6 +349,7 @@ type RawMoverSyncCmdArgs struct {
 	S2sPreserveAccessTier   bool
 	S2sPreserveBlobTags     bool
 	BlobType                common.BlobType
+	BlockSizeMB             float64
 }
 
 type SyncCmdArgsInput struct {
@@ -395,6 +396,7 @@ func CookRawSyncCmdArgs(args RawMoverSyncCmdArgs) (cookedSyncCmdArgs, error) {
 		s2sPreserveAccessTier:   args.S2sPreserveAccessTier,
 		s2sPreserveBlobTags:     args.S2sPreserveBlobTags,
 		blobType:                args.BlobType.String(),
+		blockSizeMB:             args.BlockSizeMB,
 	}
 	return raw.cook()
 }
