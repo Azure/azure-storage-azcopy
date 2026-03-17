@@ -78,7 +78,7 @@ func TestExcludeFilter(t *testing.T) {
 	for _, file := range filesToNotPass {
 		dummyProcessor := &dummyProcessor{}
 		err := traverser.ProcessIfPassedFilters(excludeFilterList, traverser.StoredObject{Name: file}, dummyProcessor.process)
-		a.Equal(traverser.IgnoredError, err)
+		a.Equal(traverser.ErrIgnored, err)
 		a.Zero(len(dummyProcessor.record))
 	}
 }
