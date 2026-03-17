@@ -562,7 +562,7 @@ func (f *syncSourceComparator) ProcessPendingHardlinks() error {
 			continue
 		}
 		lookupPath := obj.RelativePath
-		if f.IsDestinationCaseInsensitive() {
+		if f.destinationIndex.IsDestinationCaseInsensitive {
 			lookupPath = strings.ToLower(lookupPath)
 		}
 		destInode := f.dstPathToInode[lookupPath]
