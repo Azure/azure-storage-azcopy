@@ -1,0 +1,24 @@
+version: "2"
+run:
+  tests: false
+linters:
+  settings:
+    staticcheck:
+      checks: # disables all but
+        - "-S1008"   #https://staticcheck.dev/docs/checks/#S1008
+        - "-ST1003"  #https://staticcheck.dev/docs/checks/#ST1003
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - e2etest
+      - testSuite
+    rules:
+      - path: e2etest
+        linters:
+          - staticcheck
+        text: "S1008:"

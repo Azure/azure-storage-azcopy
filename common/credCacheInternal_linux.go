@@ -102,10 +102,11 @@ func (c *CredCacheInternalIntegration) hasCachedTokenInternal() (bool, error) {
 // removeCachedTokenInternal deletes all the cached token.
 func (c *CredCacheInternalIntegration) removeCachedTokenInternal() error {
 	// By design, not useful currently.
-	return errors.New("Not implemented")
+	return errors.New("not implemented")
 }
 
 // loadTokenInternal restores a Token object from file cache.
+//
 //nolint:staticcheck
 func (c *CredCacheInternalIntegration) loadTokenInternal() (*OAuthTokenInfo, error) {
 	data, err := c.keyring.Get(c.serviceName, c.accountName)
@@ -123,5 +124,5 @@ func (c *CredCacheInternalIntegration) loadTokenInternal() (*OAuthTokenInfo, err
 // saveTokenInternal persists an oauth token on disk.
 func (c *CredCacheInternalIntegration) saveTokenInternal(token OAuthTokenInfo) error {
 	// By design, not useful currently.
-	return errors.New("Not implemented")
+	return errors.New("not implemented")
 }

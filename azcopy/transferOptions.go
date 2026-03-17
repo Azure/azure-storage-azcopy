@@ -365,10 +365,10 @@ func getMetadataString(m map[string]string) string {
 			result += ";"
 		}
 		// Escape any '=' or ';' characters in metadata key or value
-		k = strings.Replace(k, ";", "\\;", -1)
-		k = strings.Replace(k, "=", "\\=", -1)
-		v = strings.Replace(v, ";", "\\;", -1)
-		v = strings.Replace(v, "=", "\\=", -1)
+		k = strings.ReplaceAll(k, ";", "\\;")
+		k = strings.ReplaceAll(k, "=", "\\=")
+		v = strings.ReplaceAll(v, ";", "\\;")
+		v = strings.ReplaceAll(v, "=", "\\=")
 		result += fmt.Sprintf("%s=%s", k, v)
 	}
 	return result
@@ -554,7 +554,7 @@ func (c *CookedTransferOptions) validateOptions() (err error) {
 	}
 
 	// blob tags
-	if !(c.fromTo.To() == common.ELocation.Blob() || c.fromTo == common.EFromTo.BlobNone() || c.fromTo != common.EFromTo.BlobFSNone()) && c.blobTags != nil {
+	if (c.fromTo.To() != common.ELocation.Blob() && c.fromTo != common.EFromTo.BlobNone() && c.fromTo == common.EFromTo.BlobFSNone()) && c.blobTags != nil {
 		return errors.New("blob tags can only be set when transferring to blob storage")
 	}
 	if c.fromTo.To() == common.ELocation.None() && c.blobTags != nil && len(c.blobTags) == 0 { // in case of Blob and BlobFS
@@ -763,7 +763,7 @@ func (c *CookedTransferOptions) validateOptions() (err error) {
 		if c.fromTo.IsNFS() {
 			// Skip logging this msg for cross-protocol transfers
 			// because --preserve-permissions flag is not applicable.
-			if !(c.fromTo == common.EFromTo.FileSMBFileNFS() || c.fromTo == common.EFromTo.FileNFSFileSMB()) {
+			if c.fromTo != common.EFromTo.FileSMBFileNFS() && c.fromTo != common.EFromTo.FileNFSFileSMB() {
 				common.GetLifecycleMgr().Info(PreserveNFSPermissionsDisabledMsg)
 			}
 		} else {
