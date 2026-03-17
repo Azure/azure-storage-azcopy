@@ -159,7 +159,7 @@ func TestFolderCreationTracker_directoryExists(t *testing.T) {
 	}) // "create" our folder
 	err := fct.CreateFolder(folderExists, func() error {
 		return common.FolderCreationErrorAlreadyExists{}
-	}) // fail creation on not existing
+	})                                                // fail creation on not existing
 	a.NoError(err, "already exists should be caught") // ensure we caught that error
 	expectedFailureErr := errors.New("this creation should fail")
 	err = fct.CreateFolder(folderShouldCreate, func() error {
