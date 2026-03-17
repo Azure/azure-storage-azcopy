@@ -6,6 +6,7 @@
 ### Dependency updates
 1. cloud.google.com/go/storage v1.45.0 -> v1.50.0
 2. Golang 1.24.13 -> 1.25.8
+3. Golangci-lint v1.64.8 -> v2.11.3
 
 ### Bug Fixes
 1. Fixed a regression where the folder tracker would panic with pre-existing folders and `--overwrite=ifSourceNewer`. ([#3403](https://github.com/Azure/azure-storage-azcopy/pull/3403))
@@ -13,7 +14,7 @@
 3. Fixed a regression where we hit segfaults from logging to a nil logger in the process checker. ([#3384](https://github.com/Azure/azure-storage-azcopy/pull/3384))
 4. Fixed a bug where the release pipeline was not automatically uploading binaries to GitHub. ([#3363](https://github.com/Azure/azure-storage-azcopy/pull/3363))
 5. Fixed a race condition panic from concurrent access to a shared metadata resource by introducing thread safety. ([#3341](https://github.com/Azure/azure-storage-azcopy/pull/3341))
-6. Fixed a bug where `--posix-properties-style` was not being chained through the copy flow correctly. ([#3398](https://github.com/Azure/azure-storage-azcopy/issues/3398))
+6. Fixed a bug where `--posix-properties-style` was not being chained through the copy flow correctly. ([#3401](https://github.com/Azure/azure-storage-azcopy/pull/3401))
 7. Fixed a regression where using `--list-of-files` and `--include-pattern` no longer worked. ([#3389](https://github.com/Azure/azure-storage-azcopy/issues/3389))
 
 ## Version 10.32.1
