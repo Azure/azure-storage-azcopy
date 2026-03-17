@@ -17,8 +17,3 @@ linters:
     paths:
       - e2etest
       - testSuite
-    rules:
-      - path: e2etest
-        linters:
-          - staticcheck
-        text: "S1008:"

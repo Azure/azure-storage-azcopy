@@ -355,10 +355,8 @@ func DoWithOverrideReadOnlyOnAzureFiles(ctx context.Context, action func() (inte
 	if fileerror.HasCode(err, fileerror.ParentNotFound, fileerror.ShareNotFound) {
 		return err
 	}
-	failedAsReadOnly := false
-	if fileerror.HasCode(err, fileerror.ReadOnlyAttribute) {
-		failedAsReadOnly = true
-	}
+	failedAsReadOnly := fileerror.HasCode(err, fileerror.ReadOnlyAttribute)
+
 	if !failedAsReadOnly {
 		return err
 	}

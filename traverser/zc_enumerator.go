@@ -821,10 +821,10 @@ func passedFilters(filters []ObjectFilter, storedObject StoredObject) (bool, err
 // This error should be treated as a flag, that we didn't fail processing, but instead, we just didn't process it.
 // Currently, this is only really used for symlink processing, but it _is_ an error, so it must be handled in all new traversers.
 // Basically, anywhere ProcessIfPassedFilters is called, additionally call getProcessingError.
-var IgnoredError = errors.New("FileIgnored")
+var ErrIgnored = errors.New("FileIgnored")
 
 func getProcessingError(errin error) (ignored bool, err error) {
-	if errin == IgnoredError {
+	if errors.Is(errin, ErrIgnored) {
 		return true, nil
 	}
 
@@ -837,7 +837,7 @@ func ProcessIfPassedFilters(filters []ObjectFilter, storedObject StoredObject, p
 		if passed {
 			err = processor(storedObject)
 		} else {
-			err = IgnoredError
+			err = ErrIgnored
 		}
 	}
 

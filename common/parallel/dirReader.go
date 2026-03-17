@@ -68,11 +68,11 @@ type defaultDirReader struct{}
 
 // Readdir in the default reader just makes the normal OS read call
 // On Windows, this is performant because Go does not have to make any additional OS calls to hydrate the raw results into os.FileInfos.
-func (_ defaultDirReader) Readdir(dir *os.File, n int) ([]os.FileInfo, error) {
+func (defaultDirReader) Readdir(dir *os.File, n int) ([]os.FileInfo, error) {
 	return dir.Readdir(n)
 }
 
-func (_ defaultDirReader) Close() {
+func (defaultDirReader) Close() {
 	// noop
 }
 
@@ -88,13 +88,13 @@ type linuxDirReader struct {
 	ch chan linuxDirEntry
 }
 
-var ReaddirTimeoutError = errors.New("readdir timed out getting file properties")
+var ErrReaddirTimeout = errors.New("readdir timed out getting file properties")
 
 func (r linuxDirReader) Readdir(dir *os.File, n int) ([]os.FileInfo, error) {
 	for try := 1; ; try++ {
 		timeout := time.Duration(try*try) * time.Minute
 		result, err := r.doReaddir(dir, n, timeout)
-		if err == ReaddirTimeoutError && try <= 3 { // we saw a few timeouts in customer testing prior to adding this
+		if errors.Is(err, ErrReaddirTimeout) && try <= 3 { // we saw a few timeouts in customer testing prior to adding this
 			continue
 		}
 		return result, err
@@ -125,7 +125,7 @@ func (r linuxDirReader) doReaddir(dir *os.File, n int, timeout time.Duration) ([
 		case r := <-resCh:
 			res = append(res, r) // r is failableFileInfo, so may carry its own error with it
 		case <-time.After(timeout):
-			return nil, ReaddirTimeoutError
+			return nil, ErrReaddirTimeout
 		}
 	}
 

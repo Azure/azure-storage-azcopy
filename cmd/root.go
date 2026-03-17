@@ -291,7 +291,7 @@ func InitializeAndExecute() {
 
 func init() {
 	// replace the word "global" to avoid confusion (e.g. it doesn't affect all instances of AzCopy)
-	rootCmd.SetUsageTemplate(strings.Replace((&cobra.Command{}).UsageTemplate(), "Global Flags", "Flags Applying to All Commands", -1))
+	rootCmd.SetUsageTemplate(strings.ReplaceAll((&cobra.Command{}).UsageTemplate(), "Global Flags", "Flags Applying to All Commands"))
 
 	// the default value is set as -1 to differentiate from an input 3.
 	// if unspecified, the policy doesn't set the request headers, which will cause the service to default to 3.

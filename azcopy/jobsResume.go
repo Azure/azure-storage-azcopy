@@ -193,7 +193,7 @@ func getSourceAndDestinationServiceClients(
 
 	// For an Azure source, if there is no SAS, the cred type is Anonymous and the resource is not Azure public blob, tell the user they need to pass a new SAS.
 	if fromTo.From().IsAzure() && srcCredType == common.ECredentialType.Anonymous() && source.SAS == "" {
-		if !(fromTo.From() == common.ELocation.Blob() && isSrcPublic) {
+		if fromTo.From() != common.ELocation.Blob() || !isSrcPublic {
 			errorMsg += "source-sas"
 		}
 	}
@@ -204,7 +204,7 @@ func getSourceAndDestinationServiceClients(
 	}
 
 	if fromTo.To().IsAzure() && dstCredType == common.ECredentialType.Anonymous() && destination.SAS == "" {
-		if !(fromTo.To() == common.ELocation.Blob() && isDstPublic) {
+		if fromTo.To() != common.ELocation.Blob() || !isDstPublic {
 			if errorMsg == "" {
 				errorMsg = "destination-sas"
 			} else {
