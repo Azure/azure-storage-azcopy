@@ -74,29 +74,34 @@ func createS3ClientForPrivateNetwork(credInfo CredentialInfo, cred *credentials.
 
 	urlParts := S3URLParts{Endpoint: baseS3Host}
 	isGCS := urlParts.IsGoogleCloudStorage()
+	isS3CompatibleUrl := urlParts.IsS3CompatibleEndpoint()
 
 	var s3Host string
 	var tlsHost string                    // hostname used for TLS ServerName verification
 	minioEndpoint := baseS3Host           // endpoint passed to minio.New()
 	bucketLookup := minio.BucketLookupDNS // default: virtual-hosted style for AWS
-	if isGCS {
-		// GCS path-style: host is just the endpoint; bucket goes in the URL path (handled by minio BucketLookupPath)
-		s3Host = "storage.googleapis.com"
-		// GCS certs only match exact endpoint (no wildcard), so use baseS3Host for TLS
+	if isS3CompatibleUrl {
+		// S3-compatible endpoint (GCS or on-prem appliances like MinIO, NetApp, Dell EMC, etc.)
+		// All S3-compatible endpoints use path-style URLs
+		bucketLookup = minio.BucketLookupPath
 		tlsHost = baseS3Host
-		// Minio lib only supports "storage.googleapis.com" as the GCS endpoint
-		// (it has an internal check for that exact host), so override for regional
-		// endpoints like storage.us-west2.rep.googleapis.com.
-		// TLS and RoundRobinTransport still use the actual regional baseS3Host.
-		minioEndpoint = s3Host
-		bucketLookup = minio.BucketLookupPath // GCS uses path-style: storage.googleapis.com/bucket
+		s3Host = baseS3Host
+
+		if isGCS {
+			// Minio lib only supports "storage.googleapis.com" as the GCS endpoint
+			// (it has an internal check for that exact host), so override for regional/PSC
+			// endpoints like storage.us-west2.rep.googleapis.com or storage-xyz.p.googleapis.com.
+			// TLS and RoundRobinTransport still use the actual baseS3Host.
+			s3Host = "storage.googleapis.com"
+			minioEndpoint = s3Host
+		}
 	} else {
-		// S3 uses virtual-hosted style: "<bucketname>.s3.<region>.amazonaws.com"
+		// AWS S3 uses virtual-hosted style: "<bucketname>.s3.<region>.amazonaws.com"
 		s3Host = privateNetworkArgs.BucketName + "." + credInfo.S3CredentialInfo.Endpoint
 		// AWS certs support *.s3.<region>.amazonaws.com, so use s3Host for TLS
 		tlsHost = s3Host
 	}
-	// Force HTTP/1.1 only for GCS regional endpoints that send non-standard HTTP/2 frames
+	// Force HTTP/1.1 only for GCS non-global endpoints that send non-standard HTTP/2 frames
 	forceHTTP11 := isGCS && baseS3Host != "storage.googleapis.com"
 	transport := NewRoundRobinTransport(peIP, s3Host, tlsHost, PeReCheckCooldownTimeInSecs, PeCheckRetries, PeCheckIntervalInmilliSecs, forceHTTP11)
 	var minioCred *credentials.Credentials

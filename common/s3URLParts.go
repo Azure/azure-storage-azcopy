@@ -218,6 +218,7 @@ func matchCustomS3Host(hostLower string) []string {
 
 	// Path-style: exact endpoint host
 	if hostLower == configuredHost {
+		log.Printf("[matchCustomS3Host] Matched host '%s' as path-style custom S3 endpoint", hostLower)
 		return []string{hostLower, "", region, keyword}
 	}
 
@@ -226,6 +227,7 @@ func matchCustomS3Host(hostLower string) []string {
 	if strings.HasSuffix(hostLower, suffix) {
 		bucketPart := strings.TrimSuffix(hostLower, suffix)
 		if bucketPart != "" && !strings.Contains(bucketPart, "..") {
+			log.Printf("[matchCustomS3Host] Matched host '%s' as virtual-hosted custom S3 endpoint (bucket='%s')", hostLower, bucketPart)
 			return []string{hostLower, bucketPart + ".", region, keyword}
 		}
 	}
