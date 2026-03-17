@@ -239,24 +239,6 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			return fmt.Errorf("cannot list objects, %v", objectInfo.Err)
 		}
 
-		// Skip objects in archive storage classes unless they have been restored.
-		// Objects in GLACIER or DEEP_ARCHIVE require restoration before transfer;
-		// attempting to transfer un-restored objects results in 403 errors.
-		// We issue a HEAD request to check the x-amz-restore header for restore status.
-		if isArchiveStorageClass(objectInfo.StorageClass) {
-			statInfo, err := t.s3Client.StatObject(t.ctx, t.s3URLParts.BucketName, objectInfo.Key, minio.StatObjectOptions{})
-			if err != nil || !isRestoredFromArchive(statInfo.Restore) {
-				skipMessage := fmt.Sprintf("Skipping S3 object %s as it is in %s storage class and has not been restored. "+
-					"Objects in archive storage classes must be restored before they can be transferred.",
-					objectInfo.Key, objectInfo.StorageClass)
-				WarnStdoutAndScanningLog(skipMessage)
-
-				// Increment the enumeration counter to track this as a skipped object
-				t.incrementEnumerationCounter(common.EEntityType.Other())
-				continue
-			}
-		}
-
 		if objectInfo.StorageClass == "" && !t.includeDirectoryOrPrefix {
 			// Directories are the only objects without storage classes.
 			// Skip directories if not using sync orchestrator
@@ -454,31 +436,4 @@ func CreateSharedS3Client(ctx context.Context, s3URLParts common.S3URLParts, cre
 	}, azcopyScanningLogger)
 }
 
-// isArchiveStorageClass checks if the given storage class is an archive tier
-// that requires restoration before objects can be accessed. Objects in these storage classes
-// cannot be directly downloaded and will result in 403 errors if attempted.
-// This function supports archive storage classes from multiple S3-compatible providers:
-//
-// AWS S3 Glacier storage classes that require restoration:
-// - GLACIER: Glacier Flexible Retrieval (formerly just "Glacier") - requires restoration
-// - DEEP_ARCHIVE: Glacier Deep Archive - requires restoration
-//
-// Note: The following storage classes are NOT included as they provide immediate access:
-// - GLACIER_IR (AWS): Provides millisecond access without restoration
-// - NEARLINE, COLDLINE, ARCHIVE (GCS): All provide immediate access without restoration
-//
-// To add support for additional archive storage classes from other S3-compatible providers
-// that require restoration, add the storage class string to the comparison below.
-func isArchiveStorageClass(storageClass string) bool {
-	// AWS Glacier storage classes that require restoration
-	return storageClass == "GLACIER" || storageClass == "DEEP_ARCHIVE"
-}
 
-// isRestoredFromArchive checks whether an archived object has been successfully
-// restored and is currently accessible. A restore is considered ready when:
-//   - RestoreInfo is not nil (x-amz-restore header was present)
-//   - OngoingRestore is false (restore operation has completed)
-//   - ExpiryTime is set (the temporary copy has an expiry, confirming availability)
-func isRestoredFromArchive(restore *minio.RestoreInfo) bool {
-	return restore != nil && !restore.OngoingRestore && !restore.ExpiryTime.IsZero()
-}

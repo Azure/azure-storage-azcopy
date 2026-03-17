@@ -598,6 +598,17 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 						IsFolderProperties: isFolder,
 						TransferStatus:     jppt.TransferStatus(),
 					})
+			case common.ETransferStatus.SkippedArchiveNotRestored():
+				js.SkippedArchiveFileCount++
+				// getting the source and destination for skipped transfer at position - index
+				src, dst, isFolder := jpp.TransferSrcDstStrings(t)
+				js.SkippedTransfers = append(js.SkippedTransfers,
+					common.TransferDetail{
+						Src:                src,
+						Dst:                dst,
+						IsFolderProperties: isFolder,
+						TransferStatus:     jppt.TransferStatus(),
+					})
 			}
 		}
 	})
