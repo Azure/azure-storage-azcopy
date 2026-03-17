@@ -106,9 +106,6 @@ func setSharedLMTIfNFS(svm *ScenarioVariationManager, obj ObjectResourceManager,
 // container is NFS, or nil otherwise.  Pass the result as ObjectProperties.FileNFSProperties
 // in a CreateResource call to make it harmless for local containers.
 func nfsPropsIfNFS(container ContainerResourceManager, lmt time.Time) *FileNFSProperties {
-	// if !isNFSContainer(container) {
-	// 	return nil
-	// }
 	return &FileNFSProperties{FileLastWriteTime: pointerTo(lmt)}
 }
 
