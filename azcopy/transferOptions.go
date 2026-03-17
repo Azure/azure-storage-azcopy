@@ -338,7 +338,7 @@ func (c *CookedTransferOptions) applyDefaultsAndInferOptions(opts CopyOptions) (
 		(c.fromTo.From().IsFile() &&
 			c.fromTo.To().IsRemote() && (c.s2sSourceChangeValidation || c.filterOptions.IncludeAfter != nil || c.filterOptions.IncludeBefore != nil)) || // If S2S from File to *, and sourceChangeValidation is enabled, we get properties so that we have LMTs. Likewise, if we are using includeAfter or includeBefore, which require LMTs.
 		(c.fromTo.From().IsRemote() && c.fromTo.To().IsRemote() && c.s2sPreserveProperties.Get() && !c.s2sGetPropertiesInBackend) // If S2S and preserve properties AND get properties in backend is on, turn this off, as properties will be obtained in the backend.
-	c.s2sGetPropertiesInBackend = c.s2sPreserveProperties.Get() && !c.getPropertiesInFrontend && c.s2sGetPropertiesInBackend // Infer GetProperties if GetPropertiesInBackend is enabled.
+	c.s2sGetPropertiesInBackend = c.s2sPreserveProperties.Get() && !c.getPropertiesInFrontend && c.s2sGetPropertiesInBackend      // Infer GetProperties if GetPropertiesInBackend is enabled.
 
 	c.srcLevel, err = DetermineLocationLevel(c.source.Value, c.fromTo.From(), true)
 	if err != nil {
@@ -554,7 +554,7 @@ func (c *CookedTransferOptions) validateOptions() (err error) {
 	}
 
 	// blob tags
-	if (c.fromTo.To() != common.ELocation.Blob() && c.fromTo != common.EFromTo.BlobNone() && c.fromTo == common.EFromTo.BlobFSNone()) && c.blobTags != nil {
+	if (c.fromTo.To() != common.ELocation.Blob() && c.fromTo != common.EFromTo.BlobNone() && c.fromTo != common.EFromTo.BlobFSNone()) && c.blobTags != nil {
 		return errors.New("blob tags can only be set when transferring to blob storage")
 	}
 	if c.fromTo.To() == common.ELocation.None() && c.blobTags != nil && len(c.blobTags) == 0 { // in case of Blob and BlobFS
