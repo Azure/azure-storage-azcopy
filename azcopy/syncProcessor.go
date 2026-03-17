@@ -28,7 +28,6 @@ import (
 	"path"
 	"strings"
 
-	_ "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 )

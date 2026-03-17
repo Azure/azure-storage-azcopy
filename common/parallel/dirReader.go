@@ -94,7 +94,7 @@ func (r linuxDirReader) Readdir(dir *os.File, n int) ([]os.FileInfo, error) {
 	for try := 1; ; try++ {
 		timeout := time.Duration(try*try) * time.Minute
 		result, err := r.doReaddir(dir, n, timeout)
-		if errors.Is(ErrReaddirTimeout, err) && try <= 3 { // we saw a few timeouts in customer testing prior to adding this
+		if errors.Is(err, ErrReaddirTimeout) && try <= 3 { // we saw a few timeouts in customer testing prior to adding this
 			continue
 		}
 		return result, err

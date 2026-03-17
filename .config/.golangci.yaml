@@ -4,7 +4,7 @@ run:
 linters:
   settings:
     staticcheck:
-      checks: # disables all but
+      checks: # disables these
         - "-S1008"   #https://staticcheck.dev/docs/checks/#S1008
         - "-ST1003"  #https://staticcheck.dev/docs/checks/#ST1003
   exclusions:
