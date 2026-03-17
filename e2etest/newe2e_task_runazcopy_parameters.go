@@ -209,7 +209,7 @@ type GlobalFlags struct {
 	// DebugSkipFiles []string `flag:"debug-skip-files"`
 
 	// TODO: handle prompting and input; WI#26475441
-	//CancelFromStdin *bool `flag:"cancel-from-stdin"`
+	CancelFromStdin *bool `flag:"cancel-from-stdin"`
 	AwaitContinue *bool `flag:"await-continue,defaultfunc:DefaultAwaitContinue"`
 	//AwaitOpen       *bool `flag:"await-open"`
 
