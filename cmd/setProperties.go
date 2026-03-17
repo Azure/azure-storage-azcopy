@@ -35,6 +35,7 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaultsForSetProperties() {
 	raw.s2sInvalidMetadataHandleOption = common.DefaultInvalidMetadataHandleOption.String()
 	raw.forceWrite = common.EOverwriteOption.True().String()
 	raw.preserveOwner = common.PreserveOwnerDefault
+	raw.posixPropertiesStyle = common.EPosixPropertiesStyle.Standard().String()
 }
 
 func (cca *CookedCopyCmdArgs) checkIfChangesPossible() error {
