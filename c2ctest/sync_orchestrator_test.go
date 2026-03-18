@@ -19,6 +19,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	datalakedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/directory"
 	datalakefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/filesystem"
 	"github.com/google/uuid"
@@ -46,27 +47,90 @@ const (
 // ---------------------------------------------------------------------------
 
 type SyncStats struct {
-	CopyFileTransfers     int // "Number of Copy Transfers for Files"
-	CopyFolderTransfers   int // "Number of Copy Transfers for Folder Properties"
-	TotalCopyTransfers    int // "Total Number of Copy Transfers"
-	CopyCompleted         int // "Number of Copy Transfers Completed"
-	CopyFailed            int // "Number of Copy Transfers Failed"
-	Deletions             int // "Number of Deletions at Destination"
-	FinalStatus           string
+	// Enumeration
+	FilesScannedAtSource   int
+	FilesScannedAtDest     int
+	FoldersScannedAtSource int
+	FoldersScannedAtDest   int
+
+	// Transfers
+	CopyFileTransfers      int // "Number of Copy Transfers for Files"
+	CopyFolderTransfers    int // "Number of Copy Transfers for Folder Properties"
+	CopyFilePropsTransfers int // "Number of Copy Transfers for Files Properties"
+	TotalCopyTransfers     int // "Total Number of Copy Transfers"
+	CopyCompleted          int // "Number of Copy Transfers Completed"
+	CopyFailed             int // "Number of Copy Transfers Failed"
+
+	// Deletions
+	Deletions int // "Number of Deletions at Destination"
+
+	// Skipped/Converted
+	SymlinksSkipped       int
+	SpecialFilesSkipped   int
+	ArchiveGlacierSkipped int
+	HardlinksConverted    int
+
+	// Not requiring transfer
+	FilesNotRequiringTransfer   int
+	FoldersNotRequiringTransfer int
+
+	// Enumeration failures
+	SrcFoldersFailedEnum  int // "Source Folders Failed During Enumeration"
+	DstFoldersFailedEnum  int // "Destination Folders Failed During Enumeration"
+	DstFoldersSkippedEnum int // "Destination Folders Skipped During Enumeration"
+
+	// Bytes
+	BytesTransferred int64
+	BytesEnumerated  int64
+
+	// Status
+	FinalStatus string
 }
 
 var (
 	// Sync output uses dot-padding: "Number of Copy Transfers Completed: ............           13"
 	// Use [.\s]* to match both dots and whitespace between label and value.
-	reCopyFileTransfers   = regexp.MustCompile(`Number of Copy Transfers for Files:[.\s]*(\d+)`)
-	reCopyFolderTransfers = regexp.MustCompile(`Number of Copy Transfers for Folder Properties:[.\s]*(\d+)`)
-	reTotalCopyTransfers  = regexp.MustCompile(`Total Number of Copy Transfers:[.\s]*(\d+)`)
-	reCopyCompleted       = regexp.MustCompile(`Number of Copy Transfers Completed:[.\s]*(\d+)`)
-	reCopyFailed          = regexp.MustCompile(`Number of Copy Transfers Failed:[.\s]*(\d+)`)
-	reDeletions           = regexp.MustCompile(`Number of Deletions at Destination:[.\s]*(\d+)`)
-	reFinalStatus         = regexp.MustCompile(`Final Job Status:[.\s]*(\S+)`)
-	reAlreadyInSync       = regexp.MustCompile(`already in sync`)
-	reNowInSync           = regexp.MustCompile(`now in sync`)
+
+	// Enumeration
+	reFilesScannedSrc   = regexp.MustCompile(`Files Scanned at Source:[.\s]*(\d+)`)
+	reFilesScannedDst   = regexp.MustCompile(`Files Scanned at Destination:[.\s]*(\d+)`)
+	reFoldersScannedSrc = regexp.MustCompile(`Folders Scanned at Source:[.\s]*(\d+)`)
+	reFoldersScannedDst = regexp.MustCompile(`Folders Scanned at Destination:[.\s]*(\d+)`)
+
+	// Transfers
+	reCopyFileTransfers      = regexp.MustCompile(`Number of Copy Transfers for Files:[.\s]*(\d+)`)
+	reCopyFolderTransfers    = regexp.MustCompile(`Number of Copy Transfers for Folder Properties:[.\s]*(\d+)`)
+	reCopyFilePropsTransfers = regexp.MustCompile(`Number of Copy Transfers for Files Properties:[.\s]*(\d+)`)
+	reTotalCopyTransfers     = regexp.MustCompile(`Total Number of Copy Transfers:[.\s]*(\d+)`)
+	reCopyCompleted          = regexp.MustCompile(`Number of Copy Transfers Completed:[.\s]*(\d+)`)
+	reCopyFailed             = regexp.MustCompile(`Number of Copy Transfers Failed:[.\s]*(\d+)`)
+
+	// Deletions
+	reDeletions = regexp.MustCompile(`Number of Deletions at Destination:[.\s]*(\d+)`)
+
+	// Skipped/Converted
+	reSymlinksSkipped     = regexp.MustCompile(`Number of Symbolic Links Skipped:[.\s]*(\d+)`)
+	reSpecialFilesSkipped = regexp.MustCompile(`Number of Special Files Skipped:[.\s]*(\d+)`)
+	reArchiveSkipped      = regexp.MustCompile(`Number of Archive/Glacier Objects Skipped:[.\s]*(\d+)`)
+	reHardlinksConverted  = regexp.MustCompile(`Number of Hardlinks Converted:[.\s]*(\d+)`)
+
+	// Not requiring transfer
+	reFilesNotReqTransfer   = regexp.MustCompile(`Number of Files Not Requiring Transfer:[.\s]*(\d+)`)
+	reFoldersNotReqTransfer = regexp.MustCompile(`Number of Folders Not Requiring Transfer:[.\s]*(\d+)`)
+
+	// Enumeration failures
+	reSrcFoldersFailedEnum  = regexp.MustCompile(`Source Folders Failed During Enumeration:[.\s]*(\d+)`)
+	reDstFoldersFailedEnum  = regexp.MustCompile(`Destination Folders Failed During Enumeration:[.\s]*(\d+)`)
+	reDstFoldersSkippedEnum = regexp.MustCompile(`Destination Folders Skipped During Enumeration:[.\s]*(\d+)`)
+
+	// Bytes
+	reBytesTransferred = regexp.MustCompile(`Total Number of Bytes Transferred:[.\s]*(\d+)`)
+	reBytesEnumerated  = regexp.MustCompile(`Total Number of Bytes Enumerated:[.\s]*(\d+)`)
+
+	// Status
+	reFinalStatus   = regexp.MustCompile(`Final Job Status:[.\s]*(\S+)`)
+	reAlreadyInSync = regexp.MustCompile(`already in sync`)
+	reNowInSync     = regexp.MustCompile(`now in sync`)
 )
 
 func extractInt(re *regexp.Regexp, s string) int {
@@ -78,15 +142,55 @@ func extractInt(re *regexp.Regexp, s string) int {
 	return v
 }
 
+func extractInt64(re *regexp.Regexp, s string) int64 {
+	m := re.FindStringSubmatch(s)
+	if len(m) < 2 {
+		return 0
+	}
+	v, _ := strconv.ParseInt(m[1], 10, 64)
+	return v
+}
+
 func parseSyncStats(stdout string) SyncStats {
 	return SyncStats{
-		CopyFileTransfers:   extractInt(reCopyFileTransfers, stdout),
-		CopyFolderTransfers: extractInt(reCopyFolderTransfers, stdout),
-		TotalCopyTransfers:  extractInt(reTotalCopyTransfers, stdout),
-		CopyCompleted:       extractInt(reCopyCompleted, stdout),
-		CopyFailed:          extractInt(reCopyFailed, stdout),
-		Deletions:           extractInt(reDeletions, stdout),
-		FinalStatus:         extractFinalStatus(stdout),
+		// Enumeration
+		FilesScannedAtSource:   extractInt(reFilesScannedSrc, stdout),
+		FilesScannedAtDest:     extractInt(reFilesScannedDst, stdout),
+		FoldersScannedAtSource: extractInt(reFoldersScannedSrc, stdout),
+		FoldersScannedAtDest:   extractInt(reFoldersScannedDst, stdout),
+
+		// Transfers
+		CopyFileTransfers:      extractInt(reCopyFileTransfers, stdout),
+		CopyFolderTransfers:    extractInt(reCopyFolderTransfers, stdout),
+		CopyFilePropsTransfers: extractInt(reCopyFilePropsTransfers, stdout),
+		TotalCopyTransfers:     extractInt(reTotalCopyTransfers, stdout),
+		CopyCompleted:          extractInt(reCopyCompleted, stdout),
+		CopyFailed:             extractInt(reCopyFailed, stdout),
+
+		// Deletions
+		Deletions: extractInt(reDeletions, stdout),
+
+		// Skipped/Converted
+		SymlinksSkipped:       extractInt(reSymlinksSkipped, stdout),
+		SpecialFilesSkipped:   extractInt(reSpecialFilesSkipped, stdout),
+		ArchiveGlacierSkipped: extractInt(reArchiveSkipped, stdout),
+		HardlinksConverted:    extractInt(reHardlinksConverted, stdout),
+
+		// Not requiring transfer
+		FilesNotRequiringTransfer:   extractInt(reFilesNotReqTransfer, stdout),
+		FoldersNotRequiringTransfer: extractInt(reFoldersNotReqTransfer, stdout),
+
+		// Enumeration failures
+		SrcFoldersFailedEnum:  extractInt(reSrcFoldersFailedEnum, stdout),
+		DstFoldersFailedEnum:  extractInt(reDstFoldersFailedEnum, stdout),
+		DstFoldersSkippedEnum: extractInt(reDstFoldersSkippedEnum, stdout),
+
+		// Bytes
+		BytesTransferred: extractInt64(reBytesTransferred, stdout),
+		BytesEnumerated:  extractInt64(reBytesEnumerated, stdout),
+
+		// Status
+		FinalStatus: extractFinalStatus(stdout),
 	}
 }
 
@@ -229,6 +333,9 @@ func setupBlobData(t *testing.T, account, containerName string, files map[string
 	}
 
 	for name, data := range files {
+		if isDirEntry(name) {
+			continue
+		}
 		_, err := client.UploadBuffer(ctx, containerName, name, data, &azblob.UploadBufferOptions{
 			BlockSize: int64(len(data)) + 1,
 		})
@@ -316,7 +423,26 @@ func setupBlobFSData(t *testing.T, account, fsName string, files map[string][]by
 	cred, err := azidentity.NewAzureCLICredential(nil)
 	require.NoError(t, err)
 
+	// Create explicit directory entries first
+	for name := range files {
+		if !isDirEntry(name) {
+			continue
+		}
+		dirPath := strings.TrimSuffix(name, "/")
+		dirURL := fmt.Sprintf("https://%s.dfs.core.windows.net/%s/%s", account, fsName, dirPath)
+		dirClient, err := datalakedirectory.NewClient(dirURL, cred, nil)
+		require.NoError(t, err)
+		_, err = dirClient.Create(ctx, nil)
+		if err != nil && !strings.Contains(err.Error(), "PathAlreadyExists") {
+			require.NoError(t, err, "Create dir failed for %s", dirPath)
+		}
+	}
+
+	// Upload file entries
 	for name, data := range files {
+		if isDirEntry(name) {
+			continue
+		}
 		// Ensure parent directories exist by creating file directly
 		fileURL := fmt.Sprintf("https://%s.dfs.core.windows.net/%s/%s", account, fsName, name)
 		fileClient, err := datalakefile.NewClient(fileURL, cred, nil)
@@ -386,6 +512,27 @@ func listBlobFS(t *testing.T, account, fsName string) []string {
 				if !isDir {
 					names = append(names, *path.Name)
 				}
+			}
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+func listBlobFSAll(t *testing.T, account, fsName string) []string {
+	t.Helper()
+	ctx := context.Background()
+	fsClient := newFilesystemClient(t, account, fsName)
+
+	recursive := true
+	var names []string
+	pager := fsClient.NewListPathsPager(recursive, &filesystem.ListPathsOptions{})
+	for pager.More() {
+		page, err := pager.NextPage(ctx)
+		require.NoError(t, err, "listBlobFSAll: NextPage failed")
+		for _, path := range page.Paths {
+			if path.Name != nil {
+				names = append(names, *path.Name)
 			}
 		}
 	}
@@ -479,6 +626,9 @@ func setupS3Data(t *testing.T, bucket string, files map[string][]byte) {
 	}
 
 	for name, data := range files {
+		if isDirEntry(name) {
+			continue
+		}
 		_, err := client.PutObject(ctx, bucket, name, bytes.NewReader(data), int64(len(data)),
 			minio.PutObjectOptions{ContentType: "application/octet-stream"})
 		require.NoError(t, err, "PutObject failed for %s/%s", bucket, name)
@@ -606,6 +756,15 @@ func mainDataset() map[string][]byte {
 	}
 }
 
+func mainDatasetWithEmptyDirs() map[string][]byte {
+	d := mainDataset()
+	d["empty_root_dir/"] = []byte{}         // root-level empty dir
+	d["dir1/empty_sub/"] = []byte{}         // empty subdir inside dir1 (dir1/ derived from files)
+	d["dir2/nested/empty_leaf/"] = []byte{} // deeper empty dir (dir2/nested/ derived from files)
+	d["dense/empty_child/"] = []byte{}      // empty dir in dense dir (dense/ derived from files)
+	return d
+}
+
 func namelessDirDataset() map[string][]byte {
 	return map[string][]byte{
 		"normal.txt":                        []byte("normal"),
@@ -668,13 +827,69 @@ func rootOnlyDataset() map[string][]byte {
 	}
 }
 
+func isDirEntry(key string) bool {
+	return strings.HasSuffix(key, "/")
+}
+
 func datasetKeys(d map[string][]byte) []string {
 	keys := make([]string, 0, len(d))
 	for k := range d {
-		keys = append(keys, k)
+		if !isDirEntry(k) {
+			keys = append(keys, k)
+		}
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+func datasetDirKeys(d map[string][]byte) []string {
+	var dirs []string
+	for k := range d {
+		if isDirEntry(k) {
+			dirs = append(dirs, k)
+		}
+	}
+	sort.Strings(dirs)
+	return dirs
+}
+
+func deriveDirs(fileKeys []string) []string {
+	dirSet := make(map[string]bool)
+	for _, key := range fileKeys {
+		parts := strings.Split(key, "/")
+		for i := 1; i < len(parts); i++ {
+			dir := strings.Join(parts[:i], "/") + "/"
+			dirSet[dir] = true
+		}
+	}
+	var dirs []string
+	for d := range dirSet {
+		dirs = append(dirs, d)
+	}
+	sort.Strings(dirs)
+	return dirs
+}
+
+func datasetKeysWithDirs(d map[string][]byte) []string {
+	files := datasetKeys(d)
+	impliedDirs := deriveDirs(files)
+	explicitDirs := datasetDirKeys(d)
+
+	dirSet := make(map[string]bool)
+	for _, d := range impliedDirs {
+		dirSet[d] = true
+	}
+	for _, d := range explicitDirs {
+		dirSet[d] = true
+	}
+
+	all := make([]string, 0, len(files)+len(dirSet))
+	all = append(all, files...)
+	for d := range dirSet {
+		all = append(all, d)
+	}
+	sort.Strings(all)
+	return all
 }
 
 // filterByPrefix returns keys that start with prefix + "/".
@@ -701,12 +916,24 @@ func filterOutPrefix(keys []string, prefix string) []string {
 	return out
 }
 
-// subpathDataset returns only entries from d whose keys start with prefix + "/".
-func subpathDataset(d map[string][]byte, prefix string) map[string][]byte {
+// filterDatasetByPrefix returns dataset entries whose key starts with prefix + "/".
+func filterDatasetByPrefix(d map[string][]byte, prefix string) map[string][]byte {
 	p := prefix + "/"
 	out := make(map[string][]byte)
 	for k, v := range d {
 		if strings.HasPrefix(k, p) {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+// filterDatasetOutPrefix returns dataset entries whose key does NOT start with prefix + "/".
+func filterDatasetOutPrefix(d map[string][]byte, prefix string) map[string][]byte {
+	p := prefix + "/"
+	out := make(map[string][]byte)
+	for k, v := range d {
+		if !strings.HasPrefix(k, p) {
 			out[k] = v
 		}
 	}
@@ -751,6 +978,55 @@ func assertNoLeadingSlash(t *testing.T, names []string) {
 	}
 }
 
+func assertNoFailures(t *testing.T, stats SyncStats) {
+	t.Helper()
+	assert.Equal(t, 0, stats.CopyFailed, "Expected 0 failed transfers")
+	assert.Equal(t, 0, stats.SrcFoldersFailedEnum,
+		"Expected 0 source folders failed during enumeration")
+	assert.Equal(t, 0, stats.DstFoldersFailedEnum,
+		"Expected 0 destination folders failed during enumeration")
+}
+
+func assertSyncStats(t *testing.T, stats SyncStats, expectedFiles, expectedFolders int) {
+	t.Helper()
+	assertNoFailures(t, stats)
+
+	// Enumeration completeness
+	assert.Equal(t, expectedFiles, stats.FilesScannedAtSource,
+		"Expected %d files scanned at source", expectedFiles)
+	assert.Equal(t, expectedFolders, stats.FoldersScannedAtSource,
+		"Expected %d folders scanned at source", expectedFolders)
+
+	// Transfer completeness
+	assert.Equal(t, expectedFiles, stats.CopyFileTransfers,
+		"Expected %d file copy transfers", expectedFiles)
+	totalExpected := stats.CopyFileTransfers + stats.CopyFolderTransfers + stats.CopyFilePropsTransfers
+	assert.Equal(t, totalExpected, stats.CopyCompleted,
+		"All scheduled transfers should complete")
+	assert.Equal(t, totalExpected, stats.TotalCopyTransfers,
+		"Total should match sum of file + folder + file props transfers")
+}
+
+func assertDestContainsAll(t *testing.T, pair c2cPair, container string, dataset map[string][]byte) {
+	t.Helper()
+	if pair.dstListAll == nil {
+		return
+	}
+	actual := pair.dstListAll(t, container)
+	expected := datasetKeysWithDirs(dataset)
+
+	// The BlobFS API does not include trailing '/' on directory names,
+	// but datasetKeysWithDirs uses trailing '/'. Strip from expected
+	// when the destination is HNS so the two sides match.
+	if pair.isHNSDest {
+		for i, e := range expected {
+			expected[i] = strings.TrimSuffix(e, "/")
+		}
+	}
+
+	assertDestContains(t, actual, expected)
+}
+
 // ---------------------------------------------------------------------------
 // C2C pair abstraction
 // ---------------------------------------------------------------------------
@@ -767,6 +1043,7 @@ type c2cPair struct {
 	srcCleanup  func(t *testing.T, container string)
 	dstCleanup  func(t *testing.T, container string)
 	dstList     func(t *testing.T, container string) []string
+	dstListAll  func(t *testing.T, container string) []string // includes directories
 	srcURL      func(container string) string
 	dstURL      func(container string) string
 
@@ -790,6 +1067,7 @@ func allC2CPairs() []c2cPair {
 			srcCleanup: func(t *testing.T, c string) { cleanupS3(t, c) },
 			dstCleanup: func(t *testing.T, c string) { cleanupBlob(t, c2cBlobDestAccount, c) },
 			dstList:    func(t *testing.T, c string) []string { return listBlob(t, c2cBlobDestAccount, c) },
+			dstListAll: nil,
 			srcURL:     func(c string) string { return s3SyncURL(c) },
 			dstURL:     func(c string) string { return blobSyncURL(c2cBlobDestAccount, c) },
 			supportsNamelessDirs: true,
@@ -806,6 +1084,7 @@ func allC2CPairs() []c2cPair {
 			srcCleanup: func(t *testing.T, c string) { cleanupBlob(t, c2cBlobSourceAccount, c) },
 			dstCleanup: func(t *testing.T, c string) { cleanupBlob(t, c2cBlobDestAccount, c) },
 			dstList:    func(t *testing.T, c string) []string { return listBlob(t, c2cBlobDestAccount, c) },
+			dstListAll: nil,
 			srcURL:     func(c string) string { return blobSyncURL(c2cBlobSourceAccount, c) },
 			dstURL:     func(c string) string { return blobSyncURL(c2cBlobDestAccount, c) },
 			supportsNamelessDirs: true,
@@ -822,6 +1101,7 @@ func allC2CPairs() []c2cPair {
 			srcCleanup: func(t *testing.T, c string) { cleanupBlob(t, c2cBlobSourceAccount, c) },
 			dstCleanup: func(t *testing.T, c string) { cleanupBlobFS(t, c2cHNSSourceAccount, c) },
 			dstList:    func(t *testing.T, c string) []string { return listBlobFS(t, c2cHNSSourceAccount, c) },
+			dstListAll: func(t *testing.T, c string) []string { return listBlobFSAll(t, c2cHNSSourceAccount, c) },
 			srcURL:     func(c string) string { return blobSyncURL(c2cBlobSourceAccount, c) },
 			dstURL:     func(c string) string { return blobFSSyncURL(c2cHNSSourceAccount, c) },
 			supportsNamelessDirs: true,
@@ -838,6 +1118,7 @@ func allC2CPairs() []c2cPair {
 			srcCleanup: func(t *testing.T, c string) { cleanupBlobFS(t, c2cHNSSourceAccount, c) },
 			dstCleanup: func(t *testing.T, c string) { cleanupBlob(t, c2cBlobDestAccount, c) },
 			dstList:    func(t *testing.T, c string) []string { return listBlob(t, c2cBlobDestAccount, c) },
+			dstListAll: nil,
 			srcURL:     func(c string) string { return blobFSSyncURL(c2cHNSSourceAccount, c) },
 			dstURL:     func(c string) string { return blobSyncURL(c2cBlobDestAccount, c) },
 			supportsNamelessDirs: false,
@@ -854,6 +1135,7 @@ func allC2CPairs() []c2cPair {
 			srcCleanup: func(t *testing.T, c string) { cleanupBlobFS(t, c2cHNSSourceAccount, c) },
 			dstCleanup: func(t *testing.T, c string) { cleanupBlobFS(t, c2cHNSDestAccount, c) },
 			dstList:    func(t *testing.T, c string) []string { return listBlobFS(t, c2cHNSDestAccount, c) },
+			dstListAll: func(t *testing.T, c string) []string { return listBlobFSAll(t, c2cHNSDestAccount, c) },
 			srcURL:     func(c string) string { return blobFSSyncURL(c2cHNSSourceAccount, c) },
 			dstURL:     func(c string) string { return blobFSSyncURL(c2cHNSDestAccount, c) },
 			supportsNamelessDirs: false,
@@ -931,19 +1213,25 @@ func mirrorSyncFlags() map[string]string {
 func TestSync_C2C_FreshSync(t *testing.T) {
 	binary := buildAzCopy(t)
 	dataset := mainDataset()
-	expected := datasetKeys(dataset)
 
 	for _, pair := range allC2CPairs() {
 		pair := pair
 		t.Run(pair.name, func(t *testing.T) {
 			t.Parallel()
+
+			pairDataset := dataset
+			if pair.name == "BlobFSToBlobFS" {
+				pairDataset = mainDatasetWithEmptyDirs()
+			}
+			expected := datasetKeys(pairDataset)
+
 			srcContainer := uniqueName("c2c-fresh-src")
 			dstContainer := uniqueName("c2c-fresh-dst")
 			defer pair.srcCleanup(t, srcContainer)
 			defer pair.dstCleanup(t, dstContainer)
 
 			// Setup source with full dataset
-			pair.srcSetup(t, srcContainer, dataset)
+			pair.srcSetup(t, srcContainer, pairDataset)
 
 			// Create empty destination container
 			pair.dstSetup(t, dstContainer, map[string][]byte{})
@@ -961,10 +1249,11 @@ func TestSync_C2C_FreshSync(t *testing.T) {
 			assertNoLeadingSlash(t, actual)
 
 			// Validate stats
+			expectedFiles := len(expected)
+			expectedFolders := len(datasetKeysWithDirs(pairDataset)) - expectedFiles
 			stats := parseSyncStats(stdout)
-			assert.Equal(t, len(expected)+stats.CopyFolderTransfers, stats.CopyCompleted,
-				"Expected %d file transfers completed", len(expected))
-			assert.Equal(t, 0, stats.CopyFailed, "Expected 0 failed transfers")
+			assertSyncStats(t, stats, expectedFiles, expectedFolders)
+			assertDestContainsAll(t, pair, dstContainer, pairDataset)
 		})
 	}
 }
@@ -976,7 +1265,6 @@ func TestSync_C2C_FreshSync(t *testing.T) {
 func TestSync_C2C_IncrementalSync(t *testing.T) {
 	binary := buildAzCopy(t)
 	dataset := mainDataset()
-	expected := datasetKeys(dataset)
 
 	modifiedFiles := []string{
 		"root_file1.txt",
@@ -990,25 +1278,32 @@ func TestSync_C2C_IncrementalSync(t *testing.T) {
 		pair := pair
 		t.Run(pair.name, func(t *testing.T) {
 			t.Parallel()
+
+			pairDataset := dataset
+			if pair.name == "BlobFSToBlobFS" {
+				pairDataset = mainDatasetWithEmptyDirs()
+			}
+			expected := datasetKeys(pairDataset)
+
 			srcContainer := uniqueName("c2c-incr-src")
 			dstContainer := uniqueName("c2c-incr-dst")
 			defer pair.srcCleanup(t, srcContainer)
 			defer pair.dstCleanup(t, dstContainer)
 
 			// Upload full dataset to source
-			pair.srcSetup(t, srcContainer, dataset)
+			pair.srcSetup(t, srcContainer, pairDataset)
 
 			// Wait to establish LMT gap
 			time.Sleep(2 * time.Second)
 
 			// Upload full dataset to destination (dest is newer)
-			pair.dstSetup(t, dstContainer, dataset)
+			pair.dstSetup(t, dstContainer, pairDataset)
 
 			// Wait again
 			time.Sleep(2 * time.Second)
 
 			// Re-upload 5 files to source (source now newer for these)
-			pair.srcReupload(t, srcContainer, modifiedFiles, dataset)
+			pair.srcReupload(t, srcContainer, modifiedFiles, pairDataset)
 
 			// Run sync
 			stdout, _, exitCode := runAzCopySync(t, binary,
@@ -1024,10 +1319,12 @@ func TestSync_C2C_IncrementalSync(t *testing.T) {
 
 			// Validate stats: only modified files should transfer
 			stats := parseSyncStats(stdout)
+			assertNoFailures(t, stats)
 			assert.Equal(t, len(modifiedFiles), stats.CopyFileTransfers,
 				"Expected %d copy transfers scheduled", len(modifiedFiles))
-			assert.Equal(t, len(modifiedFiles)+stats.CopyFolderTransfers, stats.CopyCompleted,
-				"Expected %d files transferred", len(modifiedFiles))
+			assert.Equal(t, stats.FilesNotRequiringTransfer+stats.CopyFileTransfers, stats.FilesScannedAtSource,
+				"Files not requiring transfer + copied should equal files scanned")
+			assertDestContainsAll(t, pair, dstContainer, pairDataset)
 		})
 	}
 }
@@ -1051,6 +1348,12 @@ func TestSync_C2C_MirrorFileDelete(t *testing.T) {
 		pair := pair
 		t.Run(pair.name, func(t *testing.T) {
 			t.Parallel()
+
+			pairFullDataset := fullDataset
+			if pair.name == "BlobFSToBlobFS" {
+				pairFullDataset = mainDatasetWithEmptyDirs()
+			}
+
 			srcContainer := uniqueName("c2c-mirdel-src")
 			dstContainer := uniqueName("c2c-mirdel-dst")
 			defer pair.srcCleanup(t, srcContainer)
@@ -1060,7 +1363,7 @@ func TestSync_C2C_MirrorFileDelete(t *testing.T) {
 			pair.srcSetup(t, srcContainer, subsetFiles)
 
 			// Destination: full dataset
-			pair.dstSetup(t, dstContainer, fullDataset)
+			pair.dstSetup(t, dstContainer, pairFullDataset)
 
 			// Run sync with mirror mode
 			stdout, _, exitCode := runAzCopySync(t, binary,
@@ -1074,7 +1377,10 @@ func TestSync_C2C_MirrorFileDelete(t *testing.T) {
 			assertDestContains(t, actual, expectedKeys)
 			assertNoLeadingSlash(t, actual)
 
-			_ = stdout // stats logged above
+			stats := parseSyncStats(stdout)
+			assertNoFailures(t, stats)
+			assert.Greater(t, stats.Deletions, 0, "Expected deletions in mirror mode")
+			assertDestContainsAll(t, pair, dstContainer, subsetFiles)
 		})
 	}
 }
@@ -1100,6 +1406,12 @@ func TestSync_C2C_MirrorDirDelete(t *testing.T) {
 		pair := pair
 		t.Run(pair.name, func(t *testing.T) {
 			t.Parallel()
+
+			pairFullDataset := fullDataset
+			if pair.name == "BlobFSToBlobFS" {
+				pairFullDataset = mainDatasetWithEmptyDirs()
+			}
+
 			srcContainer := uniqueName("c2c-dirrel-src")
 			dstContainer := uniqueName("c2c-dirdel-dst")
 			defer pair.srcCleanup(t, srcContainer)
@@ -1109,10 +1421,10 @@ func TestSync_C2C_MirrorDirDelete(t *testing.T) {
 			pair.srcSetup(t, srcContainer, rootOnlyFiles)
 
 			// Destination: full dataset (includes dirs and nested content)
-			pair.dstSetup(t, dstContainer, fullDataset)
+			pair.dstSetup(t, dstContainer, pairFullDataset)
 
 			// Run sync with mirror mode
-			_, _, exitCode := runAzCopySync(t, binary,
+			stdout, _, exitCode := runAzCopySync(t, binary,
 				pair.srcURL(srcContainer), pair.dstURL(dstContainer),
 				mirrorSyncFlags())
 
@@ -1122,6 +1434,11 @@ func TestSync_C2C_MirrorDirDelete(t *testing.T) {
 			actual := pair.dstList(t, dstContainer)
 			assertDestContains(t, actual, expectedKeys)
 			assertNoLeadingSlash(t, actual)
+
+			stats := parseSyncStats(stdout)
+			assertNoFailures(t, stats)
+			assert.Greater(t, stats.Deletions, 0, "Expected deletions in mirror mode")
+			assertDestContainsAll(t, pair, dstContainer, rootOnlyFiles)
 		})
 	}
 }
@@ -1156,9 +1473,10 @@ func TestSync_C2C_NamelessDirFreshSync(t *testing.T) {
 			actual := pair.dstList(t, dstContainer)
 			assertDestContains(t, actual, expected)
 
+			expectedFiles := len(expected)
+			expectedFolders := len(datasetKeysWithDirs(dataset)) - expectedFiles
 			stats := parseSyncStats(stdout)
-			assert.Equal(t, len(expected)+stats.CopyFolderTransfers, stats.CopyCompleted,
-				"Expected %d file transfers", len(expected))
+			assertSyncStats(t, stats, expectedFiles, expectedFolders)
 		})
 	}
 }
@@ -1208,10 +1526,11 @@ func TestSync_C2C_NamelessDirIncrementalSync(t *testing.T) {
 			assertDestContains(t, actual, expected)
 
 			stats := parseSyncStats(stdout)
+			assertNoFailures(t, stats)
 			assert.Equal(t, len(modifiedFiles), stats.CopyFileTransfers,
 				"Expected %d copy transfers scheduled", len(modifiedFiles))
-			assert.Equal(t, len(modifiedFiles)+stats.CopyFolderTransfers, stats.CopyCompleted,
-				"Expected %d files transferred", len(modifiedFiles))
+			assert.Equal(t, stats.FilesNotRequiringTransfer+stats.CopyFileTransfers, stats.FilesScannedAtSource,
+				"Files not requiring transfer + copied should equal files scanned")
 		})
 	}
 }
@@ -1245,7 +1564,7 @@ func TestSync_C2C_NamelessDirMirrorDelete(t *testing.T) {
 			time.Sleep(5 * time.Second)
 			pair.srcSetup(t, srcContainer, sourceFiles)
 
-			_, _, exitCode := runAzCopySync(t, binary,
+			stdout, _, exitCode := runAzCopySync(t, binary,
 				pair.srcURL(srcContainer), pair.dstURL(dstContainer),
 				mirrorSyncFlags())
 
@@ -1253,6 +1572,10 @@ func TestSync_C2C_NamelessDirMirrorDelete(t *testing.T) {
 
 			actual := pair.dstList(t, dstContainer)
 			assertDestContains(t, actual, expectedKeys)
+
+			stats := parseSyncStats(stdout)
+			assertNoFailures(t, stats)
+			assert.Greater(t, stats.Deletions, 0, "Expected deletions in mirror mode")
 		})
 	}
 }
@@ -1287,10 +1610,10 @@ func TestSync_C2C_DeepNamelessDirs(t *testing.T) {
 			actual := pair.dstList(t, dstContainer)
 			assertDestContains(t, actual, expected)
 
+			expectedFiles := len(expected)
+			expectedFolders := len(datasetKeysWithDirs(dataset)) - expectedFiles
 			stats := parseSyncStats(stdout)
-			assert.Equal(t, len(expected)+stats.CopyFolderTransfers, stats.CopyCompleted,
-				"Expected %d file transfers for deeply nested nameless dirs", len(expected))
-			assert.Equal(t, 0, stats.CopyFailed, "Expected 0 failed")
+			assertSyncStats(t, stats, expectedFiles, expectedFolders)
 		})
 	}
 }
@@ -1327,10 +1650,11 @@ func TestSync_C2C_BlobNamelessToBlobFS(t *testing.T) {
 			actual := pair.dstList(t, dstContainer)
 			assertDestContains(t, actual, expectedKeys)
 
+			expectedFiles := len(datasetKeys(srcDataset))
+			expectedFolders := len(datasetKeysWithDirs(srcDataset)) - expectedFiles
 			stats := parseSyncStats(stdout)
-			// All source files attempted transfer
-			assert.Equal(t, len(srcDataset), stats.CopyFileTransfers,
-				"Expected %d file transfers attempted", len(srcDataset))
+			assertSyncStats(t, stats, expectedFiles, expectedFolders)
+			assertDestContainsAll(t, pair, dstContainer, crossTypeDatasetNormalized())
 		})
 	}
 }
@@ -1366,9 +1690,10 @@ func TestSync_C2C_BlobFSToBlob(t *testing.T) {
 			assertDestContains(t, actual, expected)
 			assertNoLeadingSlash(t, actual)
 
+			expectedFiles := len(expected)
+			expectedFolders := len(datasetKeysWithDirs(dataset)) - expectedFiles
 			stats := parseSyncStats(stdout)
-			assert.Equal(t, len(expected)+stats.CopyFolderTransfers, stats.CopyCompleted,
-				"Expected %d file transfers", len(expected))
+			assertSyncStats(t, stats, expectedFiles, expectedFolders)
 		})
 	}
 }
@@ -1419,9 +1744,11 @@ func TestSync_C2C_BlobFSToBlobNamelessMerge(t *testing.T) {
 
 			// Source files should be transferred (newer)
 			stats := parseSyncStats(stdout)
+			assertNoFailures(t, stats)
 			assert.Equal(t, len(sourceFiles), stats.CopyFileTransfers,
 				"Expected %d file transfers", len(sourceFiles))
-			assert.Equal(t, 0, stats.CopyFailed, "Expected 0 failed transfers")
+			assert.Equal(t, stats.FilesNotRequiringTransfer+stats.CopyFileTransfers, stats.FilesScannedAtSource,
+				"Files not requiring transfer + copied should equal files scanned")
 		})
 	}
 }
@@ -1457,7 +1784,7 @@ func TestSync_C2C_BlobFSToBlobNamelessMirrorDelete(t *testing.T) {
 			pair.srcSetup(t, srcContainer, sourceFiles)
 			pair.dstSetup(t, dstContainer, dstDataset)
 
-			_, _, exitCode := runAzCopySync(t, binary,
+			stdout, _, exitCode := runAzCopySync(t, binary,
 				pair.srcURL(srcContainer), pair.dstURL(dstContainer),
 				mirrorSyncFlags())
 
@@ -1465,6 +1792,10 @@ func TestSync_C2C_BlobFSToBlobNamelessMirrorDelete(t *testing.T) {
 
 			actual := pair.dstList(t, dstContainer)
 			assertDestContains(t, actual, expectedKeys)
+
+			stats := parseSyncStats(stdout)
+			assertNoFailures(t, stats)
+			assert.Greater(t, stats.Deletions, 0, "Expected deletions in mirror mode")
 		})
 	}
 }
@@ -1507,7 +1838,7 @@ func TestSync_C2C_BlobNamelessToBlobFSMirrorDelete(t *testing.T) {
 			pair.srcSetup(t, srcContainer, mirrorSrcFiles)
 
 			// Step 3: Mirror sync — should delete extras from BlobFS
-			_, _, exitCode := runAzCopySync(t, binary,
+			stdout, _, exitCode := runAzCopySync(t, binary,
 				pair.srcURL(srcContainer), pair.dstURL(dstContainer),
 				mirrorSyncFlags())
 
@@ -1515,6 +1846,10 @@ func TestSync_C2C_BlobNamelessToBlobFSMirrorDelete(t *testing.T) {
 
 			actual = pair.dstList(t, dstContainer)
 			assertDestContains(t, actual, expectedKeys)
+
+			stats := parseSyncStats(stdout)
+			assertNoFailures(t, stats)
+			assert.Greater(t, stats.Deletions, 0, "Expected deletions in mirror mode")
 
 			_ = srcDataset // referenced for context
 		})
@@ -1552,9 +1887,10 @@ func TestSync_C2C_RootOnlyFiles(t *testing.T) {
 			assertDestContains(t, actual, expected)
 			assertNoLeadingSlash(t, actual)
 
+			expectedFiles := len(expected)
+			expectedFolders := len(datasetKeysWithDirs(dataset)) - expectedFiles
 			stats := parseSyncStats(stdout)
-			assert.Equal(t, len(expected)+stats.CopyFolderTransfers, stats.CopyCompleted,
-				"Expected %d file transfers", len(expected))
+			assertSyncStats(t, stats, expectedFiles, expectedFolders)
 		})
 	}
 }
@@ -1597,9 +1933,10 @@ func TestSync_C2C_PrefixCollision(t *testing.T) {
 			actual := pair.dstList(t, dstContainer)
 			assertDestContains(t, actual, expected)
 
+			expectedFiles := len(expected)
+			expectedFolders := len(datasetKeysWithDirs(dataset)) - expectedFiles
 			stats := parseSyncStats(stdout)
-			assert.Equal(t, len(expected)+stats.CopyFolderTransfers, stats.CopyCompleted,
-				"Expected %d file transfers", len(expected))
+			assertSyncStats(t, stats, expectedFiles, expectedFolders)
 
 			// Specifically verify dir1_extra.txt is at root, not under dir1/
 			assert.Contains(t, actual, "dir1_extra.txt",
@@ -1647,9 +1984,10 @@ func TestSync_C2C_MixedNamedNamelessDirs(t *testing.T) {
 			actual := pair.dstList(t, dstContainer)
 			assertDestContains(t, actual, expected)
 
+			expectedFiles := len(expected)
+			expectedFolders := len(datasetKeysWithDirs(dataset)) - expectedFiles
 			stats := parseSyncStats(stdout)
-			assert.Equal(t, len(expected)+stats.CopyFolderTransfers, stats.CopyCompleted,
-				"Expected %d file transfers for mixed dir types", len(expected))
+			assertSyncStats(t, stats, expectedFiles, expectedFolders)
 		})
 	}
 }
@@ -1748,8 +2086,11 @@ func TestSync_C2C_NamelessDirMirrorDeleteOldSource(t *testing.T) {
 			assertDestContains(t, actual, expectedKeys)
 
 			stats := parseSyncStats(stdout)
+			assertNoFailures(t, stats)
 			assert.Equal(t, 0, stats.CopyFileTransfers,
 				"Expected 0 file transfers (source is older)")
+			assert.Equal(t, stats.FilesScannedAtSource, stats.FilesNotRequiringTransfer,
+				"All scanned files should not require transfer (source is older)")
 		})
 	}
 }
@@ -1797,8 +2138,11 @@ func TestSync_C2C_BlobFSToBlobNamelessMirrorDeleteOldSource(t *testing.T) {
 			assertDestContains(t, actual, expectedKeys)
 
 			stats := parseSyncStats(stdout)
+			assertNoFailures(t, stats)
 			assert.Equal(t, 0, stats.CopyFileTransfers,
 				"Expected 0 file transfers (source is older)")
+			assert.Equal(t, stats.FilesScannedAtSource, stats.FilesNotRequiringTransfer,
+				"All scanned files should not require transfer (source is older)")
 		})
 	}
 }
@@ -1823,6 +2167,12 @@ func TestSync_C2C_MirrorFileDeleteOldSource(t *testing.T) {
 		pair := pair
 		t.Run(pair.name, func(t *testing.T) {
 			t.Parallel()
+
+			pairFullDataset := fullDataset
+			if pair.name == "BlobFSToBlobFS" {
+				pairFullDataset = mainDatasetWithEmptyDirs()
+			}
+
 			srcContainer := uniqueName("c2c-mfdos-src")
 			dstContainer := uniqueName("c2c-mfdos-dst")
 			defer pair.srcCleanup(t, srcContainer)
@@ -1832,7 +2182,7 @@ func TestSync_C2C_MirrorFileDeleteOldSource(t *testing.T) {
 			pair.srcSetup(t, srcContainer, sourceFiles)
 			time.Sleep(5 * time.Second)
 			// Upload dest SECOND so overlapping files are newer → skipped (no copy)
-			pair.dstSetup(t, dstContainer, fullDataset)
+			pair.dstSetup(t, dstContainer, pairFullDataset)
 
 			stdout, _, exitCode := runAzCopySync(t, binary,
 				pair.srcURL(srcContainer), pair.dstURL(dstContainer),
@@ -1844,8 +2194,12 @@ func TestSync_C2C_MirrorFileDeleteOldSource(t *testing.T) {
 			assertDestContains(t, actual, expectedKeys)
 
 			stats := parseSyncStats(stdout)
+			assertNoFailures(t, stats)
 			assert.Equal(t, 0, stats.CopyFileTransfers,
 				"Expected 0 file transfers (source is older)")
+			assert.Equal(t, stats.FilesScannedAtSource, stats.FilesNotRequiringTransfer,
+				"All scanned files should not require transfer (source is older)")
+			assertDestContainsAll(t, pair, dstContainer, sourceFiles)
 		})
 	}
 }
@@ -1861,19 +2215,26 @@ func TestSync_C2C_MirrorFileDeleteOldSource(t *testing.T) {
 func TestSync_C2C_SubpathFreshSync(t *testing.T) {
 	binary := buildAzCopy(t)
 	dataset := mainDataset()
-	dir1Keys := filterByPrefix(datasetKeys(dataset), "dir1")
-	expectedDst := stripPrefix(dir1Keys, "dir1")
 
 	for _, pair := range allC2CPairs() {
 		pair := pair
 		t.Run(pair.name, func(t *testing.T) {
 			t.Parallel()
+
+			pairDataset := dataset
+			if pair.name == "BlobFSToBlobFS" {
+				pairDataset = mainDatasetWithEmptyDirs()
+			}
+
+			dir1Keys := filterByPrefix(datasetKeys(pairDataset), "dir1")
+			expectedDst := stripPrefix(dir1Keys, "dir1")
+
 			srcContainer := uniqueName("c2c-spfresh-src")
 			dstContainer := uniqueName("c2c-spfresh-dst")
 			defer pair.srcCleanup(t, srcContainer)
 			defer pair.dstCleanup(t, dstContainer)
 
-			pair.srcSetup(t, srcContainer, dataset)
+			pair.srcSetup(t, srcContainer, pairDataset)
 			pair.dstSetup(t, dstContainer, map[string][]byte{})
 
 			stdout, _, exitCode := runAzCopySync(t, binary,
@@ -1893,10 +2254,12 @@ func TestSync_C2C_SubpathFreshSync(t *testing.T) {
 			assertDestContains(t, actual, expectedFull)
 			assertNoLeadingSlash(t, actual)
 
+			subpathDataset := filterDatasetByPrefix(pairDataset, "dir1")
+			expectedFiles := len(dir1Keys)
+			expectedFolders := len(datasetKeysWithDirs(subpathDataset)) - expectedFiles
 			stats := parseSyncStats(stdout)
-			assert.Equal(t, len(dir1Keys)+stats.CopyFolderTransfers, stats.CopyCompleted,
-				"Expected %d file transfers", len(dir1Keys))
-			assert.Equal(t, 0, stats.CopyFailed, "Expected 0 failed transfers")
+			assertSyncStats(t, stats, expectedFiles, expectedFolders)
+			assertDestContainsAll(t, pair, dstContainer, subpathDataset)
 		})
 	}
 }
@@ -1908,7 +2271,6 @@ func TestSync_C2C_SubpathFreshSync(t *testing.T) {
 func TestSync_C2C_SubpathIncrementalSync(t *testing.T) {
 	binary := buildAzCopy(t)
 	dataset := mainDataset()
-	allKeys := datasetKeys(dataset)
 
 	modifiedFiles := []string{
 		"dir1/file_a.txt",
@@ -1920,21 +2282,28 @@ func TestSync_C2C_SubpathIncrementalSync(t *testing.T) {
 		pair := pair
 		t.Run(pair.name, func(t *testing.T) {
 			t.Parallel()
+
+			pairDataset := dataset
+			if pair.name == "BlobFSToBlobFS" {
+				pairDataset = mainDatasetWithEmptyDirs()
+			}
+			allKeys := datasetKeys(pairDataset)
+
 			srcContainer := uniqueName("c2c-spincr-src")
 			dstContainer := uniqueName("c2c-spincr-dst")
 			defer pair.srcCleanup(t, srcContainer)
 			defer pair.dstCleanup(t, dstContainer)
 
 			// Upload full dataset to source
-			pair.srcSetup(t, srcContainer, dataset)
+			pair.srcSetup(t, srcContainer, pairDataset)
 			time.Sleep(2 * time.Second)
 
 			// Upload full dataset to destination (dest is newer)
-			pair.dstSetup(t, dstContainer, dataset)
+			pair.dstSetup(t, dstContainer, pairDataset)
 			time.Sleep(2 * time.Second)
 
 			// Re-upload dir1/ subset at source (source now newer for these)
-			pair.srcReupload(t, srcContainer, modifiedFiles, dataset)
+			pair.srcReupload(t, srcContainer, modifiedFiles, pairDataset)
 
 			// Sync only dir1/ subpath
 			stdout, _, exitCode := runAzCopySync(t, binary,
@@ -1950,8 +2319,12 @@ func TestSync_C2C_SubpathIncrementalSync(t *testing.T) {
 
 			// Only modified files should transfer
 			stats := parseSyncStats(stdout)
+			assertNoFailures(t, stats)
 			assert.Equal(t, len(modifiedFiles), stats.CopyFileTransfers,
 				"Expected %d copy transfers scheduled", len(modifiedFiles))
+			assert.Equal(t, stats.FilesNotRequiringTransfer+stats.CopyFileTransfers, stats.FilesScannedAtSource,
+				"Files not requiring transfer + copied should equal files scanned")
+			assertDestContainsAll(t, pair, dstContainer, pairDataset)
 		})
 	}
 }
@@ -1963,7 +2336,6 @@ func TestSync_C2C_SubpathIncrementalSync(t *testing.T) {
 func TestSync_C2C_SubpathMirrorDelete(t *testing.T) {
 	binary := buildAzCopy(t)
 	dataset := mainDataset()
-	allKeys := datasetKeys(dataset)
 
 	// Source: only a subset of dir1/ files
 	srcDir1Files := map[string][]byte{
@@ -1975,6 +2347,13 @@ func TestSync_C2C_SubpathMirrorDelete(t *testing.T) {
 		pair := pair
 		t.Run(pair.name, func(t *testing.T) {
 			t.Parallel()
+
+			pairDataset := dataset
+			if pair.name == "BlobFSToBlobFS" {
+				pairDataset = mainDatasetWithEmptyDirs()
+			}
+			allKeys := datasetKeys(pairDataset)
+
 			srcContainer := uniqueName("c2c-spmirdel-src")
 			dstContainer := uniqueName("c2c-spmirdel-dst")
 			defer pair.srcCleanup(t, srcContainer)
@@ -1983,10 +2362,10 @@ func TestSync_C2C_SubpathMirrorDelete(t *testing.T) {
 			// Source: only subset of dir1/
 			pair.srcSetup(t, srcContainer, srcDir1Files)
 			// Destination: full dataset
-			pair.dstSetup(t, dstContainer, dataset)
+			pair.dstSetup(t, dstContainer, pairDataset)
 
 			// Sync with mirror mode: srcContainer/dir1 → dstContainer/dir1
-			_, _, exitCode := runAzCopySync(t, binary,
+			stdout, _, exitCode := runAzCopySync(t, binary,
 				pair.srcURL(srcContainer)+"/dir1",
 				pair.dstURL(dstContainer)+"/dir1",
 				mirrorSyncFlags())
@@ -2004,6 +2383,17 @@ func TestSync_C2C_SubpathMirrorDelete(t *testing.T) {
 
 			assertDestContains(t, actual, expected)
 			assertNoLeadingSlash(t, actual)
+
+			stats := parseSyncStats(stdout)
+			assertNoFailures(t, stats)
+			assert.Greater(t, stats.Deletions, 0, "Expected deletions in mirror mode")
+
+			// Validate dirs: outside dir1/ untouched + srcDir1Files inside dir1/
+			expectedDirDataset := filterDatasetOutPrefix(pairDataset, "dir1")
+			for k, v := range srcDir1Files {
+				expectedDirDataset[k] = v
+			}
+			assertDestContainsAll(t, pair, dstContainer, expectedDirDataset)
 		})
 	}
 }
@@ -2015,21 +2405,28 @@ func TestSync_C2C_SubpathMirrorDelete(t *testing.T) {
 func TestSync_C2C_SubpathDeepSync(t *testing.T) {
 	binary := buildAzCopy(t)
 	dataset := mainDataset()
-	sub1Keys := filterByPrefix(datasetKeys(dataset), "dir1/sub1")
-	expectedDst := make([]string, len(sub1Keys))
-	copy(expectedDst, sub1Keys)
-	sort.Strings(expectedDst)
 
 	for _, pair := range allC2CPairs() {
 		pair := pair
 		t.Run(pair.name, func(t *testing.T) {
 			t.Parallel()
+
+			pairDataset := dataset
+			if pair.name == "BlobFSToBlobFS" {
+				pairDataset = mainDatasetWithEmptyDirs()
+			}
+
+			sub1Keys := filterByPrefix(datasetKeys(pairDataset), "dir1/sub1")
+			expectedDst := make([]string, len(sub1Keys))
+			copy(expectedDst, sub1Keys)
+			sort.Strings(expectedDst)
+
 			srcContainer := uniqueName("c2c-spdeep-src")
 			dstContainer := uniqueName("c2c-spdeep-dst")
 			defer pair.srcCleanup(t, srcContainer)
 			defer pair.dstCleanup(t, dstContainer)
 
-			pair.srcSetup(t, srcContainer, dataset)
+			pair.srcSetup(t, srcContainer, pairDataset)
 			pair.dstSetup(t, dstContainer, map[string][]byte{})
 
 			stdout, _, exitCode := runAzCopySync(t, binary,
@@ -2043,10 +2440,12 @@ func TestSync_C2C_SubpathDeepSync(t *testing.T) {
 			assertDestContains(t, actual, expectedDst)
 			assertNoLeadingSlash(t, actual)
 
+			subpathDataset := filterDatasetByPrefix(pairDataset, "dir1/sub1")
+			expectedFiles := len(sub1Keys)
+			expectedFolders := len(datasetKeysWithDirs(subpathDataset)) - expectedFiles
 			stats := parseSyncStats(stdout)
-			assert.Equal(t, len(sub1Keys)+stats.CopyFolderTransfers, stats.CopyCompleted,
-				"Expected %d file transfers", len(sub1Keys))
-			assert.Equal(t, 0, stats.CopyFailed, "Expected 0 failed transfers")
+			assertSyncStats(t, stats, expectedFiles, expectedFolders)
+			assertDestContainsAll(t, pair, dstContainer, subpathDataset)
 		})
 	}
 }
@@ -2058,21 +2457,27 @@ func TestSync_C2C_SubpathDeepSync(t *testing.T) {
 func TestSync_C2C_SubpathPrefixCollision(t *testing.T) {
 	binary := buildAzCopy(t)
 	dataset := mainDataset()
-	dir1Keys := filterByPrefix(datasetKeys(dataset), "dir1")
 
 	for _, pair := range allC2CPairs() {
 		pair := pair
 		t.Run(pair.name, func(t *testing.T) {
 			t.Parallel()
+
+			pairDataset := dataset
+			if pair.name == "BlobFSToBlobFS" {
+				pairDataset = mainDatasetWithEmptyDirs()
+			}
+			dir1Keys := filterByPrefix(datasetKeys(pairDataset), "dir1")
+
 			srcContainer := uniqueName("c2c-sppfx-src")
 			dstContainer := uniqueName("c2c-sppfx-dst")
 			defer pair.srcCleanup(t, srcContainer)
 			defer pair.dstCleanup(t, dstContainer)
 
-			pair.srcSetup(t, srcContainer, dataset)
+			pair.srcSetup(t, srcContainer, pairDataset)
 			pair.dstSetup(t, dstContainer, map[string][]byte{})
 
-			_, _, exitCode := runAzCopySync(t, binary,
+			stdout, _, exitCode := runAzCopySync(t, binary,
 				pair.srcURL(srcContainer)+"/dir1",
 				pair.dstURL(dstContainer)+"/dir1",
 				defaultSyncFlags())
@@ -2094,6 +2499,10 @@ func TestSync_C2C_SubpathPrefixCollision(t *testing.T) {
 				assert.NotEqual(t, "dir1_extra.txt", name,
 					"dir1_extra.txt should NOT be synced when syncing dir1/")
 			}
+
+			stats := parseSyncStats(stdout)
+			assertNoFailures(t, stats)
+			assertDestContainsAll(t, pair, dstContainer, filterDatasetByPrefix(pairDataset, "dir1"))
 		})
 	}
 }
@@ -2105,18 +2514,24 @@ func TestSync_C2C_SubpathPrefixCollision(t *testing.T) {
 func TestSync_C2C_SubpathUnicodeSync(t *testing.T) {
 	binary := buildAzCopy(t)
 	dataset := mainDataset()
-	unicodeKeys := filterByPrefix(datasetKeys(dataset), "打麻将")
 
 	for _, pair := range allC2CPairs() {
 		pair := pair
 		t.Run(pair.name, func(t *testing.T) {
 			t.Parallel()
+
+			pairDataset := dataset
+			if pair.name == "BlobFSToBlobFS" {
+				pairDataset = mainDatasetWithEmptyDirs()
+			}
+			unicodeKeys := filterByPrefix(datasetKeys(pairDataset), "打麻将")
+
 			srcContainer := uniqueName("c2c-spuni-src")
 			dstContainer := uniqueName("c2c-spuni-dst")
 			defer pair.srcCleanup(t, srcContainer)
 			defer pair.dstCleanup(t, dstContainer)
 
-			pair.srcSetup(t, srcContainer, dataset)
+			pair.srcSetup(t, srcContainer, pairDataset)
 			pair.dstSetup(t, dstContainer, map[string][]byte{})
 
 			stdout, _, exitCode := runAzCopySync(t, binary,
@@ -2130,10 +2545,12 @@ func TestSync_C2C_SubpathUnicodeSync(t *testing.T) {
 			assertDestContains(t, actual, unicodeKeys)
 			assertNoLeadingSlash(t, actual)
 
+			subpathDataset := filterDatasetByPrefix(pairDataset, "打麻将")
+			expectedFiles := len(unicodeKeys)
+			expectedFolders := len(datasetKeysWithDirs(subpathDataset)) - expectedFiles
 			stats := parseSyncStats(stdout)
-			assert.Equal(t, len(unicodeKeys)+stats.CopyFolderTransfers, stats.CopyCompleted,
-				"Expected %d file transfers", len(unicodeKeys))
-			assert.Equal(t, 0, stats.CopyFailed, "Expected 0 failed transfers")
+			assertSyncStats(t, stats, expectedFiles, expectedFolders)
+			assertDestContainsAll(t, pair, dstContainer, subpathDataset)
 		})
 	}
 }
@@ -2177,10 +2594,11 @@ func TestSync_C2C_CrossSubpathSync(t *testing.T) {
 			assertDestContains(t, actual, expectedFull)
 			assertNoLeadingSlash(t, actual)
 
+			subpathDataset := filterDatasetByPrefix(dataset, "dir1")
+			expectedFiles := len(dir1Keys)
+			expectedFolders := len(datasetKeysWithDirs(subpathDataset)) - expectedFiles
 			stats := parseSyncStats(stdout)
-			assert.Equal(t, len(dir1Keys)+stats.CopyFolderTransfers, stats.CopyCompleted,
-				"Expected %d file transfers", len(dir1Keys))
-			assert.Equal(t, 0, stats.CopyFailed, "Expected 0 failed transfers")
+			assertSyncStats(t, stats, expectedFiles, expectedFolders)
 		})
 	}
 }
@@ -2223,7 +2641,7 @@ func TestSync_C2C_CrossSubpathMirrorDelete(t *testing.T) {
 			pair.srcSetup(t, srcContainer, srcDir1Files)
 			pair.dstSetup(t, dstContainer, dstFiles)
 
-			_, _, exitCode := runAzCopySync(t, binary,
+			stdout, _, exitCode := runAzCopySync(t, binary,
 				pair.srcURL(srcContainer)+"/dir1",
 				pair.dstURL(dstContainer)+"/other_dir",
 				mirrorSyncFlags())
@@ -2244,6 +2662,10 @@ func TestSync_C2C_CrossSubpathMirrorDelete(t *testing.T) {
 
 			assertDestContains(t, actual, expected)
 			assertNoLeadingSlash(t, actual)
+
+			stats := parseSyncStats(stdout)
+			assertNoFailures(t, stats)
+			assert.Greater(t, stats.Deletions, 0, "Expected deletions in mirror mode")
 		})
 	}
 }

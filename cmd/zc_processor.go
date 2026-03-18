@@ -172,6 +172,7 @@ func (d DryrunTransfer) MarshalJSON() ([]byte, error) {
 }
 
 func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) (err error) {
+	fmt.Printf("[DEBUG-REMOVE] SCHEDULE TRANSFER: path=%q entityType=%v fromTo=%v\n", storedObject.relativePath, storedObject.entityType, s.copyJobTemplate.FromTo) // TODO: remove
 
 	// Escape paths on destinations where the characters are invalid
 	// And re-encode them where the characters are valid.
@@ -187,6 +188,13 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 		if dstRelativePath != "" {
 			dstRelativePath = "/" + dstRelativePath
 		}
+	}
+
+	// In order to fix nameless dir case, we had to store directories in the stored object index with a trailing slash
+	// When we go to actually transfer a folder, we need to remove the trailing slash because it's not supported by azure apis
+	if s.folderPropertiesOption != common.EFolderPropertiesOption.NoFolders() && storedObject.entityType == common.EEntityType.Folder() {
+		srcRelativePath = strings.TrimSuffix(srcRelativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
+		dstRelativePath = strings.TrimSuffix(dstRelativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 	}
 
 	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(false, srcRelativePath, dstRelativePath, s.preserveAccessTier, s.folderPropertiesOption, s.symlinkHandlingType, s.hardlinkHandlingType)
