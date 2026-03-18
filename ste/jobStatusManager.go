@@ -173,7 +173,6 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 				js.SkippedTransfers = append(js.SkippedTransfers, msg)
 			case common.ETransferStatus.SkippedArchiveNotRestored():
 				js.SkippedArchiveFileCount++
-				js.SkippedTransfers = append(js.SkippedTransfers, msg)
 			}
 
 		case <-jstm.listReq:
