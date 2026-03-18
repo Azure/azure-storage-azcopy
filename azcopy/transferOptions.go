@@ -554,7 +554,7 @@ func (c *CookedTransferOptions) validateOptions() (err error) {
 	}
 
 	// blob tags
-	if (c.fromTo.To() != common.ELocation.Blob() && c.fromTo != common.EFromTo.BlobNone() && c.fromTo != common.EFromTo.BlobFSNone()) && c.blobTags != nil {
+	if (c.fromTo.To() != common.ELocation.Blob() && c.fromTo != common.EFromTo.BlobNone() && c.fromTo == common.EFromTo.BlobFSNone()) && c.blobTags != nil {
 		return errors.New("blob tags can only be set when transferring to blob storage")
 	}
 	if c.fromTo.To() == common.ELocation.None() && c.blobTags != nil && len(c.blobTags) == 0 { // in case of Blob and BlobFS
