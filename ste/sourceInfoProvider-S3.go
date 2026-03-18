@@ -123,9 +123,12 @@ func (p *s3SourceInfoProvider) Properties() (*SrcProperties, error) {
 		// For mover builds, skip objects in archive storage classes (GLACIER, DEEP_ARCHIVE) unless restored.
 		// This check piggybacks on the existing StatObject call (no extra API call) and runs with
 		// 64-way parallelism in the STE, avoiding the single-threaded enumeration bottleneck.
-		if buildmode.IsMover && isArchiveStorageClass(objectInfo.StorageClass) && !isRestoredFromArchive(objectInfo.Restore) {
+		// Note: minio-go's StatObject (HEAD) does NOT populate ObjectInfo.StorageClass directly;
+		// the storage class is only available via the X-Amz-Storage-Class header in Metadata.
+		storageClass := objectInfo.Metadata.Get("X-Amz-Storage-Class")
+		if buildmode.IsMover && isArchiveStorageClass(storageClass) && !isRestoredFromArchive(objectInfo.Restore) {
 			return nil, fmt.Errorf("%w: object %q is in %s storage class",
-				common.ErrS3ArchiveObjectNotRestored, p.s3URLPart.ObjectKey, objectInfo.StorageClass)
+				common.ErrS3ArchiveObjectNotRestored, p.s3URLPart.ObjectKey, storageClass)
 		}
 
 		oie := common.ObjectInfoExtension{ObjectInfo: objectInfo}
