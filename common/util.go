@@ -223,7 +223,7 @@ func GetServiceClientForLocation(loc Location,
 		return ret, nil
 
 	default:
-		return nil, nil
+		return ret, nil
 	}
 }
 
@@ -302,30 +302,36 @@ func NewServiceClient(bsc *blobservice.Client,
 
 // Metadata utility functions to work around GoLang's metadata capitalization
 
-func TryAddMetadata(metadata Metadata, key, value string) {
-	if _, ok := metadata[key]; ok {
-		return // Don't overwrite the user's metadata
+func (s *SafeMetadata) TryAdd(key, value string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, ok := s.Metadata[key]; ok {
+		return // don't overwrite existing metadata
 	}
 
 	if key != "" {
 		capitalizedKey := strings.ToUpper(string(key[0])) + key[1:]
-		if _, ok := metadata[capitalizedKey]; ok {
+		if _, ok := s.Metadata[capitalizedKey]; ok {
 			return
 		}
 	}
 
 	v := value
-	metadata[key] = &v
+	s.Metadata[key] = &v
 }
 
-func TryReadMetadata(metadata Metadata, key string) (*string, bool) {
-	if v, ok := metadata[key]; ok {
+func (s *SafeMetadata) TryRead(key string) (*string, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if v, ok := s.Metadata[key]; ok {
 		return v, true
 	}
 
 	if key != "" {
 		capitalizedKey := strings.ToUpper(string(key[0])) + key[1:]
-		if v, ok := metadata[capitalizedKey]; ok {
+		if v, ok := s.Metadata[capitalizedKey]; ok {
 			return v, true
 		}
 	}
@@ -349,10 +355,8 @@ func DoWithOverrideReadOnlyOnAzureFiles(ctx context.Context, action func() (inte
 	if fileerror.HasCode(err, fileerror.ParentNotFound, fileerror.ShareNotFound) {
 		return err
 	}
-	failedAsReadOnly := false
-	if fileerror.HasCode(err, fileerror.ReadOnlyAttribute) {
-		failedAsReadOnly = true
-	}
+	failedAsReadOnly := fileerror.HasCode(err, fileerror.ReadOnlyAttribute)
+
 	if !failedAsReadOnly {
 		return err
 	}

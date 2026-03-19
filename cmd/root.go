@@ -55,10 +55,6 @@ var LogLevel common.LogLevel
 var CapMbps float64
 var SkipVersionCheck bool
 
-// It's not pretty that this one is read directly by credential util.
-// But doing otherwise required us passing it around in many places, even though really
-// it can be thought of as an "ambient" property. That's the (weak?) justification for implementing
-// it as a global
 var TrustedSuffixes string
 var azcopyAwaitContinue bool
 var azcopyAwaitAllowOpenFiles bool
@@ -131,20 +127,6 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 
-		// If the command is for resuming a job with a specific JobID,
-		// use the provided JobID to resume the job; otherwise, create a new JobID.
-		var resumeJobID common.JobID
-		if cmd.Use == "resume [jobID]" {
-			// If no argument is passed then it is not valid
-			if len(args) != 1 {
-				return errors.New("this command requires jobId to be passed as argument")
-			}
-			resumeJobID, err = common.ParseJobID(args[0])
-			if err != nil {
-				return err
-			}
-		}
-
 		// Check if we are downloading to Pipe so we can bypass version check and not write it to stdout, customer is
 		// only expecting blob data in stdout
 		var fromToFlagValue string
@@ -185,6 +167,20 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
+		// If the command is for resuming a job with a specific JobID,
+		// use the provided JobID to resume the job; otherwise, create a new JobID.
+		var resumeJobID common.JobID
+		if cmd.Use == "resume [jobID]" {
+			// If no argument is passed then it is not valid
+			if len(args) != 1 {
+				return errors.New("this command requires jobId to be passed as argument")
+			}
+			resumeJobID, err = common.ParseJobID(args[0])
+			if err != nil {
+				return err
+			}
+		}
+
 		isBench := cmd.Use == "bench [destination]"
 
 		// We only care to warn about multiple AzCopy processes for commands sent to STE
@@ -196,7 +192,8 @@ var rootCmd = &cobra.Command{
 				break
 			}
 		}
-		return Initialize(resumeJobID, isBench, shouldWarn)
+		isMigratedToLibrary := cmd.Use == "resume [jobID]" || cmd.Use == "sync" || cmd.Use == "copy [source] [destination]"
+		return Initialize(isMigratedToLibrary, isBench, shouldWarn, resumeJobID)
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Version checking is done explicitly when the user sets flag
@@ -214,9 +211,11 @@ var rootCmd = &cobra.Command{
 	},
 }
 
-func Initialize(resumeJobID common.JobID, isBench bool, shouldWarn bool) (err error) {
+func Initialize(isMigratedToLibrary, isBench, shouldWarn bool, resumeJobId common.JobID) (err error) {
+	glcm.SetOutputFormat(outputFormat)
+	glcm.SetOutputVerbosity(OutputLevel)
 	jobsAdmin.BenchmarkResults = isBench
-	Client, err = azcopy.NewClient(azcopy.ClientOptions{CapMbps: CapMbps})
+	Client, err = azcopy.NewClient(azcopy.ClientOptions{CapMbps: CapMbps, TrustedSuffixes: TrustedSuffixes, LogLevel: &LogLevel})
 	// Run MessagHandler to process messages from Input Watcher
 	if jobsAdmin.JobsAdmin != nil {
 		go jobsAdmin.JobsAdmin.MessageHandler(glcm.MsgHandlerChannel())
@@ -224,21 +223,38 @@ func Initialize(resumeJobID common.JobID, isBench bool, shouldWarn bool) (err er
 	if err != nil {
 		return err
 	}
-	Client.CurrentJobID = resumeJobID
+
+	Client.CurrentJobID = resumeJobId
 	if Client.CurrentJobID.IsEmpty() {
 		Client.CurrentJobID = common.NewJobID()
 	}
 
-	timeAtPrestart := time.Now()
-	glcm.SetOutputFormat(outputFormat)
-	glcm.SetOutputVerbosity(OutputLevel)
-
+	// We initialize the logger early because it needed for err-handling in the process checker
 	common.AzcopyCurrentJobLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "")
 	common.AzcopyCurrentJobLogger.OpenLog()
+	glcm.RegisterCloseFunc(func() {
+		if common.AzcopyCurrentJobLogger != nil {
+			common.AzcopyCurrentJobLogger.CloseLog()
+		}
+	})
+
+	if !isMigratedToLibrary {
+		timeAtPrestart := time.Now()
+
+		// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter
+		// Subtract a few seconds, to ensure that this date DEFINITELY falls before the LMT of any file changed while this
+		// job is running. I.e. using this later with --include-after is _guaranteed_ to pick up all files that changed during
+		// or after this job
+		adjustedTime := timeAtPrestart.Add(-5 * time.Second)
+		startTimeMessage := fmt.Sprintf("ISO 8601 START TIME: to copy files that changed before or after this job started, use the parameter --%s=%s or --%s=%s",
+			common.IncludeBeforeFlagName, traverser.IncludeBeforeDateFilter{}.FormatAsUTC(adjustedTime),
+			common.IncludeAfterFlagName, traverser.IncludeAfterDateFilter{}.FormatAsUTC(adjustedTime))
+		common.LogToJobLogWithPrefix(startTimeMessage, common.LogInfo)
+	}
 
 	if shouldWarn {
 		currPid := os.Getpid()
-		AsyncWarnMultipleProcesses(cmd.GetAzCopyAppPath(), currPid)
+		AsyncWarnMultipleProcesses(cmd.GetAzCopyAppPath(), currPid) // Start the process checker
 	}
 
 	// For benchmarking, try to autotune if possible, otherwise use the default values
@@ -252,20 +268,10 @@ func Initialize(resumeJobID common.JobID, isBench bool, shouldWarn bool) (err er
 			// This case happens when benchmarking with a fixed value from the env var
 			glcm.Info(fmt.Sprintf("Cannot auto-tune concurrency because it is fixed by environment variable %s", envVar.Name))
 		}
-
 	}
-	traverser.EnumerationParallelism, traverser.EnumerationParallelStatFiles = jobsAdmin.JobsAdmin.GetConcurrencySettings()
-
-	// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter
-	// Subtract a few seconds, to ensure that this date DEFINITELY falls before the LMT of any file changed while this
-	// job is running. I.e. using this later with --include-after is _guaranteed_ to pick up all files that changed during
-	// or after this job
-	adjustedTime := timeAtPrestart.Add(-5 * time.Second)
-	startTimeMessage := fmt.Sprintf("ISO 8601 START TIME: to copy files that changed before or after this job started, use the parameter --%s=%s or --%s=%s",
-		common.IncludeBeforeFlagName, traverser.IncludeBeforeDateFilter{}.FormatAsUTC(adjustedTime),
-		common.IncludeAfterFlagName, traverser.IncludeAfterDateFilter{}.FormatAsUTC(adjustedTime))
-	common.LogToJobLogWithPrefix(startTimeMessage, common.LogInfo)
-
+	if !isMigratedToLibrary {
+		traverser.EnumerationParallelism, traverser.EnumerationParallelStatFiles = jobsAdmin.JobsAdmin.GetConcurrencySettings()
+	}
 	return nil
 
 }
@@ -285,7 +291,7 @@ func InitializeAndExecute() {
 
 func init() {
 	// replace the word "global" to avoid confusion (e.g. it doesn't affect all instances of AzCopy)
-	rootCmd.SetUsageTemplate(strings.Replace((&cobra.Command{}).UsageTemplate(), "Global Flags", "Flags Applying to All Commands", -1))
+	rootCmd.SetUsageTemplate(strings.ReplaceAll((&cobra.Command{}).UsageTemplate(), "Global Flags", "Flags Applying to All Commands"))
 
 	// the default value is set as -1 to differentiate from an input 3.
 	// if unspecified, the policy doesn't set the request headers, which will cause the service to default to 3.
@@ -307,9 +313,9 @@ func init() {
 			"\n available levels: DEBUG(detailed trace), INFO(all requests/responses), WARNING(slow responses),"+
 			"\n ERROR(only failed requests), and NONE(no output logs). (default 'INFO').")
 
-	rootCmd.PersistentFlags().StringVar(&TrustedSuffixes, trustedSuffixesNameAAD, "",
+	rootCmd.PersistentFlags().StringVar(&TrustedSuffixes, azcopy.TrustedSuffixesNameAAD, "",
 		"\nSpecifies additional domain suffixes where Azure Active Directory login tokens may be sent.  \nThe default is '"+
-			trustedSuffixesAAD+"'. \n Any listed here are added to the default. For security, you should only put Microsoft Azure domains here. "+
+			azcopy.TrustedSuffixesAAD+"'. \n Any listed here are added to the default. For security, you should only put Microsoft Azure domains here. "+
 			"\n Separate multiple entries with semi-colons.")
 
 	rootCmd.PersistentFlags().BoolVar(&SkipVersionCheck, "skip-version-check", false,

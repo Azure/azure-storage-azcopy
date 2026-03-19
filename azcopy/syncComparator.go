@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package azcopy
 
 import (
 	"fmt"
@@ -50,7 +50,7 @@ func syncComparatorLog(fileName, status, skipReason string, stdout bool) {
 	}
 
 	if stdout {
-		glcm.Info(out)
+		common.GetLifecycleMgr().Info(out)
 	}
 }
 
@@ -73,7 +73,7 @@ type syncDestinationComparator struct {
 	disableComparison bool
 }
 
-func newSyncDestinationComparator(i *traverser.ObjectIndexer, copyScheduler, cleaner traverser.ObjectProcessor, comparisonHashType common.SyncHashType, preferSMBTime, disableComparison bool) *syncDestinationComparator {
+func NewSyncDestinationComparator(i *traverser.ObjectIndexer, copyScheduler, cleaner traverser.ObjectProcessor, comparisonHashType common.SyncHashType, preferSMBTime, disableComparison bool) *syncDestinationComparator {
 	return &syncDestinationComparator{sourceIndex: i, copyTransferScheduler: copyScheduler, destinationCleaner: cleaner, preferSMBTime: preferSMBTime, disableComparison: disableComparison, comparisonHashType: comparisonHashType}
 }
 
@@ -82,7 +82,7 @@ func newSyncDestinationComparator(i *traverser.ObjectIndexer, copyScheduler, cle
 // ex: we already know what the source contains, now we are looking at objects at the destination
 // if file x from the destination exists at the source, then we'd only transfer it if it is considered stale compared to its counterpart at the source
 // if file x does not exist at the source, then it is considered extra, and will be deleted
-func (f *syncDestinationComparator) processIfNecessary(destinationObject traverser.StoredObject) error {
+func (f *syncDestinationComparator) ProcessIfNecessary(destinationObject traverser.StoredObject) error {
 	sourceObjectInMap, present := f.sourceIndex.IndexMap[destinationObject.RelativePath]
 	if !present && f.sourceIndex.IsDestinationCaseInsensitive {
 		lcRelativePath := strings.ToLower(destinationObject.RelativePath)
@@ -156,7 +156,7 @@ type syncSourceComparator struct {
 	disableComparison bool
 }
 
-func newSyncSourceComparator(i *traverser.ObjectIndexer, copyScheduler traverser.ObjectProcessor, comparisonHashType common.SyncHashType, preferSMBTime, disableComparison bool) *syncSourceComparator {
+func NewSyncSourceComparator(i *traverser.ObjectIndexer, copyScheduler traverser.ObjectProcessor, comparisonHashType common.SyncHashType, preferSMBTime, disableComparison bool) *syncSourceComparator {
 	return &syncSourceComparator{destinationIndex: i, copyTransferScheduler: copyScheduler, preferSMBTime: preferSMBTime, disableComparison: disableComparison, comparisonHashType: comparisonHashType}
 }
 
@@ -166,7 +166,7 @@ func newSyncSourceComparator(i *traverser.ObjectIndexer, copyScheduler traverser
 //
 // note: we remove the StoredObject if it is present so that when we have finished
 // the index will contain all objects which exist at the destination but were NOT seen at the source
-func (f *syncSourceComparator) processIfNecessary(sourceObject traverser.StoredObject) error {
+func (f *syncSourceComparator) ProcessIfNecessary(sourceObject traverser.StoredObject) error {
 	relPath := sourceObject.RelativePath
 
 	if f.destinationIndex.IsDestinationCaseInsensitive {

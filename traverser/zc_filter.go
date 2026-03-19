@@ -60,6 +60,20 @@ func (f *ExcludeBlobTypeFilter) DoesPass(object StoredObject) bool {
 	return false
 }
 
+func buildExcludeBlobTypeFilter(blobTypes []blob.BlobType) []ObjectFilter {
+	ret := make([]ObjectFilter, 0)
+	if len(blobTypes) == 0 {
+		return ret
+	}
+	excludeSet := map[blob.BlobType]bool{}
+
+	for _, v := range blobTypes {
+		excludeSet[v] = true
+	}
+
+	return append(ret, &ExcludeBlobTypeFilter{BlobTypes: excludeSet})
+}
+
 // excludeContainerFilter filters out container names that must be excluded
 type excludeContainerFilter struct {
 	containerNamesList map[string]bool
@@ -85,6 +99,10 @@ func (s *excludeContainerFilter) DoesPass(storedObject StoredObject) bool {
 }
 
 func buildExcludeContainerFilter(containerNames []string) []ObjectFilter {
+	if len(containerNames) == 0 {
+		return make([]ObjectFilter, 0)
+	}
+
 	excludeContainerSet := make(map[string]bool)
 	for _, name := range containerNames {
 		excludeContainerSet[name] = true
@@ -195,7 +213,7 @@ func (f *IncludeFilter) DoesPass(storedObject StoredObject) bool {
 	return false
 }
 
-// getEnumerationPreFilter returns a prefix, if any, which can be used service-side to pre-select
+// getEnumerationPreFilter returns a prefix, if any, which can be used service-side to preselect
 // things that will pass the filter. E.g. if there's exactly one include pattern, and it is
 // "foo*bar", then this routine will return "foo", since only things starting with "foo" can pass the filters.
 // Service side enumeration code can be given that prefix, to optimize the enumeration.
@@ -340,7 +358,7 @@ func (f *IncludeAfterDateFilter) AppliesOnlyToFiles() bool {
 
 func (f *IncludeAfterDateFilter) DoesPass(storedObject StoredObject) bool {
 	zeroTime := time.Time{}
-	if storedObject.LastModifiedTime == zeroTime {
+	if storedObject.LastModifiedTime.Equal(zeroTime) {
 		panic("cannot use IncludeAfterDateFilter on an object for which no Last Modified Time has been retrieved")
 	}
 
@@ -374,7 +392,7 @@ func (f *IncludeBeforeDateFilter) AppliesOnlyToFiles() bool {
 
 func (f *IncludeBeforeDateFilter) DoesPass(storedObject StoredObject) bool {
 	zeroTime := time.Time{}
-	if storedObject.LastModifiedTime == zeroTime {
+	if storedObject.LastModifiedTime.Equal(zeroTime) {
 		panic("cannot use IncludeBeforeDateFilter on an object for which no Last Modified Time has been retrieved")
 	}
 
@@ -382,11 +400,11 @@ func (f *IncludeBeforeDateFilter) DoesPass(storedObject StoredObject) bool {
 		storedObject.LastModifiedTime.Equal(f.Threshold) // <= is easier for users to understand than <
 }
 
-func (_ IncludeBeforeDateFilter) ParseISO8601(s string, chooseEarliest bool) (time.Time, error) {
+func (IncludeBeforeDateFilter) ParseISO8601(s string, chooseEarliest bool) (time.Time, error) {
 	return parseISO8601(s, chooseEarliest)
 }
 
-func (_ IncludeBeforeDateFilter) FormatAsUTC(t time.Time) string {
+func (IncludeBeforeDateFilter) FormatAsUTC(t time.Time) string {
 	return formatAsUTC(t)
 }
 
@@ -482,4 +500,57 @@ func parseISO8601(s string, chooseEarliest bool) (time.Time, error) {
 // formatAsUTC is inverse of parseISO8601 (and always uses the most detailed format)
 func formatAsUTC(t time.Time) string {
 	return t.UTC().Format(time.RFC3339)
+}
+
+type FilterOptions struct {
+	IncludeBefore     *time.Time
+	IncludeAfter      *time.Time
+	ExcludeBlobTypes  []blob.BlobType
+	IncludePatterns   []string
+	ExcludePatterns   []string
+	ExcludePaths      []string
+	IncludeAttributes []string
+	ExcludeAttributes []string
+	IncludeRegex      []string
+	ExcludeRegex      []string
+}
+
+// BuildFilters sets up the filters in a specific order
+func BuildFilters(fromTo common.FromTo, source common.ResourceString, recursive bool, opts FilterOptions) []ObjectFilter {
+	filters := make([]ObjectFilter, 0)
+
+	if opts.IncludeBefore != nil {
+		filters = append(filters, &IncludeBeforeDateFilter{Threshold: *opts.IncludeBefore})
+	}
+
+	if opts.IncludeAfter != nil {
+		filters = append(filters, &IncludeAfterDateFilter{Threshold: *opts.IncludeAfter})
+	}
+
+	// Note: includeFilters and includeAttrFilters are ANDed
+	// They must both pass to get the file included
+	// Same rule applies to excludeFilters and excludeAttrFilters
+	filters = append(filters, BuildIncludeFilters(opts.IncludePatterns)...)
+	if fromTo.From() == common.ELocation.Local() {
+		includeAttrFilters := BuildAttrFilters(opts.IncludeAttributes, source.ValueLocal(), true)
+		filters = append(filters, includeAttrFilters...)
+	}
+
+	filters = append(filters, BuildExcludeFilters(opts.ExcludePatterns, false)...)
+	filters = append(filters, BuildExcludeFilters(opts.ExcludePaths, true)...)
+	if fromTo.From() == common.ELocation.Local() {
+		excludeAttrFilters := BuildAttrFilters(opts.ExcludeAttributes, source.ValueLocal(), false)
+		filters = append(filters, excludeAttrFilters...)
+	}
+	// regex
+	filters = append(filters, BuildRegexFilters(opts.IncludeRegex, true)...)
+	filters = append(filters, BuildRegexFilters(opts.ExcludeRegex, false)...)
+
+	filters = append(filters, buildExcludeBlobTypeFilter(opts.ExcludeBlobTypes)...)
+
+	// after making all filters, log any search prefix computed from them
+	if prefixFilter := FilterSet(filters).GetEnumerationPreFilter(recursive); prefixFilter != "" {
+		common.LogToJobLogWithPrefix("Search prefix, which may be used to optimize scanning, is: "+prefixFilter, common.LogInfo) // "May be used" because we don't know here which enumerators will use it
+	}
+	return filters
 }

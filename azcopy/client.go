@@ -35,17 +35,40 @@ const (
 	oauthLoginSessionCacheAccountName = "AzCopyOAuthTokenCache"
 )
 
+const (
+	// Base10Mega For networking throughput in Mbps, (and only for networking), we divide by 1000*1000 (not 1024 * 1024) because
+	// networking is traditionally done in base 10 units (not base 2).
+	// E.g. "gigabit ethernet" means 10^9 bits/sec, not 2^30. So by using base 10 units
+	// we give the best correspondence to the sizing of the user's network pipes.
+	// See https://networkengineering.stackexchange.com/questions/3628/iec-or-si-units-binary-prefixes-used-for-network-measurement
+	// NOTE that for everything else in the app (e.g. sizes of files) we use the base 2 units (i.e. 1024 * 1024) because
+	// for RAM and disk file sizes, it is conventional to use the power-of-two-based units.
+	Base10Mega = 1000 * 1000
+)
+
+// It's not pretty that this one is read directly by credential util.
+// But doing otherwise required us passing it around in many places, even though really
+// it can be thought of as an "ambient" property. That's the (weak?) justification for implementing
+// it as a global
+var TrustedSuffixes string
+
 type Client struct {
 	CurrentJobID      common.JobID                  // TODO (gapra): In future this should only be set when there is a current job running. On complete, this should be cleared. It can also behave as something we can check to see if a current job is running
 	oauthTokenManager *common.UserOAuthTokenManager // OAuth token manager for the current user, used for authentication
+	logLevel          common.LogLevel
 }
 
 type ClientOptions struct {
-	CapMbps float64
+	CapMbps         float64
+	TrustedSuffixes string
+	LogLevel        *common.LogLevel
 }
 
 func NewClient(opts ClientOptions) (Client, error) {
-	c := Client{}
+	c := Client{
+		logLevel: common.IffNil(opts.LogLevel, common.ELogLevel.Info()), // Default: Info
+	}
+	TrustedSuffixes = opts.TrustedSuffixes
 	common.InitializeFolders()
 	configureGoMaxProcs()
 	// Perform os specific initialization
@@ -81,6 +104,11 @@ func (c *Client) GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManage
 	return c.oauthTokenManager
 }
 
+// GetLogLevel returns the log level of the client.
+func (c *Client) GetLogLevel() common.LogLevel {
+	return c.logLevel
+}
+
 // Ensure we always have more than 1 OS thread running goroutines, since there are issues with having just 1.
 // (E.g. version check doesn't happen at login time, if have only one go proc. Not sure why that happens if have only one
 // proc. Is presumably due to the high CPU usage we see on login if only 1 CPU, even tho can't see any busy-wait in that code)
@@ -89,4 +117,10 @@ func configureGoMaxProcs() {
 	if isOnlyOne {
 		runtime.GOMAXPROCS(2)
 	}
+}
+
+// JobContext contains initialization context for a job.
+type JobContext struct {
+	JobID   common.JobID
+	LogPath string
 }

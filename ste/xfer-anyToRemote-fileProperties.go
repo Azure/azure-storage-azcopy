@@ -48,8 +48,8 @@ func anyToRemote_fileProperties(jptm IJobPartTransferMgr, info *TransferInfo, pa
 		return
 	}
 
-	if (jptm.GetOverwriteOption() != common.EOverwriteOption.PosixProperties() ||
-						srcInfoProvider.EntityType() != common.EEntityType.File()) {
+	if jptm.GetOverwriteOption() != common.EOverwriteOption.PosixProperties() ||
+		srcInfoProvider.EntityType() != common.EEntityType.File() {
 		panic("configuration error. Source Info Provider does not have FileProperties entity type")
 	}
 
@@ -79,5 +79,5 @@ func anyToRemote_fileProperties(jptm IJobPartTransferMgr, info *TransferInfo, pa
 
 	jptm.SetNumberOfChunks(1)
 	jptm.SetActionAfterLastChunk(func() { commonSenderCompletion(jptm, baseSender, info) }) // for consistency run standard Epilogue
-	jptm.ScheduleChunks(s.GenerateCopyMetadata(id)) // Just one chunk to schedule
+	jptm.ScheduleChunks(s.GenerateCopyMetadata(id))                                         // Just one chunk to schedule
 }

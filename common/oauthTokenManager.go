@@ -96,7 +96,7 @@ func newAzcopyHTTPClient() *http.Client {
 				Timeout:   10 * time.Second,
 				KeepAlive: 10 * time.Second,
 				DualStack: true,
-			}).Dial, /*Context*/
+			}).Dial,                   /*Context*/
 			MaxIdleConns:           0, // No limit
 			MaxIdleConnsPerHost:    1000,
 			IdleConnTimeout:        180 * time.Second,
@@ -297,13 +297,13 @@ func (uotm *UserOAuthTokenManager) AutoLogin(autoOAuth *sync.Once) (LoginRespons
 		case EAutoLoginType.PsCred():
 		case EAutoLoginType.Workload():
 		default:
-			err = fmt.Errorf("Invalid Auto-login type specified: %s", autoLoginType)
+			err = fmt.Errorf("invalid Auto-login type specified: %s", autoLoginType)
 			return
 		}
 
 		options.PersistToken = false
 		if resp, err = uotm.Login(options); err != nil {
-			err = fmt.Errorf("Failed to perform Auto-login: %v.", err)
+			err = fmt.Errorf("failed to perform Auto-login: %v", err)
 			return
 		}
 	})
@@ -630,7 +630,7 @@ var tokenStoreCredCache CredCacheImplementation = NewCredCacheInternalIntegratio
 
 // IsEmpty returns if current OAuthTokenInfo is empty and doesn't contain any useful info.
 func (credInfo OAuthTokenInfo) IsEmpty() bool {
-	if credInfo.Tenant == "" && credInfo.ActiveDirectoryEndpoint == "" && credInfo.Token.IsZero() {
+	if credInfo.Tenant == "" && credInfo.ActiveDirectoryEndpoint == "" && credInfo.IsZero() {
 		return true
 	}
 

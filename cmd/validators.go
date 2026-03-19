@@ -22,103 +22,14 @@ package cmd
 
 import (
 	"fmt"
-	"net/url"
 	"reflect"
-	"regexp"
 	"strings"
 
-	"github.com/Azure/azure-storage-azcopy/v10/traverser"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/JeffreyRichter/enum/enum"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
-
-func ValidateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo, error) {
-	if userSpecifiedFromTo == "" {
-		inferredFromTo := inferFromTo(src, dst)
-
-		// If user didn't explicitly specify FromTo, use what was inferred (if possible)
-		if inferredFromTo == common.EFromTo.Unknown() {
-			return common.EFromTo.Unknown(), fmt.Errorf("the inferred source/destination combination could not be identified, or is currently not supported")
-		}
-		return inferredFromTo, nil
-	}
-
-	// User explicitly specified FromTo, therefore, we should respect what they specified.
-	var userFromTo common.FromTo
-	err := userFromTo.Parse(userSpecifiedFromTo)
-	if err != nil {
-		return common.EFromTo.Unknown(), fmt.Errorf("invalid --from-to value specified: %q. "+fromToHelpText, userSpecifiedFromTo)
-
-	}
-
-	// Normalize FileSMB cases to corresponding File cases.
-	// This remapping ensures that we can handle FileSMB scenarios without requiring
-	// widespread code changes in AzCopy for the time being.
-	if userFromTo == common.EFromTo.LocalFileSMB() {
-		userFromTo = common.EFromTo.LocalFile()
-	} else if userFromTo == common.EFromTo.FileSMBLocal() {
-		userFromTo = common.EFromTo.FileLocal()
-	} else if userFromTo == common.EFromTo.FileSMBFileSMB() {
-		userFromTo = common.EFromTo.FileFile()
-	} else if userFromTo == common.EFromTo.FileSMBBlob() {
-		userFromTo = common.EFromTo.FileBlob()
-	} else if userFromTo == common.EFromTo.BlobFileSMB() {
-		userFromTo = common.EFromTo.BlobFile()
-	} else if userFromTo == common.EFromTo.FileSMBPipe() {
-		userFromTo = common.EFromTo.FilePipe()
-	} else if userFromTo == common.EFromTo.PipeFileSMB() {
-		userFromTo = common.EFromTo.PipeFile()
-	} else if userFromTo == common.EFromTo.FileSMBTrash() {
-		userFromTo = common.EFromTo.FileTrash()
-	} else if userFromTo == common.EFromTo.FileSMBBlobFS() {
-		userFromTo = common.EFromTo.FileBlobFS()
-	} else if userFromTo == common.EFromTo.BlobFSFileSMB() {
-		userFromTo = common.EFromTo.BlobFSFile()
-	} else if userFromTo == common.EFromTo.FileSMBTrash() {
-		userFromTo = common.EFromTo.FileTrash()
-	}
-
-	return userFromTo, nil
-}
-
-const fromToHelpFormat = "Specified to nudge AzCopy when resource detection may not work (e.g. piping/emulator/azure stack); Valid FromTo are pairs of Source-Destination words (e.g. BlobLocal, BlobBlob) that specify the source and destination resource types. All valid FromTos are: %s"
-
-var fromToHelp = func() string {
-	validFromTos := ""
-
-	isSafeToOutput := func(loc common.Location) bool {
-		switch loc {
-		case common.ELocation.Benchmark(),
-			common.ELocation.None(),
-			common.ELocation.Unknown():
-			return false
-		default:
-			return true
-		}
-	}
-
-	enum.GetSymbols(reflect.TypeOf(common.EFromTo), func(enumSymbolName string, enumSymbolValue interface{}) (stop bool) {
-		fromTo := enumSymbolValue.(common.FromTo)
-
-		if isSafeToOutput(fromTo.From()) && isSafeToOutput(fromTo.To()) {
-			fromtoStr := fromTo.String()
-			if fromTo.String() == common.EFromTo.LocalFile().String() {
-				fromtoStr = "LocalFileSMB"
-			} else if fromTo.String() == common.EFromTo.FileLocal().String() {
-				fromtoStr = "FileSMBLocal"
-			} else if fromTo.String() == common.EFromTo.FileFile().String() {
-				fromtoStr = "FileSMBFileSMB"
-			}
-			validFromTos += fromtoStr + ", "
-		}
-		return false
-	})
-
-	return fmt.Sprintf(fromToHelpFormat, strings.TrimSuffix(validFromTos, ", "))
-}()
-
-var fromToHelpText = fromToHelp
 
 const locationHelpFormat = "Specified to nudge AzCopy when resource detection may not work (e.g. emulator/azure stack); Required for NFS transfers; optional for SMB. Valid Location are Source words (e.g. Blob, File) that specify the source resource type. All valid Locations are: %s"
 
@@ -151,57 +62,9 @@ var locationHelp = func() string {
 
 var locationHelpText = locationHelp
 
-func inferFromTo(src, dst string) common.FromTo {
-	// Try to infer the 1st argument
-	srcLocation := InferArgumentLocation(src)
-	if srcLocation == srcLocation.Unknown() {
-		glcm.Info("Cannot infer source location of " +
-			common.URLStringExtension(src).RedactSecretQueryParamForLogging() +
-			". Please specify the --from-to switch. " + fromToHelpText)
-		return common.EFromTo.Unknown()
-	}
-
-	dstLocation := InferArgumentLocation(dst)
-	if dstLocation == dstLocation.Unknown() {
-		glcm.Info("Cannot infer destination location of " +
-			common.URLStringExtension(dst).RedactSecretQueryParamForLogging() +
-			". Please specify the --from-to switch. " + fromToHelpText)
-		return common.EFromTo.Unknown()
-	}
-
-	out := common.EFromTo.Unknown() // Check that the intended FromTo is in the list of valid FromTos; if it's not, return Unknown as usual and warn the user.
-	intent := (common.FromTo(srcLocation) << 8) | common.FromTo(dstLocation)
-	enum.GetSymbols(reflect.TypeOf(common.EFromTo), func(enumSymbolName string, enumSymbolValue interface{}) (stop bool) { // find if our fromto is a valid option
-		fromTo := enumSymbolValue.(common.FromTo)
-		// none/unknown will never appear as valid outputs of the above functions
-		// If it's our intended fromto, we're good.
-		if fromTo == intent {
-			out = intent
-			return true
-		}
-
-		return false
-	})
-
-	if out != common.EFromTo.Unknown() {
-		return out
-	}
-
-	glcm.Info("The parameters you supplied were " +
-		"Source: '" + common.URLStringExtension(src).RedactSecretQueryParamForLogging() + "' of type " + srcLocation.String() +
-		", and Destination: '" + common.URLStringExtension(dst).RedactSecretQueryParamForLogging() + "' of type " + dstLocation.String())
-	glcm.Info("Based on the parameters supplied, a valid source-destination combination could not " +
-		"automatically be found. Please check the parameters you supplied.  If they are correct, please " +
-		"specify an exact source and destination type using the --from-to switch. " + fromToHelpText)
-
-	return out
-}
-
-var IPv4Regex = regexp.MustCompile(`\d+\.\d+\.\d+\.\d+`) // simple regex
-
 func ValidateArgumentLocation(src string, userSpecifiedLocation string) (common.Location, error) {
 	if userSpecifiedLocation == "" {
-		inferredLocation := InferArgumentLocation(src)
+		inferredLocation := azcopy.InferArgumentLocation(src)
 
 		// If user didn't explicitly specify Location, use what was inferred (if possible)
 		if inferredLocation == common.ELocation.Unknown() {
@@ -219,45 +82,4 @@ func ValidateArgumentLocation(src string, userSpecifiedLocation string) (common.
 	}
 
 	return userLocation, nil
-}
-
-func InferArgumentLocation(arg string) common.Location {
-	if arg == pipeLocation {
-		return common.ELocation.Pipe()
-	}
-	if startsWith(arg, "http") {
-		// Let's try to parse the argument as a URL
-		u, err := url.Parse(arg)
-		// NOTE: sometimes, a local path can also be parsed as a url. To avoid thinking it's a URL, check Scheme, Host, and Path
-		if err == nil && u.Scheme != "" && u.Host != "" {
-			// Is the argument a URL to blob storage?
-			switch host := strings.ToLower(u.Host); true {
-			// Azure Stack does not have the core.windows.net
-			case strings.Contains(host, ".blob"):
-				return common.ELocation.Blob()
-			case strings.Contains(host, ".file"):
-				return common.ELocation.File()
-			case strings.Contains(host, ".dfs"):
-				return common.ELocation.BlobFS()
-			case strings.Contains(host, traverser.BenchmarkSourceHost):
-				return common.ELocation.Benchmark()
-				// enable targeting an emulator/stack
-			case IPv4Regex.MatchString(host):
-				return common.ELocation.Unknown()
-			}
-
-			if common.IsS3URL(*u) {
-				return common.ELocation.S3()
-			}
-
-			if common.IsGCPURL(*u) {
-				return common.ELocation.GCP()
-			}
-
-			// If none of the above conditions match, return Unknown
-			return common.ELocation.Unknown()
-		}
-	}
-
-	return common.ELocation.Local()
 }

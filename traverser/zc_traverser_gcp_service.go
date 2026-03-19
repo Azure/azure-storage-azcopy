@@ -73,7 +73,6 @@ func (t *gcpServiceTraverser) Traverse(preprocessor objectMorpher, processor Obj
 		urlResult := tmpGCPURL.URL()
 		bucketTraverser, err := NewGCPTraverser(&urlResult, t.ctx, InitResourceTraverserOptions{
 			Recursive:               true,
-			Credential:              t.opts.Credential,
 			GetPropertiesInFrontend: t.opts.GetPropertiesInFrontend,
 			IncrementEnumeration:    t.opts.IncrementEnumeration,
 		})

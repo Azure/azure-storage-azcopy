@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
@@ -30,6 +31,7 @@ import (
 // the interceptor gathers/saves the job part orders for validation
 type interceptor struct {
 	transfers []common.CopyTransfer
+	deletions []traverser.StoredObject
 }
 
 func (i *interceptor) intercept(copyRequest common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
@@ -44,6 +46,11 @@ func (i *interceptor) intercept(copyRequest common.CopyJobPartOrderRequest) comm
 	}
 }
 
+func (i *interceptor) delete(_ string, _ common.Location, object traverser.StoredObject) error {
+	i.deletions = append(i.deletions, object)
+	return nil
+}
+
 func (i *interceptor) init() {
 	// mock out the lifecycle manager so that it can no longer terminate the application
 	glcm = &mockedLifecycleManager{
@@ -53,6 +60,8 @@ func (i *interceptor) init() {
 
 func (i *interceptor) reset() {
 	i.transfers = make([]common.CopyTransfer, 0)
+	i.deletions = make([]traverser.StoredObject, 0)
+
 }
 
 // this lifecycle manager substitute does not perform any action
@@ -138,6 +147,10 @@ func (*mockedLifecycleManager) E2EAwaitAllowOpenFiles() {
 
 func (*mockedLifecycleManager) E2EEnableAwaitAllowOpenFiles(_ bool) {
 	// not implemented in mocked version
+}
+
+func (*mockedLifecycleManager) CancelFromStdinChannel() <-chan os.Signal {
+	return make(chan os.Signal) // Basically a no-op, returning an unwritten to channel is safe.
 }
 
 func (*mockedLifecycleManager) GatherAllLogs(channel chan string) (result []string) {

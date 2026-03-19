@@ -381,7 +381,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 	scheduleSendChunks(jptm, info.Source, srcFile, srcSize, s, sourceFileFactory, srcInfoProvider)
 }
 
-var jobCancelledLocalPrefetchErr = errors.New("job was cancelled; Pre-fetching stopped")
+var errJobCancelledLocalPrefetch = errors.New("job was cancelled; Pre-fetching stopped")
 
 // Schedule all the send chunks.
 // For upload, we force preload of each chunk to memory, and we wait (block)
@@ -429,7 +429,7 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 
 		if srcInfoProvider.IsLocal() {
 			if jptm.WasCanceled() {
-				prefetchErr = jobCancelledLocalPrefetchErr
+				prefetchErr = errJobCancelledLocalPrefetch
 			} else {
 				// As long as the prefetch error is nil, we'll attempt a prefetch.
 				// Otherwise, the chunk reader didn't need to be made.

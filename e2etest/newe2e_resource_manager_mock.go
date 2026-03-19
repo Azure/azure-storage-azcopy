@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -135,8 +135,8 @@ func (m *MockServiceResourceManager) Location() common.Location {
 	return m.serviceType
 }
 
-func (m *MockServiceResourceManager) Level() cmd.LocationLevel {
-	return cmd.ELocationLevel.Service()
+func (m *MockServiceResourceManager) Level() azcopy.LocationLevel {
+	return azcopy.ELocationLevel.Service()
 }
 
 func (m *MockServiceResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
@@ -219,8 +219,8 @@ func (m *MockContainerResourceManager) Location() common.Location {
 	return m.parent.Location()
 }
 
-func (m *MockContainerResourceManager) Level() cmd.LocationLevel {
-	return cmd.ELocationLevel.Container()
+func (m *MockContainerResourceManager) Level() azcopy.LocationLevel {
+	return azcopy.ELocationLevel.Container()
 }
 
 func (m *MockContainerResourceManager) ContainerName() string {
@@ -308,8 +308,8 @@ func (m *MockObjectResourceManager) Location() common.Location {
 	return m.parent.Location()
 }
 
-func (m *MockObjectResourceManager) Level() cmd.LocationLevel {
-	return cmd.ELocationLevel.Object()
+func (m *MockObjectResourceManager) Level() azcopy.LocationLevel {
+	return azcopy.ELocationLevel.Object()
 }
 
 func (m *MockObjectResourceManager) EntityType() common.EntityType {

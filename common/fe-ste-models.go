@@ -61,6 +61,7 @@ const (
 	RECOMMENDED_OBJECTS_COUNT = 10000000
 	WARN_MULTIPLE_PROCESSES   = "More than one AzCopy process is running. This is a non-blocking warning, AzCopy will continue the operation. \n But, it is best practice to run a single process per VM." +
 		"\nPlease terminate other instances." // This particular warning message does not abort the whole operation
+	AMLFS_MOD_TIME_LAYOUT = "2006-01-02 15:04:05 -0700"
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -653,6 +654,10 @@ func (l Location) SupportsTrailingDot() bool {
 	return false
 }
 
+func (ft FromTo) IsRedirection() bool {
+	return ft == EFromTo.PipeBlob() || ft == EFromTo.BlobPipe()
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 var EFromTo = FromTo(0)
@@ -874,10 +879,13 @@ func (TransferStatus) Started() TransferStatus { return TransferStatus(1) }
 // Transfer successfully completed
 func (TransferStatus) Success() TransferStatus { return TransferStatus(2) }
 
-// Folder was created, but properties have not been persisted yet. Equivalent to Started, but never intended to be set on anything BUT folders.
+// FolderCreated folder was created, but properties have not been persisted yet. Equivalent to Started, but never intended to be set on anything BUT folders.
 func (TransferStatus) FolderCreated() TransferStatus { return TransferStatus(3) }
 
-func (TransferStatus) Restarted() TransferStatus { return TransferStatus(4) }
+// FolderExisted folder already existed before we got to it. A valid state to continue from in overwrite scenarios.
+func (TransferStatus) FolderExisted() TransferStatus { return TransferStatus(4) }
+
+func (TransferStatus) Restarted() TransferStatus { return TransferStatus(5) }
 
 // Transfer failed due to some error.
 func (TransferStatus) Failed() TransferStatus { return TransferStatus(-1) }
@@ -1196,8 +1204,18 @@ const MetadataAndBlobTagsClearFlag = "clear" // clear flag used for metadata and
 
 type Metadata map[string]*string
 
+type SafeMetadata struct {
+	mu       sync.RWMutex
+	Metadata Metadata
+}
+
+type MetadataStore interface {
+	TryAdd(key, value string)
+	TryRead(key string) (*string, bool)
+}
+
 func (m Metadata) Clone() Metadata {
-	out := make(Metadata)
+	out := make(map[string]*string)
 
 	for k, v := range m {
 		out[k] = v
@@ -1217,20 +1235,20 @@ func (m Metadata) Marshal() (string, error) {
 }
 
 // UnMarshalToCommonMetadata unmarshals string to common metadata.
-func UnMarshalToCommonMetadata(metadataString string) (Metadata, error) {
-	var result Metadata
+func UnMarshalToCommonMetadata(metadataString string) (map[string]*string, error) {
+	var result SafeMetadata
 	if metadataString != "" {
-		err := json.Unmarshal([]byte(metadataString), &result)
+		err := json.Unmarshal([]byte(metadataString), &result.Metadata)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	return result, nil
+	return result.Metadata, nil
 }
 
 func StringToMetadata(metadataString string) (Metadata, error) {
-	metadataMap := Metadata{}
+	metadata := SafeMetadata{Metadata: make(Metadata)}
 	if len(metadataString) > 0 {
 		cKey := ""
 		cVal := ""
@@ -1263,7 +1281,7 @@ func StringToMetadata(metadataString string) (Metadata, error) {
 					}
 
 					finalValue := cVal
-					metadataMap[cKey] = &finalValue
+					metadata.Metadata[cKey] = &finalValue
 					cKey = ""
 					cVal = ""
 					keySet = false
@@ -1280,10 +1298,10 @@ func StringToMetadata(metadataString string) (Metadata, error) {
 
 		if cKey != "" {
 			finalValue := cVal
-			metadataMap[cKey] = &finalValue
+			metadata.Metadata[cKey] = &finalValue
 		}
 	}
-	return metadataMap, nil
+	return metadata.Metadata, nil
 }
 
 // isValidMetadataKey checks if the given string is a valid metadata key for Azure.
@@ -1323,8 +1341,8 @@ func isValidMetadataKeyFirstChar(c byte) bool {
 }
 
 func (m Metadata) ExcludeInvalidKey() (retainedMetadata Metadata, excludedMetadata Metadata, invalidKeyExists bool) {
-	retainedMetadata = make(map[string]*string)
-	excludedMetadata = make(map[string]*string)
+	retainedMetadata = make(Metadata)
+	excludedMetadata = make(Metadata)
 	for k, v := range m {
 		if isValidMetadataKey(k) {
 			retainedMetadata[k] = v
@@ -1381,12 +1399,11 @@ var metadataKeyRenameErrStr = "failed to rename invalid metadata key %q"
 // Note: To keep first version simple, whenever collision is found during key resolving, error will be returned.
 // This can be further improved once any user feedback get.
 func (m Metadata) ResolveInvalidKey() (resolvedMetadata Metadata, err error) {
-	resolvedMetadata = make(map[string]*string)
+	resolvedMetadata = make(Metadata)
 
 	hasCollision := func(name string) bool {
 		_, hasCollisionToOrgNames := m[name]
 		_, hasCollisionToNewNames := resolvedMetadata[name]
-
 		return hasCollisionToOrgNames || hasCollisionToNewNames
 	}
 
@@ -1886,7 +1903,7 @@ func (sht *SymlinkHandlingType) Determine(Follow, Preserve bool) error {
 	return nil
 }
 
-// /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 var oncer = sync.Once{}
 
@@ -1895,4 +1912,37 @@ func WarnIfTooManyObjects() {
 		GetLifecycleMgr().Warn(fmt.Sprintf("This job contains more than %d objects, best practice to run less than this.",
 			RECOMMENDED_OBJECTS_COUNT))
 	})
+}
+
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+var EPosixPropertiesStyle = PosixPropertiesStyle(0)
+
+var StandardPosixPropertiesStyle = EPosixPropertiesStyle.Standard() // Default
+var AMLFSPosixPropertiesStyle = EPosixPropertiesStyle.AMLFS()
+
+type PosixPropertiesStyle uint8
+
+// Standard means use the default POSIX properties type
+func (PosixPropertiesStyle) Standard() PosixPropertiesStyle {
+	return PosixPropertiesStyle(0)
+}
+
+// AMLFS means use the Azure Managed Lustre File System POSIX attributes for owner, group ID, mode and modtime
+func (PosixPropertiesStyle) AMLFS() PosixPropertiesStyle {
+	return PosixPropertiesStyle(1)
+}
+
+func (ppt PosixPropertiesStyle) String() string {
+	return enum.StringInt(ppt, reflect.TypeOf(ppt))
+}
+
+func (ppt *PosixPropertiesStyle) Parse(s string) error {
+	if s == "" { // Default to standard when not set
+		s = StandardPosixPropertiesStyle.String()
+	}
+	val, err := enum.ParseInt(reflect.TypeOf(ppt), s, true, true)
+	if err == nil {
+		*ppt = val.(PosixPropertiesStyle)
+	}
+	return err
 }

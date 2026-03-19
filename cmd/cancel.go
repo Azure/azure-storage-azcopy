@@ -60,7 +60,7 @@ func (cca cookedCancelCmdArgs) process() error {
 	if !cancelJobResponse.CancelledPauseResumed {
 		if cca.ignoreCompletedJobError && cancelJobResponse.JobStatus == common.EJobStatus.Completed() {
 			glcm.Info(cancelJobResponse.ErrorMsg)
-			resp, err := Client.GetJobSummary(azcopy.GetJobSummaryOptions{JobID: cca.jobID})
+			resp, err := Client.GetJobSummary(cca.jobID, azcopy.GetJobSummaryOptions{})
 			if err != nil {
 				return err
 			}

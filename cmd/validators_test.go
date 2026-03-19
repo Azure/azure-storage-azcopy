@@ -3,6 +3,7 @@ package cmd
 import (
 	"testing"
 
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
 )
@@ -61,7 +62,7 @@ func TestInferArgumentLocation(t *testing.T) {
 	}
 
 	for _, v := range test {
-		loc := InferArgumentLocation(v.src)
+		loc := azcopy.InferArgumentLocation(v.src)
 		a.Equal(v.expectedLocation, loc)
 	}
 }
@@ -128,7 +129,7 @@ func TestValidateFromTo(t *testing.T) {
 	}
 
 	for _, v := range test {
-		fromTo, err := ValidateFromTo("", "", v.userSpecifiedLocation)
+		fromTo, err := azcopy.InferAndValidateFromTo("", "", v.userSpecifiedLocation)
 		a.Equal(v.expectedFromTo, fromTo)
 		a.Equal(err == nil, v.expectedError == "")
 		if err != nil {

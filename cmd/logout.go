@@ -21,14 +21,11 @@
 package cmd
 
 import (
-	"fmt"
-
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/spf13/cobra"
 )
 
 func init() {
-	logoutCmdArgs := LogoutOptions{}
-
 	// logoutCmd represents the logout command
 	logoutCmd := &cobra.Command{
 		Use:        "logout",
@@ -39,27 +36,14 @@ func init() {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return RunLogout(logoutCmdArgs)
+			_, err := Client.Logout(azcopy.LogoutOptions{})
+			if err != nil {
+				return err
+			}
+			glcm.Info("Logout succeeded.")
+			return nil
 		},
 	}
 
 	rootCmd.AddCommand(logoutCmd)
-}
-
-func RunLogout(options LogoutOptions) error {
-	return options.process()
-}
-
-type LogoutOptions struct{}
-
-func (options LogoutOptions) process() error {
-	uotm := Client.GetUserOAuthTokenManagerInstance()
-	if err := uotm.RemoveCachedToken(); err != nil {
-		return fmt.Errorf("failed to perform logout command, %v", err)
-	}
-
-	// For MSI login, info success message to user.
-	glcm.Info("Logout succeeded.")
-
-	return nil
 }

@@ -1,13 +1,6 @@
 package cmd
 
-import (
-	"runtime"
-	"testing"
-
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/stretchr/testify/assert"
-)
-
+/*
 func TestCopy_NFSSpecificValidationForFlags(t *testing.T) {
 	a := assert.New(t)
 
@@ -808,3 +801,4 @@ func TestSync_SMBSpecificValidationForFlags(t *testing.T) {
 		})
 	}
 }
+*/

@@ -408,6 +408,9 @@ func (AzureFileParentDirCreator) getParentDirectoryClient(uh FileClientStub, sha
 // and there is no permission on directory level, i.e. create directory is a general permission for each level directories for Azure file.
 func (AzureFileParentDirCreator) verifyAndHandleCreateErrors(err error) error {
 	if err != nil {
+		if errors.Is(err, common.FolderCreationErrorAlreadyExists{}) {
+			return nil
+		}
 		var respErr *azcore.ResponseError
 		if errors.As(err, &respErr) && respErr.StatusCode == http.StatusConflict { // Note the ServiceCode actually be AuthenticationFailure when share failed to be created, if want to create share as well.
 			return nil
@@ -460,6 +463,11 @@ func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, shareCli
 		recorderURL.RawQuery = ""
 		err = t.CreateFolder(recorderURL.String(), func() error {
 			_, err := currentDirectoryClient.Create(ctx, nil)
+
+			if fileerror.HasCode(err, fileerror.ResourceAlreadyExists) {
+				return common.FolderCreationErrorAlreadyExists{}
+			}
+
 			return err
 		})
 		if verifiedErr := d.verifyAndHandleCreateErrors(err); verifiedErr != nil {

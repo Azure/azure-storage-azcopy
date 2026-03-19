@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"testing"
+
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestBToString(t *testing.T) {
@@ -90,14 +92,14 @@ func TestGetPath(t *testing.T) {
 		containerName string
 		relativePath  string
 		entityType    common.EntityType
-		level         LocationLevel
+		level         azcopy.LocationLevel
 
 		expectedOutput string
 	}{
-		{"fileservice", "file.txt", common.EEntityType.File(), ELocationLevel.Service(), "fileservice/file.txt"},
-		{"folderservice", "images", common.EEntityType.Folder(), ELocationLevel.Service(), "folderservice/images/"},
-		{"filenonservice", "data/file.csv", common.EEntityType.File(), ELocationLevel.Container(), "data/file.csv"},
-		{"foldernonservice", "data/reports", common.EEntityType.Folder(), ELocationLevel.Container(), "data/reports/"},
+		{"fileservice", "file.txt", common.EEntityType.File(), azcopy.ELocationLevel.Service(), "fileservice/file.txt"},
+		{"folderservice", "images", common.EEntityType.Folder(), azcopy.ELocationLevel.Service(), "folderservice/images/"},
+		{"filenonservice", "data/file.csv", common.EEntityType.File(), azcopy.ELocationLevel.Container(), "data/file.csv"},
+		{"foldernonservice", "data/reports", common.EEntityType.Folder(), azcopy.ELocationLevel.Container(), "data/reports/"},
 	}
 
 	for _, v := range test {

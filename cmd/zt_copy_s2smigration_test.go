@@ -23,17 +23,17 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	datalakedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/directory"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-	"github.com/stretchr/testify/assert"
 	"net/url"
 	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	datalakedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/directory"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -94,6 +94,7 @@ func getDefaultRawCopyInput(src, dst string) rawCopyCmdArgs {
 		forceWrite:                     common.EOverwriteOption.True().String(),
 		preserveOwner:                  common.PreserveOwnerDefault,
 		asSubdir:                       true,
+		hardlinks:                      common.DefaultHardlinkHandlingType.String(),
 	}
 }
 
@@ -171,9 +172,6 @@ func TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolved(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -182,7 +180,7 @@ func TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolved(t *testing.T) {
 	raw := getDefaultRawCopyInput(rawSrcS3BucketURL.String(), rawDstBlobServiceURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -227,9 +225,6 @@ func TestS2SCopyFromS3ToBlobWithWildcardInSrcAndBucketNameNeedBeResolved(t *test
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -239,7 +234,7 @@ func TestS2SCopyFromS3ToBlobWithWildcardInSrcAndBucketNameNeedBeResolved(t *test
 	raw := getDefaultRawCopyInput(rawSrcS3BucketStrWithWirdcard, rawDstBlobServiceURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -287,9 +282,6 @@ func TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolvedNegative(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -298,7 +290,7 @@ func TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolvedNegative(t *testing.T) {
 	raw := getDefaultRawCopyInput(rawSrcS3BucketURL.String(), rawDstBlobServiceURLWithSAS.String())
 
 	// bucket should not be resolved, and objects should not be scheduled for transfer
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.NotNil(err)
 
 		loggedError := false
@@ -337,9 +329,6 @@ func TestS2SCopyFromS3ToBlobWithSpaceInSrcNotEncoded(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -349,7 +338,7 @@ func TestS2SCopyFromS3ToBlobWithSpaceInSrcNotEncoded(t *testing.T) {
 	raw := getDefaultRawCopyInput(rawSrcS3DirStr, rawDstContainerURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -383,9 +372,6 @@ func TestS2SCopyFromS3ToBlobWithSpaceInSrcEncodedAsPlus(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -395,7 +381,7 @@ func TestS2SCopyFromS3ToBlobWithSpaceInSrcEncodedAsPlus(t *testing.T) {
 	raw := getDefaultRawCopyInput(rawSrcS3DirStr, rawDstContainerURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -429,9 +415,6 @@ func TestS2SCopyFromS3ToBlobWithObjectUsingSlashAsSuffix(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -440,7 +423,7 @@ func TestS2SCopyFromS3ToBlobWithObjectUsingSlashAsSuffix(t *testing.T) {
 	raw := getDefaultRawCopyInput(rawSrcS3BucketURL.String(), rawDstContainerURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -478,9 +461,6 @@ func TestS2SCopyFromS3AccountWithBucketInDifferentRegionsAndListUseDefaultEndpoi
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -489,7 +469,7 @@ func TestS2SCopyFromS3AccountWithBucketInDifferentRegionsAndListUseDefaultEndpoi
 	raw := getDefaultRawCopyInput(rawSrcS3AccountURL.String(), rawDstBlobServiceURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		validateS2STransfersAreScheduled(a, "", "", validateObjectList, mockedRPC)
@@ -524,9 +504,6 @@ func TestS2SCopyFromS3AccountWithBucketInDifferentRegionsAndListUseSpecificRegio
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -535,7 +512,7 @@ func TestS2SCopyFromS3AccountWithBucketInDifferentRegionsAndListUseSpecificRegio
 	raw := getDefaultRawCopyInput(rawSrcS3AccountURL.String(), rawDstBlobServiceURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		validateS2STransfersAreScheduled(a, "", "", objectList2, mockedRPC)
@@ -562,9 +539,6 @@ func TestS2SCopyFromS3ObjectToBlobContainer(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -573,7 +547,7 @@ func TestS2SCopyFromS3ObjectToBlobContainer(t *testing.T) {
 	raw := getDefaultRawCopyInput(rawSrcS3ObjectURL.String(), rawDstContainerURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -589,7 +563,7 @@ func TestS2SCopyFromS3ObjectToBlobContainer(t *testing.T) {
 	raw = getDefaultRawCopyInput(rawSrcS3ObjectURL.String(), rawDstContainerURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -620,9 +594,6 @@ func TestS2SCopyFromGCPToBlobWithBucketNameNeedBeResolved(t *testing.T) {
 	a.NotZero(len(objectList))
 
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	rawSrcGCPBucketURL := scenarioHelper{}.getRawGCPBucketURL(a, bucketName)
@@ -630,7 +601,7 @@ func TestS2SCopyFromGCPToBlobWithBucketNameNeedBeResolved(t *testing.T) {
 
 	raw := getDefaultRawCopyInput(rawSrcGCPBucketURL.String(), rawDstBlobServiceURLWithSAS.String())
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -672,16 +643,13 @@ func TestS2SCopyFromGCPToBlobWithWildcardInSrcAndBucketNameNeedBeResolved(t *tes
 	a.NotZero(len(objectList))
 
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	rawSrcGCPBucketURL := scenarioHelper{}.getRawGCPBucketURL(a, bucketName)
 	rawDstBlobServiceURLWithSAS := scenarioHelper{}.getRawBlobServiceURLWithSAS(a)
 	rawSrcGCPBucketStrWithWildcard := strings.Replace(rawSrcGCPBucketURL.String(), invalidPrefix, "invalid----*", 1)
 	raw := getDefaultRawCopyInput(rawSrcGCPBucketStrWithWildcard, rawDstBlobServiceURLWithSAS.String())
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -719,9 +687,6 @@ func TestS2SCopyFromGCPToBlobWithBucketNameNeedBeResolvedNegative(t *testing.T) 
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -730,7 +695,7 @@ func TestS2SCopyFromGCPToBlobWithBucketNameNeedBeResolvedNegative(t *testing.T) 
 	raw := getDefaultRawCopyInput(rawSrcGCPBucketURL.String(), rawDstBlobServiceURLWithSAS.String())
 
 	// bucket should not be resolved, and objects should not be scheduled for transfer
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.NotNil(err)
 
 		loggedError := false
@@ -770,9 +735,6 @@ func TestS2SCopyFromGCPToBlobWithObjectUsingSlashAsSuffix(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -781,7 +743,7 @@ func TestS2SCopyFromGCPToBlobWithObjectUsingSlashAsSuffix(t *testing.T) {
 	raw := getDefaultRawCopyInput(rawSrcGCPBucketURL.String(), rawDstContainerURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -809,9 +771,6 @@ func TestS2SCopyFromGCPObjectToBlobContainer(t *testing.T) {
 	scenarioHelper{}.generateGCPObjects(a, gcpClient, bucketName, objectList)
 
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	rawSrcGCPObjectURL := scenarioHelper{}.getRawGCPObjectURL(a, bucketName, "file") // Use default region
@@ -820,7 +779,7 @@ func TestS2SCopyFromGCPObjectToBlobContainer(t *testing.T) {
 	raw := getDefaultRawCopyInput(rawSrcGCPObjectURL.String(), rawDstContainerURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -836,7 +795,7 @@ func TestS2SCopyFromGCPObjectToBlobContainer(t *testing.T) {
 	raw = getDefaultRawCopyInput(rawSrcGCPObjectURL.String(), rawDstContainerURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -864,9 +823,6 @@ func TestS2SCopyFromContainerToContainerPreserveBlobTier(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -875,7 +831,7 @@ func TestS2SCopyFromContainerToContainerPreserveBlobTier(t *testing.T) {
 	raw := getDefaultRawCopyInput(rawSrcContainerURLWithSAS.String(), rawDstContainerURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		validateS2STransfersAreScheduled(a,
@@ -902,9 +858,6 @@ func TestS2SCopyFromContainerToContainerNoPreserveBlobTier(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -914,7 +867,7 @@ func TestS2SCopyFromContainerToContainerNoPreserveBlobTier(t *testing.T) {
 	raw.s2sPreserveAccessTier = false
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		validateS2STransfersAreScheduled(a,
@@ -944,9 +897,6 @@ func TestS2SCopyFromPageToBlockBlob(t *testing.T) {
 
 	// Set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// Prepare copy command
@@ -956,7 +906,7 @@ func TestS2SCopyFromPageToBlockBlob(t *testing.T) {
 	raw.blobType = "BlockBlob"
 
 	// Run copy command
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		a.Equal(1, len(mockedRPC.transfers))
@@ -971,7 +921,7 @@ func TestS2SCopyFromPageToBlockBlob(t *testing.T) {
 	raw.blobType = "BlockBlob"
 
 	// Run copy command
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		a.Equal(2, len(mockedRPC.transfers))
@@ -999,9 +949,6 @@ func TestS2SCopyFromBlockToPageBlob(t *testing.T) {
 
 	// Set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// Prepare copy command
@@ -1011,7 +958,7 @@ func TestS2SCopyFromBlockToPageBlob(t *testing.T) {
 	raw.blobType = "PageBlob"
 
 	// Run copy command
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		a.Equal(1, len(mockedRPC.transfers))
@@ -1026,7 +973,7 @@ func TestS2SCopyFromBlockToPageBlob(t *testing.T) {
 	raw.blobType = "PageBlob"
 
 	// Run copy command
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		a.Equal(2, len(mockedRPC.transfers))
@@ -1054,9 +1001,6 @@ func TestS2SCopyFromBlockToAppendBlob(t *testing.T) {
 
 	// Set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// Prepare copy command
@@ -1066,7 +1010,7 @@ func TestS2SCopyFromBlockToAppendBlob(t *testing.T) {
 	raw.blobType = "AppendBlob"
 
 	// Run copy command
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		a.Equal(1, len(mockedRPC.transfers))
@@ -1081,7 +1025,7 @@ func TestS2SCopyFromBlockToAppendBlob(t *testing.T) {
 	raw.blobType = "AppendBlob"
 
 	// Run copy command
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		a.Equal(2, len(mockedRPC.transfers))
@@ -1110,9 +1054,6 @@ func TestS2SCopyFromAppendToBlockBlob(t *testing.T) {
 
 	// Set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// Prepare copy command
@@ -1122,7 +1063,7 @@ func TestS2SCopyFromAppendToBlockBlob(t *testing.T) {
 	raw.blobType = "BlockBlob"
 
 	// Run copy command
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		a.Equal(1, len(mockedRPC.transfers))
@@ -1137,7 +1078,7 @@ func TestS2SCopyFromAppendToBlockBlob(t *testing.T) {
 	raw.blobType = "BlockBlob"
 
 	// Run copy command
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		a.Equal(2, len(mockedRPC.transfers))
@@ -1166,9 +1107,6 @@ func TestS2SCopyFromPageToAppendBlob(t *testing.T) {
 
 	// Set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// Prepare copy command
@@ -1178,7 +1116,7 @@ func TestS2SCopyFromPageToAppendBlob(t *testing.T) {
 	raw.blobType = "AppendBlob"
 
 	// Run copy command
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		a.Equal(1, len(mockedRPC.transfers))
@@ -1193,7 +1131,7 @@ func TestS2SCopyFromPageToAppendBlob(t *testing.T) {
 	raw.blobType = "AppendBlob"
 
 	// Run copy command
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		a.Equal(2, len(mockedRPC.transfers))
@@ -1222,9 +1160,6 @@ func TestS2SCopyFromAppendToPageBlob(t *testing.T) {
 
 	// Set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// Prepare copy command
@@ -1234,7 +1169,7 @@ func TestS2SCopyFromAppendToPageBlob(t *testing.T) {
 	raw.blobType = "PageBlob"
 
 	// Run copy command
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		a.Equal(1, len(mockedRPC.transfers))
@@ -1249,7 +1184,7 @@ func TestS2SCopyFromAppendToPageBlob(t *testing.T) {
 	raw.blobType = "PageBlob"
 
 	// Run copy command
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		a.Equal(2, len(mockedRPC.transfers))
@@ -1275,9 +1210,6 @@ func TestS2SCopyFromSingleBlobToBlobContainer(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -1286,7 +1218,7 @@ func TestS2SCopyFromSingleBlobToBlobContainer(t *testing.T) {
 	raw := getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -1302,7 +1234,7 @@ func TestS2SCopyFromSingleBlobToBlobContainer(t *testing.T) {
 	raw = getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -1329,9 +1261,6 @@ func TestS2SCopyFromSingleAzureFileToBlobContainer(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -1340,7 +1269,7 @@ func TestS2SCopyFromSingleAzureFileToBlobContainer(t *testing.T) {
 	raw := getDefaultRawCopyInput(rawSrcFileURL.String(), rawDstContainerURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -1400,13 +1329,10 @@ func TestCopyWithDFSResource(t *testing.T) {
 	rawCopy.recursive = true
 
 	// set up interceptor
-	mockedRPC := interceptor{}
-	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
-		return mockedRPC.intercept(order)
-	}
+	mockedRPC := &interceptor{}
 	mockedRPC.init()
 
-	runCopyAndVerify(a, rawCopy, func(err error) {
+	runCopyAndVerify(a, rawCopy, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -1425,7 +1351,7 @@ func TestCopyWithDFSResource(t *testing.T) {
 	a.Nil(err)
 
 	rawSync := getDefaultSyncRawInput(dirClientWithSASSource.DFSURL(), dirClientWithSAS.DFSURL())
-	runSyncAndVerify(a, rawSync, func(err error) {
+	runSyncAndVerify(a, rawSync, mockedRPC.intercept, mockedRPC.delete, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled

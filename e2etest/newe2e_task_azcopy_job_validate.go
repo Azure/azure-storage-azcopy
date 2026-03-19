@@ -249,7 +249,7 @@ type ExpectedPlanFileBlobData struct {
 	ContentType                      *string
 	BlockBlobTier                    *common.BlockBlobTier `validate:"Block Blob Tier,DstBlobData.BlockBlobTier"`
 	PageBlobTier                     *common.PageBlobTier  `validate:"Page Blob Tier,DstBlobData.PageBlobTier"`
-	PutMd5                           *bool                 `validate:"Put MD5 Data,DstBlobData.PutMd5"`
+	PutMd5                           *bool                 `validate:"Put MD5 Data,DstBlobData.PutHash"`
 	Metadata                         common.Metadata
 	BlobTags                         common.BlobTags
 	CpkInfo                          *bool

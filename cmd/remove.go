@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
 )
@@ -47,7 +48,7 @@ func init() {
 			raw.src = args[0]
 
 			if raw.fromTo == "" {
-				srcLocationType := InferArgumentLocation(raw.src)
+				srcLocationType := azcopy.InferArgumentLocation(raw.src)
 				switch srcLocationType {
 				case common.ELocation.Blob():
 					raw.fromTo = common.EFromTo.BlobTrash().String()
