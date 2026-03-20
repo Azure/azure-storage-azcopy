@@ -598,6 +598,8 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 						IsFolderProperties: isFolder,
 						TransferStatus:     jppt.TransferStatus(),
 					})
+			case common.ETransferStatus.SkippedArchiveNotRestored():
+				js.SkippedArchiveFileCount++
 			}
 		}
 	})
