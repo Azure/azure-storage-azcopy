@@ -594,8 +594,8 @@ var domainRidShortcuts = map[string]uint32{
 func isRangeValid(offset, length, descriptorLength uint32) bool {
 	u64RangeEnd := uint64(offset) + uint64(length)
 
-	return u64RangeEnd < math.MaxUint32 && // the range is valid, provided we do not overflow
-		u64RangeEnd < uint64(descriptorLength) // and that we line up with the max length of the descriptor.
+	return u64RangeEnd <= math.MaxUint32 && // the range is valid, provided we do not overflow
+		u64RangeEnd <= uint64(descriptorLength) // and that we line up with the max length of the descriptor.
 }
 
 // Test whether sd refers to a valid Security Descriptor.
@@ -641,7 +641,7 @@ func sdRelativeIsValid(sd []byte, flags SECURITY_INFORMATION) error {
 		// If non-zero, OffsetDacl must point inside the relative Security Descriptor.
 		if offsetDacl != 0 &&
 			!isRangeValid(offsetDacl, uint32(unsafe.Sizeof(ACL{})), sdLenU32) {
-			return fmt.Errorf("DACL (offsetDacl=%d) must lie within sd (length=%d)", uint64(offsetDacl)+uint64(unsafe.Sizeof(ACL{})), len(sd))
+			return fmt.Errorf("DACL (offsetDacl=%d, end=%d) must lie within sd (length=%d)", offsetDacl, uint64(offsetDacl)+uint64(unsafe.Sizeof(ACL{})), len(sd))
 		}
 	}
 
@@ -651,7 +651,7 @@ func sdRelativeIsValid(sd []byte, flags SECURITY_INFORMATION) error {
 		if (control&SE_SACL_PRESENT) != 0 && offsetSacl != 0 {
 			// OffsetSacl must point inside the relative Security Descriptor.
 			if !isRangeValid(offsetSacl, uint32(unsafe.Sizeof(ACL{})), sdLenU32) {
-				return fmt.Errorf("SACL (offsetSacl=%d) must lie within sd (length=%d)", offsetSacl, len(sd))
+				return fmt.Errorf("SACL (offsetSacl=%d, end=%d) must lie within sd (length=%d)", offsetSacl, uint64(offsetSacl)+uint64(unsafe.Sizeof(ACL{})), len(sd))
 			}
 		}
 	}
@@ -664,8 +664,8 @@ func sdRelativeIsValid(sd []byte, flags SECURITY_INFORMATION) error {
 
 		// OffsetOwner must point inside the relative Security Descriptor.
 		if !isRangeValid(offsetOwner, uint32(unsafe.Sizeof(SID{})), sdLenU32) {
-			return fmt.Errorf("OwnerSID (offsetOwner=%d) must lie within sd (length=%d)",
-				offsetOwner, len(sd))
+			return fmt.Errorf("OwnerSID (offsetOwner=%d, end=%d) must lie within sd (length=%d)",
+				offsetOwner, uint64(offsetOwner)+uint64(unsafe.Sizeof(SID{})), len(sd))
 		}
 	}
 
@@ -677,8 +677,8 @@ func sdRelativeIsValid(sd []byte, flags SECURITY_INFORMATION) error {
 
 		// OffsetGroup must point inside the relative Security Descriptor.
 		if !isRangeValid(offsetGroup, uint32(unsafe.Sizeof(SID{})), sdLenU32) {
-			return fmt.Errorf("GroupSID (offsetGroup=%d) must lie within sd (length=%d)",
-				offsetGroup, len(sd))
+			return fmt.Errorf("GroupSID (offsetGroup=%d, end=%d) must lie within sd (length=%d)",
+				offsetGroup, uint64(offsetGroup)+uint64(unsafe.Sizeof(SID{})), len(sd))
 		}
 	}
 

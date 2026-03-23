@@ -207,7 +207,7 @@ func (f localFileSourceInfoProvider) GetSDDL() (string, error) {
 	// This is the Windows equivalent of ConvertSecurityDescriptorToStringSecurityDescriptorW().
 	sdStr, err := sddl.SecurityDescriptorToString(sd)
 	if err != nil {
-		// Panic, as it's unexpected and we would want to know.
+		// No longer panic here. A malformed SD would prevent the entire job from running.
 		return "", fmt.Errorf("Cannot parse binary Security Descriptor returned by QuerySecurityObject(%s, 0x%x): %v", f.jptm.Info().Source, securityInfoFlags, err)
 	}
 
