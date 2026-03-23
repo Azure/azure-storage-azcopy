@@ -4,6 +4,7 @@
 package ste
 
 import (
+	"errors"
 	"fmt"
 	"os/user"
 	"strconv"
@@ -57,7 +58,7 @@ func (f localFileSourceInfoProvider) GetUNIXProperties() (common.UnixStatAdapter
 		err = unix.Stat(f.transferInfo.Source, &stat)
 	}
 	if err != nil {
-		return nil, err 	 	
+		return nil, err
 	}
 
 	return StatTAdapter(stat), nil
@@ -207,7 +208,7 @@ func (f localFileSourceInfoProvider) GetSDDL() (string, error) {
 	sdStr, err := sddl.SecurityDescriptorToString(sd)
 	if err != nil {
 		// Panic, as it's unexpected and we would want to know.
-		panic(fmt.Errorf("Cannot parse binary Security Descriptor returned by QuerySecurityObject(%s, 0x%x): %v", f.jptm.Info().Source, securityInfoFlags, err))
+		return "", fmt.Errorf("Cannot parse binary Security Descriptor returned by QuerySecurityObject(%s, 0x%x): %v", f.jptm.Info().Source, securityInfoFlags, err)
 	}
 
 	fSDDL, err := sddl.ParseSDDL(sdStr)
@@ -216,7 +217,7 @@ func (f localFileSourceInfoProvider) GetSDDL() (string, error) {
 	}
 
 	if strings.TrimSpace(fSDDL.String()) != strings.TrimSpace(sdStr) {
-		panic("SDDL sanity check failed (parsed string output != original string)")
+		return "", errors.New("SDDL sanity check failed (parsed string output != original string)")
 	}
 
 	return fSDDL.PortableString(), nil
