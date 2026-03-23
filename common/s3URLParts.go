@@ -22,7 +22,6 @@ package common
 
 import (
 	"errors"
-	"log"
 	"net/url"
 	"os"
 	"regexp"
@@ -195,7 +194,6 @@ func matchGoogleHost(hostLower, suffix string) []string {
 		}
 	}
 
-	log.Printf("[matchGoogleHost] No match for host: %s", hostLower)
 	return nil
 }
 
@@ -218,7 +216,6 @@ func matchCustomS3Host(hostLower string) []string {
 
 	// Path-style: exact endpoint host
 	if hostLower == configuredHost {
-		log.Printf("[matchCustomS3Host] Matched host '%s' as path-style custom S3 endpoint", hostLower)
 		return []string{hostLower, "", region, keyword}
 	}
 
@@ -227,12 +224,10 @@ func matchCustomS3Host(hostLower string) []string {
 	if strings.HasSuffix(hostLower, suffix) {
 		bucketPart := strings.TrimSuffix(hostLower, suffix)
 		if bucketPart != "" && !strings.Contains(bucketPart, "..") {
-			log.Printf("[matchCustomS3Host] Matched host '%s' as virtual-hosted custom S3 endpoint (bucket='%s')", hostLower, bucketPart)
 			return []string{hostLower, bucketPart + ".", region, keyword}
 		}
 	}
 
-	log.Printf("[matchCustomS3Host] Rejected host '%s': does not match configured endpoint '%s'", hostLower, configuredHost)
 	return nil
 }
 
