@@ -870,6 +870,16 @@ func deriveDirs(fileKeys []string) []string {
 	return dirs
 }
 
+// countSubpathFolders returns the number of folders under prefix in the dataset,
+// counting both implied dirs (from file paths) and explicit empty dirs.
+func countSubpathFolders(d map[string][]byte, prefix string) int {
+	sub := filterDatasetByPrefix(d, prefix)
+	allKeys := datasetKeysWithDirs(sub)
+	files := datasetKeys(sub)
+	prefixDepth := strings.Count(prefix, "/") + 1
+	return len(allKeys) - len(files) - prefixDepth
+}
+
 func datasetKeysWithDirs(d map[string][]byte) []string {
 	files := datasetKeys(d)
 	impliedDirs := deriveDirs(files)
@@ -2254,12 +2264,11 @@ func TestSync_C2C_SubpathFreshSync(t *testing.T) {
 			assertDestContains(t, actual, expectedFull)
 			assertNoLeadingSlash(t, actual)
 
-			subpathDataset := filterDatasetByPrefix(pairDataset, "dir1")
 			expectedFiles := len(dir1Keys)
-			expectedFolders := len(datasetKeysWithDirs(subpathDataset)) - expectedFiles
+			expectedFolders := countSubpathFolders(pairDataset, "dir1")
 			stats := parseSyncStats(stdout)
 			assertSyncStats(t, stats, expectedFiles, expectedFolders)
-			assertDestContainsAll(t, pair, dstContainer, subpathDataset)
+			assertDestContainsAll(t, pair, dstContainer, filterDatasetByPrefix(pairDataset, "dir1"))
 		})
 	}
 }
@@ -2440,12 +2449,11 @@ func TestSync_C2C_SubpathDeepSync(t *testing.T) {
 			assertDestContains(t, actual, expectedDst)
 			assertNoLeadingSlash(t, actual)
 
-			subpathDataset := filterDatasetByPrefix(pairDataset, "dir1/sub1")
 			expectedFiles := len(sub1Keys)
-			expectedFolders := len(datasetKeysWithDirs(subpathDataset)) - expectedFiles
+			expectedFolders := countSubpathFolders(pairDataset, "dir1/sub1")
 			stats := parseSyncStats(stdout)
 			assertSyncStats(t, stats, expectedFiles, expectedFolders)
-			assertDestContainsAll(t, pair, dstContainer, subpathDataset)
+			assertDestContainsAll(t, pair, dstContainer, filterDatasetByPrefix(pairDataset, "dir1/sub1"))
 		})
 	}
 }
@@ -2545,12 +2553,11 @@ func TestSync_C2C_SubpathUnicodeSync(t *testing.T) {
 			assertDestContains(t, actual, unicodeKeys)
 			assertNoLeadingSlash(t, actual)
 
-			subpathDataset := filterDatasetByPrefix(pairDataset, "打麻将")
 			expectedFiles := len(unicodeKeys)
-			expectedFolders := len(datasetKeysWithDirs(subpathDataset)) - expectedFiles
+			expectedFolders := countSubpathFolders(pairDataset, "打麻将")
 			stats := parseSyncStats(stdout)
 			assertSyncStats(t, stats, expectedFiles, expectedFolders)
-			assertDestContainsAll(t, pair, dstContainer, subpathDataset)
+			assertDestContainsAll(t, pair, dstContainer, filterDatasetByPrefix(pairDataset, "打麻将"))
 		})
 	}
 }
@@ -2594,9 +2601,8 @@ func TestSync_C2C_CrossSubpathSync(t *testing.T) {
 			assertDestContains(t, actual, expectedFull)
 			assertNoLeadingSlash(t, actual)
 
-			subpathDataset := filterDatasetByPrefix(dataset, "dir1")
 			expectedFiles := len(dir1Keys)
-			expectedFolders := len(datasetKeysWithDirs(subpathDataset)) - expectedFiles
+			expectedFolders := countSubpathFolders(dataset, "dir1")
 			stats := parseSyncStats(stdout)
 			assertSyncStats(t, stats, expectedFiles, expectedFolders)
 		})
