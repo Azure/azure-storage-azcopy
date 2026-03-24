@@ -103,32 +103,31 @@ func IsS3URL(u url.URL) bool {
 // The host must be passed as lower-case by the caller.
 func findS3URLMatches(host string) (matches []string, isS3Host bool) {
 	suffix := GetS3CompatibleSuffix()
-	hostLower := host
 
 	// Dispatcher based on configured suffix (allows per-provider parsing differences)
 	switch {
-	case strings.HasSuffix(hostLower, "."+suffix) || hostLower == suffix:
+	case strings.HasSuffix(host, "."+suffix) || host == suffix:
 		// Pick provider-specific matcher using well-known suffixes
 		switch suffix {
 		case "amazonaws.com":
-			if m := matchAWSHost(hostLower, suffix); m != nil {
+			if m := matchAWSHost(host, suffix); m != nil {
 				return m, true
 			}
 		case "googleapis.com":
-			if m := matchGoogleHost(hostLower, suffix); m != nil {
+			if m := matchGoogleHost(host, suffix); m != nil {
 				return m, true
 			}
 		default:
-			if m := matchGoogleHost(hostLower, suffix); m != nil {
+			if m := matchGoogleHost(host, suffix); m != nil {
 				return m, true
 			}
-			if m := matchAWSHost(hostLower, suffix); m != nil {
+			if m := matchAWSHost(host, suffix); m != nil {
 				return m, true
 			}
 			// For custom (non-well-known) suffixes, allow any valid FQDN
 			// for on-prem S3-compatible appliances (e.g., MinIO, NetApp, Dell EMC, etc.)
 			if os.Getenv("S3_COMPATIBLE_ENDPOINT") != "" {
-				if m := matchCustomS3Host(hostLower); m != nil {
+				if m := matchCustomS3Host(host); m != nil {
 					return m, true
 				}
 			}
