@@ -100,9 +100,10 @@ func IsS3URL(u url.URL) bool {
 //	[ fullHost, bucketCapture(with trailing '.' if present OR ""), regionOrDualStack, keywordDomainRoot ]
 //
 // For path-style compatible providers where bucket is not in host, bucketCapture is "" so caller treats it as path-style.
+// The host must be passed as lower-case by the caller.
 func findS3URLMatches(host string) (matches []string, isS3Host bool) {
 	suffix := GetS3CompatibleSuffix()
-	hostLower := strings.ToLower(host)
+	hostLower := host
 
 	// Dispatcher based on configured suffix (allows per-provider parsing differences)
 	switch {
@@ -201,7 +202,6 @@ func matchGoogleHost(hostLower, suffix string) []string {
 // This supports custom domains like s3.company.com, minio.internal.net, storage.local, etc.
 // Assumes path-style URLs (bucket in path, not subdomain) for maximum compatibility.
 func matchCustomS3Host(hostLower string) []string {
-	hostLower = strings.ToLower(hostLower)
 	if hostLower == "" {
 		return nil
 	}
