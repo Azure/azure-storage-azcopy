@@ -178,6 +178,9 @@ type objectUnixStatContainer struct {
 
 	accessTime *time.Time
 	modTime    *time.Time
+
+	owner *uint32
+	group *uint32
 }
 
 func (o *objectUnixStatContainer) HasTimes() bool {
@@ -191,7 +194,9 @@ func (o *objectUnixStatContainer) Empty() bool {
 
 	return o.mode == nil &&
 		o.accessTime == nil &&
-		o.modTime == nil
+		o.modTime == nil &&
+		o.owner == nil &&
+		o.group == nil
 }
 
 func (o *objectUnixStatContainer) DeepCopy() *objectUnixStatContainer {
@@ -215,9 +220,20 @@ func (o *objectUnixStatContainer) DeepCopy() *objectUnixStatContainer {
 		out.modTime = &modTime
 	}
 
+	if o.owner != nil {
+		ownerId := *o.owner
+		out.owner = &ownerId
+	}
+
+	if o.group != nil {
+		groupId := *o.group
+		out.group = &groupId
+	}
+
 	return out
 }
 
+// EquivalentToStatAdapter validates the metadata values, not format
 func (o *objectUnixStatContainer) EquivalentToStatAdapter(s common.UnixStatAdapter) string {
 	if o == nil {
 		return "" // no comparison to make
@@ -226,8 +242,11 @@ func (o *objectUnixStatContainer) EquivalentToStatAdapter(s common.UnixStatAdapt
 	mismatched := make([]string, 0)
 	// only compare if we set it
 	if o.mode != nil {
-		if s.FileMode() != *o.mode {
-			mismatched = append(mismatched, "mode")
+		if (s.FileMode() != *o.mode) && // First do a straight comparison
+			fmt.Sprintf("%04o", uint32(s.FileMode())&0777) != fmt.Sprintf("%04o", *o.mode&0777) { // Compare just the permission bits
+			mismatched = append(mismatched, fmt.Sprintf("actual:%v mode expected:%v", strconv.FormatInt(int64(s.FileMode()), 10),
+				strconv.FormatUint(uint64(*o.mode), 10)))
+
 		}
 	}
 
@@ -240,6 +259,18 @@ func (o *objectUnixStatContainer) EquivalentToStatAdapter(s common.UnixStatAdapt
 	if o.modTime != nil {
 		if o.modTime.UnixNano() != s.MTime().UnixNano() {
 			mismatched = append(mismatched, "mtime")
+		}
+	}
+
+	if o.owner != nil {
+		if *o.owner != s.Owner() {
+			mismatched = append(mismatched, "owner")
+		}
+	}
+
+	if o.group != nil {
+		if *o.group != s.Group() {
+			mismatched = append(mismatched, "group")
 		}
 	}
 
@@ -284,6 +315,24 @@ func (o *objectUnixStatContainer) AddToMetadata(metadata map[string]*string, sty
 			metadata[common.POSIXModTimeMeta] = to.Ptr(o.modTime.Format(common.AMLFS_MOD_TIME_LAYOUT))
 		} else {
 			metadata[common.POSIXModTimeMeta] = to.Ptr(strconv.FormatInt(o.modTime.UnixNano(), 10))
+		}
+	}
+
+	if o.owner != nil {
+		mask |= common.STATX_UID
+		if style == common.AMLFSPosixPropertiesStyle {
+			metadata[common.AMLFSOwnerMeta] = to.Ptr(strconv.FormatUint(uint64(*o.owner), 10))
+		} else {
+			metadata[common.POSIXOwnerMeta] = to.Ptr(strconv.FormatUint(uint64(*o.owner), 10))
+		}
+	}
+
+	if o.group != nil {
+		mask |= common.STATX_GID
+		if style == common.AMLFSPosixPropertiesStyle {
+			metadata[common.AMLFSGroupMeta] = to.Ptr(strconv.FormatUint(uint64(*o.owner), 10))
+		} else {
+			metadata[common.POSIXGroupMeta] = to.Ptr(strconv.FormatUint(uint64(*o.owner), 10))
 		}
 	}
 

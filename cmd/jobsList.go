@@ -122,11 +122,11 @@ func PrintExistingJobIds(listJobResponse azcopy.ListJobsResponse) error {
 		var sb strings.Builder
 		sb.WriteString("Existing Jobs \n")
 		for _, detail := range listJobResponse.Details {
-			sb.WriteString(fmt.Sprintf("JobId: %s\nStart Time: %s\nStatus: %s\nCommand: %s\n\n",
+			fmt.Fprintf(&sb, "JobId: %s\nStart Time: %s\nStatus: %s\nCommand: %s\n\n",
 				detail.JobID.String(),
 				detail.StartTime.Format(time.RFC850),
 				detail.Status,
-				detail.Command))
+				detail.Command)
 		}
 		return sb.String()
 	}, EExitCode.Success())

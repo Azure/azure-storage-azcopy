@@ -108,3 +108,57 @@ func Test_CleanUpStalePids(t *testing.T) {
 	a.Equal(len(dirEntry), 0, "Should have cleaned up pid file")
 
 }
+
+// Test_NoPanicWarnMultipleProcesses verifies does not panic
+func Test_NoPanicWarnMultipleProcesses(t *testing.T) {
+	a := assert.New(t)
+
+	tempDir, err := os.MkdirTemp("", "temp")
+	a.NoError(err)
+	defer os.RemoveAll(tempDir)
+
+	logDir, err := os.MkdirTemp("", "logs")
+	a.NoError(err)
+	defer os.RemoveAll(logDir)
+
+	// Arrange: Initialize() handles logger creation
+	err = Initialize(true, false, true, common.JobID{})
+	a.NoError(err)
+
+	// Act & Assert: should not panic
+	a.NotPanics(func() {
+		WarnMultipleProcesses(tempDir, os.Getpid())
+	})
+
+	// Verify pid file was still created
+	pidsDir := path.Join(tempDir, "pids")
+	dirEntry, err := os.ReadDir(pidsDir)
+	a.NoError(err)
+	a.Equal(1, len(dirEntry), "Should contain 1 .pid file")
+}
+
+// Test_NoPanicNilLoggerWarnMultipleProcesses tests we don't panic in the unlikely scenario logger is not set
+func Test_NoPanicNilLoggerWarnMultipleProcesses(t *testing.T) {
+	a := assert.New(t)
+	tempDir, err := os.MkdirTemp("", "temp")
+	a.NoError(err)
+	defer os.RemoveAll(tempDir)
+
+	logDir, err := os.MkdirTemp("", "logs")
+	a.NoError(err)
+	defer os.RemoveAll(logDir)
+
+	var savedLogger common.ILoggerResetable
+	if common.AzcopyCurrentJobLogger != nil {
+		savedLogger = common.AzcopyCurrentJobLogger
+		common.AzcopyCurrentJobLogger = nil // Act
+	}
+
+	defer func() {
+		common.AzcopyCurrentJobLogger = savedLogger
+	}()
+
+	a.NotPanics(func() {
+		WarnMultipleProcesses(tempDir, os.Getpid())
+	})
+}

@@ -66,7 +66,7 @@ var lgCmd = &cobra.Command{
 		err = RunLogin(options)
 		if err != nil {
 			// the errors from adal contains \r\n in the body, get rid of them to make the error easier to look at
-			prettyErr := strings.Replace(err.Error(), `\r\n`, "\n", -1)
+			prettyErr := strings.ReplaceAll(err.Error(), `\r\n`, "\n")
 			prettyErr += "\n\nNOTE: If your credential was created in the last 5 minutes, please wait a few minutes and try again."
 			glcm.Error("Failed to perform login command: \n" + prettyErr + getErrorCodeUrl(err))
 		}
