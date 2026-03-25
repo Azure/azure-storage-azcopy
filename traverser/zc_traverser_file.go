@@ -262,7 +262,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 				RelativePath: relativePath,
 			}, err
 		}
-
+		var targetHardlinkFile string
 		// NFS handling
 		// Check if the file is a symlink and should be skipped in case of NFS
 		// We don't want to skip the file if we are not using NFS
@@ -284,6 +284,18 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			//set entity tile to hardlink
 			if fullProperties.LinkCount() > int64(1) {
 				f.entityType = common.EEntityType.Hardlink()
+				if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() {
+
+					inodeStoreInstance, err := common.GetInodeStore()
+					if err != nil {
+						return nil, err
+					}
+
+					targetHardlinkFile, _, err = inodeStoreInstance.GetOrAdd(fullProperties.FileID(), fileURLParts.DirectoryOrFilePath)
+					if err != nil {
+						return nil, err
+					}
+				}
 			}
 		} else if f.entityType == common.EEntityType.File() && t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter(f.entityType, t.symlinkHandling, t.hardlinkHandling)
@@ -313,7 +325,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			NoBlobProps,
 			metadata,
 			targetURLParts.ShareName,
-			"",
+			targetHardlinkFile,
 		)
 
 		obj.smbLastModifiedTime = smbLMT
