@@ -12,23 +12,37 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// newTestInodeStore creates an InodeStore backed by a temp file.
-// It returns the store and a cleanup function. The caller must defer cleanup().
-func newTestInodeStore(t *testing.T) (*InodeStore, func()) {
-	t.Helper()
-	tmpDir := t.TempDir()
-	origFolder := AzcopyJobPlanFolder
-	AzcopyJobPlanFolder = tmpDir
+// memBuffer is an in-memory implementation of TargetedReadWriteCloser.
+// It grows automatically on WriteAt, similar to a file.
+type memBuffer struct {
+	data []byte
+}
 
-	jobID := NewJobID()
-	store, err := NewInodeStore(jobID)
-	assert.NoError(t, err)
-
-	cleanup := func() {
-		_ = store.file.Close()
-		AzcopyJobPlanFolder = origFolder
+func (m *memBuffer) ReadAt(p []byte, off int64) (int, error) {
+	if off >= int64(len(m.data)) {
+		return 0, io.EOF
 	}
-	return store, cleanup
+	n := copy(p, m.data[off:])
+	if n < len(p) {
+		return n, io.EOF
+	}
+	return n, nil
+}
+
+func (m *memBuffer) WriteAt(p []byte, off int64) (int, error) {
+	end := int(off) + len(p)
+	if end > len(m.data) {
+		m.data = append(m.data, make([]byte, end-len(m.data))...)
+	}
+	return copy(m.data[off:], p), nil
+}
+
+func (m *memBuffer) Close() error { return nil }
+
+// newTestInodeStore creates an InodeStore backed by an in-memory buffer.
+func newTestInodeStore(t *testing.T) *InodeStore {
+	t.Helper()
+	return NewInodeStoreFromBackend(&memBuffer{})
 }
 
 // newTestInodeStoreWithFile creates an InodeStore at a known file path so that
@@ -44,7 +58,7 @@ func newTestInodeStoreWithFile(t *testing.T) (*InodeStore, JobID, func()) {
 	assert.NoError(t, err)
 
 	cleanup := func() {
-		_ = store.file.Close()
+		_ = store.Close()
 		AzcopyJobPlanFolder = origFolder
 	}
 	return store, jobID, cleanup
@@ -55,8 +69,7 @@ func newTestInodeStoreWithFile(t *testing.T) (*InodeStore, JobID, func()) {
 // ──────────────────────────────────────────────────────────
 
 func TestNewInodeStore_CreatesEmptyStore(t *testing.T) {
-	store, cleanup := newTestInodeStore(t)
-	defer cleanup()
+	store := newTestInodeStore(t)
 
 	assert.NotNil(t, store)
 	assert.Empty(t, store.index)
@@ -78,8 +91,7 @@ func TestNewInodeStore_InvalidFolder(t *testing.T) {
 // ──────────────────────────────────────────────────────────
 
 func TestGetOrAdd_NewInode(t *testing.T) {
-	store, cleanup := newTestInodeStore(t)
-	defer cleanup()
+	store := newTestInodeStore(t)
 
 	existingPath, exists, err := store.GetOrAdd("111", "dir/file1.txt")
 	assert.NoError(t, err)
@@ -91,8 +103,7 @@ func TestGetOrAdd_NewInode(t *testing.T) {
 }
 
 func TestGetOrAdd_NewInode_FileGrows(t *testing.T) {
-	store, cleanup := newTestInodeStore(t)
-	defer cleanup()
+	store := newTestInodeStore(t)
 
 	_, _, err := store.GetOrAdd("111", "a.txt")
 	assert.NoError(t, err)
@@ -110,8 +121,7 @@ func TestGetOrAdd_NewInode_FileGrows(t *testing.T) {
 // ──────────────────────────────────────────────────────────
 
 func TestGetOrAdd_ExistingInode_ReturnsFirstPath(t *testing.T) {
-	store, cleanup := newTestInodeStore(t)
-	defer cleanup()
+	store := newTestInodeStore(t)
 
 	_, _, err := store.GetOrAdd("111", "first.txt")
 	assert.NoError(t, err)
@@ -123,8 +133,7 @@ func TestGetOrAdd_ExistingInode_ReturnsFirstPath(t *testing.T) {
 }
 
 func TestGetOrAdd_ExistingInode_UpdatesAnchorWhenSmaller(t *testing.T) {
-	store, cleanup := newTestInodeStore(t)
-	defer cleanup()
+	store := newTestInodeStore(t)
 
 	// First add: anchor = "z_file.txt"
 	_, _, err := store.GetOrAdd("111", "z_file.txt")
@@ -140,8 +149,7 @@ func TestGetOrAdd_ExistingInode_UpdatesAnchorWhenSmaller(t *testing.T) {
 }
 
 func TestGetOrAdd_ExistingInode_DoesNotUpdateAnchorWhenLarger(t *testing.T) {
-	store, cleanup := newTestInodeStore(t)
-	defer cleanup()
+	store := newTestInodeStore(t)
 
 	// First add: anchor = "a_file.txt"
 	_, _, err := store.GetOrAdd("111", "a_file.txt")
@@ -157,8 +165,7 @@ func TestGetOrAdd_ExistingInode_DoesNotUpdateAnchorWhenLarger(t *testing.T) {
 }
 
 func TestGetOrAdd_ExistingInode_SamePathDoesNothing(t *testing.T) {
-	store, cleanup := newTestInodeStore(t)
-	defer cleanup()
+	store := newTestInodeStore(t)
 
 	_, _, err := store.GetOrAdd("111", "file.txt")
 	assert.NoError(t, err)
@@ -174,8 +181,7 @@ func TestGetOrAdd_ExistingInode_SamePathDoesNothing(t *testing.T) {
 // ──────────────────────────────────────────────────────────
 
 func TestGetOrAdd_MultipleInodes(t *testing.T) {
-	store, cleanup := newTestInodeStore(t)
-	defer cleanup()
+	store := newTestInodeStore(t)
 
 	_, _, err := store.GetOrAdd("111", "a.txt")
 	assert.NoError(t, err)
@@ -204,8 +210,7 @@ func TestGetOrAdd_MultipleInodes(t *testing.T) {
 // ──────────────────────────────────────────────────────────
 
 func TestGetOrAdd_PathsWithSpaces(t *testing.T) {
-	store, cleanup := newTestInodeStore(t)
-	defer cleanup()
+	store := newTestInodeStore(t)
 
 	_, _, err := store.GetOrAdd("111", "dir with spaces/file name.txt")
 	assert.NoError(t, err)
@@ -222,8 +227,7 @@ func TestGetOrAdd_PathsWithSpaces(t *testing.T) {
 }
 
 func TestGetOrAdd_PathsWithMultipleSpaces(t *testing.T) {
-	store, cleanup := newTestInodeStore(t)
-	defer cleanup()
+	store := newTestInodeStore(t)
 
 	path := "a   b   c/d  e  f.txt"
 	_, _, err := store.GetOrAdd("111", path)
@@ -239,8 +243,7 @@ func TestGetOrAdd_PathsWithMultipleSpaces(t *testing.T) {
 // ──────────────────────────────────────────────────────────
 
 func TestGetAnchor_ExistingInode(t *testing.T) {
-	store, cleanup := newTestInodeStore(t)
-	defer cleanup()
+	store := newTestInodeStore(t)
 
 	_, _, err := store.GetOrAdd("111", "dir/anchor.txt")
 	assert.NoError(t, err)
@@ -251,8 +254,7 @@ func TestGetAnchor_ExistingInode(t *testing.T) {
 }
 
 func TestGetAnchor_NonExistentInode(t *testing.T) {
-	store, cleanup := newTestInodeStore(t)
-	defer cleanup()
+	store := newTestInodeStore(t)
 
 	_, err := store.GetAnchor("999")
 	assert.Error(t, err)
@@ -260,8 +262,7 @@ func TestGetAnchor_NonExistentInode(t *testing.T) {
 }
 
 func TestGetAnchor_AnchorUpdatesAfterSmallerPath(t *testing.T) {
-	store, cleanup := newTestInodeStore(t)
-	defer cleanup()
+	store := newTestInodeStore(t)
 
 	_, _, err := store.GetOrAdd("111", "z.txt")
 	assert.NoError(t, err)
@@ -280,8 +281,7 @@ func TestGetAnchor_AnchorUpdatesAfterSmallerPath(t *testing.T) {
 // ──────────────────────────────────────────────────────────
 
 func TestOverwriteRecord_Relocation(t *testing.T) {
-	store, cleanup := newTestInodeStore(t)
-	defer cleanup()
+	store := newTestInodeStore(t)
 
 	// Add with a short path — sets the initial capacity
 	_, _, err := store.GetOrAdd("111", "a.txt")
@@ -307,8 +307,7 @@ func TestOverwriteRecord_Relocation(t *testing.T) {
 }
 
 func TestOverwriteRecord_InPlace(t *testing.T) {
-	store, cleanup := newTestInodeStore(t)
-	defer cleanup()
+	store := newTestInodeStore(t)
 
 	// Add with a long-ish path first
 	_, _, err := store.GetOrAdd("111", "zzzzz.txt")
@@ -343,12 +342,12 @@ func TestRehydration_RestoresIndex(t *testing.T) {
 	assert.NoError(t, err)
 	_, _, err = store.GetOrAdd("111", "file_c.txt") // updates anchor
 	assert.NoError(t, err)
-	_ = store.file.Close()
+	_ = store.Close()
 
 	// Re-open the same file — should rehydrate
 	store2, err := NewInodeStore(jobID)
 	assert.NoError(t, err)
-	defer store2.file.Close()
+	defer store2.Close()
 
 	assert.Len(t, store2.index, 2)
 
@@ -371,11 +370,11 @@ func TestRehydration_FileSize(t *testing.T) {
 	assert.NoError(t, err)
 
 	originalSize := store.fileSize
-	_ = store.file.Close()
+	_ = store.Close()
 
 	store2, err := NewInodeStore(jobID)
 	assert.NoError(t, err)
-	defer store2.file.Close()
+	defer store2.Close()
 
 	assert.Equal(t, originalSize, store2.fileSize, "fileSize should match the on-disk file size")
 }
@@ -386,12 +385,12 @@ func TestRehydration_ContinuesWritingAtCorrectOffset(t *testing.T) {
 
 	_, _, err := store.GetOrAdd("111", "a.txt")
 	assert.NoError(t, err)
-	_ = store.file.Close()
+	_ = store.Close()
 
 	// Reopen and add more
 	store2, err := NewInodeStore(jobID)
 	assert.NoError(t, err)
-	defer store2.file.Close()
+	defer store2.Close()
 
 	_, _, err = store2.GetOrAdd("222", "b.txt")
 	assert.NoError(t, err)
@@ -418,12 +417,12 @@ func TestRehydration_RelocatedRecordLastWins(t *testing.T) {
 	longAnchor := strings.Repeat("A", 200) // "AAA..." < "z.txt", forces relocation
 	_, _, err = store.GetOrAdd("111", longAnchor)
 	assert.NoError(t, err)
-	_ = store.file.Close()
+	_ = store.Close()
 
 	// Rehydrate — the last (relocated) record for inode "111" should win
 	store2, err := NewInodeStore(jobID)
 	assert.NoError(t, err)
-	defer store2.file.Close()
+	defer store2.Close()
 
 	assert.Len(t, store2.index, 1)
 
@@ -441,7 +440,7 @@ func TestRehydration_EmptyFile(t *testing.T) {
 	jobID := NewJobID()
 	store, err := NewInodeStore(jobID)
 	assert.NoError(t, err)
-	defer store.file.Close()
+	defer store.Close()
 
 	assert.Empty(t, store.index)
 	assert.Equal(t, int64(0), store.fileSize)
@@ -458,11 +457,11 @@ func TestRehydration_PathsWithSpacesSurvive(t *testing.T) {
 	spacePath := "my dir/my file.txt"
 	_, _, err := store.GetOrAdd("111", spacePath)
 	assert.NoError(t, err)
-	_ = store.file.Close()
+	_ = store.Close()
 
 	store2, err := NewInodeStore(jobID)
 	assert.NoError(t, err)
-	defer store2.file.Close()
+	defer store2.Close()
 
 	anchor, err := store2.GetAnchor("111")
 	assert.NoError(t, err)
@@ -474,8 +473,7 @@ func TestRehydration_PathsWithSpacesSurvive(t *testing.T) {
 // ──────────────────────────────────────────────────────────
 
 func TestWriteReadRecord_RoundTrip(t *testing.T) {
-	store, cleanup := newTestInodeStore(t)
-	defer cleanup()
+	store := newTestInodeStore(t)
 
 	offset, capacity, err := store.writeRecord("42", "first/path.txt", "anchor/path.txt")
 	assert.NoError(t, err)
@@ -488,8 +486,7 @@ func TestWriteReadRecord_RoundTrip(t *testing.T) {
 }
 
 func TestWriteReadRecord_WithSpaces(t *testing.T) {
-	store, cleanup := newTestInodeStore(t)
-	defer cleanup()
+	store := newTestInodeStore(t)
 
 	offset, capacity, err := store.writeRecord("42", "dir one/file two.txt", "dir three/file four.txt")
 	assert.NoError(t, err)
@@ -502,8 +499,7 @@ func TestWriteReadRecord_WithSpaces(t *testing.T) {
 }
 
 func TestWriteReadRecord_LongPaths(t *testing.T) {
-	store, cleanup := newTestInodeStore(t)
-	defer cleanup()
+	store := newTestInodeStore(t)
 
 	longPath := strings.Repeat("x", 4000) + "/file.txt"
 	offset, capacity, err := store.writeRecord("99", longPath, longPath)
@@ -517,8 +513,7 @@ func TestWriteReadRecord_LongPaths(t *testing.T) {
 }
 
 func TestWriteReadRecord_MultipleRecords(t *testing.T) {
-	store, cleanup := newTestInodeStore(t)
-	defer cleanup()
+	store := newTestInodeStore(t)
 
 	o1, c1, err := store.writeRecord("1", "a.txt", "a.txt")
 	assert.NoError(t, err)
@@ -553,8 +548,7 @@ func TestWriteReadRecord_MultipleRecords(t *testing.T) {
 // ──────────────────────────────────────────────────────────
 
 func TestOverwriteRecord_InPlace_Direct(t *testing.T) {
-	store, cleanup := newTestInodeStore(t)
-	defer cleanup()
+	store := newTestInodeStore(t)
 
 	offset, capacity, err := store.writeRecord("42", "first.txt", "z_anchor.txt")
 	assert.NoError(t, err)
@@ -574,8 +568,7 @@ func TestOverwriteRecord_InPlace_Direct(t *testing.T) {
 }
 
 func TestOverwriteRecord_Relocate_Direct(t *testing.T) {
-	store, cleanup := newTestInodeStore(t)
-	defer cleanup()
+	store := newTestInodeStore(t)
 
 	offset, capacity, err := store.writeRecord("42", "f.txt", "a.txt")
 	assert.NoError(t, err)
@@ -705,8 +698,7 @@ func TestRehydrateInodeStore_PathsWithSpaces(t *testing.T) {
 // ──────────────────────────────────────────────────────────
 
 func TestConcurrentGetOrAdd(t *testing.T) {
-	store, cleanup := newTestInodeStore(t)
-	defer cleanup()
+	store := newTestInodeStore(t)
 
 	const goroutines = 50
 	var wg sync.WaitGroup
@@ -735,8 +727,7 @@ func TestConcurrentGetOrAdd(t *testing.T) {
 }
 
 func TestConcurrentGetAnchor(t *testing.T) {
-	store, cleanup := newTestInodeStore(t)
-	defer cleanup()
+	store := newTestInodeStore(t)
 
 	// Pre-populate
 	for i := 0; i < 10; i++ {
@@ -765,8 +756,7 @@ func TestConcurrentGetAnchor(t *testing.T) {
 // ──────────────────────────────────────────────────────────
 
 func TestGetOrAdd_EmptyPath(t *testing.T) {
-	store, cleanup := newTestInodeStore(t)
-	defer cleanup()
+	store := newTestInodeStore(t)
 
 	_, _, err := store.GetOrAdd("111", "")
 	assert.NoError(t, err)
@@ -777,8 +767,7 @@ func TestGetOrAdd_EmptyPath(t *testing.T) {
 }
 
 func TestGetOrAdd_SpecialCharactersInPath(t *testing.T) {
-	store, cleanup := newTestInodeStore(t)
-	defer cleanup()
+	store := newTestInodeStore(t)
 
 	// Various special characters that are valid in file paths
 	specialPaths := []struct {
@@ -806,8 +795,7 @@ func TestGetOrAdd_SpecialCharactersInPath(t *testing.T) {
 }
 
 func TestGetOrAdd_LargeNumberOfInodes(t *testing.T) {
-	store, cleanup := newTestInodeStore(t)
-	defer cleanup()
+	store := newTestInodeStore(t)
 
 	const count = 500
 	for i := 0; i < count; i++ {
@@ -847,7 +835,7 @@ func TestFullLifecycle(t *testing.T) {
 	assert.NoError(t, err)
 	_, _, err = store.GetOrAdd("100", "a.txt") // anchor update
 	assert.NoError(t, err)
-	_ = store.file.Close()
+	_ = store.Close()
 
 	// Phase 2: resume — rehydrate and add more
 	store2, err := NewInodeStore(jobID)
@@ -861,12 +849,12 @@ func TestFullLifecycle(t *testing.T) {
 	assert.NoError(t, err)
 	_, _, err = store2.GetOrAdd("200", "b.txt") // update anchor for 200
 	assert.NoError(t, err)
-	_ = store2.file.Close()
+	_ = store2.Close()
 
 	// Phase 3: verify everything survives a second rehydration
 	store3, err := NewInodeStore(jobID)
 	assert.NoError(t, err)
-	defer store3.file.Close()
+	defer store3.Close()
 
 	assert.Len(t, store3.index, 3)
 
