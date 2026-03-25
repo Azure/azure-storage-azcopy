@@ -724,8 +724,9 @@ func (jm *jobMgr) ResumeTransfers(appCtx context.Context) {
 	//   - scheduleJobParts blocks on unbuffered jobPartProgress, waiting for reportJobPartDoneHandler
 	// Read lock avoids this because RWMutex allows concurrent readers.
 	// No writers exist at this point — all AddJobPart/AddJobOrder calls completed in ResurrectJob (step 1).
+	useReadLock := buildmode.IsMover
 	partCount := 0
-	jm.jobPartMgrs.Iterate(buildmode.IsMover, func(p common.PartNumber, jpm IJobPartMgr) {
+	jm.jobPartMgrs.Iterate(useReadLock, func(p common.PartNumber, jpm IJobPartMgr) {
 		jm.QueueJobParts(jpm)
 		partCount++
 	})
@@ -788,6 +789,7 @@ func (jm *jobMgr) ReportJobPartDone(progressInfo jobPartProgressInfo) {
 }
 
 func (jm *jobMgr) reportJobPartDoneHandler() {
+	var haveFinalPart bool
 	var jobProgressInfo jobPartProgressInfo
 	shouldLog := jm.ShouldLog(common.LogInfo)
 
@@ -841,7 +843,7 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 
 			// If the last part is still awaited or other parts all still not complete,
 			// JobPart 0 status is not changed (unless we are cancelling)
-			haveFinalPart := atomic.LoadInt32(&jm.atomicFinalPartOrderedIndicator) == 1
+			haveFinalPart = atomic.LoadInt32(&jm.atomicFinalPartOrderedIndicator) == 1
 			allKnownPartsDone := partsDone == jm.jobPartMgrs.Count()
 			isCancelling := jobStatus == common.EJobStatus.Cancelling()
 			shouldComplete := (haveFinalPart && allKnownPartsDone) || // If we have all of the parts, they should all exit cleanly, so the job can be resumed properly.

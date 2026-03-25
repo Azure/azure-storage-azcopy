@@ -377,7 +377,6 @@ func (ja *jobsAdmin) ResurrectJob(jobId common.JobID,
 	// Search the existing plan files for the PartPlans for the given jobId
 	// only the files which are not empty and have JobId has prefix and DataSchemaVersion as Suffix
 	// are include in the result
-
 	files := func(prefix, ext string) []os.FileInfo {
 		var files []os.FileInfo
 		_ = filepath.Walk(ja.planDir, func(path string, fileInfo os.FileInfo, _ error) error {
@@ -392,14 +391,12 @@ func (ja *jobsAdmin) ResurrectJob(jobId common.JobID,
 	if len(files) == 0 {
 		return false
 	}
-
 	// sort the JobPartPlan files with respect to Part Number
 	sort.Sort(sortPlanFiles{Files: files})
 	for f := 0; f < len(files); f++ {
 		planFile := ste.JobPartPlanFileName(files[f].Name())
 		jobID, partNum, err := planFile.Parse()
 		if err != nil {
-
 			continue
 		}
 		mmf := planFile.Map()
