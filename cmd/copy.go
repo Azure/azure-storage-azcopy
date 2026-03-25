@@ -307,6 +307,10 @@ func (raw *rawCopyCmdArgs) toCopyOptions(cmd *cobra.Command) (opts azcopy.CopyOp
 		return opts, err
 	}
 
+	if err = opts.PosixPropertiesStyle.Parse(raw.posixPropertiesStyle); err != nil {
+		return opts, err
+	}
+
 	opts.IncludePatterns = parsePatterns(raw.include)
 	opts.ExcludePatterns = parsePatterns(raw.exclude)
 	opts.ExcludePaths = parsePatterns(raw.excludePath)
@@ -585,6 +589,8 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 	return cooked, nil
 }
 
+// This method and ones it calls are legacy code not used in copy command flow (as of v10.32)
+// Note: some CLI commands - remove, bench, set properties still call this.
 func (raw rawCopyCmdArgs) cook() (cooked CookedCopyCmdArgs, err error) {
 	if cooked, err = raw.toOptions(); err != nil {
 		return cooked, err
@@ -1419,7 +1425,7 @@ func init() {
 			if opts, err = raw.toCopyOptions(cmd); err != nil {
 				glcm.Error("error parsing the input given by the user. Failed with error " + err.Error() + getErrorCodeUrl(err))
 			}
-			// Create a context that can be cancelled by Ctrl-C
+			// Create a context that can be canceled by Ctrl-C
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
@@ -1427,7 +1433,11 @@ func init() {
 			go func() {
 				sigChan := make(chan os.Signal, 1)
 				signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-				<-sigChan
+				select { // Handles both cancellations
+				case <-sigChan: // unblocks if OS signal (Ctrl + C) arrives
+				case <-glcm.CancelFromStdinChannel(): // unblocks if cancel sent to stdin
+				}
+				glcm.Info("Cancellation requested")
 				cancel()
 			}()
 

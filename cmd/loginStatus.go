@@ -74,12 +74,12 @@ func init() {
 				}
 
 				if commandLineInput.AADEndpoint {
-					logText(fmt.Sprintf("Active directory endpoint: %v", status.AADEndpoint))
+					logText("Active directory endpoint: %v", status.AADEndpoint)
 					Info.AADEndpoint = &status.AADEndpoint
 				}
 
 				if commandLineInput.Method {
-					logText(fmt.Sprintf("Authorized using %s", status.LoginType))
+					logText("Authorized using %s", status.LoginType)
 					method := status.LoginType.String()
 					Info.AuthMethod = &method
 				}

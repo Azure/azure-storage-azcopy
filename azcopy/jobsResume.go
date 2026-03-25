@@ -62,8 +62,10 @@ func (c *Client) ResumeJob(ctx context.Context, jobID common.JobID, opts ResumeJ
 	c.CurrentJobID = jobID
 	timeAtPrestart := time.Now()
 
-	common.AzcopyCurrentJobLogger = common.NewJobLogger(c.CurrentJobID, c.GetLogLevel(), common.LogPathFolder, "")
-	common.AzcopyCurrentJobLogger.OpenLog()
+	if common.AzcopyCurrentJobLogger == nil { // In the unlikely case, logger is not initialized in root.go
+		common.AzcopyCurrentJobLogger = common.NewJobLogger(c.CurrentJobID, c.GetLogLevel(), common.LogPathFolder, "")
+		common.AzcopyCurrentJobLogger.OpenLog()
+	}
 	defer common.AzcopyCurrentJobLogger.CloseLog()
 	// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter
 	// Subtract a few seconds, to ensure that this date DEFINITELY falls before the LMT of any file changed while this
@@ -191,7 +193,7 @@ func getSourceAndDestinationServiceClients(
 
 	// For an Azure source, if there is no SAS, the cred type is Anonymous and the resource is not Azure public blob, tell the user they need to pass a new SAS.
 	if fromTo.From().IsAzure() && srcCredType == common.ECredentialType.Anonymous() && source.SAS == "" {
-		if !(fromTo.From() == common.ELocation.Blob() && isSrcPublic) {
+		if fromTo.From() != common.ELocation.Blob() || !isSrcPublic {
 			errorMsg += "source-sas"
 		}
 	}
@@ -202,7 +204,7 @@ func getSourceAndDestinationServiceClients(
 	}
 
 	if fromTo.To().IsAzure() && dstCredType == common.ECredentialType.Anonymous() && destination.SAS == "" {
-		if !(fromTo.To() == common.ELocation.Blob() && isDstPublic) {
+		if fromTo.To() != common.ELocation.Blob() || !isDstPublic {
 			if errorMsg == "" {
 				errorMsg = "destination-sas"
 			} else {
