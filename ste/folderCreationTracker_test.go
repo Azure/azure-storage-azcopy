@@ -197,7 +197,7 @@ func TestFolderCreationTracker_directoryExists(t *testing.T) {
 
 // Verifies that a subsequent call to createFolder does not panic when the status is
 // SkippedEntityAlreadyExists
-func TestFolderCreationTracker_skippedEntityExits(t *testing.T) {
+func TestFolderCreationTracker_skippedEntityExists(t *testing.T) {
 	a := assert.New(t)
 
 	folderExists := "folderExists"

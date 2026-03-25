@@ -148,9 +148,10 @@ func GenerateFullPath(rootPath, childPath string) string {
 	}
 
 	// if the childPath is empty, it means the rootPath already points to the desired entity
-	if childPath == "" {
+	switch childPath {
+	case "":
 		return rootPath
-	} else if childPath == "\x00" { // The enumerator has asked us to target with a / at the end of our root path. This is a massive hack. When the footgun happens later, ping Adele!
+	case "\x00": // The enumerator has asked us to target with a / at the end of our root path. This is a massive hack. When the footgun happens later, ping Adele!
 		return rootPath + rootSeparator
 	}
 

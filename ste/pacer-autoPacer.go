@@ -152,7 +152,7 @@ func (a *autoTokenBucketPacer) decreaseRate() {
 	a.lastPeakBytesPerSecond = existingRate
 	a.lastPeakTime = time.Now()
 	newRate := existingRate * decreaseFactor
-	a.tokenBucketPacer.setTargetBytesPerSecond(int64(newRate))
+	a.setTargetBytesPerSecond(int64(newRate))
 }
 
 func (a *autoTokenBucketPacer) increaseRate() {
@@ -176,7 +176,7 @@ func (a *autoTokenBucketPacer) increaseRate() {
 	// then suddenly well be at a crazy high rate that takes too long to step back down to reality (and or get
 	// integer overflow issues).
 	if newRate < maxPacerBytesPerSecond {
-		a.tokenBucketPacer.setTargetBytesPerSecond(int64(newRate))
+		a.setTargetBytesPerSecond(int64(newRate))
 	}
 }
 
