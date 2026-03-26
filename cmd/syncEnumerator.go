@@ -99,6 +99,13 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 
 	includeDirStubs := (cca.fromTo.From().SupportsHnsACLs() && cca.fromTo.To().SupportsHnsACLs() && cca.preservePermissions.IsTruthy()) || cca.includeDirectoryStubs
 
+	// When delete-destination is enabled (mirror mode) and the destination is folder-aware (e.g. BlobFS/HNS),
+	// we must include directory stubs so the destination traverser enumerates HNS folder objects.
+	// Without this, the sync comparator never sees destination-only folders and they are not deleted.
+	if cca.deleteDestination != common.EDeleteDestination.False() && cca.fromTo.To().SupportsHnsACLs() {
+		includeDirStubs = true
+	}
+
 	// TODO: enable symlink support in a future release after evaluating the implications
 	// TODO: Consider passing an errorChannel so that enumeration errors during sync can be conveyed to the caller.
 	// GetProperties is enabled by default as sync supports both upload and download.
@@ -280,7 +287,9 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 
 	// decide our folder transfer strategy
 	// sync always acts like stripTopDir=true, but if we intend to persist the root, we must tell NewFolderPropertyOption stripTopDir=false.
-	fpo, folderMessage := NewFolderPropertyOption(cca.fromTo, cca.recursive, !cca.includeRoot, filters, cca.preserveInfo, cca.preservePermissions.IsTruthy(), false, strings.EqualFold(cca.destination.Value, common.Dev_Null), cca.includeDirectoryStubs)
+	// Use includeDirStubs (which may have been forced true for mirror-mode HNS targets) instead of cca.includeDirectoryStubs,
+	// so that the Fpo correctly reflects the need to process folder objects for deletion.
+	fpo, folderMessage := NewFolderPropertyOption(cca.fromTo, cca.recursive, !cca.includeRoot, filters, cca.preserveInfo, cca.preservePermissions.IsTruthy(), false, strings.EqualFold(cca.destination.Value, common.Dev_Null), includeDirStubs)
 	if !cca.dryrunMode {
 		glcm.Info(folderMessage)
 	}
