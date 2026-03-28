@@ -29,6 +29,7 @@ def get_raw_input():
 
 def process():
     action, mutex_url = get_raw_input()
+    print(f"INFO: mutex_url = {mutex_url}")
 
     # check whether the blob exists, if not quit right away to avoid wasting time
     blob_client = BlobClient.from_blob_url(mutex_url)
