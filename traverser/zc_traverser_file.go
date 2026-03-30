@@ -337,7 +337,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			targetURLParts.ShareName,
 			&NFSMetadataContext{
 				TargetHardlinkFile: targetHardlinkFile,
-				Inode:              fullProperties.FileID(),
+				Inode:              nfsInode,
 			},
 		)
 
