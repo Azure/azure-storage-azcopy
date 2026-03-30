@@ -242,7 +242,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			t.writeToS3ErrorChannel(errInfo)
 			return fmt.Errorf("cannot list objects, %v", objectInfo.Err)
 		}
-		
+
 		// Directory detection logic differs between GCS and AWS S3:
 		// - GCS via S3 API: Use enhanced checks (empty StorageClass + trailing slash or zero size)
 		// - AWS S3: Use standard check (empty StorageClass only)
@@ -381,14 +381,6 @@ func newS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTrave
 
 	t.s3URLParts = s3URLPartsExtension{s3URLParts}
 
-	// Strip leading slashes from ObjectKey for S3-compatible endpoints immediately after parsing.
-	// This must happen here (not in Traverse) because IsDirectory() and StatObject calls
-	// use ObjectKey before Traverse() runs. Double slashes can occur when the sync orchestrator
-	// joins a trailing-slash source URL with a directory path (e.g., "bucket/" + "/" + "dir").
-	if t.s3URLParts.IsS3CompatibleEndpoint() {
-		t.s3URLParts.ObjectKey = strings.TrimLeft(t.s3URLParts.ObjectKey, "/")
-	}
-
 	showS3UrlTypeWarning(s3URLParts)
 
 	t.s3Client, err = GetS3TraverserGlobalClientManager().GetS3Client(ctx, s3URLParts, *opts.Credential)
@@ -467,5 +459,3 @@ func CreateSharedS3Client(ctx context.Context, s3URLParts common.S3URLParts, cre
 		LogError: glcm.Error,
 	}, azcopyScanningLogger)
 }
-
-

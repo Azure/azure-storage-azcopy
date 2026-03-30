@@ -70,7 +70,6 @@ const PeCheckIntervalInmilliSecs = 200
 func createS3ClientForPrivateNetwork(credInfo CredentialInfo, cred *credentials.Credentials) (*minio.Client, error) {
 	peIP := privateNetworkArgs.PrivateEndpointIPs
 	baseS3Host := credInfo.S3CredentialInfo.Endpoint
-	fmt.Printf("[createS3ClientForPrivateNetwork] baseS3Host=%s, BucketName=%s, Region=%s\n", baseS3Host, credInfo.S3CredentialInfo.BucketName, credInfo.S3CredentialInfo.Region)
 
 	urlParts := S3URLParts{Endpoint: baseS3Host}
 	isGCS := urlParts.IsGoogleCloudStorage()
