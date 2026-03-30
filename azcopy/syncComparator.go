@@ -351,8 +351,16 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 			// link structure is unchanged.  Check and transfer content if necessary.
 			// Non-anchor files carry no content (they link to the anchor), so no
 			// content check is required for them.
+<<<<<<< HEAD
 			if sourceObjectInMap.TargetHardlinkFile == "" {
 				// This is the first-seen-file path.  Perform generic content verification.
+=======
+			//
+			// Use the deterministic lex-smallest anchor from InodeStore rather than
+			// TargetHardlinkFile, which depends on non-deterministic enumeration order.
+			if srcAnchorFile == sourceObjectInMap.RelativePath {
+				// This is the anchor (lex-smallest) file.  Perform generic content verification.
+>>>>>>> 8e7276a261f6c00924526fc659c172f9c988195d
 				//
 				// groupStructureChanged is true when any file in this inode group is being
 				// recreated (group merge: src inode spans multiple dest inodes, or group split:
