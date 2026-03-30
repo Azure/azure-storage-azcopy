@@ -150,6 +150,7 @@ func (t *transferExecutor) initCopyEnumerator(ctx context.Context, logLevel comm
 
 		ExcludeContainers:    t.opts.excludeContainers,
 		IncrementEnumeration: t.tpt.incEnumeration,
+		InodeStore:           t.inodeStore,
 	})
 	if err != nil {
 		return nil, err

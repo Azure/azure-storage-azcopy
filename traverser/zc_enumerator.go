@@ -98,6 +98,7 @@ type StoredObject struct {
 	LeaseStatus        lease.StatusType
 	LeaseDuration      lease.DurationType
 	TargetHardlinkFile string // used only for NFS transfers to indicate the target hardlink file path
+	Inode              string // used only for nfs transfers to identify hardlinked files (files with the same inode are hardlinked together)
 }
 
 func (s *StoredObject) IsMoreRecentThan(storedObject2 StoredObject, preferSMBTime bool) bool {
@@ -268,12 +269,17 @@ type filePropsProvider interface {
 	FileID() string
 }
 
+type NFSMetadataContext struct {
+	TargetHardlinkFile string
+	Inode              string
+}
+
 // a constructor is used so that in case the StoredObject has to change, the callers would get a compilation error
 // and it forces all necessary properties to be always supplied and not forgotten
 func NewStoredObject(morpher objectMorpher, name string,
 	relativePath string, entityType common.EntityType, lmt time.Time,
 	size int64, props contentPropsProvider, blobProps blobPropsProvider,
-	meta common.Metadata, containerName string, targetHardlinkFile string) StoredObject {
+	meta common.Metadata, containerName string, nfsOptions *NFSMetadataContext) StoredObject {
 	obj := StoredObject{
 		Name:               name,
 		RelativePath:       relativePath,
@@ -292,10 +298,14 @@ func NewStoredObject(morpher objectMorpher, name string,
 		Metadata:           meta,
 		ContainerName:      containerName,
 		// Additional lease properties. To be used in listing
-		LeaseStatus:        blobProps.LeaseStatus(),
-		LeaseState:         blobProps.LeaseState(),
-		LeaseDuration:      blobProps.LeaseDuration(),
-		TargetHardlinkFile: targetHardlinkFile,
+		LeaseStatus:   blobProps.LeaseStatus(),
+		LeaseState:    blobProps.LeaseState(),
+		LeaseDuration: blobProps.LeaseDuration(),
+	}
+
+	if nfsOptions != nil {
+		obj.TargetHardlinkFile = nfsOptions.TargetHardlinkFile
+		obj.Inode = nfsOptions.Inode
 	}
 
 	// Folders don't have size, and root ones shouldn't have names in the StoredObject. Ensure those rules are consistently followed
@@ -392,6 +402,10 @@ type InitResourceTraverserOptions struct {
 	FromTo            common.FromTo
 	IncludeRoot       bool
 	BasePath          string // need this base path to derive the rel path for hardlink files to be created
+
+	// InodeStore is the per-job store used to track hardlink relationships.
+	// Must be non-nil when HardlinkHandling == Preserve.
+	InodeStore *common.InodeStore
 }
 
 func (o *InitResourceTraverserOptions) PerformChecks() error {
