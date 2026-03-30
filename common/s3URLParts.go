@@ -256,6 +256,9 @@ func NewS3URLParts(u url.URL) (S3URLParts, error) {
 		// In this case, it would be in virtual-hosted-style URL, and has host prefix like bucket.s3[-.]
 		up.BucketName = matchSlices[1][:len(matchSlices[1])-1] // Removing the trailing '.' at the end
 		up.ObjectKey = path
+		if strings.HasPrefix(up.ObjectKey, "/") {
+			up.ObjectKey = strings.TrimLeft(up.ObjectKey, "/")
+		}
 
 		up.Endpoint = host[strings.Index(host, ".")+1:]
 	} else {
@@ -265,6 +268,9 @@ func NewS3URLParts(u url.URL) (S3URLParts, error) {
 		if bucketEndIndex := strings.Index(path, "/"); bucketEndIndex != -1 {
 			up.BucketName = path[:bucketEndIndex]
 			up.ObjectKey = path[bucketEndIndex+1:]
+			if strings.HasPrefix(up.ObjectKey, "/") {
+				up.ObjectKey = strings.TrimLeft(up.ObjectKey, "/")
+			}
 		} else {
 			up.BucketName = path
 		}
