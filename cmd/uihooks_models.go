@@ -147,7 +147,7 @@ type outputMessage struct {
 
 func (m outputMessage) shouldExitProcess() bool {
 	return m.msgType == EOutputMessageType.Error() ||
-		(m.msgType == EOutputMessageType.EndOfJob() && !(m.exitCode == EExitCode.NoExit()))
+		(m.msgType == EOutputMessageType.EndOfJob() && (m.exitCode != EExitCode.NoExit()))
 }
 
 // -------------------------------------- JSON templates -------------------------------------- //

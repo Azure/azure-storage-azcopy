@@ -59,7 +59,7 @@ func init() {
 	}
 }
 
-var ProxyLookupTimeoutError = errors.New("proxy lookup timed out")
+var ErrProxyLookupTimeout = errors.New("proxy lookup timed out")
 
 type proxyLookupResult struct {
 	url *url.URL
@@ -103,7 +103,7 @@ func (c *proxyLookupCache) getProxyNoCache(req *http.Request) proxyLookupResult 
 	case v := <-ch:
 		return v
 	case <-time.After(c.lookupTimeout):
-		return proxyLookupResult{nil, ProxyLookupTimeoutError}
+		return proxyLookupResult{nil, ErrProxyLookupTimeout}
 		// Note: in testing the the real app, this code path wasn't triggered. Not sure if its just luck that in many Win10 test runs,
 		// with hundreds of thousands of files each, this didn't trigger - even though the underlying issue did trigger
 		// on about 25% of similar test runs prior to this code being added. Maybe just luck, or maybe something about spinning up

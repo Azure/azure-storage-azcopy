@@ -351,8 +351,11 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 			// link structure is unchanged.  Check and transfer content if necessary.
 			// Non-anchor files carry no content (they link to the anchor), so no
 			// content check is required for them.
-			if sourceObjectInMap.TargetHardlinkFile == "" {
-				// This is the first-seen-file path.  Perform generic content verification.
+			//
+			// Use the deterministic lex-smallest anchor from InodeStore rather than
+			// TargetHardlinkFile, which depends on non-deterministic enumeration order.
+			if srcAnchorFile == sourceObjectInMap.RelativePath {
+				// This is the anchor (lex-smallest) file.  Perform generic content verification.
 				//
 				// groupStructureChanged is true when any file in this inode group is being
 				// recreated (group merge: src inode spans multiple dest inodes, or group split:
@@ -455,7 +458,7 @@ func NewSyncSourceComparator(i *traverser.ObjectIndexer, copyScheduler, cleaner 
 		destinationIndex:          i,
 		copyTransferScheduler:     copyScheduler,
 		destinationCleaner:        cleaner,
-		preferSMBTime:              preferSMBTime,
+		preferSMBTime:             preferSMBTime,
 		disableComparison:         disableComparison,
 		comparisonHashType:        comparisonHashType,
 		srcPendingHardlinkObjects: traverser.ObjectIndexer{IndexMap: make(map[string]traverser.StoredObject)},
@@ -561,7 +564,11 @@ func (f *syncSourceComparator) ProcessPendingHardlinks() error {
 		if obj.Inode == "" {
 			continue
 		}
-		destInode := f.dstPathToInode[obj.RelativePath]
+		lookupPath := obj.RelativePath
+		if f.destinationIndex.IsDestinationCaseInsensitive {
+			lookupPath = strings.ToLower(lookupPath)
+		}
+		destInode := f.dstPathToInode[lookupPath]
 		if destInode == "" {
 			continue // not present in destination; will be transferred below
 		}
@@ -610,6 +617,10 @@ func (f *syncSourceComparator) ProcessPendingHardlinks() error {
 			continue
 		}
 
+		if f.inodeStore == nil {
+			return fmt.Errorf("inodeStore is nil while processing pending hardlinks")
+		}
+
 		var srcAnchorFile string
 		if sourceObject.Inode != "" {
 			var err error
@@ -621,7 +632,14 @@ func (f *syncSourceComparator) ProcessPendingHardlinks() error {
 		// GetAnchor returns "" when the dest object is not in the InodeStore
 		// (e.g. it is a regular file), which naturally triggers the entity-type
 		// mismatch path below.
-		dstAnchorFile, _ := f.inodeStore.GetAnchor(destinationObjectInMap.Inode)
+		var dstAnchorFile string
+		if destinationObjectInMap.Inode != "" {
+			var err error
+			dstAnchorFile, err = f.inodeStore.GetAnchor(destinationObjectInMap.Inode)
+			if err != nil {
+				return err
+			}
+		}
 
 		// groupIntact: the src inode group maps 1:1 onto a single dest inode group.
 		groupIntact := !srcInodeIsMultiGroup[sourceObject.Inode] &&

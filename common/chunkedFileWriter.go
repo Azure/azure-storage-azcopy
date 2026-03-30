@@ -127,7 +127,7 @@ func NewChunkedFileWriter(ctx context.Context, slicePool ByteSlicePooler, cacheL
 	return w
 }
 
-var ChunkWriterAlreadyFailed = errors.New("chunk Writer already failed")
+var ErrChunkWriterAlreadyFailed = errors.New("chunk Writer already failed")
 
 const maxDesirableActiveChunks = 20 // TODO: can we find a sensible way to remove the hard-coded count threshold here?
 
@@ -196,7 +196,7 @@ func (w *chunkedFileWriter) EnqueueChunk(ctx context.Context, id ChunkID, chunkS
 		if err != nil {
 			return err
 		}
-		return ChunkWriterAlreadyFailed // channel returned nil because it was closed and empty
+		return ErrChunkWriterAlreadyFailed // channel returned nil because it was closed and empty
 	case w.newUnorderedChunks <- fileChunk{id: id, data: buffer}:
 		return
 	}
@@ -230,7 +230,7 @@ func (w *chunkedFileWriter) Flush(ctx context.Context) ([]byte, error) {
 		if w.err != nil {
 			return nil, w.err
 		}
-		return nil, ChunkWriterAlreadyFailed // channel returned nil because it was closed and empty
+		return nil, ErrChunkWriterAlreadyFailed // channel returned nil because it was closed and empty
 	case md5AtCompletion := <-w.successMd5:
 		return md5AtCompletion, nil
 	}

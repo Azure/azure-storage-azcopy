@@ -29,6 +29,14 @@ import (
 	"sync"
 )
 
+// TargetedReadWriteCloser is the minimal I/O surface needed by InodeStore.
+// *os.File satisfies this interface; tests can substitute an in-memory implementation.
+type TargetedReadWriteCloser interface {
+	io.ReaderAt
+	io.WriterAt
+	io.Closer
+}
+
 // inodeMeta tracks the position and allocated size of an inode's record in the store file.
 type inodeMeta struct {
 	offset   int64 // byte offset of the record in the file
@@ -42,7 +50,7 @@ type inodeMeta struct {
 type InodeStore struct {
 	mu       sync.RWMutex
 	index    map[string]*inodeMeta // inode → file metadata
-	file     *os.File
+	file     TargetedReadWriteCloser
 	fileSize int64 // current logical end of file (avoids Seek calls)
 }
 
@@ -89,6 +97,17 @@ func NewInodeStore(jobID JobID) (*InodeStore, error) {
 		file:     f,
 		fileSize: fileSize,
 	}, nil
+}
+
+// NewInodeStoreFromBackend creates an InodeStore from an existing backend.
+// This is intended for testing: callers can supply an in-memory implementation
+// of TargetedReadWriteCloser instead of a real file.
+func NewInodeStoreFromBackend(backend TargetedReadWriteCloser) *InodeStore {
+	return &InodeStore{
+		index:    make(map[string]*inodeMeta),
+		file:     backend,
+		fileSize: 0,
+	}
 }
 
 // rehydrateInodeStore scans every fixed-capacity record in an existing store
@@ -154,13 +173,13 @@ func rehydrateInodeStore(f *os.File, _ int64) (map[string]*inodeMeta, error) {
 
 // writeRecord writes a padded record at the current end of the file.
 // Returns the offset and capacity. Must be called with s.mu write lock held.
-func (s *InodeStore) writeRecord(inode, firstPath, anchor string) (int64, int, error) {
+func (s *InodeStore) writeRecord(inode, firstPath, anchor string) (offset int64, capacity int, err error) {
 	content := fmt.Sprintf("%s\t%s\t%s", inode, firstPath, anchor)
-	capacity := len(content) + recordPadding + 1 // +1 for trailing \n
+	capacity = len(content) + recordPadding + 1 // +1 for trailing \n
 	padded := content + strings.Repeat(" ", capacity-len(content)-1) + "\n"
 
-	offset := s.fileSize
-	if _, err := s.file.WriteAt([]byte(padded), offset); err != nil {
+	offset = s.fileSize
+	if _, err = s.file.WriteAt([]byte(padded), offset); err != nil {
 		return 0, 0, fmt.Errorf("failed to write record: %w", err)
 	}
 	s.fileSize += int64(capacity)

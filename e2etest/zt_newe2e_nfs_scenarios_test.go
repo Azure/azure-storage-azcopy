@@ -360,7 +360,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariation
 			Targets: []ResourceManager{srcDirObj, dst.(RemoteResourceManager).WithSpecificAuthType(
 				ResolveVariation(svm, []ExplicitCredentialTypes{
 					EExplicitCredentialType.SASToken(),
-					//EExplicitCredentialType.OAuth(),
+					EExplicitCredentialType.OAuth(),
 				}), svm, CreateAzCopyTargetOptions{}),
 			},
 			Flags: CopyFlags{
@@ -610,7 +610,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 			Targets: []ResourceManager{srcDirObj.(RemoteResourceManager).WithSpecificAuthType(
 				ResolveVariation(svm, []ExplicitCredentialTypes{
 					EExplicitCredentialType.SASToken(),
-					//EExplicitCredentialType.OAuth(),
+					EExplicitCredentialType.OAuth(),
 				}), svm, CreateAzCopyTargetOptions{}), dst},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
@@ -876,13 +876,13 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 				src.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm,
 					[]ExplicitCredentialTypes{
 						EExplicitCredentialType.SASToken(),
-						//EExplicitCredentialType.OAuth(),
+						EExplicitCredentialType.OAuth(),
 					}),
 					svm, CreateAzCopyTargetOptions{}),
 				dst.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm,
 					[]ExplicitCredentialTypes{
 						EExplicitCredentialType.SASToken(),
-						//EExplicitCredentialType.OAuth(),
+						EExplicitCredentialType.OAuth(),
 					}),
 					svm, CreateAzCopyTargetOptions{}),
 			},
@@ -1136,12 +1136,12 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 				src.(RemoteResourceManager).WithSpecificAuthType(
 					ResolveVariation(svm, []ExplicitCredentialTypes{
 						EExplicitCredentialType.SASToken(),
-						//EExplicitCredentialType.OAuth(),
+						EExplicitCredentialType.OAuth(),
 					}), svm, CreateAzCopyTargetOptions{}),
 				dst.(RemoteResourceManager).WithSpecificAuthType(
 					ResolveVariation(svm, []ExplicitCredentialTypes{
 						EExplicitCredentialType.SASToken(),
-						//EExplicitCredentialType.OAuth(),
+						EExplicitCredentialType.OAuth(),
 					}), svm, CreateAzCopyTargetOptions{}),
 			},
 			Flags: CopyFlags{
@@ -1380,13 +1380,13 @@ func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationMa
 				src.(RemoteResourceManager).WithSpecificAuthType(
 					ResolveVariation(svm, []ExplicitCredentialTypes{
 						EExplicitCredentialType.SASToken(),
-						//EExplicitCredentialType.OAuth(),
+						EExplicitCredentialType.OAuth(),
 					}),
 					svm, CreateAzCopyTargetOptions{}),
 				dst.(RemoteResourceManager).WithSpecificAuthType(
 					ResolveVariation(svm, []ExplicitCredentialTypes{
 						EExplicitCredentialType.SASToken(),
-						//EExplicitCredentialType.OAuth(),
+						EExplicitCredentialType.OAuth(),
 					}), svm, CreateAzCopyTargetOptions{}),
 			},
 			Flags: CopyFlags{
@@ -1588,7 +1588,7 @@ func (s *FilesNFSTestSuite) Scenario_TestInvalidScenariosForNFS(svm *ScenarioVar
 				src.(RemoteResourceManager).WithSpecificAuthType(
 					ResolveVariation(svm, []ExplicitCredentialTypes{
 						EExplicitCredentialType.SASToken(),
-						//EExplicitCredentialType.OAuth(),
+						EExplicitCredentialType.OAuth(),
 					}), svm, CreateAzCopyTargetOptions{}),
 				dst.(RemoteResourceManager).WithSpecificAuthType(
 					ResolveVariation(svm, []ExplicitCredentialTypes{
@@ -1662,12 +1662,12 @@ func (s *FilesNFSTestSuite) Scenario_DstShareDoesNotExists(svm *ScenarioVariatio
 				src.(RemoteResourceManager).WithSpecificAuthType(
 					ResolveVariation(svm, []ExplicitCredentialTypes{
 						EExplicitCredentialType.SASToken(),
-						//EExplicitCredentialType.OAuth(),
+						EExplicitCredentialType.OAuth(),
 					}), svm, CreateAzCopyTargetOptions{}),
 				dst.(RemoteResourceManager).WithSpecificAuthType(
 					ResolveVariation(svm, []ExplicitCredentialTypes{
 						EExplicitCredentialType.SASToken(),
-						//EExplicitCredentialType.OAuth(),
+						EExplicitCredentialType.OAuth(),
 					}), svm, CreateAzCopyTargetOptions{}),
 			},
 			Flags: CopyFlags{

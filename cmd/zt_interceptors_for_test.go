@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
@@ -146,6 +147,10 @@ func (*mockedLifecycleManager) E2EAwaitAllowOpenFiles() {
 
 func (*mockedLifecycleManager) E2EEnableAwaitAllowOpenFiles(_ bool) {
 	// not implemented in mocked version
+}
+
+func (*mockedLifecycleManager) CancelFromStdinChannel() <-chan os.Signal {
+	return make(chan os.Signal) // Basically a no-op, returning an unwritten to channel is safe.
 }
 
 func (*mockedLifecycleManager) GatherAllLogs(channel chan string) (result []string) {

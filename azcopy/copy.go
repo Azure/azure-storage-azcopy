@@ -22,6 +22,7 @@ package azcopy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -30,7 +31,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/Azure/azure-storage-azcopy/v10/traverser"
-	"runtime"
 )
 
 // CopyOptions contains the optional parameters for the Copy operation.
@@ -143,13 +143,16 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (
 		copyHandler = common.NewJobUIHooks()
 		common.SetUIHooks(copyHandler)
 	}
-	jobID := common.NewJobID()
-	c.CurrentJobID = jobID
-
+	jobID := c.CurrentJobID
+	if jobID.IsEmpty() {
+		jobID = common.NewJobID()
+		c.CurrentJobID = jobID
+	}
 	timeAtPrestart := time.Now()
-	common.AzcopyCurrentJobLogger = common.NewJobLogger(jobID, c.GetLogLevel(), common.LogPathFolder, "")
-	common.AzcopyCurrentJobLogger.OpenLog()
-
+	if common.AzcopyCurrentJobLogger == nil { // In the unlikely case, logger is not initialized in root.go
+		common.AzcopyCurrentJobLogger = common.NewJobLogger(c.CurrentJobID, c.GetLogLevel(), common.LogPathFolder, "")
+		common.AzcopyCurrentJobLogger.OpenLog()
+	}
 	defer common.AzcopyCurrentJobLogger.CloseLog()
 
 	// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter
@@ -174,12 +177,12 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (
 		common.LogPathFolder = ""
 	}
 
-	var t *transferExecutor
 	ctx = context.WithValue(ctx, ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	t, err := newCopyTransferExecutor(ctx, jobID, src, dest, opts, c.GetUserOAuthTokenManagerInstance())
 	if err != nil {
 		return CopyResult{}, err
 	}
+	defer t.Close()
 
 	// handle from/to pipe
 	if t.opts.fromTo.IsRedirection() {
@@ -208,6 +211,13 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (
 		defer jobsAdmin.JobsAdmin.JobMgrCleanUp(jobID)
 
 		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
+				// AzCopy run was canceled with (Ctrl + C).
+				waitErr := mgr.Wait()
+				if waitErr != nil {
+					return CopyResult{}, waitErr
+				}
+			}
 			return CopyResult{}, err
 		}
 		// if we are in dryrun mode, we don't want to actually run the job, so return here
@@ -250,6 +260,16 @@ type transferExecutor struct {
 	inodeStore *common.InodeStore
 }
 
+// Close releases resources held by the transferExecutor, including the inode store.
+func (t *transferExecutor) Close() error {
+	if t == nil || t.inodeStore == nil {
+		return nil
+	}
+	err := t.inodeStore.Close()
+	t.inodeStore = nil
+	return err
+}
+
 func newCopyTransferExecutor(ctx context.Context, jobID common.JobID, src, dst string, opts CopyOptions, uotm *common.UserOAuthTokenManager) (t *transferExecutor, err error) {
 	cookedOpts, err := newCookedCopyOptions(src, dst, opts)
 	if err != nil {
@@ -266,11 +286,6 @@ func newCopyTransferExecutor(ctx context.Context, jobID common.JobID, src, dst s
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize inode store: %w", err)
 	}
-	// Ensure that resources held by the inode store are eventually released,
-	// even if callers forget to close it explicitly.
-	runtime.SetFinalizer(store, func(s *common.InodeStore) {
-		_ = s.Close()
-	})
 
 	progressTracker := newTransferProgressTracker(jobID, opts.Handler, cookedOpts.fromTo)
 
