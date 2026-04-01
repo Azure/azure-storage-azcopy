@@ -346,9 +346,6 @@ func (ds *ThrottleSemaphore) AcquireSourceSlot(ctx context.Context) error {
 
 // AcquireTargetSlot blocks until a target traversal slot is available and throttling conditions allow processing.
 // Target slots have lower capacity (configurable percentage of source capacity) to limit slower target operations.
-// IMPORTANT: Target slots are exempt from memory-based throttling because target enumeration + finalize
-// is what removes entries from the indexMap and frees memory. Blocking target slots on memory pressure
-// creates a deadlock where memory never drops because the only thing that can free it is blocked.
 // Returns an error if the context is cancelled during acquisition.
 func (ds *ThrottleSemaphore) AcquireTargetSlot(ctx context.Context) error {
 	ds.waitingForTargetSemaphore.Add(1)
@@ -358,8 +355,7 @@ func (ds *ThrottleSemaphore) AcquireTargetSlot(ctx context.Context) error {
 		select {
 		case <-ds.targetSemaphore:
 			// Got target semaphore token
-			// Use shouldThrottleTarget which skips memory-based throttling
-			if ds.shouldThrottleTarget() {
+			if ds.shouldThrottle() {
 				// Should throttle - put token back and wait
 				ds.targetSemaphore <- struct{}{}
 
@@ -398,33 +394,6 @@ func (ds *ThrottleSemaphore) ReleaseSourceSlot() {
 // This should be called when target traversal is complete.
 func (ds *ThrottleSemaphore) ReleaseTargetSlot() {
 	ds.targetSemaphore <- struct{}{} // Put target token back
-}
-
-// shouldThrottleTarget determines whether target directory processing should be throttled.
-// Unlike shouldThrottle(), this skips memory-based throttling because target enumeration
-// + finalize is what removes entries from the shared indexMap, freeing memory.
-// Blocking target slots on memory creates a deadlock at scale (e.g. 100M+ files).
-func (ds *ThrottleSemaphore) shouldThrottleTarget() bool {
-	ds.throttleStateMutex.Lock()
-	defer ds.throttleStateMutex.Unlock()
-
-	fileThrottle := enableFileBasedThrottling && ds.shouldThrottleBasedOnFiles()
-	goroutineThrottle := enableGoroutineBasedThrottling && ds.shouldThrottleBasedOnGoroutines()
-
-	shouldThrottle := fileThrottle || goroutineThrottle
-
-	if enableThrottleLogs && shouldThrottle {
-		var reasons []string
-		if fileThrottle {
-			reasons = append(reasons, "FILES")
-		}
-		if goroutineThrottle {
-			reasons = append(reasons, "GOROUTINES")
-		}
-		syncOrchestratorLog(common.LogWarning, fmt.Sprintf("TARGET THROTTLE ENGAGED: %s", strings.Join(reasons, ", ")))
-	}
-
-	return shouldThrottle
 }
 
 // shouldThrottle determines whether directory processing should be throttled with hysteresis
