@@ -120,13 +120,12 @@ func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, partNum Pa
 }
 
 func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
 	if folder == common.Dev_Null {
 		return nil // Never persist to dev-null
 	}
 
+	// Phase 1: Check if creation is needed (under lock).
+	f.mu.Lock()
 	state, ok := f.contents[folder]
 
 	if ok {
@@ -140,41 +139,58 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 				ts == common.ETransferStatus.Failed() ||
 				ts == common.ETransferStatus.SkippedEntityAlreadyExists() {
 
+				f.mu.Unlock()
 				return nil // do not re-create an existing folder
 			}
 		} else {
 			if state.Status != EJpptFolderTrackerStatus.Unseen() {
+				f.mu.Unlock()
 				return nil
 			}
 		}
 	}
 
+	f.mu.Unlock()
+
+	// Phase 2: Perform folder creation outside the lock.
+	// Concurrent callers for the same folder may both reach here; the second
+	// call will receive FolderCreationErrorAlreadyExists which is handled below.
 	err := doCreation()
 	if err != nil && !errors.Is(err, common.FolderCreationErrorAlreadyExists{}) {
 		return err
 	}
 
+	// Phase 3: Update state (under lock).
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// Re-fetch state; another goroutine may have updated it while unlocked.
+	state = f.contents[folder]
+
 	if state == nil {
 		state = &JpptFolderTrackerState{}
 	}
 
-	if err == nil { // first, update our internal status, then,
-		state.Status = EJpptFolderTrackerStatus.FolderCreated()
-	} else if errors.Is(err, common.FolderCreationErrorAlreadyExists{}) {
-		state.Status = EJpptFolderTrackerStatus.FolderExisted()
-	}
-
-	if state.Index != nil {
-		// commit the state if needbe.
-		switch state.Status {
-		case EJpptFolderTrackerStatus.FolderCreated():
-			f.fetchTransfer(*state.Index).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
-		case EJpptFolderTrackerStatus.FolderExisted():
-			f.fetchTransfer(*state.Index).SetTransferStatus(common.ETransferStatus.FolderExisted(), false)
+	// Only update if not already set by another goroutine.
+	if state.Status == EJpptFolderTrackerStatus.Unseen() {
+		if err == nil {
+			state.Status = EJpptFolderTrackerStatus.FolderCreated()
+		} else if errors.Is(err, common.FolderCreationErrorAlreadyExists{}) {
+			state.Status = EJpptFolderTrackerStatus.FolderExisted()
 		}
-	}
 
-	f.debugCheckState(*state)
+		if state.Index != nil {
+			// commit the state if needbe.
+			switch state.Status {
+			case EJpptFolderTrackerStatus.FolderCreated():
+				f.fetchTransfer(*state.Index).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
+			case EJpptFolderTrackerStatus.FolderExisted():
+				f.fetchTransfer(*state.Index).SetTransferStatus(common.ETransferStatus.FolderExisted(), false)
+			}
+		}
+
+		f.debugCheckState(*state)
+	}
 
 	f.contents[folder] = state
 	return nil
