@@ -321,7 +321,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 		// do for local files — and the sync comparator cannot mistake it for a member
 		// of a multi-group inode when the destination is another NFS share.
 		nfsInode := ""
-		if fullProperties.LinkCount() > int64(1) {
+		if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() && fullProperties.LinkCount() > int64(1) {
 			nfsInode = fullProperties.FileID()
 		}
 		obj := NewStoredObject(

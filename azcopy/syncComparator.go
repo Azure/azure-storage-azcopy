@@ -121,7 +121,7 @@ func (f *syncDestinationComparator) ProcessIfNecessary(destinationObject travers
 		f.srcPathToInode = buildSrcPathToInode(f.sourceIndex.IndexMap)
 	}
 
-	if destinationObject.EntityType == common.EEntityType.Hardlink() {
+	if destinationObject.EntityType == common.EEntityType.Hardlink() && f.inodeStore != nil {
 
 		// we will process hardlinks in a special way because we need to make sure the relationship is not broken.
 		// So we will not directly schedule the copy transfer here, instead we will put it in a separate map and
@@ -131,15 +131,13 @@ func (f *syncDestinationComparator) ProcessIfNecessary(destinationObject travers
 		return nil
 	}
 
-	sourceObjectInMap, present := f.sourceIndex.IndexMap[destinationObject.RelativePath]
+	// Normalize the key upfront for case-insensitive destinations so the
+	// lookup always matches the lowercase-keyed sourceIndex.
 	srcKey := destinationObject.RelativePath
-	if !present && f.sourceIndex.IsDestinationCaseInsensitive {
-		lcRelativePath := strings.ToLower(destinationObject.RelativePath)
-		sourceObjectInMap, present = f.sourceIndex.IndexMap[lcRelativePath]
-		if present {
-			srcKey = lcRelativePath
-		}
+	if f.sourceIndex.IsDestinationCaseInsensitive {
+		srcKey = strings.ToLower(srcKey)
 	}
+	sourceObjectInMap, present := f.sourceIndex.IndexMap[srcKey]
 
 	// if the destinationObject is present at source and stale, we transfer the up-to-date version from source
 	if present {
@@ -274,15 +272,13 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 
 	for _, destHardlinkObj := range f.destPendingHardlinkObjects.IndexMap {
 
-		// Track the actual key used so we delete the correct index entry,
-		// even on case-insensitive file systems where the stored key may be
-		// lowercase while destHardlinkObj.RelativePath is mixed-case.
+		// Normalize the key upfront for case-insensitive destinations so the
+		// lookup always matches the lowercase-keyed sourceIndex.
 		srcKey := destHardlinkObj.RelativePath
-		sourceObjectInMap, present := f.sourceIndex.IndexMap[srcKey]
-		if !present && f.sourceIndex.IsDestinationCaseInsensitive {
-			srcKey = strings.ToLower(destHardlinkObj.RelativePath)
-			sourceObjectInMap, present = f.sourceIndex.IndexMap[srcKey]
+		if f.sourceIndex.IsDestinationCaseInsensitive {
+			srcKey = strings.ToLower(srcKey)
 		}
+		sourceObjectInMap, present := f.sourceIndex.IndexMap[srcKey]
 
 		if !present {
 			// Path no longer exists at source — delete the stale link.
@@ -325,14 +321,25 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 		//     → only the anchor name changed; existing links are still valid.
 		//   • dstAnchor is still in the source group (lex-smaller anchor was added)
 		//     AND all group members already share a single dest inode.
+
+		// Normalize anchor paths for case-insensitive key lookups and comparisons.
+		normSrcAnchor := srcAnchorFile
+		normDstAnchor := dstAnchorFile
+		normRelPath := sourceObjectInMap.RelativePath
+		if f.sourceIndex.IsDestinationCaseInsensitive {
+			normSrcAnchor = strings.ToLower(normSrcAnchor)
+			normDstAnchor = strings.ToLower(normDstAnchor)
+			normRelPath = strings.ToLower(normRelPath)
+		}
+
 		needsRecreate := false
-		if srcAnchorFile != dstAnchorFile {
+		if normSrcAnchor != normDstAnchor {
 			if srcAnchorFile == "" {
 				// Source is a regular file (not in InodeStore): entity type changed
 				// from hardlink → file. Delete the dest link and re-upload as a file.
 				needsRecreate = true
 			} else {
-				dstAnchorInSrc := f.srcPathToInode[dstAnchorFile]
+				dstAnchorInSrc := f.srcPathToInode[normDstAnchor]
 				needsRecreate = (dstAnchorInSrc != "" && dstAnchorInSrc != sourceObjectInMap.Inode) || // (a)
 					srcInodeIsMultiGroup[sourceObjectInMap.Inode] || // (b)
 					destGroupIsMultiSource[destHardlinkObj.Inode] // (c)
@@ -354,7 +361,7 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 			//
 			// Use the deterministic lex-smallest anchor from InodeStore rather than
 			// TargetHardlinkFile, which depends on non-deterministic enumeration order.
-			if srcAnchorFile == sourceObjectInMap.RelativePath {
+			if normSrcAnchor == normRelPath {
 				// This is the anchor (lex-smallest) file.  Perform generic content verification.
 				//
 				// groupStructureChanged is true when any file in this inode group is being
@@ -485,7 +492,7 @@ func (f *syncSourceComparator) ProcessIfNecessary(sourceObject traverser.StoredO
 	}
 	destinationObjectInMap, present := f.destinationIndex.IndexMap[relPath]
 
-	if sourceObject.EntityType == common.EEntityType.Hardlink() {
+	if sourceObject.EntityType == common.EEntityType.Hardlink() && f.inodeStore != nil {
 		// Defer hardlinks — we need the complete picture of source inode groups
 		// before deciding whether any dest links need to be recreated.
 		f.srcPendingHardlinkObjects.IndexMap[relPath] = sourceObject
@@ -586,12 +593,13 @@ func (f *syncSourceComparator) ProcessPendingHardlinks() error {
 
 	for _, sourceObject := range f.srcPendingHardlinkObjects.IndexMap {
 
+		// Normalize the key upfront for case-insensitive destinations so the
+		// lookup always matches the lowercase-keyed destinationIndex.
 		dstKey := sourceObject.RelativePath
-		destinationObjectInMap, present := f.destinationIndex.IndexMap[dstKey]
-		if !present && f.destinationIndex.IsDestinationCaseInsensitive {
-			dstKey = strings.ToLower(sourceObject.RelativePath)
-			destinationObjectInMap, present = f.destinationIndex.IndexMap[dstKey]
+		if f.destinationIndex.IsDestinationCaseInsensitive {
+			dstKey = strings.ToLower(dstKey)
 		}
+		destinationObjectInMap, present := f.destinationIndex.IndexMap[dstKey]
 
 		if !present {
 			// Path does not exist at destination — transfer as new.
@@ -629,9 +637,10 @@ func (f *syncSourceComparator) ProcessPendingHardlinks() error {
 				return err
 			}
 		}
-		// GetAnchor returns "" when the dest object is not in the InodeStore
-		// (e.g. it is a regular file), which naturally triggers the entity-type
-		// mismatch path below.
+		// When Inode is empty the object is a regular file (not a hardlink in
+		// the InodeStore), so we skip the GetAnchor call and dstAnchorFile
+		// stays "".  This naturally triggers the entity-type mismatch /
+		// srcAnchorFile=="" path below.
 		var dstAnchorFile string
 		if destinationObjectInMap.Inode != "" {
 			var err error
@@ -645,10 +654,20 @@ func (f *syncSourceComparator) ProcessPendingHardlinks() error {
 		groupIntact := !srcInodeIsMultiGroup[sourceObject.Inode] &&
 			!destGroupIsMultiSource[destinationObjectInMap.Inode]
 
+		// Normalize anchor paths for case-insensitive key lookups and comparisons.
+		normSrcAnchor := srcAnchorFile
+		normDstAnchor := dstAnchorFile
+		normRelPath := sourceObject.RelativePath
+		if f.destinationIndex.IsDestinationCaseInsensitive {
+			normSrcAnchor = strings.ToLower(normSrcAnchor)
+			normDstAnchor = strings.ToLower(normDstAnchor)
+			normRelPath = strings.ToLower(normRelPath)
+		}
+
 		// srcAnchorInDst: the dest inode of the source anchor, or "" if the source
 		// anchor does not exist at the destination.
-		srcAnchorInDst := f.dstPathToInode[srcAnchorFile]
-		anchorChanged := srcAnchorFile != dstAnchorFile
+		srcAnchorInDst := f.dstPathToInode[normSrcAnchor]
+		anchorChanged := normSrcAnchor != normDstAnchor
 
 		// Entity-type change: source became a regular file.  Delete the stale link
 		// and re-upload.
@@ -686,7 +705,7 @@ func (f *syncSourceComparator) ProcessPendingHardlinks() error {
 		// anchor may differ from the lex anchor.  When firstSeen≠lex, the firstSeen
 		// anchor can hit the needsRecreate path above, while the true lex anchor
 		// has TargetHardlinkFile!="" and would be incorrectly skipped.
-		if srcAnchorFile != sourceObject.RelativePath {
+		if normSrcAnchor != normRelPath {
 			syncComparatorLog(sourceObject.RelativePath, syncStatusSkipped, syncSkipReasonHardlinkRelationshipIntact, false)
 			continue
 		}
