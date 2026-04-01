@@ -72,6 +72,142 @@ func runHardlinkSync(
 	return stdOut
 }
 
+// isNFSContainer returns true when c is backed by Azure Files NFS.
+func isNFSContainer(c ContainerResourceManager) bool {
+	return c.Location() == common.ELocation.FileNFS()
+}
+
+// setOldLMT stamps the object with a timestamp 10 minutes in the past; only NFS
+// containers support explicit LMT override via SetObjectProperties.
+func setOldLMT(svm *ScenarioVariationManager, obj ObjectResourceManager, container ContainerResourceManager) {
+	if isNFSContainer(container) {
+		obj.SetObjectProperties(svm, ObjectProperties{
+			FileNFSProperties: &FileNFSProperties{
+				FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
+				FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
+			},
+		})
+	}
+}
+
+// setSharedLMTIfNFS stamps the object with the given LMT, but only for NFS containers.
+func setSharedLMTIfNFS(svm *ScenarioVariationManager, obj ObjectResourceManager, container ContainerResourceManager, lmt time.Time) {
+	if isNFSContainer(container) {
+		obj.SetObjectProperties(svm, ObjectProperties{
+			FileNFSProperties: &FileNFSProperties{
+				FileCreationTime:  pointerTo(lmt),
+				FileLastWriteTime: pointerTo(lmt),
+			},
+		})
+	}
+}
+
+// nfsPropsIfNFS returns a *FileNFSProperties with FileLastWriteTime set to lmt when the
+// container is NFS, or nil otherwise.  Pass the result as ObjectProperties.FileNFSProperties
+// in a CreateResource call to make it harmless for local containers.
+func nfsPropsIfNFS(container ContainerResourceManager, lmt time.Time) *FileNFSProperties {
+	return &FileNFSProperties{FileLastWriteTime: pointerTo(lmt)}
+}
+
+// setupHardlinkSyncContainersForFromTo returns (srcContainer, dstContainer, rootDir) with
+// containers appropriate for the given fromTo direction.  Caller must defer
+// cleanupHardlinkSyncForFromTo.
+func setupHardlinkSyncContainersForFromTo(svm *ScenarioVariationManager, fromTo common.FromTo) (
+	srcContainer ContainerResourceManager,
+	dstContainer ContainerResourceManager,
+	rootDir string,
+) {
+	getNFSDst := func() ContainerResourceManager {
+		c := GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
+			PreferredAccount: pointerTo(PremiumFileShareAcct),
+		}).(ServiceResourceManager).GetContainer("hlsyncdst")
+		if !c.Exists() {
+			c.Create(svm, ContainerProperties{
+				FileContainerProperties: FileContainerProperties{
+					EnabledProtocols: pointerTo("NFS"),
+				},
+			})
+		}
+		return c
+	}
+	getNFSSrc := func() ContainerResourceManager {
+		c := GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
+			PreferredAccount: pointerTo(PremiumFileShareAcct),
+		}).(ServiceResourceManager).GetContainer("hlsyncsrc")
+		if !c.Exists() {
+			c.Create(svm, ContainerProperties{
+				FileContainerProperties: FileContainerProperties{
+					EnabledProtocols: pointerTo("NFS"),
+				},
+			})
+		}
+		return c
+	}
+	getLocal := func() ContainerResourceManager {
+		return CreateResource[ContainerResourceManager](svm, GetRootResource(
+			svm, common.ELocation.Local()), ResourceDefinitionContainer{})
+	}
+	switch fromTo {
+	case common.EFromTo.LocalFileNFS():
+		srcContainer, dstContainer = getLocal(), getNFSDst()
+	case common.EFromTo.FileNFSLocal():
+		srcContainer, dstContainer = getNFSSrc(), getLocal()
+	default: // FileNFSFileNFS
+		srcContainer, dstContainer = getNFSSrc(), getNFSDst()
+	}
+	rootDir = "hlsync_" + uuid.NewString()
+	return
+}
+
+// cleanupHardlinkSyncForFromTo cleans up the NFS directories created by
+// setupHardlinkSyncContainersForFromTo.
+func cleanupHardlinkSyncForFromTo(svm *ScenarioVariationManager, fromTo common.FromTo,
+	srcContainer, dstContainer ContainerResourceManager, rootDir string) {
+	switch fromTo {
+	case common.EFromTo.LocalFileNFS():
+		CleanupNFSDirectory(svm, dstContainer, rootDir)
+	case common.EFromTo.FileNFSLocal():
+		CleanupNFSDirectory(svm, srcContainer, rootDir)
+	default: // FileNFSFileNFS
+		CleanupNFSDirectory(svm, srcContainer, rootDir)
+		CleanupNFSDirectory(svm, dstContainer, rootDir)
+	}
+}
+
+// runHardlinkSyncForFromTo runs azcopy sync with --hardlinks=preserve for any fromTo
+// direction.  Both src and dst are authenticated when they are remote.
+func runHardlinkSyncForFromTo(
+	svm *ScenarioVariationManager,
+	srcDirObj ResourceManager,
+	dstDirObj ResourceManager,
+	fromTo common.FromTo,
+	deleteDestination bool,
+) AzCopyStdout {
+	authIfRemote := func(rm ResourceManager) ResourceManager {
+		if remote, ok := rm.(RemoteResourceManager); ok {
+			return remote.WithSpecificAuthType(
+				ResolveVariation(svm, []ExplicitCredentialTypes{
+					EExplicitCredentialType.SASToken(),
+					//EExplicitCredentialType.OAuth(),
+				}), svm, CreateAzCopyTargetOptions{})
+		}
+		return rm
+	}
+	stdOut, _ := RunAzCopy(svm, AzCopyCommand{
+		Verb:    AzCopyVerbSync,
+		Targets: []ResourceManager{authIfRemote(srcDirObj), authIfRemote(dstDirObj)},
+		Flags: SyncFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive:    pointerTo(true),
+				FromTo:       pointerTo(fromTo),
+				HardlinkType: pointerTo(common.PreserveHardlinkHandlingType),
+			},
+			DeleteDestination: pointerTo(deleteDestination),
+		},
+	})
+	return stdOut
+}
+
 // Scenario 1: Initial Sync — fresh upload of hardlinked files to empty destination.
 //
 // Source (local):
@@ -92,8 +228,13 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_InitialSync(svm *ScenarioVaria
 		return
 	}
 
-	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainers(svm)
-	defer CleanupNFSDirectory(svm, dstContainer, rootDir)
+	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
+		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
+		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
+		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
+	})
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
 	// Create source objects
 	srcDir := ResourceDefinitionObject{
@@ -132,12 +273,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_InitialSync(svm *ScenarioVaria
 	// For sync, seed destination with at least one file so sync does not fail
 	dstSeed := dstContainer.GetObject(svm, rootDir+"/independent.txt", common.EEntityType.File())
 	dstSeed.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
-	dstSeed.SetObjectProperties(svm, ObjectProperties{
-		FileNFSProperties: &FileNFSProperties{
-			FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
-			FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
-		},
-	})
+	setOldLMT(svm, dstSeed, dstContainer)
 
 	if !svm.Dryrun() {
 		time.Sleep(5 * time.Second)
@@ -146,7 +282,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_InitialSync(svm *ScenarioVaria
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 	dstDirObj := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
-	stdOut := runHardlinkSync(svm, srcDirObj, dstDirObj.(RemoteResourceManager), false)
+	stdOut := runHardlinkSyncForFromTo(svm, srcDirObj, dstDirObj, fromTo, false)
 
 	// Validate: all three objects should exist at destination
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -164,7 +300,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_InitialSync(svm *ScenarioVaria
 				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+	}, ValidateResourceOptions{fromTo: fromTo,
 		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	ValidateHardlinksTransferCount(svm, stdOut, 2)
@@ -186,8 +322,13 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_SameAnchorNewerSource(svm *Sce
 		return
 	}
 
-	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainers(svm)
-	defer CleanupNFSDirectory(svm, dstContainer, rootDir)
+	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
+		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
+		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
+		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
+	})
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
 	anchorName := rootDir + "/anchor.txt"
 	linkName := rootDir + "/link_to_anchor.txt"
@@ -198,12 +339,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_SameAnchorNewerSource(svm *Sce
 
 	dstAnchor := dstContainer.GetObject(svm, anchorName, common.EEntityType.File())
 	dstAnchor.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{})
-	dstAnchor.SetObjectProperties(svm, ObjectProperties{
-		FileNFSProperties: &FileNFSProperties{
-			FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
-			FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
-		},
-	})
+	setOldLMT(svm, dstAnchor, dstContainer)
 
 	dstLink := dstContainer.GetObject(svm, linkName, common.EEntityType.Hardlink())
 	dstLink.Create(svm, nil, ObjectProperties{
@@ -240,7 +376,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_SameAnchorNewerSource(svm *Sce
 
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
-	stdOut := runHardlinkSync(svm, srcDirObj, dstDir.(RemoteResourceManager), false)
+	stdOut := runHardlinkSyncForFromTo(svm, srcDirObj, dstDir, fromTo, false)
 
 	// Validate: hardlink relationship preserved, content updated
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -255,7 +391,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_SameAnchorNewerSource(svm *Sce
 				},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+	}, ValidateResourceOptions{fromTo: fromTo,
 		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	_ = stdOut
@@ -273,8 +409,13 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_SameAnchorUpToDate(svm *Scenar
 		return
 	}
 
-	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainers(svm)
-	defer CleanupNFSDirectory(svm, dstContainer, rootDir)
+	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
+		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
+		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
+		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
+	})
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
 	anchorName := rootDir + "/anchor.txt"
 	linkName := rootDir + "/link_to_anchor.txt"
@@ -321,7 +462,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_SameAnchorUpToDate(svm *Scenar
 
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
-	runHardlinkSync(svm, srcDirObj, dstDir.(RemoteResourceManager), false)
+	runHardlinkSyncForFromTo(svm, srcDirObj, dstDir, fromTo, false)
 
 	// Validate: destination still has the same structure, nothing transferred
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -336,7 +477,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_SameAnchorUpToDate(svm *Scenar
 				},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+	}, ValidateResourceOptions{fromTo: fromTo,
 		hardlinkHandling: common.PreserveHardlinkHandlingType})
 }
 
@@ -361,8 +502,13 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_RetargetLink(svm *ScenarioVari
 		return
 	}
 
-	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainers(svm)
-	defer CleanupNFSDirectory(svm, dstContainer, rootDir)
+	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
+		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
+		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
+		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
+	})
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
 	oldAnchorName := rootDir + "/old_anchor.txt"
 	newAnchorName := rootDir + "/new_anchor.txt"
@@ -374,21 +520,11 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_RetargetLink(svm *ScenarioVari
 
 	dstOldAnchor := dstContainer.GetObject(svm, oldAnchorName, common.EEntityType.File())
 	dstOldAnchor.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{})
-	dstOldAnchor.SetObjectProperties(svm, ObjectProperties{
-		FileNFSProperties: &FileNFSProperties{
-			FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
-			FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
-		},
-	})
+	setOldLMT(svm, dstOldAnchor, dstContainer)
 
 	dstNewAnchor := dstContainer.GetObject(svm, newAnchorName, common.EEntityType.File())
 	dstNewAnchor.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{})
-	dstNewAnchor.SetObjectProperties(svm, ObjectProperties{
-		FileNFSProperties: &FileNFSProperties{
-			FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
-			FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
-		},
-	})
+	setOldLMT(svm, dstNewAnchor, dstContainer)
 
 	dstRetargetLink := dstContainer.GetObject(svm, retargetLinkName, common.EEntityType.Hardlink())
 	dstRetargetLink.Create(svm, nil, ObjectProperties{
@@ -433,7 +569,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_RetargetLink(svm *ScenarioVari
 
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
-	stdOut := runHardlinkSync(svm, srcDirObj, dstDir.(RemoteResourceManager), true)
+	stdOut := runHardlinkSyncForFromTo(svm, srcDirObj, dstDir, fromTo, true)
 
 	// Validate: retarget_link now points to new_anchor
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -451,7 +587,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_RetargetLink(svm *ScenarioVari
 				},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+	}, ValidateResourceOptions{fromTo: fromTo,
 		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	_ = stdOut
@@ -476,8 +612,13 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_FileBecomesHardlink(svm *Scena
 		return
 	}
 
-	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainers(svm)
-	defer CleanupNFSDirectory(svm, dstContainer, rootDir)
+	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
+		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
+		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
+		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
+	})
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
 	anchorName := rootDir + "/anchor.txt"
 	wasFileName := rootDir + "/was_file.txt"
@@ -488,21 +629,11 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_FileBecomesHardlink(svm *Scena
 
 	dstAnchor := dstContainer.GetObject(svm, anchorName, common.EEntityType.File())
 	dstAnchor.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{})
-	dstAnchor.SetObjectProperties(svm, ObjectProperties{
-		FileNFSProperties: &FileNFSProperties{
-			FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
-			FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
-		},
-	})
+	setOldLMT(svm, dstAnchor, dstContainer)
 
 	dstWasFile := dstContainer.GetObject(svm, wasFileName, common.EEntityType.File())
 	dstWasFile.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{})
-	dstWasFile.SetObjectProperties(svm, ObjectProperties{
-		FileNFSProperties: &FileNFSProperties{
-			FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
-			FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
-		},
-	})
+	setOldLMT(svm, dstWasFile, dstContainer)
 
 	if !svm.Dryrun() {
 		time.Sleep(5 * time.Second)
@@ -533,7 +664,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_FileBecomesHardlink(svm *Scena
 
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
-	stdOut := runHardlinkSync(svm, srcDirObj, dstDir.(RemoteResourceManager), true)
+	stdOut := runHardlinkSyncForFromTo(svm, srcDirObj, dstDir, fromTo, true)
 
 	// Validate: was_file.txt is now a hardlink to anchor
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -548,7 +679,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_FileBecomesHardlink(svm *Scena
 				},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+	}, ValidateResourceOptions{fromTo: fromTo,
 		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	_ = stdOut
@@ -573,8 +704,13 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_HardlinkBecomesFile(svm *Scena
 		return
 	}
 
-	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainers(svm)
-	defer CleanupNFSDirectory(svm, dstContainer, rootDir)
+	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
+		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
+		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
+		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
+	})
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
 	anchorName := rootDir + "/anchor.txt"
 	wasLinkName := rootDir + "/was_link.txt"
@@ -585,12 +721,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_HardlinkBecomesFile(svm *Scena
 
 	dstAnchor := dstContainer.GetObject(svm, anchorName, common.EEntityType.File())
 	dstAnchor.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{})
-	dstAnchor.SetObjectProperties(svm, ObjectProperties{
-		FileNFSProperties: &FileNFSProperties{
-			FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
-			FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
-		},
-	})
+	setOldLMT(svm, dstAnchor, dstContainer)
 
 	dstLink := dstContainer.GetObject(svm, wasLinkName, common.EEntityType.Hardlink())
 	dstLink.Create(svm, nil, ObjectProperties{
@@ -627,7 +758,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_HardlinkBecomesFile(svm *Scena
 
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
-	stdOut := runHardlinkSync(svm, srcDirObj, dstDir.(RemoteResourceManager), true)
+	stdOut := runHardlinkSyncForFromTo(svm, srcDirObj, dstDir, fromTo, true)
 
 	// Validate: both are now regular files at dest (no hardlink relationship)
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -639,7 +770,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_HardlinkBecomesFile(svm *Scena
 				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+	}, ValidateResourceOptions{fromTo: fromTo,
 		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	_ = stdOut
@@ -663,8 +794,13 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_SourceDeleted(svm *ScenarioVar
 		return
 	}
 
-	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainers(svm)
-	defer CleanupNFSDirectory(svm, dstContainer, rootDir)
+	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
+		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
+		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
+		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
+	})
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
 	anchorName := rootDir + "/anchor.txt"
 	removedLinkName := rootDir + "/link_removed.txt"
@@ -675,12 +811,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_SourceDeleted(svm *ScenarioVar
 
 	dstAnchor := dstContainer.GetObject(svm, anchorName, common.EEntityType.File())
 	dstAnchor.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{})
-	dstAnchor.SetObjectProperties(svm, ObjectProperties{
-		FileNFSProperties: &FileNFSProperties{
-			FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
-			FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
-		},
-	})
+	setOldLMT(svm, dstAnchor, dstContainer)
 
 	dstLink := dstContainer.GetObject(svm, removedLinkName, common.EEntityType.Hardlink())
 	dstLink.Create(svm, nil, ObjectProperties{
@@ -709,7 +840,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_SourceDeleted(svm *ScenarioVar
 
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
-	runHardlinkSync(svm, srcDirObj, dstDir.(RemoteResourceManager), true)
+	runHardlinkSyncForFromTo(svm, srcDirObj, dstDir, fromTo, true)
 
 	// Validate: link_removed.txt should not exist at dest
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -721,7 +852,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_SourceDeleted(svm *ScenarioVar
 				ObjectShouldExist: pointerTo(false),
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+	}, ValidateResourceOptions{fromTo: fromTo,
 		hardlinkHandling: common.PreserveHardlinkHandlingType})
 }
 
@@ -745,8 +876,13 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_NewLinkAppears(svm *ScenarioVa
 		return
 	}
 
-	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainers(svm)
-	defer CleanupNFSDirectory(svm, dstContainer, rootDir)
+	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
+		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
+		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
+		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
+	})
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
 	anchorName := rootDir + "/anchor.txt"
 	existingLinkName := rootDir + "/existing_link.txt"
@@ -758,12 +894,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_NewLinkAppears(svm *ScenarioVa
 
 	dstAnchor := dstContainer.GetObject(svm, anchorName, common.EEntityType.File())
 	dstAnchor.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{})
-	dstAnchor.SetObjectProperties(svm, ObjectProperties{
-		FileNFSProperties: &FileNFSProperties{
-			FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
-			FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
-		},
-	})
+	setOldLMT(svm, dstAnchor, dstContainer)
 
 	dstExistingLink := dstContainer.GetObject(svm, existingLinkName, common.EEntityType.Hardlink())
 	dstExistingLink.Create(svm, nil, ObjectProperties{
@@ -808,7 +939,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_NewLinkAppears(svm *ScenarioVa
 
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
-	stdOut := runHardlinkSync(svm, srcDirObj, dstDir.(RemoteResourceManager), false)
+	stdOut := runHardlinkSyncForFromTo(svm, srcDirObj, dstDir, fromTo, false)
 
 	// Validate: all three hardlinks present at dest
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -829,7 +960,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_NewLinkAppears(svm *ScenarioVa
 				},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+	}, ValidateResourceOptions{fromTo: fromTo,
 		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	_ = stdOut
@@ -854,8 +985,13 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_MultipleGroups(svm *ScenarioVa
 		return
 	}
 
-	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainers(svm)
-	defer CleanupNFSDirectory(svm, dstContainer, rootDir)
+	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
+		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
+		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
+		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
+	})
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
 	g1Anchor := rootDir + "/group1_anchor.txt"
 	g1Link := rootDir + "/group1_link.txt"
@@ -912,12 +1048,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_MultipleGroups(svm *ScenarioVa
 	// Seed destination for sync
 	dstSeed := dstContainer.GetObject(svm, rootDir+"/standalone.txt", common.EEntityType.File())
 	dstSeed.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
-	dstSeed.SetObjectProperties(svm, ObjectProperties{
-		FileNFSProperties: &FileNFSProperties{
-			FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
-			FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
-		},
-	})
+	setOldLMT(svm, dstSeed, dstContainer)
 
 	if !svm.Dryrun() {
 		time.Sleep(5 * time.Second)
@@ -926,7 +1057,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_MultipleGroups(svm *ScenarioVa
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 	dstDirObj := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
-	stdOut := runHardlinkSync(svm, srcDirObj, dstDirObj.(RemoteResourceManager), false)
+	stdOut := runHardlinkSyncForFromTo(svm, srcDirObj, dstDirObj, fromTo, false)
 
 	// Validate: both groups and the standalone file are present
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -953,7 +1084,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_MultipleGroups(svm *ScenarioVa
 				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+	}, ValidateResourceOptions{fromTo: fromTo,
 		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	// anchor files + links = 4 hardlink transfers
@@ -989,8 +1120,13 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_MixedChanges(svm *ScenarioVari
 		return
 	}
 
-	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainers(svm)
-	defer CleanupNFSDirectory(svm, dstContainer, rootDir)
+	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
+		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
+		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
+		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
+	})
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
 	anchorA := rootDir + "/anchor_a.txt"
 	linkA := rootDir + "/link_a.txt"
@@ -1005,12 +1141,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_MixedChanges(svm *ScenarioVari
 
 	dstAnchorA := dstContainer.GetObject(svm, anchorA, common.EEntityType.File())
 	dstAnchorA.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{})
-	dstAnchorA.SetObjectProperties(svm, ObjectProperties{
-		FileNFSProperties: &FileNFSProperties{
-			FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
-			FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
-		},
-	})
+	setOldLMT(svm, dstAnchorA, dstContainer)
 
 	// link_a → anchor_a (correct)
 	dstLinkA := dstContainer.GetObject(svm, linkA, common.EEntityType.Hardlink())
@@ -1021,12 +1152,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_MixedChanges(svm *ScenarioVari
 
 	dstAnchorB := dstContainer.GetObject(svm, anchorB, common.EEntityType.File())
 	dstAnchorB.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{})
-	dstAnchorB.SetObjectProperties(svm, ObjectProperties{
-		FileNFSProperties: &FileNFSProperties{
-			FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
-			FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
-		},
-	})
+	setOldLMT(svm, dstAnchorB, dstContainer)
 
 	// link_b → anchor_a (wrong! should be anchor_b after sync)
 	dstLinkB := dstContainer.GetObject(svm, linkB, common.EEntityType.Hardlink())
@@ -1085,7 +1211,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_MixedChanges(svm *ScenarioVari
 
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
-	runHardlinkSync(svm, srcDirObj, dstDir.(RemoteResourceManager), true)
+	runHardlinkSyncForFromTo(svm, srcDirObj, dstDir, fromTo, true)
 
 	// Validate final state
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -1115,7 +1241,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_MixedChanges(svm *ScenarioVari
 				ObjectShouldExist: pointerTo(false),
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+	}, ValidateResourceOptions{fromTo: fromTo,
 		hardlinkHandling: common.PreserveHardlinkHandlingType})
 }
 
@@ -1128,8 +1254,13 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_IdempotentResync(svm *Scenario
 		return
 	}
 
-	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainers(svm)
-	defer CleanupNFSDirectory(svm, dstContainer, rootDir)
+	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
+		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
+		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
+		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
+	})
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
 	anchorName := rootDir + "/anchor.txt"
 	linkName := rootDir + "/link_to_anchor.txt"
@@ -1157,12 +1288,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_IdempotentResync(svm *Scenario
 	// Seed destination for sync
 	dstSeed := dstContainer.GetObject(svm, rootDir+"/anchor.txt", common.EEntityType.File())
 	dstSeed.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
-	dstSeed.SetObjectProperties(svm, ObjectProperties{
-		FileNFSProperties: &FileNFSProperties{
-			FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
-			FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
-		},
-	})
+	setOldLMT(svm, dstSeed, dstContainer)
 
 	if !svm.Dryrun() {
 		time.Sleep(5 * time.Second)
@@ -1172,14 +1298,14 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_IdempotentResync(svm *Scenario
 	dstDirObj := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
 	// First sync — initial upload
-	runHardlinkSync(svm, srcDirObj, dstDirObj.(RemoteResourceManager), false)
+	runHardlinkSyncForFromTo(svm, srcDirObj, dstDirObj, fromTo, false)
 
 	if !svm.Dryrun() {
 		time.Sleep(2 * time.Second)
 	}
 
 	// Second sync — should be a no-op (everything is up-to-date)
-	runHardlinkSync(svm, srcDirObj, dstDirObj.(RemoteResourceManager), false)
+	runHardlinkSyncForFromTo(svm, srcDirObj, dstDirObj, fromTo, false)
 
 	// Validate: structure is still correct
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -1194,7 +1320,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_IdempotentResync(svm *Scenario
 				},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+	}, ValidateResourceOptions{fromTo: fromTo,
 		hardlinkHandling: common.PreserveHardlinkHandlingType})
 }
 
@@ -1214,8 +1340,13 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_NestedDirectories(svm *Scenari
 		return
 	}
 
-	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainers(svm)
-	defer CleanupNFSDirectory(svm, dstContainer, rootDir)
+	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
+		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
+		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
+		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
+	})
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
 	subdirName := rootDir + "/subdir"
 	nestedDirName := rootDir + "/subdir/nested"
@@ -1255,12 +1386,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_NestedDirectories(svm *Scenari
 	// Seed destination
 	dstSeed := dstContainer.GetObject(svm, anchorName, common.EEntityType.File())
 	dstSeed.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
-	dstSeed.SetObjectProperties(svm, ObjectProperties{
-		FileNFSProperties: &FileNFSProperties{
-			FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
-			FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
-		},
-	})
+	setOldLMT(svm, dstSeed, dstContainer)
 
 	if !svm.Dryrun() {
 		time.Sleep(5 * time.Second)
@@ -1269,7 +1395,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_NestedDirectories(svm *Scenari
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 	dstDirObj := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
-	stdOut := runHardlinkSync(svm, srcDirObj, dstDirObj.(RemoteResourceManager), false)
+	stdOut := runHardlinkSyncForFromTo(svm, srcDirObj, dstDirObj, fromTo, false)
 
 	// Validate
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -1284,7 +1410,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_NestedDirectories(svm *Scenari
 				},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+	}, ValidateResourceOptions{fromTo: fromTo,
 		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	ValidateHardlinksTransferCount(svm, stdOut, 2)
@@ -1322,8 +1448,13 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_LexSmallerAnchorAdded(svm *Sce
 		return
 	}
 
-	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainers(svm)
-	defer CleanupNFSDirectory(svm, dstContainer, rootDir)
+	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
+		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
+		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
+		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
+	})
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
 	nameA := rootDir + "/A.txt"
 	nameB := rootDir + "/B.txt"
@@ -1341,12 +1472,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_LexSmallerAnchorAdded(svm *Sce
 
 	dstB := dstContainer.GetObject(svm, nameB, common.EEntityType.File())
 	dstB.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{})
-	dstB.SetObjectProperties(svm, ObjectProperties{
-		FileNFSProperties: &FileNFSProperties{
-			FileCreationTime:  pointerTo(sharedLMT),
-			FileLastWriteTime: pointerTo(sharedLMT),
-		},
-	})
+	setSharedLMTIfNFS(svm, dstB, dstContainer, sharedLMT)
 
 	dstC := dstContainer.GetObject(svm, nameC, common.EEntityType.Hardlink())
 	dstC.Create(svm, nil, ObjectProperties{
@@ -1375,10 +1501,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_LexSmallerAnchorAdded(svm *Sce
 		ObjectName: pointerTo(nameA),
 		Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
 		ObjectProperties: ObjectProperties{
-			EntityType: common.EEntityType.File(),
-			FileNFSProperties: &FileNFSProperties{
-				FileLastWriteTime: pointerTo(sharedLMT),
-			},
+			EntityType:        common.EEntityType.File(),
+			FileNFSProperties: nfsPropsIfNFS(srcContainer, sharedLMT),
 		},
 	})
 
@@ -1409,7 +1533,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_LexSmallerAnchorAdded(svm *Sce
 
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
-	stdOut := runHardlinkSync(svm, srcDirObj, dstDir.(RemoteResourceManager), false)
+	stdOut := runHardlinkSyncForFromTo(svm, srcDirObj, dstDir, fromTo, false)
 
 	// ── Validate ─────────────────────────────────────────────────────────────
 	// B C and D were skipped by the fix (dest anchor B is still in the source group).
@@ -1437,7 +1561,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_LexSmallerAnchorAdded(svm *Sce
 				},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+	}, ValidateResourceOptions{fromTo: fromTo,
 		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	// Only A needed a hardlink transfer; B C and D were correctly skipped.
@@ -1470,8 +1594,13 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_LexSmallerAnchorDeleted(svm *S
 		return
 	}
 
-	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainers(svm)
-	defer CleanupNFSDirectory(svm, dstContainer, rootDir)
+	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
+		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
+		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
+		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
+	})
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
 	nameA := rootDir + "/A.txt"
 	nameB := rootDir + "/B.txt"
@@ -1488,12 +1617,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_LexSmallerAnchorDeleted(svm *S
 
 	dstA := dstContainer.GetObject(svm, nameA, common.EEntityType.File())
 	dstA.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{})
-	dstA.SetObjectProperties(svm, ObjectProperties{
-		FileNFSProperties: &FileNFSProperties{
-			FileCreationTime:  pointerTo(sharedLMT),
-			FileLastWriteTime: pointerTo(sharedLMT),
-		},
-	})
+	setSharedLMTIfNFS(svm, dstA, dstContainer, sharedLMT)
 
 	dstB := dstContainer.GetObject(svm, nameB, common.EEntityType.Hardlink())
 	dstB.Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Hardlink(), HardLinkedFileName: nameA})
@@ -1521,10 +1645,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_LexSmallerAnchorDeleted(svm *S
 		ObjectName: pointerTo(nameB),
 		Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
 		ObjectProperties: ObjectProperties{
-			EntityType: common.EEntityType.File(),
-			FileNFSProperties: &FileNFSProperties{
-				FileLastWriteTime: pointerTo(sharedLMT),
-			},
+			EntityType:        common.EEntityType.File(),
+			FileNFSProperties: nfsPropsIfNFS(srcContainer, sharedLMT),
 		},
 	})
 
@@ -1546,7 +1668,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_LexSmallerAnchorDeleted(svm *S
 
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
-	stdOut := runHardlinkSync(svm, srcDirObj, dstDir.(RemoteResourceManager), true)
+	stdOut := runHardlinkSyncForFromTo(svm, srcDirObj, dstDir, fromTo, true)
 
 	// A is deleted; B/C/D are skipped (still intact as a linked group).
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -1573,7 +1695,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_LexSmallerAnchorDeleted(svm *S
 				},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+	}, ValidateResourceOptions{fromTo: fromTo,
 		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	// B, C, D are all skipped — 0 hardlink transfers.
@@ -1606,8 +1728,13 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_GroupSplit(svm *ScenarioVariat
 		return
 	}
 
-	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainers(svm)
-	defer CleanupNFSDirectory(svm, dstContainer, rootDir)
+	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
+		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
+		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
+		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
+	})
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
 	nameA := rootDir + "/A.txt"
 	nameB := rootDir + "/B.txt"
@@ -1620,12 +1747,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_GroupSplit(svm *ScenarioVariat
 
 	dstA := dstContainer.GetObject(svm, nameA, common.EEntityType.File())
 	dstA.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{})
-	dstA.SetObjectProperties(svm, ObjectProperties{
-		FileNFSProperties: &FileNFSProperties{
-			FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
-			FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
-		},
-	})
+	setOldLMT(svm, dstA, dstContainer)
 
 	dstB := dstContainer.GetObject(svm, nameB, common.EEntityType.Hardlink())
 	dstB.Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Hardlink(), HardLinkedFileName: nameA})
@@ -1684,7 +1806,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_GroupSplit(svm *ScenarioVariat
 
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
-	stdOut := runHardlinkSync(svm, srcDirObj, dstDir.(RemoteResourceManager), true)
+	stdOut := runHardlinkSyncForFromTo(svm, srcDirObj, dstDir, fromTo, true)
 
 	// A is force-transferred (dest inode of the old A-B-C-D group spans two src inodes;
 	// anchor content must be re-verified for both new sub-groups).
@@ -1717,7 +1839,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_GroupSplit(svm *ScenarioVariat
 				},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+	}, ValidateResourceOptions{fromTo: fromTo,
 		validateObjectContent: true,
 		hardlinkHandling:      common.PreserveHardlinkHandlingType})
 
@@ -1752,8 +1874,13 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_GroupMerge(svm *ScenarioVariat
 		return
 	}
 
-	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainers(svm)
-	defer CleanupNFSDirectory(svm, dstContainer, rootDir)
+	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
+		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
+		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
+		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
+	})
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
 	nameA := rootDir + "/A.txt"
 	nameB := rootDir + "/B.txt"
@@ -1768,24 +1895,14 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_GroupMerge(svm *ScenarioVariat
 
 	dstA := dstContainer.GetObject(svm, nameA, common.EEntityType.File())
 	dstA.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{})
-	dstA.SetObjectProperties(svm, ObjectProperties{
-		FileNFSProperties: &FileNFSProperties{
-			FileCreationTime:  pointerTo(sharedLMT),
-			FileLastWriteTime: pointerTo(sharedLMT),
-		},
-	})
+	setSharedLMTIfNFS(svm, dstA, dstContainer, sharedLMT)
 
 	dstB := dstContainer.GetObject(svm, nameB, common.EEntityType.Hardlink())
 	dstB.Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Hardlink(), HardLinkedFileName: nameA})
 
 	dstC := dstContainer.GetObject(svm, nameC, common.EEntityType.File())
 	dstC.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{})
-	dstC.SetObjectProperties(svm, ObjectProperties{
-		FileNFSProperties: &FileNFSProperties{
-			FileCreationTime:  pointerTo(sharedLMT),
-			FileLastWriteTime: pointerTo(sharedLMT),
-		},
-	})
+	setSharedLMTIfNFS(svm, dstC, dstContainer, sharedLMT)
 
 	dstD := dstContainer.GetObject(svm, nameD, common.EEntityType.Hardlink())
 	dstD.Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Hardlink(), HardLinkedFileName: nameC})
@@ -1809,10 +1926,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_GroupMerge(svm *ScenarioVariat
 		ObjectName: pointerTo(nameA),
 		Body:       srcBodyA,
 		ObjectProperties: ObjectProperties{
-			EntityType: common.EEntityType.File(),
-			FileNFSProperties: &FileNFSProperties{
-				FileLastWriteTime: pointerTo(sharedLMT),
-			},
+			EntityType:        common.EEntityType.File(),
+			FileNFSProperties: nfsPropsIfNFS(srcContainer, sharedLMT),
 		},
 	})
 
@@ -1842,7 +1957,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_GroupMerge(svm *ScenarioVariat
 
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
-	stdOut := runHardlinkSync(svm, srcDirObj, dstDir.(RemoteResourceManager), true)
+	stdOut := runHardlinkSyncForFromTo(svm, srcDirObj, dstDir, fromTo, true)
 
 	// A is force-transferred (src inode spans two dest groups; anchor
 	// content must match source).
@@ -1879,7 +1994,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_GroupMerge(svm *ScenarioVariat
 				},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+	}, ValidateResourceOptions{fromTo: fromTo,
 		validateObjectContent: true,
 		hardlinkHandling:      common.PreserveHardlinkHandlingType})
 
@@ -1932,8 +2047,13 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_ComplexRegrouping(svm *Scenari
 		return
 	}
 
-	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainers(svm)
-	defer CleanupNFSDirectory(svm, dstContainer, rootDir)
+	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
+		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
+		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
+		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
+	})
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
 	nameA := rootDir + "/A.txt"
 	nameB := rootDir + "/B.txt"
@@ -1947,12 +2067,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_ComplexRegrouping(svm *Scenari
 
 	dstA := dstContainer.GetObject(svm, nameA, common.EEntityType.File())
 	dstA.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{})
-	dstA.SetObjectProperties(svm, ObjectProperties{
-		FileNFSProperties: &FileNFSProperties{
-			FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
-			FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
-		},
-	})
+	setOldLMT(svm, dstA, dstContainer)
 
 	dstB := dstContainer.GetObject(svm, nameB, common.EEntityType.Hardlink())
 	dstB.Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Hardlink(), HardLinkedFileName: nameA})
@@ -1962,12 +2077,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_ComplexRegrouping(svm *Scenari
 
 	dstD := dstContainer.GetObject(svm, nameD, common.EEntityType.File())
 	dstD.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{})
-	dstD.SetObjectProperties(svm, ObjectProperties{
-		FileNFSProperties: &FileNFSProperties{
-			FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
-			FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
-		},
-	})
+	setOldLMT(svm, dstD, dstContainer)
 
 	dstE := dstContainer.GetObject(svm, nameE, common.EEntityType.Hardlink())
 	dstE.Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Hardlink(), HardLinkedFileName: nameD})
@@ -2022,7 +2132,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_ComplexRegrouping(svm *Scenari
 
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
-	stdOut := runHardlinkSync(svm, srcDirObj, dstDir.(RemoteResourceManager), true)
+	stdOut := runHardlinkSyncForFromTo(svm, srcDirObj, dstDir, fromTo, true)
 
 	// Validate structure and content.
 	// A and D must share srcBodyA; B and C must share srcBodyB; E carries srcBodyE.
@@ -2055,7 +2165,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_ComplexRegrouping(svm *Scenari
 				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+	}, ValidateResourceOptions{fromTo: fromTo,
 		validateObjectContent: true,
 		hardlinkHandling:      common.PreserveHardlinkHandlingType})
 
@@ -2093,8 +2203,13 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_AnchorBecomesFile(svm *Scenari
 		return
 	}
 
-	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainers(svm)
-	defer CleanupNFSDirectory(svm, dstContainer, rootDir)
+	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
+		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
+		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
+		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
+	})
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
 	nameA := rootDir + "/A.txt"
 	nameB := rootDir + "/B.txt"
@@ -2109,12 +2224,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_AnchorBecomesFile(svm *Scenari
 
 	dstA := dstContainer.GetObject(svm, nameA, common.EEntityType.File())
 	dstA.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{})
-	dstA.SetObjectProperties(svm, ObjectProperties{
-		FileNFSProperties: &FileNFSProperties{
-			FileCreationTime:  pointerTo(sharedLMT),
-			FileLastWriteTime: pointerTo(sharedLMT),
-		},
-	})
+	setSharedLMTIfNFS(svm, dstA, dstContainer, sharedLMT)
 
 	dstB := dstContainer.GetObject(svm, nameB, common.EEntityType.Hardlink())
 	dstB.Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Hardlink(), HardLinkedFileName: nameA})
@@ -2140,10 +2250,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_AnchorBecomesFile(svm *Scenari
 		ObjectName: pointerTo(nameA),
 		Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
 		ObjectProperties: ObjectProperties{
-			EntityType: common.EEntityType.File(),
-			FileNFSProperties: &FileNFSProperties{
-				FileLastWriteTime: pointerTo(sharedLMT),
-			},
+			EntityType:        common.EEntityType.File(),
+			FileNFSProperties: nfsPropsIfNFS(srcContainer, sharedLMT),
 		},
 	})
 
@@ -2152,10 +2260,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_AnchorBecomesFile(svm *Scenari
 		ObjectName: pointerTo(nameB),
 		Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
 		ObjectProperties: ObjectProperties{
-			EntityType: common.EEntityType.File(),
-			FileNFSProperties: &FileNFSProperties{
-				FileLastWriteTime: pointerTo(sharedLMT),
-			},
+			EntityType:        common.EEntityType.File(),
+			FileNFSProperties: nfsPropsIfNFS(srcContainer, sharedLMT),
 		},
 	})
 
@@ -2177,7 +2283,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_AnchorBecomesFile(svm *Scenari
 
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
-	stdOut := runHardlinkSync(svm, srcDirObj, dstDir.(RemoteResourceManager), true)
+	stdOut := runHardlinkSyncForFromTo(svm, srcDirObj, dstDir, fromTo, true)
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
@@ -2200,7 +2306,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_AnchorBecomesFile(svm *Scenari
 				},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+	}, ValidateResourceOptions{fromTo: fromTo,
 		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	// A re-uploaded as file (entity-type mismatch).
@@ -2234,8 +2340,13 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_FileJoinsGroup(svm *ScenarioVa
 		return
 	}
 
-	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainers(svm)
-	defer CleanupNFSDirectory(svm, dstContainer, rootDir)
+	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
+		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
+		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
+		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
+	})
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
 	nameA := rootDir + "/A.txt"
 	nameB := rootDir + "/B.txt"
@@ -2252,21 +2363,11 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_FileJoinsGroup(svm *ScenarioVa
 
 	dstA := dstContainer.GetObject(svm, nameA, common.EEntityType.File())
 	dstA.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{})
-	dstA.SetObjectProperties(svm, ObjectProperties{
-		FileNFSProperties: &FileNFSProperties{
-			FileCreationTime:  pointerTo(sharedLMT),
-			FileLastWriteTime: pointerTo(sharedLMT),
-		},
-	})
+	setSharedLMTIfNFS(svm, dstA, dstContainer, sharedLMT)
 
 	dstB := dstContainer.GetObject(svm, nameB, common.EEntityType.File())
 	dstB.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{})
-	dstB.SetObjectProperties(svm, ObjectProperties{
-		FileNFSProperties: &FileNFSProperties{
-			FileCreationTime:  pointerTo(sharedLMT),
-			FileLastWriteTime: pointerTo(sharedLMT),
-		},
-	})
+	setSharedLMTIfNFS(svm, dstB, dstContainer, sharedLMT)
 
 	dstC := dstContainer.GetObject(svm, nameC, common.EEntityType.Hardlink())
 	dstC.Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Hardlink(), HardLinkedFileName: nameB})
@@ -2288,10 +2389,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_FileJoinsGroup(svm *ScenarioVa
 		ObjectName: pointerTo(nameA),
 		Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
 		ObjectProperties: ObjectProperties{
-			EntityType: common.EEntityType.File(),
-			FileNFSProperties: &FileNFSProperties{
-				FileLastWriteTime: pointerTo(sharedLMT),
-			},
+			EntityType:        common.EEntityType.File(),
+			FileNFSProperties: nfsPropsIfNFS(srcContainer, sharedLMT),
 		},
 	})
 
@@ -2321,7 +2420,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_FileJoinsGroup(svm *ScenarioVa
 
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
-	stdOut := runHardlinkSync(svm, srcDirObj, dstDir.(RemoteResourceManager), true)
+	stdOut := runHardlinkSyncForFromTo(svm, srcDirObj, dstDir, fromTo, true)
 
 	// A re-uploaded as hardlink (entity-type mismatch: dest=File, src=Hardlink-anchor).
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
@@ -2348,7 +2447,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_FileJoinsGroup(svm *ScenarioVa
 				},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+	}, ValidateResourceOptions{fromTo: fromTo,
 		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	// Total hardlink-type transfers = 1 (CreateHardlink(A)).
@@ -2376,7 +2475,7 @@ func runHardlinkCopy(
 			Targets: []ResourceManager{srcDirObj, dstDirObj.(RemoteResourceManager).WithSpecificAuthType(
 				ResolveVariation(svm, []ExplicitCredentialTypes{
 					EExplicitCredentialType.SASToken(),
-					EExplicitCredentialType.OAuth(),
+					//EExplicitCredentialType.OAuth(),
 				}), svm, CreateAzCopyTargetOptions{}),
 			},
 			Flags: CopyFlags{
@@ -2431,7 +2530,7 @@ func runHardlinkCopyDownload(
 			Targets: []ResourceManager{srcDirObj.(RemoteResourceManager).WithSpecificAuthType(
 				ResolveVariation(svm, []ExplicitCredentialTypes{
 					EExplicitCredentialType.SASToken(),
-					EExplicitCredentialType.OAuth(),
+					//EExplicitCredentialType.OAuth(),
 				}), svm, CreateAzCopyTargetOptions{}),
 				dstDirObj,
 			},
