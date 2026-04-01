@@ -127,7 +127,7 @@ func findS3URLMatches(host string) (matches []string, isS3Host bool) {
 			}
 			// For custom (non-well-known) suffixes, allow any valid FQDN
 			// for on-prem S3-compatible appliances (e.g., MinIO, NetApp, Dell EMC, etc.)
-			if os.Getenv("S3_COMPATIBLE_ENDPOINT") != "" {
+			if os.Getenv("S3_COMPATIBLE_ENDPOINT") != "" && IsPrivateNetworkTransfer(ELocation.S3()) {
 				if m := matchCustomS3Host(hostLower); m != nil {
 					return m, true
 				}
