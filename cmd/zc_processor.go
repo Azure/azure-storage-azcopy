@@ -172,7 +172,6 @@ func (d DryrunTransfer) MarshalJSON() ([]byte, error) {
 }
 
 func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) (err error) {
-	fmt.Printf("[DEBUG-REMOVE] SCHEDULE TRANSFER: path=%q entityType=%v fromTo=%v\n", storedObject.relativePath, storedObject.entityType, s.copyJobTemplate.FromTo) // TODO: remove
 
 	// Escape paths on destinations where the characters are invalid
 	// And re-encode them where the characters are valid.
