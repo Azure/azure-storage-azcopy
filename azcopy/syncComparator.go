@@ -131,15 +131,13 @@ func (f *syncDestinationComparator) ProcessIfNecessary(destinationObject travers
 		return nil
 	}
 
-	sourceObjectInMap, present := f.sourceIndex.IndexMap[destinationObject.RelativePath]
+	// Normalize the key upfront for case-insensitive destinations so the
+	// lookup always matches the lowercase-keyed sourceIndex.
 	srcKey := destinationObject.RelativePath
-	if !present && f.sourceIndex.IsDestinationCaseInsensitive {
-		lcRelativePath := strings.ToLower(destinationObject.RelativePath)
-		sourceObjectInMap, present = f.sourceIndex.IndexMap[lcRelativePath]
-		if present {
-			srcKey = lcRelativePath
-		}
+	if f.sourceIndex.IsDestinationCaseInsensitive {
+		srcKey = strings.ToLower(srcKey)
 	}
+	sourceObjectInMap, present := f.sourceIndex.IndexMap[srcKey]
 
 	// if the destinationObject is present at source and stale, we transfer the up-to-date version from source
 	if present {
@@ -274,15 +272,13 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 
 	for _, destHardlinkObj := range f.destPendingHardlinkObjects.IndexMap {
 
-		// Track the actual key used so we delete the correct index entry,
-		// even on case-insensitive file systems where the stored key may be
-		// lowercase while destHardlinkObj.RelativePath is mixed-case.
+		// Normalize the key upfront for case-insensitive destinations so the
+		// lookup always matches the lowercase-keyed sourceIndex.
 		srcKey := destHardlinkObj.RelativePath
-		sourceObjectInMap, present := f.sourceIndex.IndexMap[srcKey]
-		if !present && f.sourceIndex.IsDestinationCaseInsensitive {
-			srcKey = strings.ToLower(destHardlinkObj.RelativePath)
-			sourceObjectInMap, present = f.sourceIndex.IndexMap[srcKey]
+		if f.sourceIndex.IsDestinationCaseInsensitive {
+			srcKey = strings.ToLower(srcKey)
 		}
+		sourceObjectInMap, present := f.sourceIndex.IndexMap[srcKey]
 
 		if !present {
 			// Path no longer exists at source — delete the stale link.
@@ -597,12 +593,13 @@ func (f *syncSourceComparator) ProcessPendingHardlinks() error {
 
 	for _, sourceObject := range f.srcPendingHardlinkObjects.IndexMap {
 
+		// Normalize the key upfront for case-insensitive destinations so the
+		// lookup always matches the lowercase-keyed destinationIndex.
 		dstKey := sourceObject.RelativePath
-		destinationObjectInMap, present := f.destinationIndex.IndexMap[dstKey]
-		if !present && f.destinationIndex.IsDestinationCaseInsensitive {
-			dstKey = strings.ToLower(sourceObject.RelativePath)
-			destinationObjectInMap, present = f.destinationIndex.IndexMap[dstKey]
+		if f.destinationIndex.IsDestinationCaseInsensitive {
+			dstKey = strings.ToLower(dstKey)
 		}
+		destinationObjectInMap, present := f.destinationIndex.IndexMap[dstKey]
 
 		if !present {
 			// Path does not exist at destination — transfer as new.
