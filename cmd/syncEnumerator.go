@@ -108,11 +108,6 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		DestResourceType: &dest,
 
 		Credential: &srcCredInfo,
-		// STATS CALLBACK (sync source):
-		// This callback is invoked by traversers (blob ~line 595, S3 ~line 136) for each
-		// enumerated object. The bug: synthetic virtual directory prefixes created by the
-		// sync orchestrator's includeDirectoryOrPrefix path hit the Folder() branch below,
-		// inflating atomicSourceFoldersScanned with entries that aren't real source objects.
 		IncrementEnumeration: func(entityType common.EntityType) {
 			if entityType == common.EEntityType.File() {
 				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)

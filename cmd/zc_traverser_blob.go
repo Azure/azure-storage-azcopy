@@ -442,13 +442,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 					enqueuedDirAsOutput := false // Reset the flag for each directory processed
 
 					if t.include.DirStubs() || t.includeDirectoryOrPrefix {
-						// PATH 1 (real dir stubs / HNS directories):
-						// Try to get properties on the directory itself, since it's not listed in BlobItems.
-						// If GetProperties succeeds and the blob has hdi_isfolder metadata, this is a real
-						// dir stub or HNS directory — enqueue it with real properties (timestamps, metadata).
-						// Sets enqueuedDirAsOutput=true so the synthetic fallback (PATH 2) is skipped.
-						// These real folders correctly increment FoldersScanned when they reach the
-						// dequeue loop at the bottom of parallelList() (~line 593).
+						// try to get properties on the directory itself, since it's not listed in BlobItems
 						dName := strings.TrimSuffix(*virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)
 						blobClient := containerClient.NewBlobClient(dName)
 					altNameCheck:
@@ -507,19 +501,6 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 					}
 
 					if t.includeDirectoryOrPrefix && !enqueuedDirAsOutput {
-						// PATH 2 (synthetic virtual directory prefix — fallback when PATH 1 found no real dir stub):
-						// This creates a synthetic StoredObject with zero timestamp, zero size, and no metadata
-						// to represent a virtual directory prefix (e.g. "config/"). These are NOT real blobs —
-						// they're just name prefixes returned by hierarchical listing.
-						//
-						// The sync orchestrator needs these entries to track directory structure for
-						// per-directory comparison and deletion during mirror sync.
-						//
-						// BUG: This synthetic folder is enqueued via enqueueOutput into the same parallel
-						// crawler channel as real objects. When it's dequeued at the bottom of parallelList()
-						// (~line 593), incrementEnumerationCounter is called with EEntityType.Folder(),
-						// which increments atomicSourceFoldersScanned. This inflates FoldersScanned because
-						// virtual directory prefixes are not real source objects.
 						dName := strings.TrimSuffix(*virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)
 						folderRelativePath := strings.TrimPrefix(dName, searchPrefix)
 						storedObject := newStoredObject(
@@ -602,13 +583,6 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 
 		object := item.(StoredObject)
 
-		// STATS INCREMENT POINT (blob traverser):
-		// ALL objects dequeued from the parallel crawler channel pass through here —
-		// both real objects (files, dir stubs, HNS dirs) and synthetic virtual directory
-		// prefixes created by the includeDirectoryOrPrefix fallback path above (~line 503).
-		// When UseSyncOrchestrator is true, this increments atomicSourceFoldersScanned
-		// for every Folder entity, including synthetic prefixes that aren't real objects.
-		// This is where FoldersScanned gets inflated.
 		if t.incrementEnumerationCounter != nil {
 			if UseSyncOrchestrator && !object.isVirtualPrefix {
 				t.incrementEnumerationCounter(object.entityType)

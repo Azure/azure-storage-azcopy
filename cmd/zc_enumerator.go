@@ -91,8 +91,9 @@ type StoredObject struct {
 	blobSnapshotID string
 	blobDeleted    bool
 
-	// Synthetic virtual directory prefix, not a real dir stub or HNS directory.
-	// Needed by the sync orchestrator for directory tracking but should not increment folder scan counters.
+	// isVirtualPrefix marks synthetic directory prefixes (not real dir stubs or HNS directories)
+	// created during hierarchical listing. These are tracked by the sync orchestrator for
+	// directory comparison but should not inflate folder scan or transfer counters.
 	isVirtualPrefix bool
 
 	// Lease information
