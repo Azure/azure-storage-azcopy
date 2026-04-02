@@ -501,6 +501,14 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 					}
 
 					if t.includeDirectoryOrPrefix && !enqueuedDirAsOutput {
+						// For HNS accounts, we will include the virtual directory as a stub if it does not have a blob with the folder metadata in the above section.
+						// However, for non-HNS accounts, we will not enqueue the virtual directory as a stub if it does not have a blob with the folder metadata.
+						//
+						// If we didn't enqueue the directory, it means that it is a non-HNS account and we didn't find a blob with the folder metadata.
+						// We still want to enqueue the virtual directory as a stub, so that we can compare it with the source during local -> blob sync.
+						// This blob prefix enqueue is necessary to track extra objects in target during mirror sync
+						// operations, so that we can delete them if they are not present in source.
+						// Note: We can skip this if deleteDestination is set to false but we don't have that option for blob traverser.
 						dName := strings.TrimSuffix(*virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)
 						folderRelativePath := strings.TrimPrefix(dName, searchPrefix)
 						storedObject := newStoredObject(
