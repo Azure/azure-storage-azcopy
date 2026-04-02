@@ -43,7 +43,7 @@ func NewFolderCreationTracker(fpo common.FolderPropertyOption, fetcher TransferF
 		fromTo.To() == common.ELocation.BlobFS():
 		return &jpptFolderTracker{ // This prevents a dependency cycle. Reviewers: Are we OK with this? Can you think of a better way to do it?
 			fetchTransfer: fetcher,
-			mu:            &sync.Mutex{},
+			mu:            &sync.RWMutex{},
 			contents:      make(map[string]*JpptFolderTrackerState),
 		}
 	case fpo == common.EFolderPropertiesOption.NoFolders():
@@ -75,7 +75,7 @@ func (f *nullFolderTracker) StopTracking(folder string) {
 type jpptFolderTracker struct {
 	// fetchTransfer is used instead of a IJobMgr reference to support testing
 	fetchTransfer func(index JpptFolderIndex) *JobPartPlanTransfer
-	mu            *sync.Mutex
+	mu            *sync.RWMutex
 
 	contents map[string]*JpptFolderTrackerState
 }
@@ -124,8 +124,8 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 		return nil // Never persist to dev-null
 	}
 
-	// Phase 1: Check if creation is needed (under lock).
-	f.mu.Lock()
+	// Phase 1: Check if creation is needed (read lock).
+	f.mu.RLock()
 	state, ok := f.contents[folder]
 
 	if ok {
@@ -139,18 +139,18 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 				ts == common.ETransferStatus.Failed() ||
 				ts == common.ETransferStatus.SkippedEntityAlreadyExists() {
 
-				f.mu.Unlock()
+				f.mu.RUnlock()
 				return nil // do not re-create an existing folder
 			}
 		} else {
 			if state.Status != EJpptFolderTrackerStatus.Unseen() {
-				f.mu.Unlock()
+				f.mu.RUnlock()
 				return nil
 			}
 		}
 	}
 
-	f.mu.Unlock()
+	f.mu.RUnlock()
 
 	// Phase 2: Perform folder creation outside the lock.
 	// Concurrent callers for the same folder may both reach here; the second
@@ -238,8 +238,8 @@ func (f *jpptFolderTracker) ShouldSetProperties(folder string, overwrite common.
 		common.EOverwriteOption.IfSourceNewer(),
 		common.EOverwriteOption.False():
 
-		f.mu.Lock()
-		defer f.mu.Unlock()
+		f.mu.RLock()
+		defer f.mu.RUnlock()
 
 		var created bool
 
