@@ -211,6 +211,26 @@ func initializeLimits(orchestratorOptions *SyncOrchestratorOptions) {
 		"[initializeLimits] FINAL: crawlParallelism = %d, maxActiveFiles = %d, maxDirectoryDirectChildCount = %d, maxActivelyEnumeratingDirectories = %d, targetSlotRatio = %.2f, targetSlots = %d",
 		crawlParallelism, maxActiveFiles, maxDirectoryDirectChildCount, maxActivelyEnumeratingDirectories,
 		targetSlotRatio, int32(float64(crawlParallelism)*targetSlotRatio)), true)
+
+	// Log to rolling-stats file if the stats monitor is available
+	memDetails := common.GetMemorySourceDetails()
+	if common.GlobalSystemStatsMonitor != nil {
+		common.GlobalSystemStatsMonitor.LogAdhocCustomStats("Memory Detection", []common.CustomStatEntry{
+			{Key: "Source", Value: memDetails.Source},
+			{Key: "HostMemory", Value: fmt.Sprintf("%d bytes (%.2f GB)", memDetails.HostMemoryBytes, float64(memDetails.HostMemoryBytes)/float64(gbToBytesMultiplier))},
+			{Key: "CgroupLimit", Value: fmt.Sprintf("%d bytes (%.2f GB)", memDetails.CgroupLimitBytes, float64(memDetails.CgroupLimitBytes)/float64(gbToBytesMultiplier))},
+			{Key: "EffectiveMemory", Value: fmt.Sprintf("%d bytes (%.2f GB)", memDetails.EffectiveBytes, float64(memDetails.EffectiveBytes)/float64(gbToBytesMultiplier))},
+		})
+		common.GlobalSystemStatsMonitor.LogAdhocCustomStats("initializeLimits", []common.CustomStatEntry{
+			{Key: "maxActiveFiles", Value: fmt.Sprintf("%d", maxActiveFiles)},
+			{Key: "maxDirectoryDirectChildCount", Value: fmt.Sprintf("%d", maxDirectoryDirectChildCount)},
+			{Key: "crawlParallelism", Value: fmt.Sprintf("%d", crawlParallelism)},
+			{Key: "maxActivelyEnumeratingDirectories", Value: fmt.Sprintf("%d", maxActivelyEnumeratingDirectories)},
+			{Key: "targetSlotRatio", Value: fmt.Sprintf("%.2f", targetSlotRatio)},
+			{Key: "targetSlots", Value: fmt.Sprintf("%d", int32(float64(crawlParallelism)*targetSlotRatio))},
+			{Key: "fromTo", Value: fmt.Sprintf("%v", orchestratorOptions.fromTo)},
+		})
+	}
 }
 
 // --- END Throttling and Concurrency Configuration ---

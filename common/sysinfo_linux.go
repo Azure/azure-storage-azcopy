@@ -192,3 +192,59 @@ func GetTotalPhysicalMemory() (int64, error) {
 	})
 	return cachedTotalMemory, totalMemoryError
 }
+
+// MemorySourceDetails contains details about where the memory limit was sourced from.
+type MemorySourceDetails struct {
+	HostMemoryBytes  int64  // Memory from /proc/meminfo
+	CgroupLimitBytes int64  // Memory from cgroup (0 if not available)
+	EffectiveBytes   int64  // The value actually used
+	Source           string // "cgroup-v2", "cgroup-v1", "host", or "error"
+}
+
+// GetMemorySourceDetails returns details about the memory detection.
+// This is useful for diagnostics and logging.
+func GetMemorySourceDetails() MemorySourceDetails {
+	details := MemorySourceDetails{}
+
+	hostMem, err := getHostMemoryFromProcMeminfo()
+	if err != nil {
+		details.Source = "error"
+		return details
+	}
+	details.HostMemoryBytes = hostMem
+
+	// Check cgroup v2
+	if data, err := os.ReadFile("/sys/fs/cgroup/memory.max"); err == nil {
+		trimmed := strings.TrimSpace(string(data))
+		if trimmed != "max" {
+			if limit, err := strconv.ParseInt(trimmed, 10, 64); err == nil && limit > 0 {
+				details.CgroupLimitBytes = limit
+				if limit < hostMem {
+					details.EffectiveBytes = limit
+					details.Source = "cgroup-v2"
+					return details
+				}
+			}
+		}
+	}
+
+	// Check cgroup v1
+	if data, err := os.ReadFile("/sys/fs/cgroup/memory/memory.limit_in_bytes"); err == nil {
+		trimmed := strings.TrimSpace(string(data))
+		if limit, err := strconv.ParseInt(trimmed, 10, 64); err == nil && limit > 0 {
+			const oneExabyte = int64(1) << 60
+			if limit < oneExabyte {
+				details.CgroupLimitBytes = limit
+				if limit < hostMem {
+					details.EffectiveBytes = limit
+					details.Source = "cgroup-v1"
+					return details
+				}
+			}
+		}
+	}
+
+	details.EffectiveBytes = hostMem
+	details.Source = "host"
+	return details
+}
