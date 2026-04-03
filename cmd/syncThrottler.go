@@ -150,34 +150,12 @@ func initializeLimits(orchestratorOptions *SyncOrchestratorOptions) {
 	memoryGB := memory / gbToBytesMultiplier                                              // Convert to GB
 	maxActiveFiles = int64(float64(memoryGB)*maxMemoryUsageMultiplier) * filesPerGBMemory // Set based on physical memory, 1 million files per GB
 
-	syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
-		"[initializeLimits] Raw memory from GetTotalPhysicalMemory = %d bytes (%.2f GB), memoryGB (truncated) = %d, maxMemoryUsageMultiplier = %.2f, filesPerGBMemory = %d, maxActiveFiles = %d",
-		memory, float64(memory)/float64(gbToBytesMultiplier), memoryGB, maxMemoryUsageMultiplier, filesPerGBMemory, maxActiveFiles), true)
-
 	maxDirectoryDirectChildCount := defaultMaxDirectoryChildCount
 	crawlParallelism = int32(EnumerationParallelism)
-
-	syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
-		"[initializeLimits] Defaults: maxDirectoryDirectChildCount = %d, EnumerationParallelism = %d",
-		maxDirectoryDirectChildCount, EnumerationParallelism), true)
 
 	if orchestratorOptions != nil && orchestratorOptions.valid && orchestratorOptions.maxDirectoryDirectChildCount > 0 {
 		maxDirectoryDirectChildCount = int64(orchestratorOptions.GetMaxDirectoryDirectChildCount())
 		crawlParallelism = orchestratorOptions.parallelTraversers
-		syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
-			"[initializeLimits] OrchestratorOptions applied: maxDirectoryDirectChildCount = %d, parallelTraversers = %d",
-			maxDirectoryDirectChildCount, crawlParallelism), true)
-	} else {
-		syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
-			"[initializeLimits] OrchestratorOptions NOT applied: orchestratorOptions=%v, valid=%v, maxDirectoryDirectChildCount=%d",
-			orchestratorOptions != nil,
-			orchestratorOptions != nil && orchestratorOptions.valid,
-			func() int64 {
-				if orchestratorOptions != nil {
-					return int64(orchestratorOptions.maxDirectoryDirectChildCount)
-				}
-				return -1
-			}()), true)
 	}
 
 	if maxDirectoryDirectChildCount > maxActiveFiles {
@@ -190,11 +168,6 @@ func initializeLimits(orchestratorOptions *SyncOrchestratorOptions) {
 	// Validate if the crawl parallelism is within acceptable limits
 	// We need to check how many directories can be enumerated in parallel based on system memory
 	safeParallelismLimit := GetSafeParallelismLimit(maxActiveFiles, maxDirectoryDirectChildCount, orchestratorOptions.fromTo)
-
-	syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
-		"[initializeLimits] GetSafeParallelismLimit(maxActiveFiles=%d, maxChildCount=%d, fromTo=%v) = %d, crawlParallelism before cap = %d",
-		maxActiveFiles, maxDirectoryDirectChildCount, orchestratorOptions.fromTo, safeParallelismLimit, crawlParallelism), true)
-
 	if crawlParallelism > safeParallelismLimit {
 		syncOrchestratorLog(
 			common.LogWarning,
@@ -203,14 +176,14 @@ func initializeLimits(orchestratorOptions *SyncOrchestratorOptions) {
 		crawlParallelism = safeParallelismLimit
 	}
 
+	syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
+		"Crawl parallelism = %d, Indexer capacity = %d, Max child count = %d",
+		crawlParallelism,
+		maxActiveFiles,
+		maxDirectoryDirectChildCount))
 	maxActivelyEnumeratingDirectories = maxActiveFiles / maxDirectoryDirectChildCount // Ensure at least one directory can be processed
 	activeFilesLimit.Store(maxActiveFiles)
 	enumeratingDirectoryLimit.Store(maxActivelyEnumeratingDirectories) // Set initial limit for actively enumerating directories
-
-	syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
-		"[initializeLimits] FINAL: crawlParallelism = %d, maxActiveFiles = %d, maxDirectoryDirectChildCount = %d, maxActivelyEnumeratingDirectories = %d, targetSlotRatio = %.2f, targetSlots = %d",
-		crawlParallelism, maxActiveFiles, maxDirectoryDirectChildCount, maxActivelyEnumeratingDirectories,
-		targetSlotRatio, int32(float64(crawlParallelism)*targetSlotRatio)), true)
 
 	// Log to rolling-stats file if the stats monitor is available
 	memDetails := common.GetMemorySourceDetails()
