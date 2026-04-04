@@ -189,6 +189,13 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 		}
 	}
 
+	// In order to fix nameless dir case, we had to store directories in the stored object index with a trailing slash
+	// When we go to actually transfer a folder, we need to remove the trailing slash because it's not supported by azure apis
+	if s.folderPropertiesOption != common.EFolderPropertiesOption.NoFolders() && storedObject.entityType == common.EEntityType.Folder() {
+		srcRelativePath = strings.TrimSuffix(srcRelativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
+		dstRelativePath = strings.TrimSuffix(dstRelativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
+	}
+
 	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(false, srcRelativePath, dstRelativePath, s.preserveAccessTier, s.folderPropertiesOption, s.symlinkHandlingType, s.hardlinkHandlingType)
 
 	if s.copyJobTemplate.FromTo.To() == common.ELocation.None() {

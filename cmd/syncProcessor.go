@@ -322,7 +322,7 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 		b.clientOptions.PerCallPolicies = append([]policy.Policy{common.NewRecursivePolicy()}, b.clientOptions.PerCallPolicies...)
 	}
 	*/
-	objectPath := path.Join(b.rootPath, object.relativePath)
+	objectPath := path.Join(b.rootPath, object.relativePath) // BUG: path.Join will normalize FNS paths with nameless virtual dirs (ex: a///b is normalized to a/b)
 	if object.relativePath == "\x00" && b.targetLocation != common.ELocation.Blob() {
 		return nil // Do nothing, we don't want to accidentally delete the root.
 	} else if object.relativePath == "\x00" { // this is acceptable on blob, though. Dir stubs are a thing, and they aren't necessary for normal function.
