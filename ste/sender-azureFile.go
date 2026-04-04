@@ -195,7 +195,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		Metadata:    u.metadataToApply,
 	}
 
-	if info.IsNFSCopy {
+	if common.IsNFSCopy() {
 
 		stage, err := u.addNFSPropertiesToHeaders(info)
 		if err != nil {
@@ -235,6 +235,8 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 	// able to upload any data to the file!). We'll set it in epilogue, if necessary.
 	creationProperties := u.smbPropertiesToApply
 	if creationProperties.Attributes != nil {
+		attrsCopy := *u.smbPropertiesToApply.Attributes
+		creationProperties.Attributes = &attrsCopy
 		creationProperties.Attributes.ReadOnly = false
 	}
 
@@ -243,11 +245,14 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 	// So when we uploaded the ranges, we've unintentionally changed the last-write-time.
 	// This will ensure that the last-write-time is set to the minimum time and epilogue
 	// will set the last-write-time to the correct value.
-	// XDM: Need to confirm before enabling this change for NFS.
-	if !u.jptm.Info().IsNFSCopy && u.jptm.Info().PreserveInfo && creationProperties.LastWriteTime != nil {
+	// XDM: Need to confirm this change for NFS.
+	if u.jptm.Info().PreserveInfo && creationProperties.LastWriteTime != nil {
 		minimalLwt := time.Unix(0, 0)
 		creationProperties.LastWriteTime = &minimalLwt
 	}
+
+	// Set this before file creation
+	createOptions.SMBProperties = &creationProperties
 
 	err := common.DoWithOverrideReadOnlyOnAzureFiles(u.ctx,
 		func() (interface{}, error) {
@@ -274,9 +279,6 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 			u.jptm.FailActiveUpload("Creating parent directory", err)
 		}
 
-		if creationProperties.Attributes != nil {
-			createOptions.SMBProperties = &creationProperties
-		}
 		// retrying file creation
 		err = common.DoWithOverrideReadOnlyOnAzureFiles(u.ctx,
 			func() (interface{}, error) {
@@ -460,7 +462,7 @@ func (u *azureFileSenderBase) Epilogue() {
 	//      So when we uploaded the ranges, we've unintentionally changed the last-write-time.
 	if u.jptm.IsLive() && u.jptm.Info().PreserveInfo {
 		// This is an extra round trip, but we can live with that for these relatively rare cases
-		if u.jptm.Info().IsNFSCopy {
+		if common.IsNFSCopy() {
 			_, err := u.getFileClient().SetHTTPHeaders(u.ctx, &file.SetHTTPHeadersOptions{
 				HTTPHeaders: &u.headersToApply,
 				NFSProperties: &file.NFSProperties{
@@ -525,7 +527,7 @@ func (u *azureFileSenderBase) SetFolderProperties() (err error) {
 	info := u.jptm.Info()
 
 	setPropertiesOptions := &directory.SetPropertiesOptions{}
-	if info.IsNFSCopy {
+	if common.IsNFSCopy() {
 
 		_, err = u.addNFSPropertiesToHeaders(info)
 		if err != nil {

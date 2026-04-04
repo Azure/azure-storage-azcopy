@@ -522,7 +522,13 @@ func newSyncTraverser(enumerator *syncEnumerator, dir string, comparator objectP
 
 func validate(cca *cookedSyncCmdArgs, orchestratorOptions *SyncOrchestratorOptions) error {
 	switch cca.fromTo {
-	case common.EFromTo.LocalBlob(), common.EFromTo.LocalBlobFS(), common.EFromTo.LocalFile(), common.EFromTo.S3Blob(), common.EFromTo.BlobBlob(), common.EFromTo.BlobBlobFS(), common.EFromTo.BlobFSBlob(), common.EFromTo.BlobFSBlobFS():
+	case common.EFromTo.LocalBlob(), common.EFromTo.LocalBlobFS():
+		// sync orchestrator is supported for these types
+	case common.EFromTo.LocalFile(), common.EFromTo.LocalFileSMB(), common.EFromTo.LocalFileNFS():
+		// sync orchestrator is supported for these types
+	case common.EFromTo.S3Blob():
+		// sync orchestrator is supported for these types	
+	case common.EFromTo.BlobBlob(), common.EFromTo.BlobBlobFS(), common.EFromTo.BlobFSBlob(),common.EFromTo.BlobFSBlobFS():
 		// sync orchestrator is supported for these types
 	default:
 		return fmt.Errorf(
@@ -530,6 +536,9 @@ func validate(cca *cookedSyncCmdArgs, orchestratorOptions *SyncOrchestratorOptio
 				"\t- Local->Blob\n" +
 				"\t- Local->BlobFS\n" +
 				"\t- Local->File\n" +
+				"\t- Local->FileSMB\n" +
+				"\t- Local->FileNFS\n" +
+				"\t- S3->Blob\n" +
 				"\t- S3->Blob\n" +
 				"\t- Blob->Blob\n" +
 				"\t- Blob->BlobFS\n" +
@@ -636,9 +645,13 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 		srcDirEnumerating.Add(1) // Increment active directory count
 
+		// func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool, source bool) string
+		// srcRelativePath = pathEncodeRules(dir.(minimalStoredObject).relativePath, cca.fromTo, false, true)
+		dstRelativePath := pathEncodeRules(dir.(minimalStoredObject).relativePath, cca.fromTo, false, false)
+
 		// Build source and destination paths for current directory
 		sync_src := []string{cca.source.Value, dir.(minimalStoredObject).relativePath}
-		sync_dst := []string{cca.destination.Value, dir.(minimalStoredObject).relativePath}
+		sync_dst := []string{cca.destination.Value, dstRelativePath}
 
 		pt_src := cca.source
 		st_src := cca.destination
@@ -665,7 +678,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			mainCtx,
 			ptt.options)
 		if err != nil {
-			errMsg = fmt.Sprintf("Creating source traverser failed for dir %s: %s", pt_src.Value, err)
+			errMsg = fmt.Sprintf("SyncOrchestrator: Creating source traverser failed for dir %s: %s", pt_src.Value, err)
 			syncOrchestratorLog(common.LogError, errMsg)
 			writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
 				DirPath:           pt_src.Value,
@@ -673,6 +686,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 				ErrorMsg:          errors.New(errMsg),
 				TraverserLocation: cca.fromTo.From(),
 			})
+			cca.IncrementSourceFolderEnumerationFailed()
 			return err
 		}
 
@@ -683,7 +697,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			mainCtx,
 			stt.options)
 		if err != nil {
-			errMsg = fmt.Sprintf("Creating target traverser failed for dir %s: %s\n", st_src.Value, err)
+			errMsg = fmt.Sprintf("SyncOrchestrator: Creating target traverser failed for dir %s: %s\n", st_src.Value, err)
 			syncOrchestratorLog(common.LogError, errMsg)
 			writeSyncErrToChannel(stt.options.ErrorChannel, SyncOrchErrorInfo{
 				DirPath:           st_src.Value,
@@ -691,6 +705,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 				ErrorMsg:          errors.New(errMsg),
 				TraverserLocation: cca.fromTo.To(),
 			})
+			cca.IncrementDestinationFolderEnumerationFailed()
 			return err
 		}
 
@@ -706,7 +721,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		}
 
 		if err != nil {
-			errMsg = fmt.Sprintf("primary traversal failed for dir %s : %s\n", pt_src.Value, err)
+			errMsg = fmt.Sprintf("SyncOrchestrator: primary traversal failed for dir %s : %s\n", pt_src.Value, err)
 			syncOrchestratorLog(common.LogError, errMsg)
 			writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
 				DirPath:           pt_src.Value,
@@ -739,7 +754,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			if changed, fileCount := stra.hasAnyChildChangedSinceLastSync(); !changed {
 				err = stra.finalize(false) // false indicates we do not want to schedule transfers yet
 				if err != nil {
-					errMsg = fmt.Sprintf("Sync finalize to skip target enumeration failed for source dir %s.\n", pt_src.Value)
+					errMsg = fmt.Sprintf("SyncOrchestrator: Sync finalize to skip target enumeration failed for source dir %s.\n", pt_src.Value)
 					syncOrchestratorLog(common.LogError, errMsg)
 					writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
 						DirPath:           pt_src.Value,
@@ -793,7 +808,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			}
 
 			if err != nil {
-				errMsg = fmt.Sprintf("Secondary traversal failed for dir %s = %s\n", st_src.Value, err)
+				errMsg = fmt.Sprintf("SyncOrchestrator: Secondary traversal failed for dir %s = %s\n", st_src.Value, err)
 				syncOrchestratorLog(common.LogError, errMsg)
 				// Only report unexpected errors (404s are normal for new files)
 				if IsDestinationNotFoundDuringSync(err) {
@@ -810,7 +825,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 					err = stra.finalize(false) // false indicates we do not want to schedule transfers yet
 					if err != nil {
-						errMsg = fmt.Sprintf("Failed to cleanup indexer object due to target traversal failure - %s. There may be unintended transfers.\n", pt_src.Value)
+						errMsg = fmt.Sprintf("SyncOrchestrator: Failed to cleanup indexer object due to target traversal failure - %s. There may be unintended transfers.\n", pt_src.Value)
 						syncOrchestratorLog(common.LogError, errMsg)
 						writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
 							DirPath:           pt_src.Value,
@@ -834,7 +849,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			err = stra.finalize(true) // true indicates we want to schedule transfers
 
 			if err != nil {
-				errMsg = fmt.Sprintf("Sync finalize failed for source dir %s.\n", pt_src.Value)
+				errMsg = fmt.Sprintf("SyncOrchestrator: Sync finalize failed for source dir %s.\n", pt_src.Value)
 				syncOrchestratorLog(common.LogError, errMsg)
 				writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
 					DirPath:           pt_src.Value,

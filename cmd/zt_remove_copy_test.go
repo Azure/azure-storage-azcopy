@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/stretchr/testify/assert"
 	"strings"
 	"testing"
@@ -25,7 +27,9 @@ func TestCopyBlobsWithDirectoryStubsS2S(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input

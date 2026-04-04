@@ -108,7 +108,6 @@ type JobPartPlanHeader struct {
 	PermanentDeleteOption common.PermanentDeleteOption
 
 	RehydratePriority common.RehydratePriorityType
-	IsNFSCopy         bool
 }
 
 // Status returns the job status stored in JobPartPlanHeader in thread-safe manner

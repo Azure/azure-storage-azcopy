@@ -38,6 +38,9 @@ func (OutputMessageType) ListSummary() OutputMessageType { return OutputMessageT
 
 func (OutputMessageType) LoginStatusInfo() OutputMessageType { return OutputMessageType(10) }
 
+func (OutputMessageType) GetJobSummary() OutputMessageType    { return OutputMessageType(11) }
+func (OutputMessageType) ListJobTransfers() OutputMessageType { return OutputMessageType(12) }
+
 func (o OutputMessageType) String() string {
 	return enum.StringInt(o, reflect.TypeOf(o))
 }

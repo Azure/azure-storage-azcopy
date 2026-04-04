@@ -23,6 +23,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"strings"
 
 	"encoding/json"
@@ -46,7 +47,7 @@ func init() {
 		Long:  showJobsCmdLongDescription,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
-				return errors.New("show job command requires only the JobID")
+				return errors.New("show job command requires the JobID")
 			}
 			// Parse the JobId
 			jobId, err := common.ParseJobID(args[0])
@@ -57,16 +58,27 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			listRequest := common.ListRequest{}
-			listRequest.JobID = commandLineInput.JobID
-			listRequest.OfStatus = commandLineInput.OfStatus
-
-			err := HandleShowCommand(listRequest)
-			if err == nil {
-				glcm.Exit(nil, common.EExitCode.Success())
+			if commandLineInput.OfStatus == "" {
+				resp, err := Client.GetJobSummary(azcopy.GetJobSummaryOptions{JobID: commandLineInput.JobID})
+				if err != nil {
+					glcm.Error(err.Error())
+				}
+				PrintJobProgressSummary(common.ListJobSummaryResponse(resp))
 			} else {
-				glcm.Error(err.Error())
+				// Parse the given expected Transfer Status
+				// If there is an error parsing, then kill return the error
+				var status common.TransferStatus
+				err := status.Parse(commandLineInput.OfStatus)
+				if err != nil {
+					glcm.Error(fmt.Sprintf("cannot parse the given Transfer Status %s", commandLineInput.OfStatus))
+				}
+				resp, err := Client.ListJobTransfers(azcopy.ListJobTransfersOptions{JobID: commandLineInput.JobID, WithStatus: &status})
+				if err != nil {
+					glcm.Error(err.Error())
+				}
+				PrintJobTransfers(common.ListJobTransfersResponse(resp))
 			}
+			glcm.Exit(nil, common.EExitCode.Success())
 		},
 	}
 
@@ -77,68 +89,57 @@ func init() {
 		"\n Available values include: All, Started, Success, Failed.")
 }
 
-// handles the list command
-// dispatches the list order to the transfer engine
-func HandleShowCommand(listRequest common.ListRequest) error {
-	if listRequest.OfStatus == "" {
-		resp := common.ListJobSummaryResponse{}
-		rpcCmd := common.ERpcCmd.ListJobSummary()
-		Rpc(rpcCmd, &listRequest.JobID, &resp)
-		PrintJobProgressSummary(resp)
-	} else {
-		lsRequest := common.ListJobTransfersRequest{}
-		lsRequest.JobID = listRequest.JobID
-		// Parse the given expected Transfer Status
-		// If there is an error parsing, then kill return the error
-		err := lsRequest.OfStatus.Parse(listRequest.OfStatus)
-		if err != nil {
-			return fmt.Errorf("cannot parse the given Transfer Status %s", listRequest.OfStatus)
-		}
-		resp := common.ListJobTransfersResponse{}
-		rpcCmd := common.ERpcCmd.ListJobTransfers()
-		Rpc(rpcCmd, lsRequest, &resp)
-		PrintJobTransfers(resp)
-	}
-	return nil
-}
-
 // PrintJobTransfers prints the response of listOrder command when list Order command requested the list of specific transfer of an existing job
 func PrintJobTransfers(listTransfersResponse common.ListJobTransfersResponse) {
-	if listTransfersResponse.ErrorMsg != "" {
-		glcm.Error("request failed with following message " + listTransfersResponse.ErrorMsg)
-	}
+	if OutputFormat == common.EOutputFormat.Json() {
+		glcm.Output(
+			func(_ common.OutputFormat) string {
+				buf, err := json.Marshal(listTransfersResponse)
+				if err != nil {
+					panic(err)
+				}
 
+				return string(buf)
+			}, common.EOutputMessageType.ListJobTransfers())
+	}
 	glcm.Exit(func(format common.OutputFormat) string {
 		if format == common.EOutputFormat.Json() {
 			jsonOutput, err := json.Marshal(listTransfersResponse)
 			common.PanicIfErr(err)
 			return string(jsonOutput)
-		}
-
-		var sb strings.Builder
-		sb.WriteString("----------- Transfers for JobId " + listTransfersResponse.JobID.String() + " -----------\n")
-		for index := 0; index < len(listTransfersResponse.Details); index++ {
-			folderChar := ""
-			if listTransfersResponse.Details[index].IsFolderProperties {
-				folderChar = "/"
+		} else {
+			var sb strings.Builder
+			sb.WriteString("----------- Transfers for JobId " + listTransfersResponse.JobID.String() + " -----------\n")
+			for index := 0; index < len(listTransfersResponse.Details); index++ {
+				folderChar := ""
+				if listTransfersResponse.Details[index].IsFolderProperties {
+					folderChar = "/"
+				}
+				sb.WriteString("transfer--> source: " + listTransfersResponse.Details[index].Src + folderChar + " destination: " +
+					listTransfersResponse.Details[index].Dst + folderChar + " status " + listTransfersResponse.Details[index].TransferStatus.String() + "\n")
 			}
-			sb.WriteString("transfer--> source: " + listTransfersResponse.Details[index].Src + folderChar + " destination: " +
-				listTransfersResponse.Details[index].Dst + folderChar + " status " + listTransfersResponse.Details[index].TransferStatus.String() + "\n")
-		}
 
-		return sb.String()
+			return sb.String()
+		}
 	}, common.EExitCode.Success())
 }
 
 // PrintJobProgressSummary prints the response of listOrder command when listOrder command requested the progress summary of an existing job
 func PrintJobProgressSummary(summary common.ListJobSummaryResponse) {
-	if summary.ErrorMsg != "" {
-		glcm.Error("list progress summary of job failed because " + summary.ErrorMsg)
-	}
-
 	// Reset the bytes over the wire counter
 	summary.BytesOverWire = 0
 
+	if OutputFormat == common.EOutputFormat.Json() {
+		glcm.Output(
+			func(_ common.OutputFormat) string {
+				buf, err := json.Marshal(summary)
+				if err != nil {
+					panic(err)
+				}
+
+				return string(buf)
+			}, common.EOutputMessageType.GetJobSummary())
+	}
 	glcm.Exit(func(format common.OutputFormat) string {
 		if format == common.EOutputFormat.Json() {
 			jsonOutput, err := json.Marshal(summary) // see note below re % complete being approximate. We can't include "approx" in the JSON.

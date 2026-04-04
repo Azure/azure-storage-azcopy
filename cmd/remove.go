@@ -22,9 +22,10 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
-	"strings"
 )
 
 func init() {
@@ -50,7 +51,7 @@ func init() {
 				switch srcLocationType {
 				case common.ELocation.Blob():
 					raw.fromTo = common.EFromTo.BlobTrash().String()
-				case common.ELocation.File():
+				case common.ELocation.File(), common.ELocation.FileNFS():
 					raw.fromTo = common.EFromTo.FileTrash().String()
 				case common.ELocation.BlobFS():
 					raw.fromTo = common.EFromTo.BlobFSTrash().String()

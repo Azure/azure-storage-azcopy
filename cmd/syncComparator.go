@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -56,6 +57,28 @@ func syncComparatorLog(fileName, status, skipReason string, stdout bool) {
 	if stdout {
 		glcm.Info(out)
 	}
+}
+
+// timeEqual compares two timestamps with precision tolerance to handle filesystem precision differences.
+// It truncates both times to the specified precision to handle precision differences
+func timeEqual(t1, t2 time.Time, useMicroSecPrecision bool) bool {
+	// Truncate both times to the specified precision to handle precision differences
+	if useMicroSecPrecision {
+		return t1.Truncate(time.Microsecond).Equal(t2.Truncate(time.Microsecond))
+	}
+
+	return t1.Equal(t2)
+}
+
+// timeAfter compares two timestamps with precision tolerance to handle filesystem precision differences.
+// It truncates both times to the specified precision to handle precision differences
+func timeAfter(t1, t2 time.Time, useMicroSecPrecision bool) bool {
+	// Truncate both times to the specified precision to handle precision differences
+	if useMicroSecPrecision {
+		return t1.Truncate(time.Microsecond).After(t2.Truncate(time.Microsecond))
+	}
+
+	return t1.After(t2)
 }
 
 // with the help of an objectIndexer containing the source objects
@@ -215,13 +238,15 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 	sourceObjectInMap StoredObject,
 	destinationObject StoredObject) (bool, error) {
 
-	if sourceObjectInMap.entityType == common.EEntityType.Hardlink() ||
-		sourceObjectInMap.entityType == common.EEntityType.Other() {
-		// As of now, for hardlinks and special files at source, fallback to the default behavior
+	if sourceObjectInMap.entityType == common.EEntityType.Other() {
+		// As of now, for special files at source, fallback to the default behavior
 		return false, nil
 	}
 
-	if sourceObjectInMap.entityType != destinationObject.entityType {
+	// Don't compare the entity type for hardlinks as destination will consider them as files for followed hardlinks
+	// This will cause unnecessary transfers
+	if sourceObjectInMap.entityType != common.EEntityType.Hardlink() &&
+		sourceObjectInMap.entityType != destinationObject.entityType {
 		if destinationObject.entityType == common.EEntityType.Folder() {
 			// This entity type compararison is necessary for SyncOrchestrator as we have the visibility
 			// of a deleted object in the source only once during the directory non-recusrive enumeration.
@@ -324,8 +349,8 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 		return true, true
 	}
 
-	// Compare last write times
-	if sourceObject.lastWriteTime.Compare(destinationObject.lastWriteTime) != 0 {
+	// Compare last write times with precision tolerance
+	if !timeEqual(sourceObject.lastWriteTime, destinationObject.lastWriteTime, common.IsNFSCopy()) {
 		return true, true
 	}
 
@@ -335,7 +360,7 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 		return false, false
 	}
 
-	if isNFSCopy {
+	if common.IsNFSCopy() {
 		// We can't rely on ChangeTime for NFS file share target
 		// It is set to the time of migration for the objects
 		// In this case, we try to use last successful job start time, if its available.
@@ -347,7 +372,7 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 				return false, true
 			} else {
 				// else check if source changed after job start time
-				return false, sourceObject.changeTime.After(f.orchestratorOptions.lastSuccessfulSyncJobStartTime)
+				return false, timeAfter(sourceObject.changeTime, f.orchestratorOptions.lastSuccessfulSyncJobStartTime, true)
 			}
 		} else {
 			// If last successful job start time can't be used, we assume its changed
@@ -362,8 +387,8 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 		return false, true
 	}
 
-	// Compare change times
-	if sourceObject.changeTime.Compare(destinationObject.changeTime) != 0 {
+	// Compare change times with precision tolerance
+	if !timeEqual(sourceObject.changeTime, destinationObject.changeTime, common.IsNFSCopy()) {
 		return false, true
 	}
 

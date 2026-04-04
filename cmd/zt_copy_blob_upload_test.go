@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/stretchr/testify/assert"
 	"net/url"
 	"os"
@@ -53,7 +54,9 @@ func TestIncludeDirSimple(t *testing.T) {
 	scenarioHelper{}.generateLocalFilesFromList(a, dirPath, files)
 
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	rawBlobURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
@@ -95,7 +98,9 @@ func TestIncludeDir(t *testing.T) {
 	scenarioHelper{}.generateLocalFilesFromList(a, dirPath, files)
 
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	rawBlobURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
@@ -137,7 +142,9 @@ func TestExcludeDir(t *testing.T) {
 	scenarioHelper{}.generateLocalFilesFromList(a, dirPath, files)
 
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	rawBlobURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
@@ -174,7 +181,9 @@ func TestIncludeAndExcludeDir(t *testing.T) {
 	scenarioHelper{}.generateLocalFilesFromList(a, dirPath, files)
 
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	rawBlobURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
@@ -211,7 +220,9 @@ func TestUploadSingleFileToBlobVirtualDirectory(t *testing.T) {
 
 		// set up interceptor
 		mockedRPC := interceptor{}
-		Rpc = mockedRPC.intercept
+		jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+			return mockedRPC.intercept(order)
+		}
 		mockedRPC.init()
 
 		// construct the raw input to simulate user input
@@ -274,7 +285,9 @@ func TestUploadSingleFileToBlob(t *testing.T) {
 
 		// set up interceptor
 		mockedRPC := interceptor{}
-		Rpc = mockedRPC.intercept
+		jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+			return mockedRPC.intercept(order)
+		}
 		mockedRPC.init()
 
 		// construct the raw input to simulate user input
@@ -328,7 +341,9 @@ func TestUploadDirectoryToContainer(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -374,7 +389,9 @@ func TestUploadDirectoryToVirtualDirectory(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -424,7 +441,9 @@ func TestUploadDirectoryToContainerWithPattern(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -479,7 +498,9 @@ func doTestUploadDirectoryToContainerWithIncludeBefore(useUtc bool, a *assert.As
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -537,7 +558,9 @@ func doTestUploadDirectoryToContainerWithIncludeAfter(useUtc bool, a *assert.Ass
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -580,7 +603,9 @@ func TestDisableAutoDecoding(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// clean the RPC for the next test

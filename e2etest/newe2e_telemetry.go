@@ -3,12 +3,13 @@ package e2etest
 import (
 	"bytes"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/data/aztables"
-	cmd2 "github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/data/aztables"
+	cmd2 "github.com/Azure/azure-storage-azcopy/v10/cmd"
 )
 
 const (

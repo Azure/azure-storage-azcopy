@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"context"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/stretchr/testify/assert"
 	"os"
 	"path/filepath"
@@ -55,7 +56,9 @@ func TestSyncUploadWithSingleFile(t *testing.T) {
 
 		// set up interceptor
 		mockedRPC := interceptor{}
-		Rpc = mockedRPC.intercept
+		jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+			return mockedRPC.intercept(order)
+		}
 		mockedRPC.init()
 
 		// construct the raw input to simulate user input
@@ -103,7 +106,9 @@ func TestSyncUploadWithEmptyDestination(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -155,7 +160,9 @@ func TestSyncUploadWithIdenticalDestination(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -200,7 +207,9 @@ func TestSyncUploadWithMismatchedDestination(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -240,7 +249,9 @@ func TestSyncUploadWithIncludePatternFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -275,7 +286,9 @@ func TestSyncUploadWithExcludePatternFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -316,7 +329,9 @@ func TestSyncUploadWithIncludeAndExcludePatternFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -352,7 +367,9 @@ func TestSyncUploadWithExcludePathFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -403,7 +420,9 @@ func TestSyncUploadWithMissingDestination(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -437,7 +456,9 @@ func TestDryrunSyncLocaltoBlob(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
 	mockedLcm.SetOutputFormat(common.EOutputFormat.Text())
 	glcm = &mockedLcm

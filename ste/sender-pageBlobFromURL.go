@@ -24,6 +24,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -33,6 +34,7 @@ type urlToPageBlobCopier struct {
 
 	srcURL                   string
 	sourcePageRangeOptimizer *pageRangeOptimizer // nil if src is not a page blob
+	addFileRequestIntent     bool
 }
 
 func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
@@ -81,10 +83,17 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, pacer 
 		return nil, err
 	}
 
+	// Check if source is File and using OAuth (no SAS)
+	intentBool := false
+	if _, ok := srcInfoProvider.(*fileSourceInfoProvider); ok {
+		sUrl, _ := file.ParseURL(srcURL)
+		intentBool = sUrl.SAS.Signature() == ""
+	}
 	return &urlToPageBlobCopier{
 		pageBlobSenderBase:       *senderBase,
 		srcURL:                   srcURL,
-		sourcePageRangeOptimizer: pageRangeOptimizer}, nil
+		sourcePageRangeOptimizer: pageRangeOptimizer,
+		addFileRequestIntent:     intentBool}, nil
 }
 
 func (c *urlToPageBlobCopier) Prologue(ps common.PrologueState) (destinationModified bool) {
@@ -145,12 +154,19 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 			c.jptm.FailActiveS2SCopy("Getting source token credential", err)
 			return
 		}
-		_, err = c.destPageBlobClient.UploadPagesFromURL(enrichedContext, c.srcURL, id.OffsetInFile(), id.OffsetInFile(), adjustedChunkSize,
-			&pageblob.UploadPagesFromURLOptions{
-				CPKInfo:                 c.jptm.CpkInfo(),
-				CPKScopeInfo:            c.jptm.CpkScopeInfo(),
-				CopySourceAuthorization: token,
-			})
+		options := &pageblob.UploadPagesFromURLOptions{
+			CPKInfo:                 c.jptm.CpkInfo(),
+			CPKScopeInfo:            c.jptm.CpkScopeInfo(),
+			CopySourceAuthorization: token,
+		}
+
+		// Informs SDK to add xms-file-request-intent header
+		if c.addFileRequestIntent {
+			intentBackup := blob.FileRequestIntentTypeBackup
+			options.FileRequestIntent = &intentBackup
+		}
+		_, err = c.destPageBlobClient.UploadPagesFromURL(enrichedContext, c.srcURL, id.OffsetInFile(), id.OffsetInFile(),
+			adjustedChunkSize, options)
 		if err != nil {
 			c.jptm.FailActiveS2SCopy("Uploading page from URL", err)
 			return

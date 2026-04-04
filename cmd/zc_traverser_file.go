@@ -285,7 +285,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				targetURLParts.ShareName,
 			)
 			// NFS handling for different file types
-			if isNFSCopy {
+			if common.IsNFSCopy() {
 				if skip, err := evaluateAndLogNFSFileType(t.ctx, NFSFileMeta{
 					Name:        storedObject.name,
 					NFSFileType: *fileProperties.NFSFileType,
@@ -346,7 +346,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		// Check if the file is a symlink and should be skipped in case of NFS
 		// We don't want to skip the file if we are not using NFS
 		// Check if the file is a hard link and should be logged with proper message in case of NFS
-		if isNFSCopy {
+		if common.IsNFSCopy() {
 			if skip, err := evaluateAndLogNFSFileType(t.ctx, NFSFileMeta{
 				Name:        f.name,
 				NFSFileType: file.NFSFileType(fullProperties.NFSFileType()),
@@ -601,7 +601,7 @@ func newFileTraverser(rawURL string, serviceClient *service.Client, ctx context.
 	// Set this to true if we are using SyncOrchestrator and getProperties is true
 	// We are disabling it for NFS copy as it needs few properties like LinkCount, FileID
 	// which are not available in the listing operation.
-	t.includeExtendedInfo = UseSyncOrchestrator && t.getProperties && !isNFSCopy
+	t.includeExtendedInfo = UseSyncOrchestrator && t.getProperties && !common.IsNFSCopy()
 
 	return
 }
