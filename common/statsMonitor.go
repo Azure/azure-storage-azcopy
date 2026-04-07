@@ -1812,21 +1812,25 @@ func (m *SystemStatsMonitor) LogAdhocCustomStats(tag string, entries []CustomSta
 		return
 	}
 
-	// Build the custom stats string in the same format as regular stats
-	customSummary := ""
-	for i, entry := range entries {
-		if i > 0 {
-			customSummary += ","
+	// Find max key length for alignment
+	maxKeyLen := 0
+	for _, entry := range entries {
+		if len(entry.Key) > maxKeyLen {
+			maxKeyLen = len(entry.Key)
 		}
-		customSummary += fmt.Sprintf("%s:%s", entry.Key, entry.Value)
 	}
 
-	// Log with tag at the start and newlines before and after for visibility
+	// Log header
+	header := tag
+	if header == "" {
+		header = "ADHOC"
+	}
 	m.config.Logger.Log(LogInfo, "")
-	if tag != "" {
-		m.config.Logger.Log(LogInfo, fmt.Sprintf("%s: [%s]", tag, customSummary))
-	} else {
-		m.config.Logger.Log(LogInfo, fmt.Sprintf("ADHOC: [%s]", customSummary))
+	m.config.Logger.Log(LogInfo, fmt.Sprintf("===== %s =====", header))
+
+	// Log each entry on its own line, aligned
+	for _, entry := range entries {
+		m.config.Logger.Log(LogInfo, fmt.Sprintf("  %-*s : %s", maxKeyLen, entry.Key, entry.Value))
 	}
 	m.config.Logger.Log(LogInfo, "")
 }

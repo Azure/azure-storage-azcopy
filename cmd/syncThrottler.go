@@ -192,10 +192,23 @@ func initializeLimits(orchestratorOptions *SyncOrchestratorOptions) {
 		crawlParallelism,
 		maxActiveFiles,
 		maxDirectoryDirectChildCount))
-
 	maxActivelyEnumeratingDirectories = maxActiveFiles / maxDirectoryDirectChildCount // Ensure at least one directory can be processed
 	activeFilesLimit.Store(maxActiveFiles)
 	enumeratingDirectoryLimit.Store(maxActivelyEnumeratingDirectories) // Set initial limit for actively enumerating directories
+
+	// Log to rolling-stats file if the stats monitor is available
+	// Note: Memory Detection is logged by JobsAdmin.RegisterStatsMonitorIfNotDone() for all flows (copy and sync)
+	if common.GlobalSystemStatsMonitor != nil {
+		common.GlobalSystemStatsMonitor.LogAdhocCustomStats("initializeLimits", []common.CustomStatEntry{
+			{Key: "maxActiveFiles", Value: fmt.Sprintf("%d", maxActiveFiles)},
+			{Key: "maxDirectoryDirectChildCount", Value: fmt.Sprintf("%d", maxDirectoryDirectChildCount)},
+			{Key: "crawlParallelism", Value: fmt.Sprintf("%d", crawlParallelism)},
+			{Key: "maxActivelyEnumeratingDirectories", Value: fmt.Sprintf("%d", maxActivelyEnumeratingDirectories)},
+			{Key: "targetSlotRatio", Value: fmt.Sprintf("%.2f", targetSlotRatio)},
+			{Key: "targetSlots", Value: fmt.Sprintf("%d", int32(float64(crawlParallelism)*targetSlotRatio))},
+			{Key: "fromTo", Value: fmt.Sprintf("%v", orchestratorOptions.fromTo)},
+		})
+	}
 }
 
 // --- END Throttling and Concurrency Configuration ---
