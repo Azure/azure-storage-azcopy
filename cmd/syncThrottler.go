@@ -186,14 +186,8 @@ func initializeLimits(orchestratorOptions *SyncOrchestratorOptions) {
 	enumeratingDirectoryLimit.Store(maxActivelyEnumeratingDirectories) // Set initial limit for actively enumerating directories
 
 	// Log to rolling-stats file if the stats monitor is available
-	memDetails := common.GetMemorySourceDetails()
+	// Note: Memory Detection is logged by JobsAdmin.RegisterStatsMonitorIfNotDone() for all flows (copy and sync)
 	if common.GlobalSystemStatsMonitor != nil {
-		common.GlobalSystemStatsMonitor.LogAdhocCustomStats("Memory Detection", []common.CustomStatEntry{
-			{Key: "Source", Value: memDetails.Source},
-			{Key: "HostMemory", Value: fmt.Sprintf("%d bytes (%.2f GB)", memDetails.HostMemoryBytes, float64(memDetails.HostMemoryBytes)/float64(gbToBytesMultiplier))},
-			{Key: "CgroupLimit", Value: fmt.Sprintf("%d bytes (%.2f GB)", memDetails.CgroupLimitBytes, float64(memDetails.CgroupLimitBytes)/float64(gbToBytesMultiplier))},
-			{Key: "EffectiveMemory", Value: fmt.Sprintf("%d bytes (%.2f GB)", memDetails.EffectiveBytes, float64(memDetails.EffectiveBytes)/float64(gbToBytesMultiplier))},
-		})
 		common.GlobalSystemStatsMonitor.LogAdhocCustomStats("initializeLimits", []common.CustomStatEntry{
 			{Key: "maxActiveFiles", Value: fmt.Sprintf("%d", maxActiveFiles)},
 			{Key: "maxDirectoryDirectChildCount", Value: fmt.Sprintf("%d", maxDirectoryDirectChildCount)},
