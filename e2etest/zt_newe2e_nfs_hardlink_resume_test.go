@@ -373,6 +373,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopyResume_Download(svm *ScenarioVa
 	// Make the destination directory read-only so downloads fail.
 	dstPath := dstContainer.GetObject(svm, "", common.EEntityType.Folder()).URI()
 	svm.NoError("chmod read-only", os.Chmod(dstPath, 0o555))
+	defer os.Chmod(dstPath, 0o755) // ensure cleanup can proceed even if the test panics
 
 	env := &AzCopyEnvironment{InheritEnvironment: map[string]bool{"*": true}}
 
@@ -395,7 +396,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopyResume_Download(svm *ScenarioVa
 
 	jobId := extractJobID(svm, stdOut)
 
-	// Restore write permissions.
+	// Restore write permissions so the resume can succeed.
 	svm.NoError("chmod writable", os.Chmod(dstPath, 0o755))
 
 	resStdOut, _ := RunAzCopy(svm, AzCopyCommand{
@@ -556,6 +557,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSyncResume_Download(svm *ScenarioVa
 	// Make the destination directory read-only so downloads fail.
 	dstPath := dstContainer.GetObject(svm, "", common.EEntityType.Folder()).URI()
 	svm.NoError("chmod read-only", os.Chmod(dstPath, 0o555))
+	defer os.Chmod(dstPath, 0o755) // ensure cleanup can proceed even if the test panics
 
 	env := &AzCopyEnvironment{InheritEnvironment: map[string]bool{"*": true}}
 
@@ -577,7 +579,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSyncResume_Download(svm *ScenarioVa
 
 	jobId := extractJobID(svm, stdOut)
 
-	// Restore write permissions.
+	// Restore write permissions so the resume can succeed.
 	svm.NoError("chmod writable", os.Chmod(dstPath, 0o755))
 	// Remove the seed so the resumed job is free to write all files.
 	_ = os.Remove(dstSeed.URI())
