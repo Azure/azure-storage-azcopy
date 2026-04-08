@@ -147,8 +147,7 @@ func (s *CopyTransferProcessor) scheduleTransfer(srcRelativePath, dstRelativePat
 }
 
 func (s *CopyTransferProcessor) readyForDispatch() bool {
-	return (len(s.dispatcher.PendingTransfers.List) == s.numOfTransfersPerPart) ||
-		(len(s.dispatcher.PendingHardlinksTransfers.List) == s.numOfTransfersPerPart)
+	return len(s.dispatcher.PendingTransfers.List) == s.numOfTransfersPerPart
 }
 
 func (s *CopyTransferProcessor) dispatchPartIfReady() error {
@@ -156,6 +155,9 @@ func (s *CopyTransferProcessor) dispatchPartIfReady() error {
 		return nil
 	}
 
+	// Only dispatch mixed (file/folder/symlink) parts during enumeration.
+	// Hardlink transfers are buffered and dispatched after all mixed parts
+	// in DispatchFinalPart, so that hardlink targets are guaranteed to exist.
 	var err error
 	if len(s.dispatcher.PendingTransfers.List) == s.numOfTransfersPerPart {
 		s.CopyJobTemplate.Transfers = s.dispatcher.PendingTransfers.Clone()
@@ -164,15 +166,6 @@ func (s *CopyTransferProcessor) dispatchPartIfReady() error {
 			return err
 		}
 		s.dispatcher.PendingTransfers = common.Transfers{}
-	}
-
-	if len(s.dispatcher.PendingHardlinksTransfers.List) == s.numOfTransfersPerPart {
-		s.CopyJobTemplate.Transfers = s.dispatcher.PendingHardlinksTransfers.Clone()
-		err = s.dispatchPart()
-		if err != nil {
-			return err
-		}
-		s.dispatcher.PendingHardlinksTransfers = common.Transfers{}
 	}
 
 	return err
@@ -233,24 +226,48 @@ var FinalPartCreatedMessage = "Final job part has been created"
 func (s *CopyTransferProcessor) DispatchFinalPart() (copyJobInitiated bool, err error) {
 	// Handle separate batch mode with remaining file/folder/symlink vs hardlink batches
 	if s.processingMode == common.EJobProcessingMode.NFS() {
-		if len(s.dispatcher.PendingTransfers.List) > 0 &&
-			len(s.dispatcher.PendingHardlinksTransfers.List) > 0 {
-			// if there are both kinds of transfers pending, first do the file/folder/symlink transfers
-			s.CopyJobTemplate.Transfers = s.dispatcher.PendingTransfers.Clone()
-			err = s.dispatchPart()
-			if err != nil {
-				return false, fmt.Errorf("failed to send final file job part with job Id %s and part number %d: %s",
-					s.CopyJobTemplate.JobID, s.CopyJobTemplate.PartNum, err.Error())
+		// Flush any remaining mixed transfers first (as non-final parts).
+		if len(s.dispatcher.PendingTransfers.List) > 0 {
+			if len(s.dispatcher.PendingHardlinksTransfers.List) > 0 {
+				// More parts will follow (hardlinks), so dispatch mixed as non-final.
+				s.CopyJobTemplate.Transfers = s.dispatcher.PendingTransfers.Clone()
+				err = s.dispatchPart()
+				if err != nil {
+					return false, fmt.Errorf("failed to send final file job part with job Id %s and part number %d: %s",
+						s.CopyJobTemplate.JobID, s.CopyJobTemplate.PartNum, err.Error())
+				}
+				s.dispatcher.PendingTransfers = common.Transfers{}
+			} else {
+				// No hardlinks pending; mixed will be the final part (handled below).
 			}
-			s.dispatcher.PendingTransfers = common.Transfers{}
 		}
 
-		// Either file/folder/symlink or hardlink transfers are pending. Whatever is pending will be the final part.
-		if len(s.dispatcher.PendingTransfers.List) > 0 {
-			s.CopyJobTemplate.Transfers = s.dispatcher.PendingTransfers.Clone()
-		} else if len(s.dispatcher.PendingHardlinksTransfers.List) > 0 {
+		// Dispatch all buffered hardlink transfers in batches, with the very
+		// last batch (or last mixed batch if no hardlinks) being the final part.
+		for len(s.dispatcher.PendingHardlinksTransfers.List) > s.numOfTransfersPerPart {
+			batch := common.Transfers{
+				List:                   make([]common.CopyTransfer, s.numOfTransfersPerPart),
+				HardlinksTransferCount: uint32(s.numOfTransfersPerPart),
+			}
+			copy(batch.List, s.dispatcher.PendingHardlinksTransfers.List[:s.numOfTransfersPerPart])
+			s.dispatcher.PendingHardlinksTransfers.List = s.dispatcher.PendingHardlinksTransfers.List[s.numOfTransfersPerPart:]
+			s.dispatcher.PendingHardlinksTransfers.HardlinksTransferCount -= uint32(s.numOfTransfersPerPart)
+
+			s.CopyJobTemplate.Transfers = batch
+			s.CopyJobTemplate.JobPartType = common.EJobPartType.Hardlink()
+			err = s.dispatchPart()
+			if err != nil {
+				return false, fmt.Errorf("failed to send hardlink job part with job Id %s and part number %d: %s",
+					s.CopyJobTemplate.JobID, s.CopyJobTemplate.PartNum, err.Error())
+			}
+		}
+
+		// Whatever remains is the final part.
+		if len(s.dispatcher.PendingHardlinksTransfers.List) > 0 {
 			s.CopyJobTemplate.JobPartType = common.EJobPartType.Hardlink()
 			s.CopyJobTemplate.Transfers = s.dispatcher.PendingHardlinksTransfers.Clone()
+		} else if len(s.dispatcher.PendingTransfers.List) > 0 {
+			s.CopyJobTemplate.Transfers = s.dispatcher.PendingTransfers.Clone()
 		}
 	} else {
 		if len(s.dispatcher.PendingTransfers.List) > 0 {
