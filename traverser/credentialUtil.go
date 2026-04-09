@@ -1,8 +1,6 @@
 package traverser
 
 import (
-	"net/http"
-
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -23,14 +21,21 @@ func CreateClientOptions(logger common.ILoggerResetable, srcCred *common.ScopedT
 		logOptions.Log = logger.Log
 		logOptions.ShouldLog = logger.ShouldLog
 	}
-	return ste.NewClientOptions(policy.RetryOptions{
-		MaxRetries:    ste.UploadMaxTries,
-		TryTimeout:    ste.UploadTryTimeout,
-		RetryDelay:    ste.UploadRetryDelay,
-		MaxRetryDelay: ste.UploadMaxRetryDelay,
-	}, policy.TelemetryOptions{
-		ApplicationID: common.AddUserAgentPrefix(common.UserAgent),
-	}, ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost), logOptions, srcCred, reauthCred)
-}
+	// Job-level/global client if available so we reuse connections and transports.
+	client := common.GetGlobalHTTPClient(logger)
 
-const frontEndMaxIdleConnectionsPerHost = http.DefaultMaxIdleConnsPerHost
+	return ste.NewClientOptions(
+		policy.RetryOptions{
+			MaxRetries:    ste.UploadMaxTries,
+			TryTimeout:    ste.UploadTryTimeout,
+			RetryDelay:    ste.UploadRetryDelay,
+			MaxRetryDelay: ste.UploadMaxRetryDelay,
+		},
+		policy.TelemetryOptions{
+			ApplicationID: common.AddUserAgentPrefix(common.UserAgent),
+		},
+		client, /*Use common.NewTracingTransport(client, "createClientOptions", logger) for http.Trace*/
+		logOptions,
+		srcCred,
+		reauthCred)
+}

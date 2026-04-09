@@ -135,7 +135,7 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	}
 
 	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(),
-		httpClient:           NewAzcopyHTTPClient(concurrency.MaxIdleConnections),
+		httpClient:           common.GetGlobalHTTPClient(jobLogger),
 		logger:               jobLogger,
 		chunkStatusLogger:    common.NewChunkStatusLogger(jobID, cpuMon, common.LogPathFolder, enableChunkLogOutput),
 		concurrency:          concurrency,
