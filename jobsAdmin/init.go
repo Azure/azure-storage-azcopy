@@ -255,6 +255,7 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 			ErrorMsg:              fmt.Sprintf("no job with JobId %v exists", req.JobID),
 		}
 	}
+
 	// If the job manager was not found, then Job was resurrected
 	// Get the Job manager again for given JobId
 	jm, _ := JobsAdmin.JobMgr(req.JobID)
@@ -402,7 +403,6 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 		})
 
 		jm.ResumeTransfers(steCtx) // Reschedule all job part's transfers
-		// }()
 		jr = common.CancelPauseResumeResponse{
 			CancelledPauseResumed: true,
 			ErrorMsg:              "",
