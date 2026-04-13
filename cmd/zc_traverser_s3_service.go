@@ -152,7 +152,8 @@ func newS3ServiceTraverser(rawURL *url.URL, ctx context.Context, opts InitResour
 	t.s3Client, err = common.CreateS3Client(t.ctx, common.CredentialInfo{
 		CredentialType: common.ECredentialType.S3AccessKey(),
 		S3CredentialInfo: common.S3CredentialInfo{
-			Endpoint: t.s3URL.Endpoint,
+			Endpoint:   t.s3URL.Endpoint,
+			BucketName: t.s3URL.BucketName,
 		},
 	}, common.CredentialOpOptions{
 		LogError: glcm.Error,

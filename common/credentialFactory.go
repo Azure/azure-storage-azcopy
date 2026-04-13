@@ -70,9 +70,39 @@ const PeCheckIntervalInmilliSecs = 200
 func createS3ClientForPrivateNetwork(credInfo CredentialInfo, cred *credentials.Credentials) (*minio.Client, error) {
 	peIP := privateNetworkArgs.PrivateEndpointIPs
 	baseS3Host := credInfo.S3CredentialInfo.Endpoint
-	// Endpoint should contain bucketname : "<bucketname>.s3.<region>.amazonaws.com"
-	s3Host := privateNetworkArgs.BucketName + "." + credInfo.S3CredentialInfo.Endpoint
-	transport := NewRoundRobinTransport(peIP, s3Host, PeReCheckCooldownTimeInSecs, PeCheckRetries, PeCheckIntervalInmilliSecs)
+
+	urlParts := S3URLParts{Endpoint: baseS3Host}
+	isGCS := urlParts.IsGoogleCloudStorage()
+	isS3CompatibleUrl := urlParts.IsS3CompatibleEndpoint()
+
+	var s3Host string
+	var tlsHost string                    // hostname used for TLS ServerName verification
+	minioEndpoint := baseS3Host           // endpoint passed to minio.New()
+	bucketLookup := minio.BucketLookupDNS // default: virtual-hosted style for AWS
+	if isS3CompatibleUrl {
+		// S3-compatible endpoint (GCS or on-prem appliances like MinIO, NetApp, Dell EMC, etc.)
+		// All S3-compatible endpoints use path-style URLs
+		bucketLookup = minio.BucketLookupPath
+		tlsHost = baseS3Host
+		s3Host = baseS3Host
+
+		if isGCS {
+			// Minio lib only supports "storage.googleapis.com" as the GCS endpoint
+			// (it has an internal check for that exact host), so override for regional/PSC
+			// endpoints like storage.us-west2.rep.googleapis.com or storage-xyz.p.googleapis.com.
+			// TLS and RoundRobinTransport still use the actual baseS3Host.
+			s3Host = "storage.googleapis.com"
+			minioEndpoint = s3Host
+		}
+	} else {
+		// AWS S3 uses virtual-hosted style: "<bucketname>.s3.<region>.amazonaws.com"
+		s3Host = privateNetworkArgs.BucketName + "." + credInfo.S3CredentialInfo.Endpoint
+		// AWS certs support *.s3.<region>.amazonaws.com, so use s3Host for TLS
+		tlsHost = s3Host
+	}
+	// Force HTTP/1.1 only for GCS non-global endpoints that send non-standard HTTP/2 frames
+	forceHTTP11 := isGCS && baseS3Host != "storage.googleapis.com"
+	transport := NewRoundRobinTransport(peIP, s3Host, tlsHost, PeReCheckCooldownTimeInSecs, PeCheckRetries, PeCheckIntervalInmilliSecs, forceHTTP11)
 	var minioCred *credentials.Credentials
 	if cred != nil {
 		minioCred = cred
@@ -81,12 +111,12 @@ func createS3ClientForPrivateNetwork(credInfo CredentialInfo, cred *credentials.
 	}
 
 	// Create MinIO client
-	client, err := minio.New(baseS3Host, &minio.Options{
+	client, err := minio.New(minioEndpoint, &minio.Options{
 		Creds:        minioCred,
 		Secure:       true,
 		Transport:    transport,
 		Region:       credInfo.S3CredentialInfo.Region,
-		BucketLookup: minio.BucketLookupDNS, // force virtual-hosted style
+		BucketLookup: bucketLookup,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create MinIO client: %v", err)

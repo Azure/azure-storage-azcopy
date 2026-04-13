@@ -31,11 +31,13 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 )
 
 // IBlobClient is an interface to allow ValidateTier to accept any type of client
@@ -88,6 +90,28 @@ func prepareDestAccountInfo(client IBlobClient, jptm IJobPartTransferMgr, ctx co
 	if getDestAccountInfoError != nil {
 		jptm.FailActiveSendWithStatus("Checking destination tier availability (Set blob tier) ", getDestAccountInfoError, common.ETransferStatus.TierAvailabilityCheckFailure())
 	}
+}
+
+// timeEqual compares two timestamps with precision tolerance to handle filesystem precision differences.
+// It truncates both times to the specified precision to handle precision differences.
+// For GCS via S3 API, we use second precision since GCS has timestamp precision differences.
+func timeEqual(t1, t2 time.Time, useSecondPrecision bool) bool {
+	if useSecondPrecision {
+		return t1.Truncate(time.Second).Equal(t2.Truncate(time.Second))
+	}
+	return t1.Equal(t2)
+}
+
+// isGCSviaS3Source checks if the source is GCS accessed via S3-compatible API.
+// Only returns true for mover builds, so GCS timestamp truncation doesn't affect azcopy users.
+func isGCSviaS3Source(sip ISourceInfoProvider) bool {
+	if !buildmode.IsMover {
+		return false
+	}
+	if s3SIP, ok := sip.(*s3SourceInfoProvider); ok {
+		return s3SIP.s3URLPart.IsGoogleCloudStorage()
+	}
+	return false
 }
 
 // // TODO: Infer availability based upon blob size as well, for premium page blobs.
@@ -343,11 +367,37 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 			jptm.ReportTransferDone()
 			return
 		}
-		if !lmt.Equal(jptm.LastModifiedTime()) {
-			jptm.LogSendError(info.Source, info.Destination, "File modified since transfer scheduled", 0)
-			jptm.SetStatus(common.ETransferStatus.Failed())
-			jptm.ReportTransferDone()
-			return
+
+		if isGCSviaS3Source(srcInfoProvider) {
+			// GCS via S3 API: truncate timestamps to seconds to avoid false positives
+			// from precision differences in the S3-compatible API
+			scheduledTime := jptm.LastModifiedTime()
+			timestampsMatch := timeEqual(lmt, scheduledTime, true)
+			if jptm.ShouldLog(common.LogDebug) {
+				jptm.Log(common.LogDebug, fmt.Sprintf("GCS S3 truncated comparison: Scheduled=%v, Current=%v, Match=%v",
+					scheduledTime.Truncate(time.Second).Format("2006-01-02T15:04:05Z07:00"),
+					lmt.Truncate(time.Second).Format("2006-01-02T15:04:05Z07:00"),
+					timestampsMatch))
+			}
+			if !timestampsMatch {
+				errorMsg := fmt.Sprintf("File modified since transfer scheduled. Scheduled LMT: %v (Unix: %d), Current LMT: %v (Unix: %d), Difference: %v seconds",
+					scheduledTime.Format("2006-01-02T15:04:05.000000000Z07:00"),
+					scheduledTime.Unix(),
+					lmt.Format("2006-01-02T15:04:05.000000000Z07:00"),
+					lmt.Unix(),
+					lmt.Sub(scheduledTime).Seconds())
+				jptm.LogSendError(info.Source, info.Destination, errorMsg, 0)
+				jptm.SetStatus(common.ETransferStatus.Failed())
+				jptm.ReportTransferDone()
+				return
+			}
+		} else {
+			if !lmt.Equal(jptm.LastModifiedTime()) {
+				jptm.LogSendError(info.Source, info.Destination, fmt.Sprintf("File modified since transfer scheduled. Enumeration %v, current %v", jptm.LastModifiedTime(), lmt), 0)
+				jptm.SetStatus(common.ETransferStatus.Failed())
+				jptm.ReportTransferDone()
+				return
+			}
 		}
 	}
 
@@ -577,15 +627,40 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 			lmt, err := sip.GetFreshFileLastModifiedTime()
 			if err != nil {
 				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", err)
+				return
 			}
 
-			if !lmt.Equal(jptm.LastModifiedTime()) {
-				// **** Note that this check is ESSENTIAL and not just for the obvious reason of not wanting to upload
-				//      corrupt or inconsistent data. It's also essential to the integrity of our MD5 hashes.
-				common.DocumentationForDependencyOnChangeDetection() // <-- read the documentation here ***
+			if isGCSviaS3Source(sip) {
+				// GCS via S3 API: truncate timestamps to seconds to avoid false positives
+				// from precision differences in the S3-compatible API
+				scheduledTime := jptm.LastModifiedTime()
+				timestampsMatch := timeEqual(lmt, scheduledTime, true)
+				if jptm.ShouldLog(common.LogDebug) {
+					jptm.Log(common.LogDebug, fmt.Sprintf("GCS S3 truncated comparison: Scheduled=%v, Current=%v, Match=%v",
+						scheduledTime.Truncate(time.Second).Format("2006-01-02T15:04:05Z07:00"),
+						lmt.Truncate(time.Second).Format("2006-01-02T15:04:05Z07:00"),
+						timestampsMatch))
+				}
+				if !timestampsMatch {
+					common.DocumentationForDependencyOnChangeDetection()
+					errorMsg := fmt.Sprintf("Source modified during transfer. Scheduled LMT: %v (Unix: %d), Current LMT: %v (Unix: %d), Difference: %v seconds",
+						scheduledTime.Format("2006-01-02T15:04:05.000000000Z07:00"),
+						scheduledTime.Unix(),
+						lmt.Format("2006-01-02T15:04:05.000000000Z07:00"),
+						lmt.Unix(),
+						lmt.Sub(scheduledTime).Seconds())
+					jptm.Log(common.LogError, errorMsg)
+					jptm.FailActiveSend("epilogueWithCleanupSendToRemote", errors.New("source modified during transfer"))
+				}
+			} else {
+				if !lmt.Equal(jptm.LastModifiedTime()) {
+					// **** Note that this check is ESSENTIAL and not just for the obvious reason of not wanting to upload
+					//      corrupt or inconsistent data. It's also essential to the integrity of our MD5 hashes.
+					common.DocumentationForDependencyOnChangeDetection() // <-- read the documentation here ***
 
-				jptm.Log(common.LogError, fmt.Sprintf("Source Modified during transfer. Enumeration %v, current %v", jptm.LastModifiedTime(), lmt))
-				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", errors.New("source modified during transfer"))
+					jptm.Log(common.LogError, fmt.Sprintf("Source Modified during transfer. Enumeration %v, current %v", jptm.LastModifiedTime(), lmt))
+					jptm.FailActiveSend("epilogueWithCleanupSendToRemote", errors.New("source modified during transfer"))
+				}
 			}
 		}
 	}
