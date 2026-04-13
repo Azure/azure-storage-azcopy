@@ -33,7 +33,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 
 	"github.com/pkg/errors"
@@ -354,9 +353,11 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		if !t.include.Deleted() && (isBlob || err != nil) {
 			return err
 		}
-	} else if blobURLParts.BlobName == "" && (t.preservePermissions.IsTruthy() || t.isDFS) && !buildmode.IsMover {
+	} else if blobURLParts.BlobName == "" && (t.preservePermissions.IsTruthy() || t.isDFS) {
 		// If the root is a container and we're copying "folders", we should persist the ACLs there too.
 		// For DFS, we should always include the container root.
+		// Note: SyncTraverser.processor suppresses the sub_dirs enqueue for this self-reference
+		// to avoid an infinite re-enqueue loop in the mover sync orchestrator.
 		if azcopyScanningLogger != nil {
 			azcopyScanningLogger.Log(common.LogDebug, "Detected the root as a container.")
 		}

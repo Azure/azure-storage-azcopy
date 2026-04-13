@@ -328,10 +328,18 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 		return nil
 	}
 
-	// Build full path for the object relative to current directory
+	// Detect self-referential root folder emission: blob/DFS traverser emits the container
+	// root as a Folder StoredObject with empty relativePath so that root ACLs flow through
+	// the transfer pipeline. We must store it in the indexer so its ACL gets transferred,
+	// but skip the sub_dirs append — otherwise it would re-enqueue the same directory and
+	// loop forever. The relativePath stays "" so the destination URL has empty BlobName,
+	// which routes the transfer through SetContainerACL().
+	isSelfReference := originalPath == "" && so.entityType == common.EEntityType.Folder()
 
 	isDirectory := so.entityType == common.EEntityType.Folder()
-	so.relativePath = buildChildPath(st.dir, so.relativePath, isDirectory)
+	if !isSelfReference {
+		so.relativePath = buildChildPath(st.dir, so.relativePath, isDirectory)
+	}
 
 	// Thread-safe storage in the indexer first
 	st.enumerator.objectIndexer.rwMutex.Lock()
@@ -347,7 +355,7 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 		totalFilesInIndexer.Add(1) // Increment the count of files in the indexer
 	}
 
-	if so.entityType == common.EEntityType.Folder() {
+	if so.entityType == common.EEntityType.Folder() && !isSelfReference {
 		st.sub_dirs = append(st.sub_dirs, minimalStoredObject{
 			relativePath: common.AZCOPY_PATH_SEPARATOR_STRING + so.relativePath, // we want enumerator to always operate with a leading slash to handle nameless dirs case (ex: ///blob.txt)
 			changeTime:   so.changeTime,

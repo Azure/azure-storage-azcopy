@@ -339,15 +339,11 @@ func TestHNSRootACL_ContainerLevel_MoverBuild(t *testing.T) {
 	_, _, exitCode := runACLSync(t, binary, srcURL, dstURL, flags)
 	require.Equal(t, 0, exitCode, "azcopy sync failed")
 
-	// Check destination root ACL — expect it NOT to match (demonstrates the bug)
+	// Verify destination root ACL matches source
 	dstRootACL := getRootACL(t, c2cHNSDestAccount, dstFS)
 	t.Logf("Destination root ACL: %s", dstRootACL)
-
-	// This assertion documents the bug: mover build does NOT transfer root ACLs
-	assert.NotEqual(t, normalizeACL(srcRootACL), normalizeACL(dstRootACL),
-		"Mover build BUG: destination root ACL should NOT match source (root ACL not transferred)")
-	t.Logf("CONFIRMED BUG: mover build did not transfer root ACL. Source: %s, Dest: %s",
-		normalizeACL(srcRootACL), normalizeACL(dstRootACL))
+	assert.Equal(t, normalizeACL(srcRootACL), normalizeACL(dstRootACL),
+		"Mover build: destination root ACL should match source root ACL")
 }
 
 // ---------------------------------------------------------------------------
@@ -427,12 +423,9 @@ func TestHNSRootACL_SubfolderLevel_MoverBuild(t *testing.T) {
 	_, _, exitCode := runACLSync(t, binary, srcURL, dstURL, flags)
 	require.Equal(t, 0, exitCode, "azcopy sync failed")
 
-	// Check destination subfolder ACL — expect it NOT to match (same bug as container-level)
-	// When sub1 is the root of the sync operation, the mover build skips its ACL too
+	// Verify destination subfolder ACL matches source
 	dstSubACL := getDirACL(t, c2cHNSDestAccount, dstFS, "sub1")
 	t.Logf("Destination sub1 ACL: %s", dstSubACL)
-	assert.NotEqual(t, normalizeACL(srcSubACL), normalizeACL(dstSubACL),
-		"Mover build BUG: destination sub1 ACL should NOT match source (sync root ACL not transferred)")
-	t.Logf("CONFIRMED BUG: mover build did not transfer subfolder ACL when subfolder is sync root. Source: %s, Dest: %s",
-		normalizeACL(srcSubACL), normalizeACL(dstSubACL))
+	assert.Equal(t, normalizeACL(srcSubACL), normalizeACL(dstSubACL),
+		"Mover build: destination sub1 ACL should match source sub1 ACL")
 }
