@@ -292,9 +292,8 @@ func validateDiverseResult(
 
 // Scenario: Copy upload resume (Local → FileNFS).
 //
-// The NFS destination share is nearly full so the first run fails.
-// After increasing the quota the job is resumed and all hardlinks are
-// preserved.
+// The first run is throttled and cancelled mid-flight via stdin.
+// After cancellation the job is resumed and all hardlinks are preserved.
 func (s *FilesNFSTestSuite) Scenario_HardlinkCopyResume_Upload(svm *ScenarioVariationManager) {
 	if runtime.GOOS != "linux" {
 		svm.InvalidateScenario()
@@ -304,15 +303,13 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopyResume_Upload(svm *ScenarioVari
 		return
 	}
 
-	dstContainer := setupNFSShareWithQuota(svm, 1)
+	dstContainer := setupNFSShareWithQuota(svm, 100)
 	rootDir := "hlcpyresup_" + uuid.NewString()
 	defer CleanupNFSDirectory(svm, dstContainer, rootDir)
 
-	fillNFSShareNearQuota(svm, dstContainer, 1000*common.MegaByte)
-
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(
 		svm, common.ELocation.Local()), ResourceDefinitionContainer{})
-	srcSet := createDiverseSourceSet(svm, srcContainer, rootDir, 10*common.MegaByte)
+	srcSet := createDiverseSourceSet(svm, srcContainer, rootDir, 50*common.MegaByte)
 
 	dstDir := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 	dstDir.Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Folder()})
@@ -328,16 +325,19 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopyResume_Upload(svm *ScenarioVari
 				FromTo:           pointerTo(common.EFromTo.LocalFileNFS()),
 				HardlinkType:     pointerTo(common.PreserveHardlinkHandlingType),
 				PreserveSymlinks: pointerTo(true),
+				GlobalFlags: GlobalFlags{
+					CancelFromStdin: pointerTo(true),
+					CapMbps:         pointerTo(float64(2)),
+				},
 			},
 			AsSubdir: pointerTo(false),
 		},
+		AfterStart:  cancelAfter(10 * time.Second),
 		ShouldFail:  true,
 		Environment: env,
 	})
 
 	jobId := extractJobID(svm, stdOut)
-
-	setNFSShareQuota(svm, dstContainer, pointerTo(int32(2)))
 
 	resStdOut, _ := RunAzCopy(svm, AzCopyCommand{
 		Verb:           AzCopyVerbJobsResume,
@@ -411,8 +411,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopyResume_Download(svm *ScenarioVa
 
 // Scenario: Copy S2S resume (FileNFS → FileNFS).
 //
-// The destination NFS share is nearly full so the first run fails.
-// After increasing the quota the job is resumed.
+// The first run is throttled and cancelled mid-flight via stdin.
+// After cancellation the job is resumed.
 func (s *FilesNFSTestSuite) Scenario_HardlinkCopyResume_S2S(svm *ScenarioVariationManager) {
 	if runtime.GOOS != "linux" {
 		svm.InvalidateScenario()
@@ -426,12 +426,10 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopyResume_S2S(svm *ScenarioVariati
 	rootDir := "hlcpyress2s_" + uuid.NewString()
 	defer CleanupNFSDirectory(svm, srcContainer, rootDir)
 
-	srcSet := createDiverseSourceSet(svm, srcContainer, rootDir, 10*common.MegaByte)
+	srcSet := createDiverseSourceSet(svm, srcContainer, rootDir, 50*common.MegaByte)
 
-	dstContainer := setupNFSShareWithQuota(svm, 1)
+	dstContainer := setupNFSShareWithQuota(svm, 100)
 	defer CleanupNFSDirectory(svm, dstContainer, rootDir)
-
-	fillNFSShareNearQuota(svm, dstContainer, 1000*common.MegaByte)
 
 	dstDir := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 	dstDir.Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Folder()})
@@ -448,16 +446,19 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopyResume_S2S(svm *ScenarioVariati
 				FromTo:           pointerTo(common.EFromTo.FileNFSFileNFS()),
 				HardlinkType:     pointerTo(common.PreserveHardlinkHandlingType),
 				PreserveSymlinks: pointerTo(true),
+				GlobalFlags: GlobalFlags{
+					CancelFromStdin: pointerTo(true),
+					CapMbps:         pointerTo(float64(2)),
+				},
 			},
 			AsSubdir: pointerTo(false),
 		},
+		AfterStart:  cancelAfter(10 * time.Second),
 		ShouldFail:  true,
 		Environment: env,
 	})
 
 	jobId := extractJobID(svm, stdOut)
-
-	setNFSShareQuota(svm, dstContainer, pointerTo(int32(2)))
 
 	resStdOut, _ := RunAzCopy(svm, AzCopyCommand{
 		Verb:           AzCopyVerbJobsResume,
@@ -474,8 +475,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopyResume_S2S(svm *ScenarioVariati
 
 // Scenario: Sync upload resume (Local → FileNFS).
 //
-// The NFS destination share is nearly full so the first run fails.
-// After increasing the quota the job is resumed.
+// The first run is throttled and cancelled mid-flight via stdin.
+// After cancellation the job is resumed.
 func (s *FilesNFSTestSuite) Scenario_HardlinkSyncResume_Upload(svm *ScenarioVariationManager) {
 	if runtime.GOOS != "linux" {
 		svm.InvalidateScenario()
@@ -485,15 +486,13 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSyncResume_Upload(svm *ScenarioVari
 		return
 	}
 
-	dstContainer := setupNFSShareWithQuota(svm, 1)
+	dstContainer := setupNFSShareWithQuota(svm, 100)
 	rootDir := "hlsynresup_" + uuid.NewString()
 	defer CleanupNFSDirectory(svm, dstContainer, rootDir)
 
-	fillNFSShareNearQuota(svm, dstContainer, 1000*common.MegaByte)
-
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(
 		svm, common.ELocation.Local()), ResourceDefinitionContainer{})
-	srcSet := createDiverseSourceSet(svm, srcContainer, rootDir, 10*common.MegaByte)
+	srcSet := createDiverseSourceSet(svm, srcContainer, rootDir, 50*common.MegaByte)
 
 	dstDir := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 	dstDir.Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Folder()})
@@ -509,15 +508,18 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSyncResume_Upload(svm *ScenarioVari
 				FromTo:           pointerTo(common.EFromTo.LocalFileNFS()),
 				HardlinkType:     pointerTo(common.PreserveHardlinkHandlingType),
 				PreserveSymlinks: pointerTo(true),
+				GlobalFlags: GlobalFlags{
+					CancelFromStdin: pointerTo(true),
+					CapMbps:         pointerTo(float64(2)),
+				},
 			},
 		},
+		AfterStart:  cancelAfter(10 * time.Second),
 		ShouldFail:  true,
 		Environment: env,
 	})
 
 	jobId := extractJobID(svm, stdOut)
-
-	setNFSShareQuota(svm, dstContainer, pointerTo(int32(2)))
 
 	resStdOut, _ := RunAzCopy(svm, AzCopyCommand{
 		Verb:           AzCopyVerbJobsResume,
@@ -596,8 +598,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSyncResume_Download(svm *ScenarioVa
 
 // Scenario: Sync S2S resume (FileNFS → FileNFS).
 //
-// The destination NFS share is nearly full so the first run fails.
-// After increasing the quota the job is resumed.
+// The first run is throttled and cancelled mid-flight via stdin.
+// After cancellation the job is resumed.
 func (s *FilesNFSTestSuite) Scenario_HardlinkSyncResume_S2S(svm *ScenarioVariationManager) {
 	if runtime.GOOS != "linux" {
 		svm.InvalidateScenario()
@@ -611,12 +613,10 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSyncResume_S2S(svm *ScenarioVariati
 	rootDir := "hlsynress2s_" + uuid.NewString()
 	defer CleanupNFSDirectory(svm, srcContainer, rootDir)
 
-	srcSet := createDiverseSourceSet(svm, srcContainer, rootDir, 10*common.MegaByte)
+	srcSet := createDiverseSourceSet(svm, srcContainer, rootDir, 50*common.MegaByte)
 
-	dstContainer := setupNFSShareWithQuota(svm, 1)
+	dstContainer := setupNFSShareWithQuota(svm, 100)
 	defer CleanupNFSDirectory(svm, dstContainer, rootDir)
-
-	fillNFSShareNearQuota(svm, dstContainer, 1000*common.MegaByte)
 
 	dstDir := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 	dstDir.Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Folder()})
@@ -633,15 +633,18 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSyncResume_S2S(svm *ScenarioVariati
 				FromTo:           pointerTo(common.EFromTo.FileNFSFileNFS()),
 				HardlinkType:     pointerTo(common.PreserveHardlinkHandlingType),
 				PreserveSymlinks: pointerTo(true),
+				GlobalFlags: GlobalFlags{
+					CancelFromStdin: pointerTo(true),
+					CapMbps:         pointerTo(float64(2)),
+				},
 			},
 		},
+		AfterStart:  cancelAfter(10 * time.Second),
 		ShouldFail:  true,
 		Environment: env,
 	})
 
 	jobId := extractJobID(svm, stdOut)
-
-	setNFSShareQuota(svm, dstContainer, pointerTo(int32(2)))
 
 	resStdOut, _ := RunAzCopy(svm, AzCopyCommand{
 		Verb:           AzCopyVerbJobsResume,
