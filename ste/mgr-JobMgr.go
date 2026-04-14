@@ -577,9 +577,17 @@ func (jm *jobMgr) ResumeTransfers(appCtx context.Context) {
 		jpm.Plan().SetJobPartStatus(common.EJobStatus.InProgress())
 	})
 
-	jm.jobPartMgrs.Iterate(false, func(p common.PartNumber, jpm IJobPartMgr) {
-		jm.QueueJobParts(jpm)
+	// Collect parts first, then queue outside the lock.
+	// QueueJobParts → checkAndProcessHardlinkParts → jobPartMgrs.Iterate(true, ...)
+	// would deadlock if called from within jobPartMgrs.Iterate(false, ...) because
+	// Go's RWMutex does not support reentrant read-locking while a write lock is held.
+	var parts []IJobPartMgr
+	jm.jobPartMgrs.Iterate(true, func(p common.PartNumber, jpm IJobPartMgr) {
+		parts = append(parts, jpm)
 	})
+	for _, jpm := range parts {
+		jm.QueueJobParts(jpm)
+	}
 }
 
 // When a previously job is resumed, ResetFailedTransfersCount

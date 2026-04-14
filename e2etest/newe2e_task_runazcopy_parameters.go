@@ -210,7 +210,7 @@ type GlobalFlags struct {
 
 	// TODO: handle prompting and input; WI#26475441
 	CancelFromStdin *bool `flag:"cancel-from-stdin"`
-	AwaitContinue *bool `flag:"await-continue,defaultfunc:DefaultAwaitContinue"`
+	AwaitContinue   *bool `flag:"await-continue,defaultfunc:DefaultAwaitContinue"`
 	//AwaitOpen       *bool `flag:"await-open"`
 
 	// TODO: Ongoing performance profiling work
@@ -484,6 +484,12 @@ type JobsCleanFlags struct {
 	GlobalFlags
 
 	WithStatus *common.JobStatus `flag:"with-status"`
+}
+
+type JobsResumeFlags struct {
+	GlobalFlags
+	SourceSAS      *string `flag:"source-sas"`
+	DestinationSAS *string `flag:"destination-sas"`
 }
 
 type JobsRemoveFlags struct {

@@ -937,7 +937,9 @@ func (f *FileObjectResourceManager) ReadLink(a Asserter) string {
 
 		resp, err := f.getFileClient().GetSymbolicLink(ctx, nil)
 		a.NoError("Read symlink", err)
-
+		if err != nil || resp.LinkText == nil {
+			return ""
+		}
 		return *resp.LinkText
 	}
 	a.Error("Symlinks are unsupported on Files.")
