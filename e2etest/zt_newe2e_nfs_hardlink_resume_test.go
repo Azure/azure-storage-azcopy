@@ -651,6 +651,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSyncResume_S2S(svm *ScenarioVariati
 		PositionalArgs: []string{jobId},
 		Environment:    env,
 	})
+	fmt.Println("StdOut---------------------", resStdOut)
 	assertResumeCompleted(svm, resStdOut)
 	validateDiverseResult(svm, dstContainer, srcSet, common.EFromTo.FileNFSFileNFS())
 }
