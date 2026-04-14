@@ -43,35 +43,6 @@ func setupHardlinkSyncContainers(svm *ScenarioVariationManager) (
 	return
 }
 
-// helper: runs azcopy sync LocalFileNFS with --hardlinks=preserve and --delete-destination.
-func runHardlinkSync(
-	svm *ScenarioVariationManager,
-	srcDirObj ResourceManager,
-	dstDirObj RemoteResourceManager,
-	deleteDestination bool,
-) AzCopyStdout {
-	stdOut, _ := RunAzCopy(
-		svm,
-		AzCopyCommand{
-			Verb: AzCopyVerbSync,
-			Targets: []ResourceManager{srcDirObj, dstDirObj.(RemoteResourceManager).WithSpecificAuthType(
-				ResolveVariation(svm, []ExplicitCredentialTypes{
-					EExplicitCredentialType.SASToken(),
-					EExplicitCredentialType.OAuth(),
-				}), svm, CreateAzCopyTargetOptions{}),
-			},
-			Flags: SyncFlags{
-				CopySyncCommonFlags: CopySyncCommonFlags{
-					Recursive:    pointerTo(true),
-					FromTo:       pointerTo(common.EFromTo.LocalFileNFS()),
-					HardlinkType: pointerTo(common.PreserveHardlinkHandlingType),
-				},
-				DeleteDestination: pointerTo(deleteDestination),
-			},
-		})
-	return stdOut
-}
-
 // isNFSContainer returns true when c is backed by Azure Files NFS.
 func isNFSContainer(c ContainerResourceManager) bool {
 	return c.Location() == common.ELocation.FileNFS()
@@ -182,28 +153,72 @@ func runHardlinkSyncForFromTo(
 	dstDirObj ResourceManager,
 	fromTo common.FromTo,
 	deleteDestination bool,
+	preserveSymlinks ...bool,
 ) AzCopyStdout {
 	authIfRemote := func(rm ResourceManager) ResourceManager {
 		if remote, ok := rm.(RemoteResourceManager); ok {
 			return remote.WithSpecificAuthType(
 				ResolveVariation(svm, []ExplicitCredentialTypes{
 					EExplicitCredentialType.SASToken(),
-					//EExplicitCredentialType.OAuth(),
+					EExplicitCredentialType.OAuth(),
 				}), svm, CreateAzCopyTargetOptions{})
 		}
 		return rm
 	}
+	flags := SyncFlags{
+		CopySyncCommonFlags: CopySyncCommonFlags{
+			Recursive:    pointerTo(true),
+			FromTo:       pointerTo(fromTo),
+			HardlinkType: pointerTo(common.PreserveHardlinkHandlingType),
+		},
+		DeleteDestination: pointerTo(deleteDestination),
+	}
+	if len(preserveSymlinks) > 0 && preserveSymlinks[0] {
+		flags.CopySyncCommonFlags.PreserveSymlinks = pointerTo(true)
+	}
 	stdOut, _ := RunAzCopy(svm, AzCopyCommand{
 		Verb:    AzCopyVerbSync,
 		Targets: []ResourceManager{authIfRemote(srcDirObj), authIfRemote(dstDirObj)},
-		Flags: SyncFlags{
-			CopySyncCommonFlags: CopySyncCommonFlags{
-				Recursive:    pointerTo(true),
-				FromTo:       pointerTo(fromTo),
-				HardlinkType: pointerTo(common.PreserveHardlinkHandlingType),
-			},
-			DeleteDestination: pointerTo(deleteDestination),
+		Flags:   flags,
+	})
+	return stdOut
+}
+
+// runHardlinkCopyForFromTo runs azcopy copy with --hardlinks=preserve and --as-subdir=false
+// for any fromTo direction.  Both src and dst are authenticated when they are remote.
+// Pass preserveSymlinks=true to also set --preserve-symlinks.
+func runHardlinkCopyForFromTo(
+	svm *ScenarioVariationManager,
+	srcDirObj ResourceManager,
+	dstDirObj ResourceManager,
+	fromTo common.FromTo,
+	preserveSymlinks ...bool,
+) AzCopyStdout {
+	authIfRemote := func(rm ResourceManager) ResourceManager {
+		if remote, ok := rm.(RemoteResourceManager); ok {
+			return remote.WithSpecificAuthType(
+				ResolveVariation(svm, []ExplicitCredentialTypes{
+					EExplicitCredentialType.SASToken(),
+					EExplicitCredentialType.OAuth(),
+				}), svm, CreateAzCopyTargetOptions{})
+		}
+		return rm
+	}
+	flags := CopyFlags{
+		CopySyncCommonFlags: CopySyncCommonFlags{
+			Recursive:    pointerTo(true),
+			FromTo:       pointerTo(fromTo),
+			HardlinkType: pointerTo(common.PreserveHardlinkHandlingType),
 		},
+		AsSubdir: pointerTo(false),
+	}
+	if len(preserveSymlinks) > 0 && preserveSymlinks[0] {
+		flags.CopySyncCommonFlags.PreserveSymlinks = pointerTo(true)
+	}
+	stdOut, _ := RunAzCopy(svm, AzCopyCommand{
+		Verb:    AzCopyVerbCopy,
+		Targets: []ResourceManager{authIfRemote(srcDirObj), authIfRemote(dstDirObj)},
+		Flags:   flags,
 	})
 	return stdOut
 }
@@ -2454,97 +2469,14 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_FileJoinsGroup(svm *ScenarioVa
 	ValidateHardlinksTransferCount(svm, stdOut, 1)
 }
 
+// ===========================================================================================
+// Hardlink Preserve Copy Upload Scenarios (Local → Azure Files NFS, using `azcopy copy`)
 //
 // These tests exercise the copy-upload direction with --hardlinks=preserve.  Unlike sync,
 // copy does not compare source vs. destination timestamps — it always transfers.  The key
 // assertions are that anchor files land as regular files and hardlink partners are created
 // via the Azure Files CreateHardLink REST API, producing the correct inode relationships.
 // ===========================================================================================
-
-// helper: runs azcopy copy LocalFileNFS with --hardlinks=preserve and --as-subdir=false so
-// that files land directly inside the given destination directory.
-func runHardlinkCopy(
-	svm *ScenarioVariationManager,
-	srcDirObj ResourceManager,
-	dstDirObj RemoteResourceManager,
-) AzCopyStdout {
-	stdOut, _ := RunAzCopy(
-		svm,
-		AzCopyCommand{
-			Verb: AzCopyVerbCopy,
-			Targets: []ResourceManager{srcDirObj, dstDirObj.(RemoteResourceManager).WithSpecificAuthType(
-				ResolveVariation(svm, []ExplicitCredentialTypes{
-					EExplicitCredentialType.SASToken(),
-					//EExplicitCredentialType.OAuth(),
-				}), svm, CreateAzCopyTargetOptions{}),
-			},
-			Flags: CopyFlags{
-				CopySyncCommonFlags: CopySyncCommonFlags{
-					Recursive:    pointerTo(true),
-					FromTo:       pointerTo(common.EFromTo.LocalFileNFS()),
-					HardlinkType: pointerTo(common.PreserveHardlinkHandlingType),
-				},
-				AsSubdir: pointerTo(false),
-			},
-		})
-	return stdOut
-}
-
-// helper: creates an NFS source container and a local destination container for download
-// tests.  Returns (srcNFSContainer, dstLocalContainer, rootDir).  Caller must defer
-// CleanupNFSDirectory on srcNFSContainer.
-func setupHardlinkDownloadContainers(svm *ScenarioVariationManager) (
-	srcContainer ContainerResourceManager,
-	dstContainer ContainerResourceManager,
-	rootDir string,
-) {
-	srcContainer = GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
-		PreferredAccount: pointerTo(PremiumFileShareAcct),
-	}).(ServiceResourceManager).GetContainer("hlcpydlsrc")
-	if !srcContainer.Exists() {
-		srcContainer.Create(svm, ContainerProperties{
-			FileContainerProperties: FileContainerProperties{
-				EnabledProtocols: pointerTo("NFS"),
-			},
-		})
-	}
-
-	dstContainer = CreateResource[ContainerResourceManager](svm, GetRootResource(
-		svm, common.ELocation.Local()), ResourceDefinitionContainer{})
-
-	rootDir = "hlcpydl_" + uuid.NewString()
-	return
-}
-
-// helper: runs azcopy copy FileNFSLocal with --hardlinks=preserve and --as-subdir=false so
-// that files from the source directory land directly in the local destination directory.
-func runHardlinkCopyDownload(
-	svm *ScenarioVariationManager,
-	srcDirObj RemoteResourceManager,
-	dstDirObj ResourceManager,
-) AzCopyStdout {
-	stdOut, _ := RunAzCopy(
-		svm,
-		AzCopyCommand{
-			Verb: AzCopyVerbCopy,
-			Targets: []ResourceManager{srcDirObj.(RemoteResourceManager).WithSpecificAuthType(
-				ResolveVariation(svm, []ExplicitCredentialTypes{
-					EExplicitCredentialType.SASToken(),
-					//EExplicitCredentialType.OAuth(),
-				}), svm, CreateAzCopyTargetOptions{}),
-				dstDirObj,
-			},
-			Flags: CopyFlags{
-				CopySyncCommonFlags: CopySyncCommonFlags{
-					Recursive:    pointerTo(true),
-					FromTo:       pointerTo(common.EFromTo.FileNFSLocal()),
-					HardlinkType: pointerTo(common.PreserveHardlinkHandlingType),
-				},
-				AsSubdir: pointerTo(false),
-			},
-		})
-	return stdOut
-}
 
 // Scenario 13: Copy upload — initial copy of hardlinked files to empty NFS destination.
 //
@@ -2609,7 +2541,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_InitialUpload(svm *ScenarioVar
 
 	srcDirObj2 := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
-	stdOut := runHardlinkCopy(svm, srcDirObj2, dstDir.(RemoteResourceManager))
+	stdOut := runHardlinkCopyForFromTo(svm, srcDirObj2, dstDir, common.EFromTo.LocalFileNFS())
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
@@ -2704,7 +2636,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_MultipleGroups(svm *ScenarioVa
 
 	srcDirObj2 := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
-	stdOut := runHardlinkCopy(svm, srcDirObj2, dstDir.(RemoteResourceManager))
+	stdOut := runHardlinkCopyForFromTo(svm, srcDirObj2, dstDir, common.EFromTo.LocalFileNFS())
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
@@ -2794,7 +2726,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_NestedDirectories(svm *Scenari
 
 	srcDirObj2 := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
-	stdOut := runHardlinkCopy(svm, srcDirObj2, dstDir.(RemoteResourceManager))
+	stdOut := runHardlinkCopyForFromTo(svm, srcDirObj2, dstDir, common.EFromTo.LocalFileNFS())
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
@@ -2842,8 +2774,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_DownloadInitial(svm *ScenarioV
 		return
 	}
 
-	srcContainer, dstContainer, rootDir := setupHardlinkDownloadContainers(svm)
-	defer CleanupNFSDirectory(svm, srcContainer, rootDir)
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, common.EFromTo.FileNFSLocal())
+	defer cleanupHardlinkSyncForFromTo(svm, common.EFromTo.FileNFSLocal(), srcContainer, dstContainer, rootDir)
 
 	anchorName := rootDir + "/anchor.txt"
 	linkName := rootDir + "/link_to_anchor.txt"
@@ -2872,7 +2804,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_DownloadInitial(svm *ScenarioV
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
 	// --as-subdir=false: files land at dstContainer/anchor.txt etc. (no rootDir prefix).
-	stdOut := runHardlinkCopyDownload(svm, srcDirObj.(RemoteResourceManager), dstContainer)
+	stdOut := runHardlinkCopyForFromTo(svm, srcDirObj, dstContainer, common.EFromTo.FileNFSLocal())
 
 	anchorLocal := "anchor.txt"
 	linkLocal := "link_to_anchor.txt"
@@ -2914,8 +2846,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_DownloadMultipleGroups(svm *Sc
 		return
 	}
 
-	srcContainer, dstContainer, rootDir := setupHardlinkDownloadContainers(svm)
-	defer CleanupNFSDirectory(svm, srcContainer, rootDir)
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, common.EFromTo.FileNFSLocal())
+	defer cleanupHardlinkSyncForFromTo(svm, common.EFromTo.FileNFSLocal(), srcContainer, dstContainer, rootDir)
 
 	g1Anchor := rootDir + "/group1_anchor.txt"
 	g1Link := rootDir + "/group1_link.txt"
@@ -2964,7 +2896,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_DownloadMultipleGroups(svm *Sc
 
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
-	stdOut := runHardlinkCopyDownload(svm, srcDirObj.(RemoteResourceManager), dstContainer)
+	stdOut := runHardlinkCopyForFromTo(svm, srcDirObj, dstContainer, common.EFromTo.FileNFSLocal())
 
 	g1AnchorLocal := "group1_anchor.txt"
 	g1LinkLocal := "group1_link.txt"
@@ -3018,8 +2950,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_DownloadNestedDirectories(svm 
 		return
 	}
 
-	srcContainer, dstContainer, rootDir := setupHardlinkDownloadContainers(svm)
-	defer CleanupNFSDirectory(svm, srcContainer, rootDir)
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, common.EFromTo.FileNFSLocal())
+	defer cleanupHardlinkSyncForFromTo(svm, common.EFromTo.FileNFSLocal(), srcContainer, dstContainer, rootDir)
 
 	subdirName := rootDir + "/subdir"
 	nestedDirName := rootDir + "/subdir/nested"
@@ -3057,7 +2989,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_DownloadNestedDirectories(svm 
 
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
-	stdOut := runHardlinkCopyDownload(svm, srcDirObj.(RemoteResourceManager), dstContainer)
+	stdOut := runHardlinkCopyForFromTo(svm, srcDirObj, dstContainer, common.EFromTo.FileNFSLocal())
 
 	anchorLocal := "subdir/anchor.txt"
 	linkLocal := "subdir/nested/link.txt"
@@ -3078,4 +3010,294 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_DownloadNestedDirectories(svm 
 		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	ValidateHardlinksTransferCount(svm, stdOut, 2)
+}
+
+// ===========================================================================================
+// Hardlink-to-Symlink Scenarios
+//
+// A hardlink to a symlink shares the same inode as the original symlink.  On Linux
+// a hardlink to a symlink is itself a symlink.  These tests verify that the anchor
+// (first-seen entry by inode) is transferred as a regular symlink and that subsequent
+// entries sharing the same inode are created via CreateHardLink, preserving the
+// relationship correctly.
+// ===========================================================================================
+
+// Scenario 19: Sync — hardlink pointing to a symlink.
+//
+// Source:
+//
+//	target.txt               (regular file)
+//	sym_to_target.txt        (symlink → target.txt)
+//	hlink_to_sym.txt         (hardlink → sym_to_target.txt, same inode)
+//
+// Destination: empty (seeded for sync)
+//
+// Expected:
+//   - target.txt transferred as regular file
+//   - sym_to_target.txt transferred as symlink (anchor for the inode)
+//   - hlink_to_sym.txt transferred as hardlink → sym_to_target.txt
+func (s *FilesNFSTestSuite) Scenario_HardlinkSync_HardlinkToSymlink(svm *ScenarioVariationManager) {
+	if runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
+	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
+		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
+		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
+		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
+	})
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
+
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName:       pointerTo(rootDir),
+		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()},
+	})
+
+	targetName := rootDir + "/target.txt"
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName:       pointerTo(targetName),
+		Body:             NewRandomObjectContentContainer(SizeFromString("1K")),
+		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+	})
+
+	symlinkName := rootDir + "/sym_to_target.txt"
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName: pointerTo(symlinkName),
+		ObjectProperties: ObjectProperties{
+			EntityType:        common.EEntityType.Symlink(),
+			SymlinkedFileName: targetName,
+		},
+	})
+
+	hlinkName := rootDir + "/hlink_to_sym.txt"
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName: pointerTo(hlinkName),
+		ObjectProperties: ObjectProperties{
+			EntityType:         common.EEntityType.Hardlink(),
+			HardLinkedFileName: symlinkName,
+		},
+	})
+
+	// Seed destination for sync (needs at least one file so sync succeeds).
+	dstSeed := dstContainer.GetObject(svm, rootDir+"/target.txt", common.EEntityType.File())
+	dstSeed.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
+	setOldLMT(svm, dstSeed, dstContainer)
+
+	if !svm.Dryrun() {
+		time.Sleep(5 * time.Second)
+	}
+
+	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+	dstDirObj := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+
+	stdOut := runHardlinkSyncForFromTo(svm, srcDirObj, dstDirObj, fromTo, false, true)
+
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			targetName: ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+			},
+			symlinkName: ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType:        common.EEntityType.Symlink(),
+					SymlinkedFileName: targetName,
+				},
+			},
+			hlinkName: ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType:         common.EEntityType.Hardlink(),
+					HardLinkedFileName: symlinkName,
+				},
+			},
+		},
+	}, ValidateResourceOptions{fromTo: fromTo,
+		hardlinkHandling: common.PreserveHardlinkHandlingType})
+
+	ValidateHardlinksTransferCount(svm, stdOut, 2)
+}
+
+// Scenario 20: Copy — hardlink pointing to a symlink.
+//
+// Same object layout as Scenario 19, but using `azcopy copy` instead of `azcopy sync`.
+// Tests all three directions: upload, download, and S2S.
+func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_HardlinkToSymlink(svm *ScenarioVariationManager) {
+	if runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
+	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
+		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
+		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
+		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
+	})
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
+
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName:       pointerTo(rootDir),
+		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()},
+	})
+
+	targetName := rootDir + "/target.txt"
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName:       pointerTo(targetName),
+		Body:             NewRandomObjectContentContainer(SizeFromString("1K")),
+		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+	})
+
+	symlinkName := rootDir + "/sym_to_target.txt"
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName: pointerTo(symlinkName),
+		ObjectProperties: ObjectProperties{
+			EntityType:        common.EEntityType.Symlink(),
+			SymlinkedFileName: targetName,
+		},
+	})
+
+	hlinkName := rootDir + "/hlink_to_sym.txt"
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName: pointerTo(hlinkName),
+		ObjectProperties: ObjectProperties{
+			EntityType:         common.EEntityType.Hardlink(),
+			HardLinkedFileName: symlinkName,
+		},
+	})
+
+	// Create destination root directory for copy --as-subdir=false.
+	dstDir := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+	dstDir.Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Folder()})
+
+	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+
+	stdOut := runHardlinkCopyForFromTo(svm, srcDirObj, dstDir, fromTo, true)
+
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			targetName: ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+			},
+			symlinkName: ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType:        common.EEntityType.Symlink(),
+					SymlinkedFileName: targetName,
+				},
+			},
+			hlinkName: ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType:         common.EEntityType.Hardlink(),
+					HardLinkedFileName: symlinkName,
+				},
+			},
+		},
+	}, ValidateResourceOptions{fromTo: fromTo,
+		hardlinkHandling: common.PreserveHardlinkHandlingType})
+
+	ValidateHardlinksTransferCount(svm, stdOut, 2)
+}
+
+// Scenario 21: Copy — multiple hardlinks pointing to the same symlink.
+//
+// Source:
+//
+//	target.txt               (regular file)
+//	sym_to_target.txt        (symlink → target.txt, nlink=3)
+//	hlink1_to_sym.txt        (hardlink → sym_to_target.txt)
+//	hlink2_to_sym.txt        (hardlink → sym_to_target.txt)
+//
+// Expected:
+//   - target.txt as regular file
+//   - sym_to_target.txt as symlink (anchor)
+//   - hlink1_to_sym.txt and hlink2_to_sym.txt as hardlinks
+//   - ValidateHardlinksTransferCount == 3 (anchor symlink + 2 hardlinks)
+func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_MultipleHardlinksToSymlink(svm *ScenarioVariationManager) {
+	if runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
+	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
+		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
+		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
+		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
+	})
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
+
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName:       pointerTo(rootDir),
+		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()},
+	})
+
+	targetName := rootDir + "/target.txt"
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName:       pointerTo(targetName),
+		Body:             NewRandomObjectContentContainer(SizeFromString("1K")),
+		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+	})
+
+	symlinkName := rootDir + "/sym_to_target.txt"
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName: pointerTo(symlinkName),
+		ObjectProperties: ObjectProperties{
+			EntityType:        common.EEntityType.Symlink(),
+			SymlinkedFileName: targetName,
+		},
+	})
+
+	hlink1Name := rootDir + "/hlink1_to_sym.txt"
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName: pointerTo(hlink1Name),
+		ObjectProperties: ObjectProperties{
+			EntityType:         common.EEntityType.Hardlink(),
+			HardLinkedFileName: symlinkName,
+		},
+	})
+
+	hlink2Name := rootDir + "/hlink2_to_sym.txt"
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName: pointerTo(hlink2Name),
+		ObjectProperties: ObjectProperties{
+			EntityType:         common.EEntityType.Hardlink(),
+			HardLinkedFileName: symlinkName,
+		},
+	})
+
+	dstDir := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+	dstDir.Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Folder()})
+
+	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+
+	stdOut := runHardlinkCopyForFromTo(svm, srcDirObj, dstDir, fromTo, true)
+
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			targetName: ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+			},
+			symlinkName: ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType:        common.EEntityType.Symlink(),
+					SymlinkedFileName: targetName,
+				},
+			},
+			hlink1Name: ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType:         common.EEntityType.Hardlink(),
+					HardLinkedFileName: symlinkName,
+				},
+			},
+			hlink2Name: ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType:         common.EEntityType.Hardlink(),
+					HardLinkedFileName: symlinkName,
+				},
+			},
+		},
+	}, ValidateResourceOptions{fromTo: fromTo,
+		hardlinkHandling: common.PreserveHardlinkHandlingType})
+
+	ValidateHardlinksTransferCount(svm, stdOut, 3)
 }

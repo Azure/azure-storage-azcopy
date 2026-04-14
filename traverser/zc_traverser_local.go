@@ -827,6 +827,14 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 								TargetHardlinkFile: targetHardlinkFile,
 								Inode:              inode,
 							}
+
+							// A hardlinked symlink (Nlink > 1 on a symlink inode) needs special
+							// handling: the anchor (first-seen entry) must be transferred as a
+							// symlink so its target is created correctly on the destination;
+							// only the subsequent links become Hardlink entities.
+							if IsSymbolicLink(fileInfo) && targetHardlinkFile == "" {
+								entityType = common.EEntityType.Symlink()
+							}
 						}
 					}
 				}
@@ -935,6 +943,12 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 								Inode:              inode,
 							}
 
+							// A hardlinked symlink (Nlink > 1 on a symlink inode): the anchor
+							// must keep Symlink entity type so it is created as a symlink on
+							// the destination; only subsequent links become Hardlink entities.
+							if IsSymbolicLink(fileInfo) && targetHardlinkFile == "" {
+								entityType = common.EEntityType.Symlink()
+							}
 						}
 					} else if !IsRegularFile(fileInfo) {
 						entityType = common.EEntityType.Other()
