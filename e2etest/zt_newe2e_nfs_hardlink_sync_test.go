@@ -1,6 +1,7 @@
 package e2etest
 
 import (
+	"runtime"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -207,7 +208,6 @@ func runHardlinkSyncForFromTo(
 	return stdOut
 }
 
-/*
 // Scenario 1: Initial Sync — fresh upload of hardlinked files to empty destination.
 //
 // Source (local):
@@ -3079,4 +3079,3 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_DownloadNestedDirectories(svm 
 
 	ValidateHardlinksTransferCount(svm, stdOut, 2)
 }
-*/
