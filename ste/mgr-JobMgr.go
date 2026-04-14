@@ -569,10 +569,25 @@ func (jm *jobMgr) ResumeTransfers(appCtx context.Context) {
 	// Since while creating the JobMgr, atomicAllTransfersScheduled is set to true
 	// reset it to false while resuming it
 	jm.ResetAllTransfersScheduled()
+
+	// Reset part statuses so checkAndProcessHardlinkParts sees the correct state.
+	// Without this, mixed parts retain completed status from the previous attempt,
+	// causing hardlink parts to be dispatched before mixed parts are re-scheduled.
 	jm.jobPartMgrs.Iterate(false, func(p common.PartNumber, jpm IJobPartMgr) {
-		jm.QueueJobParts(jpm)
-		// jpm.ScheduleTransfers(jm.ctx, includeTransfer, excludeTransfer)
+		jpm.Plan().SetJobPartStatus(common.EJobStatus.InProgress())
 	})
+
+	// Collect parts first, then queue outside the lock.
+	// QueueJobParts → checkAndProcessHardlinkParts → jobPartMgrs.Iterate(true, ...)
+	// would deadlock if called from within jobPartMgrs.Iterate(false, ...) because
+	// Go's RWMutex does not support reentrant read-locking while a write lock is held.
+	var parts []IJobPartMgr
+	jm.jobPartMgrs.Iterate(true, func(p common.PartNumber, jpm IJobPartMgr) {
+		parts = append(parts, jpm)
+	})
+	for _, jpm := range parts {
+		jm.QueueJobParts(jpm)
+	}
 }
 
 // When a previously job is resumed, ResetFailedTransfersCount
