@@ -3,6 +3,7 @@ package e2etest
 import (
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"runtime"
 	"strings"
@@ -70,6 +71,20 @@ func authTarget(svm *ScenarioVariationManager, rm ResourceManager) ResourceManag
 			}), svm, CreateAzCopyTargetOptions{})
 	}
 	return rm
+}
+
+// extractSASToken generates a SAS token for the given container and returns
+// just the query-string portion (without the leading "?").  This is suitable
+// for passing as --source-sas or --destination-sas on a resume command.
+func extractSASToken(container ContainerResourceManager) string {
+	uriWithSAS := container.URI(GetURIOptions{
+		AzureOpts: AzureURIOpts{WithSAS: true},
+	})
+	u, err := url.Parse(uriWithSAS)
+	if err != nil {
+		panic("extractSASToken: " + err.Error())
+	}
+	return u.RawQuery
 }
 
 // setupNFSShareWithQuota creates a fresh NFS share with the given quota (GB).
@@ -339,10 +354,14 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopyResume_Upload(svm *ScenarioVari
 
 	jobId := extractJobID(svm, stdOut)
 
+	dstSAS := extractSASToken(dstContainer)
 	resStdOut, _ := RunAzCopy(svm, AzCopyCommand{
 		Verb:           AzCopyVerbJobsResume,
 		PositionalArgs: []string{jobId},
 		Environment:    env,
+		Flags: JobsResumeFlags{
+			DestinationSAS: pointerTo(dstSAS),
+		},
 	})
 	assertResumeCompleted(svm, resStdOut)
 	validateDiverseResult(svm, dstContainer, srcSet, common.EFromTo.LocalFileNFS())
@@ -399,10 +418,14 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopyResume_Download(svm *ScenarioVa
 	// Restore write permissions so the resume can succeed.
 	svm.NoError("chmod writable", os.Chmod(dstPath, 0o755))
 
+	srcSAS := extractSASToken(srcContainer)
 	resStdOut, _ := RunAzCopy(svm, AzCopyCommand{
 		Verb:           AzCopyVerbJobsResume,
 		PositionalArgs: []string{jobId},
 		Environment:    env,
+		Flags: JobsResumeFlags{
+			SourceSAS: pointerTo(srcSAS),
+		},
 	})
 	assertResumeCompleted(svm, resStdOut)
 
@@ -460,10 +483,16 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopyResume_S2S(svm *ScenarioVariati
 
 	jobId := extractJobID(svm, stdOut)
 
+	srcSAS := extractSASToken(srcContainer)
+	dstSAS := extractSASToken(dstContainer)
 	resStdOut, _ := RunAzCopy(svm, AzCopyCommand{
 		Verb:           AzCopyVerbJobsResume,
 		PositionalArgs: []string{jobId},
 		Environment:    env,
+		Flags: JobsResumeFlags{
+			SourceSAS:      pointerTo(srcSAS),
+			DestinationSAS: pointerTo(dstSAS),
+		},
 	})
 	assertResumeCompleted(svm, resStdOut)
 	validateDiverseResult(svm, dstContainer, srcSet, common.EFromTo.FileNFSFileNFS())
@@ -521,10 +550,14 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSyncResume_Upload(svm *ScenarioVari
 
 	jobId := extractJobID(svm, stdOut)
 
+	dstSAS := extractSASToken(dstContainer)
 	resStdOut, _ := RunAzCopy(svm, AzCopyCommand{
 		Verb:           AzCopyVerbJobsResume,
 		PositionalArgs: []string{jobId},
 		Environment:    env,
+		Flags: JobsResumeFlags{
+			DestinationSAS: pointerTo(dstSAS),
+		},
 	})
 	assertResumeCompleted(svm, resStdOut)
 	validateDiverseResult(svm, dstContainer, srcSet, common.EFromTo.LocalFileNFS())
@@ -586,10 +619,14 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSyncResume_Download(svm *ScenarioVa
 	// Remove the seed so the resumed job is free to write all files.
 	_ = os.Remove(dstSeed.URI())
 
+	srcSAS := extractSASToken(srcContainer)
 	resStdOut, _ := RunAzCopy(svm, AzCopyCommand{
 		Verb:           AzCopyVerbJobsResume,
 		PositionalArgs: []string{jobId},
 		Environment:    env,
+		Flags: JobsResumeFlags{
+			SourceSAS: pointerTo(srcSAS),
+		},
 	})
 	assertResumeCompleted(svm, resStdOut)
 
@@ -646,12 +683,17 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSyncResume_S2S(svm *ScenarioVariati
 
 	jobId := extractJobID(svm, stdOut)
 
+	srcSAS := extractSASToken(srcContainer)
+	dstSAS := extractSASToken(dstContainer)
 	resStdOut, _ := RunAzCopy(svm, AzCopyCommand{
 		Verb:           AzCopyVerbJobsResume,
 		PositionalArgs: []string{jobId},
 		Environment:    env,
+		Flags: JobsResumeFlags{
+			SourceSAS:      pointerTo(srcSAS),
+			DestinationSAS: pointerTo(dstSAS),
+		},
 	})
-	fmt.Println("StdOut---------------------", resStdOut)
 	assertResumeCompleted(svm, resStdOut)
 	validateDiverseResult(svm, dstContainer, srcSet, common.EFromTo.FileNFSFileNFS())
 }
@@ -666,11 +708,17 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSyncResume_S2S(svm *ScenarioVariati
 
 // cancelAfter returns an AfterStart callback that writes "cancel\n" to stdin
 // after the given delay, triggering a graceful cancel via --cancel-from-stdin.
+// A follow-up "y\n" is sent to confirm cancellation in case the enumeration
+// is not yet complete (the lifecycle manager prompts for confirmation).
 func cancelAfter(delay time.Duration) func(stdin io.WriteCloser) {
 	return func(stdin io.WriteCloser) {
 		go func() {
 			time.Sleep(delay)
 			_, _ = io.WriteString(stdin, "cancel\n")
+			// Small pause so the cancel signal is processed before the
+			// confirmation arrives on the input reader.
+			time.Sleep(500 * time.Millisecond)
+			_, _ = io.WriteString(stdin, "y\n")
 		}()
 	}
 }
@@ -728,10 +776,14 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopyCancel_Upload(svm *ScenarioVari
 
 	jobId := extractJobID(svm, stdOut)
 
+	dstSAS := extractSASToken(dstContainer)
 	resStdOut, _ := RunAzCopy(svm, AzCopyCommand{
 		Verb:           AzCopyVerbJobsResume,
 		PositionalArgs: []string{jobId},
 		Environment:    env,
+		Flags: JobsResumeFlags{
+			DestinationSAS: pointerTo(dstSAS),
+		},
 	})
 	assertResumeCompleted(svm, resStdOut)
 	validateDiverseResult(svm, dstContainer, srcSet, common.EFromTo.LocalFileNFS())
@@ -782,10 +834,14 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopyCancel_Download(svm *ScenarioVa
 
 	jobId := extractJobID(svm, stdOut)
 
+	srcSAS := extractSASToken(srcContainer)
 	resStdOut, _ := RunAzCopy(svm, AzCopyCommand{
 		Verb:           AzCopyVerbJobsResume,
 		PositionalArgs: []string{jobId},
 		Environment:    env,
+		Flags: JobsResumeFlags{
+			SourceSAS: pointerTo(srcSAS),
+		},
 	})
 	assertResumeCompleted(svm, resStdOut)
 	validateDiverseResult(svm, dstContainer, srcSet.flat(), common.EFromTo.FileNFSLocal())
@@ -839,10 +895,16 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopyCancel_S2S(svm *ScenarioVariati
 
 	jobId := extractJobID(svm, stdOut)
 
+	srcSAS := extractSASToken(srcContainer)
+	dstSAS := extractSASToken(dstContainer)
 	resStdOut, _ := RunAzCopy(svm, AzCopyCommand{
 		Verb:           AzCopyVerbJobsResume,
 		PositionalArgs: []string{jobId},
 		Environment:    env,
+		Flags: JobsResumeFlags{
+			SourceSAS:      pointerTo(srcSAS),
+			DestinationSAS: pointerTo(dstSAS),
+		},
 	})
 	assertResumeCompleted(svm, resStdOut)
 	validateDiverseResult(svm, dstContainer, srcSet, common.EFromTo.FileNFSFileNFS())
@@ -897,10 +959,14 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSyncCancel_Upload(svm *ScenarioVari
 
 	jobId := extractJobID(svm, stdOut)
 
+	dstSAS := extractSASToken(dstContainer)
 	resStdOut, _ := RunAzCopy(svm, AzCopyCommand{
 		Verb:           AzCopyVerbJobsResume,
 		PositionalArgs: []string{jobId},
 		Environment:    env,
+		Flags: JobsResumeFlags{
+			DestinationSAS: pointerTo(dstSAS),
+		},
 	})
 	assertResumeCompleted(svm, resStdOut)
 	validateDiverseResult(svm, dstContainer, srcSet, common.EFromTo.LocalFileNFS())
@@ -957,10 +1023,14 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSyncCancel_Download(svm *ScenarioVa
 	// Remove the seed so the resumed job is free to write all files.
 	_ = os.Remove(dstSeed.URI())
 
+	srcSAS := extractSASToken(srcContainer)
 	resStdOut, _ := RunAzCopy(svm, AzCopyCommand{
 		Verb:           AzCopyVerbJobsResume,
 		PositionalArgs: []string{jobId},
 		Environment:    env,
+		Flags: JobsResumeFlags{
+			SourceSAS: pointerTo(srcSAS),
+		},
 	})
 	assertResumeCompleted(svm, resStdOut)
 	validateDiverseResult(svm, dstContainer, srcSet.flat(), common.EFromTo.FileNFSLocal())
@@ -1013,10 +1083,16 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSyncCancel_S2S(svm *ScenarioVariati
 
 	jobId := extractJobID(svm, stdOut)
 
+	srcSAS := extractSASToken(srcContainer)
+	dstSAS := extractSASToken(dstContainer)
 	resStdOut, _ := RunAzCopy(svm, AzCopyCommand{
 		Verb:           AzCopyVerbJobsResume,
 		PositionalArgs: []string{jobId},
 		Environment:    env,
+		Flags: JobsResumeFlags{
+			SourceSAS:      pointerTo(srcSAS),
+			DestinationSAS: pointerTo(dstSAS),
+		},
 	})
 	assertResumeCompleted(svm, resStdOut)
 	validateDiverseResult(svm, dstContainer, srcSet, common.EFromTo.FileNFSFileNFS())

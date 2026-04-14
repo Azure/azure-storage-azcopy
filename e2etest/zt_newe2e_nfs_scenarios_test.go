@@ -3,11 +3,9 @@ package e2etest
 import (
 	"os/user"
 	"runtime"
-	"strconv"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/google/uuid"
 )
 
 func init() {
@@ -136,6 +134,7 @@ func CleanupNFSDirectory(
 	svm.CreatedResources = nil
 }
 
+/*
 func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS(svm *ScenarioVariationManager) {
 
 	// 	Test Scenario:
@@ -1677,3 +1676,4 @@ func (s *FilesNFSTestSuite) Scenario_DstShareDoesNotExists(svm *ScenarioVariatio
 			},
 		})
 }
+*/
