@@ -524,6 +524,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 							noMetadata,
 							containerName,
 						)
+						storedObject.isVirtualPrefix = true
 						enqueueOutput(storedObject, err)
 					}
 				}
@@ -592,9 +593,9 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 		object := item.(StoredObject)
 
 		if t.incrementEnumerationCounter != nil {
-			if UseSyncOrchestrator {
+			if UseSyncOrchestrator && !object.isVirtualPrefix {
 				t.incrementEnumerationCounter(object.entityType)
-			} else {
+			} else if !UseSyncOrchestrator {
 				// XDM: Retaining the old behavior but this seems like a bug.
 				t.incrementEnumerationCounter(common.EEntityType.File())
 			}
