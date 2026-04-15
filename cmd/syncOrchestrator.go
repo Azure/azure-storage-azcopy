@@ -335,7 +335,10 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 	// but skip the sub_dirs append — otherwise it would re-enqueue the same directory and
 	// loop forever. The relativePath stays "" so the destination URL has empty BlobName,
 	// which routes the transfer through SetContainerACL().
-	isSelfReference := originalPath == "" && so.entityType == common.EEntityType.Folder()
+	// Using the explicit isContainerRootEmit flag (set only by the blob traverser's
+	// container-root branch) instead of matching on empty relativePath + Folder, because
+	// that shape also legitimately occurs for <no-name> virtual-directory entries.
+	isSelfReference := so.isContainerRootEmit
 
 	isDirectory := so.entityType == common.EEntityType.Folder()
 	if !isSelfReference {

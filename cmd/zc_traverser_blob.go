@@ -374,6 +374,9 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			common.Metadata{},
 			blobURLParts.ContainerName,
 		)
+		// Tag this emission so SyncTraverser.processor can distinguish it from <no-name>
+		// virtual-directory entries that also arrive with an empty relativePath.
+		storedObject.isContainerRootEmit = true
 
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter(common.EEntityType.Folder())
