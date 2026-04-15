@@ -91,6 +91,10 @@ type StoredObject struct {
 	blobSnapshotID string
 	blobDeleted    bool
 
+	// isVirtualPrefix marks synthetic directory prefixes
+	// it's used to skip incrementing folder stats for virtual prefixes during scanning for Blob to Blob syncs
+	isVirtualPrefix bool
+
 	// Lease information
 	leaseState    lease.StateType
 	leaseStatus   lease.StatusType
