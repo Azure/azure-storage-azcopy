@@ -64,6 +64,12 @@ type blobTraverser struct {
 
 	isDFS bool
 
+	// destResourceType, when set, lets the traverser avoid emitting source-root entities
+	// that the destination location can't consume (e.g. a container root folder emitted
+	// for an HNS source pointed at a flat-Blob destination would be filtered out of the
+	// transfer pipeline anyway, causing Scanned > Processed).
+	destResourceType *common.Location
+
 	errorChannel chan<- TraverserErrorItemInfo
 
 	// includeDirectoryOrPrefix is used to determine if we should enqueue directories or prefixes
@@ -116,6 +122,22 @@ func (e ErrorBlobInfo) Location() common.Location {
 }
 
 // END - Implementing methods defined in TraverserErrorItemInfo
+
+// destCanReceiveFolder reports whether the destination location can consume a folder
+// entity (BlobFS, File, or Local). Returns true when the destination type is unknown
+// (nil), preserving the prior unconditional emission behavior for callers that don't
+// populate DestResourceType.
+func (t *blobTraverser) destCanReceiveFolder() bool {
+	if t.destResourceType == nil {
+		return true
+	}
+	switch *t.destResourceType {
+	case common.ELocation.BlobFS(), common.ELocation.File(), common.ELocation.Local():
+		return true
+	default:
+		return false
+	}
+}
 
 func (t *blobTraverser) writeToBlobErrorChannel(err ErrorBlobInfo) {
 	if t.errorChannel != nil {
@@ -353,9 +375,11 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		if !t.include.Deleted() && (isBlob || err != nil) {
 			return err
 		}
-	} else if blobURLParts.BlobName == "" && (t.preservePermissions.IsTruthy() || t.isDFS) {
+	} else if blobURLParts.BlobName == "" && (t.preservePermissions.IsTruthy() || (t.isDFS && t.destCanReceiveFolder())) {
 		// If the root is a container and we're copying "folders", we should persist the ACLs there too.
-		// For DFS, we should always include the container root.
+		// For DFS, include the container root only when the destination can actually consume a folder
+		// entity — emitting it for a flat-Blob destination would be scanned-but-always-filtered by
+		// Fpo=AllFoldersExceptRoot, causing Scanned > Processed.
 		// Note: SyncTraverser.processor suppresses the sub_dirs enqueue for this self-reference
 		// to avoid an infinite re-enqueue loop in the mover sync orchestrator.
 		if azcopyScanningLogger != nil {
@@ -374,10 +398,6 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			common.Metadata{},
 			blobURLParts.ContainerName,
 		)
-		// Tag this emission so SyncTraverser.processor can distinguish it from <no-name>
-		// virtual-directory entries that also arrive with an empty relativePath.
-		storedObject.isContainerRootEmit = true
-
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter(common.EEntityType.Folder())
 		}
@@ -748,6 +768,7 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		cpkOptions:                  opts.CpkOptions,
 		preservePermissions:         opts.PreservePermissions,
 		isDFS:                       common.DerefOrZero(common.FirstOrZero(blobOpts).isDFS),
+		destResourceType:            opts.DestResourceType,
 		errorChannel:                opts.ErrorChannel,
 	}
 
