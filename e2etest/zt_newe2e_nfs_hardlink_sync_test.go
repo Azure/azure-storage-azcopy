@@ -223,7 +223,6 @@ func runHardlinkCopyForFromTo(
 	return stdOut
 }
 
-/*
 // Scenario 1: Initial Sync — fresh upload of hardlinked files to empty destination.
 //
 // Source (local):
@@ -3198,7 +3197,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_HardlinkToSymlink(svm *Scenari
 
 	ValidateHardlinksTransferCount(svm, stdOut, 2)
 }
-*/
+
 // Scenario 21: Copy — multiple hardlinks pointing to the same symlink.
 //
 // Source:
