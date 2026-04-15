@@ -95,14 +95,6 @@ type StoredObject struct {
 	// it's used to skip incrementing folder stats for virtual prefixes during scanning for Blob to Blob syncs
 	isVirtualPrefix bool
 
-	// isContainerRootEmit marks the synthetic Folder StoredObject that the blob traverser
-	// emits for the container root (BlobName == "") so HNS root ACLs flow through the
-	// transfer pipeline. The sync orchestrator uses this flag to skip the sub_dirs
-	// append that would otherwise cause a self-referential re-enqueue loop. Distinct
-	// from isVirtualPrefix because virtual-prefix entries can legitimately be empty-named
-	// folders under <no-name> virtual directories.
-	isContainerRootEmit bool
-
 	// Lease information
 	leaseState    lease.StateType
 	leaseStatus   lease.StatusType
