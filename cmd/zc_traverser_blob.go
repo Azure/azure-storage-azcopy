@@ -370,8 +370,7 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		// If the root is a container and we're copying "folders", we should persist the ACLs there too.
 		// For DFS, include the container root only when the destination is BlobFS — the container-root
 		// ACL path (blobFolderSender.SetContainerACL) hardcodes the DFS endpoint, so only HNS→HNS can
-		// actually land the ACL. Emitting for other destinations would be scanned-but-always-filtered
-		// by Fpo=AllFoldersExceptRoot, causing Scanned > Processed.
+		// actually land the ACL
 		if azcopyScanningLogger != nil {
 			azcopyScanningLogger.Log(common.LogDebug, "Detected the root as a container.")
 		}
