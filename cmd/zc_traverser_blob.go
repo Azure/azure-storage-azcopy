@@ -123,20 +123,11 @@ func (e ErrorBlobInfo) Location() common.Location {
 
 // END - Implementing methods defined in TraverserErrorItemInfo
 
-// destCanReceiveFolder reports whether the destination location can consume a folder
-// entity (BlobFS, File, or Local). Returns true when the destination type is unknown
-// (nil), preserving the prior unconditional emission behavior for callers that don't
-// populate DestResourceType.
-func (t *blobTraverser) destCanReceiveFolder() bool {
-	if t.destResourceType == nil {
-		return true
-	}
-	switch *t.destResourceType {
-	case common.ELocation.BlobFS(), common.ELocation.File(), common.ELocation.Local():
-		return true
-	default:
-		return false
-	}
+// destIsBlobFS reports whether the destination is a BlobFS (HNS) endpoint.
+// Returns false when destResourceType is nil, since the container-root ACL path
+// only succeeds against an explicitly-known HNS destination.
+func (t *blobTraverser) destIsBlobFS() bool {
+	return t.destResourceType != nil && *t.destResourceType == common.ELocation.BlobFS()
 }
 
 func (t *blobTraverser) writeToBlobErrorChannel(err ErrorBlobInfo) {
@@ -375,13 +366,12 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		if !t.include.Deleted() && (isBlob || err != nil) {
 			return err
 		}
-	} else if blobURLParts.BlobName == "" && (t.preservePermissions.IsTruthy() || (t.isDFS && t.destCanReceiveFolder())) {
+	} else if blobURLParts.BlobName == "" && (t.preservePermissions.IsTruthy() || (t.isDFS && t.destIsBlobFS())) {
 		// If the root is a container and we're copying "folders", we should persist the ACLs there too.
-		// For DFS, include the container root only when the destination can actually consume a folder
-		// entity — emitting it for a flat-Blob destination would be scanned-but-always-filtered by
-		// Fpo=AllFoldersExceptRoot, causing Scanned > Processed.
-		// Note: SyncTraverser.processor suppresses the sub_dirs enqueue for this self-reference
-		// to avoid an infinite re-enqueue loop in the mover sync orchestrator.
+		// For DFS, include the container root only when the destination is BlobFS — the container-root
+		// ACL path (blobFolderSender.SetContainerACL) hardcodes the DFS endpoint, so only HNS→HNS can
+		// actually land the ACL. Emitting for other destinations would be scanned-but-always-filtered
+		// by Fpo=AllFoldersExceptRoot, causing Scanned > Processed.
 		if azcopyScanningLogger != nil {
 			azcopyScanningLogger.Log(common.LogDebug, "Detected the root as a container.")
 		}

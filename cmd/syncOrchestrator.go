@@ -333,12 +333,7 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 	// empty relativePath when the source is DFS (HNS), so that root ACLs flow
 	// through the transfer pipeline. We must store it in the indexer so its ACL
 	// gets transferred, but skip the sub_dirs append — otherwise it would
-	// re-enqueue the same directory and loop forever. The relativePath stays ""
-	// so the destination URL has empty BlobName, which routes the transfer
-	// through SetContainerACL().
-	// Safe to identify via path shape here because <no-name> virtual-directory
-	// entries (which share the empty-path + Folder shape) only occur on flat
-	// blob sources, never on BlobFS.
+	// re-enqueue the same directory and loop forever
 	isHNSContainerRoot := st.enumerator.orchestratorOptions.fromTo.From() == common.ELocation.BlobFS() &&
 		originalPath == "" && so.entityType == common.EEntityType.Folder()
 
