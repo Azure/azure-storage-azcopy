@@ -216,7 +216,7 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 		}
 
 		// if source is not more recent, we skip the transfer
-		if f.incrementNotTransferred != nil {
+		if f.incrementNotTransferred != nil && !sourceObjectInMap.isVirtualPrefix {
 			f.incrementNotTransferred(sourceObjectInMap.entityType)
 		}
 
@@ -321,7 +321,7 @@ func (f *syncDestinationComparator) processIfNecessaryWithOrchestrator(
 	}
 
 	// Data, metadata or entity type are unchanged, so we skip the transfer.
-	if f.incrementNotTransferred != nil {
+	if f.incrementNotTransferred != nil && !sourceObjectInMap.isVirtualPrefix {
 		f.incrementNotTransferred(sourceObjectInMap.entityType)
 	}
 

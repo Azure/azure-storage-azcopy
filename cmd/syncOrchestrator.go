@@ -91,6 +91,7 @@ type minimalStoredObject struct {
 	changeTime time.Time // Change time of the object
 
 	isPresentAtDestination bool // Indicates if the object is present at the secondary location
+	isVirtualPrefix        bool // Virtual directory prefix, not a real dir stub or HNS directory
 }
 
 // GetCustomSyncHandlerInfo returns a description of the current sync handler implementation.
@@ -349,8 +350,9 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 
 	if so.entityType == common.EEntityType.Folder() {
 		st.sub_dirs = append(st.sub_dirs, minimalStoredObject{
-			relativePath: common.AZCOPY_PATH_SEPARATOR_STRING + so.relativePath, // we want enumerator to always operate with a leading slash to handle nameless dirs case (ex: ///blob.txt)
-			changeTime:   so.changeTime,
+			relativePath:    common.AZCOPY_PATH_SEPARATOR_STRING + so.relativePath, // we want enumerator to always operate with a leading slash to handle nameless dirs case (ex: ///blob.txt)
+			changeTime:      so.changeTime,
+			isVirtualPrefix: so.isVirtualPrefix,
 		})
 	}
 
@@ -801,8 +803,10 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 					ptt.options.IncrementNotTransferred(common.EEntityType.File())
 				}
 
-				for range stra.sub_dirs {
-					ptt.options.IncrementNotTransferred(common.EEntityType.Folder())
+				for _, subDir := range stra.sub_dirs {
+					if !subDir.isVirtualPrefix {
+						ptt.options.IncrementNotTransferred(common.EEntityType.Folder())
+					}
 				}
 
 				dstDirEnumerationSkippedBasedOnCTime.Add(1) // Increment skipped count based on ctime optimization
