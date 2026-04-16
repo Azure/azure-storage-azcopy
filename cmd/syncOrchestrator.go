@@ -337,6 +337,7 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 	isHNSContainerRoot := st.enumerator.orchestratorOptions.fromTo.From() == common.ELocation.BlobFS() &&
 		originalPath == "" && so.entityType == common.EEntityType.Folder()
 
+	// Build full path for the object relative to current directory
 	isDirectory := so.entityType == common.EEntityType.Folder()
 	if !isHNSContainerRoot {
 		so.relativePath = buildChildPath(st.dir, so.relativePath, isDirectory)
