@@ -337,7 +337,10 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 	isHNSContainerRoot := st.enumerator.orchestratorOptions.fromTo.From() == common.ELocation.BlobFS() &&
 		originalPath == "" && so.entityType == common.EEntityType.Folder()
 
-	// Build full path for the object relative to current directory
+	// Build full path for the object relative to current directory.
+	// Skip for the HNS container root: the empty relativePath is a sentinel that
+	// routes the transfer through blobFolderSender.SetContainerACL (via BlobName=="").
+	// buildChildPath would rewrite "" to "/" and break that routing.
 	isDirectory := so.entityType == common.EEntityType.Folder()
 	if !isHNSContainerRoot {
 		so.relativePath = buildChildPath(st.dir, so.relativePath, isDirectory)
