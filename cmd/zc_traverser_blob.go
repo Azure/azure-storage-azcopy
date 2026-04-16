@@ -64,10 +64,6 @@ type blobTraverser struct {
 
 	isDFS bool
 
-	// destResourceType, when set, lets the traverser avoid emitting source-root entities
-	// that the destination location can't consume (e.g. a container root folder emitted
-	// for an HNS source pointed at a flat-Blob destination would be filtered out of the
-	// transfer pipeline anyway, causing Scanned > Processed).
 	destResourceType *common.Location
 
 	errorChannel chan<- TraverserErrorItemInfo
