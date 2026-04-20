@@ -23,6 +23,7 @@ package common
 import (
 	"errors"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 )
@@ -64,6 +65,27 @@ const s3EssentialHostPart = "amazonaws.com"
 
 var s3HostRegex = regexp.MustCompile(s3HostPattern)
 
+func GetS3CompatibleSuffix() string {
+	if os.Getenv("S3_COMPATIBLE_ENDPOINT") != "" {
+		return os.Getenv("S3_COMPATIBLE_ENDPOINT")
+	} else {
+		return "amazonaws.com"
+	}
+}
+
+func getS3Keyword() string {
+	suffix := strings.ToLower(GetS3CompatibleSuffix())
+
+	switch {
+	case strings.HasSuffix(suffix, "googleapis.com"):
+		return "googleapis"
+	case strings.HasSuffix(suffix, "amazonaws.com"):
+		return "amazonaws"
+	default:
+		return "custom"
+	}
+}
+
 // IsS3URL verifies if a given URL points to S3 URL supported by AzCopy-v10
 func IsS3URL(u url.URL) bool {
 	if _, isS3URL := findS3URLMatches(strings.ToLower(u.Host)); isS3URL {
@@ -72,12 +94,143 @@ func IsS3URL(u url.URL) bool {
 	return false
 }
 
+// findS3URLMatches identifies whether the given host corresponds to an S3 (or S3-compatible) endpoint
+// and returns a synthesized slice similar to the AWS regex submatches:
+//
+//	[ fullHost, bucketCapture(with trailing '.' if present OR ""), regionOrDualStack, keywordDomainRoot ]
+//
+// For path-style compatible providers where bucket is not in host, bucketCapture is "" so caller treats it as path-style.
+// The host should be passed as lower-case for consistent matching.
 func findS3URLMatches(host string) (matches []string, isS3Host bool) {
-	matchSlices := s3HostRegex.FindStringSubmatch(host) // If match the first element would be entire host, and then follows the sub match strings.
-	if matchSlices == nil || !strings.Contains(host, s3EssentialHostPart) {
-		return nil, false
+	suffix := GetS3CompatibleSuffix()
+	hostLower := strings.ToLower(host)
+
+	// Dispatcher based on configured suffix (allows per-provider parsing differences)
+	switch {
+	case strings.HasSuffix(hostLower, "."+suffix) || hostLower == suffix:
+		// Pick provider-specific matcher using well-known suffixes
+		switch {
+		case suffix == "amazonaws.com":
+			if m := matchAWSHost(hostLower, suffix); m != nil {
+				return m, true
+			}
+		case strings.HasSuffix(suffix, "googleapis.com"):
+			// Always pass the domain root so matchGoogleHost builds correct endpoints
+			// (e.g. suffix may be "storage.googleapis.com" but matcher needs "googleapis.com")
+			if m := matchGoogleHost(hostLower, "googleapis.com"); m != nil {
+				return m, true
+			}
+		default:
+			if m := matchGoogleHost(hostLower, suffix); m != nil {
+				return m, true
+			}
+			if m := matchAWSHost(hostLower, suffix); m != nil {
+				return m, true
+			}
+			// For custom (non-well-known) suffixes, allow any valid FQDN
+			// for on-prem S3-compatible appliances (e.g., MinIO, NetApp, Dell EMC, etc.)
+			if os.Getenv("S3_COMPATIBLE_ENDPOINT") != "" && IsPrivateNetworkTransfer(ELocation.S3()) {
+				if m := matchCustomS3Host(hostLower); m != nil {
+					return m, true
+				}
+			}
+		}
 	}
-	return matchSlices, true
+
+	return nil, false
+}
+
+// matchAWSHost uses the legacy AWS regex; requires suffix to be present.
+func matchAWSHost(hostLower, suffix string) []string {
+	if !strings.Contains(hostLower, suffix) {
+		return nil
+	}
+	matchSlices := s3HostRegex.FindStringSubmatch(hostLower)
+	if matchSlices == nil {
+		return nil
+	}
+	// Ensure suffix presence (already checked) then return
+	return matchSlices
+}
+
+// matchGoogleHost matches Google Cloud Storage endpoints in four forms:
+//   - Path-style global:    storage.googleapis.com/bucketName
+//   - Path-style regional:  storage.<region>.rep.googleapis.com/bucketName
+//   - Path-style PSC:       storage-<psc_name>.p.googleapis.com/bucketName
+//   - Virtual-hosted style: bucketName.storage.googleapis.com
+//
+// Bucket and object come from the path for path-style, or from the host prefix for virtual-hosted.
+func matchGoogleHost(hostLower, suffix string) []string {
+	keyword := getS3Keyword() // googleapis
+
+	// Case 1: Global path-style: storage.googleapis.com
+	globalEndpoint := "storage." + suffix
+	if hostLower == globalEndpoint {
+		return []string{hostLower, "", "", keyword}
+	}
+
+	// Case 2: Regional path-style: storage.<region>.rep.googleapis.com
+	repSuffix := ".rep." + suffix
+	storagePrefix := "storage."
+	if strings.HasPrefix(hostLower, storagePrefix) && strings.HasSuffix(hostLower, repSuffix) {
+		region := hostLower[len(storagePrefix) : len(hostLower)-len(repSuffix)]
+		if region != "" {
+			return []string{hostLower, "", region, keyword}
+		}
+	}
+
+	// Case 3: PSC path-style: storage-<psc_id>.p.googleapis.com
+	// Private Service Connect endpoints use this format with no region.
+	pscSuffix := ".p." + suffix
+	if strings.HasPrefix(hostLower, "storage-") && strings.HasSuffix(hostLower, pscSuffix) {
+		pscID := hostLower[len("storage-") : len(hostLower)-len(pscSuffix)]
+		if pscID != "" {
+			return []string{hostLower, "", "", keyword}
+		}
+	}
+
+	// Case 4: Virtual-hosted style: <bucket>.storage.googleapis.com
+	if strings.HasSuffix(hostLower, "."+globalEndpoint) {
+		bucketWithDot := hostLower[:len(hostLower)-len(globalEndpoint)] // includes trailing "."
+		if bucketWithDot != "" {
+			return []string{hostLower, bucketWithDot, "", keyword}
+		}
+	}
+
+	return nil
+}
+
+// matchCustomS3Host handles arbitrary FQDN hosts for on-prem S3-compatible appliances.
+// This supports custom domains like s3.company.com, minio.internal.net, storage.local, etc.
+// Assumes path-style URLs (bucket in path, not subdomain) for maximum compatibility.
+func matchCustomS3Host(hostLower string) []string {
+	if hostLower == "" {
+		return nil
+	}
+
+	configuredHost := strings.ToLower(os.Getenv("S3_COMPATIBLE_ENDPOINT"))
+	if configuredHost == "" {
+		return nil
+	}
+
+	keyword := getS3Keyword()
+	region := ""
+
+	// Path-style: exact endpoint host
+	if hostLower == configuredHost {
+		return []string{hostLower, "", region, keyword}
+	}
+
+	// Virtual-hosted style: <bucket>.<configuredHost>
+	suffix := "." + configuredHost
+	if strings.HasSuffix(hostLower, suffix) {
+		bucketPart := strings.TrimSuffix(hostLower, suffix)
+		if bucketPart != "" && !strings.Contains(bucketPart, "..") {
+			return []string{hostLower, bucketPart + ".", region, keyword}
+		}
+	}
+
+	return nil
 }
 
 // NewS3URLParts parses a URL initializing S3URLParts' fields. This method overwrites all fields in the S3URLParts object.
@@ -121,7 +274,16 @@ func NewS3URLParts(u url.URL) (S3URLParts, error) {
 
 		up.Endpoint = host
 	}
+
+	// For S3-compatible endpoints (e.g. GCS path-style), the ObjectKey may have a
+	// leading "/" after URL parsing which causes a double-slash in minio's path-style
+	// request URL (bucket//objectKey), resulting in 403 errors.
+	if up.IsS3CompatibleEndpoint() && strings.HasPrefix(up.ObjectKey, "/") {
+		up.ObjectKey = strings.TrimLeft(up.ObjectKey, "/")
+	}
+
 	// Check if dualstack is contained in host name
+	s3KeywordAmazonAWS := getS3Keyword()
 	if matchSlices[2] == s3KeywordDualStack {
 		up.isDualStack = true
 		if matchSlices[3] != s3KeywordAmazonAWS {
@@ -209,6 +371,18 @@ func (p *S3URLParts) IsDirectorySyntactically() bool {
 		return true
 	}
 	return false
+}
+
+// IsGoogleCloudStorage checks if this S3 URL is actually pointing to Google Cloud Storage
+// (via S3-compatible API with HMAC keys). Returns true if the endpoint is storage.googleapis.com.
+func (p *S3URLParts) IsGoogleCloudStorage() bool {
+	return strings.Contains(strings.ToLower(p.Endpoint), "googleapis.com")
+}
+
+// IsS3CompatibleEndpoint returns true if a custom S3-compatible endpoint is configured
+// via the S3_COMPATIBLE_ENDPOINT environment variable.
+func (p *S3URLParts) IsS3CompatibleEndpoint() bool {
+	return os.Getenv("S3_COMPATIBLE_ENDPOINT") != ""
 }
 
 type caseInsensitiveValues url.Values // map[string][]string

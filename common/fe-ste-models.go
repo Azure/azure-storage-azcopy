@@ -920,7 +920,15 @@ func (TransferStatus) TierAvailabilityCheckFailure() TransferStatus { return Tra
 
 func (TransferStatus) Cancelled() TransferStatus { return TransferStatus(-6) }
 
+// Transfer was skipped because S3 source object is in an archive storage class (GLACIER/DEEP_ARCHIVE)
+// and has not been restored.
+func (TransferStatus) SkippedArchiveNotRestored() TransferStatus { return TransferStatus(-7) }
+
 // Transfer is any of the three possible state (InProgress, Completer or Failed)
+// ErrS3ArchiveObjectNotRestored is returned when an S3 object is in an archive storage class
+// (GLACIER/DEEP_ARCHIVE) and has not been restored. The STE uses this to skip the transfer.
+var ErrS3ArchiveObjectNotRestored = errors.New("S3 object is in archive storage class and has not been restored")
+
 func (TransferStatus) All() TransferStatus { return TransferStatus(math.MaxInt8) }
 func (ts TransferStatus) String() string {
 	return enum.StringInt(ts, reflect.TypeOf(ts))

@@ -716,10 +716,21 @@ func (jm *jobMgr) ResumeTransfers(appCtx context.Context) {
 	// Since while creating the JobMgr, atomicAllTransfersScheduled is set to true
 	// reset it to false while resuming it
 	jm.ResetAllTransfersScheduled()
-	jm.jobPartMgrs.Iterate(false, func(p common.PartNumber, jpm IJobPartMgr) {
+
+	// In mover builds, use READ lock (not write lock) to iterate jobPartMgrs while queuing to partsChannel.
+	// A write lock here would deadlock when partsChannel fills up (capacity 1000):
+	//   - ResumeTransfers holds write lock, blocks on partsChannel send
+	//   - reportJobPartDoneHandler needs read lock via Get(0), blocks on write lock
+	//   - scheduleJobParts blocks on unbuffered jobPartProgress, waiting for reportJobPartDoneHandler
+	// Read lock avoids this because RWMutex allows concurrent readers.
+	// No writers exist at this point — all AddJobPart/AddJobOrder calls completed in ResurrectJob (step 1).
+	useReadLock := buildmode.IsMover
+	partCount := 0
+	jm.jobPartMgrs.Iterate(useReadLock, func(p common.PartNumber, jpm IJobPartMgr) {
 		jm.QueueJobParts(jpm)
-		// jpm.ScheduleTransfers(jm.ctx, includeTransfer, excludeTransfer)
+		partCount++
 	})
+	common.GetLifecycleMgr().Info(fmt.Sprintf("[RESUME] JobId=%s: all %d parts queued successfully", jm.jobID, partCount))
 }
 
 // When a previously job is resumed, ResetFailedTransfersCount
@@ -1170,7 +1181,6 @@ func (jm *jobMgr) scheduleJobParts() {
 			return
 
 		case jobPart := <-jm.xferChannels.partsChannel:
-
 			if !startedPoolSizer {
 				// spin up a GR to coordinate dynamic sizing of the main pool
 				// It will automatically spin up the right number of chunk processors

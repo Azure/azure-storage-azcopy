@@ -107,6 +107,8 @@ type rawSyncCmdArgs struct {
 	hardlinks    string
 	// blobType specifies the type of blob to use at the destination (BlockBlob, PageBlob, AppendBlob).
 	blobType string
+	// blockBlobTier specifies the access tier for block blobs at the destination.
+	blockBlobTier string
 }
 
 // it is assume that the given url has the SAS stripped, and safe to print
@@ -249,6 +251,12 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 
 	if err = cooked.blobType.Parse(raw.blobType); err != nil {
 		return cooked, err
+	}
+
+	if raw.blockBlobTier != "" {
+		if err = cooked.blockBlobTier.Parse(raw.blockBlobTier); err != nil {
+			return cooked, err
+		}
 	}
 
 	if cooked.fromTo.IsS2S() {
@@ -531,6 +539,9 @@ type cookedSyncCmdArgs struct {
 
 	// blobType specifies the type of blob to use at the destination (BlockBlob, PageBlob, AppendBlob).
 	blobType common.BlobType
+
+	// blockBlobTier specifies the access tier for block blobs at the destination.
+	blockBlobTier common.BlockBlobTier
 
 	// cancellation for sync orchestrator
 	orchestratorCancel context.CancelFunc

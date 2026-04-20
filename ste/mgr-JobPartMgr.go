@@ -334,8 +334,14 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 
 	jpm.clientInfo()
 
+	// Cache IsFinalPart before the transfer loop, since plan memory may be unmapped
+	// by progressive cleanup after the last ReportTransferDone fires.
+	isFinalPart := plan.IsFinalPart
+
 	// *** Schedule this job part's transfers ***
-	for t := uint32(0); t < plan.NumTransfers; t++ {
+	// Use cachedNumTransfers (copied at init) instead of plan.NumTransfers (mmap'd memory)
+	// to avoid SIGSEGV if the plan file is unmapped by progressive cleanup while this loop is still running.
+	for t := uint32(0); t < jpm.cachedNumTransfers; t++ {
 		jppt := plan.Transfer(t)
 		ts := jppt.TransferStatus()
 		if ts == common.ETransferStatus.Success() {
@@ -430,12 +436,12 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		// atomicAllTransfersScheduled variables is used in case of resume job
 		// Since iterating the JobParts and scheduling transfer is independent
 		// a variable is required which defines whether last part is resumed or not
-		if plan.IsFinalPart {
+		if isFinalPart {
 			jpm.jobMgr.ConfirmAllTransfersScheduled()
 		}
 	}
 
-	if plan.IsFinalPart {
+	if isFinalPart {
 		jpm.Log(common.LogInfo, "Final job part has been scheduled")
 	}
 }
@@ -693,11 +699,8 @@ func (jpm *jobPartMgr) UnmapPlanFile() {
 
 	jpm.planMMF.Unmap()
 	if partNum%100 == 0 {
-		// logging for every 100th part num
 		fmt.Printf("DEBUG: Unmap() completed for part %d\n", partNum)
 	}
-	// Note: We don't set planMMF to nil here to maintain Plan() access,
-	// but the memory is freed. The Unmap() is idempotent so it's safe to call again.
 }
 
 // TODO: added for debugging purpose. remove later
