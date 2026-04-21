@@ -22,6 +22,7 @@ package common
 
 import (
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -268,7 +269,7 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 				// Incase of cancel operation return response without checking for errors.
 				if errMsg == "context canceled" {
 					log.Printf("Returning for cancel operation for Private Endpoint IP %s", peIP)
-					return resp, fmt.Errorf(errMsg)
+					return resp, errors.New(errMsg)
 				}
 				log.Printf("[Counter=%d Retry=%d] Network error with no response, Error Message:%s retryable:%v", idx, ipAttempt, errMsg, isRetryableErr)
 			}
