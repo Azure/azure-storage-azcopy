@@ -168,7 +168,7 @@ func cleanContainer(resourceURL string) {
 	_, _ = containerClient.Create(ctx, nil)
 
 	// perform a list blob
-	pager := containerClient.NewListBlobsFlatPager(nil)
+	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{UseArrowFormat: to.Ptr(true)})
 	for pager.More() {
 		// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
 		listBlob, err := pager.NextPage(ctx)

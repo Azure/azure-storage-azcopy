@@ -796,8 +796,9 @@ func TestPermDeleteSnapshotsVersionsUnderSingleBlob(t *testing.T) {
 	a.Equal(3, len(blobList))
 
 	pager := cc.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
-		Prefix:  to.Ptr(blobName),
-		Include: container.ListBlobsInclude{Deleted: true, Snapshots: true},
+		Prefix:         to.Ptr(blobName),
+		Include:        container.ListBlobsInclude{Deleted: true, Snapshots: true},
+		UseArrowFormat: to.Ptr(true),
 	})
 	list, err := pager.NextPage(ctx)
 	a.Nil(err)

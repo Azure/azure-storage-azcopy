@@ -90,8 +90,9 @@ func TestOverwritePosixProperties(t *testing.T) {
 	})
 
 	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
-		Include: container.ListBlobsInclude{Metadata: true, Tags: true},
-		Prefix:  to.Ptr(filepath.Base(dirPath)),
+		Include:        container.ListBlobsInclude{Metadata: true, Tags: true},
+		Prefix:         to.Ptr(filepath.Base(dirPath)),
+		UseArrowFormat: to.Ptr(true),
 	})
 	listBlob, err := pager.NextPage(context.TODO())
 

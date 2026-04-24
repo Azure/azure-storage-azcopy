@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
@@ -83,7 +84,7 @@ func (t *BlobTraverser) IsDirectory(isSource bool) (isDirectory bool, err error)
 		if blobURLParts.ContainerName != "" && blobURLParts.BlobName == "" {
 			// If it's a container, let's ensure that container exists. Listing is a safe assumption to be valid, because how else would we enumerate?
 			containerClient := t.ServiceClient.NewContainerClient(blobURLParts.ContainerName)
-			p := containerClient.NewListBlobsFlatPager(nil)
+			p := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{UseArrowFormat: to.Ptr(true)})
 			_, err = p.NextPage(t.ctx)
 
 			if bloberror.HasCode(err, bloberror.AuthorizationPermissionMismatch) {
@@ -116,7 +117,10 @@ func (t *BlobTraverser) IsDirectory(isSource bool) (isDirectory bool, err error)
 	containerClient := t.ServiceClient.NewContainerClient(blobURLParts.ContainerName)
 	searchPrefix := strings.TrimSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING) + common.AZCOPY_PATH_SEPARATOR_STRING
 	maxResults := int32(1)
-	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{Prefix: &searchPrefix, MaxResults: &maxResults})
+	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
+		Prefix:         &searchPrefix,
+		MaxResults:     &maxResults,
+		UseArrowFormat: to.Ptr(true)})
 	resp, err := pager.NextPage(t.ctx)
 	if err != nil {
 		if common.AzcopyScanningLogger != nil {
@@ -382,8 +386,9 @@ func (t *BlobTraverser) parallelList(containerClient *container.Client, containe
 		currentDirPath := dir.(string)
 
 		pager := containerClient.NewListBlobsHierarchyPager("/", &container.ListBlobsHierarchyOptions{
-			Prefix:  &currentDirPath,
-			Include: container.ListBlobsInclude{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.include.Deleted(), Snapshots: t.include.Snapshots(), Versions: t.include.Versions()},
+			Prefix:         &currentDirPath,
+			Include:        container.ListBlobsInclude{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.include.Deleted(), Snapshots: t.include.Snapshots(), Versions: t.include.Versions()},
+			UseArrowFormat: to.Ptr(true),
 		})
 		var marker *string
 		for pager.More() {
@@ -582,8 +587,9 @@ func (t *BlobTraverser) serialList(containerClient *container.Client, containerN
 	// TODO optimize for the case where recursive is off
 	prefix := searchPrefix + extraSearchPrefix
 	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
-		Prefix:  &prefix,
-		Include: container.ListBlobsInclude{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.include.Deleted(), Snapshots: t.include.Snapshots(), Versions: t.include.Versions()},
+		Prefix:         &prefix,
+		Include:        container.ListBlobsInclude{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.include.Deleted(), Snapshots: t.include.Snapshots(), Versions: t.include.Versions()},
+		UseArrowFormat: to.Ptr(true),
 	})
 	for pager.More() {
 		resp, err := pager.NextPage(t.ctx)

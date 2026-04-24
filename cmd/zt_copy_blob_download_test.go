@@ -999,8 +999,9 @@ func TestListOfVersions(t *testing.T) {
 
 	// confirm that base blob has 2 versions
 	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
-		Prefix:  to.Ptr(blobName),
-		Include: container.ListBlobsInclude{Versions: true},
+		Prefix:         to.Ptr(blobName),
+		Include:        container.ListBlobsInclude{Versions: true},
+		UseArrowFormat: to.Ptr(true),
 	})
 	list, err := pager.NextPage(ctx)
 	a.NoError(err)

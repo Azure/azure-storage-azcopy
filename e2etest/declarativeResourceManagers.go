@@ -23,6 +23,7 @@ package e2etest
 import (
 	"fmt"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
@@ -334,6 +335,7 @@ func (r *resourceBlobContainer) getVersions(a asserter, objectName string) []str
 	p := r.containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
 		Include: container.ListBlobsInclude{Versions: true},
 		Prefix:  &objectName,
+		UseArrowFormat: to.Ptr(true),
 	})
 
 	versions := &timestampSortable{

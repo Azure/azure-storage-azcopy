@@ -3,12 +3,14 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"net/url"
 	"os"
 	"strings"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/spf13/cobra"
@@ -103,7 +105,9 @@ func listContainer(resourceUrl string, numberOfResources int64) {
 
 	// perform a list blob
 	// look for all blobs that start with the prefix
-	pager := cc.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{Prefix: &searchPrefix})
+	pager := cc.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
+		Prefix: &searchPrefix,
+		UseArrowFormat: to.Ptr(true)})
 
 	for pager.More() {
 		listBlob, err := pager.NextPage(context.TODO())

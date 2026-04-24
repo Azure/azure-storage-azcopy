@@ -181,7 +181,9 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand) {
 	// perform a list blob with search prefix "dirname/"
 	dirName := strings.Split(testBlobCmd.Object, "/")
 	searchPrefix := dirName[len(dirName)-1] + "/"
-	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{Prefix: &searchPrefix})
+	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
+		Prefix:         &searchPrefix,
+		UseArrowFormat: to.Ptr(true)})
 	for pager.More() {
 		// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
 		listBlob, err := pager.NextPage(testCtx)
