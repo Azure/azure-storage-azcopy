@@ -167,7 +167,7 @@ jobs:
           # setting this before will always work since it is valid to break an un-acquired mutex.
           echo '##vso[task.setvariable variable=isMutexSet]true'
           # acquire the mutex before running live tests to avoid conflicts
-          python ./tool_distributed_mutex.py lock "$(MUTEX_URL)"
+          python ./tool_distributed_mutex.py lock "$(MUTEX1_URL)"
         name: 'Acquire_the_distributed_mutex'
       - template: azurePipelineTemplates/run-ut.yml
         parameters:
@@ -241,7 +241,7 @@ jobs:
           summaryFileLocation: $(System.DefaultWorkingDirectory)/**/smoke_coverage.xml
       - script: |
           pip install azure-storage-blob==12.12.0
-          python ./tool_distributed_mutex.py unlock "$(MUTEX_URL)"
+          python ./tool_distributed_mutex.py unlock "$(MUTEX1_URL)"
         name: 'Release_the_distributed_mutex'
         # this runs even if the job was canceled (only if the mutex was acquired by this job)
         condition: and(always(), eq(variables['isMutexSet'], 'true'))
