@@ -828,13 +828,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 								Inode:              inode,
 							}
 
-							// A hardlinked symlink (Nlink > 1 on a symlink inode) needs special
-							// handling: the anchor (first-seen entry) must be transferred as a
-							// symlink so its target is created correctly on the destination;
-							// only the subsequent links become Hardlink entities.
-							if IsSymbolicLink(fileInfo) && targetHardlinkFile == "" {
-								entityType = common.EEntityType.Symlink()
-							}
+							entityType = resolveHardlinkedSymlinkEntity(fileInfo, targetHardlinkFile, entityType)
 						}
 					}
 				}
@@ -943,12 +937,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 								Inode:              inode,
 							}
 
-							// A hardlinked symlink (Nlink > 1 on a symlink inode): the anchor
-							// must keep Symlink entity type so it is created as a symlink on
-							// the destination; only subsequent links become Hardlink entities.
-							if IsSymbolicLink(fileInfo) && targetHardlinkFile == "" {
-								entityType = common.EEntityType.Symlink()
-							}
+							entityType = resolveHardlinkedSymlinkEntity(fileInfo, targetHardlinkFile, entityType)
 						}
 					} else if !IsRegularFile(fileInfo) {
 						entityType = common.EEntityType.Other()
@@ -993,18 +982,6 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 	}
 
 	return finalizer(err)
-}
-
-func getRelPath(filePath, basePath string) (string, error) {
-	// we want to compute relative from its parent
-	base := filepath.Dir(basePath)
-
-	rel, err := filepath.Rel(base, filePath)
-	if err != nil {
-		return "", err
-	}
-
-	return filepath.ToSlash(rel), nil
 }
 
 func NewLocalTraverser(fullPath string, ctx context.Context, opts InitResourceTraverserOptions) (*localTraverser, error) {
@@ -1064,6 +1041,17 @@ func logNFSLinkWarning(fileName,
 	}
 
 	common.AzcopyCurrentJobLogger.Log(common.LogWarning, message)
+}
+
+// resolveHardlinkedSymlinkEntity adjusts the entity type for a hardlinked symlink.
+// The anchor (first-seen entry, indicated by targetHardlinkFile == "") must be
+// transferred as a symlink so its target is created correctly on the destination;
+// only subsequent links remain Hardlink entities.
+func resolveHardlinkedSymlinkEntity(fileInfo os.FileInfo, targetHardlinkFile string, currentEntityType common.EntityType) common.EntityType {
+	if IsSymbolicLink(fileInfo) && targetHardlinkFile == "" {
+		return common.EEntityType.Symlink()
+	}
+	return currentEntityType
 }
 
 // HandleSymlinkForNFS processes a symbolic link based on the specified handling type.
