@@ -220,23 +220,15 @@ func TestCheckReleaseMetadata(t *testing.T) {
 
 	blobClient, err := blob.NewClientWithNoCredential(versionMetadataUrl, &blob.ClientOptions{ClientOptions: options})
 	a.NoError(err)
-	if err != nil {
-		t.Skipf("skipping release metadata check: failed to create blob client: %v", err)
-	}
 
 	downloadBlobResp, err := blobClient.DownloadStream(context.TODO(), nil)
-	if err != nil {
-		t.Skipf("skipping release metadata check: metadata endpoint unavailable: %v", err)
-	}
+	a.NoError(err)
 
 	defer downloadBlobResp.Body.Close()
 
 	// step 4: read newest version str
 	data, err := io.ReadAll(downloadBlobResp.Body)
 	a.NoError(err)
-	if err != nil {
-		t.Skipf("skipping release metadata check: failed reading metadata response: %v", err)
-	}
 
 	remoteVer, err := NewVersion(string(data))
 	a.NoError(err)
