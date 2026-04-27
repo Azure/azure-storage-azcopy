@@ -22,13 +22,12 @@ package cmd
 
 import (
 	"context"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/stretchr/testify/assert"
 	"io"
 	"os"
 	"testing"
 	"time"
-
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestVersionEquality(t *testing.T) {
