@@ -450,7 +450,8 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 
 					enqueuedDirAsOutput := false // Reset the flag for each directory processed
 
-					if t.include.DirStubs() || t.includeDirectoryOrPrefix {
+					// TODO: shnayak to check the impact of removing t.includeDirectoryOrPrefix for OnPrem scenario.
+					if t.include.DirStubs() {
 						// try to get properties on the directory itself, since it's not listed in BlobItems
 						dName := strings.TrimSuffix(*virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)
 						blobClient := containerClient.NewBlobClient(dName)
