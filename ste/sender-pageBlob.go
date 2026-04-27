@@ -76,7 +76,7 @@ const (
 )
 
 var (
-	md5NotSupportedInManagedDiskError = errors.New("the Content-MD5 hash is not supported for managed disk uploads")
+	ErrMd5NotSupportedInManagedDisk = errors.New("the Content-MD5 hash is not supported for managed disk uploads")
 )
 
 func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType *blob.AccessTier) (*pageBlobSenderBase, error) {
@@ -138,7 +138,7 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer p
 	}
 
 	if s.isInManagedDiskImportExportAccount() && jptm.ShouldPutMd5() {
-		return nil, md5NotSupportedInManagedDiskError
+		return nil, ErrMd5NotSupportedInManagedDisk
 	}
 
 	return s, nil

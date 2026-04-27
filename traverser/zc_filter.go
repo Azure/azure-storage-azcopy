@@ -358,7 +358,7 @@ func (f *IncludeAfterDateFilter) AppliesOnlyToFiles() bool {
 
 func (f *IncludeAfterDateFilter) DoesPass(storedObject StoredObject) bool {
 	zeroTime := time.Time{}
-	if storedObject.LastModifiedTime == zeroTime {
+	if storedObject.LastModifiedTime.Equal(zeroTime) {
 		panic("cannot use IncludeAfterDateFilter on an object for which no Last Modified Time has been retrieved")
 	}
 
@@ -392,7 +392,7 @@ func (f *IncludeBeforeDateFilter) AppliesOnlyToFiles() bool {
 
 func (f *IncludeBeforeDateFilter) DoesPass(storedObject StoredObject) bool {
 	zeroTime := time.Time{}
-	if storedObject.LastModifiedTime == zeroTime {
+	if storedObject.LastModifiedTime.Equal(zeroTime) {
 		panic("cannot use IncludeBeforeDateFilter on an object for which no Last Modified Time has been retrieved")
 	}
 
@@ -400,11 +400,11 @@ func (f *IncludeBeforeDateFilter) DoesPass(storedObject StoredObject) bool {
 		storedObject.LastModifiedTime.Equal(f.Threshold) // <= is easier for users to understand than <
 }
 
-func (_ IncludeBeforeDateFilter) ParseISO8601(s string, chooseEarliest bool) (time.Time, error) {
+func (IncludeBeforeDateFilter) ParseISO8601(s string, chooseEarliest bool) (time.Time, error) {
 	return parseISO8601(s, chooseEarliest)
 }
 
-func (_ IncludeBeforeDateFilter) FormatAsUTC(t time.Time) string {
+func (IncludeBeforeDateFilter) FormatAsUTC(t time.Time) string {
 	return formatAsUTC(t)
 }
 

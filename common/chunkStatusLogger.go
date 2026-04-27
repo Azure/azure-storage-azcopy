@@ -354,7 +354,7 @@ func (csl *chunkStatusLogger) main(chunkLogPath string) {
 			continue // TODO can become break (or be moved to later if we close unsaved entries, once we figure out how we got stuff written to us after CloseLog was called)
 
 		}
-		_, _ = w.WriteString(fmt.Sprintf("%s,%d,%s,%s\n", x.Name, x.OffsetInFile(), x.reason, x.waitStart))
+		_, _ = fmt.Fprintf(w, "%s,%d,%s,%s\n", x.Name, x.OffsetInFile(), x.reason, x.waitStart)
 		if alwaysFlushFromNowOn {
 			// TODO: remove when we figure out how we got stuff written to us after CloseLog was called. For now, this should handle those cases (if they still exist)
 			doFlush()

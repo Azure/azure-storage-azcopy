@@ -377,7 +377,7 @@ func (jm *jobMgr) GetPerfInfo() (displayStrings []string, constraint common.Perf
 	// The states, above, that run inside that pool (basically the H and B states) will sum to
 	// a value <= this value. But without knowing this value, its harder to be sure if they are at the limit
 	// or not, especially if we are dynamically tuning the pool size.
-	result[len(result)-1] = fmt.Sprintf(strings.Replace(format, "%c", "%s", -1), "GRs", jm.CurrentMainPoolSize())
+	result[len(result)-1] = fmt.Sprintf(strings.ReplaceAll(format, "%c", "%s"), "GRs", jm.CurrentMainPoolSize())
 
 	con := jm.chunkStatusLogger.GetPrimaryPerfConstraint(atomicTransferDirection, jm.PipelineNetworkStats())
 
@@ -650,7 +650,7 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 		case partProgressInfo := <-jm.jobPartProgress:
 			jobPart0Mgr, ok := jm.jobPartMgrs.Get(0)
 			if !ok {
-				jm.Panic(fmt.Errorf("Failed to find Job %v, Part #0", jm.jobID))
+				jm.Panic(fmt.Errorf("failed to find Job %v, Part #0", jm.jobID))
 			}
 			part0Plan := jobPart0Mgr.Plan()
 			jobStatus := part0Plan.JobStatus() // status of part 0 is status of job as a whole
