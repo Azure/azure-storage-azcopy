@@ -224,11 +224,10 @@ func TestCheckReleaseMetadata(t *testing.T) {
 	downloadBlobResp, err := blobClient.DownloadStream(context.TODO(), nil)
 	a.NoError(err)
 
-	defer downloadBlobResp.Body.Close()
-
 	// step 4: read newest version str
-	data, err := io.ReadAll(downloadBlobResp.Body)
-	a.NoError(err)
+	data := make([]byte, *downloadBlobResp.ContentLength)
+	_, err = downloadBlobResp.Body.Read(data)
+	a.False(err != nil && err != io.EOF) // err can be nil or EOF
 
 	remoteVer, err := NewVersion(string(data))
 	a.NoError(err)
