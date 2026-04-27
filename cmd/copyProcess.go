@@ -79,7 +79,7 @@ func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 
 				// provide clear warning if user uses old (obsolete) format by mistake
 				if headerLineNum <= 1 {
-					cleanedLine := strings.Replace(strings.Replace(v, " ", "", -1), "\t", "", -1)
+					cleanedLine := strings.ReplaceAll(strings.ReplaceAll(v, " ", ""), "\t", "")
 					cleanedLine = strings.TrimSuffix(cleanedLine, "[") // don't care which line this is on, could be third line
 					if cleanedLine == "{" && headerLineNum == 0 {
 						firstLineIsCurlyBrace = true
@@ -170,7 +170,7 @@ func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 		if cooked.FromTo.IsNFS() {
 			// Skip logging this msg for cross-protocol transfers
 			// because --preserve-permissions flag is not applicable.
-			if !(cooked.FromTo == common.EFromTo.FileSMBFileNFS() || cooked.FromTo == common.EFromTo.FileNFSFileSMB()) {
+			if cooked.FromTo != common.EFromTo.FileSMBFileNFS() && cooked.FromTo != common.EFromTo.FileNFSFileSMB() {
 				glcm.Info(azcopy.PreserveNFSPermissionsDisabledMsg)
 			}
 		} else {

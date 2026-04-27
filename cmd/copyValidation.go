@@ -57,7 +57,7 @@ func (cooked *CookedCopyCmdArgs) validate() (err error) {
 		return err
 	}
 
-	if !(cooked.FromTo.To() == common.ELocation.Blob() || cooked.FromTo == common.EFromTo.BlobNone() || cooked.FromTo != common.EFromTo.BlobFSNone()) && cooked.blobTags != "" {
+	if (cooked.FromTo.To() != common.ELocation.Blob() && cooked.FromTo != common.EFromTo.BlobNone() && cooked.FromTo == common.EFromTo.BlobFSNone()) && cooked.blobTags != "" {
 		return errors.New("blob tags can only be set when transferring to blob storage")
 	}
 	if cooked.FromTo.To() == common.ELocation.None() && strings.EqualFold(cooked.blobTags, common.MetadataAndBlobTagsClearFlag) { // in case of Blob and BlobFS

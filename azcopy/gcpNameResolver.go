@@ -80,12 +80,12 @@ func (resolver *GCPBucketNameToAzureResourcesResolver) resolveNewBucketNameInter
 
 	//Try to replace (.) with (-)
 	if hasPeriod {
-		resolvedName = strings.Replace(resolvedName, ".", "-", -1)
+		resolvedName = strings.ReplaceAll(resolvedName, ".", "-")
 	}
 
 	//Try to replace (_) with (-)
 	if hasUnderscores {
-		resolvedName = strings.Replace(resolvedName, "_", "-", -1)
+		resolvedName = strings.ReplaceAll(resolvedName, "_", "-")
 	}
 
 	hasConsecutiveHyphens = strings.Contains(resolvedName, "--")
@@ -101,12 +101,13 @@ func (resolver *GCPBucketNameToAzureResourcesResolver) resolveNewBucketNameInter
 				continue
 			}
 
-			if consecutiveHyphenCount == 0 {
+			switch consecutiveHyphenCount {
+			case 0:
 				buffer.WriteByte(charAtI)
-			} else if consecutiveHyphenCount == 1 {
+			case 1:
 				buffer.WriteString("-")
 				buffer.WriteByte(charAtI)
-			} else {
+			default:
 				buffer.WriteString("-")
 				buffer.WriteString(strconv.Itoa(consecutiveHyphenCount))
 				buffer.WriteString("-")
@@ -146,10 +147,7 @@ func (resolver *GCPBucketNameToAzureResourcesResolver) addSuffix(bucketName stri
 	count := 2
 	resolvedName := fmt.Sprintf(suffixPattern, bucketName, count)
 
-	for {
-		if !resolver.hasCollision(resolvedName) {
-			break
-		}
+	for resolver.hasCollision(resolvedName) {
 
 		count++
 		resolvedName = fmt.Sprintf(suffixPattern, bucketName, count)

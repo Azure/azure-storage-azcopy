@@ -134,7 +134,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// Check if the destination is a directory to correctly decide where our files land
 	isDestDir := cca.isDestDirectory(cca.Destination, jobPartOrder, ctx)
-	if cca.ListOfVersionIDsChannel != nil && (!(cca.FromTo == common.EFromTo.BlobLocal() || cca.FromTo == common.EFromTo.BlobTrash()) || cca.IsSourceDir || !isDestDir) {
+	if cca.ListOfVersionIDsChannel != nil && ((cca.FromTo != common.EFromTo.BlobLocal() && cca.FromTo != common.EFromTo.BlobTrash()) || cca.IsSourceDir || !isDestDir) {
 		log.Fatalf("Either source is not a blob or destination is not a local folder")
 	}
 	srcLevel, err := azcopy.DetermineLocationLevel(cca.Source.Value, cca.FromTo.From(), true)
@@ -619,7 +619,7 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 	if object.IsSourceRootFolder() {
 		relativePath = "" // otherwise we get "/" from the line below, and that breaks some clients, e.g. blobFS
 	} else {
-		relativePath = "/" + strings.Replace(object.RelativePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+		relativePath = "/" + strings.ReplaceAll(object.RelativePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING)
 	}
 
 	if common.Iff(source, object.ContainerName, object.DstContainerName) != "" {
