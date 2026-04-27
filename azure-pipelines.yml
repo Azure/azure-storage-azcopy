@@ -163,7 +163,7 @@ jobs:
           go install github.com/matm/gocov-html@v0.0.0-20200509184451-71874e2e203b
         displayName: 'Install dependencies'
       - script: |
-          pip install azure-storage-blob==12.12.0
+          pip install six==1.16.0 azure-storage-blob==12.12.0
           # set the variable to indicate that the mutex is being acquired
           # note: we set it before acquiring the mutex to ensure we release the mutex. 
           # setting this after can result in an un-broken mutex if someone cancels the pipeline after we acquire the 
@@ -244,7 +244,7 @@ jobs:
           codeCoverageTool: Cobertura
           summaryFileLocation: $(System.DefaultWorkingDirectory)/**/smoke_coverage.xml
       - script: |
-          pip install azure-storage-blob==12.12.0
+          pip install six==1.16.0 azure-storage-blob==12.12.0
           python ./tool_distributed_mutex.py unlock "$(MUTEX_URL)"
         name: 'Release_the_distributed_mutex'
         # this runs even if the job was canceled (only if the mutex was acquired by this job)
