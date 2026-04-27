@@ -22,6 +22,14 @@ type memoryStatusEx struct {
 	AvailExtendedVirtual uint64
 }
 
+// MemorySourceDetails contains details about where the memory limit was sourced from.
+type MemorySourceDetails struct {
+	HostMemoryBytes  int64  // Memory from OS APIs
+	CgroupLimitBytes int64  // Always 0 on Windows
+	EffectiveBytes   int64  // The value actually used
+	Source           string // "host" or "error"
+}
+
 // Retrieves the available memory on a Windows system using GlobalMemoryStatusEx API.
 // Returns available physical memory in bytes.
 func GetMemAvailable() (int64, error) {
@@ -56,4 +64,21 @@ func GetTotalPhysicalMemory() (int64, error) {
 
 	// Convert to int64 and return total physical memory in bytes
 	return int64(memStatus.TotalPhys), nil
+}
+
+// GetMemorySourceDetails returns details about the memory detection.
+// On Windows, cgroups are not applicable, so host memory is always used.
+func GetMemorySourceDetails() MemorySourceDetails {
+	details := MemorySourceDetails{}
+
+	hostMem, err := GetTotalPhysicalMemory()
+	if err != nil {
+		details.Source = "error"
+		return details
+	}
+
+	details.HostMemoryBytes = hostMem
+	details.EffectiveBytes = hostMem
+	details.Source = "host"
+	return details
 }

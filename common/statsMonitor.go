@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/shirou/gopsutil/v3/cpu"
@@ -601,9 +600,8 @@ func (m *SystemStatsMonitor) logStaticSystemInfo() {
 	}
 
 	// File descriptor limits
-	var rlimit syscall.Rlimit
-	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rlimit); err == nil {
-		staticInfo = append(staticInfo, fmt.Sprintf("FD Limit: %d/%d (soft/hard)", rlimit.Cur, rlimit.Max))
+	if soft, hard, ok := getFileDescriptorLimits(); ok {
+		staticInfo = append(staticInfo, fmt.Sprintf("FD Limit: %d/%d (soft/hard)", soft, hard))
 	}
 
 	// Ephemeral port range
@@ -1151,10 +1149,8 @@ func (m *SystemStatsMonitor) collectFileDescriptorMetrics(snapshot *SystemStatsS
 		snapshot.OpenFileDescriptors = int64(len(files))
 	}
 
-	// Get file descriptor limits using syscall
-	var rlimit syscall.Rlimit
-	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rlimit); err == nil {
-		snapshot.MaxFileDescriptors = int64(rlimit.Cur)
+	if soft, _, ok := getFileDescriptorLimits(); ok {
+		snapshot.MaxFileDescriptors = int64(soft)
 		if snapshot.MaxFileDescriptors > 0 {
 			snapshot.FileDescriptorPercent = float64(snapshot.OpenFileDescriptors) / float64(snapshot.MaxFileDescriptors) * 100
 		}
