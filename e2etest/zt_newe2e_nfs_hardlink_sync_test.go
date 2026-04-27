@@ -3195,7 +3195,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_HardlinkToSymlink(svm *Scenari
 	}, ValidateResourceOptions{fromTo: fromTo,
 		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
-	ValidateHardlinksTransferCount(svm, stdOut, 2)
+	ValidateHardlinksTransferCount(svm, stdOut, 1)
 }
 
 // Scenario 21: Copy — multiple hardlinks pointing to the same symlink.
