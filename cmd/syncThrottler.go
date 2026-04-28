@@ -68,7 +68,7 @@ const (
 	defaultNumCores            int32  = 4                      // Default number of CPU cores, used if runtime.NumCPU() fails
 
 	// Traversal concurrency settings
-	defaultTargetSlotRatio float64 = 0.25 // Target slots = 25% of source slots by default
+	defaultTargetSlotRatio float64 = 1.0 // Target slots = 100% of source slots (dst doesn't add to indexer memory)
 
 	directorySizeBuffer = 1024
 

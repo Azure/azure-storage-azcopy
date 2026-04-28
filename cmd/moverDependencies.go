@@ -294,6 +294,10 @@ func (cooked *cookedSyncCmdArgs) SetStripTopDir(stripTopDir bool) {
 	cooked.stripTopDir = stripTopDir
 }
 
+func (cooked *cookedSyncCmdArgs) SetIncludeRoot(includeRoot bool) {
+	cooked.includeRoot = includeRoot
+}
+
 func (cooked *cookedSyncCmdArgs) SetJobId(jobID common.JobID) {
 	cooked.jobID = jobID
 }
