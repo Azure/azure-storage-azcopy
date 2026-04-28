@@ -828,7 +828,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 								Inode:              inode,
 							}
 
-							entityType = resolveHardlinkedSymlinkEntity(fileInfo, targetHardlinkFile, entityType)
+							entityType = resolveHardlinkedSymlinkEntity(IsSymbolicLink(fileInfo), targetHardlinkFile, entityType)
 						}
 					}
 				}
@@ -937,7 +937,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 								Inode:              inode,
 							}
 
-							entityType = resolveHardlinkedSymlinkEntity(fileInfo, targetHardlinkFile, entityType)
+							entityType = resolveHardlinkedSymlinkEntity(IsSymbolicLink(fileInfo), targetHardlinkFile, entityType)
 						}
 					} else if !IsRegularFile(fileInfo) {
 						entityType = common.EEntityType.Other()
@@ -1047,8 +1047,11 @@ func logNFSLinkWarning(fileName,
 // The anchor (first-seen entry, indicated by targetHardlinkFile == "") must be
 // transferred as a symlink so its target is created correctly on the destination;
 // only subsequent links remain Hardlink entities.
-func resolveHardlinkedSymlinkEntity(fileInfo os.FileInfo, targetHardlinkFile string, currentEntityType common.EntityType) common.EntityType {
-	if IsSymbolicLink(fileInfo) && targetHardlinkFile == "" {
+//
+// isSymlink should be true when the underlying file is a symbolic link (e.g.
+// IsSymbolicLink(fileInfo) for local files, or NFSFileType==Symlink for remote).
+func resolveHardlinkedSymlinkEntity(isSymlink bool, targetHardlinkFile string, currentEntityType common.EntityType) common.EntityType {
+	if isSymlink && targetHardlinkFile == "" {
 		return common.EEntityType.Symlink()
 	}
 	return currentEntityType

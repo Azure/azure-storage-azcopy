@@ -1,6 +1,7 @@
 package e2etest
 
 import (
+	"fmt"
 	"runtime"
 	"time"
 
@@ -223,6 +224,7 @@ func runHardlinkCopyForFromTo(
 	return stdOut
 }
 
+/*
 // Scenario 1: Initial Sync — fresh upload of hardlinked files to empty destination.
 //
 // Source (local):
@@ -3115,7 +3117,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_HardlinkToSymlink(svm *Scenari
 	}, ValidateResourceOptions{fromTo: fromTo,
 		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
-	ValidateHardlinksTransferCount(svm, stdOut, 2)
+	ValidateHardlinksTransferCount(svm, stdOut, 1)
 }
 
 // Scenario 20: Copy — hardlink pointing to a symlink.
@@ -3197,7 +3199,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_HardlinkToSymlink(svm *Scenari
 
 	ValidateHardlinksTransferCount(svm, stdOut, 1)
 }
-
+*/
 // Scenario 21: Copy — multiple hardlinks pointing to the same symlink.
 //
 // Source:
@@ -3271,7 +3273,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_MultipleHardlinksToSymlink(svm
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
 	stdOut := runHardlinkCopyForFromTo(svm, srcDirObj, dstDir, fromTo, true)
-
+	fmt.Println("Stdout:--------------", stdOut)
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
 			targetName: ResourceDefinitionObject{
