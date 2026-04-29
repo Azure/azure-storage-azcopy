@@ -120,6 +120,11 @@ func (jl *jobLogger) OpenLog() {
 		return
 	}
 
+	// If a previously opened Writer exists, we close it to prevent resource leaks
+	if jl.file != nil {
+		jl.file.Close()
+	}
+
 	file, err := NewRotatingWriter(path.Join(jl.logFileFolder, jl.jobID.String()+jl.logFileNameSuffix+".log"), maxLogSize)
 	PanicIfErr(err)
 
@@ -167,7 +172,7 @@ func (jl jobLogger) Log(loglevel LogLevel, msg string) {
 	// Go, and therefore the sdk, defaults to \n for line endings, so if the platform has a different line ending,
 	// we should replace them to ensure readability on the given platform.
 	if lineEnding != "\n" {
-		msg = strings.Replace(msg, "\n", lineEnding, -1)
+		msg = strings.ReplaceAll(msg, "\n", lineEnding)
 	}
 	if jl.ShouldLog(loglevel) {
 		jl.logger.Println(msg)

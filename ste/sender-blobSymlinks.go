@@ -17,7 +17,7 @@ type blobSymlinkSender struct {
 	jptm              IJobPartTransferMgr
 	sip               ISourceInfoProvider
 	headersToApply    blob.HTTPHeaders
-	metadataToApply   common.Metadata
+	metadataToApply   *common.SafeMetadata
 	destBlobTier      *blob.AccessTier
 	blobTagsToApply   common.BlobTags
 }
@@ -46,7 +46,7 @@ func newBlobSymlinkSender(jptm IJobPartTransferMgr, destination string, sip ISou
 		jptm:              jptm,
 		sip:               sip,
 		destinationClient: destinationClient,
-		metadataToApply:   props.SrcMetadata.Clone(), // We're going to modify it, so we should clone it.
+		metadataToApply:   &common.SafeMetadata{Metadata: props.SrcMetadata.Clone()}, // We're going to modify it, so we should clone it.
 		headersToApply:    props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
 		blobTagsToApply:   props.SrcBlobTags,
 		destBlobTier:      destBlobTier,
@@ -66,7 +66,7 @@ func (s *blobSymlinkSender) SendSymlink(linkData string) error {
 	if err != nil {
 		return fmt.Errorf("when getting additional folder properties: %w", err)
 	}
-	s.metadataToApply["is_symlink"] = to.Ptr("true")
+	s.metadataToApply.Metadata["is_symlink"] = to.Ptr("true")
 
 	blobTags := s.blobTagsToApply
 	setTags := separateSetTagsRequired(blobTags)
@@ -77,7 +77,7 @@ func (s *blobSymlinkSender) SendSymlink(linkData string) error {
 	_, err = s.destinationClient.Upload(s.jptm.Context(), streaming.NopCloser(strings.NewReader(linkData)),
 		&blockblob.UploadOptions{
 			HTTPHeaders:  &s.headersToApply,
-			Metadata:     s.metadataToApply,
+			Metadata:     s.metadataToApply.Metadata,
 			Tier:         s.destBlobTier,
 			Tags:         blobTags,
 			CPKInfo:      s.jptm.CpkInfo(),

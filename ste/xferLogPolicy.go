@@ -87,9 +87,9 @@ func formatBody(rawBody string) string {
 	// into something a little less verbose, like this:
 	//    <Code>ServerBusy</Code><Message>Ingress is over the account limit. </Message><Foo>bar</Foo>
 	const start = `<?xml version="1.0" encoding="utf-8"?><Error>`
-	b := strings.Replace(rawBody, start, "", -1)
-	b = strings.Replace(b, "</Error>", "", -1)
-	b = strings.Replace(b, "\n", " ", -1)
+	b := strings.ReplaceAll(rawBody, start, "")
+	b = strings.ReplaceAll(b, "</Error>", "")
+	b = strings.ReplaceAll(b, "\n", " ")
 	b = errorBodyRemovalRegex.ReplaceAllString(b, "</Message>") // strip out the RequestID and Time, which we log separately in the headers
 	return b
 }

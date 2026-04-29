@@ -19,7 +19,7 @@ type blobFolderSender struct {
 	destinationClient *blockblob.Client // We'll treat all folders as block blobs
 	jptm              IJobPartTransferMgr
 	sip               ISourceInfoProvider
-	metadataToApply   common.Metadata
+	metadataToApply   *common.SafeMetadata
 	headersToApply    blob.HTTPHeaders
 	blobTagsToApply   common.BlobTags
 }
@@ -41,9 +41,11 @@ func newBlobFolderSender(jptm IJobPartTransferMgr, destination string, sip ISour
 		jptm:              jptm,
 		sip:               sip,
 		destinationClient: destinationClient,
-		metadataToApply:   props.SrcMetadata.Clone(), // We're going to modify it, so we should clone it.
-		headersToApply:    props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
-		blobTagsToApply:   props.SrcBlobTags,
+		metadataToApply: &common.SafeMetadata{
+			Metadata: props.SrcMetadata.Clone(),
+		}, // We're going to modify it, so we should clone it.
+		headersToApply:  props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
+		blobTagsToApply: props.SrcBlobTags,
 	}
 	fromTo := jptm.FromTo()
 	if fromTo.IsUpload() {
@@ -85,12 +87,12 @@ func (b *blobFolderSender) overwriteDFSProperties() (string, error) {
 	}
 
 	// do not set folder flag as it's invalid to modify a folder with
-	delete(b.metadataToApply, "hdi_isfolder")
-	delete(b.metadataToApply, "Hdi_isfolder")
+	delete(b.metadataToApply.Metadata, "hdi_isfolder")
+	delete(b.metadataToApply.Metadata, "Hdi_isfolder")
 	// TODO : Here should we undo delete "Hdi_isfolder" too?
 
 	// SetMetadata can set CPK if it wasn't specified prior. This is not a "full" overwrite, but a best-effort overwrite.
-	_, err = b.destinationClient.SetMetadata(b.jptm.Context(), b.metadataToApply,
+	_, err = b.destinationClient.SetMetadata(b.jptm.Context(), b.metadataToApply.Metadata,
 		&blob.SetMetadataOptions{
 			CPKInfo:      b.jptm.CpkInfo(),
 			CPKScopeInfo: b.jptm.CpkScopeInfo(),
@@ -188,10 +190,10 @@ func (b *blobFolderSender) EnsureFolderExists() error {
 	}
 
 	// Always set this metadata in lower case while creating directories
-	if b.metadataToApply["Hdi_isfolder"] != nil {
-		delete(b.metadataToApply, "Hdi_isfolder")
+	if b.metadataToApply.Metadata["Hdi_isfolder"] != nil {
+		delete(b.metadataToApply.Metadata, "Hdi_isfolder")
 	}
-	b.metadataToApply["hdi_isfolder"] = to.Ptr("true") // Set folder metadata flag
+	b.metadataToApply.Metadata["hdi_isfolder"] = to.Ptr("true") // Set folder metadata flag
 
 	err = b.getExtraProperties()
 	if err != nil {
@@ -209,7 +211,7 @@ func (b *blobFolderSender) EnsureFolderExists() error {
 		_, err := b.destinationClient.Upload(b.jptm.Context(), streaming.NopCloser(bytes.NewReader(nil)),
 			&blockblob.UploadOptions{
 				HTTPHeaders:  &b.headersToApply,
-				Metadata:     b.metadataToApply,
+				Metadata:     b.metadataToApply.Metadata,
 				Tags:         blobTags,
 				CPKInfo:      b.jptm.CpkInfo(),
 				CPKScopeInfo: b.jptm.CpkScopeInfo(),

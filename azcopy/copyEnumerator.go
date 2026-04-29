@@ -169,7 +169,7 @@ func (t *transferExecutor) initCopyEnumerator(ctx context.Context, logLevel comm
 	// Check if the destination is a directory to correctly decide where our files land
 	isDestDir := isResourceDirectory(ctx, t.opts.destination, t.opts.fromTo.To(), t.trp.dstServiceClient, false, t.opts.trailingDot)
 	if t.opts.listOfVersionIds != nil &&
-		(!(t.opts.fromTo == common.EFromTo.BlobLocal() || t.opts.fromTo == common.EFromTo.BlobTrash()) || isSourceDir || !isDestDir) {
+		((t.opts.fromTo != common.EFromTo.BlobLocal() && t.opts.fromTo != common.EFromTo.BlobTrash()) || isSourceDir || !isDestDir) {
 		return nil, errors.New("either source is not a blob or destination is not a local folder")
 	}
 
@@ -397,7 +397,7 @@ func (t *transferExecutor) MakeEscapedRelativePath(source bool, dstIsDir bool, o
 	if object.IsSourceRootFolder() {
 		relativePath = "" // otherwise we get "/" from the line below, and that breaks some clients, e.g. blobFS
 	} else {
-		relativePath = "/" + strings.Replace(object.RelativePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+		relativePath = "/" + strings.ReplaceAll(object.RelativePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING)
 	}
 
 	if common.Iff(source, object.ContainerName, object.DstContainerName) != "" {

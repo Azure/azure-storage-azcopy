@@ -57,7 +57,7 @@ type blockBlobSenderBase struct {
 	// 1. For S2S, these come from the source service.
 	// 2. When sending local data, they are computed based on the properties of the local file
 	headersToApply  blob.HTTPHeaders
-	metadataToApply common.Metadata
+	metadataToApply *common.SafeMetadata
 	blobTagsToApply common.BlobTags
 
 	atomicChunksWritten    int32
@@ -196,7 +196,7 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, pacer pacer, srcInfoProvid
 		pacer:               pacer,
 		blockIDs:            make([]string, numChunks),
 		headersToApply:      props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
-		metadataToApply:     props.SrcMetadata,
+		metadataToApply:     &common.SafeMetadata{Metadata: props.SrcMetadata.Clone()},
 		blobTagsToApply:     props.SrcBlobTags,
 		destBlobTier:        destBlobTier,
 		muBlockIDs:          &sync.Mutex{},
@@ -270,7 +270,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 		_, err := s.destBlockBlobClient.CommitBlockList(jptm.Context(), blockIDs,
 			&blockblob.CommitBlockListOptions{
 				HTTPHeaders:  &s.headersToApply,
-				Metadata:     s.metadataToApply,
+				Metadata:     s.metadataToApply.Metadata,
 				Tier:         destBlobTier,
 				Tags:         blobTags,
 				CPKInfo:      s.jptm.CpkInfo(),
@@ -400,7 +400,7 @@ func (s *blockBlobSenderBase) GenerateCopyMetadata(id common.ChunkID) chunkFunc 
 	return createChunkFunc(true, s.jptm, id, func() {
 		if unixSIP, ok := s.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
 			// Clone the metadata before we write to it, we shouldn't be writing to the same metadata as every other blob.
-			s.metadataToApply = s.metadataToApply.Clone()
+			s.metadataToApply = &common.SafeMetadata{Metadata: s.metadataToApply.Metadata.Clone()}
 
 			statAdapter, err := unixSIP.GetUNIXProperties()
 			if err != nil {
@@ -409,7 +409,7 @@ func (s *blockBlobSenderBase) GenerateCopyMetadata(id common.ChunkID) chunkFunc 
 
 			common.AddStatToBlobMetadata(statAdapter, s.metadataToApply, s.jptm.Info().PosixPropertiesStyle)
 		}
-		_, err := s.destBlockBlobClient.SetMetadata(s.jptm.Context(), s.metadataToApply,
+		_, err := s.destBlockBlobClient.SetMetadata(s.jptm.Context(), s.metadataToApply.Metadata,
 			&blob.SetMetadataOptions{
 				CPKInfo:      s.jptm.CpkInfo(),
 				CPKScopeInfo: s.jptm.CpkScopeInfo(),
