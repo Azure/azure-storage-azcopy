@@ -1,7 +1,6 @@
 package e2etest
 
 import (
-	"fmt"
 	"runtime"
 	"time"
 
@@ -185,14 +184,16 @@ func runHardlinkSyncForFromTo(
 	return stdOut
 }
 
-// runHardlinkCopyForFromTo runs azcopy copy with --hardlinks=preserve and --as-subdir=false
+// runHardlinkCopyForFromTo runs azcopy copy with --as-subdir=false
 // for any fromTo direction.  Both src and dst are authenticated when they are remote.
 // Pass preserveSymlinks=true to also set --preserve-symlinks.
+// Pass preserveHardlinks=true to also set --hardlinks=preserve.
 func runHardlinkCopyForFromTo(
 	svm *ScenarioVariationManager,
 	srcDirObj ResourceManager,
 	dstDirObj ResourceManager,
 	fromTo common.FromTo,
+	hardlinkType common.HardlinkHandlingType,
 	preserveSymlinks ...bool,
 ) AzCopyStdout {
 	authIfRemote := func(rm ResourceManager) ResourceManager {
@@ -209,13 +210,15 @@ func runHardlinkCopyForFromTo(
 		CopySyncCommonFlags: CopySyncCommonFlags{
 			Recursive:    pointerTo(true),
 			FromTo:       pointerTo(fromTo),
-			HardlinkType: pointerTo(common.PreserveHardlinkHandlingType),
+			HardlinkType: pointerTo(hardlinkType),
 		},
 		AsSubdir: pointerTo(false),
 	}
+
 	if len(preserveSymlinks) > 0 && preserveSymlinks[0] {
 		flags.CopySyncCommonFlags.PreserveSymlinks = pointerTo(true)
 	}
+
 	stdOut, _ := RunAzCopy(svm, AzCopyCommand{
 		Verb:    AzCopyVerbCopy,
 		Targets: []ResourceManager{authIfRemote(srcDirObj), authIfRemote(dstDirObj)},
@@ -224,7 +227,6 @@ func runHardlinkCopyForFromTo(
 	return stdOut
 }
 
-/*
 // Scenario 1: Initial Sync — fresh upload of hardlinked files to empty destination.
 //
 // Source (local):
@@ -2543,7 +2545,11 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_InitialUpload(svm *ScenarioVar
 
 	srcDirObj2 := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
-	stdOut := runHardlinkCopyForFromTo(svm, srcDirObj2, dstDir, common.EFromTo.LocalFileNFS())
+	hardlinkType := NamedResolveVariation(svm, map[string]common.HardlinkHandlingType{
+		"|hardlinks=preserve": common.PreserveHardlinkHandlingType,
+	})
+
+	stdOut := runHardlinkCopyForFromTo(svm, srcDirObj2, dstDir, common.EFromTo.LocalFileNFS(), hardlinkType)
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
@@ -2638,7 +2644,11 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_MultipleGroups(svm *ScenarioVa
 
 	srcDirObj2 := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
-	stdOut := runHardlinkCopyForFromTo(svm, srcDirObj2, dstDir, common.EFromTo.LocalFileNFS())
+	hardlinkType := NamedResolveVariation(svm, map[string]common.HardlinkHandlingType{
+		"|hardlinks=preserve": common.PreserveHardlinkHandlingType,
+	})
+
+	stdOut := runHardlinkCopyForFromTo(svm, srcDirObj2, dstDir, common.EFromTo.LocalFileNFS(), hardlinkType)
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
@@ -2728,7 +2738,10 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_NestedDirectories(svm *Scenari
 
 	srcDirObj2 := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
-	stdOut := runHardlinkCopyForFromTo(svm, srcDirObj2, dstDir, common.EFromTo.LocalFileNFS())
+	hardlinkType := NamedResolveVariation(svm, map[string]common.HardlinkHandlingType{
+		"|hardlinks=preserve": common.PreserveHardlinkHandlingType,
+	})
+	stdOut := runHardlinkCopyForFromTo(svm, srcDirObj2, dstDir, common.EFromTo.LocalFileNFS(), hardlinkType)
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
@@ -2804,9 +2817,12 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_DownloadInitial(svm *ScenarioV
 	})
 
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+	hardlinkType := NamedResolveVariation(svm, map[string]common.HardlinkHandlingType{
+		"|hardlinks=preserve": common.PreserveHardlinkHandlingType,
+	})
 
 	// --as-subdir=false: files land at dstContainer/anchor.txt etc. (no rootDir prefix).
-	stdOut := runHardlinkCopyForFromTo(svm, srcDirObj, dstContainer, common.EFromTo.FileNFSLocal())
+	stdOut := runHardlinkCopyForFromTo(svm, srcDirObj, dstContainer, common.EFromTo.FileNFSLocal(), hardlinkType)
 
 	anchorLocal := "anchor.txt"
 	linkLocal := "link_to_anchor.txt"
@@ -2897,8 +2913,11 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_DownloadMultipleGroups(svm *Sc
 	})
 
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+	hardlinkType := NamedResolveVariation(svm, map[string]common.HardlinkHandlingType{
+		"|hardlinks=preserve": common.PreserveHardlinkHandlingType,
+	})
 
-	stdOut := runHardlinkCopyForFromTo(svm, srcDirObj, dstContainer, common.EFromTo.FileNFSLocal())
+	stdOut := runHardlinkCopyForFromTo(svm, srcDirObj, dstContainer, common.EFromTo.FileNFSLocal(), hardlinkType)
 
 	g1AnchorLocal := "group1_anchor.txt"
 	g1LinkLocal := "group1_link.txt"
@@ -2991,7 +3010,10 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_DownloadNestedDirectories(svm 
 
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
-	stdOut := runHardlinkCopyForFromTo(svm, srcDirObj, dstContainer, common.EFromTo.FileNFSLocal())
+	hardlinkType := NamedResolveVariation(svm, map[string]common.HardlinkHandlingType{
+		"|hardlinks=preserve": common.PreserveHardlinkHandlingType,
+	})
+	stdOut := runHardlinkCopyForFromTo(svm, srcDirObj, dstContainer, common.EFromTo.FileNFSLocal(), hardlinkType)
 
 	anchorLocal := "subdir/anchor.txt"
 	linkLocal := "subdir/nested/link.txt"
@@ -3174,7 +3196,13 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_HardlinkToSymlink(svm *Scenari
 
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
-	stdOut := runHardlinkCopyForFromTo(svm, srcDirObj, dstDir, fromTo, true)
+	hardlinkType := NamedResolveVariation(svm, map[string]common.HardlinkHandlingType{
+		"|hardlinks=follow":   common.DefaultHardlinkHandlingType,
+		"|hardlinks=skip":     common.SkipHardlinkHandlingType,
+		"|hardlinks=preserve": common.PreserveHardlinkHandlingType,
+	})
+
+	stdOut := runHardlinkCopyForFromTo(svm, srcDirObj, dstDir, fromTo, hardlinkType, true)
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
@@ -3199,7 +3227,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_HardlinkToSymlink(svm *Scenari
 
 	ValidateHardlinksTransferCount(svm, stdOut, 1)
 }
-*/
+
 // Scenario 21: Copy — multiple hardlinks pointing to the same symlink.
 //
 // Source:
@@ -3272,8 +3300,20 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_MultipleHardlinksToSymlink(svm
 
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
-	stdOut := runHardlinkCopyForFromTo(svm, srcDirObj, dstDir, fromTo, true)
-	fmt.Println("Stdout:--------------", stdOut)
+	// TODO: test these combinations later
+	// preserveSymlinks := NamedResolveVariation(svm, map[string]bool{
+	// 	"|preserveSymlinks=true":  true,
+	// 	"|preserveSymlinks=false": false,
+	// })
+
+	hardlinkType := NamedResolveVariation(svm, map[string]common.HardlinkHandlingType{
+		"|hardlinks=follow":   common.DefaultHardlinkHandlingType,
+		"|hardlinks=skip":     common.SkipHardlinkHandlingType,
+		"|hardlinks=preserve": common.PreserveHardlinkHandlingType,
+	})
+
+	stdOut := runHardlinkCopyForFromTo(svm, srcDirObj, dstDir, fromTo, hardlinkType, true)
+
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
 			targetName: ResourceDefinitionObject{
@@ -3301,6 +3341,14 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_MultipleHardlinksToSymlink(svm
 	}, ValidateResourceOptions{fromTo: fromTo,
 		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
-	ValidateSymlinksTransferCount(svm, stdOut, 1)
-	ValidateHardlinksTransferCount(svm, stdOut, 2)
+	if hardlinkType == common.PreserveHardlinkHandlingType {
+		ValidateHardlinksTransferCount(svm, stdOut, 2)
+		ValidateSymlinksTransferCount(svm, stdOut, 1)
+	} else if hardlinkType == common.SkipHardlinkHandlingType {
+		ValidateHardlinksSkippedCount(svm, stdOut, 0)
+		ValidateSymlinksTransferCount(svm, stdOut, 3)
+	} else {
+		ValidateHardlinksConvertedCount(svm, stdOut, 2)
+		ValidateSymlinksTransferCount(svm, stdOut, 3)
+	}
 }

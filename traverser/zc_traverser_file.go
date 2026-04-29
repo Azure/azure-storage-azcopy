@@ -222,7 +222,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 				// Classify by NFS file type; a hardlinked symlink stays Symlink.
 				if *fileProperties.NFSFileType == file.NFSFileTypeSymlink {
 					storedObject.EntityType = common.EEntityType.Symlink()
-				} else if *fileProperties.LinkCount > int64(1) {
+				} else if *fileProperties.LinkCount > int64(1) && t.hardlinkHandling != common.EHardlinkHandlingType.Follow() {
 					storedObject.EntityType = common.EEntityType.Hardlink()
 				}
 			} else if t.incrementEnumerationCounter != nil {
@@ -280,19 +280,22 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 				symlinkHandling:  t.symlinkHandling}, t.incrementEnumerationCounter); err == nil && skip {
 				return nil, nil
 			}
-			//set entity tile to symlink
-			if fullProperties.NFSFileType() == string(file.NFSFileTypeSymlink) {
+			//set entity type to symlink
+			isNFSSymlink := fullProperties.NFSFileType() == string(file.NFSFileTypeSymlink)
+			if isNFSSymlink {
 				f.entityType = common.EEntityType.Symlink()
 			}
 
-			//set entity tile to hardlink
-			if fullProperties.LinkCount() > int64(1) {
+			//set entity type to hardlink
+			// When the file is a preserved symlink, skip hardlink handling unless
+			// hardlinks are also being preserved (the preserve path has its own
+			// anchor/subsequent logic below).
+			// When hardlinkHandling is Follow (default), treat hardlinks as regular
+			// files so the sync comparator doesn't see entity-type mismatches.
+			isPreservedSymlink := isNFSSymlink && t.symlinkHandling.Preserve()
+			if fullProperties.LinkCount() > int64(1) && t.hardlinkHandling != common.EHardlinkHandlingType.Follow() && !(isPreservedSymlink && t.hardlinkHandling != common.EHardlinkHandlingType.Preserve()) {
 				f.entityType = common.EEntityType.Hardlink()
-				if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() {
-					if t.inodeStore == nil {
-						return nil, fmt.Errorf("inode store is not initialized; cannot preserve hardlinks")
-					}
-
+				if t.inodeStore != nil {
 					targetHardlinkFile, _, err = t.inodeStore.GetOrAdd(fullProperties.FileID(), relativePath)
 					if err != nil {
 						return nil, err
@@ -302,7 +305,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 				// A hardlinked symlink: the anchor (first-seen entry) must be
 				// transferred as a symlink so its target is created correctly
 				// on the destination; only subsequent links become Hardlink.
-				if fullProperties.NFSFileType() == string(file.NFSFileTypeSymlink) && targetHardlinkFile == "" {
+				if isNFSSymlink && targetHardlinkFile == "" {
 					f.entityType = common.EEntityType.Symlink()
 				}
 			}
@@ -323,14 +326,13 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			size = fullProperties.ContentLength()
 			metadata = fullProperties.Metadata()
 		}
-		// Only populate Inode when the file is an actual hardlink (LinkCount > 1).
-		// This mirrors the local traverser, which only sets nfsCtx.Inode inside the
-		// IsHardlink (Nlink > 1) block.  A standalone file with LinkCount == 1 gets
-		// Inode="", so buildSrcPathToInode / dstPathToInode skip it — exactly as they
-		// do for local files — and the sync comparator cannot mistake it for a member
-		// of a multi-group inode when the destination is another NFS share.
+		// Populate Inode for any file with LinkCount > 1 (i.e. a hardlink).
+		// The sync comparator needs the Inode even in "follow" mode so that
+		// it can correctly process pending hardlink objects at the destination.
+		// A standalone file with LinkCount == 1 gets Inode="", so
+		// buildSrcPathToInode / dstPathToInode skip it.
 		nfsInode := ""
-		if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() && fullProperties.LinkCount() > int64(1) {
+		if fullProperties.LinkCount() > int64(1) {
 			nfsInode = fullProperties.FileID()
 		}
 		obj := NewStoredObject(

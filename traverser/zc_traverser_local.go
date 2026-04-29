@@ -693,7 +693,9 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 					return nil
 				}
 			} else if IsHardlink(singleFileInfo) {
-				entityType = common.EEntityType.Hardlink()
+				if t.hardlinkHandling != common.EHardlinkHandlingType.Follow() {
+					entityType = common.EEntityType.Hardlink()
+				}
 				if skip := HandleHardlinkForNFS(singleFileInfo,
 					t.hardlinkHandling, t.incrementEnumerationCounter); skip {
 					return nil
@@ -740,7 +742,9 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 					return ErrorLoneSymlinkSkipped
 				}
 			} else if IsHardlink(singleFileInfo) {
-				entityType = common.EEntityType.Hardlink()
+				if t.hardlinkHandling != common.EHardlinkHandlingType.Follow() {
+					entityType = common.EEntityType.Hardlink()
+				}
 				if skip := HandleHardlinkForNFS(singleFileInfo,
 					t.hardlinkHandling, t.incrementEnumerationCounter); skip {
 					return nil
@@ -804,7 +808,11 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 				// Declare nfsCtx locally per file to avoid data races across parallel goroutines.
 				var nfsCtx NFSMetadataContext
 				if t.fromTo.IsNFS() {
-					if IsHardlink(fileInfo) {
+					// When the file is a preserved symlink, skip hardlink handling unless
+					// hardlinks are also being preserved (the preserve path has its own
+					// anchor/subsequent logic via resolveHardlinkedSymlinkEntity).
+					isPreservedSymlink := IsSymbolicLink(fileInfo) && t.symlinkHandling.Preserve()
+					if IsHardlink(fileInfo) && t.hardlinkHandling != common.EHardlinkHandlingType.Follow() && !(isPreservedSymlink && t.hardlinkHandling != common.EHardlinkHandlingType.Preserve()) {
 						entityType = common.EEntityType.Hardlink()
 						if skip := HandleHardlinkForNFS(fileInfo,
 							t.hardlinkHandling, t.incrementEnumerationCounter); skip {
@@ -916,7 +924,8 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 				}
 				// NFS handling
 				if t.fromTo.IsNFS() {
-					if IsHardlink(fileInfo) {
+					isPreservedSymlink := IsSymbolicLink(fileInfo) && t.symlinkHandling.Preserve()
+					if IsHardlink(fileInfo) && t.hardlinkHandling != common.EHardlinkHandlingType.Follow() && !(isPreservedSymlink && t.hardlinkHandling != common.EHardlinkHandlingType.Preserve()) {
 						entityType = common.EEntityType.Hardlink()
 						if skip := HandleHardlinkForNFS(fileInfo,
 							t.hardlinkHandling, t.incrementEnumerationCounter); skip {
@@ -939,7 +948,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 
 							entityType = resolveHardlinkedSymlinkEntity(IsSymbolicLink(fileInfo), targetHardlinkFile, entityType)
 						}
-					} else if !IsRegularFile(fileInfo) {
+					} else if !IsRegularFile(fileInfo) && !isPreservedSymlink {
 						entityType = common.EEntityType.Other()
 						if t.incrementEnumerationCounter != nil {
 							t.incrementEnumerationCounter(entityType, t.symlinkHandling, t.hardlinkHandling)

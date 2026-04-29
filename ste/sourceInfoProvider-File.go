@@ -25,6 +25,7 @@ import (
 	"crypto/md5"
 	"fmt"
 	"io"
+	"net/url"
 	"sync"
 	"time"
 
@@ -412,5 +413,10 @@ func (p *fileSourceInfoProvider) ReadLink() (string, error) {
 		return "", fmt.Errorf("failed to get symlink info: %w", err)
 	}
 
-	return string(*symlink.LinkText), nil
+	linkText, err := url.PathUnescape(string(*symlink.LinkText))
+	if err != nil {
+		return "", fmt.Errorf("failed to decode symlink text: %w", err)
+	}
+
+	return linkText, nil
 }
