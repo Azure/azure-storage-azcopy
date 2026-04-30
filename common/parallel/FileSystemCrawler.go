@@ -22,9 +22,12 @@ package parallel
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 )
 
 type FileSystemEntry struct {
@@ -59,10 +62,10 @@ func CrawlLocalDirectory(ctx context.Context, root string, parallelism int, read
 
 // Walk is similar to filepath.Walk.
 // But note the following difference is how WalkFunc is used:
-// 1. If fileError passed to walkFunc is not nil, then here the filePath passed to that function will usually be ""
-//    (whereas with filepath.Walk it will usually (always?) have a value).
-// 2. If the return value of walkFunc function is not nil, enumeration will always stop, not matter what the type of the error.
-//    (Unlike filepath.WalkFunc, where returning filePath.SkipDir is handled as a special case).
+//  1. If fileError passed to walkFunc is not nil, then here the filePath passed to that function will usually be ""
+//     (whereas with filepath.Walk it will usually (always?) have a value).
+//  2. If the return value of walkFunc function is not nil, enumeration will always stop, not matter what the type of the error.
+//     (Unlike filepath.WalkFunc, where returning filePath.SkipDir is handled as a special case).
 func Walk(appCtx context.Context, root string, parallelism int, parallelStat bool, walkFn filepath.WalkFunc) {
 	var ctx context.Context
 	var cancel context.CancelFunc
@@ -126,8 +129,26 @@ func Walk(appCtx context.Context, root string, parallelism int, parallelStat boo
 func enumerateOneFileSystemDirectory(dir Directory, enqueueDir func(Directory), enqueueOutput func(DirectoryEntry, error), r DirReader) error {
 	dirString := dir.(string)
 
-	d, err := os.Open(dirString) // for directories, we don't need a special open with FILE_FLAG_BACKUP_SEMANTICS, because directory opening uses FindFirst which doesn't need that flag. https://blog.differentpla.net/blog/2007/05/25/findfirstfile-and-se_backup_name
-	if err != nil {
+	const maxOpenRetries = 3
+	var d *os.File
+	var err error
+	for attempt := 0; attempt <= maxOpenRetries; attempt++ {
+		d, err = os.Open(dirString) // for directories, we don't need a special open with FILE_FLAG_BACKUP_SEMANTICS, because directory opening uses FindFirst which doesn't need that flag. https://blog.differentpla.net/blog/2007/05/25/findfirstfile-and-se_backup_name
+		if err == nil {
+			if attempt > 0 {
+				fmt.Printf("parallel.enumerateOneFileSystemDirectory: recovered opening dir %s on retry attempt %d\n", dirString, attempt)
+			}
+			break
+		}
+
+		if attempt < maxOpenRetries && isTransientFileSystemError(err) {
+			backoff := time.Duration(attempt+1) * 500 * time.Millisecond
+			fmt.Printf("parallel.enumerateOneFileSystemDirectory: open failed for dir %s attempt %d/%d: %v; retrying in %v\n", dirString, attempt+1, maxOpenRetries+1, err, backoff)
+			time.Sleep(backoff)
+			continue
+		}
+
+		fmt.Printf("parallel.enumerateOneFileSystemDirectory: open failed for dir %s with no more retries: %v\n", dirString, err)
 		// FileInfo value being nil should mean that the FileSystemEntry refers to a directory.
 		enqueueOutput(FileSystemEntry{dirString, nil}, err)
 
@@ -145,6 +166,7 @@ func enumerateOneFileSystemDirectory(dir Directory, enqueueDir func(Directory), 
 			}
 			return nil
 		} else if err != nil {
+			fmt.Printf("parallel.enumerateOneFileSystemDirectory: readdir failed for dir %s: %v\n", dirString, err)
 			// FileInfo value being nil should mean that the FileSystemEntry refers to a directory.
 			enqueueOutput(FileSystemEntry{dirString, nil}, err)
 
@@ -159,6 +181,7 @@ func enumerateOneFileSystemDirectory(dir Directory, enqueueDir func(Directory), 
 
 			if failable, ok := childInfo.(failableFileInfo); ok && failable.Error() != nil {
 				// while Readdir as a whole did not fail, this particular file info did
+				fmt.Printf("parallel.enumerateOneFileSystemDirectory: failed to get file info for %s: %v\n", childEntry.fullPath, failable.Error())
 				enqueueOutput(childEntry, failable.Error())
 				continue
 			}
@@ -169,4 +192,21 @@ func enumerateOneFileSystemDirectory(dir Directory, enqueueDir func(Directory), 
 			enqueueOutput(childEntry, nil)
 		}
 	}
+}
+
+func isTransientFileSystemError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errString := strings.ToLower(err.Error())
+	return strings.Contains(errString, "resource temporarily unavailable") ||
+		strings.Contains(errString, "device or resource busy") ||
+		strings.Contains(errString, "connection reset") ||
+		strings.Contains(errString, "broken pipe") ||
+		strings.Contains(errString, "no route to host") ||
+		strings.Contains(errString, "connection refused") ||
+		strings.Contains(errString, "no such file or directory") ||
+		strings.Contains(errString, "host is down") ||
+		strings.Contains(errString, "failed: querysecurityobject: xattr.get")
 }

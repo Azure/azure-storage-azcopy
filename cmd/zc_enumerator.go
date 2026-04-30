@@ -504,6 +504,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 			baseResource := resource.CloneWithValue(cleanLocalPath(basePath))
 			output = newListTraverser(baseResource, resourceLocation, ctx, opts)
 		} else {
+			fmt.Println("calling local traverser")
 			output, _ = newLocalTraverser(resource.ValueLocal(), ctx, opts)
 		}
 	case common.ELocation.Benchmark():

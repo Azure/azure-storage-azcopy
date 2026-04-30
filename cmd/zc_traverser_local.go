@@ -321,6 +321,7 @@ func WalkWithSymlinks(
 		// (for simplicity of coding, we don't parallelize across multiple queueItems)
 		parallel.Walk(appCtx, queueItem.fullPath, EnumerationParallelism, EnumerationParallelStatFiles, func(filePath string, fileInfo os.FileInfo, fileError error) error {
 			if fileError != nil {
+				fmt.Printf("In WalkWithSymlinks - Accessing '%s' failed with error: %s\n", filePath, fileError.Error())
 				WarnStdoutAndScanningLog(fmt.Sprintf("Accessing '%s' failed with error: %s", filePath, fileError.Error()))
 				writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: fileError})
 				return nil
@@ -334,12 +335,14 @@ func WalkWithSymlinks(
 			}
 
 			if fileInfo == nil {
+				fmt.Printf("In WalkWithSymlinks - fileInfo is nil for file %s\n", filePath)
 				err := fmt.Errorf("fileInfo is nil for file %s", filePath)
 				WarnStdoutAndScanningLog(err.Error())
 				writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: nil, ErrorMsg: err})
 				return nil
 			}
 			if fileInfo.Mode()&os.ModeSymlink != 0 {
+				fmt.Printf("In WalkWithSymlinks - Encountered symlink at %s\n", filePath)
 				if options.SymlinkHandling.Preserve() {
 					// Handle it like it's not a symlink
 					result, err := filepath.Abs(filePath)
@@ -508,6 +511,7 @@ func WalkWithSymlinks(
 				}
 
 				if err != nil {
+					fmt.Printf("In WalkWithSymlinks: not a symlink - Failed to get absolute path of %s: %s\n", filePath, err)
 					err = fmt.Errorf("failed to get absolute path of %s: %w", filePath, err)
 					WarnStdoutAndScanningLog(err.Error())
 					writeToErrorChannel(options.ErrorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
@@ -846,6 +850,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	singleFileInfo, isSingleFile, err := t.getInfoIfSingleFile()
 	// it fails here if file does not exist
 	if err != nil {
+		fmt.Printf("In traverse - Failed to scan path %s: %s\n", t.fullPath, err.Error())
 		azcopyScanningLogger.Log(common.LogError, fmt.Sprintf("Failed to scan path %s: %s", t.fullPath, err.Error()))
 
 		writeToErrorChannel(t.errorChannel, ErrorFileInfo{
@@ -910,8 +915,32 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 		return finalizer(err)
 	} else {
 		processFile := func(filePath string, fileInfo os.FileInfo, fileError error) error {
+
 			if fileError != nil {
+				fmt.Printf("In processFile - Accessing %s failed with error: %s\n", filePath, fileError.Error())
 				WarnStdoutAndScanningLog(fmt.Sprintf("Accessing %s failed with error: %s", filePath, fileError.Error()))
+
+				writeToErrorChannel(t.errorChannel, ErrorFileInfo{
+					FilePath: filePath,
+					FileInfo: fileInfo,
+					ErrorMsg: fileError,
+				})
+
+				// var localEntityType common.EntityType
+				// if fileInfo != nil {
+				// 	if fileInfo.IsDir() {
+				// 		fmt.Sprintf("Accessing directory")
+				// 		localEntityType = common.EEntityType.Folder()
+				// 	} else {
+				// 		fmt.Sprintf("Accessing file")
+				// 		localEntityType = common.EEntityType.File()
+				// 	}
+
+				// }
+
+				// if t.incrementEnumerationCounter != nil {
+				// 	t.incrementEnumerationCounter(localEntityType)
+				// }
 				return nil
 			}
 
