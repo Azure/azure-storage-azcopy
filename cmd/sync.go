@@ -724,7 +724,7 @@ func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm common.LifecycleMgr, th
 		// text output
 		throughputString := ""
 		if cca.firstPartOrdered() {
-			throughputString = fmt.Sprintf(", 2-sec Throughput (Mb/s): %v", jobsAdmin.ToFixed(throughput, 4))
+			throughputString = ", " + jobsAdmin.FormatThroughput(throughput)
 		}
 		return fmt.Sprintf("%v Files Scanned at Source, %v Files Scanned at Destination%s",
 			srcScanned, dstScanned, throughputString)
@@ -778,12 +778,12 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 		// indicate whether constrained by disk or not
 		perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration, false)
 
-		return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (Mb/s): %v%s",
+		return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Total%s, %s%s",
 			summary.PercentComplete,
 			summary.TransfersCompleted,
 			summary.TransfersFailed,
 			summary.TotalTransfers-summary.TransfersCompleted-summary.TransfersFailed,
-			summary.TotalTransfers, perfString, jobsAdmin.ToFixed(throughput, 4), diskString)
+			summary.TotalTransfers, perfString, jobsAdmin.FormatThroughput(throughput), diskString)
 	})
 
 	if jobDone {

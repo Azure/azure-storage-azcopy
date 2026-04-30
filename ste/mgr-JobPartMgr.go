@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"runtime"
 	"runtime/debug"
 	"strings"
 	"sync/atomic"
@@ -83,13 +82,13 @@ type IJobPartMgr interface {
 // number of available network sockets on resource-constrained Linux systems. (E.g. when
 // 'ulimit -Hn' is low).
 func NewAzcopyHTTPClient(maxIdleConns int) *http.Client {
-	const concurrentDialsPerCpu = 10 // exact value doesn't matter too much, but too low will be too slow, and too high will reduce the beneficial effect on thread count
+	const maxConnsPerHost = 10000
 	return &http.Client{
 		Transport: &http.Transport{
 			Proxy:                  common.GlobalProxyLookup,
-			MaxConnsPerHost:        concurrentDialsPerCpu * runtime.NumCPU(),
+			MaxConnsPerHost:        maxConnsPerHost,
 			MaxIdleConns:           0, // No limit
-			MaxIdleConnsPerHost:    maxIdleConns,
+			MaxIdleConnsPerHost:    maxConnsPerHost,
 			IdleConnTimeout:        180 * time.Second,
 			TLSHandshakeTimeout:    10 * time.Second,
 			ResponseHeaderTimeout:  60 * time.Second, // Timeout for reading response headers

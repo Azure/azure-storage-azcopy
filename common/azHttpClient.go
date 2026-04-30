@@ -40,7 +40,7 @@ var (
 )
 
 const (
-	maxIdleConnsPerHost_MaxValue = 3000
+	maxIdleConnsPerHost_MaxValue = 10000
 	httpTraceTickerInterval      = time.Minute * 1
 )
 
@@ -49,13 +49,13 @@ const (
 // will be invoked with status messages.
 func GetGlobalHTTPClient(logger ILoggerResetable) *http.Client {
 	globalHTTPClientOnce.Do(func() {
-		const concurrentDialsPerCpu = 10
+		const maxConnsPerHost = 10000
 		client := &http.Client{
 			Transport: &http.Transport{
 				Proxy:                  GlobalProxyLookup,
-				MaxConnsPerHost:        concurrentDialsPerCpu * runtime.NumCPU(),
+				MaxConnsPerHost:        maxConnsPerHost,
 				MaxIdleConns:           0,
-				MaxIdleConnsPerHost:    GetMaxIdleConnsPerHost(),
+				MaxIdleConnsPerHost:    maxConnsPerHost,
 				IdleConnTimeout:        180 * time.Second,
 				TLSHandshakeTimeout:    10 * time.Second,
 				ExpectContinueTimeout:  1 * time.Second,

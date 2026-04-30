@@ -55,6 +55,11 @@ func ToFixed(num float64, precision int) float64 {
 	return float64(round(num*output)) / output
 }
 
+// FormatThroughput formats throughput in both Mb/s and Gb/s.
+func FormatThroughput(mbps float64) string {
+	return fmt.Sprintf("2-sec Throughput (Mb/s): %v (Gb/s): %v", ToFixed(mbps, 4), ToFixed(mbps/1000, 4))
+}
+
 // MainSTE initializes the Storage Transfer Engine
 func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64, azcopyJobPlanFolder, azcopyLogPathFolder string, providePerfAdvice bool) error {
 	// Initialize the JobsAdmin, resurrect Job plan files

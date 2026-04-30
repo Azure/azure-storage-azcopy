@@ -214,7 +214,7 @@ func getMainPoolSize(numOfCPUs int, requestAutoTune bool) (initial int, max *Con
 	maxValue := initialValue
 	if requestAutoTune {
 		reason = "auto-tuning limit"
-		maxValue = 3000 // TODO: what should this be?  Testing indicates that this value is all we're ever likely to need, even in small-files cases
+		maxValue = 10000 // TODO: what should this be?  Testing indicates that this value is all we're ever likely to need, even in small-files cases
 	}
 
 	return initialValue, &ConfiguredInt{maxValue, false, envVar.Name, reason}
