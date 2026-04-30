@@ -665,6 +665,16 @@ func (ja *jobsAdmin) RegisterStatsMonitorIfNotDone() {
 		}
 		common.GlobalSystemStatsMonitor.LogAdhocCustomStats("Concurrency Settings", concurrencySettings)
 
+		// Log memory detection info (useful for all job types, not just sync)
+		const gbBytes = 1024 * 1024 * 1024
+		memDetails := common.GetMemorySourceDetails()
+		common.GlobalSystemStatsMonitor.LogAdhocCustomStats("Memory Detection", []common.CustomStatEntry{
+			{Key: "Source", Value: memDetails.Source},
+			{Key: "HostMemory", Value: fmt.Sprintf("%d bytes (%.2f GB)", memDetails.HostMemoryBytes, float64(memDetails.HostMemoryBytes)/float64(gbBytes))},
+			{Key: "CgroupLimit", Value: fmt.Sprintf("%d bytes (%.2f GB)", memDetails.CgroupLimitBytes, float64(memDetails.CgroupLimitBytes)/float64(gbBytes))},
+			{Key: "EffectiveMemory", Value: fmt.Sprintf("%d bytes (%.2f GB)", memDetails.EffectiveBytes, float64(memDetails.EffectiveBytes)/float64(gbBytes))},
+		})
+
 		// Register the callback for STE stats
 		common.GlobalSystemStatsMonitor.RegisterCustomStatsCallback(common.STEId, getSTEStats)
 	}

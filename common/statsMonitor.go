@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/shirou/gopsutil/v3/cpu"
@@ -601,9 +600,8 @@ func (m *SystemStatsMonitor) logStaticSystemInfo() {
 	}
 
 	// File descriptor limits
-	var rlimit syscall.Rlimit
-	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rlimit); err == nil {
-		staticInfo = append(staticInfo, fmt.Sprintf("FD Limit: %d/%d (soft/hard)", rlimit.Cur, rlimit.Max))
+	if soft, hard, ok := getFileDescriptorLimits(); ok {
+		staticInfo = append(staticInfo, fmt.Sprintf("FD Limit: %d/%d (soft/hard)", soft, hard))
 	}
 
 	// Ephemeral port range
@@ -1151,10 +1149,8 @@ func (m *SystemStatsMonitor) collectFileDescriptorMetrics(snapshot *SystemStatsS
 		snapshot.OpenFileDescriptors = int64(len(files))
 	}
 
-	// Get file descriptor limits using syscall
-	var rlimit syscall.Rlimit
-	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rlimit); err == nil {
-		snapshot.MaxFileDescriptors = int64(rlimit.Cur)
+	if soft, _, ok := getFileDescriptorLimits(); ok {
+		snapshot.MaxFileDescriptors = int64(soft)
 		if snapshot.MaxFileDescriptors > 0 {
 			snapshot.FileDescriptorPercent = float64(snapshot.OpenFileDescriptors) / float64(snapshot.MaxFileDescriptors) * 100
 		}
@@ -1812,21 +1808,25 @@ func (m *SystemStatsMonitor) LogAdhocCustomStats(tag string, entries []CustomSta
 		return
 	}
 
-	// Build the custom stats string in the same format as regular stats
-	customSummary := ""
-	for i, entry := range entries {
-		if i > 0 {
-			customSummary += ","
+	// Find max key length for alignment
+	maxKeyLen := 0
+	for _, entry := range entries {
+		if len(entry.Key) > maxKeyLen {
+			maxKeyLen = len(entry.Key)
 		}
-		customSummary += fmt.Sprintf("%s:%s", entry.Key, entry.Value)
 	}
 
-	// Log with tag at the start and newlines before and after for visibility
+	// Log header
+	header := tag
+	if header == "" {
+		header = "ADHOC"
+	}
 	m.config.Logger.Log(LogInfo, "")
-	if tag != "" {
-		m.config.Logger.Log(LogInfo, fmt.Sprintf("%s: [%s]", tag, customSummary))
-	} else {
-		m.config.Logger.Log(LogInfo, fmt.Sprintf("ADHOC: [%s]", customSummary))
+	m.config.Logger.Log(LogInfo, fmt.Sprintf("===== %s =====", header))
+
+	// Log each entry on its own line, aligned
+	for _, entry := range entries {
+		m.config.Logger.Log(LogInfo, fmt.Sprintf("  %-*s : %s", maxKeyLen, entry.Key, entry.Value))
 	}
 	m.config.Logger.Log(LogInfo, "")
 }

@@ -107,12 +107,24 @@ func SetPrivateNetworkArgs(privateNetworkEnabled bool, privateEndpointIPs []stri
 	privateNetworkArgs.BucketName = bucketName
 }
 
-// RoundRobinTransport creates the transport
-func NewRoundRobinTransport(ips []string, host string, cooldownInSecs int, ipRetries int, ipRetryIntervalInMilliSecs int) *RoundRobinTransport {
+// RoundRobinTransport creates the transport.
+// Set forceHTTP11 to true for GCS regional endpoints that send non-standard HTTP/2 frames,
+// causing Go's "unhandled response frame type" warnings. AWS S3 should use HTTP/2 (false).
+func NewRoundRobinTransport(ips []string, host string, tlsHost string, cooldownInSecs int, ipRetries int, ipRetryIntervalInMilliSecs int, forceHTTP11 bool) *RoundRobinTransport {
 	SetGlobalPrivateEndpointIPs(ips)
 
 	tr := http.DefaultTransport.(*http.Transport).Clone()
-	tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: false, ServerName: host}
+	tlsCfg := &tls.Config{
+		InsecureSkipVerify: false,
+		ServerName:         tlsHost,
+	}
+	if forceHTTP11 {
+		// GCS regional endpoints send proprietary HTTP/2 frames that Go doesn't recognize.
+		// Force HTTP/1.1 to avoid noisy "unhandled response frame type" warnings.
+		tlsCfg.NextProtos = []string{"http/1.1"}
+		tr.ForceAttemptHTTP2 = false
+	}
+	tr.TLSClientConfig = tlsCfg
 
 	rr := &RoundRobinTransport{
 		host:            host,
@@ -175,7 +187,7 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 			var isRetryableErr bool
 			var isS3AccessDeniedErr bool
 
-			//log.Printf("[Counter=%d Retry=%d] Sending request to PrivateEndpoint IP: %s (Host header: %s)", idx, ipAttempt, clonedReq.URL.Host, clonedReq.Host)
+			// log.Printf("[Counter=%d Retry=%d] Sending request to PrivateEndpoint IP: %s (Host header: %s)", idx, ipAttempt, clonedReq.URL.Host, clonedReq.Host)
 
 			resp, err := rr.transport.RoundTrip(clonedReq)
 			if err == nil {
@@ -256,7 +268,7 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 				// Incase of cancel operation return response without checking for errors.
 				if errMsg == "context canceled" {
 					log.Printf("Returning for cancel operation for Private Endpoint IP %s", peIP)
-					return resp, fmt.Errorf(errMsg)
+					return resp, fmt.Errorf("%s", errMsg)
 				}
 				log.Printf("[Counter=%d Retry=%d] Network error with no response, Error Message:%s retryable:%v", idx, ipAttempt, errMsg, isRetryableErr)
 			}
@@ -283,9 +295,9 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 		// continue outer loop to try next IP (if any attempts remain)
 	}
 
-	fmt.Errorf("No healthy Private Endpoint IPs are available")
+	noHealthyEndpointErr := fmt.Errorf("No healthy Private Endpoint IPs are available")
 	// All attempts exhausted
-	return nil, fmt.Errorf("The job failed because access to the Amazon S3 bucket could not be established through any configured private connection. Review the private connection settings and permissions, then try again. Last error: %v", lastErrMsg)
+	return nil, fmt.Errorf("%w. The job failed because access to the Amazon S3 bucket could not be established through any configured private connection. Review the private connection settings and permissions, then try again. Last error: %v", noHealthyEndpointErr, lastErrMsg)
 }
 
 // Close cleans up idle connections and stops the periodic refresh goroutine

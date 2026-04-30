@@ -204,6 +204,10 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 		}
 	}
 
+	// Check if this is GCS accessed via S3-compatible API (using HMAC keys)
+	// GCS has different behavior for directory markers compared to AWS S3
+	isGCSviaS3 := t.s3URLParts.IsGoogleCloudStorage()
+
 	// Append a trailing slash if it is missing.
 	if !strings.HasSuffix(t.s3URLParts.ObjectKey, "/") && t.s3URLParts.ObjectKey != "" {
 		t.s3URLParts.ObjectKey += "/"
@@ -239,21 +243,17 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			return fmt.Errorf("cannot list objects, %v", objectInfo.Err)
 		}
 
-		// Skip objects in archive storage classes as they cannot be accessed directly
-		// and require restoration before transfer. Attempting to transfer these objects
-		// will result in 403 errors and job failures.
-		if isArchiveStorageClass(objectInfo.StorageClass) {
-			skipMessage := fmt.Sprintf("Skipping S3 object %s as it is in %s storage class. "+
-				"Objects in archive storage classes must be restored before they can be transferred.",
-				objectInfo.Key, objectInfo.StorageClass)
-			WarnStdoutAndScanningLog(skipMessage)
-
-			// Increment the enumeration counter to track this as a skipped object
-			t.incrementEnumerationCounter(common.EEntityType.Other())
-			continue
+		// Directory detection logic differs between GCS and AWS S3:
+		// - GCS via S3 API: Use enhanced checks (empty StorageClass + trailing slash or zero size)
+		// - AWS S3: Use standard check (empty StorageClass only)
+		var isPotentialDirectory bool
+		if isGCSviaS3 {
+			isPotentialDirectory = objectInfo.StorageClass == "" && (strings.HasSuffix(objectInfo.Key, "/") || objectInfo.Size == 0)
+		} else {
+			isPotentialDirectory = objectInfo.StorageClass == ""
 		}
 
-		if objectInfo.StorageClass == "" && !t.includeDirectoryOrPrefix {
+		if isPotentialDirectory && !t.includeDirectoryOrPrefix {
 			// Directories are the only objects without storage classes.
 			// Skip directories if not using sync orchestrator
 			continue
@@ -269,7 +269,16 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 		objectPath := strings.Split(objectInfo.Key, "/")
 		objectName := objectPath[len(objectPath)-1]
 		var storedObject StoredObject
-		if objectInfo.StorageClass == "" {
+
+		// For GCS via S3 API, use stricter directory detection to avoid false positives
+		var isActualDirectory bool
+		if isGCSviaS3 {
+			isActualDirectory = isPotentialDirectory && objectInfo.Size == 0 && strings.HasSuffix(objectInfo.Key, "/")
+		} else {
+			isActualDirectory = objectInfo.StorageClass == ""
+		}
+
+		if isActualDirectory {
 
 			// For sync orchestrator, we need to treat directories as objects.
 			storedObject = newStoredObject(
@@ -388,7 +397,7 @@ func newS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTrave
 // For info see: https://github.com/aws/aws-sdk-go/issues/720#issuecomment-243891223
 // Once we change to bucketExists, assuming its reliable, we will be able to re allow this URL type.
 func showS3UrlTypeWarning(s3URLParts common.S3URLParts) {
-	if strings.EqualFold(s3URLParts.Host, "s3.amazonaws.com") {
+	if strings.EqualFold(s3URLParts.Host, "s3."+common.GetS3CompatibleSuffix()) {
 		s3UrlWarningOncer.Do(func() {
 			glcm.Info("Instead of transferring from the 's3.amazonaws.com' URL, in this version of AzCopy we recommend you " +
 				"use a region-specific endpoint to transfer from one specific region. E.g. s3.us-east-1.amazonaws.com or a virtual-hosted reference to a single bucket.")
@@ -441,31 +450,12 @@ func CreateSharedS3Client(ctx context.Context, s3URLParts common.S3URLParts, cre
 	return common.CreateS3Client(ctx, common.CredentialInfo{
 		CredentialType: credentialType,
 		S3CredentialInfo: common.S3CredentialInfo{
-			Endpoint: s3URLParts.Endpoint,
-			Region:   s3URLParts.Region,
-			Provider: credProvider,
+			Endpoint:   s3URLParts.Endpoint,
+			Region:     s3URLParts.Region,
+			BucketName: s3URLParts.BucketName,
+			Provider:   credProvider,
 		},
 	}, common.CredentialOpOptions{
 		LogError: glcm.Error,
 	}, azcopyScanningLogger)
-}
-
-// isArchiveStorageClass checks if the given storage class is an archive tier
-// that requires restoration before objects can be accessed. Objects in these storage classes
-// cannot be directly downloaded and will result in 403 errors if attempted.
-// This function supports archive storage classes from multiple S3-compatible providers:
-//
-// AWS S3 Glacier storage classes that require restoration:
-// - GLACIER: Glacier Flexible Retrieval (formerly just "Glacier") - requires restoration
-// - DEEP_ARCHIVE: Glacier Deep Archive - requires restoration
-//
-// Note: The following storage classes are NOT included as they provide immediate access:
-// - GLACIER_IR (AWS): Provides millisecond access without restoration
-// - NEARLINE, COLDLINE, ARCHIVE (GCS): All provide immediate access without restoration
-//
-// To add support for additional archive storage classes from other S3-compatible providers
-// that require restoration, add the storage class string to the comparison below.
-func isArchiveStorageClass(storageClass string) bool {
-	// AWS Glacier storage classes that require restoration
-	return storageClass == "GLACIER" || storageClass == "DEEP_ARCHIVE"
 }

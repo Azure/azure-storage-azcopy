@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	minio "github.com/minio/minio-go/v7"
 )
 
@@ -77,9 +78,10 @@ func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, err
 	p.s3Client, err = s3ClientFactory.GetS3Client(ctx, common.CredentialInfo{
 		CredentialType: p.credType,
 		S3CredentialInfo: common.S3CredentialInfo{
-			Endpoint: p.s3URLPart.Endpoint,
-			Region:   p.s3URLPart.Region,
-			Provider: p.transferInfo.Provider,
+			Endpoint:   p.s3URLPart.Endpoint,
+			Region:     p.s3URLPart.Region,
+			BucketName: p.s3URLPart.BucketName,
+			Provider:   p.transferInfo.Provider,
 		},
 	}, common.CredentialOpOptions{
 		LogInfo:  func(str string) { p.jptm.Log(common.LogInfo, str) },
@@ -118,6 +120,18 @@ func (p *s3SourceInfoProvider) Properties() (*SrcProperties, error) {
 		if err != nil {
 			return nil, err
 		}
+
+		// For mover builds, skip objects in archive storage classes (GLACIER, DEEP_ARCHIVE) unless restored.
+		// This check piggybacks on the existing StatObject call (no extra API call) and runs with
+		// 64-way parallelism in the STE, avoiding the single-threaded enumeration bottleneck.
+		// Note: minio-go's StatObject (HEAD) does NOT populate ObjectInfo.StorageClass directly;
+		// the storage class is only available via the X-Amz-Storage-Class header in Metadata.
+		storageClass := objectInfo.Metadata.Get("X-Amz-Storage-Class")
+		if buildmode.IsMover && isArchiveStorageClass(storageClass) && !isRestoredFromArchive(objectInfo.Restore) {
+			return nil, fmt.Errorf("%w: object %q is in %s storage class",
+				common.ErrS3ArchiveObjectNotRestored, p.s3URLPart.ObjectKey, storageClass)
+		}
+
 		oie := common.ObjectInfoExtension{ObjectInfo: objectInfo}
 
 		srcProperties = SrcProperties{
@@ -235,4 +249,25 @@ func (p *s3SourceInfoProvider) GetMD5(offset, count int64) ([]byte, error) {
 		return nil, err
 	}
 	return h.Sum(nil), nil
+}
+
+// isArchiveStorageClass checks if the given S3 storage class is an archive tier
+// that requires restoration before objects can be accessed.
+//
+// AWS S3 Glacier storage classes that require restoration:
+//   - GLACIER: Glacier Flexible Retrieval (formerly just "Glacier")
+//   - DEEP_ARCHIVE: Glacier Deep Archive
+//
+// Note: GLACIER_IR (AWS) provides millisecond access without restoration, so it is NOT included.
+func isArchiveStorageClass(storageClass string) bool {
+	return storageClass == "GLACIER" || storageClass == "DEEP_ARCHIVE"
+}
+
+// isRestoredFromArchive checks whether an archived S3 object has been successfully
+// restored and is currently accessible. A restore is considered ready when:
+//   - RestoreInfo is not nil (x-amz-restore header was present)
+//   - OngoingRestore is false (restore operation has completed)
+//   - ExpiryTime is set (the temporary copy has an expiry, confirming availability)
+func isRestoredFromArchive(restore *minio.RestoreInfo) bool {
+	return restore != nil && !restore.OngoingRestore && !restore.ExpiryTime.IsZero()
 }

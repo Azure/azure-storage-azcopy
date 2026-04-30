@@ -33,7 +33,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 
 	"github.com/pkg/errors"
@@ -64,6 +63,8 @@ type blobTraverser struct {
 	include common.BlobTraverserIncludeOption
 
 	isDFS bool
+
+	destResourceType *common.Location
 
 	errorChannel chan<- TraverserErrorItemInfo
 
@@ -117,6 +118,13 @@ func (e ErrorBlobInfo) Location() common.Location {
 }
 
 // END - Implementing methods defined in TraverserErrorItemInfo
+
+// destIsBlobFS reports whether the destination is a BlobFS (HNS) endpoint.
+// Returns false when destResourceType is nil, since the container-root ACL path
+// only succeeds against an explicitly-known HNS destination.
+func (t *blobTraverser) destIsBlobFS() bool {
+	return t.destResourceType != nil && *t.destResourceType == common.ELocation.BlobFS()
+}
 
 func (t *blobTraverser) writeToBlobErrorChannel(err ErrorBlobInfo) {
 	if t.errorChannel != nil {
@@ -354,9 +362,11 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		if !t.include.Deleted() && (isBlob || err != nil) {
 			return err
 		}
-	} else if blobURLParts.BlobName == "" && (t.preservePermissions.IsTruthy() || t.isDFS) && !buildmode.IsMover {
+	} else if blobURLParts.BlobName == "" && (t.preservePermissions.IsTruthy() || (t.isDFS && t.destIsBlobFS())) {
 		// If the root is a container and we're copying "folders", we should persist the ACLs there too.
-		// For DFS, we should always include the container root.
+		// For DFS, include the container root only when the destination is BlobFS — the container-root
+		// ACL path (blobFolderSender.SetContainerACL) hardcodes the DFS endpoint, so only HNS→HNS can
+		// actually land the ACL
 		if azcopyScanningLogger != nil {
 			azcopyScanningLogger.Log(common.LogDebug, "Detected the root as a container.")
 		}
@@ -373,7 +383,6 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			common.Metadata{},
 			blobURLParts.ContainerName,
 		)
-
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter(common.EEntityType.Folder())
 		}
@@ -441,7 +450,8 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 
 					enqueuedDirAsOutput := false // Reset the flag for each directory processed
 
-					if t.include.DirStubs() || t.includeDirectoryOrPrefix {
+					// TODO: shnayak to check the impact of removing t.includeDirectoryOrPrefix for OnPrem scenario.
+					if t.include.DirStubs() {
 						// try to get properties on the directory itself, since it's not listed in BlobItems
 						dName := strings.TrimSuffix(*virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)
 						blobClient := containerClient.NewBlobClient(dName)
@@ -523,6 +533,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 							noMetadata,
 							containerName,
 						)
+						storedObject.isVirtualPrefix = true
 						enqueueOutput(storedObject, err)
 					}
 				}
@@ -591,9 +602,9 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 		object := item.(StoredObject)
 
 		if t.incrementEnumerationCounter != nil {
-			if UseSyncOrchestrator {
+			if UseSyncOrchestrator && !object.isVirtualPrefix {
 				t.incrementEnumerationCounter(object.entityType)
-			} else {
+			} else if !UseSyncOrchestrator {
 				// XDM: Retaining the old behavior but this seems like a bug.
 				t.incrementEnumerationCounter(common.EEntityType.File())
 			}
@@ -743,6 +754,7 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		cpkOptions:                  opts.CpkOptions,
 		preservePermissions:         opts.PreservePermissions,
 		isDFS:                       common.DerefOrZero(common.FirstOrZero(blobOpts).isDFS),
+		destResourceType:            opts.DestResourceType,
 		errorChannel:                opts.ErrorChannel,
 	}
 
