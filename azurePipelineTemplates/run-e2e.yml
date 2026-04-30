@@ -169,6 +169,7 @@ jobs:
           NEW_E2E_ENVIRONMENT: "AzurePipeline"
           AZCOPY_E2E_PREMIUM_FILESHARE_ACCOUNT_KEY: $(AZCOPY_E2E_PREMIUM_FILESHARE_ACCOUNT_KEY)
           AZCOPY_E2E_PREMIUM_FILESHARE_ACCOUNT_NAME: $(AZCOPY_E2E_PREMIUM_FILESHARE_ACCOUNT_NAME)
+          NEW_E2E_SKIP_TELEMETRY: true
         displayName: 'E2E Test $(display_name) - AMD64 with Workload Identity'
 
       - task: PublishBuildArtifacts@1
