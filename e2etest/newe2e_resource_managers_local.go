@@ -360,7 +360,10 @@ func (l *LocalObjectResourceManager) GetProperties(a Asserter) ObjectProperties 
 	a.HelperMarker().Helper()
 	var stats fs.FileInfo
 	var err error
-	if l.entityType == common.EEntityType.Symlink() {
+	if l.entityType == common.EEntityType.Symlink() || l.entityType == common.EEntityType.Hardlink() {
+		// Use Lstat for symlinks and hardlinks.  A hardlink to a symlink IS a
+		// symlink at the filesystem level, so os.Stat would follow the target
+		// chain and fail if the symlink is dangling.
 		stats, err = os.Lstat(l.getWorkingPath())
 		if err != nil { // Prevent nil dereferences
 			a.NoError("failed to get stat", err)

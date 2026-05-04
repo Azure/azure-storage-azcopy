@@ -547,7 +547,16 @@ func init() {
 	_ = syncCmd.PersistentFlags().MarkHidden("delete-destination-file")
 
 	syncCmd.PersistentFlags().StringVar(&raw.hardlinks, HardlinksFlag, "follow",
-		"Follow by default. Preserve hardlinks for NFS resources. "+
-			"\n This flag is only applicable when the source is Azure NFS file share or the destination is NFS file share. "+
-			"\n Available options: skip, preserve, follow (default 'follow').")
+		"Specifies how hardlinks should be handled. "+
+			"\n This flag is only applicable when downloading from an Azure NFS file share, uploading "+
+			"to an Azure Files NFS share, or performing service-to-service copies involving Azure Files NFS. \n"+
+			"\n The supported options are 'follow' (default), 'skip' and 'preserve'. \n"+
+			"  'follow' means that the hardlinked files are transferred as separate files. \n"+
+			"  'skip' means that all the hardlinked files are skipped. \n"+
+			"  'preserve' means that hardlink relationships are maintained at the destination where supported. \n"+
+			"\n Note: \n"+
+			"  When using 'preserve', the source and destination must be on a file system that supports hardlinks.\n"+
+			"Behavior may differ based on the transfer direction. For uploads or service-to-service transfers \n"+
+			"(Azure Files NFS as destination), out-of-scope hardlinks are preserved since file updates occur in place. \n"+
+			"  For downloads (local filesystem as destination), out-of-scope hardlinks may be broken due to the default temp-file and rename behavior.")
 }

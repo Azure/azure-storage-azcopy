@@ -154,6 +154,9 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 				if msg.IsFolderProperties {
 					js.FoldersCompleted++
 				}
+				if msg.IsHardlink {
+					js.HardlinksCompleted++
+				}
 				js.TransfersCompleted++
 				js.TotalBytesTransferred += msg.TransferSize
 			case common.ETransferStatus.Failed(),
@@ -162,12 +165,18 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 				if msg.IsFolderProperties {
 					js.FoldersFailed++
 				}
+				if msg.IsHardlink {
+					js.HardlinksFailed++
+				}
 				js.TransfersFailed++
 				js.FailedTransfers = append(js.FailedTransfers, msg)
 			case common.ETransferStatus.SkippedEntityAlreadyExists(),
 				common.ETransferStatus.SkippedBlobHasSnapshots():
 				if msg.IsFolderProperties {
 					js.FoldersSkipped++
+				}
+				if msg.IsHardlink {
+					js.HardlinksSkipped++
 				}
 				js.TransfersSkipped++
 				js.SkippedTransfers = append(js.SkippedTransfers, msg)
