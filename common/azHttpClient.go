@@ -49,7 +49,7 @@ const (
 // will be invoked with status messages.
 func GetGlobalHTTPClient(logger ILoggerResetable) *http.Client {
 	globalHTTPClientOnce.Do(func() {
-		const maxConnsPerHost = 10000
+		const maxConnsPerHost = 20000
 		client := &http.Client{
 			Transport: &http.Transport{
 				Proxy:                  GlobalProxyLookup,

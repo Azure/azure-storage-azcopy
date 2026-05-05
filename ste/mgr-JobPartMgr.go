@@ -82,7 +82,7 @@ type IJobPartMgr interface {
 // number of available network sockets on resource-constrained Linux systems. (E.g. when
 // 'ulimit -Hn' is low).
 func NewAzcopyHTTPClient(maxIdleConns int) *http.Client {
-	const maxConnsPerHost = 10000
+	const maxConnsPerHost = 20000
 	return &http.Client{
 		Transport: &http.Transport{
 			Proxy:                  common.GlobalProxyLookup,
