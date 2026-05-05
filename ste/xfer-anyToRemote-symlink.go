@@ -20,6 +20,7 @@
 package ste
 
 import (
+	"fmt"
 	"net/url"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -111,6 +112,22 @@ func anyToRemote_symlink(jptm IJobPartTransferMgr, info *TransferInfo, pacer pac
 				jptm.SetStatus(common.ETransferStatus.SkippedEntityAlreadyExists())
 				jptm.ReportTransferDone()
 				return
+			}
+		}
+	}
+
+	// Handles overwrite=True S2S FileNFS copies where source and destination are different entity types.
+	// E.g the source is a symlink and destination is a regular file.
+	// In this situation, the destination file is proactively deleted and replaced with the source symlink.
+	// This was added so the following CreateSymbolicLink call does not need to depend on the service
+	// returning a specific error code to be retried on.
+	if shouldOverwrite := jptm.GetOverwriteOption() == common.EOverwriteOption.True(); jptm.FromTo().IsNFS() && shouldOverwrite {
+		if azFileSender, ok := baseSender.(*urlToAzureFileCopier); ok {
+			if delErr := azFileSender.DeleteIfNotSymlink(); delErr != nil {
+				jptm.LogAtLevelForCurrentTransfer(common.LogWarning,
+					fmt.Sprintf("Could not delete the destination %s before symlink overwrites it: %s",
+						jptm.Info().Destination, delErr.Error()))
+				// Don't fail the transfer, let retry logic in DoWithCreateSymlinkOnAzureFilesNFS() take a shot
 			}
 		}
 	}

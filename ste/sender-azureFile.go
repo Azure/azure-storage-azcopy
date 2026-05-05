@@ -571,3 +571,30 @@ func (u *azureFileSenderBase) CreateHardlink(targetHardlinkFilePath string) erro
 	u.jptm.Log(common.LogDebug, fmt.Sprintf("Created hardlink with data: %s", targetHardlinkFilePath))
 	return nil
 }
+
+// DeleteIfNotSymlink deletes the destination resource in over write scenarios
+// where the source is a symlink and destination is not.
+func (u *azureFileSenderBase) DeleteIfNotSymlink() error {
+	if !u.jptm.FromTo().IsNFS() {
+		return nil
+	}
+
+	destClient := u.getFileClient()
+	props, err := destClient.GetProperties(u.ctx, nil)
+	if err != nil {
+		// First, check if there is anything to delete
+		var respErr *azcore.ResponseError
+		if errors.As(err, &respErr) && respErr.StatusCode == http.StatusNotFound {
+			return nil
+		}
+		return err
+	}
+	if props.NFSFileType != nil && *props.NFSFileType == file.NFSFileTypeSymlink {
+		return nil
+	}
+	// Delete non-symlink
+	if _, delErr := destClient.Delete(u.ctx, nil); delErr != nil {
+		return fmt.Errorf("failed to delete file for ovewrite: %w", delErr)
+	}
+	return nil
+}
