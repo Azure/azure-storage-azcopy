@@ -83,7 +83,7 @@ func (b *bestEffortAsserter) Failed() bool                { return false }
 func (b *bestEffortAsserter) HelperMarker() HelperMarker  { return b.inner.HelperMarker() }
 func (b *bestEffortAsserter) GetTestName() string         { return b.inner.GetTestName() }
 
-// These tests are using the same source and desination shares for testing to avoid
+// These tests are using the same source and destination shares for testing to avoid
 // creating too many share accounts which may lead to throttling by Azure.
 // So in order to avoid conflicts between tests, we cleanup the test directories created during the test run.
 func CleanupNFSDirectory(

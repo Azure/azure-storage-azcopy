@@ -572,29 +572,22 @@ func (u *azureFileSenderBase) CreateHardlink(targetHardlinkFilePath string) erro
 	return nil
 }
 
-// DeleteIfNotSymlink deletes the destination resource in over write scenarios
-// where the source is a symlink and destination is not.
-func (u *azureFileSenderBase) DeleteIfNotSymlink() error {
+// DeleteDestInOverwrite deletes the destination resource in FileNFS transfer with symlink where overwrite=True.
+// This was added because the overwrite retry logic was gated on status codes from the service that were not
+// always hit
+func (u *azureFileSenderBase) DeleteDestInOverwrite() error {
 	if !u.jptm.FromTo().IsNFS() {
 		return nil
 	}
 
 	destClient := u.getFileClient()
-	props, err := destClient.GetProperties(u.ctx, nil)
-	if err != nil {
+	if _, delErr := destClient.Delete(u.ctx, nil); delErr != nil {
 		// First, check if there is anything to delete
 		var respErr *azcore.ResponseError
-		if errors.As(err, &respErr) && respErr.StatusCode == http.StatusNotFound {
+		if errors.As(delErr, &respErr) && respErr.StatusCode == http.StatusNotFound {
 			return nil
 		}
-		return err
-	}
-	if props.NFSFileType != nil && *props.NFSFileType == file.NFSFileTypeSymlink {
-		return nil
-	}
-	// Delete non-symlink
-	if _, delErr := destClient.Delete(u.ctx, nil); delErr != nil {
-		return fmt.Errorf("failed to delete file for ovewrite: %w", delErr)
+		return fmt.Errorf("failed to delete file for overwrite: %w", delErr)
 	}
 	return nil
 }

@@ -152,7 +152,7 @@ func TestComputeUploadHardlinkTarget(t *testing.T) {
 
 		// ───────────── invalid destination URL → FailActiveSend ─────────────
 		{
-			name:                   "error — unparseable destination URL",
+			name:                   "error — unparsable destination URL",
 			sourceRoot:             "/local",
 			source:                 "/local/link.txt",
 			destination:            "://not-a-valid-url",
