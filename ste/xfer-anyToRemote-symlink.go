@@ -116,11 +116,10 @@ func anyToRemote_symlink(jptm IJobPartTransferMgr, info *TransferInfo, pacer pac
 		}
 	}
 
-	// Handles overwrite=True S2S FileNFS copies where source and destination are different entity types.
-	// E.g the source is a symlink and destination is a regular file.
-	// In this situation, the destination file is proactively deleted and replaced with the source symlink.
+	// Handles overwrite=True FileNFS symlink transfers.
+	// The destination file is proactively deleted and replaced with the source symlink.
 	// This was added so the following CreateSymbolicLink call does not need to depend on the service
-	// returning a specific error code to be retried on.
+	// returning specific error codes to perform the destination deletion
 	if shouldOverwrite := jptm.GetOverwriteOption() == common.EOverwriteOption.True(); jptm.FromTo().IsNFS() && shouldOverwrite {
 		if azFileSender, ok := baseSender.(*urlToAzureFileCopier); ok {
 			if delErr := azFileSender.DeleteDestInOverwrite(); delErr != nil {
