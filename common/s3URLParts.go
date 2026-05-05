@@ -77,6 +77,8 @@ func getS3Keyword() string {
 	suffix := strings.ToLower(GetS3CompatibleSuffix())
 
 	switch {
+	case strings.HasSuffix(suffix, "oraclecloud.com"):
+		return "oracle"
 	case strings.HasSuffix(suffix, "googleapis.com"):
 		return "googleapis"
 	case strings.HasSuffix(suffix, "amazonaws.com"):
@@ -114,6 +116,10 @@ func findS3URLMatches(host string) (matches []string, isS3Host bool) {
 			if m := matchAWSHost(hostLower, suffix); m != nil {
 				return m, true
 			}
+		case strings.HasSuffix(suffix, "oraclecloud.com"):
+			if m := matchOCIHost(hostLower, suffix); m != nil {
+				return m, true
+			}
 		case strings.HasSuffix(suffix, "googleapis.com"):
 			// Always pass the domain root so matchGoogleHost builds correct endpoints
 			// (e.g. suffix may be "storage.googleapis.com" but matcher needs "googleapis.com")
@@ -125,6 +131,9 @@ func findS3URLMatches(host string) (matches []string, isS3Host bool) {
 				return m, true
 			}
 			if m := matchAWSHost(hostLower, suffix); m != nil {
+				return m, true
+			}
+			if m := matchOCIHost(hostLower, suffix); m != nil {
 				return m, true
 			}
 			// For custom (non-well-known) suffixes, allow any valid FQDN
@@ -233,6 +242,65 @@ func matchCustomS3Host(hostLower string) []string {
 	return nil
 }
 
+// parseOCICompatHost parses OCI S3-compat hosts in this format:
+//
+//	<namespace>.compat.objectstorage.<region>.oraclecloud.com
+//
+// and returns namespace + region if valid.
+func parseOCICompatHost(hostLower string) (namespace string, region string, ok bool) {
+	const marker = ".compat.objectstorage."
+	const domainSuffix = ".oraclecloud.com"
+
+	if !strings.HasSuffix(hostLower, domainSuffix) {
+		return "", "", false
+	}
+
+	markerIndex := strings.Index(hostLower, marker)
+	if markerIndex <= 0 {
+		return "", "", false
+	}
+
+	namespace = hostLower[:markerIndex]
+	if namespace == "" {
+		return "", "", false
+	}
+
+	regionStart := markerIndex + len(marker)
+	regionEnd := len(hostLower) - len(domainSuffix)
+	if regionStart >= regionEnd {
+		return "", "", false
+	}
+
+	region = hostLower[regionStart:regionEnd]
+	if region == "" {
+		return "", "", false
+	}
+
+	return namespace, region, true
+}
+
+// matchOCIHost matches OCI S3-compatible endpoints in this format:
+//
+//	https://<namespace>.compat.objectstorage.<region>.oraclecloud.com/<bucket-name>/<object-name>
+//
+// Returns a matches slice in the format: [fullHost, "", region, keyword]
+func matchOCIHost(hostLower, suffix string) []string {
+	if hostLower == "" || suffix == "" {
+		return nil
+	}
+
+	_, region, ok := parseOCICompatHost(hostLower)
+	if !ok {
+		return nil
+	}
+
+	keyword := getS3Keyword()
+
+	// Return matches in the format expected by the parser.
+	// [fullHost, bucketCapture (empty for path-style), region, keyword]
+	return []string{hostLower, "", region, keyword}
+}
+
 // NewS3URLParts parses a URL initializing S3URLParts' fields. This method overwrites all fields in the S3URLParts object.
 func NewS3URLParts(u url.URL) (S3URLParts, error) {
 	// S3's bucket name should be in lower case
@@ -265,6 +333,7 @@ func NewS3URLParts(u url.URL) (S3URLParts, error) {
 		// In this case, it would be in path-style URL. Host prefix like s3[-.], and path contains the bucket name and object id.
 		up.isPathStyle = true
 
+		// Standard path-style: bucket/object
 		if bucketEndIndex := strings.Index(path, "/"); bucketEndIndex != -1 {
 			up.BucketName = path[:bucketEndIndex]
 			up.ObjectKey = path[bucketEndIndex+1:]
@@ -377,6 +446,12 @@ func (p *S3URLParts) IsDirectorySyntactically() bool {
 // (via S3-compatible API with HMAC keys). Returns true if the endpoint is storage.googleapis.com.
 func (p *S3URLParts) IsGoogleCloudStorage() bool {
 	return strings.Contains(strings.ToLower(p.Endpoint), "googleapis.com")
+}
+
+// IsOracleCloudStorage checks if this S3 URL is actually pointing to Oracle Cloud Infrastructure (OCI)
+// Object Storage (via S3-compatible API). Returns true if the endpoint contains oraclecloud.com.
+func (p *S3URLParts) IsOracleCloudStorage() bool {
+	return strings.Contains(strings.ToLower(p.Endpoint), "oraclecloud.com")
 }
 
 // IsS3CompatibleEndpoint returns true if a custom S3-compatible endpoint is configured
