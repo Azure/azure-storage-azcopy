@@ -351,4 +351,16 @@ func TestGCSURLParse(t *testing.T) {
 	a.Equal("", p.Region)
 	a.True(p.IsGoogleCloudStorage())
 	a.Equal("https://mybucket.storage.googleapis.com/path/to/file.bin", p.String())
+
+	// Virtual-hosted style with dotted bucket name
+	u, _ = url.Parse("https://my.bucket.storage.googleapis.com/object.txt")
+	p, err = NewS3URLParts(*u)
+	a.Nil(err)
+	a.Equal("my.bucket.storage.googleapis.com", p.Host)
+	a.Equal("storage.googleapis.com", p.Endpoint)
+	a.Equal("my.bucket", p.BucketName)
+	a.Equal("object.txt", p.ObjectKey)
+	a.Equal("", p.Region)
+	a.True(p.IsGoogleCloudStorage())
+	a.Equal("https://my.bucket.storage.googleapis.com/object.txt", p.String())
 }

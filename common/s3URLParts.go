@@ -378,7 +378,12 @@ func NewS3URLParts(u url.URL) (S3URLParts, error) {
 		up.BucketName = matchSlices[1][:len(matchSlices[1])-1] // Removing the trailing '.' at the end
 		up.ObjectKey = path
 
-		up.Endpoint = host[strings.Index(host, ".")+1:]
+		// Use the captured host prefix so dotted bucket names (e.g. my.bucket.*)
+		// still produce the correct service endpoint.
+		up.Endpoint = strings.TrimPrefix(host, matchSlices[1])
+		if up.Endpoint == host {
+			up.Endpoint = host[strings.Index(host, ".")+1:]
+		}
 	} else {
 		// In this case, it would be in path-style URL. Host prefix like s3[-.], and path contains the bucket name and object id.
 		up.isPathStyle = true
