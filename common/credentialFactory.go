@@ -69,9 +69,16 @@ const PeCheckIntervalInmilliSecs = 200
 
 func getS3BucketLookup(endpoint string) minio.BucketLookupType {
 	urlParts := S3URLParts{Endpoint: endpoint}
-	if urlParts.IsGoogleCloudStorage() || urlParts.IsOracleCloudStorage() {
+	if urlParts.IsGoogleCloudStorage() {
 		// Force path-style for GCS so bucket names with underscores do not
-		// appear in the request host. OCI S3-compatible endpoints also use path-style.
+		// appear in the request host.
+		return minio.BucketLookupPath
+	}
+
+	if urlParts.IsOracleCloudStorage() {
+		if urlParts.IsOracleCloudStorageVirtualHosted() {
+			return minio.BucketLookupDNS
+		}
 		return minio.BucketLookupPath
 	}
 
@@ -91,10 +98,18 @@ func createS3ClientForPrivateNetwork(credInfo CredentialInfo, cred *credentials.
 	minioEndpoint := baseS3Host // endpoint passed to minio.New()
 	bucketLookup := getS3BucketLookup(baseS3Host)
 	if isS3CompatibleUrl {
-		// S3-compatible endpoint (GCS or on-prem appliances like MinIO, NetApp, Dell EMC, etc.)
-		// All S3-compatible endpoints use path-style URLs
-		tlsHost = baseS3Host
-		s3Host = baseS3Host
+		// S3-compatible endpoint (GCS, OCI, or on-prem appliances).
+		if bucketLookup == minio.BucketLookupDNS {
+			bucketName := credInfo.S3CredentialInfo.BucketName
+			if bucketName == "" {
+				return nil, fmt.Errorf("bucket name is required for S3-compatible DNS-style endpoint: %s", baseS3Host)
+			}
+			s3Host = bucketName + "." + baseS3Host
+			tlsHost = s3Host
+		} else {
+			tlsHost = baseS3Host
+			s3Host = baseS3Host
+		}
 
 		if isGCS {
 			// Minio lib only supports "storage.googleapis.com" as the GCS endpoint

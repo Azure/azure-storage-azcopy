@@ -266,6 +266,40 @@ func TestOCIURLParse(t *testing.T) {
 	_, err = NewS3URLParts(*u)
 	a.NotNil(err)
 	a.True(strings.Contains(err.Error(), invalidS3URLErrorMessage))
+
+	// OCI public path-style customer endpoint
+	t.Setenv("S3_COMPATIBLE_ENDPOINT", "mytenant.compat.objectstorage.us-ashburn-1.oci.customer-oci.com")
+	u, _ = url.Parse("https://mytenant.compat.objectstorage.us-ashburn-1.oci.customer-oci.com/mybucket/myobject.txt")
+	p, err = NewS3URLParts(*u)
+	a.Nil(err)
+	a.Equal("mytenant.compat.objectstorage.us-ashburn-1.oci.customer-oci.com", p.Endpoint)
+	a.Equal("mybucket", p.BucketName)
+	a.Equal("myobject.txt", p.ObjectKey)
+	a.Equal("us-ashburn-1", p.Region)
+	a.True(p.IsOracleCloudStorage())
+
+	// OCI public virtual-hosted endpoint
+	t.Setenv("S3_COMPATIBLE_ENDPOINT", "vhcompat.objectstorage.us-ashburn-1.oci.customer-oci.com")
+	u, _ = url.Parse("https://mybucket.vhcompat.objectstorage.us-ashburn-1.oci.customer-oci.com/folder/file.txt")
+	p, err = NewS3URLParts(*u)
+	a.Nil(err)
+	a.Equal("mybucket.vhcompat.objectstorage.us-ashburn-1.oci.customer-oci.com", p.Host)
+	a.Equal("vhcompat.objectstorage.us-ashburn-1.oci.customer-oci.com", p.Endpoint)
+	a.Equal("mybucket", p.BucketName)
+	a.Equal("folder/file.txt", p.ObjectKey)
+	a.Equal("us-ashburn-1", p.Region)
+	a.True(p.IsOracleCloudStorage())
+
+	// OCI private networking endpoint
+	t.Setenv("S3_COMPATIBLE_ENDPOINT", "myprefix-mytenant.private.compat.objectstorage.us-phoenix-1.oci.customer-oci.com")
+	u, _ = url.Parse("https://myprefix-mytenant.private.compat.objectstorage.us-phoenix-1.oci.customer-oci.com/mybucket/private/file.txt")
+	p, err = NewS3URLParts(*u)
+	a.Nil(err)
+	a.Equal("myprefix-mytenant.private.compat.objectstorage.us-phoenix-1.oci.customer-oci.com", p.Endpoint)
+	a.Equal("mybucket", p.BucketName)
+	a.Equal("private/file.txt", p.ObjectKey)
+	a.Equal("us-phoenix-1", p.Region)
+	a.True(p.IsOracleCloudStorage())
 }
 
 func TestGCSURLParse(t *testing.T) {
