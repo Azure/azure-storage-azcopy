@@ -1677,3 +1677,118 @@ func (s *FilesNFSTestSuite) Scenario_DstShareDoesNotExists(svm *ScenarioVariatio
 			},
 		})
 }
+
+func (s *FilesNFSTestSuite) Scenario_NFSToNFS_OverwriteSymlinkToFile(svm *ScenarioVariationManager) {
+	// Test Scenario:
+	// 1. Create source and destination NFS enabled file shares
+	// 2. Source NFS share contains:
+	//      target.txt (regular file)
+	//      mylink (symlink -> target.txt)
+	// 3.  Destination NFS share contains:
+	//      mylink (regular file, same path as the source symlink)
+	// 4. Run azcopy copy with --preserve-symlinks and --overwrite set
+	// 5. Expected: dest regular file mylink is replaced with a symlink pointing to target.txt.
+
+	dstContainer := GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
+		PreferredAccount: pointerTo(PremiumFileShareAcct),
+	}).(ServiceResourceManager).GetContainer("dstnfs")
+	if !dstContainer.Exists() {
+		dstContainer.Create(svm, ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				EnabledProtocols: pointerTo("NFS")},
+		})
+	}
+	srcContainer := GetRootResource(svm, common.ELocation.FileNFS(), GetResourceOptions{
+		PreferredAccount: pointerTo(PremiumFileShareAcct),
+	}).(ServiceResourceManager).GetContainer("srcnfs")
+	if !srcContainer.Exists() {
+		srcContainer.Create(svm, ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				EnabledProtocols: pointerTo("NFS")},
+		})
+	}
+	rootDir := "dir_overwrite_sym_to_file_" + uuid.NewString()
+	defer CleanupNFSDirectory(svm, srcContainer, rootDir)
+	defer CleanupNFSDirectory(svm, dstContainer, rootDir)
+
+	//  Source: symlink (mylink) pointing to target file (target.txt)
+	// root directory
+	srcObjs := make(ObjectResourceMappingFlat)
+	obj := ResourceDefinitionObject{
+		ObjectName:       pointerTo(rootDir),
+		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()},
+	}
+	CreateResource[ObjectResourceManager](svm, srcContainer, srcObjs[rootDir])
+	srcObjs[rootDir] = obj
+
+	// target file
+	targetName := rootDir + "/target.txt"
+	obj = ResourceDefinitionObject{
+		ObjectName:       pointerTo(targetName),
+		Body:             NewRandomObjectContentContainer(SizeFromString("1K")),
+		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+	}
+	CreateResource[ObjectResourceManager](svm, srcContainer, srcObjs[targetName])
+	srcObjs[targetName] = obj
+
+	// symlink
+	linkName := rootDir + "/mylink"
+	obj = ResourceDefinitionObject{
+		ObjectName: pointerTo(linkName),
+		Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
+		ObjectProperties: ObjectProperties{
+			EntityType:        common.EEntityType.Symlink(),
+			SymlinkedFileName: targetName,
+		},
+	}
+	CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+	srcObjs[linkName] = obj
+
+	// Destination: pre-existing REGULAR FILE (mylink) with the same path as symlink
+	dstContainer.GetObject(svm, linkName, common.EEntityType.File()).
+		Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")),
+			ObjectProperties{
+				EntityType: common.EEntityType.File(),
+			})
+
+	src := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+	dst := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+
+	RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbCopy,
+			Targets: []ResourceManager{
+				src.(RemoteResourceManager).WithSpecificAuthType(
+					ResolveVariation(svm, []ExplicitCredentialTypes{
+						EExplicitCredentialType.SASToken(),
+						EExplicitCredentialType.OAuth(),
+					}), svm, CreateAzCopyTargetOptions{}),
+				dst.(RemoteResourceManager).WithSpecificAuthType(
+					ResolveVariation(svm, []ExplicitCredentialTypes{
+						EExplicitCredentialType.SASToken(),
+						EExplicitCredentialType.OAuth(),
+					}), svm, CreateAzCopyTargetOptions{}),
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive:        pointerTo(true),
+					FromTo:           pointerTo(common.EFromTo.FileNFSFileNFS()),
+					PreserveSymlinks: pointerTo(true),
+				},
+				Overwrite: pointerTo(true),
+			},
+		})
+
+	// Verify dest object is a symlink not regular file.
+	dstLink := dstContainer.GetObject(svm, linkName, common.EEntityType.Symlink())
+	svm.Assert("destination should be a symlink after overwrite",
+		Equal{}, dstLink.EntityType(), common.EEntityType.Symlink())
+
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: srcObjs,
+	}, ValidateResourceOptions{
+		validateObjectContent: true,
+		fromTo:                common.EFromTo.FileNFSFileNFS(),
+	})
+}
