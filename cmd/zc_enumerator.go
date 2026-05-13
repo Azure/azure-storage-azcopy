@@ -411,6 +411,10 @@ type InitResourceTraverserOptions struct {
 	HardlinkHandling  common.HardlinkHandlingType
 
 	IncrementNotTransferred enumerationCounterFunc
+
+	// IsSyncDestination indicates this traverser is enumerating the destination side of a sync job.
+	// Used to return specific not-found errors that the sync orchestrator handles gracefully.
+	IsSyncDestination bool
 }
 
 // XDM: These templates are used to create directory level non-recursive traversers
