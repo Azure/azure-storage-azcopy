@@ -171,8 +171,7 @@ func NewFpoAwareProcessor(fpo common.FolderPropertyOption, inner ObjectProcessor
 	hardLinkHandlingType common.HardlinkHandlingType) ObjectProcessor {
 	return func(s StoredObject) error {
 
-		// For deletions with delete-destination, a symlink that reaches this filter has been identified as "extra" relative to the source.
-		// It should be deleted related, regardless of the preserve mode for symlinks
+		// We pass in the user provided symbolic and hardlink handling. For hardlink, the default handling is Follow
 		if s.isCompatibleWithEntitySettings(fpo, symlinkHandlingType, hardLinkHandlingType) {
 			return inner(s)
 		} else {

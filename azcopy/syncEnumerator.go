@@ -237,7 +237,7 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 	deleteProcessor := newInteractiveDeleteProcessor(deleter, s.opts.deleteDestination, s.opts.fromTo.To(),
 		s.opts.destination, s.spt.incrementDeletionCount)
 	deleteScheduler := traverser.NewFpoAwareProcessor(fpo, deleteProcessor.removeImmediately,
-		s.opts.destSymlinks,
+		s.opts.destSymlinks, // Use the destination symlink handling field to ensure symlinks to be deleted are not skipped.
 		common.EHardlinkHandlingType.Follow())
 
 	var comparator traverser.ObjectProcessor
