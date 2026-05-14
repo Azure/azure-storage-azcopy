@@ -202,7 +202,8 @@ type remoteResourceDeleter struct {
 	forceIfReadOnly bool
 }
 
-func NewRemoteResourceDeleter(ctx context.Context, remoteClient *common.ServiceClient, rawRootURL *url.URL, fpo common.FolderPropertyOption, forceIfReadOnly bool) (*remoteResourceDeleter, error) {
+func NewRemoteResourceDeleter(ctx context.Context, remoteClient *common.ServiceClient, rawRootURL *url.URL,
+	fpo common.FolderPropertyOption, forceIfReadOnly bool) (*remoteResourceDeleter, error) {
 	containerName, rootPath, err := common.SplitContainerNameFromPath(rawRootURL.String())
 	if err != nil {
 		return nil, err

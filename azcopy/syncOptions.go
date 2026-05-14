@@ -57,6 +57,13 @@ type cookedSyncOptions struct {
 	symlinks                common.SymlinkHandlingType
 	hardlinks               common.HardlinkHandlingType
 
+	// destSymlinks is the destination symlink handling mode.
+	// This was introduced because of a bug with sync --delete-destination.
+	// It handles extra symlinks present at the dest (that did not exist on the source) are no longer being ignored and are deleted.
+	// It is used only for the dest traverser and is gotten from symlinks field.
+	// We set it to `Preserve` when the user sets `--delete-destination`
+	destSymlinks common.SymlinkHandlingType
+
 	// AzCopy internal use only
 	dryrun                           bool
 	dryrunJobPartOrderHandler        func(request common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse
@@ -204,6 +211,13 @@ func (s *cookedSyncOptions) applyDefaultsAndInferOptions(opts SyncOptions) (err 
 
 	if s.trailingDot == common.ETrailingDotOption.Enable() && !s.fromTo.BothSupportTrailingDot() {
 		s.trailingDot = common.ETrailingDotOption.Disable()
+	}
+
+	s.destSymlinks = s.symlinks
+	// If delete-destination is set, track and delete any extra symlinks on the dest
+	// Evaluate the equality check on False to handle Prompt case
+	if s.deleteDestination != common.EDeleteDestination.False() {
+		s.destSymlinks = common.ESymlinkHandlingType.Preserve()
 	}
 
 	return nil

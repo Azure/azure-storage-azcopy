@@ -100,7 +100,7 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 		IncludeDirectoryStubs:   s.opts.includeDirectoryStubs,
 		PreserveBlobTags:        s.opts.s2SPreserveBlobTags,
 		HardlinkHandling:        s.opts.hardlinks,
-		SymlinkHandling:         s.opts.symlinks,
+		SymlinkHandling:         s.opts.destSymlinks, // Use destination symlink handling specific field in case of deletions
 		FromTo:                  s.opts.fromTo,
 		StripTopDir:             !s.opts.includeRoot,
 		IncludeRoot:             s.opts.includeRoot,
@@ -234,8 +234,11 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 		localDeleter := NewLocalFileDeleter(fpo)
 		deleter = localDeleter.Delete
 	}
-	deleteProcessor := newInteractiveDeleteProcessor(deleter, s.opts.deleteDestination, s.opts.fromTo.To(), s.opts.destination, s.spt.incrementDeletionCount)
-	deleteScheduler := traverser.NewFpoAwareProcessor(fpo, deleteProcessor.removeImmediately)
+	deleteProcessor := newInteractiveDeleteProcessor(deleter, s.opts.deleteDestination, s.opts.fromTo.To(),
+		s.opts.destination, s.spt.incrementDeletionCount)
+	deleteScheduler := traverser.NewFpoAwareProcessor(fpo, deleteProcessor.removeImmediately,
+		s.opts.destSymlinks,
+		common.EHardlinkHandlingType.Follow())
 
 	var comparator traverser.ObjectProcessor
 	var finalize func() error

@@ -167,9 +167,13 @@ var ErrorHashAsyncCalculation = errors.New("hash is calculating asynchronously")
 
 // Returns a func that only calls inner if StoredObject isCompatibleWithFpo
 // We use this, so that we can easily test for compatibility in the sync deletion code (which expects an ObjectProcessor)
-func NewFpoAwareProcessor(fpo common.FolderPropertyOption, inner ObjectProcessor) ObjectProcessor {
+func NewFpoAwareProcessor(fpo common.FolderPropertyOption, inner ObjectProcessor, symlinkHandlingType common.SymlinkHandlingType,
+	hardLinkHandlingType common.HardlinkHandlingType) ObjectProcessor {
 	return func(s StoredObject) error {
-		if s.isCompatibleWithEntitySettings(fpo, common.ESymlinkHandlingType.Skip(), common.EHardlinkHandlingType.Follow()) {
+
+		// For deletions with delete-destination, a symlink that reaches this filter has been identified as "extra" relative to the source.
+		// It should be deleted related, regardless of the preserve mode for symlinks
+		if s.isCompatibleWithEntitySettings(fpo, symlinkHandlingType, hardLinkHandlingType) {
 			return inner(s)
 		} else {
 			return nil // nothing went wrong, because we didn't do anything
