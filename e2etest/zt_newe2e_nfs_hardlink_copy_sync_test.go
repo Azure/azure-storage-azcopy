@@ -3225,7 +3225,16 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_HardlinkToSymlink(svm *Scenari
 	}, ValidateResourceOptions{fromTo: fromTo,
 		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
-	ValidateHardlinksTransferCount(svm, stdOut, 1)
+	if hardlinkType == common.PreserveHardlinkHandlingType {
+		ValidateHardlinksTransferCount(svm, stdOut, 1)
+		ValidateSymlinksTransferCount(svm, stdOut, 1)
+	} else if hardlinkType == common.SkipHardlinkHandlingType {
+		ValidateHardlinksSkippedCount(svm, stdOut, 0)
+		ValidateSymlinksTransferCount(svm, stdOut, 2)
+	} else {
+		ValidateHardlinksConvertedCount(svm, stdOut, 0)
+		ValidateSymlinksTransferCount(svm, stdOut, 2)
+	}
 }
 
 // Scenario 21: Copy — multiple hardlinks pointing to the same symlink.
@@ -3348,7 +3357,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_MultipleHardlinksToSymlink(svm
 		ValidateHardlinksSkippedCount(svm, stdOut, 0)
 		ValidateSymlinksTransferCount(svm, stdOut, 3)
 	} else {
-		ValidateHardlinksConvertedCount(svm, stdOut, 2)
+		ValidateHardlinksConvertedCount(svm, stdOut, 0)
 		ValidateSymlinksTransferCount(svm, stdOut, 3)
 	}
 }

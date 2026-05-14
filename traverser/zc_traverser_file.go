@@ -222,7 +222,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 				// Classify by NFS file type; a hardlinked symlink stays Symlink.
 				if *fileProperties.NFSFileType == file.NFSFileTypeSymlink {
 					storedObject.EntityType = common.EEntityType.Symlink()
-				} else if *fileProperties.LinkCount > int64(1) && t.hardlinkHandling != common.EHardlinkHandlingType.Follow() {
+				} else if *fileProperties.LinkCount > int64(1) {
 					storedObject.EntityType = common.EEntityType.Hardlink()
 				}
 			} else if t.incrementEnumerationCounter != nil {
@@ -290,12 +290,14 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			// When the file is a preserved symlink, skip hardlink handling unless
 			// hardlinks are also being preserved (the preserve path has its own
 			// anchor/subsequent logic below).
-			// When hardlinkHandling is Follow (default), treat hardlinks as regular
-			// files so the sync comparator doesn't see entity-type mismatches.
 			isPreservedSymlink := isNFSSymlink && t.symlinkHandling.Preserve()
-			if fullProperties.LinkCount() > int64(1) && t.hardlinkHandling != common.EHardlinkHandlingType.Follow() && !(isPreservedSymlink && t.hardlinkHandling != common.EHardlinkHandlingType.Preserve()) {
+			if fullProperties.LinkCount() > int64(1) && !(isPreservedSymlink && t.hardlinkHandling != common.EHardlinkHandlingType.Preserve()) {
 				f.entityType = common.EEntityType.Hardlink()
-				if t.inodeStore != nil {
+				if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() {
+					if t.inodeStore == nil {
+						return nil, fmt.Errorf("inode store is not initialized; cannot preserve hardlinks")
+					}
+
 					targetHardlinkFile, _, err = t.inodeStore.GetOrAdd(fullProperties.FileID(), relativePath)
 					if err != nil {
 						return nil, err

@@ -693,9 +693,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 					return nil
 				}
 			} else if IsHardlink(singleFileInfo) {
-				if t.hardlinkHandling != common.EHardlinkHandlingType.Follow() {
-					entityType = common.EEntityType.Hardlink()
-				}
+				entityType = common.EEntityType.Hardlink()
 				if skip := HandleHardlinkForNFS(singleFileInfo,
 					t.hardlinkHandling, t.incrementEnumerationCounter); skip {
 					return nil
@@ -742,9 +740,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 					return ErrorLoneSymlinkSkipped
 				}
 			} else if IsHardlink(singleFileInfo) {
-				if t.hardlinkHandling != common.EHardlinkHandlingType.Follow() {
-					entityType = common.EEntityType.Hardlink()
-				}
+				entityType = common.EEntityType.Hardlink()
 				if skip := HandleHardlinkForNFS(singleFileInfo,
 					t.hardlinkHandling, t.incrementEnumerationCounter); skip {
 					return nil
@@ -812,7 +808,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 					// hardlinks are also being preserved (the preserve path has its own
 					// anchor/subsequent logic via resolveHardlinkedSymlinkEntity).
 					isPreservedSymlink := IsSymbolicLink(fileInfo) && t.symlinkHandling.Preserve()
-					if IsHardlink(fileInfo) && t.hardlinkHandling != common.EHardlinkHandlingType.Follow() && !(isPreservedSymlink && t.hardlinkHandling != common.EHardlinkHandlingType.Preserve()) {
+					if IsHardlink(fileInfo) && !(isPreservedSymlink && t.hardlinkHandling != common.EHardlinkHandlingType.Preserve()) {
 						entityType = common.EEntityType.Hardlink()
 						if skip := HandleHardlinkForNFS(fileInfo,
 							t.hardlinkHandling, t.incrementEnumerationCounter); skip {
@@ -925,7 +921,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 				// NFS handling
 				if t.fromTo.IsNFS() {
 					isPreservedSymlink := IsSymbolicLink(fileInfo) && t.symlinkHandling.Preserve()
-					if IsHardlink(fileInfo) && t.hardlinkHandling != common.EHardlinkHandlingType.Follow() && !(isPreservedSymlink && t.hardlinkHandling != common.EHardlinkHandlingType.Preserve()) {
+					if IsHardlink(fileInfo) && !(isPreservedSymlink && t.hardlinkHandling != common.EHardlinkHandlingType.Preserve()) {
 						entityType = common.EEntityType.Hardlink()
 						if skip := HandleHardlinkForNFS(fileInfo,
 							t.hardlinkHandling, t.incrementEnumerationCounter); skip {

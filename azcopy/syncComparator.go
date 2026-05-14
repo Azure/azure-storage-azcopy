@@ -121,7 +121,7 @@ func (f *syncDestinationComparator) ProcessIfNecessary(destinationObject travers
 		f.srcPathToInode = buildSrcPathToInode(f.sourceIndex.IndexMap)
 	}
 
-	if destinationObject.EntityType == common.EEntityType.Hardlink() && f.inodeStore != nil {
+	if destinationObject.EntityType == common.EEntityType.Hardlink() && f.inodeStore != nil && destinationObject.Inode != "" {
 
 		// we will process hardlinks in a special way because we need to make sure the relationship is not broken.
 		// So we will not directly schedule the copy transfer here, instead we will put it in a separate map and
@@ -150,7 +150,7 @@ func (f *syncDestinationComparator) ProcessIfNecessary(destinationObject travers
 			return f.copyTransferScheduler(sourceObjectInMap)
 		}
 
-		if sourceObjectInMap.EntityType == common.EEntityType.Hardlink() {
+		if sourceObjectInMap.EntityType == common.EEntityType.Hardlink() && destinationObject.EntityType != common.EEntityType.Hardlink() {
 			// Case: Destination is a File/Folder/Symlink, but Source is now a Hardlink
 			syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncEntityTypeMismatch, false)
 
@@ -492,7 +492,7 @@ func (f *syncSourceComparator) ProcessIfNecessary(sourceObject traverser.StoredO
 	}
 	destinationObjectInMap, present := f.destinationIndex.IndexMap[relPath]
 
-	if sourceObject.EntityType == common.EEntityType.Hardlink() && f.inodeStore != nil {
+	if sourceObject.EntityType == common.EEntityType.Hardlink() && f.inodeStore != nil && sourceObject.Inode != "" {
 		// Defer hardlinks — we need the complete picture of source inode groups
 		// before deciding whether any dest links need to be recreated.
 		f.srcPendingHardlinkObjects.IndexMap[relPath] = sourceObject
@@ -511,7 +511,7 @@ func (f *syncSourceComparator) ProcessIfNecessary(sourceObject traverser.StoredO
 		// Entity-type mismatch: destination is a hardlink but source is a regular
 		// file/folder/symlink.  Delete the stale link and re-upload as the new
 		// entity type.
-		if destinationObjectInMap.EntityType == common.EEntityType.Hardlink() {
+		if destinationObjectInMap.EntityType == common.EEntityType.Hardlink() && sourceObject.EntityType != common.EEntityType.Hardlink() {
 			syncComparatorLog(sourceObject.RelativePath, syncStatusOverwritten, syncEntityTypeMismatch, false)
 			_ = f.destinationCleaner(destinationObjectInMap)
 			return f.copyTransferScheduler(sourceObject)

@@ -593,16 +593,6 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 		shouldFail = true
 	}
 
-	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
-		shouldFail = true
-	}
-	// TODO: skipping this test for now. As the download support is not added as part of this PR.
-	// Will be enabled in the next PR.
-	if azCopyVerb == AzCopyVerbSync && hardlinkType == common.EHardlinkHandlingType.Preserve() {
-		svm.InvalidateScenario()
-		return
-	}
-
 	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
@@ -637,11 +627,6 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 		ValidateContainsError(svm, stdOut, []string{
 			"The '--follow-symlink' flag is only applicable when uploading from local filesystem.",
 		})
-		return
-	}
-
-	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
-		//ValidateMessageOutput(svm, stdOut, "the '--hardlinks=preserve' flag is not applicable for sync operations", true)
 		return
 	}
 
@@ -857,16 +842,6 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 	if (followSymlinks && preserveSymlinks) || followSymlinks {
 		shouldFail = true
 	}
-	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
-		shouldFail = true
-	}
-
-	// TODO: skipping this test for now. As the download support is not added as part of this PR.
-	// Will be enabled in the next PR.
-	if azCopyVerb == AzCopyVerbSync && hardlinkType == common.EHardlinkHandlingType.Preserve() {
-		svm.InvalidateScenario()
-		return
-	}
 
 	stdOut, _ := RunAzCopy(
 		svm,
@@ -911,11 +886,6 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS(svm *ScenarioVariationMa
 		ValidateContainsError(svm, stdOut, []string{
 			"The '--follow-symlink' flag is only applicable when uploading from local filesystem.",
 		})
-		return
-	}
-
-	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
-		//ValidateMessageOutput(svm, stdOut, "the '--hardlinks=preserve' flag is not applicable for sync operations", true)
 		return
 	}
 
@@ -1124,10 +1094,6 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 		shouldFail = true
 	}
 
-	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
-		shouldFail = true
-	}
-
 	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
@@ -1190,11 +1156,6 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureSMB(svm *ScenarioVariationMa
 		ValidateContainsError(svm, stdOut, []string{
 			"Hardlinked files are not supported between NFS and SMB",
 		})
-		return
-	}
-
-	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
-		//ValidateMessageOutput(svm, stdOut, "the '--hardlinks=preserve' flag is not applicable for sync operations", true)
 		return
 	}
 
@@ -1368,10 +1329,6 @@ func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationMa
 		shouldFail = true
 	}
 
-	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
-		shouldFail = true
-	}
-
 	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
@@ -1435,11 +1392,6 @@ func (s *FilesNFSTestSuite) Scenario_AzureSMBToAzureNFS(svm *ScenarioVariationMa
 		ValidateContainsError(svm, stdOut, []string{
 			"'--hardlinks' must be set to 'skip'",
 		})
-		return
-	}
-
-	if hardlinkType == common.EHardlinkHandlingType.Preserve() && azCopyVerb == AzCopyVerbSync {
-		//ValidateMessageOutput(svm, stdOut, "the '--hardlinks=preserve' flag is not applicable for sync operations", true)
 		return
 	}
 
