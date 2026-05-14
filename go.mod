@@ -4,7 +4,7 @@ require (
 	cloud.google.com/go/storage v1.50.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.2
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake v1.2.0
-	github.com/Azure/azure-sdk-for-go/sdk/storage/azfile v1.5.2-0.20250507070125-9e8eb1f00372
+	github.com/Azure/azure-sdk-for-go/sdk/storage/azfile v1.7.0-beta.1.0.20260513214556-e9d7048fec09
 	github.com/JeffreyRichter/enum v0.0.0-20180725232043-2567042f9cda
 	github.com/danieljoos/wincred v1.2.2
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
