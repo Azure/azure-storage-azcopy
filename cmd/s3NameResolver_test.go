@@ -21,11 +21,11 @@
 package cmd
 
 import (
-	"github.com/stretchr/testify/assert"
 	"strings"
 	"testing"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestS3BucketNameToAzureResourceResolverSingleBucketName(t *testing.T) {
@@ -120,8 +120,8 @@ func TestS3BucketNameToAzureResourceResolverMultipleBucketNames(t *testing.T) {
 	resolvedNameCollision2, err := r.ResolveName("a-b---c")
 	a.Nil(err)
 
-	a.EqualValues(1, common.Iff(resolvedNameCollision1 == "a-b-3-c", 1, 0)^common.Iff(resolvedNameCollision2 == "a-b-3-c", 1, 0))
-	a.EqualValues(1, common.Iff(resolvedNameCollision1 == "a-b-3-c-2", 1, 0)^common.Iff(resolvedNameCollision2 == "a-b-3-c-2", 1, 0))
+	a.EqualValues(1, ternary.Iff(resolvedNameCollision1 == "a-b-3-c", 1, 0)^ternary.Iff(resolvedNameCollision2 == "a-b-3-c", 1, 0))
+	a.EqualValues(1, ternary.Iff(resolvedNameCollision1 == "a-b-3-c-2", 1, 0)^ternary.Iff(resolvedNameCollision2 == "a-b-3-c-2", 1, 0))
 }
 
 func TestS3BucketNameToAzureResourceResolverNegative(t *testing.T) {

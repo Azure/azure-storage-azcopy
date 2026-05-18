@@ -31,6 +31,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 
@@ -61,23 +62,23 @@ type fileGetPropertiesAdapter struct {
 }
 
 func (f fileGetPropertiesAdapter) CacheControl() string {
-	return common.IffNotNil(f.GetProperties.CacheControl, "")
+	return ternary.IffNotNil(f.GetProperties.CacheControl, "")
 }
 
 func (f fileGetPropertiesAdapter) ContentDisposition() string {
-	return common.IffNotNil(f.GetProperties.ContentDisposition, "")
+	return ternary.IffNotNil(f.GetProperties.ContentDisposition, "")
 }
 
 func (f fileGetPropertiesAdapter) ContentEncoding() string {
-	return common.IffNotNil(f.GetProperties.ContentEncoding, "")
+	return ternary.IffNotNil(f.GetProperties.ContentEncoding, "")
 }
 
 func (f fileGetPropertiesAdapter) ContentLanguage() string {
-	return common.IffNotNil(f.GetProperties.ContentLanguage, "")
+	return ternary.IffNotNil(f.GetProperties.ContentLanguage, "")
 }
 
 func (f fileGetPropertiesAdapter) ContentType() string {
-	return common.IffNotNil(f.GetProperties.ContentType, "")
+	return ternary.IffNotNil(f.GetProperties.ContentType, "")
 }
 
 func (f fileGetPropertiesAdapter) ContentMD5() []byte {
@@ -85,15 +86,15 @@ func (f fileGetPropertiesAdapter) ContentMD5() []byte {
 }
 
 func (f fileGetPropertiesAdapter) FileCreationTime() time.Time {
-	return common.IffNotNil(f.GetProperties.FileCreationTime, time.Time{})
+	return ternary.IffNotNil(f.GetProperties.FileCreationTime, time.Time{})
 }
 
 func (f fileGetPropertiesAdapter) FileLastWriteTime() time.Time {
-	return common.IffNotNil(f.GetProperties.FileLastWriteTime, time.Time{})
+	return ternary.IffNotNil(f.GetProperties.FileLastWriteTime, time.Time{})
 }
 
 func (f fileGetPropertiesAdapter) FileChangeTime() time.Time {
-	return common.IffNotNil(f.GetProperties.FileChangeTime, time.Time{})
+	return ternary.IffNotNil(f.GetProperties.FileChangeTime, time.Time{})
 }
 
 func (f fileGetPropertiesAdapter) FileAttributes() (*file.NTFSFileAttributes, error) {
@@ -101,7 +102,7 @@ func (f fileGetPropertiesAdapter) FileAttributes() (*file.NTFSFileAttributes, er
 }
 
 func (f fileGetPropertiesAdapter) FilePermissionKey() string {
-	return common.IffNotNil(f.GetProperties.FilePermissionKey, "")
+	return ternary.IffNotNil(f.GetProperties.FilePermissionKey, "")
 }
 
 func (f fileGetPropertiesAdapter) Metadata() map[string]*string {
@@ -109,19 +110,19 @@ func (f fileGetPropertiesAdapter) Metadata() map[string]*string {
 }
 
 func (f fileGetPropertiesAdapter) LastModified() time.Time {
-	return common.IffNotNil(f.GetProperties.LastModified, time.Time{})
+	return ternary.IffNotNil(f.GetProperties.LastModified, time.Time{})
 }
 
 func (f fileGetPropertiesAdapter) GetOwner() *string {
-	return common.IffNotNil(&f.GetProperties.Owner, to.Ptr(""))
+	return ternary.IffNotNil(&f.GetProperties.Owner, to.Ptr(""))
 }
 
 func (f fileGetPropertiesAdapter) GetGroup() *string {
-	return common.IffNotNil(&f.GetProperties.Group, to.Ptr(""))
+	return ternary.IffNotNil(&f.GetProperties.Group, to.Ptr(""))
 }
 
 func (f fileGetPropertiesAdapter) GetFileMode() *string {
-	return common.IffNotNil(&f.GetProperties.FileMode, to.Ptr(""))
+	return ternary.IffNotNil(&f.GetProperties.FileMode, to.Ptr(""))
 }
 
 type directoryGetPropertiesAdapter struct {
@@ -153,15 +154,15 @@ func (d directoryGetPropertiesAdapter) ContentMD5() []byte {
 }
 
 func (d directoryGetPropertiesAdapter) FileCreationTime() time.Time {
-	return common.IffNotNil(d.GetProperties.FileCreationTime, time.Time{})
+	return ternary.IffNotNil(d.GetProperties.FileCreationTime, time.Time{})
 }
 
 func (d directoryGetPropertiesAdapter) FileLastWriteTime() time.Time {
-	return common.IffNotNil(d.GetProperties.FileLastWriteTime, time.Time{})
+	return ternary.IffNotNil(d.GetProperties.FileLastWriteTime, time.Time{})
 }
 
 func (d directoryGetPropertiesAdapter) FileChangeTime() time.Time {
-	return common.IffNotNil(d.GetProperties.FileChangeTime, time.Time{})
+	return ternary.IffNotNil(d.GetProperties.FileChangeTime, time.Time{})
 }
 
 func (d directoryGetPropertiesAdapter) FileAttributes() (*file.NTFSFileAttributes, error) {
@@ -169,7 +170,7 @@ func (d directoryGetPropertiesAdapter) FileAttributes() (*file.NTFSFileAttribute
 }
 
 func (d directoryGetPropertiesAdapter) FilePermissionKey() string {
-	return common.IffNotNil(d.GetProperties.FilePermissionKey, "")
+	return ternary.IffNotNil(d.GetProperties.FilePermissionKey, "")
 }
 
 func (d directoryGetPropertiesAdapter) Metadata() map[string]*string {
@@ -177,19 +178,19 @@ func (d directoryGetPropertiesAdapter) Metadata() map[string]*string {
 }
 
 func (d directoryGetPropertiesAdapter) LastModified() time.Time {
-	return common.IffNotNil(d.GetProperties.LastModified, time.Time{})
+	return ternary.IffNotNil(d.GetProperties.LastModified, time.Time{})
 }
 
 func (f directoryGetPropertiesAdapter) GetOwner() *string {
-	return common.IffNotNil(&f.GetProperties.Owner, to.Ptr(""))
+	return ternary.IffNotNil(&f.GetProperties.Owner, to.Ptr(""))
 }
 
 func (f directoryGetPropertiesAdapter) GetGroup() *string {
-	return common.IffNotNil(&f.GetProperties.Group, to.Ptr(""))
+	return ternary.IffNotNil(&f.GetProperties.Group, to.Ptr(""))
 }
 
 func (f directoryGetPropertiesAdapter) GetFileMode() *string {
-	return common.IffNotNil(&f.GetProperties.FileMode, to.Ptr(""))
+	return ternary.IffNotNil(&f.GetProperties.FileMode, to.Ptr(""))
 }
 
 // Source info provider for Azure blob

@@ -35,6 +35,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
@@ -698,9 +699,9 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 		if shouldCheckLength {
 			if err != nil {
 				wrapped := fmt.Errorf("Could not read destination length. %w", err)
-				jptm.FailActiveSend(common.Iff(isS2SCopier, "S2S ", "Upload ")+"Length check: Get destination length", wrapped)
+				jptm.FailActiveSend(ternary.Iff(isS2SCopier, "S2S ", "Upload ")+"Length check: Get destination length", wrapped)
 			} else if destLength != jptm.Info().SourceSize {
-				jptm.FailActiveSend(common.Iff(isS2SCopier, "S2S ", "Upload ")+"Length check", errors.New("destination length does not match source length"))
+				jptm.FailActiveSend(ternary.Iff(isS2SCopier, "S2S ", "Upload ")+"Length check", errors.New("destination length does not match source length"))
 			}
 		}
 	}

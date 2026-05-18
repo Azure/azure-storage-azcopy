@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -766,7 +767,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 		// compute the average throughput for the last time interval
 		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) * 8 / float64(base10Mega))
 		timeElapsed := time.Since(cca.intervalStartTime).Seconds()
-		throughput = common.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0)
+		throughput = ternary.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0)
 
 		// reset the interval timer and byte count
 		cca.intervalStartTime = time.Now()

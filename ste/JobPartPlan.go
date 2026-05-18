@@ -6,6 +6,7 @@ import (
 	"unsafe"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -414,7 +415,7 @@ func (jppt *JobPartPlanTransfer) SetTransferStatus(status common.TransferStatus,
 		common.AtomicMorphInt32((*int32)(&jppt.atomicTransferStatus),
 			func(startVal int32) (val int32, morphResult interface{}) {
 				// If current transfer status has some completed value, then it will not be changed.
-				return common.Iff(common.TransferStatus(startVal).StatusLocked(), startVal, int32(status)), nil
+				return ternary.Iff(common.TransferStatus(startVal).StatusLocked(), startVal, int32(status)), nil
 			})
 	} else {
 		(&jppt.atomicTransferStatus).AtomicStore(status)
@@ -435,7 +436,7 @@ func (jppt *JobPartPlanTransfer) SetErrorCode(errorCode int32, overwrite bool) {
 			func(startErrorCode int32) (val int32, morphResult interface{}) {
 				// startErrorCode != 0 means that error code is already set.
 				// If current error code is already set to some error code, then it will not be changed.
-				return common.Iff(startErrorCode != 0, startErrorCode, errorCode), nil
+				return ternary.Iff(startErrorCode != 0, startErrorCode, errorCode), nil
 			})
 	} else {
 		atomic.StoreInt32(&jppt.atomicErrorCode, errorCode)

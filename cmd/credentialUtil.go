@@ -36,6 +36,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -71,9 +72,9 @@ func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
 
 		currentUserOAuthTokenManager = common.NewUserOAuthTokenManagerInstance(common.CredCacheOptions{
 			DPAPIFilePath: common.AzcopyJobPlanFolder,
-			KeyName:       common.Iff(cacheName != "", cacheName, oauthLoginSessionCacheKeyName),
+			KeyName:       ternary.Iff(cacheName != "", cacheName, oauthLoginSessionCacheKeyName),
 			ServiceName:   oauthLoginSessionCacheServiceName,
-			AccountName:   common.Iff(cacheName != "", cacheName, oauthLoginSessionCacheAccountName),
+			AccountName:   ternary.Iff(cacheName != "", cacheName, oauthLoginSessionCacheAccountName),
 		})
 	})
 

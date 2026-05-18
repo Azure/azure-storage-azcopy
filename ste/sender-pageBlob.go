@@ -32,6 +32,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -86,7 +87,7 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer p
 	chunkSize := transferInfo.BlockSize
 	// If the given chunk Size for the Job is invalid for page blob or greater than maximum page size,
 	// then set chunkSize as maximum pageSize.
-	chunkSize = common.Iff(
+	chunkSize = ternary.Iff(
 		chunkSize > common.DefaultPageBlobChunkSize || (chunkSize%pageblob.PageBytes != 0),
 		common.DefaultPageBlobChunkSize,
 		chunkSize)
@@ -260,7 +261,7 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 			CPKScopeInfo:   s.jptm.CpkScopeInfo(),
 		})
 	if err != nil {
-		s.jptm.FailActiveSend(common.Iff(len(blobTags) > 0, "Creating blob (with tags)", "Creating blob"), err)
+		s.jptm.FailActiveSend(ternary.Iff(len(blobTags) > 0, "Creating blob (with tags)", "Creating blob"), err)
 		return
 	}
 

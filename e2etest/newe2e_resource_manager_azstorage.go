@@ -2,6 +2,7 @@ package e2etest
 
 import (
 	"fmt"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
@@ -11,6 +12,8 @@ import (
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
+
 	"strings"
 )
 
@@ -67,7 +70,7 @@ func (acct *AzureAccountResourceManager) ApplySAS(URI string, loc common.Locatio
 		common.PanicIfErr(err)
 
 		parts.SAS = p
-		parts.Scheme = common.Iff(opts.RemoteOpts.Scheme != "", opts.RemoteOpts.Scheme, "https")
+		parts.Scheme = ternary.Iff(opts.RemoteOpts.Scheme != "", opts.RemoteOpts.Scheme, "https")
 		return parts.String()
 	case common.ELocation.File():
 		skc, err := fileservice.NewSharedKeyCredential(acct.InternalAccountName, acct.InternalAccountKey)
@@ -80,7 +83,7 @@ func (acct *AzureAccountResourceManager) ApplySAS(URI string, loc common.Locatio
 		common.PanicIfErr(err)
 
 		parts.SAS = p
-		parts.Scheme = common.Iff(opts.RemoteOpts.Scheme != "", opts.RemoteOpts.Scheme, "https")
+		parts.Scheme = ternary.Iff(opts.RemoteOpts.Scheme != "", opts.RemoteOpts.Scheme, "https")
 		return parts.String()
 	case common.ELocation.BlobFS():
 		skc, err := blobfscommon.NewSharedKeyCredential(acct.InternalAccountName, acct.InternalAccountKey)
@@ -93,7 +96,7 @@ func (acct *AzureAccountResourceManager) ApplySAS(URI string, loc common.Locatio
 		common.PanicIfErr(err)
 
 		parts.SAS = p
-		parts.Scheme = common.Iff(opts.RemoteOpts.Scheme != "", opts.RemoteOpts.Scheme, "https")
+		parts.Scheme = ternary.Iff(opts.RemoteOpts.Scheme != "", opts.RemoteOpts.Scheme, "https")
 		return parts.String()
 	default:
 		panic("Unsupported location " + loc.String())

@@ -57,6 +57,7 @@ import (
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/google/uuid"
 
@@ -463,7 +464,7 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 		}
 
 		blobHadBody := b.body != nil
-		versionsRequested := common.IffNotNil[uint](b.creationProperties.blobVersions, 1)
+		versionsRequested := ternary.IffNotNil[uint](b.creationProperties.blobVersions, 1)
 		versionsCreated := uint(0)
 
 		for versionsCreated < versionsRequested {
@@ -1207,7 +1208,7 @@ func (s scenarioHelper) getContainerURL(c asserter, containerName string) *conta
 }
 
 func (scenarioHelper) getRawS3AccountURL(c asserter, region string) url.URL {
-	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com", common.Iff(region == "", "", "-"+region))
+	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com", ternary.Iff(region == "", "", "-"+region))
 
 	fullURL, err := url.Parse(rawURL)
 	c.AssertNoErr(err)
@@ -1217,7 +1218,7 @@ func (scenarioHelper) getRawS3AccountURL(c asserter, region string) url.URL {
 
 // TODO: Possibly add virtual-hosted-style and dual stack support. Currently use path style for testing.
 func (scenarioHelper) getRawS3BucketURL(c asserter, region string, bucketName string) url.URL {
-	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/%s", common.Iff(region == "", "", "-"+region), bucketName)
+	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/%s", ternary.Iff(region == "", "", "-"+region), bucketName)
 
 	fullURL, err := url.Parse(rawURL)
 	c.AssertNoErr(err)
@@ -1226,7 +1227,7 @@ func (scenarioHelper) getRawS3BucketURL(c asserter, region string, bucketName st
 }
 
 func (scenarioHelper) getRawS3ObjectURL(c asserter, region string, bucketName string, objectName string) url.URL {
-	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/%s/%s", common.Iff(region == "", "", "-"+region), bucketName, objectName)
+	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/%s/%s", ternary.Iff(region == "", "", "-"+region), bucketName, objectName)
 
 	fullURL, err := url.Parse(rawURL)
 	c.AssertNoErr(err)

@@ -32,6 +32,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"golang.org/x/sync/semaphore"
 
@@ -66,7 +67,7 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer
 	chunkSize := transferInfo.BlockSize
 	// If the given chunk Size for the Job is greater than maximum append blob block size i.e common.MaxAppendBlobBlockSize,
 	// then set chunkSize as common.MaxAppendBlobBlockSize.
-	chunkSize = common.Iff(
+	chunkSize = ternary.Iff(
 		chunkSize > common.MaxAppendBlobBlockSize,
 		common.MaxAppendBlobBlockSize,
 		chunkSize)
@@ -164,7 +165,7 @@ func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) (destinationMod
 		CPKScopeInfo: s.jptm.CpkScopeInfo(),
 	})
 	if err != nil {
-		s.jptm.FailActiveSend(common.Iff(len(blobTags) > 0, "Creating blob (with tags)", "Creating blob"), err)
+		s.jptm.FailActiveSend(ternary.Iff(len(blobTags) > 0, "Creating blob (with tags)", "Creating blob"), err)
 		return
 	}
 	destinationModified = true

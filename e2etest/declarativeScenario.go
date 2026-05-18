@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
@@ -263,7 +264,7 @@ func (s *scenario) assignSourceAndDest() {
 		// TODO: handle account to account (multi-container) scenarios
 		switch loc {
 		case common.ELocation.Local():
-			return &resourceLocal{common.Iff[string](s.p.destNull && !isSourceAcc, common.Dev_Null, "")}
+			return &resourceLocal{ternary.Iff[string](s.p.destNull && !isSourceAcc, common.Dev_Null, "")}
 		case common.ELocation.File():
 			return &resourceAzureFileShare{accountType: accType}
 		case common.ELocation.Blob(), common.ELocation.BlobFS():

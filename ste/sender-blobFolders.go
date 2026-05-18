@@ -13,6 +13,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 )
 
 type blobFolderSender struct {
@@ -215,7 +216,7 @@ func (b *blobFolderSender) EnsureFolderExists() error {
 				CPKScopeInfo: b.jptm.CpkScopeInfo(),
 			})
 		if err != nil {
-			b.jptm.FailActiveSend(common.Iff(len(blobTags) > 0, "Upload folder (with tags)", "Upload folder"), err)
+			b.jptm.FailActiveSend(ternary.Iff(len(blobTags) > 0, "Upload folder (with tags)", "Upload folder"), err)
 		}
 
 		if setTags {

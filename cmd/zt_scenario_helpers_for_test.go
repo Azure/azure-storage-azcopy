@@ -47,6 +47,7 @@ import (
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/stretchr/testify/assert"
 
 	gcpUtils "cloud.google.com/go/storage"
@@ -753,7 +754,7 @@ func (s scenarioHelper) getContainerClient(a *assert.Assertions, containerName s
 }
 
 func (scenarioHelper) getRawS3AccountURL(a *assert.Assertions, region string) url.URL {
-	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com", common.Iff(region == "", "", "-"+region))
+	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com", ternary.Iff(region == "", "", "-"+region))
 
 	fullURL, err := url.Parse(rawURL)
 	a.Nil(err)
@@ -770,7 +771,7 @@ func (scenarioHelper) getRawGCPAccountURL(a *assert.Assertions) url.URL {
 
 // TODO: Possibly add virtual-hosted-style and dual stack support. Currently use path style for testing.
 func (scenarioHelper) getRawS3BucketURL(a *assert.Assertions, region string, bucketName string) url.URL {
-	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/%s", common.Iff(region == "", "", "-"+region), bucketName)
+	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/%s", ternary.Iff(region == "", "", "-"+region), bucketName)
 
 	fullURL, err := url.Parse(rawURL)
 	a.Nil(err)
@@ -787,7 +788,7 @@ func (scenarioHelper) getRawGCPBucketURL(a *assert.Assertions, bucketName string
 }
 
 func (scenarioHelper) getRawS3ObjectURL(a *assert.Assertions, region string, bucketName string, objectName string) url.URL {
-	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/%s/%s", common.Iff(region == "", "", "-"+region), bucketName, objectName)
+	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/%s/%s", ternary.Iff(region == "", "", "-"+region), bucketName, objectName)
 
 	fullURL, err := url.Parse(rawURL)
 	a.Nil(err)

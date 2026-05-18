@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
+
 	"io"
 	"net/http"
 	"net/url"
@@ -19,7 +21,7 @@ func (config *ManagedDiskConfig) GetMDURL() (*url.URL, error) {
 	}
 
 	// the API is the same, but the provider is different
-	uriFormat := common.Iff(config.isSnapshot,
+	uriFormat := ternary.Iff(config.isSnapshot,
 		"https://management.azure.com/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Compute/snapshots/%s?api-version=2023-04-02",
 		"https://management.azure.com/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Compute/disks/%s?api-version=2023-04-02")
 

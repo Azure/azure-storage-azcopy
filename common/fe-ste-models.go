@@ -39,6 +39,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	datalakefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/JeffreyRichter/enum/enum"
 )
 
@@ -1479,36 +1480,36 @@ type ResourceHTTPHeaders struct {
 // ToBlobHTTPHeaders converts ResourceHTTPHeaders to blob's HTTPHeaders.
 func (h ResourceHTTPHeaders) ToBlobHTTPHeaders() blob.HTTPHeaders {
 	return blob.HTTPHeaders{
-		BlobContentType:        IffNotEmpty(h.ContentType),
+		BlobContentType:        ternary.IffNotEmpty(h.ContentType),
 		BlobContentMD5:         h.ContentMD5,
-		BlobContentEncoding:    IffNotEmpty(h.ContentEncoding),
-		BlobContentLanguage:    IffNotEmpty(h.ContentLanguage),
-		BlobContentDisposition: IffNotEmpty(h.ContentDisposition),
-		BlobCacheControl:       IffNotEmpty(h.CacheControl),
+		BlobContentEncoding:    ternary.IffNotEmpty(h.ContentEncoding),
+		BlobContentLanguage:    ternary.IffNotEmpty(h.ContentLanguage),
+		BlobContentDisposition: ternary.IffNotEmpty(h.ContentDisposition),
+		BlobCacheControl:       ternary.IffNotEmpty(h.CacheControl),
 	}
 }
 
 // ToFileHTTPHeaders converts ResourceHTTPHeaders to sharefile's HTTPHeaders.
 func (h ResourceHTTPHeaders) ToFileHTTPHeaders() sharefile.HTTPHeaders {
 	return sharefile.HTTPHeaders{
-		ContentType:        IffNotEmpty(h.ContentType),
+		ContentType:        ternary.IffNotEmpty(h.ContentType),
 		ContentMD5:         h.ContentMD5,
-		ContentEncoding:    IffNotEmpty(h.ContentEncoding),
-		ContentLanguage:    IffNotEmpty(h.ContentLanguage),
-		ContentDisposition: IffNotEmpty(h.ContentDisposition),
-		CacheControl:       IffNotEmpty(h.CacheControl),
+		ContentEncoding:    ternary.IffNotEmpty(h.ContentEncoding),
+		ContentLanguage:    ternary.IffNotEmpty(h.ContentLanguage),
+		ContentDisposition: ternary.IffNotEmpty(h.ContentDisposition),
+		CacheControl:       ternary.IffNotEmpty(h.CacheControl),
 	}
 }
 
 // ToBlobFSHTTPHeaders converts ResourceHTTPHeaders to BlobFS Headers.
 func (h ResourceHTTPHeaders) ToBlobFSHTTPHeaders() datalakefile.HTTPHeaders {
 	return datalakefile.HTTPHeaders{
-		ContentType:        IffNotEmpty(h.ContentType),
+		ContentType:        ternary.IffNotEmpty(h.ContentType),
 		ContentMD5:         h.ContentMD5,
-		ContentEncoding:    IffNotEmpty(h.ContentEncoding),
-		ContentLanguage:    IffNotEmpty(h.ContentLanguage),
-		ContentDisposition: IffNotEmpty(h.ContentDisposition),
-		CacheControl:       IffNotEmpty(h.CacheControl),
+		ContentEncoding:    ternary.IffNotEmpty(h.ContentEncoding),
+		ContentLanguage:    ternary.IffNotEmpty(h.ContentLanguage),
+		ContentDisposition: ternary.IffNotEmpty(h.ContentDisposition),
+		CacheControl:       ternary.IffNotEmpty(h.CacheControl),
 	}
 }
 

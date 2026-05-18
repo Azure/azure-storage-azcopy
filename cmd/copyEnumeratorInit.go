@@ -19,6 +19,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
@@ -498,7 +499,7 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 	options := createClientOptions(
 		common.LogLevelOverrideLogger{ // override our log level here
 			ILoggerResetable:  common.AzcopyCurrentJobLogger,
-			MinimumLevelToLog: common.Iff(LogLevel == common.ELogLevel.Debug(), common.ELogLevel.Debug(), common.ELogLevel.None()),
+			MinimumLevelToLog: ternary.Iff(LogLevel == common.ELogLevel.Debug(), common.ELogLevel.Debug(), common.ELogLevel.None()),
 		}, nil, reauthTok)
 
 	sc, err := common.GetServiceClientForLocation(
@@ -676,8 +677,8 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 		relativePath = "/" + strings.Replace(object.relativePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
 	}
 
-	if common.Iff(source, object.ContainerName, object.DstContainerName) != "" {
-		relativePath = `/` + common.Iff(source, object.ContainerName, object.DstContainerName) + relativePath
+	if ternary.Iff(source, object.ContainerName, object.DstContainerName) != "" {
+		relativePath = `/` + ternary.Iff(source, object.ContainerName, object.DstContainerName) + relativePath
 	} else if !source && !cca.StripTopDir && cca.asSubdir { // Avoid doing this where the root is shared or renamed.
 		// We ONLY need to do this adjustment to the destination.
 		// The source SAS has already been removed. No need to convert it to a URL or whatever.
@@ -714,7 +715,7 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 func NewFolderPropertyOption(fromTo common.FromTo, recursive, stripTopDir bool, filters []ObjectFilter, preserveSmbInfo, preservePermissions, preservePosixProperties, isDstNull, includeDirectoryStubs bool) (common.FolderPropertyOption, string) {
 
 	getSuffix := func(willProcess bool) string {
-		willProcessString := common.Iff(willProcess, "will be processed", "will not be processed")
+		willProcessString := ternary.Iff(willProcess, "will be processed", "will not be processed")
 
 		template := ". For the same reason, %s defined on folders %s"
 		switch {

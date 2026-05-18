@@ -39,6 +39,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
@@ -971,11 +972,11 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 		Metadata:    metadataMap,
 		Tags:        blobTags,
 		HTTPHeaders: &blob.HTTPHeaders{
-			BlobContentType:        common.IffNotEmpty(cca.contentType),
-			BlobContentLanguage:    common.IffNotEmpty(cca.contentLanguage),
-			BlobContentEncoding:    common.IffNotEmpty(cca.contentEncoding),
-			BlobContentDisposition: common.IffNotEmpty(cca.contentDisposition),
-			BlobCacheControl:       common.IffNotEmpty(cca.cacheControl),
+			BlobContentType:        ternary.IffNotEmpty(cca.contentType),
+			BlobContentLanguage:    ternary.IffNotEmpty(cca.contentLanguage),
+			BlobContentEncoding:    ternary.IffNotEmpty(cca.contentEncoding),
+			BlobContentDisposition: ternary.IffNotEmpty(cca.contentDisposition),
+			BlobCacheControl:       ternary.IffNotEmpty(cca.cacheControl),
 		},
 		AccessTier:   bbAccessTier,
 		CPKInfo:      cca.CpkOptions.GetCPKInfo(),
@@ -1393,7 +1394,7 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 		cca.intervalStartTime = time.Now()
 		cca.intervalBytesTransferred = summary.BytesOverWire
 
-		return common.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
+		return ternary.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
 	}
 	glcm.Progress(func(format common.OutputFormat) string {
 		if format == common.EOutputFormat.Json() {

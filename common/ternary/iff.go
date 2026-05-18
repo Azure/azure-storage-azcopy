@@ -18,30 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package common
-
-// TODO : Remove this?
-// GetBlocksRoundedUp returns the number of blocks given size, rounded up
-func GetBlocksRoundedUp(size uint64, blockSize uint64) uint16 {
-	return uint16(size/blockSize) + uint16(Iff((size%blockSize) == 0, 0, 1))
-}
-
-func FirstOrZero[T any](list []T) T {
-	if len(list) != 0 {
-		return list[0]
-	}
-
-	var zero T
-	return zero
-}
-
-func DerefOrZero[T any](in *T) (out T) {
-	if in != nil {
-		out = *in
-	}
-
-	return
-}
+package ternary
 
 func Iff[T any](test bool, trueVal, falseVal T) T {
 	if test {

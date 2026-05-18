@@ -37,6 +37,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity/cache"
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
@@ -750,7 +751,7 @@ func (credInfo *OAuthTokenInfo) GetDeviceCodeCredential() (azcore.TokenCredentia
 		}
 	}
 	// Read the record
-	record := IffNotNil(credInfo.DeviceCodeInfo, azidentity.AuthenticationRecord{})
+	record := ternary.IffNotNil(credInfo.DeviceCodeInfo, azidentity.AuthenticationRecord{})
 	tc, err := azidentity.NewDeviceCodeCredential(&azidentity.DeviceCodeCredentialOptions{
 		TenantID:                       credInfo.Tenant,
 		ClientID:                       ApplicationID,
@@ -763,7 +764,7 @@ func (credInfo *OAuthTokenInfo) GetDeviceCodeCredential() (azcore.TokenCredentia
 		},
 		UserPrompt: func(ctx context.Context, message azidentity.DeviceCodeMessage) error {
 			lcm.Info(fmt.Sprintf("Authentication is required. To sign in, open the webpage %s and enter the code %s to authenticate.",
-				Iff(message.VerificationURL != "", message.VerificationURL, "https://aka.ms/devicelogin"), message.UserCode))
+				ternary.Iff(message.VerificationURL != "", message.VerificationURL, "https://aka.ms/devicelogin"), message.UserCode))
 			return nil
 		},
 	})

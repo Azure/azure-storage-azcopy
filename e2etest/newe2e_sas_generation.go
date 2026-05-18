@@ -4,7 +4,8 @@ import (
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	datalakesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
+
 	"strings"
 	"time"
 )
@@ -129,7 +130,7 @@ func (vals GenericServiceSignatureValues) AsFile() FileSignatureValues {
 		IPRange:            filesas.IPRange(s.IPRange),
 		Identifier:         s.Identifier,
 		ShareName:          s.ContainerName,
-		FilePath:           common.Iff(s.DirectoryPath != "", s.DirectoryPath, s.ObjectName),
+		FilePath:           ternary.Iff(s.DirectoryPath != "", s.DirectoryPath, s.ObjectName),
 		CacheControl:       s.CacheControl,
 		ContentDisposition: s.ContentDisposition,
 		ContentEncoding:    s.ContentEncoding,

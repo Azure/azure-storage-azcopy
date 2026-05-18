@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -395,7 +396,7 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 	if blockSize > common.MaxBlockBlobBlockSize {
 		jptm.Log(common.LogWarning, fmt.Sprintf("block-size %d is greater than maximum allowed size %d, setting it to maximum allowed size", blockSize, int64(common.MaxBlockBlobBlockSize)))
 	}
-	blockSize = common.Iff(blockSize > common.MaxBlockBlobBlockSize, common.MaxBlockBlobBlockSize, blockSize)
+	blockSize = ternary.Iff(blockSize > common.MaxBlockBlobBlockSize, common.MaxBlockBlobBlockSize, blockSize)
 
 	// If the putBlobSize is 0, then the user didn't provide any putBlobSize, default to block size to default to no breaking changes (prior to this feature, we would use blockSize to determine the put blob size).
 	putBlobSize := dstBlobData.PutBlobSize
@@ -405,7 +406,7 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 	if putBlobSize > common.MaxPutBlobSize {
 		jptm.Log(common.LogWarning, fmt.Sprintf("put-blob-size %d is greater than maximum allowed size %d, setting it to maximum allowed size", putBlobSize, int64(common.MaxPutBlobSize)))
 	}
-	putBlobSize = common.Iff(putBlobSize > common.MaxPutBlobSize, common.MaxPutBlobSize, putBlobSize)
+	putBlobSize = ternary.Iff(putBlobSize > common.MaxPutBlobSize, common.MaxPutBlobSize, putBlobSize)
 
 	var srcBlobTags common.BlobTags
 	if blobTags != nil {

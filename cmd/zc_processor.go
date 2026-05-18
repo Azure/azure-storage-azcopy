@@ -28,6 +28,7 @@ import (
 	"sync"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/pkg/errors"
@@ -154,18 +155,18 @@ func (d DryrunTransfer) MarshalJSON() ([]byte, error) {
 		d.FromTo.String(),
 		d.Source,
 		d.Destination,
-		common.IffNotNil(d.SourceSize, 0),
-		common.IffNotNil(d.HttpHeaders.BlobContentType, ""),
-		common.IffNotNil(d.HttpHeaders.BlobContentEncoding, ""),
-		common.IffNotNil(d.HttpHeaders.BlobContentDisposition, ""),
-		common.IffNotNil(d.HttpHeaders.BlobContentLanguage, ""),
-		common.IffNotNil(d.HttpHeaders.BlobCacheControl, ""),
+		ternary.IffNotNil(d.SourceSize, 0),
+		ternary.IffNotNil(d.HttpHeaders.BlobContentType, ""),
+		ternary.IffNotNil(d.HttpHeaders.BlobContentEncoding, ""),
+		ternary.IffNotNil(d.HttpHeaders.BlobContentDisposition, ""),
+		ternary.IffNotNil(d.HttpHeaders.BlobContentLanguage, ""),
+		ternary.IffNotNil(d.HttpHeaders.BlobCacheControl, ""),
 		d.HttpHeaders.BlobContentMD5,
 		d.BlobTags,
 		d.Metadata,
-		common.IffNotNil(d.BlobTier, ""),
-		common.IffNotNil(d.BlobVersion, ""),
-		common.IffNotNil(d.BlobSnapshot, ""),
+		ternary.IffNotNil(d.BlobTier, ""),
+		ternary.IffNotNil(d.BlobVersion, ""),
+		ternary.IffNotNil(d.BlobSnapshot, ""),
 	}
 
 	return json.Marshal(surrogate)

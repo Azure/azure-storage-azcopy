@@ -5,6 +5,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 )
 
 func init() {
@@ -414,7 +415,7 @@ func (s *S2STestSuite) Scenario_S2SContainerSingleFilePropertyAndMetadata(svm *S
 
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body:             srcBody,
-		ObjectProperties: common.Iff(preserveProperty, srcProps, ObjectProperties{}),
+		ObjectProperties: ternary.Iff(preserveProperty, srcProps, ObjectProperties{}),
 	}, false)
 }
 

@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -111,7 +112,7 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 		cca.intervalStartTime = time.Now()
 		cca.intervalBytesTransferred = summary.BytesOverWire
 
-		return common.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
+		return ternary.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
 	}
 
 	glcm.Progress(func(format common.OutputFormat) string {
@@ -311,7 +312,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 	}
 
 	// But we don't want to supply a reauth token if we're not using OAuth. That could cause problems if say, a SAS is invalid.
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, common.Iff(srcCredType.IsAzureOAuth(), reauthTok, nil))
+	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, ternary.Iff(srcCredType.IsAzureOAuth(), reauthTok, nil))
 	var getJobDetailsResponse common.GetJobDetailsResponse
 	// Get job details from the STE
 	Rpc(common.ERpcCmd.GetJobDetails(),
@@ -336,7 +337,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 	if fromTo.IsS2S() && srcCredType.IsAzureOAuth() {
 		srcCred = common.NewScopedCredential(tc, srcCredType)
 	}
-	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred, common.Iff(dstCredType.IsAzureOAuth(), reauthTok, nil))
+	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred, ternary.Iff(dstCredType.IsAzureOAuth(), reauthTok, nil))
 	var fileClientOptions any
 	if fromTo.To() == common.ELocation.File() {
 		fileClientOptions = &common.FileClientOptions{

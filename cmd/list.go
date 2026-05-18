@@ -33,6 +33,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"github.com/spf13/cobra"
 
@@ -503,5 +504,5 @@ func getPath(containerName, relativePath string, level LocationLevel, entityType
 }
 
 func sizeToString(size int64, machineReadable bool) string {
-	return common.Iff(machineReadable, strconv.Itoa(int(size)), ByteSizeToString(size))
+	return ternary.Iff(machineReadable, strconv.Itoa(int(size)), ByteSizeToString(size))
 }

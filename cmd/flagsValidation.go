@@ -27,6 +27,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/spf13/cobra"
 )
 
@@ -39,7 +40,7 @@ func validatePreserveNFSPropertyOption(toPreserve bool, fromTo common.FromTo, fl
 	if toPreserve && !(fromTo == common.EFromTo.LocalFile() ||
 		fromTo == common.EFromTo.FileLocal() ||
 		fromTo == common.EFromTo.FileFile()) {
-		return fmt.Errorf("%s is set but the job is not between %s-aware resources", flagName, common.Iff(flagName == PreserveInfoFlag, "permission", "NFS"))
+		return fmt.Errorf("%s is set but the job is not between %s-aware resources", flagName, ternary.Iff(flagName == PreserveInfoFlag, "permission", "NFS"))
 	}
 
 	if toPreserve && (fromTo.IsUpload() || fromTo.IsDownload()) &&
@@ -62,7 +63,7 @@ func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, fl
 	} else if toPreserve && !(fromTo == common.EFromTo.LocalFile() ||
 		fromTo == common.EFromTo.FileLocal() ||
 		fromTo == common.EFromTo.FileFile()) {
-		return fmt.Errorf("%s is set but the job is not between %s-aware resources", flagName, common.Iff(flagName == PreservePermissionsFlag, "permission", "SMB"))
+		return fmt.Errorf("%s is set but the job is not between %s-aware resources", flagName, ternary.Iff(flagName == PreservePermissionsFlag, "permission", "SMB"))
 	}
 
 	if toPreserve && (fromTo.IsUpload() || fromTo.IsDownload()) &&

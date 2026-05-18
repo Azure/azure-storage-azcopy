@@ -29,6 +29,7 @@ import (
 	sharedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 )
 
 var noContentProps = emptyPropertiesAdapter{}
@@ -101,27 +102,27 @@ type blobPropertiesResponseAdapter struct {
 }
 
 func (a blobPropertiesResponseAdapter) LastModified() time.Time {
-	return common.IffNotNil(a.GetPropertiesResponse.LastModified, time.Time{})
+	return ternary.IffNotNil(a.GetPropertiesResponse.LastModified, time.Time{})
 }
 
 func (a blobPropertiesResponseAdapter) CacheControl() string {
-	return common.IffNotNil(a.GetPropertiesResponse.CacheControl, "")
+	return ternary.IffNotNil(a.GetPropertiesResponse.CacheControl, "")
 }
 
 func (a blobPropertiesResponseAdapter) ContentDisposition() string {
-	return common.IffNotNil(a.GetPropertiesResponse.ContentDisposition, "")
+	return ternary.IffNotNil(a.GetPropertiesResponse.ContentDisposition, "")
 }
 
 func (a blobPropertiesResponseAdapter) ContentEncoding() string {
-	return common.IffNotNil(a.GetPropertiesResponse.ContentEncoding, "")
+	return ternary.IffNotNil(a.GetPropertiesResponse.ContentEncoding, "")
 }
 
 func (a blobPropertiesResponseAdapter) ContentLanguage() string {
-	return common.IffNotNil(a.GetPropertiesResponse.ContentLanguage, "")
+	return ternary.IffNotNil(a.GetPropertiesResponse.ContentLanguage, "")
 }
 
 func (a blobPropertiesResponseAdapter) ContentType() string {
-	return common.IffNotNil(a.GetPropertiesResponse.ContentType, "")
+	return ternary.IffNotNil(a.GetPropertiesResponse.ContentType, "")
 }
 
 func (a blobPropertiesResponseAdapter) ContentMD5() []byte {
@@ -129,34 +130,34 @@ func (a blobPropertiesResponseAdapter) ContentMD5() []byte {
 }
 
 func (a blobPropertiesResponseAdapter) ContentLength() int64 {
-	return common.IffNotNil(a.GetPropertiesResponse.ContentLength, 0)
+	return ternary.IffNotNil(a.GetPropertiesResponse.ContentLength, 0)
 }
 
 func (a blobPropertiesResponseAdapter) BlobType() blob.BlobType {
-	return common.IffNotNil(a.GetPropertiesResponse.BlobType, "")
+	return ternary.IffNotNil(a.GetPropertiesResponse.BlobType, "")
 }
 
 func (a blobPropertiesResponseAdapter) AccessTier() blob.AccessTier {
-	return blob.AccessTier(common.IffNotNil(a.GetPropertiesResponse.AccessTier, ""))
+	return blob.AccessTier(ternary.IffNotNil(a.GetPropertiesResponse.AccessTier, ""))
 }
 
 func (a blobPropertiesResponseAdapter) ArchiveStatus() blob.ArchiveStatus {
-	return blob.ArchiveStatus(common.IffNotNil(a.GetPropertiesResponse.ArchiveStatus, ""))
+	return blob.ArchiveStatus(ternary.IffNotNil(a.GetPropertiesResponse.ArchiveStatus, ""))
 }
 
 // LeaseDuration returns the value for header x-ms-lease-duration.
 func (a blobPropertiesResponseAdapter) LeaseDuration() lease.DurationType {
-	return common.IffNotNil(a.GetPropertiesResponse.LeaseDuration, "")
+	return ternary.IffNotNil(a.GetPropertiesResponse.LeaseDuration, "")
 }
 
 // LeaseState returns the value for header x-ms-lease-state.
 func (a blobPropertiesResponseAdapter) LeaseState() lease.StateType {
-	return common.IffNotNil(a.GetPropertiesResponse.LeaseState, "")
+	return ternary.IffNotNil(a.GetPropertiesResponse.LeaseState, "")
 }
 
 // LeaseStatus returns the value for header x-ms-lease-status.
 func (a blobPropertiesResponseAdapter) LeaseStatus() lease.StatusType {
-	return common.IffNotNil(a.GetPropertiesResponse.LeaseStatus, "")
+	return ternary.IffNotNil(a.GetPropertiesResponse.LeaseStatus, "")
 }
 
 // blobPropertiesAdapter adapts a BlobProperties object to both the
@@ -166,23 +167,23 @@ type blobPropertiesAdapter struct {
 }
 
 func (a blobPropertiesAdapter) CacheControl() string {
-	return common.IffNotNil(a.BlobProperties.CacheControl, "")
+	return ternary.IffNotNil(a.BlobProperties.CacheControl, "")
 }
 
 func (a blobPropertiesAdapter) ContentDisposition() string {
-	return common.IffNotNil(a.BlobProperties.ContentDisposition, "")
+	return ternary.IffNotNil(a.BlobProperties.ContentDisposition, "")
 }
 
 func (a blobPropertiesAdapter) ContentEncoding() string {
-	return common.IffNotNil(a.BlobProperties.ContentEncoding, "")
+	return ternary.IffNotNil(a.BlobProperties.ContentEncoding, "")
 }
 
 func (a blobPropertiesAdapter) ContentLanguage() string {
-	return common.IffNotNil(a.BlobProperties.ContentLanguage, "")
+	return ternary.IffNotNil(a.BlobProperties.ContentLanguage, "")
 }
 
 func (a blobPropertiesAdapter) ContentType() string {
-	return common.IffNotNil(a.BlobProperties.ContentType, "")
+	return ternary.IffNotNil(a.BlobProperties.ContentType, "")
 }
 
 func (a blobPropertiesAdapter) ContentMD5() []byte {
@@ -190,38 +191,38 @@ func (a blobPropertiesAdapter) ContentMD5() []byte {
 }
 
 func (a blobPropertiesAdapter) ContentLength() int64 {
-	return common.IffNotNil(a.BlobProperties.ContentLength, 0)
+	return ternary.IffNotNil(a.BlobProperties.ContentLength, 0)
 }
 
 func (a blobPropertiesAdapter) BlobType() blob.BlobType {
-	return common.IffNotNil(a.BlobProperties.BlobType, "")
+	return ternary.IffNotNil(a.BlobProperties.BlobType, "")
 }
 
 func (a blobPropertiesAdapter) AccessTier() blob.AccessTier {
-	return common.IffNotNil(a.BlobProperties.AccessTier, "")
+	return ternary.IffNotNil(a.BlobProperties.AccessTier, "")
 }
 
 // LeaseDuration returns the value for header x-ms-lease-duration.
 func (a blobPropertiesAdapter) LeaseDuration() lease.DurationType {
-	return common.IffNotNil(a.BlobProperties.LeaseDuration, "")
+	return ternary.IffNotNil(a.BlobProperties.LeaseDuration, "")
 }
 
 // LeaseState returns the value for header x-ms-lease-state.
 func (a blobPropertiesAdapter) LeaseState() lease.StateType {
-	return common.IffNotNil(a.BlobProperties.LeaseState, "")
+	return ternary.IffNotNil(a.BlobProperties.LeaseState, "")
 }
 
 // LeaseStatus returns the value for header x-ms-lease-status.
 func (a blobPropertiesAdapter) LeaseStatus() lease.StatusType {
-	return common.IffNotNil(a.BlobProperties.LeaseStatus, "")
+	return ternary.IffNotNil(a.BlobProperties.LeaseStatus, "")
 }
 
 func (a blobPropertiesAdapter) ArchiveStatus() blob.ArchiveStatus {
-	return common.IffNotNil(a.BlobProperties.ArchiveStatus, "")
+	return ternary.IffNotNil(a.BlobProperties.ArchiveStatus, "")
 }
 
 func (a blobPropertiesAdapter) LastModified() time.Time {
-	return common.IffNotNil(a.BlobProperties.LastModified, time.Time{})
+	return ternary.IffNotNil(a.BlobProperties.LastModified, time.Time{})
 }
 
 type shareFilePropertiesAdapter struct {
@@ -233,35 +234,35 @@ func (a shareFilePropertiesAdapter) Metadata() common.Metadata {
 }
 
 func (a shareFilePropertiesAdapter) LastModified() time.Time {
-	return common.IffNotNil(a.GetPropertiesResponse.LastModified, time.Time{})
+	return ternary.IffNotNil(a.GetPropertiesResponse.LastModified, time.Time{})
 }
 
 func (a shareFilePropertiesAdapter) FileLastWriteTime() time.Time {
-	return common.IffNotNil(a.GetPropertiesResponse.FileLastWriteTime, time.Time{})
+	return ternary.IffNotNil(a.GetPropertiesResponse.FileLastWriteTime, time.Time{})
 }
 
 func (a shareFilePropertiesAdapter) FileChangeTime() time.Time {
-	return common.IffNotNil(a.GetPropertiesResponse.FileChangeTime, time.Time{})
+	return ternary.IffNotNil(a.GetPropertiesResponse.FileChangeTime, time.Time{})
 }
 
 func (a shareFilePropertiesAdapter) CacheControl() string {
-	return common.IffNotNil(a.GetPropertiesResponse.CacheControl, "")
+	return ternary.IffNotNil(a.GetPropertiesResponse.CacheControl, "")
 }
 
 func (a shareFilePropertiesAdapter) ContentDisposition() string {
-	return common.IffNotNil(a.GetPropertiesResponse.ContentDisposition, "")
+	return ternary.IffNotNil(a.GetPropertiesResponse.ContentDisposition, "")
 }
 
 func (a shareFilePropertiesAdapter) ContentEncoding() string {
-	return common.IffNotNil(a.GetPropertiesResponse.ContentEncoding, "")
+	return ternary.IffNotNil(a.GetPropertiesResponse.ContentEncoding, "")
 }
 
 func (a shareFilePropertiesAdapter) ContentLanguage() string {
-	return common.IffNotNil(a.GetPropertiesResponse.ContentLanguage, "")
+	return ternary.IffNotNil(a.GetPropertiesResponse.ContentLanguage, "")
 }
 
 func (a shareFilePropertiesAdapter) ContentType() string {
-	return common.IffNotNil(a.GetPropertiesResponse.ContentType, "")
+	return ternary.IffNotNil(a.GetPropertiesResponse.ContentType, "")
 }
 
 func (a shareFilePropertiesAdapter) ContentMD5() []byte {
@@ -269,19 +270,19 @@ func (a shareFilePropertiesAdapter) ContentMD5() []byte {
 }
 
 func (a shareFilePropertiesAdapter) ContentLength() int64 {
-	return common.IffNotNil(a.GetPropertiesResponse.ContentLength, 0)
+	return ternary.IffNotNil(a.GetPropertiesResponse.ContentLength, 0)
 }
 
 func (a shareFilePropertiesAdapter) NFSFileType() string {
-	return common.IffNotNil((*string)(a.GetPropertiesResponse.NFSFileType), "")
+	return ternary.IffNotNil((*string)(a.GetPropertiesResponse.NFSFileType), "")
 }
 
 func (a shareFilePropertiesAdapter) LinkCount() int64 {
-	return common.IffNotNil(a.GetPropertiesResponse.LinkCount, 0)
+	return ternary.IffNotNil(a.GetPropertiesResponse.LinkCount, 0)
 }
 
 func (a shareFilePropertiesAdapter) FileID() string {
-	return common.IffNotNil(a.GetPropertiesResponse.ID, "")
+	return ternary.IffNotNil(a.GetPropertiesResponse.ID, "")
 }
 
 type shareDirectoryPropertiesAdapter struct {
@@ -293,15 +294,15 @@ func (a shareDirectoryPropertiesAdapter) Metadata() common.Metadata {
 }
 
 func (a shareDirectoryPropertiesAdapter) LastModified() time.Time {
-	return common.IffNotNil(a.GetPropertiesResponse.LastModified, time.Time{})
+	return ternary.IffNotNil(a.GetPropertiesResponse.LastModified, time.Time{})
 }
 
 func (a shareDirectoryPropertiesAdapter) FileLastWriteTime() time.Time {
-	return common.IffNotNil(a.GetPropertiesResponse.FileLastWriteTime, time.Time{})
+	return ternary.IffNotNil(a.GetPropertiesResponse.FileLastWriteTime, time.Time{})
 }
 
 func (a shareDirectoryPropertiesAdapter) FileChangeTime() time.Time {
-	return common.IffNotNil(a.GetPropertiesResponse.FileChangeTime, time.Time{})
+	return ternary.IffNotNil(a.GetPropertiesResponse.FileChangeTime, time.Time{})
 }
 
 func (a shareDirectoryPropertiesAdapter) CacheControl() string {
@@ -333,7 +334,7 @@ func (a shareDirectoryPropertiesAdapter) ContentLength() int64 {
 }
 
 func (a shareDirectoryPropertiesAdapter) NFSFileType() string {
-	return common.IffNotNil((*string)(a.GetPropertiesResponse.NFSFileType), "")
+	return ternary.IffNotNil((*string)(a.GetPropertiesResponse.NFSFileType), "")
 }
 
 func (a shareDirectoryPropertiesAdapter) LinkCount() int64 {
@@ -341,7 +342,7 @@ func (a shareDirectoryPropertiesAdapter) LinkCount() int64 {
 }
 
 func (a shareDirectoryPropertiesAdapter) FileID() string {
-	return common.IffNotNil(a.GetPropertiesResponse.ID, "")
+	return ternary.IffNotNil(a.GetPropertiesResponse.ID, "")
 }
 
 type shareDirectoryFilePropertiesAdapter struct {
@@ -353,15 +354,15 @@ func (a shareDirectoryFilePropertiesAdapter) Metadata() common.Metadata {
 }
 
 func (a shareDirectoryFilePropertiesAdapter) LastModified() time.Time {
-	return common.IffNotNil(a.FileProperty.LastModified, time.Time{})
+	return ternary.IffNotNil(a.FileProperty.LastModified, time.Time{})
 }
 
 func (a shareDirectoryFilePropertiesAdapter) FileLastWriteTime() time.Time {
-	return common.IffNotNil(a.FileProperty.LastWriteTime, time.Time{})
+	return ternary.IffNotNil(a.FileProperty.LastWriteTime, time.Time{})
 }
 
 func (a shareDirectoryFilePropertiesAdapter) FileChangeTime() time.Time {
-	return common.IffNotNil(a.FileProperty.ChangeTime, time.Time{})
+	return ternary.IffNotNil(a.FileProperty.ChangeTime, time.Time{})
 }
 
 func (a shareDirectoryFilePropertiesAdapter) CacheControl() string {
@@ -389,7 +390,7 @@ func (a shareDirectoryFilePropertiesAdapter) ContentMD5() []byte {
 }
 
 func (a shareDirectoryFilePropertiesAdapter) ContentLength() int64 {
-	return common.IffNotNil(a.FileProperty.ContentLength, 0)
+	return ternary.IffNotNil(a.FileProperty.ContentLength, 0)
 }
 
 func (a shareDirectoryFilePropertiesAdapter) NFSFileType() string {

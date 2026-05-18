@@ -3,8 +3,10 @@ package e2etest
 import (
 	"bytes"
 	"fmt"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
+
 	"io"
 	"runtime"
 	"sync"
@@ -57,7 +59,7 @@ func (m *MultiStepUploader) UploadContents(content ObjectContentContainer) error
 
 	wg := &sync.WaitGroup{}
 	pool := &sync.Pool{}
-	threads := common.Iff(m.Parallel, runtime.NumCPU(), 1) // 1 thread if not parallel
+	threads := ternary.Iff(m.Parallel, runtime.NumCPU(), 1) // 1 thread if not parallel
 	for i := 0; i < threads; i++ {
 		pool.Put(&struct{ threadID int }{
 			threadID: i,

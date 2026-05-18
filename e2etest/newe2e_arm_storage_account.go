@@ -3,9 +3,11 @@ package e2etest
 import (
 	"encoding/json"
 	"fmt"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
+
 	"net/http"
 	"net/url"
 	"strings"
@@ -54,7 +56,7 @@ func (sa *ARMStorageAccount) GetResourceManager() (*AzureAccountResourceManager,
 	case strings.EqualFold(props.Sku.Tier, "Premium"):
 		switch props.Kind {
 		case service.AccountKindBlockBlobStorage: // both use the same kind
-			acctType = common.Iff(props.Properties.IsHNSEnabled, EAccountType.PremiumHNSEnabled(), EAccountType.PremiumBlockBlobs())
+			acctType = ternary.Iff(props.Properties.IsHNSEnabled, EAccountType.PremiumHNSEnabled(), EAccountType.PremiumBlockBlobs())
 		case service.AccountKindFileStorage:
 			acctType = EAccountType.PremiumFileShares()
 		case service.AccountKindStorageV2:

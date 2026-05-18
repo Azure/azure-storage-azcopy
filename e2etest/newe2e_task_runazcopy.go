@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 )
 
 // AzCopyJobPlan todo probably load the job plan directly? WI#26418256
@@ -267,13 +268,13 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 
 						c.Environment.ServicePrincipalAppID = &appId
 						c.Environment.ServicePrincipalClientSecret = &secret
-						c.Environment.AutoLoginTenantID = common.Iff(tenant != "", &tenant, nil)
+						c.Environment.AutoLoginTenantID = ternary.Iff(tenant != "", &tenant, nil)
 					} else if staticOauth.OAuthSource.PSInherit {
 						c.Environment.AutoLoginMode = pointerTo("pscred")
-						c.Environment.AutoLoginTenantID = common.Iff(tenant != "", &tenant, nil)
+						c.Environment.AutoLoginTenantID = ternary.Iff(tenant != "", &tenant, nil)
 					} else if staticOauth.OAuthSource.CLIInherit {
 						c.Environment.AutoLoginMode = pointerTo("azcli")
-						c.Environment.AutoLoginTenantID = common.Iff(tenant != "", &tenant, nil)
+						c.Environment.AutoLoginTenantID = ternary.Iff(tenant != "", &tenant, nil)
 					}
 				} else {
 					// oauth should reliably work
@@ -284,13 +285,13 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 						c.Environment.InheritEnvVar(WorkloadIdentityServicePrincipalID)
 						c.Environment.InheritEnvVar(WorkloadIdentityTenantID)
 
-						c.Environment.AutoLoginTenantID = common.Iff(oAuthInfo.DynamicOAuth.Workload.TenantId != "", &oAuthInfo.DynamicOAuth.Workload.TenantId, nil)
+						c.Environment.AutoLoginTenantID = ternary.Iff(oAuthInfo.DynamicOAuth.Workload.TenantId != "", &oAuthInfo.DynamicOAuth.Workload.TenantId, nil)
 						c.Environment.AutoLoginMode = pointerTo(common.EAutoLoginType.AzCLI().String())
 					} else {
 						c.Environment.AutoLoginMode = pointerTo(common.EAutoLoginType.SPN().String())
 						c.Environment.ServicePrincipalAppID = &oAuthInfo.DynamicOAuth.SPNSecret.ApplicationID
 						c.Environment.ServicePrincipalClientSecret = &oAuthInfo.DynamicOAuth.SPNSecret.ClientSecret
-						c.Environment.AutoLoginTenantID = common.Iff(oAuthInfo.DynamicOAuth.SPNSecret.TenantID != "", &oAuthInfo.DynamicOAuth.SPNSecret.TenantID, nil)
+						c.Environment.AutoLoginTenantID = ternary.Iff(oAuthInfo.DynamicOAuth.SPNSecret.TenantID != "", &oAuthInfo.DynamicOAuth.SPNSecret.TenantID, nil)
 					}
 				}
 			} else if c.Environment.AutoLoginMode != nil {
@@ -508,9 +509,9 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 
 	err = command.Wait()
 
-	a.Assert("wait for finalize", common.Iff[Assertion](commandSpec.ShouldFail, Not{IsNil{}}, IsNil{}), err)
+	a.Assert("wait for finalize", ternary.Iff[Assertion](commandSpec.ShouldFail, Not{IsNil{}}, IsNil{}), err)
 	a.Assert("expected exit code",
-		common.Iff[Assertion](commandSpec.ShouldFail, Not{Equal{}}, Equal{}),
+		ternary.Iff[Assertion](commandSpec.ShouldFail, Not{Equal{}}, Equal{}),
 		0, command.ProcessState.ExitCode())
 
 	// validate log file retention for jobs clean command before the job logs are cleaned up and uploaded

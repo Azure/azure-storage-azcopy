@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
+
 	"os"
 	"path/filepath"
 	"reflect"
@@ -216,7 +219,7 @@ type GlobalFlags struct {
 }
 
 func (GlobalFlags) DefaultAwaitContinue(a ScenarioAsserter, ctx context.Context) string {
-	return common.Iff(isLaunchedByDebugger, "true", "false")
+	return ternary.Iff(isLaunchedByDebugger, "true", "false")
 }
 
 func (GlobalFlags) DefaultMemoryProfile(a ScenarioAsserter, ctx context.Context) string {
