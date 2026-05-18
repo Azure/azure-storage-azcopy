@@ -22,9 +22,12 @@ package ste
 
 import (
 	"fmt"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
+
 	"sync/atomic"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -193,7 +196,7 @@ func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, bl
 		_, err = c.destBlockBlobClient.UploadBlobFromURL(c.jptm.Context(), c.srcURL, options)
 
 		if err != nil {
-			c.jptm.FailActiveSend(common.Iff(len(blobTags) > 0, "Committing block list (with tags)", "Committing block list"), err)
+			c.jptm.FailActiveSend(ternary.Iff(len(blobTags) > 0, "Committing block list (with tags)", "Committing block list"), err)
 			return
 		}
 

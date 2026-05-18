@@ -2,13 +2,15 @@ package e2etest
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"os"
 	"path"
 	"path/filepath"
 	"reflect"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
 
 // ExpectedPlanFile
@@ -363,7 +365,7 @@ func ValidatePlanFiles(sm *ScenarioVariationManager, stdOut AzCopyStdout, expect
 
 			expectedObject, ok := validation.Objects[PlanFilePath{src, dst}]
 			if !ok || !DerefOrDefault(expectedObject.ShouldBePresent, true) {
-				sm.Assert(errPrefix+"was not expected to be in the plan file "+common.Iff(ok, "(explicit disinclude)", "(not present in expected plan file)"), Always{})
+				sm.Assert(errPrefix+"was not expected to be in the plan file "+ternary.Iff(ok, "(explicit disinclude)", "(not present in expected plan file)"), Always{})
 
 				continue
 			}

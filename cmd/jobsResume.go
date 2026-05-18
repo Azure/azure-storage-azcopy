@@ -30,6 +30,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -117,7 +118,7 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 		cca.intervalStartTime = time.Now()
 		cca.intervalBytesTransferred = summary.BytesOverWire
 
-		return common.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
+		return ternary.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
 	}
 
 	glcm.Progress(func(format common.OutputFormat) string {
@@ -339,7 +340,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 	if fromTo.IsS2S() && srcCredType.IsAzureOAuth() {
 		srcCred = common.NewScopedCredential(tc, srcCredType)
 	}
-	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred, common.Iff(dstCredType.IsAzureOAuth(), reauthTok, nil))
+	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred, ternary.Iff(dstCredType.IsAzureOAuth(), reauthTok, nil))
 	var fileClientOptions any
 	if fromTo.To() == common.ELocation.File() || fromTo.To() == common.ELocation.FileNFS() {
 		fileClientOptions = &common.FileClientOptions{

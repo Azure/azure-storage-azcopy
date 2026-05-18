@@ -7,6 +7,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 )
 
 func init() {
@@ -125,7 +126,7 @@ func (s *BasicFunctionalitySuite) Scenario_MultiFileUploadDownload(svm *Scenario
 					Recursive: pointerTo(true),
 				},
 
-				AsSubdir: common.Iff(azCopyVerb == AzCopyVerbCopy, &asSubdir, nil), // defaults true
+				AsSubdir: ternary.Iff(azCopyVerb == AzCopyVerbCopy, &asSubdir, nil), // defaults true
 			},
 		})
 
@@ -135,16 +136,16 @@ func (s *BasicFunctionalitySuite) Scenario_MultiFileUploadDownload(svm *Scenario
 		// todo: service level resource to object mapping
 		Objects: GeneratePlanFileObjectsFromMapping(ObjectResourceMappingOverlay{
 			Base: srcDef.Objects,
-			Overlay: common.Iff(fromTo.AreBothFolderAware() && azCopyVerb == AzCopyVerbCopy, // If we're running copy and in a folder aware , we need to include the root
+			Overlay: ternary.Iff(fromTo.AreBothFolderAware() && azCopyVerb == AzCopyVerbCopy, // If we're running copy and in a folder aware , we need to include the root
 				ObjectResourceMappingFlat{"": {ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}}},
 				nil),
 		}, GeneratePlanFileObjectsOptions{
-			DestPathProcessor: common.Iff(asSubdir, ParentDirDestPathProcessor(srcContainer.ContainerName()), nil),
+			DestPathProcessor: ternary.Iff(asSubdir, ParentDirDestPathProcessor(srcContainer.ContainerName()), nil),
 		}),
 	})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
-		Objects: common.Iff[ObjectResourceMapping](asSubdir, ObjectResourceMappingParentFolder{srcContainer.ContainerName(), srcDef.Objects}, srcDef.Objects),
+		Objects: ternary.Iff[ObjectResourceMapping](asSubdir, ObjectResourceMappingParentFolder{srcContainer.ContainerName(), srcDef.Objects}, srcDef.Objects),
 	}, true)
 }
 
@@ -476,7 +477,7 @@ func (s *BasicFunctionalitySuite) Scenario_TagsPermission(svm *ScenarioVariation
 	}
 
 	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, srcLoc), ResourceDefinitionObject{
-		Body: common.Iff(objectType == common.EEntityType.File(), NewZeroObjectContentContainer(1024*1024*5), nil),
+		Body: ternary.Iff(objectType == common.EEntityType.File(), NewZeroObjectContentContainer(1024*1024*5), nil),
 		ObjectProperties: ObjectProperties{
 			EntityType: objectType,
 		},
@@ -522,7 +523,7 @@ func (s *BasicFunctionalitySuite) Scenario_TagsPermission(svm *ScenarioVariation
 					"alpha": PtrOf("beta"),
 				},
 				CopySyncCommonFlags: CopySyncCommonFlags{
-					BlockSizeMB: common.Iff(objectType == common.EEntityType.File() && multiBlock != "single-block",
+					BlockSizeMB: ternary.Iff(objectType == common.EEntityType.File() && multiBlock != "single-block",
 						PtrOf(0.5),
 						nil),
 					Recursive:             pointerTo(true),

@@ -28,6 +28,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/JeffreyRichter/enum/enum"
 )
 
@@ -108,7 +109,7 @@ var EEnvironmentVariable = EnvironmentVariable{}
 func (EnvironmentVariable) UserDir() EnvironmentVariable {
 	// Only used internally, not listed in the environment variables.
 	return EnvironmentVariable{
-		Name: Iff(runtime.GOOS == "windows", "USERPROFILE", "HOME"),
+		Name: ternary.Iff(runtime.GOOS == "windows", "USERPROFILE", "HOME"),
 	}
 }
 

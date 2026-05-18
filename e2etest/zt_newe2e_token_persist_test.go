@@ -3,7 +3,9 @@ package e2etest
 import (
 	"flag"
 	"fmt"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 )
 
 func init() {
@@ -31,7 +33,7 @@ func (*TokenPersistenceSuite) Scenario_InheritCred_Persist(a *ScenarioVariationM
 			Verb: AzCopyVerbLogin,
 			Flags: LoginFlags{
 				LoginType: &credSource,
-				TenantID:  common.Iff(withSpecifiedTenantID && cfgTenantID != "", &cfgTenantID, nil),
+				TenantID:  ternary.Iff(withSpecifiedTenantID && cfgTenantID != "", &cfgTenantID, nil),
 			},
 			Environment: azcopyEnv,
 		})
@@ -90,7 +92,7 @@ func (*TokenPersistenceSuite) Scenario_DeviceCode_Persist(a *ScenarioVariationMa
 			Verb: AzCopyVerbLogin,
 			Flags: LoginFlags{
 				LoginType: pointerTo(common.EAutoLoginType.Device()),
-				TenantID:  common.Iff(cfgTenantID != "", &cfgTenantID, nil),
+				TenantID:  ternary.Iff(cfgTenantID != "", &cfgTenantID, nil),
 			},
 			Environment: env,
 		})

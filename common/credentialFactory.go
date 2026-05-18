@@ -27,6 +27,7 @@ import (
 
 	gcpUtils "cloud.google.com/go/storage"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -49,7 +50,7 @@ type CredentialOpOptions struct {
 
 // callerMessage formats caller message prefix.
 func (o CredentialOpOptions) callerMessage() string {
-	return Iff(o.CallerID == "", o.CallerID, o.CallerID+" ")
+	return ternary.Iff(o.CallerID == "", o.CallerID, o.CallerID+" ")
 }
 
 // panicError uses built-in panic if no Panic is specified in CredentialOpOptions.

@@ -7,6 +7,7 @@ import (
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 )
 
 func init() {
@@ -133,21 +134,21 @@ func (s *ListSuite) Scenario_ListProperties(svm *ScenarioVariationManager) {
 			Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
 		})
 		props := obj.GetProperties(svm)
-		versionId := common.IffNotNil(props.BlobProperties.VersionId, "")
+		versionId := ternary.IffNotNil(props.BlobProperties.VersionId, "")
 		expectedObjects[AzCopyOutputKey{Path: blobName, VersionId: versionId}] = cmd.AzCopyListObject{
 			Path:             blobName,
 			ContentLength:    "1.00 KiB",
 			LastModifiedTime: props.LastModifiedTime,
 			VersionId:        versionId,
-			BlobType:         common.IffNotNil(props.BlobProperties.Type, ""),
-			BlobAccessTier:   common.IffNotNil(props.BlobProperties.BlockBlobAccessTier, ""),
-			ContentType:      common.IffNotNil(props.HTTPHeaders.contentType, ""),
-			ContentEncoding:  common.IffNotNil(props.HTTPHeaders.contentEncoding, ""),
+			BlobType:         ternary.IffNotNil(props.BlobProperties.Type, ""),
+			BlobAccessTier:   ternary.IffNotNil(props.BlobProperties.BlockBlobAccessTier, ""),
+			ContentType:      ternary.IffNotNil(props.HTTPHeaders.contentType, ""),
+			ContentEncoding:  ternary.IffNotNil(props.HTTPHeaders.contentEncoding, ""),
 			ContentMD5:       props.HTTPHeaders.contentMD5,
-			LeaseState:       common.IffNotNil(props.BlobProperties.LeaseState, ""),
-			LeaseDuration:    common.IffNotNil(props.BlobProperties.LeaseDuration, ""),
-			LeaseStatus:      common.IffNotNil(props.BlobProperties.LeaseStatus, ""),
-			ArchiveStatus:    common.IffNotNil(props.BlobProperties.ArchiveStatus, ""),
+			LeaseState:       ternary.IffNotNil(props.BlobProperties.LeaseState, ""),
+			LeaseDuration:    ternary.IffNotNil(props.BlobProperties.LeaseDuration, ""),
+			LeaseStatus:      ternary.IffNotNil(props.BlobProperties.LeaseStatus, ""),
+			ArchiveStatus:    ternary.IffNotNil(props.BlobProperties.ArchiveStatus, ""),
 		}
 	}
 
@@ -187,21 +188,21 @@ func (s *ListSuite) Scenario_ListProperties_TextOutput(svm *ScenarioVariationMan
 			Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
 		})
 		props := obj.GetProperties(svm)
-		versionId := common.IffNotNil(props.BlobProperties.VersionId, "")
+		versionId := ternary.IffNotNil(props.BlobProperties.VersionId, "")
 		expectedObjects[AzCopyOutputKey{Path: blobName, VersionId: versionId}] = cmd.AzCopyListObject{
 			Path:             blobName,
 			ContentLength:    "1.00 KiB",
 			LastModifiedTime: props.LastModifiedTime,
 			VersionId:        versionId,
-			BlobType:         common.IffNotNil(props.BlobProperties.Type, ""),
-			BlobAccessTier:   common.IffNotNil(props.BlobProperties.BlockBlobAccessTier, ""),
-			ContentType:      common.IffNotNil(props.HTTPHeaders.contentType, ""),
-			ContentEncoding:  common.IffNotNil(props.HTTPHeaders.contentEncoding, ""),
+			BlobType:         ternary.IffNotNil(props.BlobProperties.Type, ""),
+			BlobAccessTier:   ternary.IffNotNil(props.BlobProperties.BlockBlobAccessTier, ""),
+			ContentType:      ternary.IffNotNil(props.HTTPHeaders.contentType, ""),
+			ContentEncoding:  ternary.IffNotNil(props.HTTPHeaders.contentEncoding, ""),
 			ContentMD5:       props.HTTPHeaders.contentMD5,
-			LeaseState:       common.IffNotNil(props.BlobProperties.LeaseState, ""),
-			LeaseDuration:    common.IffNotNil(props.BlobProperties.LeaseDuration, ""),
-			LeaseStatus:      common.IffNotNil(props.BlobProperties.LeaseStatus, ""),
-			ArchiveStatus:    common.IffNotNil(props.BlobProperties.ArchiveStatus, ""),
+			LeaseState:       ternary.IffNotNil(props.BlobProperties.LeaseState, ""),
+			LeaseDuration:    ternary.IffNotNil(props.BlobProperties.LeaseDuration, ""),
+			LeaseStatus:      ternary.IffNotNil(props.BlobProperties.LeaseStatus, ""),
+			ArchiveStatus:    ternary.IffNotNil(props.BlobProperties.ArchiveStatus, ""),
 		}
 	}
 
@@ -526,7 +527,7 @@ func (s *ListSuite) Scenario_ListVersionIdNoAdditionalVersions(svm *ScenarioVari
 			Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
 		})
 		props := obj.GetProperties(svm)
-		versionId := common.IffNotNil(props.BlobProperties.VersionId, "")
+		versionId := ternary.IffNotNil(props.BlobProperties.VersionId, "")
 		expectedObjects[AzCopyOutputKey{Path: blobName, VersionId: versionId}] = cmd.AzCopyListObject{Path: blobName, ContentLength: "1.00 KiB", VersionId: versionId}
 	}
 
@@ -567,7 +568,7 @@ func (s *ListSuite) Scenario_ListVersionIdNoAdditionalVersions_TextOutput(svm *S
 			Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
 		})
 		props := obj.GetProperties(svm)
-		versionId := common.IffNotNil(props.BlobProperties.VersionId, "")
+		versionId := ternary.IffNotNil(props.BlobProperties.VersionId, "")
 		expectedObjects[AzCopyOutputKey{Path: blobName, VersionId: versionId}] = cmd.AzCopyListObject{Path: blobName, ContentLength: "1.00 KiB", VersionId: versionId}
 	}
 
@@ -611,14 +612,14 @@ func (s *ListSuite) Scenario_ListVersionIdWithVersions(svm *ScenarioVariationMan
 			Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
 		})
 		props := obj.GetProperties(svm)
-		versionId := common.IffNotNil(props.BlobProperties.VersionId, "")
+		versionId := ternary.IffNotNil(props.BlobProperties.VersionId, "")
 		expectedObjects[AzCopyOutputKey{Path: blobName, VersionId: versionId}] = cmd.AzCopyListObject{Path: blobName, ContentLength: "1.00 KiB", VersionId: versionId}
 
 		// Create a new version of the blob for the first two blobs
 		if i < 2 {
 			obj.Create(svm, NewRandomObjectContentContainer(SizeFromString("2K")), ObjectProperties{})
 			props = obj.GetProperties(svm)
-			versionId = common.IffNotNil(props.BlobProperties.VersionId, "")
+			versionId = ternary.IffNotNil(props.BlobProperties.VersionId, "")
 			expectedObjects[AzCopyOutputKey{Path: blobName, VersionId: versionId}] = cmd.AzCopyListObject{Path: blobName, ContentLength: "2.00 KiB", VersionId: versionId}
 		}
 	}

@@ -25,7 +25,10 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
+
 	"strconv"
 	"strings"
 	"sync"
@@ -276,7 +279,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 				CPKScopeInfo: s.jptm.CpkScopeInfo(),
 			})
 		if err != nil {
-			jptm.FailActiveSend(common.Iff(blobTags != nil, "Committing block list (with tags)", "Committing block list"), err)
+			jptm.FailActiveSend(ternary.Iff(blobTags != nil, "Committing block list (with tags)", "Committing block list"), err)
 
 			/*
 				If we get an invalid block list, it's likely one of our blocks was deleted, or GC'd mid-job or something.
@@ -457,8 +460,8 @@ func (s *blockBlobSenderBase) buildCommittedBlockMap() {
 	// 1. We find chunks by a different actor
 	// 2. Chunk size differs
 	for _, block := range blockList.UncommittedBlocks {
-		name := common.IffNotNil(block.Name, "")
-		size := common.IffNotNil(block.Size, 0)
+		name := ternary.IffNotNil(block.Name, "")
+		size := ternary.IffNotNil(block.Size, 0)
 		if len(name) != common.AZCOPY_BLOCKNAME_LENGTH {
 			s.jptm.LogAtLevelForCurrentTransfer(common.LogDebug, invalidAzCopyBlockNameMsg)
 			return

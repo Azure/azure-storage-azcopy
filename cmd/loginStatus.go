@@ -25,7 +25,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/spf13/cobra"
 )
@@ -129,7 +131,7 @@ func init() {
 					}, common.EOutputMessageType.LoginStatusInfo())
 			}
 
-			glcm.Exit(nil, common.Iff(Info.Valid, common.EExitCode.Success(), common.EExitCode.Error()))
+			glcm.Exit(nil, ternary.Iff(Info.Valid, common.EExitCode.Success(), common.EExitCode.Error()))
 		},
 	}
 

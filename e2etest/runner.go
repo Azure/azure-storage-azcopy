@@ -33,6 +33,7 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 )
 
 // encapsulates the interaction with the AzCopy instance that is being tested
@@ -303,7 +304,7 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 		case common.EAutoLoginType.SPN().String():
 			tenId, appId, clientSecret := GlobalInputManager{}.GetServicePrincipalAuth()
 			env = append(env,
-				"AZCOPY_AUTO_LOGIN_TYPE="+common.Iff(oauthMode == "", common.EAutoLoginType.SPN().String(), oauthMode),
+				"AZCOPY_AUTO_LOGIN_TYPE="+ternary.Iff(oauthMode == "", common.EAutoLoginType.SPN().String(), oauthMode),
 				"AZCOPY_SPA_APPLICATION_ID="+appId,
 				"AZCOPY_SPA_CLIENT_SECRET="+clientSecret,
 			)

@@ -32,6 +32,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/filesystem"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
@@ -288,7 +289,7 @@ func dryrunRemoveSingleDFSResource(ctx context.Context, dsc *service.Client, dat
 
 	// if the source URL is actually a file
 	// then we should short-circuit and simply remove that file
-	resourceType := common.IffNotNil(props.ResourceType, "")
+	resourceType := ternary.IffNotNil(props.ResourceType, "")
 	if strings.EqualFold(resourceType, "file") {
 		glcm.Dryrun(func(of common.OutputFormat) string {
 			switch of {
@@ -333,7 +334,7 @@ func dryrunRemoveSingleDFSResource(ctx context.Context, dsc *service.Client, dat
 					return fmt.Sprintf("DRYRUN: remove %s", uri)
 				case of.Json():
 					tx := DryrunTransfer{
-						EntityType: common.Iff(entityType == "directory", common.EEntityType.Folder(), common.EEntityType.File()),
+						EntityType: ternary.Iff(entityType == "directory", common.EEntityType.Folder(), common.EEntityType.File()),
 						FromTo:     common.EFromTo.BlobFSTrash(),
 						Source:     uri,
 					}
