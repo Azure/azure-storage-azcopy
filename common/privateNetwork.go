@@ -22,7 +22,6 @@ package common
 
 import (
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -269,7 +268,7 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 				// Incase of cancel operation return response without checking for errors.
 				if errMsg == "context canceled" {
 					log.Printf("Returning for cancel operation for Private Endpoint IP %s", peIP)
-					return resp, errors.New(errMsg)
+					return resp, fmt.Errorf("%s", errMsg)
 				}
 				log.Printf("[Counter=%d Retry=%d] Network error with no response, Error Message:%s retryable:%v", idx, ipAttempt, errMsg, isRetryableErr)
 			}
@@ -296,9 +295,9 @@ func (rr *RoundRobinTransport) RoundTrip(req *http.Request) (*http.Response, err
 		// continue outer loop to try next IP (if any attempts remain)
 	}
 
-	fmt.Errorf("No healthy Private Endpoint IPs are available")
+	noHealthyEndpointErr := fmt.Errorf("No healthy Private Endpoint IPs are available")
 	// All attempts exhausted
-	return nil, fmt.Errorf("The job failed because access to the Amazon S3 bucket could not be established through any configured private connection. Review the private connection settings and permissions, then try again. Last error: %v", lastErrMsg)
+	return nil, fmt.Errorf("%w. The job failed because access to the Amazon S3 bucket could not be established through any configured private connection. Review the private connection settings and permissions, then try again. Last error: %v", noHealthyEndpointErr, lastErrMsg)
 }
 
 // Close cleans up idle connections and stops the periodic refresh goroutine
