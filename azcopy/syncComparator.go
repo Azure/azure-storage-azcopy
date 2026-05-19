@@ -67,6 +67,11 @@ type syncDestinationComparator struct {
 	// the rejected objects would be passed to the destinationCleaner
 	destinationCleaner traverser.ObjectProcessor
 
+	// hardlinkRestructureDeleter unconditionally deletes destination objects
+	// when hardlink relationships must be restructured (split/merge).
+	// Unlike destinationCleaner, this is NOT gated by --delete-destination.
+	hardlinkRestructureDeleter traverser.ObjectProcessor
+
 	// the processor responsible for scheduling copy transfers
 	copyTransferScheduler traverser.ObjectProcessor
 
@@ -92,6 +97,7 @@ type syncDestinationComparator struct {
 func NewSyncDestinationComparator(i *traverser.ObjectIndexer,
 	copyScheduler,
 	cleaner traverser.ObjectProcessor,
+	hardlinkRestructureDeleter traverser.ObjectProcessor,
 	comparisonHashType common.SyncHashType,
 	preferSMBTime,
 	disableComparison bool,
@@ -100,6 +106,7 @@ func NewSyncDestinationComparator(i *traverser.ObjectIndexer,
 	return &syncDestinationComparator{sourceIndex: i,
 		copyTransferScheduler:      copyScheduler,
 		destinationCleaner:         cleaner,
+		hardlinkRestructureDeleter: hardlinkRestructureDeleter,
 		preferSMBTime:              preferSMBTime,
 		disableComparison:          disableComparison,
 		comparisonHashType:         comparisonHashType,
@@ -270,6 +277,46 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 		}
 	}
 
+	// splitSurvivor tracks one file per dest-inode group that has been fully
+	// split into regular files at source.  When all present-at-source members of
+	// a dest hardlink group become independent (nlink=1) files at source, we only
+	// need to unlink (N-1) of them; the remaining "survivor" will naturally have
+	// its nlink drop to 1 after the others are deleted (including members missing
+	// from source).  This avoids an unnecessary delete+re-upload.
+	splitSurvivor := make(map[string]string) // dest inode → survivor relative path
+
+	// Count present-at-source members per dest inode and how many became regular files.
+	destInodePresentCount := make(map[string]int)
+	destInodeRegularCount := make(map[string]int)
+	for _, obj := range f.destPendingHardlinkObjects.IndexMap {
+		if obj.Inode == "" {
+			continue
+		}
+		srcKey := obj.RelativePath
+		if f.sourceIndex.IsDestinationCaseInsensitive {
+			srcKey = strings.ToLower(srcKey)
+		}
+		// Check if the source file exists and is a regular file (no src inode).
+		if _, present := f.sourceIndex.IndexMap[srcKey]; present {
+			destInodePresentCount[obj.Inode]++
+			srcInode := f.srcPathToInode[srcKey]
+			if srcInode == "" {
+				destInodeRegularCount[obj.Inode]++
+				// Pick first encountered as survivor (arbitrary but deterministic per run).
+				if _, has := splitSurvivor[obj.Inode]; !has {
+					splitSurvivor[obj.Inode] = obj.RelativePath
+				}
+			}
+		}
+	}
+	// Only keep survivors for groups where ALL present-at-source members became regular files.
+	for inode, survivor := range splitSurvivor {
+		if destInodeRegularCount[inode] < destInodePresentCount[inode] {
+			delete(splitSurvivor, inode)
+			_ = survivor // suppress unused warning
+		}
+	}
+
 	for _, destHardlinkObj := range f.destPendingHardlinkObjects.IndexMap {
 
 		// Normalize the key upfront for case-insensitive destinations so the
@@ -283,7 +330,7 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 		if !present {
 			// Path no longer exists at source — delete the stale link.
 			syncComparatorLog(destHardlinkObj.RelativePath, syncStatusOverwritten, syncSourceMissingForPendingHardlink, false)
-			_ = f.destinationCleaner(destHardlinkObj)
+			_ = f.hardlinkRestructureDeleter(destHardlinkObj)
 			continue
 		}
 
@@ -332,12 +379,33 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 			normRelPath = strings.ToLower(normRelPath)
 		}
 
+		// Normalize TargetHardlinkFile to align with the deterministic lex-smallest
+		// anchor from InodeStore. During traversal, GetOrAdd assigns the data-carrier
+		// role (TargetHardlinkFile = "") to whichever file os.Readdir returns first,
+		// which is non-deterministic on Linux filesystems. The sync comparator uses
+		// the lex-smallest anchor for content checks, so the anchor must be the data
+		// carrier (TargetHardlinkFile = "") and non-anchor files must reference it.
+		if srcAnchorFile != "" {
+			if normSrcAnchor == normRelPath {
+				sourceObjectInMap.TargetHardlinkFile = ""
+			} else {
+				sourceObjectInMap.TargetHardlinkFile = srcAnchorFile
+			}
+		}
+
 		needsRecreate := false
 		if normSrcAnchor != normDstAnchor {
 			if srcAnchorFile == "" {
 				// Source is a regular file (not in InodeStore): entity type changed
-				// from hardlink → file. Delete the dest link and re-upload as a file.
-				needsRecreate = true
+				// from hardlink → file.
+				// If this file is the survivor for a "pure split" group, we skip the
+				// delete — its nlink will drop to 1 after other members are unlinked.
+				survivor := splitSurvivor[destHardlinkObj.Inode]
+				if survivor != "" && survivor == destHardlinkObj.RelativePath {
+					needsRecreate = false // survivor: just check content below
+				} else {
+					needsRecreate = true
+				}
 			} else {
 				dstAnchorInSrc := f.srcPathToInode[normDstAnchor]
 				needsRecreate = (dstAnchorInSrc != "" && dstAnchorInSrc != sourceObjectInMap.Inode) || // (a)
@@ -348,7 +416,7 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 
 		if needsRecreate {
 			syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncHardlinkTargetMismatch, false)
-			_ = f.destinationCleaner(destHardlinkObj)
+			_ = f.hardlinkRestructureDeleter(destHardlinkObj)
 			if err := f.copyTransferScheduler(sourceObjectInMap); err != nil {
 				return err
 			}
@@ -361,7 +429,12 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 			//
 			// Use the deterministic lex-smallest anchor from InodeStore rather than
 			// TargetHardlinkFile, which depends on non-deterministic enumeration order.
-			if normSrcAnchor == normRelPath {
+
+			// isSurvivor: this file is the sole kept member of a fully-split group.
+			// It needs a content check like an anchor would.
+			isSurvivor := srcAnchorFile == "" && splitSurvivor[destHardlinkObj.Inode] == destHardlinkObj.RelativePath
+
+			if normSrcAnchor == normRelPath || isSurvivor {
 				// This is the anchor (lex-smallest) file.  Perform generic content verification.
 				//
 				// groupStructureChanged is true when any file in this inode group is being
@@ -442,6 +515,10 @@ type syncSourceComparator struct {
 	// the processor responsible for deleting extra destination objects
 	destinationCleaner traverser.ObjectProcessor
 
+	// hardlinkRestructureDeleter unconditionally deletes destination objects
+	// when hardlink relationships must be restructured (split/merge).
+	hardlinkRestructureDeleter traverser.ObjectProcessor
+
 	// storing the destination objects
 	destinationIndex *traverser.ObjectIndexer
 
@@ -460,16 +537,17 @@ type syncSourceComparator struct {
 	inodeStore *common.InodeStore
 }
 
-func NewSyncSourceComparator(i *traverser.ObjectIndexer, copyScheduler, cleaner traverser.ObjectProcessor, comparisonHashType common.SyncHashType, preferSMBTime, disableComparison bool, inodeStore *common.InodeStore) *syncSourceComparator {
+func NewSyncSourceComparator(i *traverser.ObjectIndexer, copyScheduler, cleaner, hardlinkRestructureDeleter traverser.ObjectProcessor, comparisonHashType common.SyncHashType, preferSMBTime, disableComparison bool, inodeStore *common.InodeStore) *syncSourceComparator {
 	return &syncSourceComparator{
-		destinationIndex:          i,
-		copyTransferScheduler:     copyScheduler,
-		destinationCleaner:        cleaner,
-		preferSMBTime:             preferSMBTime,
-		disableComparison:         disableComparison,
-		comparisonHashType:        comparisonHashType,
-		srcPendingHardlinkObjects: traverser.ObjectIndexer{IndexMap: make(map[string]traverser.StoredObject)},
-		inodeStore:                inodeStore,
+		destinationIndex:           i,
+		copyTransferScheduler:      copyScheduler,
+		destinationCleaner:         cleaner,
+		hardlinkRestructureDeleter: hardlinkRestructureDeleter,
+		preferSMBTime:              preferSMBTime,
+		disableComparison:          disableComparison,
+		comparisonHashType:         comparisonHashType,
+		srcPendingHardlinkObjects:  traverser.ObjectIndexer{IndexMap: make(map[string]traverser.StoredObject)},
+		inodeStore:                 inodeStore,
 	}
 }
 
@@ -513,7 +591,7 @@ func (f *syncSourceComparator) ProcessIfNecessary(sourceObject traverser.StoredO
 		// entity type.
 		if destinationObjectInMap.EntityType == common.EEntityType.Hardlink() && sourceObject.EntityType != common.EEntityType.Hardlink() {
 			syncComparatorLog(sourceObject.RelativePath, syncStatusOverwritten, syncEntityTypeMismatch, false)
-			_ = f.destinationCleaner(destinationObjectInMap)
+			_ = f.hardlinkRestructureDeleter(destinationObjectInMap)
 			return f.copyTransferScheduler(sourceObject)
 		}
 
@@ -618,7 +696,7 @@ func (f *syncSourceComparator) ProcessPendingHardlinks() error {
 		// at the destination and re-download as a hardlink.
 		if destinationObjectInMap.EntityType != common.EEntityType.Hardlink() {
 			syncComparatorLog(sourceObject.RelativePath, syncStatusOverwritten, syncEntityTypeMismatch, false)
-			_ = f.destinationCleaner(destinationObjectInMap)
+			_ = f.hardlinkRestructureDeleter(destinationObjectInMap)
 			if err := f.copyTransferScheduler(sourceObject); err != nil {
 				return err
 			}
@@ -672,7 +750,7 @@ func (f *syncSourceComparator) ProcessPendingHardlinks() error {
 		// Entity-type change: source became a regular file.  Delete the stale link
 		// and re-upload.
 		if srcAnchorFile == "" {
-			_ = f.destinationCleaner(destinationObjectInMap)
+			_ = f.hardlinkRestructureDeleter(destinationObjectInMap)
 			if err := f.copyTransferScheduler(sourceObject); err != nil {
 				return err
 			}
@@ -689,7 +767,7 @@ func (f *syncSourceComparator) ProcessPendingHardlinks() error {
 
 		if needsRecreate {
 			syncComparatorLog(sourceObject.RelativePath, syncStatusOverwritten, syncHardlinkTargetMismatch, false)
-			_ = f.destinationCleaner(destinationObjectInMap)
+			_ = f.hardlinkRestructureDeleter(destinationObjectInMap)
 			if err := f.copyTransferScheduler(sourceObject); err != nil {
 				return err
 			}

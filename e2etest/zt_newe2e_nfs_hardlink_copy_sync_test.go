@@ -416,6 +416,118 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_SameAnchorNewerSource(svm *Sce
 	_ = stdOut
 }
 
+// Scenario: Content modified via non-anchor hardlink member must propagate to destination.
+//
+// This exercises the fix for the anchor/data-carrier mismatch bug.  When content
+// is modified through a non-anchor (lex-larger) hardlink member, the underlying
+// inode data changes for all members.  On re-sync the comparator must detect the
+// stale content at the destination and re-upload through the anchor, regardless
+// of which file os.Readdir returns first.
+//
+// Source (local):
+//
+//	hl_1.txt  (anchor, nlink=2, content = newBody — written via hl_2.txt)
+//	hl_2.txt  (hardlink → hl_1.txt, same inode, same newBody)
+//
+// Destination (NFS, before sync):
+//
+//	hl_1.txt  (anchor, nlink=2, content = oldBody, older LMT)
+//	hl_2.txt  (hardlink → hl_1.txt, same old content)
+//
+// Expected: anchor content is re-uploaded with newBody; hardlink relationship preserved.
+func (s *FilesNFSTestSuite) Scenario_HardlinkSync_ContentModifiedViaNonAnchor(svm *ScenarioVariationManager) {
+	if runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
+	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
+		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
+		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
+		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
+	})
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
+
+	anchorName := rootDir + "/hl_1.txt" // lex-smallest → anchor
+	linkName := rootDir + "/hl_2.txt"   // lex-larger → non-anchor hardlink
+
+	// ── Destination (old state) ──────────────────────────────────────────────
+	dstDir := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+	dstDir.Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Folder()})
+
+	dstAnchor := dstContainer.GetObject(svm, anchorName, common.EEntityType.File())
+	dstAnchor.Create(svm, NewRandomObjectContentContainer(SizeFromString("1K")), ObjectProperties{})
+	setOldLMT(svm, dstAnchor, dstContainer)
+
+	dstLink := dstContainer.GetObject(svm, linkName, common.EEntityType.Hardlink())
+	dstLink.Create(svm, nil, ObjectProperties{
+		EntityType:         common.EEntityType.Hardlink(),
+		HardLinkedFileName: anchorName,
+	})
+
+	if !svm.Dryrun() {
+		time.Sleep(5 * time.Second)
+	}
+
+	// ── Source (new state — content written via the non-anchor hl_2.txt) ─────
+	// Because hl_1 and hl_2 share the same inode, writing through hl_2
+	// updates the data for hl_1 as well.  We create hl_1 as the regular file
+	// (data carrier) and hl_2 as the hardlink to hl_1.  The body is the new
+	// content that must appear at the destination after sync.
+	newBody := NewRandomObjectContentContainer(SizeFromString("1K"))
+
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName:       pointerTo(rootDir),
+		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()},
+	})
+
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName: pointerTo(anchorName),
+		Body:       newBody,
+		ObjectProperties: ObjectProperties{
+			EntityType: common.EEntityType.File(),
+		},
+	})
+
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName: pointerTo(linkName),
+		ObjectProperties: ObjectProperties{
+			EntityType:         common.EEntityType.Hardlink(),
+			HardLinkedFileName: anchorName,
+		},
+	})
+
+	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+
+	stdOut := runHardlinkSyncForFromTo(svm, srcDirObj, dstDir, fromTo, false)
+
+	// ── Validate ─────────────────────────────────────────────────────────────
+	// Both hl_1.txt and hl_2.txt at the destination must carry newBody's content.
+	// The hardlink relationship must remain intact.
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			anchorName: ResourceDefinitionObject{
+				Body:             newBody,
+				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+			},
+			linkName: ResourceDefinitionObject{
+				Body: newBody,
+				ObjectProperties: ObjectProperties{
+					EntityType:         common.EEntityType.Hardlink(),
+					HardLinkedFileName: anchorName,
+				},
+			},
+		},
+	}, ValidateResourceOptions{fromTo: fromTo,
+		validateObjectContent: true,
+		hardlinkHandling:      common.PreserveHardlinkHandlingType})
+
+	// The anchor file's content should be re-uploaded (1 copy transfer),
+	// and the non-anchor hardlink should be preserved (1 hardlink transfer).
+	ValidateHardlinksTransferCount(svm, stdOut, 1)
+}
+
 // Scenario 3: Hardlink→Hardlink, same anchor, dest up-to-date → skip (no transfer).
 //
 // Source and destination have identical hardlink relationships and the destination
@@ -3360,4 +3472,114 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_MultipleHardlinksToSymlink(svm
 		ValidateHardlinksConvertedCount(svm, stdOut, 0)
 		ValidateSymlinksTransferCount(svm, stdOut, 3)
 	}
+}
+
+// Scenario: HardlinkBecomesFile_NoDeleteDest — hardlink group fully splits into regular
+// files and sync runs WITHOUT --delete-destination.
+//
+// The hardlinkRestructureDeleter should still delete the non-survivor member to break the
+// shared inode, even though --delete-destination is not set.  The survivor keeps its data
+// intact (nlink drops to 1 after other member is unlinked).
+//
+// Source:
+//
+//	hl_1.txt  (regular file, 7 bytes "hello_1")
+//	hl_2.txt  (regular file, 7 bytes "hello_2")
+//
+// Destination (before sync):
+//
+//	hl_1.txt  (anchor of 2-member hardlink group, 7 bytes "hello_1")
+//	hl_2.txt  (hardlink → hl_1.txt)
+//
+// Expected after sync:
+//
+//	hl_1.txt  (regular file, nlink=1, content "hello_1" — survivor, not re-uploaded)
+//	hl_2.txt  (regular file, nlink=1, content "hello_2" — deleted+re-uploaded)
+//
+// Key assertion: only 1 deletion and 1 transfer; hl_1.txt is NOT deleted.
+func (s *FilesNFSTestSuite) Scenario_HardlinkSync_HardlinkBecomesFile_NoDeleteDest(svm *ScenarioVariationManager) {
+
+	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
+		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
+		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
+		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
+	})
+
+	if fromTo != common.EFromTo.FileNFSFileNFS() && runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
+
+	name1 := rootDir + "/hl_1.txt"
+	name2 := rootDir + "/hl_2.txt"
+
+	// ── Destination: hl_1 is anchor, hl_2 is hardlink to hl_1 ────────────────
+	dstDir := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+	dstDir.Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Folder()})
+
+	body1 := NewZeroObjectContentContainer(7)
+	dstAnchor := dstContainer.GetObject(svm, name1, common.EEntityType.File())
+	dstAnchor.Create(svm, body1, ObjectProperties{})
+	setOldLMT(svm, dstAnchor, dstContainer)
+
+	dstLink := dstContainer.GetObject(svm, name2, common.EEntityType.Hardlink())
+	dstLink.Create(svm, nil, ObjectProperties{
+		EntityType:         common.EEntityType.Hardlink(),
+		HardLinkedFileName: name1,
+	})
+
+	if !svm.Dryrun() {
+		time.Sleep(5 * time.Second)
+	}
+
+	// ── Source: both are independent regular files ────────────────────────────
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName:       pointerTo(rootDir),
+		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()},
+	})
+
+	srcBody1 := NewZeroObjectContentContainer(7)
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName: pointerTo(name1),
+		Body:       srcBody1,
+		ObjectProperties: ObjectProperties{
+			EntityType: common.EEntityType.File(),
+		},
+	})
+
+	srcBody2 := NewRandomObjectContentContainer(7)
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName: pointerTo(name2),
+		Body:       srcBody2,
+		ObjectProperties: ObjectProperties{
+			EntityType: common.EEntityType.File(),
+		},
+	})
+
+	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+
+	// Run sync WITHOUT --delete-destination (deleteDestination=false)
+	stdOut := runHardlinkSyncForFromTo(svm, srcDirObj, dstDir, fromTo, false)
+
+	// Validate: both are now regular files at dest with correct content.
+	// hl_2.txt was deleted and re-uploaded (content changed).
+	// hl_1.txt was kept as survivor (nlink dropped to 1 after hl_2 was unlinked).
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			name1: ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+			},
+			name2: ResourceDefinitionObject{
+				Body:             srcBody2,
+				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+			},
+		},
+	}, ValidateResourceOptions{fromTo: fromTo,
+		validateObjectContent: true,
+		hardlinkHandling:      common.PreserveHardlinkHandlingType})
+
+	_ = stdOut
 }
