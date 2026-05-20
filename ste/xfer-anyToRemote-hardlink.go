@@ -119,15 +119,37 @@ func anyToRemote_hardlink(jptm IJobPartTransferMgr, info *TransferInfo, pacer pa
 	commonSenderCompletion(jptm, baseSender, info)
 }
 
-// computeUploadHardlinkTarget computes the full remote path for the target hardlink
-// when uploading (Local → Azure Files NFS). It derives the destination-side prefix
+// computeUploadHardlinkTarget computes the full remote path for the target
+// hardlink. It supports both upload (Local → Azure Files NFS) and S2S
+// (Azure Files NFS → Azure Files NFS) directions.
+//
+// For local sources, It derives the destination-side prefix
 // by stripping the current file's traversal-root-relative path from the destination URL,
 // then joins that prefix with info.TargetHardlinkFilePath.
+// info.Source is a local file path, so a simple string
+// subtraction against the source root works.
+//
+// For remote sources, info.Source is a URL that may carry query parameters
+// (sharesnapshot, etc.), so we must work in URL path space:
+// file.ParseURL gives us the source root's path-only portion too.
 func computeUploadHardlinkTarget(info *TransferInfo, jptm IJobPartTransferMgr) string {
 
-	sourceRoot := strings.TrimSuffix(jptm.GetSourceRoot(), common.AZCOPY_PATH_SEPARATOR_STRING)
-	fileRelPath := strings.TrimPrefix(strings.TrimPrefix(info.Source, sourceRoot), common.AZCOPY_PATH_SEPARATOR_STRING)
+	var fileRelPath string
+	// For S2S copies
+	if jptm.FromTo().From().IsFile() {
+		srcRootURLParts, err := file.ParseURL(jptm.GetSourceRoot())
+		if err != nil {
+			jptm.FailActiveSend("Parsing source root URL", err)
+			return ""
+		}
+		srcRootDir := strings.TrimSuffix(srcRootURLParts.DirectoryOrFilePath, common.AZCOPY_PATH_SEPARATOR_STRING)
+		fileRelPath = strings.TrimPrefix(strings.TrimPrefix(info.SrcFilePath, srcRootDir), common.AZCOPY_PATH_SEPARATOR_STRING)
 
+	} else {
+		// For Local->FileNFS
+		sourceRoot := strings.TrimSuffix(jptm.GetSourceRoot(), common.AZCOPY_PATH_SEPARATOR_STRING)
+		fileRelPath = strings.TrimPrefix(strings.TrimPrefix(info.Source, sourceRoot), common.AZCOPY_PATH_SEPARATOR_STRING)
+	}
 	destURLParts, err := file.ParseURL(info.Destination)
 	if err != nil {
 		jptm.FailActiveSend("Parsing destination URL", err)
