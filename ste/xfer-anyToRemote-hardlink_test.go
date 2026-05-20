@@ -172,7 +172,7 @@ func TestComputeUploadHardlinkTarget(t *testing.T) {
 
 		// ───────────── invalid destination URL → FailActiveSend ─────────────
 		{
-			name:                   "error — unparseable destination URL",
+			name:                   "error — unparsable destination URL",
 			fromTo:                 common.EFromTo.LocalFileNFS(),
 			sourceRoot:             "/local",
 			source:                 "/local/link.txt",
@@ -234,7 +234,7 @@ func TestComputeUploadHardlinkTarget(t *testing.T) {
 			targetHardlinkFilePath: "anchor.txt",
 			wantPath:               "/dest/anchor.txt",
 		},
-		
+
 		// ───────────── snapshot, file directly under share root ─────────────
 		{
 			name:                   "s2s — snapshot, file at share root",
@@ -249,7 +249,7 @@ func TestComputeUploadHardlinkTarget(t *testing.T) {
 
 		// ───────────── invalid source-root URL → FailActiveSend ─────────────
 		{
-			name:                   "s2s — error, unparseable source root URL",
+			name:                   "s2s — error, unparsable source root URL",
 			fromTo:                 common.EFromTo.FileNFSFileNFS(),
 			sourceRoot:             "://not-a-valid-url",
 			source:                 "://not-a-valid-url/x?sharesnapshot=2026-05-15T17%3A20%3A00.0000000Z",
