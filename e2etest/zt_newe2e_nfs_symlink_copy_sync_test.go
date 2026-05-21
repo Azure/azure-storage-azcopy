@@ -116,19 +116,26 @@ func runSyncForFromTo(
 //   - fromTo: LocalFileNFS, FileNFSFileNFS
 //   - preserveSymlinks: true, false
 func (s *FilesNFSTestSuite) Scenario_SymlinkSync_StaleSymlinkDeleted_WithDeleteDestination(svm *ScenarioVariationManager) {
-	if runtime.GOOS != "linux" {
-		svm.InvalidateScenario()
-		return
-	}
 
 	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
 		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
 		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
+		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
 	})
 	preserveSymlinks := NamedResolveVariation(svm, map[string]bool{
 		"|preserveSymlinks=true":  true,
 		"|preserveSymlinks=false": false,
 	})
+
+	if fromTo.From().IsLocal() && runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
+	if fromTo.To().IsLocal() && runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
 
 	srcContainer, dstContainer, rootDir := setupSymLinkSyncContainersForFromTo(svm, fromTo)
 	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
@@ -187,14 +194,22 @@ func (s *FilesNFSTestSuite) Scenario_SymlinkSync_StaleSymlinkDeleted_WithDeleteD
 // Scenario 2: Stale symlink at destination is not deleted when --delete-destination=false.
 // Opposite to Scenario 1.
 func (s *FilesNFSTestSuite) Scenario_SymlinkSync_StaleSymlinkSurvives_WhenDeleteDestinationFalse(svm *ScenarioVariationManager) {
-	if runtime.GOOS != "linux" {
-		svm.InvalidateScenario()
-		return
-	}
+
 	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
 		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
 		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
+		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
 	})
+
+	if fromTo.From().IsLocal() && runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
+	if fromTo.To().IsLocal() && runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
 	srcContainer, dstContainer, rootDir := setupSymLinkSyncContainersForFromTo(svm, fromTo)
 	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
@@ -270,20 +285,27 @@ func (s *FilesNFSTestSuite) Scenario_SymlinkSync_StaleSymlinkSurvives_WhenDelete
 // Validates the destSymlinks does not accidentally classify as Preserve
 // symlinks as "extras".
 func (s *FilesNFSTestSuite) Scenario_SymlinkSync_SymlinkPresentAtBothEnds_NotDeleted(svm *ScenarioVariationManager) {
-	if runtime.GOOS != "linux" {
-		svm.InvalidateScenario()
-		return
-	}
 
 	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
 		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
 		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
+		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
 	})
 
 	preserveSymlinks := NamedResolveVariation(svm, map[string]bool{
 		"|preserveSymlinks=true":  true,
 		"|preserveSymlinks=false": false,
 	})
+
+	if fromTo.From().IsLocal() && runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
+	if fromTo.To().IsLocal() && runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
 
 	srcContainer, dstContainer, rootDir := setupSymLinkSyncContainersForFromTo(svm, fromTo)
 
