@@ -882,6 +882,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 
 			// go through the files and return if any of them fail to process
 			for _, entry := range entries {
+				entityType = common.EEntityType.File()
 				// This won't change. It's purely to hand info off to STE about where the symlink lives.
 				relativePath := entry.Name()
 				fileInfo, _ := entry.Info()

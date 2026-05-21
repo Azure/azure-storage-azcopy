@@ -413,9 +413,12 @@ func (p *fileSourceInfoProvider) ReadLink() (string, error) {
 		return "", fmt.Errorf("failed to get symlink info: %w", err)
 	}
 
-	linkText, err := url.PathUnescape(string(*symlink.LinkText))
+	raw := string(*symlink.LinkText)
+	linkText, err := url.PathUnescape(raw)
 	if err != nil {
-		return "", fmt.Errorf("failed to decode symlink text: %w", err)
+		// Fall back to the raw link text when it isn't valid percent-encoding
+		// (e.g. a literal '%' in the symlink target).
+		linkText = raw
 	}
 
 	return linkText, nil

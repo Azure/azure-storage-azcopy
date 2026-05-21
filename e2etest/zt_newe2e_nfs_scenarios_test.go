@@ -503,6 +503,25 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 				FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
 			},
 		})
+
+		// Pre-create hardlinked files at the local destination so the sync
+		// comparator takes the "present at destination" code path for hardlinks.
+		// This exercises InodeStore.GetAnchor, catching regressions where the
+		// file traverser sets Inode unconditionally without populating InodeStore
+		// (the "anchor for inode … not found" bug).
+		dstHOrig := dstContainer.GetObject(svm, rootDir+"/horiginal.txt", common.EEntityType.File())
+		dstHOrig.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{
+			FileNFSPermissions: fileOrFolderPermissions,
+			FileNFSProperties: &FileNFSProperties{
+				FileCreationTime:  pointerTo(time.Now().Add(-10 * time.Minute)),
+				FileLastWriteTime: pointerTo(time.Now().Add(-10 * time.Minute)),
+			},
+		})
+		dstHLink := dstContainer.GetObject(svm, rootDir+"/hardlinked.txt", common.EEntityType.Hardlink())
+		dstHLink.Create(svm, nil, ObjectProperties{
+			HardLinkedFileName: rootDir + "/horiginal.txt",
+		})
+
 		dst = dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 	} else {
 		dst = dstContainer

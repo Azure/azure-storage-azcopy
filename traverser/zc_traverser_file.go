@@ -328,13 +328,13 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			size = fullProperties.ContentLength()
 			metadata = fullProperties.Metadata()
 		}
-		// Populate Inode for any file with LinkCount > 1 (i.e. a hardlink).
-		// The sync comparator needs the Inode even in "follow" mode so that
-		// it can correctly process pending hardlink objects at the destination.
-		// A standalone file with LinkCount == 1 gets Inode="", so
-		// buildSrcPathToInode / dstPathToInode skip it.
+		// Populate Inode only when --hardlinks=preserve. The sync comparator
+		// defers objects with Inode != "" into pending-hardlink processing which
+		// calls InodeStore.GetAnchor; that store is only populated (via GetOrAdd)
+		// during preserve-mode traversal. Setting Inode in follow/skip modes
+		// would cause "anchor for inode … not found" errors.
 		nfsInode := ""
-		if fullProperties.LinkCount() > int64(1) {
+		if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() && fullProperties.LinkCount() > int64(1) {
 			nfsInode = fullProperties.FileID()
 		}
 		obj := NewStoredObject(

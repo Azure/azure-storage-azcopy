@@ -243,6 +243,12 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 	// In all other modes it falls back to the regular (gated) deleteScheduler.
 	hardlinkDeleteScheduler := deleteScheduler
 	if s.opts.hardlinks == common.EHardlinkHandlingType.Preserve() {
+		if s.opts.deleteDestination != common.EDeleteDestination.True() {
+			common.GetLifecycleMgr().Info("WARNING: --hardlinks=preserve may remove and " +
+				"re-create destination paths as part of hardlink restructuring even though " +
+				"--delete-destination is not set to true. These deletions are limited to files" +
+				" whose hardlink topology must change.")
+		}
 		hardlinkDeleteProcessor := newInteractiveDeleteProcessor(deleter, common.EDeleteDestination.True(), s.opts.fromTo.To(), s.opts.destination, s.spt.incrementDeletionCount)
 		hardlinkDeleteScheduler = traverser.NewFpoAwareProcessor(fpo, hardlinkDeleteProcessor.removeImmediately)
 	}

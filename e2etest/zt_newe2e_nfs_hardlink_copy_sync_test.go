@@ -3496,7 +3496,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_MultipleHardlinksToSymlink(svm
 //	hl_1.txt  (regular file, nlink=1, content "hello_1" — survivor, not re-uploaded)
 //	hl_2.txt  (regular file, nlink=1, content "hello_2" — deleted+re-uploaded)
 //
-// Key assertion: only 1 deletion and 1 transfer; hl_1.txt is NOT deleted.
+// This scenario validates the final destination state
 func (s *FilesNFSTestSuite) Scenario_HardlinkSync_HardlinkBecomesFile_NoDeleteDest(svm *ScenarioVariationManager) {
 
 	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
