@@ -216,7 +216,8 @@ func (s *cookedSyncOptions) applyDefaultsAndInferOptions(opts SyncOptions) (err 
 	s.destSymlinks = s.symlinks
 	// If delete-destination is set, track and delete any extra symlinks on the dest
 	// Evaluate the equality check on False to handle Prompt case
-	if s.deleteDestination != common.EDeleteDestination.False() {
+	// Only preserve destination symlinks automatically for NFS-aware syncs
+	if s.deleteDestination != common.EDeleteDestination.False() && s.fromTo.IsNFS() {
 		s.destSymlinks = common.ESymlinkHandlingType.Preserve()
 	}
 
