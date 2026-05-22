@@ -71,7 +71,7 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 		IncludeDirectoryStubs:   s.opts.includeDirectoryStubs,
 		PreserveBlobTags:        s.opts.s2SPreserveBlobTags,
 		HardlinkHandling:        s.opts.hardlinks,
-		SymlinkHandling:         s.opts.symlinks,
+		SymlinkHandling:         s.opts.srcSymLinkTracker, // Use source symlink handling
 		FromTo:                  s.opts.fromTo,
 		StripTopDir:             !s.opts.includeRoot,
 		IncludeRoot:             s.opts.includeRoot,
