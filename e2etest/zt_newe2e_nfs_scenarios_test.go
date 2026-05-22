@@ -1718,7 +1718,7 @@ func (s *FilesNFSTestSuite) Scenario_NFSToNFS_OverwriteSymlinkToFile(svm *Scenar
 		ObjectName:       pointerTo(rootDir),
 		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()},
 	}
-	CreateResource[ObjectResourceManager](svm, srcContainer, srcObjs[rootDir])
+	CreateResource[ObjectResourceManager](svm, srcContainer, obj)
 	srcObjs[rootDir] = obj
 
 	// target file
@@ -1728,7 +1728,7 @@ func (s *FilesNFSTestSuite) Scenario_NFSToNFS_OverwriteSymlinkToFile(svm *Scenar
 		Body:             NewRandomObjectContentContainer(SizeFromString("1K")),
 		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
 	}
-	CreateResource[ObjectResourceManager](svm, srcContainer, srcObjs[targetName])
+	CreateResource[ObjectResourceManager](svm, srcContainer, obj)
 	srcObjs[targetName] = obj
 
 	// symlink
