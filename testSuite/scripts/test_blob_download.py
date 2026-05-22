@@ -169,7 +169,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         dir_sas = util.get_resource_sas(dir_name)
         result = util.Command("copy").add_arguments(dir_sas).add_arguments(dir_path). \
             add_flags("log-level", "Info").add_flags("output-type","json").execute_azcopy_copy_command()
-        self.assertEqual(result, False)
+        self.assertFalse(result)
 
         # create the resource sas
         dir_sas = util.get_resource_sas(dir_name + "/*")
