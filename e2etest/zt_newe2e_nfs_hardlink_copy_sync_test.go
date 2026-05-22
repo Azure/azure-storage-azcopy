@@ -436,16 +436,18 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_SameAnchorNewerSource(svm *Sce
 //
 // Expected: anchor content is re-uploaded with newBody; hardlink relationship preserved.
 func (s *FilesNFSTestSuite) Scenario_HardlinkSync_ContentModifiedViaNonAnchor(svm *ScenarioVariationManager) {
-	if runtime.GOOS != "linux" {
-		svm.InvalidateScenario()
-		return
-	}
 
 	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
 		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
 		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
 		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
 	})
+
+	if fromTo != common.EFromTo.FileNFSFileNFS() && runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
 	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
 	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
@@ -535,16 +537,18 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_ContentModifiedViaNonAnchor(sv
 //
 // Expected: no transfers scheduled; hardlink count stays 0.
 func (s *FilesNFSTestSuite) Scenario_HardlinkSync_SameAnchorUpToDate(svm *ScenarioVariationManager) {
-	if runtime.GOOS != "linux" {
-		svm.InvalidateScenario()
-		return
-	}
 
 	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
 		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
 		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
 		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
 	})
+
+	if fromTo != common.EFromTo.FileNFSFileNFS() && runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
 	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
 	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
@@ -628,16 +632,18 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_SameAnchorUpToDate(svm *Scenar
 //
 // Expected: retarget_link.txt is deleted and recreated as hardlink → new_anchor.txt.
 func (s *FilesNFSTestSuite) Scenario_HardlinkSync_RetargetLink(svm *ScenarioVariationManager) {
-	if runtime.GOOS != "linux" {
-		svm.InvalidateScenario()
-		return
-	}
 
 	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
 		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
 		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
 		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
 	})
+
+	if fromTo != common.EFromTo.FileNFSFileNFS() && runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
 	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
 	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
@@ -738,16 +744,18 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_RetargetLink(svm *ScenarioVari
 //
 // Expected: was_file.txt deleted at dest, then recreated as hardlink → anchor.txt (EntityTypeMismatch path).
 func (s *FilesNFSTestSuite) Scenario_HardlinkSync_FileBecomesHardlink(svm *ScenarioVariationManager) {
-	if runtime.GOOS != "linux" {
-		svm.InvalidateScenario()
-		return
-	}
 
 	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
 		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
 		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
 		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
 	})
+
+	if fromTo != common.EFromTo.FileNFSFileNFS() && runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
 	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
 	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
@@ -830,16 +838,18 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_FileBecomesHardlink(svm *Scena
 //
 // Expected: was_link.txt deleted (breaking the link), then re-uploaded as independent file.
 func (s *FilesNFSTestSuite) Scenario_HardlinkSync_HardlinkBecomesFile(svm *ScenarioVariationManager) {
-	if runtime.GOOS != "linux" {
-		svm.InvalidateScenario()
-		return
-	}
 
 	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
 		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
 		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
 		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
 	})
+
+	if fromTo != common.EFromTo.FileNFSFileNFS() && runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
 	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
 	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
@@ -920,16 +930,18 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_HardlinkBecomesFile(svm *Scena
 //
 // Expected: link_removed.txt deleted from dest (--delete-destination).
 func (s *FilesNFSTestSuite) Scenario_HardlinkSync_SourceDeleted(svm *ScenarioVariationManager) {
-	if runtime.GOOS != "linux" {
-		svm.InvalidateScenario()
-		return
-	}
 
 	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
 		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
 		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
 		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
 	})
+
+	if fromTo != common.EFromTo.FileNFSFileNFS() && runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
 	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
 	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
@@ -1002,16 +1014,18 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_SourceDeleted(svm *ScenarioVar
 //
 // Expected: new_link.txt created at dest as hardlink to anchor.txt.
 func (s *FilesNFSTestSuite) Scenario_HardlinkSync_NewLinkAppears(svm *ScenarioVariationManager) {
-	if runtime.GOOS != "linux" {
-		svm.InvalidateScenario()
-		return
-	}
 
 	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
 		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
 		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
 		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
 	})
+
+	if fromTo != common.EFromTo.FileNFSFileNFS() && runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
 	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
 	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
@@ -1111,16 +1125,18 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_NewLinkAppears(svm *ScenarioVa
 //
 // Expected: both groups and the standalone file are transferred correctly.
 func (s *FilesNFSTestSuite) Scenario_HardlinkSync_MultipleGroups(svm *ScenarioVariationManager) {
-	if runtime.GOOS != "linux" {
-		svm.InvalidateScenario()
-		return
-	}
 
 	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
 		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
 		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
 		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
 	})
+
+	if fromTo != common.EFromTo.FileNFSFileNFS() && runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
 	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
 	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
@@ -1246,16 +1262,18 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_MultipleGroups(svm *ScenarioVa
 //   - stale.txt deleted
 //   - new_file.txt created
 func (s *FilesNFSTestSuite) Scenario_HardlinkSync_MixedChanges(svm *ScenarioVariationManager) {
-	if runtime.GOOS != "linux" {
-		svm.InvalidateScenario()
-		return
-	}
 
 	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
 		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
 		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
 		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
 	})
+
+	if fromTo != common.EFromTo.FileNFSFileNFS() && runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
 	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
 	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
@@ -1380,16 +1398,18 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_MixedChanges(svm *ScenarioVari
 //
 // Run initial sync from Scenario 1, then run again. Second run should be a no-op.
 func (s *FilesNFSTestSuite) Scenario_HardlinkSync_IdempotentResync(svm *ScenarioVariationManager) {
-	if runtime.GOOS != "linux" {
-		svm.InvalidateScenario()
-		return
-	}
 
 	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
 		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
 		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
 		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
 	})
+
+	if fromTo != common.EFromTo.FileNFSFileNFS() && runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
 	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
 	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
@@ -1466,16 +1486,18 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_IdempotentResync(svm *Scenario
 //
 // Expected: both objects created at dest preserving the relationship.
 func (s *FilesNFSTestSuite) Scenario_HardlinkSync_NestedDirectories(svm *ScenarioVariationManager) {
-	if runtime.GOOS != "linux" {
-		svm.InvalidateScenario()
-		return
-	}
 
 	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
 		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
 		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
 		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
 	})
+
+	if fromTo != common.EFromTo.FileNFSFileNFS() && runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
 	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
 	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
@@ -1574,16 +1596,18 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_NestedDirectories(svm *Scenari
 //	C.txt          (hardlink)
 //	D.txt          (hardlink)
 func (s *FilesNFSTestSuite) Scenario_HardlinkSync_LexSmallerAnchorAdded(svm *ScenarioVariationManager) {
-	if runtime.GOOS != "linux" {
-		svm.InvalidateScenario()
-		return
-	}
 
 	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
 		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
 		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
 		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
 	})
+
+	if fromTo != common.EFromTo.FileNFSFileNFS() && runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
 	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
 	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
@@ -1720,16 +1744,18 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_LexSmallerAnchorAdded(svm *Sce
 // Expected: A deleted; B, C, D skipped (still linked together, no structural change
 // among the survivors).  0 hardlink transfers.
 func (s *FilesNFSTestSuite) Scenario_HardlinkSync_LexSmallerAnchorDeleted(svm *ScenarioVariationManager) {
-	if runtime.GOOS != "linux" {
-		svm.InvalidateScenario()
-		return
-	}
 
 	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
 		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
 		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
 		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
 	})
+
+	if fromTo != common.EFromTo.FileNFSFileNFS() && runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
 	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
 	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
@@ -1854,16 +1880,18 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_LexSmallerAnchorDeleted(svm *S
 // Expected: B skipped (same anchor A); C recreated as new anchor; D recreated as
 // hardlink → C.
 func (s *FilesNFSTestSuite) Scenario_HardlinkSync_GroupSplit(svm *ScenarioVariationManager) {
-	if runtime.GOOS != "linux" {
-		svm.InvalidateScenario()
-		return
-	}
 
 	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
 		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
 		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
 		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
 	})
+
+	if fromTo != common.EFromTo.FileNFSFileNFS() && runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
 	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
 	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
@@ -2000,16 +2028,17 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_GroupSplit(svm *ScenarioVariat
 // Expected: A and B skipped (same anchor A); C and D recreated as hardlinks → A,
 // unifying them into the A-B-C-D group.
 func (s *FilesNFSTestSuite) Scenario_HardlinkSync_GroupMerge(svm *ScenarioVariationManager) {
-	if runtime.GOOS != "linux" {
-		svm.InvalidateScenario()
-		return
-	}
-
 	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
 		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
 		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
 		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
 	})
+
+	if fromTo != common.EFromTo.FileNFSFileNFS() && runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
 	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
 	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
@@ -2173,16 +2202,18 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_GroupMerge(svm *ScenarioVariat
 //	C.txt  (Hardlink → B)                — content = srcBodyB
 //	E.txt  (File, standalone)            — content = srcBodyE
 func (s *FilesNFSTestSuite) Scenario_HardlinkSync_ComplexRegrouping(svm *ScenarioVariationManager) {
-	if runtime.GOOS != "linux" {
-		svm.InvalidateScenario()
-		return
-	}
 
 	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
 		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
 		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
 		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
 	})
+
+	if fromTo != common.EFromTo.FileNFSFileNFS() && runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
 	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
 	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
@@ -2329,16 +2360,18 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_ComplexRegrouping(svm *Scenari
 // B, C, D remain hardlinks to each other (same anchor B) and are skipped.
 // 0 hardlink transfers.
 func (s *FilesNFSTestSuite) Scenario_HardlinkSync_AnchorBecomesFile(svm *ScenarioVariationManager) {
-	if runtime.GOOS != "linux" {
-		svm.InvalidateScenario()
-		return
-	}
 
 	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
 		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
 		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
 		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
 	})
+
+	if fromTo != common.EFromTo.FileNFSFileNFS() && runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
 	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
 	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
@@ -2466,16 +2499,18 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_AnchorBecomesFile(svm *Scenari
 //
 // Expected: A re-uploaded as hardlink (entity-type mismatch);
 func (s *FilesNFSTestSuite) Scenario_HardlinkSync_FileJoinsGroup(svm *ScenarioVariationManager) {
-	if runtime.GOOS != "linux" {
-		svm.InvalidateScenario()
-		return
-	}
 
 	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
 		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
 		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
 		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
 	})
+
+	if fromTo != common.EFromTo.FileNFSFileNFS() && runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
 	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
 	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
@@ -2610,13 +2645,19 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_FileJoinsGroup(svm *ScenarioVa
 //   - independent.txt transferred as regular file
 //   - ValidateHardlinksTransferCount == 2 (anchor + link)
 func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_InitialUpload(svm *ScenarioVariationManager) {
-	if runtime.GOOS != "linux" {
+	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
+		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
+		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
+		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
+	})
+
+	if fromTo != common.EFromTo.FileNFSFileNFS() && runtime.GOOS != "linux" {
 		svm.InvalidateScenario()
 		return
 	}
 
-	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainers(svm)
-	defer CleanupNFSDirectory(svm, dstContainer, rootDir)
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
 	anchorName := rootDir + "/anchor.txt"
 	linkName := rootDir + "/link_to_anchor.txt"
@@ -2661,7 +2702,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_InitialUpload(svm *ScenarioVar
 		"|hardlinks=preserve": common.PreserveHardlinkHandlingType,
 	})
 
-	stdOut := runHardlinkCopyForFromTo(svm, srcDirObj2, dstDir, common.EFromTo.LocalFileNFS(), hardlinkType)
+	stdOut := runHardlinkCopyForFromTo(svm, srcDirObj2, dstDir, fromTo, hardlinkType)
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
@@ -2678,7 +2719,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_InitialUpload(svm *ScenarioVar
 				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+	}, ValidateResourceOptions{fromTo: fromTo,
 		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	ValidateHardlinksTransferCount(svm, stdOut, 2)
@@ -2698,13 +2739,19 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_InitialUpload(svm *ScenarioVar
 //
 // Expected: both groups and standalone transferred correctly; 4 hardlink transfers.
 func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_MultipleGroups(svm *ScenarioVariationManager) {
-	if runtime.GOOS != "linux" {
+	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
+		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
+		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
+		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
+	})
+
+	if fromTo != common.EFromTo.FileNFSFileNFS() && runtime.GOOS != "linux" {
 		svm.InvalidateScenario()
 		return
 	}
 
-	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainers(svm)
-	defer CleanupNFSDirectory(svm, dstContainer, rootDir)
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
 	g1Anchor := rootDir + "/group1_anchor.txt"
 	g1Link := rootDir + "/group1_link.txt"
@@ -2760,7 +2807,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_MultipleGroups(svm *ScenarioVa
 		"|hardlinks=preserve": common.PreserveHardlinkHandlingType,
 	})
 
-	stdOut := runHardlinkCopyForFromTo(svm, srcDirObj2, dstDir, common.EFromTo.LocalFileNFS(), hardlinkType)
+	stdOut := runHardlinkCopyForFromTo(svm, srcDirObj2, dstDir, fromTo, hardlinkType)
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
@@ -2786,7 +2833,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_MultipleGroups(svm *ScenarioVa
 				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+	}, ValidateResourceOptions{fromTo: fromTo,
 		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	ValidateHardlinksTransferCount(svm, stdOut, 4)
@@ -2803,13 +2850,19 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_MultipleGroups(svm *ScenarioVa
 //
 // Expected: both files transferred; link.txt created as hardlink to anchor.txt.
 func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_NestedDirectories(svm *ScenarioVariationManager) {
-	if runtime.GOOS != "linux" {
+	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
+		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
+		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
+		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
+	})
+
+	if fromTo != common.EFromTo.FileNFSFileNFS() && runtime.GOOS != "linux" {
 		svm.InvalidateScenario()
 		return
 	}
 
-	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainers(svm)
-	defer CleanupNFSDirectory(svm, dstContainer, rootDir)
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
 	subdirName := rootDir + "/subdir"
 	nestedDirName := rootDir + "/subdir/nested"
@@ -2853,7 +2906,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_NestedDirectories(svm *Scenari
 	hardlinkType := NamedResolveVariation(svm, map[string]common.HardlinkHandlingType{
 		"|hardlinks=preserve": common.PreserveHardlinkHandlingType,
 	})
-	stdOut := runHardlinkCopyForFromTo(svm, srcDirObj2, dstDir, common.EFromTo.LocalFileNFS(), hardlinkType)
+	stdOut := runHardlinkCopyForFromTo(svm, srcDirObj2, dstDir, fromTo, hardlinkType)
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
@@ -2867,7 +2920,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_NestedDirectories(svm *Scenari
 				},
 			},
 		},
-	}, ValidateResourceOptions{fromTo: common.EFromTo.LocalFileNFS(),
+	}, ValidateResourceOptions{fromTo: fromTo,
 		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	ValidateHardlinksTransferCount(svm, stdOut, 2)
@@ -3173,16 +3226,17 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_DownloadNestedDirectories(svm 
 //   - sym_to_target.txt transferred as symlink (anchor for the inode)
 //   - hlink_to_sym.txt transferred as hardlink → sym_to_target.txt
 func (s *FilesNFSTestSuite) Scenario_HardlinkSync_HardlinkToSymlink(svm *ScenarioVariationManager) {
-	if runtime.GOOS != "linux" {
-		svm.InvalidateScenario()
-		return
-	}
 
 	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
 		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
 		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
 		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
 	})
+
+	if fromTo != common.EFromTo.FileNFSFileNFS() && runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
 	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
 	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
@@ -3259,16 +3313,17 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_HardlinkToSymlink(svm *Scenari
 // Same object layout as Scenario 19, but using `azcopy copy` instead of `azcopy sync`.
 // Tests all three directions: upload, download, and S2S.
 func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_HardlinkToSymlink(svm *ScenarioVariationManager) {
-	if runtime.GOOS != "linux" {
-		svm.InvalidateScenario()
-		return
-	}
 
 	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
 		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
 		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
 		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
 	})
+
+	if fromTo != common.EFromTo.FileNFSFileNFS() && runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
 	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
 	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 
@@ -3364,16 +3419,18 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_HardlinkToSymlink(svm *Scenari
 //   - hlink1_to_sym.txt and hlink2_to_sym.txt as hardlinks
 //   - ValidateHardlinksTransferCount == 3 (anchor symlink + 2 hardlinks)
 func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_MultipleHardlinksToSymlink(svm *ScenarioVariationManager) {
-	if runtime.GOOS != "linux" {
-		svm.InvalidateScenario()
-		return
-	}
 
 	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
 		"|fromTo=LocalFileNFS":   common.EFromTo.LocalFileNFS(),
 		"|fromTo=FileNFSLocal":   common.EFromTo.FileNFSLocal(),
 		"|fromTo=FileNFSFileNFS": common.EFromTo.FileNFSFileNFS(),
 	})
+
+	if fromTo != common.EFromTo.FileNFSFileNFS() && runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
 	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
 	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
 

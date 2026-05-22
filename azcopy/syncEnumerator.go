@@ -310,7 +310,14 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 		indexer.IsDestinationCaseInsensitive = isDestinationCaseInsensitive(s.opts.fromTo)
 		// in all other cases (download and S2S), the destination is scanned/indexed first
 		// then the source is scanned and filtered based on what the destination contains
-		comparatorInstance := NewSyncSourceComparator(indexer, transferScheduler.ScheduleSyncRemoveSetPropertiesTransfer, deleteScheduler, hardlinkDeleteScheduler, s.opts.compareHash, s.opts.preserveInfo, s.opts.mirrorMode, s.inodeStore)
+		preferSMBTime := s.opts.preserveInfo
+		if s.opts.fromTo == common.EFromTo.FileNFSLocal() {
+			// For NFS-to-local sync, prefer LMT over SMB FileLastWriteTime because
+			// the local side has no smbLastModifiedTime — mixing the two semantics
+			// can cause stale comparisons.
+			preferSMBTime = false
+		}
+		comparatorInstance := NewSyncSourceComparator(indexer, transferScheduler.ScheduleSyncRemoveSetPropertiesTransfer, deleteScheduler, hardlinkDeleteScheduler, s.opts.compareHash, preferSMBTime, s.opts.mirrorMode, s.inodeStore)
 		comparator = comparatorInstance.ProcessIfNecessary
 
 		finalize = func() error {

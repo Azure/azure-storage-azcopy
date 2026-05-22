@@ -385,10 +385,34 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 		// which is non-deterministic on Linux filesystems. The sync comparator uses
 		// the lex-smallest anchor for content checks, so the anchor must be the data
 		// carrier (TargetHardlinkFile = "") and non-anchor files must reference it.
+		//
+		// Guard: only override when the target is also a hardlink in the source.
+		// For hardlinked symlinks, the traverser processes the first-seen member as
+		// EntityType=Symlink (srcPathToInode has no entry for it) and assigns
+		// subsequent members a TargetHardlinkFile pointing to it.  Overriding that
+		// pointer would break the link relationship.
 		if srcAnchorFile != "" {
+			_, anchorIsSourceHardlink := f.srcPathToInode[normSrcAnchor]
 			if normSrcAnchor == normRelPath {
-				sourceObjectInMap.TargetHardlinkFile = ""
-			} else {
+				// This IS the lex-smallest anchor.  Only become the data
+				// carrier if the current target (if any) is also a source
+				// hardlink.  If it points to a symlink, preserve that link.
+				if sourceObjectInMap.TargetHardlinkFile == "" {
+					// Already the data carrier — nothing to change.
+				} else {
+					normTarget := sourceObjectInMap.TargetHardlinkFile
+					if f.sourceIndex.IsDestinationCaseInsensitive {
+						normTarget = strings.ToLower(normTarget)
+					}
+					if _, targetIsHardlink := f.srcPathToInode[normTarget]; targetIsHardlink {
+						sourceObjectInMap.TargetHardlinkFile = ""
+					}
+				}
+			} else if anchorIsSourceHardlink {
+				// Non-anchor: point to the lex-smallest, but only when the
+				// anchor is also a source hardlink.  Otherwise keep the
+				// traverser's value (which points to a separately-processed
+				// symlink).
 				sourceObjectInMap.TargetHardlinkFile = srcAnchorFile
 			}
 		}
@@ -670,6 +694,55 @@ func (f *syncSourceComparator) ProcessPendingHardlinks() error {
 	}
 
 	for _, sourceObject := range f.srcPendingHardlinkObjects.IndexMap {
+
+		// Normalize TargetHardlinkFile early — before any decision path schedules
+		// a transfer — so that ALL code paths (entity-type mismatch, needsRecreate,
+		// !present, etc.) use the deterministic lex-smallest anchor rather than the
+		// non-deterministic first-seen-by-parallel-traversal value.
+		//
+		// Guard: only override when the inode group is fully represented in the
+		// pending set.  For hardlinked symlinks the traverser processes the
+		// first-seen member as EntityType=Symlink (outside the pending set) and
+		// assigns subsequent members a TargetHardlinkFile pointing to it.
+		// Overriding that pointer would break the link relationship.
+		if f.inodeStore != nil && sourceObject.Inode != "" {
+			anchor, err := f.inodeStore.GetAnchor(sourceObject.Inode)
+			if err != nil {
+				return err
+			}
+			if anchor != "" {
+				normAnchor := anchor
+				normPath := sourceObject.RelativePath
+				if f.destinationIndex.IsDestinationCaseInsensitive {
+					normAnchor = strings.ToLower(normAnchor)
+					normPath = strings.ToLower(normPath)
+				}
+				_, anchorInPending := f.srcPendingHardlinkObjects.IndexMap[normAnchor]
+				if normAnchor == normPath {
+					// This IS the lex-smallest anchor.  Only become the data
+					// carrier if the current target (if any) is also a deferred
+					// hardlink.  If it points to a file already processed
+					// outside this set (e.g. a symlink), preserve that link.
+					if sourceObject.TargetHardlinkFile == "" {
+						// Already the data carrier — nothing to change.
+					} else {
+						normTarget := sourceObject.TargetHardlinkFile
+						if f.destinationIndex.IsDestinationCaseInsensitive {
+							normTarget = strings.ToLower(normTarget)
+						}
+						if _, targetInPending := f.srcPendingHardlinkObjects.IndexMap[normTarget]; targetInPending {
+							sourceObject.TargetHardlinkFile = ""
+						}
+					}
+				} else if anchorInPending {
+					// Non-anchor: point to the lex-smallest, but only when the
+					// anchor is also deferred.  Otherwise keep the traverser's
+					// value (which already points to the correct non-deferred
+					// file such as a separately-processed symlink).
+					sourceObject.TargetHardlinkFile = anchor
+				}
+			}
+		}
 
 		// Normalize the key upfront for case-insensitive destinations so the
 		// lookup always matches the lowercase-keyed destinationIndex.
