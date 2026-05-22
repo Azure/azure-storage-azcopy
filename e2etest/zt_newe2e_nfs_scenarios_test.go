@@ -685,7 +685,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal(svm *ScenarioVariationManag
 		if azCopyVerb == AzCopyVerbCopy {
 			ValidateHardlinksConvertedCount(svm, stdOut, 2)
 		} else {
-			ValidateHardlinksConvertedCount(svm, stdOut, 1)
+			ValidateHardlinksConvertedCount(svm, stdOut, 2)
 		}
 	case common.PreserveHardlinkHandlingType:
 		ValidateHardlinksTransferCount(svm, stdOut, 2)
