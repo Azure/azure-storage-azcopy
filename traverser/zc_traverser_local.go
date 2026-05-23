@@ -804,7 +804,11 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 				// Declare nfsCtx locally per file to avoid data races across parallel goroutines.
 				var nfsCtx NFSMetadataContext
 				if t.fromTo.IsNFS() {
-					if IsHardlink(fileInfo) {
+					// When the file is a preserved symlink, skip hardlink handling unless
+					// hardlinks are also being preserved (the preserve path has its own
+					// anchor/subsequent logic via resolveHardlinkedSymlinkEntity).
+					isPreservedSymlink := IsSymbolicLink(fileInfo) && t.symlinkHandling.Preserve()
+					if IsHardlink(fileInfo) && !(isPreservedSymlink && t.hardlinkHandling != common.EHardlinkHandlingType.Preserve()) {
 						entityType = common.EEntityType.Hardlink()
 						if skip := HandleHardlinkForNFS(fileInfo,
 							t.hardlinkHandling, t.incrementEnumerationCounter); skip {
@@ -827,6 +831,8 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 								TargetHardlinkFile: targetHardlinkFile,
 								Inode:              inode,
 							}
+
+							entityType = resolveHardlinkedSymlinkEntity(IsSymbolicLink(fileInfo), targetHardlinkFile, entityType)
 						}
 					}
 				}
@@ -876,6 +882,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 
 			// go through the files and return if any of them fail to process
 			for _, entry := range entries {
+				entityType = common.EEntityType.File()
 				// This won't change. It's purely to hand info off to STE about where the symlink lives.
 				relativePath := entry.Name()
 				fileInfo, _ := entry.Info()
@@ -914,7 +921,8 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 				}
 				// NFS handling
 				if t.fromTo.IsNFS() {
-					if IsHardlink(fileInfo) {
+					isPreservedSymlink := IsSymbolicLink(fileInfo) && t.symlinkHandling.Preserve()
+					if IsHardlink(fileInfo) && !(isPreservedSymlink && t.hardlinkHandling != common.EHardlinkHandlingType.Preserve()) {
 						entityType = common.EEntityType.Hardlink()
 						if skip := HandleHardlinkForNFS(fileInfo,
 							t.hardlinkHandling, t.incrementEnumerationCounter); skip {
@@ -935,8 +943,9 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 								Inode:              inode,
 							}
 
+							entityType = resolveHardlinkedSymlinkEntity(IsSymbolicLink(fileInfo), targetHardlinkFile, entityType)
 						}
-					} else if !IsRegularFile(fileInfo) {
+					} else if !IsRegularFile(fileInfo) && !isPreservedSymlink {
 						entityType = common.EEntityType.Other()
 						if t.incrementEnumerationCounter != nil {
 							t.incrementEnumerationCounter(entityType, t.symlinkHandling, t.hardlinkHandling)
@@ -979,18 +988,6 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 	}
 
 	return finalizer(err)
-}
-
-func getRelPath(filePath, basePath string) (string, error) {
-	// we want to compute relative from its parent
-	base := filepath.Dir(basePath)
-
-	rel, err := filepath.Rel(base, filePath)
-	if err != nil {
-		return "", err
-	}
-
-	return filepath.ToSlash(rel), nil
 }
 
 func NewLocalTraverser(fullPath string, ctx context.Context, opts InitResourceTraverserOptions) (*localTraverser, error) {
@@ -1050,6 +1047,20 @@ func logNFSLinkWarning(fileName,
 	}
 
 	common.AzcopyCurrentJobLogger.Log(common.LogWarning, message)
+}
+
+// resolveHardlinkedSymlinkEntity adjusts the entity type for a hardlinked symlink.
+// The anchor (first-seen entry, indicated by targetHardlinkFile == "") must be
+// transferred as a symlink so its target is created correctly on the destination;
+// only subsequent links remain Hardlink entities.
+//
+// isSymlink should be true when the underlying file is a symbolic link (e.g.
+// IsSymbolicLink(fileInfo) for local files, or NFSFileType==Symlink for remote).
+func resolveHardlinkedSymlinkEntity(isSymlink bool, targetHardlinkFile string, currentEntityType common.EntityType) common.EntityType {
+	if isSymlink && targetHardlinkFile == "" {
+		return common.EEntityType.Symlink()
+	}
+	return currentEntityType
 }
 
 // HandleSymlinkForNFS processes a symbolic link based on the specified handling type.

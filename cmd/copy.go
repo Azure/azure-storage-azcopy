@@ -1795,8 +1795,10 @@ func init() {
 			"\n The supported options are 'follow' (default), 'skip' and 'preserve'. \n"+
 			"  'follow' means that the hardlinked files are transferred as separate files. \n"+
 			"  'skip' means that all the hardlinked files are skipped. \n"+
-			"  'preserve' means that the first hardlinked file is transferred, and the other files are created as hardlinks to that file at the destination. \n"+
+			"  'preserve' means that hardlink relationships are maintained at the destination where supported. \n"+
 			"\n Note: \n"+
-			"  When using 'preserve', the source and destination must be on a file system that supports hardlinks. \n"+
-			"Note: This version of AzCopy supports hardlink preservation for copy operations only; sync operations are not supported. \n")
+			"  When using 'preserve', the source and destination must be on a file system that supports hardlinks.\n"+
+			"Behavior may differ based on the transfer direction. For uploads or service-to-service transfers \n"+
+			"(Azure Files NFS as destination), out-of-scope hardlinks are preserved since file updates occur in place. \n"+
+			"  For downloads (local filesystem as destination), out-of-scope hardlinks may be broken due to the default temp-file and rename behavior.")
 }

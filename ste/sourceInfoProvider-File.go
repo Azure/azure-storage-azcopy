@@ -25,6 +25,7 @@ import (
 	"crypto/md5"
 	"fmt"
 	"io"
+	"net/url"
 	"sync"
 	"time"
 
@@ -412,5 +413,13 @@ func (p *fileSourceInfoProvider) ReadLink() (string, error) {
 		return "", fmt.Errorf("failed to get symlink info: %w", err)
 	}
 
-	return string(*symlink.LinkText), nil
+	raw := string(*symlink.LinkText)
+	linkText, err := url.PathUnescape(raw)
+	if err != nil {
+		// Fall back to the raw link text when it isn't valid percent-encoding
+		// (e.g. a literal '%' in the symlink target).
+		linkText = raw
+	}
+
+	return linkText, nil
 }

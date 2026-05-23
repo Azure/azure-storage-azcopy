@@ -15,8 +15,7 @@ type CopyJobPartDispatcher struct {
 }
 
 func (d *CopyJobPartDispatcher) readyForDispatch() bool {
-	return (len(d.PendingTransfers.List) == azcopy.NumOfFilesPerDispatchJobPart) ||
-		(len(d.PendingHardlinksTransfers.List) == azcopy.NumOfFilesPerDispatchJobPart)
+	return len(d.PendingTransfers.List) == azcopy.NumOfFilesPerDispatchJobPart
 }
 
 func (d *CopyJobPartDispatcher) appendTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer) error {
@@ -54,29 +53,15 @@ func (d *CopyJobPartDispatcher) appendTransfer(e *common.CopyJobPartOrderRequest
 func (d *CopyJobPartDispatcher) addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer, cca *CookedCopyCmdArgs) error {
 	// Source and destination paths are and should be relative paths.
 
+	// Only dispatch mixed (file/folder/symlink) parts during enumeration.
+	// Hardlink transfers are buffered and dispatched after all mixed parts
+	// in dispatchFinalPart, so that hardlink targets are guaranteed to exist.
 	if d.readyForDispatch() {
-
-		if e.JobProcessingMode == common.EJobProcessingMode.NFS() {
-			if len(d.PendingTransfers.List) == azcopy.NumOfFilesPerDispatchJobPart {
-				e.Transfers = d.PendingTransfers.Clone()
-				e.JobPartType = common.EJobPartType.Mixed()
-				d.dispatchPart(e, cca)
-				d.PendingTransfers = common.Transfers{}
-			}
-
-			if len(d.PendingHardlinksTransfers.List) == azcopy.NumOfFilesPerDispatchJobPart {
-				e.Transfers = d.PendingHardlinksTransfers.Clone()
-				e.JobPartType = common.EJobPartType.Hardlink()
-				d.dispatchPart(e, cca)
-				d.PendingHardlinksTransfers = common.Transfers{}
-			}
-		} else {
-			if len(d.PendingTransfers.List) == azcopy.NumOfFilesPerDispatchJobPart {
-				e.Transfers = d.PendingTransfers.Clone()
-				e.JobPartType = common.EJobPartType.Mixed()
-				d.dispatchPart(e, cca)
-				d.PendingTransfers = common.Transfers{}
-			}
+		if len(d.PendingTransfers.List) == azcopy.NumOfFilesPerDispatchJobPart {
+			e.Transfers = d.PendingTransfers.Clone()
+			e.JobPartType = common.EJobPartType.Mixed()
+			d.dispatchPart(e, cca)
+			d.PendingTransfers = common.Transfers{}
 		}
 	}
 	// only append the transfer after we've checked and dispatched a part
@@ -119,21 +104,42 @@ func shuffleTransfers(transfers []common.CopyTransfer) {
 func (d *CopyJobPartDispatcher) dispatchFinalPart(e *common.CopyJobPartOrderRequest, cca *CookedCopyCmdArgs) error {
 
 	if e.JobProcessingMode == common.EJobProcessingMode.NFS() {
-		if len(d.PendingTransfers.List) > 0 && len(d.PendingHardlinksTransfers.List) > 0 {
-			// if there are both kinds of transfers pending, first do the mixed transfers
-			e.Transfers = d.PendingTransfers.Clone()
-			e.JobPartType = common.EJobPartType.Mixed()
-			d.dispatchPart(e, cca)
-			d.PendingTransfers = common.Transfers{}
+		// Flush any remaining mixed transfers first (as non-final parts).
+		if len(d.PendingTransfers.List) > 0 {
+			if len(d.PendingHardlinksTransfers.List) > 0 {
+				// More parts will follow (hardlinks), so dispatch mixed as non-final.
+				e.Transfers = d.PendingTransfers.Clone()
+				e.JobPartType = common.EJobPartType.Mixed()
+				d.dispatchPart(e, cca)
+				d.PendingTransfers = common.Transfers{}
+			} else {
+				// No hardlinks pending; mixed will be the final part (handled below).
+			}
 		}
 
-		// Either mixed transfer or hardlink transfers are pending. Whatever is pending will be the final part.
-		if len(d.PendingTransfers.List) > 0 {
-			e.Transfers = d.PendingTransfers.Clone()
-			e.JobPartType = common.EJobPartType.Mixed()
-		} else if len(d.PendingHardlinksTransfers.List) > 0 {
+		// Dispatch all buffered hardlink transfers in batches, with the very
+		// last batch (or last mixed batch if no hardlinks) being the final part.
+		for len(d.PendingHardlinksTransfers.List) > azcopy.NumOfFilesPerDispatchJobPart {
+			batch := common.Transfers{
+				List:                   make([]common.CopyTransfer, azcopy.NumOfFilesPerDispatchJobPart),
+				HardlinksTransferCount: uint32(azcopy.NumOfFilesPerDispatchJobPart),
+			}
+			copy(batch.List, d.PendingHardlinksTransfers.List[:azcopy.NumOfFilesPerDispatchJobPart])
+			d.PendingHardlinksTransfers.List = d.PendingHardlinksTransfers.List[azcopy.NumOfFilesPerDispatchJobPart:]
+			d.PendingHardlinksTransfers.HardlinksTransferCount -= uint32(azcopy.NumOfFilesPerDispatchJobPart)
+
+			e.Transfers = batch
+			e.JobPartType = common.EJobPartType.Hardlink()
+			d.dispatchPart(e, cca)
+		}
+
+		// Whatever remains is the final part.
+		if len(d.PendingHardlinksTransfers.List) > 0 {
 			e.Transfers = d.PendingHardlinksTransfers.Clone()
 			e.JobPartType = common.EJobPartType.Hardlink()
+		} else if len(d.PendingTransfers.List) > 0 {
+			e.Transfers = d.PendingTransfers.Clone()
+			e.JobPartType = common.EJobPartType.Mixed()
 		}
 	} else {
 		if len(d.PendingTransfers.List) > 0 {
