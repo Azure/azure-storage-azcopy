@@ -922,6 +922,13 @@ func (jm *jobMgr) checkAndProcessHardlinkParts() {
 		return
 	}
 
+	// Do not dispatch hardlink parts until the final part has been ordered.
+	// Without this guard, early mixed-part completions could trigger premature
+	// dispatch when later mixed parts have not been created yet.
+	if atomic.LoadInt32(&jm.atomicFinalPartOrderedIndicator) != 1 {
+		return
+	}
+
 	// Check if all mixed parts are complete
 	allFilePartsComplete := true
 	jm.jobPartMgrs.Iterate(true, func(k common.PartNumber, v IJobPartMgr) {

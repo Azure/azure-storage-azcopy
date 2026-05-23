@@ -219,8 +219,10 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 
 					return nil
 				}
-				//set entity tile to hardlink
-				if *fileProperties.LinkCount > int64(1) {
+				// Classify by NFS file type; a hardlinked symlink stays Symlink.
+				if *fileProperties.NFSFileType == file.NFSFileTypeSymlink {
+					storedObject.EntityType = common.EEntityType.Symlink()
+				} else if *fileProperties.LinkCount > int64(1) {
 					storedObject.EntityType = common.EEntityType.Hardlink()
 				}
 			} else if t.incrementEnumerationCounter != nil {
@@ -295,6 +297,13 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 					if err != nil {
 						return nil, err
 					}
+				}
+
+				// A hardlinked symlink: the anchor (first-seen entry) must be
+				// transferred as a symlink so its target is created correctly
+				// on the destination; only subsequent links become Hardlink.
+				if fullProperties.NFSFileType() == string(file.NFSFileTypeSymlink) && targetHardlinkFile == "" {
+					f.entityType = common.EEntityType.Symlink()
 				}
 			}
 		} else if f.entityType == common.EEntityType.File() && t.incrementEnumerationCounter != nil {

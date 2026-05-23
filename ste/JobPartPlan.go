@@ -110,10 +110,9 @@ type JobPartPlanHeader struct {
 
 	RehydratePriority common.RehydratePriorityType
 
-	SymlinkHandling        common.SymlinkHandlingType
-	HardlinkHandling       common.HardlinkHandlingType
-	JobPartType            common.JobPartType // Type of transfers this job part contains
-	TargetHardlinkFilePath [1000]byte         // Target hardlink file path at destination for NFS
+	SymlinkHandling  common.SymlinkHandlingType
+	HardlinkHandling common.HardlinkHandlingType
+	JobPartType      common.JobPartType // Type of transfers this job part contains
 }
 
 // Status returns the job status stored in JobPartPlanHeader in thread-safe manner
