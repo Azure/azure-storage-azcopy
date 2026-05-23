@@ -208,7 +208,7 @@ func (s *CopyTransferProcessor) appendTransfer(copyTransfer common.CopyTransfer)
 		case common.EEntityType.Symlink():
 			s.dispatcher.PendingTransfers.SymlinkTransferCount++
 		case common.EEntityType.Hardlink():
-			// This is the first ocurrence of a hardlink file which will be copied as a regular file
+			// This is the first occurrence of a hardlink file which will be copied as a regular file
 			if s.hardlinkHandlingType == common.EHardlinkHandlingType.Preserve() {
 				s.dispatcher.PendingTransfers.HardlinksTransferCount++
 			} else if s.hardlinkHandlingType == common.EHardlinkHandlingType.Follow() {

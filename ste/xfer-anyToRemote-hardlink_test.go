@@ -173,7 +173,6 @@ func TestComputeUploadHardlinkTarget(t *testing.T) {
 		// ───────────── invalid destination URL → FailActiveSend ─────────────
 		{
 			name:                   "error — unparsable destination URL",
-			fromTo:                 common.EFromTo.LocalFileNFS(),
 			sourceRoot:             "/local",
 			source:                 "/local/link.txt",
 			destination:            "://not-a-valid-url",
