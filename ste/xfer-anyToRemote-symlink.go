@@ -121,7 +121,7 @@ func anyToRemote_symlink(jptm IJobPartTransferMgr, info *TransferInfo, pacer pac
 	// This was added so the following CreateSymbolicLink call does not need to depend on the service
 	// returning specific error codes to perform the destination deletion
 	if shouldOverwrite := jptm.GetOverwriteOption() == common.EOverwriteOption.True(); jptm.FromTo().IsNFS() && shouldOverwrite {
-		if azFileSender, ok := baseSender.(*urlToAzureFileCopier); ok {
+		if azFileSender, ok := baseSender.(interface{ DeleteDestInOverwrite() error }); ok {
 			if delErr := azFileSender.DeleteDestInOverwrite(); delErr != nil {
 				jptm.LogAtLevelForCurrentTransfer(common.LogWarning,
 					fmt.Sprintf("Could not delete the destination %s before symlink overwrites it: %s",
