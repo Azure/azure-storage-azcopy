@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// uploadStub satisfies GetSourceRoot and FailActiveSend for computeUploadHardlinkTarget.
+// uploadStub satisfies GetSourceRoot and FailActiveSend for computeAnyToRemoteHardlinkTarget.
 type uploadStub struct {
 	IJobPartTransferMgr
 	root       string
@@ -26,10 +26,10 @@ func (s *uploadStub) FromTo() common.FromTo {
 	return s.fromTo
 }
 
-func TestComputeUploadHardlinkTarget(t *testing.T) {
+func TestComputeAnyToRemoteHardlinkTarget(t *testing.T) {
 	tests := []struct {
 		name                   string
-		fromTo                 common.FromTo // selects which branch of computeUploadHardlinkTarget is exercised
+		fromTo                 common.FromTo // selects which branch of computeAnyToRemoteHardlinkTarget is exercised
 		sourceRoot             string        // local source root directory
 		source                 string        // TransferInfo.Source (local file path)
 		destination            string        // TransferInfo.Destination (Azure Files URL)
@@ -269,7 +269,7 @@ func TestComputeUploadHardlinkTarget(t *testing.T) {
 			}
 			stub := &uploadStub{root: tc.sourceRoot, fromTo: tc.fromTo}
 
-			got := computeUploadHardlinkTarget(info, stub)
+			got := computeAnyToRemoteHardlinkTarget(info, stub)
 
 			if tc.wantFail {
 				assert.True(t, stub.failCalled, "expected FailActiveSend to be called")
