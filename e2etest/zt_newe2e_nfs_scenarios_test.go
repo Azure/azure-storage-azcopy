@@ -1752,7 +1752,7 @@ func (s *FilesNFSTestSuite) Scenario_NFSToNFS_OverwriteSymlinkToFile(svm *Scenar
 			})
 
 	src := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
-	dst := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+	//dst := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
 	RunAzCopy(
 		svm,
@@ -1764,7 +1764,7 @@ func (s *FilesNFSTestSuite) Scenario_NFSToNFS_OverwriteSymlinkToFile(svm *Scenar
 						EExplicitCredentialType.SASToken(),
 						EExplicitCredentialType.OAuth(),
 					}), svm, CreateAzCopyTargetOptions{}),
-				dst.(RemoteResourceManager).WithSpecificAuthType(
+				dstContainer.(RemoteResourceManager).WithSpecificAuthType(
 					ResolveVariation(svm, []ExplicitCredentialTypes{
 						EExplicitCredentialType.SASToken(),
 						EExplicitCredentialType.OAuth(),
