@@ -280,13 +280,18 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 				symlinkHandling:  t.symlinkHandling}, t.incrementEnumerationCounter); err == nil && skip {
 				return nil, nil
 			}
-			//set entity tile to symlink
-			if fullProperties.NFSFileType() == string(file.NFSFileTypeSymlink) {
+			//set entity type to symlink
+			isNFSSymlink := fullProperties.NFSFileType() == string(file.NFSFileTypeSymlink)
+			if isNFSSymlink {
 				f.entityType = common.EEntityType.Symlink()
 			}
 
-			//set entity tile to hardlink
-			if fullProperties.LinkCount() > int64(1) {
+			//set entity type to hardlink
+			// When the file is a preserved symlink, skip hardlink handling unless
+			// hardlinks are also being preserved (the preserve path has its own
+			// anchor/subsequent logic below).
+			isPreservedSymlink := isNFSSymlink && t.symlinkHandling.Preserve()
+			if fullProperties.LinkCount() > int64(1) && !(isPreservedSymlink && t.hardlinkHandling != common.EHardlinkHandlingType.Preserve()) {
 				f.entityType = common.EEntityType.Hardlink()
 				if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() {
 					if t.inodeStore == nil {
@@ -302,7 +307,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 				// A hardlinked symlink: the anchor (first-seen entry) must be
 				// transferred as a symlink so its target is created correctly
 				// on the destination; only subsequent links become Hardlink.
-				if fullProperties.NFSFileType() == string(file.NFSFileTypeSymlink) && targetHardlinkFile == "" {
+				if isNFSSymlink && targetHardlinkFile == "" {
 					f.entityType = common.EEntityType.Symlink()
 				}
 			}
@@ -323,12 +328,11 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			size = fullProperties.ContentLength()
 			metadata = fullProperties.Metadata()
 		}
-		// Only populate Inode when the file is an actual hardlink (LinkCount > 1).
-		// This mirrors the local traverser, which only sets nfsCtx.Inode inside the
-		// IsHardlink (Nlink > 1) block.  A standalone file with LinkCount == 1 gets
-		// Inode="", so buildSrcPathToInode / dstPathToInode skip it — exactly as they
-		// do for local files — and the sync comparator cannot mistake it for a member
-		// of a multi-group inode when the destination is another NFS share.
+		// Populate Inode only when --hardlinks=preserve. The sync comparator
+		// defers objects with Inode != "" into pending-hardlink processing which
+		// calls InodeStore.GetAnchor; that store is only populated (via GetOrAdd)
+		// during preserve-mode traversal. Setting Inode in follow/skip modes
+		// would cause "anchor for inode … not found" errors.
 		nfsInode := ""
 		if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() && fullProperties.LinkCount() > int64(1) {
 			nfsInode = fullProperties.FileID()
