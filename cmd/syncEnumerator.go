@@ -209,6 +209,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
 		HardlinkHandling:        common.EHardlinkHandlingType.Follow(),
 		ErrorChannel:            enumeratorOptions.ErrorChannel,
+		IsSyncDestination:       true,
 		SymlinkHandling:         cca.symlinkHandling,
 	}
 	dstTraverserTemplate := ResourceTraverserTemplate{
