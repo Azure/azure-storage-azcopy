@@ -23,6 +23,7 @@ package ste
 import (
 	"context"
 	"crypto/md5"
+	"fmt"
 	"io"
 	"time"
 
@@ -140,13 +141,26 @@ func (p *blobSourceInfoProvider) AccessControl() (*string, error) {
 		return nil, err
 	}
 
-	sourceDatalakeClient := dsc.NewFileSystemClient(p.jptm.Info().SrcContainer).NewFileClient(p.jptm.Info().SrcFilePath)
+	fileSystemClient := dsc.NewFileSystemClient(p.jptm.Info().SrcContainer)
+	if p.jptm.Info().SrcFilePath == "" {
+		// A path is required for Get ACL API
+		// https://learn.microsoft.com/en-us/rest/api/storageservices/datalakestoragegen2/path/get-properties
+		// So we correctly call it on the root
+		dirClient := fileSystemClient.NewDirectoryClient("/")
+		resp, err := dirClient.GetAccessControl(p.ctx, nil)
+		if err != nil {
+			return nil, fmt.Errorf("Error getting root directory ACL: %v", err)
+		}
+		return resp.ACL, nil
+	} else {
+		sourceDatalakeClient := fileSystemClient.NewFileClient(p.jptm.Info().SrcFilePath)
 
-	resp, err := sourceDatalakeClient.GetAccessControl(p.ctx, nil)
-	if err != nil {
-		return nil, err
+		resp, err := sourceDatalakeClient.GetAccessControl(p.ctx, nil)
+		if err != nil {
+			return nil, fmt.Errorf("Error getting file ACL: %v", err)
+		}
+		return resp.ACL, nil
 	}
-	return resp.ACL, nil
 }
 
 func (p *blobSourceInfoProvider) BlobTier() *blob.AccessTier {
