@@ -333,6 +333,7 @@ type RawMoverSyncCmdArgs struct {
 	PreserveInfo            bool
 	ForceIfReadOnly         bool
 	Md5ValidationOption     string
+	PutMd5                  bool
 	CompareHash             string
 	LocalHashStorageMode    string
 	Hardlinks               string
@@ -352,6 +353,7 @@ type SyncCmdArgsInput struct {
 	PreserveSMBInfo         bool
 	ForceIfReadOnly         bool
 	Md5ValidationOption     string
+	PutMd5                  bool
 	CompareHash             string
 	LocalHashStorageMode    string
 	Hardlinks               string
@@ -372,6 +374,7 @@ func CookRawSyncCmdArgs(args RawMoverSyncCmdArgs) (cookedSyncCmdArgs, error) {
 		preserveInfo:            args.PreserveInfo,
 		forceIfReadOnly:         args.ForceIfReadOnly,
 		md5ValidationOption:     args.Md5ValidationOption,
+		putMd5:                  args.PutMd5,
 		compareHash:             args.CompareHash,
 		localHashStorageMode:    args.LocalHashStorageMode,
 		hardlinks:               args.Hardlinks,
