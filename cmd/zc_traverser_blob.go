@@ -68,6 +68,9 @@ type blobTraverser struct {
 
 	errorChannel chan<- TraverserErrorItemInfo
 
+	// isSyncDestination indicates this traverser is enumerating the destination side of a sync job.
+	isSyncDestination bool
+
 	// includeDirectoryOrPrefix is used to determine if we should enqueue directories or prefixes
 	// in the traversal process. If true, prefixes will be enqueued as well even if location
 	// is not folder aware.
@@ -299,9 +302,10 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		} else if respErr.StatusCode == 403 { // Some nature of auth error-- Whatever the user is pointing at, they don't have access to, regardless of whether it's a file or a dir stub.
 			t.writeToBlobErrorChannel(errorBlobInfo)
 			return fmt.Errorf("cannot list files due to reason %s", respErr)
-		} else if UseSyncOrchestrator && t.isDFS && respErr.StatusCode == 404 {
-			// If we're using the sync orchestrator and we get a 404, it means the blob doesn't exist
-			// in the destination. We need to explicitly return the error.
+		} else if t.isSyncDestination && t.isDFS && respErr.StatusCode == 404 {
+			// If this is a sync destination traversal and we get a 404, it means the blob doesn't exist
+			// in the destination. We need to explicitly return the error so the sync orchestrator
+			// can handle it gracefully (e.g. set isDestinationPresent = false).
 			return fmt.Errorf("blob %s not found in destination. Err %s", blobName, respErr)
 		}
 	}
@@ -623,8 +627,8 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 		}
 	}
 
-	if UseSyncOrchestrator && !t.isDFS && emptyPrefix {
-		// In case of sync orchestrator, we want to let the orchestrator know that the prefix was not found
+	if t.isSyncDestination && !t.isDFS && emptyPrefix {
+		// In case of sync destination traversal, we want to let the orchestrator know that the prefix was not found
 		// for a flat blob destination. This will help in optimizing the sync process by avoiding redundant
 		// target traversals.
 		return fmt.Errorf("blob %s not found in destination. Err %s", t.rawURL, bloberror.BlobNotFound)
@@ -756,6 +760,7 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		isDFS:                       common.DerefOrZero(common.FirstOrZero(blobOpts).isDFS),
 		destResourceType:            opts.DestResourceType,
 		errorChannel:                opts.ErrorChannel,
+		isSyncDestination:          opts.IsSyncDestination,
 	}
 
 	t.includeDirectoryOrPrefix = UseSyncOrchestrator && !t.recursive
