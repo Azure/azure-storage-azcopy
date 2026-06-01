@@ -40,8 +40,9 @@ var activeMergeJoinDirs atomic.Int64
 // mergeJoinChannelBufferSize controls the buffer size of channels used to bridge
 // push-based traversers into pull-based iteration for the merge-join algorithm.
 // A larger buffer reduces goroutine context switches but uses more memory.
-// Each slot holds one StoredObject (~800 bytes), so 10K slots ≈ 8MB per channel.
-const mergeJoinChannelBufferSize = 10_000
+// Each slot holds one StoredObject (~430 bytes), so 1K slots ≈ 430KB per channel.
+// With 500 workers × 2 channels, total buffer memory ≈ 430MB.
+const mergeJoinChannelBufferSize = 1_000
 
 // traverserResult wraps a StoredObject emitted by a traverser goroutine.
 // When done is true, the channel has been drained and obj is invalid.
@@ -184,6 +185,7 @@ func mergeJoinSyncDir(
 	dstObj, dstOk := <-dstCh
 
 	for srcOk && dstOk {
+		srcOrigPath := srcObj.relativePath
 		srcPath := buildChildPath(dir, srcObj.relativePath, srcObj.entityType == common.EEntityType.Folder())
 		dstPath := buildChildPath(dir, dstObj.relativePath, dstObj.entityType == common.EEntityType.Folder())
 
@@ -193,7 +195,7 @@ func mergeJoinSyncDir(
 		case cmp < 0:
 			// Source-only: new object at source → schedule transfer
 			srcObj.relativePath = srcPath
-			subDirs, err = mergeJoinHandleSourceOnly(enumerator, cca, srcObj, subDirs)
+			subDirs, err = mergeJoinHandleSourceOnly(enumerator, cca, srcObj, srcOrigPath, subDirs)
 			if err != nil {
 				return subDirs, err
 			}
@@ -212,7 +214,7 @@ func mergeJoinSyncDir(
 			// Both exist: compare properties and decide
 			srcObj.relativePath = srcPath
 			dstObj.relativePath = dstPath
-			subDirs, err = mergeJoinHandleBothExist(enumerator, cca, comparator, srcObj, dstObj, subDirs)
+			subDirs, err = mergeJoinHandleBothExist(enumerator, cca, comparator, srcObj, dstObj, srcOrigPath, subDirs)
 			if err != nil {
 				return subDirs, err
 			}
@@ -223,8 +225,9 @@ func mergeJoinSyncDir(
 
 	// Drain remaining source-only objects
 	for srcOk {
+		srcOrigPath := srcObj.relativePath
 		srcObj.relativePath = buildChildPath(dir, srcObj.relativePath, srcObj.entityType == common.EEntityType.Folder())
-		subDirs, err = mergeJoinHandleSourceOnly(enumerator, cca, srcObj, subDirs)
+		subDirs, err = mergeJoinHandleSourceOnly(enumerator, cca, srcObj, srcOrigPath, subDirs)
 		if err != nil {
 			return subDirs, err
 		}
@@ -252,6 +255,26 @@ func mergeJoinSyncDir(
 	return subDirs, nil
 }
 
+// isSelfReferentialDirSentinel returns true when a BlobFS (HNS) traverser emits
+// the current directory itself as a Folder StoredObject with empty relativePath.
+// This sentinel carries root/directory ACLs but must NOT be re-enqueued as a
+// subdirectory — otherwise the same directory would be processed again, causing
+// duplicate folder counts, failed transfers, and potential infinite loops.
+func isSelfReferentialDirSentinel(obj StoredObject, originalRelativePath string, fromTo common.FromTo) bool {
+	if obj.entityType != common.EEntityType.Folder() {
+		return false
+	}
+	// GCP S3-compatible source emits directory placeholders with empty relativePath
+	if isGCPSource && originalRelativePath == "" {
+		return true
+	}
+	// BlobFS (HNS) traverser emits the current directory as a folder with empty relativePath
+	if fromTo.From() == common.ELocation.BlobFS() && originalRelativePath == "" {
+		return true
+	}
+	return false
+}
+
 // mergeJoinHandleSourceOnly processes an object that exists at the source but not
 // the destination. Files are scheduled for transfer. Folders are added to the
 // subdirectory list for recursive traversal.
@@ -259,13 +282,16 @@ func mergeJoinHandleSourceOnly(
 	enumerator *syncEnumerator,
 	cca *cookedSyncCmdArgs,
 	srcObj StoredObject,
+	originalRelativePath string,
 	subDirs []minimalStoredObject,
 ) ([]minimalStoredObject, error) {
 
 	if srcObj.entityType == common.EEntityType.Folder() {
-		// Skip GCP self-referential directory placeholders
-		if isGCPSource && srcObj.relativePath == "" {
-			return subDirs, nil
+		// Skip self-referential directory sentinels (GCP/HNS) from subDirs
+		// but still schedule the transfer for ACL propagation
+		if isSelfReferentialDirSentinel(srcObj, originalRelativePath, cca.fromTo) {
+			err := enumerator.ctp.scheduleCopyTransfer(srcObj)
+			return subDirs, err
 		}
 
 		subDirs = append(subDirs, minimalStoredObject{
@@ -316,13 +342,18 @@ func mergeJoinHandleBothExist(
 	comparator *syncDestinationComparator,
 	srcObj StoredObject,
 	dstObj StoredObject,
+	originalRelativePath string,
 	subDirs []minimalStoredObject,
 ) ([]minimalStoredObject, error) {
 
 	if srcObj.entityType == common.EEntityType.Folder() {
-		// Skip GCP self-referential directory placeholders
-		if isGCPSource && srcObj.relativePath == "" {
-			return subDirs, nil
+		// Skip self-referential directory sentinels (GCP/HNS) from subDirs
+		if isSelfReferentialDirSentinel(srcObj, originalRelativePath, cca.fromTo) {
+			// Always schedule transfer for ACL propagation (matches indexMap path behavior
+			// where the root sentinel with BlobName="" routes through SetContainerACL).
+			// Do NOT re-enqueue as subdirectory — that would cause infinite loops.
+			err := enumerator.ctp.scheduleCopyTransfer(srcObj)
+			return subDirs, err
 		}
 
 		subDirs = append(subDirs, minimalStoredObject{
