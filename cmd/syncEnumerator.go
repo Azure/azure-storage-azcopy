@@ -209,8 +209,8 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
 		HardlinkHandling:        common.EHardlinkHandlingType.Follow(),
 		ErrorChannel:            enumeratorOptions.ErrorChannel,
-		SymlinkHandling:         cca.symlinkHandling,
 		IsSyncDestination:       true,
+		SymlinkHandling:         cca.symlinkHandling,
 	}
 	dstTraverserTemplate := ResourceTraverserTemplate{
 		location: cca.fromTo.To(),
@@ -338,7 +338,6 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.trailingDot,
 		},
-		IsNFSCopy: cca.isNFSCopy,
 	}
 	//Optional check for custom credential provider
 	var credProvider credentials.Provider = nil
