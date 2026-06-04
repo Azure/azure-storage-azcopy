@@ -253,7 +253,8 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 				" whose hardlink topology must change.")
 		}
 		hardlinkDeleteProcessor := newInteractiveDeleteProcessor(deleter, common.EDeleteDestination.True(), s.opts.fromTo.To(), s.opts.destination, s.spt.incrementDeletionCount)
-		hardlinkDeleteScheduler = traverser.NewFpoAwareProcessor(fpo, hardlinkDeleteProcessor.removeImmediately)
+		hardlinkDeleteScheduler = traverser.NewFpoAwareProcessor(fpo, hardlinkDeleteProcessor.removeImmediately, s.opts.symlinks,
+			s.opts.hardlinks)
 	}
 
 	var comparator traverser.ObjectProcessor
