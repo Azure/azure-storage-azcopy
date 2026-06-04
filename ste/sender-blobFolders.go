@@ -11,6 +11,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -75,7 +76,8 @@ func (b *blobFolderSender) setDatalakeACLs() {
 		// We cannot set ACLs with an empty file path
 		// https://learn.microsoft.com/en-us/azure/storage/blobs/data-lake-storage-access-control#can-i-set-the-acl-of-a-container
 		dstDirectoryDatalakeClient := fileSystemClient.NewDirectoryClient("/")
-		_, err = dstDirectoryDatalakeClient.SetAccessControl(b.jptm.Context(), &file.SetAccessControlOptions{ACL: acl})
+		_, err = dstDirectoryDatalakeClient.SetAccessControl(b.jptm.Context(),
+			&directory.SetAccessControlOptions{ACL: acl})
 		if err != nil {
 			b.jptm.FailActiveSend("Setting Root Directory ACL", err)
 			return
@@ -148,7 +150,7 @@ func (b *blobFolderSender) SetContainerACL() error {
 
 	if b.jptm.Info().DstFilePath == "" {
 		dstDirectoryDatalakeClient := dstFileSystemClient.NewDirectoryClient("/")
-		_, err = dstDirectoryDatalakeClient.SetAccessControl(b.jptm.Context(), &file.SetAccessControlOptions{ACL: acl})
+		_, err = dstDirectoryDatalakeClient.SetAccessControl(b.jptm.Context(), &directory.SetAccessControlOptions{ACL: acl})
 		if err != nil {
 			b.jptm.FailActiveSend("Setting Root Directory ACL", err)
 			return folderPropertiesSetInCreation{} // standard completion will detect failure
