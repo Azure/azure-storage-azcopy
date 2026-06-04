@@ -167,9 +167,12 @@ var ErrorHashAsyncCalculation = errors.New("hash is calculating asynchronously")
 
 // Returns a func that only calls inner if StoredObject isCompatibleWithFpo
 // We use this, so that we can easily test for compatibility in the sync deletion code (which expects an ObjectProcessor)
-func NewFpoAwareProcessor(fpo common.FolderPropertyOption, inner ObjectProcessor) ObjectProcessor {
+func NewFpoAwareProcessor(fpo common.FolderPropertyOption, inner ObjectProcessor, symlinkHandlingType common.SymlinkHandlingType,
+	hardLinkHandlingType common.HardlinkHandlingType) ObjectProcessor {
 	return func(s StoredObject) error {
-		if s.isCompatibleWithEntitySettings(fpo, common.ESymlinkHandlingType.Skip(), common.EHardlinkHandlingType.Follow()) {
+
+		// We pass in the user provided symbolic and hardlink handling. For hardlink, the default handling is Follow
+		if s.isCompatibleWithEntitySettings(fpo, symlinkHandlingType, hardLinkHandlingType) {
 			return inner(s)
 		} else {
 			return nil // nothing went wrong, because we didn't do anything
