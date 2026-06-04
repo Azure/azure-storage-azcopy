@@ -23,8 +23,9 @@ package cmd
 import (
 	"context"
 	"fmt"
-	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"strings"
+
+	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 )
 
 // Enumerates an entire blob account, looking into each matching container as it goes

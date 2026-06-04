@@ -1,13 +1,14 @@
 package cmd
 
 import (
-	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"google.golang.org/api/iterator"
 	"net/url"
 	"strings"
+
+	gcpUtils "cloud.google.com/go/storage"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"google.golang.org/api/iterator"
 )
 
 type gcpServiceTraverser struct {

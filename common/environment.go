@@ -279,6 +279,13 @@ func (EnvironmentVariable) TransferInitiationPoolSize() EnvironmentVariable {
 	}
 }
 
+func (EnvironmentVariable) ShuffleThresholdParts() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_SHUFFLE_THRESHOLD_PARTS",
+		Description: "Sync orchestrator: number of plan-parts worth of transfers to buffer before performing a shuffle/flush. Default 0 (no shuffle, transfers dispatched as encountered). Set to a positive value to buffer that many plan-parts before shuffling/flushing; set larger than the expected total plan parts to defer all dispatch until enumeration completes (single global shuffle of all transfers).",
+	}
+}
+
 const azCopyConcurrentScan = "AZCOPY_CONCURRENT_SCAN"
 
 func (EnvironmentVariable) EnumerationPoolSize() EnvironmentVariable {
