@@ -149,7 +149,7 @@ func (p *blobSourceInfoProvider) AccessControl() (*string, error) {
 		dirClient := fileSystemClient.NewDirectoryClient("/")
 		resp, err := dirClient.GetAccessControl(p.ctx, nil)
 		if err != nil {
-			return nil, fmt.Errorf("Error getting root directory ACL: %v", err)
+			return nil, fmt.Errorf("Error getting root directory ACL: %w", err)
 		}
 		return resp.ACL, nil
 	} else {
@@ -157,7 +157,7 @@ func (p *blobSourceInfoProvider) AccessControl() (*string, error) {
 
 		resp, err := sourceDatalakeClient.GetAccessControl(p.ctx, nil)
 		if err != nil {
-			return nil, fmt.Errorf("Error getting file ACL: %v", err)
+			return nil, fmt.Errorf("Error getting file ACL: %w", err)
 		}
 		return resp.ACL, nil
 	}
