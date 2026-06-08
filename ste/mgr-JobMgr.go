@@ -135,7 +135,7 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	}
 
 	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(),
-		httpClient:           common.GetGlobalHTTPClient(jobLogger),
+		httpClient:           common.GetGlobalHTTPClient(),
 		logger:               jobLogger,
 		chunkStatusLogger:    common.NewChunkStatusLogger(jobID, cpuMon, common.LogPathFolder, enableChunkLogOutput),
 		concurrency:          concurrency,
@@ -248,6 +248,12 @@ func (jm *jobMgr) logConcurrencyParameters() {
 
 	jm.logger.Log(level, fmt.Sprintf("Max open files when downloading: %d (auto-computed)",
 		jm.concurrency.MaxOpenDownloadFiles))
+
+	if tr, ok := jm.httpClient.Transport.(*http.Transport); ok {
+		jm.logger.Log(level, fmt.Sprintf(
+			"Global HTTP client %p: MaxIdleConnsPerHost=%d MaxConnsPerHost=%d MaxIdleConns=%d IdleConnTimeout=%s",
+			jm.httpClient, tr.MaxIdleConnsPerHost, tr.MaxConnsPerHost, tr.MaxIdleConns, tr.IdleConnTimeout))
+	}
 }
 
 // jobMgrInitState holds one-time init structures (such as SIPM), that initialize when the first part is added.

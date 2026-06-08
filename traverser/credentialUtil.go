@@ -21,8 +21,9 @@ func CreateClientOptions(logger common.ILoggerResetable, srcCred *common.ScopedT
 		logOptions.Log = logger.Log
 		logOptions.ShouldLog = logger.ShouldLog
 	}
-	// Job-level/global client if available so we reuse connections and transports.
-	client := common.GetGlobalHTTPClient(logger)
+	// Process-wide HTTP client (initialized at startup from ConcurrencySettings) so we
+	// reuse connections and transports across the front-end and STE.
+	client := common.GetGlobalHTTPClient()
 
 	return ste.NewClientOptions(
 		policy.RetryOptions{
