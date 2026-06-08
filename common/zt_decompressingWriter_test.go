@@ -141,7 +141,7 @@ func getTestData(a *assert.Assertions, tp CompressionType, originalSize int) (or
 	case ECompressionType.ZLib():
 		comp = zlib.NewWriter(compBuf)
 	default:
-		a.Fail("unexpected compression type")
+		a.FailNow("unexpected compression type")
 		return originalData, nil
 	}
 	_, err = io.Copy(comp, bytes.NewReader(originalData))
