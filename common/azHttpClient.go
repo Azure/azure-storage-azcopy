@@ -32,11 +32,11 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 )
 
-// GlobalHTTPClient is the process-wide HTTP client used by AzCopy. It is configured by
+// globalHTTPClient is the process-wide HTTP client used by AzCopy. It is configured by
 // InitGlobalHTTPClient (which should be called once at startup, after concurrency
 // settings have been computed) and retrieved by GetGlobalHTTPClient.
 var (
-	GlobalHTTPClient     *http.Client
+	globalHTTPClient     *http.Client
 	globalHTTPClientOnce sync.Once
 )
 
@@ -58,9 +58,9 @@ const (
 // first picks it up, where a job-scoped logger is available.
 func InitGlobalHTTPClient(maxIdleConnsPerHost int) *http.Client {
 	globalHTTPClientOnce.Do(func() {
-		GlobalHTTPClient = buildGlobalHTTPClient(maxIdleConnsPerHost)
+		globalHTTPClient = buildGlobalHTTPClient(maxIdleConnsPerHost)
 	})
-	return GlobalHTTPClient
+	return globalHTTPClient
 }
 
 // GetGlobalHTTPClient returns the process-global HTTP client previously configured
@@ -69,9 +69,9 @@ func InitGlobalHTTPClient(maxIdleConnsPerHost int) *http.Client {
 // which bypass azcopy.NewClient still get a working client.
 func GetGlobalHTTPClient() *http.Client {
 	globalHTTPClientOnce.Do(func() {
-		GlobalHTTPClient = buildGlobalHTTPClient(fallbackMaxIdleConnsPerHost)
+		globalHTTPClient = buildGlobalHTTPClient(fallbackMaxIdleConnsPerHost)
 	})
-	return GlobalHTTPClient
+	return globalHTTPClient
 }
 
 func buildGlobalHTTPClient(maxIdleConnsPerHost int) *http.Client {
@@ -157,11 +157,14 @@ func dumpConnStats() {
 }
 
 // NewTracingTransport wraps an existing policy.Transporter and injects an httptrace.ClientTrace to
-// collect aggregated connection reuse metrics (per label). A periodic dumper is started once.
+// collect aggregated connection reuse metrics (per label). A periodic dumper is started once,
+// using the logger supplied on the FIRST call; loggers passed to later calls are ignored.
 //
-// Usage: replace the Transport field of an *http.Client with the result of this function.
-// Use common.NewTracingTransport(client, "createClientOptions", logger) for http.Trace
-// This will log connection stats every minute using the provided logger.
+// Note: *http.Client satisfies policy.Transporter, so it can be passed directly. Typical usage:
+//
+//	common.NewTracingTransport(common.GetGlobalHTTPClient(), "createClientOptions", logger)
+//
+// Connection stats are logged every httpTraceTickerInterval using the captured logger.
 func NewTracingTransport(inner policy.Transporter, label string, logger ILoggerResetable) policy.Transporter {
 	connStatsLoggerOnce.Do(func() {
 		if logger != nil {
@@ -175,14 +178,13 @@ func NewTracingTransport(inner policy.Transporter, label string, logger ILoggerR
 			}
 		}()
 	})
-	return &traceTransport{inner: inner, label: label, logger: logger}
+	return &traceTransport{inner: inner, label: label}
 }
 
 // traceTransport implements policy.Transporter using the wrapped transport's Do method.
 type traceTransport struct {
-	inner  policy.Transporter
-	label  string
-	logger ILoggerResetable
+	inner policy.Transporter
+	label string
 }
 
 func (t *traceTransport) Do(req *http.Request) (*http.Response, error) {
