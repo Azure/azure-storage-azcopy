@@ -197,8 +197,13 @@ func (f localFileSourceInfoProvider) GetSDDL() (string, error) {
 	// This is the Windows equivalent of ConvertSecurityDescriptorToStringSecurityDescriptorW().
 	sdStr, err := sddl.SecurityDescriptorToString(sd)
 	if err != nil {
-		// Panic, as it's unexpected and we would want to know.
-		panic(fmt.Errorf("Cannot parse binary Security Descriptor returned by QuerySecurityObject(%s, 0x%x): %v", f.jptm.Info().Source, securityInfoFlags, err))
+		// Return the error instead of panicking. The DACL may legitimately contain ACE
+		// types our SDDL serializer does not yet support (e.g. conditional/callback ACEs
+		// 0x09-0x14 emitted by Dynamic Access Control rules, or SACL-only ACE types).
+		// Panicking here brings down the entire process; returning the error lets the
+		// caller record a per-file failure (matched on the "SecurityDescriptorToString:"
+		// substring in the wrapped error) and lets the rest of the job continue.
+		return "", fmt.Errorf("Cannot parse binary Security Descriptor returned by QuerySecurityObject(%s, 0x%x): %w", f.jptm.Info().Source, securityInfoFlags, err)
 	}
 
 	fSDDL, err := sddl.ParseSDDL(sdStr)
@@ -207,7 +212,10 @@ func (f localFileSourceInfoProvider) GetSDDL() (string, error) {
 	}
 
 	if strings.TrimSpace(fSDDL.String()) != strings.TrimSpace(sdStr) {
-		panic("SDDL sanity check failed (parsed string output != original string)")
+		// Round-trip sanity check failed. Return the error rather than panicking so a
+		// single problematic file does not crash the whole transfer process.
+		return "", fmt.Errorf("SecurityDescriptorToString: SDDL sanity check failed for %s (parsed=%q, original=%q)",
+			f.jptm.Info().Source, fSDDL.String(), sdStr)
 	}
 
 	return fSDDL.PortableString(), nil
