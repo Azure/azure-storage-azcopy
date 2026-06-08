@@ -10,6 +10,7 @@ require (
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
 	github.com/google/uuid v1.6.0
 	github.com/hillu/go-ntdll v0.0.0-20240418173803-69345773b582
+	github.com/klauspost/compress v1.18.6
 	github.com/mattn/go-ieproxy v0.0.12
 	github.com/minio/minio-go v6.0.14+incompatible
 	github.com/pkg/errors v0.9.1

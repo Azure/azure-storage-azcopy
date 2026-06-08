@@ -230,7 +230,8 @@ func stripCompressionExtension(dest string, contentEncoding string) string {
 	ext := strings.ToLower(filepath.Ext(dest))
 	stripGzip := ct == common.ECompressionType.GZip() && (ext == ".gz" || ext == ".gzip")
 	stripZlib := ct == common.ECompressionType.ZLib() && ext == ".zz" // "standard" extension for zlib-wrapped files, according to pigz doc and Stack Overflow
-	if stripGzip || stripZlib {
+	stripZstd := ct == common.ECompressionType.ZStd() && (ext == ".zst" || ext == ".zstd")
+	if stripGzip || stripZlib || stripZstd {
 		return strings.TrimSuffix(dest, filepath.Ext(dest))
 	}
 	return dest
