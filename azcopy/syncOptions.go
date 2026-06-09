@@ -204,8 +204,13 @@ func (s *cookedSyncOptions) applyDefaultsAndInferOptions(opts SyncOptions) (err 
 			common.GetLifecycleMgr().Info("WARNING: --dedup-copy is only effective when the destination is a remote resource. Ignoring for local destinations.")
 			s.dedupCopy = false
 		} else if s.compareHash == common.ESyncHashType.None() {
+			// Only auto-enable putMd5 for uploads (local source) where we can compute MD5 locally.
+			// For S2S syncs, the source may lack MD5s and forcing --compare-hash=MD5 could cause
+			// errors on missing hashes. In S2S, we rely on existing Content-MD5 headers.
 			s.compareHash = common.ESyncHashType.MD5()
-			s.putMd5 = true
+			if s.fromTo.From() == common.ELocation.Local() {
+				s.putMd5 = true
+			}
 			common.GetLifecycleMgr().Info("--dedup-copy requires hash comparison; auto-enabling --compare-hash=MD5")
 		}
 	}

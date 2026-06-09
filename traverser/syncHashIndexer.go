@@ -22,17 +22,22 @@ package traverser
 
 import (
 	"encoding/hex"
+	"sync"
 	"sync/atomic"
 )
 
 // HashIndexer builds a secondary index of destination objects by their content hash (MD5).
 // This enables the sync command to detect when identical content already exists
 // at a different path on the destination, allowing a server-side copy instead of re-upload.
+// It is safe for concurrent use.
 type HashIndexer struct {
 	// hashToObject maps hex-encoded MD5 -> first StoredObject found with that hash.
 	// Only the first occurrence is stored; subsequent duplicates are ignored since
 	// any one of them is sufficient as a copy source.
 	hashToObject map[string]StoredObject
+
+	// mu protects hashToObject for concurrent access.
+	mu sync.RWMutex
 
 	// missingHashCount tracks the number of destination objects that lacked a content hash.
 	// This is reported to the user as a warning since these objects cannot participate in dedup.
@@ -54,9 +59,11 @@ func (h *HashIndexer) Store(obj StoredObject) {
 		return
 	}
 	key := hex.EncodeToString(obj.Md5)
+	h.mu.Lock()
 	if _, exists := h.hashToObject[key]; !exists {
 		h.hashToObject[key] = obj
 	}
+	h.mu.Unlock()
 }
 
 // Lookup finds a destination object with the given MD5 hash.
@@ -66,7 +73,9 @@ func (h *HashIndexer) Lookup(md5 []byte) (StoredObject, bool) {
 		return StoredObject{}, false
 	}
 	key := hex.EncodeToString(md5)
+	h.mu.RLock()
 	obj, ok := h.hashToObject[key]
+	h.mu.RUnlock()
 	return obj, ok
 }
 
@@ -78,5 +87,8 @@ func (h *HashIndexer) MissingHashCount() int64 {
 
 // IndexedCount returns the number of unique hashes indexed.
 func (h *HashIndexer) IndexedCount() int {
-	return len(h.hashToObject)
+	h.mu.RLock()
+	n := len(h.hashToObject)
+	h.mu.RUnlock()
+	return n
 }

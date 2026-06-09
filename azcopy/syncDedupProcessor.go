@@ -21,7 +21,7 @@
 package azcopy
 
 import (
-	"reflect"
+	"bytes"
 	"sync/atomic"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -76,7 +76,7 @@ func (p *syncDedupProcessor) ProcessTransfer(obj traverser.StoredObject) error {
 			// and that the sizes match (extra safety check beyond MD5)
 			if matchingDest.RelativePath != obj.RelativePath &&
 				matchingDest.Size == obj.Size &&
-				reflect.DeepEqual(matchingDest.Md5, obj.Md5) {
+				bytes.Equal(matchingDest.Md5, obj.Md5) {
 				return p.scheduleDedupCopy(obj, matchingDest)
 			}
 		}

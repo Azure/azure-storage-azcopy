@@ -306,7 +306,8 @@ func TestSyncUploadDedupCopyAutoEnablesCompareHash(t *testing.T) {
 	a := assert.New(t)
 
 	// Verify that dedupCopy is correctly passed through options
-	raw := getDefaultSyncRawInput("/tmp/src", "https://account.blob.core.windows.net/container?sv=2021-06-08&se=2030-01-01&sr=c&sp=rwdlacx&sig=fake")
+	tmpDir := t.TempDir()
+	raw := getDefaultSyncRawInput(tmpDir, "https://account.blob.core.windows.net/container?sv=2021-06-08&se=2030-01-01&sr=c&sp=rwdlacx&sig=fake")
 	raw.dedupCopy = true
 	// compareHash defaults to "None" - auto-enable happens in cooked options
 
@@ -405,7 +406,8 @@ func TestSyncUploadWithDedupCopyMixedMD5(t *testing.T) {
 func TestSyncRawArgsDedupCopyFieldPassthrough(t *testing.T) {
 	a := assert.New(t)
 
-	raw := getDefaultSyncRawInput("/tmp/src", "https://account.blob.core.windows.net/container?sv=2021-06-08&se=2030-01-01&sr=c&sp=rwdlacx&sig=fake")
+	tmpDir := t.TempDir()
+	raw := getDefaultSyncRawInput(tmpDir, "https://account.blob.core.windows.net/container?sv=2021-06-08&se=2030-01-01&sr=c&sp=rwdlacx&sig=fake")
 	raw.dedupCopy = true
 
 	opts, err := raw.toOptions()

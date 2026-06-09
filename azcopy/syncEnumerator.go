@@ -330,20 +330,8 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 			}
 
 			// Dispatch dedup job final part if applicable
-			if dedupProc != nil {
-				_, dedupErr := dedupProc.dedupScheduler.DispatchFinalPart()
-				if dedupErr != nil && dedupErr != NothingScheduledError {
-					return dedupErr
-				}
-				// Log dedup stats
-				if hashIndexer.MissingHashCount() > 0 {
-					common.GetLifecycleMgr().Info(fmt.Sprintf(
-						"NOTE: %d destination file(s) lacked Content-MD5 and could not participate in dedup optimization. Upload with --put-md5 to enable full dedup coverage.",
-						hashIndexer.MissingHashCount()))
-				}
-				common.GetLifecycleMgr().Info(fmt.Sprintf(
-					"Dedup stats: %d file(s) via server-side copy (dedup), %d file(s) via normal transfer.",
-					dedupProc.DedupCount(), dedupProc.NormalCount()))
+			if err := finalizeDedup(dedupProc, hashIndexer); err != nil {
+				return err
 			}
 
 			_, err := transferScheduler.DispatchFinalPart()
@@ -376,20 +364,8 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 			}
 
 			// Dispatch dedup job final part if applicable
-			if dedupProc != nil {
-				_, dedupErr := dedupProc.dedupScheduler.DispatchFinalPart()
-				if dedupErr != nil && dedupErr != NothingScheduledError {
-					return dedupErr
-				}
-				// Log dedup stats
-				if hashIndexer.MissingHashCount() > 0 {
-					common.GetLifecycleMgr().Info(fmt.Sprintf(
-						"NOTE: %d destination file(s) lacked Content-MD5 and could not participate in dedup optimization.",
-						hashIndexer.MissingHashCount()))
-				}
-				common.GetLifecycleMgr().Info(fmt.Sprintf(
-					"Dedup stats: %d file(s) via server-side copy (dedup), %d file(s) via normal transfer.",
-					dedupProc.DedupCount(), dedupProc.NormalCount()))
+			if err := finalizeDedup(dedupProc, hashIndexer); err != nil {
+				return err
 			}
 
 			// let the deletions happen first
@@ -408,4 +384,25 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 
 func isDestinationCaseInsensitive(fromTo common.FromTo) bool {
 	return fromTo.IsDownload() && runtime.GOOS == "windows"
+}
+
+// finalizeDedup dispatches the dedup job's final part and logs dedup statistics.
+// This is called at the end of sync enumeration when dedup is enabled.
+func finalizeDedup(dedupProc *syncDedupProcessor, hashIndexer *traverser.HashIndexer) error {
+	if dedupProc == nil {
+		return nil
+	}
+	_, dedupErr := dedupProc.dedupScheduler.DispatchFinalPart()
+	if dedupErr != nil && dedupErr != NothingScheduledError {
+		return dedupErr
+	}
+	if hashIndexer.MissingHashCount() > 0 {
+		common.GetLifecycleMgr().Info(fmt.Sprintf(
+			"NOTE: %d destination file(s) lacked Content-MD5 and could not participate in dedup optimization. Upload with --put-md5 to enable full dedup coverage.",
+			hashIndexer.MissingHashCount()))
+	}
+	common.GetLifecycleMgr().Info(fmt.Sprintf(
+		"Dedup stats: %d file(s) via server-side copy (dedup), %d file(s) via normal transfer.",
+		dedupProc.DedupCount(), dedupProc.NormalCount()))
+	return nil
 }
