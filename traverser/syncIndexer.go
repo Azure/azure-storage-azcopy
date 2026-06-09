@@ -37,6 +37,10 @@ type ObjectIndexer struct {
 	// Apple File System (APFS) can be configured to be case-sensitive or case-insensitive.
 	// So for such locations, the key in the IndexMap will be lowercase to avoid infinite syncing.
 	IsDestinationCaseInsensitive bool
+
+	// OnStore is an optional callback invoked for each object stored in the index.
+	// It can be used to feed secondary indexes (e.g., a HashIndexer for dedup).
+	OnStore func(StoredObject)
 }
 
 func NewObjectIndexer() *ObjectIndexer {
@@ -58,6 +62,10 @@ func (i *ObjectIndexer) Store(storedObject StoredObject) (err error) {
 		i.IndexMap[storedObject.RelativePath] = storedObject
 	}
 	i.counter += 1
+
+	if i.OnStore != nil {
+		i.OnStore(storedObject)
+	}
 	return
 }
 
