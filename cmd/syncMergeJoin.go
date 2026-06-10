@@ -40,9 +40,9 @@ var activeMergeJoinDirs atomic.Int64
 // mergeJoinChannelBufferSize controls the buffer size of channels used to bridge
 // push-based traversers into pull-based iteration for the merge-join algorithm.
 // A larger buffer reduces goroutine context switches but uses more memory.
-// Each slot holds one StoredObject (~430 bytes), so 1K slots ≈ 430KB per channel.
-// With 500 workers × 2 channels, total buffer memory ≈ 430MB.
-const mergeJoinChannelBufferSize = 1_000
+// Each slot holds one StoredObject (~430 bytes), so 100 slots ≈ 43KB per channel.
+// With 500 workers × 2 channels, total buffer memory ≈ 43MB.
+const mergeJoinChannelBufferSize = 100
 
 // traverserResult wraps a StoredObject emitted by a traverser goroutine.
 // When done is true, the channel has been drained and obj is invalid.
