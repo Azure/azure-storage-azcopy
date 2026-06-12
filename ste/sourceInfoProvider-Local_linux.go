@@ -199,11 +199,12 @@ func (f localFileSourceInfoProvider) GetSDDL() (string, error) {
 	if err != nil {
 		// Return the error instead of panicking. The DACL may legitimately contain ACE
 		// types our SDDL serializer does not yet support (e.g. conditional/callback ACEs
-		// 0x09-0x14 emitted by Dynamic Access Control rules, or SACL-only ACE types).
-		// Panicking here brings down the entire process; returning the error lets the
-		// caller record a per-file failure (matched on the "SecurityDescriptorToString:"
-		// substring in the wrapped error) and lets the rest of the job continue.
-		return "", fmt.Errorf("Cannot parse binary Security Descriptor returned by QuerySecurityObject(%s, 0x%x): %w", f.jptm.Info().Source, securityInfoFlags, err)
+		// 0x09-0x14 emitted by Dynamic Access Control rules). Panicking here brings down
+		// the entire process; returning the error lets the caller record a per-file
+		// failure (matched on the "SecurityDescriptorToString:" substring) and lets the
+		// rest of the job continue. The prefix is included explicitly here so the match
+		// does not depend on the wrapped error always carrying it.
+		return "", fmt.Errorf("SecurityDescriptorToString: failed to serialize binary Security Descriptor to SDDL for QuerySecurityObject(%s, 0x%x): %w", f.jptm.Info().Source, securityInfoFlags, err)
 	}
 
 	fSDDL, err := sddl.ParseSDDL(sdStr)
