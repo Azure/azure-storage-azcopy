@@ -75,6 +75,17 @@ type IJobPartMgr interface {
 }
 
 // NewAzcopyHTTPClient creates a new HTTP client.
+//
+// Production data-plane code does NOT use this constructor; it uses the process-wide
+// client common.GetGlobalHTTPClient(), initialized once at startup from
+// ConcurrencySettings.MaxIdleConnections. See common/azHttpClient.go.
+//
+// This constructor is retained for tests (ste/sender-*_test.go,
+// ste/testJobPartTransferManager_test.go) and for the standalone testSuite/cmd
+// binary, all of which run outside the azcopy command and therefore cannot rely on
+// the global client being initialized. Tests want their own isolated transport so
+// they don't depend on package-level startup wiring from another package.
+//
 // We must minimize use of this, and instead maximize reuse of the returned client object.
 // Why? Because that makes our connection pooling more efficient, and prevents us exhausting the
 // number of available network sockets on resource-constrained Linux systems. (E.g. when

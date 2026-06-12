@@ -32,22 +32,15 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 )
 
-// globalHTTPClient is the process-wide HTTP client used by AzCopy. It is configured by
-// InitGlobalHTTPClient (which should be called once at startup, after concurrency
-// settings have been computed) and retrieved by GetGlobalHTTPClient.
+// globalHTTPClient is the process-wide HTTP client used by AzCopy. It is configured
+// exactly once by InitGlobalHTTPClient at startup (after ConcurrencySettings have
+// been computed) and retrieved thereafter by GetGlobalHTTPClient.
 var (
 	globalHTTPClient     *http.Client
 	globalHTTPClientOnce sync.Once
 )
 
-const (
-	httpTraceTickerInterval = time.Minute * 1
-
-	// fallbackMaxIdleConnsPerHost is used only when GetGlobalHTTPClient is called
-	// before InitGlobalHTTPClient (e.g. from a unit test). It mirrors the Go default
-	// rather than picking a workload-specific value.
-	fallbackMaxIdleConnsPerHost = http.DefaultMaxIdleConnsPerHost
-)
+const httpTraceTickerInterval = time.Minute * 1
 
 // InitGlobalHTTPClient initializes the process-global HTTP client exactly once with
 // the supplied limits. Callers should pass the value derived from the STE
@@ -56,6 +49,8 @@ const (
 // Subsequent calls are no-ops and the originally supplied values continue to apply.
 // The configured client's transport limits are logged later by JobMgr when a job
 // first picks it up, where a job-scoped logger is available.
+//
+// Must be called before GetGlobalHTTPClient. azcopy.NewClient is the canonical caller.
 func InitGlobalHTTPClient(maxIdleConnsPerHost int) *http.Client {
 	globalHTTPClientOnce.Do(func() {
 		globalHTTPClient = buildGlobalHTTPClient(maxIdleConnsPerHost)
@@ -64,13 +59,14 @@ func InitGlobalHTTPClient(maxIdleConnsPerHost int) *http.Client {
 }
 
 // GetGlobalHTTPClient returns the process-global HTTP client previously configured
-// via InitGlobalHTTPClient. If InitGlobalHTTPClient has not yet been called, the
-// client is lazily created with a conservative fallback so that test/import paths
-// which bypass azcopy.NewClient still get a working client.
+// via InitGlobalHTTPClient. Panics if Init has not run yet; this is intentional so
+// that an init-order bug fails loudly instead of silently producing a misconfigured
+// client (e.g. with the Go default of 2 idle conns per host).
 func GetGlobalHTTPClient() *http.Client {
-	globalHTTPClientOnce.Do(func() {
-		globalHTTPClient = buildGlobalHTTPClient(fallbackMaxIdleConnsPerHost)
-	})
+	if globalHTTPClient == nil {
+		panic("common.GetGlobalHTTPClient called before InitGlobalHTTPClient; " +
+			"InitGlobalHTTPClient must run during process startup (see azcopy.NewClient)")
+	}
 	return globalHTTPClient
 }
 
