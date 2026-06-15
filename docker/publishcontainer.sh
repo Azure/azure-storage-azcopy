@@ -22,7 +22,7 @@ echo "Remote target: $REMOTE_TAG"
 # --defender-break causes a non-zero exit code if critical issues are found.
 echo "Running pre-push security scan..."
 defender scan image "$LOCAL_TAG" \
-  --defender-break \ 
+  --defender-break \
   --defender-output "./defender-scan-$IMAGE.sarif"
 
 echo "Pre-push scan passed."
