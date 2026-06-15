@@ -31,7 +31,7 @@ echo "Pre-push scan passed."
 # 2) Login to ACR
 # -----------------------------
 echo "Logging into ACR..."
-sudo docker login "$REGISTRY" --username "$1" --password "$2"
+printf '%s\n' "$2" | sudo docker login "$REGISTRY" --username "$1" --password-stdin
 
 # -----------------------------
 # 3) Tag and push
