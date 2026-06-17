@@ -18,56 +18,52 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-
 package ste
 
-import  (
+import (
 	"testing"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+
 	"github.com/stretchr/testify/assert"
 )
-
 
 func TestSetUIDNoOverflow(t *testing.T) {
 	a := assert.New(t)
 
 	nfsperms := HandleNFSPermissions{
-		common.UnixStatContainer{
-			mode: uint32(04775),
-		}
-
-		fileMode := nfsperms.GetFileMode()
-		a.NotNil(fileMode)
-		a.Equal("4775")
+		StatxTAdapter{
+			Mode: uint16(04775),
+		},
 	}
-}
 
+	fileMode := nfsperms.GetFileMode()
+	a.NotNil(fileMode)
+	a.Equal("4775", *fileMode)
+}
 
 func TestSetGIDNoOverflow(t *testing.T) {
 	a := assert.New(t)
 
 	nfsperms := HandleNFSPermissions{
-		common.UnixStatContainer{
-			mode: uint32(02775),
-		}
-
-		fileMode := nfsperms.GetFileMode()
-		a.NotNil(fileMode)
-		a.Equal("2775")
+		StatxTAdapter{
+			Mode: uint16(02775),
+		},
 	}
+
+	fileMode := nfsperms.GetFileMode()
+	a.NotNil(fileMode)
+	a.Equal("2775", *fileMode)
 }
 
 func TestStickyBitsNoOverflow(t *testing.T) {
 	a := assert.New(t)
 
 	nfsperms := HandleNFSPermissions{
-		common.UnixStatContainer{
-			mode: uint32(01775),
-		}
-
-		fileMode := nfsperms.GetFileMode()
-		a.NotNil(fileMode)
-		a.Equal("1775")
+		StatxTAdapter{
+			Mode: uint16(01775),
+		},
 	}
-}
 
+	fileMode := nfsperms.GetFileMode()
+	a.NotNil(fileMode)
+	a.Equal("1775", *fileMode)
+}
