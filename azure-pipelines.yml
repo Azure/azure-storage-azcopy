@@ -32,6 +32,16 @@ jobs:
           GO111MODULE: 'on'
         inputs:
           version: $(AZCOPY_GOLANG_VERSION)
+          # We use the Microsoft build of Go on Linux, for FIPS compliance. We use the default build of Go on other OSs.
+          goDownloadUrl: 'https://aka.ms/golang/release/latest'
+        condition: eq(variables.type, 'linux')
+
+      - task: GoTool@0
+        env:
+          GO111MODULE: 'on'
+        inputs:
+          version: $(AZCOPY_GOLANG_VERSION)
+        condition: ne(variables.type, 'linux')
 
       - script: |
           echo 'Running GO Vet'
@@ -43,7 +53,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libsecret-1-dev libglib2.0-dev
         displayName: 'Install dependencies'
-        condition: eq(variables['type'], 'linux')
+        condition: eq(variables.type, 'linux')
         
       - script: |
           GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
@@ -99,10 +109,10 @@ jobs:
         condition: eq(variables.type, 'mac-os')
 
       # uncomment below when manually releasing for m1
-#      - script: |
-#          curl -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_arm64" -L "BUILD_URL"
-#        displayName: 'Generate MacOS Build with ARM64'
-#        condition: eq(variables.type, 'mac-os')
+      # - script: |
+      #     curl -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_arm64" -L "BUILD_URL"
+      #   displayName: 'Generate MacOS Build with ARM64'
+      #   condition: eq(variables.type, 'mac-os')
 
       # cross compile to make sure nothing broke
       - script: |
@@ -146,6 +156,8 @@ jobs:
         name: 'Set_up_Golang'
         inputs:
           version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
+          # We use the Microsoft build of Go on Linux, for FIPS compliance. We use the default build of Go on other OSs.
+          goDownloadUrl: 'https://aka.ms/golang/release/latest'
       - task: DownloadSecureFile@1
         name: ciGCSServiceAccountKey
         displayName: 'Download GCS Service Account Key'
@@ -273,6 +285,8 @@ jobs:
       - task: GoTool@0
         inputs:
           version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
+          # We use the Microsoft build of Go on Linux, for FIPS compliance. We use the default build of Go on other OSs.
+          goDownloadUrl: 'https://aka.ms/golang/release/latest'
       
       # Install azcli
       - script: |

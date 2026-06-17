@@ -83,6 +83,9 @@ extends:
                   GO111MODULE: 'on'
                 inputs:
                   version: $(AZCOPY_GOLANG_VERSION)
+                  # We use the Microsoft build of Go on Linux, for FIPS compliance. We use the default build of Go on other OSs.
+                  # This should not affect the output of azcopy --version.
+                  goDownloadUrl: 'https://aka.ms/golang/release/latest'
 
               - script: |
                   go build -tags "netgo" -o azcopy_bin
@@ -107,6 +110,7 @@ extends:
                   fi
                 displayName: 'Verify and extract the generated build version'
                 name: SetAzCopyVersion
+        # AzCopyVersion ends here
 
       - stage: BuildArtifacts
         dependsOn: AzCopyVersion
@@ -243,8 +247,7 @@ extends:
 
             steps:
               - template: azurePipelineTemplates/build_macos_m1.yml@self
-
-        # BuildArtifacts end here
+        # BuildArtifacts ends here
 
       - stage: SignArtifacts
         dependsOn:
@@ -551,7 +554,7 @@ extends:
                       exit 1
                   fi
                 displayName:  'Copy signed mac binaries'
-#       SignArtifacts end here
+        # SignArtifacts ends here
 
       - stage: VerifyArtifacts
         dependsOn: SignArtifacts
@@ -751,8 +754,8 @@ extends:
                   cd $(extracted)\azcopy*arm64*
                   azcopy.exe --version
                 displayName: 'Verify exe in zip'
+        # VerifyArtifacts ends here
 
-      # VerifyArtifacts end here
       - stage: UploadToStorage
         dependsOn:
           - AzCopyVersion
@@ -783,11 +786,15 @@ extends:
                   sudo apt-get update --fix-missing
                   sudo apt-get install -y zip unzip
                 displayName: 'Install Dependencies'
+
               - task: GoTool@0
                 env:
                   GO111MODULE: 'on'
                 inputs:
                   version: $(AZCOPY_GOLANG_VERSION)
+                  # We use the Microsoft build of Go on Linux, for FIPS compliance. We use the default build of Go on other OSs.
+                  # This job builds AzCopy to extract a text file and upload artifacts to Azure, so the OS should be irrelevant.
+                  goDownloadUrl: 'https://aka.ms/golang/release/latest'
 
               - script: |
                   go build -tags "netgo" -o azcopy_bin
@@ -873,7 +880,8 @@ extends:
                       m1_container_url="https://azcopyvnextrelease.blob.core.windows.net/%24web/azcopy-m1-drops/azcopy-$(azcopy_version)-$today"
                     AZCOPY_AUTO_LOGIN_TYPE=AzCLI ./azcopy_bin cp "$(input)/azcopy-binaries-mac/azcopy_darwin_m1_arm64" "$m1_container_url" --recursive --put-md5=true
                     fi
-      # UploadToStorage end here
+        # UploadToStorage ends here
+
       - ${{ if eq(parameters.publish_docker_image, true) }}:
           - stage: BuildAndPublishDockerImage
             dependsOn:
@@ -984,7 +992,7 @@ extends:
                     inputs:
                       image: azcopycontainers.azurecr.io/azure-azcopy-mariner-arm64.$(azcopy_version):latest
                       remoteImage: azcopycontainers.azurecr.io/azure-azcopy-mariner-arm64.$(azcopy_version):latest
-
+            # BuildAndPublishDockerImage ends here
 
       - ${{ if eq(parameters.post_release, true) }}:
           - stage: ReleaseToGithub
@@ -1056,6 +1064,7 @@ extends:
                         $(Build.ArtifactStagingDirectory)/azcopy-mac-signed/*.zip
                         $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/mariner/*
                       assetUploadMode: replace
+            # ReleaseToGithub ends here
 
       - ${{ if eq(parameters.publish_artifacts, true) }}:
           - stage: PublishArtifacts
@@ -1239,6 +1248,7 @@ extends:
                                 pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" repo publish $repoName
                               fi
                             done < <(tail -n +3 ../packages.csv)
+            # PublishArtifacts ends here
 
       - ${{ if ne(parameters.remove_packages, '') }}:
           - stage: RemovePackagesFromLinuxRepository
@@ -1334,3 +1344,4 @@ extends:
                           done
                       done
                     displayName: 'Remove rpm packages from the repository'
+            # RemovePackagesFromLinuxRepository ends here

@@ -14,6 +14,7 @@ jobs:
           imageName: 'ubuntu-latest'
           build_name: 'azcopy_linux_amd64'
           display_name: "Linux"
+          type: 'linux'
         Windows:
           imageName: 'windows-latest'
           build_name: 'azcopy_windows_amd64.exe'
@@ -23,6 +24,7 @@ jobs:
           imageName: 'macos-latest'
           build_name: 'azcopy_darwin_amd64'
           display_name: "MacOS"
+          type: 'mac-os'
     pool:
       vmImage: $(imageName)
     steps:
@@ -32,24 +34,37 @@ jobs:
           script: 'Install-Module -Name Az.Accounts -Scope CurrentUser -Repository PSGallery -AllowClobber -Force'
           pwsh: 'true'
         displayName: 'Install Powershell Az Module'
+
       - task: GoTool@0
         inputs:
           version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
+          # We use the Microsoft build of Go on Linux, for FIPS compliance. We use the default build of Go on other OSs.
+          goDownloadUrl: 'https://aka.ms/golang/release/latest'
+        condition: eq(variables.type, 'linux')
+
+      - task: GoTool@0
+        inputs:
+          version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
+        condition: ne(variables.type, 'linux')
+
       - script: |
           go install github.com/jstemmer/go-junit-report@v0.9.1
           go install github.com/axw/gocov/gocov@v1.1.0
           go install github.com/AlekSi/gocov-xml@v1.0.0
           go install github.com/matm/gocov-html@v0.0.0-20200509184451-71874e2e203b
         displayName: 'Installing dependencies'
+
       - bash: |
           echo "##vso[task.setvariable variable=CGO_ENABLED]0"
         displayName: 'Set CGO_ENABLED for Windows'
         condition: eq(variables.type, 'windows')
+
       - bash: |
           npm install -g azurite
           mkdir azurite
           azurite --silent --location azurite --debug azurite\debug.log &
         displayName: 'Install and Run Azurite'
+
       # Running E2E Tests on AMD64
       - task: AzureCLI@2
         inputs:

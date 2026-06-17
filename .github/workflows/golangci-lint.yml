@@ -21,7 +21,14 @@ jobs:
     name: lint
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/setup-go@v5
+      - if: matrix.os == 'ubuntu-latest'
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ matrix.go }}
+          # We use the Microsoft build of Go on Linux, for FIPS compliance. We use the default build of Go on other OSs.
+          go-download-base-url: 'https://aka.ms/golang/release/latest'
+      - if: matrix.os != 'ubuntu-latest'
+        uses: actions/setup-go@v6
         with:
           go-version: ${{ matrix.go }}
       - uses: actions/checkout@v4

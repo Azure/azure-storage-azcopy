@@ -31,10 +31,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.25.8'
+          # We use the Microsoft build of Go on Linux, for FIPS compliance. We use the default build of Go on other OSs.
+          go-download-base-url: 'https://aka.ms/golang/release/latest'
+
       - name: Build AzCopy
         run: |
           go build -o azcopy
           ls -l
+
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:

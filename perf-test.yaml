@@ -31,6 +31,8 @@ stages:
         - task: GoTool@0
           inputs:
             version: '1.25.8'
+            # We use the Microsoft build of Go on Linux, for FIPS compliance. We use the default build of Go on other OSs.
+            goDownloadUrl: 'https://aka.ms/golang/release/latest'
 
         - script: |
             go build -o $GOROOT/bin/azcopy

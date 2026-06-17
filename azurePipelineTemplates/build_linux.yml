@@ -6,12 +6,14 @@ steps:
   - checkout: self
     displayName: 'Checkout repository'
 
-  # Custom script to install Go-lang
-  - task: ShellScript@2
+  - task: GoTool@0
+    env:
+      GO111MODULE: 'on'
     inputs:
-      scriptPath: "$(System.DefaultWorkingDirectory)/go_installer.sh"
-      args: "$(System.DefaultWorkingDirectory)/ $(AZCOPY_GOLANG_VERSION)"
-    displayName: "Installing Go tools"
+      version: $(AZCOPY_GOLANG_VERSION)
+      # We use the Microsoft build of Go on Linux, for FIPS compliance. We use the default build of Go on other OSs.
+      goDownloadUrl: 'https://aka.ms/golang/release/latest'
+
   # install dependencies required for compiling azcopy
   - script: |
       sudo apt-get clean
@@ -20,16 +22,20 @@ steps:
       sudo gem install dotenv -v 2.8.1
       sudo gem install fpm -V
     displayName: "Installing Dependencies"
+
   - script: |
       mkdir -p $(binaries)
       mkdir -p $(unsigned)
     displayName: 'Create output paths'
+
   - script: |
       GOARCH=${{ parameters.host_architecture }} GOOS=linux go build -tags "netgo" -o "$(binaries)/azcopy_linux_${{ parameters.host_architecture }}"
     displayName: 'Build'
+
   - script: |
       GOARCH=${{ parameters.host_architecture }} GOOS=linux go build -tags "netgo,se_integration" -o "$(binaries)/azcopy_linux_se_${{ parameters.host_architecture }}"
     displayName: 'Build SE Integration'
+
   - script: |
       linux_dir="$(System.DefaultWorkingDirectory)/azcopy_linux_${{ parameters.host_architecture }}_$(azcopy_version)"
       echo "##vso[task.setvariable variable=linux_dir]$linux_dir"
@@ -42,6 +48,7 @@ steps:
       mkdir -p $(archives)
       mkdir -p pkgDir/usr/bin/
     displayName: 'Create archive directories'
+
   - script: |
       cp $(binaries)/azcopy_linux_${{ parameters.host_architecture }} $(linux_dir)/azcopy
       cp NOTICE.txt $(linux_dir)/
@@ -52,6 +59,7 @@ steps:
       cp $(linux_dir)/azcopy pkgDir/usr/bin/
       cp NOTICE.txt pkgDir/usr/bin/
     displayName: 'Copy required files for packaging'
+
   # using fpm tool for packaging of our binary & performing post-install operations
   # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
   - script: |
@@ -62,6 +70,7 @@ steps:
       --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts"
       mv ./azcopy*.deb $(unsigned)/azcopy-$(azcopy_version).${{ parameters.host_suffix }}.deb
     displayName: 'Make deb Package'
+
   - script: |
       fpm -s dir -t rpm -n azcopy --rpm-digest sha256 -C pkgDir/ \
       -v $(azcopy_version) \
@@ -70,6 +79,7 @@ steps:
       --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts"
       mv ./azcopy*.rpm $(unsigned)/azcopy-$(azcopy_version).${{ parameters.host_suffix }}.rpm
     displayName: 'Make rpm Package'
+
   - task: ArchiveFiles@2
     displayName: 'Archive Linux Build'
     inputs:
