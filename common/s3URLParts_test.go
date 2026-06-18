@@ -21,10 +21,11 @@
 package common
 
 import (
-	"github.com/stretchr/testify/assert"
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestS3URLParse(t *testing.T) {
@@ -201,4 +202,165 @@ func TestS3URLParseNegative(t *testing.T) {
 	_, err = NewS3URLParts(*u)
 	a.NotNil(err)
 	a.True(strings.Contains(err.Error(), invalidS3URLErrorMessage))
+}
+
+func TestOCIURLParse(t *testing.T) {
+	a := assert.New(t)
+	t.Setenv("S3_COMPATIBLE_ENDPOINT", "mytenant.compat.objectstorage.us-sanjose-1.oraclecloud.com")
+
+	// Test OCI bucket URL
+	u, _ := url.Parse("https://mytenant.compat.objectstorage.us-sanjose-1.oraclecloud.com/mybucket/")
+	p, err := NewS3URLParts(*u)
+	a.Nil(err)
+	a.Equal("mytenant.compat.objectstorage.us-sanjose-1.oraclecloud.com", p.Host)
+	a.Equal("mytenant.compat.objectstorage.us-sanjose-1.oraclecloud.com", p.Endpoint)
+	a.Equal("us-sanjose-1", p.Region)
+	a.Equal("mybucket", p.BucketName)
+	a.Equal("", p.ObjectKey)
+	a.True(p.IsOracleCloudStorage())
+
+	// Test OCI object URL
+	u, _ = url.Parse("https://mytenant.compat.objectstorage.us-sanjose-1.oraclecloud.com/mybucket/file.txt")
+	p, err = NewS3URLParts(*u)
+	a.Nil(err)
+	a.Equal("mybucket", p.BucketName)
+	a.Equal("file.txt", p.ObjectKey)
+	a.Equal("us-sanjose-1", p.Region)
+
+	// Test OCI with nested object path
+	t.Setenv("S3_COMPATIBLE_ENDPOINT", "mynamespace.compat.objectstorage.us-phoenix-1.oraclecloud.com")
+	u, _ = url.Parse("https://mynamespace.compat.objectstorage.us-phoenix-1.oraclecloud.com/mybucket/folder/subfolder/file.pdf")
+	p, err = NewS3URLParts(*u)
+	a.Nil(err)
+	a.Equal("mybucket", p.BucketName)
+	a.Equal("folder/subfolder/file.pdf", p.ObjectKey)
+	a.Equal("us-phoenix-1", p.Region)
+	a.True(p.IsOracleCloudStorage())
+
+	// Test OCI with different region
+	t.Setenv("S3_COMPATIBLE_ENDPOINT", "myns.compat.objectstorage.eu-zurich-1.oraclecloud.com")
+	u, _ = url.Parse("https://myns.compat.objectstorage.eu-zurich-1.oraclecloud.com/testbucket/")
+	p, err = NewS3URLParts(*u)
+	a.Nil(err)
+	a.Equal("eu-zurich-1", p.Region)
+	a.Equal("testbucket", p.BucketName)
+
+	// Test OCI bucket only without trailing slash
+	t.Setenv("S3_COMPATIBLE_ENDPOINT", "namespace123.compat.objectstorage.ca-montreal-1.oraclecloud.com")
+	u, _ = url.Parse("https://namespace123.compat.objectstorage.ca-montreal-1.oraclecloud.com/bucket456")
+	p, err = NewS3URLParts(*u)
+	a.Nil(err)
+	a.Equal("bucket456", p.BucketName)
+	a.Equal("", p.ObjectKey)
+
+	// Test round-trip URL reconstruction
+	t.Setenv("S3_COMPATIBLE_ENDPOINT", "mytenant.compat.objectstorage.us-sanjose-1.oraclecloud.com")
+	u, _ = url.Parse("https://mytenant.compat.objectstorage.us-sanjose-1.oraclecloud.com/mybucket/folder/file.txt")
+	p, err = NewS3URLParts(*u)
+	a.Nil(err)
+	a.Equal("https://mytenant.compat.objectstorage.us-sanjose-1.oraclecloud.com/mybucket/folder/file.txt", p.String())
+
+	// Validate namespace must exist in host for OCI compat URL
+	t.Setenv("S3_COMPATIBLE_ENDPOINT", "compat.objectstorage.us-sanjose-1.oraclecloud.com")
+	u, _ = url.Parse("https://compat.objectstorage.us-sanjose-1.oraclecloud.com/mybucket/file.txt")
+	_, err = NewS3URLParts(*u)
+	a.NotNil(err)
+	a.True(strings.Contains(err.Error(), invalidS3URLErrorMessage))
+
+	// OCI public path-style customer endpoint
+	t.Setenv("S3_COMPATIBLE_ENDPOINT", "mytenant.compat.objectstorage.us-ashburn-1.oci.customer-oci.com")
+	u, _ = url.Parse("https://mytenant.compat.objectstorage.us-ashburn-1.oci.customer-oci.com/mybucket/myobject.txt")
+	p, err = NewS3URLParts(*u)
+	a.Nil(err)
+	a.Equal("mytenant.compat.objectstorage.us-ashburn-1.oci.customer-oci.com", p.Endpoint)
+	a.Equal("mybucket", p.BucketName)
+	a.Equal("myobject.txt", p.ObjectKey)
+	a.Equal("us-ashburn-1", p.Region)
+	a.True(p.IsOracleCloudStorage())
+
+	// OCI public virtual-hosted endpoint
+	t.Setenv("S3_COMPATIBLE_ENDPOINT", "vhcompat.objectstorage.us-ashburn-1.oci.customer-oci.com")
+	u, _ = url.Parse("https://mybucket.vhcompat.objectstorage.us-ashburn-1.oci.customer-oci.com/folder/file.txt")
+	p, err = NewS3URLParts(*u)
+	a.Nil(err)
+	a.Equal("mybucket.vhcompat.objectstorage.us-ashburn-1.oci.customer-oci.com", p.Host)
+	a.Equal("vhcompat.objectstorage.us-ashburn-1.oci.customer-oci.com", p.Endpoint)
+	a.Equal("mybucket", p.BucketName)
+	a.Equal("folder/file.txt", p.ObjectKey)
+	a.Equal("us-ashburn-1", p.Region)
+	a.True(p.IsOracleCloudStorage())
+
+	// OCI private networking endpoint
+	t.Setenv("S3_COMPATIBLE_ENDPOINT", "myprefix-mytenant.private.compat.objectstorage.us-phoenix-1.oci.customer-oci.com")
+	u, _ = url.Parse("https://myprefix-mytenant.private.compat.objectstorage.us-phoenix-1.oci.customer-oci.com/mybucket/private/file.txt")
+	p, err = NewS3URLParts(*u)
+	a.Nil(err)
+	a.Equal("myprefix-mytenant.private.compat.objectstorage.us-phoenix-1.oci.customer-oci.com", p.Endpoint)
+	a.Equal("mybucket", p.BucketName)
+	a.Equal("private/file.txt", p.ObjectKey)
+	a.Equal("us-phoenix-1", p.Region)
+	a.True(p.IsOracleCloudStorage())
+}
+
+func TestGCSURLParse(t *testing.T) {
+	a := assert.New(t)
+
+	// Global path-style: endpoint comes from path-style host
+	t.Setenv("S3_COMPATIBLE_ENDPOINT", "storage.googleapis.com")
+	u, _ := url.Parse("https://storage.googleapis.com/mybucket/seed_2/fileooo1.txt")
+	p, err := NewS3URLParts(*u)
+	a.Nil(err)
+	a.Equal("storage.googleapis.com", p.Host)
+	a.Equal("storage.googleapis.com", p.Endpoint)
+	a.Equal("mybucket", p.BucketName)
+	a.Equal("seed_2/fileooo1.txt", p.ObjectKey)
+	a.Equal("", p.Region)
+	a.True(p.IsGoogleCloudStorage())
+
+	// Regional path-style REP endpoint
+	t.Setenv("S3_COMPATIBLE_ENDPOINT", "storage.us-west2.rep.googleapis.com")
+	u, _ = url.Parse("https://storage.us-west2.rep.googleapis.com/mybucket/file001.txt")
+	p, err = NewS3URLParts(*u)
+	a.Nil(err)
+	a.Equal("storage.us-west2.rep.googleapis.com", p.Endpoint)
+	a.Equal("mybucket", p.BucketName)
+	a.Equal("file001.txt", p.ObjectKey)
+	a.Equal("us-west2", p.Region)
+	a.True(p.IsGoogleCloudStorage())
+
+	// PSC path-style endpoint
+	t.Setenv("S3_COMPATIBLE_ENDPOINT", "storage-psc123.p.googleapis.com")
+	u, _ = url.Parse("https://storage-psc123.p.googleapis.com/mybucket/folder/file.txt")
+	p, err = NewS3URLParts(*u)
+	a.Nil(err)
+	a.Equal("storage-psc123.p.googleapis.com", p.Endpoint)
+	a.Equal("mybucket", p.BucketName)
+	a.Equal("folder/file.txt", p.ObjectKey)
+	a.Equal("", p.Region)
+	a.True(p.IsGoogleCloudStorage())
+
+	// Virtual-hosted style: endpoint extracted by worker would be storage.googleapis.com
+	t.Setenv("S3_COMPATIBLE_ENDPOINT", "storage.googleapis.com")
+	u, _ = url.Parse("https://mybucket.storage.googleapis.com/path/to/file.bin")
+	p, err = NewS3URLParts(*u)
+	a.Nil(err)
+	a.Equal("mybucket.storage.googleapis.com", p.Host)
+	a.Equal("storage.googleapis.com", p.Endpoint)
+	a.Equal("mybucket", p.BucketName)
+	a.Equal("path/to/file.bin", p.ObjectKey)
+	a.Equal("", p.Region)
+	a.True(p.IsGoogleCloudStorage())
+	a.Equal("https://mybucket.storage.googleapis.com/path/to/file.bin", p.String())
+
+	// Virtual-hosted style with dotted bucket name
+	u, _ = url.Parse("https://my.bucket.storage.googleapis.com/object.txt")
+	p, err = NewS3URLParts(*u)
+	a.Nil(err)
+	a.Equal("my.bucket.storage.googleapis.com", p.Host)
+	a.Equal("storage.googleapis.com", p.Endpoint)
+	a.Equal("my.bucket", p.BucketName)
+	a.Equal("object.txt", p.ObjectKey)
+	a.Equal("", p.Region)
+	a.True(p.IsGoogleCloudStorage())
+	a.Equal("https://my.bucket.storage.googleapis.com/object.txt", p.String())
 }
