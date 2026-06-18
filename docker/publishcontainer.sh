@@ -8,9 +8,9 @@ set -euo pipefail
 
 REGISTRY="azcopycontainers.azurecr.io"
 VER=$(../azcopy --version | cut -d " " -f 3)
-IMAGE="azure-azcopy-$3.$VER"
-LOCAL_TAG="$IMAGE:latest"
-REMOTE_TAG="$REGISTRY/$IMAGE"
+IMAGE="azure-azcopy-$3"
+LOCAL_TAG="$IMAGE:$VER"
+REMOTE_TAG="$REGISTRY/$IMAGE:$VER"
 
 echo "Building/publishing image: $LOCAL_TAG"
 echo "Remote target: $REMOTE_TAG"

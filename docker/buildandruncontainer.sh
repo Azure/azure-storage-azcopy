@@ -6,7 +6,7 @@
 azcopy_version=$(../azcopy --version | awk '{print $3}')
 
 # Construct the Docker image tag using the fetched version
-docker_image_tag="azure-azcopy-ubuntu-x86_64.$azcopy_version"
+docker_image_tag="azure-azcopy-ubuntu-x86_64:$azcopy_version"
 
 # If build was successful then launch a container instance
 status=`docker images | grep $docker_image_tag`

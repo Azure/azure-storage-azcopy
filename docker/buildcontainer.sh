@@ -6,7 +6,7 @@ echo "Building azcopy"
 ls -l azcopy
 
 ver=`./azcopy --version | cut -d " " -f 3`
-tag="azure-azcopy-$2.$ver"
+tag="azure-azcopy-$2:$ver"
 
 # Cleanup older container image from docker
 sudo docker image rm $tag -f
