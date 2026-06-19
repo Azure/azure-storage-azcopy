@@ -82,6 +82,12 @@ func getS3BucketLookup(endpoint string) minio.BucketLookupType {
 		return minio.BucketLookupPath
 	}
 
+	if urlParts.IsS3CompatibleEndpoint() {
+		// For on-prem/custom S3-compatible endpoints, default to path-style.
+		// This avoids DNS/TLS issues with virtual-hosted bucket naming.
+		return minio.BucketLookupPath
+	}
+
 	return minio.BucketLookupDNS
 }
 
