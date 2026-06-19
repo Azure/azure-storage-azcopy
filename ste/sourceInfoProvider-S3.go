@@ -29,6 +29,7 @@ import (
 	"os"
 	"time"
 
+	gcpUtils "cloud.google.com/go/storage"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	minio "github.com/minio/minio-go/v7"
@@ -44,6 +45,11 @@ type s3SourceInfoProvider struct {
 	s3Client  *minio.Client
 	s3URLPart common.S3URLParts
 	credType  common.CredentialType
+
+	// For Google Cloud Storage S3-compatible endpoints
+	isGoogleEndpoint bool
+	gcpClient        *gcpUtils.Client
+	gcpJSONKey       []byte
 }
 
 // By default presign expires after 7 days, which is considered enough for large amounts of files transfer.
@@ -51,6 +57,7 @@ type s3SourceInfoProvider struct {
 const defaultPresignExpires = time.Hour * 7 * 24
 
 var s3ClientFactory = common.NewS3ClientFactory()
+var gcpClientFactoryForS3 = common.NewGCPClientFactory()
 
 func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, error) {
 	var err error
@@ -66,6 +73,47 @@ func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, err
 		return nil, err
 	}
 
+	// Check if this is a Google Cloud Storage endpoint accessed via S3-compatible API
+	p.isGoogleEndpoint = p.s3URLPart.IsGoogleCloudStorage()
+
+	ctx := jptm.Context()
+	ctx = withPipelineNetworkStats(ctx, nil)
+
+	// For Google endpoints, try to use GCP credentials; otherwise fall back to S3
+	if p.isGoogleEndpoint {
+		googleAppCredentials := common.GetEnvironmentVariable(common.EEnvironmentVariable.GoogleAppCredentials())
+		if googleAppCredentials != "" {
+			// Use GCP signing for this Google endpoint
+			p.credType = common.ECredentialType.GoogleAppCredentials()
+
+			// Create GCP client for metadata operations
+			p.gcpClient, err = gcpClientFactoryForS3.GetGCPClient(
+				ctx,
+				common.CredentialInfo{
+					CredentialType:    common.ECredentialType.GoogleAppCredentials(),
+					GCPCredentialInfo: common.GCPCredentialInfo{},
+				},
+				common.CredentialOpOptions{
+					LogInfo:  func(str string) { p.jptm.Log(common.LogInfo, str) },
+					LogError: func(str string) { p.jptm.Log(common.LogError, str) },
+					Panic:    func(err error) { panic(err) },
+				})
+			if err != nil {
+				return nil, err
+			}
+
+			// Read and store the JSON key for signing
+			p.gcpJSONKey, err = os.ReadFile(googleAppCredentials)
+			if err != nil {
+				return nil, fmt.Errorf("Cannot read JSON key file. Please verify you have correctly set GOOGLE_APPLICATION_CREDENTIALS environment variable")
+			}
+
+			return &p, nil
+		}
+	}
+
+	// Fall back to S3-style auth for Google endpoints without GOOGLE_APPLICATION_CREDENTIALS
+	// or for non-Google S3-compatible endpoints
 	if p.transferInfo.Provider != nil { //add check for if we want to use provider case
 		p.credType = common.ECredentialType.S3AccessKey()
 	} else if os.Getenv("AWS_ACCESS_KEY_ID") == "" && os.Getenv("AWS_SECRET_ACCESS_KEY") == "" {
@@ -73,8 +121,7 @@ func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, err
 	} else {
 		p.credType = common.ECredentialType.S3AccessKey()
 	}
-	ctx := jptm.Context()
-	ctx = withPipelineNetworkStats(ctx, nil)
+
 	p.s3Client, err = s3ClientFactory.GetS3Client(ctx, common.CredentialInfo{
 		CredentialType: p.credType,
 		S3CredentialInfo: common.S3CredentialInfo{
@@ -96,6 +143,11 @@ func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, err
 }
 
 func (p *s3SourceInfoProvider) PreSignedSourceURL() (string, error) {
+	// For Google endpoints with GCP credentials, use GCS V4 signing
+	if p.isGoogleEndpoint && p.credType == common.ECredentialType.GoogleAppCredentials() {
+		return p.preSignedSourceURLGCP()
+	}
+
 	if p.credType == common.ECredentialType.S3PublicBucket() {
 		return p.rawSourceURL.String(), nil
 	}
@@ -107,11 +159,45 @@ func (p *s3SourceInfoProvider) PreSignedSourceURL() (string, error) {
 	return source.String(), nil
 }
 
+// preSignedSourceURLGCP generates a GCS V4 signed URL for Google endpoints
+func (p *s3SourceInfoProvider) preSignedSourceURLGCP() (string, error) {
+	return signGCPObjectURLV4(p.gcpJSONKey, p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, defaultPresignExpires)
+}
+
 func (p *s3SourceInfoProvider) Properties() (*SrcProperties, error) {
 	srcProperties := SrcProperties{
 		SrcHTTPHeaders: p.transferInfo.SrcHTTPHeaders,
 		SrcMetadata:    p.transferInfo.SrcMetadata,
 		SrcBlobTags:    p.transferInfo.SrcBlobTags,
+	}
+
+	if p.isGoogleEndpoint && p.credType == common.ECredentialType.GoogleAppCredentials() {
+		if p.transferInfo.S2SGetPropertiesInBackend {
+			objectInfo, err := p.gcpClient.Bucket(p.s3URLPart.BucketName).Object(p.s3URLPart.ObjectKey).Attrs(context.Background())
+			if err != nil {
+				return nil, err
+			}
+
+			oie := common.GCPObjectInfoExtension{ObjectInfo: *objectInfo}
+			srcProperties = SrcProperties{
+				SrcHTTPHeaders: common.ResourceHTTPHeaders{
+					ContentType:        objectInfo.ContentType,
+					ContentEncoding:    oie.ContentEncoding(),
+					ContentDisposition: oie.ContentDisposition(),
+					ContentLanguage:    oie.ContentLanguage(),
+					CacheControl:       oie.CacheControl(),
+					ContentMD5:         oie.ContentMD5(),
+				},
+				SrcMetadata: oie.NewCommonMetadata(),
+			}
+		}
+
+		resolvedMetadata, err := p.handleInvalidMetadataKeys(srcProperties.SrcMetadata)
+		if err != nil {
+			return nil, err
+		}
+		srcProperties.SrcMetadata = resolvedMetadata
+		return &srcProperties, nil
 	}
 
 	// Get properties in backend.
@@ -200,6 +286,14 @@ func (p *s3SourceInfoProvider) IsLocal() bool {
 }
 
 func (p *s3SourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, error) {
+	if p.isGoogleEndpoint && p.credType == common.ECredentialType.GoogleAppCredentials() {
+		objectInfo, err := p.gcpClient.Bucket(p.s3URLPart.BucketName).Object(p.s3URLPart.ObjectKey).Attrs(context.Background())
+		if err != nil {
+			return time.Time{}, err
+		}
+		return objectInfo.Updated, nil
+	}
+
 	objectInfo, err := p.s3Client.StatObject(context.Background(), p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, minio.StatObjectOptions{})
 	if err != nil {
 		return time.Time{}, err
@@ -212,6 +306,10 @@ func (p *s3SourceInfoProvider) EntityType() common.EntityType {
 }
 
 func (p *s3SourceInfoProvider) GetObjectRange(offset, length int64) (io.ReadCloser, error) {
+	if p.isGoogleEndpoint && p.credType == common.ECredentialType.GoogleAppCredentials() {
+		return p.gcpClient.Bucket(p.s3URLPart.BucketName).Object(p.s3URLPart.ObjectKey).NewRangeReader(context.Background(), offset, length)
+	}
+
 	options := minio.GetObjectOptions{}
 
 	// Set the range header for the bytes we want to retrieve
@@ -231,6 +329,19 @@ func (p *s3SourceInfoProvider) GetObjectRange(offset, length int64) (io.ReadClos
 }
 
 func (p *s3SourceInfoProvider) GetMD5(offset, count int64) ([]byte, error) {
+	if p.isGoogleEndpoint && p.credType == common.ECredentialType.GoogleAppCredentials() {
+		body, err := p.gcpClient.Bucket(p.s3URLPart.BucketName).Object(p.s3URLPart.ObjectKey).NewRangeReader(context.Background(), offset, count)
+		if err != nil {
+			return nil, err
+		}
+		defer body.Close() //nolint:staticcheck
+		h := md5.New()
+		if _, err = io.Copy(h, body); err != nil {
+			return nil, err
+		}
+		return h.Sum(nil), nil
+	}
+
 	options := minio.GetObjectOptions{}
 	r := formatHTTPRange(offset, count)
 	if r != nil {
