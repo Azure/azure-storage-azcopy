@@ -207,6 +207,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 	// Check if this is GCS accessed via S3-compatible API (using HMAC keys)
 	// GCS has different behavior for directory markers compared to AWS S3
 	isGCSviaS3 := t.s3URLParts.IsGoogleCloudStorage()
+	isOnPremS3 := t.s3URLParts.IsOnPremS3Compatible()
 
 	// Append a trailing slash if it is missing.
 	if !strings.HasSuffix(t.s3URLParts.ObjectKey, "/") && t.s3URLParts.ObjectKey != "" {
@@ -243,11 +244,15 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			return fmt.Errorf("cannot list objects, %v", objectInfo.Err)
 		}
 
-		// Directory detection logic differs between GCS and AWS S3:
-		// - GCS via S3 API: Use enhanced checks (empty StorageClass + trailing slash or zero size)
-		// - AWS S3: Use standard check (empty StorageClass only)
+		// Directory detection logic differs across providers:
+		// - Generic S3-compatible/on-prem: many providers don't set StorageClass for regular objects.
+		//   Rely on explicit directory-marker shape only (trailing slash + zero size).
+		// - GCS via S3 API: keep enhanced checks to handle its marker behavior.
+		// - AWS S3: keep legacy StorageClass-based behavior.
 		var isPotentialDirectory bool
-		if isGCSviaS3 {
+		if isOnPremS3 {
+			isPotentialDirectory = strings.HasSuffix(objectInfo.Key, "/") && objectInfo.Size == 0
+		} else if isGCSviaS3 {
 			isPotentialDirectory = objectInfo.StorageClass == "" && (strings.HasSuffix(objectInfo.Key, "/") || objectInfo.Size == 0)
 		} else {
 			isPotentialDirectory = objectInfo.StorageClass == ""
@@ -272,7 +277,9 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 
 		// For GCS via S3 API, use stricter directory detection to avoid false positives
 		var isActualDirectory bool
-		if isGCSviaS3 {
+		if isOnPremS3 {
+			isActualDirectory = strings.HasSuffix(objectInfo.Key, "/") && objectInfo.Size == 0
+		} else if isGCSviaS3 {
 			isActualDirectory = isPotentialDirectory && objectInfo.Size == 0 && strings.HasSuffix(objectInfo.Key, "/")
 		} else {
 			isActualDirectory = objectInfo.StorageClass == ""

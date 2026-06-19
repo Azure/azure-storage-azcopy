@@ -515,6 +515,20 @@ func (p *S3URLParts) IsOracleCloudStorageVirtualHosted() bool {
 	return strings.HasPrefix(endpoint, "vhcompat.objectstorage.") || strings.Contains(endpoint, ".vhcompat.objectstorage.")
 }
 
+// IsOnPremS3Compatible checks if this S3 URL is a custom/on-prem S3-compatible endpoint.
+// Returns true only when S3_COMPATIBLE_ENDPOINT is set and the endpoint is neither Google nor Oracle.
+func (p *S3URLParts) IsOnPremS3Compatible() bool {
+	if !p.IsS3CompatibleEndpoint() {
+		return false
+	}
+
+	if p.IsGoogleCloudStorage() || p.IsOracleCloudStorage() {
+		return false
+	}
+
+	return true
+}
+
 // IsS3CompatibleEndpoint returns true if a custom S3-compatible endpoint is configured
 // via the S3_COMPATIBLE_ENDPOINT environment variable.
 func (p *S3URLParts) IsS3CompatibleEndpoint() bool {
