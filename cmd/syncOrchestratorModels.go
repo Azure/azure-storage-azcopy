@@ -36,6 +36,7 @@ var DefaultSyncOrchestratorOptions = SyncOrchestratorOptions{
 	lastSuccessfulSyncJobStartTime: time.Now().Add(-10 * time.Minute), // Default to 10 minutes ago
 	optimizeEnumerationByCTime:     false,
 	parallelTraversers:             64,
+	mergeJoinParallelism:           0, // 0 = use AZCOPY_MERGE_JOIN_PARALLELISM env var or default
 }
 
 // SyncOrchestratorOptions defines the options for the enumerator that are required for the sync operation.
@@ -50,6 +51,11 @@ type SyncOrchestratorOptions struct {
 
 	// parallelTraversers is the number of parallel traversers to use for the sync operation.
 	parallelTraversers int32
+
+	// mergeJoinParallelism is the number of parallel directory workers for streaming merge-join sync.
+	// Only used when merge-join is active (remote-to-remote with sorted listings).
+	// 0 means use AZCOPY_MERGE_JOIN_PARALLELISM env var or default (500).
+	mergeJoinParallelism int32
 
 	//
 	// Sync only file metadata if only metadata has changed and not the file content, else for changed files both file data and metadata are sync’ed.
@@ -119,6 +125,7 @@ func NewSyncOrchestratorOptions(
 	lastSuccessfulSyncJobStartTime time.Time,
 	optimizeEnumerationByCTime bool,
 	parallelTraversers int32,
+	mergeJoinParallelism int32,
 ) SyncOrchestratorOptions {
 
 	return SyncOrchestratorOptions{
@@ -127,6 +134,7 @@ func NewSyncOrchestratorOptions(
 		lastSuccessfulSyncJobStartTime: lastSuccessfulSyncJobStartTime,
 		optimizeEnumerationByCTime:     optimizeEnumerationByCTime,
 		parallelTraversers:             parallelTraversers,
+		mergeJoinParallelism:           mergeJoinParallelism,
 		valid:                          true,
 	}
 }
@@ -136,6 +144,7 @@ func (s *SyncOrchestratorOptions) ToStringMap() map[string]string {
 	m["valid"] = fmt.Sprintf("%t", s.valid)
 	m["maxDirectoryDirectChildCount"] = fmt.Sprintf("%d", s.maxDirectoryDirectChildCount)
 	m["parallelTraversers"] = fmt.Sprintf("%d", s.parallelTraversers)
+	m["mergeJoinParallelism"] = fmt.Sprintf("%d", s.mergeJoinParallelism)
 	m["metaDataOnlySync"] = fmt.Sprintf("%t", s.metaDataOnlySync)
 	m["lastSuccessfulSyncJobStartTime"] = s.lastSuccessfulSyncJobStartTime.Format(time.RFC3339)
 	m["optimizeEnumerationByCTime"] = fmt.Sprintf("%t", s.optimizeEnumerationByCTime)
@@ -166,5 +175,6 @@ func NewTestSyncOrchestratorOptions() SyncOrchestratorOptions {
 		optimizeEnumerationByCTime:     true,
 		valid:                          true,
 		parallelTraversers:             64,
+		mergeJoinParallelism:           0,
 	}
 }

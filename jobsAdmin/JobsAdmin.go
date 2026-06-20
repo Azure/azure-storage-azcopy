@@ -601,6 +601,11 @@ func getSTEStats() []common.CustomStatEntry {
 	var totalPartsCreatedSize int
 	var totalXferDoneUsed int
 	var totalXferDoneSize int
+	// Diagnostic counters
+	var totalChunkStarveCount int64
+	var totalTransferStarveCount int64
+	var maxMainPoolSize int32
+	var maxNumGoroutines int
 
 	// Iterate through all jobs to get their metrics
 	for _, jobID := range jobIDs {
@@ -628,6 +633,14 @@ func getSTEStats() []common.CustomStatEntry {
 			totalPartsCreatedSize += channelStats.PartsCreatedSize
 			totalXferDoneUsed += channelStats.XferDoneUsed
 			totalXferDoneSize += channelStats.XferDoneSize
+			totalChunkStarveCount += channelStats.ChunkStarveCount
+			totalTransferStarveCount += channelStats.TransferStarveCount
+			if channelStats.CurrentMainPoolSize > maxMainPoolSize {
+				maxMainPoolSize = channelStats.CurrentMainPoolSize
+			}
+			if channelStats.NumGoroutines > maxNumGoroutines {
+				maxNumGoroutines = channelStats.NumGoroutines
+			}
 		}
 	}
 
@@ -641,8 +654,14 @@ func getSTEStats() []common.CustomStatEntry {
 		{Key: "low_xfer_ch", Value: fmt.Sprintf("%d/%d", totalLowTransferChannelUsed, totalLowTransferChannelSize)},
 		{Key: "norm_chunk_ch", Value: fmt.Sprintf("%d/%d", totalNormalChunkChannelUsed, totalNormalChunkChannelSize)},
 		{Key: "low_chunk_ch", Value: fmt.Sprintf("%d/%d", totalLowChunkChannelUsed, totalLowChunkChannelSize)},
-		// {Key: "parts_cr_ch", Value: fmt.Sprintf("%d/%d", totalPartsCreatedUsed, totalPartsCreatedSize)},
-		// {Key: "xfer_done_ch", Value: fmt.Sprintf("%d/%d", totalXferDoneUsed, totalXferDoneSize)},
+		{Key: "xfer_done_ch", Value: fmt.Sprintf("%d/%d", totalXferDoneUsed, totalXferDoneSize)},
+		// Diagnostic counters: cumulative starvation events. Sustained high values indicate
+		// the worker pool is idle waiting for new chunks/transfers (dispatcher is the bottleneck);
+		// near-zero values indicate workers are saturated.
+		{Key: "chunk_starve", Value: fmt.Sprintf("%d", totalChunkStarveCount)},
+		{Key: "xfer_starve", Value: fmt.Sprintf("%d", totalTransferStarveCount)},
+		{Key: "pool_size", Value: fmt.Sprintf("%d", maxMainPoolSize)},
+		{Key: "goroutines", Value: fmt.Sprintf("%d", maxNumGoroutines)},
 	}
 }
 

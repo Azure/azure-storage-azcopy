@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"runtime"
 	"strings"
 	"sync/atomic"
@@ -319,8 +320,8 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		PreservePermissions:            cca.preservePermissions,
 		PreserveInfo:                   cca.preserveInfo,
 		PreservePOSIXProperties:        cca.preservePOSIXProperties,
-		S2SSourceChangeValidation:      true,
-		DestLengthValidation:           true,
+		S2SSourceChangeValidation:      os.Getenv("AZCOPY_S2S_SOURCE_CHANGE_VALIDATION") != "false",
+		DestLengthValidation:           os.Getenv("AZCOPY_S2S_DEST_LENGTH_VALIDATION") != "false",
 		S2SGetPropertiesInBackend:      true,
 		S2SInvalidMetadataHandleOption: common.EInvalidMetadataHandleOption.RenameIfInvalid(),
 		CpkOptions:                     cca.cpkOptions,

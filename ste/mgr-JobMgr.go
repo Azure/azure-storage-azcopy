@@ -55,6 +55,13 @@ type ChannelStats struct {
 	PartsCreatedSize          int
 	XferDoneUsed              int
 	XferDoneSize              int
+
+	// Diagnostic counters for identifying scheduler-starvation bottlenecks. All are cumulative
+	// since job start; dividing by elapsed seconds gives a per-second rate.
+	ChunkStarveCount    int64 // chunkProcessor goroutines that hit the empty-channel sleep path
+	TransferStarveCount int64 // transferProcessor goroutines that hit the empty-channel sleep path
+	CurrentMainPoolSize int32 // current chunkProcessor goroutine pool size (auto-tuned)
+	NumGoroutines       int   // process-wide runtime.NumGoroutine() at sample time
 }
 
 // ChannelSizeConfig holds channel size configurations
@@ -96,9 +103,9 @@ type ChannelSizeConfig struct {
 func GetChannelSizeConfig() ChannelSizeConfig {
 	if buildmode.IsMover {
 		return ChannelSizeConfig{
-			PartsChannelSize:         1000,
-			TransferChannelSize:      20000,
-			ChunkChannelSize:         20000,
+			PartsChannelSize:         5000,
+			TransferChannelSize:      200000,
+			ChunkChannelSize:         200000,
 			PartCreatedChannelSize:   100,
 			XferDoneChannelSize:      1000,
 			CloseTransferChannelSize: 100,
@@ -162,6 +169,7 @@ type IJobMgr interface {
 	ChunkStatusLogger() common.ChunkStatusLogger
 	HttpClient() *http.Client
 	PipelineNetworkStats() *PipelineNetworkStats
+	AverageChunkQueueWaitMs() int
 	getOverwritePrompter() *overwritePrompter
 	common.ILoggerCloser
 
@@ -314,6 +322,11 @@ func (jm *jobMgr) GetChannelStats() ChannelStats {
 		PartsCreatedSize:          cap(jm.jstm.partCreated),
 		XferDoneUsed:              len(jm.jstm.xferDone),
 		XferDoneSize:              cap(jm.jstm.xferDone),
+
+		ChunkStarveCount:    atomic.LoadInt64(&jm.atomicChunkStarveCount),
+		TransferStarveCount: atomic.LoadInt64(&jm.atomicTransferStarveCount),
+		CurrentMainPoolSize: atomic.LoadInt32(&jm.atomicCurrentMainPoolSize),
+		NumGoroutines:       runtime.NumGoroutine(),
 	}
 }
 
@@ -394,7 +407,14 @@ type jobMgr struct {
 	atomicCurrentConcurrentConnections int64
 	/* Pool sizer related values */
 	atomicSuccessfulBytesInActiveFiles int64 // atomic 64-bit values should always be at the start of a struct to ensure alignment
-	atomicCurrentMainPoolSize          int32
+	// Diagnostic counters: number of times chunkProcessor / transferProcessor hit the
+	// empty-channel time.Sleep fallback. High values indicate worker starvation
+	// (workers spinning on idle channels rather than running chunks/transfers).
+	atomicChunkStarveCount    int64
+	atomicTransferStarveCount int64
+	atomicChunkQueueWaitMs    int64 // total ms chunks spent waiting in the channel
+	atomicChunkQueueCount     int64 // number of chunks dequeued (for averaging)
+	atomicCurrentMainPoolSize int32
 	// atomicAllTransfersScheduled defines whether all job parts have been iterated and resumed or not
 	atomicAllTransfersScheduled     int32
 	atomicFinalPartOrderedIndicator int32
@@ -445,6 +465,13 @@ type jobMgr struct {
 	cacheLimiter        common.CacheLimiter
 	fileCountLimiter    common.CacheLimiter
 	jstm                *jobStatusManager
+
+	// scheduler coordination: several scheduleJobPartsWorker goroutines run concurrently,
+	// so the one-time pool-sizer startup, the one-time pool-sizer shutdown signal, and the
+	// one-time close of scheduleCloseCh are each guarded by a sync.Once.
+	schedulerStartOnce sync.Once
+	schedulerDoneOnce  sync.Once
+	schedulerCloseOnce sync.Once
 
 	isDaemon bool /* is it running as service */
 }
@@ -1013,6 +1040,14 @@ func (jm *jobMgr) CurrentMainPoolSize() int {
 	return int(atomic.LoadInt32(&jm.atomicCurrentMainPoolSize))
 }
 
+func (jm *jobMgr) AverageChunkQueueWaitMs() int {
+	count := atomic.LoadInt64(&jm.atomicChunkQueueCount)
+	if count > 0 {
+		return int(atomic.LoadInt64(&jm.atomicChunkQueueWaitMs) / count)
+	}
+	return 0
+}
+
 func (jm *jobMgr) ScheduleTransfer(priority common.JobPriority, jptm IJobPartTransferMgr) {
 	switch priority { // priority determines which channel handles the job part's transfers
 	case common.EJobPriority.Normal():
@@ -1036,11 +1071,18 @@ func (jm *jobMgr) ScheduleTransfer(priority common.JobPriority, jptm IJobPartTra
 }
 
 func (jm *jobMgr) ScheduleChunk(priority common.JobPriority, chunkFunc chunkFunc) {
+	enqueued := time.Now()
+	wrapped := func(workerID int) {
+		waitMs := time.Since(enqueued).Milliseconds()
+		atomic.AddInt64(&jm.atomicChunkQueueWaitMs, waitMs)
+		atomic.AddInt64(&jm.atomicChunkQueueCount, 1)
+		chunkFunc(workerID)
+	}
 	switch priority { // priority determines which channel handles the job part's transfers
 	case common.EJobPriority.Normal():
-		jm.xferChannels.normalChunckCh <- chunkFunc
+		jm.xferChannels.normalChunckCh <- wrapped
 	case common.EJobPriority.Low():
-		jm.xferChannels.lowChunkCh <- chunkFunc
+		jm.xferChannels.lowChunkCh <- wrapped
 	default:
 		jm.Panic(fmt.Errorf("invalid priority: %q", priority))
 	}
@@ -1067,7 +1109,11 @@ func (jm *jobMgr) deleteJobPartsMgrs() {
 // Note: Created the buffer channel so that, if somehow any thread missing(down), it should not stuck.
 func (jm *jobMgr) cleanupTransferRoutine() {
 	jm.reportCancelCh <- struct{}{}
-	jm.xferChannels.scheduleCloseCh <- struct{}{}
+	// Close (rather than send) scheduleCloseCh so that every scheduleJobPartsWorker
+	// goroutine wakes and exits. Guarded by a sync.Once to avoid a double-close.
+	jm.schedulerCloseOnce.Do(func() {
+		close(jm.xferChannels.scheduleCloseCh)
+	})
 	for cc := 0; cc < jm.concurrency.TransferInitiationPoolSize.Value; cc++ {
 		jm.xferChannels.closeTransferCh <- struct{}{}
 	}
@@ -1172,21 +1218,40 @@ func (jm *jobMgr) RequestTuneSlowly() {
 }
 
 func (jm *jobMgr) scheduleJobParts() {
-	startedPoolSizer := false
+	parallelism := jm.concurrency.SchedulerParallelism.Value
+	if parallelism < 1 {
+		parallelism = 1
+	}
+	for i := 0; i < parallelism; i++ {
+		go jm.scheduleJobPartsWorker()
+	}
+}
+
+// scheduleJobPartsWorker is a single scheduler goroutine. Several of these run
+// concurrently (see SchedulerParallelism). Go channels are safe for concurrent receivers,
+// so each worker pulls a distinct job part off partsChannel and schedules its transfers
+// independently. Running multiple workers keeps the per-transfer creation loop
+// (ScheduleTransfers) from being a single-threaded bottleneck that starves the
+// transfer-initiation and chunk worker pools.
+func (jm *jobMgr) scheduleJobPartsWorker() {
 	for {
 		select {
 		case <-jm.xferChannels.scheduleCloseCh:
 			jm.Log(common.LogInfo, "ScheduleJobParts done called")
-			jm.poolSizingChannels.done <- struct{}{}
+			// scheduleCloseCh is closed (broadcast), so every worker wakes here; only the
+			// first one signals the pool sizer to wind down.
+			jm.schedulerDoneOnce.Do(func() {
+				jm.poolSizingChannels.done <- struct{}{}
+			})
 			return
 
 		case jobPart := <-jm.xferChannels.partsChannel:
-			if !startedPoolSizer {
+			// Spin up the pool sizer exactly once, on the first part that arrives.
+			jm.schedulerStartOnce.Do(func() {
 				// spin up a GR to coordinate dynamic sizing of the main pool
 				// It will automatically spin up the right number of chunk processors
 				go jm.poolSizer()
-				startedPoolSizer = true
-			}
+			})
 
 			inMemoryState := jm.getInMemoryTransitJobState()
 			s3provider := inMemoryState.Provider
@@ -1203,26 +1268,24 @@ func (jm *jobMgr) chunkProcessor(workerID int) {
 	defer func() { jm.poolSizingChannels.exitNotificationCh <- struct{}{} }() // say we have exited
 
 	for {
-		// We check for scalebacks first to shrink goroutine pool
-		// Then, we check chunks: normal & low priority
+		// Priority: scaleback > normal chunks > low chunks
+		// First, try scaleback and normal chunks non-blocking
 		select {
 		case <-jm.poolSizingChannels.scalebackRequestCh:
 			return
+		case chunkFunc := <-jm.xferChannels.normalChunckCh:
+			chunkFunc(workerID)
 		default:
+			// Normal channel is empty — block on all three channels.
+			// Goroutines park here with zero CPU overhead until work arrives
+			// (no polling, no sleep, instant wake-up).
 			select {
+			case <-jm.poolSizingChannels.scalebackRequestCh:
+				return
 			case chunkFunc := <-jm.xferChannels.normalChunckCh:
 				chunkFunc(workerID)
-			default:
-				select {
-				case chunkFunc := <-jm.xferChannels.lowChunkCh:
-					chunkFunc(workerID)
-				default:
-					time.Sleep(100 * time.Millisecond) // Sleep before looping around
-					// TODO: Question: In order to safely support high goroutine counts,
-					// do we need to review sleep duration, or find an approach that does not require waking every x milliseconds
-					// For now, duration has been increased substantially from the previous 1 ms, to reduce cost of
-					// the wake-ups.
-				}
+			case chunkFunc := <-jm.xferChannels.lowChunkCh:
+				chunkFunc(workerID)
 			}
 		}
 	}
@@ -1267,6 +1330,8 @@ func (jm *jobMgr) transferProcessor(workerID int) {
 			case jptm := <-jm.xferChannels.lowTransferCh:
 				startTransfer(jptm)
 			default:
+				// Diagnostic: count transferProcessor starvation events.
+				atomic.AddInt64(&jm.atomicTransferStarveCount, 1)
 				time.Sleep(10 * time.Millisecond) // Sleep before looping around
 			}
 		}

@@ -23,10 +23,12 @@ package ste
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
 	"net/http"
+	"net/http/httptrace"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -40,8 +42,17 @@ type PipelineNetworkStats struct {
 	atomic503CountUnknown      int64 // counts 503's when we don't know the reason
 	atomicE2ETotalMilliseconds int64 // should this be nanoseconds?  Not really needed, given typical minimum operation lengths that we observe
 	atomicStartSeconds         int64
-	nocopy                     common.NoCopy
-	tunerInterface             ConcurrencyTuner
+
+	// Latency breakdown: connection pool wait vs actual wire time
+	atomicConnWaitTotalMs int64 // time waiting for a connection from http.Transport pool (GetConn → GotConn)
+	atomicWireTotalMs     int64 // time on the wire after connection acquired (GotConn → response complete)
+	atomicDNSTotalMs      int64 // DNS resolution time
+	atomicTLSTotalMs      int64 // TLS handshake time
+	atomicConnNewCount    int64 // number of new connections created (not reused)
+	atomicConnReusedCount int64 // number of reused connections
+
+	nocopy         common.NoCopy
+	tunerInterface ConcurrencyTuner
 }
 
 func newPipelineNetworkStats(tunerInterface ConcurrencyTuner) *PipelineNetworkStats {
@@ -143,6 +154,46 @@ func (s *PipelineNetworkStats) AverageE2EMilliseconds() int {
 	}
 }
 
+func (s *PipelineNetworkStats) AverageConnWaitMs() int {
+	ops := atomic.LoadInt64(&s.atomicOperationCount)
+	if ops > 0 {
+		return int(atomic.LoadInt64(&s.atomicConnWaitTotalMs) / ops)
+	}
+	return 0
+}
+
+func (s *PipelineNetworkStats) AverageWireMs() int {
+	ops := atomic.LoadInt64(&s.atomicOperationCount)
+	if ops > 0 {
+		return int(atomic.LoadInt64(&s.atomicWireTotalMs) / ops)
+	}
+	return 0
+}
+
+func (s *PipelineNetworkStats) AverageDNSMs() int {
+	ops := atomic.LoadInt64(&s.atomicOperationCount)
+	if ops > 0 {
+		return int(atomic.LoadInt64(&s.atomicDNSTotalMs) / ops)
+	}
+	return 0
+}
+
+func (s *PipelineNetworkStats) AverageTLSMs() int {
+	ops := atomic.LoadInt64(&s.atomicOperationCount)
+	if ops > 0 {
+		return int(atomic.LoadInt64(&s.atomicTLSTotalMs) / ops)
+	}
+	return 0
+}
+
+func (s *PipelineNetworkStats) ConnNewCount() int64 {
+	return atomic.LoadInt64(&s.atomicConnNewCount)
+}
+
+func (s *PipelineNetworkStats) ConnReusedCount() int64 {
+	return atomic.LoadInt64(&s.atomicConnReusedCount)
+}
+
 // transparentlyReadBody reads the response body, and then (because body is read-once-only) replaces it with
 // a new body that will return the same content to anyone else who reads it.
 // This looks like a fairly common approach in Go, e.g. https://stackoverflow.com/a/23077519
@@ -172,12 +223,63 @@ type statsPolicy struct {
 func (s statsPolicy) Do(req *policy.Request) (*http.Response, error) {
 	start := time.Now()
 
+	// Add httptrace to measure connection pool wait vs wire time
+	var connWaitStart, gotConnTime, dnsStart, tlsStart time.Time
+	var connWaitMs, dnsMs, tlsMs int64
+	var wasReused bool
+
+	trace := &httptrace.ClientTrace{
+		GetConn: func(hostPort string) {
+			connWaitStart = time.Now()
+		},
+		GotConn: func(info httptrace.GotConnInfo) {
+			gotConnTime = time.Now()
+			connWaitMs = gotConnTime.Sub(connWaitStart).Milliseconds()
+			wasReused = info.Reused
+		},
+		DNSStart: func(info httptrace.DNSStartInfo) {
+			dnsStart = time.Now()
+		},
+		DNSDone: func(info httptrace.DNSDoneInfo) {
+			if !dnsStart.IsZero() {
+				dnsMs = time.Since(dnsStart).Milliseconds()
+			}
+		},
+		TLSHandshakeStart: func() {
+			tlsStart = time.Now()
+		},
+		TLSHandshakeDone: func(state tls.ConnectionState, err error) {
+			if !tlsStart.IsZero() {
+				tlsMs = time.Since(tlsStart).Milliseconds()
+			}
+		},
+	}
+
+	raw := req.Raw()
+	*raw = *raw.WithContext(httptrace.WithClientTrace(raw.Context(), trace))
+
 	response, err := req.Next()
+
 	// Grab the notification callback out of the context and, if its there, call it
 	stats, ok := req.Raw().Context().Value(pipelineNetworkStatsContextKey).(*PipelineNetworkStats)
 	if ok && stats != nil {
+		e2eMs := int64(time.Since(start).Seconds() * 1000)
 		atomic.AddInt64(&stats.atomicOperationCount, 1)
-		atomic.AddInt64(&stats.atomicE2ETotalMilliseconds, int64(time.Since(start).Seconds()*1000))
+		atomic.AddInt64(&stats.atomicE2ETotalMilliseconds, e2eMs)
+
+		// Record latency breakdown
+		atomic.AddInt64(&stats.atomicConnWaitTotalMs, connWaitMs)
+		if !gotConnTime.IsZero() {
+			wireMs := int64(time.Since(gotConnTime).Seconds() * 1000)
+			atomic.AddInt64(&stats.atomicWireTotalMs, wireMs)
+		}
+		atomic.AddInt64(&stats.atomicDNSTotalMs, dnsMs)
+		atomic.AddInt64(&stats.atomicTLSTotalMs, tlsMs)
+		if wasReused {
+			atomic.AddInt64(&stats.atomicConnReusedCount, 1)
+		} else {
+			atomic.AddInt64(&stats.atomicConnNewCount, 1)
+		}
 
 		if err != nil && !isContextCancelledError(err) {
 			// no response from server

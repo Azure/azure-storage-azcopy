@@ -2,8 +2,10 @@ package ste
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"mime"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -82,22 +84,38 @@ type IJobPartMgr interface {
 // number of available network sockets on resource-constrained Linux systems. (E.g. when
 // 'ulimit -Hn' is low).
 func NewAzcopyHTTPClient(maxIdleConns int) *http.Client {
-	const maxConnsPerHost = 20000
+	const maxConnsPerHost = 30000
+	// Go 1.24: Use explicit Protocols field to force HTTP/1.1 only.
+	http1Only := &http.Protocols{}
+	http1Only.SetHTTP1(true)
+	dialer := &net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 15 * time.Second,
+	}
 	return &http.Client{
 		Transport: &http.Transport{
 			Proxy:                  common.GlobalProxyLookup,
+			Protocols:              http1Only,
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return dialer.DialContext(ctx, network, addr)
+			},
 			MaxConnsPerHost:        maxConnsPerHost,
-			MaxIdleConns:           0, // No limit
+			MaxIdleConns:           0,
 			MaxIdleConnsPerHost:    maxConnsPerHost,
-			IdleConnTimeout:        180 * time.Second,
+			IdleConnTimeout:        90 * time.Second,
 			TLSHandshakeTimeout:    10 * time.Second,
-			ResponseHeaderTimeout:  60 * time.Second, // Timeout for reading response headers
+			ResponseHeaderTimeout:  60 * time.Second,
 			ExpectContinueTimeout:  1 * time.Second,
 			DisableKeepAlives:      false,
-			DisableCompression:     true, // must disable the auto-decompression of gzipped files, and just download the gzipped version. See https://github.com/Azure/azure-storage-azcopy/issues/374
+			DisableCompression:     true,
 			MaxResponseHeaderBytes: 0,
-			// ResponseHeaderTimeout:  time.Duration{},
-			// ExpectContinueTimeout:  time.Duration{},
+			WriteBufferSize:        32 * 1024,
+			ReadBufferSize:         32 * 1024,
+			ForceAttemptHTTP2:      false,
+			TLSNextProto:           make(map[string]func(authority string, c *tls.Conn) http.RoundTripper),
+			TLSClientConfig: &tls.Config{
+				NextProtos: []string{"http/1.1"},
+			},
 		},
 	}
 }
@@ -399,32 +417,35 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		jpm.Log(common.LogDebug, fmt.Sprintf("scheduling JobID=%v, Part#=%d, Transfer#=%d, priority=%v", plan.JobID, plan.PartNum, t, plan.Priority))
 
 		// ===== TEST KNOB
-		relSrc, relDst := plan.TransferSrcDstRelatives(t)
+		// DebugSkipFiles is empty in production. relSrc/relDst are consumed ONLY by the
+		// DebugSkipFiles lookup below, so when the knob is unused we skip the per-transfer
+		// path decoding (url.PathUnescape, relative-path computation, map lookups) entirely.
+		if len(DebugSkipFiles) > 0 {
+			relSrc, relDst := plan.TransferSrcDstRelatives(t)
 
-		var err error
-		if plan.FromTo.From().IsRemote() {
-			relSrc, err = url.PathUnescape(relSrc)
-		}
-		relSrc = strings.TrimPrefix(relSrc, common.AZCOPY_PATH_SEPARATOR_STRING)
-		common.PanicIfErr(err) // neither of these panics should happen, they already would have had a clean error.
-		if plan.FromTo.To().IsRemote() {
-			relDst, err = url.PathUnescape(relDst)
-		}
-		relDst = strings.TrimPrefix(relDst, common.AZCOPY_PATH_SEPARATOR_STRING)
-		common.PanicIfErr(err)
-
-		_, srcOk := DebugSkipFiles[relSrc]
-		_, dstOk := DebugSkipFiles[relDst]
-		if srcOk || dstOk {
-			if jpm.ShouldLog(common.LogInfo) {
-				jpm.Log(common.LogInfo, fmt.Sprintf("Transfer %d cancelled: %s", jptm.transferIndex, relSrc))
+			var err error
+			if plan.FromTo.From().IsRemote() {
+				relSrc, err = url.PathUnescape(relSrc)
 			}
+			relSrc = strings.TrimPrefix(relSrc, common.AZCOPY_PATH_SEPARATOR_STRING)
+			common.PanicIfErr(err) // neither of these panics should happen, they already would have had a clean error.
+			if plan.FromTo.To().IsRemote() {
+				relDst, err = url.PathUnescape(relDst)
+			}
+			relDst = strings.TrimPrefix(relDst, common.AZCOPY_PATH_SEPARATOR_STRING)
+			common.PanicIfErr(err)
 
-			// cancel the transfer
-			jptm.Cancel()
-			jptm.SetStatus(common.ETransferStatus.Cancelled())
-		} else {
-			if len(DebugSkipFiles) != 0 && jpm.ShouldLog(common.LogInfo) {
+			_, srcOk := DebugSkipFiles[relSrc]
+			_, dstOk := DebugSkipFiles[relDst]
+			if srcOk || dstOk {
+				if jpm.ShouldLog(common.LogInfo) {
+					jpm.Log(common.LogInfo, fmt.Sprintf("Transfer %d cancelled: %s", jptm.transferIndex, relSrc))
+				}
+
+				// cancel the transfer
+				jptm.Cancel()
+				jptm.SetStatus(common.ETransferStatus.Cancelled())
+			} else if jpm.ShouldLog(common.LogInfo) {
 				jpm.Log(common.LogInfo, fmt.Sprintf("Did not exclude: src: %s dst: %s", relSrc, relDst))
 			}
 		}

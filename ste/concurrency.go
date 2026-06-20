@@ -124,6 +124,12 @@ type ConcurrencySettings struct {
 
 	// CheckCpuWhenTuning determines whether CPU usage should be taken into account when auto-tuning
 	CheckCpuWhenTuning *ConfiguredBool
+
+	// SchedulerParallelism is the number of goroutines that pull job parts off the parts channel
+	// and schedule their transfers concurrently. Increasing this prevents the per-transfer creation
+	// loop (ScheduleTransfers) from becoming a single-threaded bottleneck that starves the
+	// transfer-initiation and chunk worker pools when copying huge numbers of small files.
+	SchedulerParallelism *ConfiguredInt
 }
 
 // AutoTuneMainPool says whether the main pool size should by dynamically tuned
@@ -134,6 +140,7 @@ func (c ConcurrencySettings) AutoTuneMainPool() bool {
 const defaultTransferInitiationPoolSize = 64
 const defaultEnumerationPoolSize = 16
 const concurrentFilesFloor = 32
+const defaultSchedulerParallelism = 16
 
 // NewConcurrencySettings gets concurrency settings by referring to the
 // environment variable AZCOPY_CONCURRENCY_VALUE (if set) and to properties of the
@@ -149,6 +156,7 @@ func NewConcurrencySettings(maxFileAndSocketHandles int, requestAutoTuneGRs bool
 		EnumerationPoolSize:        GetEnumerationPoolSize(),
 		ParallelStatFiles:          GetParallelStatFiles(),
 		CheckCpuWhenTuning:         getCheckCpuUsageWhenTuning(),
+		SchedulerParallelism:       getSchedulerParallelism(),
 	}
 
 	s.MaxOpenDownloadFiles = getMaxOpenPayloadFiles(maxFileAndSocketHandles,
@@ -228,6 +236,16 @@ func getTransferInitiationPoolSize() *ConfiguredInt {
 	}
 
 	return &ConfiguredInt{defaultTransferInitiationPoolSize, false, envVar.Name, "hard-coded default"}
+}
+
+func getSchedulerParallelism() *ConfiguredInt {
+	envVar := common.EEnvironmentVariable.SchedulerParallelism()
+
+	if c := tryNewConfiguredInt(envVar); c != nil {
+		return c
+	}
+
+	return &ConfiguredInt{defaultSchedulerParallelism, false, envVar.Name, "hard-coded default"}
 }
 
 func GetEnumerationPoolSize() *ConfiguredInt {

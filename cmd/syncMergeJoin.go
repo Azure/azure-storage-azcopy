@@ -31,38 +31,55 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
+
+// incrementSourceScanned increments the source files or folders scanned counter
+// in the merge-join path, matching the traverser's IncrementEnumeration behavior.
+// Virtual prefixes (FNS blob directories) are NOT counted, matching the traverser
+// which only counts real blobs/folders (HNS).
+func incrementSourceScanned(cca *cookedSyncCmdArgs, entityType common.EntityType, isVirtualPrefix bool) {
+	if isVirtualPrefix {
+		return
+	}
+	if entityType == common.EEntityType.File() {
+		atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
+	} else if entityType == common.EEntityType.Folder() {
+		atomic.AddUint64(&cca.atomicSourceFoldersScanned, 1)
+	}
+}
 
 // activeMergeJoinDirs tracks how many mergeJoinSyncDir calls are in-flight.
 var activeMergeJoinDirs atomic.Int64
 
+// usePageLevelMergeJoin returns true when AZCOPY_USE_PAGE_LEVEL_MERGE_JOIN is "true" or "1".
+// Default is false (channel-based).
+func usePageLevelMergeJoin() bool {
+	v := strings.ToLower(strings.TrimSpace(
+		common.GetEnvironmentVariable(common.EEnvironmentVariable.UsePageLevelMergeJoin())))
+	return v == "true" || v == "1"
+}
+
 // mergeJoinChannelBufferSize controls the buffer size of channels used to bridge
-// push-based traversers into pull-based iteration for the merge-join algorithm.
-// A larger buffer reduces goroutine context switches but uses more memory.
-// Each slot holds one StoredObject (~430 bytes), so 100 slots ≈ 43KB per channel.
-// With 500 workers × 2 channels, total buffer memory ≈ 43MB.
-const mergeJoinChannelBufferSize = 100
+// push-based traversers into pull-based iteration for the channel-based merge-join.
+// Each slot holds one StoredObject (~430 bytes), so 4K slots ≈ 1.7MB per channel.
+// Sized to roughly one ListBlobs page (5K) so the consumer can keep draining while
+// the producer is blocked fetching the next page over the network.
+const mergeJoinChannelBufferSize = 4_000
 
-// traverserResult wraps a StoredObject emitted by a traverser goroutine.
-// When done is true, the channel has been drained and obj is invalid.
-type traverserResult struct {
-	obj StoredObject
-	err error
-}
-
-// useStreamingMergeJoin returns true if the source type guarantees lexicographic
-// listing order, which is required for the streaming merge-join algorithm.
-// Local filesystem (ext4/XFS) does NOT guarantee sorted order, so it stays on
-// the existing indexMap-based flow.
-func useStreamingMergeJoin(fromTo common.FromTo) bool {
-	switch fromTo.From() {
-	case common.ELocation.S3(), common.ELocation.Blob(), common.ELocation.BlobFS():
-		return true
-	default:
-		return false
-	}
-}
+// Channel-based merge-join diagnostics (baseline instrumentation).
+// mergeJoinChanFullEvents increments each time a producer's send finds the channel
+// full (back-pressure: the merge/consumer is slower than the listing/producer —
+// batching sends would help).
+// mergeJoinChanDryEvents increments each time a consumer's receive finds the channel
+// empty while still open (starvation: the listing/producer/network is slower than the
+// merge/consumer — batching would NOT help; the wall is listing/XML/network).
+var (
+	mergeJoinChanFullEvents atomic.Int64
+	mergeJoinChanDryEvents  atomic.Int64
+)
 
 // traverserToChannel starts a goroutine that runs a ResourceTraverser and bridges
 // its push-based callback into a pull-based channel. The caller receives objects
@@ -99,6 +116,14 @@ func traverserToChannel(
 				}
 			}
 			count++
+			// Non-blocking send first; if the channel is full, record back-pressure
+			// (consumer slower than producer) then fall back to a blocking send.
+			select {
+			case objCh <- obj:
+				return nil
+			default:
+				mergeJoinChanFullEvents.Add(1)
+			}
 			select {
 			case objCh <- obj:
 				return nil
@@ -108,7 +133,6 @@ func traverserToChannel(
 		}, filters)
 
 		if firstObj {
-			// Traverser returned 0 objects — log how long it took
 			elapsed := time.Since(start)
 			if elapsed > 30*time.Second {
 				mergeJoinSyncOneDirLog(common.LogWarning,
@@ -126,18 +150,25 @@ func traverserToChannel(
 	return objCh, errCh
 }
 
-// mergeJoinSyncDir performs a streaming merge-join of source and destination
-// object listings for a single directory. Both sides must emit objects in
-// lexicographic order (guaranteed by all remote storage APIs: S3, Blob, BlobFS).
-//
-// The algorithm walks both sorted streams in lockstep:
-//   - srcPath < dstPath → source-only object: schedule transfer (new file)
-//   - srcPath > dstPath → dest-only object: handle via delete-destination policy
-//   - srcPath == dstPath → both exist: compare properties, transfer if stale
-//
-// This replaces the indexMap-based processor/comparator/finalize flow for remote
-// sources, eliminating O(N) memory usage in favor of O(1) streaming.
-func mergeJoinSyncDir(
+// mergeJoinRecv receives one object from ch for the channel-based merge-join. It records
+// a "channel dry" event when the channel is empty but still open at the moment of receive,
+// indicating the consumer (merge) is outpacing the producer (listing/network). A closed
+// channel is NOT counted as dry, because the receive is immediately ready.
+func mergeJoinRecv(ch <-chan StoredObject) (StoredObject, bool) {
+	select {
+	case obj, ok := <-ch:
+		return obj, ok
+	default:
+		mergeJoinChanDryEvents.Add(1)
+	}
+	obj, ok := <-ch
+	return obj, ok
+}
+
+// mergeJoinSyncDirChannelBased performs a streaming merge-join using traverser-based
+// channels. Both source and destination traversers are bridged into pull-based channels
+// with a 4000-item buffer, enabling natural back-pressure and concurrent listing.
+func mergeJoinSyncDirChannelBased(
 	ctx context.Context,
 	enumerator *syncEnumerator,
 	cca *cookedSyncCmdArgs,
@@ -161,7 +192,6 @@ func mergeJoinSyncDir(
 	if isDestinationPresent {
 		dstCh, dstErrCh = traverserToChannel(ctx, st, enumerator.filters, dstLabel)
 	} else {
-		// Destination doesn't exist yet — all source objects are new
 		emptyCh := make(chan StoredObject)
 		close(emptyCh)
 		emptyErrCh := make(chan error)
@@ -172,17 +202,17 @@ func mergeJoinSyncDir(
 
 	// Build the comparator for property comparison (size, LWT, changeTime)
 	comparator := &syncDestinationComparator{
-		sourceIndex:             enumerator.objectIndexer, // not used in merge-join path but required by struct
+		sourceIndex:             enumerator.objectIndexer,
 		copyTransferScheduler:   enumerator.ctp.scheduleCopyTransfer,
-		destinationCleaner:      enumerator.objectComparator, // will be replaced below
+		destinationCleaner:      enumerator.objectComparator,
 		deleteDestination:       cca.deleteDestination,
 		incrementNotTransferred: enumerator.primaryTraverserTemplate.options.IncrementNotTransferred,
 		orchestratorOptions:     enumerator.orchestratorOptions,
 	}
 
 	// Pull first object from each side
-	srcObj, srcOk := <-srcCh
-	dstObj, dstOk := <-dstCh
+	srcObj, srcOk := mergeJoinRecv(srcCh)
+	dstObj, dstOk := mergeJoinRecv(dstCh)
 
 	for srcOk && dstOk {
 		srcOrigPath := srcObj.relativePath
@@ -193,33 +223,30 @@ func mergeJoinSyncDir(
 
 		switch {
 		case cmp < 0:
-			// Source-only: new object at source → schedule transfer
 			srcObj.relativePath = srcPath
 			subDirs, err = mergeJoinHandleSourceOnly(enumerator, cca, srcObj, srcOrigPath, subDirs)
 			if err != nil {
 				return subDirs, err
 			}
-			srcObj, srcOk = <-srcCh
+			srcObj, srcOk = mergeJoinRecv(srcCh)
 
 		case cmp > 0:
-			// Dest-only: extra object at destination → handle based on delete-destination policy
 			dstObj.relativePath = dstPath
 			err = mergeJoinHandleDestOnly(enumerator, cca, dstObj)
 			if err != nil {
 				return subDirs, err
 			}
-			dstObj, dstOk = <-dstCh
+			dstObj, dstOk = mergeJoinRecv(dstCh)
 
 		default:
-			// Both exist: compare properties and decide
 			srcObj.relativePath = srcPath
 			dstObj.relativePath = dstPath
 			subDirs, err = mergeJoinHandleBothExist(enumerator, cca, comparator, srcObj, dstObj, srcOrigPath, subDirs)
 			if err != nil {
 				return subDirs, err
 			}
-			srcObj, srcOk = <-srcCh
-			dstObj, dstOk = <-dstCh
+			srcObj, srcOk = mergeJoinRecv(srcCh)
+			dstObj, dstOk = mergeJoinRecv(dstCh)
 		}
 	}
 
@@ -231,7 +258,7 @@ func mergeJoinSyncDir(
 		if err != nil {
 			return subDirs, err
 		}
-		srcObj, srcOk = <-srcCh
+		srcObj, srcOk = mergeJoinRecv(srcCh)
 	}
 
 	// Drain remaining dest-only objects
@@ -241,7 +268,7 @@ func mergeJoinSyncDir(
 		if err != nil {
 			return subDirs, err
 		}
-		dstObj, dstOk = <-dstCh
+		dstObj, dstOk = mergeJoinRecv(dstCh)
 	}
 
 	// Check for traversal errors from either side
@@ -250,6 +277,226 @@ func mergeJoinSyncDir(
 	}
 	if dstErr := <-dstErrCh; dstErr != nil {
 		return subDirs, fmt.Errorf("destination traversal error during merge-join: %w", dstErr)
+	}
+
+	return subDirs, nil
+}
+
+// mergeJoinContext holds cached container clients for the page-level merge-join path.
+// Created once per sync job and shared across all directory workers to avoid
+// creating new HTTP service clients per directory (which is expensive).
+type mergeJoinContext struct {
+	srcContainerClient *container.Client
+	srcContainerName   string
+	dstContainerClient *container.Client
+	dstContainerName   string
+	includeTags        bool
+}
+
+// newMergeJoinContext creates the shared container clients for source and destination.
+// Called once before the crawl loop starts.
+func newMergeJoinContext(enumerator *syncEnumerator, srcBaseURL, dstBaseURL string) (*mergeJoinContext, error) {
+	ptt := enumerator.primaryTraverserTemplate
+	stt := enumerator.secondaryTraverserTemplate
+
+	srcCC, srcCN, _, err := getContainerClientAndPrefix(srcBaseURL, &ptt.options)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create source container client: %w", err)
+	}
+
+	dstCC, dstCN, _, err := getContainerClientAndPrefix(dstBaseURL, &stt.options)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create destination container client: %w", err)
+	}
+
+	return &mergeJoinContext{
+		srcContainerClient: srcCC,
+		srcContainerName:   srcCN,
+		dstContainerClient: dstCC,
+		dstContainerName:   dstCN,
+		includeTags:        ptt.options.PreserveBlobTags,
+	}, nil
+}
+
+// searchPrefixForURL extracts the blob name from a URL and ensures it has a trailing slash.
+func searchPrefixForURL(rawURL string) (string, error) {
+	_, blobName, _, err := parseBlobURL(rawURL)
+	if err != nil {
+		return "", err
+	}
+	if blobName != "" && !strings.HasSuffix(blobName, common.AZCOPY_PATH_SEPARATOR_STRING) {
+		blobName += common.AZCOPY_PATH_SEPARATOR_STRING
+	}
+	return blobName, nil
+}
+
+// useStreamingMergeJoin returns true if the source type guarantees lexicographic
+// listing order, which is required for the streaming merge-join algorithm.
+// Local filesystem (ext4/XFS) does NOT guarantee sorted order, so it stays on
+// the existing indexMap-based flow.
+func useStreamingMergeJoin(fromTo common.FromTo) bool {
+	switch fromTo.From() {
+	case common.ELocation.S3(), common.ELocation.Blob(), common.ELocation.BlobFS():
+		return true
+	default:
+		return false
+	}
+}
+
+// mergeJoinSyncDirPageLevel performs a streaming merge-join of source and destination
+// object listings for a single directory. Instead of creating full StoredObject
+// for every blob, this reads directly from SDK listing page items via pageCursors.
+// StoredObject is only created for the <1% of items that actually need a transfer.
+//
+// Both sides are prefetched concurrently: each side has a goroutine fetching
+// pages from the storage API, with a buffer=4 channel. This ensures source and
+// destination listing are always happening in parallel, not sequentially.
+//
+// For the match case (99.99% of resync), NO StoredObject is created — we just
+// compare fields directly from the SDK listing response pages.
+func mergeJoinSyncDirPageLevel(
+	ctx context.Context,
+	mjCtx *mergeJoinContext,
+	enumerator *syncEnumerator,
+	cca *cookedSyncCmdArgs,
+	dir string,
+	srcURL string,
+	dstURL string,
+	isDestinationPresent bool,
+) (subDirs []minimalStoredObject, err error) {
+
+	subDirs = make([]minimalStoredObject, 0, 64)
+	activeMergeJoinDirs.Add(1)
+	defer activeMergeJoinDirs.Add(-1)
+
+	srcContainerName := mjCtx.srcContainerName
+	dstContainerName := mjCtx.dstContainerName
+
+	// Extract search prefix from URL (only parse, no new HTTP client)
+	srcSearchPrefix, err := searchPrefixForURL(srcURL)
+	if err != nil {
+		return subDirs, fmt.Errorf("failed to parse source URL for dir '%s': %w", dir, err)
+	}
+
+	var dstPageCh <-chan rawPage
+	var dstErrCh <-chan error
+
+	if isDestinationPresent {
+		dstSearchPrefix, dstErr := searchPrefixForURL(dstURL)
+		if dstErr != nil {
+			return subDirs, fmt.Errorf("failed to parse destination URL for dir '%s': %w", dir, dstErr)
+		}
+		// Start dst prefetch BEFORE blocking on src — both listings run in parallel
+		dstPageCh, dstErrCh = startBlobHierarchyPrefetch(ctx, mjCtx.dstContainerClient, dstSearchPrefix, false)
+	}
+
+	// Start src prefetch (goroutine launched immediately, non-blocking)
+	srcPageCh, srcErrCh := startBlobHierarchyPrefetch(ctx, mjCtx.srcContainerClient, srcSearchPrefix, mjCtx.includeTags)
+
+	// Now block on first pages — both HTTP requests are already in-flight
+	src := newPageCursor(srcPageCh, srcErrCh)
+
+	var dst *pageCursor
+	if isDestinationPresent {
+		dst = newPageCursor(dstPageCh, dstErrCh)
+	} else {
+		dst = newEmptyCursor()
+	}
+
+	// ── Merge-join loop ──
+	// Read name, size, LMT directly from raw SDK page items.
+	// Only create StoredObject when a transfer is actually needed.
+	for !src.done && !dst.done {
+		srcRelPath := src.name()
+		dstRelPath := dst.name()
+
+		srcIsFolder := src.itemEntityType() == common.EEntityType.Folder()
+		dstIsFolder := dst.itemEntityType() == common.EEntityType.Folder()
+
+		srcPath := buildChildPath(dir, srcRelPath, srcIsFolder)
+		dstPath := buildChildPath(dir, dstRelPath, dstIsFolder)
+
+		cmp := strings.Compare(srcPath, dstPath)
+
+		switch {
+		case cmp < 0:
+			// Source-only: create StoredObject and schedule transfer
+			srcObj := src.toStoredObject(srcContainerName)
+			srcObj.relativePath = srcPath
+			srcObj.isVirtualPrefix = src.itemIsVirtualPrefix()
+			incrementSourceScanned(cca, src.itemEntityType(), src.itemIsVirtualPrefix())
+			subDirs, err = mergeJoinHandleSourceOnly(enumerator, cca, srcObj, srcRelPath, subDirs)
+			if err != nil {
+				return subDirs, err
+			}
+			src.advance()
+
+		case cmp > 0:
+			// Dest-only: create StoredObject for deletion handling
+			dstObj := dst.toStoredObject(dstContainerName)
+			dstObj.relativePath = dstPath
+			err = mergeJoinHandleDestOnly(enumerator, cca, dstObj)
+			if err != nil {
+				return subDirs, err
+			}
+			dst.advance()
+
+		default:
+			// Both exist — compare from raw page data (ZERO allocation for match case)
+			incrementSourceScanned(cca, src.itemEntityType(), src.itemIsVirtualPrefix())
+			subDirs, err = mergeJoinHandleBothExistPageLevel(
+				enumerator, cca, dir,
+				src, dst,
+				srcRelPath, srcPath,
+				srcContainerName, dstContainerName,
+				subDirs,
+			)
+			if err != nil {
+				return subDirs, err
+			}
+			src.advance()
+			dst.advance()
+		}
+	}
+
+	// Drain remaining source-only objects
+	for !src.done {
+		srcRelPath := src.name()
+		srcIsFolder := src.itemEntityType() == common.EEntityType.Folder()
+		srcPath := buildChildPath(dir, srcRelPath, srcIsFolder)
+
+		srcObj := src.toStoredObject(srcContainerName)
+		srcObj.relativePath = srcPath
+		srcObj.isVirtualPrefix = src.itemIsVirtualPrefix()
+		incrementSourceScanned(cca, src.itemEntityType(), src.itemIsVirtualPrefix())
+		subDirs, err = mergeJoinHandleSourceOnly(enumerator, cca, srcObj, srcRelPath, subDirs)
+		if err != nil {
+			return subDirs, err
+		}
+		src.advance()
+	}
+
+	// Drain remaining dest-only objects
+	for !dst.done {
+		dstRelPath := dst.name()
+		dstIsFolder := dst.itemEntityType() == common.EEntityType.Folder()
+		dstPath := buildChildPath(dir, dstRelPath, dstIsFolder)
+
+		dstObj := dst.toStoredObject(dstContainerName)
+		dstObj.relativePath = dstPath
+		err = mergeJoinHandleDestOnly(enumerator, cca, dstObj)
+		if err != nil {
+			return subDirs, err
+		}
+		dst.advance()
+	}
+
+	// Check for listing errors from prefetch goroutines
+	if srcErr := src.checkError(); srcErr != nil {
+		return subDirs, fmt.Errorf("source listing error during merge-join: %w", srcErr)
+	}
+	if dstErr := dst.checkError(); dstErr != nil {
+		return subDirs, fmt.Errorf("destination listing error during merge-join: %w", dstErr)
 	}
 
 	return subDirs, nil
@@ -336,6 +583,8 @@ func mergeJoinHandleDestOnly(
 // mergeJoinHandleBothExist processes an object that exists at both source and destination.
 // It compares properties (size, LWT, changeTime) to determine if a transfer is needed.
 // Folders are always added to subdirectories for recursive traversal.
+// This version creates full StoredObjects and delegates to processIfNecessaryWithOrchestrator
+// for parity with the indexMap path.
 func mergeJoinHandleBothExist(
 	enumerator *syncEnumerator,
 	cca *cookedSyncCmdArgs,
@@ -381,6 +630,107 @@ func mergeJoinHandleBothExist(
 
 	syncComparatorLog(srcObj.relativePath, syncStatusSkipped, syncSkipReasonNoChangeInLWTorCT, false)
 	return subDirs, nil
+}
+
+// mergeJoinHandleBothExistPageLevel compares source and destination items directly
+// from the raw SDK page data — ZERO StoredObject allocation for the match case.
+//
+// Quick check: if size matches AND source LMT <= destination LMT → skip (no alloc).
+// If they differ, fall through to full comparison via StoredObject creation.
+func mergeJoinHandleBothExistPageLevel(
+	enumerator *syncEnumerator,
+	cca *cookedSyncCmdArgs,
+	dir string,
+	src *pageCursor,
+	dst *pageCursor,
+	srcRelPath string,
+	srcPath string,
+	srcContainerName string,
+	dstContainerName string,
+	subDirs []minimalStoredObject,
+) ([]minimalStoredObject, error) {
+
+	srcEntityType := src.itemEntityType()
+	dstEntityType := dst.itemEntityType()
+	srcIsVirtualPrefix := src.itemIsVirtualPrefix()
+
+	// Folders: always add to subDirs for recursive traversal
+	if srcEntityType == common.EEntityType.Folder() {
+		// Check for self-referential sentinel
+		if !isSelfReferentialDirSentinelFromCursor(srcRelPath, srcIsVirtualPrefix, cca.fromTo) {
+			subDirs = append(subDirs, minimalStoredObject{
+				relativePath:           common.AZCOPY_PATH_SEPARATOR_STRING + srcPath,
+				changeTime:             src.lmt(), // use LMT as changeTime for folders
+				isVirtualPrefix:        srcIsVirtualPrefix,
+				isPresentAtDestination: dstEntityType == common.EEntityType.Folder(),
+			})
+		}
+
+		// For folders that are virtual prefixes, no transfer is needed
+		if srcIsVirtualPrefix {
+			return subDirs, nil
+		}
+
+		// Non-virtual folder (e.g., HNS folder blob) — create StoredObject and schedule
+		srcObj := src.toStoredObject(srcContainerName)
+		srcObj.relativePath = srcPath
+		srcObj.isVirtualPrefix = srcIsVirtualPrefix
+		err := enumerator.ctp.scheduleCopyTransfer(srcObj)
+		return subDirs, err
+	}
+
+	// Files: fast path — compare size + LMT directly from page data (ZERO alloc)
+	if srcEntityType == dstEntityType {
+		srcSize := src.itemSize()
+		dstSize := dst.itemSize()
+		srcLMT := src.lmt()
+		dstLMT := dst.lmt()
+
+		// Quick match: same entity type, same size, source not newer → skip
+		if srcSize == dstSize && !srcLMT.After(dstLMT) {
+			// No transfer needed — zero allocation!
+			if enumerator.primaryTraverserTemplate.options.IncrementNotTransferred != nil {
+				enumerator.primaryTraverserTemplate.options.IncrementNotTransferred(srcEntityType)
+			}
+			return subDirs, nil
+		}
+	}
+
+	// Slow path: something differs — create full StoredObjects for detailed comparison
+	srcObj := src.toStoredObject(srcContainerName)
+	srcObj.relativePath = srcPath
+	srcObj.isVirtualPrefix = srcIsVirtualPrefix
+
+	dstObj := dst.toStoredObject(dstContainerName)
+	dstObj.relativePath = buildChildPath(dir, dst.name(), dstEntityType == common.EEntityType.Folder())
+
+	comparator := &syncDestinationComparator{
+		sourceIndex:             enumerator.objectIndexer,
+		copyTransferScheduler:   enumerator.ctp.scheduleCopyTransfer,
+		destinationCleaner:      enumerator.objectComparator,
+		deleteDestination:       cca.deleteDestination,
+		incrementNotTransferred: enumerator.primaryTraverserTemplate.options.IncrementNotTransferred,
+		orchestratorOptions:     enumerator.orchestratorOptions,
+	}
+
+	return mergeJoinHandleBothExist(enumerator, cca, comparator, srcObj, dstObj, srcRelPath, subDirs)
+}
+
+// isSelfReferentialDirSentinelFromCursor is a lighter version of isSelfReferentialDirSentinel
+// that works with cursor data (no StoredObject needed).
+func isSelfReferentialDirSentinelFromCursor(relPath string, isVirtualPrefix bool, fromTo common.FromTo) bool {
+	if relPath != "" {
+		return false
+	}
+	// GCP S3-compatible source emits directory placeholders with empty relativePath
+	if isGCPSource {
+		return true
+	}
+	// BlobFS (HNS) traverser emits the current directory as a folder with empty relativePath
+	if fromTo.From() == common.ELocation.BlobFS() {
+		return true
+	}
+	return false
 }
 
 // mergeJoinSyncOneDirLog logs messages specific to the merge-join sync path.

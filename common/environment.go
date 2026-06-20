@@ -71,6 +71,7 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.JobPlanLocation(),
 	EEnvironmentVariable.ConcurrencyValue(),
 	EEnvironmentVariable.TransferInitiationPoolSize(),
+	EEnvironmentVariable.SchedulerParallelism(),
 	EEnvironmentVariable.EnumerationPoolSize(),
 	EEnvironmentVariable.DisableHierarchicalScanning(),
 	EEnvironmentVariable.ParallelStatFiles(),
@@ -279,10 +280,31 @@ func (EnvironmentVariable) TransferInitiationPoolSize() EnvironmentVariable {
 	}
 }
 
+func (EnvironmentVariable) SchedulerParallelism() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_CONCURRENT_SCHEDULERS",
+		Description: "Overrides the number of goroutines that pull job parts off the parts channel and schedule their transfers. Higher values prevent the per-transfer creation loop from becoming a single-threaded bottleneck when copying very large numbers of small files.",
+	}
+}
+
 func (EnvironmentVariable) ShuffleThresholdParts() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_SHUFFLE_THRESHOLD_PARTS",
 		Description: "Sync orchestrator: number of plan-parts worth of transfers to buffer before performing a shuffle/flush. Default 0 (no shuffle, transfers dispatched as encountered). Set to a positive value to buffer that many plan-parts before shuffling/flushing; set larger than the expected total plan parts to defer all dispatch until enumeration completes (single global shuffle of all transfers).",
+	}
+}
+
+func (EnvironmentVariable) ShuffleTransfers() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_SHUFFLE_TRANSFERS",
+		Description: "Sync orchestrator: enable transfer shuffling and part reordering to spread key-space prefixes across plan parts. Default false (disabled). When disabled, transfers are dispatched directly to STE in arrival order with bounded memory. Set to true or 1 to enable.",
+	}
+}
+
+func (EnvironmentVariable) UsePageLevelMergeJoin() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_USE_PAGE_LEVEL_MERGE_JOIN",
+		Description: "When true or 1, the sync orchestrator merge-join path reads raw SDK listing pages directly (zero-alloc fast path for matched items). When false or unset (default), it uses the channel-based approach that bridges traversers into pull-based channels. The channel-based approach is the proven path; page-level is experimental.",
 	}
 }
 

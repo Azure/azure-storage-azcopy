@@ -83,7 +83,7 @@ const (
 var (
 	enableDebugLogs    bool = false
 	enableThrottleLogs bool = true
-	startGoProfiling   bool = false
+	startGoProfiling   bool = true
 
 	// Core concurrency settings
 	crawlParallelism                  int32
@@ -164,7 +164,11 @@ func initializeLimits(orchestratorOptions *SyncOrchestratorOptions) {
 	// For merge-join (remote sources), parallelism is not bound by memory/indexMap constraints
 	// since objects are streamed and not accumulated. Use env var override with a high default.
 	if useStreamingMergeJoin(orchestratorOptions.fromTo) {
-		crawlParallelism = getMergeJoinParallelism()
+		if orchestratorOptions.mergeJoinParallelism > 0 {
+			crawlParallelism = orchestratorOptions.mergeJoinParallelism
+		} else {
+			crawlParallelism = getMergeJoinParallelism()
+		}
 		// Merge-join streams objects — no indexMap accumulation — so memory/file/goroutine
 		// throttling is unnecessary. Disabling avoids the ReadMemStats STW bottleneck
 		// that serializes all workers through a global mutex+STW pause.
@@ -607,6 +611,8 @@ func (ds *ThrottleSemaphore) getOrchestratorStats() []common.CustomStatEntry {
 		{Key: "SrcEnum", Value: fmt.Sprintf("%d", srcDirEnumerating.Load())},
 		{Key: "DstEnum", Value: fmt.Sprintf("%d", dstDirEnumerating.Load())},
 		{Key: "Done", Value: fmt.Sprintf("%d", totalDirectoriesProcessed.Load())},
+		{Key: "ChanFull", Value: fmt.Sprintf("%d", mergeJoinChanFullEvents.Load())},
+		{Key: "ChanDry", Value: fmt.Sprintf("%d", mergeJoinChanDryEvents.Load())},
 	}
 
 	waitingSource := ds.waitingForSourceSemaphore.Load()

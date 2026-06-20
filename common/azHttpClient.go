@@ -21,9 +21,13 @@
 package common
 
 import (
+	"context"
+	"crypto/tls"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptrace"
+	"os"
 	"runtime"
 	"strconv"
 	"sync"
@@ -40,40 +44,148 @@ var (
 )
 
 const (
-	maxIdleConnsPerHost_MaxValue = 10000
+	maxIdleConnsPerHost_MaxValue = 30000
 	httpTraceTickerInterval      = time.Minute * 1
 )
+
+// ShardedTransport implements http.RoundTripper by distributing requests across
+// N underlying http.Transport instances via atomic round-robin. Each transport has
+// its own connection pool and connsPerHostMu lock, so contention is reduced by N×.
+// This is critical for high-IOPS workloads where thousands of goroutines compete.
+type ShardedTransport struct {
+	transports []*http.Transport
+	counter    atomic.Uint64
+	shardStats []shardMetrics
+}
+
+// shardMetrics tracks per-shard connection and concurrency statistics.
+type shardMetrics struct {
+	inFlight    atomic.Int64 // current in-flight requests
+	peakFlight  atomic.Int64 // peak in-flight since last log
+	totalReqs   atomic.Int64 // total requests routed to this shard
+	connNew     atomic.Int64 // new connections (not reused)
+	connReused  atomic.Int64 // reused connections
+}
+
+func (s *ShardedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	idx := s.counter.Add(1) % uint64(len(s.transports))
+	m := &s.shardStats[idx]
+
+	// Track in-flight concurrency
+	inflight := m.inFlight.Add(1)
+	m.totalReqs.Add(1)
+	// Update peak (relaxed CAS loop)
+	for {
+		peak := m.peakFlight.Load()
+		if inflight <= peak || m.peakFlight.CompareAndSwap(peak, inflight) {
+			break
+		}
+	}
+
+	// Inject httptrace to count connections per shard
+	trace := &httptrace.ClientTrace{
+		GotConn: func(info httptrace.GotConnInfo) {
+			if info.Reused {
+				m.connReused.Add(1)
+			} else {
+				m.connNew.Add(1)
+			}
+		},
+	}
+	req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
+
+	resp, err := s.transports[idx].RoundTrip(req)
+	m.inFlight.Add(-1)
+	return resp, err
+}
+
+// startShardLogger logs per-shard stats periodically (every 60s).
+func (s *ShardedTransport) startShardLogger() {
+	go func() {
+		ticker := time.NewTicker(60 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			for i := range s.shardStats {
+				m := &s.shardStats[i]
+				inflight := m.inFlight.Load()
+				peak := m.peakFlight.Swap(0) // reset peak each interval
+				total := m.totalReqs.Load()
+				connNew := m.connNew.Load()
+				connReused := m.connReused.Load()
+				// Only log shards that had traffic
+				if total > 0 {
+					fmt.Fprintf(os.Stderr,
+						"SHARD[%d]: inFlight=%d peakFlight=%d totalReqs=%d connNew=%d connReused=%d activeConns~%d\n",
+						i, inflight, peak, total, connNew, connReused, connNew)
+				}
+			}
+		}
+	}()
+}
+
+// numTransportShards controls how many http.Transport instances are created.
+// Each shard has its own mutex for connection pool access.
+// 128 shards → with 100k goroutines, only ~780 contend per lock.
+const numTransportShards = 128
+
+// newShardedTransport creates N http.Transport instances with identical configuration.
+// Azure Blob Storage only supports HTTP/1.1 (per MS docs), so we optimize for maximum
+// parallel connections. 128 shards × 100k maxConnsPerHost eliminates pool lock contention.
+func newShardedTransport(maxConnsPerHost int) *ShardedTransport {
+	shards := make([]*http.Transport, numTransportShards)
+	for i := range shards {
+		dialer := &net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}
+		shards[i] = &http.Transport{
+			Proxy: GlobalProxyLookup,
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return dialer.DialContext(ctx, network, addr)
+			},
+			MaxConnsPerHost:        maxConnsPerHost,
+			MaxIdleConns:           0,
+			MaxIdleConnsPerHost:    maxConnsPerHost,
+			IdleConnTimeout:        180 * time.Second,
+			TLSHandshakeTimeout:    10 * time.Second,
+			ExpectContinueTimeout:  1 * time.Second,
+			DisableKeepAlives:      false,
+			DisableCompression:     true,
+			MaxResponseHeaderBytes: 0,
+			WriteBufferSize:        64 * 1024,
+			ReadBufferSize:         64 * 1024,
+			ForceAttemptHTTP2:      false, // Azure Blob doesn't support h2
+			TLSClientConfig: &tls.Config{
+				NextProtos: []string{"http/1.1"},
+			},
+		}
+	}
+	st := &ShardedTransport{
+		transports: shards,
+		shardStats: make([]shardMetrics, numTransportShards),
+	}
+	st.startShardLogger()
+	return st
+}
 
 // GetGlobalHTTPClient initializes and returns the process-global HTTP client exactly once.
 // Subsequent calls return the same client. The logger function, if provided on the first call,
 // will be invoked with status messages.
 func GetGlobalHTTPClient(logger ILoggerResetable) *http.Client {
 	globalHTTPClientOnce.Do(func() {
-		const maxConnsPerHost = 20000
+		const maxConnsPerHost = 100000
+		shardedTransport := newShardedTransport(maxConnsPerHost)
 		client := &http.Client{
-			Transport: &http.Transport{
-				Proxy:                  GlobalProxyLookup,
-				MaxConnsPerHost:        maxConnsPerHost,
-				MaxIdleConns:           0,
-				MaxIdleConnsPerHost:    maxConnsPerHost,
-				IdleConnTimeout:        180 * time.Second,
-				TLSHandshakeTimeout:    10 * time.Second,
-				ExpectContinueTimeout:  1 * time.Second,
-				DisableKeepAlives:      false,
-				DisableCompression:     true,
-				MaxResponseHeaderBytes: 0,
-			},
+			Transport: shardedTransport,
 		}
 		GlobalHTTPClient = client
+		// Always log to stderr so it shows up in container logs
+		msg := fmt.Sprintf(
+			"GetGlobalHTTPClient: SHARDED_TRANSPORT_V6 initialized %p shards=%d MaxConnsPerHost=%d HTTP1.1_ONLY",
+			client, numTransportShards, maxConnsPerHost)
+		fmt.Fprintln(os.Stderr, msg)
 		if logger != nil {
-			if tr, ok := client.Transport.(*http.Transport); ok {
-				logger.Log(LogError, // XDM: This is error level on purpose as we want to make sure it is seen in the logs
-					fmt.Sprintf(
-						"GetGlobalHTTPClient: initialized %p MaxIdleConnsPerHost=%d MaxConnsPerHost=%d MaxIdleConns=%d",
-						client, tr.MaxIdleConnsPerHost, tr.MaxConnsPerHost, tr.MaxIdleConns))
-			} else {
-				logger.Log(LogError, fmt.Sprintf("GetGlobalHTTPClient: initialized %p", client))
-			}
+			logger.Log(LogError, msg)
 		}
 	})
 	return GlobalHTTPClient

@@ -488,9 +488,16 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	if pipeStats != nil {
 		js.AverageIOPS = pipeStats.OperationsPerSecond()
 		js.AverageE2EMilliseconds = pipeStats.AverageE2EMilliseconds()
+		js.AverageConnWaitMs = pipeStats.AverageConnWaitMs()
+		js.AverageWireMs = pipeStats.AverageWireMs()
+		js.AverageDNSMs = pipeStats.AverageDNSMs()
+		js.AverageTLSMs = pipeStats.AverageTLSMs()
+		js.ConnNewCount = pipeStats.ConnNewCount()
+		js.ConnReusedCount = pipeStats.ConnReusedCount()
 		js.NetworkErrorPercentage = pipeStats.NetworkErrorPercentage()
 		js.ServerBusyPercentage = pipeStats.TotalServerBusyPercentage()
 	}
+	js.AverageChunkQueueMs = jm.AverageChunkQueueWaitMs()
 
 	// If the status is cancelled, then no need to check for completerJobOrdered
 	// since user must have provided the consent to cancel an incompleteJob if that
@@ -644,9 +651,16 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 	if pipeStats != nil {
 		js.AverageIOPS = pipeStats.OperationsPerSecond()
 		js.AverageE2EMilliseconds = pipeStats.AverageE2EMilliseconds()
+		js.AverageConnWaitMs = pipeStats.AverageConnWaitMs()
+		js.AverageWireMs = pipeStats.AverageWireMs()
+		js.AverageDNSMs = pipeStats.AverageDNSMs()
+		js.AverageTLSMs = pipeStats.AverageTLSMs()
+		js.ConnNewCount = pipeStats.ConnNewCount()
+		js.ConnReusedCount = pipeStats.ConnReusedCount()
 		js.NetworkErrorPercentage = pipeStats.NetworkErrorPercentage()
 		js.ServerBusyPercentage = pipeStats.TotalServerBusyPercentage()
 	}
+	js.AverageChunkQueueMs = jm.AverageChunkQueueWaitMs()
 
 	// If the status is cancelled, then no need to check for completerJobOrdered
 	// since user must have provided the consent to cancel an incompleteJob if that

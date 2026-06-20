@@ -33,6 +33,7 @@ import (
 	"net/url"
 	"os"
 	"runtime"
+	"runtime/pprof"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -593,6 +594,59 @@ func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator,
 			syncOrchestratorLog(common.LogInfo, "Listening to port 6060..\n")
 			http.ListenAndServe("localhost:6060", nil)
 		}()
+		// Capture heap + CPU profiles every 2 minutes continuously
+		go func() {
+			ticker := time.NewTicker(2 * time.Minute)
+			defer ticker.Stop()
+			// Write profiles into the per-job azcopy directory (same place the rolling-stats
+			// and scanning logs live) so they can be easily correlated with a specific job run.
+			// Fall back to the share root if the per-job log folder is not set.
+			profileDir := azcopyLogPathFolder
+			if profileDir == "" {
+				profileDir = "/mnt/clpfileshare"
+			}
+			iteration := 0
+			for range ticker.C {
+				iteration++
+
+				// Heap profile
+				heapPath := fmt.Sprintf("%s/heap_profile_%dmin.pb.gz", profileDir, iteration*2)
+				hf, err := os.Create(heapPath)
+				if err != nil {
+					syncOrchestratorLog(common.LogError, fmt.Sprintf("pprof: cannot create %s: %v", heapPath, err))
+				} else {
+					runtime.GC()
+					pprof.WriteHeapProfile(hf)
+					hf.Close()
+					syncOrchestratorLog(common.LogInfo, fmt.Sprintf("pprof: heap profile written to %s", heapPath))
+				}
+
+				// Goroutine profile
+				goroutinePath := fmt.Sprintf("%s/goroutine_profile_%dmin.pb.gz", profileDir, iteration*2)
+				gf, err := os.Create(goroutinePath)
+				if err != nil {
+					syncOrchestratorLog(common.LogError, fmt.Sprintf("pprof: cannot create %s: %v", goroutinePath, err))
+				} else {
+					pprof.Lookup("goroutine").WriteTo(gf, 0)
+					gf.Close()
+					syncOrchestratorLog(common.LogInfo, fmt.Sprintf("pprof: goroutine profile written to %s", goroutinePath))
+				}
+
+				// CPU profile (30s sample)
+				cpuPath := fmt.Sprintf("%s/cpu_profile_%dmin.pb.gz", profileDir, iteration*2)
+				cf, err := os.Create(cpuPath)
+				if err != nil {
+					syncOrchestratorLog(common.LogError, fmt.Sprintf("pprof: cannot create %s: %v", cpuPath, err))
+				} else {
+					syncOrchestratorLog(common.LogInfo, fmt.Sprintf("pprof: starting 30s CPU profile at %dmin", iteration*2))
+					pprof.StartCPUProfile(cf)
+					time.Sleep(30 * time.Second)
+					pprof.StopCPUProfile()
+					cf.Close()
+					syncOrchestratorLog(common.LogInfo, fmt.Sprintf("pprof: CPU profile written to %s", cpuPath))
+				}
+			}
+		}()
 	}
 
 	err := validate(cca, enumerator.orchestratorOptions) // Validate the command arguments for sync orchestrator
@@ -656,6 +710,22 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 	var crawlWg sync.WaitGroup // WaitGroup for all directory processing tasks
 
+	// Determine merge-join mode: page-level (experimental) or channel-based (default)
+	pageLevelMergeJoin := useStreamingMergeJoin(cca.fromTo) && usePageLevelMergeJoin()
+
+	// Create shared merge-join context (cached container clients) — only needed for page-level path
+	var mjCtx *mergeJoinContext
+	if pageLevelMergeJoin {
+		var mjErr error
+		mjCtx, mjErr = newMergeJoinContext(enumerator, cca.source.Value, cca.destination.Value)
+		if mjErr != nil {
+			return fmt.Errorf("failed to create merge-join context: %w", mjErr)
+		}
+		syncOrchestratorLog(common.LogInfo, "[MergeJoin] Using PAGE-LEVEL merge-join (AZCOPY_USE_PAGE_LEVEL_MERGE_JOIN=true)", true)
+	} else if useStreamingMergeJoin(cca.fromTo) {
+		syncOrchestratorLog(common.LogInfo, "[MergeJoin] Using CHANNEL-BASED merge-join (default)", true)
+	}
+
 	// syncOneDir processes a single directory by creating source and destination traversers,
 	// enumerating files, comparing them, and scheduling transfers. It also discovers
 	// subdirectories and enqueues them for further processing.
@@ -669,27 +739,16 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		defer totalDirectoriesProcessed.Add(1)
 
 		var err error
-		var stepStart time.Time
 
 		// Acquire semaphore slot to limit concurrent directory processing
 		if enableThrottling {
-			syncOrchestratorLog(common.LogInfo,
-				fmt.Sprintf("[STEP] dir='%s' → AcquireSourceSlot START (activeMJ=%d, goroutines=%d)",
-					dir.(minimalStoredObject).relativePath, activeMergeJoinDirs.Load(), runtime.NumGoroutine()), true)
-			stepStart = time.Now()
 			err = semaphore.AcquireSourceSlot(mainCtx)
-			if elapsed := time.Since(stepStart); elapsed > 5*time.Second {
-				syncOrchestratorLog(common.LogWarning,
-					fmt.Sprintf("[SLOW-STEP] dir='%s' AcquireSourceSlot took %v", dir.(minimalStoredObject).relativePath, elapsed), true)
-			}
 			if err != nil {
 				syncOrchestratorLog(
 					common.LogError,
 					fmt.Sprintf("Failed to acquire source slot for dir '%s': %s", dir.(minimalStoredObject).relativePath, err))
 				return err
 			}
-			syncOrchestratorLog(common.LogInfo,
-				fmt.Sprintf("[STEP] dir='%s' → AcquireSourceSlot DONE", dir.(minimalStoredObject).relativePath), true)
 		}
 
 		srcDirEnumerating.Add(1) // Increment active directory count
@@ -716,77 +775,85 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 		var errMsg string
 
-		// Create source traverser for current directory
-		syncOrchestratorLog(common.LogInfo,
-			fmt.Sprintf("[STEP] dir='%s' → InitResourceTraverser(src) START", dir.(minimalStoredObject).relativePath), true)
-		stepStart = time.Now()
-		pt, err := InitResourceTraverser(
-			pt_src,
-			ptt.location,
-			mainCtx,
-			ptt.options)
-		if err != nil {
-			errMsg = fmt.Sprintf("Creating source traverser failed for dir %s: %s", pt_src.Value, err)
-			syncOrchestratorLog(common.LogError, errMsg)
-			writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
-				DirPath:           pt_src.Value,
-				DirName:           dir.(minimalStoredObject).relativePath,
-				ErrorMsg:          errors.New(errMsg),
-				TraverserLocation: cca.fromTo.From(),
-			})
-			return err
-		}
-		if elapsed := time.Since(stepStart); elapsed > 10*time.Second {
-			syncOrchestratorLog(common.LogWarning,
-				fmt.Sprintf("[SLOW-STEP] dir='%s' InitResourceTraverser(src) took %v", dir.(minimalStoredObject).relativePath, elapsed), true)
-		}
-
-		// Create destination traverser for current directory
-		syncOrchestratorLog(common.LogInfo,
-			fmt.Sprintf("[STEP] dir='%s' → InitResourceTraverser(dst) START", dir.(minimalStoredObject).relativePath), true)
-		stepStart = time.Now()
-		st, err := InitResourceTraverser(
-			st_src,
-			stt.location,
-			mainCtx,
-			stt.options)
-		if err != nil {
-			errMsg = fmt.Sprintf("Creating target traverser failed for dir %s: %s\n", st_src.Value, err)
-			syncOrchestratorLog(common.LogError, errMsg)
-			writeSyncErrToChannel(stt.options.ErrorChannel, SyncOrchErrorInfo{
-				DirPath:           st_src.Value,
-				DirName:           dir.(minimalStoredObject).relativePath,
-				ErrorMsg:          errors.New(errMsg),
-				TraverserLocation: cca.fromTo.To(),
-			})
-			return err
-		}
-		if elapsed := time.Since(stepStart); elapsed > 10*time.Second {
-			syncOrchestratorLog(common.LogWarning,
-				fmt.Sprintf("[SLOW-STEP] dir='%s' InitResourceTraverser(dst) took %v", dir.(minimalStoredObject).relativePath, elapsed), true)
-		}
-
 		isDestinationPresent := dir.(minimalStoredObject).isPresentAtDestination
 
 		// Fork: use streaming merge-join for remote sources (sorted listings),
 		// keep existing indexMap-based flow for local filesystem (unsorted).
 		if useStreamingMergeJoin(cca.fromTo) {
-			// ── Streaming merge-join path (S3, Blob, BlobFS sources) ──
-			// Both source and destination listings are lexicographically ordered,
-			// enabling O(1) memory streaming comparison instead of O(N) indexMap.
-
 			mergeJoinSyncOneDirLog(common.LogDebug,
 				fmt.Sprintf("Processing dir '%s'", dir.(minimalStoredObject).relativePath))
 
-			subDirs, mergeErr := mergeJoinSyncDir(
-				mainCtx,
-				enumerator,
-				cca,
-				dir.(minimalStoredObject).relativePath,
-				pt,
-				st,
-				isDestinationPresent,
-			)
+			var subDirs []minimalStoredObject
+			var mergeErr error
+
+			if pageLevelMergeJoin {
+				// ── Page-level merge-join (experimental) ──
+				// Reads raw SDK listing pages directly via pageCursors.
+				subDirs, mergeErr = mergeJoinSyncDirPageLevel(
+					mainCtx,
+					mjCtx,
+					enumerator,
+					cca,
+					dir.(minimalStoredObject).relativePath,
+					pt_src.Value,
+					st_src.Value,
+					isDestinationPresent,
+				)
+			} else {
+				// ── Channel-based merge-join (default) ──
+				// Uses InitResourceTraverser + traverserToChannel with 1000-item buffer.
+				pt, ptErr := InitResourceTraverser(
+					pt_src,
+					ptt.location,
+					mainCtx,
+					ptt.options)
+				if ptErr != nil {
+					errMsg = fmt.Sprintf("Creating source traverser failed for dir %s: %s", pt_src.Value, ptErr)
+					syncOrchestratorLog(common.LogError, errMsg)
+					writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
+						DirPath:           pt_src.Value,
+						DirName:           dir.(minimalStoredObject).relativePath,
+						ErrorMsg:          errors.New(errMsg),
+						TraverserLocation: cca.fromTo.From(),
+					})
+					srcDirEnumerating.Add(-1)
+					if enableThrottling {
+						semaphore.ReleaseSourceSlot()
+					}
+					return ptErr
+				}
+
+				st, stErr := InitResourceTraverser(
+					st_src,
+					stt.location,
+					mainCtx,
+					stt.options)
+				if stErr != nil {
+					errMsg = fmt.Sprintf("Creating target traverser failed for dir %s: %s\n", st_src.Value, stErr)
+					syncOrchestratorLog(common.LogError, errMsg)
+					writeSyncErrToChannel(stt.options.ErrorChannel, SyncOrchErrorInfo{
+						DirPath:           st_src.Value,
+						DirName:           dir.(minimalStoredObject).relativePath,
+						ErrorMsg:          errors.New(errMsg),
+						TraverserLocation: cca.fromTo.To(),
+					})
+					srcDirEnumerating.Add(-1)
+					if enableThrottling {
+						semaphore.ReleaseSourceSlot()
+					}
+					return stErr
+				}
+
+				subDirs, mergeErr = mergeJoinSyncDirChannelBased(
+					mainCtx,
+					enumerator,
+					cca,
+					dir.(minimalStoredObject).relativePath,
+					pt,
+					st,
+					isDestinationPresent,
+				)
+			}
 
 			srcDirEnumerating.Add(-1) // Decrement active directory count after merge-join completes
 
@@ -822,6 +889,42 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		// ── Existing indexMap-based path (local filesystem sources) ──
 		// Local filesystem does not guarantee lexicographic listing order,
 		// so we use the traditional store-all-then-compare approach.
+
+		// Create source traverser for current directory
+		pt, err := InitResourceTraverser(
+			pt_src,
+			ptt.location,
+			mainCtx,
+			ptt.options)
+		if err != nil {
+			errMsg = fmt.Sprintf("Creating source traverser failed for dir %s: %s", pt_src.Value, err)
+			syncOrchestratorLog(common.LogError, errMsg)
+			writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
+				DirPath:           pt_src.Value,
+				DirName:           dir.(minimalStoredObject).relativePath,
+				ErrorMsg:          errors.New(errMsg),
+				TraverserLocation: cca.fromTo.From(),
+			})
+			return err
+		}
+
+		// Create destination traverser for current directory
+		st, err := InitResourceTraverser(
+			st_src,
+			stt.location,
+			mainCtx,
+			stt.options)
+		if err != nil {
+			errMsg = fmt.Sprintf("Creating target traverser failed for dir %s: %s\n", st_src.Value, err)
+			syncOrchestratorLog(common.LogError, errMsg)
+			writeSyncErrToChannel(stt.options.ErrorChannel, SyncOrchErrorInfo{
+				DirPath:           st_src.Value,
+				DirName:           dir.(minimalStoredObject).relativePath,
+				ErrorMsg:          errors.New(errMsg),
+				TraverserLocation: cca.fromTo.To(),
+			})
+			return err
+		}
 
 		// Create sync traverser for this directory
 		stra := newSyncTraverser(enumerator, dir.(minimalStoredObject).relativePath, enumerator.objectComparator)

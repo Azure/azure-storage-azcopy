@@ -22,6 +22,7 @@ package parallel
 
 import (
 	"context"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -129,7 +130,6 @@ func (c *crawler) workerLoop(ctx context.Context, wg *sync.WaitGroup, workerInde
 
 func (c *crawler) processOneDirectory(ctx context.Context, workerIndex int) (bool, error) {
 	const maxQueueDirectories = 1000 * 1000
-	const maxQueueDirsForBreadthFirst = 100 * 1000 // figure is somewhat arbitrary.  Want it big, but not huge
 
 	var toExamine Directory
 	stop := false
@@ -148,22 +148,16 @@ func (c *crawler) processOneDirectory(ctx context.Context, workerIndex int) (boo
 		stop = ctx.Err() != nil
 		if !stop {
 			if len(c.unstartedDirs) > 0 {
-				if len(c.unstartedDirs) < maxQueueDirsForBreadthFirst {
-					// pop from start of list. This gives a breadth-first flavour to the search.
-					// (Breadth-first is useful for distributing small-file workloads over the full keyspace, which
-					// is can help performance when uploading small files to Azure Blob Storage)
-					toExamine = c.unstartedDirs[0]
-					c.unstartedDirs = c.unstartedDirs[1:]
-				} else {
-					// Fall back to popping from end of list if list is already pretty big.
-					// This gives more of a depth-first flavour to our processing,
-					// which (we think) will prevent c.unstartedDirs getting really large and using too much RAM.
-					// (Since we think that depth first tends to hit leaf nodes relatively quickly, so total number of
-					// unstarted dirs should tend to grow less in a depth first mode)
-					lastIndex := len(c.unstartedDirs) - 1
-					toExamine = c.unstartedDirs[lastIndex]
-					c.unstartedDirs = c.unstartedDirs[:lastIndex]
-				}
+				// Random dequeue: pick a random directory from the queue and swap-remove it (O(1)).
+				// This spreads workers across diverse prefixes, avoiding partition hotspotting
+				// when writing to Azure Blob Storage (where lexicographically adjacent keys
+				// often land on the same partition). Unlike BFS (FIFO) or DFS (LIFO), random
+				// selection ensures no sustained prefix locality regardless of queue size.
+				idx := rand.Intn(len(c.unstartedDirs))
+				toExamine = c.unstartedDirs[idx]
+				last := len(c.unstartedDirs) - 1
+				c.unstartedDirs[idx] = c.unstartedDirs[last]
+				c.unstartedDirs = c.unstartedDirs[:last]
 
 				c.dirInProgressCount++ // record that we are working on something
 				c.cond.Broadcast()     // and let other threads know of that fact

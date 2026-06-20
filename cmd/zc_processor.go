@@ -37,6 +37,20 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
+// Backpressure limits to prevent unbounded memory growth.
+//
+// inMemoryWindowMultiplier sets the high watermark for the scanner backpressure as a
+// multiple of the shuffle window (numOfTransfersPerPart * shuffleThreshold). The shuffle
+// buffer is the true in-memory accumulator: every flush swaps it out, shuffles it lock-free,
+// and dispatches the resulting plan parts asynchronously to STE (the plan files written to
+// the SMB share are the durable store, so dispatched parts no longer cost heap). The scanner
+// therefore runs unblocked in the common case. It is only parked when dispatch genuinely
+// cannot keep up and the buffer grows past this watermark — i.e. a double-buffer worth of
+// transfers (one window filling + one window mid-flush). A wide hysteresis band (release once
+// the buffer drains below a single window) prevents the per-part on/off thrashing that caused
+// the throughput sawtooth.
+const inMemoryWindowMultiplier = 2
+
 // getShuffleThresholdParts returns the number of plan parts worth of transfers to buffer
 // before performing a shuffle/flush. Default 0 (no shuffle); overridable via AZCOPY_SHUFFLE_THRESHOLD_PARTS.
 // Set to a value larger than the expected total plan parts in the job to defer all dispatch
@@ -44,7 +58,7 @@ import (
 var shuffleThresholdLogOnce sync.Once
 
 func getShuffleThresholdParts() int {
-	const defaultThreshold = 0
+	const defaultThreshold = 30
 	effective := defaultThreshold
 	rawValue := common.GetEnvironmentVariable(common.EEnvironmentVariable.ShuffleThresholdParts())
 	if rawValue != "" {
@@ -56,6 +70,31 @@ func getShuffleThresholdParts() int {
 		fmt.Printf("[ShuffleConfig] AZCOPY_SHUFFLE_THRESHOLD_PARTS raw=%q effective=%d\n", rawValue, effective)
 	})
 	return effective
+}
+
+var shuffleEnabledLogOnce sync.Once
+
+func isShuffleEnabled() bool {
+	enabled := false
+	rawValue := common.GetEnvironmentVariable(common.EEnvironmentVariable.ShuffleTransfers())
+	if rawValue != "" {
+		switch strings.ToLower(rawValue) {
+		case "true", "1":
+			enabled = true
+		}
+	}
+	shuffleEnabledLogOnce.Do(func() {
+		fmt.Printf("[ShuffleConfig] AZCOPY_SHUFFLE_TRANSFERS raw=%q enabled=%v\n", rawValue, enabled)
+	})
+	return enabled
+}
+
+// dispatchItem is a snapshot of a single part ready for async dispatch to STE.
+// It captures all state needed so the dispatch goroutine can call sendPartToSte
+// without holding any locks on the processor.
+type dispatchItem struct {
+	transfers common.Transfers
+	partNum   common.PartNumber
 }
 
 type copyTransferProcessor struct {
@@ -90,6 +129,17 @@ type copyTransferProcessor struct {
 	// so the STE processes diverse prefix ranges concurrently.
 	pendingParts       []pendingPart
 	flushWindowCounter uint32 // monotonically increasing flush window ID for diagnostics
+
+	// Pipelined dispatch: parts are pushed into dispatchCh and a pool of background goroutines
+	// calls sendPartToSte asynchronously, allowing the shuffle buffer to refill concurrently.
+	dispatchCh   chan dispatchItem
+	dispatchOnce sync.Once
+	dispatchErr  error         // first error from dispatch goroutine
+	dispatchWg   sync.WaitGroup // tracks all dispatch workers
+	dispatchDone chan struct{}  // closed when all dispatch workers exit
+
+	// Backpressure signaling
+	bufferDrainCond *sync.Cond // condition variable signaled when pendingParts or shuffleBuffer drain below limits
 }
 
 // pendingPart wraps a plan part's transfers with metadata about its origin,
@@ -101,6 +151,7 @@ type pendingPart struct {
 }
 
 func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int, source, destination common.ResourceString, reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier, dryrunMode bool) *copyTransferProcessor {
+	m := &sync.Mutex{}
 	return &copyTransferProcessor{
 		numOfTransfersPerPart:     numOfTransfersPerPart,
 		copyJobTemplate:           copyJobTemplate,
@@ -112,7 +163,62 @@ func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, n
 		folderPropertiesOption:    copyJobTemplate.Fpo,
 		symlinkHandlingType:       copyJobTemplate.SymlinkHandlingType,
 		dryrunMode:                dryrunMode,
+		dispatchCh:                make(chan dispatchItem, 1000), // buffer 1000 parts for async dispatch
+		dispatchDone:              make(chan struct{}),
+		bufferDrainCond:           sync.NewCond(m),
 	}
+}
+
+// startDispatchPipeline ensures the background dispatch worker pool is running.
+// Called lazily on first use via sync.Once.
+func (s *copyTransferProcessor) startDispatchPipeline() {
+	s.dispatchOnce.Do(func() {
+		const numDispatchWorkers = 32 // parallelize fsync-heavy plan file creation
+		s.dispatchWg.Add(numDispatchWorkers)
+		for i := 0; i < numDispatchWorkers; i++ {
+			go s.dispatchWorker()
+		}
+		// Close dispatchDone when all workers finish
+		go func() {
+			s.dispatchWg.Wait()
+			close(s.dispatchDone)
+		}()
+	})
+}
+
+// dispatchWorker is a background goroutine that reads dispatchItems and sends them to STE.
+// Multiple workers run concurrently to parallelize plan file creation (fsync).
+func (s *copyTransferProcessor) dispatchWorker() {
+	defer s.dispatchWg.Done()
+	for item := range s.dispatchCh {
+		if s.dispatchErr != nil {
+			continue // drain channel after first error
+		}
+		// Build a local copy of the template for this part
+		template := *s.copyJobTemplate
+		template.Transfers = item.transfers
+		template.PartNum = item.partNum
+
+		var resp common.CopyJobPartOrderResponse
+		Rpc(common.ERpcCmd.CopyJobPartOrder(), &template, &resp)
+
+		// Report first part dispatched if this is part 0
+		if item.partNum == 0 && s.reportFirstPartDispatched != nil {
+			s.reportFirstPartDispatched(resp.JobStarted)
+		}
+
+		if resp.ErrorMsg != "" {
+			s.dispatchErr = errors.New(string(resp.ErrorMsg))
+		}
+	}
+}
+
+// waitForDispatchPipeline closes the dispatch channel and waits for all workers to finish.
+// Returns the first error encountered during async dispatch.
+func (s *copyTransferProcessor) waitForDispatchPipeline() error {
+	close(s.dispatchCh)
+	<-s.dispatchDone
+	return s.dispatchErr
 }
 
 type DryrunTransfer struct {
@@ -332,39 +438,62 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 	}
 
 	if UseSyncOrchestrator {
-		// Buffer transfers and shuffle across multiple plan parts to spread key-space prefixes.
-		// This prevents the append-only partition access pattern where consecutive plan parts
-		// contain consecutive blob prefixes, which concentrates storage partition load.
-		// Threshold (in plan parts) is overridable via AZCOPY_SHUFFLE_THRESHOLD_PARTS — set
-		// to a value larger than the expected total parts to defer all dispatch until the
-		// final part (single global shuffle of all transfers).
-		shuffleThreshold := getShuffleThresholdParts()
+		if isShuffleEnabled() {
+			// Buffer transfers and shuffle across multiple plan parts to spread key-space prefixes.
+			shuffleThreshold := getShuffleThresholdParts()
 
-		var needsFlush bool
+			// Last-resort backpressure (anti-sawtooth): do NOT block the scanner per-part.
+			// Enumerated transfers stream into the shuffle buffer, get chopped into plan parts,
+			// and are dispatched asynchronously — the plan files on the SMB share are the durable
+			// store, so the scanner does not need to wait on dispatch in the common case. We only
+			// park the scanner when dispatch genuinely cannot keep up and the in-memory buffer
+			// exceeds a double-buffer worth of transfers. Woken scanners re-check this loop
+			// condition, so the wide hysteresis band (drain below one window before refilling past
+			// two) is preserved and the boundary thrashing that caused the sawtooth is eliminated.
+			highWatermark := s.numOfTransfersPerPart * shuffleThreshold * inMemoryWindowMultiplier
+			s.bufferDrainCond.L.Lock()
+			for len(s.shuffleBuffer) >= highWatermark {
+				s.bufferDrainCond.Wait()
+			}
+			s.bufferDrainCond.L.Unlock()
 
-		// Hold the mutex only for the append operation, not for the flush
-		s.syncTransferMutex.Lock()
-		s.shuffleBuffer = append(s.shuffleBuffer, copyTransfer)
-		s.shuffleBufferSizeInBytes += uint64(copyTransfer.SourceSize)
-		switch copyTransfer.EntityType {
-		case common.EEntityType.File():
-			s.shuffleBufferFileCounts.FileTransferCount++
-		case common.EEntityType.Folder():
-			s.shuffleBufferFileCounts.FolderTransferCount++
-		case common.EEntityType.Symlink():
-			s.shuffleBufferFileCounts.SymlinkTransferCount++
-		case common.EEntityType.Hardlink():
-			s.shuffleBufferFileCounts.HardlinksConvertedCount++
-		case common.EEntityType.FileProperties():
-			s.shuffleBufferFileCounts.FilePropertyTransferCount++
-		}
-		needsFlush = len(s.shuffleBuffer) >= s.numOfTransfersPerPart*shuffleThreshold
-		s.syncTransferMutex.Unlock()
+			var needsFlush bool
 
-		if needsFlush {
-			fmt.Printf("[ShuffleConfig] Intermediate flush triggered (bufferLen >= %d * %d)\n", s.numOfTransfersPerPart, shuffleThreshold)
-			if err := s.flushShuffleBuffer(); err != nil {
-				return err
+			s.syncTransferMutex.Lock()
+			s.shuffleBuffer = append(s.shuffleBuffer, copyTransfer)
+			s.shuffleBufferSizeInBytes += uint64(copyTransfer.SourceSize)
+			switch copyTransfer.EntityType {
+			case common.EEntityType.File():
+				s.shuffleBufferFileCounts.FileTransferCount++
+			case common.EEntityType.Folder():
+				s.shuffleBufferFileCounts.FolderTransferCount++
+			case common.EEntityType.Symlink():
+				s.shuffleBufferFileCounts.SymlinkTransferCount++
+			case common.EEntityType.Hardlink():
+				s.shuffleBufferFileCounts.HardlinksConvertedCount++
+			case common.EEntityType.FileProperties():
+				s.shuffleBufferFileCounts.FilePropertyTransferCount++
+			}
+			needsFlush = len(s.shuffleBuffer) >= s.numOfTransfersPerPart*shuffleThreshold
+			s.syncTransferMutex.Unlock()
+
+			if needsFlush {
+				if err := s.flushShuffleBuffer(); err != nil {
+					return err
+				}
+			}
+		} else {
+			// Direct dispatch: accumulate transfers, dispatch immediately when a full part is ready.
+			// No shuffle, no pendingParts buffering — bounded O(numOfTransfersPerPart) memory.
+			s.syncTransferMutex.Lock()
+			s.shuffleBuffer = append(s.shuffleBuffer, copyTransfer)
+			needsFlush := len(s.shuffleBuffer) >= s.numOfTransfersPerPart
+			s.syncTransferMutex.Unlock()
+
+			if needsFlush {
+				if err := s.flushDirectBuffer(); err != nil {
+					return err
+				}
 			}
 		}
 		return nil
@@ -404,19 +533,78 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 	return nil
 }
 
+// flushDirectBuffer dispatches accumulated transfers directly to STE without shuffling or
+// part reordering. Used when AZCOPY_SHUFFLE_TRANSFERS is disabled. Memory usage is bounded
+// at O(numOfTransfersPerPart).
+func (s *copyTransferProcessor) flushDirectBuffer() error {
+	s.flushMutex.Lock()
+	defer s.flushMutex.Unlock()
+
+	s.syncTransferMutex.Lock()
+	if len(s.shuffleBuffer) < s.numOfTransfersPerPart {
+		s.syncTransferMutex.Unlock()
+		return nil
+	}
+	toFlush := s.shuffleBuffer
+	s.shuffleBuffer = make([]common.CopyTransfer, 0, s.numOfTransfersPerPart)
+	s.syncTransferMutex.Unlock()
+
+	for len(toFlush) >= s.numOfTransfersPerPart {
+		// Copy batch to a new right-sized slice to avoid retaining the entire toFlush array
+		batch := make([]common.CopyTransfer, s.numOfTransfersPerPart)
+		copy(batch, toFlush[:s.numOfTransfersPerPart])
+		toFlush = toFlush[s.numOfTransfersPerPart:]
+
+		transfers := common.Transfers{List: batch}
+		for _, t := range batch {
+			transfers.TotalSizeInBytes += uint64(t.SourceSize)
+			switch t.EntityType {
+			case common.EEntityType.File():
+				transfers.FileTransferCount++
+			case common.EEntityType.Folder():
+				transfers.FolderTransferCount++
+			case common.EEntityType.Symlink():
+				transfers.SymlinkTransferCount++
+			case common.EEntityType.Hardlink():
+				transfers.HardlinksConvertedCount++
+			case common.EEntityType.FileProperties():
+				transfers.FilePropertyTransferCount++
+			}
+		}
+
+		// Pipeline: async dispatch
+		s.startDispatchPipeline()
+		s.dispatchCh <- dispatchItem{
+			transfers: transfers,
+			partNum:   s.copyJobTemplate.PartNum,
+		}
+		s.copyJobTemplate.PartNum++
+
+		if s.dispatchErr != nil {
+			return s.dispatchErr
+		}
+	}
+
+	// Put remainder back
+	if len(toFlush) > 0 {
+		s.syncTransferMutex.Lock()
+		s.shuffleBuffer = append(toFlush, s.shuffleBuffer...)
+		s.syncTransferMutex.Unlock()
+	}
+	return nil
+}
+
 // flushShuffleBuffer shuffles the accumulated transfer buffer and dispatches it as multiple plan parts.
 // This ensures transfers from different key-space prefixes are mixed across plan parts,
 // preventing the append-only partition access pattern that limits storage throughput.
 //
-// Thread safety: Holds syncTransferMutex only to swap out the buffer (fast), then releases it
-// before the expensive sendPartToSte calls so enumeration goroutines can keep appending.
+// Thread safety: The buffer swap is protected by syncTransferMutex (microseconds).
+// The Fisher-Yates shuffle runs lock-free on the exclusively-owned slice so enumeration
+// goroutines can continue filling the next buffer concurrently.
+// Only the dispatch phase acquires flushMutex to serialize sendPartToSte calls.
 func (s *copyTransferProcessor) flushShuffleBuffer() error {
-	// Serialize flushes — only one goroutine can flush at a time since sendPartToSte
-	// uses shared copyJobTemplate state (PartNum, Transfers, etc.)
-	s.flushMutex.Lock()
-	defer s.flushMutex.Unlock()
-
-	// Take the buffer lock to atomically swap out the buffer, then release immediately
+	// Phase 1: Fast buffer swap (microseconds, protected by syncTransferMutex only).
+	// This allows enumeration to immediately start filling the next buffer.
 	s.syncTransferMutex.Lock()
 	if len(s.shuffleBuffer) < s.numOfTransfersPerPart {
 		// Another goroutine already flushed, nothing to do
@@ -425,17 +613,27 @@ func (s *copyTransferProcessor) flushShuffleBuffer() error {
 	}
 	// Swap out the buffer — take ownership of the current slice, give the struct a fresh one
 	toFlush := s.shuffleBuffer
-	s.shuffleBuffer = make([]common.CopyTransfer, 0, s.numOfTransfersPerPart*30)
+	threshold := getShuffleThresholdParts()
+	newCap := s.numOfTransfersPerPart * threshold
+	if newCap < s.numOfTransfersPerPart*2 {
+		newCap = s.numOfTransfersPerPart * 2
+	}
+	s.shuffleBuffer = make([]common.CopyTransfer, 0, newCap)
 	s.shuffleBufferSizeInBytes = 0
 	s.shuffleBufferFileCounts = common.Transfers{}
 	s.syncTransferMutex.Unlock()
 
-	// From here on, we own toFlush exclusively — no lock needed for shuffle/dispatch
-
-	// Fisher-Yates shuffle to randomize transfer order across all buffered transfers
+	// Phase 2: Shuffle without any lock — we exclusively own toFlush.
+	// This is the expensive part (~seconds for millions of items) but it no longer
+	// blocks enumeration since syncTransferMutex was already released above.
 	rand.Shuffle(len(toFlush), func(i, j int) {
 		toFlush[i], toFlush[j] = toFlush[j], toFlush[i]
 	})
+
+	// Phase 3: Dispatch under flushMutex — serializes access to shared state
+	// (pendingParts, copyJobTemplate, PartNum, flushWindowCounter).
+	s.flushMutex.Lock()
+	defer s.flushMutex.Unlock()
 
 	// Track which flush window these batches belong to
 	s.flushWindowCounter++
@@ -464,7 +662,9 @@ func (s *copyTransferProcessor) flushShuffleBuffer() error {
 
 	// Dispatch in plan-part-sized batches
 	for len(toFlush) >= s.numOfTransfersPerPart {
-		batch := toFlush[:s.numOfTransfersPerPart]
+		// Copy batch to a new right-sized slice to avoid retaining the entire toFlush array
+		batch := make([]common.CopyTransfer, s.numOfTransfersPerPart)
+		copy(batch, toFlush[:s.numOfTransfersPerPart])
 		toFlush = toFlush[s.numOfTransfersPerPart:]
 
 		s.copyJobTemplate.Transfers = common.Transfers{List: batch}
@@ -503,6 +703,14 @@ func (s *copyTransferProcessor) flushShuffleBuffer() error {
 			return err
 		}
 	}
+
+	// Wake any scanner goroutines parked on the high-watermark backpressure: this flush
+	// swapped out a full window and dispatched it, so the in-memory shuffle buffer has drained.
+	// Woken scanners re-check the high-watermark loop condition, so the wide hysteresis band is
+	// preserved — they only re-park if the buffer is still above the double-buffer cap.
+	s.bufferDrainCond.L.Lock()
+	s.bufferDrainCond.Broadcast()
+	s.bufferDrainCond.L.Unlock()
 
 	// Put any remainder (< numOfTransfersPerPart) back into the buffer
 	if len(toFlush) > 0 {
@@ -551,12 +759,10 @@ func (s *copyTransferProcessor) flushPendingParts() error {
 			common.LogInfo)
 	}
 
-	// Shuffle part order to interleave different prefix ranges
-	rand.Shuffle(len(s.pendingParts), func(i, j int) {
-		s.pendingParts[i], s.pendingParts[j] = s.pendingParts[j], s.pendingParts[i]
-	})
+	// Part-level shuffle disabled: transfer-level shuffle in flushShuffleBuffer already
+	// ensures each batch has diverse prefixes, so reordering batches adds no value.
 
-	// Log post-shuffle dispatch order (first 10 + last 5)
+	// Log dispatch order (first 10 + last 5)
 	if jobsAdmin.JobsAdmin != nil {
 		var order strings.Builder
 		for i, p := range s.pendingParts {
@@ -585,14 +791,21 @@ func (s *copyTransferProcessor) flushPendingParts() error {
 	}
 
 	for _, p := range s.pendingParts {
-		s.copyJobTemplate.Transfers = p.transfers
-		resp := s.sendPartToSte()
-		if resp.ErrorMsg != "" {
-			return errors.New(string(resp.ErrorMsg))
+		// Pipeline: push to dispatch channel for async processing.
+		// The dispatch goroutine handles sendPartToSte (with fsync) in the background,
+		// allowing the next shuffle buffer to accumulate concurrently.
+		s.startDispatchPipeline()
+		s.dispatchCh <- dispatchItem{
+			transfers: p.transfers,
+			partNum:   s.copyJobTemplate.PartNum,
 		}
-
-		s.copyJobTemplate.Transfers = common.Transfers{}
 		s.copyJobTemplate.PartNum++
+	}
+
+	// Check if dispatch goroutine hit an error
+	if s.dispatchErr != nil {
+		s.pendingParts = s.pendingParts[:0]
+		return s.dispatchErr
 	}
 
 	s.pendingParts = s.pendingParts[:0]
@@ -604,51 +817,79 @@ var FinalPartCreatedMessage = "Final job part has been created"
 
 func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err error) {
 	fmt.Printf("[ShuffleConfig] dispatchFinalPart entered: UseSyncOrchestrator=%v, shuffleBufferLen=%d, pendingPartsLen=%d\n", UseSyncOrchestrator, len(s.shuffleBuffer), len(s.pendingParts))
-	// Flush any remaining shuffled transfers before dispatching the final part
+	// Flush any remaining transfers before dispatching the final part
 	if UseSyncOrchestrator && len(s.shuffleBuffer) > 0 {
-		// Wait for any in-progress flush to finish before touching the buffer
 		s.flushMutex.Lock()
 
-		// Shuffle the remaining transfers
-		rand.Shuffle(len(s.shuffleBuffer), func(i, j int) {
-			s.shuffleBuffer[i], s.shuffleBuffer[j] = s.shuffleBuffer[j], s.shuffleBuffer[i]
-		})
+		if isShuffleEnabled() {
+			// Add full plan parts to pendingParts for interleaved dispatch
+			s.flushWindowCounter++
+			finalWindow := s.flushWindowCounter
+			finalBatchIdx := 0
+			for len(s.shuffleBuffer) > s.numOfTransfersPerPart {
+				batch := make([]common.CopyTransfer, s.numOfTransfersPerPart)
+				copy(batch, s.shuffleBuffer[:s.numOfTransfersPerPart])
+				s.shuffleBuffer = s.shuffleBuffer[s.numOfTransfersPerPart:]
 
-		// Add full plan parts to pendingParts for interleaved dispatch
-		s.flushWindowCounter++
-		finalWindow := s.flushWindowCounter
-		finalBatchIdx := 0
-		for len(s.shuffleBuffer) > s.numOfTransfersPerPart {
-			batch := s.shuffleBuffer[:s.numOfTransfersPerPart]
-			s.shuffleBuffer = s.shuffleBuffer[s.numOfTransfersPerPart:]
-
-			transfers := common.Transfers{List: batch}
-			for _, t := range batch {
-				transfers.TotalSizeInBytes += uint64(t.SourceSize)
-				switch t.EntityType {
-				case common.EEntityType.File():
-					transfers.FileTransferCount++
-				case common.EEntityType.Folder():
-					transfers.FolderTransferCount++
-				case common.EEntityType.Symlink():
-					transfers.SymlinkTransferCount++
-				case common.EEntityType.Hardlink():
-					transfers.HardlinksConvertedCount++
-				case common.EEntityType.FileProperties():
-					transfers.FilePropertyTransferCount++
+				transfers := common.Transfers{List: batch}
+				for _, t := range batch {
+					transfers.TotalSizeInBytes += uint64(t.SourceSize)
+					switch t.EntityType {
+					case common.EEntityType.File():
+						transfers.FileTransferCount++
+					case common.EEntityType.Folder():
+						transfers.FolderTransferCount++
+					case common.EEntityType.Symlink():
+						transfers.SymlinkTransferCount++
+					case common.EEntityType.Hardlink():
+						transfers.HardlinksConvertedCount++
+					case common.EEntityType.FileProperties():
+						transfers.FilePropertyTransferCount++
+					}
 				}
+				s.pendingParts = append(s.pendingParts, pendingPart{
+					transfers:   transfers,
+					flushWindow: finalWindow,
+					batchIndex:  finalBatchIdx,
+				})
+				finalBatchIdx++
 			}
-			s.pendingParts = append(s.pendingParts, pendingPart{
-				transfers:   transfers,
-				flushWindow: finalWindow,
-				batchIndex:  finalBatchIdx,
-			})
-			finalBatchIdx++
-		}
 
-		// Flush all pending parts (shuffled order) before dispatching the final part
-		if err := s.flushPendingParts(); err != nil {
-			return false, err
+			// Flush all pending parts (shuffled order) before dispatching the final part
+			if err := s.flushPendingParts(); err != nil {
+				s.flushMutex.Unlock()
+				return false, err
+			}
+		} else {
+			// Direct dispatch: send remaining full parts via pipeline
+			for len(s.shuffleBuffer) > s.numOfTransfersPerPart {
+				batch := make([]common.CopyTransfer, s.numOfTransfersPerPart)
+				copy(batch, s.shuffleBuffer[:s.numOfTransfersPerPart])
+				s.shuffleBuffer = s.shuffleBuffer[s.numOfTransfersPerPart:]
+
+				transfers := common.Transfers{List: batch}
+				for _, t := range batch {
+					transfers.TotalSizeInBytes += uint64(t.SourceSize)
+					switch t.EntityType {
+					case common.EEntityType.File():
+						transfers.FileTransferCount++
+					case common.EEntityType.Folder():
+						transfers.FolderTransferCount++
+					case common.EEntityType.Symlink():
+						transfers.SymlinkTransferCount++
+					case common.EEntityType.Hardlink():
+						transfers.HardlinksConvertedCount++
+					case common.EEntityType.FileProperties():
+						transfers.FilePropertyTransferCount++
+					}
+				}
+				s.startDispatchPipeline()
+				s.dispatchCh <- dispatchItem{
+					transfers: transfers,
+					partNum:   s.copyJobTemplate.PartNum,
+				}
+				s.copyJobTemplate.PartNum++
+			}
 		}
 
 		// Place the last remaining transfers (< numOfTransfersPerPart) into the template for the final part
@@ -670,6 +911,12 @@ func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err 
 		}
 		s.shuffleBuffer = nil
 		s.flushMutex.Unlock()
+	}
+
+	// Wait for all pipelined parts to finish before sending the final part.
+	// The final part must be the last one sent to STE to signal job completion.
+	if err := s.waitForDispatchPipeline(); err != nil {
+		return false, err
 	}
 
 	var resp common.CopyJobPartOrderResponse
