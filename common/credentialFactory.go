@@ -76,6 +76,11 @@ func getS3BucketLookup(endpoint string) minio.BucketLookupType {
 		return minio.BucketLookupPath
 	}
 
+	if urlParts.IsAlibabaObjectStorage() {
+		// Alibaba OSS requires virtual-hosted style.
+		return minio.BucketLookupDNS
+	}
+
 	if urlParts.IsS3CompatibleEndpoint() {
 		return minio.BucketLookupPath
 	}
