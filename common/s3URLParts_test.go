@@ -404,6 +404,41 @@ func TestIBMURLParse(t *testing.T) {
 	a.Equal("us-south", p.Region)
 	a.True(p.IsIBMCloudObjectStorage())
 	a.Equal(S3ProviderIBM, p.ProviderKind())
+
+	// IBM private endpoint (path-style)
+	t.Setenv("S3_COMPATIBLE_ENDPOINT", "s3.private.us-south.cloud-object-storage.appdomain.cloud")
+	u, _ = url.Parse("https://s3.private.us-south.cloud-object-storage.appdomain.cloud/mybucket/private-file.txt")
+	p, err = NewS3URLParts(*u)
+	a.Nil(err)
+	a.Equal("s3.private.us-south.cloud-object-storage.appdomain.cloud", p.Endpoint)
+	a.Equal("mybucket", p.BucketName)
+	a.Equal("private-file.txt", p.ObjectKey)
+	a.Equal("us-south", p.Region)
+	a.True(p.IsIBMCloudObjectStorage())
+	a.Equal(S3ProviderIBM, p.ProviderKind())
+
+	// IBM private endpoint (virtual-hosted)
+	u, _ = url.Parse("https://mybucket.s3.private.us-south.cloud-object-storage.appdomain.cloud/folder/file.txt")
+	p, err = NewS3URLParts(*u)
+	a.Nil(err)
+	a.Equal("s3.private.us-south.cloud-object-storage.appdomain.cloud", p.Endpoint)
+	a.Equal("mybucket", p.BucketName)
+	a.Equal("folder/file.txt", p.ObjectKey)
+	a.Equal("us-south", p.Region)
+	a.True(p.IsIBMCloudObjectStorage())
+	a.Equal(S3ProviderIBM, p.ProviderKind())
+
+	// Generic IBM suffix should also recognize private endpoints.
+	t.Setenv("S3_COMPATIBLE_ENDPOINT", "cloud-object-storage.appdomain.cloud")
+	u, _ = url.Parse("https://mybucket.s3.private.us-south.cloud-object-storage.appdomain.cloud/folder/file2.txt")
+	p, err = NewS3URLParts(*u)
+	a.Nil(err)
+	a.Equal("s3.private.us-south.cloud-object-storage.appdomain.cloud", p.Endpoint)
+	a.Equal("mybucket", p.BucketName)
+	a.Equal("folder/file2.txt", p.ObjectKey)
+	a.Equal("us-south", p.Region)
+	a.True(p.IsIBMCloudObjectStorage())
+	a.Equal(S3ProviderIBM, p.ProviderKind())
 }
 
 func TestAlibabaURLParseAndBucketLookup(t *testing.T) {

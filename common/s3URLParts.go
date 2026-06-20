@@ -233,15 +233,20 @@ func matchGoogleHost(hostLower, suffix string) []string {
 	return nil
 }
 
-func parseIBMRegionFromHost(hostLower string) (string, bool) {
+func parseIBMRegionFromEndpoint(endpoint string) (string, bool) {
 	const prefix = "s3."
 	const suffix = ".cloud-object-storage.appdomain.cloud"
+	const privatePrefix = "private."
 
-	if !strings.HasPrefix(hostLower, prefix) || !strings.HasSuffix(hostLower, suffix) {
+	if !strings.HasPrefix(endpoint, prefix) || !strings.HasSuffix(endpoint, suffix) {
 		return "", false
 	}
 
-	region := hostLower[len(prefix) : len(hostLower)-len(suffix)]
+	region := endpoint[len(prefix) : len(endpoint)-len(suffix)]
+	if strings.HasPrefix(region, privatePrefix) {
+		region = strings.TrimPrefix(region, privatePrefix)
+	}
+
 	if region == "" {
 		return "", false
 	}
@@ -249,26 +254,65 @@ func parseIBMRegionFromHost(hostLower string) (string, bool) {
 	return region, true
 }
 
+func parseIBMHost(hostLower string) (endpoint string, bucket string, region string, ok bool) {
+	if region, ok := parseIBMRegionFromEndpoint(hostLower); ok {
+		return hostLower, "", region, true
+	}
+
+	index := strings.LastIndex(hostLower, ".s3.")
+	if index <= 0 {
+		return "", "", "", false
+	}
+
+	bucket = hostLower[:index]
+	if bucket == "" {
+		return "", "", "", false
+	}
+
+	endpoint = hostLower[index+1:]
+	region, ok = parseIBMRegionFromEndpoint(endpoint)
+	if !ok {
+		return "", "", "", false
+	}
+
+	return endpoint, bucket, region, true
+}
+
 // matchIBMHost matches IBM Cloud Object Storage endpoints in these forms:
 //   - Path-style/service: s3.<region>.cloud-object-storage.appdomain.cloud
 //   - Virtual-hosted:     <bucket>.s3.<region>.cloud-object-storage.appdomain.cloud
+//   - Private endpoint:    s3.private.<region>.cloud-object-storage.appdomain.cloud
+//   - Private virtual:     <bucket>.s3.private.<region>.cloud-object-storage.appdomain.cloud
 func matchIBMHost(hostLower, suffix string) []string {
 	keyword := getS3Keyword() // ibm
+	configuredSuffix := strings.ToLower(suffix)
 
-	if hostLower == suffix {
-		region, _ := parseIBMRegionFromHost(hostLower)
+	// If config is a concrete IBM endpoint, keep direct matching fast-path.
+	if region, ok := parseIBMRegionFromEndpoint(configuredSuffix); ok {
+		if hostLower == configuredSuffix {
+			return []string{hostLower, "", region, keyword}
+		}
+
+		if strings.HasSuffix(hostLower, "."+configuredSuffix) {
+			bucketWithDot := hostLower[:len(hostLower)-len(configuredSuffix)]
+			if bucketWithDot != "" {
+				return []string{hostLower, bucketWithDot, region, keyword}
+			}
+		}
+
+		return nil
+	}
+
+	endpoint, bucket, region, ok := parseIBMHost(hostLower)
+	if !ok || !strings.HasSuffix(endpoint, configuredSuffix) {
+		return nil
+	}
+
+	if bucket == "" {
 		return []string{hostLower, "", region, keyword}
 	}
 
-	if strings.HasSuffix(hostLower, "."+suffix) {
-		bucketWithDot := hostLower[:len(hostLower)-len(suffix)]
-		if bucketWithDot != "" {
-			region, _ := parseIBMRegionFromHost(suffix)
-			return []string{hostLower, bucketWithDot, region, keyword}
-		}
-	}
-
-	return nil
+	return []string{hostLower, bucket + ".", region, keyword}
 }
 
 func parseAlibabaRegionFromEndpoint(endpoint string) (string, bool) {
