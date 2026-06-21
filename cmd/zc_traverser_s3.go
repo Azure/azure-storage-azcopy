@@ -204,9 +204,6 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 		}
 	}
 
-	// Check if this is GCS accessed via S3-compatible API (using HMAC keys)
-	// GCS has different behavior for directory markers compared to AWS S3
-	isGCSviaS3 := t.s3URLParts.IsGoogleCloudStorage()
 	providerKind := t.s3URLParts.ProviderKind()
 
 	// Append a trailing slash if it is missing.
