@@ -29,6 +29,8 @@ var cmd = cobra.Command{
 		cfg.ProductVerMajor = ver.Segments[0]
 		cfg.ProductVerMinor = ver.Segments[1]
 		cfg.ProductVerPatch = ver.Segments[2]
+		// skips trying to read versioninfo.json... which we supply the relevant fields from it above.
+		cfg.SkipVersionInfo = true
 
 		cfg.ProductName = "Microsoft ® AzCopy v10"
 		cfg.Copyright = "© Microsoft Corporation. All rights reserved"
