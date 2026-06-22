@@ -31,7 +31,7 @@ import (
 )
 
 type Version struct {
-	segments []int64 // {10, 29, 1}
+	Segments []int64 // {10, 29, 1}
 	preview  bool
 	original string
 }
@@ -50,7 +50,7 @@ func NewVersion(raw string) (*Version, error) {
 		return nil, errors.New(standardError)
 	}
 
-	v := &Version{segments: make([]int64, 3), original: raw}
+	v := &Version{Segments: make([]int64, 3), original: raw}
 	for i, str := range rawSegments {
 		if strings.Contains(str, "-") {
 			if i != 2 {
@@ -64,7 +64,7 @@ func NewVersion(raw string) (*Version, error) {
 		if err != nil {
 			return nil, errors.New("cannot version string")
 		}
-		v.segments[i] = val
+		v.Segments[i] = val
 	}
 
 	return v, nil
@@ -82,10 +82,10 @@ func (v Version) compare(v2 Version) int {
 
 	// compare the major/minor/patch version
 	// if v has a bigger number, it is newer
-	for i, num := range v.segments {
-		if num > v2.segments[i] {
+	for i, num := range v.Segments {
+		if num > v2.Segments[i] {
 			return 1
-		} else if num < v2.segments[i] {
+		} else if num < v2.Segments[i] {
 			return -1
 		}
 	}
