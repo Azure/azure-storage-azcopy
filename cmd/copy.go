@@ -1383,6 +1383,10 @@ func init() {
 				glcm.Error("failed to parse --from-to user input due to error: " + err.Error())
 			}
 
+			// POC: surface an Azure Storage Mover awareness note for migration
+			// scenarios Storage Mover also covers (opt-in via AZCOPY_STORAGE_MOVER_NUDGE).
+			maybeSuggestStorageMover(cmd, userFromTo)
+
 			if azcopy.AreBothLocationsNFSAware(userFromTo) {
 				if (raw.preserveSMBInfo && runtime.GOOS == "linux") || raw.preserveSMBPermissions {
 					glcm.Error(InvalidFlagsForNFSMsg)
