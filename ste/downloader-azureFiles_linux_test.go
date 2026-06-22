@@ -118,7 +118,7 @@ func TestComputeDownloadHardlinkTarget(t *testing.T) {
 
 		// ───────────── invalid source root URL → ERROR ─────────────
 		{
-			name:                   "error — unparseable source root URL",
+			name:                   "error — unparsable source root URL",
 			sourceRoot:             "://not-a-valid-url",
 			srcFilePath:            "dir/link.txt",
 			destination:            "/local/dir/link.txt",

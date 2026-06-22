@@ -310,7 +310,7 @@ func (l *LocalObjectResourceManager) Create(a Asserter, body ObjectContentContai
 			a.NoError("Write file", err)
 		}
 	} else if l.entityType == common.EEntityType.Folder() {
-		err := os.Mkdir(l.getWorkingPath(), 0775)
+		err := os.MkdirAll(l.getWorkingPath(), 0775)
 		a.NoError("Mkdir", err)
 	} else if l.entityType == common.EEntityType.Symlink() {
 		err := os.Symlink(filepath.Join(l.container.RootPath, properties.SymlinkedFileName), l.getWorkingPath())

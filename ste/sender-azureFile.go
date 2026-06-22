@@ -592,3 +592,23 @@ func (u *azureFileSenderBase) CreateHardlink(targetHardlinkFilePath string) erro
 	u.jptm.Log(common.LogDebug, fmt.Sprintf("Created hardlink with data: %s", targetHardlinkFilePath))
 	return nil
 }
+
+// DeleteDestInOverwrite deletes the destination resource in FileNFS transfer with symlink where overwrite=True.
+// This was added because the overwrite retry logic was gated on status codes from the service that were not
+// always hit
+func (u *azureFileSenderBase) DeleteDestInOverwrite() error {
+	if !u.jptm.FromTo().IsNFS() {
+		return nil
+	}
+
+	destClient := u.getFileClient()
+	if _, delErr := destClient.Delete(u.ctx, nil); delErr != nil {
+		// First, check if there is anything to delete
+		var respErr *azcore.ResponseError
+		if errors.As(delErr, &respErr) && respErr.StatusCode == http.StatusNotFound {
+			return nil
+		}
+		return fmt.Errorf("failed to delete file for overwrite: %w", delErr)
+	}
+	return nil
+}

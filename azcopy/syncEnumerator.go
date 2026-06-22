@@ -71,7 +71,7 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 		IncludeDirectoryStubs:   s.opts.includeDirectoryStubs,
 		PreserveBlobTags:        s.opts.s2SPreserveBlobTags,
 		HardlinkHandling:        s.opts.hardlinks,
-		SymlinkHandling:         s.opts.symlinks,
+		SymlinkHandling:         s.opts.srcSymLinkTracker, // Use source symlink handling
 		FromTo:                  s.opts.fromTo,
 		StripTopDir:             !s.opts.includeRoot,
 		IncludeRoot:             s.opts.includeRoot,
@@ -100,7 +100,7 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 		IncludeDirectoryStubs:   s.opts.includeDirectoryStubs,
 		PreserveBlobTags:        s.opts.s2SPreserveBlobTags,
 		HardlinkHandling:        s.opts.hardlinks,
-		SymlinkHandling:         s.opts.symlinks,
+		SymlinkHandling:         s.opts.destSymlinks, // Use destination symlink handling specific field in case of deletions
 		FromTo:                  s.opts.fromTo,
 		StripTopDir:             !s.opts.includeRoot,
 		IncludeRoot:             s.opts.includeRoot,
@@ -234,8 +234,27 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 		localDeleter := NewLocalFileDeleter(fpo)
 		deleter = localDeleter.Delete
 	}
-	deleteProcessor := newInteractiveDeleteProcessor(deleter, s.opts.deleteDestination, s.opts.fromTo.To(), s.opts.destination, s.spt.incrementDeletionCount)
-	deleteScheduler := traverser.NewFpoAwareProcessor(fpo, deleteProcessor.removeImmediately)
+	deleteProcessor := newInteractiveDeleteProcessor(deleter, s.opts.deleteDestination, s.opts.fromTo.To(),
+		s.opts.destination, s.spt.incrementDeletionCount)
+	deleteScheduler := traverser.NewFpoAwareProcessor(fpo, deleteProcessor.removeImmediately,
+		s.opts.destSymlinks, // Use the destination symlink handling field to ensure symlinks to be deleted are not skipped.
+		common.EHardlinkHandlingType.Follow())
+
+	// hardlinkDeleteScheduler is used exclusively for hardlink restructuring
+	// (split/merge). When --hardlinks=preserve it is NOT gated by --delete-destination
+	// because restructuring requires unlinking the old inode before re-creating.
+	// In all other modes it falls back to the regular (gated) deleteScheduler.
+	hardlinkDeleteScheduler := deleteScheduler
+	if s.opts.hardlinks == common.EHardlinkHandlingType.Preserve() {
+		if s.opts.deleteDestination != common.EDeleteDestination.True() {
+			common.GetLifecycleMgr().Info("WARNING: --hardlinks=preserve may remove and " +
+				"re-create destination paths as part of hardlink restructuring even though " +
+				"--delete-destination is not set to true. These deletions are limited to files" +
+				" whose hardlink topology must change.")
+		}
+		hardlinkDeleteProcessor := newInteractiveDeleteProcessor(deleter, common.EDeleteDestination.True(), s.opts.fromTo.To(), s.opts.destination, s.spt.incrementDeletionCount)
+		hardlinkDeleteScheduler = traverser.NewFpoAwareProcessor(fpo, hardlinkDeleteProcessor.removeImmediately)
+	}
 
 	var comparator traverser.ObjectProcessor
 	var finalize func() error
@@ -261,6 +280,7 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 		comparatorInstance := NewSyncDestinationComparator(indexer,
 			transferScheduler.ScheduleSyncRemoveSetPropertiesTransfer,
 			deleteScheduler,
+			hardlinkDeleteScheduler,
 			s.opts.compareHash,
 			preferSMBTime,
 			s.opts.mirrorMode,
@@ -293,7 +313,14 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 		indexer.IsDestinationCaseInsensitive = isDestinationCaseInsensitive(s.opts.fromTo)
 		// in all other cases (download and S2S), the destination is scanned/indexed first
 		// then the source is scanned and filtered based on what the destination contains
-		comparatorInstance := NewSyncSourceComparator(indexer, transferScheduler.ScheduleSyncRemoveSetPropertiesTransfer, deleteScheduler, s.opts.compareHash, s.opts.preserveInfo, s.opts.mirrorMode, s.inodeStore)
+		preferSMBTime := s.opts.preserveInfo
+		if s.opts.fromTo == common.EFromTo.FileNFSLocal() {
+			// For NFS-to-local sync, prefer LMT over SMB FileLastWriteTime because
+			// the local side has no smbLastModifiedTime — mixing the two semantics
+			// can cause stale comparisons.
+			preferSMBTime = false
+		}
+		comparatorInstance := NewSyncSourceComparator(indexer, transferScheduler.ScheduleSyncRemoveSetPropertiesTransfer, deleteScheduler, hardlinkDeleteScheduler, s.opts.compareHash, preferSMBTime, s.opts.mirrorMode, s.inodeStore)
 		comparator = comparatorInstance.ProcessIfNecessary
 
 		finalize = func() error {

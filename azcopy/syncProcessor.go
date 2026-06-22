@@ -168,8 +168,10 @@ func (l localFileDeleter) Delete(rootPath string, _ common.Location, object trav
 	objectURI := l.getObjectURL(object)
 	l.folderManager.RecordChildExists(objectURI)
 
-	if object.EntityType == common.EEntityType.File() || object.EntityType == common.EEntityType.Hardlink() {
-		msg := "Deleting extra file: " + object.RelativePath
+	if object.EntityType == common.EEntityType.File() ||
+		object.EntityType == common.EEntityType.Hardlink() ||
+		object.EntityType == common.EEntityType.Symlink() {
+		msg := fmt.Sprintf("Deleting extra %s: %s", object.EntityType.String(), object.RelativePath)
 		common.GetLifecycleMgr().Info(msg)
 		if common.AzcopyScanningLogger != nil {
 			common.AzcopyScanningLogger.Log(common.LogInfo, msg)
@@ -202,7 +204,8 @@ type remoteResourceDeleter struct {
 	forceIfReadOnly bool
 }
 
-func NewRemoteResourceDeleter(ctx context.Context, remoteClient *common.ServiceClient, rawRootURL *url.URL, fpo common.FolderPropertyOption, forceIfReadOnly bool) (*remoteResourceDeleter, error) {
+func NewRemoteResourceDeleter(ctx context.Context, remoteClient *common.ServiceClient, rawRootURL *url.URL,
+	fpo common.FolderPropertyOption, forceIfReadOnly bool) (*remoteResourceDeleter, error) {
 	containerName, rootPath, err := common.SplitContainerNameFromPath(rawRootURL.String())
 	if err != nil {
 		return nil, err
