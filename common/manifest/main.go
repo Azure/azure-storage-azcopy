@@ -18,18 +18,17 @@ var cmd = cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ver, err := cmd2.NewVersion(common.AzcopyVersion)
 		if err != nil {
-			return fmt.Errorf("failed to parse AzCopy Version")
+			return fmt.Errorf("failed to parse AzCopy Version: %w", err)
 		}
 
 		cfg := goversioninfo.NewCLIConfig()
 
-		cfg.VerMajor = int(ver.Segments[0])
-		cfg.VerMinor = int(ver.Segments[1])
-		cfg.VerPatch = int(ver.Segments[2])
-		cfg.ProductVerMajor = int(ver.Segments[0])
-		cfg.ProductVerMinor = int(ver.Segments[1])
-		cfg.ProductVerPatch = int(ver.Segments[2])
-		cfg.SkipVersionInfo = true
+		cfg.VerMajor = ver.Segments[0]
+		cfg.VerMinor = ver.Segments[1]
+		cfg.VerPatch = ver.Segments[2]
+		cfg.ProductVerMajor = ver.Segments[0]
+		cfg.ProductVerMinor = ver.Segments[1]
+		cfg.ProductVerPatch = ver.Segments[2]
 
 		cfg.ProductName = "Microsoft ® AzCopy v10"
 		cfg.Copyright = "© Microsoft Corporation. All rights reserved"

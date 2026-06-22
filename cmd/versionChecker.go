@@ -31,7 +31,7 @@ import (
 )
 
 type Version struct {
-	Segments []int64 // {10, 29, 1}
+	Segments []int // {10, 29, 1}
 	preview  bool
 	original string
 }
@@ -50,7 +50,7 @@ func NewVersion(raw string) (*Version, error) {
 		return nil, errors.New(standardError)
 	}
 
-	v := &Version{Segments: make([]int64, 3), original: raw}
+	v := &Version{Segments: make([]int, 3), original: raw}
 	for i, str := range rawSegments {
 		if strings.Contains(str, "-") {
 			if i != 2 {
@@ -60,7 +60,7 @@ func NewVersion(raw string) (*Version, error) {
 			str = strings.Split(str, "-")[0]
 		}
 
-		val, err := strconv.ParseInt(str, 10, 64)
+		val, err := strconv.Atoi(str)
 		if err != nil {
 			return nil, errors.New("cannot version string")
 		}
