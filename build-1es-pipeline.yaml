@@ -674,7 +674,8 @@ extends:
                   destinationFolder: $(extracted)
 
               - script: |
-                  $(extracted)/azcopy*amd64*/azcopy --version
+                  $(extracted)/azcopy_darwin_amd64*/azcopy --version
+                  $(extracted)/azcopy_darwin_grpc_amd64*/azcopy --version
                 displayName: 'Verify binary in zip'
 
           - job: Windows_Amd64
