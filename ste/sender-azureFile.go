@@ -192,7 +192,6 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 
 	// In the case where the destination is hard linked group and source is independent file. We need to unlink the
 	// file before recreating it on the destination.
-	// NFS Create will preserve the hardlink relatino
 	if u.jptm.FromTo().IsNFS() {
 		if props, err := u.getFileClient().GetProperties(u.ctx, nil); err == nil {
 			isNFSFileRegular := props.NFSFileType != nil && *props.NFSFileType == file.NFSFileTypeRegular
