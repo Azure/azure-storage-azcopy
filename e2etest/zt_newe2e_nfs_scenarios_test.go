@@ -60,6 +60,9 @@ func getPropertiesAndPermissions(svm *ScenarioVariationManager, preserveProperti
 // nfslinkInfo returns LinkCount and FIleID for file from the service. It uses the go SDK calls since these two props
 // are not exposed by ObjectProperties in the test framework today
 func nfsLinkInfo(svm *ScenarioVariationManager, c ContainerResourceManager, objName string) (linkCount int64, fileID string) {
+	if svm.Dryrun() {
+		return
+	}
 	objResourceMan := c.GetObject(svm, objName, common.EEntityType.Hardlink()).(*FileObjectResourceManager)
 
 	propsResp, err := objResourceMan.Share.InternalClient.
