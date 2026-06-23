@@ -104,9 +104,9 @@ func anyToRemote_hardlink(jptm IJobPartTransferMgr, info *TransferInfo, pacer pa
 		}
 	}
 
-	targetHardlinkFullPath := computeUploadHardlinkTarget(info, jptm)
+	targetHardlinkFullPath := computeAnyToRemoteHardlinkTarget(info, jptm)
 	if targetHardlinkFullPath == "" {
-		// computeUploadHardlinkTarget has already logged the specific error via jptm.FailActiveSend.
+		// computeAnyToRemoteHardlinkTarget has already logged the specific error via jptm.FailActiveSend.
 		// Avoid calling CreateHardlink with an empty path, which could cause a secondary, less-informative failure.
 		commonSenderCompletion(jptm, baseSender, info)
 		return
@@ -119,7 +119,7 @@ func anyToRemote_hardlink(jptm IJobPartTransferMgr, info *TransferInfo, pacer pa
 	commonSenderCompletion(jptm, baseSender, info)
 }
 
-// computeUploadHardlinkTarget computes the full remote path for the target
+// computeAnyToRemoteHardlinkTarget computes the full remote path for the target
 // hardlink. It supports both upload (Local → Azure Files NFS) and S2S
 // (Azure Files NFS → Azure Files NFS) directions.
 //
@@ -132,7 +132,7 @@ func anyToRemote_hardlink(jptm IJobPartTransferMgr, info *TransferInfo, pacer pa
 // For remote sources, info.Source is a URL that may carry query parameters
 // (sharesnapshot, etc.), so we must work in URL path space:
 // file.ParseURL gives us the source root's path-only portion too.
-func computeUploadHardlinkTarget(info *TransferInfo, jptm IJobPartTransferMgr) string {
+func computeAnyToRemoteHardlinkTarget(info *TransferInfo, jptm IJobPartTransferMgr) string {
 
 	var fileRelPath string
 	// For S2S copies
