@@ -157,7 +157,15 @@ func (f *syncDestinationComparator) ProcessIfNecessary(destinationObject travers
 			return f.copyTransferScheduler(sourceObjectInMap)
 		}
 
-		if sourceObjectInMap.EntityType == common.EEntityType.Hardlink() && destinationObject.EntityType != common.EEntityType.Hardlink() {
+		if sourceObjectInMap.EntityType == common.EEntityType.Hardlink() &&
+			destinationObject.EntityType != common.EEntityType.Hardlink() {
+
+			// Normalize TargetHardlinkFile to the deterministic lex-smallest
+			// anchor from InodeStore.  Without this, parallel directory walk
+			// can leave TargetHardlinkFile pointing at a sibling that is still
+			// deferred on the destination, causing CreateHardLink to 404.
+			f.normalizeHardlinkTarget(&sourceObjectInMap)
+
 			// Case: Destination is a File/Folder/Symlink, but Source is now a Hardlink
 			syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncEntityTypeMismatch, false)
 
@@ -229,6 +237,55 @@ func buildSrcPathToInode(indexMap map[string]traverser.StoredObject) map[string]
 		}
 	}
 	return m
+}
+
+// normalizeHardlinkTarget rewrites sourceObj.TargetHardlinkFile to match the
+// deterministic lex-smallest anchor recorded in InodeStore. The traverser's
+// GetOrAdd assigns TargetHardlinkFile="" to whichever member os.Readdir
+// returns first (non-deterministic on Linux). Without this step, the data
+// carrier can end up being a non-anchor file and uploads of the true anchor
+// can be routed through the hardlink sender, which then 404s on a target
+// that doesn't exist at the destination yet.
+
+func (f *syncDestinationComparator) normalizeHardlinkTarget(sourceObj *traverser.StoredObject) {
+	if f.inodeStore == nil || sourceObj.Inode == "" ||
+		sourceObj.EntityType != common.EEntityType.Hardlink() {
+		return
+	}
+	anchor, err := f.inodeStore.GetAnchor(sourceObj.Inode)
+	if err != nil {
+		if common.AzcopyScanningLogger != nil {
+			common.AzcopyScanningLogger.Log(common.LogWarning,
+				fmt.Sprintf("hardlink anchor lookup failed for %s (inode=%s): %v; "+
+					"continuing with traverser-assigned TargetHardlinkFile=%q",
+					sourceObj.RelativePath, sourceObj.Inode, err, sourceObj.TargetHardlinkFile))
+		}
+		return
+	}
+	if anchor == "" {
+		return
+	}
+	normAnchor := anchor
+	normPath := sourceObj.RelativePath
+	if f.sourceIndex.IsDestinationCaseInsensitive {
+		normAnchor = strings.ToLower(normAnchor)
+		normPath = strings.ToLower(normPath)
+	}
+	_, anchorIsSourceHardlink := f.srcPathToInode[normAnchor]
+	if normAnchor == normPath {
+		if sourceObj.TargetHardlinkFile == "" {
+			return
+		}
+		normTarget := sourceObj.TargetHardlinkFile
+		if f.sourceIndex.IsDestinationCaseInsensitive {
+			normTarget = strings.ToLower(normTarget)
+		}
+		if _, targetIsHardlink := f.srcPathToInode[normTarget]; targetIsHardlink {
+			sourceObj.TargetHardlinkFile = ""
+		}
+	} else if anchorIsSourceHardlink {
+		sourceObj.TargetHardlinkFile = anchor
+	}
 }
 
 func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
