@@ -87,6 +87,19 @@ func NewUserOAuthTokenManagerInstance(credCacheOptions CredCacheOptions) *UserOA
 	}
 }
 
+// newAzcopyHTTPClient builds a dedicated HTTP client for AAD / IMDS / token endpoints.
+//
+// This is intentionally NOT the data-plane client (common.GetGlobalHTTPClient()). The
+// two clients differ in ways that matter for token acquisition:
+//   - this client uses net.Dialer.Dial (not DialContext), which has historically been
+//     reported as faster for the short-lived AAD calls;
+//   - this client has no MaxConnsPerHost cap, whereas the data-plane client caps at
+//     10*NumCPU per host;
+//   - this client talks to a different set of hosts (login.microsoftonline.com, IMDS at
+//     169.254.169.254, etc.), so its idle-pool sizing is independent of data-plane needs.
+//
+// Token RPS is tiny compared to data-plane RPS, so the shared-client benefits don't
+// apply here; consolidating would be a behavior change worth its own review.
 func newAzcopyHTTPClient() *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{
