@@ -63,10 +63,17 @@ const DefaultActiveDirectoryEndpoint = "https://login.microsoftonline.com"
 
 const TokenCache = "AzCopyTokenCache"
 
+type CredCacheImplementation interface {
+	HasCachedToken() (bool, error)
+	LoadToken() (*OAuthTokenInfo, error)
+	SaveToken(OAuthTokenInfo) error
+	RemoveCachedToken() error
+}
+
 // UserOAuthTokenManager for token management.
 type UserOAuthTokenManager struct {
 	oauthClient *http.Client
-	credCache   *CredCache
+	credCache   CredCacheImplementation
 
 	// Stash the credential info as we delete the environment variable after reading it, and we need to get it multiple times.
 	stashedInfo *OAuthTokenInfo
@@ -80,6 +87,19 @@ func NewUserOAuthTokenManagerInstance(credCacheOptions CredCacheOptions) *UserOA
 	}
 }
 
+// newAzcopyHTTPClient builds a dedicated HTTP client for AAD / IMDS / token endpoints.
+//
+// This is intentionally NOT the data-plane client (common.GetGlobalHTTPClient()). The
+// two clients differ in ways that matter for token acquisition:
+//   - this client uses net.Dialer.Dial (not DialContext), which has historically been
+//     reported as faster for the short-lived AAD calls;
+//   - this client has no MaxConnsPerHost cap, whereas the data-plane client caps at
+//     10*NumCPU per host;
+//   - this client talks to a different set of hosts (login.microsoftonline.com, IMDS at
+//     169.254.169.254, etc.), so its idle-pool sizing is independent of data-plane needs.
+//
+// Token RPS is tiny compared to data-plane RPS, so the shared-client benefits don't
+// apply here; consolidating would be a behavior change worth its own review.
 func newAzcopyHTTPClient() *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{
@@ -89,7 +109,7 @@ func newAzcopyHTTPClient() *http.Client {
 				Timeout:   10 * time.Second,
 				KeepAlive: 10 * time.Second,
 				DualStack: true,
-			}).Dial, /*Context*/
+			}).Dial,                   /*Context*/
 			MaxIdleConns:           0, // No limit
 			MaxIdleConnsPerHost:    1000,
 			IdleConnTimeout:        180 * time.Second,
@@ -102,6 +122,35 @@ func newAzcopyHTTPClient() *http.Client {
 			// ExpectContinueTimeout:  time.Duration{},
 		},
 	}
+}
+
+func (uotm *UserOAuthTokenManager) OAuthTokenExists(announceOAuthTokenOnce, autoOAuth *sync.Once) (oauthTokenExists bool, err error) {
+	// Note: Environment variable for OAuth token should only be used in testing, or the case user clearly now how to protect
+	// the tokens
+	if EnvVarOAuthTokenInfoExists() {
+		announceOAuthTokenOnce.Do(
+			func() {
+				lcm.Info(fmt.Sprintf("%v is set.", EnvVarOAuthTokenInfo)) // Log the case when env var is set, as it's rare case.
+			},
+		)
+		oauthTokenExists = true
+	}
+
+	_, err = uotm.AutoLogin(autoOAuth)
+	if err != nil {
+		oauthTokenExists = false
+		return
+	}
+
+	if hasCachedToken, err := uotm.HasCachedToken(); hasCachedToken {
+		oauthTokenExists = true
+	} else if err != nil { //nolint:staticcheck
+		// Log the error if fail to get cached token, as these are unhandled errors, and should not influence the logic flow.
+		// Uncomment for debugging.
+		// glcm.Info(fmt.Sprintf("No cached token found, %v", err))
+	}
+
+	return
 }
 
 // GetTokenInfo gets token info, it follows rule:
@@ -165,6 +214,113 @@ func (uotm *UserOAuthTokenManager) validateAndPersistLogin(oAuthTokenInfo *OAuth
 	}
 
 	return nil
+}
+
+type LoginOptions struct {
+	TenantID    string
+	AADEndpoint string
+	LoginType   AutoLoginType
+
+	// Managed Identity Options
+	IdentityClientID   string
+	IdentityResourceID string
+	IdentityObjectID   string
+
+	// Service Principal Options
+	ApplicationID       string
+	ClientSecret        string
+	CertificatePath     string
+	CertificatePassword string
+
+	PersistToken bool // Whether to persist the token in the credential cache
+}
+
+type LoginResponse struct {
+}
+
+func (uotm *UserOAuthTokenManager) Login(opts LoginOptions) (LoginResponse, error) {
+	resp := LoginResponse{}
+
+	// Persist the token to cache, if login fulfilled successfully.
+	switch opts.LoginType {
+	case EAutoLoginType.SPN():
+		if opts.CertificatePath != "" {
+			return resp, uotm.CertLogin(opts.TenantID, opts.AADEndpoint, opts.CertificatePath, opts.CertificatePassword, opts.ApplicationID, opts.PersistToken)
+		} else {
+			return resp, uotm.SecretLogin(opts.TenantID, opts.AADEndpoint, opts.ClientSecret, opts.ApplicationID, opts.PersistToken)
+		}
+	case EAutoLoginType.MSI():
+		return resp, uotm.MSILogin(IdentityInfo{
+			ClientID: opts.IdentityClientID,
+			ObjectID: opts.IdentityObjectID,
+			MSIResID: opts.IdentityResourceID,
+		}, opts.PersistToken)
+	case EAutoLoginType.AzCLI():
+		return resp, uotm.AzCliLogin(opts.TenantID, opts.PersistToken)
+	case EAutoLoginType.PsCred():
+		return resp, uotm.PSContextToken(opts.TenantID, opts.PersistToken)
+	case EAutoLoginType.Workload():
+		return resp, uotm.WorkloadIdentityLogin(opts.PersistToken)
+	default:
+		return resp, uotm.UserLogin(opts.TenantID, opts.AADEndpoint, opts.PersistToken)
+		// User fulfills login in browser, and there would be message in browser indicating whether login fulfilled successfully.
+	}
+}
+
+func (uotm *UserOAuthTokenManager) AutoLogin(autoOAuth *sync.Once) (LoginResponse, error) {
+	var resp LoginResponse
+	var err error
+	autoOAuth.Do(func() {
+		var options LoginOptions
+		autoLoginType := strings.ToLower(GetEnvironmentVariable(EEnvironmentVariable.AutoLoginType()))
+		if autoLoginType == "" {
+			lcm.Info("Autologin not specified.")
+			return
+		}
+
+		if tenantID := GetEnvironmentVariable(EEnvironmentVariable.TenantID()); tenantID != "" {
+			options.TenantID = tenantID
+		}
+
+		if endpoint := GetEnvironmentVariable(EEnvironmentVariable.AADEndpoint()); endpoint != "" {
+			options.AADEndpoint = endpoint
+		}
+
+		var loginType AutoLoginType
+		err = loginType.Parse(autoLoginType)
+		if err != nil {
+			err = fmt.Errorf("Invalid Auto-login type specified: %s", autoLoginType)
+			return
+		}
+
+		// Fill up options
+		options.LoginType = loginType
+		switch options.LoginType {
+		case EAutoLoginType.SPN():
+			options.ApplicationID = GetEnvironmentVariable(EEnvironmentVariable.ApplicationID())
+			options.CertificatePath = GetEnvironmentVariable(EEnvironmentVariable.CertificatePath())
+			options.CertificatePassword = GetEnvironmentVariable(EEnvironmentVariable.CertificatePassword())
+			options.ClientSecret = GetEnvironmentVariable(EEnvironmentVariable.ClientSecret())
+		case EAutoLoginType.MSI():
+			options.IdentityClientID = GetEnvironmentVariable(EEnvironmentVariable.ManagedIdentityClientID())
+			options.IdentityObjectID = GetEnvironmentVariable(EEnvironmentVariable.ManagedIdentityObjectID())
+			options.IdentityResourceID = GetEnvironmentVariable(EEnvironmentVariable.ManagedIdentityResourceString())
+		case EAutoLoginType.Device():
+		case EAutoLoginType.AzCLI():
+		case EAutoLoginType.PsCred():
+		case EAutoLoginType.Workload():
+		default:
+			err = fmt.Errorf("invalid Auto-login type specified: %s", autoLoginType)
+			return
+		}
+
+		options.PersistToken = false
+		if resp, err = uotm.Login(options); err != nil {
+			err = fmt.Errorf("failed to perform Auto-login: %v", err)
+			return
+		}
+	})
+	return resp, err
 }
 
 func (uotm *UserOAuthTokenManager) WorkloadIdentityLogin(persist bool) error {
@@ -490,7 +646,7 @@ func (credInfo *OAuthTokenInfo) Refresh(ctx context.Context) (*Token, error) {
 }
 
 // Single instance token store credential cache shared by entire azcopy process.
-var tokenStoreCredCache = NewCredCacheInternalIntegration(CredCacheOptions{
+var tokenStoreCredCache CredCacheImplementation = NewCredCacheInternalIntegration(CredCacheOptions{
 	KeyName:     "azcopy/aadtoken/" + strconv.Itoa(os.Getpid()),
 	ServiceName: "azcopy",
 	AccountName: "aadtoken/" + strconv.Itoa(os.Getpid()),
@@ -498,7 +654,7 @@ var tokenStoreCredCache = NewCredCacheInternalIntegration(CredCacheOptions{
 
 // IsEmpty returns if current OAuthTokenInfo is empty and doesn't contain any useful info.
 func (credInfo OAuthTokenInfo) IsEmpty() bool {
-	if credInfo.Tenant == "" && credInfo.ActiveDirectoryEndpoint == "" && credInfo.Token.IsZero() {
+	if credInfo.Tenant == "" && credInfo.ActiveDirectoryEndpoint == "" && credInfo.IsZero() {
 		return true
 	}
 
@@ -521,8 +677,9 @@ func getAuthorityURL(activeDirectoryEndpoint string) (*url.URL, error) {
 const minimumTokenValidDuration = time.Minute * 5
 
 type TokenStoreCredential struct {
-	token *azcore.AccessToken
-	lock  sync.RWMutex
+	token     *azcore.AccessToken
+	lock      sync.RWMutex
+	credCache CredCacheImplementation
 }
 
 // globalTokenStoreCredential is created to make sure that all
@@ -542,22 +699,26 @@ var globalTokenStoreCredential *TokenStoreCredential
 var globalTsc sync.Once
 
 func (tsc *TokenStoreCredential) GetToken(_ context.Context, _ policy.TokenRequestOptions) (azcore.AccessToken, error) {
-	// if the token we've has not expired, return the same.
+	// if the token we have has not expired, return the same.
 	tsc.lock.RLock()
-	if time.Until(tsc.token.ExpiresOn) > minimumTokenValidDuration {
+	if rem := time.Until(tsc.token.ExpiresOn); rem > minimumTokenValidDuration {
+		tsc.lock.RUnlock() // return path, so we must release the read lock here as well.
 		return *tsc.token, nil
 	}
 	tsc.lock.RUnlock()
 
 	tsc.lock.Lock()
 	defer tsc.lock.Unlock()
-	hasToken, err := tokenStoreCredCache.HasCachedToken()
+
+	hasToken, err := tsc.credCache.HasCachedToken()
 	if err != nil || !hasToken {
+		AzcopyCurrentJobLogger.Log(LogDebug, fmt.Sprintf("no token found %v", err))
 		return azcore.AccessToken{}, fmt.Errorf("no cached token found in Token Store Mode(SE), %w", err)
 	}
 
-	tokenInfo, err := tokenStoreCredCache.LoadToken()
+	tokenInfo, err := tsc.credCache.LoadToken()
 	if err != nil {
+		AzcopyCurrentJobLogger.Log(LogDebug, fmt.Sprintf("get token failed %s", err.Error()))
 		return azcore.AccessToken{}, fmt.Errorf("get cached token failed in Token Store Mode(SE), %w", err)
 	}
 
@@ -579,6 +740,7 @@ func GetTokenStoreCredential(accessToken string, expiresOn time.Time) azcore.Tok
 				Token:     accessToken,
 				ExpiresOn: expiresOn,
 			},
+			credCache: tokenStoreCredCache,
 		}
 	})
 	return globalTokenStoreCredential

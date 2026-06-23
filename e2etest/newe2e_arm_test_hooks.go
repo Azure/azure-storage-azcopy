@@ -16,7 +16,15 @@ func SetupArmClient(a Asserter) {
 		return // no setup
 	}
 
-	spt, err := PrimaryOAuthCache.GetAccessToken(AzureManagementResource)
+	maxRetries := 2
+	var err error
+	var spt *AzCoreAccessToken
+	for i := 0; i < maxRetries; i++ {
+		spt, err = PrimaryOAuthCache.GetAccessToken(AzureManagementResource)
+		if err == nil {
+			break
+		}
+	}
 	a.NoError("get management access token", err)
 
 	CommonARMClient = &ARMClient{

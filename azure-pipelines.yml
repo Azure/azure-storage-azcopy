@@ -1,6 +1,6 @@
 variables:
-  AZCOPY_GOLANG_VERSION: '1.24.2'
-  AZCOPY_GOLANG_VERSION_COVERAGE: '1.24.2'
+  AZCOPY_GOLANG_VERSION: '1.25.8'
+  AZCOPY_GOLANG_VERSION_COVERAGE: '1.25.8'
 
 trigger:
   branches:
@@ -129,7 +129,7 @@ jobs:
     parameters:
       name: 'New_E2E'
       test_cli_param: '-run "TestNewE2E/.*"'
-
+      
   - job: Test_On_Ubuntu
     variables:
       isMutexSet: 'false'
@@ -159,6 +159,7 @@ jobs:
         displayName: 'Install dependencies'
       - script: |
           pip install azure-storage-blob==12.12.0
+          pip install azure-storage-blob six
           # set the variable to indicate that the mutex is being acquired
           # note: we set it before acquiring the mutex to ensure we release the mutex. 
           # setting this after can result in an un-broken mutex if someone cancels the pipeline after we acquire the 
@@ -283,15 +284,10 @@ jobs:
         parameters:
           container_name: $(container_name)
           storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
-          orp_source_account_name: $(ORP_SOURCE_ACCOUNT_NAME)
-          orp_destination_account_name: $(ORP_DESTINATION_ACCOUNT_NAME)
-          orp_source_container_name: $(ORP_SOURCE_CONTAINER_NAME)
-          destination_container_name: $(DESTINATION_CONTAINER_NAME)
           GOOS: $(GOOS)
           GOARCH: $(GOARCH)
           CGO_ENABLED: $(CGO_ENABLED)
           build_name: $(build_name)
-          azcopy_msi_app_id: $(AZCOPY_MSI_APP_ID)
           
   - job: Additional_E2E_Test_Windows
     timeoutInMinutes: 360
@@ -335,15 +331,10 @@ jobs:
         parameters:
           container_name: $(container_name)
           storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
-          orp_source_account_name: $(ORP_SOURCE_ACCOUNT_NAME)
-          orp_destination_account_name: $(ORP_DESTINATION_ACCOUNT_NAME)
-          orp_source_container_name: $(ORP_SOURCE_CONTAINER_NAME)
-          destination_container_name: $(DESTINATION_CONTAINER_NAME)
           GOOS: $(GOOS)
           GOARCH: $(GOARCH)
           CGO_ENABLED: $(CGO_ENABLED)
           build_name: $(build_name)
-          azcopy_msi_app_id: $(AZCOPY_MSI_APP_ID)
 
     #TODO: Add MacOS E2E tests after creating macos pool
           

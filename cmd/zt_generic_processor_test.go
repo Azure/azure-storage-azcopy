@@ -21,13 +21,17 @@
 package cmd
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/stretchr/testify/assert"
-	chk "gopkg.in/check.v1"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
+	"github.com/stretchr/testify/assert"
+	chk "gopkg.in/check.v1"
 )
 
 type genericProcessorSuite struct{}
@@ -37,22 +41,22 @@ var _ = chk.Suite(&genericProcessorSuite{})
 type processorTestSuiteHelper struct{}
 
 // return a list of sample entities
-func (processorTestSuiteHelper) getSampleObjectList() []StoredObject {
-	return []StoredObject{
-		{name: "file1", relativePath: "file1", lastModifiedTime: time.Now()},
-		{name: "file2", relativePath: "file2", lastModifiedTime: time.Now()},
-		{name: "file3", relativePath: "sub1/file3", lastModifiedTime: time.Now()},
-		{name: "file4", relativePath: "sub1/file4", lastModifiedTime: time.Now()},
-		{name: "file5", relativePath: "sub1/sub2/file5", lastModifiedTime: time.Now()},
-		{name: "file6", relativePath: "sub1/sub2/file6", lastModifiedTime: time.Now()},
+func (processorTestSuiteHelper) getSampleObjectList() []traverser.StoredObject {
+	return []traverser.StoredObject{
+		{Name: "file1", RelativePath: "file1", LastModifiedTime: time.Now()},
+		{Name: "file2", RelativePath: "file2", LastModifiedTime: time.Now()},
+		{Name: "file3", RelativePath: "sub1/file3", LastModifiedTime: time.Now()},
+		{Name: "file4", RelativePath: "sub1/file4", LastModifiedTime: time.Now()},
+		{Name: "file5", RelativePath: "sub1/sub2/file5", LastModifiedTime: time.Now()},
+		{Name: "file6", RelativePath: "sub1/sub2/file6", LastModifiedTime: time.Now()},
 	}
 }
 
 // given a list of entities, return the relative paths in a list, to help with validations
-func (processorTestSuiteHelper) getExpectedTransferFromStoredObjectList(storedObjectList []StoredObject) []string {
+func (processorTestSuiteHelper) getExpectedTransferFromStoredObjectList(storedObjectList []traverser.StoredObject) []string {
 	expectedTransfers := make([]string, 0)
 	for _, storedObject := range storedObjectList {
-		expectedTransfers = append(expectedTransfers, "/"+storedObject.relativePath)
+		expectedTransfers = append(expectedTransfers, "/"+storedObject.RelativePath)
 	}
 
 	return expectedTransfers
@@ -73,26 +77,28 @@ func TestCopyTransferProcessorMultipleFiles(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// exercise the processor
 	sampleObjects := processorTestSuiteHelper{}.getSampleObjectList()
 	for _, numOfParts := range []int{1, 3} {
 		numOfTransfersPerPart := len(sampleObjects) / numOfParts
-		copyProcessor := newCopyTransferProcessor(processorTestSuiteHelper{}.getCopyJobTemplate(), numOfTransfersPerPart, newRemoteRes(cc.URL()), newLocalRes(dstDirName), nil, nil, false, false)
+		copyProcessor := azcopy.NewCopyTransferProcessor(false, processorTestSuiteHelper{}.getCopyJobTemplate(), numOfTransfersPerPart, newRemoteRes(cc.URL()), newLocalRes(dstDirName), nil, nil, false, false, dryrunNewCopyJobPartOrder)
 
 		// go through the objects and make sure they are processed without error
 		for _, storedObject := range sampleObjects {
-			err := copyProcessor.scheduleCopyTransfer(storedObject)
+			err := copyProcessor.ScheduleSyncRemoveSetPropertiesTransfer(storedObject)
 			a.Nil(err)
 		}
 
 		// make sure everything has been dispatched apart from the final one
-		a.Equal(common.PartNumber(numOfParts-1), copyProcessor.copyJobTemplate.PartNum)
+		a.Equal(common.PartNumber(numOfParts-1), copyProcessor.CopyJobTemplate.PartNum)
 
 		// dispatch final part
-		jobInitiated, err := copyProcessor.dispatchFinalPart()
+		jobInitiated, err := copyProcessor.DispatchFinalPart()
 		a.True(jobInitiated)
 		a.Nil(err)
 
@@ -122,23 +128,25 @@ func TestCopyTransferProcessorSingleFile(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// set up the processor
 	blobURL := cc.NewBlobClient(blobList[0]).URL()
-	copyProcessor := newCopyTransferProcessor(processorTestSuiteHelper{}.getCopyJobTemplate(), 2, newRemoteRes(blobURL), newLocalRes(filepath.Join(dstDirName, dstFileName)), nil, nil, false, false)
+	copyProcessor := azcopy.NewCopyTransferProcessor(false, processorTestSuiteHelper{}.getCopyJobTemplate(), 2, newRemoteRes(blobURL), newLocalRes(filepath.Join(dstDirName, dstFileName)), nil, nil, false, false, dryrunNewCopyJobPartOrder)
 
 	// exercise the copy transfer processor
-	storedObject := newStoredObject(noPreProccessor, blobList[0], "", common.EEntityType.File(), time.Now(), 0, noContentProps, noBlobProps, noMetadata, "")
-	err := copyProcessor.scheduleCopyTransfer(storedObject)
+	storedObject := traverser.NewStoredObject(traverser.NoPreProccessor, blobList[0], "", common.EEntityType.File(), time.Now(), 0, traverser.NoContentProps, traverser.NoBlobProps, traverser.NoMetadata, "")
+	err := copyProcessor.ScheduleSyncRemoveSetPropertiesTransfer(storedObject)
 	a.Nil(err)
 
 	// no part should have been dispatched
-	a.Equal(common.PartNumber(0), copyProcessor.copyJobTemplate.PartNum)
+	a.Equal(common.PartNumber(0), copyProcessor.CopyJobTemplate.PartNum)
 
 	// dispatch final part
-	jobInitiated, err := copyProcessor.dispatchFinalPart()
+	jobInitiated, err := copyProcessor.DispatchFinalPart()
 	a.True(jobInitiated)
 
 	// In cases of syncing file to file, the source and destination are empty because this info is already in the root

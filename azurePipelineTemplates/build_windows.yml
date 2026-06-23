@@ -41,3 +41,19 @@ steps:
       GOARCH: arm64
       GOOS: windows
       CGO_ENABLED: 0
+
+  - script: |
+      go build -tags "grpc" -o "$(binaries)\azcopy_windows_grpc_amd64.exe"
+    displayName: 'Generate Windows gRPC AMD64'
+    env:
+      GOARCH: amd64
+      GOOS: windows
+      CGO_ENABLED: 0
+
+  - script: |
+      go build -tags "grpc" -o "$(binaries)\azcopy_windows_grpc_arm64.exe"
+    displayName: 'Generate Windows gRPC ARM64'
+    env:
+      GOARCH: arm64
+      GOOS: windows
+      CGO_ENABLED: 0

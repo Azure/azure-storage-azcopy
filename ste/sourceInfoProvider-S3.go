@@ -77,10 +77,6 @@ func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, err
 			Endpoint: p.s3URLPart.Endpoint,
 			Region:   p.s3URLPart.Region,
 		},
-	}, common.CredentialOpOptions{
-		LogInfo:  func(str string) { p.jptm.Log(common.LogInfo, str) },
-		LogError: func(str string) { p.jptm.Log(common.LogError, str) },
-		Panic:    func(err error) { panic(err) },
 	}, jptm)
 	if err != nil {
 		return nil, err

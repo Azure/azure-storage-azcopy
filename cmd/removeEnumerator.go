@@ -25,67 +25,30 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/filesystem"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 	"path"
 	"strings"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/filesystem"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
 
-var NothingToRemoveError = errors.New("nothing found to remove")
+var ErrNothingToRemove = errors.New("nothing found to remove")
 
 // provide an enumerator that lists a given resource (Blob, File)
 // and schedule delete transfers to remove them
 // TODO: Make this merge into the other copy refactor code
 // TODO: initEnumerator is significantly more verbose at this point, evaluate the impact of switching over
-func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, err error) {
-	var sourceTraverser ResourceTraverser
+func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *traverser.CopyEnumerator, err error) {
+	var sourceTraverser traverser.ResourceTraverser
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-
-	// Include-path is handled by ListOfFilesChannel.
-	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &cca.credentialInfo, common.ESymlinkHandlingType.Skip(), cca.ListOfFilesChannel, cca.Recursive, true, cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), azcopyLogVerbosity, cca.CpkOptions, nil, cca.StripTopDir, cca.trailingDot, nil, cca.excludeContainer, false)
-
-	// report failure to create traverser
-	if err != nil {
-		return nil, err
-	}
-
-	includeFilters := buildIncludeFilters(cca.IncludePatterns)
-	excludeFilters := buildExcludeFilters(cca.ExcludePatterns, false)
-	excludePathFilters := buildExcludeFilters(cca.ExcludePathPatterns, true)
-	includeSoftDelete := buildIncludeSoftDeleted(cca.permanentDeleteOption)
-
-	// set up the filters in the right order
-	filters := append(includeFilters, excludeFilters...)
-	filters = append(filters, excludePathFilters...)
-	filters = append(filters, includeSoftDelete...)
-	if cca.IncludeBefore != nil {
-		filters = append(filters, &IncludeBeforeDateFilter{Threshold: *cca.IncludeBefore})
-	}
-
-	if cca.IncludeAfter != nil {
-		filters = append(filters, &IncludeAfterDateFilter{Threshold: *cca.IncludeAfter})
-	}
-
-	// decide our folder transfer strategy
-	// (Must enumerate folders when deleting from a folder-aware location. Can't do folder deletion just based on file
-	// deletion, because that would not handle folders that were empty at the start of the job).
-	// isHNStoHNS is IGNORED here, because BlobFS locations don't take this route currently.
-	fpo, message := NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, false, false, false, false, cca.IncludeDirectoryStubs)
-	// do not print Info message if in dry run mode
-	if !cca.dryrunMode {
-		glcm.Info(message)
-	}
-	if jobsAdmin.JobsAdmin != nil {
-		jobsAdmin.JobsAdmin.LogToJobLog(message, common.LogInfo)
-	}
-
 	from := cca.FromTo.From()
 	if !from.SupportsTrailingDot() {
 		cca.trailingDot = common.ETrailingDotOption.Disable()
@@ -97,9 +60,9 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
+	options := traverser.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
 	var fileClientOptions any
-	if cca.FromTo.From() == common.ELocation.File() {
+	if cca.FromTo.From().IsFile() {
 		fileClientOptions = &common.FileClientOptions{AllowTrailingDot: cca.trailingDot.IsEnabled()}
 	}
 	targetServiceClient, err := common.GetServiceClientForLocation(
@@ -113,16 +76,75 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	if err != nil {
 		return nil, err
 	}
-	transferScheduler := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo, targetServiceClient)
+
+	// Include-path is handled by ListOfFilesChannel.
+	sourceTraverser, err = traverser.InitResourceTraverser(cca.Source, cca.FromTo.From(), ctx, traverser.InitResourceTraverserOptions{
+		Client:         targetServiceClient,
+		CredentialType: cca.credentialInfo.CredentialType,
+
+		ListOfFiles:      cca.ListOfFilesChannel,
+		ListOfVersionIDs: cca.ListOfVersionIDsChannel,
+
+		CpkOptions: cca.CpkOptions,
+
+		PermanentDelete:   cca.permanentDeleteOption,
+		TrailingDotOption: cca.trailingDot,
+
+		Recursive:               cca.Recursive,
+		IncludeDirectoryStubs:   cca.IncludeDirectoryStubs,
+		GetPropertiesInFrontend: true,
+		StripTopDir:             cca.StripTopDir,
+
+		ExcludeContainers: cca.excludeContainer,
+		HardlinkHandling:  common.EHardlinkHandlingType.Follow(),
+	})
+
+	// report failure to create traverser
+	if err != nil {
+		return nil, err
+	}
+
+	includeFilters := traverser.BuildIncludeFilters(cca.IncludePatterns)
+	excludeFilters := traverser.BuildExcludeFilters(cca.ExcludePatterns, false)
+	excludePathFilters := traverser.BuildExcludeFilters(cca.ExcludePathPatterns, true)
+	includeSoftDelete := traverser.BuildIncludeSoftDeleted(cca.permanentDeleteOption)
+
+	// set up the filters in the right order
+	filters := append(includeFilters, excludeFilters...)
+	filters = append(filters, excludePathFilters...)
+	filters = append(filters, includeSoftDelete...)
+	if cca.IncludeBefore != nil {
+		filters = append(filters, &traverser.IncludeBeforeDateFilter{Threshold: *cca.IncludeBefore})
+	}
+
+	if cca.IncludeAfter != nil {
+		filters = append(filters, &traverser.IncludeAfterDateFilter{Threshold: *cca.IncludeAfter})
+	}
+
+	// decide our folder transfer strategy
+	// (Must enumerate folders when deleting from a folder-aware location. Can't do folder deletion just based on file
+	// deletion, because that would not handle folders that were empty at the start of the job).
+	// isHNStoHNS is IGNORED here, because BlobFS locations don't take this route currently.
+	fpo, message := azcopy.NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, false, false, false, false, cca.IncludeDirectoryStubs)
+	// do not print Info message if in dry run mode
+	if !cca.dryrunMode {
+		glcm.Info(message)
+	}
+	common.LogToJobLogWithPrefix(message, common.LogInfo)
+
+	if err != nil {
+		return nil, err
+	}
+	transferScheduler := newRemoveTransferProcessor(cca, azcopy.NumOfFilesPerDispatchJobPart, fpo, targetServiceClient)
 
 	finalize := func() error {
-		jobInitiated, err := transferScheduler.dispatchFinalPart()
+		jobInitiated, err := transferScheduler.DispatchFinalPart()
 		if err != nil {
 			if cca.dryrunMode {
 				return nil
-			} else if err == NothingScheduledError {
+			} else if err == azcopy.NothingScheduledError {
 				// No log file needed. Logging begins as a part of awaiting job completion.
-				return NothingToRemoveError
+				return ErrNothingToRemove
 			}
 
 			return err
@@ -140,7 +162,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 		return nil
 	}
 
-	return NewCopyEnumerator(sourceTraverser, filters, transferScheduler.scheduleCopyTransfer, finalize), nil
+	return traverser.NewCopyEnumerator(sourceTraverser, filters, transferScheduler.ScheduleSyncRemoveSetPropertiesTransfer, finalize), nil
 }
 
 // TODO move after ADLS/Blob interop goes public
@@ -155,7 +177,7 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
+	options := traverser.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
 
 	targetServiceClient, err := common.GetServiceClientForLocation(cca.FromTo.From(), cca.Source, cca.credentialInfo.CredentialType, cca.credentialInfo.OAuthTokenInfo.TokenCredential, &options, nil)
 	if err != nil {
@@ -164,7 +186,7 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 
 	dsc, _ := targetServiceClient.DatalakeServiceClient() // We've just created client above, need not verify error here.
 
-	transferProcessor := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart, common.EFolderPropertiesOption.AllFolders(), targetServiceClient)
+	transferProcessor := newRemoveTransferProcessor(cca, azcopy.NumOfFilesPerDispatchJobPart, common.EFolderPropertiesOption.AllFolders(), targetServiceClient)
 
 	// return an error if the unsupported options are passed in
 	if len(cca.InitModularFilters()) > 0 {
@@ -187,15 +209,15 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 		if cca.dryrunMode {
 			return dryrunRemoveSingleDFSResource(ctx, dsc, datalakeURLParts, cca.Recursive)
 		} else {
-			err := transferProcessor.scheduleCopyTransfer(newStoredObject(
+			err := transferProcessor.ScheduleSyncRemoveSetPropertiesTransfer(traverser.NewStoredObject(
 				nil,
 				path.Base(datalakeURLParts.PathName),
 				"",
 				common.EEntityType.File(), // blobfs deleter doesn't differentiate
 				time.Now(),
 				0,
-				noContentProps,
-				noContentProps,
+				traverser.NoContentProps,
+				traverser.NoContentProps,
 				nil,
 				"",
 			))
@@ -216,15 +238,15 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 			if cca.dryrunMode {
 				return dryrunRemoveSingleDFSResource(ctx, dsc, datalakeURLParts, cca.Recursive)
 			} else {
-				err := transferProcessor.scheduleCopyTransfer(newStoredObject(
+				err := transferProcessor.ScheduleSyncRemoveSetPropertiesTransfer(traverser.NewStoredObject(
 					nil,
 					path.Base(datalakeURLParts.PathName),
 					childPath,
 					common.EEntityType.File(), // blobfs deleter doesn't differentiate
 					time.Now(),
 					0,
-					noContentProps,
-					noContentProps,
+					traverser.NoContentProps,
+					traverser.NoContentProps,
 					nil,
 					"",
 				))
@@ -236,14 +258,14 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 		}
 	}
 
-	_, err = transferProcessor.dispatchFinalPart()
+	_, err = transferProcessor.DispatchFinalPart()
 	return err
 }
 
 func dryrunRemoveSingleDFSResource(ctx context.Context, dsc *service.Client, datalakeURLParts azdatalake.URLParts, recursive bool) error {
 	//deleting a filesystem
 	if datalakeURLParts.PathName == "" {
-		glcm.Dryrun(func(of common.OutputFormat) string {
+		glcm.Dryrun(func(of OutputFormat) string {
 			switch of {
 			case of.Text():
 				return fmt.Sprintf("DRYRUN: remove %s", dsc.NewFileSystemClient(datalakeURLParts.FileSystemName).DFSURL())
@@ -274,7 +296,7 @@ func dryrunRemoveSingleDFSResource(ctx context.Context, dsc *service.Client, dat
 	// then we should short-circuit and simply remove that file
 	resourceType := common.IffNotNil(props.ResourceType, "")
 	if strings.EqualFold(resourceType, "file") {
-		glcm.Dryrun(func(of common.OutputFormat) string {
+		glcm.Dryrun(func(of OutputFormat) string {
 			switch of {
 			case of.Text():
 				return fmt.Sprintf("DRYRUN: remove %s", directoryClient.DFSURL())
@@ -309,7 +331,7 @@ func dryrunRemoveSingleDFSResource(ctx context.Context, dsc *service.Client, dat
 				entityType = "file"
 			}
 
-			glcm.Dryrun(func(of common.OutputFormat) string {
+			glcm.Dryrun(func(of OutputFormat) string {
 				uri := dsc.NewFileSystemClient(datalakeURLParts.FileSystemName).NewFileClient(*v.Name).DFSURL()
 
 				switch of {

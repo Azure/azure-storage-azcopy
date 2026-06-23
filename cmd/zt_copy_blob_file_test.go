@@ -22,10 +22,13 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
-	"github.com/stretchr/testify/assert"
 	"strings"
 	"testing"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestBlobAccountCopyToFileShareS2S actually ends up testing the entire account->container scenario as that is not dependent on destination or source.
@@ -64,7 +67,6 @@ func TestBlobAccountCopyToFileShareS2S(t *testing.T) {
 
 	// initialize mocked RPC
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
 	// generate raw input
@@ -73,53 +75,12 @@ func TestBlobAccountCopyToFileShareS2S(t *testing.T) {
 	dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(a, dstShareName)
 	raw := getDefaultRawCopyInput(blobServiceURLWithSAS.String(), dstShareURLWithSAS.String())
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		a.Equal(len(expectedTransfers), len(mockedRPC.transfers))
 
 		validateS2STransfersAreScheduled(a, "/", "/", expectedTransfers, mockedRPC)
-	})
-}
-
-// TestBlobCopyToFileS2SImplicitDstShare uses a service-level URL on the destination to implicitly create the destination share.
-func TestBlobCopyToFileS2SImplicitDstShare(t *testing.T) {
-	a := assert.New(t)
-	bsc := getBlobServiceClient()
-	fsc := getFileServiceClient()
-
-	// create source container
-	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
-	defer deleteContainer(a, srcContainerClient)
-
-	// prepare a destination container URL to be deleted.
-	dstShareClient := fsc.NewShareClient(srcContainerName)
-	defer deleteShare(a, dstShareClient)
-
-	// create a scenario on the source container
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerClient, "blobFileImplicitDest")
-	a.NotZero(len(fileList)) // Ensure that at least one blob is present
-
-	// initialize the mocked RPC
-	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
-	mockedRPC.init()
-
-	// Create raw arguments
-	srcContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, srcContainerName)
-	dstServiceURLWithSAS := scenarioHelper{}.getRawFileServiceURLWithSAS(a)
-	raw := getDefaultRawCopyInput(srcContainerURLWithSAS.String(), dstServiceURLWithSAS.String())
-	// recursive is enabled by default
-
-	// run the copy, check the container, and check the transfer success.
-	runCopyAndVerify(a, raw, func(err error) {
-		a.Nil(err) // Check there was no error
-
-		_, err = dstShareClient.GetProperties(ctx, nil)
-		a.Nil(err) // Ensure the destination share exists
-
-		// Ensure the transfers were scheduled
-		validateS2STransfersAreScheduled(a, "/", "/"+srcContainerName+"/", fileList, mockedRPC)
 	})
 }
 
@@ -140,7 +101,6 @@ func TestBlobCopyToFileS2SWithSingleFile(t *testing.T) {
 
 		// set up the interceptor
 		mockedRPC := interceptor{}
-		Rpc = mockedRPC.intercept
 		mockedRPC.init()
 
 		// construct the raw input for explicit destination
@@ -148,7 +108,7 @@ func TestBlobCopyToFileS2SWithSingleFile(t *testing.T) {
 		dstFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(a, dstShareName, fileName)
 		raw := getDefaultRawCopyInput(srcBlobURLWithSAS.String(), dstFileURLWithSAS.String())
 
-		runCopyAndVerify(a, raw, func(err error) {
+		runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 			a.Nil(err)
 
 			validateS2STransfersAreScheduled(a, "", "", []string{""}, mockedRPC)
@@ -161,7 +121,9 @@ func TestBlobCopyToFileS2SWithSingleFile(t *testing.T) {
 
 		// set up the interceptor
 		mockedRPC := interceptor{}
-		Rpc = mockedRPC.intercept
+		jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+			return mockedRPC.intercept(order)
+		}
 		mockedRPC.init()
 
 		// construct the raw input for implicit destination
@@ -169,7 +131,7 @@ func TestBlobCopyToFileS2SWithSingleFile(t *testing.T) {
 		dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(a, dstShareName)
 		raw := getDefaultRawCopyInput(srcBlobURLWithSAS.String(), dstShareURLWithSAS.String())
 
-		runCopyAndVerify(a, raw, func(err error) {
+		runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 			a.Nil(err)
 
 			// put the filename in the destination dir name
@@ -197,7 +159,6 @@ func TestContainerToShareCopyS2S(t *testing.T) {
 
 	// set up the interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
 	// set up the raw input with recursive = true to copy
@@ -205,7 +166,7 @@ func TestContainerToShareCopyS2S(t *testing.T) {
 	dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(a, dstShareName)
 	raw := getDefaultRawCopyInput(srcContainerURLWithSAS.String(), dstShareURLWithSAS.String())
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate the transfer count is correct
@@ -218,7 +179,7 @@ func TestContainerToShareCopyS2S(t *testing.T) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.NotNil(err)
 		// make sure that the failure was due to the recursive flag
 		a.Contains(err.Error(), "recursive")
@@ -268,7 +229,6 @@ func TestBlobFileCopyS2SWithIncludeAndIncludeDirFlag(t *testing.T) {
 
 	// set up the interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
 	// construct the raw input
@@ -278,14 +238,14 @@ func TestBlobFileCopyS2SWithIncludeAndIncludeDirFlag(t *testing.T) {
 	raw.include = includeString
 	raw.recursive = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		validateS2STransfersAreScheduled(a, "/", "/", loneIncludeList, mockedRPC)
 	})
 
 	mockedRPC.reset()
 	raw.includePath = includePathString
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		validateS2STransfersAreScheduled(a, "/", "/", includePathAndIncludeList, mockedRPC)
 	})
@@ -331,7 +291,6 @@ func TestBlobToFileCopyS2SWithExcludeAndExcludeDirFlag(t *testing.T) {
 
 	// set up the interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
 	// construct the raw input
@@ -341,14 +300,14 @@ func TestBlobToFileCopyS2SWithExcludeAndExcludeDirFlag(t *testing.T) {
 	raw.exclude = excludeString
 	raw.recursive = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		validateS2STransfersAreScheduled(a, "/", "/", loneExcludeList, mockedRPC)
 	})
 
 	mockedRPC.reset()
 	raw.excludePath = excludePathString
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		validateS2STransfersAreScheduled(a, "/", "/", excludePathAndExcludeList, mockedRPC)
 	})
@@ -393,7 +352,6 @@ func TestBlobToFileCopyS2SIncludeExcludeMix(t *testing.T) {
 
 	// set up the interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
 	// construct the raw input
@@ -404,7 +362,7 @@ func TestBlobToFileCopyS2SIncludeExcludeMix(t *testing.T) {
 	raw.exclude = excludeString
 	raw.recursive = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		validateS2STransfersAreScheduled(a, "/", "/", toInclude, mockedRPC)
 	})
@@ -428,7 +386,6 @@ func TestBlobToFileCopyS2SWithDirectory(t *testing.T) {
 
 	// initialize mocked RPC
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
 	// generate raw copy command
@@ -440,7 +397,7 @@ func TestBlobToFileCopyS2SWithDirectory(t *testing.T) {
 
 	// test folder copies
 	expectedList := scenarioHelper{}.shaveOffPrefix(fileList, dirName+"/")
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		validateS2STransfersAreScheduled(a, "/", "/"+dirName+"/", expectedList, mockedRPC)
 	})

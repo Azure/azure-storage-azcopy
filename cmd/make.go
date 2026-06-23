@@ -23,9 +23,12 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 	"net/url"
 	"strings"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
@@ -61,7 +64,7 @@ func (raw rawMakeCmdArgs) cook() (cookedMakeCmdArgs, error) {
 	// resourceLocation could be unknown at this stage, it will be handled by the caller
 	return cookedMakeCmdArgs{
 		resourceURL:      *parsedURL,
-		resourceLocation: InferArgumentLocation(raw.resourceToCreate),
+		resourceLocation: azcopy.InferArgumentLocation(raw.resourceToCreate),
 		quota:            int32(raw.quota),
 	}, nil
 }
@@ -76,7 +79,7 @@ type cookedMakeCmdArgs struct {
 func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	resourceStringParts, err := SplitResourceString(cookedArgs.resourceURL.String(), cookedArgs.resourceLocation)
+	resourceStringParts, err := traverser.SplitResourceString(cookedArgs.resourceURL.String(), cookedArgs.resourceLocation)
 	if err != nil {
 		return err
 	}
@@ -97,7 +100,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 	}
 
 	// Note : trailing dot is only applicable to file operations anyway, so setting this to false
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
+	options := traverser.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
 	resourceURL := cookedArgs.resourceURL.String()
 	cred := credentialInfo.OAuthTokenInfo.TokenCredential
 
@@ -151,7 +154,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 			// print the ugly error if unexpected
 			return err
 		}
-	case common.ELocation.File():
+	case common.ELocation.File(), common.ELocation.FileNFS():
 		var shareClient *share.Client
 		shareClient, err = share.NewClientWithNoCredential(resourceURL, &share.ClientOptions{ClientOptions: options})
 		if err != nil {
@@ -208,12 +211,13 @@ func init() {
 				glcm.Error(err.Error())
 			}
 
-			glcm.Exit(func(format common.OutputFormat) string {
+			glcm.Exit(func(format OutputFormat) string {
 				return "Successfully created the resource."
-			}, common.EExitCode.Success())
+			}, EExitCode.Success())
 		},
 	}
 
-	makeCmd.PersistentFlags().Uint32Var(&rawArgs.quota, "quota-gb", 0, "Specifies the maximum size of the share in gigabytes (GiB), 0 means you accept the file service's default quota.")
+	makeCmd.PersistentFlags().Uint32Var(&rawArgs.quota, "quota-gb", 0, "Specifies the maximum size of the share in gigabytes (GiB), "+
+		"\n 0 means you accept the file service's default quota.")
 	rootCmd.AddCommand(makeCmd)
 }

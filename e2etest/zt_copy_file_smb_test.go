@@ -1,11 +1,12 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func TestSMB_FromShareSnapshot(t *testing.T) {
@@ -43,6 +44,7 @@ func TestSMB_ToDevNull(t *testing.T) {
 			recursive:              true,
 			preserveSMBPermissions: isWindows,
 			preserveSMBInfo:        to.Ptr(isWindows),
+			preserveInfo:           to.Ptr(isWindows),
 			checkMd5:               common.EHashValidationOption.FailIfDifferent(),
 			destNull:               true,
 		},

@@ -48,16 +48,16 @@ func ToExtendedPath(short string) string {
 	// ex. \\share\dir\file.txt -> \\?\UNC\share\dir\file.txt
 	if runtime.GOOS == "windows" { // Only do this on Windows
 		if strings.HasPrefix(short, EXTENDED_PATH_PREFIX) { // already an extended path \\?\C:\folder\file.txt or \\?\UNC\sharename\folder\file.txt
-			return strings.Replace(short, `/`, `\`, -1) // Just ensure it has all backslashes-- Windows can't handle forward-slash anymore in this format.
+			return strings.ReplaceAll(short, `/`, `\`) // Just ensure it has all backslashes-- Windows can't handle forward-slash anymore in this format.
 		} else if strings.HasPrefix(short, `\\`) { // this is a file share (//sharename/folder/file.txt)
 			// Steal the first backslash, and then append the prefix. Enforce \.
-			return strings.Replace(EXTENDED_UNC_PATH_PREFIX+short[1:], `/`, `\`, -1) // convert to extended UNC path
+			return strings.ReplaceAll(EXTENDED_UNC_PATH_PREFIX+short[1:], `/`, `\`) // convert to extended UNC path
 		} else { // this is coming from a drive-- capitalize the drive prefix. (C:/folder/file.txt)
 			if len(short) >= 2 && RootDriveRegex.MatchString(short[:2]) {
 				short = strings.Replace(short, short[:2], strings.ToUpper(short[:2]), 1)
 			}
 			// Then append the prefix. Enforce \.
-			return strings.Replace(EXTENDED_PATH_PREFIX+short, `/`, `\`, -1) // Just append the prefix
+			return strings.ReplaceAll(EXTENDED_PATH_PREFIX+short, `/`, `\`) // Just append the prefix
 		}
 	}
 

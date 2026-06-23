@@ -22,11 +22,12 @@ package ste
 
 import (
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -90,6 +91,25 @@ type ISMBPropertyBearingSourceInfoProvider interface {
 
 	GetSDDL() (string, error)
 	GetSMBProperties() (TypedSMBPropertyHolder, error)
+}
+
+type TypedNFSPropertyHolder interface {
+	FileCreationTime() time.Time
+	FileLastWriteTime() time.Time
+}
+
+type TypedNFSPermissionsHolder interface {
+	GetOwner() *string
+	GetGroup() *string
+	GetFileMode() *string // Mode may not always be available to check in a Statx call (though it should be, since we requested it.) Best safe than sorry; check Mask!
+}
+
+type INFSPropertyBearingSourceInfoProvider interface {
+	ISourceInfoProvider
+
+	GetNFSProperties() (TypedNFSPropertyHolder, error)
+	GetNFSPermissions() (TypedNFSPermissionsHolder, error)
+	GetNFSDefaultPerms() (*string, *string, *string, error)
 }
 
 type IUNIXPropertyBearingSourceInfoProvider interface {

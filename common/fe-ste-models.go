@@ -31,6 +31,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -43,7 +44,6 @@ import (
 
 const (
 	AZCOPY_PATH_SEPARATOR_STRING = "/"
-	AZCOPY_PATH_SEPARATOR_CHAR   = '/'
 	OS_PATH_SEPARATOR            = string(os.PathSeparator)
 	EXTENDED_PATH_PREFIX         = `\\?\`
 	EXTENDED_UNC_PATH_PREFIX     = `\\?\UNC`
@@ -55,10 +55,13 @@ const (
 
 	// Since we haven't updated the Go SDKs to handle CPK just yet, we need to detect CPK related errors
 	// and inform the user that we don't support CPK yet.
-	CPK_ERROR_SERVICE_CODE = "BlobUsesCustomerSpecifiedEncryption"
-	BLOB_NOT_FOUND         = "BlobNotFound"
-	FILE_NOT_FOUND         = "The specified file was not found."
-	EINTR_RETRY_COUNT      = 5
+	CPK_ERROR_SERVICE_CODE    = "BlobUsesCustomerSpecifiedEncryption"
+	FILE_NOT_FOUND            = "The specified file was not found."
+	EINTR_RETRY_COUNT         = 5
+	RECOMMENDED_OBJECTS_COUNT = 10000000
+	WARN_MULTIPLE_PROCESSES   = "More than one AzCopy process is running. This is a non-blocking warning, AzCopy will continue the operation. \n But, it is best practice to run a single process per VM." +
+		"\nPlease terminate other instances." // This particular warning message does not abort the whole operation
+	AMLFS_MOD_TIME_LAYOUT = "2006-01-02 15:04:05 -0700"
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -191,16 +194,81 @@ func ValidTrailingDotOptions() []string {
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-var EPermanentDeleteOption = PermanentDeleteOption(3) // Default to "None"
+var EBlobTraverserIncludeOption eBlobTraverserIncludeOption
+
+type eBlobTraverserIncludeOption bool
+
+type BlobTraverserIncludeOption uint8
+
+func (eBlobTraverserIncludeOption) Snapshots() BlobTraverserIncludeOption { return 1 }
+func (eBlobTraverserIncludeOption) Versions() BlobTraverserIncludeOption  { return 1 << 1 }
+func (eBlobTraverserIncludeOption) Deleted() BlobTraverserIncludeOption   { return 1 << 2 }
+func (eBlobTraverserIncludeOption) DirStubs() BlobTraverserIncludeOption  { return 1 << 3 } // whether to include blobs that have metadata 'hdi_isfolder = true'
+func (eBlobTraverserIncludeOption) None() BlobTraverserIncludeOption      { return 0 }
+
+func (e eBlobTraverserIncludeOption) FromInputs(pdo PermanentDeleteOption, listVersions, includeDirectoryStubs bool) BlobTraverserIncludeOption {
+	out := e.None()
+
+	if includeDirectoryStubs {
+		out = out.Add(e.DirStubs())
+	}
+
+	if pdo != 0 {
+		out = out.Add(e.Deleted())
+
+		if pdo.Includes(EPermanentDeleteOption.Snapshots()) {
+			out = out.Add(e.Snapshots())
+		}
+
+		if pdo.Includes(EPermanentDeleteOption.Versions()) || listVersions {
+			out = out.Add(e.Versions())
+		}
+
+		return out
+	}
+
+	if listVersions {
+		out = out.Add(e.Versions())
+	}
+
+	return out
+}
+
+func (o BlobTraverserIncludeOption) Add(other BlobTraverserIncludeOption) BlobTraverserIncludeOption {
+	return o | other
+}
+func (o BlobTraverserIncludeOption) Includes(other BlobTraverserIncludeOption) bool {
+	return (o & other) == other
+}
+
+func (o BlobTraverserIncludeOption) Snapshots() bool {
+	return o.Includes(EBlobTraverserIncludeOption.Snapshots())
+}
+func (o BlobTraverserIncludeOption) Versions() bool {
+	return o.Includes(EBlobTraverserIncludeOption.Versions())
+}
+func (o BlobTraverserIncludeOption) Deleted() bool {
+	return o.Includes(EBlobTraverserIncludeOption.Deleted())
+}
+func (o BlobTraverserIncludeOption) DirStubs() bool {
+	return o.Includes(EBlobTraverserIncludeOption.DirStubs())
+}
+
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+var EPermanentDeleteOption = PermanentDeleteOption(0) // Default to "None"
 
 type PermanentDeleteOption uint8
 
-func (PermanentDeleteOption) Snapshots() PermanentDeleteOption { return PermanentDeleteOption(0) }
-func (PermanentDeleteOption) Versions() PermanentDeleteOption  { return PermanentDeleteOption(1) }
-func (PermanentDeleteOption) SnapshotsAndVersions() PermanentDeleteOption {
-	return PermanentDeleteOption(2)
+func (PermanentDeleteOption) Snapshots() PermanentDeleteOption { return PermanentDeleteOption(1) }
+func (PermanentDeleteOption) Versions() PermanentDeleteOption  { return PermanentDeleteOption(1 << 1) }
+func (p PermanentDeleteOption) SnapshotsAndVersions() PermanentDeleteOption {
+	return p.Snapshots() | p.Versions()
 }
-func (PermanentDeleteOption) None() PermanentDeleteOption { return PermanentDeleteOption(3) }
+func (PermanentDeleteOption) None() PermanentDeleteOption { return PermanentDeleteOption(0) }
+
+func (p PermanentDeleteOption) Includes(other PermanentDeleteOption) bool {
+	return (p & other) == other
+}
 
 func (p *PermanentDeleteOption) Parse(s string) error {
 	// allow empty to mean "None"
@@ -317,45 +385,6 @@ func (o *OverwriteOption) Parse(s string) error {
 func (o OverwriteOption) String() string {
 	return enum.StringInt(o, reflect.TypeOf(o))
 }
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-type OutputFormat uint32
-
-var EOutputFormat = OutputFormat(0)
-
-func (OutputFormat) None() OutputFormat { return OutputFormat(0) }
-func (OutputFormat) Text() OutputFormat { return OutputFormat(1) }
-func (OutputFormat) Json() OutputFormat { return OutputFormat(2) }
-
-func (of *OutputFormat) Parse(s string) error {
-	val, err := enum.Parse(reflect.TypeOf(of), s, true)
-	if err == nil {
-		*of = val.(OutputFormat)
-	}
-	return err
-}
-
-func (of OutputFormat) String() string {
-	return enum.StringInt(of, reflect.TypeOf(of))
-}
-
-var EExitCode = ExitCode(0)
-
-type ExitCode uint32
-
-func (ExitCode) Success() ExitCode { return ExitCode(0) }
-func (ExitCode) Error() ExitCode   { return ExitCode(1) }
-
-// note: if AzCopy exits due to a panic, we don't directly control what the exit code will be. The Go runtime seems to be
-// hard-coded to give an exit code of 2 in that case, but there is discussion of changing it to 1, so it may become
-// impossible to tell from exit code alone whether AzCopy panic or return EExitCode.Error.
-// See https://groups.google.com/forum/#!topic/golang-nuts/u9NgKibJsKI
-// However, fortunately, in the panic case, stderr will get the panic message;
-// whereas AFAIK we never write to stderr in normal execution of AzCopy.  So that's a suggested way to differentiate when needed.
-
-// NoExit is used as a marker, to suppress the normal exit behaviour
-func (ExitCode) NoExit() ExitCode { return ExitCode(99) }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 type LogLevel uint8
@@ -533,6 +562,7 @@ func (Location) S3() Location        { return Location(6) }
 func (Location) Benchmark() Location { return Location(7) }
 func (Location) GCP() Location       { return Location(8) }
 func (Location) None() Location      { return Location(9) } // None is used in case we're transferring properties
+func (Location) FileNFS() Location   { return Location(10) }
 
 func (Location) AzureAccount() Location { return Location(100) } // AzureAccount is never used within AzCopy, and won't be detected, (for now)
 
@@ -555,6 +585,7 @@ func (Location) AllStandardLocations() []Location {
 		ELocation.File(),
 		ELocation.BlobFS(),
 		ELocation.S3(),
+		ELocation.FileNFS(),
 		// TODO: ELocation.GCP
 	}
 }
@@ -568,7 +599,7 @@ func FromToValue(from Location, to Location) FromTo {
 
 func (l Location) IsRemote() bool {
 	switch l {
-	case ELocation.BlobFS(), ELocation.Blob(), ELocation.File(), ELocation.S3(), ELocation.GCP():
+	case ELocation.BlobFS(), ELocation.Blob(), ELocation.File(), ELocation.S3(), ELocation.GCP(), ELocation.FileNFS():
 		return true
 	case ELocation.Local(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown(), ELocation.None():
 		return false
@@ -587,14 +618,14 @@ func (l Location) IsLocal() bool {
 
 // IsAzure checks if location is Azure (BlobFS, Blob, File)
 func (l Location) IsAzure() bool {
-	return l == ELocation.BlobFS() || l == ELocation.Blob() || l == ELocation.File()
+	return l == ELocation.BlobFS() || l == ELocation.Blob() || l == ELocation.File() || l == ELocation.FileNFS()
 }
 
 // IsFolderAware returns true if the location has real folders (e.g. there's such a thing as an empty folder,
 // and folders may have properties). Folders are only virtual, and so not real, in Blob Storage.
 func (l Location) IsFolderAware() bool {
 	switch l {
-	case ELocation.BlobFS(), ELocation.File(), ELocation.Local():
+	case ELocation.BlobFS(), ELocation.File(), ELocation.Local(), ELocation.FileNFS():
 		return true
 	case ELocation.Blob(), ELocation.S3(), ELocation.GCP(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown(), ELocation.None():
 		return false
@@ -604,19 +635,27 @@ func (l Location) IsFolderAware() bool {
 }
 
 func (l Location) CanForwardOAuthTokens() bool {
-	return l == ELocation.Blob() || l == ELocation.BlobFS() || l == ELocation.File()
+	return l == ELocation.Blob() || l == ELocation.BlobFS() || l == ELocation.File() || l == ELocation.FileNFS()
 }
 
 func (l Location) SupportsHnsACLs() bool {
 	return l == ELocation.Blob() || l == ELocation.BlobFS()
 }
 
+func (l Location) IsFile() bool {
+	return l == ELocation.File() || l == ELocation.FileNFS()
+}
+
 func (l Location) SupportsTrailingDot() bool {
-	if (l == ELocation.File()) || (l == ELocation.Local() && runtime.GOOS != "windows") {
+	if (l == ELocation.File() || l == ELocation.FileNFS()) || (l == ELocation.Local() && runtime.GOOS != "windows") {
 		return true
 	}
 
 	return false
+}
+
+func (ft FromTo) IsRedirection() bool {
+	return ft == EFromTo.PipeBlob() || ft == EFromTo.BlobPipe()
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -628,34 +667,50 @@ var EFromTo = FromTo(0)
 // represents the to location
 type FromTo uint16
 
-func (FromTo) Unknown() FromTo      { return FromTo(0) }
-func (FromTo) LocalBlob() FromTo    { return FromToValue(ELocation.Local(), ELocation.Blob()) }
-func (FromTo) LocalFile() FromTo    { return FromToValue(ELocation.Local(), ELocation.File()) }
-func (FromTo) BlobLocal() FromTo    { return FromToValue(ELocation.Blob(), ELocation.Local()) }
-func (FromTo) FileLocal() FromTo    { return FromToValue(ELocation.File(), ELocation.Local()) }
-func (FromTo) BlobPipe() FromTo     { return FromToValue(ELocation.Blob(), ELocation.Pipe()) }
-func (FromTo) PipeBlob() FromTo     { return FromToValue(ELocation.Pipe(), ELocation.Blob()) }
-func (FromTo) FilePipe() FromTo     { return FromToValue(ELocation.File(), ELocation.Pipe()) }
-func (FromTo) PipeFile() FromTo     { return FromToValue(ELocation.Pipe(), ELocation.File()) }
-func (FromTo) BlobTrash() FromTo    { return FromToValue(ELocation.Blob(), ELocation.Unknown()) }
-func (FromTo) FileTrash() FromTo    { return FromToValue(ELocation.File(), ELocation.Unknown()) }
-func (FromTo) BlobFSTrash() FromTo  { return FromToValue(ELocation.BlobFS(), ELocation.Unknown()) }
-func (FromTo) LocalBlobFS() FromTo  { return FromToValue(ELocation.Local(), ELocation.BlobFS()) }
-func (FromTo) BlobFSLocal() FromTo  { return FromToValue(ELocation.BlobFS(), ELocation.Local()) }
-func (FromTo) BlobFSBlobFS() FromTo { return FromToValue(ELocation.BlobFS(), ELocation.BlobFS()) }
-func (FromTo) BlobFSBlob() FromTo   { return FromToValue(ELocation.BlobFS(), ELocation.Blob()) }
-func (FromTo) BlobFSFile() FromTo   { return FromToValue(ELocation.BlobFS(), ELocation.File()) }
-func (FromTo) BlobBlobFS() FromTo   { return FromToValue(ELocation.Blob(), ELocation.BlobFS()) }
-func (FromTo) FileBlobFS() FromTo   { return FromToValue(ELocation.File(), ELocation.BlobFS()) }
-func (FromTo) BlobBlob() FromTo     { return FromToValue(ELocation.Blob(), ELocation.Blob()) }
-func (FromTo) FileBlob() FromTo     { return FromToValue(ELocation.File(), ELocation.Blob()) }
-func (FromTo) BlobFile() FromTo     { return FromToValue(ELocation.Blob(), ELocation.File()) }
-func (FromTo) FileFile() FromTo     { return FromToValue(ELocation.File(), ELocation.File()) }
-func (FromTo) S3Blob() FromTo       { return FromToValue(ELocation.S3(), ELocation.Blob()) }
-func (FromTo) GCPBlob() FromTo      { return FromToValue(ELocation.GCP(), ELocation.Blob()) }
-func (FromTo) BlobNone() FromTo     { return FromToValue(ELocation.Blob(), ELocation.None()) }
-func (FromTo) BlobFSNone() FromTo   { return FromToValue(ELocation.BlobFS(), ELocation.None()) }
-func (FromTo) FileNone() FromTo     { return FromToValue(ELocation.File(), ELocation.None()) }
+func (FromTo) Unknown() FromTo { return FromTo(0) }
+
+func (FromTo) LocalBlob() FromTo      { return FromToValue(ELocation.Local(), ELocation.Blob()) }
+func (FromTo) LocalFile() FromTo      { return FromToValue(ELocation.Local(), ELocation.File()) }
+func (FromTo) BlobLocal() FromTo      { return FromToValue(ELocation.Blob(), ELocation.Local()) }
+func (FromTo) FileLocal() FromTo      { return FromToValue(ELocation.File(), ELocation.Local()) }
+func (FromTo) BlobPipe() FromTo       { return FromToValue(ELocation.Blob(), ELocation.Pipe()) }
+func (FromTo) PipeBlob() FromTo       { return FromToValue(ELocation.Pipe(), ELocation.Blob()) }
+func (FromTo) FilePipe() FromTo       { return FromToValue(ELocation.File(), ELocation.Pipe()) }
+func (FromTo) FileSMBPipe() FromTo    { return FromToValue(ELocation.File(), ELocation.Pipe()) }
+func (FromTo) PipeFile() FromTo       { return FromToValue(ELocation.Pipe(), ELocation.File()) }
+func (FromTo) PipeFileSMB() FromTo    { return FromToValue(ELocation.Pipe(), ELocation.File()) }
+func (FromTo) BlobTrash() FromTo      { return FromToValue(ELocation.Blob(), ELocation.Unknown()) }
+func (FromTo) FileTrash() FromTo      { return FromToValue(ELocation.File(), ELocation.Unknown()) }
+func (FromTo) FileSMBTrash() FromTo   { return FromToValue(ELocation.File(), ELocation.Unknown()) }
+func (FromTo) BlobFSTrash() FromTo    { return FromToValue(ELocation.BlobFS(), ELocation.Unknown()) }
+func (FromTo) LocalBlobFS() FromTo    { return FromToValue(ELocation.Local(), ELocation.BlobFS()) }
+func (FromTo) BlobFSLocal() FromTo    { return FromToValue(ELocation.BlobFS(), ELocation.Local()) }
+func (FromTo) BlobFSBlobFS() FromTo   { return FromToValue(ELocation.BlobFS(), ELocation.BlobFS()) }
+func (FromTo) BlobFSBlob() FromTo     { return FromToValue(ELocation.BlobFS(), ELocation.Blob()) }
+func (FromTo) BlobFSFile() FromTo     { return FromToValue(ELocation.BlobFS(), ELocation.File()) }
+func (FromTo) BlobFSFileSMB() FromTo  { return FromToValue(ELocation.BlobFS(), ELocation.File()) }
+func (FromTo) BlobBlobFS() FromTo     { return FromToValue(ELocation.Blob(), ELocation.BlobFS()) }
+func (FromTo) FileBlobFS() FromTo     { return FromToValue(ELocation.File(), ELocation.BlobFS()) }
+func (FromTo) FileSMBBlobFS() FromTo  { return FromToValue(ELocation.File(), ELocation.BlobFS()) }
+func (FromTo) BlobBlob() FromTo       { return FromToValue(ELocation.Blob(), ELocation.Blob()) }
+func (FromTo) FileBlob() FromTo       { return FromToValue(ELocation.File(), ELocation.Blob()) }
+func (FromTo) FileSMBBlob() FromTo    { return FromToValue(ELocation.File(), ELocation.Blob()) }
+func (FromTo) BlobFile() FromTo       { return FromToValue(ELocation.Blob(), ELocation.File()) }
+func (FromTo) BlobFileSMB() FromTo    { return FromToValue(ELocation.Blob(), ELocation.File()) }
+func (FromTo) FileFile() FromTo       { return FromToValue(ELocation.File(), ELocation.File()) }
+func (FromTo) S3Blob() FromTo         { return FromToValue(ELocation.S3(), ELocation.Blob()) }
+func (FromTo) GCPBlob() FromTo        { return FromToValue(ELocation.GCP(), ELocation.Blob()) }
+func (FromTo) BlobNone() FromTo       { return FromToValue(ELocation.Blob(), ELocation.None()) }
+func (FromTo) BlobFSNone() FromTo     { return FromToValue(ELocation.BlobFS(), ELocation.None()) }
+func (FromTo) FileNone() FromTo       { return FromToValue(ELocation.File(), ELocation.None()) }
+func (FromTo) LocalFileNFS() FromTo   { return FromToValue(ELocation.Local(), ELocation.FileNFS()) }
+func (FromTo) FileNFSLocal() FromTo   { return FromToValue(ELocation.FileNFS(), ELocation.Local()) }
+func (FromTo) FileNFSFileNFS() FromTo { return FromToValue(ELocation.FileNFS(), ELocation.FileNFS()) }
+func (FromTo) LocalFileSMB() FromTo   { return FromToValue(ELocation.Local(), ELocation.File()) }
+func (FromTo) FileSMBLocal() FromTo   { return FromToValue(ELocation.File(), ELocation.Local()) }
+func (FromTo) FileSMBFileSMB() FromTo { return FromToValue(ELocation.File(), ELocation.File()) }
+func (FromTo) FileSMBFileNFS() FromTo { return FromToValue(ELocation.File(), ELocation.FileNFS()) }
+func (FromTo) FileNFSFileSMB() FromTo { return FromToValue(ELocation.FileNFS(), ELocation.File()) }
 
 // todo: to we really want these?  Starts to look like a bit of a combinatorial explosion
 func (FromTo) BenchmarkBlob() FromTo {
@@ -664,6 +719,10 @@ func (FromTo) BenchmarkBlob() FromTo {
 func (FromTo) BenchmarkFile() FromTo {
 	return FromTo(FromToValue(ELocation.Benchmark(), ELocation.File()))
 }
+func (FromTo) BenchmarkFileNFS() FromTo {
+	return FromTo(FromToValue(ELocation.Benchmark(), ELocation.FileNFS()))
+}
+
 func (FromTo) BenchmarkBlobFS() FromTo {
 	return FromTo(FromToValue(ELocation.Benchmark(), ELocation.BlobFS()))
 }
@@ -706,6 +765,10 @@ func (ft FromTo) IsDownload() bool {
 
 func (ft FromTo) IsS2S() bool {
 	return ft.From().IsRemote() && ft.To().IsRemote() && ft.To() != ELocation.None() && ft.To() != ELocation.Unknown()
+}
+
+func (ft FromTo) IsNFS() bool {
+	return ft.From() == ELocation.FileNFS() || ft.To() == ELocation.FileNFS()
 }
 
 func (ft FromTo) IsUpload() bool {
@@ -816,10 +879,13 @@ func (TransferStatus) Started() TransferStatus { return TransferStatus(1) }
 // Transfer successfully completed
 func (TransferStatus) Success() TransferStatus { return TransferStatus(2) }
 
-// Folder was created, but properties have not been persisted yet. Equivalent to Started, but never intended to be set on anything BUT folders.
+// FolderCreated folder was created, but properties have not been persisted yet. Equivalent to Started, but never intended to be set on anything BUT folders.
 func (TransferStatus) FolderCreated() TransferStatus { return TransferStatus(3) }
 
-func (TransferStatus) Restarted() TransferStatus { return TransferStatus(4) }
+// FolderExisted folder already existed before we got to it. A valid state to continue from in overwrite scenarios.
+func (TransferStatus) FolderExisted() TransferStatus { return TransferStatus(4) }
+
+func (TransferStatus) Restarted() TransferStatus { return TransferStatus(5) }
 
 // Transfer failed due to some error.
 func (TransferStatus) Failed() TransferStatus { return TransferStatus(-1) }
@@ -992,28 +1058,6 @@ func (ct *CredentialType) Parse(s string) error {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-var EOutputVerbosity = OutputVerbosity(0)
-
-type OutputVerbosity uint8
-
-func (OutputVerbosity) Default() OutputVerbosity   { return OutputVerbosity(0) }
-func (OutputVerbosity) Essential() OutputVerbosity { return OutputVerbosity(1) } // no progress, no info, no prompts. Print everything else
-func (OutputVerbosity) Quiet() OutputVerbosity     { return OutputVerbosity(2) } // nothing at all
-
-func (qm *OutputVerbosity) Parse(s string) error {
-	val, err := enum.ParseInt(reflect.TypeOf(qm), s, true, true)
-	if err == nil {
-		*qm = val.(OutputVerbosity)
-	}
-	return err
-}
-
-func (qm OutputVerbosity) String() string {
-	return enum.StringInt(qm, reflect.TypeOf(qm))
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 var EHashValidationOption = HashValidationOption(0)
 
 var DefaultHashValidationOption = EHashValidationOption.FailIfDifferent()
@@ -1160,8 +1204,18 @@ const MetadataAndBlobTagsClearFlag = "clear" // clear flag used for metadata and
 
 type Metadata map[string]*string
 
+type SafeMetadata struct {
+	mu       sync.RWMutex
+	Metadata Metadata
+}
+
+type MetadataStore interface {
+	TryAdd(key, value string)
+	TryRead(key string) (*string, bool)
+}
+
 func (m Metadata) Clone() Metadata {
-	out := make(Metadata)
+	out := make(map[string]*string)
 
 	for k, v := range m {
 		out[k] = v
@@ -1181,20 +1235,20 @@ func (m Metadata) Marshal() (string, error) {
 }
 
 // UnMarshalToCommonMetadata unmarshals string to common metadata.
-func UnMarshalToCommonMetadata(metadataString string) (Metadata, error) {
-	var result Metadata
+func UnMarshalToCommonMetadata(metadataString string) (map[string]*string, error) {
+	var result SafeMetadata
 	if metadataString != "" {
-		err := json.Unmarshal([]byte(metadataString), &result)
+		err := json.Unmarshal([]byte(metadataString), &result.Metadata)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	return result, nil
+	return result.Metadata, nil
 }
 
 func StringToMetadata(metadataString string) (Metadata, error) {
-	metadataMap := Metadata{}
+	metadata := SafeMetadata{Metadata: make(Metadata)}
 	if len(metadataString) > 0 {
 		cKey := ""
 		cVal := ""
@@ -1227,7 +1281,7 @@ func StringToMetadata(metadataString string) (Metadata, error) {
 					}
 
 					finalValue := cVal
-					metadataMap[cKey] = &finalValue
+					metadata.Metadata[cKey] = &finalValue
 					cKey = ""
 					cVal = ""
 					keySet = false
@@ -1244,10 +1298,10 @@ func StringToMetadata(metadataString string) (Metadata, error) {
 
 		if cKey != "" {
 			finalValue := cVal
-			metadataMap[cKey] = &finalValue
+			metadata.Metadata[cKey] = &finalValue
 		}
 	}
-	return metadataMap, nil
+	return metadata.Metadata, nil
 }
 
 // isValidMetadataKey checks if the given string is a valid metadata key for Azure.
@@ -1287,8 +1341,8 @@ func isValidMetadataKeyFirstChar(c byte) bool {
 }
 
 func (m Metadata) ExcludeInvalidKey() (retainedMetadata Metadata, excludedMetadata Metadata, invalidKeyExists bool) {
-	retainedMetadata = make(map[string]*string)
-	excludedMetadata = make(map[string]*string)
+	retainedMetadata = make(Metadata)
+	excludedMetadata = make(Metadata)
 	for k, v := range m {
 		if isValidMetadataKey(k) {
 			retainedMetadata[k] = v
@@ -1345,12 +1399,11 @@ var metadataKeyRenameErrStr = "failed to rename invalid metadata key %q"
 // Note: To keep first version simple, whenever collision is found during key resolving, error will be returned.
 // This can be further improved once any user feedback get.
 func (m Metadata) ResolveInvalidKey() (resolvedMetadata Metadata, err error) {
-	resolvedMetadata = make(map[string]*string)
+	resolvedMetadata = make(Metadata)
 
 	hasCollision := func(name string) bool {
 		_, hasCollisionToOrgNames := m[name]
 		_, hasCollisionToNewNames := resolvedMetadata[name]
-
 		return hasCollisionToOrgNames || hasCollisionToNewNames
 	}
 
@@ -1494,6 +1547,49 @@ func (pc *PerfConstraint) Parse(s string) error {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+var EHardlinkHandlingType = HardlinkHandlingType(0)
+
+var DefaultHardlinkHandlingType = EHardlinkHandlingType.Follow()
+var SkipHardlinkHandlingType = EHardlinkHandlingType.Skip()
+
+type HardlinkHandlingType uint8
+
+// Follow means copy the files to the destination as regular files
+func (HardlinkHandlingType) Follow() HardlinkHandlingType {
+	return HardlinkHandlingType(0)
+}
+
+// Skip means skip the hardlinks and do not copy them to the destination
+func (HardlinkHandlingType) Skip() HardlinkHandlingType {
+	return HardlinkHandlingType(1)
+}
+
+func (pho HardlinkHandlingType) String() string {
+	return enum.StringInt(pho, reflect.TypeOf(pho))
+}
+
+func (pho *HardlinkHandlingType) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(pho), s, true, true)
+	if err == nil {
+		*pho = val.(HardlinkHandlingType)
+	}
+	return err
+}
+
+func (pho HardlinkHandlingType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(pho.String())
+}
+
+func (pho *HardlinkHandlingType) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	return pho.Parse(s)
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 type PerformanceAdvice struct {
 
 	// Code representing the type of the advice
@@ -1580,6 +1676,8 @@ func (EntityType) File() EntityType           { return EntityType(0) }
 func (EntityType) Folder() EntityType         { return EntityType(1) }
 func (EntityType) Symlink() EntityType        { return EntityType(2) }
 func (EntityType) FileProperties() EntityType { return EntityType(3) }
+func (EntityType) Hardlink() EntityType       { return EntityType(4) }
+func (EntityType) Other() EntityType          { return EntityType(5) }
 
 func (e EntityType) String() string {
 	return enum.StringInt(e, reflect.TypeOf(e))
@@ -1655,6 +1753,17 @@ func (p PreservePermissionsOption) IsTruthy() bool {
 	}
 }
 
+func (p PreservePermissionsOption) IsOwner() bool {
+	switch p {
+	case EPreservePermissionsOption.OwnershipAndACLs():
+		return true
+	case EPreservePermissionsOption.ACLsOnly(), EPreservePermissionsOption.None():
+		return false
+	default:
+		panic("unknown permissions option")
+	}
+}
+
 type CpkOptions struct {
 	// Optional flag to encrypt user data with user provided key.
 	// Key is provide in the REST request itself
@@ -1669,9 +1778,9 @@ type CpkOptions struct {
 	IsSourceEncrypted bool
 }
 
-func (options CpkOptions) GetCPKInfo() *blob.CPKInfo {
+func (options CpkOptions) GetCPKInfo() (*blob.CPKInfo, error) {
 	if !options.IsSourceEncrypted {
-		return nil
+		return nil, nil
 	} else {
 		return GetCpkInfo(options.CpkInfo)
 	}
@@ -1792,4 +1901,48 @@ func (sht *SymlinkHandlingType) Determine(Follow, Preserve bool) error {
 	}
 
 	return nil
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+var oncer = sync.Once{}
+
+func WarnIfTooManyObjects() {
+	oncer.Do(func() {
+		GetLifecycleMgr().Warn(fmt.Sprintf("This job contains more than %d objects, best practice to run less than this.",
+			RECOMMENDED_OBJECTS_COUNT))
+	})
+}
+
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+var EPosixPropertiesStyle = PosixPropertiesStyle(0)
+
+var StandardPosixPropertiesStyle = EPosixPropertiesStyle.Standard() // Default
+var AMLFSPosixPropertiesStyle = EPosixPropertiesStyle.AMLFS()
+
+type PosixPropertiesStyle uint8
+
+// Standard means use the default POSIX properties type
+func (PosixPropertiesStyle) Standard() PosixPropertiesStyle {
+	return PosixPropertiesStyle(0)
+}
+
+// AMLFS means use the Azure Managed Lustre File System POSIX attributes for owner, group ID, mode and modtime
+func (PosixPropertiesStyle) AMLFS() PosixPropertiesStyle {
+	return PosixPropertiesStyle(1)
+}
+
+func (ppt PosixPropertiesStyle) String() string {
+	return enum.StringInt(ppt, reflect.TypeOf(ppt))
+}
+
+func (ppt *PosixPropertiesStyle) Parse(s string) error {
+	if s == "" { // Default to standard when not set
+		s = StandardPosixPropertiesStyle.String()
+	}
+	val, err := enum.ParseInt(reflect.TypeOf(ppt), s, true, true)
+	if err == nil {
+		*ppt = val.(PosixPropertiesStyle)
+	}
+	return err
 }

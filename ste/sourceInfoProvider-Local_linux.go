@@ -5,12 +5,18 @@ package ste
 
 import (
 	"fmt"
+	"os/user"
+	"strconv"
+	"strings"
+	"sync"
+	"syscall"
+	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
 	"golang.org/x/sys/unix"
-	"strings"
-	"time"
 )
 
 func (f localFileSourceInfoProvider) HasUNIXProperties() bool {
@@ -18,29 +24,38 @@ func (f localFileSourceInfoProvider) HasUNIXProperties() bool {
 }
 
 func (f localFileSourceInfoProvider) GetUNIXProperties() (common.UnixStatAdapter, error) {
-	{ // attempt to call statx, if ENOSYS is returned, statx is unavailable
+	// First try statx
+	{
 		var stat unix.Statx_t
-
 		statxFlags := unix.AT_STATX_SYNC_AS_STAT
 		if f.EntityType() == common.EEntityType.Symlink() {
 			statxFlags |= unix.AT_SYMLINK_NOFOLLOW
 		}
-		// dirfd is a null pointer, because we should only ever be passing relative paths here, and directories will be passed via transferInfo.Source.
-		// AT_SYMLINK_NOFOLLOW is not used, because we automagically resolve symlinks. TODO: Add option to not follow symlinks, and use AT_SYMLINK_NOFOLLOW when resolving is disabled.
-		err := unix.Statx(0, f.transferInfo.Source,
-			statxFlags,
-			unix.STATX_ALL,
-			&stat)
 
-		if err != nil && err != unix.ENOSYS {
-			return nil, err
-		} else if err == nil {
+		err := unix.Statx(0, f.transferInfo.Source, statxFlags, unix.STATX_ALL, &stat)
+
+		if err == nil {
+			// statx worked
 			return StatxTAdapter(stat), nil
+		}
+
+		// Only bail if it's NOT ENOSYS and NOT (symlink+ENOENT)
+		if err != unix.ENOSYS {
+			if !(f.EntityType() == common.EEntityType.Symlink() && err == unix.ENOENT) {
+				return nil, err
+			}
+			// orphan symlink → continue to Lstat
 		}
 	}
 
+	// Fallback: use Lstat for symlinks, Stat for others
 	var stat unix.Stat_t
-	err := unix.Stat(f.transferInfo.Source, &stat)
+	var err error
+	if f.EntityType() == common.EEntityType.Symlink() {
+		err = unix.Lstat(f.transferInfo.Source, &stat)
+	} else {
+		err = unix.Stat(f.transferInfo.Source, &stat)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -207,8 +222,12 @@ func (f localFileSourceInfoProvider) GetSDDL() (string, error) {
 	return fSDDL.PortableString(), nil
 }
 
+func (f localFileSourceInfoProvider) getSymlinkHandlingForEntityType() common.SymlinkHandlingType {
+	return common.Iff(f.EntityType() == common.EEntityType.Symlink(), common.ESymlinkHandlingType.Preserve(), common.ESymlinkHandlingType.Follow())
+}
+
 func (f localFileSourceInfoProvider) GetSMBProperties() (TypedSMBPropertyHolder, error) {
-	info, err := common.GetFileInformation(f.jptm.Info().Source)
+	info, err := common.GetFileInformation(f.jptm.Info().Source, false, f.getSymlinkHandlingForEntityType())
 
 	return HandleInfo{info}, err
 }
@@ -230,4 +249,82 @@ func (hi HandleInfo) FileLastWriteTime() time.Time {
 func (hi HandleInfo) FileAttributes() (*file.NTFSFileAttributes, error) {
 	// Can't shorthand it because the function name overrides.
 	return FileAttributesFromUint32(hi.ByHandleFileInformation.FileAttributes)
+}
+
+func (hi HandleInfo) FileAccessTime() time.Time {
+	// This returns nanoseconds since Unix Epoch.
+	return time.Unix(0, hi.LastAccessTime.Nanoseconds())
+}
+
+func (f localFileSourceInfoProvider) GetNFSProperties() (TypedNFSPropertyHolder, error) {
+	info, err := common.GetFileInformation(f.jptm.Info().Source, true, f.getSymlinkHandlingForEntityType())
+	return HandleInfo{info}, err
+}
+
+type HandleNFSPermissions struct {
+	common.UnixStatAdapter
+}
+
+func (f localFileSourceInfoProvider) GetNFSPermissions() (TypedNFSPermissionsHolder, error) {
+	stats, err := f.GetUNIXProperties()
+	return HandleNFSPermissions{stats}, err
+}
+
+func (h HandleNFSPermissions) GetOwner() *string {
+	return to.Ptr(strconv.Itoa(int(h.Owner())))
+}
+
+func (h HandleNFSPermissions) GetGroup() *string {
+	return to.Ptr(strconv.Itoa(int(h.Group())))
+}
+
+func (h HandleNFSPermissions) GetFileMode() *string {
+	fileMode := h.FileMode() &^ unix.S_IFMT // Remove file type bits
+	// 4 digits because service max is 12-bits:
+	// https://learn.microsoft.com/en-us/rest/api/storageservices/create-file#nfs-only-request-headers
+	return to.Ptr(fmt.Sprintf("%04o", fileMode))
+}
+
+var (
+	umask     int
+	umaskOnce sync.Once
+)
+
+// getUmask retrieves the current process's umask without permanently modifying it.
+func getUmask() int {
+	umaskOnce.Do(func() {
+		// Set umask to 0, capture the old value
+		current := syscall.Umask(0)
+		// Restore it immediately
+		syscall.Umask(current)
+		umask = current
+	})
+	return umask
+}
+
+// GetNFSDefaultPerms retrieves the default file permissions, owner UID, and group GID
+// for the current user, with permissions adjusted based on the user's umask.
+// This is typically used to infer default NFS permissions when creating new files or directories.
+// Returns pointers to strings representing the file mode (in octal), UID, and GID.
+func (f localFileSourceInfoProvider) GetNFSDefaultPerms() (fileMode, owner, group *string, err error) {
+	defaultStats, err := f.GetUNIXProperties()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	// Get the default file mode
+	currFileMode := defaultStats.FileMode() &^ unix.S_IFMT
+	defaultMode := int(currFileMode) &^ getUmask()
+	// 4 digits because service max is 12-bits:
+	// https://learn.microsoft.com/en-us/rest/api/storageservices/create-file#nfs-only-request-headers
+	fileMode = to.Ptr(fmt.Sprintf("%04o", defaultMode))
+
+	currentUser, err := user.Current()
+	owner = to.Ptr(currentUser.Uid)
+
+	// Lookup the primary group using the user's GID
+	group = to.Ptr(currentUser.Gid)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return
 }

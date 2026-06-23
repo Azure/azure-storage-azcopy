@@ -25,7 +25,6 @@ jobs:
           display_name: "MacOS"
     pool:
       vmImage: $(imageName)
-
     steps:
       - task: PowerShell@2
         inputs:
@@ -168,6 +167,8 @@ jobs:
           NEW_E2E_SUBSCRIPTION_ID: $(AZCOPY_NEW_E2E_SUBSCRIPTION_ID)
           NEW_E2E_AZCOPY_PATH: $(System.DefaultWorkingDirectory)/$(build_name)
           NEW_E2E_ENVIRONMENT: "AzurePipeline"
+          AZCOPY_E2E_PREMIUM_FILESHARE_ACCOUNT_KEY: $(AZCOPY_E2E_PREMIUM_FILESHARE_ACCOUNT_KEY)
+          AZCOPY_E2E_PREMIUM_FILESHARE_ACCOUNT_NAME: $(AZCOPY_E2E_PREMIUM_FILESHARE_ACCOUNT_NAME)
         displayName: 'E2E Test $(display_name) - AMD64 with Workload Identity'
 
       - task: PublishBuildArtifacts@1

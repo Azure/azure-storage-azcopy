@@ -1,9 +1,10 @@
 package cmd
 
 import (
-	"github.com/stretchr/testify/assert"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestCopyBlobsWithDirectoryStubsS2S(t *testing.T) {
@@ -25,7 +26,6 @@ func TestCopyBlobsWithDirectoryStubsS2S(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -35,7 +35,7 @@ func TestCopyBlobsWithDirectoryStubsS2S(t *testing.T) {
 	raw.recursive = true
 	raw.includeDirectoryStubs = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled

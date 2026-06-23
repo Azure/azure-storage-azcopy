@@ -22,11 +22,17 @@ package common
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/stretchr/testify/assert"
 	"os"
 	"reflect"
 	"strconv"
 	"testing"
+	"time"
 )
 
 const tokenInfoJson = `{
@@ -182,4 +188,73 @@ func TestUserOAuthTokenManager_GetTokenInfo(t *testing.T) {
 			}
 		})
 	}
+}
+
+type TestCredCache struct {
+	stashed *OAuthTokenInfo
+}
+
+func (d *TestCredCache) HasCachedToken() (bool, error) {
+	return d.stashed != nil, nil
+}
+
+func (d *TestCredCache) LoadToken() (*OAuthTokenInfo, error) {
+	if d.stashed == nil {
+		return nil, errors.New("no cached token found")
+	}
+
+	return d.stashed, nil
+}
+
+func (d *TestCredCache) SaveToken(info OAuthTokenInfo) error {
+	d.stashed = &info
+	return nil
+}
+
+func (d *TestCredCache) RemoveCachedToken() error {
+	if d.stashed == nil {
+		return errors.New("no cached token found")
+	}
+
+	d.stashed = nil
+	return nil
+}
+
+func TestTokenStoreCredentialHang(t *testing.T) {
+	tok := &azcore.AccessToken{
+		Token:     "asdf",
+		ExpiresOn: time.Now().Add(minimumTokenValidDuration * 2), // we want to hit that if statement at the start and get it into the read lock
+	}
+
+	tsc := &TokenStoreCredential{
+		token: tok,
+		credCache: &TestCredCache{
+			stashed: &OAuthTokenInfo{
+				Token: Token{
+					AccessToken: "foobar",
+					ExpiresOn:   json.Number(fmt.Sprint(tok.ExpiresOn.Unix())),
+				},
+			},
+		},
+	}
+
+	// Prior to this PR, we'd get locked into a read state doing this, because the if statement didn't contain a way out of the read lock.
+	outTok, err := tsc.GetToken(context.Background(), policy.TokenRequestOptions{})
+	assert.NoError(t, err)
+	assert.Equal(t, tok.Token, outTok.Token)
+
+	// we shouldn't get blocked here, otherwise we have problems.
+	assert.Equal(t, true, tsc.lock.TryLock())
+	tsc.lock.Unlock()
+
+	tok.ExpiresOn = time.Now() // now it should refresh
+
+	// We shouldn't get caught here at all
+	outTok, err = tsc.GetToken(context.Background(), policy.TokenRequestOptions{})
+	assert.NoError(t, err)
+	assert.Equal(t, "foobar", outTok.Token) // ensure it refreshed
+
+	// we shouldn't get blocked here, otherwise we have problems.
+	assert.Equal(t, true, tsc.lock.TryLock())
+	tsc.lock.Unlock()
 }

@@ -23,7 +23,10 @@ package cmd
 import (
 	"errors"
 	"fmt"
+
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/spf13/cobra"
 )
 
@@ -53,15 +56,15 @@ type cookedCancelCmdArgs struct {
 // handles the cancel command
 // dispatches the cancel Job order to the storage engine
 func (cca cookedCancelCmdArgs) process() error {
-	var cancelJobResponse common.CancelPauseResumeResponse
-	Rpc(common.ERpcCmd.CancelJob(), cca.jobID, &cancelJobResponse)
+	cancelJobResponse := jobsAdmin.CancelPauseJobOrder(cca.jobID, common.EJobStatus.Cancelling(), glcm)
 	if !cancelJobResponse.CancelledPauseResumed {
 		if cca.ignoreCompletedJobError && cancelJobResponse.JobStatus == common.EJobStatus.Completed() {
 			glcm.Info(cancelJobResponse.ErrorMsg)
-			resp := common.ListJobSummaryResponse{}
-			rpcCmd := common.ERpcCmd.ListJobSummary()
-			Rpc(rpcCmd, &cca.jobID, &resp)
-			PrintJobProgressSummary(resp)
+			resp, err := Client.GetJobSummary(cca.jobID, azcopy.GetJobSummaryOptions{})
+			if err != nil {
+				return err
+			}
+			PrintJobProgressSummary(common.ListJobSummaryResponse(resp))
 			return nil
 		}
 		return errors.New(cancelJobResponse.ErrorMsg)
@@ -99,8 +102,7 @@ func init() {
 			if err != nil {
 				glcm.Error("failed to perform cancel command due to error " + err.Error())
 			}
-
-			glcm.Exit(nil, common.EExitCode.Success())
+			glcm.Exit(nil, EExitCode.Success())
 		},
 		// hide features not relevant to BFS
 		// TODO remove after preview release.

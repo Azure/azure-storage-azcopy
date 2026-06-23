@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"golang.org/x/sys/unix"
 )
 
 type osScenarioHelper struct{}
@@ -75,4 +76,9 @@ func (osScenarioHelper) IsFileHidden(c asserter, filePath string) bool {
 	fileName := filepath.Base(filePath)
 	isHidden := strings.HasPrefix(fileName, ".")
 	return isHidden
+}
+
+func (osScenarioHelper) CreateSpecialFile(filePath string) error {
+	err := unix.Mkfifo(filePath, 0666)
+	return err
 }

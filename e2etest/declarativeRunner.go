@@ -42,6 +42,7 @@ var validCredTypesPerLocation = map[common.Location][]common.CredentialType{
 	common.ELocation.Pipe():    {common.ECredentialType.Anonymous()},
 	common.ELocation.S3():      {common.ECredentialType.S3AccessKey()},
 	common.ELocation.GCP():     {common.ECredentialType.GoogleAppCredentials()},
+	common.ELocation.FileNFS(): {common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()},
 }
 
 var allCredentialTypes []common.CredentialType = nil
@@ -109,18 +110,18 @@ func RunScenarios(
 	operations Operation,
 	testFromTo TestFromTo,
 	validate Validate, // TODO: do we really want the test author to have to nominate which validation should happen?  Pros: better perf of tests. Cons: they have to tell us, and if they tell us wrong test may not test what they think it tests
-	// _ interface{}, // TODO if we want it??, blockBlobsOnly or specific/all blob types
+// _ interface{}, // TODO if we want it??, blockBlobsOnly or specific/all blob types
 
-	// It would be a pain to list out every combo by hand,
-	// In addition to the fact that not every credential type is sensible.
-	// Thus, the E2E framework takes in a requested set of credential types, and applies them where sensible.
-	// This allows you to make tests use OAuth only, SAS only, etc.
+//+ It would be a pain to list out every combo by hand,
+// In addition to the fact that not every credential type is sensible.
+// Thus, the E2E framework takes in a requested set of credential types, and applies them where sensible.
+// This allows you to make tests use OAuth only, SAS only, etc.
 	requestedCredentialTypesSrc []common.CredentialType,
 	requestedCredentialTypesDst []common.CredentialType,
 	p params,
 	hs *hooks,
 	fs testFiles,
-	// TODO: do we need something here to explicitly say that we expect success or failure? For now, we are just inferring that from the elements of sourceFiles
+// TODO: do we need something here to explicitly say that we expect success or failure? For now, we are just inferring that from the elements of sourceFiles
 	destAccountType AccountType,
 	srcAccountType AccountType,
 	scenarioSuffix string) {

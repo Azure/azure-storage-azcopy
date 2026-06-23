@@ -23,16 +23,18 @@ package cmd
 import (
 	"context"
 	"errors"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"github.com/Azure/azure-storage-azcopy/v10/traverser"
 )
 
 // provides an enumerator that lists a given resource and schedules setProperties on them
 
-func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, err error) {
-	var sourceTraverser ResourceTraverser
+func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *traverser.CopyEnumerator, err error) {
+	var sourceTraverser traverser.ResourceTraverser
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
@@ -45,42 +47,15 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 		return nil, errors.New("a SAS token (or S3 access key) is required as a part of the input for set-properties on File Storage")
 	}
 
-	// Include-path is handled by ListOfFilesChannel.
-	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &cca.credentialInfo, common.ESymlinkHandlingType.Preserve(), cca.ListOfFilesChannel, cca.Recursive, false, cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), azcopyLogVerbosity, cca.CpkOptions, nil, cca.StripTopDir, cca.trailingDot, nil, cca.excludeContainer, false)
-
-	// report failure to create traverser
-	if err != nil {
-		return nil, err
-	}
-
-	includeFilters := buildIncludeFilters(cca.IncludePatterns)
-	excludeFilters := buildExcludeFilters(cca.ExcludePatterns, false)
-	excludePathFilters := buildExcludeFilters(cca.ExcludePathPatterns, true)
-	includeSoftDelete := buildIncludeSoftDeleted(cca.permanentDeleteOption)
-
-	// set up the filters in the right order
-	filters := append(includeFilters, excludeFilters...)
-	filters = append(filters, excludePathFilters...)
-	filters = append(filters, includeSoftDelete...)
-
-	fpo, message := NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, false, false, false, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.IncludeDirectoryStubs)
-	// do not print Info message if in dry run mode
-	if !cca.dryrunMode {
-		glcm.Info(message)
-	}
-	if jobsAdmin.JobsAdmin != nil {
-		jobsAdmin.JobsAdmin.LogToJobLog(message, common.LogInfo)
-	}
-
 	var reauthTok *common.ScopedAuthenticator
 	if at, ok := cca.credentialInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok { // We don't need two different tokens here since it gets passed in just the same either way.
 		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
 		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
+	options := traverser.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
 	var fileClientOptions any
-	if cca.FromTo.From() == common.ELocation.File() {
+	if cca.FromTo.From().IsFile() {
 		fileClientOptions = &common.FileClientOptions{AllowTrailingDot: cca.trailingDot.IsEnabled()}
 	}
 
@@ -96,16 +71,60 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 		return nil, err
 	}
 
-	transferScheduler := setPropertiesTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo, targetServiceClient)
+	// Include-path is handled by ListOfFilesChannel.
+	sourceTraverser, err = traverser.InitResourceTraverser(cca.Source, cca.FromTo.From(), ctx, traverser.InitResourceTraverserOptions{
+		Client:         targetServiceClient,
+		CredentialType: cca.credentialInfo.CredentialType,
+
+		ListOfFiles:      cca.ListOfFilesChannel,
+		ListOfVersionIDs: cca.ListOfVersionIDsChannel,
+
+		CpkOptions: cca.CpkOptions,
+
+		SymlinkHandling:   common.ESymlinkHandlingType.Preserve(),
+		PermanentDelete:   cca.permanentDeleteOption,
+		TrailingDotOption: cca.trailingDot,
+
+		Recursive:             cca.Recursive,
+		IncludeDirectoryStubs: cca.IncludeDirectoryStubs,
+		StripTopDir:           cca.StripTopDir,
+
+		ExcludeContainers: cca.excludeContainer,
+		HardlinkHandling:  cca.hardlinks,
+	})
+
+	// report failure to create traverser
+	if err != nil {
+		return nil, err
+	}
+
+	includeFilters := traverser.BuildIncludeFilters(cca.IncludePatterns)
+	excludeFilters := traverser.BuildExcludeFilters(cca.ExcludePatterns, false)
+	excludePathFilters := traverser.BuildExcludeFilters(cca.ExcludePathPatterns, true)
+	includeSoftDelete := traverser.BuildIncludeSoftDeleted(cca.permanentDeleteOption)
+
+	// set up the filters in the right order
+	filters := append(includeFilters, excludeFilters...)
+	filters = append(filters, excludePathFilters...)
+	filters = append(filters, includeSoftDelete...)
+
+	fpo, message := azcopy.NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, false, false, false, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.IncludeDirectoryStubs)
+	// do not print Info message if in dry run mode
+	if !cca.dryrunMode {
+		glcm.Info(message)
+	}
+	common.LogToJobLogWithPrefix(message, common.LogInfo)
+
+	transferScheduler := setPropertiesTransferProcessor(cca, azcopy.NumOfFilesPerDispatchJobPart, fpo, targetServiceClient)
 
 	finalize := func() error {
-		jobInitiated, err := transferScheduler.dispatchFinalPart()
+		jobInitiated, err := transferScheduler.DispatchFinalPart()
 		if err != nil {
 			if cca.dryrunMode {
 				return nil
-			} else if err == NothingScheduledError {
+			} else if err == azcopy.NothingScheduledError {
 				// No log file needed. Logging begins as a part of awaiting job completion.
-				return NothingToRemoveError
+				return ErrNothingToRemove
 			}
 
 			return err
@@ -121,5 +140,5 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 
 		return nil
 	}
-	return NewCopyEnumerator(sourceTraverser, filters, transferScheduler.scheduleCopyTransfer, finalize), nil
+	return traverser.NewCopyEnumerator(sourceTraverser, filters, transferScheduler.ScheduleSyncRemoveSetPropertiesTransfer, finalize), nil
 }

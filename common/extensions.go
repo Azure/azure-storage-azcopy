@@ -56,9 +56,14 @@ func (u URLExtension) RedactSecretQueryParamForLogging() string {
 		u.RawQuery = rawQuery
 	}
 
-	// rediact x-amx-signature in S3
+	// redact x-amz-signature in S3
 	if ok, rawQuery := RedactSecretQueryParam(u.RawQuery, SigXAmzForAws); ok {
 		u.RawQuery = rawQuery
+	}
+
+	// redact x-amz-credential in S3
+	if ok, rawquery := RedactSecretQueryParam(u.RawQuery, CredXAmzForAws); ok {
+		u.RawQuery = rawquery
 	}
 
 	return u.String()
@@ -66,6 +71,7 @@ func (u URLExtension) RedactSecretQueryParamForLogging() string {
 
 const SigAzure = "sig"
 const SigXAmzForAws = "x-amz-signature"
+const CredXAmzForAws = "x-amz-credential"
 
 func RedactSecretQueryParam(rawQuery, queryKeyNeedRedact string) (bool, string) {
 	values, _ := url.ParseQuery(rawQuery)
@@ -142,9 +148,10 @@ func GenerateFullPath(rootPath, childPath string) string {
 	}
 
 	// if the childPath is empty, it means the rootPath already points to the desired entity
-	if childPath == "" {
+	switch childPath {
+	case "":
 		return rootPath
-	} else if childPath == "\x00" { // The enumerator has asked us to target with a / at the end of our root path. This is a massive hack. When the footgun happens later, ping Adele!
+	case "\x00": // The enumerator has asked us to target with a / at the end of our root path. This is a massive hack. When the footgun happens later, ping Adele!
 		return rootPath + rootSeparator
 	}
 

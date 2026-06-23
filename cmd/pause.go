@@ -23,6 +23,8 @@ package cmd
 import (
 	"errors"
 
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
 )
@@ -51,7 +53,7 @@ func init() {
 		},
 		Run: func(cmd *cobra.Command, args []string) {
 			HandlePauseCommand(commandLineInput)
-			glcm.Exit(nil, common.EExitCode.Success())
+			glcm.Exit(nil, EExitCode.Success())
 		},
 		// hide features not relevant to BFS
 		// TODO remove after preview release
@@ -71,9 +73,9 @@ func HandlePauseCommand(jobIdString string) {
 		glcm.Error("invalid jobId string passed. Failed while parsing string to jobId")
 	}
 
-	var pauseJobResponse common.CancelPauseResumeResponse
-	Rpc(common.ERpcCmd.PauseJob(), jobID, &pauseJobResponse)
-	glcm.Exit(func(format common.OutputFormat) string {
+	// TODO : Why isn't the response here used?
+	jobsAdmin.CancelPauseJobOrder(jobID, common.EJobStatus.Paused(), glcm)
+	glcm.Exit(func(format OutputFormat) string {
 		return "Job " + jobID.String() + " paused successfully"
-	}, common.EExitCode.Success())
+	}, EExitCode.Success())
 }

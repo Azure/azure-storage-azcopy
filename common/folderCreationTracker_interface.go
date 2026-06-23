@@ -13,3 +13,12 @@ type FolderCreationTracker interface {
 type Prompter interface {
 	ShouldOverwrite(objectPath string, objectType EntityType) bool
 }
+
+// FolderCreationErrorAlreadyExists is a signalling error that should be
+// returned by doCreation when the folder already exists, allowing the tracker to mark it as
+// FolderExisted rather than FolderCreated.
+type FolderCreationErrorAlreadyExists struct{}
+
+func (f FolderCreationErrorAlreadyExists) Error() string {
+	return "not a real error"
+}

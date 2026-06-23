@@ -32,6 +32,8 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
@@ -55,7 +57,7 @@ type blockBlobSenderBase struct {
 	// 1. For S2S, these come from the source service.
 	// 2. When sending local data, they are computed based on the properties of the local file
 	headersToApply  blob.HTTPHeaders
-	metadataToApply common.Metadata
+	metadataToApply *common.SafeMetadata
 	blobTagsToApply common.BlobTags
 
 	atomicChunksWritten    int32
@@ -194,7 +196,7 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, pacer pacer, srcInfoProvid
 		pacer:               pacer,
 		blockIDs:            make([]string, numChunks),
 		headersToApply:      props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
-		metadataToApply:     FixBustedMetadata(props.SrcMetadata),
+		metadataToApply:     &common.SafeMetadata{Metadata: props.SrcMetadata.Clone()},
 		blobTagsToApply:     props.SrcBlobTags,
 		destBlobTier:        destBlobTier,
 		muBlockIDs:          &sync.Mutex{},
@@ -248,8 +250,6 @@ func (s *blockBlobSenderBase) Epilogue() {
 
 	// commit block list if necessary
 	if jptm.IsLive() && shouldPutBlockList == putListNeeded {
-		jptm.Log(common.LogDebug, fmt.Sprintf("Conclude Transfer with BlockList %s", blockIDs))
-
 		// commit the blocks.
 		if !ValidateTier(jptm, s.destBlobTier, s.destBlockBlobClient.BlobClient(), s.jptm.Context(), false) {
 			s.destBlobTier = nil
@@ -270,7 +270,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 		_, err := s.destBlockBlobClient.CommitBlockList(jptm.Context(), blockIDs,
 			&blockblob.CommitBlockListOptions{
 				HTTPHeaders:  &s.headersToApply,
-				Metadata:     s.metadataToApply,
+				Metadata:     s.metadataToApply.Metadata,
 				Tier:         destBlobTier,
 				Tags:         blobTags,
 				CPKInfo:      s.jptm.CpkInfo(),
@@ -278,6 +278,59 @@ func (s *blockBlobSenderBase) Epilogue() {
 			})
 		if err != nil {
 			jptm.FailActiveSend(common.Iff(blobTags != nil, "Committing block list (with tags)", "Committing block list"), err)
+
+			/*
+				If we get an invalid block list, it's likely one of our blocks was deleted, or GC'd mid-job or something.
+				Knowing which blocks are missing is useful, as up to 50k blocks can exist in a single object.
+
+				This info could *potentially* be used to just re-upload the missing blocks later, but for now we want to discover the why.
+			*/
+			if bloberror.HasCode(err, bloberror.InvalidBlockList) {
+				blockList, err := s.destBlockBlobClient.GetBlockList(jptm.Context(), blockblob.BlockListTypeAll, nil)
+				if err != nil {
+					jptm.Log(common.LogWarning, fmt.Sprintf("Failed to get block list to provide delta: %v", err))
+				} else {
+					blockSet := map[string]bool{}
+					extraBlocks := map[string]bool{} // any blocks the service has but we don't
+					for _, v := range blockIDs {
+						blockSet[v] = true
+					}
+
+					recordBlock := func(blockId string) { // Subtract blocks we know of, but keep track of the ones we don't
+						if blockSet[blockId] {
+							delete(blockSet, blockId)
+						} else {
+							extraBlocks[blockId] = true
+						}
+					}
+
+					for _, v := range blockList.UncommittedBlocks { // Uncommitted is primarily what we're looking for, BUT:
+						recordBlock(*v.Name)
+					}
+					for _, v := range blockList.CommittedBlocks { // For the sake of thoroughness, we'll include blocks that already were present.
+						recordBlock(*v.Name)
+					}
+
+					formatBlocklist := func(dict map[string]bool) string { // Format things pretty
+						out := ""
+
+						out += fmt.Sprintf("%d blocks: ", len(dict))
+						out += "["
+						for k := range dict {
+							out += k + ", "
+						}
+						out = out[:len(out)-2] + "]"
+
+						return out
+					}
+
+					// And do our due diligence in the logs.
+					jptm.Log(common.LogError, fmt.Sprintf("Total blocks: %d blocks: %v", len(blockIDs), blockIDs))
+					jptm.Log(common.LogError, fmt.Sprintf("Missing blocks: %s", formatBlocklist(blockSet)))
+					jptm.Log(common.LogError, fmt.Sprintf("Unrecognized blocks: %s", formatBlocklist(extraBlocks)))
+				}
+			}
+
 			return
 		}
 
@@ -290,7 +343,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 
 	// Upload ADLS Gen 2 ACLs
 	fromTo := jptm.FromTo()
-	if fromTo.From().SupportsHnsACLs() && fromTo.To().SupportsHnsACLs() && jptm.Info().PreserveSMBPermissions.IsTruthy() {
+	if fromTo.From().SupportsHnsACLs() && fromTo.To().SupportsHnsACLs() && jptm.Info().PreservePermissions.IsTruthy() {
 		// We know for a fact our source is a "blob".
 		acl, err := s.sip.(*blobSourceInfoProvider).AccessControl()
 		if err != nil {
@@ -347,16 +400,16 @@ func (s *blockBlobSenderBase) GenerateCopyMetadata(id common.ChunkID) chunkFunc 
 	return createChunkFunc(true, s.jptm, id, func() {
 		if unixSIP, ok := s.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
 			// Clone the metadata before we write to it, we shouldn't be writing to the same metadata as every other blob.
-			s.metadataToApply = s.metadataToApply.Clone()
+			s.metadataToApply = &common.SafeMetadata{Metadata: s.metadataToApply.Metadata.Clone()}
 
 			statAdapter, err := unixSIP.GetUNIXProperties()
 			if err != nil {
 				s.jptm.FailActiveSend("GetUNIXProperties", err)
 			}
 
-			common.AddStatToBlobMetadata(statAdapter, s.metadataToApply)
+			common.AddStatToBlobMetadata(statAdapter, s.metadataToApply, s.jptm.Info().PosixPropertiesStyle)
 		}
-		_, err := s.destBlockBlobClient.SetMetadata(s.jptm.Context(), s.metadataToApply,
+		_, err := s.destBlockBlobClient.SetMetadata(s.jptm.Context(), s.metadataToApply.Metadata,
 			&blob.SetMetadataOptions{
 				CPKInfo:      s.jptm.CpkInfo(),
 				CPKScopeInfo: s.jptm.CpkScopeInfo(),

@@ -21,10 +21,11 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/JeffreyRichter/enum/enum"
@@ -160,6 +161,7 @@ type params struct {
 	preserveSMBPermissions    bool
 	preserveSMBInfo           *bool
 	preservePOSIXProperties   bool
+	posixPropertiesStyle      common.PosixPropertiesStyle
 	relativeSourcePath        string
 	blobTags                  string
 	blobType                  string
@@ -183,6 +185,7 @@ type params struct {
 	deleteDestinationFile  bool
 	trailingDot            common.TrailingDotOption
 	decompress             bool
+	preserveInfo           *bool
 	// looks like this for a folder transfer:
 	/*
 		INFO: source: /New folder/New Text Document.txt dest: /Test/New folder/New Text Document.txt
@@ -440,6 +443,8 @@ func (tft TestFromTo) getValues(op Operation) []common.FromTo {
 			if !tft.suppressAutoFileToFile {
 				if from == common.ELocation.File() && to == common.ELocation.Blob() {
 					to = common.ELocation.File()
+				} else if from == common.ELocation.FileNFS() && to == common.ELocation.Blob() {
+					to = common.ELocation.FileNFS()
 				}
 			}
 
@@ -546,8 +551,11 @@ type hookHelper interface {
 	// This is intended to be used in hook functions for pre or mid transfer adjustments.
 	CreateFile(f *testObject, atSource bool)
 
-	// CancelAndResume tells the runner to cancel the running AzCopy job (with "cancel" to stdin) and the resume the job
+	// CancelAndResume tells the runner to cancel the running AzCopy job (with "cancel" to stdin) and then resume the job
 	CancelAndResume()
+
+	// CancelOnly tells the runner to cancel the running AzCopy job (with "cancel" to stdin)
+	CancelOnly()
 
 	// CreateSourceSnapshot Create a source snapshot to use it as the source
 	CreateSourceSnapshot()

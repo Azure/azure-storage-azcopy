@@ -2,6 +2,11 @@ package e2etest
 
 import (
 	"bytes"
+	"io"
+	"path"
+	"runtime"
+	"strings"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/directory"
@@ -9,12 +14,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/filesystem"
 	datalakeSAS "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"io"
-	"path"
-	"runtime"
-	"strings"
 )
 
 // check that everything aligns with interfaces
@@ -77,8 +78,8 @@ func (b *BlobFSServiceResourceManager) Location() common.Location {
 	return common.ELocation.BlobFS()
 }
 
-func (b *BlobFSServiceResourceManager) Level() cmd.LocationLevel {
-	return cmd.ELocationLevel.Service()
+func (b *BlobFSServiceResourceManager) Level() azcopy.LocationLevel {
+	return azcopy.ELocationLevel.Service()
 }
 
 func (b *BlobFSServiceResourceManager) URI(opts ...GetURIOptions) string {
@@ -173,8 +174,8 @@ func (b *BlobFSFileSystemResourceManager) Location() common.Location {
 	return b.Service.Location()
 }
 
-func (b *BlobFSFileSystemResourceManager) Level() cmd.LocationLevel {
-	return cmd.ELocationLevel.Container()
+func (b *BlobFSFileSystemResourceManager) Level() azcopy.LocationLevel {
+	return azcopy.ELocationLevel.Container()
 }
 
 func (b *BlobFSFileSystemResourceManager) URI(opts ...GetURIOptions) string {
@@ -273,8 +274,9 @@ type BlobFSPathResourceProvider struct {
 	Service         *BlobFSServiceResourceManager
 	Container       *BlobFSFileSystemResourceManager
 
-	entityType common.EntityType
-	objectPath string
+	entityType         common.EntityType
+	objectPath         string
+	hardlinkedFilePath string
 }
 
 func (b *BlobFSPathResourceProvider) DefaultAuthType() ExplicitCredentialTypes {
@@ -315,8 +317,8 @@ func (b *BlobFSPathResourceProvider) Location() common.Location {
 	return b.Service.Location()
 }
 
-func (b *BlobFSPathResourceProvider) Level() cmd.LocationLevel {
-	return cmd.ELocationLevel.Object()
+func (b *BlobFSPathResourceProvider) Level() azcopy.LocationLevel {
+	return azcopy.ELocationLevel.Object()
 }
 
 func (b *BlobFSPathResourceProvider) URI(opts ...GetURIOptions) string {
@@ -337,6 +339,10 @@ func (b *BlobFSPathResourceProvider) ContainerName() string {
 
 func (b *BlobFSPathResourceProvider) ObjectName() string {
 	return b.objectPath
+}
+
+func (b *BlobFSPathResourceProvider) HardlinkedFileName() string {
+	return b.hardlinkedFilePath
 }
 
 func (b *BlobFSPathResourceProvider) CreateParents(a Asserter) {
@@ -369,6 +375,12 @@ func (b *BlobFSPathResourceProvider) Create(a Asserter, body ObjectContentContai
 		})
 		a.NoError("Create directory", err)
 	case common.EEntityType.File(), common.EEntityType.Symlink(): // Symlinks just need an extra metadata tag
+		if b.entityType == common.EEntityType.Symlink() && body == nil {
+			body = NewStringObjectContentContainer(properties.SymlinkedFileName)
+		} else if body == nil {
+			body = NewZeroObjectContentContainer(0)
+		}
+
 		_, err := b.getFileClient().Create(ctx, &file.CreateOptions{
 			HTTPHeaders: properties.HTTPHeaders.ToBlobFS(),
 		})
@@ -560,7 +572,8 @@ func (b *BlobFSPathResourceProvider) getBlobClient(a Asserter) *blob.Client {
 
 func (b *BlobFSPathResourceProvider) Download(a Asserter) io.ReadSeeker {
 	a.HelperMarker().Helper()
-	a.Assert("Object type must be file", Equal{}, common.EEntityType.File(), b.entityType)
+	isFileOrSymlink := b.entityType == common.EEntityType.File() || b.entityType == common.EEntityType.Symlink()
+	a.Assert("Object type must be file or symlink", Equal{}, isFileOrSymlink, true)
 
 	resp, err := b.getFileClient().DownloadStream(ctx, nil)
 	a.NoError("Download stream", err)
@@ -572,6 +585,13 @@ func (b *BlobFSPathResourceProvider) Download(a Asserter) io.ReadSeeker {
 	}
 
 	return bytes.NewReader(buf.Bytes())
+}
+
+func (b *BlobFSPathResourceProvider) ReadLink(a Asserter) string {
+	reader := b.Download(a)
+	buf, err := io.ReadAll(reader)
+	a.NoError("Read symlink body", err)
+	return string(buf)
 }
 
 func (b *BlobFSPathResourceProvider) Exists() bool {

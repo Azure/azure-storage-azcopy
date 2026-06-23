@@ -21,9 +21,10 @@
 package cmd
 
 import (
-	"github.com/stretchr/testify/assert"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // regular file->file copy
@@ -42,7 +43,6 @@ func TestFileCopyS2SWithSingleFile(t *testing.T) {
 
 		// set up interceptor
 		mockedRPC := interceptor{}
-		Rpc = mockedRPC.intercept
 		mockedRPC.init()
 
 		// construct the raw input to simulate user input
@@ -50,7 +50,7 @@ func TestFileCopyS2SWithSingleFile(t *testing.T) {
 		dstFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(a, dstShareName, fileList[0])
 		raw := getDefaultCopyRawInput(srcFileURLWithSAS.String(), dstFileURLWithSAS.String())
 
-		runCopyAndVerify(a, raw, func(err error) {
+		runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 			a.Nil(err)
 			validateS2STransfersAreScheduled(a, "", "", []string{""}, mockedRPC)
 		})
@@ -61,7 +61,6 @@ func TestFileCopyS2SWithSingleFile(t *testing.T) {
 
 		// set up interceptor
 		mockedRPC := interceptor{}
-		Rpc = mockedRPC.intercept
 		mockedRPC.init()
 
 		// construct the raw input to simulate user input
@@ -69,7 +68,7 @@ func TestFileCopyS2SWithSingleFile(t *testing.T) {
 		dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(a, dstShareName)
 		raw := getDefaultCopyRawInput(srcFileURLWithSAS.String(), dstShareURLWithSAS.String())
 
-		runCopyAndVerify(a, raw, func(err error) {
+		runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 			a.Nil(err)
 
 			// put the filename in the destination dir name
@@ -95,7 +94,6 @@ func TestFileCopyS2SWithShares(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -106,7 +104,7 @@ func TestFileCopyS2SWithShares(t *testing.T) {
 
 	// all files at source should be copied to destination
 	expectedList := scenarioHelper{}.addFoldersToList(fileList, false) // since this is files-to-files and so folder aware
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -119,7 +117,7 @@ func TestFileCopyS2SWithShares(t *testing.T) {
 	// turn off recursive, we should be getting an error
 	raw.recursive = false
 	mockedRPC.reset()
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.NotNil(err)
 		// make sure the failure was due to the recursive flag
 		a.Contains(err.Error(), "recursive")
@@ -146,7 +144,6 @@ func TestFileCopyS2SWithIncludeFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -157,7 +154,7 @@ func TestFileCopyS2SWithIncludeFlag(t *testing.T) {
 	raw.recursive = true
 
 	// verify that only the files specified by the include flag are copied
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		validateS2STransfersAreScheduled(a, "/", "/", filesToInclude, mockedRPC)
 	})
@@ -183,7 +180,6 @@ func TestFileCopyS2SWithExcludeFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -194,7 +190,7 @@ func TestFileCopyS2SWithExcludeFlag(t *testing.T) {
 	raw.recursive = true
 
 	// make sure the list doesn't include the files specified by the exclude flag
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		validateS2STransfersAreScheduled(a, "/", "/", fileList, mockedRPC)
 	})
@@ -226,7 +222,6 @@ func TestFileCopyS2SWithIncludeAndExcludeFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -238,7 +233,7 @@ func TestFileCopyS2SWithIncludeAndExcludeFlag(t *testing.T) {
 	raw.recursive = true
 
 	// verify that only the files specified by the include flag are copied
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		validateS2STransfersAreScheduled(a, "/", "/", filesToInclude, mockedRPC)
 	})
@@ -263,7 +258,6 @@ func TestFileCopyS2SWithDirectory(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -275,7 +269,7 @@ func TestFileCopyS2SWithDirectory(t *testing.T) {
 
 	expectedList := scenarioHelper{}.shaveOffPrefix(fileList, dirName+"/")
 	expectedList = scenarioHelper{}.addFoldersToList(expectedList, true) // since this is files-to-files and so folder aware
-	runCopyAndVerify(a, raw, func(err error) {
+	runCopyAndVerify(a, raw, mockedRPC.intercept, func(err error) {
 		a.Nil(err)
 		validateS2STransfersAreScheduled(a, "/", "/"+dirName+"/", expectedList, mockedRPC)
 	})

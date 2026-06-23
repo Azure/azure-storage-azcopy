@@ -2,47 +2,9 @@ package common
 
 import (
 	"net/url"
-	"reflect"
 	"strings"
 	"time"
-
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	datalake "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
-
-	"github.com/JeffreyRichter/enum/enum"
 )
-
-var ERpcCmd = RpcCmd("")
-
-// JobStatus indicates the status of a Job; the default is InProgress.
-type RpcCmd string
-
-func (RpcCmd) None() RpcCmd               { return RpcCmd("--none--") }
-func (RpcCmd) CopyJobPartOrder() RpcCmd   { return RpcCmd("CopyJobPartOrder") }
-func (RpcCmd) GetJobLCMWrapper() RpcCmd   { return RpcCmd("GetJobLCMWrapper") }
-func (RpcCmd) ListJobs() RpcCmd           { return RpcCmd("ListJobs") }
-func (RpcCmd) ListJobSummary() RpcCmd     { return RpcCmd("ListJobSummary") }
-func (RpcCmd) ListSyncJobSummary() RpcCmd { return RpcCmd("ListSyncJobSummary") }
-func (RpcCmd) ListJobTransfers() RpcCmd   { return RpcCmd("ListJobTransfers") }
-func (RpcCmd) CancelJob() RpcCmd          { return RpcCmd("Cancel") }
-func (RpcCmd) PauseJob() RpcCmd           { return RpcCmd("PauseJob") }
-func (RpcCmd) ResumeJob() RpcCmd          { return RpcCmd("ResumeJob") }
-func (RpcCmd) GetJobDetails() RpcCmd      { return RpcCmd("GetJobDetails") }
-
-func (c RpcCmd) String() string {
-	return enum.String(c, reflect.TypeOf(c))
-}
-func (c RpcCmd) Pattern() string { return "/" + c.String() }
-
-func (c *RpcCmd) Parse(s string) error {
-	val, err := enum.Parse(reflect.TypeOf(c), s, false)
-	if err == nil {
-		*c = val.(RpcCmd)
-	}
-	return err
-}
-
-// ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // ResourceString represents a source or dest string, that can have
 // three parts: the main part, a sas, and extra query parameters that are not part of the sas.
@@ -124,11 +86,12 @@ func ConsolidatePathSeparators(path string) string {
 // Transfers describes each file/folder being transferred in a given JobPartOrder, and
 // other auxiliary details of this order.
 type Transfers struct {
-	List                 []CopyTransfer
-	TotalSizeInBytes     uint64
-	FileTransferCount    uint32
-	FolderTransferCount  uint32
-	SymlinkTransferCount uint32
+	List                    []CopyTransfer
+	TotalSizeInBytes        uint64
+	FileTransferCount       uint32
+	FolderTransferCount     uint32
+	SymlinkTransferCount    uint32
+	HardlinksConvertedCount uint32
 }
 
 // This struct represents the job info (a single part) to be sent to the storage engine
@@ -144,17 +107,11 @@ type CopyJobPartOrderRequest struct {
 	FromTo              FromTo
 	Fpo                 FolderPropertyOption // passed in from front-end to ensure that front-end and STE agree on the desired behaviour for the job
 	SymlinkHandlingType SymlinkHandlingType
-	// list of blobTypes to exclude.
-	ExcludeBlobType []blob.BlobType
 
 	SourceRoot       ResourceString
 	DestinationRoot  ResourceString
 	SrcServiceClient *ServiceClient
 	DstServiceClient *ServiceClient
-
-	//These clients are required only in S2S transfers from/to datalake
-	SrcDatalakeClient *datalake.Client
-	DstDatalakeClient *datalake.Client
 
 	Transfers      Transfers
 	LogLevel       LogLevel
@@ -162,9 +119,10 @@ type CopyJobPartOrderRequest struct {
 	CommandString  string // commandString hold the user given command which is logged to the Job log file
 	CredentialInfo CredentialInfo
 
-	PreserveSMBPermissions         PreservePermissionsOption
-	PreserveSMBInfo                bool
+	PreservePermissions            PreservePermissionsOption
+	PreserveInfo                   bool
 	PreservePOSIXProperties        bool
+	PosixPropertiesStyle           PosixPropertiesStyle
 	S2SGetPropertiesInBackend      bool
 	S2SSourceChangeValidation      bool
 	DestLengthValidation           bool
@@ -179,6 +137,7 @@ type CopyJobPartOrderRequest struct {
 	// This may not always be the case (for instance, if we opt to use multiple OAuth tokens). At that point, this will likely be it's own CredentialInfo.
 	S2SSourceCredentialType CredentialType // Only Anonymous and OAuth will really be used in response to this, but S3 and GCP will come along too...
 	FileAttributes          FileTransferAttributes
+	JobErrorHandler         JobErrorHandler
 }
 
 // CredentialInfo contains essential credential info which need be transited between modules,
@@ -188,12 +147,6 @@ type CredentialInfo struct {
 	OAuthTokenInfo    OAuthTokenInfo
 	S3CredentialInfo  S3CredentialInfo
 	GCPCredentialInfo GCPCredentialInfo
-}
-
-func (c CredentialInfo) WithType(credentialType CredentialType) CredentialInfo {
-	// c is a clone, so this is OK
-	c.CredentialType = credentialType
-	return c
 }
 
 type GCPCredentialInfo struct {
@@ -216,13 +169,6 @@ func (CopyJobPartOrderErrorType) NoTransfersScheduledErr() CopyJobPartOrderError
 type CopyJobPartOrderResponse struct {
 	ErrorMsg   CopyJobPartOrderErrorType
 	JobStarted bool
-}
-
-// represents the raw list command input from the user when requested the list of transfer with given status for given JobId
-type ListRequest struct {
-	JobID    JobID
-	OfStatus string // TODO: OfStatus with string type sounds not good, change it to enum
-	Output   OutputFormat
 }
 
 // This struct represents the optional attribute for blob request header
@@ -320,13 +266,16 @@ type ListJobSummaryResponse struct {
 	ServerBusyPercentage   float32 `json:",string"`
 	NetworkErrorPercentage float32 `json:",string"`
 
-	FailedTransfers  []TransferDetail
-	SkippedTransfers []TransferDetail
-	PerfConstraint   PerfConstraint
-	PerfStrings      []string `json:"-"`
-
-	PerformanceAdvice []PerformanceAdvice
-	IsCleanupJob      bool
+	FailedTransfers         []TransferDetail
+	SkippedTransfers        []TransferDetail
+	PerfConstraint          PerfConstraint
+	PerfStrings             []string `json:"-"`
+	PerformanceAdvice       []PerformanceAdvice
+	IsCleanupJob            bool
+	SkippedSymlinkCount     uint32 `json:",string"`
+	HardlinksConvertedCount uint32 `json:",string"` // Hardlinks converted count is only applicable for NFS transfers
+	SkippedHardlinkCount    uint32 `json:",string"` // Skipped hardlinks count is only applicable for NFS transfers
+	SkippedSpecialFileCount uint32 `json:",string"`
 }
 
 // wraps the standard ListJobSummaryResponse with sync-specific stats
@@ -343,13 +292,9 @@ type ListJobTransfersRequest struct {
 
 type ResumeJobRequest struct {
 	JobID            JobID
-	SourceSAS        string
-	DestinationSAS   string
 	SrcServiceClient *ServiceClient
 	DstServiceClient *ServiceClient
-	IncludeTransfer  map[string]int
-	ExcludeTransfer  map[string]int
-	CredentialInfo   CredentialInfo
+	JobErrorHandler  JobErrorHandler
 }
 
 // represents the Details and details of a single transfer

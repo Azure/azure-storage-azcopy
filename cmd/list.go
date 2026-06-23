@@ -26,12 +26,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
+	traverser2 "github.com/Azure/azure-storage-azcopy/v10/traverser"
 
 	"github.com/spf13/cobra"
 
@@ -114,10 +117,10 @@ func (raw rawListCmdArgs) parseProperties() []validProperty {
 
 func (raw rawListCmdArgs) cook() (cookedListCmdArgs, error) {
 	// set up the front end scanning logger
-	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, azcopyLogVerbosity, azcopyLogPathFolder, "-scanning")
-	azcopyScanningLogger.OpenLog()
+	common.AzcopyScanningLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "-scanning")
+	common.AzcopyScanningLogger.OpenLog()
 	glcm.RegisterCloseFunc(func() {
-		azcopyScanningLogger.CloseLog()
+		common.AzcopyScanningLogger.CloseLog()
 	})
 	cooked = cookedListCmdArgs{}
 	// the expected argument in input is the container sas / or path of virtual directory in the container.
@@ -130,7 +133,7 @@ func (raw rawListCmdArgs) cook() (cookedListCmdArgs, error) {
 	// Only support listing for Azure locations
 	switch cooked.location {
 	case common.ELocation.Blob():
-	case common.ELocation.File():
+	case common.ELocation.File(), common.ELocation.FileNFS():
 	case common.ELocation.BlobFS():
 		break
 	default:
@@ -192,7 +195,7 @@ func init() {
 			}
 			err = cooked.handleListContainerCommand()
 			if err == nil {
-				glcm.Exit(nil, common.EExitCode.Success())
+				glcm.Exit(nil, EExitCode.Success())
 			} else {
 				glcm.Error(err.Error() + getErrorCodeUrl(err))
 			}
@@ -204,11 +207,15 @@ func init() {
 	listContainerCmd.PersistentFlags().BoolVar(&raw.RunningTally, "running-tally", false, "False by default. Counts the total number of files and their sizes.")
 	listContainerCmd.PersistentFlags().BoolVar(&raw.MegaUnits, "mega-units", false, "False by default. Displays units in orders of 1000, not 1024.")
 	listContainerCmd.PersistentFlags().StringVar(&raw.Properties, "properties", "", "Properties to be displayed in list output. "+
-		"Possible properties include: "+strings.Join(validPropertiesString(), ", ")+". "+
-		"Delimiter (;) should be used to separate multiple values of properties (i.e. 'LastModifiedTime;VersionId;BlobType').")
-	listContainerCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "'Enable' by default to treat file share related operations in a safe manner. Available options: "+strings.Join(common.ValidTrailingDotOptions(), ", ")+". "+
-		"Choose 'Disable' to go back to legacy (potentially unsafe) treatment of trailing dot files where the file service will trim any trailing dots in paths. This can result in potential data corruption if the transfer contains two paths that differ only by a trailing dot (ex: mypath and mypath.). If this flag is set to 'Disable' and AzCopy encounters a trailing dot file, it will warn customers in the scanning log but will not attempt to abort the operation."+
-		"If the destination does not support trailing dot files (Windows or Blob Storage), AzCopy will fail if the trailing dot file is the root of the transfer and skip any trailing dot paths encountered during enumeration.")
+		"\n Possible properties include: "+strings.Join(validPropertiesString(), ", ")+". "+
+		"\n Delimiter (;) should be used to separate multiple values of properties (i.e. 'LastModifiedTime;VersionId;BlobType').")
+	listContainerCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "'Enable' by default to treat file share related operations in a safe manner. "+
+		"\n Available options: "+strings.Join(common.ValidTrailingDotOptions(), ", ")+". "+
+		"\n Choose 'Disable' to go back to legacy (potentially unsafe) treatment of trailing dot files where the file service will trim any trailing dots in paths. "+
+		"\n This can result in potential data corruption if the transfer contains two paths that differ only by a trailing dot (ex: mypath and mypath.). "+
+		"\n If this flag is set to 'Disable' and AzCopy encounters a trailing dot file, it will warn customers in the scanning log but will not attempt to abort the operation."+
+		"\n If the destination does not support trailing dot files (Windows or Blob Storage), "+
+		"\n AzCopy will fail if the trailing dot file is the root of the transfer and skip any trailing dot paths encountered during enumeration.")
 
 	rootCmd.AddCommand(listContainerCmd)
 }
@@ -219,7 +226,7 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 
 	var credentialInfo common.CredentialInfo
 
-	source, err := SplitResourceString(cooked.sourcePath, cooked.location)
+	source, err := traverser2.SplitResourceString(cooked.sourcePath, cooked.location)
 	if err != nil {
 		return err
 	}
@@ -228,7 +235,7 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 		return fmt.Errorf("failed to resolve target: %w", err)
 	}
 
-	level, err := DetermineLocationLevel(source.Value, cooked.location, true)
+	level, err := azcopy.DetermineLocationLevel(source.Value, cooked.location, true)
 	if err != nil {
 		return err
 	}
@@ -237,7 +244,7 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 	if credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cooked.location, source, true, common.CpkOptions{}); err != nil {
 		return fmt.Errorf("failed to obtain credential info: %s", err.Error())
 	} else if credentialInfo.CredentialType.IsAzureOAuth() {
-		uotm := GetUserOAuthTokenManagerInstance()
+		uotm := Client.GetUserOAuthTokenManagerInstance()
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return err
 		} else {
@@ -247,8 +254,39 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 
 	// check if user wants to get version id
 	getVersionId := containsProperty(cooked.properties, VersionId)
+	var reauthTok *common.ScopedAuthenticator
+	if at, ok := credentialInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok { // We don't need two different tokens here since it gets passed in just the same either way.
+		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
+		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+	}
 
-	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, common.ESymlinkHandlingType.Skip(), nil, true, true, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, nil, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), common.LogNone, common.CpkOptions{}, nil, false, cooked.trailingDot, nil, nil, getVersionId)
+	options := traverser2.CreateClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
+	var fileClientOptions any
+	if cooked.location.IsFile() {
+		fileClientOptions = &common.FileClientOptions{AllowTrailingDot: cooked.trailingDot.IsEnabled()}
+	}
+
+	targetServiceClient, _ := common.GetServiceClientForLocation(
+		cooked.location,
+		source,
+		credentialInfo.CredentialType,
+		credentialInfo.OAuthTokenInfo.TokenCredential,
+		&options,
+		fileClientOptions,
+	)
+
+	traverser, err := traverser2.InitResourceTraverser(source, cooked.location, ctx, traverser2.InitResourceTraverserOptions{
+		Client:         targetServiceClient,
+		CredentialType: credentialInfo.CredentialType,
+
+		TrailingDotOption: cooked.trailingDot,
+
+		Recursive:               true,
+		GetPropertiesInFrontend: true,
+
+		ListVersions:     getVersionId,
+		HardlinkHandling: common.EHardlinkHandlingType.Follow(),
+	})
 	if err != nil {
 		return fmt.Errorf("failed to initialize traverser: %s", err.Error())
 	}
@@ -262,17 +300,17 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 	}
 	objectVer := make(map[string]versionIdObject)
 
-	processor := func(object StoredObject) error {
+	processor := func(object traverser2.StoredObject) error {
 		lo := cooked.newListObject(object, level)
-		glcm.Output(func(format common.OutputFormat) string {
-			if format == common.EOutputFormat.Json() {
+		glcm.Output(func(format OutputFormat) string {
+			if format == EOutputFormat.Json() {
 				jsonOutput, err := json.Marshal(lo)
 				common.PanicIfErr(err)
 				return string(jsonOutput)
 			} else {
 				return lo.String()
 			}
-		}, common.EOutputMessageType.ListObject())
+		}, EOutputMessageType.ListObject())
 
 		// ensure that versioned objects don't get counted multiple times in the tally
 		// 1. only include the size of the latest version of the object in the sizeCount
@@ -281,17 +319,17 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 			if getVersionId {
 				// get new version id object
 				updatedVersionId := versionIdObject{
-					versionId: object.blobVersionID,
-					fileSize:  object.size,
+					versionId: object.BlobVersionID,
+					fileSize:  object.Size,
 				}
 
 				// there exists a current version id of the object
-				if currentVersionId, ok := objectVer[object.relativePath]; ok {
+				if currentVersionId, ok := objectVer[object.RelativePath]; ok {
 					// get current version id time
 					currentVid, _ := time.Parse(versionIdTimeFormat, currentVersionId.versionId)
 
 					// get new version id time
-					newVid, _ := time.Parse(versionIdTimeFormat, object.blobVersionID)
+					newVid, _ := time.Parse(versionIdTimeFormat, object.BlobVersionID)
 
 					// if new vid came after the current vid, then it is the latest version
 					// update the objectVer with the latest version
@@ -300,14 +338,14 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 					if newVid.After(currentVid) {
 						sizeCount -= currentVersionId.fileSize // remove size of current object
 						fileCount--                            // remove current object file count
-						objectVer[object.relativePath] = updatedVersionId
+						objectVer[object.RelativePath] = updatedVersionId
 					}
 				} else {
-					objectVer[object.relativePath] = updatedVersionId
+					objectVer[object.RelativePath] = updatedVersionId
 				}
 			}
 			fileCount++
-			sizeCount += object.size
+			sizeCount += object.Size
 		}
 		return nil
 	}
@@ -320,15 +358,15 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 
 	if cooked.RunningTally {
 		ls := cooked.newListSummary(fileCount, sizeCount)
-		glcm.Output(func(format common.OutputFormat) string {
-			if format == common.EOutputFormat.Json() {
+		glcm.Output(func(format OutputFormat) string {
+			if format == EOutputFormat.Json() {
 				jsonOutput, err := json.Marshal(ls)
 				common.PanicIfErr(err)
 				return string(jsonOutput)
 			} else {
 				return ls.String()
 			}
-		}, common.EOutputMessageType.ListSummary())
+		}, EOutputMessageType.ListSummary())
 	}
 
 	return nil
@@ -358,9 +396,9 @@ func (l AzCopyListObject) String() string {
 	return l.StringEncoding
 }
 
-func (cooked cookedListCmdArgs) newListObject(object StoredObject, level LocationLevel) AzCopyListObject {
-	path := getPath(object.ContainerName, object.relativePath, level, object.entityType)
-	contentLength := sizeToString(object.size, cooked.MachineReadable)
+func (cooked cookedListCmdArgs) newListObject(object traverser2.StoredObject, level azcopy.LocationLevel) AzCopyListObject {
+	path := getPath(object.ContainerName, object.RelativePath, level, object.EntityType)
+	contentLength := sizeToString(object.Size, cooked.MachineReadable)
 
 	lo := AzCopyListObject{
 		Path:          path,
@@ -374,37 +412,37 @@ func (cooked cookedListCmdArgs) newListObject(object StoredObject, level Locatio
 		propertyStr := string(property)
 		switch property {
 		case LastModifiedTime:
-			lo.LastModifiedTime = to.Ptr(object.lastModifiedTime)
+			lo.LastModifiedTime = to.Ptr(object.LastModifiedTime)
 			builder.WriteString(propertyStr + ": " + lo.LastModifiedTime.String() + "; ")
 		case VersionId:
-			lo.VersionId = object.blobVersionID
+			lo.VersionId = object.BlobVersionID
 			builder.WriteString(propertyStr + ": " + lo.VersionId + "; ")
 		case BlobType:
-			lo.BlobType = object.blobType
+			lo.BlobType = object.BlobType
 			builder.WriteString(propertyStr + ": " + string(lo.BlobType) + "; ")
 		case BlobAccessTier:
-			lo.BlobAccessTier = object.blobAccessTier
+			lo.BlobAccessTier = object.BlobAccessTier
 			builder.WriteString(propertyStr + ": " + string(lo.BlobAccessTier) + "; ")
 		case ContentType:
-			lo.ContentType = object.contentType
+			lo.ContentType = object.ContentType
 			builder.WriteString(propertyStr + ": " + lo.ContentType + "; ")
 		case ContentEncoding:
-			lo.ContentEncoding = object.contentEncoding
+			lo.ContentEncoding = object.ContentEncoding
 			builder.WriteString(propertyStr + ": " + lo.ContentEncoding + "; ")
 		case ContentMD5:
-			lo.ContentMD5 = object.md5
+			lo.ContentMD5 = object.Md5
 			builder.WriteString(propertyStr + ": " + base64.StdEncoding.EncodeToString(lo.ContentMD5) + "; ")
 		case LeaseState:
-			lo.LeaseState = object.leaseState
+			lo.LeaseState = object.LeaseState
 			builder.WriteString(propertyStr + ": " + string(lo.LeaseState) + "; ")
 		case LeaseStatus:
-			lo.LeaseStatus = object.leaseStatus
+			lo.LeaseStatus = object.LeaseStatus
 			builder.WriteString(propertyStr + ": " + string(lo.LeaseStatus) + "; ")
 		case LeaseDuration:
-			lo.LeaseDuration = object.leaseDuration
+			lo.LeaseDuration = object.LeaseDuration
 			builder.WriteString(propertyStr + ": " + string(lo.LeaseDuration) + "; ")
 		case ArchiveStatus:
-			lo.ArchiveStatus = object.archiveStatus
+			lo.ArchiveStatus = object.ArchiveStatus
 			builder.WriteString(propertyStr + ": " + string(lo.ArchiveStatus) + "; ")
 		}
 	}
@@ -475,7 +513,7 @@ func ByteSizeToString(size int64) string {
 	return strconv.FormatFloat(floatSize, 'f', 2, 64) + " " + units[unit]
 }
 
-func getPath(containerName, relativePath string, level LocationLevel, entityType common.EntityType) string {
+func getPath(containerName, relativePath string, level azcopy.LocationLevel, entityType common.EntityType) string {
 	builder := strings.Builder{}
 	if level == level.Service() {
 		builder.WriteString(containerName + "/")

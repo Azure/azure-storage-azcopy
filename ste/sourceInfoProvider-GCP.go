@@ -50,11 +50,6 @@ func newGCPSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, er
 		common.CredentialInfo{
 			CredentialType:    common.ECredentialType.GoogleAppCredentials(),
 			GCPCredentialInfo: common.GCPCredentialInfo{},
-		},
-		common.CredentialOpOptions{
-			LogInfo:  func(str string) { p.jptm.Log(common.LogInfo, str) },
-			LogError: func(str string) { p.jptm.Log(common.LogError, str) },
-			Panic:    func(err error) { panic(err) },
 		})
 	if err != nil {
 		return nil, err

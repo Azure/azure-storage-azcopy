@@ -26,6 +26,7 @@ import (
 	"log"
 	"path"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -33,6 +34,25 @@ import (
 	datalakefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 )
+
+var AzcopyScanningLogger ILoggerResetable
+var AzcopyCurrentJobLogger ILoggerResetable
+
+// TODO: (gapra) I think this should actually be a function on the logger?
+
+// LogToJobLogWithPrefix logs a message to the current job logger.
+// It applies a level-based prefix (e.g., "WARN:") for messages with a severity
+// level of LogWarning or higher. This helps distinguish warnings and errors
+// from informational messages in the logs.
+func LogToJobLogWithPrefix(msg string, level LogLevel) {
+	if AzcopyCurrentJobLogger != nil {
+		prefix := ""
+		if level <= LogWarning {
+			prefix = fmt.Sprintf("%s: ", level) // so readers can find serious ones, but information ones still look uncluttered without INFO:
+		}
+		AzcopyCurrentJobLogger.Log(level, prefix+msg)
+	}
+}
 
 type ILogger interface {
 	ShouldLog(level LogLevel) bool
@@ -49,6 +69,24 @@ type ILoggerResetable interface {
 	OpenLog()
 	MinimumLogLevel() LogLevel
 	ILoggerCloser
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+type LogLevelOverrideLogger struct {
+	ILoggerResetable
+	MinimumLevelToLog LogLevel
+}
+
+func (l LogLevelOverrideLogger) MinimumLogLevel() LogLevel {
+	return l.MinimumLevelToLog
+}
+
+func (l LogLevelOverrideLogger) ShouldLog(level LogLevel) bool {
+	if level == LogNone {
+		return false
+	}
+	return level <= l.MinimumLevelToLog
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -80,6 +118,11 @@ func NewJobLogger(jobID JobID, minimumLevelToLog LogLevel, logFileFolder string,
 func (jl *jobLogger) OpenLog() {
 	if jl.minimumLevelToLog == LogNone {
 		return
+	}
+
+	// If a previously opened Writer exists, we close it to prevent resource leaks
+	if jl.file != nil {
+		jl.file.Close()
 	}
 
 	file, err := NewRotatingWriter(path.Join(jl.logFileFolder, jl.jobID.String()+jl.logFileNameSuffix+".log"), maxLogSize)
@@ -129,7 +172,7 @@ func (jl jobLogger) Log(loglevel LogLevel, msg string) {
 	// Go, and therefore the sdk, defaults to \n for line endings, so if the platform has a different line ending,
 	// we should replace them to ensure readability on the given platform.
 	if lineEnding != "\n" {
-		msg = strings.Replace(msg, "\n", lineEnding, -1)
+		msg = strings.ReplaceAll(msg, "\n", lineEnding)
 	}
 	if jl.ShouldLog(loglevel) {
 		jl.logger.Println(msg)
@@ -222,10 +265,6 @@ func NewDatalakeReadLogFunc(logger ILogger, fullUrl string) func(int32, error, d
 	}
 }
 
-func IsForceLoggingDisabled() bool {
-	return GetLifecycleMgr().IsForceLoggingDisabled()
-}
-
 type S3HTTPTraceLogger struct {
 	logger   ILogger
 	logLevel LogLevel
@@ -258,4 +297,19 @@ func Cause(err error) error {
 		err = cause.Cause()
 	}
 	return err
+}
+
+var disableSyslog bool
+
+func IsForceLoggingDisabled() bool {
+	return disableSyslog
+}
+
+func init() {
+	var err error
+	disableSyslog, err = strconv.ParseBool(GetEnvironmentVariable(EEnvironmentVariable.DisableSyslog()))
+	if err != nil {
+		// By default, we'll retain the current behaviour. i.e. To log in Syslog/WindowsEventLog if not specified by the user
+		disableSyslog = false
+	}
 }

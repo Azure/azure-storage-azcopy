@@ -2,12 +2,13 @@ package ste
 
 import (
 	"errors"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
-	"github.com/stretchr/testify/assert"
 	"net/http"
 	"runtime"
 	"syscall"
 	"testing"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestGetShouldRetry(t *testing.T) {
@@ -50,8 +51,28 @@ func TestGetShouldRetry(t *testing.T) {
 		}
 	}
 
+	syscallErrnoTests := func(errs []error, retry bool) []*ResponseRetryPair {
+		out := make([]*ResponseRetryPair, len(errs)*2)
+
+		for k, v := range errs {
+			out[k*2] = ErrorTest(v, retry)
+			out[(k*2)+1] = ErrorTest(errors.New(v.Error()), retry)
+		}
+
+		return out
+	}
+
 	_ = ParseRules
 
+	retriedErrnos := []error{
+		syscall.ECONNRESET,    // connection reset by peer
+		syscall.ECONNREFUSED,  // connection refused
+		syscall.ECONNABORTED,  // software caused connection abort
+		syscall.ETIMEDOUT,     // connection timed out
+		syscall.EPIPE,         // broken pipe
+		syscall.EADDRINUSE,    // address already in use
+		syscall.EADDRNOTAVAIL, // address not available
+	}
 	matrix := []TestEntry{
 		{ // porting the original test in
 			Rules: nil,
@@ -70,13 +91,10 @@ func TestGetShouldRetry(t *testing.T) {
 		},
 		{
 			TestCond: func() bool {
-				return runtime.GOOS == "windows"
+				return runtime.GOOS == "windows" || runtime.GOOS == "darwin" || runtime.GOOS == "linux"
 			},
 			Rules: ParseRules("409: ShareAlreadyExists, ShareBeingDeleted, BlobAlreadyExists; 500; 404: BlobNotFound"),
-			Tests: []*ResponseRetryPair{
-				ErrorTest(syscall.Errno(10054), true),
-				ErrorTest(errors.New("wsarecv: An existing connection was forcibly closed by the remote host."), true),
-			},
+			Tests: syscallErrnoTests(retriedErrnos, true),
 		},
 		{ // test full code removal
 			Rules: ParseRules("400; 500; -400"),
@@ -116,7 +134,8 @@ func TestGetShouldRetry(t *testing.T) {
 
 		for testNum, v := range v.Tests {
 			res := shouldRetry(v.Resp, v.Err)
-			assert.Equalf(t, v.ShouldRetry, res, "expected result mismatch on entry %d test %d", entryNum, testNum)
+			assert.Equalf(t, v.ShouldRetry, res, "expected result mismatch on entry %d test %d \n %v", entryNum, testNum,
+				matrix[entryNum].Tests[testNum])
 		}
 	}
 }
@@ -128,22 +147,70 @@ func TestGetErrorCode(t *testing.T) {
 	header := make(http.Header)
 	header["x-ms-meta-foo"] = []string{"bar"}
 	response := &http.Response{Header: header}
-	code := getErrorCode(response)
-	a.Equal("", code)
+	codeNil := getErrorCodes(response)
+	a.Nil(codeNil)
 
 	// Test with error code
 	header = make(http.Header)
 	header["x-ms-error-code"] = []string{"BlobAlreadyExists"}
 	response = &http.Response{Header: header}
-	code = getErrorCode(response)
+	code := getErrorCodes(response)[0]
 	a.Equal("BlobAlreadyExists", code)
 
 	// Test with error code
 	header = make(http.Header)
 	header.Set("x-ms-error-code", "BlobBeingDeleted")
 	response = &http.Response{Header: header}
-	code = getErrorCode(response)
+	code = getErrorCodes(response)[0]
 	a.Equal("BlobBeingDeleted", code)
+
+	// Test with copy source error code
+	header = make(http.Header)
+	header.Set("x-ms-copy-source-error-code", "CopySourceErrCode")
+	response = &http.Response{Header: header}
+	code = getErrorCodes(response)[0]
+	a.Equal("CopySourceErrCode", code)
+
+	// Test with error code and copy source error code
+	header = make(http.Header)
+	header.Set("X-Ms-Copy-Source-Error-Code", "AccessDenied")
+	header.Set("x-ms-error-code", "CouldNotVerifyCopySource")
+	response = &http.Response{Header: header}
+	codes := getErrorCodes(response)
+	a.Equal([]string{"CouldNotVerifyCopySource", "AccessDenied"}, codes)
+
+	// Test with wrong header and copy source error code
+	header = make(http.Header)
+	header.Set("X-Ms-Copy-Source-Error-Code", "AccessDenied")
+	header.Set("x-ms-foo-bar", "RandomErrCode")
+	response = &http.Response{Header: header}
+	codes = getErrorCodes(response)
+	a.Equal([]string{"AccessDenied"}, codes)
+}
+
+func TestGetCopySourceStatusCodes(t *testing.T) {
+	a := assert.New(t)
+
+	// Test with no status code
+	header := make(http.Header)
+	header.Set("x-ms-foo-bar", "200")
+	response := &http.Response{Header: header}
+	code := getCopySourceStatusCode(response)
+	a.Empty(code)
+
+	// Test with copy source status code
+	header = make(http.Header)
+	header.Set("x-ms-copy-source-status-code", "408")
+	response = &http.Response{Header: header}
+	code = getCopySourceStatusCode(response)
+	a.Equal("408", code)
+
+	// Test with copy source status code
+	header = make(http.Header)
+	header.Set("X-Ms-Copy-Source-Status-Code", "429")
+	response = &http.Response{Header: header}
+	code = getCopySourceStatusCode(response)
+	a.Equal("429", code)
 }
 
 func TestParseRetryCodes(t *testing.T) {

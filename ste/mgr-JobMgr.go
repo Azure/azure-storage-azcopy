@@ -37,31 +37,19 @@ var _ IJobMgr = &jobMgr{}
 
 type PartNumber = common.PartNumber
 
-// InMemoryTransitJobState defines job state transit in memory, and not in JobPartPlan file.
-// Note: InMemoryTransitJobState should only be set when request come from cmd(FE) module to STE module.
-// In memory CredentialInfo is currently maintained per job in STE, as FE could have many-to-one relationship with STE,
-// i.e. different jobs could have different OAuth tokens requested from FE, and these jobs can run at same time in STE.
-// This can be optimized if FE would no more be another module vs STE module.
-type InMemoryTransitJobState struct {
-	CredentialInfo common.CredentialInfo
-	// S2SSourceCredentialType can override the CredentialInfo.CredentialType when being used for the source (e.g. Source Info Provider and when using GetS2SSourceBlobTokenCredential)
-	S2SSourceCredentialType common.CredentialType
-}
-
 type IJobMgr interface {
 	JobID() common.JobID
 	JobPartMgr(partNum PartNumber) (IJobPartMgr, bool)
 	// Throughput() XferThroughput
 	// If existingPlanMMF is nil, a new MMF is opened.
 	AddJobPart(args *AddJobPartArgs) IJobPartMgr
-
-	SetIncludeExclude(map[string]int, map[string]int)
-	IncludeExclude() (map[string]int, map[string]int)
 	ResumeTransfers(appCtx context.Context)
 	ResetFailedTransfersCount()
 	AllTransfersScheduled() bool
 	ConfirmAllTransfersScheduled()
 	ResetAllTransfersScheduled()
+	GetTotalNumFilesProcessed() int64
+	AddTotalNumFilesProcessed(numFiles int64)
 	Reset(context.Context, string) IJobMgr
 	PipelineLogInfo() LogOptions
 	ReportJobPartDone(jobPartProgressInfo)
@@ -75,8 +63,6 @@ type IJobMgr interface {
 	ActiveConnections() int64
 	GetPerfInfo() (displayStrings []string, constraint common.PerfConstraint)
 	// Close()
-	getInMemoryTransitJobState() InMemoryTransitJobState      // get in memory transit job state saved in this job.
-	SetInMemoryTransitJobState(state InMemoryTransitJobState) // set in memory transit job state saved in this job.
 	ChunkStatusLogger() common.ChunkStatusLogger
 	HttpClient() *http.Client
 	PipelineNetworkStats() *PipelineNetworkStats
@@ -100,6 +86,7 @@ type IJobMgr interface {
 	SuccessfulBytesInActiveFiles() uint64
 	CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.CancelPauseResumeResponse
 	IsDaemon() bool
+	GetJobErrorHandler() common.JobErrorHandler
 
 	// Cleanup Functions
 	DeferredCleanupJobMgr()
@@ -108,9 +95,9 @@ type IJobMgr interface {
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx context.Context, cpuMon common.CPUMonitor, level common.LogLevel,
-	commandString string, logFileFolder string, tuner ConcurrencyTuner,
+	commandString string, tuner ConcurrencyTuner,
 	pacer PacerAdmin, slicePool common.ByteSlicePooler, cacheLimiter common.CacheLimiter, fileCountLimiter common.CacheLimiter,
-	jobLogger common.ILoggerResetable, daemonMode bool) IJobMgr {
+	jobLogger common.ILoggerResetable, daemonMode bool, jobErrorHandler common.JobErrorHandler) IJobMgr {
 	const channelSize = 100000
 	// PartsChannelSize defines the number of JobParts which can be placed into the
 	// parts channel. Any JobPart which comes from FE and partChannel is full,
@@ -143,14 +130,14 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	jstm.statusMgrDone = make(chan struct{})
 	// Different logger for each job.
 	if jobLogger == nil {
-		jobLogger = common.NewJobLogger(jobID, common.ELogLevel.Debug(), logFileFolder, "" /* logFileNameSuffix */)
+		jobLogger = common.NewJobLogger(jobID, common.ELogLevel.Debug(), common.LogPathFolder, "" /* logFileNameSuffix */)
 		jobLogger.OpenLog()
 	}
 
-	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), include: map[string]int{}, exclude: map[string]int{},
-		httpClient:           NewAzcopyHTTPClient(concurrency.MaxIdleConnections),
+	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(),
+		httpClient:           common.GetGlobalHTTPClient(),
 		logger:               jobLogger,
-		chunkStatusLogger:    common.NewChunkStatusLogger(jobID, cpuMon, logFileFolder, enableChunkLogOutput),
+		chunkStatusLogger:    common.NewChunkStatusLogger(jobID, cpuMon, common.LogPathFolder, enableChunkLogOutput),
 		concurrency:          concurrency,
 		overwritePrompter:    newOverwritePrompter(),
 		pipelineNetworkStats: newPipelineNetworkStats(tuner), // let the stats coordinate with the concurrency tuner
@@ -185,6 +172,7 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 		fileCountLimiter: fileCountLimiter,
 		cpuMon:           cpuMon,
 		jstm:             &jstm,
+		jobErrorHandler:  jobErrorHandler,
 		isDaemon:         daemonMode,
 		/*Other fields remain zero-value until this job is scheduled */}
 	jm.Reset(appCtx, commandString)
@@ -260,6 +248,12 @@ func (jm *jobMgr) logConcurrencyParameters() {
 
 	jm.logger.Log(level, fmt.Sprintf("Max open files when downloading: %d (auto-computed)",
 		jm.concurrency.MaxOpenDownloadFiles))
+
+	if tr, ok := jm.httpClient.Transport.(*http.Transport); ok {
+		jm.logger.Log(level, fmt.Sprintf(
+			"Global HTTP client %p: MaxIdleConnsPerHost=%d MaxConnsPerHost=%d MaxIdleConns=%d IdleConnTimeout=%s",
+			jm.httpClient, tr.MaxIdleConnsPerHost, tr.MaxConnsPerHost, tr.MaxIdleConns, tr.IdleConnTimeout))
+	}
 }
 
 // jobMgrInitState holds one-time init structures (such as SIPM), that initialize when the first part is added.
@@ -287,14 +281,14 @@ type jobMgr struct {
 	atomicAllTransfersScheduled     int32
 	atomicFinalPartOrderedIndicator int32
 	atomicTransferDirection         common.TransferDirection
-
-	concurrency          ConcurrencySettings
-	logger               common.ILoggerResetable
-	chunkStatusLogger    common.ChunkStatusLoggerCloser
-	jobID                common.JobID // The Job's unique ID
-	ctx                  context.Context
-	cancel               context.CancelFunc
-	pipelineNetworkStats *PipelineNetworkStats
+	atomicTotalFilesProcessed       int64 // Number of files processed across multiple job parts
+	concurrency                     ConcurrencySettings
+	logger                          common.ILoggerResetable
+	chunkStatusLogger               common.ChunkStatusLoggerCloser
+	jobID                           common.JobID // The Job's unique ID
+	ctx                             context.Context
+	cancel                          context.CancelFunc
+	pipelineNetworkStats            *PipelineNetworkStats
 
 	// Share the same HTTP Client across all job parts, so that the we maximize reuse of
 	// its internal connection pool
@@ -308,12 +302,6 @@ type jobMgr struct {
 	// partsDone keep the count of completed part of the Job.
 	partsDone uint32
 	// throughput  common.CountPerSecond // TODO: Set LastCheckedTime to now
-
-	inMemoryTransitJobState InMemoryTransitJobState
-	// list of transfer mentioned to include only then while resuming the job
-	include map[string]int
-	// list of transfer mentioned to exclude while resuming the job
-	exclude map[string]int
 
 	// only a single instance of the prompter is needed for all transfers
 	overwritePrompter *overwritePrompter
@@ -333,6 +321,7 @@ type jobMgr struct {
 	cacheLimiter        common.CacheLimiter
 	fileCountLimiter    common.CacheLimiter
 	jstm                *jobStatusManager
+	jobErrorHandler     common.JobErrorHandler
 
 	isDaemon bool /* is it running as service */
 }
@@ -394,7 +383,7 @@ func (jm *jobMgr) GetPerfInfo() (displayStrings []string, constraint common.Perf
 	// The states, above, that run inside that pool (basically the H and B states) will sum to
 	// a value <= this value. But without knowing this value, its harder to be sure if they are at the limit
 	// or not, especially if we are dynamically tuning the pool size.
-	result[len(result)-1] = fmt.Sprintf(strings.Replace(format, "%c", "%s", -1), "GRs", jm.CurrentMainPoolSize())
+	result[len(result)-1] = fmt.Sprintf(strings.ReplaceAll(format, "%c", "%s"), "GRs", jm.CurrentMainPoolSize())
 
 	con := jm.chunkStatusLogger.GetPrimaryPerfConstraint(atomicTransferDirection, jm.PipelineNetworkStats())
 
@@ -464,7 +453,7 @@ func (jm *jobMgr) AddJobPart(args *AddJobPartArgs) IJobPartMgr {
 		var logger common.ILogger = jm
 		jm.initState = &jobMgrInitState{
 			securityInfoPersistenceManager: newSecurityInfoPersistenceManager(jm.ctx),
-			folderCreationTracker:          NewFolderCreationTracker(jpm.Plan().Fpo, jpm.Plan()),
+			folderCreationTracker:          NewFolderCreationTracker(jpm.Plan().Fpo, NewTransferFetcher(jm), jpm.Plan().FromTo),
 			folderDeletionManager:          common.NewFolderDeletionManager(jm.ctx, jpm.Plan().Fpo, logger),
 			exclusiveDestinationMapHolder:  &atomic.Value{},
 		}
@@ -497,7 +486,6 @@ func (jm *jobMgr) AddJobOrder(order common.CopyJobPartOrderRequest) IJobPartMgr 
 		slicePool:        jm.slicePool,
 		cacheLimiter:     jm.cacheLimiter,
 		fileCountLimiter: jm.fileCountLimiter,
-		credInfo:         order.CredentialInfo,
 		srcIsOAuth:       order.S2SSourceCredentialType.IsAzureOAuth(),
 	}
 	jpm.planMMF = jpm.filename.Map()
@@ -511,7 +499,7 @@ func (jm *jobMgr) AddJobOrder(order common.CopyJobPartOrderRequest) IJobPartMgr 
 		var logger common.ILogger = jm
 		jm.initState = &jobMgrInitState{
 			securityInfoPersistenceManager: newSecurityInfoPersistenceManager(jm.ctx),
-			folderCreationTracker:          NewFolderCreationTracker(jpm.Plan().Fpo, jpm.Plan()),
+			folderCreationTracker:          NewFolderCreationTracker(jpm.Plan().Fpo, NewTransferFetcher(jm), jpm.Plan().FromTo),
 			folderDeletionManager:          common.NewFolderDeletionManager(jm.ctx, jpm.Plan().Fpo, logger),
 			exclusiveDestinationMapHolder:  &atomic.Value{},
 		}
@@ -576,18 +564,6 @@ func (jm *jobMgr) PipelineNetworkStats() *PipelineNetworkStats {
 	return jm.pipelineNetworkStats
 }
 
-// SetIncludeExclude sets the include / exclude list of transfers
-// supplied with resume command to include or exclude mentioned transfers
-func (jm *jobMgr) SetIncludeExclude(include, exclude map[string]int) {
-	jm.include = include
-	jm.exclude = exclude
-}
-
-// Returns the list of transfer mentioned to include / exclude
-func (jm *jobMgr) IncludeExclude() (map[string]int, map[string]int) {
-	return jm.include, jm.exclude
-}
-
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
 func (jm *jobMgr) ResumeTransfers(appCtx context.Context) {
 	jm.Reset(appCtx, "")
@@ -642,6 +618,14 @@ func (jm *jobMgr) ResetAllTransfersScheduled() {
 	atomic.StoreInt32(&jm.atomicAllTransfersScheduled, 0)
 }
 
+func (jm *jobMgr) GetTotalNumFilesProcessed() int64 {
+	return atomic.LoadInt64(&jm.atomicTotalFilesProcessed)
+}
+
+func (jm *jobMgr) AddTotalNumFilesProcessed(numFiles int64) {
+	atomic.AddInt64(&jm.atomicTotalFilesProcessed, numFiles)
+}
+
 // ReportJobPartDone is called to report that a job part completed or failed
 func (jm *jobMgr) ReportJobPartDone(progressInfo jobPartProgressInfo) {
 	jm.jobPartProgress <- progressInfo
@@ -672,7 +656,7 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 		case partProgressInfo := <-jm.jobPartProgress:
 			jobPart0Mgr, ok := jm.jobPartMgrs.Get(0)
 			if !ok {
-				jm.Panic(fmt.Errorf("Failed to find Job %v, Part #0", jm.jobID))
+				jm.Panic(fmt.Errorf("failed to find Job %v, Part #0", jm.jobID))
 			}
 			part0Plan := jobPart0Mgr.Plan()
 			jobStatus := part0Plan.JobStatus() // status of part 0 is status of job as a whole
@@ -739,16 +723,6 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 			}
 		}
 	}
-}
-
-func (jm *jobMgr) getInMemoryTransitJobState() InMemoryTransitJobState {
-	return jm.inMemoryTransitJobState
-}
-
-// Note: InMemoryTransitJobState should only be set when request come from cmd(FE) module to STE module.
-// And the state should no more be changed inside STE module.
-func (jm *jobMgr) SetInMemoryTransitJobState(state InMemoryTransitJobState) {
-	jm.inMemoryTransitJobState = state
 }
 
 func (jm *jobMgr) Context() context.Context { return jm.ctx }
@@ -1165,6 +1139,7 @@ func (jm *jobMgr) CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.
 		fallthrough
 	case common.EJobStatus.Paused(): // Logically, It's OK to pause an already-paused job
 		jpp0.SetJobStatus(desiredJobStatus)
+		jm.Log(common.LogInfo, fmt.Sprintf("Job status updated: %s", desiredJobStatus))
 		msg := fmt.Sprintf("JobID=%v %s", jobID,
 			common.Iff(desiredJobStatus == common.EJobStatus.Paused(), "paused", "canceled"))
 
@@ -1183,6 +1158,10 @@ func (jm *jobMgr) CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.
 
 func (jm *jobMgr) IsDaemon() bool {
 	return jm.isDaemon
+}
+
+func (jm *jobMgr) GetJobErrorHandler() common.JobErrorHandler {
+	return jm.jobErrorHandler
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

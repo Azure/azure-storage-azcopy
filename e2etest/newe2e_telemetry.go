@@ -2,13 +2,16 @@ package e2etest
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/data/aztables"
-	cmd2 "github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"io/fs"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/data/aztables"
+	cmd2 "github.com/Azure/azure-storage-azcopy/v10/cmd"
 )
 
 const (
@@ -17,6 +20,20 @@ const (
 )
 
 func UploadMemoryProfile(a Asserter, profilePath string, runCount uint) {
+	if GlobalConfig.E2EFrameworkSpecialConfig.SkipTelemetry {
+		return
+	}
+
+	if _, err := os.Stat(profilePath); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			a.Log("no pprof data generated")
+			return
+		}
+
+		a.NoError("profile cannot be accessed", err)
+		return
+	}
+
 	// We don't need telemetry configured to dump details on peak memory usage, and we need to grab these anyway.
 	cmd := exec.Command("go", "tool", "pprof", "-top", "-unit=bytes", profilePath)
 

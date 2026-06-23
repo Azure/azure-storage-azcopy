@@ -100,7 +100,7 @@ func (p *tokenBucketPacer) RequestTrafficAllocation(ctx context.Context, byteCou
 	}
 
 	if targetBytes < byteCount {
-		return errors.New("request size greater than pacer target")
+		return errors.New("request size greater than pacer target. ensure --block-size-mb is smaller than --cap-mbps and retry the transfer")
 	}
 
 	// block until tokens are available
@@ -121,7 +121,7 @@ func (p *tokenBucketPacer) RequestTrafficAllocation(ctx context.Context, byteCou
 		case <-time.After(modifiedSleepDuration):
 			// keep looping
 		}
-		
+
 		// If we've updated target to a NULL pacer, we'll return immediately
 		if p.targetBytesPerSecond() == 0 {
 			atomic.AddInt64(&p.atomicGrandTotal, byteCount)
@@ -159,7 +159,7 @@ func (p *tokenBucketPacer) pacerBody() {
 		select {
 		case <-p.done:
 			return
-		case newTarget = <- p.newTargetBytesPerSecond:
+		case newTarget = <-p.newTargetBytesPerSecond:
 		default:
 		}
 

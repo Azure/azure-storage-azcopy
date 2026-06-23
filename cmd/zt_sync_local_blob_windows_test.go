@@ -21,12 +21,13 @@
 package cmd
 
 import (
-	"github.com/stretchr/testify/assert"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestSyncUploadWithExcludeAttrFlag(t *testing.T) {
@@ -50,14 +51,13 @@ func TestSyncUploadWithExcludeAttrFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultSyncRawInput(srcDirName, rawContainerURLWithSAS.String())
 	raw.excludeFileAttributes = excludeAttrsStr
 
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, mockedRPC.delete, func(err error) {
 		a.Nil(err)
 		validateUploadTransfersAreScheduled(a, "", "", fileList, mockedRPC)
 	})
@@ -84,14 +84,13 @@ func TestSyncUploadWithIncludeAttrFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultSyncRawInput(srcDirName, rawContainerURLWithSAS.String())
 	raw.includeFileAttributes = includeAttrsStr
 
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, mockedRPC.delete, func(err error) {
 		a.Nil(err)
 		validateUploadTransfersAreScheduled(a, "", "", filesToInclude, mockedRPC)
 	})
@@ -121,7 +120,6 @@ func TestSyncUploadWithIncludeAndIncludeAttrFlags(t *testing.T) {
 	defer deleteContainer(a, cc)
 
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
@@ -129,7 +127,7 @@ func TestSyncUploadWithIncludeAndIncludeAttrFlags(t *testing.T) {
 	raw.includeFileAttributes = includeAttrsStr
 	raw.include = includeString
 
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, mockedRPC.delete, func(err error) {
 		a.Nil(err)
 		validateUploadTransfersAreScheduled(a, "", "", fileList[2:], mockedRPC)
 	})
@@ -159,7 +157,6 @@ func TestSyncUploadWithExcludeAndExcludeAttrFlags(t *testing.T) {
 	defer deleteContainer(a, cc)
 
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
@@ -167,7 +164,7 @@ func TestSyncUploadWithExcludeAndExcludeAttrFlags(t *testing.T) {
 	raw.excludeFileAttributes = excludeAttrsStr
 	raw.exclude = excludeString
 
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, mockedRPC.delete, func(err error) {
 		a.Nil(err)
 		validateUploadTransfersAreScheduled(a, "", "", commonFileList, mockedRPC)
 	})
@@ -193,7 +190,6 @@ func TestSyncDownloadWithDeleteDestinationOnCaseInsensitiveFS(t *testing.T) {
 	scenarioHelper{}.generateLocalFilesFromList(a, dstDirName, fileList)
 
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
@@ -201,7 +197,7 @@ func TestSyncDownloadWithDeleteDestinationOnCaseInsensitiveFS(t *testing.T) {
 	raw.recursive = true
 	raw.deleteDestination = "true"
 
-	runSyncAndVerify(a, raw, func(err error) {
+	runSyncAndVerify(a, raw, mockedRPC.intercept, mockedRPC.delete, func(err error) {
 		// It should not have deleted them
 		seenFiles := make(map[string]bool)
 		filepath.Walk(dstDirName, func(path string, info fs.FileInfo, err error) error {

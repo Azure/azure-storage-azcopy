@@ -2,6 +2,8 @@ package e2etest
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
@@ -11,7 +13,6 @@ import (
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"strings"
 )
 
 func addWildCard(uri string, optList ...GetURIOptions) string {
@@ -69,7 +70,7 @@ func (acct *AzureAccountResourceManager) ApplySAS(URI string, loc common.Locatio
 		parts.SAS = p
 		parts.Scheme = common.Iff(opts.RemoteOpts.Scheme != "", opts.RemoteOpts.Scheme, "https")
 		return parts.String()
-	case common.ELocation.File():
+	case common.ELocation.File(), common.ELocation.FileNFS():
 		skc, err := fileservice.NewSharedKeyCredential(acct.InternalAccountName, acct.InternalAccountKey)
 		common.PanicIfErr(err)
 
@@ -122,6 +123,7 @@ func (acct *AzureAccountResourceManager) AvailableServices() []common.Location {
 		common.ELocation.Blob(),
 		common.ELocation.BlobFS(),
 		common.ELocation.File(),
+		common.ELocation.FileNFS(),
 	}
 }
 
@@ -129,7 +131,7 @@ func (acct *AzureAccountResourceManager) getServiceURL(a Asserter, service commo
 	switch service {
 	case common.ELocation.Blob():
 		return fmt.Sprintf("https://%s.blob.core.windows.net/", acct.InternalAccountName)
-	case common.ELocation.File():
+	case common.ELocation.File(), common.ELocation.FileNFS():
 		return fmt.Sprintf("https://%s.file.core.windows.net/", acct.InternalAccountName)
 	case common.ELocation.BlobFS():
 		return fmt.Sprintf("https://%s.dfs.core.windows.net/", acct.InternalAccountName)
@@ -153,7 +155,7 @@ func (acct *AzureAccountResourceManager) GetService(a Asserter, location common.
 			InternalAccount: acct,
 			InternalClient:  client,
 		}
-	case common.ELocation.File():
+	case common.ELocation.File(), common.ELocation.FileNFS():
 		sharedKey, err := fileservice.NewSharedKeyCredential(acct.InternalAccountName, acct.InternalAccountKey)
 		a.NoError("Create shared key", err)
 		client, err := fileservice.NewClientWithSharedKeyCredential(uri, sharedKey, &fileservice.ClientOptions{AllowTrailingDot: to.Ptr(true)})
@@ -162,6 +164,7 @@ func (acct *AzureAccountResourceManager) GetService(a Asserter, location common.
 		return &FileServiceResourceManager{
 			InternalAccount: acct,
 			InternalClient:  client,
+			Llocation:       location,
 		}
 	case common.ELocation.BlobFS():
 		sharedKey, err := blobfscommon.NewSharedKeyCredential(acct.InternalAccountName, acct.InternalAccountKey)

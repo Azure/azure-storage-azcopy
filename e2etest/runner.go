@@ -29,9 +29,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -48,7 +50,10 @@ func newTestRunner() TestRunner {
 var isLaunchedByDebugger = func() bool {
 	// gops executable must be in the path. See https://github.com/google/gops
 	gopsOut, err := exec.Command("gops", strconv.Itoa(os.Getppid())).Output()
-	if err == nil && strings.Contains(string(gopsOut), "\\dlv.exe") {
+
+	searchStr := common.Iff(runtime.GOOS == "windows", "\\dlv.exe", "/dlv")
+
+	if err == nil && strings.Contains(string(gopsOut), searchStr) {
 		// our parent process is (probably) the Delve debugger
 		return true
 	}
@@ -130,6 +135,7 @@ func (t *TestRunner) SetAllFlags(s *scenario) {
 	if o == eOperation.Copy() {
 		set("s2s-preserve-access-tier", p.s2sPreserveAccessTier, true)
 		set("preserve-posix-properties", p.preservePOSIXProperties, "")
+		set("posix-properties-style", p.posixPropertiesStyle.String(), common.StandardPosixPropertiesStyle.String())
 
 		switch p.symlinkHandling {
 		case common.ESymlinkHandlingType.Follow():
@@ -167,6 +173,7 @@ func (t *TestRunner) SetAllFlags(s *scenario) {
 	} else if o == eOperation.Sync() {
 		set("delete-destination", p.deleteDestination.String(), "False")
 		set("preserve-posix-properties", p.preservePOSIXProperties, false)
+		set("posix-properties-style", p.posixPropertiesStyle.String(), common.StandardPosixPropertiesStyle.String())
 		set("compare-hash", p.compareHash.String(), "None")
 		set("local-hash-storage-mode", p.hashStorageMode.String(), common.EHashStorageMode.Default().String())
 		set("hash-meta-dir", p.hashStorageDir, "")
@@ -441,7 +448,7 @@ func newCopyOrSyncCommandResult(rawOutput string) (CopyOrSyncCommandResult, bool
 		return CopyOrSyncCommandResult{}, false
 	}
 	finalLine := lines[len(lines)-2]
-	finalMsg := common.JsonOutputTemplate{}
+	finalMsg := cmd.JsonOutputTemplate{}
 	err := json.Unmarshal([]byte(finalLine), &finalMsg)
 	if err != nil {
 		return CopyOrSyncCommandResult{}, false
@@ -480,7 +487,7 @@ func newJobsShowCommandResult(rawOutput string) JobsShowCommandResult {
 	// parse out the final status
 	// -2 because the last line is empty
 	finalLine := lines[len(lines)-2]
-	finalMsg := common.JsonOutputTemplate{}
+	finalMsg := cmd.JsonOutputTemplate{}
 	err := json.Unmarshal([]byte(finalLine), &finalMsg)
 	if err != nil {
 		panic(err)

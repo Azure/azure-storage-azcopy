@@ -23,19 +23,21 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
-	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
-	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/stretchr/testify/assert"
 	"log"
 	"net/url"
 	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
+	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestRemoveSingleBlob(t *testing.T) {
@@ -52,14 +54,16 @@ func TestRemoveSingleBlob(t *testing.T) {
 
 		// set up interceptor
 		mockedRPC := interceptor{}
-		Rpc = mockedRPC.intercept
+		jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+			return mockedRPC.intercept(order)
+		}
 		mockedRPC.init()
 
 		// construct the raw input to simulate user input
 		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, blobList[0])
 		raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String())
 
-		runCopyAndVerify(a, raw, func(err error) {
+		runOldCopyAndVerify(a, raw, func(err error) {
 			a.Nil(err)
 
 			// note that when we are targeting single blobs, the relative path is empty ("") since the root path already points to the blob
@@ -81,7 +85,9 @@ func TestRemoveBlobsUnderContainer(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -90,7 +96,7 @@ func TestRemoveBlobsUnderContainer(t *testing.T) {
 	raw.recursive = true
 	raw.includeDirectoryStubs = false // The test target is a DFS account, which coincidentally created our directory stubs. Thus, we mustn't include them, since this is a test of blob.
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -104,7 +110,7 @@ func TestRemoveBlobsUnderContainer(t *testing.T) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
@@ -130,7 +136,9 @@ func TestRemoveBlobsUnderVirtualDir(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -138,7 +146,7 @@ func TestRemoveBlobsUnderVirtualDir(t *testing.T) {
 	raw := getDefaultRemoveRawInput(rawVirtualDirectoryURLWithSAS.String())
 	raw.recursive = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -153,7 +161,7 @@ func TestRemoveBlobsUnderVirtualDir(t *testing.T) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
@@ -183,7 +191,9 @@ func TestRemoveWithIncludeFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -192,7 +202,7 @@ func TestRemoveWithIncludeFlag(t *testing.T) {
 	raw.include = includeString
 	raw.recursive = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 		validateRemoveTransfersAreScheduled(a, true, blobsToInclude, mockedRPC)
 	})
@@ -217,7 +227,9 @@ func TestRemoveWithExcludeFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -227,7 +239,7 @@ func TestRemoveWithExcludeFlag(t *testing.T) {
 	raw.recursive = true
 	raw.includeDirectoryStubs = false // The test target is a DFS account, which coincidentally created our directory stubs. Thus, we mustn't include them, since this is a test of blob.
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 		validateRemoveTransfersAreScheduled(a, true, blobList, mockedRPC)
 	})
@@ -258,7 +270,9 @@ func TestRemoveWithIncludeAndExcludeFlag(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -268,7 +282,7 @@ func TestRemoveWithIncludeAndExcludeFlag(t *testing.T) {
 	raw.exclude = excludeString
 	raw.recursive = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 		validateRemoveTransfersAreScheduled(a, true, blobsToInclude, mockedRPC)
 	})
@@ -292,7 +306,9 @@ func TestRemoveListOfBlobsAndVirtualDirs(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -308,7 +324,7 @@ func TestRemoveListOfBlobsAndVirtualDirs(t *testing.T) {
 	listOfFiles = append(listOfFiles, "DONTKNOW")
 	raw.listOfFilesToCopy = scenarioHelper{}.generateListOfFiles(a, listOfFiles)
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -322,7 +338,7 @@ func TestRemoveListOfBlobsAndVirtualDirs(t *testing.T) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
@@ -365,7 +381,9 @@ func TestRemoveListOfBlobsWithIncludeAndExclude(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -387,7 +405,7 @@ func TestRemoveListOfBlobsWithIncludeAndExclude(t *testing.T) {
 	listOfFiles = append(listOfFiles, blobsToExclude...)
 	raw.listOfFilesToCopy = scenarioHelper{}.generateListOfFiles(a, listOfFiles)
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -413,7 +431,9 @@ func TestRemoveBlobsWithDirectoryStubs(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -421,7 +441,7 @@ func TestRemoveBlobsWithDirectoryStubs(t *testing.T) {
 	raw := getDefaultRemoveRawInput(rawVirtualDirectoryURLWithSAS.String())
 	raw.recursive = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -437,7 +457,7 @@ func TestRemoveBlobsWithDirectoryStubs(t *testing.T) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 
 		// there should be exactly 20 top files, no directory stubs should be included
@@ -470,7 +490,9 @@ func TestRemoveBlobsWithDirectoryStubsWithListOfFiles(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -482,7 +504,7 @@ func TestRemoveBlobsWithDirectoryStubsWithListOfFiles(t *testing.T) {
 	listOfFiles := []string{vdirName, vdirName2}
 	raw.listOfFilesToCopy = scenarioHelper{}.generateListOfFiles(a, listOfFiles)
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -496,7 +518,7 @@ func TestRemoveBlobsWithDirectoryStubsWithListOfFiles(t *testing.T) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.NotNil(err)
 		a.Zero(len(mockedRPC.transfers))
 	})
@@ -515,9 +537,11 @@ func TestDryrunRemoveSingleBlob(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) // text format
+	mockedLcm.SetOutputFormat(EOutputFormat.Text()) // text format
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
@@ -525,7 +549,7 @@ func TestDryrunRemoveSingleBlob(t *testing.T) {
 	raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String())
 	raw.dryrun = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 		// validate that none where transferred
 		a.Zero(len(mockedRPC.transfers))
@@ -551,9 +575,11 @@ func TestDryrunRemoveBlobsUnderContainer(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) // text format
+	mockedLcm.SetOutputFormat(EOutputFormat.Text()) // text format
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
@@ -562,7 +588,7 @@ func TestDryrunRemoveBlobsUnderContainer(t *testing.T) {
 	raw.dryrun = true
 	raw.recursive = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 		// validate that none where transferred
 		a.Zero(len(mockedRPC.transfers))
@@ -590,9 +616,11 @@ func TestDryrunRemoveBlobsUnderContainerJson(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Json()) // json format
+	mockedLcm.SetOutputFormat(EOutputFormat.Json()) // json format
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
@@ -600,7 +628,7 @@ func TestDryrunRemoveBlobsUnderContainerJson(t *testing.T) {
 	raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String())
 	raw.dryrun = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 		// validate that none where transferred
 		a.Zero(len(mockedRPC.transfers))
@@ -632,7 +660,9 @@ func TestRemoveSingleBlobWithFromTo(t *testing.T) {
 
 		// set up interceptor
 		mockedRPC := interceptor{}
-		Rpc = mockedRPC.intercept
+		jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+			return mockedRPC.intercept(order)
+		}
 		mockedRPC.init()
 
 		// construct the raw input to simulate user input
@@ -640,7 +670,7 @@ func TestRemoveSingleBlobWithFromTo(t *testing.T) {
 		raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String())
 		raw.fromTo = "BlobTrash"
 
-		runCopyAndVerify(a, raw, func(err error) {
+		runOldCopyAndVerify(a, raw, func(err error) {
 			a.Nil(err)
 
 			// note that when we are targeting single blobs, the relative path is empty ("") since the root path already points to the blob
@@ -662,7 +692,9 @@ func TestRemoveBlobsUnderContainerWithFromTo(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -672,7 +704,7 @@ func TestRemoveBlobsUnderContainerWithFromTo(t *testing.T) {
 	raw.recursive = true
 	raw.includeDirectoryStubs = false // The test target is a DFS account, which coincidentally created our directory stubs. Thus, we mustn't include them, since this is a test of blob.
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -686,7 +718,7 @@ func TestRemoveBlobsUnderContainerWithFromTo(t *testing.T) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
@@ -712,7 +744,9 @@ func TestRemoveBlobsUnderVirtualDirWithFromTo(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -721,7 +755,7 @@ func TestRemoveBlobsUnderVirtualDirWithFromTo(t *testing.T) {
 	raw.fromTo = "BlobTrash"
 	raw.recursive = true
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -736,7 +770,7 @@ func TestRemoveBlobsUnderVirtualDirWithFromTo(t *testing.T) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
@@ -772,7 +806,9 @@ func TestPermDeleteSnapshotsVersionsUnderSingleBlob(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -780,7 +816,7 @@ func TestPermDeleteSnapshotsVersionsUnderSingleBlob(t *testing.T) {
 	raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String())
 	raw.recursive = true
 	raw.permanentDeleteOption = "snapshotsandversions"
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
@@ -804,7 +840,9 @@ func TestPermDeleteSnapshotsVersionsUnderContainer(t *testing.T) {
 
 	// set up interceptor
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
@@ -812,7 +850,7 @@ func TestPermDeleteSnapshotsVersionsUnderContainer(t *testing.T) {
 	raw := getDefaultRemoveRawInput(rawContainerURLWithSAS.String())
 	raw.recursive = true
 	raw.permanentDeleteOption = "snapshotsandversions"
-	runCopyAndVerify(a, raw, func(err error) {
+	runOldCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled

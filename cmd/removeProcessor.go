@@ -21,29 +21,31 @@
 package cmd
 
 import (
+	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // extract the right info from cooked arguments and instantiate a generic copy transfer processor from it
-func newRemoveTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPart int, fpo common.FolderPropertyOption, targetServiceClient *common.ServiceClient) *copyTransferProcessor {
+func newRemoveTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPart int, fpo common.FolderPropertyOption, targetServiceClient *common.ServiceClient) *azcopy.CopyTransferProcessor {
 	copyJobTemplate := &common.CopyJobPartOrderRequest{
-		JobID:               cca.jobID,
-		CommandString:       cca.commandString,
-		FromTo:              cca.FromTo,
-		Fpo:                 fpo,
-		SymlinkHandlingType: common.ESymlinkHandlingType.Preserve(),       // We want to delete symlinks
-		SourceRoot:          cca.Source.CloneWithConsolidatedSeparators(), // TODO: why do we consolidate here, but not in "copy"? Is it needed in both places or neither? Or is copy just covering the same need differently?
-		CredentialInfo:      cca.credentialInfo,
-		ForceIfReadOnly:     cca.ForceIfReadOnly,
+		JobID:                 cca.jobID,
+		CommandString:         cca.commandString,
+		FromTo:                cca.FromTo,
+		Fpo:                   fpo,
+		SymlinkHandlingType:   common.ESymlinkHandlingType.Preserve(),       // We want to delete symlinks
+		SourceRoot:            cca.Source.CloneWithConsolidatedSeparators(), // TODO: why do we consolidate here, but not in "copy"? Is it needed in both places or neither? Or is copy just covering the same need differently?
+		CredentialInfo:        cca.credentialInfo,
+		ForceIfReadOnly:       cca.ForceIfReadOnly,
 		BlobFSRecursiveDelete: cca.Recursive,
-		SrcServiceClient:    targetServiceClient,
+		SrcServiceClient:      targetServiceClient,
 
 		// flags
-		LogLevel:       azcopyLogVerbosity,
+		LogLevel:       LogLevel,
 		BlobAttributes: common.BlobTransferAttributes{DeleteSnapshotsOption: cca.deleteSnapshotsOption, PermanentDeleteOption: cca.permanentDeleteOption},
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.trailingDot,
 		},
+		JobErrorHandler: glcm,
 	}
 
 	reportFirstPart := func(jobStarted bool) {
@@ -55,6 +57,6 @@ func newRemoveTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPart in
 
 	// note that the source and destination, along with the template are given to the generic processor's constructor
 	// this means that given an object with a relative path, this processor already knows how to schedule the right kind of transfers
-	return newCopyTransferProcessor(copyJobTemplate, numOfTransfersPerPart, cca.Source, cca.Destination,
-		reportFirstPart, reportFinalPart, false, cca.dryrunMode)
+	return azcopy.NewCopyTransferProcessor(false, copyJobTemplate, numOfTransfersPerPart, cca.Source, cca.Destination,
+		reportFirstPart, reportFinalPart, false, cca.dryrunMode, dryrunNewCopyJobPartOrder)
 }
