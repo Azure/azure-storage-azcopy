@@ -1791,10 +1791,26 @@ func (s *FilesNFSTestSuite) Scenario_NFSToNFS_OverwriteSymlinkToFile(svm *Scenar
 	})
 }
 
-// Scenario_NFStoNFS_DestinationHardlinkBroken verifies that there is a source with an independent file B
+// Scenario_NFStoNFS_DestinationHardlinkGroupBroken verifies that when there is a source with an independent file B
 // and destination with hardlink group A+B, we unlink the hardlink group on the destination. So, the destination
 // will have a similar structure to the source with B as an independent file.
-func (s *FilesNFSTestSuite) Scenario_NFStoNFS_DestinationHardlinkBroken(svm *ScenarioVariationManager) {
+
+/*
+Source:
+
+	B.txt (regular file, 10 bytes, "hello", inode=123)
+
+Destination (before copy):
+
+	A.txt (anchor of 2-member hardlink, 10 bytes, "hello", inode=456)
+	B.txt (hardlink -> A.txt, inode=456)
+
+Destination (after copy with --hardlinks=preserve):
+
+	A.txt (regular file, 10 bytes, "hello", inode=456)
+	B.txt (regular file, 10 bytes, "hello", indoe=123)
+*/
+func (s *FilesNFSTestSuite) Scenario_NFStoNFS_DestinationHardlinkGroupBroken(svm *ScenarioVariationManager) {
 
 	if runtime.GOOS != "linux" {
 		svm.InvalidateScenario()
@@ -1809,14 +1825,21 @@ func (s *FilesNFSTestSuite) Scenario_NFStoNFS_DestinationHardlinkBroken(svm *Sce
 
 	// Destination: A+B hardlinked.
 	dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder()).
-		Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Folder()})
+		Create(svm, NewRandomObjectContentContainer(10),
+			ObjectProperties{
+				EntityType: common.EEntityType.Folder()})
+
 	dstContainer.GetObject(svm, aName, common.EEntityType.File()).
-		Create(svm, NewStringObjectContentContainer("OLD shared content"), ObjectProperties{})
+		Create(svm,
+			NewStringObjectContentContainer("OLD shared content"),
+			ObjectProperties{})
+
 	dstContainer.GetObject(svm, bName, common.EEntityType.Hardlink()).
-		Create(svm, nil, ObjectProperties{
-			EntityType:         common.EEntityType.Hardlink(),
-			HardLinkedFileName: aName,
-		})
+		Create(svm, NewRandomObjectContentContainer(10),
+			ObjectProperties{
+				EntityType:         common.EEntityType.Hardlink(),
+				HardLinkedFileName: aName,
+			})
 
 	// Validate the structure pre-run
 	preALinks, preAID := nfsLinkInfo(svm, dstContainer, aName)
@@ -1827,13 +1850,17 @@ func (s *FilesNFSTestSuite) Scenario_NFStoNFS_DestinationHardlinkBroken(svm *Sce
 
 	// Source: independent B in another NFS share.
 	srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder()).
-		Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Folder()})
+		Create(svm, NewRandomObjectContentContainer(10),
+			ObjectProperties{EntityType: common.EEntityType.Folder()})
+
 	srcContainer.GetObject(svm, bName, common.EEntityType.File()).
-		Create(svm, NewStringObjectContentContainer("NEW independent B"), ObjectProperties{})
+		Create(svm,
+			NewStringObjectContentContainer("NEW independent B"), ObjectProperties{})
+
 	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 	dstDirObj := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
 
-	_ = runHardlinkCopyForFromTo(svm, srcDirObj, dstDirObj, fromTo, common.DefaultHardlinkHandlingType)
+	_ = runHardlinkCopyForFromTo(svm, srcDirObj, dstDirObj, fromTo, common.PreserveHardlinkHandlingType)
 
 	if svm.Dryrun() {
 		return
