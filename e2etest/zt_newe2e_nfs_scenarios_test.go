@@ -1,6 +1,7 @@
 package e2etest
 
 import (
+	"fmt"
 	"os/user"
 	"runtime"
 	"strconv"
@@ -54,6 +55,28 @@ func getPropertiesAndPermissions(svm *ScenarioVariationManager, preserveProperti
 		}
 	}
 	return folderProperties, fileProperties, fileOrFolderPermissions
+}
+
+// nfslinkInfo returns LinkCount and FIleID for file from the service. It uses the go SDK calls since these two props
+// are not exposed by ObjectProperties in the test framework today
+func nfsLinkInfo(svm *ScenarioVariationManager, c ContainerResourceManager, objName string) (linkCount int64, fileID string) {
+	objResourceMan := c.GetObject(svm, objName, common.EEntityType.Hardlink()).(*FileObjectResourceManager)
+
+	propsResp, err := objResourceMan.Share.InternalClient.
+		NewRootDirectoryClient().
+		NewFileClient(objResourceMan.ObjectName()).
+		GetProperties(ctx, nil)
+	svm.Assert(fmt.Sprintf("GetProperties for file %s is nil", objName), NoError{}, err)
+
+	if propsResp.LinkCount != nil {
+		linkCount = *propsResp.LinkCount
+	}
+
+	if propsResp.ID != nil {
+		fileID = *propsResp.ID
+	}
+
+	return linkCount, fileID
 }
 
 // bestEffortAsserter is an Asserter that logs errors as warnings instead of
@@ -1766,4 +1789,61 @@ func (s *FilesNFSTestSuite) Scenario_NFSToNFS_OverwriteSymlinkToFile(svm *Scenar
 		validateObjectContent: true,
 		fromTo:                common.EFromTo.FileNFSFileNFS(),
 	})
+}
+
+// Scenario_NFStoNFS_DestinationHardlinkBroken verifies that there is a source with an independent file B
+// and destination with hardlink group A+B, we unlink the hardlink group on the destination. So, the destination
+// will have a similar structure to the source with B as an independent file.
+func (s *FilesNFSTestSuite) Scenario_NFStoNFS_DestinationHardlinkBroken(svm *ScenarioVariationManager) {
+
+	if runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+	fromTo := common.EFromTo.FileNFSFileNFS()
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
+
+	aName := rootDir + "/A.txt"
+	bName := rootDir + "/B.txt"
+
+	// Destination: A+B hardlinked.
+	dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder()).
+		Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Folder()})
+	dstContainer.GetObject(svm, aName, common.EEntityType.File()).
+		Create(svm, NewStringObjectContentContainer("OLD shared content"), ObjectProperties{})
+	dstContainer.GetObject(svm, bName, common.EEntityType.Hardlink()).
+		Create(svm, nil, ObjectProperties{
+			EntityType:         common.EEntityType.Hardlink(),
+			HardLinkedFileName: aName,
+		})
+
+	// Validate the structure pre-run
+	preALinks, preAID := nfsLinkInfo(svm, dstContainer, aName)
+	preBLinks, preBID := nfsLinkInfo(svm, dstContainer, bName)
+	svm.Assert("prerun: A LinkCount == 2", Equal{}, preALinks, int64(2))
+	svm.Assert("prerun: B LinkCount == 2", Equal{}, preBLinks, int64(2))
+	svm.Assert("prerun: A and B share FileID", Equal{}, preAID, preBID)
+
+	// Source: independent B in another NFS share.
+	srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder()).
+		Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Folder()})
+	srcContainer.GetObject(svm, bName, common.EEntityType.File()).
+		Create(svm, NewStringObjectContentContainer("NEW independent B"), ObjectProperties{})
+	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+	dstDirObj := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+
+	_ = runHardlinkCopyForFromTo(svm, srcDirObj, dstDirObj, fromTo, common.DefaultHardlinkHandlingType)
+
+	if svm.Dryrun() {
+		return
+	}
+
+	// Post-run validations
+	postALinks, postAID := nfsLinkInfo(svm, dstContainer, aName)
+	postBLinks, postBID := nfsLinkInfo(svm, dstContainer, bName)
+	svm.Assert("post: A LinkCount must drop to 1", Equal{}, postALinks, int64(1))
+	svm.Assert("post: B LinkCount must be 1", Equal{}, postBLinks, int64(1))
+	svm.Assert("post: A FileID unchanged", Equal{}, postAID, preAID)
+	svm.Assert("post: B FileID must be new", Not{Equal{}}, postBID, preBID)
 }
