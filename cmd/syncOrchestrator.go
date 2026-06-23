@@ -557,8 +557,8 @@ func validate(cca *cookedSyncCmdArgs, orchestratorOptions *SyncOrchestratorOptio
 	case common.EFromTo.LocalFile(), common.EFromTo.LocalFileSMB(), common.EFromTo.LocalFileNFS():
 		// sync orchestrator is supported for these types
 	case common.EFromTo.S3Blob():
-		// sync orchestrator is supported for these types	
-	case common.EFromTo.BlobBlob(), common.EFromTo.BlobBlobFS(), common.EFromTo.BlobFSBlob(),common.EFromTo.BlobFSBlobFS():
+		// sync orchestrator is supported for these types
+	case common.EFromTo.BlobBlob(), common.EFromTo.BlobBlobFS(), common.EFromTo.BlobFSBlob(), common.EFromTo.BlobFSBlobFS():
 		// sync orchestrator is supported for these types
 	default:
 		return fmt.Errorf(
@@ -568,7 +568,6 @@ func validate(cca *cookedSyncCmdArgs, orchestratorOptions *SyncOrchestratorOptio
 				"\t- Local->File\n" +
 				"\t- Local->FileSMB\n" +
 				"\t- Local->FileNFS\n" +
-				"\t- S3->Blob\n" +
 				"\t- S3->Blob\n" +
 				"\t- Blob->Blob\n" +
 				"\t- Blob->BlobFS\n" +

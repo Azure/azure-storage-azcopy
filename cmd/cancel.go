@@ -23,6 +23,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+
 	"github.com/Azure/azure-storage-azcopy/v10/azcopy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
@@ -63,7 +64,7 @@ func (cca cookedCancelCmdArgs) process() error {
 			if err != nil {
 				return err
 			}
-			PrintJobProgressSummary(common.ListJobSummaryResponse(resp))
+			azcopy.PrintJobProgressSummary(common.ListJobSummaryResponse(resp), OutputFormat, glcm)
 			return nil
 		}
 		return errors.New(cancelJobResponse.ErrorMsg)
