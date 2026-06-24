@@ -2007,11 +2007,10 @@ func (s *FilesNFSTestSuite) Scenario_NFStoNFS_DestinationHardlinkGroupSplit(svm 
 }
 
 // Scenario_NFStoNFS_DestinationHardlinkAnchorSplitOut verifies that when the
-// source has one independent file A and a separate hardlink group B+C+D, but
-// the destination has a single 4-way hardlink group A+B+C+D, the destination
-// is correctly reshaped so that A is independent and B+C+D remain linked
-// together — matching the source.
-//
+// source has file A (alone) and a hardlink group B+C+D, but
+// dest has hardlink group A+B+C+D, the dest
+// is correctly reshaped to match the source structure.
+// I.e A is independent and B+C+D linked
 /*
 Source:
 
@@ -2022,17 +2021,17 @@ Source:
 
 Destination (before copy):
 
-	A.txt (anchor of 4-way group, "OLD ", inode=999, nlink=4)
+	A.txt (anchor of 4-way group, inode=999, nlink=4)
 	B.txt (hardlink -> A.txt, inode=999)
 	C.txt (hardlink -> A.txt, inode=999)
 	D.txt (hardlink -> A.txt, inode=999)
 
 Destination (after copy with --hardlinks=preserve):
 
-	A.txt (independent regular file, data2, new inode=N1, nlink=1)
-	B.txt (anchor of B+C+D, data1, new inode=N2, nlink=3)
-	C.txt (hardlink -> B.txt, inode=N2)
-	D.txt (hardlink -> B.txt, inode=N2)
+	A.txt (independent regular file, data2,  nlink=1)
+	B.txt (anchor of B+C+D, data1, nlink=3)
+	C.txt (hardlink -> B.txt)
+	D.txt (hardlink -> B.txt)
 */
 func (s *FilesNFSTestSuite) Scenario_NFStoNFS_DestinationHardlinkAnchorSplitOut(svm *ScenarioVariationManager) {
 
@@ -2049,7 +2048,7 @@ func (s *FilesNFSTestSuite) Scenario_NFStoNFS_DestinationHardlinkAnchorSplitOut(
 	cName := rootDir + "/C.txt"
 	dName := rootDir + "/D.txt"
 
-	// Destination: (A anchor -- B,C,D linked to A).
+	// Destination: (B,C,D linked to A).
 	dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder()).
 		Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Folder()})
 
@@ -2080,7 +2079,7 @@ func (s *FilesNFSTestSuite) Scenario_NFStoNFS_DestinationHardlinkAnchorSplitOut(
 	svm.Assert("prerun: A and C share FileID", Equal{}, preAID, preCID)
 	svm.Assert("prerun: A and D share FileID", Equal{}, preAID, preDID)
 
-	// Source: A alone + (C,D linked to B).
+	// Source: A alone + (B+C+D, B anchor)
 	srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder()).
 		Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Folder()})
 
@@ -2112,21 +2111,20 @@ func (s *FilesNFSTestSuite) Scenario_NFStoNFS_DestinationHardlinkAnchorSplitOut(
 		return
 	}
 
-	// Post-run validations.
+	// Post-run validations
 	postALinks, postAID := nfsLinkInfo(svm, dstContainer, aName)
 	postBLinks, postBID := nfsLinkInfo(svm, dstContainer, bName)
 	postCLinks, postCID := nfsLinkInfo(svm, dstContainer, cName)
 	postDLinks, postDID := nfsLinkInfo(svm, dstContainer, dName)
 
-	// LinkCount: A is now independent; B,C,D form a 3-way group.
 	svm.Assert("post: A LinkCount must drop to 1", Equal{}, postALinks, int64(1))
 	svm.Assert("post: B LinkCount must drop to 3", Equal{}, postBLinks, int64(3))
 	svm.Assert("post: C LinkCount must drop to 3", Equal{}, postCLinks, int64(3))
 	svm.Assert("post: D LinkCount must drop to 3", Equal{}, postDLinks, int64(3))
 
-	// Intra-group: B,C,D all share one inode.
+	// B,C,D all share one inode
 	svm.Assert("post: B and C must share FileID", Equal{}, postBID, postCID)
 	svm.Assert("post: B and D must share FileID", Equal{}, postBID, postDID)
-
+	// A,B no longer share an inode
 	svm.Assert("post: A and B must NOT share FileID", Not{Equal{}}, postAID, postBID)
 }
