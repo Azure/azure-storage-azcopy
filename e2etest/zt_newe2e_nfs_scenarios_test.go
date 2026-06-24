@@ -1828,7 +1828,7 @@ func (s *FilesNFSTestSuite) Scenario_NFStoNFS_DestinationHardlinkGroupBroken(svm
 
 	// Destination: A+B hardlinked.
 	dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder()).
-		Create(svm, NewRandomObjectContentContainer(10),
+		Create(svm, nil,
 			ObjectProperties{
 				EntityType: common.EEntityType.Folder()})
 
@@ -1853,7 +1853,7 @@ func (s *FilesNFSTestSuite) Scenario_NFStoNFS_DestinationHardlinkGroupBroken(svm
 
 	// Source: independent B in another NFS share.
 	srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder()).
-		Create(svm, NewRandomObjectContentContainer(10),
+		Create(svm, nil,
 			ObjectProperties{EntityType: common.EEntityType.Folder()})
 
 	srcContainer.GetObject(svm, bName, common.EEntityType.File()).
