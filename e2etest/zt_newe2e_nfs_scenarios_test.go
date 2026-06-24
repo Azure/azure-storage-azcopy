@@ -1875,7 +1875,10 @@ func (s *FilesNFSTestSuite) Scenario_LocalToNFS_RetargetHardlinkGroup_Copy(svm *
 				},
 			},
 			cName: ResourceDefinitionObject{
-				ObjectProperties: ObjectProperties{},
+				Body: dstBody,
+				ObjectProperties: ObjectProperties{
+					EntityType: common.EEntityType.File(),
+				},
 			},
 		},
 	}, ValidateResourceOptions{

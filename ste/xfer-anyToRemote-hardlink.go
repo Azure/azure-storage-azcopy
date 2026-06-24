@@ -124,7 +124,7 @@ func anyToRemote_hardlink(jptm IJobPartTransferMgr, info *TransferInfo, pacer pa
 				jptm.LogAtLevelForCurrentTransfer(common.LogWarning,
 					fmt.Sprintf("Could not delete the destination hardlink %s before creation: %s",
 						jptm.Info().Destination, delErr.Error()))
-				// Don't fail the transfer, let retry logic in DoWithCreateSymlinkOnAzureFilesNFS() take a shot
+				// Don't fail the transfer, let retry logic in DoWithCreateHardlinkOnAzureFilesNFS() take a shot
 			}
 		}
 	}

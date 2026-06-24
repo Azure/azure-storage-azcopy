@@ -130,7 +130,6 @@ func anyToRemote_symlink(jptm IJobPartTransferMgr, info *TransferInfo, pacer pac
 			}
 		}
 	}
-	
 	// write the symlink
 	err = s.SendSymlink(path)
 	if err != nil {
