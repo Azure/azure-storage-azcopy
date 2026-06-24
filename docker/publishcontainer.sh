@@ -80,7 +80,7 @@ for i in $(seq 1 $MAX_RETRIES); do
   result=$(az graph query -q "$QUERY" -o tsv)
 
   if [[ -n "$result" ]]; then
-    echo "✅ Scan results available"
+    echo "Scan results available"
     echo "$result"
     break
   fi
@@ -89,16 +89,16 @@ for i in $(seq 1 $MAX_RETRIES); do
   sleep $SLEEP
 done
 
-# ✅ If still empty after retries → treat as failure
+# If still empty after retries → treat as failure
 if [[ -z "$result" ]]; then
-  echo "❌ Scan did not complete in time"
+  echo "Scan did not complete in time"
   exit 1
 fi
 
-# ✅ Fail on bad severity
+# Fail on bad severity
 if echo "$result" | grep -E "Critical|High"; then
-  echo "❌ Vulnerabilities found"
+  echo "Vulnerabilities found"
   exit 1
 fi
 
-echo "✅ Scan passed"
+echo "Scan passed"
