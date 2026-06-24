@@ -190,21 +190,22 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		u.headersToApply.ContentType = state.GetInferredContentType(u.jptm)
 	}
 
-	// In the case where the destination is hard linked group and source is independent file. We need to unlink the
-	// file before recreating it on the destination.
+	// If the destination is a regular NFS file with LinkCount > 1 (i.e. part of a hardlink group), delete it before Create
+	// so we don't preserve the existing inode/hardlink relationships when overwriting this path.
 	if u.jptm.FromTo().IsNFS() {
 		if props, err := u.getFileClient().GetProperties(u.ctx, nil); err == nil {
 			isNFSFileRegular := props.NFSFileType != nil && *props.NFSFileType == file.NFSFileTypeRegular
 			linkCount := common.IffNotNil(props.LinkCount, int64(0))
 			if isNFSFileRegular && linkCount > 1 {
 				jptm.Log(common.LogInfo, fmt.Sprintf(
-					"Destination %s is part of a hardlink group (linkcount=%d). \n Deleting before creation so "+
-						"hardlink group is broken to match the source.", u.getFileClient().URL(), linkCount))
+					"Destination %s is part of a hardlink group (linkCount=%d). Deleting before creation so the hardlink group is broken to match the source.",
+					u.getFileClient().URL(), linkCount))
 				if _, delErr := u.getFileClient().Delete(u.ctx, nil); delErr != nil {
 					// We don't fail outright on Delete errors here.
 					// Any errors would be surfaced and handled in Create
-					jptm.Log(common.LogWarning, fmt.Sprintf("The deletion on the hardlink destionation"+
-						" before creation failed %s", delErr.Error()))
+					jptm.Log(common.LogWarning, fmt.Sprintf(
+						"Deleting destination %s to break hardlink group before creation failed: %v",
+						u.getFileClient().URL(), delErr))
 				}
 			}
 		}
