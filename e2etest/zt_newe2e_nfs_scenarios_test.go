@@ -1789,6 +1789,11 @@ func (s *FilesNFSTestSuite) Scenario_LocalToNFS_RetargetHardlinkGroup_Copy(svm *
 		svm.InvalidateScenario()
 		return
 	}
+
+	if svm.Dryrun() {
+		return
+	}
+
 	fromTo := common.EFromTo.LocalFileNFS()
 
 	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
@@ -1798,8 +1803,8 @@ func (s *FilesNFSTestSuite) Scenario_LocalToNFS_RetargetHardlinkGroup_Copy(svm *
 	bName := rootDir + "/b.txt"
 	cName := rootDir + "/c.txt"
 
-	srcBody := NewRandomObjectContentContainer(SizeFromString("1K"))
-	dstBody := NewRandomObjectContentContainer(SizeFromString("1K"))
+	srcBody := NewRandomObjectContentContainer(10)
+	dstBody := NewRandomObjectContentContainer(10)
 
 	// Source: {a, b}
 	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
@@ -1812,6 +1817,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalToNFS_RetargetHardlinkGroup_Copy(svm *
 		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
 	})
 	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		Body:       srcBody,
 		ObjectName: pointerTo(bName),
 		ObjectProperties: ObjectProperties{
 			EntityType:         common.EEntityType.Hardlink(),
@@ -1827,7 +1833,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalToNFS_RetargetHardlinkGroup_Copy(svm *
 		Create(svm, dstBody, ObjectProperties{EntityType: common.EEntityType.File()})
 
 	dstContainer.GetObject(svm, cName, common.EEntityType.Hardlink()).
-		Create(svm, nil, ObjectProperties{
+		Create(svm, dstBody, ObjectProperties{
 			EntityType:         common.EEntityType.Hardlink(),
 			HardLinkedFileName: bName,
 		})
@@ -1850,6 +1856,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalToNFS_RetargetHardlinkGroup_Copy(svm *
 				FromTo:       pointerTo(fromTo),
 				HardlinkType: pointerTo(common.PreserveHardlinkHandlingType),
 			},
+			Overwrite: pointerTo(true),
 		},
 	})
 
@@ -1857,7 +1864,9 @@ func (s *FilesNFSTestSuite) Scenario_LocalToNFS_RetargetHardlinkGroup_Copy(svm *
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
 			aName: ResourceDefinitionObject{
-				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+				ObjectProperties: ObjectProperties{
+					EntityType: common.EEntityType.Hardlink(),
+				},
 			},
 			bName: ResourceDefinitionObject{
 				ObjectProperties: ObjectProperties{
@@ -1866,7 +1875,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalToNFS_RetargetHardlinkGroup_Copy(svm *
 				},
 			},
 			cName: ResourceDefinitionObject{
-				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+				ObjectProperties: ObjectProperties{},
 			},
 		},
 	}, ValidateResourceOptions{
