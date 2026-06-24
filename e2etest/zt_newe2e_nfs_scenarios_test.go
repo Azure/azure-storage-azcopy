@@ -1856,7 +1856,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalToNFS_RetargetHardlinkGroup_Copy(svm *
 				FromTo:       pointerTo(fromTo),
 				HardlinkType: pointerTo(common.PreserveHardlinkHandlingType),
 			},
-			Overwrite: pointerTo(true),
+			AsSubdir: pointerTo(false),
 		},
 	})
 
