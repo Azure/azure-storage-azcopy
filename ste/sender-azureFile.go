@@ -190,8 +190,8 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		u.headersToApply.ContentType = state.GetInferredContentType(u.jptm)
 	}
 
-	// In the case where the destination is hard linked group and source is independent file. We need to unlink the
-	// file before recreating it on the destination.
+	// If the destination is a regular NFS file with LinkCount > 1 (i.e. part of a hardlink group), delete it before Create
+	// so we don't preserve the existing inode/hardlink relationships when overwriting this path.
 	if u.jptm.FromTo().IsNFS() {
 		if props, err := u.getFileClient().GetProperties(u.ctx, nil); err == nil {
 			isNFSFileRegular := props.NFSFileType != nil && *props.NFSFileType == file.NFSFileTypeRegular
