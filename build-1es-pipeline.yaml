@@ -912,25 +912,25 @@ extends:
 
                   - task: 1ES.BuildContainerImage@1
                     inputs:
-                      image: azcopycontainers.azurecr.io/azure-azcopy-ubuntu-x86_64.$(azcopy_docker_version):latest
+                      image: azcopycontainers.azurecr.io/public/azcopy/azcopy:$(azcopy_docker_version)-ubuntu-x86_64
                       path: '$(System.DefaultWorkingDirectory)'
                       dockerfile: docker/Dockerfile
 
                   - task: 1ES.PushContainerImage@1
                     inputs:
-                      image: azcopycontainers.azurecr.io/azure-azcopy-ubuntu-x86_64.$(azcopy_docker_version):latest
-                      remoteImage: azcopycontainers.azurecr.io/azure-azcopy-ubuntu-x86_64.$(azcopy_docker_version):latest
+                      image: azcopycontainers.azurecr.io/public/azcopy/azcopy:$(azcopy_docker_version)-ubuntu-x86_64
+                      remoteImage: azcopycontainers.azurecr.io/public/azcopy/azcopy:$(azcopy_docker_version)-ubuntu-x86_64
 
                   - task: 1ES.BuildContainerImage@1
                     inputs:
-                      image: azcopycontainers.azurecr.io/azure-azcopy-mariner-x86_64.$(azcopy_docker_version):latest
+                      image: azcopycontainers.azurecr.io/public/azcopy/azcopy:$(azcopy_docker_version)-mariner-x86_64
                       path: '$(System.DefaultWorkingDirectory)'
                       dockerfile: docker/DockerfileMariner
 
                   - task: 1ES.PushContainerImage@1
                     inputs:
-                      image: azcopycontainers.azurecr.io/azure-azcopy-mariner-x86_64.$(azcopy_docker_version):latest
-                      remoteImage: azcopycontainers.azurecr.io/azure-azcopy-mariner-x86_64.$(azcopy_docker_version):latest
+                      image: azcopycontainers.azurecr.io/public/azcopy/azcopy:$(azcopy_docker_version)-mariner-x86_64
+                      remoteImage: azcopycontainers.azurecr.io/public/azcopy/azcopy:$(azcopy_docker_version)-mariner-x86_64
 
               - job: LinuxARM64
                 pool:
@@ -965,25 +965,25 @@ extends:
 
                   - task: 1ES.BuildContainerImage@1
                     inputs:
-                      image: azcopycontainers.azurecr.io/azure-azcopy-ubuntu-arm64.$(azcopy_docker_version):latest
+                      image: azcopycontainers.azurecr.io/public/azcopy/azcopy:$(azcopy_docker_version)-ubuntu-arm64
                       path: '$(System.DefaultWorkingDirectory)'
                       dockerfile: docker/Dockerfile
 
                   - task: 1ES.PushContainerImage@1
                     inputs:
-                      image: azcopycontainers.azurecr.io/azure-azcopy-ubuntu-arm64.$(azcopy_docker_version):latest
-                      remoteImage: azcopycontainers.azurecr.io/azure-azcopy-ubuntu-arm64.$(azcopy_docker_version):latest
+                      image: azcopycontainers.azurecr.io/public/azcopy/azcopy:$(azcopy_docker_version)-ubuntu-arm64
+                      remoteImage: azcopycontainers.azurecr.io/public/azcopy/azcopy:$(azcopy_docker_version)-ubuntu-arm64
 
                   - task: 1ES.BuildContainerImage@1
                     inputs:
-                      image: azcopycontainers.azurecr.io/azure-azcopy-mariner-arm64.$(azcopy_version):latest
+                      image: azcopycontainers.azurecr.io/public/azcopy/azcopy:$(azcopy_docker_version)-mariner-arm64
                       path: '$(System.DefaultWorkingDirectory)'
                       dockerfile: docker/DockerfileMarinerArm64
 
                   - task: 1ES.PushContainerImage@1
                     inputs:
-                      image: azcopycontainers.azurecr.io/azure-azcopy-mariner-arm64.$(azcopy_version):latest
-                      remoteImage: azcopycontainers.azurecr.io/azure-azcopy-mariner-arm64.$(azcopy_version):latest
+                      image: azcopycontainers.azurecr.io/public/azcopy/azcopy:$(azcopy_docker_version)-mariner-arm64
+                      remoteImage: azcopycontainers.azurecr.io/public/azcopy/azcopy:$(azcopy_docker_version)-mariner-arm64
 
 
       - ${{ if eq(parameters.post_release, true) }}:

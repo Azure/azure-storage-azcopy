@@ -7,10 +7,16 @@ set -euo pipefail
 #   $3 = image variant suffix (example: ubuntu-x86_64)
 
 REGISTRY="azcopycontainers.azurecr.io"
+# Repository must match a repos[].name entry in the MCR onboarding manifest (mcr.yaml).
+# MCR's webhook ignores pushes to any other repository ("invalid repository").
+REPO="public/azcopy/azcopy"
 VER=$(../azcopy --version | cut -d " " -f 3)
-IMAGE="azure-azcopy-$3"
+VARIANT="$3"
+IMAGE="azure-azcopy-$VARIANT"
 LOCAL_TAG="$IMAGE:$VER"
-REMOTE_TAG="$REGISTRY/$IMAGE:$VER"
+# Variant is encoded in the tag, not the repository, so both ubuntu and mariner
+# images land in public/azcopy/azcopy where MCR can pick them up.
+REMOTE_TAG="$REGISTRY/$REPO:$VER-$VARIANT"
 
 echo "Building/publishing image: $LOCAL_TAG"
 echo "Remote target: $REMOTE_TAG"
@@ -59,7 +65,7 @@ securityresources
 | extend repo = tostring(properties.additionalData.artifactDetails.repositoryName)
 | extend registry = tostring(properties.additionalData.artifactDetails.registryHost)
 | extend severity = tostring(properties.status.severity)
-| where repo contains '$IMAGE'
+| where repo contains '$REPO'
 | project repo, registry, severity
 "
 
