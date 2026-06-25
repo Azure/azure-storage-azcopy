@@ -1,0 +1,202 @@
+parameters:
+  - name: job_name
+    type: string
+  - name: hosted_pool
+    type: boolean
+    default: true
+
+jobs:
+  - job: ${{ parameters.job_name }}
+    variables:
+      isMutexSet: 'false'
+    # allow maximum build time, in case we have build congestion
+    timeoutInMinutes: 360
+    ${{ if eq(parameters.hosted_pool, true) }}:
+      strategy:
+        matrix:
+          Linux:
+            imageName: 'ubuntu-latest'
+            build_name: 'azcopy_linux_amd64'
+            display_name: 'Linux'
+            type: 'linux'
+          Linux-FIPS-disabled:
+            imageName: 'ubuntu-latest'
+            build_name: 'azcopy_linux_fips_amd64'
+            display_name: 'Linux-FIPS-disabled'
+            type: 'linux-fips'
+            fips: 'disabled'
+      pool:
+        vmImage: $(imageName)
+    ${{ else }}:
+      strategy:
+        matrix:
+          Linux-FIPS-enabled:
+            # Azure Linux 3.0 enables FIPS by default.
+            imageName: 'azurelinux3'
+            build_name: 'azcopy_linux_fips_amd64'
+            type: 'linux-fips'
+            display_name: 'Linux-FIPS-enabled'
+            fips: 'enabled'
+      pool:
+        name: 'azcopy-pool'
+        demands:
+          - ImageOverride -equals $(imageName)
+    steps:
+      - task: UsePythonVersion@0
+        name: 'Set_up_Python'
+        inputs:
+          versionSpec: '3.10'
+
+      - task: GoTool@0
+        name: 'Set_up_Microsoft_Golang'
+        inputs:
+          version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
+          # We use the Microsoft build of Go to produce FIPS-capable Linux builds.
+          goDownloadUrl: 'https://aka.ms/golang/release/latest'
+        displayName: 'Install Microsoft build of Go'
+        # Don't run if job is canceled or a previous step fails
+        condition: and(succeeded(), eq(variables.type, 'linux-fips'))
+
+      - task: GoTool@0
+        name: 'Set_up_Golang'
+        inputs:
+          version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
+        displayName: 'Install Go'
+        # Don't run if job is canceled or a previous step fails
+        condition: and(succeeded(), ne(variables.type, 'linux-fips'))
+
+      - task: DownloadSecureFile@1
+        name: ciGCSServiceAccountKey
+        displayName: 'Download GCS Service Account Key'
+        inputs:
+          secureFile: 'ci-gcs-dev.json'
+
+      - script: |
+          go install github.com/jstemmer/go-junit-report@v0.9.1
+          go install github.com/axw/gocov/gocov@v1.1.0
+          go install github.com/AlekSi/gocov-xml@v1.0.0
+          go install github.com/matm/gocov-html@v0.0.0-20200509184451-71874e2e203b
+        displayName: 'Install dependencies'
+
+      - script: |
+          pip install azure-storage-blob==12.12.0
+          pip install azure-storage-blob six
+          # set the variable to indicate that the mutex is being acquired
+          # note: we set it before acquiring the mutex to ensure we release the mutex. 
+          # setting this after can result in an un-broken mutex if someone cancels the pipeline after we acquire the 
+          # mutex but before we set this variable.
+          # setting this before will always work since it is valid to break an un-acquired mutex.
+          echo '##vso[task.setvariable variable=isMutexSet]true'
+          # acquire the mutex before running live tests to avoid conflicts
+          python ./tool_distributed_mutex.py lock "$(MUTEX_URL)"
+        name: 'Acquire_the_distributed_mutex'
+
+      - template: run-ut.yml
+        parameters:
+          directories:
+          - 'cmd'
+          - 'common'
+          - 'common/parallel'
+          - 'sddl'
+          fips: $(fips)
+          job_name: $(display_name)
+
+      - template: run-ut.yml
+        parameters:
+          directories:
+          - 'ste'
+          fips: $(fips)
+          job_name: $(display_name)
+          with_federated_credential: true
+
+      - script: |
+          baseReportName='smoke_coverage'
+          # It's unclear what the effect of setting CGO_ENABLED to an empty string would be,
+          # so this variable will store the name and value, to prevent running commands with "CGO_ENABLED=", later. 
+          cgoEnabled=''
+          # This sets the GOFIPS environment variable, which is only used by Microsoft builds of Go.
+          # Setting it to the empty string simplifies the pipeline logic and has no effect on the product.
+          # See https://github.com/microsoft/go/blob/microsoft/main/eng/doc/fips/README.md#usage-runtime
+          gofips=''
+          if [[ "$(fips)" == 'enabled' ]]; then
+            baseReportName="${baseReportName}-fips-enabled"
+            cgoEnabled='CGO_ENABLED=1'
+            gofips=1
+          elif [[ "$(fips)" == 'disabled' ]]; then
+            baseReportName="${baseReportName}-fips-disabled"
+            # We'll be testing with FIPS disabled, but the CGO_ENABLED variable should still be set to 1 when testing the FIPS build,
+            # to ensure we test the crypto backend that decides at runtime whether to use a FIPS-compliant implementation or not.
+            cgoEnabled='CGO_ENABLED=1'
+            # WARNING: GOFIPS=0 won't disable FIPS in version 1.27+ of the Microsoft build of Go.
+            # See https://github.com/microsoft/go/blob/microsoft/main/eng/doc/fips/README.md#usage-runtime
+            gofips=0
+          fi
+          echo "##vso[task.setvariable variable=baseReportName]$baseReportName"
+          echo "##vso[task.setvariable variable=cgoEnabled]$cgoEnabled"
+          echo "##vso[task.setvariable variable=gofips]$gofips"
+        displayName: 'Set Job Variables for Smoke Tests'
+        # Later steps that run on failure use variables set in this step.
+        condition: succeededOrFailed()
+
+      - script: |
+          export GOFIPS=$(gofips) $(cgoEnabled)
+          GOARCH=amd64 GOOS=linux go build -cover -tags "netgo" -o $(build_name) 
+          go build -tags "netgo" -o test-validator ./testSuite/
+          mkdir test-temp
+          mkdir coverage
+          export AZCOPY_EXECUTABLE_PATH=$(pwd)/$(build_name)
+          export TEST_SUITE_EXECUTABLE_LOCATION=$(pwd)/test-validator
+          export TEST_DIRECTORY_PATH=$(pwd)/test-temp
+
+          keyctl session test python ./testSuite/scripts/run.py
+          
+          # Convert coverage data to text format
+          echo "Converting coverage data to legacy text format as $(baseReportName).txt"
+          go tool covdata textfmt -i=coverage -o "$(baseReportName).txt"
+
+          echo "Converting coverage data to JSON format as $(baseReportName).json"
+          $(go env GOPATH)/bin/gocov convert "$(baseReportName).txt" > "$(baseReportName).json"
+
+          echo "Converting coverage data to XML format as ${baseCoverageReportName}.xml"
+          $(go env GOPATH)/bin/gocov-xml < "$(baseReportName).json" > "$(baseReportName).xml"
+        name: 'Run_smoke_tests'
+        env:
+          ACCOUNT_NAME: $(ACCOUNT_NAME)
+          ACCOUNT_KEY: $(ACCOUNT_KEY)
+          AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+          AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+          GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
+          GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
+          ACTIVE_DIRECTORY_APPLICATION_ID: $(ACTIVE_DIRECTORY_APPLICATION_ID)
+          AZCOPY_SPA_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
+          CONTAINER_OAUTH_URL: $(CONTAINER_OAUTH_URL)
+          CONTAINER_OAUTH_VALIDATE_SAS_URL: $(CONTAINER_OAUTH_VALIDATE_SAS_URL)
+          CONTAINER_SAS_URL: $(CONTAINER_SAS_URL)
+          FILESYSTEM_SAS_URL: $(FILESYSTEM_SAS_URL)
+          FILESYSTEM_URL: $(FILESYSTEM_URL)
+          OAUTH_AAD_ENDPOINT: $(OAUTH_AAD_ENDPOINT)
+          OAUTH_TENANT_ID: $(OAUTH_TENANT_ID)
+          PREMIUM_CONTAINER_SAS_URL: $(PREMIUM_CONTAINER_SAS_URL)
+          S2S_DST_BLOB_ACCOUNT_SAS_URL: $(S2S_DST_BLOB_ACCOUNT_SAS_URL)
+          S2S_SRC_BLOB_ACCOUNT_SAS_URL: $(S2S_SRC_BLOB_ACCOUNT_SAS_URL)
+          S2S_SRC_FILE_ACCOUNT_SAS_URL: $(S2S_SRC_FILE_ACCOUNT_SAS_URL)
+          S2S_SRC_S3_SERVICE_URL: $(S2S_SRC_S3_SERVICE_URL)
+          S2S_SRC_GCP_SERVICE_URL: $(S2S_SRC_GCP_SERVICE_URL)
+          SHARE_SAS_URL: $(SHARE_SAS_URL)
+          GOCOVERDIR: '$(System.DefaultWorkingDirectory)/coverage'
+        # Don't let a unit-test failure prevent the Python tests from running
+        condition: succeededOrFailed()
+
+      # Smoke Tests Publishing
+      - task: PublishCodeCoverageResults@1
+        inputs:
+          codeCoverageTool: Cobertura
+          summaryFileLocation: '$(System.DefaultWorkingDirectory)/**/$(baseReportName).xml'
+        condition: succeededOrFailed()
+
+      - script: |
+          pip install azure-storage-blob==12.12.0
+          python ./tool_distributed_mutex.py unlock "$(MUTEX_URL)"
+        name: 'Release_the_distributed_mutex'
+        # this runs even if the job was canceled (only if the mutex was acquired by this job)
+        condition: and(always(), eq(variables['isMutexSet'], 'true'))
