@@ -57,3 +57,11 @@ steps:
       GOARCH: arm64
       GOOS: windows
       CGO_ENABLED: 0
+
+  - script: |
+      go build -tags "grpc" -o "$(binaries)\azcopy_windows_grpc_386.exe"
+    displayName: 'Generate Windows gRPC i386'
+    env:
+      GOARCH: 386
+      GOOS: windows
+      CGO_ENABLED: 0
