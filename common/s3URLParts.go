@@ -243,9 +243,7 @@ func parseIBMRegionFromEndpoint(endpoint string) (string, bool) {
 	}
 
 	region := endpoint[len(prefix) : len(endpoint)-len(suffix)]
-	if strings.HasPrefix(region, privatePrefix) {
-		region = strings.TrimPrefix(region, privatePrefix)
-	}
+	region = strings.TrimPrefix(region, privatePrefix)
 
 	if region == "" {
 		return "", false
@@ -768,7 +766,7 @@ func (p *S3URLParts) IsOnPremS3Compatible() bool {
 // IsS3CompatibleEndpoint returns true if a custom S3-compatible endpoint is configured
 // via the S3_COMPATIBLE_ENDPOINT environment variable.
 func (p *S3URLParts) IsS3CompatibleEndpoint() bool {
-	return os.Getenv("S3_COMPATIBLE_ENDPOINT") != ""
+	return os.Getenv("S3_COMPATIBLE_ENDPOINT") != "" && IsPrivateNetworkTransfer(ELocation.S3())
 }
 
 type caseInsensitiveValues url.Values // map[string][]string
