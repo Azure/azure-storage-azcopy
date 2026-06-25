@@ -716,6 +716,12 @@ func (p *S3URLParts) IsAlibabaObjectStorage() bool {
 	return strings.Contains(endpoint, ".aliyuncs.com") && strings.Contains(endpoint, "oss-")
 }
 
+// IsAWSS3 checks if this S3 URL is pointing to Amazon AWS.
+// Returns true if the endpoint contains "amazonaws.com".
+func (p *S3URLParts) IsAWSS3() bool {
+	return strings.Contains(strings.ToLower(p.Endpoint), "amazonaws.com")
+}
+
 // ProviderKind classifies the endpoint into a known S3 provider family.
 // This allows behavior decisions to key off a stable provider bucket instead of
 // chained negated checks (e.g. "not Google and not Oracle").
@@ -740,7 +746,7 @@ func (p *S3URLParts) ProviderKind() S3ProviderKind {
 		return S3ProviderCustom
 	}
 
-	if strings.Contains(strings.ToLower(p.Endpoint), "amazonaws.com") {
+	if p.IsAWSS3() {
 		return S3ProviderAWS
 	}
 
