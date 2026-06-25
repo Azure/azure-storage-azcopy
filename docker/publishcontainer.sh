@@ -4,22 +4,24 @@ set -euo pipefail
 # Args:
 #   $1 = ACR username
 #   $2 = ACR password
-#   $3 = image variant suffix (example: ubuntu-x86_64)
+#   $3 = target architecture (example: amd64 or arm64)
 
 REGISTRY="azcopycontainers.azurecr.io"
 # Repository must match a repos[].name entry in the MCR onboarding manifest (mcr.yaml).
 # MCR's webhook ignores pushes to any other repository ("invalid repository").
-REPO="public/azcopy/azcopy"
+# The OS/arch is encoded in the repository path (azcopy/linux/<arch>) so the tag
+# can stay clean (version + latest). This keeps room for future windows images.
+ARCH="$3"
+REPO="public/azcopy/linux/$ARCH"
 VER=$(../azcopy --version | cut -d " " -f 3)
-VARIANT="$3"
-IMAGE="azure-azcopy-$VARIANT"
+IMAGE="azure-azcopy-mariner-$ARCH"
 LOCAL_TAG="$IMAGE:$VER"
-# Variant is encoded in the tag, not the repository, so both ubuntu and mariner
-# images land in public/azcopy/azcopy where MCR can pick them up.
-REMOTE_TAG="$REGISTRY/$REPO:$VER-$VARIANT"
+REMOTE_TAG="$REGISTRY/$REPO:$VER"
+LATEST_TAG="$REGISTRY/$REPO:latest"
 
 echo "Building/publishing image: $LOCAL_TAG"
 echo "Remote target: $REMOTE_TAG"
+echo "Latest target: $LATEST_TAG"
 
 # -----------------------------
 # 1) Pre-push security gate
@@ -42,11 +44,14 @@ printf '%s\n' "$2" | sudo docker login "$REGISTRY" --username "$1" --password-st
 # -----------------------------
 # 3) Tag and push
 # -----------------------------
+# Push the version tag and always move :latest to this newest release.
 echo "Tagging image..."
 sudo docker tag "$LOCAL_TAG" "$REMOTE_TAG"
+sudo docker tag "$LOCAL_TAG" "$LATEST_TAG"
 
 echo "Pushing image to ACR..."
 sudo docker push "$REMOTE_TAG"
+sudo docker push "$LATEST_TAG"
 
 # -----------------------------
 # 4) Informational post-push note
@@ -54,7 +59,7 @@ sudo docker push "$REMOTE_TAG"
 # Defender for Cloud scans images in ACR on push/import/pull-based triggers.
 # This script cannot directly guarantee scan completion unless your pipeline
 # separately queries Defender results or gates deployment on them.
-echo "Image pushed successfully: $REMOTE_TAG"
+echo "Image pushed successfully: $REMOTE_TAG (and $LATEST_TAG)"
 echo "ACR-side vulnerability scanning should now be triggered if Defender for Cloud is enabled for this subscription."
 
 
