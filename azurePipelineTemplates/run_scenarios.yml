@@ -52,7 +52,7 @@ steps:
         else
           echo "Scenario 1 failed with exit code $scenario1_exit_code"
         fi
-      displayName: "Run Scenarios"
+    displayName: "Run Scenarios"
     env:
       GOOS: ${{ parameters.goos }}
       GOARCH: ${{ parameters.goarch }}
