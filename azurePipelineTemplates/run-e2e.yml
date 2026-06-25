@@ -1,16 +1,16 @@
 parameters:
   - name: job_name
     type: string
-  - name: hosted_pool
+  - name: custom_pool
     type: boolean
-    default: true
+    default: false
   - name: test_cli_param
     type: string
 
 jobs:
   - job: ${{ parameters.job_name }}
     timeoutInMinutes: 360
-    ${{ if eq(parameters.hosted_pool, true) }}:
+    ${{ if eq(parameters.custom_pool, false) }}:
       strategy:
         matrix:
           Linux:

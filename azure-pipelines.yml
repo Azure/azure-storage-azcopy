@@ -184,36 +184,33 @@ jobs:
   - template: azurePipelineTemplates/run-e2e.yml
     parameters:
       job_name: 'Old_E2E'
-      hosted_pool: true
       test_cli_param: '-tags olde2etest'
 
   - template: azurePipelineTemplates/run-e2e.yml
     parameters:
       job_name: 'Old_E2E_custom_pool'
-      hosted_pool: false
+      custom_pool: true
       test_cli_param: '-tags olde2etest'
 
   - template: azurePipelineTemplates/run-e2e.yml
     parameters:
       job_name: 'New_E2E'
-      hosted_pool: true
       test_cli_param: '-run "TestNewE2E/.*"'
 
   - template: azurePipelineTemplates/run-e2e.yml
     parameters:
       job_name: 'New_E2E_custom_pool'
-      hosted_pool: false
+      custom_pool: true
       test_cli_param: '-run "TestNewE2E/.*"'
 
   - template: azurePipelineTemplates/run-ut-and-py.yml
     parameters:
       job_name: 'Unit_and_Python_Tests'
-      hosted_pool: true
 
   - template: azurePipelineTemplates/run-ut-and-py.yml
     parameters:
       job_name: 'Unit_and_Python_Tests_custom_pool'
-      hosted_pool: false
+      custom_pool: true
  
   - job: Additional_E2E_Test_Linux
     timeoutInMinutes: 360
