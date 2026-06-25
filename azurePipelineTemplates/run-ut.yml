@@ -1,86 +1,152 @@
 parameters:
-  - name: directory
+  - name: directories
+    type: object
+    default: []
+  - name: fips
     type: string
-  - name: coverage_name
+    default: ''
+  - name: job_name
     type: string
   - name: with_federated_credential
     type: boolean
     default: false
 steps:
-  - ${{ if eq('false', parameters.with_federated_credential) }}:
-      - script: |
-          set -e
-          echo "Running tests in" ${directory}
-          go test -timeout=1h -v -coverprofile=${coverage_name}_coverage.txt ./${directory} | tee ${coverage_name}.txt
-          exit_code=${PIPESTATUS[0]}
-          echo "Generating junit report for" ${directory}
-          cat ${coverage_name}.txt | $(go env GOPATH)/bin/go-junit-report > ${coverage_name}_report.xml
-          echo "Generating json coverage report for" ${directory}
-          $(go env GOPATH)/bin/gocov convert ${coverage_name}_coverage.txt > ${coverage_name}_coverage.json
-          echo "Generating xml coverage report for" ${directory}
-          $(go env GOPATH)/bin/gocov-xml < ${coverage_name}_coverage.json > ${coverage_name}_coverage.xml
-          exit "$exit_code"
-        displayName: 'Run ${{ parameters.directory }} tests'
-        env:
-          directory: ${{ parameters.directory }}
-          coverage_name: ${{ parameters.coverage_name }}
-          ACCOUNT_NAME: $(ACCOUNT_NAME)
-          ACCOUNT_KEY: $(ACCOUNT_KEY)
-          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
-          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
-          AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
-          AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
-          AZCOPY_E2E_APPLICATION_ID: $(ACTIVE_DIRECTORY_APPLICATION_ID)
-          AZCOPY_E2E_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
-          AZCOPY_E2E_TENANT_ID: $(OAUTH_TENANT_ID)
-          GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
-          GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
-        condition: succeededOrFailed()
-  - ${{ else }}:
-      - task: AzureCLI@2
-        inputs:
-          azureSubscription: azcopytestworkloadidentity
-          addSpnToEnvironment: true
-          scriptType: bash
-          scriptLocation: inlineScript
-          inlineScript: |
-            set -e
-            echo "Running tests in" ${directory}
-            go test -timeout=1h -v -coverprofile=${coverage_name}_coverage.txt ./${directory} | tee ${coverage_name}.txt
-            exit_code=${PIPESTATUS[0]}
-            echo "Generating junit report for" ${directory}
-            cat ${coverage_name}.txt | $(go env GOPATH)/bin/go-junit-report > ${coverage_name}_report.xml
-            echo "Generating json coverage report for" ${directory}
-            $(go env GOPATH)/bin/gocov convert ${coverage_name}_coverage.txt > ${coverage_name}_coverage.json
-            echo "Generating xml coverage report for" ${directory}
-            $(go env GOPATH)/bin/gocov-xml < ${coverage_name}_coverage.json > ${coverage_name}_coverage.xml
-            exit "$exit_code"
-        env:
-          directory: ${{ parameters.directory }}
-          coverage_name: ${{ parameters.coverage_name }}
-          ACCOUNT_NAME: $(ACCOUNT_NAME)
-          ACCOUNT_KEY: $(ACCOUNT_KEY)
-          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
-          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
-          AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
-          AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
-          GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
-          GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
-          NEW_E2E_ENVIRONMENT: "AzurePipeline"
-        displayName: 'Run ${{ parameters.directory }} tests with Workload Identity'
-        condition: succeededOrFailed()
-  - task: PublishTestResults@2
+- ${{ each directory in parameters.directories }}:
+  - bash: |
+      # Replace all forward slashes with periods, to avoid creating directories.
+      # This is done in two assignments because template expression syntax doesn't seem to work within shell parameter expansion.
+      baseReportName="${{ directory }}"
+      baseReportName="${baseReportName//[\/]/.}"
+      # It's unclear what the effect of setting CGO_ENABLED to an empty string would be,
+      # so this variable will store the name and value, to prevent running commands with "CGO_ENABLED=", later. 
+      cgoEnabled=''
+      # This sets the GOFIPS environment variable, which is only used by Microsoft builds of Go.
+      # Setting it to the empty string simplifies the pipeline logic and has no effect on the product.
+      # See https://github.com/microsoft/go/blob/microsoft/main/eng/doc/fips/README.md#usage-runtime
+      gofips=''
+      if [[ '${{ parameters.fips }}' == 'enabled' ]]; then
+        baseReportName="${baseReportName}-fips-enabled"
+        cgoEnabled='CGO_ENABLED=1'
+        gofips=1
+      elif [[ '${{ parameters.fips }}' == 'disabled' ]]; then
+        baseReportName="${baseReportName}-fips-disabled"
+        # We'll be testing with FIPS disabled, but the CGO_ENABLED variable should still be set to 1 when testing the FIPS build,
+        # to ensure we test the crypto backend that decides at runtime whether to use a FIPS-compliant implementation or not.
+        cgoEnabled='CGO_ENABLED=1'
+        # WARNING: GOFIPS=0 won't disable FIPS in version 1.27+ of the Microsoft build of Go.
+        # See https://github.com/microsoft/go/blob/microsoft/main/eng/doc/fips/README.md#usage-runtime
+        gofips=0
+      fi
+      echo "##vso[task.setvariable variable=baseCoverageReportName]${baseReportName}_coverage"
+      echo "##vso[task.setvariable variable=junitReportName]${baseReportName}_report.xml" 
+      echo "##vso[task.setvariable variable=cgoEnabled]$cgoEnabled"
+      echo "##vso[task.setvariable variable=gofips]$gofips"
+    displayName: 'Set Job Variables'
+    # Later steps that run on failure use variables set in this step.
     condition: succeededOrFailed()
+
+  - ${{ if eq(false, parameters.with_federated_credential) }}:
+    - script: |
+        # This should be identical to the inlineScript below. Once you've updated one script, just copy, paste, and indent it in the other location.
+        set -e
+
+        # Generate the name of the file the test results will be written to
+        testResultsFileName="test.txt"  
+
+        # Run tests, write coverage data to a file, and pipe output to a file
+        echo "Running tests in ${{ directory }}. Writing coverage data to $(baseCoverageReportName).txt and test results to ${testResultsFileName}."
+        $(cgoEnabled) go test -timeout=1h -v -coverprofile="$(baseCoverageReportName).txt" "./${{ directory }}" | tee "$testResultsFileName"
+        
+        exit_code=${PIPESTATUS[0]}
+
+        # Generate the jUnit report
+        echo "Generating jUnit report $(junitReportName) for ${{ directory }}"
+        cat "$testResultsFileName" | $(go env GOPATH)/bin/go-junit-report > "$(junitReportName)"
+
+        # Convert coverage data to JSON format
+        echo "Generating JSON coverage report $(baseCoverageReportName).json for ${{ directory }}"
+        $(go env GOPATH)/bin/gocov convert "$(baseCoverageReportName).txt" > "$(baseCoverageReportName).json"
+
+        # Convert coverage data to XML format
+        echo "Generating XML coverage report $(baseCoverageReportName).xml for ${{ directory }}"
+        $(go env GOPATH)/bin/gocov-xml < "$(baseCoverageReportName).json" > "$(baseCoverageReportName).xml"
+        
+        exit "$exit_code"
+      env:
+        GOFIPS: $(gofips)
+        ACCOUNT_NAME: $(ACCOUNT_NAME)
+        ACCOUNT_KEY: $(ACCOUNT_KEY)
+        AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
+        AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
+        AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+        AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+        GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
+        GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
+        # All env variables above this comment should be the same for both scripts.
+        AZCOPY_E2E_APPLICATION_ID: $(ACTIVE_DIRECTORY_APPLICATION_ID)
+        AZCOPY_E2E_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
+        AZCOPY_E2E_TENANT_ID: $(OAUTH_TENANT_ID)
+      displayName: 'Run ${{ directory }} tests'
+      # Don't let a test failure for a different directory prevent this directory from being tested
+      condition: succeededOrFailed()
+  - ${{ else }}:
+    - task: AzureCLI@2
+      inputs:
+        azureSubscription: azcopytestworkloadidentity
+        addSpnToEnvironment: true
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+          # This should be identical to the script above. Once you've updated one script, just copy, paste, and indent it in the other location.
+          set -e
+
+          # Generate the name of the file the test results will be written to
+          testResultsFileName="test.txt"  
+
+          # Run tests, write coverage data to a file, and pipe output to a file
+          echo "Running tests in ${{ directory }}. Writing coverage data to $(baseCoverageReportName).txt and test results to ${testResultsFileName}."
+          $(cgoEnabled) go test -timeout=1h -v -coverprofile="$(baseCoverageReportName).txt" "./${{ directory }}" | tee "$testResultsFileName"
+          
+          exit_code=${PIPESTATUS[0]}
+
+          # Generate the jUnit report
+          echo "Generating jUnit report $(junitReportName) for ${{ directory }}"
+          cat "$testResultsFileName" | $(go env GOPATH)/bin/go-junit-report > "$(junitReportName)"
+
+          # Convert coverage data to JSON format
+          echo "Generating JSON coverage report $(baseCoverageReportName).json for ${{ directory }}"
+          $(go env GOPATH)/bin/gocov convert "$(baseCoverageReportName).txt" > "$(baseCoverageReportName).json"
+
+          # Convert coverage data to XML format
+          echo "Generating XML coverage report $(baseCoverageReportName).xml for ${{ directory }}"
+          $(go env GOPATH)/bin/gocov-xml < "$(baseCoverageReportName).json" > "$(baseCoverageReportName).xml"
+          
+          exit "$exit_code"
+      env:
+        GOFIPS: $(gofips)
+        ACCOUNT_NAME: $(ACCOUNT_NAME)
+        ACCOUNT_KEY: $(ACCOUNT_KEY)
+        AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
+        AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
+        AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+        AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+        GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
+        GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
+        # All env variables above this comment should be the same for both scripts.
+        NEW_E2E_ENVIRONMENT: 'AzurePipeline'
+      displayName: 'Run ${{ directory }} tests with Workload Identity'
+      # Don't let a test failure for a different directory prevent this directory from being tested
+      condition: succeededOrFailed()
+
+  - task: PublishTestResults@2
     inputs:
       testRunner: JUnit
-      testResultsFiles: $(System.DefaultWorkingDirectory)/**/${{ parameters.coverage_name }}_report.xml
-      testRunTitle: '${{ parameters.directory }} Tests'
-    env:
-      coverage_name: ${{ parameters.coverage_name }}
-  - task: PublishCodeCoverageResults@1
+      testResultsFiles: '$(System.DefaultWorkingDirectory)/**/$(junitReportName)'
+      testRunTitle: '${{ directory }} Tests - ${{ parameters.job_name }}'
     condition: succeededOrFailed()
+
+  - task: PublishCodeCoverageResults@1
     inputs:
       codeCoverageTool: Cobertura
-      summaryFileLocation: $(System.DefaultWorkingDirectory)/**/${{ parameters.coverage_name }}_coverage.xml
-    env:
-      coverage_name: ${{ parameters.coverage_name }}
+      summaryFileLocation: '$(System.DefaultWorkingDirectory)/**/$(baseCoverageReportName).xml'
+    condition: succeededOrFailed()
