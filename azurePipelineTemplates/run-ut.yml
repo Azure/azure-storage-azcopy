@@ -2,10 +2,12 @@ parameters:
   - name: directories
     type: object
     default: []
+  - name: isMutexSet
+    type: string
   - name: fips
     type: string
     default: ''
-  - name: job_name
+  - name: display_name
     type: string
   - name: with_federated_credential
     type: boolean
@@ -43,7 +45,8 @@ steps:
       echo "##vso[task.setvariable variable=gofips]$gofips"
     displayName: 'Set Job Variables'
     # Later steps that run on failure use variables set in this step.
-    condition: succeededOrFailed()
+    # Don't run if job is canceled or mutex wasn't acquired (in which case, test task won't run, and no test results or coverage data to report)
+    condition: and(succeededOrFailed(), eq(${{ parameters.isMutexSet }}, 'true'))
 
   - ${{ if eq(false, parameters.with_federated_credential) }}:
     - script: |
@@ -51,7 +54,7 @@ steps:
         set -e
 
         # Generate the name of the file the test results will be written to
-        testResultsFileName="test.txt"  
+        testResultsFileName="test.txt"
 
         # Run tests, write coverage data to a file, and pipe output to a file
         echo "Running tests in ${{ directory }}. Writing coverage data to $(baseCoverageReportName).txt and test results to ${testResultsFileName}."
@@ -87,8 +90,9 @@ steps:
         AZCOPY_E2E_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
         AZCOPY_E2E_TENANT_ID: $(OAUTH_TENANT_ID)
       displayName: 'Run ${{ directory }} tests'
-      # Don't let a test failure for a different directory prevent this directory from being tested
-      condition: succeededOrFailed()
+      # Don't let a test failure for a different directory prevent this directory from being tested,
+      # but don't run if job is canceled or mutex wasn't acquired
+      condition: and(succeededOrFailed(), eq(${{ parameters.isMutexSet }}, 'true'))
   - ${{ else }}:
     - task: AzureCLI@2
       inputs:
@@ -101,7 +105,7 @@ steps:
           set -e
 
           # Generate the name of the file the test results will be written to
-          testResultsFileName="test.txt"  
+          testResultsFileName="test.txt"
 
           # Run tests, write coverage data to a file, and pipe output to a file
           echo "Running tests in ${{ directory }}. Writing coverage data to $(baseCoverageReportName).txt and test results to ${testResultsFileName}."
@@ -135,18 +139,21 @@ steps:
         # All env variables above this comment should be the same for both scripts.
         NEW_E2E_ENVIRONMENT: 'AzurePipeline'
       displayName: 'Run ${{ directory }} tests with Workload Identity'
-      # Don't let a test failure for a different directory prevent this directory from being tested
-      condition: succeededOrFailed()
+      # Don't let a test failure for a different directory prevent this directory from being tested,
+      # but don't run if job is canceled or mutex wasn't acquired
+      condition: and(succeededOrFailed(), eq(${{ parameters.isMutexSet }}, 'true'))
 
   - task: PublishTestResults@2
     inputs:
       testRunner: JUnit
       testResultsFiles: '$(System.DefaultWorkingDirectory)/**/$(junitReportName)'
-      testRunTitle: '${{ directory }} Tests - ${{ parameters.job_name }}'
-    condition: succeededOrFailed()
+      testRunTitle: 'Unit Tests: ${{ parameters.display_name }} - ${{ directory }}'
+      # Don't run if job is canceled or mutex wasn't acquired (in which case, test task didn't run, so no test results to report)
+    condition: and(succeededOrFailed(), eq(${{ parameters.isMutexSet }}, 'true'))
 
   - task: PublishCodeCoverageResults@1
     inputs:
       codeCoverageTool: Cobertura
       summaryFileLocation: '$(System.DefaultWorkingDirectory)/**/$(baseCoverageReportName).xml'
-    condition: succeededOrFailed()
+      # Don't run if job is canceled or mutex wasn't acquired (in which case, test task didn't run, so no test coverage data to report)
+    condition: and(succeededOrFailed(), eq(${{ parameters.isMutexSet }}, 'true'))

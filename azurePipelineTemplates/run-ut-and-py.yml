@@ -1,9 +1,9 @@
 parameters:
   - name: job_name
     type: string
-  - name: hosted_pool
+  - name: custom_pool
     type: boolean
-    default: true
+    default: false
 
 jobs:
   - job: ${{ parameters.job_name }}
@@ -11,7 +11,7 @@ jobs:
       isMutexSet: 'false'
     # allow maximum build time, in case we have build congestion
     timeoutInMinutes: 360
-    ${{ if eq(parameters.hosted_pool, true) }}:
+    ${{ if eq(parameters.custom_pool, false) }}:
       strategy:
         matrix:
           Linux:
@@ -43,9 +43,20 @@ jobs:
           - ImageOverride -equals $(imageName)
     steps:
       - task: UsePythonVersion@0
+        name: 'Set_up_Python_on_AzureLinux3'
+        inputs:
+          # Ideally, all agents would use the same version of Python in this pipeline.
+          # However, this is the only version azurelinux 3 seems to support, as judged
+          # by the messages this task logs when run in the pipeline with versionSpec
+          # set to 3.10.
+          versionSpec: '3.12.13'
+        condition: eq(variables.imageName, 'azurelinux3')
+
+      - task: UsePythonVersion@0
         name: 'Set_up_Python'
         inputs:
           versionSpec: '3.10'
+        condition: ne(variables.imageName, 'azurelinux3')
 
       - task: GoTool@0
         name: 'Set_up_Microsoft_Golang'
@@ -98,15 +109,17 @@ jobs:
           - 'common'
           - 'common/parallel'
           - 'sddl'
+          isMutexSet: variables['isMutexSet']
           fips: $(fips)
-          job_name: $(display_name)
+          display_name: $(display_name)
 
       - template: run-ut.yml
         parameters:
           directories:
           - 'ste'
+          isMutexSet: variables['isMutexSet']
           fips: $(fips)
-          job_name: $(display_name)
+          display_name: $(display_name)
           with_federated_credential: true
 
       - script: |
@@ -136,7 +149,8 @@ jobs:
           echo "##vso[task.setvariable variable=gofips]$gofips"
         displayName: 'Set Job Variables for Smoke Tests'
         # Later steps that run on failure use variables set in this step.
-        condition: succeededOrFailed()
+        # Don't run if job is canceled or mutex wasn't acquired (in which case, test task won't run, so no test results to report)
+        condition: and(succeededOrFailed(), eq(variables['isMutexSet'], 'true'))
 
       - script: |
           export GOFIPS=$(gofips) $(cgoEnabled)
@@ -184,15 +198,17 @@ jobs:
           S2S_SRC_GCP_SERVICE_URL: $(S2S_SRC_GCP_SERVICE_URL)
           SHARE_SAS_URL: $(SHARE_SAS_URL)
           GOCOVERDIR: '$(System.DefaultWorkingDirectory)/coverage'
-        # Don't let a unit-test failure prevent the Python tests from running
-        condition: succeededOrFailed()
+        # Don't let a unit-test failure prevent the Python tests from running,
+        # but don't run if job is canceled or mutex wasn't acquired
+        condition: and(succeededOrFailed(), eq(variables['isMutexSet'], 'true'))
 
       # Smoke Tests Publishing
       - task: PublishCodeCoverageResults@1
         inputs:
           codeCoverageTool: Cobertura
           summaryFileLocation: '$(System.DefaultWorkingDirectory)/**/$(baseReportName).xml'
-        condition: succeededOrFailed()
+        # Don't run if job is canceled or mutex wasn't acquired (in which case, test task didn't run, so no test results to report)
+        condition: and(succeededOrFailed(), eq(variables['isMutexSet'], 'true'))
 
       - script: |
           pip install azure-storage-blob==12.12.0
