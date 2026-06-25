@@ -515,6 +515,11 @@ func (p *S3URLParts) IsOracleCloudStorageVirtualHosted() bool {
 	return strings.HasPrefix(endpoint, "vhcompat.objectstorage.") || strings.Contains(endpoint, ".vhcompat.objectstorage.")
 }
 
+// IsAmazonAWS checks if this S3 URL points to an AWS S3 endpoint.
+func (p *S3URLParts) IsAmazonAWS() bool {
+	return strings.Contains(strings.ToLower(p.Endpoint), "amazonaws.com")
+}
+
 // IsS3CompatibleEndpoint returns true if a custom S3-compatible endpoint is configured
 // via the S3_COMPATIBLE_ENDPOINT environment variable.
 func (p *S3URLParts) IsS3CompatibleEndpoint() bool {

@@ -67,8 +67,8 @@ const PeReCheckCooldownTimeInSecs = 600 // 10 minutes - time to wait before rech
 const PeCheckRetries = 3
 const PeCheckIntervalInmilliSecs = 200
 
-func getS3BucketLookup(endpoint string) minio.BucketLookupType {
-	urlParts := S3URLParts{Endpoint: endpoint}
+func getS3BucketLookup(s3CredInfo S3CredentialInfo) minio.BucketLookupType {
+	urlParts := S3URLParts{Endpoint: s3CredInfo.Endpoint}
 	if urlParts.IsGoogleCloudStorage() {
 		// Force path-style for GCS so bucket names with underscores do not
 		// appear in the request host.
@@ -82,6 +82,18 @@ func getS3BucketLookup(endpoint string) minio.BucketLookupType {
 		return minio.BucketLookupPath
 	}
 
+	// AWS S3 always uses virtual-hosted (DNS) style, even when a custom Provider is set.
+	if urlParts.IsAmazonAWS() {
+		return minio.BucketLookupDNS
+	}
+
+	// For all other endpoints (OnPrem/MinIO, custom S3-compatible) where the caller
+	// supplies a Provider, use path-style so the bucket name is in the URL path
+	// rather than the hostname (avoids DNS resolution issues for unknown endpoints).
+	if s3CredInfo.Provider != nil {
+		return minio.BucketLookupPath
+	}
+
 	return minio.BucketLookupDNS
 }
 
@@ -91,12 +103,18 @@ func createS3ClientForPrivateNetwork(credInfo CredentialInfo, cred *credentials.
 
 	urlParts := S3URLParts{Endpoint: baseS3Host}
 	isGCS := urlParts.IsGoogleCloudStorage()
-	isS3CompatibleUrl := urlParts.IsS3CompatibleEndpoint()
+	// isS3CompatibleUrl is true for any non-AWS S3-compatible provider:
+	// known cloud providers (GCS, Oracle), custom on-prem endpoints signalled
+	// by a Provider being set, or the legacy S3_COMPATIBLE_ENDPOINT env var.
+	isS3CompatibleUrl := urlParts.IsS3CompatibleEndpoint() ||
+		urlParts.IsGoogleCloudStorage() ||
+		urlParts.IsOracleCloudStorage() ||
+		credInfo.S3CredentialInfo.Provider != nil
 
 	var s3Host string
 	var tlsHost string          // hostname used for TLS ServerName verification
 	minioEndpoint := baseS3Host // endpoint passed to minio.New()
-	bucketLookup := getS3BucketLookup(baseS3Host)
+	bucketLookup := getS3BucketLookup(credInfo.S3CredentialInfo)
 	if isS3CompatibleUrl {
 		// S3-compatible endpoint (GCS, OCI, or on-prem appliances).
 		if bucketLookup == minio.BucketLookupDNS {
@@ -176,7 +194,7 @@ func CreateS3ClientFromProvider(credInfo CredentialInfo) (*minio.Client, error) 
 	}
 	fmt.Println("Creating S3 Client for public access")
 	cred := credentials.New(credInfo.S3CredentialInfo.Provider)
-	bucketLookup := getS3BucketLookup(credInfo.S3CredentialInfo.Endpoint)
+	bucketLookup := getS3BucketLookup(credInfo.S3CredentialInfo)
 	s3Client, err := minio.New(credInfo.S3CredentialInfo.Endpoint, &minio.Options{Creds: cred, Secure: true, Region: credInfo.S3CredentialInfo.Region, BucketLookup: bucketLookup})
 	return s3Client, err
 }
@@ -185,7 +203,7 @@ func CreateS3ClientFromProvider(credInfo CredentialInfo) (*minio.Client, error) 
 // S3 credential related factory methods
 // ==============================================================================================
 func CreateS3Client(ctx context.Context, credInfo CredentialInfo, option CredentialOpOptions, logger ILogger) (*minio.Client, error) {
-	bucketLookup := getS3BucketLookup(credInfo.S3CredentialInfo.Endpoint)
+	bucketLookup := getS3BucketLookup(credInfo.S3CredentialInfo)
 
 	if credInfo.CredentialType == ECredentialType.S3PublicBucket() {
 		cred := credentials.NewStatic("", "", "", credentials.SignatureAnonymous)
