@@ -113,6 +113,7 @@ func (AutoLoginType) MSI() AutoLoginType        { return AutoLoginType(2) }
 func (AutoLoginType) AzCLI() AutoLoginType      { return AutoLoginType(3) }
 func (AutoLoginType) PsCred() AutoLoginType     { return AutoLoginType(4) }
 func (AutoLoginType) Workload() AutoLoginType   { return AutoLoginType(5) }
+func (AutoLoginType) GRPC() AutoLoginType       { return AutoLoginType(254) } // Ev2 Extension/FRP integration only. Receives fresh OAuth tokens via GRPC.
 func (AutoLoginType) TokenStore() AutoLoginType { return AutoLoginType(255) } // Storage Explorer internal integration only. Do not add this to ValidAutoLoginTypes.
 
 func (d AutoLoginType) IsInteractive() bool {

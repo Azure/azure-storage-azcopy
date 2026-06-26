@@ -153,7 +153,7 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 		smbPropertiesToApply: file.SMBProperties{},
 		permissionsToApply:   file.Permissions{},
 		sip:                  sip,
-		metadataToApply:      props.SrcMetadata,
+		metadataToApply:      props.SrcMetadata.Clone(),
 	}, nil
 }
 

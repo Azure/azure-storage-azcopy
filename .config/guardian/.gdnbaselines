@@ -25,6 +25,21 @@
       "createdDate": "2025-04-24 18:58:31Z",
       "expirationDate": "2025-10-11 19:47:23Z",
       "justification": "This error is baselined with an expiration date of 180 days from 2025-04-24 19:47:23Z"
-    }
-  }
+    },
+    "2a317efeccfcc4b1693fab5ad5e0cb3b7d5a4ce7527fb793af668248552d20c7": {
+          "signature": "2a317efeccfcc4b1693fab5ad5e0cb3b7d5a4ce7527fb793af668248552d20c7",
+          "alternativeSignatures": [
+            "2c48aa1a65bfc34fc22e420d430fa1549f0eba6db2c2aee69de2abd0f7fcd25d"
+          ],
+          "target": "binaries/azcopy_windows_grpc_386.exe",
+          "memberOf": [
+            "default"
+          ],
+          "tool": "binskim",
+          "ruleId": "BA2018",
+          "createdDate": "2025-04-24 18:58:31Z",
+          "expirationDate": "2025-10-11 19:47:23Z",
+          "justification": "This error is baselined with an expiration date of 180 days from 2025-04-24 19:47:23Z"
+        }
+  },
 }

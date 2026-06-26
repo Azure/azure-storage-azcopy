@@ -61,6 +61,7 @@ var azcopyAwaitAllowOpenFiles bool
 var isPipeDownload bool
 var retryStatusCodes string
 var debugMemoryProfile string
+var grpcServerPort string
 var checkAzCopyUpdates bool
 
 // It would be preferable if this was a local variable, since it just gets altered and shot off to the STE
@@ -257,6 +258,12 @@ func Initialize(isMigratedToLibrary, isBench, shouldWarn bool, resumeJobId commo
 		AsyncWarnMultipleProcesses(cmd.GetAzCopyAppPath(), currPid) // Start the process checker
 	}
 
+	if common.GrpcShim.Available() {
+		if err := any(common.GrpcShim).(common.GrpcCtl).SetupGrpc(grpcServerPort, common.AzcopyCurrentJobLogger); grpcServerPort != "" && err != nil {
+			glcm.Info("Failed to set up GRPC shim: " + err.Error())
+		}
+	}
+
 	// For benchmarking, try to autotune if possible, otherwise use the default values
 	if jobsAdmin.JobsAdmin != nil && isBench {
 		envVar := common.EEnvironmentVariable.ConcurrencyValue()
@@ -337,8 +344,16 @@ func init() {
 		"Used when debugging, to tell AzCopy to cancel the job midway."+
 			"\n List of relative paths to skip in the STE.")
 
+	// special remote control flag, only available if the build enabled it.
+	if common.GrpcShim.Available() {
+		rootCmd.PersistentFlags().StringVar(&grpcServerPort, "grpc-server-addr", "", "Used in specific scenarios; defaults to disabled. If set, listens on the requested port (e.g. 127.0.0.1:9879). Protocol spec is in grpcctl/internal.")
+	}
+
 	// reserved for partner teams
 	_ = rootCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
+
+	// currently for use in the ev2 extension
+	_ = rootCmd.PersistentFlags().MarkHidden("enable-grpc-server")
 
 	// special flags to be used in case of unexpected service errors.
 	rootCmd.PersistentFlags().StringVar(&retryStatusCodes, "retry-status-codes", "",
