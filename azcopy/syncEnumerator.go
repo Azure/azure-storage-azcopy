@@ -296,7 +296,8 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 			}
 
 			// schedule every local file that doesn't exist at the destination
-			err = indexer.Traverse(transferScheduler.ScheduleSyncRemoveSetPropertiesTransfer, filters)
+			// Normalize the TargetHardlinkFile to ensure it points to lex-smallest anchor
+			err = indexer.Traverse(comparatorInstance.NormalizeAndSchedule(transferScheduler.ScheduleSyncRemoveSetPropertiesTransfer), filters)
 			if err != nil {
 				return err
 			}

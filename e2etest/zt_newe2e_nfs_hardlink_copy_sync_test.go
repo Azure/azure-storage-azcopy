@@ -3640,3 +3640,82 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_HardlinkBecomesFile_NoDeleteDe
 
 	_ = stdOut
 }
+
+// Source: (local)
+//	A.txt  (regular file, nlink=2)
+//	B.txt  (hardlink -> A.txt)
+//
+// Destination (before sync):
+//	A.txt  (regular file)
+//
+// Expected Destination after sync:
+//	A.txt  (regular file, nlink=2)
+//	B.txt  (hardlink -> A.txt)
+
+// Validates that sync creates the missing non-anchor member of a hardlink
+// group as a hardlink (CreateHardLink API), not as an independent inode.
+func (s *FilesNFSTestSuite) Scenario_HardlinkSync_HardlinkCreatedOnDestination(svm *ScenarioVariationManager) {
+	if runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, common.EFromTo.LocalFileNFS())
+	defer cleanupHardlinkSyncForFromTo(svm, common.EFromTo.LocalFileNFS(), srcContainer, dstContainer, rootDir)
+
+	anchorName := rootDir + "/A.txt"
+	linkName := rootDir + "/B.txt"
+
+	// ── Destination (before sync): anchor only, as a plain regular file ──────
+	dstDir := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+	dstDir.Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Folder()})
+
+	dstAnchor := dstContainer.GetObject(svm, anchorName, common.EEntityType.File())
+	dstAnchor.Create(svm, NewRandomObjectContentContainer(1), ObjectProperties{})
+
+	setOldLMT(svm, dstAnchor, dstContainer)
+
+	if !svm.Dryrun() {
+		time.Sleep(5 * time.Second)
+	}
+
+	// ── Source: A.txt and B.txt share one inode ──────────────────────
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName:       pointerTo(rootDir),
+		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()},
+	})
+
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName: pointerTo(anchorName),
+		Body:       NewRandomObjectContentContainer(1),
+		ObjectProperties: ObjectProperties{
+			EntityType: common.EEntityType.File(),
+		},
+	})
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName: pointerTo(linkName),
+		ObjectProperties: ObjectProperties{
+			EntityType:         common.EEntityType.Hardlink(),
+			HardLinkedFileName: anchorName,
+		},
+	})
+	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+	stdOut := runHardlinkSyncForFromTo(svm, srcDirObj, dstDir, common.EFromTo.LocalFileNFS(), true)
+
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			anchorName: ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+			},
+			linkName: ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType:         common.EEntityType.Hardlink(),
+					HardLinkedFileName: anchorName,
+				},
+			},
+		},
+	}, ValidateResourceOptions{
+		fromTo:           common.EFromTo.LocalFileNFS(),
+		hardlinkHandling: common.PreserveHardlinkHandlingType,
+	})
+	ValidateHardlinksTransferCount(svm, stdOut, 2)
+}
