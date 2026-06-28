@@ -26,6 +26,7 @@ package sddl
 import (
 	"encoding/binary"
 	"fmt"
+	"math"
 	"strconv"
 	"unsafe"
 
@@ -589,6 +590,14 @@ var domainRidShortcuts = map[string]uint32{
 
 /****************************************************************************/
 
+// isRangeValid validates that offset+length does not overflow, and lies under descriptorLength
+func isRangeValid(offset, length, descriptorLength uint32) bool {
+	u64RangeEnd := uint64(offset) + uint64(length)
+
+	return u64RangeEnd <= math.MaxUint32 && // the range is valid, provided we do not overflow
+		u64RangeEnd <= uint64(descriptorLength) // and that we line up with the max length of the descriptor.
+}
+
 // Test whether sd refers to a valid Security Descriptor.
 // We do some basic validations of the SECURITY_DESCRIPTOR_RELATIVE header.
 // 'flags' is used to convey what all information does the caller want us to verify in the binary SD.
@@ -605,6 +614,7 @@ func sdRelativeIsValid(sd []byte, flags SECURITY_INFORMATION) error {
 	offsetGroup := binary.LittleEndian.Uint32(sd[8:12])
 	offsetSacl := binary.LittleEndian.Uint32(sd[12:16])
 	offsetDacl := binary.LittleEndian.Uint32(sd[16:20])
+	sdLenU32 := uint32(len(sd))
 
 	// Now validate sanity of these fields.
 	if revision != SDDL_REVISION {
@@ -629,8 +639,9 @@ func sdRelativeIsValid(sd []byte, flags SECURITY_INFORMATION) error {
 
 		// offsetDacl may be 0 which would mean "No ACLs" aka "allow all users".
 		// If non-zero, OffsetDacl must point inside the relative Security Descriptor.
-		if offsetDacl != 0 && offsetDacl+uint32(unsafe.Sizeof(ACL{})) > uint32(len(sd)) {
-			return fmt.Errorf("DACL (offsetDacl=%d) must lie within sd (length=%d)", offsetDacl, len(sd))
+		if offsetDacl != 0 &&
+			!isRangeValid(offsetDacl, uint32(unsafe.Sizeof(ACL{})), sdLenU32) {
+			return fmt.Errorf("DACL (offsetDacl=%d, end=%d) must lie within sd (length=%d)", offsetDacl, uint64(offsetDacl)+uint64(unsafe.Sizeof(ACL{})), len(sd))
 		}
 	}
 
@@ -639,8 +650,8 @@ func sdRelativeIsValid(sd []byte, flags SECURITY_INFORMATION) error {
 		// SE_SACL_PRESENT bit is optional. If not set it means there is no SACL present.
 		if (control&SE_SACL_PRESENT) != 0 && offsetSacl != 0 {
 			// OffsetSacl must point inside the relative Security Descriptor.
-			if offsetSacl+uint32(unsafe.Sizeof(ACL{})) > uint32(len(sd)) {
-				return fmt.Errorf("SACL (offsetSacl=%d) must lie within sd (length=%d)", offsetSacl, len(sd))
+			if !isRangeValid(offsetSacl, uint32(unsafe.Sizeof(ACL{})), sdLenU32) {
+				return fmt.Errorf("SACL (offsetSacl=%d, end=%d) must lie within sd (length=%d)", offsetSacl, uint64(offsetSacl)+uint64(unsafe.Sizeof(ACL{})), len(sd))
 			}
 		}
 	}
@@ -652,9 +663,9 @@ func sdRelativeIsValid(sd []byte, flags SECURITY_INFORMATION) error {
 		}
 
 		// OffsetOwner must point inside the relative Security Descriptor.
-		if offsetOwner+uint32(unsafe.Sizeof(SID{})) > uint32(len(sd)) {
-			return fmt.Errorf("OwnerSID (offsetOwner=%d) must lie within sd (length=%d)",
-				offsetOwner, len(sd))
+		if !isRangeValid(offsetOwner, uint32(unsafe.Sizeof(SID{})), sdLenU32) {
+			return fmt.Errorf("OwnerSID (offsetOwner=%d, end=%d) must lie within sd (length=%d)",
+				offsetOwner, uint64(offsetOwner)+uint64(unsafe.Sizeof(SID{})), len(sd))
 		}
 	}
 
@@ -665,9 +676,9 @@ func sdRelativeIsValid(sd []byte, flags SECURITY_INFORMATION) error {
 		}
 
 		// OffsetGroup must point inside the relative Security Descriptor.
-		if offsetGroup+uint32(unsafe.Sizeof(SID{})) > uint32(len(sd)) {
-			return fmt.Errorf("GroupSID (offsetGroup=%d) must lie within sd (length=%d)",
-				offsetGroup, len(sd))
+		if !isRangeValid(offsetGroup, uint32(unsafe.Sizeof(SID{})), sdLenU32) {
+			return fmt.Errorf("GroupSID (offsetGroup=%d, end=%d) must lie within sd (length=%d)",
+				offsetGroup, uint64(offsetGroup)+uint64(unsafe.Sizeof(SID{})), len(sd))
 		}
 	}
 
@@ -873,6 +884,7 @@ func aceRightsToString(aceRights uint32) string {
 
 // Does the aceType correspond to an object ACE?
 // We don't support object ACEs.
+//
 //nolint:deadcode,unused
 func isObjectAce(aceType byte) bool {
 	switch aceType {
@@ -1017,6 +1029,7 @@ func getOwnerSidString(sd []byte) (string, error) {
 
 	// SECURITY_DESCRIPTOR_RELATIVE.OffsetOwner.
 	offsetOwner := binary.LittleEndian.Uint32(sd[4:8])
+	// we don't care as much about validating the range here -- sidToString ensures there's at least 8 bytes after slicing.
 	if offsetOwner >= uint32(len(sd)) {
 		return "", fmt.Errorf("offsetOwner (%d) points outside Security Descriptor of size %d bytes!",
 			offsetOwner, len(sd))
@@ -1044,6 +1057,7 @@ func getGroupSidString(sd []byte) (string, error) {
 
 	// SECURITY_DESCRIPTOR_RELATIVE.OffsetGroup.
 	offsetGroup := binary.LittleEndian.Uint32(sd[8:12])
+	// we don't care as much about validating the range here -- sidToString ensures there's at least 8 bytes after slicing.
 	if offsetGroup >= uint32(len(sd)) {
 		return "", fmt.Errorf("offsetGroup (%d) points outside Security Descriptor of size %d bytes!",
 			offsetGroup, len(sd))
@@ -1111,7 +1125,7 @@ func getDaclString(sd []byte) (string, error) {
 		return daclString, nil
 	}
 
-	if (dacloffset + 8) > uint32(len(sd)) {
+	if !isRangeValid(dacloffset, 8, uint32(len(sd))) {
 		return "", fmt.Errorf("dacloffset (%d) points outside Security Descriptor of size %d bytes!",
 			dacloffset+8, len(sd))
 	}
@@ -1141,7 +1155,7 @@ func getDaclString(sd []byte) (string, error) {
 	// If numAces is 0 it'll result in daclString to have only flags and no ACEs.
 	// Such an ACL will mean "allow nobody".
 	for i := 0; i < int(numAces); i++ {
-		if (offset + 4) > uint32(len(sd)) {
+		if !isRangeValid(offset, 4, uint32(len(sd))) {
 			return "", fmt.Errorf("Short ACE (offset=%d), Security Descriptor size=%d bytes!",
 				offset, len(sd))
 		}
@@ -1149,8 +1163,8 @@ func getDaclString(sd []byte) (string, error) {
 		// ACCESS_ALLOWED_ACE.Header.AceSize.
 		ace_size := uint32(binary.LittleEndian.Uint16(sd[offset+2 : offset+4]))
 
-		if (offset + ace_size) > uint32(len(sd)) {
-			return "", fmt.Errorf("ACE (offset=%d, ace_size=%d) lies outside Security Descriptor of size %d bytes!", offset, ace_size, len(sd))
+		if !isRangeValid(offset, ace_size, uint32(len(sd))) {
+			return "", fmt.Errorf("ACE (offset=%d, ace_size=%d) lies outside Security Descriptor of size %d bytes (or exceeds uint32 limits)!", offset, ace_size, len(sd))
 		}
 
 		aceStr, err := aceToString(sd[offset : offset+ace_size])
