@@ -217,12 +217,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 
 	// It's a bucket or virtual directory.
 	listObjectOptions := minio.ListObjectsOptions{Prefix: searchPrefix, Recursive: t.recursive}
-	listedObjectCount := 0
-	skippedPotentialDirectoryCount := 0
-	processedFileCount := 0
-	firstSkippedPotentialDirectoryKey := ""
 	for objectInfo := range t.s3Client.ListObjects(t.ctx, t.s3URLParts.BucketName, listObjectOptions) {
-		listedObjectCount++
 		// re-join the unescaped path.
 		relativePath := strings.TrimPrefix(objectInfo.Key, searchPrefix)
 
@@ -265,10 +260,6 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 		if isPotentialDirectory && !t.includeDirectoryOrPrefix {
 			// Directories are the only objects without storage classes.
 			// Skip directories if not using sync orchestrator
-			skippedPotentialDirectoryCount++
-			if firstSkippedPotentialDirectoryKey == "" {
-				firstSkippedPotentialDirectoryKey = objectInfo.Key
-			}
 			continue
 		}
 
@@ -316,8 +307,6 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 				// XDM: What do we do for SyncOrchrestrator?
 				continue
 			}
-			processedFileCount++
-
 			// default to empty props, but retrieve real ones if required
 			oie := common.ObjectInfoExtension{ObjectInfo: minio.ObjectInfo{}}
 			if t.getProperties {
@@ -361,17 +350,6 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			})
 			return
 		}
-	}
-
-	if providerKind == common.S3ProviderCustom && listedObjectCount > 0 && processedFileCount == 0 && skippedPotentialDirectoryCount > 0 {
-		logCustomS3DirectoryDiagnosticOncePerJob(fmt.Sprintf(
-			"Custom S3-compatible scan for bucket %q and prefix %q listed %d objects but processed 0 files; %d objects were skipped as potential directories. First skipped key: %q. This may indicate the endpoint is returning directory-like metadata for objects.",
-			t.s3URLParts.BucketName,
-			searchPrefix,
-			listedObjectCount,
-			skippedPotentialDirectoryCount,
-			firstSkippedPotentialDirectoryKey,
-		))
 	}
 	return
 }
@@ -434,20 +412,6 @@ func showS3UrlTypeWarning(s3URLParts common.S3URLParts) {
 }
 
 var s3UrlWarningOncer = &sync.Once{}
-var customS3DirectoryDiagnosticLoggedJobs sync.Map
-
-func logCustomS3DirectoryDiagnosticOncePerJob(message string) {
-	jobKey := azcopyCurrentJobID.String()
-	if jobKey == "00000000-0000-0000-0000-000000000000" || jobKey == "" {
-		jobKey = "empty-job-id"
-	}
-
-	if _, loaded := customS3DirectoryDiagnosticLoggedJobs.LoadOrStore(jobKey, struct{}{}); loaded {
-		return
-	}
-
-	WarnStdoutAndScanningLog(message)
-}
 
 // Global S3 client manager for reusing clients across operations
 // This is particularly useful for sync orchestrator which creates many traversers for different path prefixes
