@@ -67,34 +67,23 @@ const PeReCheckCooldownTimeInSecs = 600 // 10 minutes - time to wait before rech
 const PeCheckRetries = 3
 const PeCheckIntervalInmilliSecs = 200
 
-func getS3BucketLookup(s3CredInfo S3CredentialInfo) minio.BucketLookupType {
-	urlParts := S3URLParts{Endpoint: s3CredInfo.Endpoint}
-	if urlParts.IsGoogleCloudStorage() {
-		// Force path-style for GCS so bucket names with underscores do not
-		// appear in the request host.
-		return minio.BucketLookupPath
-	}
-
-	if urlParts.IsOracleCloudStorage() {
+func getS3BucketLookup(endpoint string) minio.BucketLookupType {
+	urlParts := S3URLParts{Endpoint: endpoint}
+	switch urlParts.ProviderKind() {
+	case S3ProviderOracle:
 		if urlParts.IsOracleCloudStorageVirtualHosted() {
 			return minio.BucketLookupDNS
 		}
 		return minio.BucketLookupPath
-	}
-
-	// AWS S3 always uses virtual-hosted (DNS) style, even when a custom Provider is set.
-	if urlParts.IsAmazonAWS() {
+	case S3ProviderAlibaba:
+		// Alibaba OSS requires virtual-hosted style.
+		return minio.BucketLookupDNS
+	case S3ProviderGoogle, S3ProviderIBM, S3ProviderCustom:
+		return minio.BucketLookupPath
+	default:
+		// Default behavior for AWS S3 endpoints.
 		return minio.BucketLookupDNS
 	}
-
-	// For all other endpoints (OnPrem/MinIO, custom S3-compatible) where the caller
-	// supplies a Provider, use path-style so the bucket name is in the URL path
-	// rather than the hostname (avoids DNS resolution issues for unknown endpoints).
-	if s3CredInfo.Provider != nil {
-		return minio.BucketLookupPath
-	}
-
-	return minio.BucketLookupDNS
 }
 
 func createS3ClientForPrivateNetwork(credInfo CredentialInfo, cred *credentials.Credentials) (*minio.Client, error) {

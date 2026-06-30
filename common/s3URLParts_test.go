@@ -25,6 +25,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/minio/minio-go/v7"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -363,4 +364,135 @@ func TestGCSURLParse(t *testing.T) {
 	a.Equal("", p.Region)
 	a.True(p.IsGoogleCloudStorage())
 	a.Equal("https://my.bucket.storage.googleapis.com/object.txt", p.String())
+}
+
+func TestIBMURLParse(t *testing.T) {
+	a := assert.New(t)
+
+	// IBM regional endpoint (path-style)
+	t.Setenv("S3_COMPATIBLE_ENDPOINT", "s3.eu-de.cloud-object-storage.appdomain.cloud")
+	u, _ := url.Parse("https://s3.eu-de.cloud-object-storage.appdomain.cloud/mybucket/folder/file.txt")
+	p, err := NewS3URLParts(*u)
+	a.Nil(err)
+	a.Equal("s3.eu-de.cloud-object-storage.appdomain.cloud", p.Endpoint)
+	a.Equal("mybucket", p.BucketName)
+	a.Equal("folder/file.txt", p.ObjectKey)
+	a.Equal("eu-de", p.Region)
+	a.True(p.IsIBMCloudObjectStorage())
+	a.Equal(S3ProviderIBM, p.ProviderKind())
+
+	// IBM geo endpoint (path-style)
+	t.Setenv("S3_COMPATIBLE_ENDPOINT", "s3.us.cloud-object-storage.appdomain.cloud")
+	u, _ = url.Parse("https://s3.us.cloud-object-storage.appdomain.cloud/mybucket/file.txt")
+	p, err = NewS3URLParts(*u)
+	a.Nil(err)
+	a.Equal("s3.us.cloud-object-storage.appdomain.cloud", p.Endpoint)
+	a.Equal("mybucket", p.BucketName)
+	a.Equal("file.txt", p.ObjectKey)
+	a.Equal("us", p.Region)
+	a.True(p.IsIBMCloudObjectStorage())
+	a.Equal(S3ProviderIBM, p.ProviderKind())
+
+	// IBM virtual-hosted style
+	t.Setenv("S3_COMPATIBLE_ENDPOINT", "s3.us-south.cloud-object-storage.appdomain.cloud")
+	u, _ = url.Parse("https://mybucket.s3.us-south.cloud-object-storage.appdomain.cloud/folder/file.txt")
+	p, err = NewS3URLParts(*u)
+	a.Nil(err)
+	a.Equal("s3.us-south.cloud-object-storage.appdomain.cloud", p.Endpoint)
+	a.Equal("mybucket", p.BucketName)
+	a.Equal("folder/file.txt", p.ObjectKey)
+	a.Equal("us-south", p.Region)
+	a.True(p.IsIBMCloudObjectStorage())
+	a.Equal(S3ProviderIBM, p.ProviderKind())
+
+	// IBM private endpoint (path-style)
+	t.Setenv("S3_COMPATIBLE_ENDPOINT", "s3.private.us-south.cloud-object-storage.appdomain.cloud")
+	u, _ = url.Parse("https://s3.private.us-south.cloud-object-storage.appdomain.cloud/mybucket/private-file.txt")
+	p, err = NewS3URLParts(*u)
+	a.Nil(err)
+	a.Equal("s3.private.us-south.cloud-object-storage.appdomain.cloud", p.Endpoint)
+	a.Equal("mybucket", p.BucketName)
+	a.Equal("private-file.txt", p.ObjectKey)
+	a.Equal("us-south", p.Region)
+	a.True(p.IsIBMCloudObjectStorage())
+	a.Equal(S3ProviderIBM, p.ProviderKind())
+
+	// IBM private endpoint (virtual-hosted)
+	u, _ = url.Parse("https://mybucket.s3.private.us-south.cloud-object-storage.appdomain.cloud/folder/file.txt")
+	p, err = NewS3URLParts(*u)
+	a.Nil(err)
+	a.Equal("s3.private.us-south.cloud-object-storage.appdomain.cloud", p.Endpoint)
+	a.Equal("mybucket", p.BucketName)
+	a.Equal("folder/file.txt", p.ObjectKey)
+	a.Equal("us-south", p.Region)
+	a.True(p.IsIBMCloudObjectStorage())
+	a.Equal(S3ProviderIBM, p.ProviderKind())
+
+	// Generic IBM suffix should also recognize private endpoints.
+	t.Setenv("S3_COMPATIBLE_ENDPOINT", "cloud-object-storage.appdomain.cloud")
+	u, _ = url.Parse("https://mybucket.s3.private.us-south.cloud-object-storage.appdomain.cloud/folder/file2.txt")
+	p, err = NewS3URLParts(*u)
+	a.Nil(err)
+	a.Equal("s3.private.us-south.cloud-object-storage.appdomain.cloud", p.Endpoint)
+	a.Equal("mybucket", p.BucketName)
+	a.Equal("folder/file2.txt", p.ObjectKey)
+	a.Equal("us-south", p.Region)
+	a.True(p.IsIBMCloudObjectStorage())
+	a.Equal(S3ProviderIBM, p.ProviderKind())
+}
+
+func TestAlibabaURLParseAndBucketLookup(t *testing.T) {
+	a := assert.New(t)
+
+	t.Setenv("S3_COMPATIBLE_ENDPOINT", "oss-cn-hangzhou.aliyuncs.com")
+	u, _ := url.Parse("https://mybucket.oss-cn-hangzhou.aliyuncs.com/path/to/file.txt")
+	p, err := NewS3URLParts(*u)
+	a.Nil(err)
+	a.Equal("oss-cn-hangzhou.aliyuncs.com", p.Endpoint)
+	a.Equal("mybucket", p.BucketName)
+	a.Equal("path/to/file.txt", p.ObjectKey)
+	a.Equal("cn-hangzhou", p.Region)
+	a.True(p.IsAlibabaObjectStorage())
+	a.Equal(S3ProviderAlibaba, p.ProviderKind())
+
+	// Alibaba OSS only supports virtual-hosted style, so lookup must be DNS.
+	a.Equal(minio.BucketLookupDNS, getS3BucketLookup("oss-cn-hangzhou.aliyuncs.com"))
+
+	// IBM should keep existing S3-compatible behavior (path-style via env-based compatible endpoint).
+	t.Setenv("S3_COMPATIBLE_ENDPOINT", "s3.us.cloud-object-storage.appdomain.cloud")
+	a.Equal(minio.BucketLookupPath, getS3BucketLookup("s3.us.cloud-object-storage.appdomain.cloud"))
+
+	// Alibaba internal endpoint should also parse as Alibaba OSS.
+	t.Setenv("S3_COMPATIBLE_ENDPOINT", "oss-cn-hangzhou-internal.aliyuncs.com")
+	u, _ = url.Parse("https://mybucket.oss-cn-hangzhou-internal.aliyuncs.com/path/to/internal-file.txt")
+	p, err = NewS3URLParts(*u)
+	a.Nil(err)
+	a.Equal("oss-cn-hangzhou-internal.aliyuncs.com", p.Endpoint)
+	a.Equal("mybucket", p.BucketName)
+	a.Equal("path/to/internal-file.txt", p.ObjectKey)
+	a.Equal("cn-hangzhou", p.Region)
+	a.True(p.IsAlibabaObjectStorage())
+	a.Equal(S3ProviderAlibaba, p.ProviderKind())
+	a.Equal(minio.BucketLookupDNS, getS3BucketLookup("oss-cn-hangzhou-internal.aliyuncs.com"))
+
+	// Generic Alibaba suffix should also recognize internal virtual-hosted endpoints.
+	t.Setenv("S3_COMPATIBLE_ENDPOINT", "aliyuncs.com")
+	u, _ = url.Parse("https://mybucket.oss-cn-hangzhou-internal.aliyuncs.com/path/to/internal-file2.txt")
+	p, err = NewS3URLParts(*u)
+	a.Nil(err)
+	a.Equal("oss-cn-hangzhou-internal.aliyuncs.com", p.Endpoint)
+	a.Equal("mybucket", p.BucketName)
+	a.Equal("path/to/internal-file2.txt", p.ObjectKey)
+	a.Equal("cn-hangzhou", p.Region)
+	a.True(p.IsAlibabaObjectStorage())
+	a.Equal(S3ProviderAlibaba, p.ProviderKind())
+
+	// Generic suffix with service endpoint path-style should also parse region correctly.
+	u, _ = url.Parse("https://oss-cn-hangzhou-internal.aliyuncs.com/mybucket/path/to/internal-file3.txt")
+	p, err = NewS3URLParts(*u)
+	a.Nil(err)
+	a.Equal("oss-cn-hangzhou-internal.aliyuncs.com", p.Endpoint)
+	a.Equal("mybucket", p.BucketName)
+	a.Equal("path/to/internal-file3.txt", p.ObjectKey)
+	a.Equal("cn-hangzhou", p.Region)
 }

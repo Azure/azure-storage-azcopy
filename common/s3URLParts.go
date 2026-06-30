@@ -56,6 +56,18 @@ type S3URLParts struct {
 	// TODO: Other S3 compatible service which might be with IP endpoint style
 }
 
+type S3ProviderKind string
+
+const (
+	S3ProviderAWS     S3ProviderKind = "aws"
+	S3ProviderGoogle  S3ProviderKind = "google"
+	S3ProviderOracle  S3ProviderKind = "oracle"
+	S3ProviderIBM     S3ProviderKind = "ibm"
+	S3ProviderAlibaba S3ProviderKind = "alibaba"
+	S3ProviderCustom  S3ProviderKind = "custom"
+	S3ProviderUnknown S3ProviderKind = "unknown"
+)
+
 const s3HostPattern = "^(?P<bucketName>.+\\.)?s3[.-](?P<dualStackOrRegionOrAWSDomain>[a-z0-9-]+)\\.(?P<regionOrAWSDomainOrCom>[a-z0-9-]+)"
 const invalidS3URLErrorMessage = "Invalid S3 URL. AzCopy supports standard virtual-hosted-style or path-style URLs defined by AWS, E.g: https://bucket.s3.amazonaws.com or https://s3.amazonaws.com/bucket"
 const versionQueryParamKey = "versionId"
@@ -79,6 +91,10 @@ func getS3Keyword() string {
 	switch {
 	case strings.HasSuffix(suffix, "oraclecloud.com"), strings.HasSuffix(suffix, "oci.customer-oci.com"):
 		return "oracle"
+	case strings.HasSuffix(suffix, "cloud-object-storage.appdomain.cloud"):
+		return "ibm"
+	case strings.HasSuffix(suffix, "aliyuncs.com"):
+		return "alibaba"
 	case strings.HasSuffix(suffix, "googleapis.com"):
 		return "googleapis"
 	case strings.HasSuffix(suffix, "amazonaws.com"):
@@ -114,6 +130,14 @@ func findS3URLMatches(host string) (matches []string, isS3Host bool) {
 		switch {
 		case suffix == "amazonaws.com":
 			if m := matchAWSHost(hostLower, suffix); m != nil {
+				return m, true
+			}
+		case strings.HasSuffix(suffix, "cloud-object-storage.appdomain.cloud"):
+			if m := matchIBMHost(hostLower, suffix); m != nil {
+				return m, true
+			}
+		case strings.HasSuffix(suffix, "aliyuncs.com"):
+			if m := matchAlibabaHost(hostLower, suffix); m != nil {
 				return m, true
 			}
 		case strings.HasSuffix(suffix, "oraclecloud.com"), strings.HasSuffix(suffix, "oci.customer-oci.com"):
@@ -207,6 +231,171 @@ func matchGoogleHost(hostLower, suffix string) []string {
 	}
 
 	return nil
+}
+
+func parseIBMRegionFromEndpoint(endpoint string) (string, bool) {
+	const prefix = "s3."
+	const suffix = ".cloud-object-storage.appdomain.cloud"
+	const privatePrefix = "private."
+
+	if !strings.HasPrefix(endpoint, prefix) || !strings.HasSuffix(endpoint, suffix) {
+		return "", false
+	}
+
+	region := endpoint[len(prefix) : len(endpoint)-len(suffix)]
+	region = strings.TrimPrefix(region, privatePrefix)
+
+	if region == "" {
+		return "", false
+	}
+
+	return region, true
+}
+
+func parseIBMHost(hostLower string) (endpoint string, bucket string, region string, ok bool) {
+	if region, ok := parseIBMRegionFromEndpoint(hostLower); ok {
+		return hostLower, "", region, true
+	}
+
+	index := strings.LastIndex(hostLower, ".s3.")
+	if index <= 0 {
+		return "", "", "", false
+	}
+
+	bucket = hostLower[:index]
+	if bucket == "" {
+		return "", "", "", false
+	}
+
+	endpoint = hostLower[index+1:]
+	region, ok = parseIBMRegionFromEndpoint(endpoint)
+	if !ok {
+		return "", "", "", false
+	}
+
+	return endpoint, bucket, region, true
+}
+
+// matchIBMHost matches IBM Cloud Object Storage endpoints in these forms:
+//   - Path-style/service: s3.<region>.cloud-object-storage.appdomain.cloud
+//   - Virtual-hosted:     <bucket>.s3.<region>.cloud-object-storage.appdomain.cloud
+//   - Private endpoint:    s3.private.<region>.cloud-object-storage.appdomain.cloud
+//   - Private virtual:     <bucket>.s3.private.<region>.cloud-object-storage.appdomain.cloud
+func matchIBMHost(hostLower, suffix string) []string {
+	keyword := getS3Keyword() // ibm
+	configuredSuffix := strings.ToLower(suffix)
+
+	// If config is a concrete IBM endpoint, keep direct matching fast-path.
+	if region, ok := parseIBMRegionFromEndpoint(configuredSuffix); ok {
+		if hostLower == configuredSuffix {
+			return []string{hostLower, "", region, keyword}
+		}
+
+		if strings.HasSuffix(hostLower, "."+configuredSuffix) {
+			bucketWithDot := hostLower[:len(hostLower)-len(configuredSuffix)]
+			if bucketWithDot != "" {
+				return []string{hostLower, bucketWithDot, region, keyword}
+			}
+		}
+
+		return nil
+	}
+
+	endpoint, bucket, region, ok := parseIBMHost(hostLower)
+	if !ok || !strings.HasSuffix(endpoint, configuredSuffix) {
+		return nil
+	}
+
+	if bucket == "" {
+		return []string{hostLower, "", region, keyword}
+	}
+
+	return []string{hostLower, bucket + ".", region, keyword}
+}
+
+func parseAlibabaRegionFromEndpoint(endpoint string) (string, bool) {
+	const prefix = "oss-"
+	const suffix = ".aliyuncs.com"
+	const internalSuffix = "-internal"
+
+	if !strings.HasPrefix(endpoint, prefix) || !strings.HasSuffix(endpoint, suffix) {
+		return "", false
+	}
+
+	region := endpoint[len(prefix) : len(endpoint)-len(suffix)]
+	if region == "" {
+		return "", false
+	}
+
+	// Alibaba private-network endpoints use oss-<region>-internal.aliyuncs.com.
+	// The "-internal" segment indicates networking mode, not region identity.
+	if strings.HasSuffix(region, internalSuffix) {
+		region = strings.TrimSuffix(region, internalSuffix)
+		if region == "" {
+			return "", false
+		}
+	}
+
+	return region, true
+}
+
+func parseAlibabaHost(hostLower string) (endpoint string, bucket string, region string, ok bool) {
+	if region, ok := parseAlibabaRegionFromEndpoint(hostLower); ok {
+		return hostLower, "", region, true
+	}
+
+	index := strings.LastIndex(hostLower, ".oss-")
+	if index <= 0 {
+		return "", "", "", false
+	}
+
+	bucket = hostLower[:index]
+	if bucket == "" {
+		return "", "", "", false
+	}
+
+	endpoint = hostLower[index+1:]
+	region, ok = parseAlibabaRegionFromEndpoint(endpoint)
+	if !ok {
+		return "", "", "", false
+	}
+
+	return endpoint, bucket, region, true
+}
+
+// matchAlibabaHost matches Alibaba OSS endpoints in these forms:
+//   - Service endpoint:    oss-<region>.aliyuncs.com
+//   - Virtual-hosted:      <bucket>.oss-<region>.aliyuncs.com
+func matchAlibabaHost(hostLower, suffix string) []string {
+	keyword := getS3Keyword() // alibaba
+	configuredSuffix := strings.ToLower(suffix)
+
+	// If config is a concrete Alibaba endpoint, keep direct matching fast-path.
+	if region, ok := parseAlibabaRegionFromEndpoint(configuredSuffix); ok {
+		if hostLower == configuredSuffix {
+			return []string{hostLower, "", region, keyword}
+		}
+
+		if strings.HasSuffix(hostLower, "."+configuredSuffix) {
+			bucketWithDot := hostLower[:len(hostLower)-len(configuredSuffix)]
+			if bucketWithDot != "" {
+				return []string{hostLower, bucketWithDot, region, keyword}
+			}
+		}
+
+		return nil
+	}
+
+	endpoint, bucket, region, ok := parseAlibabaHost(hostLower)
+	if !ok || !strings.HasSuffix(endpoint, configuredSuffix) {
+		return nil
+	}
+
+	if bucket == "" {
+		return []string{hostLower, "", region, keyword}
+	}
+
+	return []string{hostLower, bucket + ".", region, keyword}
 }
 
 // matchCustomS3Host handles arbitrary FQDN hosts for on-prem S3-compatible appliances.
@@ -515,15 +704,69 @@ func (p *S3URLParts) IsOracleCloudStorageVirtualHosted() bool {
 	return strings.HasPrefix(endpoint, "vhcompat.objectstorage.") || strings.Contains(endpoint, ".vhcompat.objectstorage.")
 }
 
-// IsAmazonAWS checks if this S3 URL points to an AWS S3 endpoint.
-func (p *S3URLParts) IsAmazonAWS() bool {
+func (p *S3URLParts) IsIBMCloudObjectStorage() bool {
+	endpoint := strings.ToLower(p.Endpoint)
+	return strings.Contains(endpoint, ".cloud-object-storage.appdomain.cloud")
+}
+
+func (p *S3URLParts) IsAlibabaObjectStorage() bool {
+	endpoint := strings.ToLower(p.Endpoint)
+	return strings.Contains(endpoint, ".aliyuncs.com") && strings.Contains(endpoint, "oss-")
+}
+
+// IsAWSS3 checks if this S3 URL is pointing to Amazon AWS.
+// Returns true if the endpoint contains "amazonaws.com".
+func (p *S3URLParts) IsAWSS3() bool {
 	return strings.Contains(strings.ToLower(p.Endpoint), "amazonaws.com")
+}
+
+// ProviderKind classifies the endpoint into a known S3 provider family.
+// This allows behavior decisions to key off a stable provider bucket instead of
+// chained negated checks (e.g. "not Google and not Oracle").
+func (p *S3URLParts) ProviderKind() S3ProviderKind {
+	if p.IsGoogleCloudStorage() {
+		return S3ProviderGoogle
+	}
+
+	if p.IsOracleCloudStorage() {
+		return S3ProviderOracle
+	}
+
+	if p.IsIBMCloudObjectStorage() {
+		return S3ProviderIBM
+	}
+
+	if p.IsAlibabaObjectStorage() {
+		return S3ProviderAlibaba
+	}
+
+	if p.IsS3CompatibleEndpoint() {
+		return S3ProviderCustom
+	}
+
+	if p.IsAWSS3() {
+		return S3ProviderAWS
+	}
+
+	return S3ProviderUnknown
+}
+
+// IsCustomS3Compatible checks if this S3 URL is a custom S3-compatible endpoint.
+// Returns true only when S3_COMPATIBLE_ENDPOINT is set and the endpoint is neither Google nor Oracle.
+func (p *S3URLParts) IsCustomS3Compatible() bool {
+	return p.ProviderKind() == S3ProviderCustom
+}
+
+// IsOnPremS3Compatible is a backward-compatible alias for IsCustomS3Compatible.
+// NOTE: "on-prem" is not always accurate for custom endpoints (e.g. managed clouds).
+func (p *S3URLParts) IsOnPremS3Compatible() bool {
+	return p.IsCustomS3Compatible()
 }
 
 // IsS3CompatibleEndpoint returns true if a custom S3-compatible endpoint is configured
 // via the S3_COMPATIBLE_ENDPOINT environment variable.
 func (p *S3URLParts) IsS3CompatibleEndpoint() bool {
-	return os.Getenv("S3_COMPATIBLE_ENDPOINT") != ""
+	return os.Getenv("S3_COMPATIBLE_ENDPOINT") != "" && IsPrivateNetworkTransfer(ELocation.S3())
 }
 
 type caseInsensitiveValues url.Values // map[string][]string
