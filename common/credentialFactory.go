@@ -69,20 +69,21 @@ const PeCheckIntervalInmilliSecs = 200
 
 func getS3BucketLookup(endpoint string) minio.BucketLookupType {
 	urlParts := S3URLParts{Endpoint: endpoint}
-	if urlParts.IsGoogleCloudStorage() {
-		// Force path-style for GCS so bucket names with underscores do not
-		// appear in the request host.
-		return minio.BucketLookupPath
-	}
-
-	if urlParts.IsOracleCloudStorage() {
+	switch urlParts.ProviderKind() {
+	case S3ProviderOracle:
 		if urlParts.IsOracleCloudStorageVirtualHosted() {
 			return minio.BucketLookupDNS
 		}
 		return minio.BucketLookupPath
+	case S3ProviderAlibaba:
+		// Alibaba OSS requires virtual-hosted style.
+		return minio.BucketLookupDNS
+	case S3ProviderGoogle, S3ProviderIBM, S3ProviderCustom:
+		return minio.BucketLookupPath
+	default:
+		// Default behavior for AWS S3 endpoints.
+		return minio.BucketLookupDNS
 	}
-
-	return minio.BucketLookupDNS
 }
 
 func createS3ClientForPrivateNetwork(credInfo CredentialInfo, cred *credentials.Credentials) (*minio.Client, error) {

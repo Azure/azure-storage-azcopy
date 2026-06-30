@@ -204,9 +204,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 		}
 	}
 
-	// Check if this is GCS accessed via S3-compatible API (using HMAC keys)
-	// GCS has different behavior for directory markers compared to AWS S3
-	isGCSviaS3 := t.s3URLParts.IsGoogleCloudStorage()
+	providerKind := t.s3URLParts.ProviderKind()
 
 	// Append a trailing slash if it is missing.
 	if !strings.HasSuffix(t.s3URLParts.ObjectKey, "/") && t.s3URLParts.ObjectKey != "" {
@@ -243,13 +241,19 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			return fmt.Errorf("cannot list objects, %v", objectInfo.Err)
 		}
 
-		// Directory detection logic differs between GCS and AWS S3:
-		// - GCS via S3 API: Use enhanced checks (empty StorageClass + trailing slash or zero size)
-		// - AWS S3: Use standard check (empty StorageClass only)
+		// Directory detection logic differs across providers:
+		// - Generic S3-compatible/on-prem: many providers don't set StorageClass for regular objects.
+		//   Rely on explicit directory-marker shape only (trailing slash + zero size).
+		// - GCS via S3 API: keep enhanced checks to handle its marker behavior.
+		// - AWS S3: keep legacy StorageClass-based behavior.
 		var isPotentialDirectory bool
-		if isGCSviaS3 {
+		switch providerKind {
+		case common.S3ProviderCustom:
+			// Generic S3-compatible/on-prem: avoid StorageClass heuristics.
+			isPotentialDirectory = strings.HasSuffix(objectInfo.Key, "/") && objectInfo.Size == 0
+		case common.S3ProviderGoogle:
 			isPotentialDirectory = objectInfo.StorageClass == "" && (strings.HasSuffix(objectInfo.Key, "/") || objectInfo.Size == 0)
-		} else {
+		default:
 			isPotentialDirectory = objectInfo.StorageClass == ""
 		}
 
@@ -272,9 +276,12 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 
 		// For GCS via S3 API, use stricter directory detection to avoid false positives
 		var isActualDirectory bool
-		if isGCSviaS3 {
+		switch providerKind {
+		case common.S3ProviderCustom:
+			isActualDirectory = strings.HasSuffix(objectInfo.Key, "/") && objectInfo.Size == 0
+		case common.S3ProviderGoogle:
 			isActualDirectory = isPotentialDirectory && objectInfo.Size == 0 && strings.HasSuffix(objectInfo.Key, "/")
-		} else {
+		default:
 			isActualDirectory = objectInfo.StorageClass == ""
 		}
 
@@ -300,7 +307,6 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 				// XDM: What do we do for SyncOrchrestrator?
 				continue
 			}
-
 			// default to empty props, but retrieve real ones if required
 			oie := common.ObjectInfoExtension{ObjectInfo: minio.ObjectInfo{}}
 			if t.getProperties {
