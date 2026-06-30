@@ -3,12 +3,13 @@ package e2etest
 import (
 	"errors"
 	"fmt"
+	"sync"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"sync"
-	"time"
 )
 
 const (
@@ -31,19 +32,23 @@ func SetupOAuthCache(a Asserter) {
 	// We don't consider workload identity in here because it's only used in a few tests
 
 	if GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo.Environment == AzurePipeline {
+		a.Log("OAuth Cache SubscriptionLoginInfo.")
 		tenantId = GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo.DynamicOAuth.Workload.TenantId
 		cred, err = azidentity.NewDefaultAzureCredential(&azidentity.DefaultAzureCredentialOptions{
 			TenantID: tenantId,
 		})
 	} else if useSpn, tenant, appId, secret := GlobalConfig.GetSPNOptions(); useSpn {
+		a.Log("OAuth Cache GetSPNOptions.")
 		tenantId = tenant
 		cred, err = azidentity.NewClientSecretCredential(tenant, appId, secret, nil)
 	} else if staticOAuth.OAuthSource.CLIInherit {
+		a.Log("OAuth Cache CLIInherit.")
 		tenantId = staticOAuth.TenantID
 		cred, err = azidentity.NewAzureCLICredential(&azidentity.AzureCLICredentialOptions{
 			TenantID: tenantId,
 		})
 	} else if staticOAuth.OAuthSource.PSInherit {
+		a.Log("OAuth Cache PSInherit.")
 		tenantId = staticOAuth.TenantID
 		cred, err = common.NewPowershellContextCredential(&common.PowershellContextCredentialOptions{
 			TenantID: tenantId,

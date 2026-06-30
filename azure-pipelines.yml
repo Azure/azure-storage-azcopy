@@ -2,6 +2,12 @@ variables:
   AZCOPY_GOLANG_VERSION: '1.25.11'
   AZCOPY_GOLANG_VERSION_COVERAGE: '1.25.11'
 
+parameters:
+  - name: e2e_tests
+    displayName: 'E2E Tests to Run'
+    type: string
+    default: 'TestNewE2E/.*'
+
 trigger:
   branches:
     include: [ 'main' ]
@@ -11,294 +17,300 @@ pr:
     include: [ '*' ]
      
 jobs:
-  - job: Build
-    timeoutInMinutes: 360
-    strategy:
-      matrix:
-        Linux:
-          imageName: 'ubuntu-latest'
-          type: 'linux'
-        Linux-FIPS:
-          # It's fine to build the FIPS-capable binaries on a system that doesn't support FIPS (but we need to test on both systems)
-          imageName: 'ubuntu-latest'
-          type: 'linux-fips'
-        MacOS:
-          imageName: 'macos-latest'
-          type: 'mac-os'
-        Windows:
-          imageName: 'windows-latest'
-          type: 'windows'
-    pool:
-      vmImage: $(imageName)
-    steps:
-      - task: GoTool@0
-        env:
-          GO111MODULE: 'on'
-        inputs:
-          version: $(AZCOPY_GOLANG_VERSION)
-          # We use the Microsoft build of Go to produce FIPS-capable Linux builds.
-          goDownloadUrl: 'https://aka.ms/golang/release/latest'
-        displayName: 'Install Microsoft build of Go'
-        # Don't run if job is canceled
-        condition: and(succeededOrFailed(), eq(variables.type, 'linux-fips'))
+  # - job: Build
+  #   timeoutInMinutes: 360
+  #   strategy:
+  #     matrix:
+  #       Linux:
+  #         imageName: 'ubuntu-latest'
+  #         type: 'linux'
+  #       Linux-FIPS:
+  #         # It's fine to build the FIPS-capable binaries on a system that doesn't support FIPS (but we need to test on both systems)
+  #         imageName: 'ubuntu-latest'
+  #         type: 'linux-fips'
+  #       MacOS:
+  #         imageName: 'macos-latest'
+  #         type: 'mac-os'
+  #       Windows:
+  #         imageName: 'windows-latest'
+  #         type: 'windows'
+  #   pool:
+  #     vmImage: $(imageName)
+  #   steps:
+  #     - task: GoTool@0
+  #       env:
+  #         GO111MODULE: 'on'
+  #       inputs:
+  #         version: $(AZCOPY_GOLANG_VERSION)
+  #         # We use the Microsoft build of Go to produce FIPS-capable Linux builds.
+  #         goDownloadUrl: 'https://aka.ms/golang/release/latest'
+  #       displayName: 'Install Microsoft build of Go'
+  #       # Don't run if job is canceled
+  #       condition: and(succeededOrFailed(), eq(variables.type, 'linux-fips'))
 
-      - task: GoTool@0
-        env:
-          GO111MODULE: 'on'
-        inputs:
-          version: $(AZCOPY_GOLANG_VERSION)
-        displayName: 'Install Go'
-        # Don't run if job is canceled
-        condition: and(succeededOrFailed(), ne(variables.type, 'linux-fips'))
+  #     - task: GoTool@0
+  #       env:
+  #         GO111MODULE: 'on'
+  #       inputs:
+  #         version: $(AZCOPY_GOLANG_VERSION)
+  #       displayName: 'Install Go'
+  #       # Don't run if job is canceled
+  #       condition: and(succeededOrFailed(), ne(variables.type, 'linux-fips'))
 
-      - script: |
-          echo 'Running GO Vet'
-          go vet 
-        displayName: 'Golang Vet - Linux'
-        workingDirectory: $(System.DefaultWorkingDirectory)
+  #     - script: |
+  #         echo 'Running GO Vet'
+  #         go vet 
+  #       displayName: 'Golang Vet - Linux'
+  #       workingDirectory: $(System.DefaultWorkingDirectory)
 
-      - script: |
-          sudo apt-get update
-          sudo apt-get install -y libsecret-1-dev libglib2.0-dev
-        displayName: 'Install dependencies'
-        # Don't run if job is canceled
-        condition: and(succeededOrFailed(), in(variables.type, 'linux', 'linux-fips'))
+  #     - script: |
+  #         sudo apt-get update
+  #         sudo apt-get install -y libsecret-1-dev libglib2.0-dev
+  #       displayName: 'Install dependencies'
+  #       # Don't run if job is canceled
+  #       condition: and(succeededOrFailed(), in(variables.type, 'linux', 'linux-fips'))
         
-      - script: |
-          GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
-        displayName: 'Generate Linux AMD64'
-        # Don't run if job is canceled
-        condition: and(succeededOrFailed(), eq(variables.type, 'linux'))
+  #     - script: |
+  #         GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
+  #       displayName: 'Generate Linux AMD64'
+  #       # Don't run if job is canceled
+  #       condition: and(succeededOrFailed(), eq(variables.type, 'linux'))
 
-      - script: |
-          GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
-        displayName: 'Generate Linux AMD64 SE Integration'
-        # Don't run if job is canceled
-        condition: and(succeededOrFailed(), eq(variables.type, 'linux'))
+  #     - script: |
+  #         GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
+  #       displayName: 'Generate Linux AMD64 SE Integration'
+  #       # Don't run if job is canceled
+  #       condition: and(succeededOrFailed(), eq(variables.type, 'linux'))
 
-      - script: |
-          GOARCH=arm64 GOOS=linux go build -tags "netgo" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64"
-        displayName: 'Generate Linux ARM64'
-        # Don't run if job is canceled
-        condition: and(succeededOrFailed(), eq(variables.type, 'linux'))
+  #     - script: |
+  #         GOARCH=arm64 GOOS=linux go build -tags "netgo" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64"
+  #       displayName: 'Generate Linux ARM64'
+  #       # Don't run if job is canceled
+  #       condition: and(succeededOrFailed(), eq(variables.type, 'linux'))
         
-      - script: |
-          go build -tags "netgo" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_fips_amd64"
-        displayName: 'Generate FIPS-capable Linux AMD64'
-        # Don't run if job is canceled
-        condition: and(succeededOrFailed(), eq(variables.type, 'linux-fips'))
-        env:
-          GOARCH: amd64
-          GOOS: linux
-          CGO_ENABLED: 1
+  #     - script: |
+  #         go build -tags "netgo" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_fips_amd64"
+  #       displayName: 'Generate FIPS-capable Linux AMD64'
+  #       # Don't run if job is canceled
+  #       condition: and(succeededOrFailed(), eq(variables.type, 'linux-fips'))
+  #       env:
+  #         GOARCH: amd64
+  #         GOOS: linux
+  #         CGO_ENABLED: 1
 
-      - script: |
-          go build -tags "netgo,se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_fips_amd64"
-        displayName: 'Generate FIPS-capable Linux AMD64 SE Integration'
-        # Don't run if job is canceled
-        condition: and(succeededOrFailed(), eq(variables.type, 'linux-fips'))
-        env:
-          GOARCH: amd64
-          GOOS: linux
-          CGO_ENABLED: 1
+  #     - script: |
+  #         go build -tags "netgo,se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_fips_amd64"
+  #       displayName: 'Generate FIPS-capable Linux AMD64 SE Integration'
+  #       # Don't run if job is canceled
+  #       condition: and(succeededOrFailed(), eq(variables.type, 'linux-fips'))
+  #       env:
+  #         GOARCH: amd64
+  #         GOOS: linux
+  #         CGO_ENABLED: 1
 
-      - script: |
-          sudo apt-get install -y gcc-aarch64-linux-gnu
-          go build -tags "netgo" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_fips_arm64"
-        displayName: 'Generate FIPS-capable Linux ARM64'
-        # Don't run if job is canceled
-        condition: and(succeededOrFailed(), eq(variables.type, 'linux-fips'))
-        env:
-          GOARCH: arm64
-          GOOS: linux
-          CGO_ENABLED: 1
-          CC: aarch64-linux-gnu-gcc
+  #     - script: |
+  #         sudo apt-get install -y gcc-aarch64-linux-gnu
+  #         go build -tags "netgo" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_fips_arm64"
+  #       displayName: 'Generate FIPS-capable Linux ARM64'
+  #       # Don't run if job is canceled
+  #       condition: and(succeededOrFailed(), eq(variables.type, 'linux-fips'))
+  #       env:
+  #         GOARCH: arm64
+  #         GOOS: linux
+  #         CGO_ENABLED: 1
+  #         CC: aarch64-linux-gnu-gcc
 
-      - script: |
-          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe"
-        displayName: 'Generate Windows AMD64'
-        # Don't run if job is canceled
-        condition: and(succeededOrFailed(), eq(variables.type, 'windows'))
-        env:
-          GOARCH: amd64
-          GOOS: windows
-          CGO_ENABLED: 0
+  #     - script: |
+  #         go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe"
+  #       displayName: 'Generate Windows AMD64'
+  #       # Don't run if job is canceled
+  #       condition: and(succeededOrFailed(), eq(variables.type, 'windows'))
+  #       env:
+  #         GOARCH: amd64
+  #         GOOS: windows
+  #         CGO_ENABLED: 0
 
-      - script: |
-          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_386.exe"
-        displayName: 'Generate Windows i386'
-        # Don't run if job is canceled
-        condition: and(succeededOrFailed(), eq(variables.type, 'windows'))
-        env:
-          GOARCH: 386
-          GOOS: windows
-          CGO_ENABLED: 0
+  #     - script: |
+  #         go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_386.exe"
+  #       displayName: 'Generate Windows i386'
+  #       # Don't run if job is canceled
+  #       condition: and(succeededOrFailed(), eq(variables.type, 'windows'))
+  #       env:
+  #         GOARCH: 386
+  #         GOOS: windows
+  #         CGO_ENABLED: 0
 
-      - script: |
-          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_v7_arm.exe"
-        displayName: 'Generate Windows ARM'
-        # Don't run if job is canceled
-        condition: and(succeededOrFailed(), eq(variables.type, 'windows'))
-        env:
-          GOARCH: arm
-          GOARM: 7
-          GOOS: windows
-          CGO_ENABLED: 0
+  #     - script: |
+  #         go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_v7_arm.exe"
+  #       displayName: 'Generate Windows ARM'
+  #       # Don't run if job is canceled
+  #       condition: and(succeededOrFailed(), eq(variables.type, 'windows'))
+  #       env:
+  #         GOARCH: arm
+  #         GOARM: 7
+  #         GOOS: windows
+  #         CGO_ENABLED: 0
 
-      - script: |
-          cp NOTICE.txt $(Build.ArtifactStagingDirectory)
-        displayName: 'Copy NOTICE.txt'
-        # Don't run if job is canceled
-        condition: and(succeededOrFailed(), in(variables.type, 'linux', 'linux-fips'))
+  #     - script: |
+  #         cp NOTICE.txt $(Build.ArtifactStagingDirectory)
+  #       displayName: 'Copy NOTICE.txt'
+  #       # Don't run if job is canceled
+  #       condition: and(succeededOrFailed(), in(variables.type, 'linux', 'linux-fips'))
 
-      - script: |
-          CGO_ENABLED=1 go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
-        displayName: 'Generate MacOS Build with AMD64'
-        # Don't run if job is canceled
-        condition: and(succeededOrFailed(), eq(variables.type, 'mac-os'))
+  #     - script: |
+  #         CGO_ENABLED=1 go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
+  #       displayName: 'Generate MacOS Build with AMD64'
+  #       # Don't run if job is canceled
+  #       condition: and(succeededOrFailed(), eq(variables.type, 'mac-os'))
 
-      # uncomment below when manually releasing for m1
-      # - script: |
-      #     curl -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_arm64" -L "BUILD_URL"
-      #   displayName: 'Generate MacOS Build with ARM64'
-      #   # Don't run if job is canceled
-      #   condition: and(succeededOrFailed(), eq(variables.type, 'mac-os'))
+  #     # uncomment below when manually releasing for m1
+  #     # - script: |
+  #     #     curl -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_arm64" -L "BUILD_URL"
+  #     #   displayName: 'Generate MacOS Build with ARM64'
+  #     #   # Don't run if job is canceled
+  #     #   condition: and(succeededOrFailed(), eq(variables.type, 'mac-os'))
 
-      # cross compile to make sure nothing broke
-      - script: |
-          GOARCH=arm64 CGO_ENABLED=1 go build
-        displayName: 'Test Cross-compiled MacOS Build with ARM64'
-        # Don't run if job is canceled
-        condition: and(succeededOrFailed(), eq(variables.type, 'mac-os'))
+  #     # cross compile to make sure nothing broke
+  #     - script: |
+  #         GOARCH=arm64 CGO_ENABLED=1 go build
+  #       displayName: 'Test Cross-compiled MacOS Build with ARM64'
+  #       # Don't run if job is canceled
+  #       condition: and(succeededOrFailed(), eq(variables.type, 'mac-os'))
 
-      - task: PublishBuildArtifacts@1
-        displayName: 'Publish Artifacts'
-        condition: succeededOrFailed()
+  #     - task: PublishBuildArtifacts@1
+  #       displayName: 'Publish Artifacts'
+  #       condition: succeededOrFailed()
         
-      - task: ComponentGovernanceComponentDetection@0
-        inputs:
-          scanType: 'Register'
-          verbosity: 'Verbose'
-          alertWarningLevel: 'High'
+  #     - task: ComponentGovernanceComponentDetection@0
+  #       inputs:
+  #         scanType: 'Register'
+  #         verbosity: 'Verbose'
+  #         alertWarningLevel: 'High'
 
-  - template: azurePipelineTemplates/run-e2e.yml
-    parameters:
-      job_name: 'Old_E2E'
-      test_cli_param: '-tags olde2etest'
+  # - template: azurePipelineTemplates/run-e2e.yml
+  #   parameters:
+  #     job_name: 'Old_E2E'
+  #     test_cli_param: '-tags olde2etest'
 
-  - template: azurePipelineTemplates/run-e2e.yml
-    parameters:
-      job_name: 'Old_E2E_custom_pool'
-      custom_pool: true
-      test_cli_param: '-tags olde2etest'
+  # - template: azurePipelineTemplates/run-e2e.yml
+  #   parameters:
+  #     job_name: 'Old_E2E_custom_pool_TestManagedDisks'
+  #     custom_pool: true
+  #     test_cli_param: '-run=TestManagedDisks_'
 
-  - template: azurePipelineTemplates/run-e2e.yml
-    parameters:
-      job_name: 'New_E2E'
-      test_cli_param: '-run "TestNewE2E/.*"'
+  # - template: azurePipelineTemplates/run-e2e.yml
+  #   parameters:
+  #     job_name: 'Old_E2E_custom_pool_TestPOSIX'
+  #     custom_pool: true
+  #     test_cli_param: '-run=TestPOSIX_'
+
+  # - template: azurePipelineTemplates/run-e2e.yml
+  #   parameters:
+  #     job_name: 'New_E2E'
+  #     test_cli_param: '-run "TestNewE2E/.*"'
 
   - template: azurePipelineTemplates/run-e2e.yml
     parameters:
       job_name: 'New_E2E_custom_pool'
       custom_pool: true
-      test_cli_param: '-run "TestNewE2E/.*"'
+      test_cli_param: '-run "${{ parameters.e2e_tests }}"'
 
-  - template: azurePipelineTemplates/run-ut-and-py.yml
-    parameters:
-      job_name: 'Unit_and_Python_Tests'
+  # - template: azurePipelineTemplates/run-ut-and-py.yml
+  #   parameters:
+  #     job_name: 'Unit_and_Python_Tests'
 
-  - template: azurePipelineTemplates/run-ut-and-py.yml
-    parameters:
-      job_name: 'Unit_and_Python_Tests_custom_pool'
-      custom_pool: true
+  # - template: azurePipelineTemplates/run-ut-and-py.yml
+  #   parameters:
+  #     job_name: 'Unit_Tests_custom_pool_TestInferContentType'
+  #     custom_pool: true
  
-  - job: Additional_E2E_Test_Linux
-    timeoutInMinutes: 360
-    strategy:
-      matrix:
-        Linux:
-          AgentName: "blobfuse-ubuntu20"
-          build_name: 'azcopy_linux_amd64'
-          container_name: 'testcontainer1'
-          GOOS: 'linux'
-          GOARCH: 'amd64'
-          CGO_ENABLED: '0'
-    pool:
-      name: "blobfuse-ubuntu-pool"
-      demands:
-        - ImageOverride -equals $(AgentName)
-    steps:
-      - script: |
-          # Install Az.Accounts module using Bash script
-          sudo apt-get update
-          sudo apt-get install -y powershell
-          pwsh -Command "Install-Module -Name Az.Accounts -Scope CurrentUser -Repository PSGallery -AllowClobber -Force"
-        displayName: 'Install PowerShell Az Module'
+  # - job: Additional_E2E_Test_Linux
+  #   timeoutInMinutes: 360
+  #   strategy:
+  #     matrix:
+  #       Linux:
+  #         AgentName: "blobfuse-ubuntu20"
+  #         build_name: 'azcopy_linux_amd64'
+  #         container_name: 'testcontainer1'
+  #         GOOS: 'linux'
+  #         GOARCH: 'amd64'
+  #         CGO_ENABLED: '0'
+  #   pool:
+  #     name: "blobfuse-ubuntu-pool"
+  #     demands:
+  #       - ImageOverride -equals $(AgentName)
+  #   steps:
+  #     - script: |
+  #         # Install Az.Accounts module using Bash script
+  #         sudo apt-get update
+  #         sudo apt-get install -y powershell
+  #         pwsh -Command "Install-Module -Name Az.Accounts -Scope CurrentUser -Repository PSGallery -AllowClobber -Force"
+  #       displayName: 'Install PowerShell Az Module'
 
-      - task: GoTool@0
-        inputs:
-          version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
+  #     - task: GoTool@0
+  #       inputs:
+  #         version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
       
-      # Install azcli
-      - script: |
-          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-          az --version
-        displayName: 'Install Azure CLI'
+  #     # Install azcli
+  #     - script: |
+  #         curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+  #         az --version
+  #       displayName: 'Install Azure CLI'
 
-      - template: azurePipelineTemplates/run_scenarios.yml
-        parameters:
-          container_name: $(container_name)
-          storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
-          GOOS: $(GOOS)
-          GOARCH: $(GOARCH)
-          CGO_ENABLED: $(CGO_ENABLED)
-          build_name: $(build_name)
+  #     - template: azurePipelineTemplates/run_scenarios.yml
+  #       parameters:
+  #         container_name: $(container_name)
+  #         storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
+  #         GOOS: $(GOOS)
+  #         GOARCH: $(GOARCH)
+  #         CGO_ENABLED: $(CGO_ENABLED)
+  #         build_name: $(build_name)
           
-  - job: Additional_E2E_Test_Windows
-    timeoutInMinutes: 360
-    strategy:
-      matrix:
-        Windows:
-          AgentName: 'azcopy-windows-22'
-          build_name: 'azcopy_windows_amd64.exe'
-          container_name: 'testcontainer2'
-          GOOS: 'windows'
-          GOARCH: 'amd64'
-          CGO_ENABLED: '0'
-    pool:
-      name: "azcopy-windows-pool"
-      demands:
-        - ImageOverride -equals $(AgentName)
-    steps:
-      - task: PowerShell@2
-        inputs:
-          targetType: 'inline'
-          script: |
-            # Install Az.Accounts module using PowerShell
-            Install-Module -Name Az.Accounts -Scope CurrentUser -Repository PSGallery -AllowClobber -Force
-        displayName: 'Install PowerShell Az Module'
+  # - job: Additional_E2E_Test_Windows
+  #   timeoutInMinutes: 360
+  #   strategy:
+  #     matrix:
+  #       Windows:
+  #         AgentName: 'azcopy-windows-22'
+  #         build_name: 'azcopy_windows_amd64.exe'
+  #         container_name: 'testcontainer2'
+  #         GOOS: 'windows'
+  #         GOARCH: 'amd64'
+  #         CGO_ENABLED: '0'
+  #   pool:
+  #     name: "azcopy-windows-pool"
+  #     demands:
+  #       - ImageOverride -equals $(AgentName)
+  #   steps:
+  #     - task: PowerShell@2
+  #       inputs:
+  #         targetType: 'inline'
+  #         script: |
+  #           # Install Az.Accounts module using PowerShell
+  #           Install-Module -Name Az.Accounts -Scope CurrentUser -Repository PSGallery -AllowClobber -Force
+  #       displayName: 'Install PowerShell Az Module'
 
-      - task: GoTool@0
-        inputs:
-          version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
+  #     - task: GoTool@0
+  #       inputs:
+  #         version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
 
-      - task: PowerShell@2
-        displayName: 'Install Azure CLI'
-        inputs:
-          targetType: 'inline'
-          script: |
-            # Install Azure CLI using Chocolatey
-            choco install azure-cli -y
-            az --version
+  #     - task: PowerShell@2
+  #       displayName: 'Install Azure CLI'
+  #       inputs:
+  #         targetType: 'inline'
+  #         script: |
+  #           # Install Azure CLI using Chocolatey
+  #           choco install azure-cli -y
+  #           az --version
           
-      - template: azurePipelineTemplates/run_scenarios.yml
-        parameters:
-          container_name: $(container_name)
-          storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
-          GOOS: $(GOOS)
-          GOARCH: $(GOARCH)
-          CGO_ENABLED: $(CGO_ENABLED)
-          build_name: $(build_name)
+  #     - template: azurePipelineTemplates/run_scenarios.yml
+  #       parameters:
+  #         container_name: $(container_name)
+  #         storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
+  #         GOOS: $(GOOS)
+  #         GOARCH: $(GOARCH)
+  #         CGO_ENABLED: $(CGO_ENABLED)
+  #         build_name: $(build_name)
 
-    #TODO: Add MacOS E2E tests after creating macos pool
+  #   #TODO: Add MacOS E2E tests after creating macos pool
           

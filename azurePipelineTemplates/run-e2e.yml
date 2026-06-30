@@ -106,13 +106,18 @@ jobs:
           azurite --silent --location azurite --skipApiVersionCheck --debug azurite\debug.log &
         displayName: 'Install and Run Azurite'
 
-      - task: AzureCLI@2
+      # - task: AzureCLI@2
+      #   inputs:
+      #     azureSubscription: azcopytestworkloadidentity
+      #     addSpnToEnvironment: true
+      #     scriptType: pscore
+      #     scriptLocation: inlineScript
+      #     inlineScript: |
+      - task: PowerShell@2
         inputs:
-          azureSubscription: azcopytestworkloadidentity
-          addSpnToEnvironment: true
-          scriptType: pscore
-          scriptLocation: inlineScript
-          inlineScript: |
+          targetType: 'inline'
+          pwsh: true
+          script: |
             # Create coverage directory
             if (-Not (Test-Path -Path "./coverage")) {
               New-Item -Path "./coverage" -ItemType Directory
@@ -159,8 +164,8 @@ jobs:
             }
             
             # Az PS login
-            Connect-AzAccount -FederatedToken $env:idToken -Tenant $env:tenantId -ApplicationId $env:servicePrincipalId
-            $null = Get-AzAccessToken -AsSecureString
+            # Connect-AzAccount -FederatedToken $env:idToken -Tenant $env:tenantId -ApplicationId $env:servicePrincipalId
+            # $null = Get-AzAccessToken -AsSecureString
 
             # Generate the name of the file the test results will be written to
             $testResultsFileName = "test.txt"
@@ -211,12 +216,36 @@ jobs:
           CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
           AZCOPY_E2E_EXECUTABLE_PATH: $(System.DefaultWorkingDirectory)/$(build_name)
           GOCOVERDIR: '$(System.DefaultWorkingDirectory)/coverage'
-          NEW_E2E_SUBSCRIPTION_ID: $(AZCOPY_NEW_E2E_SUBSCRIPTION_ID)
+          # NEW_E2E_SUBSCRIPTION_ID: $(AZCOPY_NEW_E2E_SUBSCRIPTION_ID)
           NEW_E2E_AZCOPY_PATH: $(System.DefaultWorkingDirectory)/$(build_name)
-          NEW_E2E_ENVIRONMENT: "AzurePipeline"
+          # NEW_E2E_ENVIRONMENT: 'AzurePipeline'
           AZCOPY_E2E_PREMIUM_FILESHARE_ACCOUNT_KEY: $(AZCOPY_E2E_PREMIUM_FILESHARE_ACCOUNT_KEY)
           AZCOPY_E2E_PREMIUM_FILESHARE_ACCOUNT_NAME: $(AZCOPY_E2E_PREMIUM_FILESHARE_ACCOUNT_NAME)
-        displayName: 'E2E Test $(display_name) - AMD64 with Workload Identity'
+          #
+          # SubscriptionLoginInfo with DynamicOAuth.SPNSecret:
+          # NEW_E2E_SUBSCRIPTION_ID: $(AZCOPY_NEW_E2E_SUBSCRIPTION_ID)
+          # NEW_E2E_APPLICATION_ID: $(AZCOPY_NEW_E2E_APPLICATION_ID)
+          # NEW_E2E_CLIENT_SECRET: $(AZCOPY_NEW_E2E_CLIENT_SECRET)
+          # NEW_E2E_TENANT_ID: $(OAUTH_TENANT_ID)
+          # NEW_E2E_ENVIRONMENT: '!AzurePipeline' # required field, but must be set to anything other than "AzurePipeline" and seems to be ignored after that check
+          # # These shouldn't be necessary, but they were previously present (see https://github.com/Azure/azure-storage-azcopy/commit/a2521ad86327d6c21cad8598418740a6cc73192f#diff-7915b9b726a397ae7ba6af7b9703633d21c031ebf21682f3ee7e6a4ec52837a5):
+          # AZCOPY_E2E_TENANT_ID: $(OAUTH_TENANT_ID)
+          # AZCOPY_E2E_APPLICATION_ID: $(ACTIVE_DIRECTORY_APPLICATION_ID)
+          # AZCOPY_E2E_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
+          #
+          # StaticStgAcctInfo with StaticOAuth:
+          NEW_E2E_STATIC_TENANT_ID: '$(OAUTH_TENANT_ID)'
+          NEW_E2E_STATIC_APPLICATION_ID: '$(NEW_E2E_STATIC_APPLICATION_ID)'
+          NEW_E2E_STATIC_CLIENT_SECRET: '$(NEW_E2E_STATIC_CLIENT_SECRET)'
+          NEW_E2E_STANDARD_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
+          NEW_E2E_STANDARD_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
+          NEW_E2E_HNS_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY_HNS)
+          NEW_E2E_HNS_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_KEY_HNS)
+          NEW_E2E_PREMIUM_PAGE_ACCOUNT_KEY: $(NEW_E2E_PREMIUM_PAGE_ACCOUNT_KEY)
+          NEW_E2E_PREMIUM_PAGE_ACCOUNT_NAME: $(NEW_E2E_PREMIUM_PAGE_ACCOUNT_KEY)
+          NEW_E2E_PREMIUM_FILESHARE_ACCOUNT_KEY: $(AZCOPY_E2E_PREMIUM_FILESHARE_ACCOUNT_KEY)
+          NEW_E2E_PREMIUM_FILESHARE_ACCOUNT_NAME: $(AZCOPY_E2E_PREMIUM_FILESHARE_ACCOUNT_NAME)
+        displayName: 'E2E Test $(display_name) - without Workload Identity'
 
       - task: PublishBuildArtifacts@1
         displayName: 'Publish logs'
