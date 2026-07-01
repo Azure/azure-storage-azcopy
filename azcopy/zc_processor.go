@@ -137,11 +137,17 @@ func (s *CopyTransferProcessor) scheduleTransfer(srcRelativePath, dstRelativePat
 		return nil // skip this one
 	}
 
-	s.dispatchPartIfReady()
+	err = s.dispatchPartIfReady()
+	if err != nil {
+		return fmt.Errorf("error dispatching part: %w", err)
+	}
 
 	// only append the transfer after we've checked and dispatched a part
 	// so that there is at least one transfer for the final part
-	s.appendTransfer(copyTransfer)
+	err = s.appendTransfer(copyTransfer)
+	if err != nil {
+		return fmt.Errorf("error appending transfer: %w", err)
+	}
 
 	return nil
 }
