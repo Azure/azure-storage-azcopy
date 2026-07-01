@@ -436,11 +436,42 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 			Include: container.ListBlobsInclude{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.include.Deleted(), Snapshots: t.include.Snapshots(), Versions: t.include.Versions()},
 		})
 		var marker *string
+
+		// The streaming merge-join (sync orchestrator) requires each directory level to be
+		// emitted in lexicographic order. The hierarchy listing returns files (BlobItems) and
+		// sub-dirs (BlobPrefixes) as two SEPARATE arrays, but each array is already sorted by the
+		// service. Emitting all dirs then all files would not be globally sorted (e.g. "b/", "n/",
+		// then "a.txt"). Rather than re-sort, we collect the page's dirs and files into two runs
+		// (each stays sorted, since the listing yields them in order) and MERGE the two runs on
+		// flush. The merge key matches buildChildPath: a folder sorts as "<name>/" (trailing slash),
+		// a file as its plain relative path (so "foo.txt" < "foo/"). Memory is bounded to one page.
+		type pageEntry struct {
+			obj StoredObject
+			err error
+			key string
+		}
+		var dirBuf, fileBuf []pageEntry
+		emit := func(obj StoredObject, err error) {
+			if !t.includeDirectoryOrPrefix {
+				// Non-orchestrator (recursive) path: order does not matter, emit directly.
+				enqueueOutput(obj, err)
+				return
+			}
+			if obj.entityType == common.EEntityType.Folder() {
+				key := strings.TrimSuffix(obj.relativePath, common.AZCOPY_PATH_SEPARATOR_STRING) + common.AZCOPY_PATH_SEPARATOR_STRING
+				dirBuf = append(dirBuf, pageEntry{obj: obj, err: err, key: key})
+			} else {
+				fileBuf = append(fileBuf, pageEntry{obj: obj, err: err, key: obj.relativePath})
+			}
+		}
+
 		for pager.More() {
 			lResp, err := pager.NextPage(t.ctx)
 			if err != nil {
 				return fmt.Errorf("cannot list files due to reason %s", err)
 			}
+			dirBuf = dirBuf[:0]
+			fileBuf = fileBuf[:0]
 			emptyPrefix = emptyPrefix && len(lResp.Segment.BlobPrefixes) == 0 && len(lResp.Segment.BlobItems) == 0
 			// queue up the sub virtual directories if recursive is true or if enqueueDirorPrefix is true
 			if t.recursive || t.includeDirectoryOrPrefix {
@@ -501,7 +532,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 								}
 							}
 
-							enqueueOutput(storedObject, err)
+							emit(storedObject, err)
 							enqueuedDirAsOutput = true
 						} else {
 							// There was nothing there, but is there folder/?
@@ -538,7 +569,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 							containerName,
 						)
 						storedObject.isVirtualPrefix = true
-						enqueueOutput(storedObject, err)
+						emit(storedObject, err)
 					}
 				}
 			}
@@ -565,7 +596,23 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 					storedObject.blobTags = blobTagsMap
 				}
 
-				enqueueOutput(storedObject, nil)
+				emit(storedObject, nil)
+			}
+
+			// Emit this page in globally lexicographic order by merging the two already-sorted runs
+			// (sub-dirs and files) — no comparison sort, since the listing API already returns each
+			// run in order. For the recursive path emit() forwarded directly, so both runs are empty.
+			if t.includeDirectoryOrPrefix {
+				di, fi := 0, 0
+				for di < len(dirBuf) || fi < len(fileBuf) {
+					if fi >= len(fileBuf) || (di < len(dirBuf) && dirBuf[di].key < fileBuf[fi].key) {
+						enqueueOutput(dirBuf[di].obj, dirBuf[di].err)
+						di++
+					} else {
+						enqueueOutput(fileBuf[fi].obj, fileBuf[fi].err)
+						fi++
+					}
+				}
 			}
 
 			// if debug mode is on, note down the result, this is not going to be fast
