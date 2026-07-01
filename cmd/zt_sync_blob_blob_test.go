@@ -31,6 +31,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -206,7 +207,7 @@ func TestSyncS2SWithMismatchedDestination(t *testing.T) {
 
 		// make sure the extra blobs were deleted
 		extraFilesFound := false
-		pager := dstContainerClient.NewListBlobsFlatPager(nil)
+		pager := dstContainerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{UseArrowFormat: to.Ptr(true)})
 		for pager.More() {
 			listResponse, err := pager.NextPage(ctx)
 			a.Nil(err)

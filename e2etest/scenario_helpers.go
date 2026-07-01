@@ -650,7 +650,10 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerClient *container.Client, fileSystemURL *filesystem.Client) map[string]*objectProperties {
 	result := make(map[string]*objectProperties)
 
-	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{Include: container.ListBlobsInclude{Metadata: true, Tags: true}})
+	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
+		Include: container.ListBlobsInclude{Metadata: true, Tags: true},
+		UseArrowFormat: to.Ptr(true),
+	})
 	for pager.More() {
 		listBlob, err := pager.NextPage(context.TODO())
 		a.AssertNoErr(err)

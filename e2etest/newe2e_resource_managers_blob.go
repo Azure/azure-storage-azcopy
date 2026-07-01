@@ -263,8 +263,9 @@ func (b *BlobContainerResourceManager) ListObjects(a Asserter, prefix string, re
 
 	if !recursive {
 		pager := b.InternalClient.NewListBlobsHierarchyPager("/", &container.ListBlobsHierarchyOptions{
-			Include: container.ListBlobsInclude{Metadata: true, Tags: true, Versions: true, LegalHold: true},
-			Prefix:  &prefix,
+			Include:        container.ListBlobsInclude{Metadata: true, Tags: true, Versions: true, LegalHold: true},
+			Prefix:         &prefix,
+			UseArrowFormat: to.Ptr(true),
 		})
 
 		for pager.More() {
@@ -277,8 +278,9 @@ func (b *BlobContainerResourceManager) ListObjects(a Asserter, prefix string, re
 		}
 	} else {
 		pager := b.InternalClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
-			Include: container.ListBlobsInclude{Metadata: true, Tags: true, Versions: true, LegalHold: true},
-			Prefix:  &prefix,
+			Include:        container.ListBlobsInclude{Metadata: true, Tags: true, Versions: true, LegalHold: true},
+			Prefix:         &prefix,
+			UseArrowFormat: to.Ptr(true),
 		})
 
 		for pager.More() {

@@ -19,19 +19,19 @@ UNLOCK = 'unlock'
 def get_raw_input():
     parser = argparse.ArgumentParser(description='Lock/unlock a distributed mutex (implemented with blob lease)')
     parser.add_argument('action', help='can be "lock" (attempt to acquire lease) or "unlock" (break lease)')
-    parser.add_argument('mutex_url', help='points to a blob url (SAS included)')
+    parser.add_argument('mutex1_url', help='points to a blob url (SAS included)')
     args = parser.parse_args()
 
     if args.action not in [LOCK, UNLOCK]:
         raise ValueError('invalid action, can only be "lock" or "unlock"')
-    return args.action, args.mutex_url
+    return args.action, args.mutex1_url
 
 
 def process():
-    action, mutex_url = get_raw_input()
+    action, mutex1_url = get_raw_input()
 
     # check whether the blob exists, if not quit right away to avoid wasting time
-    blob_client = BlobClient.from_blob_url(mutex_url)
+    blob_client = BlobClient.from_blob_url(mutex1_url)
     try:
         blob_client.get_blob_properties()
         print("INFO: validated mutex url")
