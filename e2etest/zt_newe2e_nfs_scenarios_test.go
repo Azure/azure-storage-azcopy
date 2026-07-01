@@ -1913,3 +1913,341 @@ func (s *FilesNFSTestSuite) Scenario_LocalToNFS_RetargetHardlinkGroup_Copy(svm *
 		validateObjectContent: true,
 	})
 }
+
+// Scenario_NFStoNFS_DestinationHardlinkGroupBroken verifies that when there is a source with an independent file B
+// and destination with hardlink group A+B, we unlink the hardlink group on the destination. So, the destination
+// will have a similar structure to the source with B as an independent file.
+
+/*
+Source:
+
+	B.txt (regular file, 10 bytes, "hello", inode=123)
+
+Destination (before copy):
+
+	A.txt (anchor of 2-member hardlink, 10 bytes, "hello", inode=456)
+	B.txt (hardlink -> A.txt, inode=456)
+
+Destination (after copy with --hardlinks=preserve):
+
+	A.txt (regular file, 10 bytes, "hello", inode=456)
+	B.txt (regular file, 10 bytes, "hello", inode=123)
+*/
+func (s *FilesNFSTestSuite) Scenario_NFStoNFS_DestinationHardlinkGroupBroken(svm *ScenarioVariationManager) {
+
+	if runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+	fromTo := common.EFromTo.FileNFSFileNFS()
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
+
+	aName := rootDir + "/A.txt"
+	bName := rootDir + "/B.txt"
+
+	// Destination: A+B hardlinked.
+	dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder()).
+		Create(svm, nil,
+			ObjectProperties{
+				EntityType: common.EEntityType.Folder()})
+
+	dstContainer.GetObject(svm, aName, common.EEntityType.File()).
+		Create(svm,
+			NewStringObjectContentContainer("OLD shared content"),
+			ObjectProperties{})
+
+	dstContainer.GetObject(svm, bName, common.EEntityType.Hardlink()).
+		Create(svm, NewRandomObjectContentContainer(10),
+			ObjectProperties{
+				EntityType:         common.EEntityType.Hardlink(),
+				HardLinkedFileName: aName,
+			})
+
+	// Validate the structure pre-run
+	preALinks, preAID := nfsLinkInfo(svm, dstContainer, aName)
+	preBLinks, preBID := nfsLinkInfo(svm, dstContainer, bName)
+	svm.Assert("prerun: A LinkCount == 2", Equal{}, preALinks, int64(2))
+	svm.Assert("prerun: B LinkCount == 2", Equal{}, preBLinks, int64(2))
+	svm.Assert("prerun: A and B share FileID", Equal{}, preAID, preBID)
+
+	// Source: independent B in another NFS share.
+	srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder()).
+		Create(svm, nil,
+			ObjectProperties{EntityType: common.EEntityType.Folder()})
+
+	srcContainer.GetObject(svm, bName, common.EEntityType.File()).
+		Create(svm,
+			NewStringObjectContentContainer("NEW independent B"), ObjectProperties{})
+
+	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+	dstDirObj := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+
+	_ = runHardlinkCopyForFromTo(svm, srcDirObj, dstDirObj, fromTo, common.PreserveHardlinkHandlingType)
+
+	if svm.Dryrun() {
+		return
+	}
+
+	// Post-run validations
+	postALinks, postAID := nfsLinkInfo(svm, dstContainer, aName)
+	postBLinks, postBID := nfsLinkInfo(svm, dstContainer, bName)
+	svm.Assert("post: A LinkCount must drop to 1", Equal{}, postALinks, int64(1))
+	svm.Assert("post: B LinkCount must be 1", Equal{}, postBLinks, int64(1))
+	svm.Assert("post: A FileID unchanged", Equal{}, postAID, preAID)
+	svm.Assert("post: B FileID must be new", Not{Equal{}}, postBID, preBID)
+}
+
+// Scenario_NFStoNFS_DestinationHardlinkGroupSplit verifies that when the source
+// has two independent hardlink groups (A+B and C+D) but the destination has a
+// single 4-way hardlink group (A+B+C+D), the destination is correctly split
+// into two independent groups matching the source.
+//
+// This catches the bug where the "anchor" file of each source hardlink group
+// is uploaded through anyToRemote_file without first unlinking the existing
+// destination file.
+/*
+
+Source:
+	A.txt (anchor of A+B, 1 KiB, data1, inode=123)
+	B.txt (hardlink -> A.txt, inode=123)
+	C.txt (anchor of C+D, 1 KiB, data2, inode=456)
+	D.txt (hardlink -> C.txt, inode=456)
+
+Destination (before copy):
+	A.txt (anchor of 4-member hardlink, 4 bytes, inode=999)
+	B.txt (hardlink -> A.txt, inode=999)
+	C.txt (hardlink -> A.txt, inode=999)
+	D.txt (hardlink -> A.txt, inode=999)
+
+Destination (after copy with --hardlinks=preserve):
+	A.txt (anchor of A+B, 1 KiB, data1, new inode=N1)
+	B.txt (hardlink -> A.txt, inode=N1)
+	C.txt (anchor of C+D, 1 KiB, data2, new inode=N2)
+	D.txt (hardlink -> C.txt, inode=N2)
+
+*/
+func (s *FilesNFSTestSuite) Scenario_NFStoNFS_DestinationHardlinkGroupSplit(svm *ScenarioVariationManager) {
+	if runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+	fromTo := common.EFromTo.FileNFSFileNFS()
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
+
+	aName := rootDir + "/A.txt"
+	bName := rootDir + "/B.txt"
+	cName := rootDir + "/C.txt"
+	dName := rootDir + "/D.txt"
+
+	// Destination: single 4-way hardlink group (A is the anchor; B,C,D linked to A).
+	dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder()).
+		Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Folder()})
+
+	dstContainer.GetObject(svm, aName, common.EEntityType.File()).
+		Create(svm,
+			NewStringObjectContentContainer("OLD shared content"),
+			ObjectProperties{})
+
+	for _, name := range []string{bName, cName, dName} {
+		dstContainer.GetObject(svm, name, common.EEntityType.Hardlink()).
+			Create(svm, nil,
+				ObjectProperties{
+					EntityType:         common.EEntityType.Hardlink(),
+					HardLinkedFileName: aName,
+				})
+	}
+
+	// Validate the structure pre-run: all 4 names share one inode, LinkCount=4.
+	preALinks, preAID := nfsLinkInfo(svm, dstContainer, aName)
+	preBLinks, preBID := nfsLinkInfo(svm, dstContainer, bName)
+	preCLinks, preCID := nfsLinkInfo(svm, dstContainer, cName)
+	preDLinks, preDID := nfsLinkInfo(svm, dstContainer, dName)
+	svm.Assert("prerun: A LinkCount == 4", Equal{}, preALinks, int64(4))
+	svm.Assert("prerun: B LinkCount == 4", Equal{}, preBLinks, int64(4))
+	svm.Assert("prerun: C LinkCount == 4", Equal{}, preCLinks, int64(4))
+	svm.Assert("prerun: D LinkCount == 4", Equal{}, preDLinks, int64(4))
+
+	svm.Assert("prerun: A and B share FileID", Equal{}, preAID, preBID)
+	svm.Assert("prerun: A and C share FileID", Equal{}, preAID, preCID)
+	svm.Assert("prerun: A and D share FileID", Equal{}, preAID, preDID)
+
+	// Source: two independent hardlink groups (A+B) and (C+D).
+	srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder()).
+		Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Folder()})
+
+	srcContainer.GetObject(svm, aName, common.EEntityType.File()).
+		Create(svm,
+			NewStringObjectContentContainer("NEW data1 for A+B"),
+			ObjectProperties{})
+
+	srcContainer.GetObject(svm, bName, common.EEntityType.Hardlink()).
+		Create(svm, nil,
+			ObjectProperties{
+				EntityType:         common.EEntityType.Hardlink(),
+				HardLinkedFileName: aName,
+			})
+
+	srcContainer.GetObject(svm, cName, common.EEntityType.File()).
+		Create(svm,
+			NewStringObjectContentContainer("NEW data2 for C+D"),
+			ObjectProperties{})
+
+	srcContainer.GetObject(svm, dName, common.EEntityType.Hardlink()).
+		Create(svm, nil,
+			ObjectProperties{
+				EntityType:         common.EEntityType.Hardlink(),
+				HardLinkedFileName: cName,
+			})
+
+	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+	dstDirObj := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+
+	_ = runHardlinkCopyForFromTo(svm, srcDirObj, dstDirObj, fromTo, common.PreserveHardlinkHandlingType)
+
+	if svm.Dryrun() {
+		return
+	}
+
+	// Post-run validations.
+	postALinks, postAID := nfsLinkInfo(svm, dstContainer, aName)
+	postBLinks, postBID := nfsLinkInfo(svm, dstContainer, bName)
+	postCLinks, postCID := nfsLinkInfo(svm, dstContainer, cName)
+	postDLinks, postDID := nfsLinkInfo(svm, dstContainer, dName)
+
+	// LinkCount: each new group is 2-way.
+	svm.Assert("post: A LinkCount must drop to 2", Equal{}, postALinks, int64(2))
+	svm.Assert("post: B LinkCount must drop to 2", Equal{}, postBLinks, int64(2))
+	svm.Assert("post: C LinkCount must drop to 2", Equal{}, postCLinks, int64(2))
+	svm.Assert("post: D LinkCount must drop to 2", Equal{}, postDLinks, int64(2))
+
+	svm.Assert("post: A and B must share FileID", Equal{}, postAID, postBID)
+	svm.Assert("post: C and D must share FileID", Equal{}, postCID, postDID)
+
+	svm.Assert("post: (A,B) and (C,D) must NOT share FileID", Not{Equal{}}, postAID, postCID)
+
+}
+
+// Scenario_NFStoNFS_DestinationHardlinkAnchorSplitOut verifies that when the
+// source has file A (alone) and a hardlink group B+C+D, but
+// dest has hardlink group A+B+C+D, the dest
+// is correctly reshaped to match the source structure.
+// I.e A is independent and B+C+D linked
+/*
+Source:
+
+	A.txt (independent regular file, data2, inode=123, nlink=1)
+	B.txt (anchor of B+C+D, data1, inode=4456, nlink=3)
+	C.txt (hardlink -> B.txt, inode=456)
+	D.txt (hardlink -> B.txt, inode=456)
+
+Destination (before copy):
+
+	A.txt (anchor of 4-way group, inode=999, nlink=4)
+	B.txt (hardlink -> A.txt, inode=999)
+	C.txt (hardlink -> A.txt, inode=999)
+	D.txt (hardlink -> A.txt, inode=999)
+
+Destination (after copy with --hardlinks=preserve):
+
+	A.txt (independent regular file, data2,  nlink=1)
+	B.txt (anchor of B+C+D, data1, nlink=3)
+	C.txt (hardlink -> B.txt)
+	D.txt (hardlink -> B.txt)
+*/
+func (s *FilesNFSTestSuite) Scenario_NFStoNFS_DestinationHardlinkAnchorSplitOut(svm *ScenarioVariationManager) {
+
+	if runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+	fromTo := common.EFromTo.FileNFSFileNFS()
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
+
+	aName := rootDir + "/A.txt"
+	bName := rootDir + "/B.txt"
+	cName := rootDir + "/C.txt"
+	dName := rootDir + "/D.txt"
+
+	// Destination: (B,C,D linked to A).
+	dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder()).
+		Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Folder()})
+
+	dstContainer.GetObject(svm, aName, common.EEntityType.File()).
+		Create(svm,
+			NewStringObjectContentContainer("OLD content"),
+			ObjectProperties{})
+
+	for _, name := range []string{bName, cName, dName} {
+		dstContainer.GetObject(svm, name, common.EEntityType.Hardlink()).
+			Create(svm, nil,
+				ObjectProperties{
+					EntityType:         common.EEntityType.Hardlink(),
+					HardLinkedFileName: aName,
+				})
+	}
+
+	// Pre-run
+	preALinks, preAID := nfsLinkInfo(svm, dstContainer, aName)
+	preBLinks, preBID := nfsLinkInfo(svm, dstContainer, bName)
+	preCLinks, preCID := nfsLinkInfo(svm, dstContainer, cName)
+	preDLinks, preDID := nfsLinkInfo(svm, dstContainer, dName)
+	svm.Assert("prerun: A LinkCount == 4", Equal{}, preALinks, int64(4))
+	svm.Assert("prerun: B LinkCount == 4", Equal{}, preBLinks, int64(4))
+	svm.Assert("prerun: C LinkCount == 4", Equal{}, preCLinks, int64(4))
+	svm.Assert("prerun: D LinkCount == 4", Equal{}, preDLinks, int64(4))
+	svm.Assert("prerun: A and B share FileID", Equal{}, preAID, preBID)
+	svm.Assert("prerun: A and C share FileID", Equal{}, preAID, preCID)
+	svm.Assert("prerun: A and D share FileID", Equal{}, preAID, preDID)
+
+	// Source: A alone + (B+C+D, B anchor)
+	srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder()).
+		Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Folder()})
+
+	srcContainer.GetObject(svm, aName, common.EEntityType.File()).
+		Create(svm,
+			NewStringObjectContentContainer("NEW data2 for A"),
+			ObjectProperties{})
+
+	srcContainer.GetObject(svm, bName, common.EEntityType.File()).
+		Create(svm,
+			NewStringObjectContentContainer("NEW data1 for B+C+D"),
+			ObjectProperties{})
+
+	for _, name := range []string{cName, dName} {
+		srcContainer.GetObject(svm, name, common.EEntityType.Hardlink()).
+			Create(svm, nil,
+				ObjectProperties{
+					EntityType:         common.EEntityType.Hardlink(),
+					HardLinkedFileName: bName,
+				})
+	}
+
+	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+	dstDirObj := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+
+	_ = runHardlinkCopyForFromTo(svm, srcDirObj, dstDirObj, fromTo, common.PreserveHardlinkHandlingType)
+
+	if svm.Dryrun() {
+		return
+	}
+
+	// Post-run validations
+	postALinks, postAID := nfsLinkInfo(svm, dstContainer, aName)
+	postBLinks, postBID := nfsLinkInfo(svm, dstContainer, bName)
+	postCLinks, postCID := nfsLinkInfo(svm, dstContainer, cName)
+	postDLinks, postDID := nfsLinkInfo(svm, dstContainer, dName)
+
+	svm.Assert("post: A LinkCount must drop to 1", Equal{}, postALinks, int64(1))
+	svm.Assert("post: B LinkCount must drop to 3", Equal{}, postBLinks, int64(3))
+	svm.Assert("post: C LinkCount must drop to 3", Equal{}, postCLinks, int64(3))
+	svm.Assert("post: D LinkCount must drop to 3", Equal{}, postDLinks, int64(3))
+
+	// B,C,D all share one inode
+	svm.Assert("post: B and C must share FileID", Equal{}, postBID, postCID)
+	svm.Assert("post: B and D must share FileID", Equal{}, postBID, postDID)
+	// A,B no longer share an inode
+	svm.Assert("post: A and B must NOT share FileID", Not{Equal{}}, postAID, postBID)
+}
