@@ -320,9 +320,9 @@ type jobMgr struct {
 	isDaemon bool /* is it running as service */
 
 	// For Hardlinks After Files/Folders/Symlinks processing mode
-	hardlinkPartsMutex    sync.Mutex
-	queuedHardlinkParts   []queuedHardlinkPart
-	allOtherPartsComplete bool
+	hardlinkPartsMutex  sync.Mutex
+	queuedHardlinkParts []queuedHardlinkPart
+	// allOtherPartsComplete bool
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

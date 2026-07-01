@@ -20,6 +20,7 @@
 package ste
 
 import (
+	"fmt"
 	"net/url"
 	"path"
 	"strings"
@@ -70,6 +71,7 @@ func anyToRemote_hardlink(jptm IJobPartTransferMgr, info *TransferInfo, pacer pa
 	// if the force Write flags is set to false or prompt
 	// then check the file exists at the remote location
 	// if it does, react accordingly
+	shouldOverwrite := common.Iff(jptm.GetOverwriteOption() == common.EOverwriteOption.True(), true, false)
 	if jptm.GetOverwriteOption() != common.EOverwriteOption.True() {
 		exists, dstLmt, existenceErr := s.RemoteFileExists()
 		if existenceErr != nil {
@@ -79,7 +81,7 @@ func anyToRemote_hardlink(jptm IJobPartTransferMgr, info *TransferInfo, pacer pa
 			return
 		}
 		if exists {
-			shouldOverwrite := false
+			shouldOverwrite = false
 
 			// if necessary, prompt to confirm user's intent
 			if jptm.GetOverwriteOption() == common.EOverwriteOption.Prompt() {
@@ -110,6 +112,21 @@ func anyToRemote_hardlink(jptm IJobPartTransferMgr, info *TransferInfo, pacer pa
 		// Avoid calling CreateHardlink with an empty path, which could cause a secondary, less-informative failure.
 		commonSenderCompletion(jptm, baseSender, info)
 		return
+	}
+	// If the hardlink file already exists on the destination,
+	// we need to handle the case where it might be part of a different hardlink group than the source.
+	// E.g source (A+B) destination (B+C)
+	// So, we proactively unlink the file from the previous group (with Delete())
+	// before calling creating to reattach it to the correct group on the destination
+	if jptm.GetOverwriteOption() == common.EOverwriteOption.True() || shouldOverwrite {
+		if azFileSender, ok := baseSender.(interface{ DeleteDestInOverwrite() error }); ok {
+			if delErr := azFileSender.DeleteDestInOverwrite(); delErr != nil {
+				jptm.LogAtLevelForCurrentTransfer(common.LogWarning,
+					fmt.Sprintf("Could not delete the destination hardlink %s before creation: %s",
+						jptm.Info().Destination, delErr.Error()))
+				// Don't fail the transfer, let retry logic in DoWithCreateHardlinkOnAzureFilesNFS() take a shot
+			}
+		}
 	}
 	err = s.CreateHardlink(targetHardlinkFullPath)
 	if err != nil {

@@ -60,13 +60,19 @@ func (d *CopyJobPartDispatcher) addTransfer(e *common.CopyJobPartOrderRequest, t
 		if len(d.PendingTransfers.List) == azcopy.NumOfFilesPerDispatchJobPart {
 			e.Transfers = d.PendingTransfers.Clone()
 			e.JobPartType = common.EJobPartType.Mixed()
-			d.dispatchPart(e, cca)
+			err := d.dispatchPart(e, cca)
+			if err != nil {
+				return fmt.Errorf("error adding transfer %w", err)
+			}
 			d.PendingTransfers = common.Transfers{}
 		}
 	}
 	// only append the transfer after we've checked and dispatched a part
 	// so that there is at least one transfer for the final part
-	d.appendTransfer(e, transfer)
+	err := d.appendTransfer(e, transfer)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -110,7 +116,10 @@ func (d *CopyJobPartDispatcher) dispatchFinalPart(e *common.CopyJobPartOrderRequ
 				// More parts will follow (hardlinks), so dispatch mixed as non-final.
 				e.Transfers = d.PendingTransfers.Clone()
 				e.JobPartType = common.EJobPartType.Mixed()
-				d.dispatchPart(e, cca)
+				err := d.dispatchPart(e, cca)
+				if err != nil {
+					return fmt.Errorf("error dispatching mixed parts %w", err)
+				}
 				d.PendingTransfers = common.Transfers{}
 			} else {
 				// No hardlinks pending; mixed will be the final part (handled below).
@@ -130,7 +139,10 @@ func (d *CopyJobPartDispatcher) dispatchFinalPart(e *common.CopyJobPartOrderRequ
 
 			e.Transfers = batch
 			e.JobPartType = common.EJobPartType.Hardlink()
-			d.dispatchPart(e, cca)
+			err := d.dispatchPart(e, cca)
+			if err != nil {
+				return fmt.Errorf("error dispatching buffered hardlink part: %w", err)
+			}
 		}
 
 		// Whatever remains is the final part.
