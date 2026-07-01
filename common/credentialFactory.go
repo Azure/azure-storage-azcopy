@@ -103,7 +103,7 @@ func createS3ClientForPrivateNetwork(credInfo CredentialInfo, cred *credentials.
 	var s3Host string
 	var tlsHost string          // hostname used for TLS ServerName verification
 	minioEndpoint := baseS3Host // endpoint passed to minio.New()
-	bucketLookup := getS3BucketLookup(credInfo.S3CredentialInfo)
+	bucketLookup := getS3BucketLookup(baseS3Host)
 	if isS3CompatibleUrl {
 		// S3-compatible endpoint (GCS, OCI, or on-prem appliances).
 		if bucketLookup == minio.BucketLookupDNS {
@@ -183,7 +183,7 @@ func CreateS3ClientFromProvider(credInfo CredentialInfo) (*minio.Client, error) 
 	}
 	fmt.Println("Creating S3 Client for public access")
 	cred := credentials.New(credInfo.S3CredentialInfo.Provider)
-	bucketLookup := getS3BucketLookup(credInfo.S3CredentialInfo)
+	bucketLookup := getS3BucketLookup(credInfo.S3CredentialInfo.Endpoint)
 	s3Client, err := minio.New(credInfo.S3CredentialInfo.Endpoint, &minio.Options{Creds: cred, Secure: true, Region: credInfo.S3CredentialInfo.Region, BucketLookup: bucketLookup})
 	return s3Client, err
 }
@@ -192,7 +192,7 @@ func CreateS3ClientFromProvider(credInfo CredentialInfo) (*minio.Client, error) 
 // S3 credential related factory methods
 // ==============================================================================================
 func CreateS3Client(ctx context.Context, credInfo CredentialInfo, option CredentialOpOptions, logger ILogger) (*minio.Client, error) {
-	bucketLookup := getS3BucketLookup(credInfo.S3CredentialInfo)
+	bucketLookup := getS3BucketLookup(credInfo.S3CredentialInfo.Endpoint)
 
 	if credInfo.CredentialType == ECredentialType.S3PublicBucket() {
 		cred := credentials.NewStatic("", "", "", credentials.SignatureAnonymous)
