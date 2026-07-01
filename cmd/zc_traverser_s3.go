@@ -215,6 +215,46 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 	// This is because * is both a valid URL path character and a valid portion of an object key in S3.
 	searchPrefix := t.s3URLParts.ObjectKey
 
+	// The streaming merge-join (sync orchestrator) needs each directory level emitted in
+	// lexicographic order. minio's ListObjects yields a page's objects (Contents) before its
+	// sub-dirs (CommonPrefixes), so the raw stream is files-then-dirs per page — not globally
+	// sorted. Collect the level's dirs and files into two runs (each stays sorted: S3 returns
+	// pages in sorted order and each category within a page is sorted) and two-pointer merge
+	// them at the end. Merge key matches buildChildPath: folder = "<name>/", file = "<name>".
+	// Gated to the orchestrator path; the recursive path emits directly.
+	// NOTE: this buffers one directory level. A future memory optimization is a per-page merge
+	// via the minio Core ListObjectsV2 API (mirrors the blob traverser's per-page merge).
+	type s3Entry struct {
+		obj StoredObject
+		key string
+	}
+	var dirEntries, fileEntries []s3Entry
+	processOne := func(so StoredObject) error {
+		e := processIfPassedFilters(filters, so, processor)
+		_, e = getProcessingError(e)
+		if e != nil {
+			t.writeToS3ErrorChannel(ErrorS3Info{
+				S3Name:             so.name,
+				S3Path:             t.s3URLParts.ObjectKey,
+				ErrorMsg:           e,
+				S3LastModifiedTime: so.lastModifiedTime,
+				S3Size:             so.size,
+			})
+		}
+		return e
+	}
+	emitS3 := func(so StoredObject) error {
+		if !t.includeDirectoryOrPrefix {
+			return processOne(so)
+		}
+		if so.entityType == common.EEntityType.Folder() {
+			dirEntries = append(dirEntries, s3Entry{obj: so, key: strings.TrimSuffix(so.relativePath, common.AZCOPY_PATH_SEPARATOR_STRING) + common.AZCOPY_PATH_SEPARATOR_STRING})
+		} else {
+			fileEntries = append(fileEntries, s3Entry{obj: so, key: so.relativePath})
+		}
+		return nil
+	}
+
 	// It's a bucket or virtual directory.
 	listObjectOptions := minio.ListObjectsOptions{Prefix: searchPrefix, Recursive: t.recursive}
 	for objectInfo := range t.s3Client.ListObjects(t.ctx, t.s3URLParts.BucketName, listObjectOptions) {
@@ -336,19 +376,27 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 				t.s3URLParts.BucketName)
 		}
 
-		err = processIfPassedFilters(filters,
-			storedObject,
-			processor)
-		_, err = getProcessingError(err)
-		if err != nil {
-			t.writeToS3ErrorChannel(ErrorS3Info{
-				S3Name:             objectName,
-				S3Path:             t.s3URLParts.ObjectKey,
-				ErrorMsg:           err,
-				S3LastModifiedTime: storedObject.lastModifiedTime,
-				S3Size:             storedObject.size,
-			})
+		if err = emitS3(storedObject); err != nil {
 			return
+		}
+	}
+
+	// Flush the buffered level in globally sorted order by merging the two sorted runs
+	// (sub-dirs and files). No-op for the recursive path, which emitted directly above.
+	if t.includeDirectoryOrPrefix {
+		di, fi := 0, 0
+		for di < len(dirEntries) || fi < len(fileEntries) {
+			if fi >= len(fileEntries) || (di < len(dirEntries) && dirEntries[di].key < fileEntries[fi].key) {
+				if err = processOne(dirEntries[di].obj); err != nil {
+					return
+				}
+				di++
+			} else {
+				if err = processOne(fileEntries[fi].obj); err != nil {
+					return
+				}
+				fi++
+			}
 		}
 	}
 	return
