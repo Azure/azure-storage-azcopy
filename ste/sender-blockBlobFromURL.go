@@ -55,9 +55,61 @@ func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, pacer pacer, srcInfoProvi
 		return nil, err
 	}
 
-	return &urlToBlockBlobCopier{
+	copier := &urlToBlockBlobCopier{
 		blockBlobSenderBase: *senderBase,
-		srcURL:              srcURL}, nil
+		srcURL:              srcURL,
+	}
+
+	// Block-level dedupe prototype (AZCOPY_DEDUPE_ACT): for an eligible block-blob -> block-blob S2S
+	// copy, chunk on the source's committed block boundaries and arm the per-block hit decision used in
+	// generatePutBlockFromURL. A no-op (uniform grid) when the flag is unset or the source is not an
+	// eligible block blob.
+	configureBlockBlobDedupe(jptm, copier, srcInfoProvider)
+
+	return copier, nil
+}
+
+// configureBlockBlobDedupe arms source-grid chunking + the dedupe hit decision on a block-blob S2S
+// copier when AZCOPY_DEDUPE_ACT is set and the source is a block blob with a committed block list. It
+// overrides the sender's chunk count so every chunk lines up with a hashed source block. Any problem
+// leaves dedupe off and the copy proceeds on the uniform grid, so it can never break a transfer.
+func configureBlockBlobDedupe(jptm IJobPartTransferMgr, c *urlToBlockBlobCopier, srcInfoProvider IRemoteSourceInfoProvider) {
+	mode := dedupeActModeFromEnv()
+	if mode == dedupeActOff {
+		return
+	}
+	blobSrc, ok := srcInfoProvider.(IBlobSourceInfoProvider)
+	if !ok || blobSrc.BlobType() != blob.BlobTypeBlockBlob {
+		return
+	}
+
+	plan, err := fetchSourceGridPlan(jptm)
+	if err != nil {
+		jptm.LogAtLevelForCurrentTransfer(common.LogDebug, "dedupe-act: GetBlockList failed, using uniform grid: "+err.Error())
+		return
+	}
+	if plan == nil || len(plan.Blocks) == 0 {
+		return // single-PutBlob or empty source: no committed blocks to align to
+	}
+	if plan.TotalSize != jptm.Info().SourceSize {
+		jptm.LogAtLevelForCurrentTransfer(common.LogDebug, fmt.Sprintf(
+			"dedupe-act: source-grid total %d != source size %d, using uniform grid", plan.TotalSize, jptm.Info().SourceSize))
+		return
+	}
+	if len(plan.Blocks) > common.MaxNumberOfBlocksPerBlob {
+		return
+	}
+
+	// One chunk per source committed block.
+	c.numChunks = uint32(len(plan.Blocks))
+	c.blockIDs = make([]string, c.numChunks)
+	c.dedupeMode = mode
+	c.dedupePlan = plan
+	c.dedupeIndex = buildSourceBlockHashIndex(plan)
+
+	jptm.LogAtLevelForCurrentTransfer(common.LogInfo, fmt.Sprintf(
+		"dedupe-act(%s): source-grid chunking armed: %d block(s), %d with hashes, totalSize=%d",
+		mode, len(plan.Blocks), len(c.dedupeIndex), plan.TotalSize))
 }
 
 // Returns a chunk-func for blob copies
@@ -72,7 +124,7 @@ func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 	 * for blobs of all sizes.
 	 */
 	// Small blobs from all sources will be copied over to destination using PutBlobFromUrl
-	if c.NumChunks() == 1 && adjustedChunkSize <= int64(common.MaxPutBlobSize) {
+	if c.dedupeMode == dedupeActOff && c.NumChunks() == 1 && adjustedChunkSize <= int64(common.MaxPutBlobSize) {
 		/*
 		 * siminsavani: FYI: For GCP, if the blob is the entirety of the file, GCP still returns
 		 * invalid error from service due to PutBlockFromUrl.
@@ -94,7 +146,9 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 		// step 2: save the block ID into the list of block IDs
 		c.setBlockID(blockIndex, encodedBlockID)
 
-		if c.ChunkAlreadyTransferred(blockIndex) {
+		// In dedupe mode the chunk grid is content-defined, so the resume "already transferred" map
+		// (keyed by the uniform-grid block names) does not apply; always (re)stage the block.
+		if c.dedupeMode == dedupeActOff && c.ChunkAlreadyTransferred(blockIndex) {
 			c.jptm.LogAtLevelForCurrentTransfer(common.LogDebug, fmt.Sprintf("Skipping chunk %d as it was already transferred.", blockIndex))
 			atomic.AddInt32(&c.atomicChunksWritten, 1)
 			return
@@ -111,20 +165,85 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 			c.jptm.FailActiveS2SCopy("Getting source token credential", err)
 			return
 		}
-		_, err = c.destBlockBlobClient.StageBlockFromURL(c.jptm.Context(), encodedBlockID, c.srcURL,
-			&blockblob.StageBlockFromURLOptions{
-				Range:                   blob.HTTPRange{Offset: id.OffsetInFile(), Count: adjustedChunkSize},
-				CPKInfo:                 c.jptm.CpkInfo(),
-				CPKScopeInfo:            c.jptm.CpkScopeInfo(),
-				CopySourceAuthorization: token,
-			})
+
+		// Block-level dedupe prototype: if this chunk's content already exists at the destination, either
+		// log it (shadow) or stage it from there instead of the source (enforce, with fallback to source).
+		if c.dedupeMode != dedupeActOff && c.tryDedupeStage(id, encodedBlockID, adjustedChunkSize, token) {
+			atomic.AddInt32(&c.atomicChunksWritten, 1)
+			return
+		}
+
+		options := &blockblob.StageBlockFromURLOptions{
+			Range:                   blob.HTTPRange{Offset: id.OffsetInFile(), Count: adjustedChunkSize},
+			CPKInfo:                 c.jptm.CpkInfo(),
+			CPKScopeInfo:            c.jptm.CpkScopeInfo(),
+			CopySourceAuthorization: token,
+		}
+
+		_, err = c.destBlockBlobClient.StageBlockFromURL(c.jptm.Context(), encodedBlockID, c.srcURL, options)
 		if err != nil {
 			c.jptm.FailActiveSend("Staging block from URL", err)
 			return
 		}
 
+		if c.dedupeMode != dedupeActOff {
+			dedupeStateForJob(c.jptm.Info().JobID).addSourceStaged(adjustedChunkSize)
+		}
+
 		atomic.AddInt32(&c.atomicChunksWritten, 1)
 	})
+}
+
+// tryDedupeStage applies the block-level dedupe decision for one chunk. It returns true only when the
+// block was fully handled by staging it from an already-migrated destination block (enforce mode on a
+// successful reference). In shadow mode, or on any miss/failure, it returns false so the caller stages
+// the block from the source as usual.
+func (c *urlToBlockBlobCopier) tryDedupeStage(id common.ChunkID, encodedBlockID string, size int64, token *string) (handled bool) {
+	st := dedupeStateForJob(c.jptm.Info().JobID)
+	target, reference := decideStaging(c.dedupeIndex, st.committed, id.OffsetInFile(), size)
+	if !reference {
+		return false
+	}
+
+	if c.dedupeMode == dedupeActShadow {
+		st.addWouldReference(size)
+		c.jptm.LogAtLevelForCurrentTransfer(common.LogInfo, fmt.Sprintf(
+			"dedupe-act(shadow): block at offset=%d size=%d WOULD be referenced from %s [%d,%d) (staging from source instead)",
+			id.OffsetInFile(), size, target.TargetURI, target.TargetOffset, target.TargetLength))
+		return false
+	}
+
+	// enforce: stage the block from the destination sub-range, guarded by the recorded ETag.
+	if err := c.stageBlockFromTarget(encodedBlockID, target, token); err != nil {
+		st.addFallback()
+		c.jptm.LogAtLevelForCurrentTransfer(common.LogInfo, fmt.Sprintf(
+			"dedupe-act(enforce): reference to %s failed (%v); falling back to staging from source", target.TargetURI, err))
+		return false
+	}
+	st.addReferenced(size)
+	c.jptm.LogAtLevelForCurrentTransfer(common.LogDebug, fmt.Sprintf(
+		"dedupe-act(enforce): block at offset=%d size=%d staged from %s [%d,%d)",
+		id.OffsetInFile(), size, target.TargetURI, target.TargetOffset, target.TargetLength))
+	return true
+}
+
+// stageBlockFromTarget stages a block by copying a sub-range of an already-migrated destination blob
+// (Put Block From URL) instead of re-reading the bytes from the source. The recorded ETag is sent as an
+// If-Match on the copy source so a changed/replaced target fails fast (and the caller falls back to the
+// source). The chunk has already been paced by the caller, so it is not re-paced here.
+func (c *urlToBlockBlobCopier) stageBlockFromTarget(encodedBlockID string, target common.BlockEntry, token *string) error {
+	options := &blockblob.StageBlockFromURLOptions{
+		Range:                   blob.HTTPRange{Offset: target.TargetOffset, Count: target.TargetLength},
+		CPKInfo:                 c.jptm.CpkInfo(),
+		CPKScopeInfo:            c.jptm.CpkScopeInfo(),
+		CopySourceAuthorization: token,
+	}
+	if target.ETag != "" {
+		etag := target.ETag
+		options.SourceModifiedAccessConditions = &blob.SourceModifiedAccessConditions{SourceIfMatch: &etag}
+	}
+	_, err := c.destBlockBlobClient.StageBlockFromURL(c.jptm.Context(), encodedBlockID, target.TargetURI, options)
+	return err
 }
 
 func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, blockIndex int32, adjustedChunkSize int64) chunkFunc {

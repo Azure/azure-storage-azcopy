@@ -440,6 +440,10 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 	// stop tracking pseudo id (since real chunk id's will be tracked from here on)
 	jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone())
 
+	// Read-only dedupe prototype diagnostic (opt-in via AZCOPY_DEDUPE_OBSERVE). No-op when
+	// disabled; never alters the transfer.
+	observeSourceGrid(jptm)
+
 	// Step 6: Go through the file and schedule chunk messages to send each chunk
 	scheduleSendChunks(jptm, info.Source, srcFile, srcSize, s, sourceFileFactory, srcInfoProvider)
 }
@@ -458,6 +462,15 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 	// For generic send
 	chunkSize := s.ChunkSize()
 	numChunks := s.NumChunks()
+
+	// Block-level dedupe prototype: when the sender provides a content-defined (source-grid) chunk
+	// plan, schedule those chunks instead of the uniform grid. S2S only (no local prefetch path).
+	if cg, ok := s.(sourceGridChunker); ok {
+		if specs := cg.dedupeChunkSpecs(); len(specs) > 0 {
+			scheduleSourceGridChunks(jptm, srcPath, s, specs)
+			return
+		}
+	}
 
 	// For upload
 	var md5Channel chan<- []byte
@@ -591,6 +604,32 @@ func createS3ChunkReader(
 		jptm.CacheLimiter(),
 	)
 	return s3ChunkReader
+}
+
+// scheduleSourceGridChunks schedules one send per source-grid chunk spec, used by the block-level
+// dedupe prototype. It mirrors the S2S branch of scheduleSendChunks (no local prefetch / md5) but
+// drives the chunk boundaries from the sender's content-defined plan instead of the uniform grid.
+func scheduleSourceGridChunks(jptm IJobPartTransferMgr, srcPath string, s sender, specs []chunkSpec) {
+	// Run the prologue before the first chunk (mirrors scheduleSendChunks). S2S has no leading bytes,
+	// so an empty prologue state is correct here.
+	if modified := s.Prologue(common.PrologueState{}); modified {
+		jptm.SetDestinationIsModified()
+	}
+
+	s2s, ok := s.(s2sCopier)
+	if !ok {
+		// Defensive: source-grid chunking is only armed for S2S copiers; fail loudly if misused.
+		jptm.FailActiveSend("source-grid chunking", errors.New("sender is not an s2sCopier"))
+		return
+	}
+
+	isWholeFile := len(specs) == 1
+	for i, sp := range specs {
+		id := common.NewChunkID(srcPath, sp.offset, sp.size)
+		jptm.LogChunkStatus(id, common.EWaitReason.WorkerGR())
+		cf := s2s.GenerateCopyFunc(id, int32(i), sp.size, isWholeFile)
+		jptm.ScheduleChunks(cf)
+	}
 }
 
 // Make reader for this chunk.

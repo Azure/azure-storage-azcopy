@@ -25,7 +25,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"strconv"
 	"strings"
 	"sync"
@@ -33,7 +32,9 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 
@@ -64,6 +65,13 @@ type blockBlobSenderBase struct {
 	muBlockIDs             *sync.Mutex
 	blockNamePrefix        string
 	completedBlockList     map[int]string
+
+	// Block-level dedupe prototype (AZCOPY_DEDUPE_ACT). These are only populated for an eligible
+	// block-blob -> block-blob S2S copy; they stay at their zero values (dedupeMode == dedupeActOff)
+	// for every other transfer, so the default code path is unaffected.
+	dedupeMode  dedupeActMode
+	dedupePlan  *SourceGridPlan
+	dedupeIndex map[srcBlockKey]srcBlockHashes
 }
 
 func getVerifiedChunkParams(transferInfo *TransferInfo, memLimit int64, strictMemLimit int64) (chunkSize int64, numChunks uint32, err error) {
@@ -215,6 +223,15 @@ func (s *blockBlobSenderBase) NumChunks() uint32 {
 	return s.numChunks
 }
 
+// dedupeChunkSpecs implements sourceGridChunker. It returns the source-grid chunk boundaries when the
+// dedupe prototype is active for this transfer, and nil otherwise (so the uniform chunk grid is used).
+func (s *blockBlobSenderBase) dedupeChunkSpecs() []chunkSpec {
+	if s.dedupeMode == dedupeActOff {
+		return nil
+	}
+	return chunkSpecsFromPlan(s.dedupePlan)
+}
+
 func (s *blockBlobSenderBase) RemoteFileExists() (bool, time.Time, error) {
 	properties, err := s.destBlockBlobClient.GetProperties(s.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: s.jptm.CpkInfo()})
 	return remoteObjectExists(blobPropertiesResponseAdapter{properties}, err)
@@ -266,7 +283,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 			destBlobTier = nil
 		}
 
-		_, err := s.destBlockBlobClient.CommitBlockList(jptm.Context(), blockIDs,
+		resp, err := s.destBlockBlobClient.CommitBlockList(jptm.Context(), blockIDs,
 			&blockblob.CommitBlockListOptions{
 				HTTPHeaders:  &s.headersToApply,
 				Metadata:     s.metadataToApply,
@@ -331,6 +348,21 @@ func (s *blockBlobSenderBase) Epilogue() {
 			}
 
 			return
+		}
+
+		// Block-level dedupe prototype (AZCOPY_DEDUPE_ACT): record this freshly-committed blob's hashed
+		// blocks into the job's committed table so that later identical blocks can be served from it.
+		// This only populates an in-memory lookup table and does not touch the bytes just written.
+		if s.dedupeMode != dedupeActOff && s.dedupePlan != nil {
+			var etag azcore.ETag
+			if resp.ETag != nil {
+				etag = *resp.ETag
+			}
+			recorded := recordCommittedBlocks(jptm.Info().JobID, jptm.Info().Destination, etag, s.dedupePlan)
+			jptm.LogAtLevelForCurrentTransfer(common.LogInfo, fmt.Sprintf(
+				"dedupe-act(%s): recorded %d committed block(s) for %q into the job dedupe table",
+				s.dedupeMode, recorded, jptm.Info().DstFilePath))
+			logDedupeActSummary(jptm, s.dedupeMode)
 		}
 
 		if setTags {
