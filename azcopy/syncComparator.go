@@ -289,30 +289,30 @@ func (f *syncDestinationComparator) normalizeHardlinkTarget(sourceObj *traverser
 }
 
 // NormalizeAndSchedule wraps an object scheduler.
-// This is to handle leftover source objects
+// This is to make sure leftover source objects
 // (those with no destination counterpart, scheduled directly
-// from indexer.Traverse in finalize) get the same TargetHardlinkFile
+// from indexer.Traverser) get the same TargetHardlinkFile
 // normalization that ProcessIfNecessary applies to matched source
 // objects.
 //
 // Without this, a source hardlink whose firstSeen-anchor
 // (TargetHardlinkFile=="") and InodeStore-anchor disagree is routed
-// into PendingTransfers as a data carrier rather than into
+// into PendingTransfers as a regular data carrier rather than into
 // PendingHardlinksTransfers, so CreateHardlink never runs.
 
 /*
-Example copy --hardlinks=preserve:
-
+Example sync --hardlinks=preserve:
+Before run:
 	Source: A + B (hardlink group)
 	Dest: A only
+
+After run:
+	Dest: A + B (CreateHardlink called on B)
 */
 func (f *syncDestinationComparator) NormalizeAndSchedule(
 	scheduler traverser.ObjectProcessor,
 ) traverser.ObjectProcessor {
 	return func(o traverser.StoredObject) error {
-		// Ensure srcPathToInode is built. ProcessIfNecessary normally
-		// does this lazily; if the destination was empty (or had no
-		// matching object) it may not have run yet.
 		if f.srcPathToInode == nil {
 			f.srcPathToInode = buildSrcPathToInode(f.sourceIndex.IndexMap)
 		}
