@@ -358,7 +358,14 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 
 	// if its not NFS copy, we assume reliable change time is available in target
 
+	if sourceObject.changeTime.IsZero() && destinationObject.changeTime.IsZero() {
+		// Both change times are zero (e.g., blobs copied from S3 without hdi_ct metadata).
+		// We can't detect metadata changes, so assume no change.
+		return false, false
+	}
+
 	if sourceObject.changeTime.IsZero() || destinationObject.changeTime.IsZero() {
+		// One side has change time but the other doesn't — assume metadata changed
 		return false, true
 	}
 

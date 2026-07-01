@@ -698,6 +698,104 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 
 		var errMsg string
 
+		isDestinationPresent := dir.(minimalStoredObject).isPresentAtDestination
+
+		// Fork: use the streaming (channel-based) merge-join for remote sources whose
+		// listings are lexicographically sorted; keep the existing indexMap-based flow for
+		// local filesystem sources (which do not guarantee sorted listing order).
+		if useStreamingMergeJoin(cca.fromTo) {
+			mergeJoinSyncOneDirLog(common.LogDebug,
+				fmt.Sprintf("Processing dir '%s'", dir.(minimalStoredObject).relativePath))
+
+			var subDirs []minimalStoredObject
+			var mergeErr error
+
+			// Channel-based merge-join: bridge source + destination traversers into
+			// back-pressured channels and merge their sorted streams.
+			pt, ptErr := InitResourceTraverser(
+				pt_src,
+				ptt.location,
+				mainCtx,
+				ptt.options)
+			if ptErr != nil {
+				errMsg = fmt.Sprintf("Creating source traverser failed for dir %s: %s", pt_src.Value, ptErr)
+				syncOrchestratorLog(common.LogError, errMsg)
+				writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
+					DirPath:           pt_src.Value,
+					DirName:           dir.(minimalStoredObject).relativePath,
+					ErrorMsg:          errors.New(errMsg),
+					TraverserLocation: cca.fromTo.From(),
+				})
+				srcDirEnumerating.Add(-1)
+				if enableThrottling {
+					semaphore.ReleaseSourceSlot()
+				}
+				return ptErr
+			}
+
+			st, stErr := InitResourceTraverser(
+				st_src,
+				stt.location,
+				mainCtx,
+				stt.options)
+			if stErr != nil {
+				errMsg = fmt.Sprintf("Creating target traverser failed for dir %s: %s\n", st_src.Value, stErr)
+				syncOrchestratorLog(common.LogError, errMsg)
+				writeSyncErrToChannel(stt.options.ErrorChannel, SyncOrchErrorInfo{
+					DirPath:           st_src.Value,
+					DirName:           dir.(minimalStoredObject).relativePath,
+					ErrorMsg:          errors.New(errMsg),
+					TraverserLocation: cca.fromTo.To(),
+				})
+				srcDirEnumerating.Add(-1)
+				if enableThrottling {
+					semaphore.ReleaseSourceSlot()
+				}
+				return stErr
+			}
+
+			subDirs, mergeErr = mergeJoinSyncDirChannelBased(
+				mainCtx,
+				enumerator,
+				cca,
+				dir.(minimalStoredObject).relativePath,
+				pt,
+				st,
+				isDestinationPresent,
+			)
+
+			srcDirEnumerating.Add(-1) // Decrement active directory count after merge-join completes
+
+			// Release source slot after merge-join completes (source was actively listed during merge-join)
+			if enableThrottling {
+				semaphore.ReleaseSourceSlot()
+			}
+
+			if mergeErr != nil {
+				errMsg = fmt.Sprintf("Merge-join sync failed for dir %s: %s", pt_src.Value, mergeErr)
+				syncOrchestratorLog(common.LogError, errMsg, true)
+				writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
+					DirPath:           pt_src.Value,
+					DirName:           dir.(minimalStoredObject).relativePath,
+					ErrorMsg:          errors.New(errMsg),
+					TraverserLocation: cca.fromTo.From(),
+				})
+				return mergeErr
+			}
+
+			// Enqueue discovered subdirectories for processing
+			for _, sub_dir := range subDirs {
+				crawlWg.Add(1)
+				enqueueDir(minimalStoredObject{
+					relativePath:           sub_dir.relativePath,
+					changeTime:             sub_dir.changeTime,
+					isPresentAtDestination: sub_dir.isPresentAtDestination,
+				})
+			}
+			return nil
+		}
+
+		// ── Existing indexMap-based path (local filesystem sources) ──
 		// Create source traverser for current directory
 		pt, err := InitResourceTraverser(
 			pt_src,
@@ -761,9 +859,6 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		// Flag to control whether we traverse the destination
 		traverseDestination := true
 
-		// Flag to check if destination exists
-		// We will use the parent directory flag as the seed value to avoid redundant checks
-		isDestinationPresent := dir.(minimalStoredObject).isPresentAtDestination
 		finalize := true // Flag to control whether we finalize
 		// Before proceeding, check if we need to enumerate the destination
 		if isDestinationPresent &&
