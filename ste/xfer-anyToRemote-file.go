@@ -94,7 +94,8 @@ func prepareDestAccountInfo(client IBlobClient, jptm IJobPartTransferMgr, ctx co
 
 // timeEqual compares two timestamps with precision tolerance to handle filesystem precision differences.
 // It truncates both times to the specified precision to handle precision differences.
-// For GCS via S3 API, we use second precision since GCS has timestamp precision differences.
+// For certain S3-compatible sources, we use second precision since provider APIs may
+// normalize timestamps to whole seconds, causing false positives on exact-ns comparison.
 func timeEqual(t1, t2 time.Time, useSecondPrecision bool) bool {
 	if useSecondPrecision {
 		return t1.Truncate(time.Second).Equal(t2.Truncate(time.Second))
@@ -102,14 +103,20 @@ func timeEqual(t1, t2 time.Time, useSecondPrecision bool) bool {
 	return t1.Equal(t2)
 }
 
-// isGCSviaS3Source checks if the source is GCS accessed via S3-compatible API.
-// Only returns true for mover builds, so GCS timestamp truncation doesn't affect azcopy users.
-func isGCSviaS3Source(sip ISourceInfoProvider) bool {
+// isSecondPrecisionS3Source checks whether S3 source timestamp comparisons should use
+// second-level precision to avoid false modified-during-transfer failures.
+// Only returns true for mover builds.
+func isSecondPrecisionS3Source(sip ISourceInfoProvider) bool {
 	if !buildmode.IsMover {
 		return false
 	}
 	if s3SIP, ok := sip.(*s3SourceInfoProvider); ok {
-		return s3SIP.s3URLPart.IsGoogleCloudStorage()
+		switch s3SIP.s3URLPart.ProviderKind() {
+		case common.S3ProviderGoogle, common.S3ProviderIBM:
+			return true
+		default:
+			return false
+		}
 	}
 	return false
 }
@@ -368,13 +375,13 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 			return
 		}
 
-		if isGCSviaS3Source(srcInfoProvider) {
-			// GCS via S3 API: truncate timestamps to seconds to avoid false positives
+		if isSecondPrecisionS3Source(srcInfoProvider) {
+			// GCS/IBM via S3 API: truncate timestamps to seconds to avoid false positives
 			// from precision differences in the S3-compatible API
 			scheduledTime := jptm.LastModifiedTime()
 			timestampsMatch := timeEqual(lmt, scheduledTime, true)
 			if jptm.ShouldLog(common.LogDebug) {
-				jptm.Log(common.LogDebug, fmt.Sprintf("GCS S3 truncated comparison: Scheduled=%v, Current=%v, Match=%v",
+				jptm.Log(common.LogDebug, fmt.Sprintf("S3 second-precision comparison: Scheduled=%v, Current=%v, Match=%v",
 					scheduledTime.Truncate(time.Second).Format("2006-01-02T15:04:05Z07:00"),
 					lmt.Truncate(time.Second).Format("2006-01-02T15:04:05Z07:00"),
 					timestampsMatch))
@@ -630,13 +637,13 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 				return
 			}
 
-			if isGCSviaS3Source(sip) {
-				// GCS via S3 API: truncate timestamps to seconds to avoid false positives
+			if isSecondPrecisionS3Source(sip) {
+				// GCS/IBM via S3 API: truncate timestamps to seconds to avoid false positives
 				// from precision differences in the S3-compatible API
 				scheduledTime := jptm.LastModifiedTime()
 				timestampsMatch := timeEqual(lmt, scheduledTime, true)
 				if jptm.ShouldLog(common.LogDebug) {
-					jptm.Log(common.LogDebug, fmt.Sprintf("GCS S3 truncated comparison: Scheduled=%v, Current=%v, Match=%v",
+					jptm.Log(common.LogDebug, fmt.Sprintf("S3 second-precision comparison: Scheduled=%v, Current=%v, Match=%v",
 						scheduledTime.Truncate(time.Second).Format("2006-01-02T15:04:05Z07:00"),
 						lmt.Truncate(time.Second).Format("2006-01-02T15:04:05Z07:00"),
 						timestampsMatch))
