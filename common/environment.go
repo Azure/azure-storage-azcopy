@@ -308,6 +308,13 @@ func (EnvironmentVariable) UsePageLevelMergeJoin() EnvironmentVariable {
 	}
 }
 
+func (EnvironmentVariable) UseBatchedChannelMergeJoin() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_USE_BATCHED_CHANNEL_MERGE_JOIN",
+		Description: "When true or 1, the channel-based sync merge-join bridges traversers using batched channels (one []StoredObject slice per N items) instead of one StoredObject per channel op. This collapses per-item channel send/recv overhead into per-batch while preserving full StoredObject fidelity (metadata/properties). Only affects the channel-based path (ignored when AZCOPY_USE_PAGE_LEVEL_MERGE_JOIN is set). Default false.",
+	}
+}
+
 const azCopyConcurrentScan = "AZCOPY_CONCURRENT_SCAN"
 
 func (EnvironmentVariable) EnumerationPoolSize() EnvironmentVariable {

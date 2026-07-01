@@ -267,8 +267,26 @@ func (fs FilterSet) GetEnumerationPreFilter(recursive bool) string {
 
 // includeRegex & excludeRegex
 type regexFilter struct {
-	patterns   []string
+	// patterns holds the precompiled regular expressions. A nil entry means the
+	// corresponding pattern failed to compile (treated as an invalid pattern at match time).
+	patterns   []*regexp.Regexp
 	isIncluded bool
+}
+
+// newRegexFilter precompiles the given patterns once, so that matching does not
+// recompile the regex for every object. Empty patterns are skipped; patterns that
+// fail to compile are stored as nil and handled as "invalid" in DoesPass (preserving
+// the previous per-call error behavior).
+func newRegexFilter(patterns []string, isIncluded bool) *regexFilter {
+	compiled := make([]*regexp.Regexp, 0, len(patterns))
+	for _, pattern := range patterns {
+		if pattern == "" {
+			continue
+		}
+		re, _ := regexp.Compile(pattern)
+		compiled = append(compiled, re)
+	}
+	return &regexFilter{patterns: compiled, isIncluded: isIncluded}
 }
 
 func (f *regexFilter) DoesSupportThisOS() (msg string, supported bool) {
@@ -285,13 +303,11 @@ func (f *regexFilter) DoesPass(storedObject StoredObject) bool {
 	if len(f.patterns) == 0 {
 		return true
 	}
-	for _, pattern := range f.patterns {
-		matched := false
-		var err error
-
-		matched, err = regexp.MatchString(pattern, storedObject.relativePath)
-		// if pattern fails to match with an error, we assume the pattern is invalid
-		if err != nil {
+	for _, re := range f.patterns {
+		// A nil entry means the pattern failed to compile; preserve the old behavior
+		// where an invalid pattern is ignored for include filters and lets the object
+		// pass for exclude filters.
+		if re == nil {
 			if f.isIncluded { //if include filter then we ignore it
 				continue
 			} else { //if exclude filter then we let it pass
@@ -300,7 +316,7 @@ func (f *regexFilter) DoesPass(storedObject StoredObject) bool {
 		}
 		//check if pattern matched relative path
 		//if matched then return isIncluded which is a boolean expression to represent included and excluded
-		if matched {
+		if re.MatchString(storedObject.relativePath) {
 			return f.isIncluded
 		}
 	}
@@ -312,14 +328,7 @@ func buildRegexFilters(patterns []string, isIncluded bool) []ObjectFilter {
 		return []ObjectFilter{}
 	}
 
-	filters := make([]string, 0)
-	for _, pattern := range patterns {
-		if pattern != "" {
-			filters = append(filters, pattern)
-		}
-	}
-
-	return []ObjectFilter{&regexFilter{patterns: filters, isIncluded: isIncluded}}
+	return []ObjectFilter{newRegexFilter(patterns, isIncluded)}
 }
 
 // includeAfterDateFilter includes files with Last Modified Times >= the specified threshold

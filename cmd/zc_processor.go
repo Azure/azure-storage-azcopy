@@ -124,14 +124,14 @@ type copyTransferProcessor struct {
 	shuffleBufferSizeInBytes uint64
 	shuffleBufferFileCounts  common.Transfers // tracks entity type counts for the buffer
 
-	// pendingParts buffers assembled plan parts before sending to STE.
-	// Parts from different shuffle-buffer flush windows are interleaved (shuffled)
-	// so the STE processes diverse prefix ranges concurrently.
-	pendingParts       []pendingPart
-	flushWindowCounter uint32 // monotonically increasing flush window ID for diagnostics
+	// flushWindowCounter is a monotonically increasing flush window ID used for diagnostics.
+	flushWindowCounter uint32
 
-	// Pipelined dispatch: parts are pushed into dispatchCh and a pool of background goroutines
-	// calls sendPartToSte asynchronously, allowing the shuffle buffer to refill concurrently.
+	// Pipelined dispatch: assembled plan parts are pushed directly into dispatchCh and a pool
+	// of background goroutines calls sendPartToSte asynchronously, allowing the shuffle buffer
+	// to refill concurrently. The transfer-level shuffle in flushShuffleBuffer already gives each
+	// part diverse key-space prefixes, so parts are dispatched as soon as they are assembled —
+	// there is no intermediate part-buffering/reorder stage.
 	dispatchCh   chan dispatchItem
 	dispatchOnce sync.Once
 	dispatchErr  error         // first error from dispatch goroutine
@@ -139,15 +139,7 @@ type copyTransferProcessor struct {
 	dispatchDone chan struct{}  // closed when all dispatch workers exit
 
 	// Backpressure signaling
-	bufferDrainCond *sync.Cond // condition variable signaled when pendingParts or shuffleBuffer drain below limits
-}
-
-// pendingPart wraps a plan part's transfers with metadata about its origin,
-// used to verify that part-level shuffling interleaves different flush windows.
-type pendingPart struct {
-	transfers   common.Transfers
-	flushWindow uint32 // which shuffle-buffer flush produced this part
-	batchIndex  int    // original position within that flush
+	bufferDrainCond *sync.Cond // condition variable signaled when the shuffle buffer drains below the high watermark
 }
 
 func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int, source, destination common.ResourceString, reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier, dryrunMode bool) *copyTransferProcessor {
@@ -163,7 +155,7 @@ func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, n
 		folderPropertiesOption:    copyJobTemplate.Fpo,
 		symlinkHandlingType:       copyJobTemplate.SymlinkHandlingType,
 		dryrunMode:                dryrunMode,
-		dispatchCh:                make(chan dispatchItem, 1000), // buffer 1000 parts for async dispatch
+		dispatchCh:                make(chan dispatchItem, 5000), // high-IOPS config: buffer 5000 parts for async dispatch
 		dispatchDone:              make(chan struct{}),
 		bufferDrainCond:           sync.NewCond(m),
 	}
@@ -215,7 +207,15 @@ func (s *copyTransferProcessor) dispatchWorker() {
 
 // waitForDispatchPipeline closes the dispatch channel and waits for all workers to finish.
 // Returns the first error encountered during async dispatch.
+//
+// startDispatchPipeline is invoked here (idempotently, via sync.Once) to guarantee the
+// worker pool and the dispatchDone-closer goroutine exist before we wait. Without this,
+// a small job (fewer than numOfTransfersPerPart transfers with shuffle enabled, so no full
+// part was ever flushed) would never have started the pipeline, leaving dispatchDone unclosed
+// and blocking <-s.dispatchDone forever. With the workers started, close(s.dispatchCh) drains
+// the (possibly empty) channel, the workers exit, and dispatchDone is closed.
 func (s *copyTransferProcessor) waitForDispatchPipeline() error {
+	s.startDispatchPipeline()
 	close(s.dispatchCh)
 	<-s.dispatchDone
 	return s.dispatchErr
@@ -484,7 +484,7 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 			}
 		} else {
 			// Direct dispatch: accumulate transfers, dispatch immediately when a full part is ready.
-			// No shuffle, no pendingParts buffering — bounded O(numOfTransfersPerPart) memory.
+			// No shuffle and no part reordering — bounded O(numOfTransfersPerPart) memory.
 			s.syncTransferMutex.Lock()
 			s.shuffleBuffer = append(s.shuffleBuffer, copyTransfer)
 			needsFlush := len(s.shuffleBuffer) >= s.numOfTransfersPerPart
@@ -631,14 +631,13 @@ func (s *copyTransferProcessor) flushShuffleBuffer() error {
 	})
 
 	// Phase 3: Dispatch under flushMutex — serializes access to shared state
-	// (pendingParts, copyJobTemplate, PartNum, flushWindowCounter).
+	// (copyJobTemplate, PartNum, flushWindowCounter).
 	s.flushMutex.Lock()
 	defer s.flushMutex.Unlock()
 
 	// Track which flush window these batches belong to
 	s.flushWindowCounter++
 	currentWindow := s.flushWindowCounter
-	batchIdx := 0
 
 	// Log transfer-level shuffle diagnostics
 	if jobsAdmin.JobsAdmin != nil {
@@ -655,52 +654,53 @@ func (s *copyTransferProcessor) flushShuffleBuffer() error {
 			}
 		}
 		jobsAdmin.JobsAdmin.LogToJobLog(
-			fmt.Sprintf("[ShuffleDiag] Transfer-level flush window #%d: shuffled %d transfers -> %d batches, pending total will be %d, sample prefixes: %v",
-				currentWindow, len(toFlush), nBatches, len(s.pendingParts)+nBatches, samples),
+			fmt.Sprintf("[ShuffleDiag] Transfer-level flush window #%d: shuffled %d transfers -> %d batches, sample prefixes: %v",
+				currentWindow, len(toFlush), nBatches, samples),
 			common.LogInfo)
 	}
 
-	// Dispatch in plan-part-sized batches
+	// Dispatch in plan-part-sized batches straight to the async dispatch pipeline.
+	// The transfer-level shuffle above already gives each part diverse key-space prefixes,
+	// so there is no need to buffer parts for a second reordering pass — send each one to
+	// dispatchCh as soon as it is assembled. The dispatch workers handle the fsync-heavy
+	// plan-file writes in the background while the next shuffle buffer accumulates.
+	s.startDispatchPipeline()
 	for len(toFlush) >= s.numOfTransfersPerPart {
-		// Copy batch to a new right-sized slice to avoid retaining the entire toFlush array
-		batch := make([]common.CopyTransfer, s.numOfTransfersPerPart)
-		copy(batch, toFlush[:s.numOfTransfersPerPart])
-		toFlush = toFlush[s.numOfTransfersPerPart:]
+		// Hand out a capped view into the (already-shuffled) toFlush array instead of
+		// allocating + copying a fresh slice per part. The three-index slice caps cap at
+		// numOfTransfersPerPart so a downstream append can't bleed into the next part's
+		// region. This eliminates one malloc + one full 10K-struct copy per part; the shared
+		// backing array is released once the last part drains from dispatchCh.
+		n := s.numOfTransfersPerPart
+		batch := toFlush[:n:n]
+		toFlush = toFlush[n:]
 
-		s.copyJobTemplate.Transfers = common.Transfers{List: batch}
+		transfers := common.Transfers{List: batch}
 		// Calculate size for this batch
 		for _, t := range batch {
-			s.copyJobTemplate.Transfers.TotalSizeInBytes += uint64(t.SourceSize)
+			transfers.TotalSizeInBytes += uint64(t.SourceSize)
 			switch t.EntityType {
 			case common.EEntityType.File():
-				s.copyJobTemplate.Transfers.FileTransferCount++
+				transfers.FileTransferCount++
 			case common.EEntityType.Folder():
-				s.copyJobTemplate.Transfers.FolderTransferCount++
+				transfers.FolderTransferCount++
 			case common.EEntityType.Symlink():
-				s.copyJobTemplate.Transfers.SymlinkTransferCount++
+				transfers.SymlinkTransferCount++
 			case common.EEntityType.Hardlink():
-				s.copyJobTemplate.Transfers.HardlinksConvertedCount++
+				transfers.HardlinksConvertedCount++
 			case common.EEntityType.FileProperties():
-				s.copyJobTemplate.Transfers.FilePropertyTransferCount++
+				transfers.FilePropertyTransferCount++
 			}
 		}
 
-		// Buffer the part instead of sending immediately; parts will be
-		// shuffled across multiple flush windows in flushPendingParts.
-		s.pendingParts = append(s.pendingParts, pendingPart{
-			transfers:   s.copyJobTemplate.Transfers,
-			flushWindow: currentWindow,
-			batchIndex:  batchIdx,
-		})
-		batchIdx++
-		s.copyJobTemplate.Transfers = common.Transfers{}
-	}
+		s.dispatchCh <- dispatchItem{
+			transfers: transfers,
+			partNum:   s.copyJobTemplate.PartNum,
+		}
+		s.copyJobTemplate.PartNum++
 
-	// Flush pending parts if we've accumulated enough to interleave different prefix ranges
-	const partReorderThreshold = 100
-	if len(s.pendingParts) >= partReorderThreshold {
-		if err := s.flushPendingParts(); err != nil {
-			return err
+		if s.dispatchErr != nil {
+			return s.dispatchErr
 		}
 	}
 
@@ -738,158 +738,47 @@ func (s *copyTransferProcessor) flushShuffleBuffer() error {
 	return nil
 }
 
-// flushPendingParts shuffles the order of buffered plan parts and sends them to the STE.
-// By interleaving parts from different shuffle-buffer flush windows, the STE processes
-// diverse prefix ranges concurrently rather than sweeping through them sequentially.
-// Must be called while holding flushMutex.
-func (s *copyTransferProcessor) flushPendingParts() error {
-	if len(s.pendingParts) == 0 {
-		return nil
-	}
-
-	// Log pre-shuffle state: how many parts from which flush windows
-	if jobsAdmin.JobsAdmin != nil {
-		windowCounts := make(map[uint32]int)
-		for _, p := range s.pendingParts {
-			windowCounts[p.flushWindow]++
-		}
-		jobsAdmin.JobsAdmin.LogToJobLog(
-			fmt.Sprintf("[ShuffleDiag] Part-level flush: shuffling %d pending parts from %d flush windows: %v",
-				len(s.pendingParts), len(windowCounts), windowCounts),
-			common.LogInfo)
-	}
-
-	// Part-level shuffle disabled: transfer-level shuffle in flushShuffleBuffer already
-	// ensures each batch has diverse prefixes, so reordering batches adds no value.
-
-	// Log dispatch order (first 10 + last 5)
-	if jobsAdmin.JobsAdmin != nil {
-		var order strings.Builder
-		for i, p := range s.pendingParts {
-			if i >= 10 && i < len(s.pendingParts)-5 {
-				if i == 10 {
-					order.WriteString("...")
-				}
-				continue
-			}
-			if order.Len() > 0 {
-				order.WriteString(", ")
-			}
-			firstSrc := ""
-			if len(p.transfers.List) > 0 {
-				src := p.transfers.List[0].Source
-				if len(src) > 5 {
-					firstSrc = src[:5]
-				}
-			}
-			fmt.Fprintf(&order, "fw%d/b%d(%s)", p.flushWindow, p.batchIndex, firstSrc)
-		}
-		jobsAdmin.JobsAdmin.LogToJobLog(
-			fmt.Sprintf("[ShuffleDiag] Part dispatch order (PartNum %d+): [%s]",
-				s.copyJobTemplate.PartNum, order.String()),
-			common.LogInfo)
-	}
-
-	for _, p := range s.pendingParts {
-		// Pipeline: push to dispatch channel for async processing.
-		// The dispatch goroutine handles sendPartToSte (with fsync) in the background,
-		// allowing the next shuffle buffer to accumulate concurrently.
-		s.startDispatchPipeline()
-		s.dispatchCh <- dispatchItem{
-			transfers: p.transfers,
-			partNum:   s.copyJobTemplate.PartNum,
-		}
-		s.copyJobTemplate.PartNum++
-	}
-
-	// Check if dispatch goroutine hit an error
-	if s.dispatchErr != nil {
-		s.pendingParts = s.pendingParts[:0]
-		return s.dispatchErr
-	}
-
-	s.pendingParts = s.pendingParts[:0]
-	return nil
-}
-
 var NothingScheduledError = errors.New("no transfers were scheduled because no files matched the specified criteria")
 var FinalPartCreatedMessage = "Final job part has been created"
 
 func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err error) {
-	fmt.Printf("[ShuffleConfig] dispatchFinalPart entered: UseSyncOrchestrator=%v, shuffleBufferLen=%d, pendingPartsLen=%d\n", UseSyncOrchestrator, len(s.shuffleBuffer), len(s.pendingParts))
+	fmt.Printf("[ShuffleConfig] dispatchFinalPart entered: UseSyncOrchestrator=%v, shuffleBufferLen=%d\n", UseSyncOrchestrator, len(s.shuffleBuffer))
 	// Flush any remaining transfers before dispatching the final part
 	if UseSyncOrchestrator && len(s.shuffleBuffer) > 0 {
 		s.flushMutex.Lock()
 
-		if isShuffleEnabled() {
-			// Add full plan parts to pendingParts for interleaved dispatch
-			s.flushWindowCounter++
-			finalWindow := s.flushWindowCounter
-			finalBatchIdx := 0
-			for len(s.shuffleBuffer) > s.numOfTransfersPerPart {
-				batch := make([]common.CopyTransfer, s.numOfTransfersPerPart)
-				copy(batch, s.shuffleBuffer[:s.numOfTransfersPerPart])
-				s.shuffleBuffer = s.shuffleBuffer[s.numOfTransfersPerPart:]
+		// Dispatch any remaining full plan parts straight to the async pipeline.
+		// The transfer-level shuffle already ran when these transfers were enqueued and the
+		// part-buffering/reorder stage has been removed, so the shuffle and non-shuffle paths
+		// are identical here — send each assembled part directly to dispatchCh. Any dispatch
+		// error is surfaced by waitForDispatchPipeline() below.
+		s.startDispatchPipeline()
+		for len(s.shuffleBuffer) > s.numOfTransfersPerPart {
+			batch := make([]common.CopyTransfer, s.numOfTransfersPerPart)
+			copy(batch, s.shuffleBuffer[:s.numOfTransfersPerPart])
+			s.shuffleBuffer = s.shuffleBuffer[s.numOfTransfersPerPart:]
 
-				transfers := common.Transfers{List: batch}
-				for _, t := range batch {
-					transfers.TotalSizeInBytes += uint64(t.SourceSize)
-					switch t.EntityType {
-					case common.EEntityType.File():
-						transfers.FileTransferCount++
-					case common.EEntityType.Folder():
-						transfers.FolderTransferCount++
-					case common.EEntityType.Symlink():
-						transfers.SymlinkTransferCount++
-					case common.EEntityType.Hardlink():
-						transfers.HardlinksConvertedCount++
-					case common.EEntityType.FileProperties():
-						transfers.FilePropertyTransferCount++
-					}
+			transfers := common.Transfers{List: batch}
+			for _, t := range batch {
+				transfers.TotalSizeInBytes += uint64(t.SourceSize)
+				switch t.EntityType {
+				case common.EEntityType.File():
+					transfers.FileTransferCount++
+				case common.EEntityType.Folder():
+					transfers.FolderTransferCount++
+				case common.EEntityType.Symlink():
+					transfers.SymlinkTransferCount++
+				case common.EEntityType.Hardlink():
+					transfers.HardlinksConvertedCount++
+				case common.EEntityType.FileProperties():
+					transfers.FilePropertyTransferCount++
 				}
-				s.pendingParts = append(s.pendingParts, pendingPart{
-					transfers:   transfers,
-					flushWindow: finalWindow,
-					batchIndex:  finalBatchIdx,
-				})
-				finalBatchIdx++
 			}
-
-			// Flush all pending parts (shuffled order) before dispatching the final part
-			if err := s.flushPendingParts(); err != nil {
-				s.flushMutex.Unlock()
-				return false, err
+			s.dispatchCh <- dispatchItem{
+				transfers: transfers,
+				partNum:   s.copyJobTemplate.PartNum,
 			}
-		} else {
-			// Direct dispatch: send remaining full parts via pipeline
-			for len(s.shuffleBuffer) > s.numOfTransfersPerPart {
-				batch := make([]common.CopyTransfer, s.numOfTransfersPerPart)
-				copy(batch, s.shuffleBuffer[:s.numOfTransfersPerPart])
-				s.shuffleBuffer = s.shuffleBuffer[s.numOfTransfersPerPart:]
-
-				transfers := common.Transfers{List: batch}
-				for _, t := range batch {
-					transfers.TotalSizeInBytes += uint64(t.SourceSize)
-					switch t.EntityType {
-					case common.EEntityType.File():
-						transfers.FileTransferCount++
-					case common.EEntityType.Folder():
-						transfers.FolderTransferCount++
-					case common.EEntityType.Symlink():
-						transfers.SymlinkTransferCount++
-					case common.EEntityType.Hardlink():
-						transfers.HardlinksConvertedCount++
-					case common.EEntityType.FileProperties():
-						transfers.FilePropertyTransferCount++
-					}
-				}
-				s.startDispatchPipeline()
-				s.dispatchCh <- dispatchItem{
-					transfers: transfers,
-					partNum:   s.copyJobTemplate.PartNum,
-				}
-				s.copyJobTemplate.PartNum++
-			}
+			s.copyJobTemplate.PartNum++
 		}
 
 		// Place the last remaining transfers (< numOfTransfersPerPart) into the template for the final part

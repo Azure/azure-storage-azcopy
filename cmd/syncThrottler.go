@@ -83,7 +83,10 @@ const (
 var (
 	enableDebugLogs    bool = false
 	enableThrottleLogs bool = true
-	startGoProfiling   bool = true
+	// startGoProfiling controls the periodic pprof writer in syncOrchestratorHandler that
+	// dumps heap/goroutine/CPU profiles into the per-job (JobRunId) folder on clpfileshare.
+	// Disabled by default to avoid writing profile files during production runs.
+	startGoProfiling   bool = false
 
 	// Core concurrency settings
 	crawlParallelism                  int32
@@ -169,10 +172,15 @@ func initializeLimits(orchestratorOptions *SyncOrchestratorOptions) {
 		} else {
 			crawlParallelism = getMergeJoinParallelism()
 		}
-		// Merge-join streams objects — no indexMap accumulation — so memory/file/goroutine
-		// throttling is unnecessary. Disabling avoids the ReadMemStats STW bottleneck
-		// that serializes all workers through a global mutex+STW pause.
-		enableMemoryBasedThrottling = false
+		// Merge-join streams objects with no indexMap accumulation, so file- and
+		// goroutine-based throttling are unnecessary. However, on a fresh-target
+		// full copy every source object becomes a transfer, so the downstream
+		// shuffle buffer + in-flight HTTP pipeline can still drive the worker to
+		// OOM. Keep memory-based throttling ENABLED to provide coarse directory-level
+		// backpressure (stop acquiring new dir slots above the engage threshold).
+		// The memory check reads the cached cgroup-aware percentage from the stats
+		// monitor, so it does NOT incur the ReadMemStats stop-the-world pause.
+		enableMemoryBasedThrottling = true
 		enableFileBasedThrottling = false
 		enableGoroutineBasedThrottling = false
 		// Each merge-join worker processes one flat directory — no recursive sub-tree.
@@ -181,7 +189,7 @@ func initializeLimits(orchestratorOptions *SyncOrchestratorOptions) {
 		// = 160K goroutines, most idle. Set to 1 since outer crawl already provides parallelism.
 		EnumerationParallelism = 1
 		syncOrchestratorLog(common.LogInfo,
-			fmt.Sprintf("[MergeJoin] Using merge-join parallelism: %d, throttling disabled, inner enum=1", crawlParallelism),
+			fmt.Sprintf("[MergeJoin] Using merge-join parallelism: %d, memory-based throttling enabled, inner enum=1", crawlParallelism),
 			true)
 	}
 
@@ -240,6 +248,8 @@ func GetSafeParallelismLimit(maxActiveFiles, maxChildCount int64, fromTo common.
 		return min(limit, 48)
 	case common.EFromTo.S3Blob():
 		return min(limit, 64)
+	case common.EFromTo.FileFile():
+		return min(limit, 48)
 	default:
 		return min(limit, 48)
 	}
@@ -528,14 +538,32 @@ func (ds *ThrottleSemaphore) shouldThrottleBasedOnFiles() bool {
 
 // shouldThrottleBasedOnMemory applies hysteresis to memory pressure throttling
 func (ds *ThrottleSemaphore) shouldThrottleBasedOnMemory() bool {
-	var memStats runtime.MemStats
-	runtime.ReadMemStats(&memStats)
+	var usagePercent float64
 
-	totalMemoryBytes, err := common.GetTotalPhysicalMemory()
-	if err != nil {
-		totalMemoryBytes = int64(defaultPhysicalMemoryGB) * gbToBytesMultiplier
+	// Prefer the cached OS-level (container/cgroup-aware) memory percentage from the
+	// stats monitor. It is refreshed on the monitor's interval and avoids the
+	// runtime.ReadMemStats stop-the-world pause that would otherwise serialize every
+	// directory acquisition. It also reflects true process RSS rather than just the
+	// Go heap arena, which is what actually drives the container OOM killer.
+	gotFromMonitor := false
+	if common.GlobalSystemStatsMonitor != nil {
+		if p := common.GlobalSystemStatsMonitor.GetMemoryPercent(); p >= 0 {
+			usagePercent = p
+			gotFromMonitor = true
+		}
 	}
-	usagePercent := float64(memStats.Sys) / float64(totalMemoryBytes) * 100
+
+	if !gotFromMonitor {
+		// Fallback (e.g. non-linux dev, or monitor not yet started): use runtime stats.
+		var memStats runtime.MemStats
+		runtime.ReadMemStats(&memStats)
+
+		totalMemoryBytes, err := common.GetTotalPhysicalMemory()
+		if err != nil {
+			totalMemoryBytes = int64(defaultPhysicalMemoryGB) * gbToBytesMultiplier
+		}
+		usagePercent = float64(memStats.Sys) / float64(totalMemoryBytes) * 100
+	}
 
 	if !ds.memoryThrottleActive {
 		// Not currently throttling - check if we should start
