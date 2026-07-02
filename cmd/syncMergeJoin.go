@@ -362,16 +362,34 @@ func mergeJoinSyncDirChannelBased(
 	return subDirs, nil
 }
 
+// streamingMergeJoinEnabled gates the streaming merge-join as an OPT-IN feature. It is
+// OFF by default so blob->blob and s3->blob keep using the proven indexMap-based sync
+// path (unchanged production behavior). Set AZCOPY_USE_STREAMING_MERGE_JOIN to a truthy
+// value (1/true/yes/on) to route the eligible source/dest pairs through the merge-join.
+var streamingMergeJoinEnabled = func() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("AZCOPY_USE_STREAMING_MERGE_JOIN"))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}()
+
 // useStreamingMergeJoin reports whether the streaming merge-join should be used for
-// this transfer. It is intentionally restricted to the source/destination pairs whose
-// listing order is proven lexicographically sorted and validated end-to-end:
+// this transfer. It is an OPT-IN feature (AZCOPY_USE_STREAMING_MERGE_JOIN, default off):
+// when disabled, every sync uses the existing indexMap-based path. When enabled, it is
+// still restricted to the source/destination pairs whose listing order is proven
+// lexicographically sorted and validated end-to-end:
 //   - S3 -> Blob (S3 source list-order fix + per-level merge)
 //   - Azure -> Azure, i.e. Blob/BlobFS (FNS or HNS) in any combination
 //
-// Everything else (Azure Files, Local, GCP, etc.) stays on the existing indexMap-based
-// flow. Keep this allow-list conservative: any source whose listing is not guaranteed
+// Everything else (Azure Files, Local, GCP, etc.) always stays on the indexMap flow.
+// Keep this allow-list conservative: any source whose listing is not guaranteed
 // globally sorted would silently break the two-pointer merge.
 func useStreamingMergeJoin(fromTo common.FromTo) bool {
+	if !streamingMergeJoinEnabled {
+		return false
+	}
 	isAzure := func(loc common.Location) bool {
 		return loc == common.ELocation.Blob() || loc == common.ELocation.BlobFS()
 	}
