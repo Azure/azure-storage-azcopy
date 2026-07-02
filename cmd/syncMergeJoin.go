@@ -26,6 +26,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
 	"runtime"
 	"strings"
 	"sync/atomic"
@@ -33,6 +34,64 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
+
+// mergeJoinTraceEnabled turns on verbose per-object, per-comparison tracing of the
+// streaming merge-join sync path. Enable by setting AZCOPY_MERGEJOIN_TRACE to a
+// truthy value (1/true/yes). Off by default so production logs stay quiet.
+var mergeJoinTraceEnabled = func() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("AZCOPY_MERGEJOIN_TRACE"))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}()
+
+// mergeJoinTraceLog emits a verbose merge-join trace line (log file + console, so it
+// is visible in Log Analytics container logs) only when AZCOPY_MERGEJOIN_TRACE is on.
+func mergeJoinTraceLog(format string, args ...interface{}) {
+	if !mergeJoinTraceEnabled {
+		return
+	}
+	mergeJoinSyncOneDirLog(common.LogInfo, "[TRACE] "+fmt.Sprintf(format, args...), true)
+}
+
+// mergeJoinEntityLabel returns a short human-readable label for a StoredObject's
+// entity type, used in trace logs ("file", "folder", or "vdir" for an FNS virtual prefix).
+func mergeJoinEntityLabel(obj StoredObject) string {
+	if obj.entityType == common.EEntityType.Folder() {
+		if obj.isVirtualPrefix {
+			return "vdir"
+		}
+		return "folder"
+	}
+	return "file"
+}
+
+// mergeJoinCmpLabel maps a strings.Compare result to a human-readable merge-join
+// branch label for trace logs.
+func mergeJoinCmpLabel(cmp int) string {
+	switch {
+	case cmp < 0:
+		return "SRC<DST => source-only"
+	case cmp > 0:
+		return "SRC>DST => dest-only"
+	default:
+		return "SRC==DST => both"
+	}
+}
+
+// mergeJoinChildKey returns the per-object ordering key used by the streaming
+// merge-join, matching buildChildPath's ordering (folder => name+"/", file => name).
+// Because the parent directory is a common prefix for every object in a single
+// traverser call, comparing these suffix keys is order-equivalent to comparing the
+// full buildChildPath values — which lets us cheaply verify the sort invariant.
+func mergeJoinChildKey(obj StoredObject) string {
+	if obj.entityType == common.EEntityType.Folder() {
+		return strings.TrimSuffix(obj.relativePath, common.AZCOPY_PATH_SEPARATOR_STRING) + common.AZCOPY_PATH_SEPARATOR_STRING
+	}
+	return obj.relativePath
+}
 
 // incrementSourceScanned increments the source files or folders scanned counter
 // in the merge-join path, matching the traverser's IncrementEnumeration behavior.
@@ -95,6 +154,7 @@ func traverserToChannel(
 		start := time.Now()
 		firstObj := true
 		count := 0
+		var prevKey string // last emitted ordering key, for the sort-invariant guard
 
 		err := t.Traverse(noPreProccessor, func(obj StoredObject) error {
 			if firstObj {
@@ -106,6 +166,21 @@ func traverserToChannel(
 				}
 			}
 			count++
+			// Sort-invariant guard (always on, ~one string compare per object): the
+			// streaming merge-join is only correct if each stream is emitted in strictly
+			// non-decreasing key order. If a traverser ever emits an out-of-order key,
+			// the merge-join can silently mis-classify objects (missed or extra transfers),
+			// so we log it at Error even in production. This is rare (fires only on the
+			// anomaly) and cheap, so it does not spam logs for millions of sorted files.
+			curKey := mergeJoinChildKey(obj)
+			if count > 1 && curKey < prevKey {
+				mergeJoinSyncOneDirLog(common.LogError,
+					fmt.Sprintf("ORDER VIOLATION in %s: object #%d key=%q < previous key=%q — listing is not lexicographically sorted; merge-join results may be INCORRECT for this directory",
+						label, count, curKey, prevKey), true)
+			}
+			prevKey = curKey
+			mergeJoinTraceLog("%s LIST #%d relPath=%q entity=%s size=%d lmt=%s",
+				label, count, obj.relativePath, mergeJoinEntityLabel(obj), obj.size, obj.lastModifiedTime.Format(time.RFC3339))
 			// Non-blocking send first; if the channel is full, record back-pressure
 			// (consumer slower than producer) then fall back to a blocking send.
 			select {
@@ -219,6 +294,8 @@ func mergeJoinSyncDirChannelBased(
 		dstPath := buildChildPath(dir, dstObj.relativePath, dstObj.entityType == common.EEntityType.Folder())
 
 		cmp := strings.Compare(srcPath, dstPath)
+		mergeJoinTraceLog("CMP dir=%q SRC=%q(%s) vs DST=%q(%s) => %s",
+			dir, srcPath, mergeJoinEntityLabel(srcObj), dstPath, mergeJoinEntityLabel(dstObj), mergeJoinCmpLabel(cmp))
 
 		switch {
 		case cmp < 0:
@@ -253,6 +330,8 @@ func mergeJoinSyncDirChannelBased(
 	for srcOk {
 		srcOrigPath := srcObj.relativePath
 		srcObj.relativePath = buildChildPath(dir, srcObj.relativePath, srcObj.entityType == common.EEntityType.Folder())
+		mergeJoinTraceLog("DRAIN-SRC dir=%q SRC=%q(%s) (dest exhausted) => source-only",
+			dir, srcObj.relativePath, mergeJoinEntityLabel(srcObj))
 		subDirs, err = mergeJoinHandleSourceOnly(enumerator, cca, srcObj, srcOrigPath, subDirs)
 		if err != nil {
 			return subDirs, err
@@ -263,6 +342,8 @@ func mergeJoinSyncDirChannelBased(
 	// Drain remaining dest-only objects
 	for dstOk {
 		dstObj.relativePath = buildChildPath(dir, dstObj.relativePath, dstObj.entityType == common.EEntityType.Folder())
+		mergeJoinTraceLog("DRAIN-DST dir=%q DST=%q(%s) (source exhausted) => dest-only",
+			dir, dstObj.relativePath, mergeJoinEntityLabel(dstObj))
 		err = mergeJoinHandleDestOnly(enumerator, cca, dstObj)
 		if err != nil {
 			return subDirs, err
@@ -281,14 +362,25 @@ func mergeJoinSyncDirChannelBased(
 	return subDirs, nil
 }
 
-// useStreamingMergeJoin returns true if the source type guarantees lexicographic
-// listing order, which is required for the streaming merge-join algorithm.
-// Local filesystem (ext4/XFS) does NOT guarantee sorted order, so it stays on
-// the existing indexMap-based flow.
+// useStreamingMergeJoin reports whether the streaming merge-join should be used for
+// this transfer. It is intentionally restricted to the source/destination pairs whose
+// listing order is proven lexicographically sorted and validated end-to-end:
+//   - S3 -> Blob (S3 source list-order fix + per-level merge)
+//   - Azure -> Azure, i.e. Blob/BlobFS (FNS or HNS) in any combination
+//
+// Everything else (Azure Files, Local, GCP, etc.) stays on the existing indexMap-based
+// flow. Keep this allow-list conservative: any source whose listing is not guaranteed
+// globally sorted would silently break the two-pointer merge.
 func useStreamingMergeJoin(fromTo common.FromTo) bool {
-	switch fromTo.From() {
-	case common.ELocation.S3(), common.ELocation.Blob(), common.ELocation.BlobFS(), common.ELocation.File():
-		return true
+	isAzure := func(loc common.Location) bool {
+		return loc == common.ELocation.Blob() || loc == common.ELocation.BlobFS()
+	}
+	from, to := fromTo.From(), fromTo.To()
+	switch {
+	case from == common.ELocation.S3() && to == common.ELocation.Blob():
+		return true // S3 -> Blob
+	case isAzure(from) && isAzure(to):
+		return true // Azure -> Azure (Blob/BlobFS)
 	default:
 		return false
 	}
@@ -329,6 +421,7 @@ func mergeJoinHandleSourceOnly(
 		// Skip self-referential directory sentinels (GCP/HNS) from subDirs
 		// but still schedule the transfer for ACL propagation
 		if isSelfReferentialDirSentinel(srcObj, originalRelativePath, cca.fromTo) {
+			mergeJoinTraceLog("    ACTION SRC-ONLY folder %q: self-referential sentinel => TRANSFER (ACL only, no recurse)", srcObj.relativePath)
 			err := enumerator.ctp.scheduleCopyTransfer(srcObj)
 			return subDirs, err
 		}
@@ -343,10 +436,12 @@ func mergeJoinHandleSourceOnly(
 		// Virtual prefixes (FNS directories) have no folder entity to transfer —
 		// recurse only. Real folders (HNS) are scheduled for transfer.
 		if srcObj.isVirtualPrefix {
+			mergeJoinTraceLog("    ACTION SRC-ONLY vdir %q: RECURSE only (FNS virtual prefix, nothing to transfer)", srcObj.relativePath)
 			return subDirs, nil
 		}
 
 		// Schedule folder transfer (for ACLs, metadata, etc.)
+		mergeJoinTraceLog("    ACTION SRC-ONLY folder %q: TRANSFER (ACL/metadata) + RECURSE", srcObj.relativePath)
 		err := enumerator.ctp.scheduleCopyTransfer(srcObj)
 		if err != nil {
 			return subDirs, err
@@ -356,6 +451,7 @@ func mergeJoinHandleSourceOnly(
 	}
 
 	// File: schedule transfer
+	mergeJoinTraceLog("    ACTION SRC-ONLY file %q: TRANSFER (new at destination)", srcObj.relativePath)
 	err := enumerator.ctp.scheduleCopyTransfer(srcObj)
 	return subDirs, err
 }
@@ -371,10 +467,12 @@ func mergeJoinHandleDestOnly(
 ) error {
 	if cca.deleteDestination == common.EDeleteDestination.True() {
 		// Pass to the destination cleaner (same function used by the indexMap path)
+		mergeJoinTraceLog("    ACTION DST-ONLY %q: DELETE (--delete-destination=true, not present at source)", dstObj.relativePath)
 		return enumerator.objectComparator(dstObj)
 	}
 
 	// Not deleting destination — this object is extra but we leave it alone
+	mergeJoinTraceLog("    ACTION DST-ONLY %q: SKIP (extra at destination, delete-destination not enabled)", dstObj.relativePath)
 	return nil
 }
 
@@ -399,10 +497,12 @@ func mergeJoinHandleBothExist(
 			// Always schedule transfer for ACL propagation (matches indexMap path behavior
 			// where the root sentinel with BlobName="" routes through SetContainerACL).
 			// Do NOT re-enqueue as subdirectory — that would cause infinite loops.
+			mergeJoinTraceLog("    ACTION BOTH folder %q: self-referential sentinel => TRANSFER (ACL only, no recurse)", srcObj.relativePath)
 			err := enumerator.ctp.scheduleCopyTransfer(srcObj)
 			return subDirs, err
 		}
 
+		mergeJoinTraceLog("    ACTION BOTH folder %q: RECURSE (enqueue subdir); property comparison follows", srcObj.relativePath)
 		subDirs = append(subDirs, minimalStoredObject{
 			relativePath:           common.AZCOPY_PATH_SEPARATOR_STRING + srcObj.relativePath,
 			changeTime:             srcObj.changeTime,
@@ -416,6 +516,9 @@ func mergeJoinHandleBothExist(
 	// LWT/changeTime are not reliable for remote sources (e.g., blob Last-Modified
 	// is always updated to copy time, and POSIX metadata keys may not exist).
 	if srcObj.isMoreRecentThan(dstObj, comparator.preferSMBTime) {
+		mergeJoinTraceLog("    ACTION BOTH %q (%s): OVERWRITE (src LMT %s newer than dst LMT %s)",
+			srcObj.relativePath, mergeJoinEntityLabel(srcObj),
+			srcObj.lastModifiedTime.Format(time.RFC3339), dstObj.lastModifiedTime.Format(time.RFC3339))
 		syncComparatorLog(srcObj.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMT, false)
 		err := enumerator.ctp.scheduleCopyTransfer(srcObj)
 		return subDirs, err
@@ -426,6 +529,9 @@ func mergeJoinHandleBothExist(
 		enumerator.primaryTraverserTemplate.options.IncrementNotTransferred(srcObj.entityType)
 	}
 
+	mergeJoinTraceLog("    ACTION BOTH %q (%s): SKIP (no change; src LMT %s <= dst LMT %s)",
+		srcObj.relativePath, mergeJoinEntityLabel(srcObj),
+		srcObj.lastModifiedTime.Format(time.RFC3339), dstObj.lastModifiedTime.Format(time.RFC3339))
 	syncComparatorLog(srcObj.relativePath, syncStatusSkipped, syncSkipReasonNoChangeInLWTorCT, false)
 	return subDirs, nil
 }
