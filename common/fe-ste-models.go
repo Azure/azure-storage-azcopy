@@ -1566,6 +1566,7 @@ func (HardlinkHandlingType) Skip() HardlinkHandlingType {
 	return HardlinkHandlingType(1)
 }
 
+// Preserve means that hardlink relationships are maintained at the destination where supported
 func (HardlinkHandlingType) Preserve() HardlinkHandlingType {
 	return HardlinkHandlingType(2)
 }
