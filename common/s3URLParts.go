@@ -64,7 +64,7 @@ const (
 	S3ProviderOracle  S3ProviderKind = "oracle"
 	S3ProviderIBM     S3ProviderKind = "ibm"
 	S3ProviderAlibaba S3ProviderKind = "alibaba"
-	S3ProviderCustom  S3ProviderKind = "custom"
+	S3ProviderOnPrem  S3ProviderKind = "onprem"
 	S3ProviderUnknown S3ProviderKind = "unknown"
 )
 
@@ -740,8 +740,8 @@ func (p *S3URLParts) ProviderKind() S3ProviderKind {
 		return S3ProviderAlibaba
 	}
 
-	if p.IsS3CompatibleEndpoint() {
-		return S3ProviderCustom
+	if p.IsOnPremS3Compatible() {
+		return S3ProviderOnPrem
 	}
 
 	if p.IsAWSS3() {
