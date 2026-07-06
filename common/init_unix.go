@@ -24,16 +24,12 @@
 package common
 
 import (
-	"os"
 	"path"
 )
 
 // getAzCopyAppPath returns the path of Azcopy folder in local appdata.
 // Azcopy folder in local appdata contains all the files created by azcopy locally.
 func getAzCopyAppPath() string {
-	if mount := os.Getenv("AZCOPY_FILESHARE_JOBPATH"); mount != "" {
-		return path.Join(mount, "azcopy")
-	}
 	localAppData := GetEnvironmentVariable(EEnvironmentVariable.UserDir())
 	azcopyAppDataFolder := path.Join(localAppData, ".azcopy")
 	return azcopyAppDataFolder
