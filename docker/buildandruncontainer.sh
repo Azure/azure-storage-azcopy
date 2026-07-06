@@ -1,12 +1,12 @@
 # Build azcopy binary
 ./dockerinstall.sh
-./buildcontainer.sh Dockerfile ubuntu-x86_64
+./buildcontainer.sh DockerfileMariner mariner-amd64
 
 # Fetch the version of azcopy and extract the version number
 azcopy_version=$(../azcopy --version | awk '{print $3}')
 
 # Construct the Docker image tag using the fetched version
-docker_image_tag="azure-azcopy-ubuntu-x86_64.$azcopy_version"
+docker_image_tag="azure-azcopy-mariner-amd64:$azcopy_version"
 
 # If build was successful then launch a container instance
 status=`docker images | grep $docker_image_tag`
