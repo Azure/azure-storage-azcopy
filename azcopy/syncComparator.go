@@ -303,10 +303,12 @@ func (f *syncDestinationComparator) normalizeHardlinkTarget(sourceObj *traverser
 /*
 Example sync --hardlinks=preserve:
 Before run:
+
 	Source: A + B (hardlink group)
 	Dest: A only
 
 After run:
+
 	Dest: A + B (CreateHardlink called on B)
 */
 func (f *syncDestinationComparator) NormalizeAndSchedule(
