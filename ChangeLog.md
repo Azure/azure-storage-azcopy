@@ -1,6 +1,24 @@
 
 # Change Log
 
+## Version 10.32.5
+
+### Dependency updates
+1. Golang 1.25.8 -> 1.25.11
+2. golang.org/x/crypto 0.47.0 -> 0.53.0
+3. golang.org/x/net 0.49.0 -> 0.55.0 
+4. golang.org/x/sync v0.19.0 -> 0.21.0
+5. golang.org/x/sys v0.40.0 -> 0.46.0 
+6. Trivy dependency updated to v0.35.0 ([#3421](https://github.com/Azure/azure-storage-azcopy/pull/3421))
+
+### Bug Fixes 
+1. Fixed a bug where `CreateFile` would fail with `InvalidProtocolHeader` when special bits in the x-ms-mode is set. ([#3467](https://github.com/Azure/azure-storage-azcopy/pull/3467))
+
+### Code Improvements 
+1. Centralize the HTTP client into a shared global instance. ([#3436](https://github.com/Azure/azure-storage-azcopy/pull/3436))
+2. AzCopy prints help text on running `azcopy` with no subcommands ([#3485](https://github.com/Azure/azure-storage-azcopy/pull/3485))
+3. Ensure `GetProperties` and `SetProperties` calls are not on a pathless container root. ([#3453](https://github.com/Azure/azure-storage-azcopy/pull/3453))
+
 ## Version 10.32.2
 
 ### Dependency updates
@@ -68,7 +86,7 @@
 3. Fixed a bug where jobs resume would not produce any output for previously failed jobs. ([#3103](https://github.com/Azure/azure-storage-azcopy/pull/3103))
 4. Fixed a bug where FileBlob transfers with EntraID on the source would pass the wrong service version. ([#3242](https://github.com/Azure/azure-storage-azcopy/issues/3242))
 
-## Code Improvements
+### Code Improvements
 1. Refactored traverser related code into its own package. ([#3251](https://github.com/Azure/azure-storage-azcopy/pull/3251))
 2. Refactored OAuth token manager access to use a client-based pattern instead of global singleton access. ([#3260](https://github.com/Azure/azure-storage-azcopy/pull/3260))
 3. Removed unused code related to credential management. ([#3260](https://github.com/Azure/azure-storage-azcopy/pull/3260))
