@@ -7,6 +7,9 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	datalake "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
+	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
+
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
@@ -128,7 +131,6 @@ type CopyJobPartOrderRequest struct {
 	LogLevel       LogLevel
 	BlobAttributes BlobTransferAttributes
 	CommandString  string // commandString hold the user given command which is logged to the Job log file
-	CredentialInfo CredentialInfo
 
 	PreservePermissions            PreservePermissionsOption
 	PreserveInfo                   bool
@@ -145,7 +147,7 @@ type CopyJobPartOrderRequest struct {
 	// S2SSourceCredentialType will override CredentialInfo.CredentialType for use on the source.
 	// As a result, CredentialInfo.OAuthTokenInfo may end up being fulfilled even _if_ CredentialInfo.CredentialType is _not_ OAuth.
 	// This may not always be the case (for instance, if we opt to use multiple OAuth tokens). At that point, this will likely be it's own CredentialInfo.
-	S2SSourceCredentialType CredentialType // Only Anonymous and OAuth will really be used in response to this, but S3 and GCP will come along too...
+	S2SSourceCredentialType enum.CredentialType // Only Anonymous and OAuth will really be used in response to this, but S3 and GCP will come along too...
 	FileAttributes          FileTransferAttributes
 	Provider                credentials.Provider //credential provider implementation for custom credential management
 }
@@ -153,27 +155,16 @@ type CopyJobPartOrderRequest struct {
 // CredentialInfo contains essential credential info which need be transited between modules,
 // and used during creating Azure storage client Credential.
 type CredentialInfo struct {
-	CredentialType    CredentialType
+	CredentialType    enum.CredentialType
 	OAuthTokenInfo    OAuthTokenInfo
-	S3CredentialInfo  S3CredentialInfo
-	GCPCredentialInfo GCPCredentialInfo
+	S3CredentialInfo  cred.S3CredentialInfo
+	GCPCredentialInfo cred.GCPCredentialInfo
 }
 
-func (c CredentialInfo) WithType(credentialType CredentialType) CredentialInfo {
+func (c CredentialInfo) WithType(credentialType enum.CredentialType) CredentialInfo {
 	// c is a clone, so this is OK
 	c.CredentialType = credentialType
 	return c
-}
-
-type GCPCredentialInfo struct {
-}
-
-// S3CredentialInfo contains essential credential info which need to build up S3 client.
-type S3CredentialInfo struct {
-	Endpoint   string
-	Region     string
-	BucketName string               // Bucket name from S3URLParts, used for GCS private network transfers
-	Provider   credentials.Provider //credential provider implementation for custom credential management
 }
 
 type CopyJobPartOrderErrorType string
@@ -319,7 +310,7 @@ type ResumeJobRequest struct {
 	ExcludeTransfer         map[string]int
 	CredentialInfo          CredentialInfo
 	Provider                credentials.Provider
-	S2SSourceCredentialType CredentialType
+	S2SSourceCredentialType enum.CredentialType
 }
 
 // represents the Details and details of a single transfer

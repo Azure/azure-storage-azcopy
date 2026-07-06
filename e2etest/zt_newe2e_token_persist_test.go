@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 )
 
@@ -15,7 +16,7 @@ func init() {
 type TokenPersistenceSuite struct{}
 
 func (*TokenPersistenceSuite) Scenario_InheritCred_Persist(a *ScenarioVariationManager) {
-	credSource := ResolveVariation(a, []common.AutoLoginType{common.EAutoLoginType.PsCred(), common.EAutoLoginType.AzCLI()})
+	credSource := ResolveVariation(a, []enum.AutoLoginType{enum.EAutoLoginType.PsCred(), enum.EAutoLoginType.AzCLI()})
 	withSpecifiedTenantID := NamedResolveVariation(a, map[string]bool{
 		"-withTenantID": true,
 		"":              false,
@@ -91,7 +92,7 @@ func (*TokenPersistenceSuite) Scenario_DeviceCode_Persist(a *ScenarioVariationMa
 		AzCopyCommand{
 			Verb: AzCopyVerbLogin,
 			Flags: LoginFlags{
-				LoginType: pointerTo(common.EAutoLoginType.Device()),
+				LoginType: pointerTo(enum.EAutoLoginType.Device()),
 				TenantID:  ternary.Iff(cfgTenantID != "", &cfgTenantID, nil),
 			},
 			Environment: env,
@@ -122,7 +123,7 @@ func (*TokenPersistenceSuite) Scenario_DeviceCode_Persist(a *ScenarioVariationMa
 		a.Assert("Endpoint not returned", Not{IsNil{}}, status.AADEndpoint)
 		a.Assert("Auth mechanism not returned", Not{IsNil{}}, status.AuthMethod)
 		if status.AuthMethod != nil {
-			a.Assert("Incorrect auth mechanism", Equal{}, *status.AuthMethod, common.EAutoLoginType.Device().String())
+			a.Assert("Incorrect auth mechanism", Equal{}, *status.AuthMethod, enum.EAutoLoginType.Device().String())
 		}
 	}
 

@@ -1,0 +1,66 @@
+// Copyright © 2024 Microsoft <wastore@microsoft.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+package cred
+
+import (
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
+)
+
+const (
+	DefaultTenantID                = "common"
+	DefaultActiveDirectoryEndpoint = "https://login.microsoftonline.com"
+)
+
+type LoginTokenOptions struct {
+	TenantID    string
+	AADEndpoint string
+	LoginType   enum.AutoLoginType
+
+	IdentityClientID   string
+	IdentityObjectID   string
+	IdentityResourceID string
+
+	ApplicationID   string
+	CertificateData string
+	ClientSecret    string
+
+	Nickname string
+
+	SaveCredential bool
+}
+
+func newLoginToken(opts LoginTokenOptions) token {
+	header := TokenHeader{
+		Tenant:                  ternary.Iff(opts.TenantID != "", opts.TenantID, DefaultTenantID),
+		Nickname:                ternary.Iff(opts.Nickname != "", opts.Nickname, DefaultNickname),
+		ActiveDirectoryEndpoint: ternary.Iff(opts.AADEndpoint != "", opts.AADEndpoint, DefaultActiveDirectoryEndpoint),
+		LoginType:               opts.LoginType,
+	}
+
+	impl := newTokenImpl(opts.LoginType)
+	impl = impl.fromLoginTokenOptions(opts)
+
+	return token{
+		TokenHeader: header,
+		tokenImpl:   impl,
+	}
+}

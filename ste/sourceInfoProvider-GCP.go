@@ -9,6 +9,8 @@ import (
 
 	gcpUtils "cloud.google.com/go/storage"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"golang.org/x/oauth2/google"
 
 	"net/url"
@@ -49,8 +51,8 @@ func newGCPSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, er
 	p.gcpClient, err = gcpClientFactory.GetGCPClient(
 		p.ctx,
 		common.CredentialInfo{
-			CredentialType:    common.ECredentialType.GoogleAppCredentials(),
-			GCPCredentialInfo: common.GCPCredentialInfo{},
+			CredentialType:    enum.ECredentialType.GoogleAppCredentials(),
+			GCPCredentialInfo: cred.GCPCredentialInfo{},
 		},
 		common.CredentialOpOptions{
 			LogInfo:  func(str string) { p.jptm.Log(common.LogInfo, str) },
@@ -60,7 +62,7 @@ func newGCPSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, er
 	if err != nil {
 		return nil, err
 	}
-	jsonKey, err = os.ReadFile(common.GetEnvironmentVariable(common.EEnvironmentVariable.GoogleAppCredentials()))
+	jsonKey, err = os.ReadFile(enum.EEnvironmentVariable.GoogleAppCredentials().Get())
 	if err != nil {
 		return nil, fmt.Errorf("Cannot read JSON key file. Please verify you have correctly set GOOGLE_APPLICATION_CREDENTIALS environment variable")
 	}

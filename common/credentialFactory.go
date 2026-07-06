@@ -27,6 +27,8 @@ import (
 
 	gcpUtils "cloud.google.com/go/storage"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"github.com/minio/minio-go/v7"
@@ -155,12 +157,12 @@ func createS3ClientForPrivateNetwork(credInfo CredentialInfo, cred *credentials.
 // CreateS3Credential creates AWS S3 credential according to credential info.
 func CreateS3Credential(ctx context.Context, credInfo CredentialInfo, options CredentialOpOptions) (*credentials.Credentials, error) {
 	switch credInfo.CredentialType {
-	case ECredentialType.S3PublicBucket():
+	case enum.ECredentialType.S3PublicBucket():
 		return credentials.NewStatic("", "", "", credentials.SignatureAnonymous), nil
-	case ECredentialType.S3AccessKey():
-		accessKeyID := GetEnvironmentVariable(EEnvironmentVariable.AWSAccessKeyID())
-		secretAccessKey := GetEnvironmentVariable(EEnvironmentVariable.AWSSecretAccessKey())
-		sessionToken := GetEnvironmentVariable(EEnvironmentVariable.AwsSessionToken())
+	case enum.ECredentialType.S3AccessKey():
+		accessKeyID := enum.EEnvironmentVariable.AWSAccessKeyID().Get()
+		secretAccessKey := enum.EEnvironmentVariable.AWSSecretAccessKey().Get()
+		sessionToken := enum.EEnvironmentVariable.AwsSessionToken().Get()
 
 		// create and return s3 credential
 		return credentials.NewStaticV4(accessKeyID, secretAccessKey, sessionToken), nil // S3 uses V4 signature
@@ -189,7 +191,7 @@ func CreateS3ClientFromProvider(credInfo CredentialInfo) (*minio.Client, error) 
 func CreateS3Client(ctx context.Context, credInfo CredentialInfo, option CredentialOpOptions, logger ILogger) (*minio.Client, error) {
 	bucketLookup := getS3BucketLookup(credInfo.S3CredentialInfo.Endpoint)
 
-	if credInfo.CredentialType == ECredentialType.S3PublicBucket() {
+	if credInfo.CredentialType == enum.ECredentialType.S3PublicBucket() {
 		cred := credentials.NewStatic("", "", "", credentials.SignatureAnonymous)
 		return minio.New(credInfo.S3CredentialInfo.Endpoint, &minio.Options{Creds: cred, Secure: true, Region: credInfo.S3CredentialInfo.Region, BucketLookup: bucketLookup})
 	}
@@ -218,14 +220,14 @@ func CreateS3Client(ctx context.Context, credInfo CredentialInfo, option Credent
 }
 
 type S3ClientFactory struct {
-	s3Clients map[S3CredentialInfo]*minio.Client
+	s3Clients map[cred.S3CredentialInfo]*minio.Client
 	lock      sync.RWMutex
 }
 
 // NewS3ClientFactory creates new S3 client factory.
 func NewS3ClientFactory() S3ClientFactory {
 	return S3ClientFactory{
-		s3Clients: make(map[S3CredentialInfo]*minio.Client),
+		s3Clients: make(map[cred.S3CredentialInfo]*minio.Client),
 	}
 }
 
@@ -263,13 +265,13 @@ func CreateGCPClient(ctx context.Context) (*gcpUtils.Client, error) {
 }
 
 type GCPClientFactory struct {
-	gcpClients map[GCPCredentialInfo]*gcpUtils.Client
+	gcpClients map[cred.GCPCredentialInfo]*gcpUtils.Client
 	lock       sync.RWMutex
 }
 
 func NewGCPClientFactory() GCPClientFactory {
 	return GCPClientFactory{
-		gcpClients: make(map[GCPCredentialInfo]*gcpUtils.Client),
+		gcpClients: make(map[cred.GCPCredentialInfo]*gcpUtils.Client),
 	}
 }
 
@@ -301,14 +303,14 @@ func GetCpkInfo(cpkInfo bool) *blob.CPKInfo {
 	}
 
 	// fetch EncryptionKey and EncryptionKeySHA256 from the environment variables
-	encryptionKey := GetEnvironmentVariable(EEnvironmentVariable.CPKEncryptionKey())
-	encryptionKeySHA256 := GetEnvironmentVariable(EEnvironmentVariable.CPKEncryptionKeySHA256())
+	encryptionKey := enum.EEnvironmentVariable.CPKEncryptionKey().Get()
+	encryptionKeySHA256 := enum.EEnvironmentVariable.CPKEncryptionKeySHA256().Get()
 	encryptionAlgorithmAES256 := blob.EncryptionAlgorithmTypeAES256
 
 	glcm := GetLifecycleMgr()
 	if encryptionKey == "" || encryptionKeySHA256 == "" {
-		glcm.Error("fatal: failed to fetch cpk encryption key (" + EEnvironmentVariable.CPKEncryptionKey().Name +
-			") or hash (" + EEnvironmentVariable.CPKEncryptionKeySHA256().Name + ") from environment variables")
+		glcm.Error("fatal: failed to fetch cpk encryption key (" + enum.EEnvironmentVariable.CPKEncryptionKey().Name +
+			") or hash (" + enum.EEnvironmentVariable.CPKEncryptionKeySHA256().Name + ") from environment variables")
 	}
 
 	return &blob.CPKInfo{

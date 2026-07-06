@@ -37,6 +37,8 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity/cache"
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
+	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
@@ -52,13 +54,6 @@ import (
 // ApplicationID represents 1st party ApplicationID for AzCopy.
 // const ApplicationID = "a45c21f4-7066-40b4-97d8-14f4313c3caa" // 3rd party test ApplicationID for AzCopy.
 const ApplicationID = "579a7132-0e58-4d80-b1e1-7a1e2d337859"
-
-// Resource used in azure storage OAuth authentication
-const Resource = "https://storage.azure.com"
-const MDResource = "https://disk.azure.com/" // There must be a trailing slash-- The service checks explicitly for "https://disk.azure.com/"
-
-const StorageScope = "https://storage.azure.com/.default"
-const ManagedDiskScope = "https://disk.azure.com//.default" // There must be a trailing slash-- The service checks explicitly for "https://disk.azure.com/"
 
 const DefaultTenantID = "common"
 const DefaultActiveDirectoryEndpoint = "https://login.microsoftonline.com"
@@ -79,6 +74,12 @@ type UserOAuthTokenManager struct {
 
 	// Stash the credential info as we delete the environment variable after reading it, and we need to get it multiple times.
 	stashedInfo *OAuthTokenInfo
+}
+
+// StashTokenInfo sets the in-process stashed token info for consumers that use
+// GetTokenInfo. This avoids re-reading from cache after login.
+func (uotm *UserOAuthTokenManager) StashTokenInfo(info *OAuthTokenInfo) {
+	uotm.stashedInfo = info
 }
 
 // NewUserOAuthTokenManagerInstance creates a token manager instance.
@@ -159,7 +160,7 @@ func (uotm *UserOAuthTokenManager) validateAndPersistLogin(oAuthTokenInfo *OAuth
 	if err != nil {
 		return err
 	}
-	scopes := []string{StorageScope}
+	scopes := []string{cred.StorageScope}
 	_, err = tc.GetToken(context.TODO(), policy.TokenRequestOptions{Scopes: scopes, EnableCAE: true})
 	if err != nil {
 		return err
@@ -178,7 +179,7 @@ func (uotm *UserOAuthTokenManager) validateAndPersistLogin(oAuthTokenInfo *OAuth
 
 func (uotm *UserOAuthTokenManager) WorkloadIdentityLogin(persist bool) error {
 	oAuthTokenInfo := &OAuthTokenInfo{
-		LoginType: EAutoLoginType.Workload(),
+		LoginType: enum.EAutoLoginType.Workload(),
 		Persist:   persist,
 	}
 
@@ -187,7 +188,7 @@ func (uotm *UserOAuthTokenManager) WorkloadIdentityLogin(persist bool) error {
 
 func (uotm *UserOAuthTokenManager) AzCliLogin(tenantID string, persist bool) error {
 	oAuthTokenInfo := &OAuthTokenInfo{
-		LoginType: EAutoLoginType.AzCLI(),
+		LoginType: enum.EAutoLoginType.AzCLI(),
 		Tenant:    tenantID,
 		Persist:   persist, // AzCLI creds do not need to be persisted, AzCLI handles persistence.
 	}
@@ -197,7 +198,7 @@ func (uotm *UserOAuthTokenManager) AzCliLogin(tenantID string, persist bool) err
 
 func (uotm *UserOAuthTokenManager) PSContextToken(tenantID string, persist bool) error {
 	oAuthTokenInfo := &OAuthTokenInfo{
-		LoginType: EAutoLoginType.PsCred(),
+		LoginType: enum.EAutoLoginType.PsCred(),
 		Tenant:    tenantID,
 		Persist:   persist, // Powershell creds do not need to be persisted, Powershell handles persistence.
 	}
@@ -212,7 +213,7 @@ func (uotm *UserOAuthTokenManager) MSILogin(identityInfo IdentityInfo, persist b
 	}
 
 	oAuthTokenInfo := &OAuthTokenInfo{
-		LoginType:    EAutoLoginType.MSI(),
+		LoginType:    enum.EAutoLoginType.MSI(),
 		IdentityInfo: identityInfo,
 		Persist:      persist,
 	}
@@ -223,7 +224,7 @@ func (uotm *UserOAuthTokenManager) MSILogin(identityInfo IdentityInfo, persist b
 // SecretLogin is a UOTM shell for secretLoginNoUOTM.
 func (uotm *UserOAuthTokenManager) SecretLogin(tenantID, activeDirectoryEndpoint, secret, applicationID string, persist bool) error {
 	oAuthTokenInfo := &OAuthTokenInfo{
-		LoginType:               EAutoLoginType.SPN(),
+		LoginType:               enum.EAutoLoginType.SPN(),
 		Tenant:                  tenantID,
 		ActiveDirectoryEndpoint: activeDirectoryEndpoint,
 		ApplicationID:           applicationID,
@@ -241,7 +242,7 @@ func (uotm *UserOAuthTokenManager) SecretLogin(tenantID, activeDirectoryEndpoint
 func (uotm *UserOAuthTokenManager) CertLogin(tenantID, activeDirectoryEndpoint, certPath, certPass, applicationID string, persist bool) error {
 	absCertPath, _ := filepath.Abs(certPath)
 	oAuthTokenInfo := &OAuthTokenInfo{
-		LoginType:               EAutoLoginType.SPN(),
+		LoginType:               enum.EAutoLoginType.SPN(),
 		Tenant:                  tenantID,
 		ActiveDirectoryEndpoint: activeDirectoryEndpoint,
 		ApplicationID:           applicationID,
@@ -258,7 +259,7 @@ func (uotm *UserOAuthTokenManager) CertLogin(tenantID, activeDirectoryEndpoint, 
 // CertLogin non-interactively logs in using a specified certificate, certificate password, and activedirectory endpoint.
 func (uotm *UserOAuthTokenManager) SpnArgsLogin(tenantID, activeDirectoryEndpoint, certData, certPass, applicationID string, persist bool) error {
 	oAuthTokenInfo := &OAuthTokenInfo{
-		LoginType:               EAutoLoginType.SPN(),
+		LoginType:               enum.EAutoLoginType.SPN(),
 		Tenant:                  tenantID,
 		ActiveDirectoryEndpoint: activeDirectoryEndpoint,
 		ApplicationID:           applicationID,
@@ -277,7 +278,7 @@ func (uotm *UserOAuthTokenManager) SpnArgsLogin(tenantID, activeDirectoryEndpoin
 // cache the token on local disk.
 func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint string, persist bool) error {
 	oAuthTokenInfo := &OAuthTokenInfo{
-		LoginType:               EAutoLoginType.Device(),
+		LoginType:               enum.EAutoLoginType.Device(),
 		Tenant:                  tenantID,
 		ActiveDirectoryEndpoint: activeDirectoryEndpoint,
 		ApplicationID:           ApplicationID,
@@ -352,7 +353,7 @@ var stashedEnvOAuthTokenExists = false
 // Note: This is useful for only checking whether the env var exists, please use getTokenInfoFromEnvVar
 // directly in the case getting token info is necessary.
 func EnvVarOAuthTokenInfoExists() bool {
-	if GetEnvironmentVariable(EEnvironmentVariable.OAuthTokenInfo()) == "" && !stashedEnvOAuthTokenExists {
+	if enum.EEnvironmentVariable.OAuthTokenInfo().Get() == "" && !stashedEnvOAuthTokenExists {
 		return false
 	}
 	stashedEnvOAuthTokenExists = true
@@ -369,21 +370,21 @@ func IsErrorEnvVarOAuthTokenInfoNotSet(err error) bool {
 
 // getTokenInfoFromEnvVar gets token info from environment variable.
 func (uotm *UserOAuthTokenManager) getTokenInfoFromEnvVar(ctx context.Context) (*OAuthTokenInfo, error) {
-	rawToken := GetEnvironmentVariable(EEnvironmentVariable.OAuthTokenInfo())
+	rawToken := enum.EEnvironmentVariable.OAuthTokenInfo().Get()
 	if rawToken == "" {
 		return nil, errors.New(ErrorCodeEnvVarOAuthTokenInfoNotSet)
 	}
 
 	// Remove the env var after successfully fetching once,
 	// in case of env var is further spreading into child processes unexpectedly.
-	ClearEnvironmentVariable(EEnvironmentVariable.OAuthTokenInfo())
+	_ = enum.EEnvironmentVariable.OAuthTokenInfo().Clear()
 
 	tokenInfo, err := jsonToTokenInfo([]byte(rawToken))
 	if err != nil {
 		return nil, fmt.Errorf("get token from environment variable failed to unmarshal token, %w", err)
 	}
 
-	if tokenInfo.LoginType != EAutoLoginType.TokenStore() {
+	if tokenInfo.LoginType != enum.EAutoLoginType.TokenStore() {
 		refreshedToken, err := tokenInfo.Refresh(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("get token from environment variable failed to ensure token fresh, %w", err)
@@ -400,10 +401,10 @@ func (uotm *UserOAuthTokenManager) getTokenInfoFromEnvVar(ctx context.Context) (
 type OAuthTokenInfo struct {
 	azcore.TokenCredential `json:"-"`
 	Token
-	Tenant                  string        `json:"_tenant"`
-	ActiveDirectoryEndpoint string        `json:"_ad_endpoint"`
-	LoginType               AutoLoginType `json:"_token_refresh_source"`
-	ApplicationID           string        `json:"_application_id"`
+	Tenant                  string             `json:"_tenant"`
+	ActiveDirectoryEndpoint string             `json:"_ad_endpoint"`
+	LoginType               enum.AutoLoginType `json:"_token_refresh_source"`
+	ApplicationID           string             `json:"_application_id"`
 	IdentityInfo            IdentityInfo
 	SPNInfo                 SPNInfo
 	// Note: ClientID should be only used for internal integrations through env var with refresh token.
@@ -495,7 +496,7 @@ func (credInfo *OAuthTokenInfo) Refresh(ctx context.Context) (*Token, error) {
 	if err != nil {
 		return nil, err
 	}
-	scopes := []string{StorageScope}
+	scopes := []string{cred.StorageScope}
 	t, err := tc.GetToken(ctx, policy.TokenRequestOptions{Scopes: scopes, EnableCAE: true})
 	if err != nil {
 		return nil, err
@@ -776,7 +777,7 @@ func (credInfo *OAuthTokenInfo) GetDeviceCodeCredential() (azcore.TokenCredentia
 		// No stored record; call Authenticate to acquire one
 		record, err = tc.Authenticate(context.TODO(), &policy.TokenRequestOptions{
 			EnableCAE: true,
-			Scopes:    []string{StorageScope},
+			Scopes:    []string{cred.StorageScope},
 		})
 		if err != nil {
 			return nil, err
@@ -804,26 +805,26 @@ func (credInfo *OAuthTokenInfo) GetTokenCredential() (azcore.TokenCredential, er
 		return credInfo.TokenCredential, nil
 	}
 
-	if credInfo.LoginType == EAutoLoginType.TokenStore() {
+	if credInfo.LoginType == enum.EAutoLoginType.TokenStore() {
 		return credInfo.GetTokenStoreCredential()
 	}
 
 	switch credInfo.LoginType {
-	case EAutoLoginType.MSI():
+	case enum.EAutoLoginType.MSI():
 		return credInfo.GetManagedIdentityCredential()
-	case EAutoLoginType.SPN():
+	case enum.EAutoLoginType.SPN():
 		if credInfo.SPNInfo.CertPath != "" {
 			return credInfo.GetClientCertificateCredential()
 		} else {
 			return credInfo.GetClientSecretCredential()
 		}
-	case EAutoLoginType.AzCLI():
+	case enum.EAutoLoginType.AzCLI():
 		return credInfo.GetAzCliCredential()
-	case EAutoLoginType.PsCred():
+	case enum.EAutoLoginType.PsCred():
 		return credInfo.GetPSContextCredential()
-	case EAutoLoginType.Workload():
+	case enum.EAutoLoginType.Workload():
 		return credInfo.GetWorkloadIdentityCredential()
-	case EAutoLoginType.Device():
+	case enum.EAutoLoginType.Device():
 		return credInfo.GetDeviceCodeCredential()
 	default:
 		return nil, fmt.Errorf("invalid auto-login type specified: %s", credInfo.LoginType)
@@ -836,7 +837,7 @@ func jsonToTokenInfo(b []byte) (*OAuthTokenInfo, error) {
 	if err := json.Unmarshal(b, &OAuthTokenInfo); err != nil {
 		return nil, err
 	}
-	if OAuthTokenInfo.LoginType == EAutoLoginType.TokenStore() {
+	if OAuthTokenInfo.LoginType == enum.EAutoLoginType.TokenStore() {
 		_, _ = OAuthTokenInfo.GetTokenStoreCredential()
 	}
 	return &OAuthTokenInfo, nil

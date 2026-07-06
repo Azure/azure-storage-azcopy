@@ -2,17 +2,19 @@ package ste
 
 import (
 	"context"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
-	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/stretchr/testify/assert"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
+	"github.com/stretchr/testify/assert"
 )
 
 const (
@@ -100,7 +102,7 @@ func TestDestReauthPolicy(t *testing.T) {
 		policy.TelemetryOptions{},
 		transport,
 		LogOptions{},
-		nil, (*common.ScopedAuthenticator)(common.NewScopedCredential[common.AuthenticateToken](cred, common.ECredentialType.OAuthToken())),
+		nil, (*common.ScopedAuthenticator)(common.NewScopedCredential[common.AuthenticateToken](cred, enum.ECredentialType.OAuthToken())),
 	)
 
 	c, err := blobservice.NewClient("https://foobar.blob.core.windows.net/", cred, &blobservice.ClientOptions{ClientOptions: opts})

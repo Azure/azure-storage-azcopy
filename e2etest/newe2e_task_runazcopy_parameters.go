@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"os"
@@ -456,9 +457,9 @@ type LoginFlags struct {
 	GlobalFlags
 
 	// Generic flags
-	TenantID    *string               `flag:"tenant-id"`
-	AADEndpoint *string               `flag:"aad-endpoint"`
-	LoginType   *common.AutoLoginType `flag:"login-type"`
+	TenantID    *string             `flag:"tenant-id"`
+	AADEndpoint *string             `flag:"aad-endpoint"`
+	LoginType   *enum.AutoLoginType `flag:"login-type"`
 
 	// Managed identity
 	IdentityClientID   *string `flag:"identity-client-id"`

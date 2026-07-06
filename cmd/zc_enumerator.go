@@ -36,6 +36,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
+	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -387,7 +389,7 @@ var enumerationCounterFuncNoop enumerationCounterFunc = func(entityType common.E
 type InitResourceTraverserOptions struct {
 	DestResourceType *common.Location // Used by Azure Files
 
-	Credential                  *common.CredentialInfo // Required for most remote traversers
+	Credential           *cred.CredentialInfo // Required for most remote traversers
 	IncrementEnumeration        enumerationCounterFunc
 	IncrementEnumerationFailure enumerationCounterFunc
 
@@ -483,9 +485,9 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 
 	var reauthTok *common.ScopedAuthenticator
 	if opts.Credential != nil {
-		if at, ok := opts.Credential.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
+		if at, ok := opts.Credential.TokenCredential.(common.AuthenticateToken); ok {
 			// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-			reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+			reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, enum.ECredentialType.OAuthToken()))
 		}
 	}
 
@@ -554,7 +556,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 			return nil, err
 		}
 
-		c, err := common.GetServiceClientForLocation(common.ELocation.Blob(), res, opts.Credential.CredentialType, opts.Credential.OAuthTokenInfo.TokenCredential, &options, nil)
+		c, err := common.GetServiceClientForLocation(common.ELocation.Blob(), res, opts.Credential.CredentialType, opts.Credential.TokenCredential, &options, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -650,7 +652,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 			return nil, err
 		}
 
-		c, err := common.GetServiceClientForLocation(common.ELocation.Blob(), res, opts.Credential.CredentialType, opts.Credential.OAuthTokenInfo.TokenCredential, &options, nil)
+		c, err := common.GetServiceClientForLocation(common.ELocation.Blob(), res, opts.Credential.CredentialType, opts.Credential.TokenCredential, &options, nil)
 		if err != nil {
 			return nil, err
 		}

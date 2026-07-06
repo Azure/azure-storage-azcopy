@@ -16,7 +16,9 @@ package cmd
 
 import (
 	"fmt"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/spf13/cobra"
 )
 
@@ -28,10 +30,18 @@ var envCmd = &cobra.Command{
 	Short: envCmdShortDescription,
 	Long:  envCmdLongDescription,
 	Run: func(cmd *cobra.Command, args []string) {
-		for _, env := range common.VisibleEnvironmentVariables {
-			val := common.GetEnvironmentVariable(env)
-			if env.Hidden && !showSensitive {
+		for env := range enum.EEnvironmentVariable.Values() {
+			if env.DeveloperOption && !displayDeveloperOptions {
+				continue
+			}
+
+			val, ok := env.Lookup()
+
+			if env.ContainsSecret && !showSensitive {
 				val = "REDACTED"
+			}
+			if !ok {
+				val += " (Unset/Defaulted)"
 			}
 
 			glcm.Info(fmt.Sprintf("Name: %s\nCurrent Value: %s\nDescription: %s\n",
@@ -44,5 +54,6 @@ var envCmd = &cobra.Command{
 
 func init() {
 	envCmd.PersistentFlags().BoolVar(&showSensitive, "show-sensitive", false, "Shows sensitive/secret environment variables.")
+
 	rootCmd.AddCommand(envCmd)
 }

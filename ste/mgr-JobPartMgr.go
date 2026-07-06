@@ -162,7 +162,6 @@ type jobPartMgr struct {
 	srcServiceClient *common.ServiceClient
 	dstServiceClient *common.ServiceClient
 
-	credInfo   common.CredentialInfo
 	srcIsOAuth bool // true if source is authenticated via oauth
 	credOption *common.CredentialOpOptions
 	// When the part is schedule to run (inprogress), the below fields are used
@@ -455,13 +454,6 @@ func (jpm *jobPartMgr) RescheduleTransfer(jptm IJobPartTransferMgr) {
 }
 
 func (jpm *jobPartMgr) clientInfo() {
-	jobState := jpm.jobMgr.getInMemoryTransitJobState()
-
-	// Destination credential
-	if jpm.credInfo.CredentialType == common.ECredentialType.Unknown() {
-		jpm.credInfo = jobState.CredentialInfo
-	}
-
 	jpm.credOption = &common.CredentialOpOptions{
 		LogInfo:  func(str string) { jpm.Log(common.LogInfo, str) },
 		LogError: func(str string) { jpm.Log(common.LogError, str) },

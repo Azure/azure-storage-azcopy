@@ -4,6 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
+	cred2 "github.com/Azure/azure-storage-azcopy/v10/common/cred"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
+
 	"net"
 	"net/url"
 	"strings"
@@ -109,7 +113,7 @@ type FileClientOptions struct {
 // are required currently only for files.
 func GetServiceClientForLocation(loc Location,
 	resource ResourceString,
-	credType CredentialType,
+	credType enum.CredentialType,
 	cred azcore.TokenCredential,
 	policyOptions *azcore.ClientOptions,
 	locationSpecificOptions any,
@@ -230,14 +234,14 @@ func GetServiceClientForLocation(loc Location,
 // NewScopedCredential takes in a credInfo object and returns ScopedCredential
 // if credentialType is either MDOAuth or oAuth. For anything else,
 // nil is returned
-func NewScopedCredential[T azcore.TokenCredential](cred T, credType CredentialType) *ScopedCredential[T] {
+func NewScopedCredential[T azcore.TokenCredential](cred T, credType enum.CredentialType) *ScopedCredential[T] {
 	var scope string
 	if !credType.IsAzureOAuth() {
 		return nil
-	} else if credType == ECredentialType.MDOAuthToken() {
-		scope = ManagedDiskScope
-	} else if credType == ECredentialType.OAuthToken() {
-		scope = StorageScope
+	} else if credType == enum.ECredentialType.MDOAuthToken() {
+		scope = cred2.ManagedDiskScope
+	} else if credType == enum.ECredentialType.OAuthToken() {
+		scope = cred2.StorageScope
 	}
 	return &ScopedCredential[T]{cred: cred, scopes: []string{scope}}
 }

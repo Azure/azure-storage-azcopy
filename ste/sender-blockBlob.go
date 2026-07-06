@@ -27,6 +27,7 @@ import (
 	"fmt"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"strconv"
@@ -91,7 +92,7 @@ func getVerifiedChunkParams(transferInfo *TransferInfo, memLimit int64, strictMe
 			"Consider providing at least %.2fGiB to AzCopy, using environment variable %s.",
 			toGiB(chunkSize), transferInfo.Source, toGiB(memLimit),
 			toGiB(common.MinParallelChunkCountThreshold*chunkSize),
-			common.EEnvironmentVariable.BufferGB().Name)
+			enum.EEnvironmentVariable.BufferGB().Name)
 
 		lowMemoryLimitAdvice.Do(func() { glcm.Info(msg) })
 	}
@@ -441,7 +442,7 @@ func (s *blockBlobSenderBase) buildCommittedBlockMap() {
 	changedChunkSize := "buildCommittedBlockMap: Chunksize mismatch on uncommitted blocks"
 	list := make(map[int]string)
 
-	if common.GetEnvironmentVariable(common.EEnvironmentVariable.DisableBlobTransferResume()) == "true" {
+	if enum.EEnvironmentVariable.DisableBlobTransferResume().Get() == "true" {
 		return
 	}
 

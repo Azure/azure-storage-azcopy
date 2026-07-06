@@ -7,3 +7,7 @@ func DerefOrZero[T any](in *T) (out T) {
 
 	return
 }
+
+func DefaultValue[T any](in *T, defaultValue T) *T {
+	return Iff(in == nil, &defaultValue, in)
+}

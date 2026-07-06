@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -52,7 +53,7 @@ type scenario struct {
 	operation           Operation
 	validate            Validate
 	fromTo              common.FromTo
-	credTypes           [2]common.CredentialType
+	credTypes           [2]enum.CredentialType
 	p                   params
 	hs                  hooks
 	fs                  testFiles
@@ -312,8 +313,8 @@ func (s *scenario) runAzCopy(logDirectory string) {
 		}
 	}
 
-	needsSAS := func(credType common.CredentialType) bool {
-		return credType == common.ECredentialType.Anonymous() || credType == common.ECredentialType.MDOAuthToken()
+	needsSAS := func(credType enum.CredentialType) bool {
+		return credType == enum.ECredentialType.Anonymous() || credType == enum.ECredentialType.MDOAuthToken()
 	}
 
 	needsFromTo := s.destAccountType == EAccountType.Azurite() || s.srcAccountType == EAccountType.Azurite()
