@@ -24,6 +24,7 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"net/http"
 	"runtime"
 	"time"
@@ -310,7 +311,7 @@ func (p *PerformanceAdvisor) GetAdvice() []common.PerformanceAdvice {
 				"When auto-tuning concurrency, AzCopy experienced high CPU usage so "+
 					"AzCopy might not have reached the full capacity of your network. Consider trying a machine or VM with more CPU power. "+
 					"(This is an experimental feature so, if you believe AzCopy was mistaken and CPU usage was actually fine, you can turn "+
-					"off this message by setting the environment variable %s to false.)", common.EEnvironmentVariable.AutoTuneToCpu().Name)
+					"off this message by setting the environment variable %s to false.)", enum.EEnvironmentVariable.AutoTuneToCpu().Name)
 			// TODO: review whether we still need the environment variable, and adjust this message if we remove it
 		case ConcurrencyReasonTunerDisabled:
 			addAdvice(EAdviceType.ConcurrencyNotTuned(),

@@ -29,6 +29,7 @@ import (
 	"github.com/minio/minio-go/v7"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
 // processOSSpecificInitialization changes the soft limit for filedescriptor for process
@@ -46,7 +47,7 @@ func processOSSpecificInitialization() (int, error) {
 
 // getAzCopyAppPath returns the path of Azcopy in local appdata.
 func getAzCopyAppPath() string {
-	userProfile := common.GetEnvironmentVariable(common.EEnvironmentVariable.UserDir())
+	userProfile := enum.EEnvironmentVariable.UserDir().Get()
 	azcopyAppDataFolder := strings.ReplaceAll(path.Join(userProfile, ".azcopy"), "/", `\`)
 
 	return azcopyAppDataFolder

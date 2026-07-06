@@ -1,5 +1,7 @@
 package common
 
+import "github.com/Azure/azure-storage-azcopy/v10/common/enum"
+
 const AzcopyVersion = "10.30.0~preview.2"
 const UserAgent = "AzCopy/" + AzcopyVersion
 const S3ImportUserAgent = "S3Import " + UserAgent
@@ -8,7 +10,7 @@ const BenchmarkUserAgent = "Benchmark " + UserAgent
 
 // AddUserAgentPrefix appends the global user agent prefix, if applicable
 func AddUserAgentPrefix(userAgent string) string {
-	prefix := GetEnvironmentVariable(EEnvironmentVariable.UserAgentPrefix())
+	prefix := enum.EEnvironmentVariable.UserAgentPrefix().Get()
 	if len(prefix) > 0 {
 		userAgent = prefix + " " + userAgent
 	}

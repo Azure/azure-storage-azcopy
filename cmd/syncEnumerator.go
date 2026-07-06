@@ -32,6 +32,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
@@ -79,22 +80,16 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		enumeratorOptions.SyncOrchOptions.fromTo = cca.fromTo
 	}
 
-	srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source, true, cca.cpkOptions)
-
+	srcCredInfo, err := getTargetCredInfo(cca.source, cca.fromTo.From(), getTargetCredInfoOptions{
+		ctx:                ctx,
+		canBePublic:        true,
+		sharedKeyAllowed:   false,
+		preferredTokenName: SourceCredentialName,
+		cpkOptions:         cca.cpkOptions,
+		tokenManager:       GetCredentialManager(),
+	})
 	if err != nil {
 		return nil, err
-	}
-
-	if cca.fromTo.IsS2S() && srcCredInfo.CredentialType != common.ECredentialType.Anonymous() {
-		if srcCredInfo.CredentialType.IsAzureOAuth() && cca.fromTo.To().CanForwardOAuthTokens() {
-			// no-op, this is OK
-		} else if srcCredInfo.CredentialType == common.ECredentialType.GoogleAppCredentials() || srcCredInfo.CredentialType == common.ECredentialType.S3AccessKey() || srcCredInfo.CredentialType == common.ECredentialType.S3PublicBucket() {
-			// this too, is OK
-		} else if srcCredInfo.CredentialType == common.ECredentialType.Anonymous() {
-			// this is OK
-		} else {
-			return nil, fmt.Errorf("the source of a %s->%s sync must either be public, or authorized with a SAS token; blob destinations can forward OAuth", cca.fromTo.From(), cca.fromTo.To())
-		}
 	}
 
 	includeDirStubs := (cca.fromTo.From().SupportsHnsACLs() && cca.fromTo.To().SupportsHnsACLs() && cca.preservePermissions.IsTruthy()) || cca.includeDirectoryStubs
@@ -161,7 +156,14 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 	}
 
 	// Because we can't trust cca.credinfo, given that it's for the overall job, not the individual traversers, we get cred info again here.
-	dstCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination, false, cca.cpkOptions)
+	dstCredInfo, err := getTargetCredInfo(cca.destination, cca.fromTo.To(), getTargetCredInfoOptions{
+		ctx:                ctx,
+		canBePublic:        false,
+		sharedKeyAllowed:   true,
+		preferredTokenName: DestCredentialName,
+		cpkOptions:         common.CpkOptions{}, // unnecessary for destination
+		tokenManager:       GetCredentialManager(),
+	})
 
 	if err != nil {
 		return nil, err
@@ -301,7 +303,6 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		SymlinkHandlingType: cca.symlinkHandling,
 		SourceRoot:          cca.source.CloneWithConsolidatedSeparators(),
 		DestinationRoot:     cca.destination.CloneWithConsolidatedSeparators(),
-		CredentialInfo:      cca.credentialInfo,
 
 		// flags
 		BlobAttributes: common.BlobTransferAttributes{
@@ -342,9 +343,9 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 	}
 
 	var srcReauthTok *common.ScopedAuthenticator
-	if at, ok := srcCredInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
+	if at, ok := srcCredInfo.TokenCredential.(common.AuthenticateToken); ok {
 		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-		srcReauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+		srcReauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, enum.ECredentialType.OAuthToken()))
 	}
 
 	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, srcReauthTok)
@@ -361,7 +362,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		cca.fromTo.From(),
 		cca.source,
 		srcCredInfo.CredentialType,
-		srcCredInfo.OAuthTokenInfo.TokenCredential,
+		srcCredInfo.TokenCredential,
 		&options,
 		azureFileSpecificOptions,
 	)
@@ -378,14 +379,14 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 	}
 
 	var dstReauthTok *common.ScopedAuthenticator
-	if at, ok := srcCredInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
+	if at, ok := srcCredInfo.TokenCredential.(common.AuthenticateToken); ok {
 		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-		dstReauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+		dstReauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, enum.ECredentialType.OAuthToken()))
 	}
 
 	var srcTokenCred *common.ScopedToken
 	if cca.fromTo.IsS2S() && srcCredInfo.CredentialType.IsAzureOAuth() {
-		srcTokenCred = common.NewScopedCredential(srcCredInfo.OAuthTokenInfo.TokenCredential, srcCredInfo.CredentialType)
+		srcTokenCred = common.NewScopedCredential(srcCredInfo.TokenCredential, srcCredInfo.CredentialType)
 	}
 
 	options = createClientOptions(common.AzcopyCurrentJobLogger, srcTokenCred, dstReauthTok)
@@ -393,7 +394,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		cca.fromTo.To(),
 		cca.destination,
 		dstCredInfo.CredentialType,
-		dstCredInfo.OAuthTokenInfo.TokenCredential,
+		dstCredInfo.TokenCredential,
 		&options,
 		azureFileSpecificOptions,
 	)

@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 )
 
@@ -286,9 +287,9 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 						c.Environment.InheritEnvVar(WorkloadIdentityTenantID)
 
 						c.Environment.AutoLoginTenantID = ternary.Iff(oAuthInfo.DynamicOAuth.Workload.TenantId != "", &oAuthInfo.DynamicOAuth.Workload.TenantId, nil)
-						c.Environment.AutoLoginMode = pointerTo(common.EAutoLoginType.AzCLI().String())
+						c.Environment.AutoLoginMode = pointerTo(enum.EAutoLoginType.AzCLI().String())
 					} else {
-						c.Environment.AutoLoginMode = pointerTo(common.EAutoLoginType.SPN().String())
+						c.Environment.AutoLoginMode = pointerTo(enum.EAutoLoginType.SPN().String())
 						c.Environment.ServicePrincipalAppID = &oAuthInfo.DynamicOAuth.SPNSecret.ApplicationID
 						c.Environment.ServicePrincipalClientSecret = &oAuthInfo.DynamicOAuth.SPNSecret.ClientSecret
 						c.Environment.AutoLoginTenantID = ternary.Iff(oAuthInfo.DynamicOAuth.SPNSecret.TenantID != "", &oAuthInfo.DynamicOAuth.SPNSecret.TenantID, nil)
@@ -296,9 +297,13 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 				}
 			} else if c.Environment.AutoLoginMode != nil {
 				oAuthInfo := GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo
-				var mode common.AutoLoginType
-				a.NoError("failed to parse auto login mode `"+*c.Environment.AutoLoginMode+"`", mode.Parse(*c.Environment.AutoLoginMode))
-				if mode == common.EAutoLoginType.Workload() {
+				var err error
+				mode, ok := enum.EAutoLoginType.Parse(*c.Environment.AutoLoginMode)
+				if !ok {
+					err = fmt.Errorf("failed to parse auto login mode `%s`", *c.Environment.AutoLoginMode)
+				}
+				a.NoError("failed to parse auto login mode `"+*c.Environment.AutoLoginMode+"`", err)
+				if mode == enum.EAutoLoginType.Workload() {
 					// Get the value of the AZURE_FEDERATED_TOKEN environment variable
 					token := oAuthInfo.DynamicOAuth.Workload.FederatedToken
 					a.AssertNow("idToken must be specified to authenticate with workload identity", Empty{Invert: true}, token)
@@ -471,9 +476,9 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 
 		// Login (interactive)
 		case commandSpec.Verb == AzCopyVerbLogin:
-			var lType common.AutoLoginType
+			var lType enum.AutoLoginType
 			if ltStr := flagMap["login-type"]; ltStr != "" {
-				_ = lType.Parse(ltStr)
+				lType, _ = enum.EAutoLoginType.Parse(ltStr)
 			}
 
 			if lType.IsInteractive() {

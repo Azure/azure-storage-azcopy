@@ -33,6 +33,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
+	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"github.com/spf13/cobra"
@@ -217,13 +218,15 @@ func init() {
 		"\n AzCopy will fail if the trailing dot file is the root of the transfer and skip any trailing dot paths encountered during enumeration.")
 
 	rootCmd.AddCommand(listContainerCmd)
+
+	AddTargetCredFlags(listContainerCmd)
 }
 
 // handleListContainerCommand handles the list container command
 func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	var credentialInfo common.CredentialInfo
+	var credentialInfo cred.CredentialInfo
 
 	source, err := SplitResourceString(cooked.sourcePath, cooked.location)
 	if err != nil {
@@ -239,16 +242,16 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 		return err
 	}
 
-	// isSource is rather misnomer for canBePublic. We can list public containers, and hence isSource=true
-	if credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cooked.location, source, true, common.CpkOptions{}); err != nil {
-		return fmt.Errorf("failed to obtain credential info: %s", err.Error())
-	} else if credentialInfo.CredentialType.IsAzureOAuth() {
-		uotm := GetUserOAuthTokenManagerInstance()
-		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
-			return err
-		} else {
-			credentialInfo.OAuthTokenInfo = *tokenInfo
-		}
+	credentialInfo, err = getTargetCredInfo(source, cooked.location, getTargetCredInfoOptions{
+		ctx:                ctx,
+		canBePublic:        true,
+		sharedKeyAllowed:   true,
+		preferredTokenName: TargetCredentialName,
+		cpkOptions:         common.CpkOptions{},
+		tokenManager:       nil,
+	})
+	if err != nil {
+		return err
 	}
 
 	// check if user wants to get version id

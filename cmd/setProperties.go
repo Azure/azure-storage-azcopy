@@ -22,9 +22,10 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
-	"strings"
 )
 
 func (raw *rawCopyCmdArgs) setMandatoryDefaultsForSetProperties() {
@@ -191,4 +192,6 @@ func init() {
 		"\n If this flag is set to 'Disable' and AzCopy encounters a trailing dot file, it will warn customers in the scanning log but will not attempt to abort the operation."+
 		"\n If the destination does not support trailing dot files (Windows or Blob Storage), "+
 		"\n AzCopy will fail if the trailing dot file is the root of the transfer and skip any trailing dot paths encountered during enumeration.")
+
+	AddTargetCredFlags(setPropCmd)
 }

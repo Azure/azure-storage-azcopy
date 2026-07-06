@@ -29,6 +29,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
 var _ IJobPartTransferMgr = &testJobPartTransferManager{}
@@ -263,7 +264,7 @@ func (t *testJobPartTransferManager) ClientOptions() azcore.ClientOptions {
 }
 
 func (t *testJobPartTransferManager) S2SSourceCredentialInfo() common.CredentialInfo {
-	return common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}
+	return common.CredentialInfo{CredentialType: enum.ECredentialType.Anonymous()}
 }
 
 func (t *testJobPartTransferManager) GetS2SSourceTokenCredential(ctx context.Context) (token *string, err error) {

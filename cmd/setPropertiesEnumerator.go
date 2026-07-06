@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
@@ -37,18 +38,24 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	var srcCredInfo common.CredentialInfo
-
-	if srcCredInfo, _, err = GetCredentialInfoForLocation(ctx, cca.FromTo.From(), cca.Source, true, cca.CpkOptions); err != nil {
+	srcCredInfo, err := getTargetCredInfo(cca.Source, cca.FromTo.From(), getTargetCredInfoOptions{
+		ctx:                ctx,
+		canBePublic:        true,
+		sharedKeyAllowed:   false,
+		preferredTokenName: SourceCredentialName,
+		cpkOptions:         cca.CpkOptions,
+		tokenManager:       GetCredentialManager(),
+	})
+	if err != nil {
 		return nil, err
 	}
-	if cca.FromTo == common.EFromTo.FileNone() && (srcCredInfo.CredentialType == common.ECredentialType.Anonymous() && cca.Source.SAS == "") {
+	if cca.FromTo == common.EFromTo.FileNone() && (srcCredInfo.CredentialType == enum.ECredentialType.Anonymous() && cca.Source.SAS == "") {
 		return nil, errors.New("a SAS token (or S3 access key) is required as a part of the input for set-properties on File Storage")
 	}
 
 	// Include-path is handled by ListOfFilesChannel.
 	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), ctx, InitResourceTraverserOptions{
-		Credential: &cca.credentialInfo,
+		Credential: &srcCredInfo,
 
 		ListOfFiles:      cca.ListOfFilesChannel,
 		ListOfVersionIDs: cca.ListOfVersionIDsChannel,
@@ -92,9 +99,9 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 	}
 
 	var reauthTok *common.ScopedAuthenticator
-	if at, ok := cca.credentialInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok { // We don't need two different tokens here since it gets passed in just the same either way.
+	if at, ok := cca.credentialInfo.TokenCredential.(common.AuthenticateToken); ok { // We don't need two different tokens here since it gets passed in just the same either way.
 		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, enum.ECredentialType.OAuthToken()))
 	}
 
 	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
@@ -107,7 +114,7 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 		cca.FromTo.From(),
 		cca.Source,
 		cca.credentialInfo.CredentialType,
-		cca.credentialInfo.OAuthTokenInfo.TokenCredential,
+		cca.credentialInfo.TokenCredential,
 		&options,
 		fileClientOptions,
 	)

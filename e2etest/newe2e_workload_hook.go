@@ -3,7 +3,8 @@ package e2etest
 import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
+
 	"os"
 )
 
@@ -34,7 +35,7 @@ func WorkloadIdentitySetup(a Asserter) {
 	})
 	a.NoError("Workload identity failed to spawn", err, true)
 	_, err = tc.GetToken(ctx, policy.TokenRequestOptions{
-		Scopes:    []string{common.StorageScope},
+		Scopes:    []string{cred.StorageScope},
 		EnableCAE: true,
 	})
 	a.NoError("Workload identity failed to fetch token", err, true)

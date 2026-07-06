@@ -31,6 +31,7 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
 const azcopyTempDownloadPrefix string = ".azDownload-%s-"
@@ -570,7 +571,7 @@ func tryDeleteFile(info *TransferInfo, jptm IJobPartTransferMgr) {
 // download to a temp path we return a temp path in format
 // /actual/parent/path/.azDownload-<jobID>-<actualFileName>
 func (info *TransferInfo) getDownloadPath() string {
-	downloadToTempPath, err := strconv.ParseBool(common.GetEnvironmentVariable(common.EEnvironmentVariable.DownloadToTempPath()))
+	downloadToTempPath, err := strconv.ParseBool(enum.EEnvironmentVariable.DownloadToTempPath().Get())
 	if err != nil {
 		// By default, we'll download to temp path
 		downloadToTempPath = true

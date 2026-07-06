@@ -24,6 +24,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"testing"
 )
 
@@ -104,7 +105,7 @@ func TestTier_V2ToClassicAccountNoPreserveCool(t *testing.T) {
 // and is only available in certain regions. The service version must be 2021-04-10 or above. To test this feature,
 // uncomment TestTier_V2ToPremiumBBAccountCool and TestTier_V2ToPremiumBBAccountHot.
 /*func TestTier_V2ToPremiumBBAccountCool(t *testing.T) {
-	os.Setenv(common.EEnvironmentVariable.DefaultServiceApiVersion().Name, "2021-04-10")
+	os.Setenv(enum.EEnvironmentVariable.DefaultServiceApiVersion().Name, "2021-04-10")
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:  true,
 		accessTier: to.Ptr(blob.AccessTierCool),
@@ -115,11 +116,11 @@ func TestTier_V2ToClassicAccountNoPreserveCool(t *testing.T) {
 			f("filea"),
 		},
 	}, EAccountType.PremiumBlockBlob(), EAccountType.Standard(), "")
-	os.Setenv(common.EEnvironmentVariable.DefaultServiceApiVersion().Name, "2020-10-02")
+	os.Setenv(enum.EEnvironmentVariable.DefaultServiceApiVersion().Name, "2020-10-02")
 }
 
 func TestTier_V2ToPremiumBBAccountHot(t *testing.T) {
-	os.Setenv(common.EEnvironmentVariable.DefaultServiceApiVersion().Name, "2021-04-10")
+	os.Setenv(enum.EEnvironmentVariable.DefaultServiceApiVersion().Name, "2021-04-10")
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:  true,
 		accessTier: to.Ptr(blob.AccessTierHot),
@@ -130,5 +131,5 @@ func TestTier_V2ToPremiumBBAccountHot(t *testing.T) {
 			f("filea"),
 		},
 	}, EAccountType.PremiumBlockBlob(), EAccountType.Standard(), "")
-	os.Setenv(common.EEnvironmentVariable.DefaultServiceApiVersion().Name, "2020-10-02")
+	os.Setenv(enum.EEnvironmentVariable.DefaultServiceApiVersion().Name, "2020-10-02")
 }*/

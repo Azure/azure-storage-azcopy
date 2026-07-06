@@ -26,6 +26,8 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/minio/minio-go/v7"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -91,7 +93,7 @@ func (t *s3ServiceTraverser) Traverse(preprocessor objectMorpher, processor obje
 		tmpS3URL := t.s3URL
 		tmpS3URL.BucketName = v
 		urlResult := tmpS3URL.URL()
-		credentialInfo := common.CredentialInfo{CredentialType: common.ECredentialType.S3AccessKey()}
+		credentialInfo := cred.CredentialInfo{CredentialType: enum.ECredentialType.S3AccessKey()}
 
 		bucketTraverser, err := newS3Traverser(&urlResult, t.ctx, InitResourceTraverserOptions{
 			Credential: &credentialInfo,
@@ -150,8 +152,8 @@ func newS3ServiceTraverser(rawURL *url.URL, ctx context.Context, opts InitResour
 	t.s3URL = s3URLPartsExtension{s3URLParts}
 
 	t.s3Client, err = common.CreateS3Client(t.ctx, common.CredentialInfo{
-		CredentialType: common.ECredentialType.S3AccessKey(),
-		S3CredentialInfo: common.S3CredentialInfo{
+		CredentialType: enum.ECredentialType.S3AccessKey(),
+		S3CredentialInfo: cred.S3CredentialInfo{
 			Endpoint:   t.s3URL.Endpoint,
 			BucketName: t.s3URL.BucketName,
 		},

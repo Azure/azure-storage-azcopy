@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
 type autopacer interface {
@@ -78,7 +79,7 @@ var (
 func newPageBlobAutoPacer(bytesPerSecond int64, expectedBytesPerRequest int64, isFair bool, logger common.ILogger) autopacer {
 
 	shouldPaceOncer.Do(func() {
-		raw := common.GetEnvironmentVariable(common.EEnvironmentVariable.PacePageBlobs())
+		raw := enum.EEnvironmentVariable.PacePageBlobs().Get()
 		shouldPacePageBlobs = strings.ToLower(raw) != "false"
 	})
 

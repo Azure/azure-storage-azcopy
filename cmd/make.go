@@ -23,7 +23,10 @@ package cmd
 import (
 	"context"
 	"fmt"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
+
 	"net/url"
 	"strings"
 
@@ -93,7 +96,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 	var reauthTok *common.ScopedAuthenticator
 	if at, ok := credentialInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok { // We don't need two different tokens here since it gets passed in just the same either way.
 		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, enum.ECredentialType.OAuthToken()))
 	}
 
 	// Note : trailing dot is only applicable to file operations anyway, so setting this to false

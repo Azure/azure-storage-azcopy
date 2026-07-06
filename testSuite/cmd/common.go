@@ -14,7 +14,7 @@ import (
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
 // validateString compares the two strings.
@@ -30,8 +30,8 @@ type createS3ResOptions struct {
 }
 
 func createS3ClientWithMinio(o createS3ResOptions) *minio.Client {
-	accessKeyID := common.GetEnvironmentVariable(common.EEnvironmentVariable.AWSAccessKeyID())
-	secretAccessKey := common.GetEnvironmentVariable(common.EEnvironmentVariable.AWSSecretAccessKey())
+	accessKeyID := enum.EEnvironmentVariable.AWSAccessKeyID().Get()
+	secretAccessKey := enum.EEnvironmentVariable.AWSSecretAccessKey().Get()
 
 	if accessKeyID == "" || secretAccessKey == "" {
 		fmt.Println("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY should be set before creating the S3 client")

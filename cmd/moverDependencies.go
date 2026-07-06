@@ -10,6 +10,8 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
 // ============================================================================
@@ -65,7 +67,7 @@ func (cooked *CookedCopyCmdArgs) AsSubdir() bool {
 }
 
 // Authentication and credential options
-func (cooked *CookedCopyCmdArgs) CredentialInfo() common.CredentialInfo {
+func (cooked *CookedCopyCmdArgs) CredentialInfo() cred.CredentialInfo {
 	return cooked.credentialInfo
 }
 
@@ -581,7 +583,7 @@ func (cooked *cookedSyncCmdArgs) ToStringMap() map[string]string {
 	}
 
 	// Always mask credential info
-	if cooked.credentialInfo.CredentialType != common.ECredentialType.Unknown() {
+	if cooked.credentialInfo.CredentialType != enum.ECredentialType.Unknown() {
 		result["credentialType"] = cooked.credentialInfo.CredentialType.String()
 	}
 
@@ -880,7 +882,7 @@ func (cooked *CookedCopyCmdArgs) ToStringMap() map[string]string {
 	}
 
 	// Always mask credential info
-	if cooked.credentialInfo.CredentialType != common.ECredentialType.Unknown() {
+	if cooked.credentialInfo.CredentialType != enum.ECredentialType.Unknown() {
 		result["credentialType"] = cooked.credentialInfo.CredentialType.String()
 	}
 

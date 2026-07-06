@@ -19,6 +19,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
+	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
@@ -47,7 +49,7 @@ func (cca *CookedCopyCmdArgs) validateSourceDir(traverser ResourceTraverser) err
 	return nil
 }
 
-func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrderRequest, srcCredInfo common.CredentialInfo, ctx context.Context) (*CopyEnumerator, error) {
+func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrderRequest, srcCredInfo cred.CredentialInfo, ctx context.Context) (*CopyEnumerator, error) {
 	var traverser ResourceTraverser
 	var err error
 	jobPartOrder.FileAttributes = common.FileTransferAttributes{
@@ -368,13 +370,20 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 // This is just for the directory check.
 func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx context.Context) bool {
 	var err error
-	dstCredInfo := common.CredentialInfo{}
+	dstCredInfo := cred.CredentialInfo{}
 
 	if ctx == nil {
 		return false
 	}
 
-	if dstCredInfo, _, err = GetCredentialInfoForLocation(ctx, cca.FromTo.To(), cca.Destination, false, cca.CpkOptions); err != nil {
+	if dstCredInfo, err = getTargetCredInfo(cca.Destination, cca.FromTo.To(), getTargetCredInfoOptions{
+		ctx:                ctx,
+		canBePublic:        false,
+		sharedKeyAllowed:   true,
+		preferredTokenName: DestCredentialName,
+		cpkOptions:         common.CpkOptions{},
+		tokenManager:       GetCredentialManager(),
+	}); err != nil {
 		return false
 	}
 
@@ -493,7 +502,7 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 	var reauthTok *common.ScopedAuthenticator
 	if at, ok := dstCredInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
 		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, enum.ECredentialType.OAuthToken()))
 	}
 
 	options := createClientOptions(

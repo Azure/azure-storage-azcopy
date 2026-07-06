@@ -37,6 +37,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -49,6 +50,7 @@ var outputFormatRaw string
 var outputVerbosityRaw string
 var logVerbosityRaw string
 var cancelFromStdin bool
+var displayDeveloperOptions bool
 var OutputFormat common.OutputFormat
 var OutputLevel common.OutputVerbosity
 var LogLevel common.LogLevel
@@ -374,8 +376,8 @@ func initializeFolders(logPathFolder, jobPlanFolder, appPathFolder string) (azco
 }
 
 func initializeFoldersFromEnv() (azcopyLogPathFolder, azcopyJobPlanFolder string) {
-	azcopyLogPathFolder = common.GetEnvironmentVariable(common.EEnvironmentVariable.LogLocation())     // user specified location for log files
-	azcopyJobPlanFolder = common.GetEnvironmentVariable(common.EEnvironmentVariable.JobPlanLocation()) // user specified location for plan files
+	azcopyLogPathFolder = enum.EEnvironmentVariable.LogLocation().Get()     // user specified location for log files
+	azcopyJobPlanFolder = enum.EEnvironmentVariable.JobPlanLocation().Get() // user specified location for plan files
 
 	// note: azcopyAppPathFolder is the default location for all AzCopy data (logs, job plans, oauth token on Windows)
 	// but all the above can be put elsewhere as they can become very large
@@ -420,30 +422,40 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&SkipVersionCheck, "skip-version-check", false,
 		"Do not perform the version check at startup. \nIntended for automation scenarios & airgapped use.")
 
-	// Note: this is due to Windows not supporting signals properly
-	rootCmd.PersistentFlags().BoolVar(&cancelFromStdin, "cancel-from-stdin", false,
-		"Used by partner teams to send in `cancel` through stdin to stop a job.")
+	{ // Hidden flags placed into a closure to help identify them
+		// Note: this is due to Windows not supporting signals properly
+		rootCmd.PersistentFlags().BoolVar(&cancelFromStdin, "cancel-from-stdin", false,
+			"Used by partner teams to send in `cancel` through stdin to stop a job.")
 
-	// special E2E testing flags
-	rootCmd.PersistentFlags().BoolVar(&azcopyAwaitContinue, "await-continue", false,
-		"Used when debugging, to tell AzCopy to await `continue` on stdin before starting any work. "+
-			"\n Assists with debugging AzCopy via attach-to-process")
-	rootCmd.PersistentFlags().BoolVar(&azcopyAwaitAllowOpenFiles, "await-open", false,
-		"Used when debugging, to tell AzCopy to await `open` on stdin, after scanning but before opening the first file. "+
-			"\n Assists with testing cases around file modifications between scanning and usage")
-	rootCmd.PersistentFlags().StringVar(&debugSkipFiles, "debug-skip-files", "",
-		"Used when debugging, to tell AzCopy to cancel the job midway."+
-			"\n List of relative paths to skip in the STE.")
+		// special E2E testing flags
+		rootCmd.PersistentFlags().BoolVar(&azcopyAwaitContinue, "await-continue", false,
+			"Used when debugging, to tell AzCopy to await `continue` on stdin before starting any work. "+
+				"\n Assists with debugging AzCopy via attach-to-process")
+		rootCmd.PersistentFlags().BoolVar(&azcopyAwaitAllowOpenFiles, "await-open", false,
+			"Used when debugging, to tell AzCopy to await `open` on stdin, after scanning but before opening the first file. "+
+				"\n Assists with testing cases around file modifications between scanning and usage")
+		rootCmd.PersistentFlags().StringVar(&debugSkipFiles, "debug-skip-files", "",
+			"Used when debugging, to tell AzCopy to cancel the job midway."+
+				"\n List of relative paths to skip in the STE.")
 
-	// reserved for partner teams
-	_ = rootCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
+		// special flags to be used in case of unexpected service errors.
+		rootCmd.PersistentFlags().StringVar(&retryStatusCodes, "retry-status-codes", "",
+			"Comma-separated list of HTTP status codes to retry on. (default '408;429;500;502;503;504')")
+		rootCmd.PersistentFlags().StringVar(&debugMemoryProfile, "memory-profile", "", "Export pprof memory profile")
 
-	// special flags to be used in case of unexpected service errors.
-	rootCmd.PersistentFlags().StringVar(&retryStatusCodes, "retry-status-codes", "",
-		"Comma-separated list of HTTP status codes to retry on. (default '408;429;500;502;503;504')")
-	_ = rootCmd.PersistentFlags().MarkHidden("retry-status-codes")
-	rootCmd.PersistentFlags().StringVar(&debugMemoryProfile, "memory-profile", "", "Export pprof memory profile")
-	_ = rootCmd.PersistentFlags().MarkHidden("memory-profile")
+		rootCmd.PersistentFlags().BoolVar(&displayDeveloperOptions, "display-dev", false, "display development flags")
+		if !displayDeveloperOptions {
+			_ = rootCmd.PersistentFlags().MarkHidden("display-dev")
+
+			_ = rootCmd.PersistentFlags().MarkHidden("retry-status-codes")
+			_ = rootCmd.PersistentFlags().MarkHidden("memory-profile")
+
+			_ = rootCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
+			_ = rootCmd.PersistentFlags().MarkHidden("await-continue")
+			_ = rootCmd.PersistentFlags().MarkHidden("await-open")
+			_ = rootCmd.PersistentFlags().MarkHidden("debug-skip-files")
+		}
+	}
 }
 
 const versionMetadataUrl = "https://azcopyvnextrelease.z22.web.core.windows.net/releasemetadata/latest_version.txt"

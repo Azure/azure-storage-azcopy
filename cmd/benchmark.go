@@ -23,12 +23,13 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
-	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
+	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
@@ -321,6 +322,8 @@ func init() {
 			glcm.Info("Scanning...")
 
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
+			SourceCredentialName = TargetCredentialName
+			DestCredentialName = TargetCredentialName
 			err = cooked.process()
 			if err != nil {
 				glcm.Error("failed to perform benchmark command due to error: " + err.Error())
@@ -360,4 +363,6 @@ func init() {
 	benchCmd.PersistentFlags().StringVar(&raw.mode, "mode", "upload",
 		"Defines if AzCopy should test uploads or downloads from this target. "+
 			"\n Valid values are 'upload' and 'download'. Defaulted option is 'upload'.")
+
+	AddTargetCredFlags(benchCmd)
 }

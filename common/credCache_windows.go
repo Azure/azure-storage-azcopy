@@ -29,6 +29,8 @@ import (
 	"sync"
 	"syscall"
 	"unsafe"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
 // CredCache manages credential caches.
@@ -197,7 +199,7 @@ func (c *CredCache) saveTokenInternal(token OAuthTokenInfo) error {
 }
 
 func (c *CredCache) tokenFilePath() string {
-	if cacheFile := GetEnvironmentVariable(EEnvironmentVariable.LoginCacheName()); cacheFile != "" {
+	if cacheFile := enum.EEnvironmentVariable.LoginCacheName().Get(); cacheFile != "" {
 		return path.Join(c.dpapiFilePath, "/", cacheFile)
 	}
 

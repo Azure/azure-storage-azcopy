@@ -42,6 +42,7 @@ require (
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.11 // indirect
+	github.com/lescuer97/go-libsecret v0.0.0-20251130160347-067b741bcf5a // indirect
 	github.com/minio/crc64nvme v1.0.2 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
@@ -118,4 +119,4 @@ require (
 
 replace github.com/Azure/azure-sdk-for-go/sdk/storage/azfile => github.com/Azure/azure-sdk-for-go/sdk/storage/azfile v0.0.0-20250313100248-09ad70aa7647
 
-go 1.24.4
+go 1.25.4

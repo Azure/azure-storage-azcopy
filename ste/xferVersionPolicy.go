@@ -22,7 +22,7 @@ package ste
 
 import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"net/http"
 )
 
@@ -32,7 +32,7 @@ type serviceAPIVersionOverride struct{}
 var ServiceAPIVersionOverride = serviceAPIVersionOverride{}
 
 // DefaultServiceApiVersion is the default value of service api version that is set as value to the ServiceAPIVersionOverride in every Job's context.
-var DefaultServiceApiVersion = common.GetEnvironmentVariable(common.EEnvironmentVariable.DefaultServiceApiVersion())
+var DefaultServiceApiVersion = enum.EEnvironmentVariable.DefaultServiceApiVersion().Get()
 
 type versionPolicy struct {
 }

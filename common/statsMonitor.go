@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/load"
@@ -718,16 +719,16 @@ func (m *SystemStatsMonitor) logEnvironmentVariables() {
 	m.config.Logger.Log(LogInfo, "\n")
 	m.config.Logger.Log(LogInfo, "=== ENVIRONMENT VARIABLES ===")
 
-	envVars := []EnvironmentVariable{
-		EEnvironmentVariable.LogLocation(),
-		EEnvironmentVariable.JobPlanLocation(),
-		EEnvironmentVariable.ConcurrencyValue(),
-		EEnvironmentVariable.TransferInitiationPoolSize(),
-		EEnvironmentVariable.EnumerationPoolSize(),
-		EEnvironmentVariable.DisableHierarchicalScanning(),
-		EEnvironmentVariable.ParallelStatFiles(),
-		EEnvironmentVariable.AutoTuneToCpu(),
-		EEnvironmentVariable.UserAgentPrefix(),
+	envVars := []enum.EnvironmentVariable{
+		enum.EEnvironmentVariable.LogLocation(),
+		enum.EEnvironmentVariable.JobPlanLocation(),
+		enum.EEnvironmentVariable.ConcurrencyValue(),
+		enum.EEnvironmentVariable.TransferInitiationPoolSize(),
+		enum.EEnvironmentVariable.EnumerationPoolSize(),
+		enum.EEnvironmentVariable.DisableHierarchicalScanning(),
+		enum.EEnvironmentVariable.ParallelStatFiles(),
+		enum.EEnvironmentVariable.AutoTuneToCpu(),
+		enum.EEnvironmentVariable.UserAgentPrefix(),
 	}
 
 	// Collect set environment variables
@@ -735,11 +736,11 @@ func (m *SystemStatsMonitor) logEnvironmentVariables() {
 
 	// Check AzCopy-specific environment variables
 	for _, envVar := range envVars {
-		if envVar.Hidden {
+		if envVar.ContainsSecret {
 			continue // Skip hidden/secret variables
 		}
 
-		value := GetEnvironmentVariable(envVar)
+		value := envVar.Get()
 		if value != "" {
 			setVars = append(setVars, fmt.Sprintf("%s=%s", envVar.Name, value))
 		}

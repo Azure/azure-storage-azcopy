@@ -26,6 +26,7 @@ import (
 	"testing"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
 // This declarative test runner adds a layer on top of e2etest/base. The added layer allows us to test in a declarative style,
@@ -33,26 +34,26 @@ import (
 // In particular, it lets one test cover a range of different source/dest types, and even cover both sync and copy.
 // See first test in zt_enumeration for an annotated example.
 
-var validCredTypesPerLocation = map[common.Location][]common.CredentialType{
-	common.ELocation.Unknown(): {common.ECredentialType.Unknown(), common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()}, // Delete!
-	common.ELocation.File():    {common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()},
-	common.ELocation.Blob():    {common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken(), common.ECredentialType.MDOAuthToken()},
-	common.ELocation.BlobFS():  {common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()}, // todo: currently, account key auth isn't even supported in e2e tests.
-	common.ELocation.Local():   {common.ECredentialType.Anonymous()},
-	common.ELocation.Pipe():    {common.ECredentialType.Anonymous()},
-	common.ELocation.S3():      {common.ECredentialType.S3AccessKey()},
-	common.ELocation.GCP():     {common.ECredentialType.GoogleAppCredentials()},
+var validCredTypesPerLocation = map[common.Location][]enum.CredentialType{
+	common.ELocation.Unknown(): {enum.ECredentialType.Unknown(), enum.ECredentialType.Anonymous(), enum.ECredentialType.OAuthToken()}, // Delete!
+	common.ELocation.File():    {enum.ECredentialType.Anonymous(), enum.ECredentialType.OAuthToken()},
+	common.ELocation.Blob():    {enum.ECredentialType.Anonymous(), enum.ECredentialType.OAuthToken(), enum.ECredentialType.MDOAuthToken()},
+	common.ELocation.BlobFS():  {enum.ECredentialType.Anonymous(), enum.ECredentialType.OAuthToken()}, // todo: currently, account key auth isn't even supported in e2e tests.
+	common.ELocation.Local():   {enum.ECredentialType.Anonymous()},
+	common.ELocation.Pipe():    {enum.ECredentialType.Anonymous()},
+	common.ELocation.S3():      {enum.ECredentialType.S3AccessKey()},
+	common.ELocation.GCP():     {enum.ECredentialType.GoogleAppCredentials()},
 }
 
-var allCredentialTypes []common.CredentialType = nil
+var allCredentialTypes []enum.CredentialType = nil
 
-var oAuthOnly = []common.CredentialType{common.ECredentialType.OAuthToken()}
-var anonymousAuthOnly = []common.CredentialType{common.ECredentialType.Anonymous()}
+var oAuthOnly = []enum.CredentialType{enum.ECredentialType.OAuthToken()}
+var anonymousAuthOnly = []enum.CredentialType{enum.ECredentialType.Anonymous()}
 
-func getValidCredCombinationsForFromTo(fromTo common.FromTo, requestedCredentialTypesSrc, requestedCredentialTypesDst []common.CredentialType, accountTypes []AccountType) [][2]common.CredentialType {
-	output := make([][2]common.CredentialType, 0)
+func getValidCredCombinationsForFromTo(fromTo common.FromTo, requestedCredentialTypesSrc, requestedCredentialTypesDst []enum.CredentialType, accountTypes []AccountType) [][2]enum.CredentialType {
+	output := make([][2]enum.CredentialType, 0)
 
-	credIsRequested := func(cType common.CredentialType, dst bool) bool {
+	credIsRequested := func(cType enum.CredentialType, dst bool) bool {
 		if (dst && requestedCredentialTypesDst == nil) || (!dst && requestedCredentialTypesSrc == nil) {
 			return true
 		}
@@ -72,21 +73,21 @@ func getValidCredCombinationsForFromTo(fromTo common.FromTo, requestedCredential
 	}
 
 	// determine source types
-	var sourceTypes []common.CredentialType
+	var sourceTypes []enum.CredentialType
 	if fromTo.IsS2S() && (fromTo != common.EFromTo.BlobBlob() && fromTo != common.EFromTo.BlobFile() && fromTo != common.EFromTo.FileFile()) {
 		// source must always be anonymous-- no exceptions until OAuth over S2S is introduced.
-		sourceTypes = []common.CredentialType{common.ECredentialType.Anonymous()}
+		sourceTypes = []enum.CredentialType{enum.ECredentialType.Anonymous()}
 	} else {
 		sourceTypes = validCredTypesPerLocation[fromTo.From()]
 	}
 
 	for _, srcCredType := range sourceTypes {
-		if srcCredType == common.ECredentialType.MDOAuthToken() && accountTypes[0] != EAccountType.OAuthManagedDisk() && accountTypes[0] != EAccountType.ManagedDiskSnapshotOAuth() {
+		if srcCredType == enum.ECredentialType.MDOAuthToken() && accountTypes[0] != EAccountType.OAuthManagedDisk() && accountTypes[0] != EAccountType.ManagedDiskSnapshotOAuth() {
 			continue // invalid selection
 		}
 
 		for _, dstCredType := range validCredTypesPerLocation[fromTo.To()] {
-			if dstCredType == common.ECredentialType.MDOAuthToken() && accountTypes[1] != EAccountType.OAuthManagedDisk() && accountTypes[0] != EAccountType.ManagedDiskSnapshotOAuth() {
+			if dstCredType == enum.ECredentialType.MDOAuthToken() && accountTypes[1] != EAccountType.OAuthManagedDisk() && accountTypes[0] != EAccountType.ManagedDiskSnapshotOAuth() {
 				continue // invalid selection
 			}
 
@@ -95,7 +96,7 @@ func getValidCredCombinationsForFromTo(fromTo common.FromTo, requestedCredential
 				continue
 			}
 
-			output = append(output, [2]common.CredentialType{srcCredType, dstCredType})
+			output = append(output, [2]enum.CredentialType{srcCredType, dstCredType})
 		}
 	}
 
@@ -115,8 +116,8 @@ func RunScenarios(
 	// In addition to the fact that not every credential type is sensible.
 	// Thus, the E2E framework takes in a requested set of credential types, and applies them where sensible.
 	// This allows you to make tests use OAuth only, SAS only, etc.
-	requestedCredentialTypesSrc []common.CredentialType,
-	requestedCredentialTypesDst []common.CredentialType,
+	requestedCredentialTypesSrc []enum.CredentialType,
+	requestedCredentialTypesDst []enum.CredentialType,
 	p params,
 	hs *hooks,
 	fs testFiles,

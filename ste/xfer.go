@@ -29,6 +29,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
 // upload related
@@ -185,7 +186,7 @@ func inferBlobType(filename string, defaultBlobType blob.BlobType) blob.BlobType
 }
 
 func init() {
-	requestTryTimeout := common.GetEnvironmentVariable(common.EEnvironmentVariable.RequestTryTimeout())
+	requestTryTimeout := enum.EEnvironmentVariable.RequestTryTimeout().Get()
 	if requestTryTimeout != "" {
 		timeout, err := time.ParseDuration(requestTryTimeout + "m")
 		if err == nil {

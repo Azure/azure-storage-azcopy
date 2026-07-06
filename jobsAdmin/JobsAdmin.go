@@ -37,6 +37,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
 // sortPlanFiles is struct that implements len, swap and less than functions
@@ -178,8 +179,8 @@ func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, 
 func getMaxRamForChunks() int64 {
 
 	// return the user-specified override value, if any
-	envVar := common.EEnvironmentVariable.BufferGB()
-	overrideString := common.GetEnvironmentVariable(envVar)
+	envVar := enum.EEnvironmentVariable.BufferGB()
+	overrideString := envVar.Get()
 	if overrideString != "" {
 		overrideValue, err := strconv.ParseFloat(overrideString, 64)
 		if err != nil {
@@ -460,7 +461,7 @@ func (ja *jobsAdmin) ListJobs(givenStatus common.JobStatus) common.ListJobsRespo
 func (ja *jobsAdmin) SetConcurrencySettingsToAuto() {
 	// Setting initial pool size to 4 and max pool size to 3,000
 	ja.concurrency.InitialMainPoolSize = 4
-	ja.concurrency.MaxMainPoolSize = &ste.ConfiguredInt{Value: 3000, IsUserSpecified: false, EnvVarName: common.EEnvironmentVariable.ConcurrencyValue().Name, DefaultSourceDesc: "auto-tuning limit"}
+	ja.concurrency.MaxMainPoolSize = &ste.ConfiguredInt{Value: 3000, IsUserSpecified: false, EnvVarName: enum.EEnvironmentVariable.ConcurrencyValue().Name, DefaultSourceDesc: "auto-tuning limit"}
 
 	// recreate the concurrency tuner.
 	// Tuner isn't called until the first job part is scheduled for transfer, so it is safe to update it before that.

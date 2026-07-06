@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
 // Purpose: Tests for the special cases that relate to moving managed disks (default local VHD to page blob; special handling for
@@ -101,8 +102,8 @@ func TestManagedDisks_SnapshotOAuth(t *testing.T) {
 		eOperation.Copy(),
 		eTestFromTo.Other(common.EFromTo.BlobLocal(), common.EFromTo.BlobBlob()), // It's relevant to test blobblob since this interfaces with x-ms-copysourceauthorization
 		eValidate.Auto(),
-		[]common.CredentialType{common.ECredentialType.MDOAuthToken()},
-		[]common.CredentialType{common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()},
+		[]enum.CredentialType{enum.ECredentialType.MDOAuthToken()},
+		[]enum.CredentialType{enum.ECredentialType.Anonymous(), enum.ECredentialType.OAuthToken()},
 		params{
 			disableParallelTesting: true,
 		},
@@ -130,8 +131,8 @@ func TestManagedDisks_Aaa(t *testing.T) {
 		eOperation.Copy(),
 		eTestFromTo.Other(common.EFromTo.BlobLocal(), common.EFromTo.BlobBlob()), // It's relevant to test blobblob since this interfaces with x-ms-copysourceauthorization
 		eValidate.Auto(),
-		[]common.CredentialType{common.ECredentialType.MDOAuthToken()},
-		[]common.CredentialType{common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()},
+		[]enum.CredentialType{enum.ECredentialType.MDOAuthToken()},
+		[]enum.CredentialType{enum.ECredentialType.Anonymous(), enum.ECredentialType.OAuthToken()},
 		params{
 			disableParallelTesting: true, // testing is implemented with a single managed disk
 		},

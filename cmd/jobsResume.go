@@ -28,7 +28,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
@@ -240,6 +240,8 @@ func init() {
 	// oauth options
 	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.SourceSAS, "source-sas", "", "Source SAS token of the source for a given Job ID.")
 	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.DestinationSAS, "destination-sas", "", "Destination SAS token of the destination for a given Job ID.")
+
+	AddSourceDestCredFlags(resumeCmd)
 }
 
 type resumeCmdArgs struct {
@@ -267,43 +269,63 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 	source.SAS = rca.SourceSAS
 	destination.SAS = rca.DestinationSAS
 
-	srcCredType, _, err := getCredentialTypeForLocation(ctx,
-		fromTo.From(),
-		source,
-		true,
-		common.CpkOptions{})
-	if err != nil {
-		return nil, nil, err
-	}
+	//srcCredType, _, err := getCredentialTypeForLocation(ctx,
+	//	fromTo.From(),
+	//	source,
+	//	true,
+	//	common.CpkOptions{})
+	//if err != nil {
+	//	return nil, nil, err
+	//}
+	//
+	//dstCredType, _, err := getCredentialTypeForLocation(ctx,
+	//	fromTo.To(),
+	//	destination,
+	//	false,
+	//	common.CpkOptions{})
+	//if err != nil {
+	//	return nil, nil, err
+	//}
+	//
+	//var tc azcore.TokenCredential
+	//if srcCredType.IsAzureOAuth() || dstCredType.IsAzureOAuth() {
+	//	uotm := GetUserOAuthTokenManagerInstance()
+	//	// Get token from env var or cache.
+	//	tokenInfo, err := uotm.GetTokenInfo(ctx)
+	//	if err != nil {
+	//		return nil, nil, err
+	//	}
+	//
+	//	tc, err = tokenInfo.GetTokenCredential()
+	//	if err != nil {
+	//		return nil, nil, err
+	//	}
+	//}
 
-	dstCredType, _, err := getCredentialTypeForLocation(ctx,
-		fromTo.To(),
-		destination,
-		false,
-		common.CpkOptions{})
-	if err != nil {
-		return nil, nil, err
-	}
+	credManager := GetCredentialManager()
 
-	var tc azcore.TokenCredential
-	if srcCredType.IsAzureOAuth() || dstCredType.IsAzureOAuth() {
-		uotm := GetUserOAuthTokenManagerInstance()
-		// Get token from env var or cache.
-		tokenInfo, err := uotm.GetTokenInfo(ctx)
-		if err != nil {
-			return nil, nil, err
-		}
+	srcCredInfo, err := getTargetCredInfo(source, fromTo.From(), getTargetCredInfoOptions{
+		ctx:                ctx,
+		canBePublic:        true,  // source can be public
+		sharedKeyAllowed:   false, // but not shared key
+		preferredTokenName: SourceCredentialName,
+		cpkOptions:         common.CpkOptions{},
+		tokenManager:       credManager,
+	})
 
-		tc, err = tokenInfo.GetTokenCredential()
-		if err != nil {
-			return nil, nil, err
-		}
-	}
+	dstCredInfo, err := getTargetCredInfo(destination, fromTo.To(), getTargetCredInfoOptions{
+		ctx:                ctx,
+		canBePublic:        true,  // source can be public
+		sharedKeyAllowed:   false, // but not shared key
+		preferredTokenName: SourceCredentialName,
+		cpkOptions:         common.CpkOptions{},
+		tokenManager:       credManager,
+	})
 
 	var reauthTok *common.ScopedAuthenticator
-	if at, ok := tc.(common.AuthenticateToken); ok { // We don't need two different tokens here since it gets passed in just the same either way.
+	if at, ok := srcCredInfo.TokenCredential.(common.AuthenticateToken); ok { // We don't need two different tokens here since it gets passed in just the same either way.
 		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, enum.ECredentialType.OAuthToken()))
 	}
 	jobID, err := common.ParseJobID(rca.jobID)
 	if err != nil {

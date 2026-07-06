@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
 // GlobalHTTPClient is the process-wide HTTP client used by AzCopy when initialized via InitGlobalHTTPClient.
@@ -84,8 +85,8 @@ func GetGlobalHTTPClient(logger ILoggerResetable) *http.Client {
 func GetMaxIdleConnsPerHost() int {
 
 	autoTune := true
-	envVar := EEnvironmentVariable.ConcurrencyValue()
-	envValue := GetEnvironmentVariable(envVar)
+	envVar := enum.EEnvironmentVariable.ConcurrencyValue()
+	envValue := envVar.Get()
 	concurrencyValue := maxIdleConnsPerHost_MaxValue
 
 	if envValue != "AUTO" && envValue != "" {

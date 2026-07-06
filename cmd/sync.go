@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
@@ -472,7 +473,7 @@ type cookedSyncCmdArgs struct {
 	destination             common.ResourceString
 	fromTo                  common.FromTo
 	credentialInfo          common.CredentialInfo
-	s2sSourceCredentialType common.CredentialType
+	s2sSourceCredentialType enum.CredentialType
 
 	// filters
 	recursive             bool
@@ -1144,21 +1145,10 @@ func init() {
 		"\n For Example: LocalBlob, BlobLocal, LocalFile, FileLocal, BlobFile, FileBlob, etc.")
 	syncCmd.PersistentFlags().BoolVar(&raw.includeDirectoryStubs, "include-directory-stub", false, "False by default, includes blobs with the hdi_isfolder metadata in the transfer.")
 
+	syncCmd.PersistentFlags().BoolVar(&raw.isNFSCopy, IsNFSProtocolFlag, false, "False by default. Users must specify this flag if they intend to transfer data to or from NFS shares.")
+
 	// TODO: enable for copy with IfSourceNewer
 	// smb info/permissions can be persisted in the scenario of File -> File
-	syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false, "False by default. "+
-		"\n Preserves SMB ACLs between aware resources (Azure Files). "+
-		"\n This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
-	syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", (runtime.GOOS == "windows"), "Preserves SMB property info (last write time, creation time, attribute bits)"+
-		" between SMB-aware resources (Windows and Azure Files). On windows, this flag will be set to true by default. \n If the source or destination is a "+
-		"\n volume mounted on Linux using SMB protocol, this flag will have to be explicitly set to true.\n  Only the attribute bits supported by Azure Files "+
-		"will be transferred; any others will be ignored. "+
-		"\n This flag applies to both files and folders, unless a file-only filter is specified "+
-		"(e.g. include-pattern). \n The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
-
-	syncCmd.PersistentFlags().BoolVar(&raw.isNFSCopy, IsNFSProtocolFlag, false, "False by default. Users must specify this flag if they intend to transfer data to or from NFS shares.")
-	//Marking this flag as hidden as we might not support it in the future
-	_ = syncCmd.PersistentFlags().MarkHidden("preserve-smb-info")
 	syncCmd.PersistentFlags().BoolVar(&raw.preserveInfo, PreserveInfoFlag, false, "Specify this flag if you want to preserve properties during the transfer operation.The previously available flag for SMB (--preserve-smb-info) is now redirected to --preserve-info flag for both SMB and NFS operations. The default value is true for Windows when copying to Azure Files SMB share and for Linux when copying to Azure Files NFS share. ")
 
 	syncCmd.PersistentFlags().BoolVar(&raw.preservePOSIXProperties, "preserve-posix-properties", false, "False by default. 'Preserves' property info gleaned from stat or statx into object metadata.")
@@ -1237,19 +1227,11 @@ func init() {
 		"\n valid options are: HiddenFiles (OS Agnostic), "+
 		"\n XAttr (Linux/MacOS only; requires user_xattr on all filesystems traversed @ source), \n AlternateDataStreams (Windows only; requires named streams on target volume)")
 
-	// temp, to assist users with change in param names, by providing a clearer message when these obsolete ones are accidentally used
-	syncCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "Legacy include param. DO NOT USE")
-	syncCmd.PersistentFlags().StringVar(&raw.legacyExclude, "exclude", "", "Legacy exclude param. DO NOT USE")
-	_ = syncCmd.PersistentFlags().MarkHidden("include")
-	_ = syncCmd.PersistentFlags().MarkHidden("exclude")
-
 	// TODO follow sym link is not implemented, clarify behavior first
 	// syncCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "follow symbolic links when performing sync from local file system.")
 
 	// TODO sync does not support all BlobAttributes on the command line, this functionality should be added
 
-	// Deprecate the old persist-smb-permissions flag
-	_ = syncCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
 	syncCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default. "+
 		"\nPreserves ACLs between aware resources (Windows and Azure Files SMB, or Data Lake Storage to Data Lake Storage) and permissions between aware resources(Linux to Azure Files NFS). "+
 		"\nFor accounts that have a hierarchical namespace, your security principal must be the owning user of the target container or it must be assigned "+
@@ -1257,11 +1239,36 @@ func init() {
 		"\nFor downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. "+
 		"\nThis flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
 
-	// Deletes destination blobs with uncommitted blocks when staging block, hidden because we want to preserve default behavior
-	syncCmd.PersistentFlags().BoolVar(&raw.deleteDestinationFileIfNecessary, "delete-destination-file", false, "False by default. Deletes destination blobs, specifically blobs with uncommitted blocks when staging block.")
-	_ = syncCmd.PersistentFlags().MarkHidden("delete-destination-file")
-
 	syncCmd.PersistentFlags().StringVar(&raw.hardlinks, HardlinksFlag, "follow", "Follow by default. Preserve hardlinks for NFS resources. "+
 		"\n This flag is only applicable when the source is NFS file share or the destination is NFS file share. "+
 		"\n Available options: skip, preserve, follow (default 'follow').")
+
+	{ // Separate out hidden flags to improve readability
+		// temp, to assist users with change in param names, by providing a clearer message when these obsolete ones are accidentally used
+		syncCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "Legacy include param. DO NOT USE")
+		syncCmd.PersistentFlags().StringVar(&raw.legacyExclude, "exclude", "", "Legacy exclude param. DO NOT USE")
+
+		syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false, "False by default. "+
+			"\n Preserves SMB ACLs between aware resources (Azure Files). "+
+			"\n This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
+		syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", (runtime.GOOS == "windows"), "Preserves SMB property info (last write time, creation time, attribute bits)"+
+			" between SMB-aware resources (Windows and Azure Files). On windows, this flag will be set to true by default. \n If the source or destination is a "+
+			"\n volume mounted on Linux using SMB protocol, this flag will have to be explicitly set to true.\n  Only the attribute bits supported by Azure Files "+
+			"will be transferred; any others will be ignored. "+
+			"\n This flag applies to both files and folders, unless a file-only filter is specified "+
+			"(e.g. include-pattern). \n The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
+
+		// Deletes destination blobs with uncommitted blocks when staging block, hidden because we want to preserve default behavior
+		syncCmd.PersistentFlags().BoolVar(&raw.deleteDestinationFileIfNecessary, "delete-destination-file", false, "False by default. Deletes destination blobs, specifically blobs with uncommitted blocks when staging block.")
+
+		if !displayDeveloperOptions {
+			_ = syncCmd.PersistentFlags().MarkHidden("include")
+			_ = syncCmd.PersistentFlags().MarkHidden("exclude")
+			_ = syncCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
+			_ = syncCmd.PersistentFlags().MarkHidden("preserve-smb-info")
+			_ = syncCmd.PersistentFlags().MarkHidden("delete-destination-file")
+		}
+	}
+
+	AddSourceDestCredFlags(syncCmd)
 }

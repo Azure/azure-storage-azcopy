@@ -21,14 +21,12 @@
 package cmd
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/spf13/cobra"
 )
 
@@ -42,25 +40,41 @@ type LoginStatus struct {
 	Valid       bool
 	TenantID    string
 	AADEndpoint string
-	AuthMethod  common.AutoLoginType
+	AuthMethod  enum.AutoLoginType
 }
 
 func (options LoginStatusOptions) process() (LoginStatus, error) {
-	// getting current token info and refreshing it with GetTokenInfo()
-	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	uotm := GetUserOAuthTokenManagerInstance()
-	tokenInfo, err := uotm.GetTokenInfo(ctx)
-	var status = LoginStatus{
-		Valid: err == nil && !tokenInfo.IsExpired(),
+	manager := GetCredentialManager()
+	creds, err := manager.ListCredentials()
+	if err != nil {
+		return LoginStatus{}, err
 	}
-	if status.Valid {
-		status.TenantID = tokenInfo.Tenant
-		status.AADEndpoint = tokenInfo.ActiveDirectoryEndpoint
-		status.AuthMethod = tokenInfo.LoginType
-		return status, nil
-	} else {
-		return status, errors.New("You are currently not logged in. Please login using 'azcopy login'")
+
+	if len(creds) == 0 {
+		return LoginStatus{}, nil
 	}
+
+	primary := creds[0]
+	status := LoginStatus{
+		Valid:       true,
+		TenantID:    primary.Tenant,
+		AADEndpoint: primary.ActiveDirectoryEndpoint,
+		AuthMethod:  primary.LoginType,
+	}
+
+	if OutputFormat == common.EOutputFormat.None() || OutputFormat == common.EOutputFormat.Text() {
+		for _, c := range creds {
+			nickname := c.Nickname
+			if nickname == "" {
+				nickname = c.Tenant
+			} else if nickname == "*" {
+				c.Tenant += "; default token"
+			}
+			glcm.Info(fmt.Sprintf("Credential: %s (Tenant: %s)", nickname, c.Tenant))
+		}
+	}
+
+	return status, nil
 }
 
 func RunLoginStatus(options LoginStatusOptions) (LoginStatus, error) {

@@ -39,6 +39,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
@@ -691,7 +693,7 @@ type CookedCopyCmdArgs struct {
 	jobID common.JobID
 
 	// extracted from the input
-	credentialInfo common.CredentialInfo
+	credentialInfo cred.CredentialInfo
 
 	// variables used to calculate progress
 	// intervalStartTime holds the last time value when the progress summary was fetched
@@ -894,7 +896,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	// Use the concurrency environment value
-	concurrencyEnvVar := common.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue())
+	concurrencyEnvVar := enum.EEnvironmentVariable.ConcurrencyValue().Get()
 
 	pipingUploadParallelism := pipingUploadParallelism
 	if concurrencyEnvVar != "" {
@@ -929,7 +931,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	var reauthTok *common.ScopedAuthenticator
 	if at, ok := credInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
 		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, enum.ECredentialType.OAuthToken()))
 	}
 
 	// step 0: initialize pipeline
@@ -986,58 +988,12 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	return err
 }
 
-// get source credential - if there is a token it will be used to get passed along our pipeline
-func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.CopyJobPartOrderRequest) (common.CredentialInfo, error) {
-	switch cca.FromTo.From() {
-	case common.ELocation.Local(), common.ELocation.Benchmark():
-		return common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}, nil
-	case common.ELocation.S3():
-		return common.CredentialInfo{CredentialType: common.ECredentialType.S3AccessKey()}, nil
-	case common.ELocation.GCP():
-		return common.CredentialInfo{CredentialType: common.ECredentialType.GoogleAppCredentials()}, nil
-	case common.ELocation.Pipe():
-		panic("Invalid Source")
-	}
-
-	srcCredInfo, isPublic, err := GetCredentialInfoForLocation(ctx, cca.FromTo.From(), cca.Source, true, cca.CpkOptions)
-	if err != nil {
-		return srcCredInfo, err
-		// If S2S and source takes OAuthToken as its cred type (OR) source takes anonymous as its cred type, but it's not public and there's no SAS
-	} else if cca.FromTo.IsS2S() &&
-		((srcCredInfo.CredentialType == common.ECredentialType.OAuthToken() && !cca.FromTo.To().CanForwardOAuthTokens()) || // Blob can forward OAuth tokens; BlobFS inherits this.
-			(srcCredInfo.CredentialType == common.ECredentialType.Anonymous() && !isPublic && cca.Source.SAS == "")) {
-		return srcCredInfo, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource. Blob and BlobFS additionally support OAuth on both source and destination")
-	} else if cca.FromTo.IsS2S() && (srcCredInfo.CredentialType == common.ECredentialType.SharedKey() || jpo.CredentialInfo.CredentialType == common.ECredentialType.SharedKey()) {
-		return srcCredInfo, errors.New("shared key auth is not supported for S2S operations")
-	}
-
-	if cca.Source.SAS != "" && cca.FromTo.IsS2S() && jpo.CredentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
-		glcm.Info("Authentication: If the source and destination accounts are in the same AAD tenant & the user/spn/msi has appropriate permissions on both, the source SAS token is not required and OAuth can be used round-trip.")
-	}
-
-	if cca.FromTo.IsS2S() {
-		jpo.S2SSourceCredentialType = srcCredInfo.CredentialType
-
-		if jpo.S2SSourceCredentialType.IsAzureOAuth() {
-			uotm := GetUserOAuthTokenManagerInstance()
-			// get token from env var or cache
-			if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
-				return srcCredInfo, err
-			} else if _, err := tokenInfo.GetTokenCredential(); err != nil {
-				// we just verified we can get a token credential
-				return srcCredInfo, err
-			}
-		}
-	}
-	return srcCredInfo, nil
-}
-
 // handles the copy command
 // dispatches the job order (in parts) to the storage engine
 func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// Make AUTO default for Azure Files since Azure Files throttles too easily unless user specified concurrency value
-	if jobsAdmin.JobsAdmin != nil && (cca.FromTo.From() == common.ELocation.File() || cca.FromTo.To() == common.ELocation.File()) && common.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue()) == "" {
+	if jobsAdmin.JobsAdmin != nil && (cca.FromTo.From() == common.ELocation.File() || cca.FromTo.To() == common.ELocation.File()) && enum.EEnvironmentVariable.ConcurrencyValue().Get() == "" {
 		jobsAdmin.JobsAdmin.SetConcurrencySettingsToAuto()
 	}
 
@@ -1049,31 +1005,36 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		return fmt.Errorf("failed to resolve destination: %w", err)
 	}
 
-	// Note: credential info here is only used by remove at the moment.
-	// TODO: Get the entirety of remove into the new copyEnumeratorInit script so we can remove this
-	//       and stop having two places in copy that we get credential info
-	// verifies credential type and initializes credential info.
-	// Note: Currently, only one credential type is necessary for source and destination.
-	// For upload&download, only one side need credential.
-	// For S2S copy, as azcopy-v10 use Put*FromUrl, only one credential is needed for destination.
-	if cca.credentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
-		fromTo:      cca.FromTo,
-		source:      cca.Source,
-		destination: cca.Destination,
-	}, cca.CpkOptions); err != nil {
+	credManager := GetCredentialManager()
+
+	cca.credentialInfo, err = getTargetCredInfo(cca.Destination, cca.FromTo.To(), getTargetCredInfoOptions{
+		ctx:                ctx,
+		canBePublic:        false, // dest can't be public
+		sharedKeyAllowed:   true,  // dest could be shared key
+		preferredTokenName: DestCredentialName,
+		cpkOptions:         common.CpkOptions{}, // not necessary, since dest can't be public.
+		tokenManager:       credManager,
+	})
+	if err != nil {
 		return err
 	}
 
-	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
-	// the info will be transferred to STE.
-	if cca.credentialInfo.CredentialType.IsAzureOAuth() {
-		uotm := GetUserOAuthTokenManagerInstance()
-		// Get token from env var or cache.
-		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
-			return err
-		} else {
-			cca.credentialInfo.OAuthTokenInfo = *tokenInfo
-		}
+	srcCredInfo, err := getTargetCredInfo(cca.Source, cca.FromTo.From(), getTargetCredInfoOptions{
+		ctx:                ctx,
+		canBePublic:        true,  // source can be public
+		sharedKeyAllowed:   false, // but it can't be shared key
+		preferredTokenName: SourceCredentialName,
+		cpkOptions:         cca.CpkOptions,
+		tokenManager:       credManager,
+	})
+	if err != nil {
+		return err
+	}
+
+	var srcReauth *common.ScopedAuthenticator
+	if at, ok := srcCredInfo.TokenCredential.(common.AuthenticateToken); ok {
+		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
+		srcReauth = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, enum.ECredentialType.OAuthToken()))
 	}
 
 	// initialize the fields that are constant across all job part orders,
@@ -1109,22 +1070,11 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			BlobTagsString:                   cca.blobTagsMap.ToString(),
 			DeleteDestinationFileIfNecessary: cca.deleteDestinationFileIfNecessary,
 		},
-		CommandString:  cca.commandString,
-		CredentialInfo: cca.credentialInfo,
+		CommandString:           cca.commandString,
+		S2SSourceCredentialType: srcCredInfo.CredentialType,
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.trailingDot,
 		},
-	}
-
-	srcCredInfo, err := cca.getSrcCredential(ctx, &jobPartOrder)
-	if err != nil {
-		return err
-	}
-
-	var srcReauth *common.ScopedAuthenticator
-	if at, ok := srcCredInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
-		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-		srcReauth = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
 
 	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, srcReauth)
@@ -1139,7 +1089,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		cca.FromTo.From(),
 		cca.Source,
 		srcCredInfo.CredentialType,
-		srcCredInfo.OAuthTokenInfo.TokenCredential,
+		srcCredInfo.TokenCredential,
 		&options,
 		azureFileSpecificOptions,
 	)
@@ -1155,21 +1105,21 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	}
 
 	var dstReauthTok *common.ScopedAuthenticator
-	if at, ok := cca.credentialInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
+	if at, ok := cca.credentialInfo.TokenCredential.(common.AuthenticateToken); ok {
 		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-		dstReauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+		dstReauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, enum.ECredentialType.OAuthToken()))
 	}
 
 	var srcCred *common.ScopedToken
 	if cca.FromTo.IsS2S() && srcCredInfo.CredentialType.IsAzureOAuth() {
-		srcCred = common.NewScopedCredential(srcCredInfo.OAuthTokenInfo.TokenCredential, srcCredInfo.CredentialType)
+		srcCred = common.NewScopedCredential(srcCredInfo.TokenCredential, srcCredInfo.CredentialType)
 	}
 	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred, dstReauthTok)
 	jobPartOrder.DstServiceClient, err = common.GetServiceClientForLocation(
 		cca.FromTo.To(),
 		cca.Destination,
 		cca.credentialInfo.CredentialType,
-		cca.credentialInfo.OAuthTokenInfo.TokenCredential,
+		cca.credentialInfo.TokenCredential,
 		&options,
 		azureFileSpecificOptions,
 	)
@@ -1587,7 +1537,7 @@ func getPerfDisplayText(perfDiagnosticStrings []string, constraint common.PerfCo
 }
 
 func shouldDisplayPerfStates() bool {
-	return common.GetEnvironmentVariable(common.EEnvironmentVariable.ShowPerfStates()) != ""
+	return enum.EEnvironmentVariable.ShowPerfStates().IsSet()
 }
 
 func isStdinPipeIn() (bool, error) {
@@ -1727,10 +1677,6 @@ func init() {
 			"\n Separate regular expressions with ';'.")
 	cpCmd.PersistentFlags().StringVar(&raw.excludeRegex, "exclude-regex", "",
 		"Exclude all the relative path of the files that align with regular expressions. Separate regular expressions with ';'.")
-	// This flag is implemented only for Storage Explorer.
-	cpCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "",
-		"Defines the location of text file which has the list of files to be copied. "+
-			"\n The text file should contain paths from root for each file name or directory written on a separate line.")
 	cpCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "",
 		"Exclude these files when copying. This option supports wildcard characters (*). "+
 			"\n Separate files by using a ';' (For example: *.jpg;*.pdf;exactName).")
@@ -1784,22 +1730,12 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.cacheControl, "cache-control", "", "Set the cache-control header. Returned on download.")
 	cpCmd.PersistentFlags().BoolVar(&raw.noGuessMimeType, "no-guess-mime-type", false, "False by default. Prevents AzCopy from detecting the content-type based on the extension or content of the file.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false, "False by default. Preserves Last Modified Time. Only available when destination is file system.")
-	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false, "False by default. Preserves SMB ACLs between aware resources (Windows and Azure Files). "+
-		"\n For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. "+
-		"\n This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
 	cpCmd.PersistentFlags().BoolVar(&raw.asSubdir, "as-subdir", true, "True by default. Places folder sources as subdirectories under the destination.")
-	cpCmd.PersistentFlags().BoolVar(&raw.preserveOwner, common.PreserveOwnerFlagName, common.PreserveOwnerDefault, "Only has an effect in downloads, and only when --preserve-smb-permissions is used. "+
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveOwner, common.PreserveOwnerFlagName, common.PreserveOwnerDefault, "Only has an effect in downloads, and only when --preserve-permissions is used. "+
 		"\n If true (the default), the file Owner and Group are preserved in downloads. "+
 		"\n If set to false, --preserve-smb-permissions will still preserve ACLs but Owner and Group will be based on the user running AzCopy")
 
-	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", (runtime.GOOS == "windows"), "Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Windows and Azure Files). "+
-		"\n On windows, this flag will be set to true by default. If the source or destination is a volume mounted on Linux using SMB protocol, this flag will have to be explicitly set to true. "+
-		"\n Only the attribute bits supported by Azure Files will be transferred; any others will be ignored. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern). "+
-		"\n The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
 	cpCmd.PersistentFlags().BoolVar(&raw.isNFSCopy, IsNFSProtocolFlag, false, "False by default. Users must specify this flag if they intend to transfer data to or from NFS shares.")
-	//Marking this flag as hidden as we might not support it in the future
-	_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-info")
-	cpCmd.PersistentFlags().BoolVar(&raw.preserveInfo, PreserveInfoFlag, false, "Specify this flag if you want to preserve properties during the transfer operation.The previously available flag for SMB (--preserve-smb-info) is now redirected to --preserve-info flag for both SMB and NFS operations. The default value is true for Windows when copying to Azure Files SMB share and for Linux when copying to Azure Files NFS share. ")
 
 	cpCmd.PersistentFlags().BoolVar(&raw.preservePOSIXProperties, "preserve-posix-properties", false, "False by default. 'Preserves' property info gleaned from stat or statx into object metadata.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSymlinks, common.PreserveSymlinkFlagName, false, "False by default. If enabled, symlink destinations are preserved as the blob content, rather than uploading the file/folder on the other end of the symlink")
@@ -1837,16 +1773,7 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.disableAutoDecoding, "disable-auto-decoding", false, "False by default to enable automatic decoding of illegal chars on Windows. "+
 		"\n Can be set to true to disable automatic decoding.")
 	cpCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "False by default. Prints the file paths that would be copied by this command. This flag does not copy the actual files. The --overwrite flag has no effect. If you set the --overwrite flag to false, files in the source directory are listed even if those files exist in the destination directory.")
-	// s2sGetPropertiesInBackend is an optional flag for controlling whether S3 object's or Azure file's full properties are get during enumerating in frontend or
-	// right before transferring in ste(backend).
-	// The traditional behavior of all existing enumerator is to get full properties during enumerating(more specifically listing),
-	// while this could cause big performance issue for S3 and Azure file, where listing doesn't return full properties,
-	// and enumerating logic do fetching properties sequentially!
-	// To achieve better performance and at same time have good control for overall go routine numbers, getting property in ste is introduced,
-	// so properties can be get in parallel, at same time no additional go routines are created for this specific job.
-	// The usage of this hidden flag is to provide fallback to traditional behavior, when service supports returning full properties during list.
-	cpCmd.PersistentFlags().BoolVar(&raw.s2sGetPropertiesInBackend, "s2s-get-properties-in-backend", true, "True by default. Gets S3 objects' or Azure files' properties in backend, if properties need to be accessed. "+
-		"\n Properties need to be accessed if s2s-preserve-properties is true, and in certain other cases where we need the properties for modification time checks or MD5 checks.")
+
 	cpCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "Available options: "+strings.Join(common.ValidTrailingDotOptions(), ", ")+". "+
 		"\n 'Enable'(Default) treats trailing dot file operations in a safe manner between systems that support these files. "+
 		"\n On Windows, the transfers will not occur to stop risk of data corruption. "+
@@ -1869,23 +1796,7 @@ func init() {
 		"\n Azure Blob storage an option to provide an encryption key on a per-request basis. "+
 		"\n Provided key and its hash will be fetched from environment variables (CPK_ENCRYPTION_KEY and CPK_ENCRYPTION_KEY_SHA256 must be set).")
 
-	// permanently hidden
-	// Hide the list-of-files flag since it is implemented only for Storage Explorer.
-	_ = cpCmd.PersistentFlags().MarkHidden("list-of-files")
-	_ = cpCmd.PersistentFlags().MarkHidden("s2s-get-properties-in-backend")
-
-	// temp, to assist users with change in param names, by providing a clearer message when these obsolete ones are accidentally used
-	cpCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "Legacy include param. DO NOT USE")
-	cpCmd.PersistentFlags().StringVar(&raw.legacyExclude, "exclude", "", "Legacy exclude param. DO NOT USE")
-	_ = cpCmd.PersistentFlags().MarkHidden("include")
-	_ = cpCmd.PersistentFlags().MarkHidden("exclude")
-
-	// Hide the flush-threshold flag since it is implemented only for CI.
-	cpCmd.PersistentFlags().Uint32Var(&ste.ADLSFlushThreshold, "flush-threshold", 7500, "Adjust the number of blocks to flush at once on accounts that have a hierarchical namespace.")
-	_ = cpCmd.PersistentFlags().MarkHidden("flush-threshold")
-
-	// Deprecate the old persist-smb-permissions flag
-	_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveInfo, PreserveInfoFlag, false, "Specify this flag if you want to preserve properties during the transfer operation.The previously available flag for SMB (--preserve-smb-info) is now redirected to --preserve-info flag for both SMB and NFS operations. The default value is true for Windows when copying to Azure Files SMB share and for Linux when copying to Azure Files NFS share. ")
 	cpCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default."+
 		" Preserves ACLs between aware resources (Windows and Azure Files SMB, or Data Lake Storage to Data Lake Storage) and "+
 		"\n permissions between aware resources(Linux to Azure Files NFS). \n"+
@@ -1894,12 +1805,64 @@ func init() {
 		"\n  For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy."+
 		"\n  This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
 
-	// Deletes destination blobs with uncommitted blocks when staging block, hidden because we want to preserve default behavior
-	cpCmd.PersistentFlags().BoolVar(&raw.deleteDestinationFileIfNecessary, "delete-destination-file", false, "False by default. "+
-		"\n Deletes destination blobs, specifically blobs with uncommitted blocks when staging block.")
-	_ = cpCmd.PersistentFlags().MarkHidden("delete-destination-file")
 	cpCmd.PersistentFlags().StringVar(&raw.hardlinks, HardlinksFlag, "follow",
 		"Specifies how hardlinks should be handled. "+
 			"\n This flag is only applicable when downloading from an NFS file share, uploading to an NFS share, or performing service-to-service copies involving NFS. \n"+
 			"\n The only supported option is 'follow' (default), which copies hardlinks as regular, independent files at the destination.")
+
+	{ // Hidden flags
+		cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", (runtime.GOOS == "windows"), "Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Windows and Azure Files). "+
+			"\n On windows, this flag will be set to true by default. If the source or destination is a volume mounted on Linux using SMB protocol, this flag will have to be explicitly set to true. "+
+			"\n Only the attribute bits supported by Azure Files will be transferred; any others will be ignored. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern). "+
+			"\n The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
+
+		cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false, "False by default. Preserves SMB ACLs between aware resources (Windows and Azure Files). "+
+			"\n For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. "+
+			"\n This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
+
+		// temp, to assist users with change in param names, by providing a clearer message when these obsolete ones are accidentally used
+		cpCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "Legacy include param. DO NOT USE")
+		cpCmd.PersistentFlags().StringVar(&raw.legacyExclude, "exclude", "", "Legacy exclude param. DO NOT USE")
+
+		// Deletes destination blobs with uncommitted blocks when staging block, hidden because we want to preserve default behavior
+		cpCmd.PersistentFlags().BoolVar(&raw.deleteDestinationFileIfNecessary, "delete-destination-file", false, "False by default. "+
+			"\n Deletes destination blobs, specifically blobs with uncommitted blocks when staging block.")
+
+		// This flag is implemented only for Storage Explorer.
+		cpCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "",
+			"Defines the location of text file which has the list of files to be copied. "+
+				"\n The text file should contain paths from root for each file name or directory written on a separate line.")
+		// s2sGetPropertiesInBackend is an optional flag for controlling whether S3 object's or Azure file's full properties are get during enumerating in frontend or
+		// right before transferring in ste(backend).
+		// The traditional behavior of all existing enumerator is to get full properties during enumerating(more specifically listing),
+		// while this could cause big performance issue for S3 and Azure file, where listing doesn't return full properties,
+		// and enumerating logic do fetching properties sequentially!
+		// To achieve better performance and at same time have good control for overall go routine numbers, getting property in ste is introduced,
+		// so properties can be get in parallel, at same time no additional go routines are created for this specific job.
+		// The usage of this hidden flag is to provide fallback to traditional behavior, when service supports returning full properties during list.
+		cpCmd.PersistentFlags().BoolVar(&raw.s2sGetPropertiesInBackend, "s2s-get-properties-in-backend", true, "True by default. Gets S3 objects' or Azure files' properties in backend, if properties need to be accessed. "+
+			"\n Properties need to be accessed if s2s-preserve-properties is true, and in certain other cases where we need the properties for modification time checks or MD5 checks.")
+
+		// Hide the flush-threshold flag since it is implemented only for CI.
+		cpCmd.PersistentFlags().Uint32Var(&ste.ADLSFlushThreshold, "flush-threshold", 7500, "Adjust the number of blocks to flush at once on accounts that have a hierarchical namespace.")
+
+		if !displayDeveloperOptions {
+			// Hide the old SMB-specific flags
+			_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-info")
+			_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
+
+			// legacy include/exclude flags
+			_ = cpCmd.PersistentFlags().MarkHidden("include")
+			_ = cpCmd.PersistentFlags().MarkHidden("exclude")
+
+			// Flag intended for use for support
+			_ = cpCmd.PersistentFlags().MarkHidden("delete-destination-file")
+
+			_ = cpCmd.PersistentFlags().MarkHidden("list-of-files")
+			_ = cpCmd.PersistentFlags().MarkHidden("s2s-get-properties-in-backend")
+			_ = cpCmd.PersistentFlags().MarkHidden("flush-threshold")
+		}
+	}
+
+	AddSourceDestCredFlags(cpCmd)
 }
