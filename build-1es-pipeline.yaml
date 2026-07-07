@@ -1397,13 +1397,13 @@ extends:
                     azcopyAmdDebFile=$(ls azcopy-* | grep -vE 'fips|cm2' | grep '\.x86_64\.deb')
                     echo "Azcopy AMD DEB File: $azcopyAmdDebFile"
                     
-                    azcopyAmdRpmFile=$(ls azcopy-* | grep -vE 'fips|cm2' | grep '.\.x86_64\.rpm')
+                    azcopyAmdRpmFile=$(ls azcopy-* | grep -vE 'fips|cm2' | grep '\.x86_64\.rpm')
                     echo "Azcopy AMD RPM File: $azcopyAmdRpmFile"
                     
                     azcopyArmDebFile=$(ls azcopy-* | grep -vE 'fips|cm2' | grep '\.arm64\.deb')
                     echo "Azcopy ARM DEB File: $azcopyArmDebFile"
 
-                    azcopyArmRpmFile=$(ls azcopy-* | grep -vE 'fips|cm2' | grep '.\.arm64\.rpm')
+                    azcopyArmRpmFile=$(ls azcopy-* | grep -vE 'fips|cm2' | grep '\.arm64\.rpm')
                     echo "Azcopy ARM RPM File: $azcopyArmRpmFile"
                     
                     marinerAmdRpmFile=$(ls azcopy-* | grep 'cm2\.x86_64\.rpm')
@@ -1412,10 +1412,10 @@ extends:
                     marinerAarchRpmFile=$(ls azcopy-* | grep 'cm2\.arm64\.rpm')
                     echo "Azcopy Mariner ARM RPM File: $marinerAarchRpmFile"
                     
-                    azcopyFipsAmdRpmFile=$(ls azcopy-fips-* | grep '.\.x86_64\.rpm')
+                    azcopyFipsAmdRpmFile=$(ls azcopy-fips-* | grep '\.x86_64\.rpm')
                     echo "Azcopy FIPS AMD RPM File: $azcopyFipsAmdRpmFile"
 
-                    azcopyFipsArmRpmFile=$(ls azcopy-fips-* | grep '.\.arm64\.rpm')
+                    azcopyFipsArmRpmFile=$(ls azcopy-fips-* | grep '\.arm64\.rpm')
                     echo "Azcopy FIPS ARM RPM File: $azcopyFipsArmRpmFile"
 
                     if (( publish == 0 )); then
@@ -1440,10 +1440,10 @@ extends:
                       echo "Azcopy Mariner ARM RPM ID: $marinerAarchRpm"
 
                       azcopyFipsAmdRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azcopyFipsAmdRpmFile)
-                      echo "Azcopy AMD RPM ID: $azcopyFipsAmdRpm"
+                      echo "Azcopy FIPS AMD RPM ID: $azcopyFipsAmdRpm"
 
                       azcopyFipsArmRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azcopyFipsArmRpmFile)
-                      echo "Azcopy ARM RPM ID: $azcopyFipsArmRpm"
+                      echo "Azcopy FIPS ARM RPM ID: $azcopyFipsArmRpm"
                     fi
 
                     is_preview="false"
