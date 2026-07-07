@@ -401,7 +401,7 @@ func (s scenarioHelper) generateFilesystemsAndFilesFromLists(c asserter, dsc *da
 
 func (s scenarioHelper) generateS3BucketsAndObjectsFromLists(c asserter, s3Client *minio.Client, bucketList []string, objectList []string, data string) {
 	for _, bucketName := range bucketList {
-		err := s3Client.MakeBucket(bucketName, "")
+		err := s3Client.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{})
 		c.AssertNoErr(err)
 
 		s.generateObjects(c, s3Client, bucketName, objectList)
@@ -791,7 +791,7 @@ func (scenarioHelper) generateBlockBlobWithAccessTier(c asserter, containerClien
 func (scenarioHelper) generateObjects(c asserter, client *minio.Client, bucketName string, objectList []string) {
 	size := int64(len(objectDefaultData))
 	for _, objectName := range objectList {
-		n, err := client.PutObjectWithContext(ctx, bucketName, objectName, strings.NewReader(objectDefaultData), size, minio.PutObjectOptions{})
+		n, err := client.PutObject(ctx, bucketName, objectName, strings.NewReader(objectDefaultData), size, minio.PutObjectOptions{})
 		c.AssertNoErr(err)
 		c.Assert(n, equals(), size)
 	}
