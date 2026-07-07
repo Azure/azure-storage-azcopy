@@ -78,7 +78,7 @@ func getS3BucketLookup(endpoint string) minio.BucketLookupType {
 	case S3ProviderAlibaba:
 		// Alibaba OSS requires virtual-hosted style.
 		return minio.BucketLookupDNS
-	case S3ProviderGoogle, S3ProviderIBM, S3ProviderCustom:
+	case S3ProviderGoogle, S3ProviderIBM, S3ProviderOnPrem:
 		return minio.BucketLookupPath
 	default:
 		// Default behavior for AWS S3 endpoints.
