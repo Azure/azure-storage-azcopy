@@ -24,11 +24,13 @@ import (
 	"bytes"
 	"compress/gzip"
 	"compress/zlib"
-	"github.com/stretchr/testify/assert"
 	"io"
 	"math/rand"
 	"sync/atomic"
 	"testing"
+
+	"github.com/klauspost/compress/zstd"
+	"github.com/stretchr/testify/assert"
 )
 
 type closeableBuffer struct {
@@ -63,6 +65,10 @@ func TestDecompressingWriter_SuccessCases(t *testing.T) {
 		{"big zlib", ECompressionType.ZLib(), 10 * 1024 * 1024, rand.Intn(1024*1024) + 1},
 		{"sml zlib", ECompressionType.ZLib(), 1024, rand.Intn(1024*1024) + 1},
 		{"1bytzlib", ECompressionType.ZLib(), 1234, 1},
+
+		{"big zstd", ECompressionType.ZStd(), 10 * 1024 * 1024, rand.Intn(1024*1024) + 1},
+		{"sml zstd", ECompressionType.ZStd(), 1024, rand.Intn(1024*1024) + 1},
+		{"1bytzstd", ECompressionType.ZStd(), 1234, 1},
 	}
 
 	for _, cs := range cases {
@@ -93,6 +99,7 @@ func TestDecompressingWriter_EarlyClose(t *testing.T) {
 	cases := []CompressionType{
 		ECompressionType.GZip(),
 		ECompressionType.ZLib(),
+		ECompressionType.ZStd(),
 	}
 	for _, tp := range cases {
 		// given:
@@ -121,11 +128,23 @@ func getTestData(a *assert.Assertions, tp CompressionType, originalSize int) (or
 	originalData := genCompressibleTestData(originalSize)
 	// and from that we have original compressed data
 	compBuf := &bytes.Buffer{}
-	var comp io.WriteCloser = zlib.NewWriter(compBuf)
-	if tp == ECompressionType.GZip() {
+	var (
+		comp io.WriteCloser
+		err  error
+	)
+	switch tp {
+	case ECompressionType.GZip():
 		comp = gzip.NewWriter(compBuf)
+	case ECompressionType.ZStd():
+		comp, err = zstd.NewWriter(compBuf)
+		a.Nil(err)
+	case ECompressionType.ZLib():
+		comp = zlib.NewWriter(compBuf)
+	default:
+		a.FailNow("unexpected compression type")
+		return originalData, nil
 	}
-	_, err := io.Copy(comp, bytes.NewReader(originalData))
+	_, err = io.Copy(comp, bytes.NewReader(originalData))
 	// write into buf by way of comp
 	a.Nil(err)
 	a.Nil(comp.Close())

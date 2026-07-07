@@ -1512,8 +1512,8 @@ func init() {
 			"will be overwritten if this flag is 'true' or if a positive response is provided to the prompt.")
 	cpCmd.PersistentFlags().BoolVar(&raw.autoDecompress, "decompress", false,
 		"False by default. Automatically decompress files when downloading, if their content-encoding indicates"+
-			"that they are compressed.\n  The supported content-encoding values are 'gzip' and 'deflate'. "+
-			"\n File extensions of '.gz'/'.gzip' or '.zz' aren't necessary, but will be removed if present.")
+			"that they are compressed.\n  The supported content-encoding values are 'gzip', 'deflate', and 'zstd'. "+
+			"\n File extensions of '.gz'/'.gzip', '.zz', '.zst' or '.zstd' aren't necessary, but will be removed if present.")
 
 	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false,
 		"False by default. Look into sub-directories recursively when uploading from local file system.")
