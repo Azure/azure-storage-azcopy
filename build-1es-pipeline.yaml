@@ -27,7 +27,7 @@ extends:
             pool:
               name: 'azcopy-pool'
               demands:
-                - ImageOverride -equals 'azurelinux3'
+                - ImageOverride -equals azurelinux3
             steps:
               - script: |
                   echo "Please help me, 1ES PT Support!"
