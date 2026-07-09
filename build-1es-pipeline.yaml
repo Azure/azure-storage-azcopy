@@ -1392,7 +1392,7 @@ extends:
                   scriptLocation: inlineScript
                   workingDirectory: $(signed)
                   inlineScript: |
-                    [ ${{ parameters.publish_artifacts }} == 'true' ] && [ ${{ parameters.test_pmc_connection }} == 'false' ]
+                    [ ${{ parameters.publish_artifacts }} == 'True' ] && [ ${{ parameters.test_pmc_connection }} == 'False' ]
                     publish=$?
                     
                     azcopyAmdDebFile=$(ls azcopy-* | grep -vE 'fips|cm2' | grep '\.x86_64\.deb')
@@ -1479,7 +1479,7 @@ extends:
                   scriptLocation: inlineScript
                   workingDirectory: $(signed)
                   inlineScript: |
-                    [ ${{ parameters.publish_artifacts }} == 'true' ] && [ ${{ parameters.test_pmc_connection }} == 'false' ]
+                    [ ${{ parameters.publish_artifacts }} == 'True' ] && [ ${{ parameters.test_pmc_connection }} == 'False' ]
                     publish=$?
 
                     while IFS=, read -r distro archetype repoName releaseName; do
