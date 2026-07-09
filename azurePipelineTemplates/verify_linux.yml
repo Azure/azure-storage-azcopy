@@ -1,14 +1,16 @@
 parameters:
   host_architecture: ''
   host_suffix: ''
+  build_suffix: ''
+  package_suffix: ''
 
 steps:
   - checkout: none
 
   - script: |
       chmod +x $(binaries)/*
-      $(binaries)/azcopy_linux_${{ parameters.host_architecture }} --version
-      $(binaries)/azcopy_linux_se_${{ parameters.host_architecture }} --version
+      $(binaries)/azcopy_linux${{ parameters.build_suffix }}_${{ parameters.host_architecture }} --version
+      $(binaries)/azcopy_linux_se${{ parameters.build_suffix }}_${{ parameters.host_architecture }} --version
       rm -rf /usr/local/bin/azcopy
       rm -rf /usr/bin/azcopy
     displayName: 'Verify binaries'
@@ -18,14 +20,14 @@ steps:
       sudo apt-get install build-essential -y
     displayName: "Installing Dependencies"
   - script: |
-      sudo dpkg --info $(signed)/azcopy-*${{ parameters.host_suffix }}.deb
-      sudo dpkg -i $(signed)/azcopy-*${{ parameters.host_suffix }}.deb
+      sudo dpkg --info $(signed)/azcopy${{ parameters.package_suffix }}-*${{ parameters.host_suffix }}.deb
+      sudo dpkg -i $(signed)/azcopy${{ parameters.package_suffix }}-*${{ parameters.host_suffix }}.deb
       azcopy --version
-      sudo apt remove -y azcopy
+      sudo apt remove -y azcopy${{ parameters.package_suffix }}
     displayName: 'Verify deb'
   - script: |
       mkdir -p $(extracted)
-      tar xf $(signed)/azcopy_linux_${{ parameters.host_architecture }}*.tar.gz -C $(extracted)
+      tar xf $(signed)/azcopy_linux${{ parameters.build_suffix }}_${{ parameters.host_architecture }}*.tar.gz -C $(extracted)
       $(extracted)/azcopy --version
       rm -rf $(extracted)
     displayName: 'Verify tar gz'
@@ -34,7 +36,7 @@ steps:
     displayName: "Installing Dependencies"
   - script: |
       mkdir -p $(extracted)
-      tar xf $(signed)/azcopy_linux_se_${{ parameters.host_architecture }}*.tar.gz -C $(extracted)
+      tar xf $(signed)/azcopy_linux_se${{ parameters.build_suffix }}_${{ parameters.host_architecture }}*.tar.gz -C $(extracted)
       $(extracted)/azcopy --version
       rm -rf $(extracted)
     displayName: 'Verify SE Integration tar gz'
