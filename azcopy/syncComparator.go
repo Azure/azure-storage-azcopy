@@ -303,10 +303,12 @@ func (f *syncDestinationComparator) normalizeHardlinkTarget(sourceObj *traverser
 /*
 Example sync --hardlinks=preserve:
 Before run:
+
 	Source: A + B (hardlink group)
 	Dest: A only
 
 After run:
+
 	Dest: A + B (CreateHardlink called on B)
 */
 func (f *syncDestinationComparator) NormalizeAndSchedule(
@@ -410,6 +412,24 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 		}
 	}
 
+	// destPathToInode maps each pending destination hardlink path to its destination inode.
+	// This is used to determine where the srcAnchor is in the same group as a shared member at the destination
+	// It lets us ask per member, "At the destination, is the source anchor already in the same hardlink group as
+	// this member?"
+	// (needsRecreate condition (d) )
+	destPathToInode := make(map[string]string, len(f.destPendingHardlinkObjects.IndexMap))
+	for _, obj := range f.destPendingHardlinkObjects.IndexMap {
+		if obj.Inode == "" {
+			continue
+		}
+		key := obj.RelativePath
+		if f.sourceIndex.IsDestinationCaseInsensitive {
+			key = strings.ToLower(key)
+		}
+
+		destPathToInode[key] = obj.Inode
+	}
+
 	for _, destHardlinkObj := range f.destPendingHardlinkObjects.IndexMap {
 
 		// Normalize the key upfront for case-insensitive destinations so the
@@ -455,6 +475,15 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 		//       group → true re-target or group split with a live anchor.
 		//   (b) Source group spans multiple dest inodes → group merge, must unify.
 		//   (c) Dest group spans multiple source inodes → group split, must break up.
+		// 	 (d) srcAnchor is NOT in this member's hardlink group at the destination
+		//		 (either it is absent or in a different group) The member is linked to the
+		//		 wrong group and must be re-pointed. This handles merges whose groups overlap
+		//		 on a single shared member.
+		//		 This is the case (b)/(c) can't see:
+		//		 when source group {A,B} and destination group {B,C} overlap on only the
+		//		 single shared file B, the source-only member A and the
+		//		 destination-only member C are invisible to the multi-inode
+		//		 counters, so without (d) B would be wrongly left linked to C
 		//
 		// Skip (no recreate) when srcAnchor ≠ dstAnchor but none of (a)-(c) apply:
 		//   • dstAnchor was deleted from source (srcInode="") AND group is intact
@@ -525,9 +554,17 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 				}
 			} else {
 				dstAnchorInSrc := f.srcPathToInode[normDstAnchor]
+				// srcAnchorDstInode is the destination inode the source anchor
+				// currently points at, or "" if the source anchor is not at the
+				// destination yet. A member is correctly linked only when it is in
+				// the SAME destination hardlink group as the source anchor i.e.
+				// they share this inode.
+				srcAnchorDstInode := destPathToInode[normSrcAnchor]
+
 				needsRecreate = (dstAnchorInSrc != "" && dstAnchorInSrc != sourceObjectInMap.Inode) || // (a)
 					srcInodeIsMultiGroup[sourceObjectInMap.Inode] || // (b)
-					destGroupIsMultiSource[destHardlinkObj.Inode] // (c)
+					destGroupIsMultiSource[destHardlinkObj.Inode] || // (c)
+					srcAnchorDstInode != destHardlinkObj.Inode // (d)
 			}
 		}
 

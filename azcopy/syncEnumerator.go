@@ -264,7 +264,8 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 	switch s.opts.fromTo {
 	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile(), common.EFromTo.LocalFileNFS():
 		// Upload implies transferring from a local disk to a remote resource.
-		// In this scenario, the local disk (source) is scanned/indexed first because it is assumed that local file systems will be faster to enumerate than remote resources
+		// In this scenario, the local disk (source) is scanned/indexed first because it is assumed that local file systems
+		// will be faster to enumerate than remote resources.
 		// Then the destination is scanned and filtered based on what the destination contains
 
 		// when uploading, we can delete remote objects immediately, because as we traverse the remote location
