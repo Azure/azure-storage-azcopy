@@ -793,13 +793,23 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			}
 
 			if mergeErr != nil {
-				errMsg = fmt.Sprintf("Merge-join sync failed for dir %s: %s", pt_src.Value, mergeErr)
+				// Attribute the failure to the correct side (source vs destination) so the error
+				// channel reports the same TraverserLocation/path as the indexMap path. Defaults
+				// to source; a tagged mergeJoinTraversalError overrides it (e.g. dest listing failed).
+				errLocation := cca.fromTo.From()
+				errPath := pt_src.Value
+				var mjErr *mergeJoinTraversalError
+				if errors.As(mergeErr, &mjErr) && mjErr.location == cca.fromTo.To() {
+					errLocation = cca.fromTo.To()
+					errPath = st_src.Value
+				}
+				errMsg = fmt.Sprintf("Merge-join sync failed for dir %s: %s", errPath, mergeErr)
 				syncOrchestratorLog(common.LogError, errMsg, true)
 				writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
-					DirPath:           pt_src.Value,
+					DirPath:           errPath,
 					DirName:           dir.(minimalStoredObject).relativePath,
 					ErrorMsg:          errors.New(errMsg),
-					TraverserLocation: cca.fromTo.From(),
+					TraverserLocation: errLocation,
 				})
 				return mergeErr
 			}

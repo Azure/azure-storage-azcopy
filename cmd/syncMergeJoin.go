@@ -118,6 +118,18 @@ var activeMergeJoinDirs atomic.Int64
 // the producer is blocked fetching the next page over the network.
 const mergeJoinChannelBufferSize = 4_000
 
+// mergeJoinTraversalError wraps a traverser failure surfaced by the streaming merge-join,
+// tagging which side (source or destination) failed. This lets the sync orchestrator report
+// the error to the error channel with the correct TraverserLocation and path, matching the
+// attribution the indexMap path produces for source vs destination enumeration failures.
+type mergeJoinTraversalError struct {
+	location common.Location // source (fromTo.From()) or destination (fromTo.To())
+	err      error
+}
+
+func (e *mergeJoinTraversalError) Error() string { return e.err.Error() }
+func (e *mergeJoinTraversalError) Unwrap() error  { return e.err }
+
 // Channel-based merge-join diagnostics (baseline instrumentation).
 // mergeJoinChanFullEvents increments each time a producer's send finds the channel
 // full (back-pressure: the merge/consumer is slower than the listing/producer —
@@ -351,12 +363,19 @@ func mergeJoinSyncDirChannelBased(
 		dstObj, dstOk = dstNext()
 	}
 
-	// Check for traversal errors from either side
+	// Check for traversal errors from either side. Tag the failing side so the orchestrator
+	// can attribute the error to source vs destination (location + path), matching indexMap.
 	if srcErr := <-srcErrCh; srcErr != nil {
-		return subDirs, fmt.Errorf("source traversal error during merge-join: %w", srcErr)
+		return subDirs, &mergeJoinTraversalError{
+			location: cca.fromTo.From(),
+			err:      fmt.Errorf("source traversal error during merge-join: %w", srcErr),
+		}
 	}
 	if dstErr := <-dstErrCh; dstErr != nil {
-		return subDirs, fmt.Errorf("destination traversal error during merge-join: %w", dstErr)
+		return subDirs, &mergeJoinTraversalError{
+			location: cca.fromTo.To(),
+			err:      fmt.Errorf("destination traversal error during merge-join: %w", dstErr),
+		}
 	}
 
 	return subDirs, nil
