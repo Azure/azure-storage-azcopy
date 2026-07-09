@@ -288,7 +288,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 		// - AWS S3: keep legacy StorageClass-based behavior.
 		var isPotentialDirectory bool
 		switch providerKind {
-		case common.S3ProviderCustom:
+		case common.S3ProviderOnPrem:
 			// Generic S3-compatible/on-prem: avoid StorageClass heuristics.
 			isPotentialDirectory = strings.HasSuffix(objectInfo.Key, "/") && objectInfo.Size == 0
 		case common.S3ProviderGoogle:
@@ -317,7 +317,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 		// For GCS via S3 API, use stricter directory detection to avoid false positives
 		var isActualDirectory bool
 		switch providerKind {
-		case common.S3ProviderCustom:
+		case common.S3ProviderOnPrem:
 			isActualDirectory = strings.HasSuffix(objectInfo.Key, "/") && objectInfo.Size == 0
 		case common.S3ProviderGoogle:
 			isActualDirectory = isPotentialDirectory && objectInfo.Size == 0 && strings.HasSuffix(objectInfo.Key, "/")

@@ -64,7 +64,7 @@ const (
 	S3ProviderOracle  S3ProviderKind = "oracle"
 	S3ProviderIBM     S3ProviderKind = "ibm"
 	S3ProviderAlibaba S3ProviderKind = "alibaba"
-	S3ProviderCustom  S3ProviderKind = "custom"
+	S3ProviderOnPrem  S3ProviderKind = "onprem"
 	S3ProviderUnknown S3ProviderKind = "unknown"
 )
 
@@ -740,8 +740,8 @@ func (p *S3URLParts) ProviderKind() S3ProviderKind {
 		return S3ProviderAlibaba
 	}
 
-	if p.IsS3CompatibleEndpoint() {
-		return S3ProviderCustom
+	if p.IsOnPremS3Compatible() {
+		return S3ProviderOnPrem
 	}
 
 	if p.IsAWSS3() {
@@ -751,22 +751,16 @@ func (p *S3URLParts) ProviderKind() S3ProviderKind {
 	return S3ProviderUnknown
 }
 
-// IsCustomS3Compatible checks if this S3 URL is a custom S3-compatible endpoint.
-// Returns true only when S3_COMPATIBLE_ENDPOINT is set and the endpoint is neither Google nor Oracle.
-func (p *S3URLParts) IsCustomS3Compatible() bool {
-	return p.ProviderKind() == S3ProviderCustom
-}
-
 // IsOnPremS3Compatible is a backward-compatible alias for IsCustomS3Compatible.
 // NOTE: "on-prem" is not always accurate for custom endpoints (e.g. managed clouds).
 func (p *S3URLParts) IsOnPremS3Compatible() bool {
-	return p.IsCustomS3Compatible()
+	return os.Getenv("S3_COMPATIBLE_ENDPOINT") != "" && IsPrivateNetworkTransfer(ELocation.S3())
 }
 
 // IsS3CompatibleEndpoint returns true if a custom S3-compatible endpoint is configured
 // via the S3_COMPATIBLE_ENDPOINT environment variable.
 func (p *S3URLParts) IsS3CompatibleEndpoint() bool {
-	return os.Getenv("S3_COMPATIBLE_ENDPOINT") != "" && IsPrivateNetworkTransfer(ELocation.S3())
+	return os.Getenv("S3_COMPATIBLE_ENDPOINT") != ""
 }
 
 type caseInsensitiveValues url.Values // map[string][]string
