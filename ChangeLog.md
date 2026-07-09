@@ -1,23 +1,52 @@
 
 # Change Log
 
+## Version 10.32.6
+
+### Dependency updates
+
+1. github.com/cncf/xds/go v0.0.0-20251210132809-ee656c7534f5 -> v0.0.0-20260202195803-dba9d589def2
+2. github.com/envoyproxy/go-control-plane/envoy v1.36.0 -> v1.37.0
+3. github.com/envoyproxy/protoc-gen-validate v1.3.0 -> v1.3.3
+4. go.opentelemetry.io/contrib/detectors/gcp v1.40.0 -> v1.42.0
+5. go.opentelemetry.io/otel v1.40.0 -> v1.42.0
+6. go.opentelemetry.io/otel/metric v1.40.0 -> v1.42.0
+7. go.opentelemetry.io/otel/sdk v1.40.0 -> v1.42.0
+8. go.opentelemetry.io/otel/sdk/metric v1.40.0 ->v1.42.0
+9. go.opentelemetry.io/otel/trace v1.40.0 -> v1.42.0
+
+### Bug Fixes
+
+1. 10.32.5 was discovered to not be based upon 10.32.4 or .3-- this has been rectified, and changes are now consistent with prior patch releases.
+
+### New Features
+
+1. FIPS 140-3 compliant Linux builds are now available. [#3488](https://github.com/Azure/azure-storage-azcopy/pull/3488)
+
 ## Version 10.32.5
 
 ### Dependency updates
+
 1. Golang 1.25.8 -> 1.25.11
-2. golang.org/x/crypto v0.47.0 -> v0.53.0
-3. golang.org/x/net v0.49.0 -> v0.55.0
-4. golang.org/x/sync v0.19.0 -> v0.21.0
-5. golang.org/x/sys v0.40.0 -> v0.46.0
+2. golang.org/x/crypto v0.47.0 -> v0.53.0
+3. golang.org/x/net v0.49.0 -> v0.55.0
+4. golang.org/x/sync v0.19.0 -> v0.21.0
+5. golang.org/x/sys v0.40.0 -> v0.46.0
 6. Trivy dependency updated to v0.35.0 ([#3421](https://github.com/Azure/azure-storage-azcopy/pull/3421))
 
-### Bug Fixes
-1. Fixed a bug where `CreateFile` would fail with `InvalidProtocolHeader` when special bits in `x-ms-mode` are set. ([#3467](https://github.com/Azure/azure-storage-azcopy/pull/3467))
+### Bug Fixes
 
-### Code Improvements
-1. Centralized the HTTP client into a shared global instance. ([#3436](https://github.com/Azure/azure-storage-azcopy/pull/3436))
-2. AzCopy prints help text when running `azcopy` with no subcommands. ([#3485](https://github.com/Azure/azure-storage-azcopy/pull/3485))
-3. Ensured `GetProperties` and `SetProperties` calls are not on a pathless container root. ([#3453](https://github.com/Azure/azure-storage-azcopy/pull/3453))
+1. Fixed a bug where `CreateFile` would fail with `InvalidProtocolHeader` when special bits in `x-ms-mode` are set. ([#3467](https://github.com/Azure/azure-storage-azcopy/pull/3467))
+
+
+### Code Improvements
+
+1. Centralized the HTTP client into a shared global instance. ([#3436](https://github.com/Azure/azure-storage-azcopy/pull/3436))
+
+2. AzCopy prints help text when running `azcopy` with no subcommands. ([#3485](https://github.com/Azure/azure-storage-azcopy/pull/3485))
+
+3. Ensured `GetProperties` and `SetProperties` calls are not on a pathless container root. ([#3453](https://github.com/Azure/azure-storage-azcopy/pull/3453))
+
 
 ## Version 10.32.3
 
