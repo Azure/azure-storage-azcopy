@@ -376,24 +376,27 @@ var streamingMergeJoinEnabled = func() bool {
 }()
 
 // useStreamingMergeJoin reports whether the streaming merge-join should be used for
-// this transfer. It is an OPT-IN feature (AZCOPY_USE_STREAMING_MERGE_JOIN, default off):
-// when disabled, every sync uses the existing indexMap-based path. When enabled, it is
-// still restricted to the source/destination pairs whose listing order is proven
-// lexicographically sorted and validated end-to-end:
+// this transfer. It is enabled per-job when EITHER:
+//   - the global env flag AZCOPY_USE_STREAMING_MERGE_JOIN is truthy (testing / blanket enable), OR
+//   - the job opted in (cca.useStreamingMergeJoin) — set by the mover when the job's subscription
+//     is allowlisted for the feature via featureConfig.
+//
+// When enabled, it is still restricted to the source/destination pairs whose listing order is
+// proven lexicographically sorted and validated end-to-end:
 //   - S3 -> Blob (S3 source list-order fix + per-level merge)
 //   - Azure -> Azure, i.e. Blob/BlobFS (FNS or HNS) in any combination
 //
 // Everything else (Azure Files, Local, GCP, etc.) always stays on the indexMap flow.
 // Keep this allow-list conservative: any source whose listing is not guaranteed
 // globally sorted would silently break the two-pointer merge.
-func useStreamingMergeJoin(fromTo common.FromTo) bool {
-	if !streamingMergeJoinEnabled {
+func useStreamingMergeJoin(cca *cookedSyncCmdArgs) bool {
+	if !streamingMergeJoinEnabled && !cca.useStreamingMergeJoin {
 		return false
 	}
 	isAzure := func(loc common.Location) bool {
 		return loc == common.ELocation.Blob() || loc == common.ELocation.BlobFS()
 	}
-	from, to := fromTo.From(), fromTo.To()
+	from, to := cca.fromTo.From(), cca.fromTo.To()
 	switch {
 	case from == common.ELocation.S3() && to == common.ELocation.Blob():
 		return true // S3 -> Blob

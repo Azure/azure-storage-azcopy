@@ -612,6 +612,27 @@ func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator,
 		}
 	}
 
+	// Log (once per job) whether the streaming merge-join is used and, if so, what enabled it:
+	// the AZCOPY_USE_STREAMING_MERGE_JOIN env flag (test/blanket) or the per-job subscription
+	// allowlist (featureConfig). This makes it easy to confirm the gating in production logs.
+	if useStreamingMergeJoin(cca) {
+		var reason string
+		switch {
+		case streamingMergeJoinEnabled && cca.useStreamingMergeJoin:
+			reason = "env AZCOPY_USE_STREAMING_MERGE_JOIN + subscription allowlist (featureConfig)"
+		case streamingMergeJoinEnabled:
+			reason = "env AZCOPY_USE_STREAMING_MERGE_JOIN"
+		default:
+			reason = "subscription allowlist (featureConfig)"
+		}
+		syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
+			"Streaming merge-join ENABLED via %s for %s->%s", reason, cca.fromTo.From(), cca.fromTo.To()), true)
+	} else if streamingMergeJoinEnabled || cca.useStreamingMergeJoin {
+		syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
+			"Streaming merge-join requested (env=%t, allowlist=%t) but NOT used for %s->%s (pair not eligible); using indexMap sync path",
+			streamingMergeJoinEnabled, cca.useStreamingMergeJoin, cca.fromTo.From(), cca.fromTo.To()), true)
+	}
+
 	// Initialize resource limits based on source/destination types
 	initializeLimits(orchestratorOptions)
 	return cca.runSyncOrchestrator(enumerator, ctx)
@@ -703,7 +724,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 		// Fork: use the streaming (channel-based) merge-join for remote sources whose
 		// listings are lexicographically sorted; keep the existing indexMap-based flow for
 		// local filesystem sources (which do not guarantee sorted listing order).
-		if useStreamingMergeJoin(cca.fromTo) {
+		if useStreamingMergeJoin(cca) {
 			mergeJoinSyncOneDirLog(common.LogDebug,
 				fmt.Sprintf("Processing dir '%s'", dir.(minimalStoredObject).relativePath))
 
