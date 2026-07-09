@@ -19,6 +19,21 @@
 2. AzCopy prints help text when running `azcopy` with no subcommands. ([#3485](https://github.com/Azure/azure-storage-azcopy/pull/3485))
 3. Ensured `GetProperties` and `SetProperties` calls are not on a pathless container root. ([#3453](https://github.com/Azure/azure-storage-azcopy/pull/3453))
 
+## Version 10.32.3
+
+### Dependency updates
+1. golang.org/x/crypto v0.47.0 -> v0.49.0
+2. golang.org/x/sync v0.19.0 -> v0.20.0
+3. golang.org/x/sys v0.40.0 -> v0.42.0
+4. golang.org/x/net v0.49.0 -> v0.52.0
+5. golang.org/x/text v0.33.0 -> v0.35.0
+6. google.golang.org/genproto/googleapis/rpc v0.0.0-20260128011058-8636f8732409 -> v0.0.0-20260319201613-d00831a3d3e7
+7. google.golang.org/grpc v1.79.1 -> v1.79.3
+
+### Vulnerability fixes
+1. Fixed an issue where a maliciously crafted SDDL could crash AzCopy on Linux.
+
+
 ## Version 10.32.2
 
 ### Dependency updates
