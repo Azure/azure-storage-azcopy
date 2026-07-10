@@ -516,11 +516,15 @@ func mergeJoinHandleDestOnly(
 	return nil
 }
 
-// mergeJoinHandleBothExist processes an object that exists at both source and destination.
-// It compares properties (size, LWT, changeTime) to determine if a transfer is needed.
-// Folders are always added to subdirectories for recursive traversal.
-// This version creates full StoredObjects and delegates to processIfNecessaryWithOrchestrator
-// for parity with the indexMap path.
+// mergeJoinHandleBothExist processes an object present at both source and destination.
+// Transfer-vs-skip is decided with isMoreRecentThan (source last-modified newer than the
+// destination's) — the appropriate comparison for the merge-join's supported remote pairs
+// (S3->Blob and Blob/BlobFS->Blob/BlobFS), whose listings expose a reliable last-modified time.
+// It intentionally does NOT run the indexMap comparator (processIfNecessaryWithOrchestrator),
+// whose SMB last-write-time / POSIX change-time / metadata-only-sync logic targets File (SMB)
+// and NFS sources that the merge-join does not support (for FNS blob and S3, last-write/change
+// time are unset, so that path degrades to a plain last-modified comparison anyway).
+// Folders are enqueued for recursive traversal.
 func mergeJoinHandleBothExist(
 	enumerator *syncEnumerator,
 	cca *cookedSyncCmdArgs,
