@@ -209,6 +209,67 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 	// transferScheduler is responsible for batching up transfers and sending them to the job service
 	transferScheduler := s.newSyncTransferProcessor(NumOfFilesPerDispatchJobPart, copyJobTemplate)
 
+	// Set up dedup infrastructure if enabled
+	var hashIndexer *traverser.HashIndexer
+	var dedupProc *syncDedupProcessor
+	if s.opts.dedupCopy {
+		hashIndexer = traverser.NewHashIndexer()
+
+		// Determine the S2S FromTo type for intra-destination copies.
+		// This is always destination-to-destination (e.g., BlobBlob for Blob destinations).
+		destLocation := s.opts.fromTo.To()
+		dedupFromTo := common.FromToValue(destLocation, destLocation)
+
+		// Create a job template for intra-destination server-side copies.
+		dedupJobTemplate := &common.CopyJobPartOrderRequest{
+			JobID:               common.NewJobID(), // separate job for dedup copies
+			CommandString:       s.opts.commandString,
+			FromTo:              dedupFromTo,
+			Fpo:                 fpo,
+			SymlinkHandlingType: s.opts.symlinks,
+			SourceRoot:          s.opts.destination.CloneWithConsolidatedSeparators(), // source is the destination (copy within)
+			DestinationRoot:     s.opts.destination.CloneWithConsolidatedSeparators(),
+
+			BlobAttributes: common.BlobTransferAttributes{
+				PreserveLastModifiedTime:         s.opts.preserveInfo,
+				PutMd5:                           s.opts.putMd5,
+				MD5ValidationOption:              s.opts.checkMd5,
+				BlockSizeInBytes:                 s.opts.blockSize,
+				PutBlobSizeInBytes:               s.opts.putBlobSize,
+				DeleteDestinationFileIfNecessary: s.opts.deleteDestinationFileIfNecessary,
+			},
+			ForceWrite:                     common.EOverwriteOption.True(),
+			ForceIfReadOnly:                s.opts.forceIfReadOnly,
+			LogLevel:                       logLevel,
+			PreservePermissions:            s.opts.preservePermissions,
+			PreserveInfo:                   s.opts.preserveInfo,
+			PreservePOSIXProperties:        s.opts.preservePosixProperties,
+			PosixPropertiesStyle:           s.opts.posixPropertiesStyle,
+			S2SSourceChangeValidation:      false, // not needed for intra-destination copy
+			DestLengthValidation:           true,
+			S2SGetPropertiesInBackend:      true,
+			S2SInvalidMetadataHandleOption: common.EInvalidMetadataHandleOption.RenameIfInvalid(),
+			CpkOptions:                     s.opts.cpkOptions,
+			S2SPreserveBlobTags:            s.opts.s2SPreserveBlobTags,
+
+			S2SSourceCredentialType: s.srp.dstCredType, // source is the destination account
+			FileAttributes: common.FileTransferAttributes{
+				TrailingDot: s.opts.trailingDot,
+			},
+			JobErrorHandler:  mgr,
+			SrcServiceClient: s.srp.dstServiceClient, // source = destination (intra-account copy)
+			DstServiceClient: s.srp.dstServiceClient,
+		}
+
+		reportFirstPart := func(jobStarted bool) {} // no-op for dedup job
+		reportFinalPart := func() {}                // no-op for dedup job
+		dedupScheduler := NewCopyTransferProcessor(false, dedupJobTemplate, NumOfFilesPerDispatchJobPart,
+			s.opts.destination, s.opts.destination,
+			reportFirstPart, reportFinalPart, s.opts.s2SPreserveAccessTier, s.opts.dryrun, s.opts.dryrunJobPartOrderHandler)
+
+		dedupProc = newSyncDedupProcessor(hashIndexer, dedupScheduler, transferScheduler, dedupFromTo)
+	}
+
 	// indexer keeps track of the destination (source in case of upload) files and folders
 	indexer := traverser.NewObjectIndexer()
 	// deleter is responsible for deleting files at the destination that no longer exist at the source
@@ -235,6 +296,12 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 	var comparator traverser.ObjectProcessor
 	var finalize func() error
 
+	// Determine the transfer function: either the dedup processor or normal scheduler.
+	transferFunc := transferScheduler.ScheduleSyncRemoveSetPropertiesTransfer
+	if dedupProc != nil {
+		transferFunc = dedupProc.ProcessTransfer
+	}
+
 	switch s.opts.fromTo {
 	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile(), common.EFromTo.LocalFileNFS():
 		// Upload implies transferring from a local disk to a remote resource.
@@ -244,11 +311,26 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 		// when uploading, we can delete remote objects immediately, because as we traverse the remote location
 		// we ALREADY have available a complete map of everything that exists locally
 		// so as soon as we see a remote destination object we can know whether it exists in the local source
-		comparator = NewSyncDestinationComparator(indexer, transferScheduler.ScheduleSyncRemoveSetPropertiesTransfer, deleteScheduler, s.opts.compareHash, s.opts.preserveInfo, s.opts.mirrorMode).ProcessIfNecessary
+		comparator = NewSyncDestinationComparator(indexer, transferFunc, deleteScheduler, s.opts.compareHash, s.opts.preserveInfo, s.opts.mirrorMode).ProcessIfNecessary
+
+		// For dedup: wrap comparator to also feed the hash indexer with destination objects
+		if hashIndexer != nil {
+			originalComparator := comparator
+			comparator = func(obj traverser.StoredObject) error {
+				hashIndexer.Store(obj)
+				return originalComparator(obj)
+			}
+		}
+
 		finalize = func() error {
 			// schedule every local file that doesn't exist at the destination
-			err = indexer.Traverse(transferScheduler.ScheduleSyncRemoveSetPropertiesTransfer, filters)
+			err = indexer.Traverse(transferFunc, filters)
 			if err != nil {
+				return err
+			}
+
+			// Dispatch dedup job final part if applicable
+			if err := finalizeDedup(dedupProc, hashIndexer); err != nil {
 				return err
 			}
 
@@ -263,13 +345,26 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 		return traverser.NewSyncEnumerator(sourceTraverser, destinationTraverser, indexer, filters, comparator, finalize), nil
 	default:
 		indexer.IsDestinationCaseInsensitive = isDestinationCaseInsensitive(s.opts.fromTo)
+
+		// For dedup in S2S/download: feed the hash indexer as destination objects are stored in the indexer
+		if hashIndexer != nil {
+			indexer.OnStore = func(obj traverser.StoredObject) {
+				hashIndexer.Store(obj)
+			}
+		}
+
 		// in all other cases (download and S2S), the destination is scanned/indexed first
 		// then the source is scanned and filtered based on what the destination contains
-		comparator = NewSyncSourceComparator(indexer, transferScheduler.ScheduleSyncRemoveSetPropertiesTransfer, s.opts.compareHash, s.opts.preserveInfo, s.opts.mirrorMode).ProcessIfNecessary
+		comparator = NewSyncSourceComparator(indexer, transferFunc, s.opts.compareHash, s.opts.preserveInfo, s.opts.mirrorMode).ProcessIfNecessary
 
 		finalize = func() error {
 			err = indexer.Traverse(deleteScheduler, nil)
 			if err != nil {
+				return err
+			}
+
+			// Dispatch dedup job final part if applicable
+			if err := finalizeDedup(dedupProc, hashIndexer); err != nil {
 				return err
 			}
 
@@ -289,4 +384,25 @@ func (s *syncer) initEnumerator(ctx context.Context, logLevel common.LogLevel, m
 
 func isDestinationCaseInsensitive(fromTo common.FromTo) bool {
 	return fromTo.IsDownload() && runtime.GOOS == "windows"
+}
+
+// finalizeDedup dispatches the dedup job's final part and logs dedup statistics.
+// This is called at the end of sync enumeration when dedup is enabled.
+func finalizeDedup(dedupProc *syncDedupProcessor, hashIndexer *traverser.HashIndexer) error {
+	if dedupProc == nil {
+		return nil
+	}
+	_, dedupErr := dedupProc.dedupScheduler.DispatchFinalPart()
+	if dedupErr != nil && dedupErr != NothingScheduledError {
+		return dedupErr
+	}
+	if hashIndexer.MissingHashCount() > 0 {
+		common.GetLifecycleMgr().Info(fmt.Sprintf(
+			"NOTE: %d destination file(s) lacked Content-MD5 and could not participate in dedup optimization. Upload with --put-md5 to enable full dedup coverage.",
+			hashIndexer.MissingHashCount()))
+	}
+	common.GetLifecycleMgr().Info(fmt.Sprintf(
+		"Dedup stats: %d file(s) via server-side copy (dedup), %d file(s) via normal transfer.",
+		dedupProc.DedupCount(), dedupProc.NormalCount()))
+	return nil
 }

@@ -102,6 +102,7 @@ type rawSyncCmdArgs struct {
 	preserveInfo bool
 	hardlinks    string
 	hashMetaDir  string
+	dedupCopy    bool
 }
 
 func (raw rawSyncCmdArgs) toOptions() (opts azcopy.SyncOptions, err error) {
@@ -123,6 +124,7 @@ func (raw rawSyncCmdArgs) toOptions() (opts azcopy.SyncOptions, err error) {
 		IncludeRoot:             raw.includeRoot,
 		HashMetaDir:             raw.hashMetaDir,
 		PreservePermissions:     raw.preservePermissions,
+		DedupCopy:               raw.dedupCopy,
 	}
 	opts.FromTo, err = azcopy.InferAndValidateFromTo(raw.src, raw.dst, raw.fromTo)
 	if err != nil {
@@ -550,4 +552,12 @@ func init() {
 		"Follow by default. Preserve hardlinks for NFS resources. "+
 			"\n This flag is only applicable when the source is Azure NFS file share or the destination is NFS file share. "+
 			"\n Available options: skip, preserve, follow (default 'follow').")
+
+	syncCmd.PersistentFlags().BoolVar(&raw.dedupCopy, "dedup-copy", false,
+		"When a file needs to be transferred but identical content (by MD5 hash) already exists "+
+			"\n at a different path on the destination, perform a server-side copy within the destination "+
+			"\n instead of re-uploading from source. This saves bandwidth and transfer time for scenarios "+
+			"\n like file renames, moves, or duplicates. Requires Content-MD5 on destination blobs "+
+			"\n (upload with --put-md5). Auto-enables --compare-hash=MD5 if not set. "+
+			"\n Only effective when the destination is a remote resource.")
 }

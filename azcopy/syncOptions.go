@@ -56,6 +56,7 @@ type cookedSyncOptions struct {
 	preservePermissions     common.PreservePermissionsOption
 	symlinks                common.SymlinkHandlingType
 	hardlinks               common.HardlinkHandlingType
+	dedupCopy               bool // content-based dedup: server-side copy within destination when identical content exists
 
 	// AzCopy internal use only
 	dryrun                           bool
@@ -182,6 +183,7 @@ func (s *cookedSyncOptions) applyDefaultsAndInferOptions(opts SyncOptions) (err 
 	s.preservePermissions = common.NewPreservePermissionsOption(opts.PreservePermissions, preserveOwner, s.fromTo)
 	s.symlinks = opts.Symlinks
 	s.hardlinks = opts.Hardlinks
+	s.dedupCopy = opts.DedupCopy
 	s.dryrun = opts.dryrun
 	s.deleteDestinationFileIfNecessary = opts.deleteDestinationFileIfNecessary
 	s.commandString = opts.commandString
@@ -194,6 +196,23 @@ func (s *cookedSyncOptions) applyDefaultsAndInferOptions(opts SyncOptions) (err 
 		// Save any new MD5s on files we download.
 		s.putMd5 = true
 	default: // no need to put a hash of any kind.
+	}
+
+	// dedup-copy inference: auto-enable hash comparison (MD5) if not already set
+	if s.dedupCopy {
+		if !s.fromTo.To().IsRemote() {
+			common.GetLifecycleMgr().Info("WARNING: --dedup-copy is only effective when the destination is a remote resource. Ignoring for local destinations.")
+			s.dedupCopy = false
+		} else if s.compareHash == common.ESyncHashType.None() {
+			// Only auto-enable putMd5 for uploads (local source) where we can compute MD5 locally.
+			// For S2S syncs, the source may lack MD5s and forcing --compare-hash=MD5 could cause
+			// errors on missing hashes. In S2S, we rely on existing Content-MD5 headers.
+			s.compareHash = common.ESyncHashType.MD5()
+			if s.fromTo.From() == common.ELocation.Local() {
+				s.putMd5 = true
+			}
+			common.GetLifecycleMgr().Info("--dedup-copy requires hash comparison; auto-enabling --compare-hash=MD5")
+		}
 	}
 
 	if !s.fromTo.IsS2S() {
