@@ -627,6 +627,16 @@ func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator,
 		}
 		syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
 			"Streaming merge-join ENABLED via %s for %s->%s", reason, cca.fromTo.From(), cca.fromTo.To()), true)
+
+		// The streaming merge-join uses its own directory-crawl parallelism
+		// (SYNC_MJ_PARALLEL_TRAVERSERS, default 32) — separate from the indexMap path, which keeps
+		// orchestratorOptions.parallelTraversers unchanged — because the merge-join also lists
+		// source and destination concurrently within each directory.
+		if orchestratorOptions != nil {
+			orchestratorOptions.parallelTraversers = mergeJoinParallelTraversers
+			syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
+				"Streaming merge-join directory-crawl parallelism set to %d (SYNC_MJ_PARALLEL_TRAVERSERS)", mergeJoinParallelTraversers), true)
+		}
 	} else if streamingMergeJoinEnabled || cca.useStreamingMergeJoin {
 		syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
 			"Streaming merge-join requested (env=%t, allowlist=%t) but NOT used for %s->%s (pair not eligible); using indexMap sync path",

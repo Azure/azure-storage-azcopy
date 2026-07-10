@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -180,15 +181,20 @@ func traverserToChannel(
 			count++
 			// Sort-invariant guard (always on, ~one string compare per object): the
 			// streaming merge-join is only correct if each stream is emitted in strictly
-			// non-decreasing key order. If a traverser ever emits an out-of-order key,
-			// the merge-join can silently mis-classify objects (missed or extra transfers),
-			// so we log it at Error even in production. This is rare (fires only on the
-			// anomaly) and cheap, so it does not spam logs for millions of sorted files.
+			// non-decreasing key order. If a traverser ever emits an out-of-order key, the
+			// two-pointer merge can silently mis-classify objects (missed transfers, or — for
+			// a mirror sync — extra deletes of destination objects). For the allow-listed,
+			// service-sorted endpoints this must never happen, so treat it as a HARD FAILURE
+			// rather than a warning: abort the traversal by returning an error. It propagates
+			// via errCh and is surfaced to the orchestrator as a mergeJoinTraversalError,
+			// failing this directory (and the job) instead of producing incorrect sync results.
 			curKey := mergeJoinChildKey(obj)
 			if count > 1 && curKey < prevKey {
-				mergeJoinSyncOneDirLog(common.LogError,
-					fmt.Sprintf("ORDER VIOLATION in %s: object #%d key=%q < previous key=%q — listing is not lexicographically sorted; merge-join results may be INCORRECT for this directory",
-						label, count, curKey, prevKey), true)
+				orderErr := fmt.Errorf(
+					"ORDER VIOLATION in %s: object #%d key=%q < previous key=%q — listing is not lexicographically sorted; aborting merge-join to avoid incorrect sync results",
+					label, count, curKey, prevKey)
+				mergeJoinSyncOneDirLog(common.LogError, orderErr.Error(), true)
+				return orderErr
 			}
 			prevKey = curKey
 			mergeJoinTraceLog("%s LIST #%d relPath=%q entity=%s size=%d lmt=%s",
@@ -240,6 +246,42 @@ func mergeJoinRecv(ch <-chan StoredObject) (StoredObject, bool) {
 	}
 	obj, ok := <-ch
 	return obj, ok
+}
+
+// mergeJoinPollErrs performs a NON-BLOCKING check of both traverser error channels and,
+// if either side has already reported a failure, returns it as a tagged
+// mergeJoinTraversalError (source vs destination). It is called at the top of the merge
+// and drain loops so the merge-join short-circuits the moment a listing error is visible,
+// instead of acting on a truncated stream.
+//
+// This is race-free because traverserToChannel sends on errCh BEFORE it closes objCh
+// (defer order). So the instant a side's object channel is observed closed (its drain loop
+// is entered), any error is already buffered on that side's errCh and this poll will see
+// it. Most importantly, this prevents DELETING the remaining destination objects for a
+// mirror sync when the SOURCE listing was truncated by an error (e.g. token expiry or
+// sustained throttling mid-listing).
+func mergeJoinPollErrs(cca *cookedSyncCmdArgs, srcErrCh, dstErrCh <-chan error) error {
+	select {
+	case e, ok := <-srcErrCh:
+		if ok && e != nil {
+			return &mergeJoinTraversalError{
+				location: cca.fromTo.From(),
+				err:      fmt.Errorf("source traversal error during merge-join: %w", e),
+			}
+		}
+	default:
+	}
+	select {
+	case e, ok := <-dstErrCh:
+		if ok && e != nil {
+			return &mergeJoinTraversalError{
+				location: cca.fromTo.To(),
+				err:      fmt.Errorf("destination traversal error during merge-join: %w", e),
+			}
+		}
+	default:
+	}
+	return nil
 }
 
 // mergeJoinSyncDirChannelBased performs a streaming merge-join using traverser-based
@@ -301,6 +343,11 @@ func mergeJoinSyncDirChannelBased(
 	dstObj, dstOk := dstNext()
 
 	for srcOk && dstOk {
+		// Short-circuit if either traverser has already reported an error, so we never
+		// act on a truncated stream (see mergeJoinPollErrs).
+		if e := mergeJoinPollErrs(cca, srcErrCh, dstErrCh); e != nil {
+			return subDirs, e
+		}
 		srcOrigPath := srcObj.relativePath
 		srcPath := buildChildPath(dir, srcObj.relativePath, srcObj.entityType == common.EEntityType.Folder())
 		dstPath := buildChildPath(dir, dstObj.relativePath, dstObj.entityType == common.EEntityType.Folder())
@@ -340,6 +387,10 @@ func mergeJoinSyncDirChannelBased(
 
 	// Drain remaining source-only objects
 	for srcOk {
+		// A destination listing error must not cause us to over-transfer source objects.
+		if e := mergeJoinPollErrs(cca, srcErrCh, dstErrCh); e != nil {
+			return subDirs, e
+		}
 		srcOrigPath := srcObj.relativePath
 		srcObj.relativePath = buildChildPath(dir, srcObj.relativePath, srcObj.entityType == common.EEntityType.Folder())
 		mergeJoinTraceLog("DRAIN-SRC dir=%q SRC=%q(%s) (dest exhausted) => source-only",
@@ -353,6 +404,13 @@ func mergeJoinSyncDirChannelBased(
 
 	// Drain remaining dest-only objects
 	for dstOk {
+		// CRITICAL for mirror sync: if the SOURCE listing failed, the destination objects
+		// still queued here are NOT genuinely source-absent — deleting them would be data
+		// loss. mergeJoinPollErrs reliably sees the source error here because source's objCh
+		// is already closed (which happens-after its errCh send), so we abort before deleting.
+		if e := mergeJoinPollErrs(cca, srcErrCh, dstErrCh); e != nil {
+			return subDirs, e
+		}
 		dstObj.relativePath = buildChildPath(dir, dstObj.relativePath, dstObj.entityType == common.EEntityType.Folder())
 		mergeJoinTraceLog("DRAIN-DST dir=%q DST=%q(%s) (source exhausted) => dest-only",
 			dir, dstObj.relativePath, mergeJoinEntityLabel(dstObj))
@@ -392,6 +450,25 @@ var streamingMergeJoinEnabled = func() bool {
 	default:
 		return false
 	}
+}()
+
+// mergeJoinDefaultParallelTraversers is the default directory-crawl parallelism used ONLY for
+// streaming merge-join jobs. It is intentionally separate from (and lower than) the indexMap
+// path's parallelism because the merge-join additionally lists source and destination
+// concurrently within each directory, so fewer directories in flight keeps the live working
+// set (and GC pressure) bounded.
+const mergeJoinDefaultParallelTraversers int32 = 32
+
+// mergeJoinParallelTraversers is the directory-crawl parallelism for streaming merge-join jobs.
+// Override with SYNC_MJ_PARALLEL_TRAVERSERS (positive integer). The indexMap sync path is
+// unaffected and keeps its own parallelism (orchestratorOptions.parallelTraversers).
+var mergeJoinParallelTraversers = func() int32 {
+	if v := strings.TrimSpace(os.Getenv("SYNC_MJ_PARALLEL_TRAVERSERS")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return int32(n)
+		}
+	}
+	return mergeJoinDefaultParallelTraversers
 }()
 
 // useStreamingMergeJoin reports whether the streaming merge-join should be used for

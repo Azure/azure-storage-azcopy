@@ -75,6 +75,11 @@ type blobTraverser struct {
 	// in the traversal process. If true, prefixes will be enqueued as well even if location
 	// is not folder aware.
 	includeDirectoryOrPrefix bool
+
+	// emitSorted, when true, makes parallelList buffer each listing page and emit it in
+	// lexicographic order (folders and files merged). Required by the streaming merge-join sync
+	// path. The indexMap path leaves this false, since its ordering is irrelevant.
+	emitSorted bool
 }
 
 // ErrorFileInfo holds information about files and folders that failed enumeration.
@@ -452,8 +457,9 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 		}
 		var dirBuf, fileBuf []pageEntry
 		emit := func(obj StoredObject, err error) {
-			if !t.includeDirectoryOrPrefix {
-				// Non-orchestrator (recursive) path: order does not matter, emit directly.
+			if !t.emitSorted {
+				// Not the streaming merge-join (indexMap / recursive / non-orchestrator paths):
+				// order does not matter, so emit directly without buffering.
 				enqueueOutput(obj, err)
 				return
 			}
@@ -601,8 +607,8 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 
 			// Emit this page in globally lexicographic order by merging the two already-sorted runs
 			// (sub-dirs and files) — no comparison sort, since the listing API already returns each
-			// run in order. For the recursive path emit() forwarded directly, so both runs are empty.
-			if t.includeDirectoryOrPrefix {
+			// run in order. For the non-sorted paths emit() forwarded directly, so both runs are empty.
+			if t.emitSorted {
 				di, fi := 0, 0
 				for di < len(dirBuf) || fi < len(fileBuf) {
 					if fi >= len(fileBuf) || (di < len(dirBuf) && dirBuf[di].key < fileBuf[fi].key) {
@@ -808,6 +814,7 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		destResourceType:            opts.DestResourceType,
 		errorChannel:                opts.ErrorChannel,
 		isSyncDestination:          opts.IsSyncDestination,
+		emitSorted:                  opts.EmitSorted,
 	}
 
 	t.includeDirectoryOrPrefix = UseSyncOrchestrator && !t.recursive
