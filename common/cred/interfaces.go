@@ -25,6 +25,10 @@ type Manager interface {
 	// Read-only Keyrings are skipped. Returns true if any token was deleted.
 	DeleteCredentials(nickname string) bool
 
+	// ProbeToken returns the metadata for the credential matching the nickname.
+	// Returns the header and true if found, or empty header and false if not found.
+	ProbeToken(nickname string) (TokenHeader, bool)
+
 	// GetKeyrings returns the list of keyrings configured on the manager, for direct interactions.
 	// First returned, first searched. First returned, first used to store tokens.
 	// The returned list should not be modified.

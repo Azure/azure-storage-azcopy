@@ -43,7 +43,7 @@ func init() {
 		},
 	}
 
-	AddTargetCredFlags(logoutCmd)
+	AddTargetCredFlags(logoutCmd, "nickname")
 	rootCmd.AddCommand(logoutCmd)
 }
 
