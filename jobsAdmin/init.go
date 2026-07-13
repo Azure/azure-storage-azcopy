@@ -396,6 +396,7 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 
 			// check for all completed transfer to calculate the progress percentage at the end
 			isHardlink := jppt.EntityType == common.EEntityType.Hardlink()
+			isSymlink := jppt.EntityType == common.EEntityType.Symlink()
 
 			switch jppt.TransferStatus() {
 			case common.ETransferStatus.NotStarted(),
@@ -410,6 +411,9 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 				if isHardlink {
 					js.HardlinksCompleted++
 				}
+				if isSymlink {
+					js.SymlinksCompleted++
+				}
 				js.TotalBytesTransferred += uint64(jppt.SourceSize)
 				js.TotalBytesExpected += uint64(jppt.SourceSize)
 			case common.ETransferStatus.Failed(),
@@ -418,6 +422,9 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 				js.TransfersFailed++
 				if isHardlink {
 					js.HardlinksFailed++
+				}
+				if isSymlink {
+					js.SymlinksFailed++
 				}
 				// getting the source and destination for failed transfer at position - index
 				src, dst, isFolder := jpp.TransferSrcDstStrings(t)
@@ -428,6 +435,7 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 						Dst:                dst,
 						IsFolderProperties: isFolder,
 						IsHardlink:         isHardlink,
+						IsSymlink:          isSymlink,
 						TransferStatus:     common.ETransferStatus.Failed(),
 						ErrorCode:          jppt.ErrorCode()}) // TODO: Optimize
 			case common.ETransferStatus.SkippedEntityAlreadyExists(),
@@ -435,6 +443,9 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 				js.TransfersSkipped++
 				if isHardlink {
 					js.HardlinksSkipped++
+				}
+				if isSymlink {
+					js.SymlinksSkipped++
 				}
 				// getting the source and destination for skipped transfer at position - index
 				src, dst, isFolder := jpp.TransferSrcDstStrings(t)
@@ -444,6 +455,7 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 						Dst:                dst,
 						IsFolderProperties: isFolder,
 						IsHardlink:         isHardlink,
+						IsSymlink:          isSymlink,
 						TransferStatus:     jppt.TransferStatus(),
 					})
 			}

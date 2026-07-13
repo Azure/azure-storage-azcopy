@@ -303,6 +303,9 @@ type ListJobSummaryResponse struct {
 	HardlinksCompleted      uint32 `json:",string"` // Hardlinks completed count is only applicable for NFS transfers
 	HardlinksFailed         uint32 `json:",string"` // Hardlinks failed count is only applicable for NFS transfers
 	HardlinksSkipped        uint32 `json:",string"` // Hardlinks skipped count is only applicable for NFS transfers
+	SymlinksCompleted       uint32 `json:",string"` // Symlink transfers completed; tracked separately so File counts exclude symlinks
+	SymlinksFailed          uint32 `json:",string"` // Symlink transfers failed; tracked separately so File counts exclude symlinks
+	SymlinksSkipped         uint32 `json:",string"` // Symlink transfers skipped; tracked separately so File counts exclude symlinks
 	SkippedSpecialFileCount uint32 `json:",string"`
 }
 
@@ -331,6 +334,7 @@ type TransferDetail struct {
 	Dst                string
 	IsFolderProperties bool
 	IsHardlink         bool
+	IsSymlink          bool
 	TransferStatus     TransferStatus
 	TransferSize       uint64
 	ErrorCode          int32 `json:",string"`

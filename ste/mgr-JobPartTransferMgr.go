@@ -1014,6 +1014,7 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 		Dst:                jptm.Info().Destination,
 		IsFolderProperties: jptm.Info().IsFolderPropertiesTransfer(),
 		IsHardlink:         jptm.Info().EntityType == common.EEntityType.Hardlink(),
+		IsSymlink:          jptm.Info().EntityType == common.EEntityType.Symlink(),
 		TransferStatus:     jptm.jobPartPlanTransfer.TransferStatus(),
 		TransferSize:       uint64(jptm.Info().SourceSize),
 		ErrorCode:          jptm.ErrorCode(),

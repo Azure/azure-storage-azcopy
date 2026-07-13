@@ -157,10 +157,13 @@ Number of Symlink Transfers: %v
 Total Number of Transfers: %v
 Number of File Transfers Completed: %v
 Number of Folder Transfers Completed: %v
+Number of Symlink Transfers Completed: %v
 Number of File Transfers Failed: %v
 Number of Folder Transfers Failed: %v
+Number of Symlink Transfers Failed: %v
 Number of File Transfers Skipped: %v
 Number of Folder Transfers Skipped: %v
+Number of Symlink Transfers Skipped: %v
 Number of Hardlinks Completed: %v
 Number of Hardlinks Failed: %v
 Number of Hardlinks Skipped: %v
@@ -173,12 +176,15 @@ Final Job Status: %v
 			summary.FolderPropertyTransfers,
 			summary.SymlinkTransfers,
 			summary.TotalTransfers,
-			summary.TransfersCompleted-summary.FoldersCompleted-summary.HardlinksCompleted,
+			summary.TransfersCompleted-summary.FoldersCompleted-summary.HardlinksCompleted-summary.SymlinksCompleted,
 			summary.FoldersCompleted,
-			summary.TransfersFailed-summary.FoldersFailed-summary.HardlinksFailed,
+			summary.SymlinksCompleted,
+			summary.TransfersFailed-summary.FoldersFailed-summary.HardlinksFailed-summary.SymlinksFailed,
 			summary.FoldersFailed,
-			summary.TransfersSkipped-summary.FoldersSkipped-summary.HardlinksSkipped,
+			summary.SymlinksFailed,
+			summary.TransfersSkipped-summary.FoldersSkipped-summary.HardlinksSkipped-summary.SymlinksSkipped,
 			summary.FoldersSkipped,
+			summary.SymlinksSkipped,
 			summary.HardlinksCompleted,
 			summary.HardlinksFailed,
 			summary.HardlinksSkipped,

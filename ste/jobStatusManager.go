@@ -157,6 +157,9 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 				if msg.IsHardlink {
 					js.HardlinksCompleted++
 				}
+				if msg.IsSymlink {
+					js.SymlinksCompleted++
+				}
 				js.TransfersCompleted++
 				js.TotalBytesTransferred += msg.TransferSize
 			case common.ETransferStatus.Failed(),
@@ -168,6 +171,9 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 				if msg.IsHardlink {
 					js.HardlinksFailed++
 				}
+				if msg.IsSymlink {
+					js.SymlinksFailed++
+				}
 				js.TransfersFailed++
 				js.FailedTransfers = append(js.FailedTransfers, msg)
 			case common.ETransferStatus.SkippedEntityAlreadyExists(),
@@ -177,6 +183,9 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 				}
 				if msg.IsHardlink {
 					js.HardlinksSkipped++
+				}
+				if msg.IsSymlink {
+					js.SymlinksSkipped++
 				}
 				js.TransfersSkipped++
 				js.SkippedTransfers = append(js.SkippedTransfers, msg)
