@@ -204,9 +204,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 		}
 	}
 
-	// Check if this is GCS accessed via S3-compatible API (using HMAC keys)
-	// GCS has different behavior for directory markers compared to AWS S3
-	isGCSviaS3 := t.s3URLParts.IsGoogleCloudStorage()
+	providerKind := t.s3URLParts.ProviderKind()
 
 	// Append a trailing slash if it is missing.
 	if !strings.HasSuffix(t.s3URLParts.ObjectKey, "/") && t.s3URLParts.ObjectKey != "" {
@@ -216,6 +214,46 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 	// Ignore *s in URLs and treat them as normal characters
 	// This is because * is both a valid URL path character and a valid portion of an object key in S3.
 	searchPrefix := t.s3URLParts.ObjectKey
+
+	// The streaming merge-join (sync orchestrator) needs each directory level emitted in
+	// lexicographic order. minio's ListObjects yields a page's objects (Contents) before its
+	// sub-dirs (CommonPrefixes), so the raw stream is files-then-dirs per page — not globally
+	// sorted. Collect the level's dirs and files into two runs (each stays sorted: S3 returns
+	// pages in sorted order and each category within a page is sorted) and two-pointer merge
+	// them at the end. Merge key matches buildChildPath: folder = "<name>/", file = "<name>".
+	// Gated to the orchestrator path; the recursive path emits directly.
+	// NOTE: this buffers one directory level. A future memory optimization is a per-page merge
+	// via the minio Core ListObjectsV2 API (mirrors the blob traverser's per-page merge).
+	type s3Entry struct {
+		obj StoredObject
+		key string
+	}
+	var dirEntries, fileEntries []s3Entry
+	processOne := func(so StoredObject) error {
+		e := processIfPassedFilters(filters, so, processor)
+		_, e = getProcessingError(e)
+		if e != nil {
+			t.writeToS3ErrorChannel(ErrorS3Info{
+				S3Name:             so.name,
+				S3Path:             t.s3URLParts.ObjectKey,
+				ErrorMsg:           e,
+				S3LastModifiedTime: so.lastModifiedTime,
+				S3Size:             so.size,
+			})
+		}
+		return e
+	}
+	emitS3 := func(so StoredObject) error {
+		if !t.includeDirectoryOrPrefix {
+			return processOne(so)
+		}
+		if so.entityType == common.EEntityType.Folder() {
+			dirEntries = append(dirEntries, s3Entry{obj: so, key: strings.TrimSuffix(so.relativePath, common.AZCOPY_PATH_SEPARATOR_STRING) + common.AZCOPY_PATH_SEPARATOR_STRING})
+		} else {
+			fileEntries = append(fileEntries, s3Entry{obj: so, key: so.relativePath})
+		}
+		return nil
+	}
 
 	// It's a bucket or virtual directory.
 	listObjectOptions := minio.ListObjectsOptions{Prefix: searchPrefix, Recursive: t.recursive}
@@ -243,13 +281,19 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			return fmt.Errorf("cannot list objects, %v", objectInfo.Err)
 		}
 
-		// Directory detection logic differs between GCS and AWS S3:
-		// - GCS via S3 API: Use enhanced checks (empty StorageClass + trailing slash or zero size)
-		// - AWS S3: Use standard check (empty StorageClass only)
+		// Directory detection logic differs across providers:
+		// - Generic S3-compatible/on-prem: many providers don't set StorageClass for regular objects.
+		//   Rely on explicit directory-marker shape only (trailing slash + zero size).
+		// - GCS via S3 API: keep enhanced checks to handle its marker behavior.
+		// - AWS S3: keep legacy StorageClass-based behavior.
 		var isPotentialDirectory bool
-		if isGCSviaS3 {
+		switch providerKind {
+		case common.S3ProviderOnPrem:
+			// Generic S3-compatible/on-prem: avoid StorageClass heuristics.
+			isPotentialDirectory = strings.HasSuffix(objectInfo.Key, "/") && objectInfo.Size == 0
+		case common.S3ProviderGoogle:
 			isPotentialDirectory = objectInfo.StorageClass == "" && (strings.HasSuffix(objectInfo.Key, "/") || objectInfo.Size == 0)
-		} else {
+		default:
 			isPotentialDirectory = objectInfo.StorageClass == ""
 		}
 
@@ -272,9 +316,12 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 
 		// For GCS via S3 API, use stricter directory detection to avoid false positives
 		var isActualDirectory bool
-		if isGCSviaS3 {
+		switch providerKind {
+		case common.S3ProviderOnPrem:
+			isActualDirectory = strings.HasSuffix(objectInfo.Key, "/") && objectInfo.Size == 0
+		case common.S3ProviderGoogle:
 			isActualDirectory = isPotentialDirectory && objectInfo.Size == 0 && strings.HasSuffix(objectInfo.Key, "/")
-		} else {
+		default:
 			isActualDirectory = objectInfo.StorageClass == ""
 		}
 
@@ -300,7 +347,6 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 				// XDM: What do we do for SyncOrchrestrator?
 				continue
 			}
-
 			// default to empty props, but retrieve real ones if required
 			oie := common.ObjectInfoExtension{ObjectInfo: minio.ObjectInfo{}}
 			if t.getProperties {
@@ -330,19 +376,27 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 				t.s3URLParts.BucketName)
 		}
 
-		err = processIfPassedFilters(filters,
-			storedObject,
-			processor)
-		_, err = getProcessingError(err)
-		if err != nil {
-			t.writeToS3ErrorChannel(ErrorS3Info{
-				S3Name:             objectName,
-				S3Path:             t.s3URLParts.ObjectKey,
-				ErrorMsg:           err,
-				S3LastModifiedTime: storedObject.lastModifiedTime,
-				S3Size:             storedObject.size,
-			})
+		if err = emitS3(storedObject); err != nil {
 			return
+		}
+	}
+
+	// Flush the buffered level in globally sorted order by merging the two sorted runs
+	// (sub-dirs and files). No-op for the recursive path, which emitted directly above.
+	if t.includeDirectoryOrPrefix {
+		di, fi := 0, 0
+		for di < len(dirEntries) || fi < len(fileEntries) {
+			if fi >= len(fileEntries) || (di < len(dirEntries) && dirEntries[di].key < fileEntries[fi].key) {
+				if err = processOne(dirEntries[di].obj); err != nil {
+					return
+				}
+				di++
+			} else {
+				if err = processOne(fileEntries[fi].obj); err != nil {
+					return
+				}
+				fi++
+			}
 		}
 	}
 	return

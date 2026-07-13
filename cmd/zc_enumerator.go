@@ -415,6 +415,16 @@ type InitResourceTraverserOptions struct {
 	HardlinkHandling  common.HardlinkHandlingType
 
 	IncrementNotTransferred enumerationCounterFunc
+
+	// IsSyncDestination indicates this traverser is enumerating the destination side of a sync job.
+	// Used to return specific not-found errors that the sync orchestrator handles gracefully.
+	IsSyncDestination bool
+
+	// EmitSorted requests that each directory level be emitted in lexicographic order (folders
+	// and files merged into a single sorted stream). Required by the streaming merge-join sync
+	// path, which consumes the source and destination streams with a two-pointer merge. Left
+	// false for the indexMap sync path (order-independent) and all other traversals.
+	EmitSorted bool
 }
 
 // XDM: These templates are used to create directory level non-recursive traversers

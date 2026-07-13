@@ -149,6 +149,8 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 			}
 		},
 		ErrorChannel: enumeratorOptions.ErrorChannel,
+		// Only the streaming merge-join needs sorted per-directory emission; the indexMap path is order-independent.
+		EmitSorted: useStreamingMergeJoin(cca),
 	}
 	srcTraverserTemplate := ResourceTraverserTemplate{
 		location: cca.fromTo.From(),
@@ -192,6 +194,9 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		PreserveBlobTags:        cca.s2sPreserveBlobTags,
 		HardlinkHandling:        common.EHardlinkHandlingType.Follow(),
 		ErrorChannel:            enumeratorOptions.ErrorChannel,
+		IsSyncDestination:       true,
+		// Only the streaming merge-join needs sorted per-directory emission; the indexMap path is order-independent.
+		EmitSorted: useStreamingMergeJoin(cca),
 	}
 	dstTraverserTemplate := ResourceTraverserTemplate{
 		location: cca.fromTo.To(),
