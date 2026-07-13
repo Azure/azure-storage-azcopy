@@ -348,6 +348,13 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 	destInodeFirstSrc := make(map[string]string)
 	destGroupIsMultiSource := make(map[string]bool)
 
+	// destGroupHasForeignMember: dest inode → true when at least one member of that
+	// dest hardlink group is NOT a hardlink in the source (it was deleted, or
+	// converted to a regular file). Such a group is not a clean subset of a single
+	// source group, so a shared member whose source anchor is absent may be linked
+	// to the wrong group and needs re-pointing (needsRecreate condition (d2)).
+	destGroupHasForeignMember := make(map[string]bool)
+
 	for _, obj := range f.destPendingHardlinkObjects.IndexMap {
 		if obj.Inode == "" {
 			continue
@@ -358,6 +365,11 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 		}
 		srcInode := f.srcPathToInode[srcKey]
 		if srcInode == "" {
+			// This dest member has no source hardlink counterpart, so its dest
+			// group only partially overlaps the source. Flag the group so a shared
+			// member whose source anchor is absent can still be detected as needing
+			// a re-point (overlap-merge condition (d2)).
+			destGroupHasForeignMember[obj.Inode] = true
 			continue // not present in source; will be deleted below
 		}
 		if first, seen := srcInodeFirstDest[srcInode]; !seen {
@@ -475,15 +487,20 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 		//       group → true re-target or group split with a live anchor.
 		//   (b) Source group spans multiple dest inodes → group merge, must unify.
 		//   (c) Dest group spans multiple source inodes → group split, must break up.
-		// 	 (d) srcAnchor is NOT in this member's hardlink group at the destination
-		//		 (either it is absent or in a different group) The member is linked to the
-		//		 wrong group and must be re-pointed. This handles merges whose groups overlap
-		//		 on a single shared member.
-		//		 This is the case (b)/(c) can't see:
-		//		 when source group {A,B} and destination group {B,C} overlap on only the
-		//		 single shared file B, the source-only member A and the
-		//		 destination-only member C are invisible to the multi-inode
-		//		 counters, so without (d) B would be wrongly left linked to C
+		// 	 (d) The member is linked to the WRONG group at the destination and must
+		//		 be re-pointed. Split into two sub-cases:
+		//		 (d1) srcAnchor exists at the destination but in a DIFFERENT dest inode
+		//		      group → a real retarget.
+		//		 (d2) srcAnchor is ABSENT from the destination AND this member's dest
+		//		      group contains a foreign member (a dest hardlink with no source
+		//		      hardlink counterpart) → overlap merge.
+		//		 (d2) covers what (b)/(c) can't see: when source group {A,B} and
+		//		 destination group {B,C} overlap on only the single shared file B, the
+		//		 source-only member A and the destination-only member C are invisible to
+		//		 the multi-inode counters, so without (d2) B would be wrongly left linked
+		//		 to C. Requiring a foreign member keeps (d2) from over-firing when a new
+		//		 lex-smaller anchor is merely added to an otherwise-intact group
+		//		 (srcAnchor absent, no foreign member → skip).
 		//
 		// Skip (no recreate) when srcAnchor ≠ dstAnchor but none of (a)-(c) apply:
 		//   • dstAnchor was deleted from source (srcInode="") AND group is intact
@@ -564,7 +581,8 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 				needsRecreate = (dstAnchorInSrc != "" && dstAnchorInSrc != sourceObjectInMap.Inode) || // (a)
 					srcInodeIsMultiGroup[sourceObjectInMap.Inode] || // (b)
 					destGroupIsMultiSource[destHardlinkObj.Inode] || // (c)
-					srcAnchorDstInode != destHardlinkObj.Inode // (d)
+					(srcAnchorDstInode != "" && srcAnchorDstInode != destHardlinkObj.Inode) || // (d1) retarget: src anchor lives in a different dest group
+					(srcAnchorDstInode == "" && destGroupHasForeignMember[destHardlinkObj.Inode]) // (d2) overlap merge: src anchor absent AND dest group has a foreign member
 			}
 		}
 
