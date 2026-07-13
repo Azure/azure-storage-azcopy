@@ -3640,3 +3640,187 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_HardlinkBecomesFile_NoDeleteDe
 
 	_ = stdOut
 }
+
+// Source: (local)
+//	A.txt  (regular file, nlink=2)
+//	B.txt  (hardlink -> A.txt)
+//
+// Destination (before sync):
+//	A.txt  (regular file)
+//
+// Expected Destination after sync:
+//	A.txt  (regular file, nlink=2)
+//	B.txt  (hardlink -> A.txt)
+
+// Validates that sync creates the missing non-anchor member of a hardlink
+// group as a hardlink (CreateHardLink API), not as an independent inode.
+func (s *FilesNFSTestSuite) Scenario_HardlinkSync_HardlinkCreatedOnDestination(svm *ScenarioVariationManager) {
+	if runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, common.EFromTo.LocalFileNFS())
+	defer cleanupHardlinkSyncForFromTo(svm, common.EFromTo.LocalFileNFS(), srcContainer, dstContainer, rootDir)
+
+	anchorName := rootDir + "/A.txt"
+	linkName := rootDir + "/B.txt"
+
+	// ── Destination (before sync): anchor only, as a plain regular file ──────
+	dstDir := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+	dstDir.Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Folder()})
+
+	dstAnchor := dstContainer.GetObject(svm, anchorName, common.EEntityType.File())
+	dstAnchor.Create(svm, NewRandomObjectContentContainer(1), ObjectProperties{})
+
+	setOldLMT(svm, dstAnchor, dstContainer)
+
+	if !svm.Dryrun() {
+		time.Sleep(5 * time.Second)
+	}
+
+	// ── Source: A.txt and B.txt share one inode ──────────────────────
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName:       pointerTo(rootDir),
+		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()},
+	})
+
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName: pointerTo(anchorName),
+		Body:       NewRandomObjectContentContainer(1),
+		ObjectProperties: ObjectProperties{
+			EntityType: common.EEntityType.File(),
+		},
+	})
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName: pointerTo(linkName),
+		ObjectProperties: ObjectProperties{
+			EntityType:         common.EEntityType.Hardlink(),
+			HardLinkedFileName: anchorName,
+		},
+	})
+	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+	stdOut := runHardlinkSyncForFromTo(svm, srcDirObj, dstDir, common.EFromTo.LocalFileNFS(), true)
+
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			anchorName: ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+			},
+			linkName: ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType:         common.EEntityType.Hardlink(),
+					HardLinkedFileName: anchorName,
+				},
+			},
+		},
+	}, ValidateResourceOptions{
+		fromTo:           common.EFromTo.LocalFileNFS(),
+		hardlinkHandling: common.PreserveHardlinkHandlingType,
+	})
+	ValidateHardlinksTransferCount(svm, stdOut, 2)
+}
+
+// Scenario: PartialOverlapMerge — src: A-B  dst: B-C
+//
+// Source has a hardlink group {A,B}; destination has a different group {B,C}
+// that only partially overlaps. Sync must merge/re-point so B links to A and
+// delete the extra dest member C.
+//
+// Source:
+//
+//	A.txt  (anchor of A-B group)
+//	B.txt  (hardlink → A)
+//
+// Destination (before sync):
+//
+//	B.txt  (hardlink ↔ C)
+//	C.txt  (hardlink ↔ B)
+//
+// Expected (LocalFileNFS, --delete-destination=true):
+//
+//	A.txt  (File, data carrier)
+//	B.txt  (Hardlink → A)
+//	C.txt  absent
+func (s *FilesNFSTestSuite) Scenario_HardlinkSync_PartialOverlapMerge(svm *ScenarioVariationManager) {
+	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
+		"|fromTo=LocalFileNFS": common.EFromTo.LocalFileNFS(),
+	})
+	if runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
+	nameA := rootDir + "/A.txt"
+	nameB := rootDir + "/B.txt"
+	nameC := rootDir + "/C.txt"
+
+	// Use a shared LMT so source and dest is testing the hardlink restructuring and not
+	// potential overwrites from differing LMT
+	sharedLMT := time.Now().Add(-5 * time.Minute).Truncate(time.Second)
+
+	// ── Destination: B and C share an inode
+	dstDir := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+	dstDir.Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Folder()})
+
+	dstC := dstContainer.GetObject(svm, nameC, common.EEntityType.File())
+	dstC.Create(svm, NewRandomObjectContentContainer(1), ObjectProperties{})
+
+	setSharedLMTIfNFS(svm, dstC, dstContainer, sharedLMT)
+	dstB := dstContainer.GetObject(svm, nameB, common.EEntityType.Hardlink())
+
+	dstB.Create(svm, nil, ObjectProperties{
+		EntityType:         common.EEntityType.Hardlink(),
+		HardLinkedFileName: nameC,
+	})
+	if !svm.Dryrun() {
+		time.Sleep(5 * time.Second)
+	}
+	// ── Source: A and B share an inode
+	srcBodyA := NewRandomObjectContentContainer(1)
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName:       pointerTo(rootDir),
+		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()},
+	})
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName: pointerTo(nameA),
+		Body:       srcBodyA,
+		ObjectProperties: ObjectProperties{
+			EntityType:        common.EEntityType.File(),
+			FileNFSProperties: nfsPropsIfNFS(srcContainer, sharedLMT),
+		},
+	})
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName: pointerTo(nameB),
+		ObjectProperties: ObjectProperties{
+			EntityType:         common.EEntityType.Hardlink(),
+			HardLinkedFileName: nameA,
+		},
+	})
+	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+	stdOut := runHardlinkSyncForFromTo(svm, srcDirObj, dstDir, fromTo, true)
+
+	// A is the data carrier; B must be re-pointed to A; C must be deleted.
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			nameA: ResourceDefinitionObject{
+				Body:             srcBodyA,
+				ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+			},
+			nameB: ResourceDefinitionObject{
+				Body: srcBodyA,
+				ObjectProperties: ObjectProperties{
+					EntityType:         common.EEntityType.Hardlink(),
+					HardLinkedFileName: nameA,
+				},
+			},
+			nameC: ResourceDefinitionObject{
+				ObjectShouldExist: pointerTo(false),
+			},
+		},
+	}, ValidateResourceOptions{fromTo: fromTo,
+		validateObjectContent: true,
+		hardlinkHandling:      common.PreserveHardlinkHandlingType})
+
+	ValidateHardlinksTransferCount(svm, stdOut, 2)
+}

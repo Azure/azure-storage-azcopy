@@ -1456,7 +1456,8 @@ func init() {
 
 	// filters change which files get transferred
 	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false,
-		"False by default. Follow symbolic links when uploading from local file system.")
+		"False by default. Follow symbolic links when uploading from local file system.\n"+
+			"If neither --follow-symlinks nor --preserve-symlinks is set, symlinks are skipped.")
 
 	cpCmd.PersistentFlags().StringVar(&raw.includeBefore, common.IncludeBeforeFlagName, "",
 		"Include only those files were modified before or on the given date/time. \n "+

@@ -288,6 +288,44 @@ func (f *syncDestinationComparator) normalizeHardlinkTarget(sourceObj *traverser
 	}
 }
 
+// NormalizeAndSchedule wraps an object scheduler.
+// This is to make sure leftover source objects
+// (those with no destination counterpart, scheduled directly
+// from indexer.Traverser) get the same TargetHardlinkFile
+// normalization that ProcessIfNecessary applies to matched source
+// objects.
+//
+// Without this, a source hardlink whose firstSeen-anchor
+// (TargetHardlinkFile=="") and InodeStore-anchor disagree is routed
+// into PendingTransfers as a regular data carrier rather than into
+// PendingHardlinksTransfers, so CreateHardlink never runs.
+
+/*
+Example sync --hardlinks=preserve:
+Before run:
+
+	Source: A + B (hardlink group)
+	Dest: A only
+
+After run:
+
+	Dest: A + B (CreateHardlink called on B)
+*/
+func (f *syncDestinationComparator) NormalizeAndSchedule(
+	scheduler traverser.ObjectProcessor,
+) traverser.ObjectProcessor {
+	return func(o traverser.StoredObject) error {
+		if f.srcPathToInode == nil {
+			f.srcPathToInode = buildSrcPathToInode(f.sourceIndex.IndexMap)
+		}
+		if o.EntityType == common.EEntityType.Hardlink() &&
+			f.inodeStore != nil && o.Inode != "" {
+			f.normalizeHardlinkTarget(&o)
+		}
+		return scheduler(o)
+	}
+}
+
 func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 
 	// Build two flat lookup tables to detect structural mismatches between
@@ -310,6 +348,13 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 	destInodeFirstSrc := make(map[string]string)
 	destGroupIsMultiSource := make(map[string]bool)
 
+	// destGroupHasForeignMember: dest inode → true when at least one member of that
+	// dest hardlink group is NOT a hardlink in the source (it was deleted, or
+	// converted to a regular file). Such a group is not a clean subset of a single
+	// source group, so a shared member whose source anchor is absent may be linked
+	// to the wrong group and needs re-pointing (needsRecreate condition (d2)).
+	destGroupHasForeignMember := make(map[string]bool)
+
 	for _, obj := range f.destPendingHardlinkObjects.IndexMap {
 		if obj.Inode == "" {
 			continue
@@ -320,6 +365,11 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 		}
 		srcInode := f.srcPathToInode[srcKey]
 		if srcInode == "" {
+			// This dest member has no source hardlink counterpart, so its dest
+			// group only partially overlaps the source. Flag the group so a shared
+			// member whose source anchor is absent can still be detected as needing
+			// a re-point (overlap-merge condition (d2)).
+			destGroupHasForeignMember[obj.Inode] = true
 			continue // not present in source; will be deleted below
 		}
 		if first, seen := srcInodeFirstDest[srcInode]; !seen {
@@ -374,6 +424,24 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 		}
 	}
 
+	// destPathToInode maps each pending destination hardlink path to its destination inode.
+	// This is used to determine where the srcAnchor is in the same group as a shared member at the destination
+	// It lets us ask per member, "At the destination, is the source anchor already in the same hardlink group as
+	// this member?"
+	// (needsRecreate condition (d) )
+	destPathToInode := make(map[string]string, len(f.destPendingHardlinkObjects.IndexMap))
+	for _, obj := range f.destPendingHardlinkObjects.IndexMap {
+		if obj.Inode == "" {
+			continue
+		}
+		key := obj.RelativePath
+		if f.sourceIndex.IsDestinationCaseInsensitive {
+			key = strings.ToLower(key)
+		}
+
+		destPathToInode[key] = obj.Inode
+	}
+
 	for _, destHardlinkObj := range f.destPendingHardlinkObjects.IndexMap {
 
 		// Normalize the key upfront for case-insensitive destinations so the
@@ -419,6 +487,20 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 		//       group → true re-target or group split with a live anchor.
 		//   (b) Source group spans multiple dest inodes → group merge, must unify.
 		//   (c) Dest group spans multiple source inodes → group split, must break up.
+		// 	 (d) The member is linked to the WRONG group at the destination and must
+		//		 be re-pointed. Split into two sub-cases:
+		//		 (d1) srcAnchor exists at the destination but in a DIFFERENT dest inode
+		//		      group → a real retarget.
+		//		 (d2) srcAnchor is ABSENT from the destination AND this member's dest
+		//		      group contains a foreign member (a dest hardlink with no source
+		//		      hardlink counterpart) → overlap merge.
+		//		 (d2) covers what (b)/(c) can't see: when source group {A,B} and
+		//		 destination group {B,C} overlap on only the single shared file B, the
+		//		 source-only member A and the destination-only member C are invisible to
+		//		 the multi-inode counters, so without (d2) B would be wrongly left linked
+		//		 to C. Requiring a foreign member keeps (d2) from over-firing when a new
+		//		 lex-smaller anchor is merely added to an otherwise-intact group
+		//		 (srcAnchor absent, no foreign member → skip).
 		//
 		// Skip (no recreate) when srcAnchor ≠ dstAnchor but none of (a)-(c) apply:
 		//   • dstAnchor was deleted from source (srcInode="") AND group is intact
@@ -489,9 +571,18 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 				}
 			} else {
 				dstAnchorInSrc := f.srcPathToInode[normDstAnchor]
+				// srcAnchorDstInode is the destination inode the source anchor
+				// currently points at, or "" if the source anchor is not at the
+				// destination yet. A member is correctly linked only when it is in
+				// the SAME destination hardlink group as the source anchor i.e.
+				// they share this inode.
+				srcAnchorDstInode := destPathToInode[normSrcAnchor]
+
 				needsRecreate = (dstAnchorInSrc != "" && dstAnchorInSrc != sourceObjectInMap.Inode) || // (a)
 					srcInodeIsMultiGroup[sourceObjectInMap.Inode] || // (b)
-					destGroupIsMultiSource[destHardlinkObj.Inode] // (c)
+					destGroupIsMultiSource[destHardlinkObj.Inode] || // (c)
+					(srcAnchorDstInode != "" && srcAnchorDstInode != destHardlinkObj.Inode) || // (d1) retarget: src anchor lives in a different dest group
+					(srcAnchorDstInode == "" && destGroupHasForeignMember[destHardlinkObj.Inode]) // (d2) overlap merge: src anchor absent AND dest group has a foreign member
 			}
 		}
 

@@ -106,8 +106,10 @@ func (s *CopyTransferProcessor) ScheduleSyncRemoveSetPropertiesTransfer(storedOb
 	return s.scheduleTransfer(srcRelativePath, dstRelativePath, storedObject)
 }
 
-func (s *CopyTransferProcessor) scheduleTransfer(srcRelativePath, dstRelativePath string, storedObject traverser.StoredObject) (err error) {
-	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(false, srcRelativePath, dstRelativePath, s.preserveAccessTier, s.folderPropertiesOption, s.symlinkHandlingType, s.hardlinkHandlingType)
+func (s *CopyTransferProcessor) scheduleTransfer(srcRelativePath, dstRelativePath string,
+	storedObject traverser.StoredObject) (err error) {
+	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(false, srcRelativePath, dstRelativePath,
+		s.preserveAccessTier, s.folderPropertiesOption, s.symlinkHandlingType, s.hardlinkHandlingType)
 
 	// set properties specific code
 	if s.CopyJobTemplate.FromTo.To() == common.ELocation.None() {
