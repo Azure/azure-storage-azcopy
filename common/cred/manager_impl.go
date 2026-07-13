@@ -65,6 +65,25 @@ func NewManager(keyrings ...Keyring) Manager {
 	}
 }
 
+// ProbeToken returns the TokenHeader for the credential matching the nickname,
+// without resolving the full credential.
+func (m *managerImpl) ProbeToken(nickname string) (TokenHeader, bool) {
+	if nickname == "" {
+		nickname = DefaultNickname
+	}
+
+	for _, v := range m.rings {
+		token, ok := v.GetToken(nickname)
+		if !ok {
+			continue
+		}
+
+		return token.TokenHeader, true
+	}
+
+	return TokenHeader{}, false
+}
+
 // GetCredentials returns the credential matching the nickname, in the order
 // returned by registered keyrings.
 func (m *managerImpl) GetCredentials(nickname string) (azcore.TokenCredential, error) {

@@ -21,19 +21,23 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/spf13/cobra"
 )
 
 type LoginStatusOptions struct {
-	TenantID    bool
-	AADEndpoint bool
-	Method      bool
+	TenantID          bool
+	AADEndpoint       bool
+	Method            bool
+	NicknameSpecified bool
 }
 
 type LoginStatus struct {
@@ -45,9 +49,23 @@ type LoginStatus struct {
 
 func (options LoginStatusOptions) process() (LoginStatus, error) {
 	manager := GetCredentialManager()
-	creds, err := manager.ListCredentials()
-	if err != nil {
-		return LoginStatus{}, err
+
+	var creds []cred.TokenHeader
+
+	if options.NicknameSpecified {
+		nickname := TargetCredentialName
+		header, ok := manager.ProbeToken(nickname)
+		if !ok {
+			return LoginStatus{}, fmt.Errorf("no cached token found for `%q`", nickname)
+		}
+
+		creds = []cred.TokenHeader{header}
+	} else {
+		var err error
+		creds, err = manager.ListCredentials()
+		if err != nil {
+			return LoginStatus{}, err
+		}
 	}
 
 	if len(creds) == 0 {
@@ -64,13 +82,24 @@ func (options LoginStatusOptions) process() (LoginStatus, error) {
 
 	if OutputFormat == common.EOutputFormat.None() || OutputFormat == common.EOutputFormat.Text() {
 		for _, c := range creds {
-			nickname := c.Nickname
-			if nickname == "" {
-				nickname = c.Tenant
-			} else if nickname == "*" {
+			displayName := c.Nickname
+			if displayName == "" {
+				displayName = c.Tenant
+			} else if displayName == "*" {
 				c.Tenant += "; default token"
 			}
-			glcm.Info(fmt.Sprintf("Credential: %s (Tenant: %s)", nickname, c.Tenant))
+
+			if targetCred, err := manager.GetCredentials(c.Nickname); err != nil {
+				glcm.Info(fmt.Sprintf("could not retrieve info for credential `%q`: %s", c.Nickname, err))
+				continue
+			} else {
+				_, err = cred.NewScopedToken(targetCred, enum.ECredentialType.OAuthToken()).GetToken(context.Background(), policy.TokenRequestOptions{})
+				if err != nil {
+					glcm.Info(fmt.Sprintf("could not retrieve token for credential `%q`: %s", c.Nickname, err))
+				}
+			}
+
+			glcm.Info(fmt.Sprintf("Credential: %s (Tenant: %s)", displayName, c.Tenant))
 		}
 	}
 
@@ -96,9 +125,6 @@ func init() {
 		Short: loginStatusShortDescription,
 		Long:  loginStatusLongDescription,
 		Args: func(cmd *cobra.Command, args []string) error {
-			if len(args) > 0 {
-				return fmt.Errorf("login status does not require any argument")
-			}
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
@@ -107,6 +133,7 @@ func init() {
 					glcm.Info(fmt.Sprintf(format, a...))
 				}
 			}
+			commandLineInput.NicknameSpecified = cmd.PersistentFlags().Changed("nickname")
 			status, _ := RunLoginStatus(commandLineInput)
 			var Info = LoginStatusOutput{
 				Valid: status.Valid,
@@ -148,6 +175,8 @@ func init() {
 			glcm.Exit(nil, ternary.Iff(Info.Valid, common.EExitCode.Success(), common.EExitCode.Error()))
 		},
 	}
+
+	AddTargetCredFlags(lgStatus, "nickname")
 
 	lgCmd.AddCommand(lgStatus)
 	lgStatus.PersistentFlags().BoolVar(&commandLineInput.TenantID, "tenant", false, "Prints the Microsoft Entra tenant ID that is currently being used in session.")
