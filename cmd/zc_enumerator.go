@@ -37,7 +37,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
-	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -483,15 +482,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 		return output, nil
 	}
 
-	var reauthTok *common.ScopedAuthenticator
-	if opts.Credential != nil {
-		if at, ok := opts.Credential.TokenCredential.(common.AuthenticateToken); ok {
-			// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-			reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, enum.ECredentialType.OAuthToken()))
-		}
-	}
-
-	options := createClientOptions(azcopyScanningLogger, nil, reauthTok)
+	options := createClientOptions(azcopyScanningLogger, nil, opts.Credential.TokenCredential)
 
 	switch resourceLocation {
 	case common.ELocation.Local():
@@ -609,7 +600,7 @@ func InitResourceTraverser(resource common.ResourceString, resourceLocation comm
 			return nil, err
 		}
 
-		c, err := common.GetServiceClientForLocation(resLoc, res, opts.Credential.CredentialType, opts.Credential.OAuthTokenInfo.TokenCredential, &options, fileOptions)
+		c, err := common.GetServiceClientForLocation(resLoc, res, opts.Credential.CredentialType, opts.Credential.TokenCredential, &options, fileOptions)
 		if err != nil {
 			return nil, err
 		}

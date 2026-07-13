@@ -22,114 +22,14 @@ package cmd
 
 import (
 	"context"
-	"os"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	chk "gopkg.in/check.v1"
 )
-
-type credentialUtilSuite struct{}
-
-var _ = chk.Suite(&credentialUtilSuite{})
-
-func TestCheckAuthSafeForTarget(t *testing.T) {
-	a := assert.New(t)
-	tests := []struct {
-		ct               enum.CredentialType
-		resourceType     common.Location
-		resource         string
-		extraSuffixesAAD string
-		expectedOK       bool
-	}{
-		// these auth types deliberately don't get checked, i.e. always should be considered safe
-		// invalid URLs are supposedly overridden as the resource type specified via --fromTo in this scenario
-		{enum.ECredentialType.Unknown(), common.ELocation.Blob(), "http://nowhere.com", "", true},
-		{enum.ECredentialType.Anonymous(), common.ELocation.Blob(), "http://nowhere.com", "", true},
-
-		// these ones get checked, so these should pass:
-		{enum.ECredentialType.OAuthToken(), common.ELocation.Blob(), "http://myaccount.blob.core.windows.net", "", true},
-		{enum.ECredentialType.OAuthToken(), common.ELocation.Blob(), "http://myaccount.blob.core.chinacloudapi.cn", "", true},
-		{enum.ECredentialType.OAuthToken(), common.ELocation.Blob(), "http://myaccount.blob.core.cloudapi.de", "", true},
-		{enum.ECredentialType.OAuthToken(), common.ELocation.Blob(), "http://myaccount.blob.core.core.usgovcloudapi.net", "", true},
-		{enum.ECredentialType.MDOAuthToken(), common.ELocation.Blob(), "http://myaccount.blob.core.windows.net", "", true},
-		{enum.ECredentialType.MDOAuthToken(), common.ELocation.Blob(), "http://myaccount.blob.core.chinacloudapi.cn", "", true},
-		{enum.ECredentialType.MDOAuthToken(), common.ELocation.Blob(), "http://myaccount.blob.core.cloudapi.de", "", true},
-		{enum.ECredentialType.MDOAuthToken(), common.ELocation.Blob(), "http://myaccount.blob.core.core.usgovcloudapi.net", "", true},
-		{enum.ECredentialType.SharedKey(), common.ELocation.BlobFS(), "http://myaccount.dfs.core.windows.net", "", true},
-		{enum.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://something.s3.eu-central-1.amazonaws.com", "", true},
-		{enum.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://something.s3.cn-north-1.amazonaws.com.cn", "", true},
-		{enum.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://s3.eu-central-1.amazonaws.com", "", true},
-		{enum.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://s3.cn-north-1.amazonaws.com.cn", "", true},
-		{enum.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://s3.amazonaws.com", "", true},
-		{enum.ECredentialType.GoogleAppCredentials(), common.ELocation.GCP(), "http://storage.cloud.google.com", "", true},
-
-		// These should fail (they are not storage)
-		{enum.ECredentialType.OAuthToken(), common.ELocation.Blob(), "http://somethingelseinazure.windows.net", "", false},
-		{enum.ECredentialType.MDOAuthToken(), common.ELocation.Blob(), "http://somethingelseinazure.windows.net", "", false},
-		{enum.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://somethingelseinaws.amazonaws.com", "", false},
-		{enum.ECredentialType.GoogleAppCredentials(), common.ELocation.GCP(), "http://appengine.google.com", "", false},
-
-		// As should these (they are nothing to do with the expected URLs)
-		{enum.ECredentialType.OAuthToken(), common.ELocation.Blob(), "http://abc.example.com", "", false},
-		{enum.ECredentialType.MDOAuthToken(), common.ELocation.Blob(), "http://abc.example.com", "", false},
-		{enum.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://abc.example.com", "", false},
-		{enum.ECredentialType.GoogleAppCredentials(), common.ELocation.GCP(), "http://abc.example.com", "", false},
-		// Test that we don't want to send an S3 access key to a blob resource type.
-		{enum.ECredentialType.S3AccessKey(), common.ELocation.Blob(), "http://abc.example.com", "", false},
-		{enum.ECredentialType.GoogleAppCredentials(), common.ELocation.Blob(), "http://abc.example.com", "", false},
-
-		// But the same Azure one should pass if the user opts in to them (we don't support any similar override for S3)
-		{enum.ECredentialType.OAuthToken(), common.ELocation.Blob(), "http://abc.example.com", "*.foo.com;*.example.com", true},
-		{enum.ECredentialType.MDOAuthToken(), common.ELocation.Blob(), "http://abc.example.com", "*.foo.com;*.example.com", true},
-	}
-
-	for i, t := range tests {
-		err := checkAuthSafeForTarget(t.ct, t.resource, t.extraSuffixesAAD, t.resourceType)
-		a.Equal(t.expectedOK, err == nil, chk.Commentf("Failed on test %d for resource %s", i, t.resource))
-	}
-}
-
-func TestCheckAuthSafeForTargetIsCalledWhenGettingAuthType(t *testing.T) {
-	common.AzcopyJobPlanFolder = os.TempDir()
-	a := assert.New(t)
-	mockGetCredTypeFromEnvVar := func() enum.CredentialType {
-		return enum.ECredentialType.OAuthToken() // force it to OAuth, which is the case we want to test
-	}
-
-	res, err := SplitResourceString("http://notblob.example.com", common.ELocation.Blob())
-	a.NoError(err)
-
-	// Call our core cred type getter function, in a way that will fail the safety check, and assert
-	// that it really does fail.
-	// This checks that our safety check is hooked into the main logic
-	_, _, err = doGetCredentialTypeForLocation(context.Background(), common.ELocation.Blob(), res, true, mockGetCredTypeFromEnvVar, common.CpkOptions{})
-	a.NotNil(err)
-	a.True(strings.Contains(err.Error(), "If this URL is in fact an Azure service, you can enable Azure authentication to notblob.example.com."))
-}
-
-func TestCheckAuthSafeForTargetIsCalledWhenGettingAuthTypeMDOAuth(t *testing.T) {
-	a := assert.New(t)
-	mockGetCredTypeFromEnvVar := func() enum.CredentialType {
-		return enum.ECredentialType.MDOAuthToken() // force it to OAuth, which is the case we want to test
-	}
-
-	res, err := SplitResourceString("http://notblob.example.com", common.ELocation.Blob())
-	a.NoError(err)
-
-	// Call our core cred type getter function, in a way that will fail the safety check, and assert
-	// that it really does fail.
-	// This checks that our safety check is hooked into the main logic
-	_, _, err = doGetCredentialTypeForLocation(context.Background(), common.ELocation.Blob(), res, true, mockGetCredTypeFromEnvVar, common.CpkOptions{})
-	a.NotNil(err)
-	a.True(strings.Contains(err.Error(), "If this URL is in fact an Azure service, you can enable Azure authentication to notblob.example.com."))
-}
 
 /*
  * This function tests that common.isPublic routine is works fine.

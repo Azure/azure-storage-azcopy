@@ -26,7 +26,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -81,7 +80,6 @@ func TestBlobDeleter(t *testing.T) {
 	rawContainerURL := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	cca := &cookedSyncCmdArgs{
 		destination:       newRemoteRes(rawContainerURL.String()),
-		credentialInfo:    common.CredentialInfo{CredentialType: enum.ECredentialType.Anonymous()},
 		deleteDestination: common.EDeleteDestination.True(),
 		fromTo:            common.EFromTo.LocalBlob(),
 	}
@@ -119,7 +117,6 @@ func TestFileDeleter(t *testing.T) {
 	rawShareSAS := scenarioHelper{}.getRawShareURLWithSAS(a, shareName)
 	cca := &cookedSyncCmdArgs{
 		destination:       newRemoteRes(rawShareSAS.String()),
-		credentialInfo:    common.CredentialInfo{CredentialType: enum.ECredentialType.Anonymous()},
 		deleteDestination: common.EDeleteDestination.True(),
 		fromTo:            common.EFromTo.FileFile(),
 	}

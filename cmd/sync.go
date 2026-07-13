@@ -31,7 +31,6 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
-	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
@@ -464,11 +463,9 @@ type cookedSyncCmdArgs struct {
 	// deletion count keeps track of how many extra files from the destination were removed
 	atomicDeletionCount uint32
 
-	source                  common.ResourceString
-	destination             common.ResourceString
-	fromTo                  common.FromTo
-	credentialInfo          common.CredentialInfo
-	s2sSourceCredentialType enum.CredentialType
+	source      common.ResourceString
+	destination common.ResourceString
+	fromTo      common.FromTo
 
 	// filters
 	recursive             bool
@@ -860,12 +857,6 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 }
 
 func (cca *cookedSyncCmdArgs) setCredentialInfo(ctx context.Context) error {
-
-	err := common.SetBackupMode(cca.backupMode, cca.fromTo)
-	if err != nil {
-		return err
-	}
-
 	if err := common.VerifyIsURLResolvable(cca.source.Value); cca.fromTo.From().IsRemote() && err != nil {
 		return fmt.Errorf("failed to resolve source: %w", err)
 	}
@@ -874,36 +865,19 @@ func (cca *cookedSyncCmdArgs) setCredentialInfo(ctx context.Context) error {
 		return fmt.Errorf("failed to resolve destination: %w", err)
 	}
 
-	// Verifies credential type and initializes credential info.
-	// Note that this is for the destination.
-	cca.credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination, false, cca.cpkOptions)
-	if err != nil {
-		return err
+	if cca.fromTo.IsUpload() || cca.fromTo.IsS2S() {
+		// Solve for the destination, and potentially, the source as an auxiliary token.
+	} else if cca.fromTo.IsDownload() {
+		// it's a download, so,
+	} else {
+		panic("auth resolution scheme not defined for transfer fromto " + cca.fromTo.String())
 	}
 
-	srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source, true, cca.cpkOptions)
-	if err != nil {
-		return err
-	}
-	cca.s2sSourceCredentialType = srcCredInfo.CredentialType
-	// Download is the only time our primary credential type will be based on source
-	if cca.fromTo.IsDownload() {
-		cca.credentialInfo = srcCredInfo
-	} else if cca.fromTo.IsS2S() {
-		cca.s2sSourceCredentialType = srcCredInfo.CredentialType // Assign the source credential type in S2S
-	}
-
-	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
-	// the info will be transferred to STE.
-	if cca.credentialInfo.CredentialType.IsAzureOAuth() || srcCredInfo.CredentialType.IsAzureOAuth() {
-		uotm := GetUserOAuthTokenManagerInstance()
-		// Get token from env var or cache.
-		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
-			return err
-		} else if _, err := tokenInfo.GetTokenCredential(); err != nil {
-			return err
-		}
-	}
+	//err := common.SetBackupMode(cca.backupMode, cca.fromTo)
+	//if err != nil {
+	//	return err
+	//}
+	//
 
 	// Check if destination is system container
 	if cca.fromTo.IsS2S() || cca.fromTo.IsUpload() {
@@ -1262,9 +1236,15 @@ func init() {
 	syncCmd.PersistentFlags().BoolVar(&raw.includeRoot, "include-root", false, "Disabled by default. "+
 		"\n Enable to include the root directory's properties when persisting properties such as SMB or HNS ACLs")
 
-	syncCmd.PersistentFlags().StringVar(&raw.compareHash, "compare-hash", "None",
-		"Inform sync to rely on hashes as an alternative to LMT. "+
-			"\n Missing hashes at a remote source will throw an error. (None, MD5) Default: None")
+	syncCmd.PersistentFlags().StringVar(&raw.compareHash, "compare-hash", "None", "Inform sync to rely on hashes as an alternative to LMT. "+
+		"\n Missing hashes at a remote source will throw an error. (None, MD5) Default: None")
+
+	syncCmd.PersistentFlags().StringVar(&common.LocalHashDir, "hash-meta-dir", "", "When using `--local-hash-storage-mode=HiddenFiles` "+
+		"\n you can specify an alternate directory to store hash metadata files in (as opposed to next to the related files in the source)")
+
+	syncCmd.PersistentFlags().StringVar(&raw.localHashStorageMode, "local-hash-storage-mode", common.EHashStorageMode.Default().String(), "Specify an alternative way to cache file hashes; "+
+		"\n valid options are: HiddenFiles (OS Agnostic), "+
+		"\n XAttr (Linux/MacOS only; requires user_xattr on all filesystems traversed @ source), \n AlternateDataStreams (Windows only; requires named streams on target volume)")
 
 	// TODO follow sym link is not implemented, clarify behavior first
 	// syncCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "follow symbolic links when performing sync from local file system.")

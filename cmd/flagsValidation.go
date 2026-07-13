@@ -40,7 +40,7 @@ func validatePreserveNFSPropertyOption(toPreserve bool, fromTo common.FromTo, fl
 	if toPreserve && !(fromTo == common.EFromTo.LocalFileNFS() ||
 		fromTo == common.EFromTo.FileNFSLocal() ||
 		fromTo == common.EFromTo.FileNFSFileNFS()) {
-		return fmt.Errorf("%s is set but the job is not between %s-aware resources", flagName, common.Iff(flagName == PreserveInfoFlag, "permission", "NFS"))
+		return fmt.Errorf("%s is set but the job is not between %s-aware resources", flagName, ternary.Iff(flagName == PreserveInfoFlag, "permission", "NFS"))
 	}
 
 	if toPreserve && (fromTo.IsUpload() || fromTo.IsDownload()) &&

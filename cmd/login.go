@@ -25,7 +25,6 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
@@ -52,7 +51,7 @@ type LoginOptions struct {
 	CredentialName string
 }
 
-var loginCmdArg = rawLoginArgs{tenantID: common.DefaultTenantID}
+var loginCmdArg = rawLoginArgs{tenantID: cred.DefaultTenantID}
 
 var lgCmd = &cobra.Command{
 	Use:        "login",
@@ -112,7 +111,7 @@ func init() {
 
 	lgCmd.PersistentFlags().StringVar(&loginCmdArg.tenantID, "tenant-id", "", "The Azure Active Directory tenant ID to use for OAuth device interactive login.")
 	lgCmd.PersistentFlags().StringVar(&loginCmdArg.aadEndpoint, "aad-endpoint", "", "The Azure Active Directory endpoint to use."+
-		"\n The default ("+common.DefaultActiveDirectoryEndpoint+") is correct for the public Azure cloud. "+
+		"\n The default ("+cred.DefaultActiveDirectoryEndpoint+") is correct for the public Azure cloud. "+
 		"\n Set this parameter when authenticating in a national cloud. "+
 		"\n Not needed for Managed Service Identity")
 	lgCmd.PersistentFlags().StringVar(&loginCmdArg.loginType, "login-type", enum.EAutoLoginType.Interactive().String(), "Default value is "+enum.EAutoLoginType.Device().String()+". Specify the credential type to access Azure Resource, available values are "+strings.Join(enum.ValidAutoLoginTypes(), ", ")+".")

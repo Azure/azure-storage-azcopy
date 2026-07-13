@@ -154,18 +154,7 @@ type CopyJobPartOrderRequest struct {
 
 // CredentialInfo contains essential credential info which need be transited between modules,
 // and used during creating Azure storage client Credential.
-type CredentialInfo struct {
-	CredentialType    enum.CredentialType
-	OAuthTokenInfo    OAuthTokenInfo
-	S3CredentialInfo  cred.S3CredentialInfo
-	GCPCredentialInfo cred.GCPCredentialInfo
-}
-
-func (c CredentialInfo) WithType(credentialType enum.CredentialType) CredentialInfo {
-	// c is a clone, so this is OK
-	c.CredentialType = credentialType
-	return c
-}
+type CredentialInfo = cred.CredentialInfo
 
 type CopyJobPartOrderErrorType string
 
@@ -308,8 +297,8 @@ type ResumeJobRequest struct {
 	DstServiceClient        *ServiceClient
 	IncludeTransfer         map[string]int
 	ExcludeTransfer         map[string]int
-	CredentialInfo          CredentialInfo
 	Provider                credentials.Provider
+	TargetCredentialType    enum.CredentialType
 	S2SSourceCredentialType enum.CredentialType
 }
 

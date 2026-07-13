@@ -12,7 +12,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	cred2 "github.com/Azure/azure-storage-azcopy/v10/common/cred"
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/stretchr/testify/assert"
 )
@@ -82,15 +82,15 @@ func (r *ReauthTestCred) Authenticate(ctx context.Context, opts *policy.TokenReq
 
 // This is not an end-to-end test. But it is an instantaneous validation of the logic.
 func TestDestReauthPolicy(t *testing.T) {
-	rootctx := context.WithValue(context.Background(), destReauthDebugNoPrompt, true)
+	rootctx := context.WithValue(context.Background(), tokenReauthNoPrompt, true)
 	ctx, cancel := context.WithCancel(rootctx)
 
 	reauthed := false
 	cred := &ReauthTestCred{
 		ReauthCallback: func(ctx context.Context) {
 			reauthed = true
-			assert.Equal(t, ctx.Value(destReauthDebugExecuted), true, "Expected reauth to occur via the policy")
-			assert.Equal(t, ctx.Value(destReauthDebugCause), destReauthDebugCauseAuthenticationRequired, "Expected reauth to occur via the AuthenticationRequired mechanism")
+			assert.Equal(t, ctx.Value(tokenReauthDebugExecuted), true, "Expected reauth to occur via the policy")
+			assert.Equal(t, ctx.Value(destReauthDebugCause), tokenReauthDebugCauseAuthenticationRequired, "Expected reauth to occur via the AuthenticationRequired mechanism")
 			cancel()
 		},
 	}
@@ -102,7 +102,7 @@ func TestDestReauthPolicy(t *testing.T) {
 		policy.TelemetryOptions{},
 		transport,
 		LogOptions{},
-		nil, (*common.ScopedAuthenticator)(common.NewScopedCredential[common.AuthenticateToken](cred, enum.ECredentialType.OAuthToken())),
+		nil, (*cred2.ScopedAuthenticator)(cred2.NewScopedToken[cred2.AuthenticateToken](cred, enum.ECredentialType.OAuthToken())),
 	)
 
 	c, err := blobservice.NewClient("https://foobar.blob.core.windows.net/", cred, &blobservice.ClientOptions{ClientOptions: opts})
@@ -115,7 +115,7 @@ func TestDestReauthPolicy(t *testing.T) {
 
 	// Reset the context
 	ctx, cancel = context.WithCancel(rootctx)
-	ctx = context.WithValue(ctx, destReauthDebugNoPrompt, true)
+	ctx = context.WithValue(ctx, tokenReauthNoPrompt, true)
 	reauthed = false
 
 	// =========== InvalidAuthenticationInfo ============
@@ -127,8 +127,8 @@ func TestDestReauthPolicy(t *testing.T) {
 	// reset callback
 	cred.ReauthCallback = func(ctx context.Context) {
 		reauthed = true
-		assert.Equal(t, ctx.Value(destReauthDebugExecuted), true, "Expected reauth to occur via the policy")
-		assert.Equal(t, ctx.Value(destReauthDebugCause), destReauthDebugCauseInvalidAuthenticationInfo, "Expected reauth to occur via the InvalidAuthenticationInfo mechanism")
+		assert.Equal(t, ctx.Value(tokenReauthDebugExecuted), true, "Expected reauth to occur via the policy")
+		assert.Equal(t, ctx.Value(destReauthDebugCause), tokenReauthDebugCauseInvalidAuthenticationInfo, "Expected reauth to occur via the InvalidAuthenticationInfo mechanism")
 		cancel()
 		transport.RequireAuth = false
 	}

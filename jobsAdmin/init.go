@@ -212,7 +212,7 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 
 	// If the credential type is is Anonymous, to resume the Job destinationSAS / sourceSAS needs to be provided
 	// Depending on the FromType, sourceSAS or destinationSAS is checked.
-	if req.CredentialInfo.CredentialType == enum.ECredentialType.Anonymous() {
+	if req.TargetCredentialType == enum.ECredentialType.Anonymous() {
 		var errorMsg = ""
 		switch jpm.Plan().FromTo {
 		case common.EFromTo.LocalBlob(),

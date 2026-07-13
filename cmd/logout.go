@@ -43,6 +43,7 @@ func init() {
 		},
 	}
 
+	AddTargetCredFlags(logoutCmd)
 	rootCmd.AddCommand(logoutCmd)
 }
 
@@ -53,12 +54,11 @@ func RunLogout(options LogoutOptions) error {
 type LogoutOptions struct{}
 
 func (options LogoutOptions) process() error {
-	uotm := GetUserOAuthTokenManagerInstance()
-	if err := uotm.RemoveCachedToken(); err != nil {
-		return fmt.Errorf("failed to perform logout command, %v", err)
+	nickname := TargetCredentialName
+	if !GetCredentialManager().DeleteCredentials(nickname) {
+		return fmt.Errorf("no cached token found for %q", nickname)
 	}
 
-	// For MSI login, info success message to user.
 	glcm.Info("Logout succeeded.")
 
 	return nil

@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
+	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
@@ -264,7 +265,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 	fromTo common.FromTo,
 	source common.ResourceString,
 	destination common.ResourceString,
-) (*common.ServiceClient, *common.ServiceClient, error) {
+) (srcServiceClient *common.ServiceClient, dstServiceClient *common.ServiceClient, srcCredInfo, dstCredInfo cred.CredentialInfo, err error) {
 	if len(rca.SourceSAS) > 0 && rca.SourceSAS[0] != '?' {
 		rca.SourceSAS = "?" + rca.SourceSAS
 	}
@@ -275,42 +276,9 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 	source.SAS = rca.SourceSAS
 	destination.SAS = rca.DestinationSAS
 
-	//srcCredType, _, err := getCredentialTypeForLocation(ctx,
-	//	fromTo.From(),
-	//	source,
-	//	true,
-	//	common.CpkOptions{})
-	//if err != nil {
-	//	return nil, nil, err
-	//}
-	//
-	//dstCredType, _, err := getCredentialTypeForLocation(ctx,
-	//	fromTo.To(),
-	//	destination,
-	//	false,
-	//	common.CpkOptions{})
-	//if err != nil {
-	//	return nil, nil, err
-	//}
-	//
-	//var tc azcore.TokenCredential
-	//if srcCredType.IsAzureOAuth() || dstCredType.IsAzureOAuth() {
-	//	uotm := GetUserOAuthTokenManagerInstance()
-	//	// Get token from env var or cache.
-	//	tokenInfo, err := uotm.GetTokenInfo(ctx)
-	//	if err != nil {
-	//		return nil, nil, err
-	//	}
-	//
-	//	tc, err = tokenInfo.GetTokenCredential()
-	//	if err != nil {
-	//		return nil, nil, err
-	//	}
-	//}
-
 	credManager := GetCredentialManager()
 
-	srcCredInfo, err := getTargetCredInfo(source, fromTo.From(), getTargetCredInfoOptions{
+	srcCredInfo, err = getTargetCredInfo(source, fromTo.From(), getTargetCredInfoOptions{
 		ctx:                ctx,
 		canBePublic:        true,  // source can be public
 		sharedKeyAllowed:   false, // but not shared key
@@ -319,7 +287,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		tokenManager:       credManager,
 	})
 
-	dstCredInfo, err := getTargetCredInfo(destination, fromTo.To(), getTargetCredInfoOptions{
+	dstCredInfo, err = getTargetCredInfo(destination, fromTo.To(), getTargetCredInfoOptions{
 		ctx:                ctx,
 		canBePublic:        true,  // source can be public
 		sharedKeyAllowed:   false, // but not shared key
@@ -328,19 +296,15 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		tokenManager:       credManager,
 	})
 
-	var reauthTok *common.ScopedAuthenticator
-	if at, ok := srcCredInfo.TokenCredential.(common.AuthenticateToken); ok { // We don't need two different tokens here since it gets passed in just the same either way.
-		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, enum.ECredentialType.OAuthToken()))
-	}
 	jobID, err := common.ParseJobID(rca.jobID)
 	if err != nil {
 		// Error for invalid JobId format
-		return nil, nil, fmt.Errorf("error parsing the jobId %s. Failed with error %w", rca.jobID, err)
+		return nil, nil, cred.CredentialInfo{}, cred.CredentialInfo{}, fmt.Errorf("error parsing the jobId %s. Failed with error %w", rca.jobID, err)
 	}
 
 	// But we don't want to supply a reauth token if we're not using OAuth. That could cause problems if say, a SAS is invalid.
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, srcCredInfo.TokenCredential)
+	// We put the source into the target slot this time.
+	srcOptions := createClientOptions(common.AzcopyCurrentJobLogger, nil, srcCredInfo.TokenCredential)
 	// Get job details from the STE
 	getJobDetailsResponse := jobsAdmin.GetJobDetails(common.GetJobDetailsRequest{JobID: jobID})
 	if getJobDetailsResponse.ErrorMsg != "" {
@@ -353,16 +317,12 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 			AllowTrailingDot: getJobDetailsResponse.TrailingDot.IsEnabled(), //Access the trailingDot option of the job
 		}
 	}
-	srcServiceClient, err := common.GetServiceClientForLocation(fromTo.From(), source, srcCredType, tc, &options, fileSrcClientOptions)
+	srcServiceClient, err = common.GetServiceClientForLocation(fromTo.From(), source, srcCredInfo.CredentialType, srcCredInfo.TokenCredential, &srcOptions, fileSrcClientOptions)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, cred.CredentialInfo{}, cred.CredentialInfo{}, err
 	}
 
-	var srcCred *common.ScopedToken
-	if fromTo.IsS2S() && srcCredType.IsAzureOAuth() {
-		srcCred = common.NewScopedCredential(tc, srcCredType)
-	}
-	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred, ternary.Iff(dstCredType.IsAzureOAuth(), reauthTok, nil))
+	dstOptions := createClientOptions(common.AzcopyCurrentJobLogger, srcCredInfo.TokenCredential, dstCredInfo.TokenCredential)
 	var fileClientOptions any
 	if fromTo.To() == common.ELocation.File() || fromTo.To() == common.ELocation.FileNFS() {
 		fileClientOptions = &common.FileClientOptions{
@@ -370,11 +330,11 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 			AllowTrailingDot:       getJobDetailsResponse.TrailingDot.IsEnabled(),
 		}
 	}
-	dstServiceClient, err := common.GetServiceClientForLocation(fromTo.To(), destination, dstCredType, tc, &options, fileClientOptions)
+	dstServiceClient, err = common.GetServiceClientForLocation(fromTo.To(), destination, dstCredInfo.CredentialType, dstCredInfo.TokenCredential, &dstOptions, fileClientOptions)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, cred.CredentialInfo{}, cred.CredentialInfo{}, err
 	}
-	return srcServiceClient, dstServiceClient, nil
+	return srcServiceClient, dstServiceClient, srcCredInfo, dstCredInfo, nil
 }
 
 // processes the resume command,
@@ -439,26 +399,20 @@ func (rca resumeCmdArgs) process() error {
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// Initialize credential info.
-	credentialInfo := common.CredentialInfo{}
 	// TODO: Replace context with root context
 	srcResourceString, err := SplitResourceString(getJobFromToResponse.Source, getJobFromToResponse.FromTo.From())
-	_ = err // todo
+	if err != nil {
+		return fmt.Errorf("failed to split source resource string: %w", err)
+	}
 	srcResourceString.SAS = rca.SourceSAS
 	dstResourceString, err := SplitResourceString(getJobFromToResponse.Destination, getJobFromToResponse.FromTo.To())
-	_ = err // todo
+	if err != nil {
+		return fmt.Errorf("failed to split dest resource string: %w", err)
+	}
 	dstResourceString.SAS = rca.DestinationSAS
 
-	// we should stop using credentiaLInfo and use the clients instead. But before we fix
-	// that there will be repeated calls to get Credential type for correctness.
-	if credentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
-		fromTo:      getJobFromToResponse.FromTo,
-		source:      srcResourceString,
-		destination: dstResourceString,
-	}, common.CpkOptions{}); err != nil {
-		return err
-	}
-
-	srcServiceClient, dstServiceClient, err := rca.getSourceAndDestinationServiceClients(
+	// Fetch service clients and do some primitive credential validation
+	srcServiceClient, dstServiceClient, srcCredInfo, dstCredInfo, err := rca.getSourceAndDestinationServiceClients(
 		ctx, getJobFromToResponse.FromTo,
 		srcResourceString,
 		dstResourceString,
@@ -466,6 +420,7 @@ func (rca resumeCmdArgs) process() error {
 	if err != nil {
 		return errors.New("could not create service clients " + err.Error())
 	}
+
 	// Send resume job request.
 	resumeJobResponse := jobsAdmin.ResumeJobOrder(common.ResumeJobRequest{
 		JobID:            jobID,
@@ -473,9 +428,13 @@ func (rca resumeCmdArgs) process() error {
 		DestinationSAS:   rca.DestinationSAS,
 		SrcServiceClient: srcServiceClient,
 		DstServiceClient: dstServiceClient,
-		CredentialInfo:   credentialInfo,
 		IncludeTransfer:  includeTransfer,
 		ExcludeTransfer:  excludeTransfer,
+
+		// upload is the only sort that uses the source as our target credential type
+		TargetCredentialType: ternary.Iff(getJobFromToResponse.FromTo.IsUpload(), srcCredInfo.CredentialType, dstCredInfo.CredentialType),
+		// s2s is the only case where we need to provide this info; upload is "anonymous", download source is target
+		S2SSourceCredentialType: ternary.Iff(getJobFromToResponse.FromTo.IsS2S(), srcCredInfo.CredentialType, enum.ECredentialType.Anonymous()),
 	})
 
 	if !resumeJobResponse.CancelledPauseResumed {
