@@ -32,8 +32,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
-	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -327,8 +325,8 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		S2SInvalidMetadataHandleOption: common.EInvalidMetadataHandleOption.RenameIfInvalid(),
 		CpkOptions:                     cca.cpkOptions,
 		S2SPreserveBlobTags:            cca.s2sPreserveBlobTags,
+		S2SSourceCredentialType:        srcCredInfo.CredentialType,
 
-		S2SSourceCredentialType: cca.s2sSourceCredentialType,
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.trailingDot,
 		},
@@ -342,13 +340,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		copyJobTemplate.Provider = credProvider
 	}
 
-	var srcReauthTok *common.ScopedAuthenticator
-	if at, ok := srcCredInfo.TokenCredential.(common.AuthenticateToken); ok {
-		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-		srcReauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, enum.ECredentialType.OAuthToken()))
-	}
-
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, srcReauthTok)
+	srcOptions := createClientOptions(common.AzcopyCurrentJobLogger, nil, srcCredInfo.TokenCredential)
 
 	// Create Source Client.
 	var azureFileSpecificOptions any
@@ -363,7 +355,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		cca.source,
 		srcCredInfo.CredentialType,
 		srcCredInfo.TokenCredential,
-		&options,
+		&srcOptions,
 		azureFileSpecificOptions,
 	)
 	if err != nil {
@@ -378,24 +370,13 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		}
 	}
 
-	var dstReauthTok *common.ScopedAuthenticator
-	if at, ok := srcCredInfo.TokenCredential.(common.AuthenticateToken); ok {
-		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-		dstReauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, enum.ECredentialType.OAuthToken()))
-	}
-
-	var srcTokenCred *common.ScopedToken
-	if cca.fromTo.IsS2S() && srcCredInfo.CredentialType.IsAzureOAuth() {
-		srcTokenCred = common.NewScopedCredential(srcCredInfo.TokenCredential, srcCredInfo.CredentialType)
-	}
-
-	options = createClientOptions(common.AzcopyCurrentJobLogger, srcTokenCred, dstReauthTok)
+	dstOptions := createClientOptions(common.AzcopyCurrentJobLogger, srcCredInfo.TokenCredential, dstCredInfo.TokenCredential)
 	copyJobTemplate.DstServiceClient, err = common.GetServiceClientForLocation(
 		cca.fromTo.To(),
 		cca.destination,
 		dstCredInfo.CredentialType,
 		dstCredInfo.TokenCredential,
-		&options,
+		&dstOptions,
 		azureFileSpecificOptions,
 	)
 

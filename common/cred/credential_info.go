@@ -31,3 +31,9 @@ type CredentialInfo struct {
 	S3CredentialInfo  S3CredentialInfo
 	GCPCredentialInfo GCPCredentialInfo
 }
+
+func (c CredentialInfo) WithType(credentialType enum.CredentialType) CredentialInfo {
+	// c is a clone, so this is OK
+	c.CredentialType = credentialType
+	return c
+}

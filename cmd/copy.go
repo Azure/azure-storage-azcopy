@@ -843,8 +843,14 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 
 	// The isPublic flag is useful in S2S transfers but doesn't much matter for download. Fortunately, no S2S happens here.
 	// This means that if there's auth, there's auth. We're happy and can move on.
-	// GetCredentialInfoForLocation also populates oauth token fields... so, it's very easy.
-	credInfo, _, err := GetCredentialInfoForLocation(ctx, common.ELocation.Blob(), blobResource, true, cca.CpkOptions)
+	credInfo, err := getTargetCredInfo(blobResource, common.ELocation.Blob(), getTargetCredInfoOptions{
+		ctx:                ctx,
+		canBePublic:        true,
+		sharedKeyAllowed:   false,
+		preferredTokenName: SourceCredentialName,
+		cpkOptions:         cca.CpkOptions,
+		tokenManager:       GetCredentialManager(),
+	})
 
 	if err != nil {
 		return fmt.Errorf("fatal: cannot find auth on source blob URL: %s", err.Error())
@@ -852,7 +858,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 
 	// step 1: create client options
 	// note: dstCred is nil, as we could not reauth effectively because stdout is a pipe.
-	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(azcopyScanningLogger, nil, nil)}
+	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(azcopyScanningLogger, credInfo.TokenCredential, nil)}
 
 	// step 2: parse source url
 	u, err := blobResource.FullURL()
@@ -862,7 +868,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 
 	var blobClient *blockblob.Client
 	if credInfo.CredentialType.IsAzureOAuth() {
-		blobClient, err = blockblob.NewClient(u.String(), credInfo.OAuthTokenInfo.TokenCredential, options)
+		blobClient, err = blockblob.NewClient(u.String(), credInfo.TokenCredential, options)
 	} else {
 		blobClient, err = blockblob.NewClientWithNoCredential(u.String(), options)
 	}
@@ -921,22 +927,23 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 		blockSize = pipingDefaultBlockSize
 	}
 
-	// GetCredentialInfoForLocation populates oauth token fields... so, it's very easy.
-	credInfo, _, err := GetCredentialInfoForLocation(ctx, common.ELocation.Blob(), blobResource, false, cca.CpkOptions)
+	// get auth info for destination blob
+	credInfo, err := getTargetCredInfo(blobResource, common.ELocation.Blob(), getTargetCredInfoOptions{
+		ctx:                ctx,
+		canBePublic:        false,
+		sharedKeyAllowed:   true,
+		preferredTokenName: DestCredentialName,
+		cpkOptions:         cca.CpkOptions,
+		tokenManager:       GetCredentialManager(),
+	})
 
 	if err != nil {
 		return fmt.Errorf("fatal: cannot find auth on destination blob URL: %s", err.Error())
 	}
 
-	var reauthTok *common.ScopedAuthenticator
-	if at, ok := credInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
-		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, enum.ECredentialType.OAuthToken()))
-	}
-
 	// step 0: initialize pipeline
 	// Reauthentication is theoretically possible here, since stdin is blocked.
-	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)}
+	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(common.AzcopyCurrentJobLogger, nil, credInfo.TokenCredential)}
 
 	// step 1: parse destination url
 	u, err := blobResource.FullURL()
@@ -947,7 +954,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	// step 2: leverage high-level call in Blob SDK to upload stdin in parallel
 	var blockBlobClient *blockblob.Client
 	if credInfo.CredentialType.IsAzureOAuth() {
-		blockBlobClient, err = blockblob.NewClient(u.String(), credInfo.OAuthTokenInfo.TokenCredential, options)
+		blockBlobClient, err = blockblob.NewClient(u.String(), credInfo.TokenCredential, options)
 	} else {
 		blockBlobClient, err = blockblob.NewClientWithNoCredential(u.String(), options)
 	}
@@ -1031,12 +1038,6 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		return err
 	}
 
-	var srcReauth *common.ScopedAuthenticator
-	if at, ok := srcCredInfo.TokenCredential.(common.AuthenticateToken); ok {
-		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-		srcReauth = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, enum.ECredentialType.OAuthToken()))
-	}
-
 	// initialize the fields that are constant across all job part orders,
 	// and for which we have sufficient info now to set them
 	jobPartOrder := common.CopyJobPartOrderRequest{
@@ -1077,7 +1078,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		},
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, srcReauth)
+	options := createClientOptions(common.AzcopyCurrentJobLogger, srcCredInfo.TokenCredential, cca.credentialInfo.TokenCredential)
 	var azureFileSpecificOptions any
 	if cca.FromTo.From() == common.ELocation.File() {
 		azureFileSpecificOptions = &common.FileClientOptions{
@@ -1104,17 +1105,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 	}
 
-	var dstReauthTok *common.ScopedAuthenticator
-	if at, ok := cca.credentialInfo.TokenCredential.(common.AuthenticateToken); ok {
-		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-		dstReauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, enum.ECredentialType.OAuthToken()))
-	}
-
-	var srcCred *common.ScopedToken
-	if cca.FromTo.IsS2S() && srcCredInfo.CredentialType.IsAzureOAuth() {
-		srcCred = common.NewScopedCredential(srcCredInfo.TokenCredential, srcCredInfo.CredentialType)
-	}
-	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred, dstReauthTok)
+	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCredInfo.TokenCredential, cca.credentialInfo.TokenCredential)
 	jobPartOrder.DstServiceClient, err = common.GetServiceClientForLocation(
 		cca.FromTo.To(),
 		cca.Destination,

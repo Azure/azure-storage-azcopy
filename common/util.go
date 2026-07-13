@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
-	cred2 "github.com/Azure/azure-storage-azcopy/v10/common/cred"
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 
 	"net"
@@ -14,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
@@ -233,40 +230,7 @@ func GetServiceClientForLocation(loc Location,
 	}
 }
 
-// NewScopedCredential takes in a credInfo object and returns ScopedCredential
-// if credentialType is either MDOAuth or oAuth. For anything else,
-// nil is returned
-func NewScopedCredential[T azcore.TokenCredential](cred T, credType enum.CredentialType) *ScopedCredential[T] {
-	var scope string
-	if !credType.IsAzureOAuth() {
-		return nil
-	} else if credType == enum.ECredentialType.MDOAuthToken() {
-		scope = cred2.ManagedDiskScope
-	} else if credType == enum.ECredentialType.OAuthToken() {
-		scope = cred2.StorageScope
-	}
-	return &ScopedCredential[T]{cred: cred, scopes: []string{scope}}
-}
-
-type ScopedCredential[T azcore.TokenCredential] struct {
-	cred   T
-	scopes []string
-}
-
-func (s *ScopedCredential[T]) GetToken(ctx context.Context, _ policy.TokenRequestOptions) (azcore.AccessToken, error) {
-	return s.cred.GetToken(ctx, policy.TokenRequestOptions{Scopes: s.scopes, EnableCAE: true})
-}
-
-type ScopedToken = ScopedCredential[azcore.TokenCredential]
-type ScopedAuthenticator ScopedCredential[AuthenticateToken]
-
-func (s *ScopedAuthenticator) GetToken(ctx context.Context, _ policy.TokenRequestOptions) (azcore.AccessToken, error) {
-	return s.cred.GetToken(ctx, policy.TokenRequestOptions{Scopes: s.scopes, EnableCAE: true})
-}
-
-func (s *ScopedAuthenticator) Authenticate(ctx context.Context, _ *policy.TokenRequestOptions) (azidentity.AuthenticationRecord, error) {
-	return s.cred.Authenticate(ctx, &policy.TokenRequestOptions{Scopes: s.scopes, EnableCAE: true})
-}
+// =========================
 
 type ServiceClient struct {
 	fsc *fileservice.Client

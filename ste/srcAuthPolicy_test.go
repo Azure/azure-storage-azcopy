@@ -32,7 +32,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	cred2 "github.com/Azure/azure-storage-azcopy/v10/common/cred"
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/stretchr/testify/assert"
 )
@@ -60,7 +60,7 @@ func getE2ETokenCredential(a *assert.Assertions) azcore.TokenCredential {
 func TestSrcAuthPolicy(t *testing.T) {
 	a := assert.New(t)
 	cred := getE2ETokenCredential(a)
-	cred = common.NewScopedCredential(cred, enum.ECredentialType.OAuthToken())
+	cred = cred2.NewScopedToken(cred, enum.ECredentialType.OAuthToken())
 	srcAuthPolicy := NewSourceAuthPolicy(cred)
 	req, err := runtime.NewRequest(context.Background(), http.MethodGet, "https://127.0.0.1/")
 	a.Nil(err)
@@ -96,7 +96,7 @@ func TestSrcAuthPolicy(t *testing.T) {
 func TestSrcAuthPolicyMultipleRefresh(t *testing.T) {
 	a := assert.New(t)
 	cred := getE2ETokenCredential(a)
-	cred = common.NewScopedCredential(cred, enum.ECredentialType.OAuthToken())
+	cred = cred2.NewScopedToken(cred, enum.ECredentialType.OAuthToken())
 	srcAuthPolicy := NewSourceAuthPolicy(cred)
 
 	// 5. When multiple goroutines request a token to be refreshed, token should be refreshed once

@@ -31,7 +31,6 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
-	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
@@ -469,11 +468,9 @@ type cookedSyncCmdArgs struct {
 	// deletion count keeps track of how many extra files from the destination were removed
 	atomicDeletionCount uint32
 
-	source                  common.ResourceString
-	destination             common.ResourceString
-	fromTo                  common.FromTo
-	credentialInfo          common.CredentialInfo
-	s2sSourceCredentialType enum.CredentialType
+	source      common.ResourceString
+	destination common.ResourceString
+	fromTo      common.FromTo
 
 	// filters
 	recursive             bool
@@ -842,12 +839,6 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 }
 
 func (cca *cookedSyncCmdArgs) setCredentialInfo(ctx context.Context) error {
-
-	err := common.SetBackupMode(cca.backupMode, cca.fromTo)
-	if err != nil {
-		return err
-	}
-
 	if err := common.VerifyIsURLResolvable(cca.source.Value); cca.fromTo.From().IsRemote() && err != nil {
 		return fmt.Errorf("failed to resolve source: %w", err)
 	}
@@ -856,52 +847,20 @@ func (cca *cookedSyncCmdArgs) setCredentialInfo(ctx context.Context) error {
 		return fmt.Errorf("failed to resolve destination: %w", err)
 	}
 
-	// Verifies credential type and initializes credential info.
-	// Note that this is for the destination.
-	cca.credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination, false, cca.cpkOptions)
-	if err != nil {
-		return err
+	if cca.fromTo.IsUpload() || cca.fromTo.IsS2S() {
+		// Solve for the destination, and potentially, the source as an auxiliary token.
+	} else if cca.fromTo.IsDownload() {
+		// it's a download, so,
+	} else {
+		panic("auth resolution scheme not defined for transfer fromto " + cca.fromTo.String())
 	}
 
-	srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source, true, cca.cpkOptions)
-	if err != nil {
-		return err
-	}
-	cca.s2sSourceCredentialType = srcCredInfo.CredentialType
-	// Download is the only time our primary credential type will be based on source
-	if cca.fromTo.IsDownload() {
-		cca.credentialInfo = srcCredInfo
-	} else if cca.fromTo.IsS2S() {
-		cca.s2sSourceCredentialType = srcCredInfo.CredentialType // Assign the source credential type in S2S
-	}
+	//err := common.SetBackupMode(cca.backupMode, cca.fromTo)
+	//if err != nil {
+	//	return err
+	//}
+	//
 
-	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
-	// the info will be transferred to STE.
-	if cca.credentialInfo.CredentialType.IsAzureOAuth() || srcCredInfo.CredentialType.IsAzureOAuth() {
-		uotm := GetUserOAuthTokenManagerInstance()
-		// Get token from env var or cache.
-		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
-			return err
-		} else if _, err := tokenInfo.GetTokenCredential(); err != nil {
-			return err
-		}
-	}
-
-	// TODO: Remove this check when FileBlob w/ File OAuth works.
-	if cca.fromTo.IsS2S() && cca.fromTo.From() == common.ELocation.File() && srcCredInfo.CredentialType.IsAzureOAuth() && cca.fromTo.To() != common.ELocation.File() {
-		return fmt.Errorf("S2S sync from Azure File authenticated with Azure AD to Blob/BlobFS is not supported")
-	}
-
-	// Check if destination is system container
-	if cca.fromTo.IsS2S() || cca.fromTo.IsUpload() {
-		dstContainerName, err := GetContainerName(cca.destination.Value, cca.fromTo.To())
-		if err != nil {
-			return fmt.Errorf("failed to get container name from destination (is it formatted correctly?)")
-		}
-		if common.IsSystemContainer(dstContainerName) {
-			return fmt.Errorf("cannot copy to system container '%s'", dstContainerName)
-		}
-	}
 	return nil
 }
 

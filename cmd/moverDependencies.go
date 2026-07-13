@@ -326,9 +326,8 @@ func (cooked *cookedSyncCmdArgs) SetDestinationValue(destination string) {
 
 func CreateClientOptionsExt(
 	logger common.ILoggerResetable,
-	srcCred *common.ScopedToken,
-	reauthCred *common.ScopedAuthenticator) azcore.ClientOptions {
-	return createClientOptions(logger, srcCred, reauthCred)
+	srcCred, targetCred azcore.TokenCredential) azcore.ClientOptions {
+	return createClientOptions(logger, srcCred, targetCred)
 }
 
 // RawMoverSyncCmdArgs - Represents the raw command line arguments for the mover sync command.
@@ -580,11 +579,6 @@ func (cooked *cookedSyncCmdArgs) ToStringMap() map[string]string {
 	deletions := atomic.LoadUint32(&cooked.atomicDeletionCount)
 	if deletions > 0 {
 		result["deletionCount"] = fmt.Sprintf("%d", deletions)
-	}
-
-	// Always mask credential info
-	if cooked.credentialInfo.CredentialType != enum.ECredentialType.Unknown() {
-		result["credentialType"] = cooked.credentialInfo.CredentialType.String()
 	}
 
 	// Add CPK info if present (without exposing keys)

@@ -20,7 +20,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
-	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
@@ -495,27 +494,29 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 	// 3minutes is enough time to list properties of a container, and create new if it does not exist.
 	ctx, cancel := context.WithTimeout(parentCtx, time.Minute*3)
 	defer cancel()
-	if dstCredInfo, _, err = GetCredentialInfoForLocation(ctx, cca.FromTo.To(), cca.Destination, false, cca.CpkOptions); err != nil {
+	dstCredInfo, err = getTargetCredInfo(cca.Destination, cca.FromTo.To(), getTargetCredInfoOptions{
+		ctx:                ctx,
+		canBePublic:        false,
+		sharedKeyAllowed:   true,
+		preferredTokenName: DestCredentialName,
+		cpkOptions:         cca.CpkOptions,
+		tokenManager:       GetCredentialManager(),
+	})
+	if err != nil {
 		return err
-	}
-
-	var reauthTok *common.ScopedAuthenticator
-	if at, ok := dstCredInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
-		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, enum.ECredentialType.OAuthToken()))
 	}
 
 	options := createClientOptions(
 		common.LogLevelOverrideLogger{ // override our log level here
 			ILoggerResetable:  common.AzcopyCurrentJobLogger,
 			MinimumLevelToLog: ternary.Iff(LogLevel == common.ELogLevel.Debug(), common.ELogLevel.Debug(), common.ELogLevel.None()),
-		}, nil, reauthTok)
+		}, nil, dstCredInfo.TokenCredential)
 
 	sc, err := common.GetServiceClientForLocation(
 		cca.FromTo.To(),
 		dstWithSAS,
 		dstCredInfo.CredentialType,
-		dstCredInfo.OAuthTokenInfo.TokenCredential,
+		dstCredInfo.TokenCredential,
 		&options,
 		nil, // trailingDot is not required when creating a share
 	)

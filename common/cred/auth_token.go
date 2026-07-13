@@ -23,6 +23,7 @@ package cred
 import (
 	"context"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 )
@@ -30,6 +31,7 @@ import (
 // AuthenticateToken is implemented by token credentials that can authenticate
 // on demand to obtain a persistent auth record. DeviceCodeCredential satisfies this.
 type AuthenticateToken interface {
+	azcore.TokenCredential
 	Authenticate(ctx context.Context, opts *policy.TokenRequestOptions) (azidentity.AuthenticationRecord, error)
 }
 
