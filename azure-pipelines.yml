@@ -15,7 +15,7 @@ jobs:
     timeoutInMinutes: 360
     strategy:
       matrix:
-        Ubuntu-20:
+        Linux:
           imageName: 'ubuntu-latest'
           type: 'linux'
         MacOS:
@@ -32,78 +32,104 @@ jobs:
           GO111MODULE: 'on'
         inputs:
           version: $(AZCOPY_GOLANG_VERSION)
+        displayName: 'Install Go'
 
       - script: |
           echo 'Running GO Vet'
           go vet 
-        displayName: 'Golang Vet - Linux'
         workingDirectory: $(System.DefaultWorkingDirectory)
+        displayName: 'Golang Vet - Linux'
 
       - script: |
           sudo apt-get update
           sudo apt-get install -y libsecret-1-dev libglib2.0-dev
         displayName: 'Install dependencies'
-        condition: eq(variables['type'], 'linux')
+        # Don't run if job is canceled
+        condition: and(succeededOrFailed(), eq(variables.type, 'linux'))
 
       - script: |
           go run "common/manifest/main.go"
         displayName: 'Create resource.syso files'
-        condition: eq(variables.type, 'windows')
+        # Don't run if job is canceled
+        condition: and(succeededOrFailed(), eq(variables.type, 'windows'))
         
       - script: |
-          GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
+          go build -tags "netgo" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
+        env:
+          GOARCH: amd64
+          GOOS: linux
         displayName: 'Generate Linux AMD64'
-        condition: eq(variables.type, 'linux')
+        # Don't run if job is canceled
+        condition: and(succeededOrFailed(), eq(variables.type, 'linux'))
 
       - script: |
-          GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
+          go build -tags "netgo,se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
+        env:
+          GOARCH: amd64
+          GOOS: linux
         displayName: 'Generate Linux AMD64 SE Integration'
-        condition: eq(variables.type, 'linux')
+        # Don't run if job is canceled
+        condition: and(succeededOrFailed(), eq(variables.type, 'linux'))
 
       - script: |
-          GOARCH=arm64 GOOS=linux go build -tags "netgo" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64"
+          go build -tags "netgo" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64"
+        env:
+          GOARCH: arm64
+          GOOS: linux
         displayName: 'Generate Linux ARM64'
-        condition: eq(variables.type, 'linux')
+        # Don't run if job is canceled
+        condition: and(succeededOrFailed(), eq(variables.type, 'linux'))
 
       - script: |
           go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe"
-        displayName: 'Generate Windows AMD64'
-        condition: eq(variables.type, 'windows')
         env:
           GOARCH: amd64
           GOOS: windows
           CGO_ENABLED: 0
+        displayName: 'Generate Windows AMD64'
+        # Don't run if job is canceled
+        condition: and(succeededOrFailed(), eq(variables.type, 'windows'))
 
       - script: |
           go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_386.exe"
-        displayName: 'Generate Windows i386'
-        condition: eq(variables.type, 'windows')
         env:
           GOARCH: 386
           GOOS: windows
           CGO_ENABLED: 0
+        displayName: 'Generate Windows i386'
+        # Don't run if job is canceled
+        condition: and(succeededOrFailed(), eq(variables.type, 'windows'))
 
       - script: |
           cp NOTICE.txt $(Build.ArtifactStagingDirectory)
         displayName: 'Copy NOTICE.txt'
-        condition: eq(variables.type, 'linux')
+        # Don't run if job is canceled
+        condition: and(succeededOrFailed(), eq(variables.type, 'linux'))
 
       - script: |
-          CGO_ENABLED=1 go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
+          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
+        env:
+          CGO_ENABLED: 1
         displayName: 'Generate MacOS Build with AMD64'
-        condition: eq(variables.type, 'mac-os')
+        # Don't run if job is canceled
+        condition: and(succeededOrFailed(), eq(variables.type, 'mac-os'))
 
       # uncomment below when manually releasing for m1
-#      - script: |
-#          curl -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_arm64" -L "BUILD_URL"
-#        displayName: 'Generate MacOS Build with ARM64'
-#        condition: eq(variables.type, 'mac-os')
+      # - script: |
+      #     curl -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_arm64" -L "BUILD_URL"
+      #   displayName: 'Generate MacOS Build with ARM64'
+      #   # Don't run if job is canceled
+      #   condition: and(succeededOrFailed(), eq(variables.type, 'mac-os'))
 
       # cross compile to make sure nothing broke
       - script: |
-          GOARCH=arm64 CGO_ENABLED=1 go build
+          go build
+        env:
+          GOARCH: arm64
+          CGO_ENABLED: 1
         displayName: 'Test Cross-compiled MacOS Build with ARM64'
-        condition: eq(variables.type, 'mac-os')
+        # Don't run if job is canceled
+        condition: and(succeededOrFailed(), eq(variables.type, 'mac-os'))
 
       - task: PublishBuildArtifacts@1
         displayName: 'Publish Artifacts'
@@ -117,41 +143,47 @@ jobs:
 
   - template: azurePipelineTemplates/run-e2e.yml
     parameters:
-      name: 'Old_E2E'
+      job_name: 'Old_E2E'
       test_cli_param: '-tags olde2etest'
 
   - template: azurePipelineTemplates/run-e2e.yml
     parameters:
-      name: 'New_E2E'
+      job_name: 'New_E2E'
       test_cli_param: '-run "TestNewE2E/.*"'
       
-  - job: Test_On_Ubuntu
+  - job: Unit_and_Python_Tests
     variables:
       isMutexSet: 'false'
+      coverageDir: 'coverage'
+      pythonCoverageReportName: 'smoke_coverage'
     # allow maximum build time, in case we have build congestion
     timeoutInMinutes: 360
     pool:
       vmImage: 'ubuntu-latest'
     steps:
       - task: UsePythonVersion@0
-        name: 'Set_up_Python'
         inputs:
           versionSpec: '3.10'
+        displayName: 'Install Python'
+
       - task: GoTool@0
-        name: 'Set_up_Golang'
         inputs:
           version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
+        displayName: 'Install Go'
+
       - task: DownloadSecureFile@1
-        name: ciGCSServiceAccountKey
-        displayName: 'Download GCS Service Account Key'
         inputs:
           secureFile: 'ci-gcs-dev.json'
+        name: ciGCSServiceAccountKey
+        displayName: 'Download GCS Service Account Key'
+
       - script: |
           go install github.com/jstemmer/go-junit-report@v0.9.1
           go install github.com/axw/gocov/gocov@v1.1.0
           go install github.com/AlekSi/gocov-xml@v1.0.0
           go install github.com/matm/gocov-html@v0.0.0-20200509184451-71874e2e203b
-        displayName: 'Install dependencies'
+        displayName: 'Install Code Coverage and Test Report Dependencies'
+
       - script: |
           pip install azure-storage-blob==12.12.0
           pip install azure-storage-blob six
@@ -163,46 +195,63 @@ jobs:
           echo '##vso[task.setvariable variable=isMutexSet]true'
           # acquire the mutex before running live tests to avoid conflicts
           python ./tool_distributed_mutex.py lock "$(MUTEX_URL)"
-        name: 'Acquire_the_distributed_mutex'
+        displayName: 'Acquire the Distributed Mutex'
+
       - template: azurePipelineTemplates/run-ut.yml
         parameters:
           directory: 'cmd'
           coverage_name: 'cmd'
+          isMutexSet: variables['isMutexSet']
+
       - template: azurePipelineTemplates/run-ut.yml
         parameters:
           directory: 'common'
           coverage_name: 'common'
+          isMutexSet: variables['isMutexSet']
+
       - template: azurePipelineTemplates/run-ut.yml
         parameters:
           directory: 'common/parallel'
           coverage_name: 'parallel'
+          isMutexSet: variables['isMutexSet']
+
+      - template: azurePipelineTemplates/run-ut.yml
+        parameters:
+          directory: 'sddl'
+          coverage_name: 'sddl'
+          isMutexSet: variables['isMutexSet']
+
       - template: azurePipelineTemplates/run-ut.yml
         parameters:
           directory: 'ste'
           coverage_name: 'ste'
           with_federated_credential: true
-      - template: azurePipelineTemplates/run-ut.yml
-        parameters:
-          directory: 'sddl'
-          coverage_name: 'sddl'
+          isMutexSet: variables['isMutexSet']
+
       - script: |
           GOARCH=amd64 GOOS=linux go build -cover -tags "netgo" -o azcopy_linux_amd64 
           go build -tags "netgo" -o test-validator ./testSuite/
           mkdir test-temp
-          mkdir coverage
+          mkdir "$(coverageDir)"
           export AZCOPY_EXECUTABLE_PATH=$(pwd)/azcopy_linux_amd64
           export TEST_SUITE_EXECUTABLE_LOCATION=$(pwd)/test-validator
           export TEST_DIRECTORY_PATH=$(pwd)/test-temp
 
+          # Run tests and write coverage data to a directory
+          echo "Running tests. Writing coverage data to \"$(coverageDir)\" directory."
           keyctl session test python ./testSuite/scripts/run.py
           
-          echo 'Formatting coverage directory to legacy txt format'
-          go tool covdata textfmt -i=coverage -o smoke_coverage.txt
-          echo 'Formatting coverage to json format'
-          $(go env GOPATH)/bin/gocov convert smoke_coverage.txt > smoke_coverage.json
-          echo 'Formatting coverage to xml format'
-          $(go env GOPATH)/bin/gocov-xml < smoke_coverage.json > smoke_coverage.xml
-        name: 'Run_smoke_tests'
+          # Convert coverage data to text format
+          echo "Generating plain-text coverage report $(pythonCoverageReportName).txt"
+          go tool covdata textfmt -i="$(coverageDir)" -o "$(pythonCoverageReportName).txt"
+
+          # Convert coverage data to JSON format
+          echo "Generating JSON coverage report $(pythonCoverageReportName).json"
+          $(go env GOPATH)/bin/gocov convert "$(pythonCoverageReportName).txt" > "$(pythonCoverageReportName).json"
+          
+          # Convert coverage data to XML format
+          echo "Generating XML coverage report $(pythonCoverageReportName).xml"
+          $(go env GOPATH)/bin/gocov-xml < "$(pythonCoverageReportName).json" > "$(pythonCoverageReportName).xml"
         env:
           ACCOUNT_NAME: $(ACCOUNT_NAME)
           ACCOUNT_KEY: $(ACCOUNT_KEY)
@@ -226,19 +275,25 @@ jobs:
           S2S_SRC_S3_SERVICE_URL: $(S2S_SRC_S3_SERVICE_URL)
           S2S_SRC_GCP_SERVICE_URL: $(S2S_SRC_GCP_SERVICE_URL)
           SHARE_SAS_URL: $(SHARE_SAS_URL)
-          GOCOVERDIR: '$(System.DefaultWorkingDirectory)/coverage'
-        condition: succeededOrFailed()
+          GOCOVERDIR: '$(System.DefaultWorkingDirectory)/$(coverageDir)'
+        displayName: 'Run Python Tests'
+        # Don't let a unit-test failure prevent the Python tests from running,
+        # but don't run if job is canceled or mutex wasn't acquired
+        condition: and(succeededOrFailed(), eq(variables['isMutexSet'], 'true'))
+
       # Smoke Tests Publishing
       - task: PublishCodeCoverageResults@1
-        condition: succeededOrFailed()
         inputs:
           codeCoverageTool: Cobertura
-          summaryFileLocation: $(System.DefaultWorkingDirectory)/**/smoke_coverage.xml
+          summaryFileLocation: '$(System.DefaultWorkingDirectory)/**/$(pythonCoverageReportName).xml'
+        # Don't run if job is canceled or mutex wasn't acquired (in which case, test task didn't run, so no test results to report)
+        condition: and(succeededOrFailed(), eq(variables['isMutexSet'], 'true'))
+
       - script: |
           pip install azure-storage-blob==12.12.0
           python ./tool_distributed_mutex.py unlock "$(MUTEX_URL)"
-        name: 'Release_the_distributed_mutex'
-        # this runs even if the job was canceled (only if the mutex was acquired by this job)
+        displayName: 'Release the Distributed Mutex'
+        # If the mutex was acquired by this job, release the mutex - even if the job was canceled
         condition: and(always(), eq(variables['isMutexSet'], 'true'))
 
   - job: Additional_E2E_Test_Linux
@@ -268,6 +323,7 @@ jobs:
       - task: GoTool@0
         inputs:
           version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
+        displayName: 'Install Go'
       
       # Install azcli
       - script: |
@@ -307,20 +363,21 @@ jobs:
           script: |
             # Install Az.Accounts module using PowerShell
             Install-Module -Name Az.Accounts -Scope CurrentUser -Repository PSGallery -AllowClobber -Force
-          displayName: 'Install PowerShell Az Module'
+        displayName: 'Install PowerShell Az Module'
 
       - task: GoTool@0
         inputs:
           version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
+        displayName: 'Install Go'
 
       - task: PowerShell@2
-        displayName: 'Install Azure CLI'
         inputs:
           targetType: 'inline'
           script: |
             # Install Azure CLI using Chocolatey
             choco install azure-cli -y
             az --version
+        displayName: 'Install Azure CLI'
           
       - template: azurePipelineTemplates/run_scenarios.yml
         parameters:

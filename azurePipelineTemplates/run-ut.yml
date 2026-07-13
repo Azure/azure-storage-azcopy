@@ -6,36 +6,54 @@ parameters:
   - name: with_federated_credential
     type: boolean
     default: false
+  - name: isMutexSet
+    type: string
+
 steps:
   - ${{ if eq('false', parameters.with_federated_credential) }}:
       - script: |
-          set -e
-          echo "Running tests in" ${directory}
-          go test -timeout=1h -v -coverprofile=${coverage_name}_coverage.txt ./${directory} | tee ${coverage_name}.txt
-          exit_code=${PIPESTATUS[0]}
-          echo "Generating junit report for" ${directory}
-          cat ${coverage_name}.txt | $(go env GOPATH)/bin/go-junit-report > ${coverage_name}_report.xml
-          echo "Generating json coverage report for" ${directory}
-          $(go env GOPATH)/bin/gocov convert ${coverage_name}_coverage.txt > ${coverage_name}_coverage.json
-          echo "Generating xml coverage report for" ${directory}
-          $(go env GOPATH)/bin/gocov-xml < ${coverage_name}_coverage.json > ${coverage_name}_coverage.xml
-          exit "$exit_code"
-        displayName: 'Run ${{ parameters.directory }} tests'
+            # This should be identical to the script below. Once you've updated one script, just copy and paste it in the other location.
+            set -e
+
+            # Run tests, write coverage data to a file, and pipe output to a file
+            echo "Running tests in ${directory}. Writing coverage data to ${coverageReportName}.txt and test results to ${testReportName}.txt."
+            go test -timeout=1h -v -coverprofile="${coverageReportName}.txt" "./${directory}" | tee "${testReportName}.txt"
+
+            exit_code=${PIPESTATUS[0]}
+
+            # Generate the jUnit report
+            echo "Generating jUnit report ${testReportName}.xml"
+            cat "${testReportName}.txt" | $(go env GOPATH)/bin/go-junit-report > "${testReportName}.xml"
+
+            # Convert coverage data to JSON format
+            echo "Generating JSON coverage report ${coverageReportName}.json"
+            $(go env GOPATH)/bin/gocov convert "${coverageReportName}.txt" > "${coverageReportName}.json"
+
+            # Convert coverage data to XML format
+            echo "Generating XML coverage report ${coverageReportName}.xml"
+            $(go env GOPATH)/bin/gocov-xml < "${coverageReportName}.json" > "${coverageReportName}.xml"
+
+            exit "$exit_code"
         env:
           directory: ${{ parameters.directory }}
-          coverage_name: ${{ parameters.coverage_name }}
+          testReportName: '${{ parameters.coverage_name }}_report'
+          coverageReportName: '${{ parameters.coverage_name }}_coverage'
           ACCOUNT_NAME: $(ACCOUNT_NAME)
           ACCOUNT_KEY: $(ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
           AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
           AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+          GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
+          GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
+          # All env variables above this comment should be the same for both scripts.
           AZCOPY_E2E_APPLICATION_ID: $(ACTIVE_DIRECTORY_APPLICATION_ID)
           AZCOPY_E2E_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
           AZCOPY_E2E_TENANT_ID: $(OAUTH_TENANT_ID)
-          GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
-          GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
-        condition: succeededOrFailed()
+        displayName: 'Run ${{ parameters.directory }} tests'
+        # Don't let a test failure for a different directory prevent this directory from being tested,
+        # but don't run if job is canceled or mutex wasn't acquired
+        condition: and(succeededOrFailed(), eq(${{ parameters.isMutexSet }}, 'true'))
   - ${{ else }}:
       - task: AzureCLI@2
         inputs:
@@ -44,20 +62,32 @@ steps:
           scriptType: bash
           scriptLocation: inlineScript
           inlineScript: |
+            # This should be identical to the script above. Once you've updated one script, just copy and paste it in the other location.
             set -e
-            echo "Running tests in" ${directory}
-            go test -timeout=1h -v -coverprofile=${coverage_name}_coverage.txt ./${directory} | tee ${coverage_name}.txt
+
+            # Run tests, write coverage data to a file, and pipe output to a file
+            echo "Running tests in ${directory}. Writing coverage data to ${coverageReportName}.txt and test results to ${testReportName}.txt."
+            go test -timeout=1h -v -coverprofile="${coverageReportName}.txt" "./${directory}" | tee "${testReportName}.txt"
+
             exit_code=${PIPESTATUS[0]}
-            echo "Generating junit report for" ${directory}
-            cat ${coverage_name}.txt | $(go env GOPATH)/bin/go-junit-report > ${coverage_name}_report.xml
-            echo "Generating json coverage report for" ${directory}
-            $(go env GOPATH)/bin/gocov convert ${coverage_name}_coverage.txt > ${coverage_name}_coverage.json
-            echo "Generating xml coverage report for" ${directory}
-            $(go env GOPATH)/bin/gocov-xml < ${coverage_name}_coverage.json > ${coverage_name}_coverage.xml
+
+            # Generate the jUnit report
+            echo "Generating jUnit report ${testReportName}.xml"
+            cat "${testReportName}.txt" | $(go env GOPATH)/bin/go-junit-report > "${testReportName}.xml"
+
+            # Convert coverage data to JSON format
+            echo "Generating JSON coverage report ${coverageReportName}.json"
+            $(go env GOPATH)/bin/gocov convert "${coverageReportName}.txt" > "${coverageReportName}.json"
+
+            # Convert coverage data to XML format
+            echo "Generating XML coverage report ${coverageReportName}.xml"
+            $(go env GOPATH)/bin/gocov-xml < "${coverageReportName}.json" > "${coverageReportName}.xml"
+
             exit "$exit_code"
         env:
           directory: ${{ parameters.directory }}
-          coverage_name: ${{ parameters.coverage_name }}
+          testReportName: '${{ parameters.coverage_name }}_report'
+          coverageReportName: '${{ parameters.coverage_name }}_coverage'
           ACCOUNT_NAME: $(ACCOUNT_NAME)
           ACCOUNT_KEY: $(ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
@@ -66,21 +96,24 @@ steps:
           AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
           GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
           GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
+          # All env variables above this comment should be the same for both scripts.
           NEW_E2E_ENVIRONMENT: "AzurePipeline"
-        displayName: 'Run ${{ parameters.directory }} tests with Workload Identity'
-        condition: succeededOrFailed()
+        displayName: 'Run ${{ parameters.directory }} Tests with Workload Identity'
+        # Don't let a test failure for a different directory prevent this directory from being tested,
+        # but don't run if job is canceled or mutex wasn't acquired
+        condition: and(succeededOrFailed(), eq(${{ parameters.isMutexSet }}, 'true'))
+
   - task: PublishTestResults@2
-    condition: succeededOrFailed()
     inputs:
       testRunner: JUnit
-      testResultsFiles: $(System.DefaultWorkingDirectory)/**/${{ parameters.coverage_name }}_report.xml
+      testResultsFiles: '$(System.DefaultWorkingDirectory)/**/${{ parameters.coverage_name }}_report.xml'
       testRunTitle: '${{ parameters.directory }} Tests'
-    env:
-      coverage_name: ${{ parameters.coverage_name }}
+    # Don't run if job is canceled or mutex wasn't acquired (in which case, test task didn't run, so no test results to report)
+    condition: and(succeededOrFailed(), eq(${{ parameters.isMutexSet }}, 'true'))
+
   - task: PublishCodeCoverageResults@1
-    condition: succeededOrFailed()
     inputs:
       codeCoverageTool: Cobertura
-      summaryFileLocation: $(System.DefaultWorkingDirectory)/**/${{ parameters.coverage_name }}_coverage.xml
-    env:
-      coverage_name: ${{ parameters.coverage_name }}
+      summaryFileLocation: '$(System.DefaultWorkingDirectory)/**/${{ parameters.coverage_name }}_coverage.xml'
+    # Don't run if job is canceled or mutex wasn't acquired (in which case, test task didn't run, so no test coverage data to report)
+    condition: and(succeededOrFailed(), eq(${{ parameters.isMutexSet }}, 'true'))
