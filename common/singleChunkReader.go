@@ -240,6 +240,15 @@ func (cr *singleChunkReader) blockingPrefetch(fileReader io.ReaderAt, isRetry bo
 
 	targetBuffer := cr.slicePool.RentSlice(cr.length)
 
+	// Snapshot the closed state.  Rationale: the isClosed check after ReadAt below is
+	// intended to detect a Close() that races with THIS particular disk read.  A
+	// previous Close() (e.g. by the HTTP transport reacting to a server-side
+	// connection reset such as an AFD 240s idle recycle) must NOT prevent the
+	// azcore retry policy from re-driving this reader via RewindBody+Read again,
+	// otherwise every subsequent retry will fail with "closed while reading" and
+	// exhaust the retry budget without recovering.
+	wasClosedBefore := cr.isClosed
+
 	// read WITHOUT holding the "close" lock.  While we don't have the lock, we mutate ONLY local variables, no instance state.
 	// (Don't release the other lock, muMaster, since that's unnecessary would make it harder to reason about behaviour - e.g. is something other than Close happening?)
 	cr.muClose.Unlock()
@@ -248,7 +257,8 @@ func (cr *singleChunkReader) blockingPrefetch(fileReader io.ReaderAt, isRetry bo
 
 	// now that we have the lock again, see if any error means we can't continue
 	if readErr == nil {
-		if cr.isClosed {
+		if cr.isClosed && !wasClosedBefore {
+			// Close() ran concurrently with ReadAt for THIS attempt; abort.
 			readErr = errors.New("closed while reading")
 		} else if cr.ctx.Err() != nil {
 			readErr = cr.ctx.Err() // context cancelled
@@ -260,6 +270,13 @@ func (cr *singleChunkReader) blockingPrefetch(fileReader io.ReaderAt, isRetry bo
 	if readErr != nil {
 		cr.returnSlice(targetBuffer)
 		return readErr
+	}
+
+	// The reader was previously Close()-d but is now being successfully re-used (retry after
+	// a server-closed connection).  Clear the closed flag so subsequent state (e.g. any later
+	// concurrent Close during a further read) is detected correctly.
+	if wasClosedBefore {
+		cr.isClosed = false
 	}
 
 	// We can continue, so use the data we have read
