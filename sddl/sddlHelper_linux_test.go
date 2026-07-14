@@ -70,9 +70,9 @@ func TestMaliciousRelativeSDDLCrashPrevented(t *testing.T) {
 		craftedDescriptor.Control = originalControl
 
 		// We should not have panicked, just errored cleanly.
-		a.Nil(panicked, v.testName, "panicked")
-		a.NotNil(err, v.testName, "should have returned an error")
-		a.Contains(err.Error(), "must lie within sd", v.testName, "error wasn't as expected")
+		a.Nil(panicked, "%s panicked", v.testName)
+		a.NotNil(err, "%s should have returned an error", v.testName)
+		a.Contains(err.Error(), "must lie within sd", "%s error wasn't as expected", v.testName)
 	}
 
 	// let's test one more thing. getDaclString could cause issues in the past, let's set the malicious data for that and make sure we error.
