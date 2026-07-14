@@ -1250,27 +1250,27 @@ extends:
                     sudo ls -lRt $(Build.ArtifactStagingDirectory)
                   displayName: 'List Artifacts'
 
-                - task: GithubRelease@1
-                  inputs:
-                    githubConnection: 'azcopy-github-connection'
-                    repositoryName: 'Azure/azure-storage-azcopy'
-                    action: 'create' # Will prevent overwriting already existing release
-                    target: '$(Build.SourceVersion)'
-                    tagSource: 'userSpecifiedTag'
-                    title: "AzCopy v$(azcopy_version)"
-                    tag: "v$(azcopy_github_tag)"
-                    changeLogCompareToRelease: 'lastFullRelease'
-                    changeLogType: 'commitBased'
-                    isDraft: ${{ parameters.draft }}
-                    isPreRelease: ${{ parameters.prerelease }}
-                    assets: |
-                      $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/*.deb
-                      $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/*.rpm
-                      $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/*.tar.gz
-                      $(Build.ArtifactStagingDirectory)/azcopy-windows-signed/*.zip
-                      $(Build.ArtifactStagingDirectory)/azcopy-mac-signed/*.zip
-                      $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/mariner/*
-                    assetUploadMode: replace
+                # - task: GithubRelease@1
+                #   inputs:
+                #     githubConnection: 'azcopy-github-connection'
+                #     repositoryName: 'Azure/azure-storage-azcopy'
+                #     action: 'create' # Will prevent overwriting already existing release
+                #     target: '$(Build.SourceVersion)'
+                #     tagSource: 'userSpecifiedTag'
+                #     title: "AzCopy v$(azcopy_version)"
+                #     tag: "v$(azcopy_github_tag)"
+                #     changeLogCompareToRelease: 'lastFullRelease'
+                #     changeLogType: 'commitBased'
+                #     isDraft: ${{ parameters.draft }}
+                #     isPreRelease: ${{ parameters.prerelease }}
+                #     assets: |
+                #       $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/*.deb
+                #       $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/*.rpm
+                #       $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/*.tar.gz
+                #       $(Build.ArtifactStagingDirectory)/azcopy-windows-signed/*.zip
+                #       $(Build.ArtifactStagingDirectory)/azcopy-mac-signed/*.zip
+                #       $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/mariner/*
+                #     assetUploadMode: replace
           # ReleaseToGithub ends here
 
       - ${{ if eq(parameters.publish_artifacts, true) }}:
@@ -1381,7 +1381,8 @@ extends:
                       scriptType: bash
                       scriptLocation: inlineScript
                       inlineScript: |
-                        pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" package upload signed
+                        #pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" package upload signed
+                        echo "no-op"
 
                 - ${{ if eq(parameters.test_pmc_connection, false) }}:
                   - task: AzureCLI@2
@@ -1419,29 +1420,29 @@ extends:
 
                         # These pmc commands appear to be uploading package IDs for later reference in other pmc commands
                         
-                        azcopyAmdDeb=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azcopyAmdDebFile)
-                        echo "Azcopy AMD DEB ID: $azcopyAmdDeb"
+                        # azcopyAmdDeb=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azcopyAmdDebFile)
+                        # echo "Azcopy AMD DEB ID: $azcopyAmdDeb"
 
-                        azcopyAmdRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azcopyAmdRpmFile)
-                        echo "Azcopy AMD RPM ID: $azcopyAmdRpm"
+                        # azcopyAmdRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azcopyAmdRpmFile)
+                        # echo "Azcopy AMD RPM ID: $azcopyAmdRpm"
 
-                        azcopyArmDeb=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azcopyArmDebFile)
-                        echo "Azcopy ARM DEB ID: $azcopyArmDeb"
+                        # azcopyArmDeb=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azcopyArmDebFile)
+                        # echo "Azcopy ARM DEB ID: $azcopyArmDeb"
 
-                        azcopyArmRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azcopyArmRpmFile)
-                        echo "Azcopy ARM RPM ID: $azcopyArmRpm"
+                        # azcopyArmRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azcopyArmRpmFile)
+                        # echo "Azcopy ARM RPM ID: $azcopyArmRpm"
 
-                        marinerAmdRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $marinerAmdRpmFile)
-                        echo "Azcopy Mariner AMD RPM ID: $marinerAmdRpm"
+                        # marinerAmdRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $marinerAmdRpmFile)
+                        # echo "Azcopy Mariner AMD RPM ID: $marinerAmdRpm"
                       
-                        marinerAarchRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $marinerAarchRpmFile)
-                        echo "Azcopy Mariner ARM RPM ID: $marinerAarchRpm"
+                        # marinerAarchRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $marinerAarchRpmFile)
+                        # echo "Azcopy Mariner ARM RPM ID: $marinerAarchRpm"
 
-                        azcopyFipsAmdRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azcopyFipsAmdRpmFile)
-                        echo "Azcopy FIPS AMD RPM ID: $azcopyFipsAmdRpm"
+                        # azcopyFipsAmdRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azcopyFipsAmdRpmFile)
+                        # echo "Azcopy FIPS AMD RPM ID: $azcopyFipsAmdRpm"
 
-                        azcopyFipsArmRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azcopyFipsArmRpmFile)
-                        echo "Azcopy FIPS ARM RPM ID: $azcopyFipsArmRpm"
+                        # azcopyFipsArmRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azcopyFipsArmRpmFile)
+                        # echo "Azcopy FIPS ARM RPM ID: $azcopyFipsArmRpm"
 
                         is_preview="false"
                         echo "##vso[task.setvariable variable=is_preview]$is_preview"
@@ -1462,7 +1463,7 @@ extends:
                           echo "Uploading packages for $distro"
                           # This is reading a line from packages.csv and adding (to the repo) the package ID stored in the variable that has the name stored in the archetype field.
                           # For example, if $archetype = azcopyAmdDeb (as read from the second field of packages.csv), scroll up to see where this script assigns a package ID to azcopyAmdDeb.
-                          pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" repo package update --add-packages ${!archetype} $repoName $releaseName
+                          # pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" repo package update --add-packages ${!archetype} $repoName $releaseName
                         done < <(tail -n +3 ../packages.csv)
 
                 - ${{ if eq(parameters.test_pmc_connection, false) }}:
@@ -1485,7 +1486,7 @@ extends:
                               fi
                             fi
                             echo "Publishing $repoName"
-                            pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" repo publish $repoName
+                            # pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" repo publish $repoName
                           fi
                         done < <(tail -n +3 ../packages.csv)
           # PublishArtifacts ends here
