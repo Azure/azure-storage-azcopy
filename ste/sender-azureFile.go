@@ -189,6 +189,27 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		// about the file type at this time than what we had before
 		u.headersToApply.ContentType = state.GetInferredContentType(u.jptm)
 	}
+
+	// If the destination is a regular NFS file with LinkCount > 1 (i.e. part of a hardlink group), delete it before Create
+	// so we don't preserve the existing inode/hardlink relationships when overwriting this path.
+	if u.jptm.FromTo().IsNFS() {
+		if props, err := u.getFileClient().GetProperties(u.ctx, nil); err == nil {
+			isNFSFileRegular := props.NFSFileType != nil && *props.NFSFileType == file.NFSFileTypeRegular
+			linkCount := common.IffNotNil(props.LinkCount, int64(0))
+			if isNFSFileRegular && linkCount > 1 {
+				jptm.Log(common.LogInfo, fmt.Sprintf(
+					"Destination %s is part of a hardlink group (linkCount=%d). Deleting before creation so the hardlink group is broken to match the source.",
+					u.getFileClient().URL(), linkCount))
+				if _, delErr := u.getFileClient().Delete(u.ctx, nil); delErr != nil {
+					// We don't fail outright on Delete errors here.
+					// Any errors would be surfaced and handled in Create
+					jptm.Log(common.LogWarning, fmt.Sprintf(
+						"Deleting destination %s to break hardlink group before creation failed: %v",
+						u.getFileClient().URL(), delErr))
+				}
+			}
+		}
+	}
 	createOptions := &file.CreateOptions{
 		HTTPHeaders: &u.headersToApply,
 		Metadata:    u.metadataToApply,
