@@ -12,12 +12,12 @@
 5. go.opentelemetry.io/otel v1.40.0 -> v1.42.0
 6. go.opentelemetry.io/otel/metric v1.40.0 -> v1.42.0
 7. go.opentelemetry.io/otel/sdk v1.40.0 -> v1.42.0
-8. go.opentelemetry.io/otel/sdk/metric v1.40.0 ->v1.42.0
+8. go.opentelemetry.io/otel/sdk/metric v1.40.0 -> v1.42.0
 9. go.opentelemetry.io/otel/trace v1.40.0 -> v1.42.0
 
 ### Bug Fixes
 
-1. 10.32.5 was discovered to not be based upon 10.32.4 or .3-- this has been rectified, and changes are now consistent with prior patch releases.
+1. 10.32.5 was discovered to not be based upon 10.32.4 or 10.32.3-- this has been rectified, and changes are now consistent with prior patch releases.
 
 ### New Features
 
