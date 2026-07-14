@@ -1767,3 +1767,123 @@ func (s *FilesNFSTestSuite) Scenario_NFSToNFS_OverwriteSymlinkToFile(svm *Scenar
 		fromTo:                common.EFromTo.FileNFSFileNFS(),
 	})
 }
+
+/*
+ Source:
+	A.txt  -> anchor   (inode = 123) nlink = 2
+	B.txt  -> hardlink (inode = 123) nlink = 2
+
+ Dest:
+	B.txt -> anchor   (inode = 456) nlink = 2
+	C.txt -> hardlink (inode = 456) nlink = 2
+
+After Copy:
+	A.txt  -> anchor   (inode = 123) nlink = 2
+	B.txt  -> hardlink (inode = 123) nlink = 2
+    C.txt  -> hardlink (inode = 456) nlink = 1
+*/
+// Scenario_LocalToNFS_RetargetHardlinkGroup_Copy verifies that during copy with --hardlinks=preserve
+// existing hardlinks with the same path on the destination are retargeted to the correct inodes to match the source structure
+func (s *FilesNFSTestSuite) Scenario_LocalToNFS_RetargetHardlinkGroup_Copy(svm *ScenarioVariationManager) {
+	if runtime.GOOS != "linux" {
+		svm.InvalidateScenario()
+		return
+	}
+
+	if svm.Dryrun() {
+		return
+	}
+
+	fromTo := common.EFromTo.LocalFileNFS()
+
+	srcContainer, dstContainer, rootDir := setupHardlinkSyncContainersForFromTo(svm, fromTo)
+	defer cleanupHardlinkSyncForFromTo(svm, fromTo, srcContainer, dstContainer, rootDir)
+
+	aName := rootDir + "/a.txt"
+	bName := rootDir + "/b.txt"
+	cName := rootDir + "/c.txt"
+
+	srcBody := NewRandomObjectContentContainer(10)
+	dstBody := NewRandomObjectContentContainer(10)
+
+	// Source: {a, b}
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName:       pointerTo(rootDir),
+		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()},
+	})
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		ObjectName:       pointerTo(aName),
+		Body:             srcBody,
+		ObjectProperties: ObjectProperties{EntityType: common.EEntityType.File()},
+	})
+	CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+		Body:       srcBody,
+		ObjectName: pointerTo(bName),
+		ObjectProperties: ObjectProperties{
+			EntityType:         common.EEntityType.Hardlink(),
+			HardLinkedFileName: aName,
+		},
+	})
+
+	// Dest: {b, c}
+	dstDir := dstContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+	dstDir.Create(svm, nil, ObjectProperties{EntityType: common.EEntityType.Folder()})
+
+	dstContainer.GetObject(svm, bName, common.EEntityType.File()).
+		Create(svm, dstBody, ObjectProperties{EntityType: common.EEntityType.File()})
+
+	dstContainer.GetObject(svm, cName, common.EEntityType.Hardlink()).
+		Create(svm, dstBody, ObjectProperties{
+			EntityType:         common.EEntityType.Hardlink(),
+			HardLinkedFileName: bName,
+		})
+
+	srcDirObj := srcContainer.GetObject(svm, rootDir, common.EEntityType.Folder())
+
+	RunAzCopy(svm, AzCopyCommand{
+		Verb: AzCopyVerbCopy,
+		Targets: []ResourceManager{
+			srcDirObj,
+			dstDir.(RemoteResourceManager).WithSpecificAuthType(
+				ResolveVariation(svm, []ExplicitCredentialTypes{
+					EExplicitCredentialType.SASToken(),
+					//EExplicitCredentialType.OAuth(),
+				}), svm, CreateAzCopyTargetOptions{}),
+		},
+		Flags: CopyFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive:    pointerTo(true),
+				FromTo:       pointerTo(fromTo),
+				HardlinkType: pointerTo(common.PreserveHardlinkHandlingType),
+			},
+			AsSubdir: pointerTo(false),
+		},
+	})
+
+	// (A+B), C (standalone file)
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			aName: ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType: common.EEntityType.Hardlink(),
+				},
+			},
+			bName: ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType:         common.EEntityType.Hardlink(),
+					HardLinkedFileName: aName,
+				},
+			},
+			cName: ResourceDefinitionObject{
+				Body: dstBody,
+				ObjectProperties: ObjectProperties{
+					EntityType: common.EEntityType.File(),
+				},
+			},
+		},
+	}, ValidateResourceOptions{
+		fromTo:                fromTo,
+		hardlinkHandling:      common.PreserveHardlinkHandlingType,
+		validateObjectContent: true,
+	})
+}
