@@ -1,12 +1,14 @@
 package e2etest
 
 import (
-	"github.com/google/uuid"
 	"reflect"
 	"runtime/debug"
 	"strings"
 	"sync"
 	"testing"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 type ScenarioManager struct {
@@ -122,7 +124,10 @@ func (sm *ScenarioManager) RunScenario() {
 					svm.DeleteCreatedResources()
 				})
 
+				start := time.Now()
 				sm.Func.Call([]reflect.Value{reflect.ValueOf(svm)})
+				duration := time.Since(start)
+				t.Logf("%s took %v to complete", svm.VariationName(), duration)
 
 				if svm.isInvalid {
 					t.Fail() // If FailNow hasn't already been called, we should fail.

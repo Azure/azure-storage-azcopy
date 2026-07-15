@@ -21,6 +21,7 @@
 package e2etest
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -210,7 +211,7 @@ func (gim GlobalInputManager) GetMDConfig(accountType AccountType) (*ManagedDisk
 		return nil, fmt.Errorf("failed to setup OAuth cache: %w", err)
 	}
 
-	out.oauth, err = ClassicE2EOAuthCache.GetAccessToken(AzureManagementResource)
+	out.oauth, err = ClassicE2EOAuthCache.GetAccessToken(AzureManagementResource, context.TODO())
 	if err != nil {
 		return nil, fmt.Errorf("failed to get access token: %w", err)
 	}

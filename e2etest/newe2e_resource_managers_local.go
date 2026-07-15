@@ -35,8 +35,15 @@ func NewLocalContainer(a Asserter) ContainerResourceManager {
 		}
 	}
 
+retryDir:
+
 	tmp := os.TempDir()
 	dirName := uuid.NewString()
+
+	// It is unlikely this could happen, but just in case...
+	if _, err := os.Stat(filepath.Join(tmp, dirName)); err != nil {
+		goto retryDir
+	}
 
 	return &LocalContainerResourceManager{
 		RootPath: filepath.Join(tmp, dirName),
