@@ -94,12 +94,33 @@ func getSourceBlockList(jptm IJobPartTransferMgr) (blockblob.GetBlockListRespons
 		return blockblob.GetBlockListResponse{}, err
 	}
 	srcClient := bsc.NewContainerClient(info.SrcContainer).NewBlockBlobClient(info.SrcFilePath)
+	srcClient, err = sourceBlockBlobClientForTransfer(srcClient, info)
+	if err != nil {
+		return blockblob.GetBlockListResponse{}, err
+	}
 	return srcClient.GetBlockList(jptm.Context(), blockblob.BlockListTypeCommitted, &blockblob.GetBlockListOptions{
 		Include: []blockblob.BlockListIncludeItem{
 			blockblob.BlockListIncludeItemCrc64,
 			blockblob.BlockListIncludeItemSha256,
 		},
 	})
+}
+
+func sourceBlockBlobClientForTransfer(srcClient *blockblob.Client, info *TransferInfo) (*blockblob.Client, error) {
+	if info.VersionID != "" {
+		return srcClient.WithVersionID(info.VersionID)
+	}
+	if info.SnapshotID != "" {
+		return srcClient.WithSnapshot(info.SnapshotID)
+	}
+	return srcClient, nil
+}
+
+func dedupeActDestinationReady(mode dedupeActMode, destinationSAS string) bool {
+	if mode != dedupeActEnforce {
+		return true
+	}
+	return strings.TrimPrefix(strings.TrimSpace(destinationSAS), "?") != ""
 }
 
 // rawCommittedBlocksFromResponse extracts the minimal per-block info (name, size, and the optional

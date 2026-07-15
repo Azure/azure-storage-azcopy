@@ -83,6 +83,12 @@ func configureBlockBlobDedupe(jptm IJobPartTransferMgr, c *urlToBlockBlobCopier,
 	if !ok || blobSrc.BlobType() != blob.BlobTypeBlockBlob {
 		return
 	}
+	_, destinationSAS := jptm.SAS()
+	if !dedupeActDestinationReady(mode, destinationSAS) {
+		jptm.LogAtLevelForCurrentTransfer(common.LogDebug,
+			"dedupe-act(enforce): destination SAS is unavailable, using uniform grid")
+		return
+	}
 
 	plan, err := fetchSourceGridPlan(jptm)
 	if err != nil {
