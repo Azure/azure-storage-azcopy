@@ -612,21 +612,13 @@ func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator,
 		}
 	}
 
-	// Log (once per job) whether the streaming merge-join is used and, if so, what enabled it:
-	// the AZCOPY_USE_STREAMING_MERGE_JOIN env flag (test/blanket) or the per-job subscription
-	// allowlist (featureConfig). This makes it easy to confirm the gating in production logs.
+	// Log (once per job) whether the streaming merge-join is used. Enablement is decided in the
+	// mover (subscription allowlist via featureConfig OR the USE_STREAMING_MERGE_JOIN env var) and
+	// passed to azcopy as the single cca.useStreamingMergeJoin flag. This makes it easy to confirm
+	// the gating in production logs.
 	if useStreamingMergeJoin(cca) {
-		var reason string
-		switch {
-		case streamingMergeJoinEnabled && cca.useStreamingMergeJoin:
-			reason = "env AZCOPY_USE_STREAMING_MERGE_JOIN + subscription allowlist (featureConfig)"
-		case streamingMergeJoinEnabled:
-			reason = "env AZCOPY_USE_STREAMING_MERGE_JOIN"
-		default:
-			reason = "subscription allowlist (featureConfig)"
-		}
 		syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
-			"Streaming merge-join ENABLED via %s for %s->%s", reason, cca.fromTo.From(), cca.fromTo.To()), true)
+			"Streaming merge-join ENABLED (mover flag) for %s->%s", cca.fromTo.From(), cca.fromTo.To()), true)
 
 		// The streaming merge-join uses its own directory-crawl parallelism
 		// (SYNC_MJ_PARALLEL_TRAVERSERS, default 32) — separate from the indexMap path, which keeps
@@ -637,10 +629,10 @@ func syncOrchestratorHandler(cca *cookedSyncCmdArgs, enumerator *syncEnumerator,
 			syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
 				"Streaming merge-join directory-crawl parallelism set to %d (SYNC_MJ_PARALLEL_TRAVERSERS)", mergeJoinParallelTraversers), true)
 		}
-	} else if streamingMergeJoinEnabled || cca.useStreamingMergeJoin {
+	} else if cca.useStreamingMergeJoin {
 		syncOrchestratorLog(common.LogInfo, fmt.Sprintf(
-			"Streaming merge-join requested (env=%t, allowlist=%t) but NOT used for %s->%s (pair not eligible); using indexMap sync path",
-			streamingMergeJoinEnabled, cca.useStreamingMergeJoin, cca.fromTo.From(), cca.fromTo.To()), true)
+			"Streaming merge-join requested (mover flag) but NOT used for %s->%s (pair not eligible); using indexMap sync path",
+			cca.fromTo.From(), cca.fromTo.To()), true)
 	}
 
 	// Initialize resource limits based on source/destination types
@@ -741,14 +733,22 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			var subDirs []minimalStoredObject
 			var mergeErr error
 
+			// Per-directory cancellable context derived from mainCtx. mergeJoinTwoWaySyncDir cancels it
+			// and drains/awaits all producer goroutines on EVERY return path, so no detached traverser
+			// goroutine outlives this directory's processing and later writes to the shared sync error
+			// channel after it is closed ("send on closed channel"). Creating the traversers with dirCtx
+			// (not mainCtx) is what lets that cancel abort their in-flight listing promptly.
+			dirCtx, dirCancel := context.WithCancel(mainCtx)
+
 			// Channel-based merge-join: bridge source + destination traversers into
 			// back-pressured channels and merge their sorted streams.
 			pt, ptErr := InitResourceTraverser(
 				pt_src,
 				ptt.location,
-				mainCtx,
+				dirCtx,
 				ptt.options)
 			if ptErr != nil {
+				dirCancel()
 				errMsg = fmt.Sprintf("Creating source traverser failed for dir %s: %s", pt_src.Value, ptErr)
 				syncOrchestratorLog(common.LogError, errMsg)
 				writeSyncErrToChannel(ptt.options.ErrorChannel, SyncOrchErrorInfo{
@@ -767,9 +767,10 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 			st, stErr := InitResourceTraverser(
 				st_src,
 				stt.location,
-				mainCtx,
+				dirCtx,
 				stt.options)
 			if stErr != nil {
+				dirCancel()
 				errMsg = fmt.Sprintf("Creating target traverser failed for dir %s: %s\n", st_src.Value, stErr)
 				syncOrchestratorLog(common.LogError, errMsg)
 				writeSyncErrToChannel(stt.options.ErrorChannel, SyncOrchErrorInfo{
@@ -785,8 +786,9 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(enumerator *syncEnumerator, ct
 				return stErr
 			}
 
-			subDirs, mergeErr = mergeJoinSyncDirChannelBased(
-				mainCtx,
+			subDirs, mergeErr = mergeJoinTwoWaySyncDir(
+				dirCtx,
+				dirCancel,
 				enumerator,
 				cca,
 				dir.(minimalStoredObject).relativePath,
