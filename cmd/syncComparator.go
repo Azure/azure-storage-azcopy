@@ -344,6 +344,9 @@ func (f *syncDestinationComparator) compareSourceAndDestinationObject(
 		return true, false
 	}
 
+	//rosedinh: need to compare Last Modified Time
+	// If LMT changed but LWT and size are the same, return false, true
+
 	if sourceObject.lastWriteTime.IsZero() || destinationObject.lastWriteTime.IsZero() {
 		// assume it changed as we can't compare
 		return true, true
