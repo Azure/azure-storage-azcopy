@@ -2497,7 +2497,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_AnchorBecomesFile(svm *Scenari
 //	C.txt  (hardlink)
 //	D.txt  (hardlink)
 //
-// Expected: A re-uploaded as hardlink (entity-type mismatch);
+// Expected: A re-uploaded as data carrier (entity-type mismatch); B,C,D
+// recreated as hardlinks → A (nlink=4).
 func (s *FilesNFSTestSuite) Scenario_HardlinkSync_FileJoinsGroup(svm *ScenarioVariationManager) {
 
 	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
@@ -2588,7 +2589,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_FileJoinsGroup(svm *ScenarioVa
 
 	stdOut := runHardlinkSyncForFromTo(svm, srcDirObj, dstDir, fromTo, true)
 
-	// A re-uploaded as hardlink (entity-type mismatch: dest=File, src=Hardlink-anchor).
+	// A re-uploaded as data carrier (entity-type mismatch: dest=File, src=Hardlink-anchor).
+	// B, C, D recreated as hardlinks → A so the whole group shares one inode (nlink=4).
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
 			nameA: ResourceDefinitionObject{
@@ -2616,8 +2618,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_FileJoinsGroup(svm *ScenarioVa
 	}, ValidateResourceOptions{fromTo: fromTo,
 		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
-	// Total hardlink-type transfers = 1 (CreateHardlink(A)).
-	ValidateHardlinksTransferCount(svm, stdOut, 1)
+	// A content carrier + B,C,D CreateHardLink → A.
+	ValidateHardlinksTransferCount(svm, stdOut, 4)
 }
 
 // ===========================================================================================

@@ -91,6 +91,13 @@ type syncDestinationComparator struct {
 	// member of the source inode group, without needing the full nested group map.
 	srcPathToInode map[string]string
 
+	// srcInodeHasIndependentDestFile records source inodes for which we saw a
+	// destination File/Folder/Symlink at a path that is a hardlink at source.
+	// Those dest objects never enter destPendingHardlinkObjects (nlink=1 → no
+	// Inode), so without this flag merge detection cannot see FileJoinsGroup:
+	// src {A,B,C,D} one group vs dest {A File + B-C-D hardlinks}.
+	srcInodeHasIndependentDestFile map[string]bool
+
 	inodeStore *common.InodeStore
 }
 
@@ -166,11 +173,21 @@ func (f *syncDestinationComparator) ProcessIfNecessary(destinationObject travers
 			// deferred on the destination, causing CreateHardLink to 404.
 			f.normalizeHardlinkTarget(&sourceObjectInMap)
 
+			// Remember that this source inode has an independent dest File so
+			// ProcessPendingHardlinks can treat sibling hardlinks as a merge
+			// (FileJoinsGroup: recreate B/C/D → A after A is uploaded as carrier).
+			if sourceObjectInMap.Inode != "" {
+				if f.srcInodeHasIndependentDestFile == nil {
+					f.srcInodeHasIndependentDestFile = make(map[string]bool)
+				}
+				f.srcInodeHasIndependentDestFile[sourceObjectInMap.Inode] = true
+			}
+
 			// Case: Destination is a File/Folder/Symlink, but Source is now a Hardlink
 			syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncEntityTypeMismatch, false)
 
-			// Delete the independent file/folder/symlink to allow link creation
-			_ = f.destinationCleaner(destinationObject)
+			// Structural hardlink change: delete even when --delete-destination is off.
+			_ = f.hardlinkRestructureDeleter(destinationObject)
 			return f.copyTransferScheduler(sourceObjectInMap)
 		}
 
@@ -372,6 +389,15 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 			destInodeFirstSrc[obj.Inode] = srcInode
 		} else if first != srcInode {
 			destGroupIsMultiSource[obj.Inode] = true
+		}
+	}
+
+	// FileJoinsGroup: source group has an independent dest File (A) AND hardlink
+	// siblings at dest (B,C,D). The File never appears in destPendingHardlinkObjects,
+	// so the loop above cannot set srcInodeIsMultiGroup — fold the flag in here.
+	for srcInode := range f.srcInodeHasIndependentDestFile {
+		if _, hasHardlinkSiblingAtDest := srcInodeFirstDest[srcInode]; hasHardlinkSiblingAtDest {
+			srcInodeIsMultiGroup[srcInode] = true
 		}
 	}
 
@@ -696,6 +722,11 @@ type syncSourceComparator struct {
 	// the source anchor is still present in the destination group.
 	dstPathToInode map[string]string
 
+	// srcInodeHasIndependentDestFile: see syncDestinationComparator. Used for
+	// FileJoinsGroup on the download/S2S path where the dest File is discovered
+	// while processing deferred source hardlinks.
+	srcInodeHasIndependentDestFile map[string]bool
+
 	inodeStore *common.InodeStore
 }
 
@@ -817,7 +848,16 @@ func (f *syncSourceComparator) ProcessPendingHardlinks() error {
 		}
 		destInode := f.dstPathToInode[lookupPath]
 		if destInode == "" {
-			continue // not present in destination; will be transferred below
+			// Path may exist at dest as an independent File (nlink=1 → Inode not
+			// recorded in dstPathToInode). Treat that as FileJoinsGroup signal.
+			if destObj, ok := f.destinationIndex.IndexMap[lookupPath]; ok &&
+				destObj.EntityType != common.EEntityType.Hardlink() {
+				if f.srcInodeHasIndependentDestFile == nil {
+					f.srcInodeHasIndependentDestFile = make(map[string]bool)
+				}
+				f.srcInodeHasIndependentDestFile[obj.Inode] = true
+			}
+			continue // not a hardlink at destination; handled below
 		}
 		if first, seen := srcInodeFirstDest[obj.Inode]; !seen {
 			srcInodeFirstDest[obj.Inode] = destInode
@@ -828,6 +868,13 @@ func (f *syncSourceComparator) ProcessPendingHardlinks() error {
 			destInodeFirstSrc[destInode] = obj.Inode
 		} else if first != obj.Inode {
 			destGroupIsMultiSource[destInode] = true
+		}
+	}
+
+	// FileJoinsGroup: independent dest File + hardlink siblings → merge.
+	for srcInode := range f.srcInodeHasIndependentDestFile {
+		if _, hasHardlinkSiblingAtDest := srcInodeFirstDest[srcInode]; hasHardlinkSiblingAtDest {
+			srcInodeIsMultiGroup[srcInode] = true
 		}
 	}
 
