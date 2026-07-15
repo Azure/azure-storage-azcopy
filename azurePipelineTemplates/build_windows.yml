@@ -4,6 +4,7 @@ steps:
       GO111MODULE: 'on'
     inputs:
       version: $(AZCOPY_GOLANG_VERSION)
+    displayName: 'Install Go'
 
   - script: |
       mkdir -p $(binaries)

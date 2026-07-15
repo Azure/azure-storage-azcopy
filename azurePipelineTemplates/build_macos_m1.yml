@@ -4,12 +4,13 @@ steps:
       GO111MODULE: 'on'
     inputs:
       version: $(AZCOPY_GOLANG_VERSION)
+    displayName: 'Install Go'
 
   - script: |
       sudo apt-get clean
       sudo apt-get update --fix-missing
       sudo apt-get install -y zip unzip
-    displayName: "Installing Dependencies"
+    displayName: 'Install Dependencies'
 
   - template: ../setup/trigger_m1_build.yml@self
     parameters:
