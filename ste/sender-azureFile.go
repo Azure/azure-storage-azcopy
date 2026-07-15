@@ -192,7 +192,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 
 	// If the destination is a regular NFS file with LinkCount > 1 (i.e. part of a hardlink group), delete it before Create
 	// so we don't preserve the existing inode/hardlink relationships when overwriting this path.
-	if u.jptm.FromTo().IsNFS() {
+	if u.jptm.FromTo().IsNFS() && info.EntityType != common.EEntityType.Hardlink() {
 		if props, err := u.getFileClient().GetProperties(u.ctx, nil); err == nil {
 			isNFSFileRegular := props.NFSFileType != nil && *props.NFSFileType == file.NFSFileTypeRegular
 			linkCount := common.IffNotNil(props.LinkCount, int64(0))
