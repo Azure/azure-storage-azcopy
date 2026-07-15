@@ -881,6 +881,10 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 						jobProgressInfo.transfersFailed > 0,
 						jobProgressInfo.transfersCompleted > 0))
 				}
+				status := part0Plan.JobStatus()
+				if status.IsJobDone() {
+					finalizeDedupeJob(jm.jobID, jm.Log)
+				}
 
 				// reset counters
 				atomic.StoreUint32(&jm.partsDone, 0)
