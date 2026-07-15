@@ -61,6 +61,8 @@ extends:
   # For productions pipelines, use "Official".
   template: v1/1ES.Official.PipelineTemplate.yml@1esPipelines
   parameters:
+    featureFlags:
+      disableNetworkIsolation: true
     sdl:
       sourceAnalysisPool:
         name: azcopy-pool  # Name of your hosted pool
@@ -419,15 +421,33 @@ extends:
                 parameters:
                   FolderPath: $(fips-amd64)
                   ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_KEY_CODE)
-                  Pattern: '*.rpm, *.deb'
-                  DisplayName: 'ESRP CodeSigning azcopy linux fips amd64'
+                  Pattern: '*.deb'
+                  DisplayName: 'ESRP CodeSigning azcopy linux fips amd64 deb'
 
               - template: setup/esrp_sign_linux.yml@self
                 parameters:
                   FolderPath: $(fips-arm64)
                   ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_KEY_CODE)
-                  Pattern: '*.rpm, *.deb'
-                  DisplayName: 'ESRP CodeSigning azcopy linux fips arm64'
+                  Pattern: '*.deb'
+                  DisplayName: 'ESRP CodeSigning azcopy linux fips arm64 deb'
+
+              # When we're ready to support the FIPS RPM packages on other distros,
+              # like the RHEL and CentOS distros already listed in packages.csv,
+              # the pipeline will need to be revised to copy and sign the RPM files for the other distros with ESRP_AZCOPY_KEY_CODE,
+              # unless we can sign a single RPM file with multiple signing keys (in which case, we'll need to do that).
+              - template: setup/esrp_sign_linux.yml@self
+                parameters:
+                  FolderPath: $(fips-amd64)
+                  ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_MARINER_KEY_CODE)
+                  Pattern: '*.rpm'
+                  DisplayName: 'ESRP CodeSigning azcopy linux fips amd64 rpm'
+
+              - template: setup/esrp_sign_linux.yml@self
+                parameters:
+                  FolderPath: $(fips-arm64)
+                  ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_MARINER_KEY_CODE)
+                  Pattern: '*.rpm'
+                  DisplayName: 'ESRP CodeSigning azcopy linux fips arm64 rpm'
 
               - script: |
                   mkdir -p $(signed)
@@ -537,7 +557,6 @@ extends:
 
               - script: |
                   cp $(windows)/* $(System.DefaultWorkingDirectory)/binaries
-                  rm -rf $(windows)/azcopy_windows_v7_arm.exe
                   mv $(windows)/azcopy_windows_amd64.exe $(windows_amd64)/azcopy.exe
                   cp NOTICE.txt $(windows_amd64)
                   mv $(windows)/azcopy_windows_arm64.exe $(windows_arm64)/azcopy.exe
@@ -1391,7 +1410,7 @@ extends:
                   scriptLocation: inlineScript
                   workingDirectory: $(signed)
                   inlineScript: |
-                    [ ${{ parameters.publish_artifacts }} == 'true' ] && [ ${{ parameters.test_pmc_connection }} == 'false' ]
+                    [ ${{ parameters.publish_artifacts }} == 'True' ] && [ ${{ parameters.test_pmc_connection }} == 'False' ]
                     publish=$?
                     
                     azcopyAmdDebFile=$(ls azcopy-* | grep -vE 'fips|cm2' | grep '\.x86_64\.deb')
@@ -1478,7 +1497,7 @@ extends:
                   scriptLocation: inlineScript
                   workingDirectory: $(signed)
                   inlineScript: |
-                    [ ${{ parameters.publish_artifacts }} == 'true' ] && [ ${{ parameters.test_pmc_connection }} == 'false' ]
+                    [ ${{ parameters.publish_artifacts }} == 'True' ] && [ ${{ parameters.test_pmc_connection }} == 'False' ]
                     publish=$?
 
                     while IFS=, read -r distro archetype repoName releaseName; do
