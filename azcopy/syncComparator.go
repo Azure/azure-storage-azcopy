@@ -365,13 +365,6 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 	destInodeFirstSrc := make(map[string]string)
 	destGroupIsMultiSource := make(map[string]bool)
 
-	// destGroupHasForeignMember: dest inode → true when at least one member of that
-	// dest hardlink group is NOT a hardlink in the source (it was deleted, or
-	// converted to a regular file). Such a group is not a clean subset of a single
-	// source group, so a shared member whose source anchor is absent may be linked
-	// to the wrong group and needs re-pointing (needsRecreate condition (d2)).
-	//destGroupHasForeignMember := make(map[string]bool)
-
 	for _, obj := range f.destPendingHardlinkObjects.IndexMap {
 		if obj.Inode == "" {
 			continue
@@ -382,17 +375,12 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 		}
 		srcInode := f.srcPathToInode[srcKey]
 		if srcInode == "" {
-			// Path may still exist at source as a regular file (nlink=1).
-			// That is a group-split signal: one dest inode spans a detached
-			// file member plus hardlink siblings.
-			if _, srcPresent := f.sourceIndex.IndexMap[srcKey]; !srcPresent {
-				continue
-			}
-			if first, seen := destInodeFirstSrc[obj.Inode]; !seen {
-				destInodeFirstSrc[obj.Inode] = "" // sentinel: regular-file member
-			} else if first != "" {
-				destGroupIsMultiSource[obj.Inode] = true
-			}
+			// This dest member has no source hardlink counterpart. Either it is
+			// absent at source (deleted → cleaned up below) or it became a plain
+			// regular file (anchor/member detached). A detaching regular file
+			// simply LEAVES the hardlink group; the surviving hardlink members do
+			// not need to be recreated, so it is NOT a multi-source split. The
+			// detached path is re-uploaded as a File via the srcAnchorFile=="" path.
 			continue
 		}
 		if first, seen := srcInodeFirstDest[srcInode]; !seen {
@@ -611,14 +599,7 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 				dstAnchorInSrc := f.srcPathToInode[normDstAnchor]
 				srcAnchorDstInode := destPathToInode[normSrcAnchor]
 
-				// (a') dest anchor exists at source but as a regular file — anchor
-				// was detached from the hardlink group (AnchorBecomesFile split).
-				dstAnchorSrcObj, dstAnchorAtSrc := f.sourceIndex.IndexMap[normDstAnchor]
-				dstAnchorDetachedAtSrc := dstAnchorAtSrc &&
-					dstAnchorSrcObj.EntityType != common.EEntityType.Hardlink()
-
-				needsRecreate = dstAnchorDetachedAtSrc || // (a')
-					(dstAnchorInSrc != "" && dstAnchorInSrc != sourceObjectInMap.Inode) || // (a)
+				needsRecreate = (dstAnchorInSrc != "" && dstAnchorInSrc != sourceObjectInMap.Inode) || // (a)
 					srcInodeIsMultiGroup[sourceObjectInMap.Inode] || // (b)
 					destGroupIsMultiSource[destHardlinkObj.Inode] || // (c)
 					(srcAnchorDstInode != "" && srcAnchorDstInode != destHardlinkObj.Inode) || // (d1) source anchor lives in a different dest group
@@ -759,11 +740,6 @@ type syncSourceComparator struct {
 	// while processing deferred source hardlinks.
 	srcInodeHasIndependentDestFile map[string]bool
 
-	// srcDetachedPaths records source paths handled as regular files while the
-	// destination still had a hardlink at that path (AnchorBecomesFile split).
-	// Populated in ProcessIfNecessary; consumed in ProcessPendingHardlinks.
-	srcDetachedPaths map[string]bool
-
 	inodeStore *common.InodeStore
 }
 
@@ -821,10 +797,6 @@ func (f *syncSourceComparator) ProcessIfNecessary(sourceObject traverser.StoredO
 		// entity type.
 		if destinationObjectInMap.EntityType == common.EEntityType.Hardlink() && sourceObject.EntityType != common.EEntityType.Hardlink() {
 			syncComparatorLog(sourceObject.RelativePath, syncStatusOverwritten, syncEntityTypeMismatch, false)
-			if f.srcDetachedPaths == nil {
-				f.srcDetachedPaths = make(map[string]bool)
-			}
-			f.srcDetachedPaths[relPath] = true
 			_ = f.hardlinkRestructureDeleter(destinationObjectInMap)
 			return f.copyTransferScheduler(sourceObject)
 		}
@@ -916,25 +888,6 @@ func (f *syncSourceComparator) ProcessPendingHardlinks() error {
 	for srcInode := range f.srcInodeHasIndependentDestFile {
 		if _, hasHardlinkSiblingAtDest := srcInodeFirstDest[srcInode]; hasHardlinkSiblingAtDest {
 			srcInodeIsMultiGroup[srcInode] = true
-		}
-	}
-
-	// Group-split: dest inode contains paths that are regular files at source
-	// (former anchor detached). Those paths were handled in ProcessIfNecessary
-	// and never enter srcPendingHardlinkObjects.
-	for detachedPath := range f.srcDetachedPaths {
-		lookupPath := detachedPath
-		if f.destinationIndex.IsDestinationCaseInsensitive {
-			lookupPath = strings.ToLower(lookupPath)
-		}
-		destInode := f.dstPathToInode[lookupPath]
-		if destInode == "" {
-			continue
-		}
-		if first, seen := destInodeFirstSrc[destInode]; !seen {
-			destInodeFirstSrc[destInode] = ""
-		} else if first != "" {
-			destGroupIsMultiSource[destInode] = true
 		}
 	}
 
@@ -1086,16 +1039,12 @@ func (f *syncSourceComparator) ProcessPendingHardlinks() error {
 
 		// needsRecreate: the hardlink target must change at the destination.
 		// True only when the anchor change is substantive:
-		//   (a') dest anchor was detached to a regular file at source, OR
 		//   (d1) source anchor lives in a different dest inode group, OR
 		//   (d2) source anchor is absent from dest AND this member's dest group
 		//        has a foreign member (overlap merge), OR
 		//   (b)/(c) the group is merging or splitting (!groupIntact).
-		dstAnchorDetachedAtSrc := f.srcDetachedPaths[normDstAnchor]
-
 		needsRecreate := anchorChanged &&
-			(dstAnchorDetachedAtSrc ||
-				(srcAnchorInDst != "" && srcAnchorInDst != destinationObjectInMap.Inode) ||
+			((srcAnchorInDst != "" && srcAnchorInDst != destinationObjectInMap.Inode) ||
 				(srcAnchorInDst == "" && destInodeHasForeignMember[destinationObjectInMap.Inode]) ||
 				!groupIntact)
 
