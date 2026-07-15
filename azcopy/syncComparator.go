@@ -365,6 +365,13 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 	destInodeFirstSrc := make(map[string]string)
 	destGroupIsMultiSource := make(map[string]bool)
 
+	// destGroupHasForeignMember: dest inode → true when at least one member of that
+	// dest hardlink group is NOT a hardlink in the source (it was deleted, or
+	// converted to a regular file). Such a group is not a clean subset of a single
+	// source group, so a shared member whose source anchor is absent may be linked
+	// to the wrong group and needs re-pointing (needsRecreate condition (d2)).
+	//destGroupHasForeignMember := make(map[string]bool)
+
 	for _, obj := range f.destPendingHardlinkObjects.IndexMap {
 		if obj.Inode == "" {
 			continue
