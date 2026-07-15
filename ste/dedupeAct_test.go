@@ -22,6 +22,7 @@ package ste
 
 import (
 	"encoding/binary"
+	"net/url"
 	"testing"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
@@ -52,6 +53,45 @@ func TestDedupeActModeString(t *testing.T) {
 	a.Equal("off", dedupeActOff.String())
 	a.Equal("shadow", dedupeActShadow.String())
 	a.Equal("enforce", dedupeActEnforce.String())
+}
+
+func TestSourceBlockBlobClientForTransferPreservesVersionOrSnapshot(t *testing.T) {
+	a := assert.New(t)
+	base, err := blockblob.NewClientWithNoCredential("https://acct.blob.core.windows.net/c/blob", nil)
+	a.NoError(err)
+
+	versioned, err := sourceBlockBlobClientForTransfer(base, &TransferInfo{
+		VersionID:  "2026-07-15T12:00:00.0000000Z",
+		SnapshotID: "ignored-when-version-is-present",
+	})
+	a.NoError(err)
+	versionedURL, err := url.Parse(versioned.URL())
+	a.NoError(err)
+	a.Equal("2026-07-15T12:00:00.0000000Z", versionedURL.Query().Get("versionid"))
+	a.Empty(versionedURL.Query().Get("snapshot"))
+
+	snapshot, err := sourceBlockBlobClientForTransfer(base, &TransferInfo{
+		SnapshotID: "2026-07-15T12:30:00.0000000Z",
+	})
+	a.NoError(err)
+	snapshotURL, err := url.Parse(snapshot.URL())
+	a.NoError(err)
+	a.Equal("2026-07-15T12:30:00.0000000Z", snapshotURL.Query().Get("snapshot"))
+	a.Empty(snapshotURL.Query().Get("versionid"))
+
+	unversioned, err := sourceBlockBlobClientForTransfer(base, &TransferInfo{})
+	a.NoError(err)
+	a.Equal(base.URL(), unversioned.URL())
+}
+
+func TestDedupeActDestinationReadyRequiresSASForEnforce(t *testing.T) {
+	a := assert.New(t)
+
+	a.True(dedupeActDestinationReady(dedupeActOff, ""))
+	a.True(dedupeActDestinationReady(dedupeActShadow, ""))
+	a.False(dedupeActDestinationReady(dedupeActEnforce, ""))
+	a.False(dedupeActDestinationReady(dedupeActEnforce, "  ?  "))
+	a.True(dedupeActDestinationReady(dedupeActEnforce, "?sv=2026&sig=secret"))
 }
 
 func TestChunkSpecsFromPlan(t *testing.T) {
