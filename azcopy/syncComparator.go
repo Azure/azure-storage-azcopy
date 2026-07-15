@@ -700,6 +700,14 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 					if err := f.copyTransferScheduler(sourceObjectInMap); err != nil {
 						return err
 					}
+				} else if normSrcAnchor != normDstAnchor {
+					// Nominal anchor rename: the dest anchor was deleted/renamed but
+					// this group is structurally intact and the member is already
+					// linked correctly (needsRecreate=false above).  Skip the LMT-only
+					// re-transfer: re-uploading the anchor would create a NEW inode and
+					// break the surviving links (the other members keep the old dest
+					// inode).
+					syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusSkipped, syncSkipReasonHardlinkRelationshipIntact, false)
 				} else if sourceObjectInMap.IsMoreRecentThan(destHardlinkObj, f.preferSMBTime) {
 					syncComparatorLog(sourceObjectInMap.RelativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMT, false)
 					if err := f.copyTransferScheduler(sourceObjectInMap); err != nil {
