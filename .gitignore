@@ -341,4 +341,4 @@ venv*
 *.sum
 
 # ignore the latest_version.txt
-/latest_version.txtC:\\bin\\azcopyTestFailureLogs/
+/latest_version.txt
