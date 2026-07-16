@@ -681,7 +681,7 @@ func (f *syncDestinationComparator) ProcessPendingHardlinks() error {
 					if err := f.copyTransferScheduler(sourceObjectInMap); err != nil {
 						return err
 					}
-				} else if normSrcAnchor != normDstAnchor {
+				} else if srcAnchorFile != "" && normSrcAnchor != normDstAnchor {
 					// Nominal anchor rename: the dest anchor was deleted/renamed but
 					// this group is structurally intact and the member is already
 					// linked correctly (needsRecreate=false above).  Skip the LMT-only
