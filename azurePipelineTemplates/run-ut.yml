@@ -111,9 +111,8 @@ steps:
     # Don't run if job is canceled or mutex wasn't acquired (in which case, test task didn't run, so no test results to report)
     condition: and(succeededOrFailed(), eq(${{ parameters.isMutexSet }}, 'true'))
 
-  - task: PublishCodeCoverageResults@1
+  - task: PublishCodeCoverageResults@2
     inputs:
-      codeCoverageTool: Cobertura
       summaryFileLocation: '$(System.DefaultWorkingDirectory)/**/${{ parameters.coverage_name }}_coverage.xml'
     # Don't run if job is canceled or mutex wasn't acquired (in which case, test task didn't run, so no test coverage data to report)
     condition: and(succeededOrFailed(), eq(${{ parameters.isMutexSet }}, 'true'))

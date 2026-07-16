@@ -49,11 +49,10 @@ jobs:
           version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
         displayName: 'Install Go'
 
-      - script: |
-          go install github.com/jstemmer/go-junit-report@v0.9.1
-          go install github.com/axw/gocov/gocov@v1.1.0
-          go install github.com/AlekSi/gocov-xml@v1.0.0
-          go install github.com/matm/gocov-html@v0.0.0-20200509184451-71874e2e203b
+      - bash: |
+          go install github.com/jstemmer/go-junit-report/v2@v2.1.0
+          go install github.com/axw/gocov/gocov@v1.1.0 # this version is required by gocov-xml@v1.2.0
+          go install github.com/AlekSi/gocov-xml@v1.2.0
         displayName: 'Install Code Coverage and Test Report Dependencies'
 
       - bash: |
@@ -96,6 +95,8 @@ jobs:
             
             # Build the Go program
             Write-Output "Building executable"
+            # Normally, `go build` has no effect when `go test` is used to run unit tests,
+            # but we're using `go test` to run end-to-end tests that expect `go build` to have been run
             if ($tags -ne "") {
               go build -cover -tags $tags -o "$(build_name)"
             } else {
@@ -171,9 +172,7 @@ jobs:
           testRunTitle: '${{ parameters.job_name }}: $(display_name)'
         condition: succeededOrFailed()
 
-      - task: PublishCodeCoverageResults@1
+      - task: PublishCodeCoverageResults@2
         inputs:
-          codeCoverageTool: Cobertura
           summaryFileLocation: '$(System.DefaultWorkingDirectory)/**/$(coverageReportName).xml'
-          additionalCodeCoverageFiles: '$(System.DefaultWorkingDirectory)/**/$(coverageReportName).html'
         condition: succeededOrFailed()

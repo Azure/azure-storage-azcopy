@@ -29,16 +29,17 @@ def get_raw_input():
 
 def process():
     action, mutex_url = get_raw_input()
+    print(f"INFO: action: \"{action}\", mutex URL: \"{mutex_url}\"")
 
     # check whether the blob exists, if not quit right away to avoid wasting time
     blob_client = BlobClient.from_blob_url(mutex_url)
+    print("INFO: validating mutex URL")
     try:
         blob_client.get_blob_properties()
-        print("INFO: validated mutex url")
     except HttpResponseError as e:
         raise ValueError('please provide an existing and valid blob URL, failed to get properties with error: ' + e)
+    print("INFO: validated mutex URL")
 
-    # get a handle on the lease
     lease_client = BlobLeaseClient(blob_client)
     if action == UNLOCK:
         # make the lease free as soon as possible
