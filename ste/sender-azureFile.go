@@ -178,17 +178,11 @@ func (u *azureFileSenderBase) RemoteFileExists() (bool, time.Time, error) {
 	return remoteObjectExists(filePropertiesResponseAdapter{props}, err)
 }
 
-// senderIsSyncJob reports whether the current transfer belongs to an
-// `azcopy sync` job (as opposed to `azcopy copy`). Sync reconciles NFS hardlink
-// groups in its comparator and deletes members that must move, so the
-// anchor/data-carrier must be overwritten in place; copy has no comparator and
+// senderIsSyncJob tells us whether the current transfer is `sync`.
+// Sync reconciles NFS hardlink groups in its comparator and deletes members that must move, so the
+// anchor/data-carrier must be overwritten in place.
+// But, copy has no comparator and
 // relies on delete-before-create to break stale destination groups.
-//
-// It reads the command verb from the persisted job plan (JobPartPlanHeader),
-// which is set once at job creation and is NOT re-derived on resume: `jobs
-// resume` reloads the existing plan via ResurrectJob, so the stored command
-// string is still the original `sync ...`/`copy ...`. This keeps the decision
-// correct for resumed jobs without changing the job-plan data schema version.
 func senderIsSyncJob(jptm IJobPartTransferMgr) bool {
 	m, ok := jptm.(*jobPartTransferMgr)
 	if !ok {
@@ -210,13 +204,13 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		u.headersToApply.ContentType = state.GetInferredContentType(u.jptm)
 	}
 
-	// Decide whether to break the destination's existing hardlink group before
-	// (re)creating this path.
-	//
-	// Break it for:
+	// If the destination is a regular NFS file with LinkCount > 1 (i.e. part of a hardlink group), delete it before Create
+	// so we don't preserve the existing inode/hardlink relationships when overwriting this path.
+
+	// We delete/ break the hardlink group in these cases:
 	//   - copy: there is no comparator, so re-uploading the anchor/data-carrier
 	//     is the only way to detach it from a stale destination group and rebuild
-	//     the source's grouping (e.g. one dest group must split into two).
+	//     the source's grouping
 	//   - a genuine hardlink→file conversion (source is a regular file): the path
 	//     must leave the group to match the source.
 	//
@@ -225,6 +219,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 	// anchor/data-carrier only needs an in-place content refresh. Deleting it here
 	// would replace its inode and orphan the non-anchor siblings the comparator
 	// intentionally left in place.
+
 	breakDestHardlinkGroup := info.EntityType != common.EEntityType.Hardlink() || !senderIsSyncJob(u.jptm)
 	if u.jptm.FromTo().IsNFS() && breakDestHardlinkGroup {
 		if props, err := u.getFileClient().GetProperties(u.ctx, nil); err == nil {
