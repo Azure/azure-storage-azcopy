@@ -62,8 +62,9 @@ var stashedEnvCredType = ""
 func GetCredTypeFromEnvVar() common.CredentialType {
 	rawVal := stashedEnvCredType
 	if stashedEnvCredType == "" {
-		rawVal = common.GetEnvironmentVariable(common.EEnvironmentVariable.CredentialType())
-		if rawVal == "" {
+		var ok bool
+		rawVal, _, ok = common.EEnvironmentVariable.CredentialType().Lookup()
+		if !ok {
 			return common.ECredentialType.Unknown()
 		}
 		stashedEnvCredType = rawVal
@@ -71,7 +72,7 @@ func GetCredTypeFromEnvVar() common.CredentialType {
 
 	// Remove the env var after successfully fetching once,
 	// in case of env var is further spreading into child processes unexpectedly.
-	common.ClearEnvironmentVariable(common.EEnvironmentVariable.CredentialType())
+	common.EEnvironmentVariable.CredentialType().Clear()
 
 	// Try to get the value set.
 	var credType common.CredentialType
@@ -340,9 +341,7 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 	}
 
 	if location == common.ELocation.S3() {
-		accessKeyID := common.GetEnvironmentVariable(common.EEnvironmentVariable.AWSAccessKeyID())
-		secretAccessKey := common.GetEnvironmentVariable(common.EEnvironmentVariable.AWSSecretAccessKey())
-		if accessKeyID == "" || secretAccessKey == "" {
+		if !common.EEnvironmentVariable.AWSAccessKeyID().IsSet() || !common.EEnvironmentVariable.AWSSecretAccessKey().IsSet() {
 			credType = common.ECredentialType.S3PublicBucket()
 			public = true
 			return
@@ -353,8 +352,7 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 	}
 
 	if location == common.ELocation.GCP() {
-		googleAppCredentials := common.GetEnvironmentVariable(common.EEnvironmentVariable.GoogleAppCredentials())
-		if googleAppCredentials == "" {
+		if !common.EEnvironmentVariable.GoogleAppCredentials().IsSet() {
 			return common.ECredentialType.Unknown(), false, errors.New("GOOGLE_APPLICATION_CREDENTIALS environment variable must be set before using GCP transfer feature")
 		}
 		credType = common.ECredentialType.GoogleAppCredentials()
@@ -415,9 +413,7 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 	// BlobFS currently supports Shared key. Remove this piece of code, once
 	// we deprecate that.
 	if location == common.ELocation.BlobFS() {
-		name := common.GetEnvironmentVariable(common.EEnvironmentVariable.AccountName())
-		key := common.GetEnvironmentVariable(common.EEnvironmentVariable.AccountKey())
-		if name != "" && key != "" { // TODO: To remove, use for internal testing, SharedKey should not be supported from commandline
+		if common.EEnvironmentVariable.AccountName().IsSet() && common.EEnvironmentVariable.AccountKey().IsSet() { // TODO: To remove, use for internal testing, SharedKey should not be supported from commandline
 			credType = common.ECredentialType.SharedKey()
 			warnIfSharedKeyAuthForDatalake()
 		}

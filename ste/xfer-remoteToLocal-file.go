@@ -570,7 +570,7 @@ func tryDeleteFile(info *TransferInfo, jptm IJobPartTransferMgr) {
 // download to a temp path we return a temp path in format
 // /actual/parent/path/.azDownload-<jobID>-<actualFileName>
 func (info *TransferInfo) getDownloadPath() string {
-	downloadToTempPath, err := strconv.ParseBool(common.GetEnvironmentVariable(common.EEnvironmentVariable.DownloadToTempPath()))
+	downloadToTempPath, err := strconv.ParseBool(common.EEnvironmentVariable.DownloadToTempPath().Value())
 	if err != nil {
 		// By default, we'll download to temp path
 		downloadToTempPath = true

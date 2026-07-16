@@ -49,7 +49,7 @@ func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec flo
 	// TODO: We may want to list listen first and terminate if there is already an instance listening
 
 	// if we've a custom mime map
-	if path := common.GetEnvironmentVariable(common.EEnvironmentVariable.MimeMapping()); path != "" {
+	if path, _, ok := common.EEnvironmentVariable.MimeMapping().Lookup(); ok {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return err

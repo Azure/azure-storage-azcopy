@@ -137,10 +137,10 @@ func (args rawLoginArgs) toOptions() (azcopy.LoginOptions, error) {
 	if err != nil {
 		return azcopy.LoginOptions{}, err
 	}
-	certificatePassword := common.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
-	clientSecret := common.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
+	certificatePassword, _, certPasswordOK := common.EEnvironmentVariable.CertificatePassword().Lookup()
+	clientSecret, _, clientSecretOK := common.EEnvironmentVariable.ClientSecret().Lookup()
 
-	if certificatePassword != "" || clientSecret != "" {
+	if certPasswordOK || clientSecretOK {
 		glcm.Info(environmentVariableNotice)
 	}
 	return azcopy.LoginOptions{

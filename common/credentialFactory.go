@@ -43,9 +43,9 @@ func CreateS3Credential(ctx context.Context, credInfo CredentialInfo) (*credenti
 	case ECredentialType.S3PublicBucket():
 		return credentials.NewStatic("", "", "", credentials.SignatureAnonymous), nil
 	case ECredentialType.S3AccessKey():
-		accessKeyID := GetEnvironmentVariable(EEnvironmentVariable.AWSAccessKeyID())
-		secretAccessKey := GetEnvironmentVariable(EEnvironmentVariable.AWSSecretAccessKey())
-		sessionToken := GetEnvironmentVariable(EEnvironmentVariable.AwsSessionToken())
+		accessKeyID := EEnvironmentVariable.AWSAccessKeyID().Value()
+		secretAccessKey := EEnvironmentVariable.AWSSecretAccessKey().Value()
+		sessionToken := EEnvironmentVariable.AwsSessionToken().Value()
 
 		// create and return s3 credential
 		return credentials.NewStaticV4(accessKeyID, secretAccessKey, sessionToken), nil // S3 uses V4 signature
@@ -159,11 +159,11 @@ func GetCpkInfo(cpkInfo bool) (*blob.CPKInfo, error) {
 	}
 
 	// fetch EncryptionKey and EncryptionKeySHA256 from the environment variables
-	encryptionKey := GetEnvironmentVariable(EEnvironmentVariable.CPKEncryptionKey())
-	encryptionKeySHA256 := GetEnvironmentVariable(EEnvironmentVariable.CPKEncryptionKeySHA256())
+	encryptionKey, _, keyOk := EEnvironmentVariable.CPKEncryptionKey().Lookup()
+	encryptionKeySHA256, _, sha256Ok := EEnvironmentVariable.CPKEncryptionKeySHA256().Lookup()
 	encryptionAlgorithmAES256 := blob.EncryptionAlgorithmTypeAES256
 
-	if encryptionKey == "" || encryptionKeySHA256 == "" {
+	if !keyOk || !sha256Ok {
 		return nil, errors.New("fatal: failed to fetch cpk encryption key (" + EEnvironmentVariable.CPKEncryptionKey().Name +
 			") or hash (" + EEnvironmentVariable.CPKEncryptionKeySHA256().Name + ") from environment variables")
 	}

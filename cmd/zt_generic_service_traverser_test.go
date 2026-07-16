@@ -321,7 +321,7 @@ func TestServiceTraverserWithWildcards(t *testing.T) {
 		gcpAccountURL.BucketName = "objectmatch*"
 		urlStr := gcpAccountURL.URL()
 
-		gcpServiceTraverser, err := traverser.NewGCPServiceTraverser(&urlStr, ctx, traverser.InitResourceTraverserOptions{})
+		gcpServiceTraverser, err := traverser.NewGCPServiceTraverser(&urlStr, common.EEnvironmentVariable.GoogleCloudProject().Value(), ctx, traverser.InitResourceTraverserOptions{})
 		a.Nil(err)
 
 		gcpDummyProcessor = dummyProcessor{}

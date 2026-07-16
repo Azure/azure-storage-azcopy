@@ -654,7 +654,7 @@ func NewBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		includeRoot:                 opts.IncludeRoot,
 	}
 
-	disableHierarchicalScanning := strings.ToLower(common.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning()))
+	disableHierarchicalScanning := strings.ToLower(common.EEnvironmentVariable.DisableHierarchicalScanning().Value())
 
 	// disableHierarchicalScanning should be true for permanent delete
 	if (disableHierarchicalScanning == "false" || disableHierarchicalScanning == "") && t.include.Deleted() && (t.include.Snapshots() || t.include.Versions()) {

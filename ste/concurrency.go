@@ -47,14 +47,14 @@ func (i *ConfiguredInt) GetDescription() string {
 
 // tryNewConfiguredInt populates a ConfiguredInt from an environment variable, or returns nil if env var is not set
 func tryNewConfiguredInt(envVar common.EnvironmentVariable) *ConfiguredInt {
-	override := common.GetEnvironmentVariable(envVar)
-	if override != "" {
-		val, err := strconv.ParseInt(override, 10, 32)
+	userVal, varName, ok := envVar.Lookup()
+	if ok {
+		val, err := strconv.ParseInt(userVal, 10, 32)
 		if err != nil {
 			log.Fatalf("error parsing the env %s %q failed with error %v",
-				envVar.Name, override, err)
+				varName, userVal, err)
 		}
-		return &ConfiguredInt{int(val), true, envVar.Name, ""}
+		return &ConfiguredInt{int(val), true, varName, ""}
 	}
 	return nil
 }
@@ -77,14 +77,14 @@ func (b *ConfiguredBool) GetDescription() string {
 
 // tryNewConfiguredBool populates a ConfiguredInt from an environment variable, or returns nil if env var is not set
 func tryNewConfiguredBool(envVar common.EnvironmentVariable) *ConfiguredBool {
-	override := common.GetEnvironmentVariable(envVar)
-	if override != "" {
-		val, err := strconv.ParseBool(override)
+	userVal, varName, ok := envVar.Lookup()
+	if ok {
+		val, err := strconv.ParseBool(userVal)
 		if err != nil {
 			log.Fatalf("error parsing the env %s %q failed with error %v",
-				envVar.Name, override, err)
+				varName, userVal, err)
 		}
-		return &ConfiguredBool{bool(val), true, envVar.Name, ""}
+		return &ConfiguredBool{bool(val), true, varName, ""}
 	}
 	return nil
 }
@@ -178,7 +178,7 @@ func getMainPoolSize(numOfCPUs int) (initial int, max *ConfiguredInt) {
 	autoTune := false
 	envVar := common.EEnvironmentVariable.ConcurrencyValue()
 
-	if common.GetEnvironmentVariable(envVar) == "AUTO" {
+	if envVar.Value() == "AUTO" {
 		// Allow user to force auto-tuning from the env var, even when not in benchmark mode
 		// Might be handy in some S2S cases, where we know that release 10.2.1 was using too few goroutines
 		// This feature will probably remain undocumented for at least one release cycle, while we consider
@@ -213,7 +213,7 @@ func getMainPoolSize(numOfCPUs int) (initial int, max *ConfiguredInt) {
 		maxValue = 3000 // TODO: what should this be?  Testing indicates that this value is all we're ever likely to need, even in small-files cases
 	}
 
-	return initialValue, &ConfiguredInt{maxValue, false, envVar.Name, reason}
+	return initialValue, &ConfiguredInt{maxValue, false, envVar.LookupName(), reason}
 }
 
 func getTransferInitiationPoolSize() *ConfiguredInt {

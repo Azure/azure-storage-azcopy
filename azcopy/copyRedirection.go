@@ -22,7 +22,6 @@ package azcopy
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -53,13 +52,13 @@ func (e *transferExecutor) redirectionTransfer(ctx context.Context) error {
 // redirectionBlobUpload uploads data from os.stdin to a blob destination using piping (redirection).
 func (e *transferExecutor) redirectionBlobUpload(ctx context.Context) (err error) {
 	// Use the concurrency environment value
-	concurrencyEnvVar := common.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue())
+	concurrencyEnvVar, lookupName, ok := common.EEnvironmentVariable.ConcurrencyValue().Lookup()
 
 	pipingUploadParallelism := PipingUploadParallelismDefault
-	if concurrencyEnvVar != "" {
+	if ok {
 		// handle when the concurrency value is AUTO
 		if concurrencyEnvVar == "AUTO" {
-			return errors.New("concurrency auto-tuning is not possible when using redirection transfers (AZCOPY_CONCURRENCY_VALUE = AUTO)")
+			return fmt.Errorf("concurrency auto-tuning is not possible when using redirection transfers (%s = AUTO)", lookupName)
 		}
 
 		// convert the concurrency value to
@@ -68,7 +67,7 @@ func (e *transferExecutor) redirectionBlobUpload(ctx context.Context) (err error
 
 		//handle the error if the conversion fails
 		if err != nil {
-			return fmt.Errorf("AZCOPY_CONCURRENCY_VALUE is not set to a valid value, an integer is expected (current value: %s): %w", concurrencyEnvVar, err)
+			return fmt.Errorf("%s is not set to a valid value, an integer is expected (current value: %s): %w", lookupName, concurrencyEnvVar, err)
 		}
 
 		pipingUploadParallelism = int(concurrencyValue) // Cast to Integer

@@ -27,7 +27,7 @@ import (
 
 // getAzCopyAppPath returns the path of Azcopy in local appdata.
 func getAzCopyAppPath() string {
-	userProfile := GetEnvironmentVariable(EEnvironmentVariable.UserDir())
+	userProfile := EEnvironmentVariable.UserDir().Value()
 	azcopyAppDataFolder := strings.ReplaceAll(path.Join(userProfile, ".azcopy"), "/", `\`)
 
 	return azcopyAppDataFolder

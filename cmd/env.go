@@ -16,6 +16,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
@@ -29,14 +30,33 @@ var envCmd = &cobra.Command{
 	Short: envCmdShortDescription,
 	Long:  envCmdLongDescription,
 	Run: func(cmd *cobra.Command, args []string) {
+		setDeprecatedVars := make(map[string]string)
+
 		for _, env := range common.VisibleEnvironmentVariables {
-			val := common.GetEnvironmentVariable(env)
-			if env.Hidden && !showSensitive {
+			// do a direct lookup, instead of calling indirect lookup since indirect can get deprecated values.
+			val, ok := os.LookupEnv(env.Name)
+
+			if env.Hidden && !showSensitive && ok {
 				val = "REDACTED"
+			} else if !ok {
+				val = "<Unset>"
+			}
+
+			// if this is a deprecated env var, don't display it unless we have a value. If we do display it, stash a warning to be displayed at the end, closest to the user's line of sight.
+			if env.ReplacedBy != "" {
+				if !ok {
+					continue // skip displaying it
+				} else {
+					setDeprecatedVars[env.Name] = env.ReplacedBy
+				}
 			}
 
 			glcm.Info(fmt.Sprintf("Name: %s\nCurrent Value: %s\nDescription: %s\n",
 				env.Name, val, env.Description))
+		}
+
+		for depName, newName := range setDeprecatedVars {
+			glcm.Info(fmt.Sprintf("Deprecated environment variable %s was set. Please check the new variable, %s, and migrate to it, as the deprecated variable may be removed in a future version.", depName, newName))
 		}
 
 		glcm.Exit(nil, EExitCode.Success())

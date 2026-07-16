@@ -180,8 +180,8 @@ func inferBlobType(filename string, defaultBlobType blob.BlobType) blob.BlobType
 }
 
 func init() {
-	requestTryTimeout := common.GetEnvironmentVariable(common.EEnvironmentVariable.RequestTryTimeout())
-	if requestTryTimeout != "" {
+	requestTryTimeout, _, ok := common.EEnvironmentVariable.RequestTryTimeout().Lookup()
+	if ok {
 		timeout, err := time.ParseDuration(requestTryTimeout + "m")
 		if err == nil {
 			UploadTryTimeout = timeout

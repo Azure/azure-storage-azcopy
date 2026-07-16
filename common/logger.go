@@ -307,7 +307,13 @@ func IsForceLoggingDisabled() bool {
 
 func init() {
 	var err error
-	disableSyslog, err = strconv.ParseBool(GetEnvironmentVariable(EEnvironmentVariable.DisableSyslog()))
+	userValue, _, ok := EEnvironmentVariable.DisableSyslog().Lookup()
+	if !ok {
+		// already false
+		return
+	}
+
+	disableSyslog, err = strconv.ParseBool(userValue)
 	if err != nil {
 		// By default, we'll retain the current behaviour. i.e. To log in Syslog/WindowsEventLog if not specified by the user
 		disableSyslog = false
