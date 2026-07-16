@@ -146,11 +146,10 @@ jobs:
         displayName: 'Download GCS Service Account Key'
         inputs:
           secureFile: 'ci-gcs-dev.json'
-      - script: |
-          go install github.com/jstemmer/go-junit-report@v0.9.1
-          go install github.com/axw/gocov/gocov@v1.1.0
-          go install github.com/AlekSi/gocov-xml@v1.0.0
-          go install github.com/matm/gocov-html@v0.0.0-20200509184451-71874e2e203b
+      - bash: |
+          go install github.com/jstemmer/go-junit-report/v2@v2.1.0
+          go install github.com/axw/gocov/gocov@v1.1.0 # this version is required by gocov-xml@v1.2.0
+          go install github.com/AlekSi/gocov-xml@v1.2.0
         displayName: 'Install dependencies'
       - script: |
           pip install azure-storage-blob==12.12.0
@@ -229,10 +228,9 @@ jobs:
           GOCOVERDIR: '$(System.DefaultWorkingDirectory)/coverage'
         condition: succeededOrFailed()
       # Smoke Tests Publishing
-      - task: PublishCodeCoverageResults@1
+      - task: PublishCodeCoverageResults@2
         condition: succeededOrFailed()
         inputs:
-          codeCoverageTool: Cobertura
           summaryFileLocation: $(System.DefaultWorkingDirectory)/**/smoke_coverage.xml
       - script: |
           pip install azure-storage-blob==12.12.0
