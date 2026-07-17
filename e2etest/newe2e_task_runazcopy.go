@@ -390,6 +390,8 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 				commandSpec.Flags = LoginStatusFlags{}
 			case AzCopyVerbRemove:
 				commandSpec.Flags = RemoveFlags{}
+			case AzCopyVerbLogout:
+				commandSpec.Flags = LogoutFlags{}
 			case AzCopyVerbJobsClean:
 				commandSpec.Flags = JobsCleanFlags{}
 			case AzCopyVerbJobsRemove:

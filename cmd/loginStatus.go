@@ -23,7 +23,9 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -41,13 +43,18 @@ type LoginStatusOptions struct {
 }
 
 type LoginStatus struct {
-	Valid       bool
-	TenantID    string
-	AADEndpoint string
-	AuthMethod  enum.AutoLoginType
+	Identities map[string]IdentityStatus
 }
 
-func (options LoginStatusOptions) process() (LoginStatus, error) {
+type IdentityStatus struct {
+	Valid       bool   `json:"valid"`
+	Error       error  `json:"error,omitempty"`
+	TenantID    string `json:"tenantID"`
+	AADEndpoint string `json:"AADEndpoint"`
+	AuthMethod  string `json:"authMethod"`
+}
+
+func (options LoginStatusOptions) process() LoginStatus {
 	manager := GetCredentialManager()
 
 	var creds []cred.TokenHeader
@@ -56,7 +63,9 @@ func (options LoginStatusOptions) process() (LoginStatus, error) {
 		nickname := TargetCredentialName
 		header, ok := manager.ProbeToken(nickname)
 		if !ok {
-			return LoginStatus{}, fmt.Errorf("no cached token found for `%q`", nickname)
+			return LoginStatus{Identities: map[string]IdentityStatus{
+				nickname: {Valid: false, Error: errors.New("identity not found")},
+			}}
 		}
 
 		creds = []cred.TokenHeader{header}
@@ -64,57 +73,44 @@ func (options LoginStatusOptions) process() (LoginStatus, error) {
 		var err error
 		creds, err = manager.ListCredentials()
 		if err != nil {
-			return LoginStatus{}, err
+			return LoginStatus{}
 		}
 	}
 
 	if len(creds) == 0 {
-		return LoginStatus{}, nil
+		return LoginStatus{}
 	}
 
-	primary := creds[0]
 	status := LoginStatus{
-		Valid:       true,
-		TenantID:    primary.Tenant,
-		AADEndpoint: primary.ActiveDirectoryEndpoint,
-		AuthMethod:  primary.LoginType,
+		make(map[string]IdentityStatus),
 	}
 
-	if OutputFormat == common.EOutputFormat.None() || OutputFormat == common.EOutputFormat.Text() {
-		for _, c := range creds {
-			displayName := c.Nickname
-			if displayName == "" {
-				displayName = c.Tenant
-			} else if displayName == "*" {
-				c.Tenant += "; default token"
-			}
-
-			if targetCred, err := manager.GetCredentials(c.Nickname); err != nil {
-				glcm.Info(fmt.Sprintf("could not retrieve info for credential `%q`: %s", c.Nickname, err))
-				continue
-			} else {
-				_, err = cred.NewScopedToken(targetCred, enum.ECredentialType.OAuthToken()).GetToken(context.Background(), policy.TokenRequestOptions{})
-				if err != nil {
-					glcm.Info(fmt.Sprintf("could not retrieve token for credential `%q`: %s", c.Nickname, err))
-				}
-			}
-
-			glcm.Info(fmt.Sprintf("Credential: %s (Tenant: %s)", displayName, c.Tenant))
+	for _, c := range creds {
+		result := IdentityStatus{
+			TenantID:    c.Tenant,
+			AADEndpoint: c.ActiveDirectoryEndpoint,
+			AuthMethod:  c.LoginType.String(),
 		}
+
+		if targetCred, err := manager.GetCredentials(c.Nickname); err != nil {
+			result.Error = err
+		} else {
+			_, err = cred.NewScopedToken(targetCred, enum.ECredentialType.OAuthToken()).GetToken(context.Background(), policy.TokenRequestOptions{})
+			if err != nil {
+				result.Error = err
+			} else {
+				result.Valid = true
+			}
+		}
+
+		status.Identities[c.Nickname] = result
 	}
 
-	return status, nil
+	return status
 }
 
-func RunLoginStatus(options LoginStatusOptions) (LoginStatus, error) {
+func RunLoginStatus(options LoginStatusOptions) LoginStatus {
 	return options.process()
-}
-
-type LoginStatusOutput struct {
-	Valid       bool    `json:"valid"`
-	TenantID    *string `json:"tenantID,omitempty"`
-	AADEndpoint *string `json:"AADEndpoint,omitempty"`
-	AuthMethod  *string `json:"authMethod,omitempty"`
 }
 
 func init() {
@@ -128,51 +124,38 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			logText := func(format string, a ...any) {
-				if OutputFormat == common.EOutputFormat.None() || OutputFormat == common.EOutputFormat.Text() {
-					glcm.Info(fmt.Sprintf(format, a...))
-				}
-			}
 			commandLineInput.NicknameSpecified = cmd.PersistentFlags().Changed("nickname")
-			status, _ := RunLoginStatus(commandLineInput)
-			var Info = LoginStatusOutput{
-				Valid: status.Valid,
-			}
-			if Info.Valid {
-				logText("You have successfully refreshed your token. Your login session is still active")
+			status := RunLoginStatus(commandLineInput)
 
-				if commandLineInput.TenantID {
-					logText("Tenant ID: %v", status.TenantID)
-					Info.TenantID = &status.TenantID
-				}
+			glcm.Output(func(format common.OutputFormat) string {
+				if format == common.EOutputFormat.Json() {
+					buf, _ := json.Marshal(status)
+					return string(buf)
+				} else {
+					var output strings.Builder
 
-				if commandLineInput.AADEndpoint {
-					logText(fmt.Sprintf("Active directory endpoint: %v", status.AADEndpoint))
-					Info.AADEndpoint = &status.AADEndpoint
-				}
+					for nickname, ident := range status.Identities {
+						output.WriteString(fmt.Sprintf("identity `%s`: ", nickname))
+						output.WriteString(ternary.Iff(ident.Valid, "refreshed successfully", "failed refresh (re-login required)"))
+						output.WriteString(fmt.Sprintf("; tenant ID: `%s` / AD endpoint: `%s` / Auth method: `%s`", ident.TenantID, ident.AADEndpoint, ident.AuthMethod))
 
-				if commandLineInput.Method {
-					logText(fmt.Sprintf("Authorized using %s", status.AuthMethod))
-					method := status.AuthMethod.String()
-					Info.AuthMethod = &method
-				}
-			} else {
-				logText("You are currently not logged in. Please login using 'azcopy login'")
-			}
-
-			if OutputFormat == common.EOutputFormat.Json() {
-				glcm.Output(
-					func(_ common.OutputFormat) string {
-						buf, err := json.Marshal(Info)
-						if err != nil {
-							panic(err)
+						if !ident.Valid {
+							output.WriteString(fmt.Sprintf("\nrefresh error: %s", ident.Error.Error()))
 						}
+						output.WriteString("\n\n")
+					}
 
-						return string(buf)
-					}, common.EOutputMessageType.LoginStatusInfo())
+					return output.String()
+				}
+			}, common.EOutputMessageType.LoginStatusInfo())
+
+			for _, v := range status.Identities {
+				if !v.Valid {
+					glcm.Exit(nil, common.EExitCode.Error())
+				}
 			}
 
-			glcm.Exit(nil, ternary.Iff(Info.Valid, common.EExitCode.Success(), common.EExitCode.Error()))
+			glcm.Exit(nil, common.EExitCode.Success())
 		},
 	}
 

@@ -24,9 +24,14 @@ const (
 )
 
 func GetOSKeyring(opts GetOSKeyringOptions) (Keyring, error) {
+	dpapiFolder, dpapiFilename := filepath.Split(*ternary.DefaultValue(opts.DPAPIFilePath, filepath.Join(enum.EEnvironmentVariable.AppDir().Get(), defaultTokenFileName)))
+	if cacheName, ok := enum.EEnvironmentVariable.LoginCacheName().Lookup(); ok {
+		dpapiFolder = filepath.Join(dpapiFolder, cacheName)
+	}
+
 	out := &windowsCredCache{
 		keyringData:   make(map[string]token),
-		dpapiFilePath: *ternary.DefaultValue(opts.DPAPIFilePath, filepath.Join(enum.EEnvironmentVariable.AppDir().Get(), defaultTokenFileName)),
+		dpapiFilePath: filepath.Join(dpapiFolder, dpapiFilename),
 		entropy:       newDataBlob([]byte(azcopyverbose)),
 		lock:          sync.RWMutex{},
 	}

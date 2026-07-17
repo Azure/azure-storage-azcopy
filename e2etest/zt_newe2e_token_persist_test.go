@@ -4,7 +4,7 @@ import (
 	"flag"
 	"fmt"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 )
@@ -35,6 +35,7 @@ func (*TokenPersistenceSuite) Scenario_InheritCred_Persist(a *ScenarioVariationM
 			Flags: LoginFlags{
 				LoginType: &credSource,
 				TenantID:  ternary.Iff(withSpecifiedTenantID && cfgTenantID != "", &cfgTenantID, nil),
+				Nickname:  PtrOf(cred.DefaultNickname),
 			},
 			Environment: azcopyEnv,
 		})
@@ -46,6 +47,7 @@ func (*TokenPersistenceSuite) Scenario_InheritCred_Persist(a *ScenarioVariationM
 				Method:   pointerTo(true),
 				Endpoint: pointerTo(true),
 				Tenant:   pointerTo(true),
+				Nickname: PtrOf(cred.DefaultNickname),
 			},
 			Environment: azcopyEnv,
 		})
@@ -54,25 +56,155 @@ func (*TokenPersistenceSuite) Scenario_InheritCred_Persist(a *ScenarioVariationM
 	a.AssertNow("must be AzCopyParsedLoginStatusStdout", Equal{}, ok, true)
 
 	if !a.Dryrun() {
-		status := parsedStdout.status
-		a.Assert("Login check failed", Equal{}, true, status.Valid)
+		identity, ok := parsedStdout.status.Identities[cred.DefaultNickname]
+		a.AssertNow("default identity not returned", Equal{}, ok, true)
+		a.Assert("Login check failed", Equal{}, true, identity.Valid)
 
-		a.Assert("Tenant not returned", Not{IsNil{}}, status.TenantID) // Let's just do a little extra testing while we're at it, kill two birds with one stone.
-		if withSpecifiedTenantID && status.TenantID != nil && cfgTenantID != "" {
-			a.Assert("Tenant does not match", Equal{}, cfgTenantID, *status.TenantID)
+		a.Assert("Tenant not returned", Empty{Invert: true}, identity.TenantID) // Let's just do a little extra testing while we're at it, kill two birds with one stone.
+		if withSpecifiedTenantID && cfgTenantID != "" {
+			a.Assert("Tenant does not match", Equal{}, cfgTenantID, identity.TenantID)
 		}
-		a.Assert("Endpoint not returned", Not{IsNil{}}, status.AADEndpoint)
-		a.Assert("Auth mechanism not returned", Not{IsNil{}}, status.AuthMethod)
-		if status.AuthMethod != nil {
-			a.Assert("Incorrect auth mechanism", Equal{}, *status.AuthMethod, credSource.String())
-		}
+		a.Assert("Endpoint not returned", Empty{Invert: true}, identity.AADEndpoint)
+		a.Assert("Incorrect auth mechanism", Equal{}, identity.AuthMethod, credSource.String())
 	}
 
 	_, _ = RunAzCopy(a,
 		AzCopyCommand{
-			Verb:        AzCopyVerbLogout,
+			Verb: AzCopyVerbLogout,
+			Flags: LogoutFlags{
+				Nickname: PtrOf(cred.DefaultNickname),
+			},
 			Environment: azcopyEnv,
 		})
+}
+
+func (*TokenPersistenceSuite) Scenario_MultiLogin_Persist(a *ScenarioVariationManager) {
+	if runDeviceCodeTest == nil || !*runDeviceCodeTest {
+		a.Skip("device code disabled")
+	}
+
+	cfgTenantID := GlobalConfig.GetTenantID()
+
+	env := &AzCopyEnvironment{
+		LoginCacheName: pointerTo("AzCopyMultiLoginInteractiveTest"),
+		ManualLogin:    true,
+	}
+
+	a.Log("Logging in the first credential, interactive")
+	_, _ = RunAzCopy(a,
+		AzCopyCommand{
+			Verb: AzCopyVerbLogin,
+			Flags: LoginFlags{
+				LoginType: pointerTo(enum.EAutoLoginType.Interactive()),
+				TenantID:  &cfgTenantID,
+				Nickname:  PtrOf("testToken1"),
+			},
+			Environment: env,
+		})
+
+	a.Log("Logging in the second credential, interactive")
+	_, _ = RunAzCopy(a,
+		AzCopyCommand{
+			Verb: AzCopyVerbLogin,
+			Flags: LoginFlags{
+				LoginType: pointerTo(enum.EAutoLoginType.Interactive()),
+				TenantID:  &cfgTenantID,
+				Nickname:  PtrOf("testToken2"),
+			},
+			Environment: env,
+		})
+
+	loginStatus, _ := RunAzCopy(a,
+		AzCopyCommand{
+			Verb: AzCopyVerbLoginStatus,
+			Flags: LoginStatusFlags{
+				Method:   pointerTo(true),
+				Endpoint: pointerTo(true),
+				Tenant:   pointerTo(true),
+			},
+			Environment: env,
+		})
+
+	parsedStdout, ok := loginStatus.(*AzCopyParsedLoginStatusStdout)
+	a.AssertNow("must be AzCopyParsedLoginStatusStdout", Equal{}, ok, true)
+
+	if !a.Dryrun() {
+		identity1, ok := parsedStdout.status.Identities["testToken1"]
+		a.AssertNow("token1 not returned", Equal{}, ok, true)
+		a.Assert("token1 login check failed", Equal{}, true, identity1.Valid)
+		a.Assert("token1 tenant not returned", Empty{Invert: true}, identity1.TenantID)
+		a.Assert("token1 tenant does not match", Equal{}, cfgTenantID, identity1.TenantID)
+		a.Assert("token1 endpoint not returned", Empty{Invert: true}, identity1.AADEndpoint)
+		a.Assert("token1 incorrect auth method", Equal{}, identity1.AuthMethod, enum.EAutoLoginType.Interactive().String())
+
+		identity2, ok := parsedStdout.status.Identities["testToken2"]
+		a.AssertNow("token2 not returned", Equal{}, ok, true)
+		a.Assert("token2 login check failed", Equal{}, true, identity2.Valid)
+		a.Assert("token2 tenant not returned", Empty{Invert: true}, identity2.TenantID)
+		a.Assert("token2 tenant does not match", Equal{}, cfgTenantID, identity2.TenantID)
+		a.Assert("token2 endpoint not returned", Empty{Invert: true}, identity2.AADEndpoint)
+		a.Assert("token2 incorrect auth method", Equal{}, identity2.AuthMethod, enum.EAutoLoginType.Interactive().String())
+	}
+
+	_, _ = RunAzCopy(a,
+		AzCopyCommand{
+			Verb: AzCopyVerbLogout,
+			Flags: LogoutFlags{
+				Nickname: PtrOf("testToken1"),
+			},
+			Environment: env,
+		})
+
+	loginStatus, _ = RunAzCopy(a,
+		AzCopyCommand{
+			Verb: AzCopyVerbLoginStatus,
+			Flags: LoginStatusFlags{
+				Method:   pointerTo(true),
+				Endpoint: pointerTo(true),
+				Tenant:   pointerTo(true),
+			},
+			Environment: env,
+		})
+
+	parsedStdout, ok = loginStatus.(*AzCopyParsedLoginStatusStdout)
+	a.AssertNow("must be AzCopyParsedLoginStatusStdout", Equal{}, ok, true)
+
+	if !a.Dryrun() {
+		_, ok := parsedStdout.status.Identities["testToken1"]
+		a.Assert("token1 should be removed after logout", Equal{}, false, ok)
+
+		identity2, ok := parsedStdout.status.Identities["testToken2"]
+		a.AssertNow("token2 not returned after token1 logout", Equal{}, ok, true)
+		a.Assert("token2 should remain valid", Equal{}, true, identity2.Valid)
+	}
+
+	_, _ = RunAzCopy(a,
+		AzCopyCommand{
+			Verb: AzCopyVerbLogout,
+			Flags: LogoutFlags{
+				Nickname: PtrOf("testToken2"),
+			},
+			Environment: env,
+		})
+
+	loginStatus, _ = RunAzCopy(a,
+		AzCopyCommand{
+			Verb: AzCopyVerbLoginStatus,
+			Flags: LoginStatusFlags{
+				Method:   pointerTo(true),
+				Endpoint: pointerTo(true),
+				Tenant:   pointerTo(true),
+			},
+			Environment: env,
+		})
+
+	parsedStdout, ok = loginStatus.(*AzCopyParsedLoginStatusStdout)
+	a.AssertNow("must be AzCopyParsedLoginStatusStdout", Equal{}, ok, true)
+
+	if !a.Dryrun() {
+		fmt.Println(parsedStdout.status.Identities)
+		a.Assert("expected no identities after all logouts", Empty{}, parsedStdout.status.Identities)
+	}
 }
 
 var runDeviceCodeTest = flag.Bool("device-code", false, "Whether or not to run device code tests. These must be run manually due to interactive nature.")
@@ -94,6 +226,7 @@ func (*TokenPersistenceSuite) Scenario_DeviceCode_Persist(a *ScenarioVariationMa
 			Flags: LoginFlags{
 				LoginType: pointerTo(enum.EAutoLoginType.Device()),
 				TenantID:  ternary.Iff(cfgTenantID != "", &cfgTenantID, nil),
+				Nickname:  PtrOf(cred.DefaultNickname),
 			},
 			Environment: env,
 		})
@@ -105,6 +238,7 @@ func (*TokenPersistenceSuite) Scenario_DeviceCode_Persist(a *ScenarioVariationMa
 				Method:   pointerTo(true),
 				Endpoint: pointerTo(true),
 				Tenant:   pointerTo(true),
+				Nickname: PtrOf(cred.DefaultNickname),
 			},
 			Environment: env,
 		})
@@ -113,23 +247,24 @@ func (*TokenPersistenceSuite) Scenario_DeviceCode_Persist(a *ScenarioVariationMa
 	a.AssertNow("must be AzCopyParsedLoginStatusStdout", Equal{}, ok, true)
 
 	if !a.Dryrun() {
-		status := parsedStdout.status
-		a.Assert("Login check failed", Equal{}, true, status.Valid)
+		identity, ok := parsedStdout.status.Identities[cred.DefaultNickname]
+		a.AssertNow("default identity not returned", Equal{}, ok, true)
+		a.Assert("Login check failed", Equal{}, true, identity.Valid)
 
-		a.Assert("Tenant not returned", Not{IsNil{}}, status.TenantID) // Let's just do a little extra testing while we're at it, kill two birds with one stone.
-		if status.TenantID != nil && cfgTenantID != "" {
-			a.Assert("Tenant does not match", Equal{}, cfgTenantID, *status.TenantID)
+		a.Assert("Tenant not returned", Empty{Invert: true}, identity.TenantID) // Let's just do a little extra testing while we're at it, kill two birds with one stone.
+		if cfgTenantID != "" {
+			a.Assert("Tenant does not match", Equal{}, cfgTenantID, identity.TenantID)
 		}
-		a.Assert("Endpoint not returned", Not{IsNil{}}, status.AADEndpoint)
-		a.Assert("Auth mechanism not returned", Not{IsNil{}}, status.AuthMethod)
-		if status.AuthMethod != nil {
-			a.Assert("Incorrect auth mechanism", Equal{}, *status.AuthMethod, enum.EAutoLoginType.Device().String())
-		}
+		a.Assert("Endpoint not returned", Empty{Invert: true}, identity.AADEndpoint)
+		a.Assert("Incorrect auth mechanism", Equal{}, identity.AuthMethod, enum.EAutoLoginType.Device().String())
 	}
 
 	_, _ = RunAzCopy(a,
 		AzCopyCommand{
-			Verb:        AzCopyVerbLogout,
+			Verb: AzCopyVerbLogout,
+			Flags: LogoutFlags{
+				Nickname: PtrOf(cred.DefaultNickname),
+			},
 			Environment: env,
 		})
 }
