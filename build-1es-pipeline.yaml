@@ -198,7 +198,7 @@ extends:
                   displayName: 'Upload Linux FIPS Amd64 Unsigned'
                 - output: pipelineArtifact
                   targetPath: $(System.DefaultWorkingDirectory)/binaries
-                  # We separate the FIPS builds from the other Linux builds to prevent the FIPS and non-FIPS jobs from conflicting and to easily avoid creating FIPS-capable Docker container images.
+                  # We separate the FIPS builds from the other Linux builds to prevent the FIPS and non-FIPS jobs from conflicting.
                   artifactName: 'azcopy-binaries-linux-fips-amd64'
                   displayName: 'Upload Linux FIPS Amd64 Binaries'
 
@@ -237,7 +237,7 @@ extends:
                   displayName: 'Upload Linux FIPS Arm64 Unsigned'
                 - output: pipelineArtifact
                   targetPath: $(System.DefaultWorkingDirectory)/binaries
-                  # We separate the FIPS builds from the other Linux builds to prevent the FIPS and non-FIPS jobs from conflicting and to easily avoid creating FIPS-capable Docker container images.
+                  # We separate the FIPS builds from the other Linux builds to prevent the FIPS and non-FIPS jobs from conflicting.
                   artifactName: 'azcopy-binaries-linux-fips-arm64'
                   displayName: 'Upload Linux FIPS Arm64 Binaries'
 
@@ -350,7 +350,6 @@ extends:
                   artifactName: azcopy-linux-arm64-unsigned
                   targetPath: $(System.DefaultWorkingDirectory)/arm64
                   displayName: 'Download Linux Arm64 Unsigned'
-                # We use different target paths for the FIPS builds to easily avoid creating FIPS-capable Mariner builds
                 - input: pipelineArtifact
                   artifactName: azcopy-linux-fips-amd64-unsigned
                   targetPath: $(System.DefaultWorkingDirectory)/fips-amd64
@@ -371,13 +370,12 @@ extends:
                 value: $(System.DefaultWorkingDirectory)/amd64
               - name: arm64
                 value: $(System.DefaultWorkingDirectory)/arm64
-              - name: mariner
-                value: $(System.DefaultWorkingDirectory)/mariner
+              - name: azure-linux
+                value: $(System.DefaultWorkingDirectory)/azure-linux
               - name: fips-amd64
                 value: $(System.DefaultWorkingDirectory)/fips-amd64
               - name: fips-arm64
                 value: $(System.DefaultWorkingDirectory)/fips-arm64
-              # We've decided not to create FIPS-compliant builds for Mariner 2.
               - name: signed
                 value: $(System.DefaultWorkingDirectory)/signed
 
@@ -390,11 +388,11 @@ extends:
                   version: '9.0.x'
 
               - script: |
-                  mkdir -p $(mariner)
-                  chmod 755 $(mariner)
-                  cp $(amd64)/*x86_64.rpm $(mariner)
-                  cp $(arm64)/*arm64.rpm $(mariner)
-                displayName: 'Copy artifacts for Mariner'
+                  mkdir -p $(azure-linux)
+                  chmod 755 $(azure-linux)
+                  cp $(amd64)/*x86_64.rpm $(azure-linux)
+                  cp $(arm64)/*arm64.rpm $(azure-linux)
+                displayName: 'Copy artifacts for Azure Linux'
 
               - template: setup/esrp_sign_linux.yml@self
                 parameters:
@@ -412,10 +410,11 @@ extends:
 
               - template: setup/esrp_sign_linux.yml@self
                 parameters:
-                  FolderPath: $(mariner)
+                  FolderPath: $(azure-linux)
+                  # Mariner was the name of previous versions of Azure Linux
                   ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_MARINER_KEY_CODE)
                   Pattern: '*.rpm, *.deb'
-                  DisplayName: 'ESRP CodeSigning azcopy mariner'
+                  DisplayName: 'ESRP CodeSigning azcopy Azure Linux'
 
               - template: setup/esrp_sign_linux.yml@self
                 parameters:
@@ -438,6 +437,7 @@ extends:
               - template: setup/esrp_sign_linux.yml@self
                 parameters:
                   FolderPath: $(fips-amd64)
+                  # Mariner was the name of previous versions of Azure Linux
                   ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_MARINER_KEY_CODE)
                   Pattern: '*.rpm'
                   DisplayName: 'ESRP CodeSigning azcopy linux fips amd64 rpm'
@@ -445,6 +445,7 @@ extends:
               - template: setup/esrp_sign_linux.yml@self
                 parameters:
                   FolderPath: $(fips-arm64)
+                  # Mariner was the name of previous versions of Azure Linux
                   ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_MARINER_KEY_CODE)
                   Pattern: '*.rpm'
                   DisplayName: 'ESRP CodeSigning azcopy linux fips arm64 rpm'
@@ -462,14 +463,14 @@ extends:
                   
                   # FIPS
                   # To match the layout of other parts of this pipeline, this FIPS section
-                  # would be placed below the Mariner section. However, this task fails if
+                  # would be placed below the Azure Linux section. However, this task fails if
                   # the last command returns a non-zero exit code, and the arm64 and FIPS
                   # "mv" commands return 1, due to the presence of the "_manifest" folder
                   # that was copied to the "signed" folder by the amd64 mv. Leaving
-                  # Mariner's mv at the end of this script avoids this issue, because
-                  # (like the amd64 mv), the Mariner mv targets an initially-empty folder.
+                  # Azure Linux's mv at the end of this script avoids this issue, because
+                  # (like the amd64 mv), the Azure Linux mv targets an initially-empty folder.
                   # For details, see the messages this task logs in the pipeline when the
-                  # Mariner mv isn't the last command in this script.
+                  # Azure Linux mv isn't the last command in this script.
                   chmod 755 $(fips-amd64)/*
                   rm -rf $(fips-amd64)/*.md
                   mv $(fips-amd64)/* $(signed)
@@ -478,12 +479,12 @@ extends:
                   rm -rf $(fips-arm64)/*.md
                   mv $(fips-arm64)/* $(signed)
 
-                  # Mariner
-                  mkdir -p $(signed)/mariner
+                  # Azure Linux
+                  mkdir -p $(signed)/azure-linux
 
-                  chmod 755 $(mariner)/*
-                  rm -rf $(mariner)/*.md
-                  mv $(mariner)/* $(signed)/mariner
+                  chmod 755 $(azure-linux)/*
+                  rm -rf $(azure-linux)/*.md
+                  mv $(azure-linux)/* $(signed)/azure-linux
                 displayName: 'Make Artifacts executable'
 
           - job: Windows
@@ -769,6 +770,7 @@ extends:
             timeoutInMinutes: 120
             pool:
               name: azcopy-pool
+              # We should replace this with an Azure Linux 3.0 image (and rename this job) once we've resolved the pool issues with that image
               image: mariner2-1espt
               os: linux
             templateContext:
@@ -776,11 +778,11 @@ extends:
                 - input: pipelineArtifact
                   artifactName: azcopy-linux-signed
                   targetPath: '$(System.DefaultWorkingDirectory)/signed'
-                  item_pattern: 'mariner/azcopy-*x86_64.rpm'
+                  item_pattern: 'azure-linux/azcopy-*x86_64.rpm'
                   displayName: 'Download Linux Signed'
             variables:
               - name: signed
-                value: '$(System.DefaultWorkingDirectory)/signed/mariner'
+                value: '$(System.DefaultWorkingDirectory)/signed/azure-linux'
             steps:
               - checkout: none
               - script: |
@@ -1027,8 +1029,8 @@ extends:
 
               - script: |
                   mkdir -p $(release)
-                  # The Mariner artifacts are copies of some of the other Linux artifacts that have been signed with a different key.
-                  # There's no need to include the Mariner artifacts in the release folder.
+                  # The Azure Linux artifacts are copies of some of the other Linux artifacts that have been signed with a different key.
+                  # There's no need to include the Azure Linux artifacts in the release folder.
                   cp $(input)/azcopy-linux-signed/azcopy* $(release)
                   cp $(input)/azcopy-windows-signed/azcopy* $(release)
                   cp $(input)/azcopy-mac-signed/azcopy* $(release)
@@ -1291,8 +1293,8 @@ extends:
                       $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/*.tar.gz
                       $(Build.ArtifactStagingDirectory)/azcopy-windows-signed/*.zip
                       $(Build.ArtifactStagingDirectory)/azcopy-mac-signed/*.zip
-                      # The Mariner artifacts are copies of some of the other Linux artifacts that have been signed with a different key.
-                      # There's no need to upload the Mariner artifacts to GitHub
+                      # The Azure Linux artifacts are copies of some of the other Linux artifacts that have been signed with a different key.
+                      # There's no need to upload the Azure Linux artifacts to GitHub
                       # (despite what earlier versions of this file suggest, they weren't being uploaded before).
                     assetUploadMode: replace
         # ReleaseToGithub ends here
@@ -1365,17 +1367,17 @@ extends:
                   displayName: "Download Linux Signed"
 
               - script: |
-                  arm64file=$(ls "$(signed)/mariner/azcopy"*.arm64.rpm)
-                  amd64file=$(ls "$(signed)/mariner/azcopy"*.x86_64.rpm)
-                  marinerArmFileName="${arm64file/.arm64.rpm/-cm2.arm64.rpm}"
-                  marinerAmdFileName="${amd64file/.x86_64.rpm/-cm2.x86_64.rpm}"
+                  arm64file=$(ls "$(signed)/azure-linux/azcopy"*.arm64.rpm)
+                  amd64file=$(ls "$(signed)/azure-linux/azcopy"*.x86_64.rpm)
+                  azureLinuxArmFileName="${arm64file/.arm64.rpm/-al.arm64.rpm}"
+                  azureLinuxAmdFileName="${amd64file/.x86_64.rpm/-al.x86_64.rpm}"
 
-                  mv -v "$(signed)/mariner/azcopy"*.arm64.rpm "$marinerArmFileName"
-                  mv -v "$(signed)/mariner/azcopy"*.x86_64.rpm "$marinerAmdFileName"
+                  mv -v "$(signed)/azure-linux/azcopy"*.arm64.rpm "$azureLinuxArmFileName"
+                  mv -v "$(signed)/azure-linux/azcopy"*.x86_64.rpm "$azureLinuxAmdFileName"
 
-                  mv "$(signed)/mariner/azcopy"*.rpm "$(signed)/"
-                  rm -r "$(signed)/mariner/"
-                displayName: 'Rename Mariner binaries'
+                  mv "$(signed)/azure-linux/azcopy"*.rpm "$(signed)/"
+                  rm -r "$(signed)/azure-linux/"
+                displayName: 'Rename Azure Linux binaries'
 
               - script: |
                   rm -r $(signed)/azcopy_linux_*.tar.gz
@@ -1418,29 +1420,29 @@ extends:
                     [ ${{ parameters.publish_artifacts }} == 'True' ] && [ ${{ parameters.test_pmc_connection }} == 'False' ]
                     publish=$?
                     
-                    azcopyAmdDebFile=$(ls azcopy-* | grep -vE 'fips|cm2' | grep '\.x86_64\.deb')
+                    azcopyAmdDebFile=$(ls azcopy-* | grep -vE 'fips|al' | grep '\.x86_64\.deb')
                     echo "Azcopy AMD DEB File: $azcopyAmdDebFile"
                     
-                    azcopyAmdRpmFile=$(ls azcopy-* | grep -vE 'fips|cm2' | grep '\.x86_64\.rpm')
+                    azcopyAmdRpmFile=$(ls azcopy-* | grep -vE 'fips|al' | grep '\.x86_64\.rpm')
                     echo "Azcopy AMD RPM File: $azcopyAmdRpmFile"
                     
-                    azcopyArmDebFile=$(ls azcopy-* | grep -vE 'fips|cm2' | grep '\.arm64\.deb')
+                    azcopyArmDebFile=$(ls azcopy-* | grep -vE 'fips|al' | grep '\.arm64\.deb')
                     echo "Azcopy ARM DEB File: $azcopyArmDebFile"
 
-                    azcopyArmRpmFile=$(ls azcopy-* | grep -vE 'fips|cm2' | grep '\.arm64\.rpm')
+                    azcopyArmRpmFile=$(ls azcopy-* | grep -vE 'fips|al' | grep '\.arm64\.rpm')
                     echo "Azcopy ARM RPM File: $azcopyArmRpmFile"
                     
-                    marinerAmdRpmFile=$(ls azcopy-* | grep 'cm2\.x86_64\.rpm')
-                    echo "Azcopy Mariner AMD RPM File: $marinerAmdRpmFile"
+                    azureLinuxAmdRpmFile=$(ls azcopy-* | grep 'al\.x86_64\.rpm')
+                    echo "Azcopy Azure Linux AMD RPM File: $azureLinuxAmdRpmFile"
                     
-                    marinerAarchRpmFile=$(ls azcopy-* | grep 'cm2\.arm64\.rpm')
-                    echo "Azcopy Mariner ARM RPM File: $marinerAarchRpmFile"
+                    azureLinuxAarchRpmFile=$(ls azcopy-* | grep 'al\.arm64\.rpm')
+                    echo "Azcopy Azure Linux ARM RPM File: $azureLinuxAarchRpmFile"
                     
-                    azcopyFipsAmdRpmFile=$(ls azcopy-fips-* | grep '\.x86_64\.rpm')
-                    echo "Azcopy FIPS AMD RPM File: $azcopyFipsAmdRpmFile"
+                    azureLinuxFipsAmdRpmFile=$(ls azcopy-fips-* | grep '\.x86_64\.rpm')
+                    echo "Azcopy Azure Linux FIPS AMD RPM File: $azureLinuxFipsAmdRpmFile"
 
-                    azcopyFipsArmRpmFile=$(ls azcopy-fips-* | grep '\.arm64\.rpm')
-                    echo "Azcopy FIPS ARM RPM File: $azcopyFipsArmRpmFile"
+                    azureLinuxFipsArmRpmFile=$(ls azcopy-fips-* | grep '\.arm64\.rpm')
+                    echo "Azcopy Azure Linux FIPS ARM RPM File: $azureLinuxFipsArmRpmFile"
 
                     if (( publish == 0 )); then
                       # These pmc commands appear to be uploading package IDs for later reference in other pmc commands
@@ -1457,17 +1459,17 @@ extends:
                       azcopyArmRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azcopyArmRpmFile)
                       echo "Azcopy ARM RPM ID: $azcopyArmRpm"
 
-                      marinerAmdRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $marinerAmdRpmFile)
-                      echo "Azcopy Mariner AMD RPM ID: $marinerAmdRpm"
+                      azureLinuxAmdRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azureLinuxAmdRpmFile)
+                      echo "Azcopy Azure Linux AMD RPM ID: $azureLinuxAmdRpm"
                     
-                      marinerAarchRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $marinerAarchRpmFile)
-                      echo "Azcopy Mariner ARM RPM ID: $marinerAarchRpm"
+                      azureLinuxAarchRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azureLinuxAarchRpmFile)
+                      echo "Azcopy Azure Linux ARM RPM ID: $azureLinuxAarchRpm"
 
-                      azcopyFipsAmdRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azcopyFipsAmdRpmFile)
-                      echo "Azcopy FIPS AMD RPM ID: $azcopyFipsAmdRpm"
+                      azureLinuxFipsAmdRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azureLinuxFipsAmdRpmFile)
+                      echo "Azcopy Azure Linux FIPS AMD RPM ID: $azureLinuxFipsAmdRpm"
 
-                      azcopyFipsArmRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azcopyFipsArmRpmFile)
-                      echo "Azcopy FIPS ARM RPM ID: $azcopyFipsArmRpm"
+                      azureLinuxFipsArmRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azureLinuxFipsArmRpmFile)
+                      echo "Azcopy Azure Linux FIPS ARM RPM ID: $azureLinuxFipsArmRpm"
                     fi
 
                     while IFS=, read -r distro archetype repoName releaseName; do
