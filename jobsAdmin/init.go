@@ -194,6 +194,8 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 		PartNum:           order.PartNum,
 		PlanFile:          jppfn,
 		ExistingPlanMMF:   nil,
+		SourceSAS:         order.SourceRoot.SAS,
+		DestinationSAS:    order.DestinationRoot.SAS,
 		SrcClient:         order.SrcServiceClient,
 		DstClient:         order.DstServiceClient,
 		SrcIsOAuth:        order.S2SSourceCredentialType.IsAzureOAuth(),

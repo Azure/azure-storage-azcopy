@@ -21,9 +21,14 @@
 package ste
 
 import (
-	"github.com/stretchr/testify/assert"
+	"context"
+	"fmt"
 	"strings"
+	"sync"
 	"testing"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestInferContentType(t *testing.T) {
@@ -52,5 +57,90 @@ func TestInferContentType(t *testing.T) {
 		// make sure the inferred type is correct
 		// we use Contains to check because charset is also in contentType
 		a.True(strings.Contains(contentType, expectedType))
+	}
+}
+
+func TestAddJobPartRuntimeSAS(t *testing.T) {
+	const (
+		sourceSAS      = "sp=rl&sig=source-runtime-sentinel"
+		destinationSAS = "sp=rcwdl&sig=destination-runtime-sentinel"
+	)
+
+	originalPlanFolder := common.AzcopyJobPlanFolder
+	common.AzcopyJobPlanFolder = t.TempDir()
+	t.Cleanup(func() {
+		common.AzcopyJobPlanFolder = originalPlanFolder
+	})
+
+	tests := []struct {
+		name              string
+		existingPlan      bool
+		sourceSAS         string
+		destinationSAS    string
+		expectedSourceSAS string
+		expectedDestSAS   string
+	}{
+		{
+			name:              "new part with runtime SAS",
+			sourceSAS:         sourceSAS,
+			destinationSAS:    destinationSAS,
+			expectedSourceSAS: sourceSAS,
+			expectedDestSAS:   destinationSAS,
+		},
+		{
+			name: "new non-SAS part",
+		},
+		{
+			name:         "resumed part without runtime SAS",
+			existingPlan: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			order := common.CopyJobPartOrderRequest{
+				JobID:           common.NewJobID(),
+				PartNum:         0,
+				FromTo:          common.EFromTo.LocalBlob(),
+				Fpo:             common.EFolderPropertiesOption.NoFolders(),
+				SourceRoot:      common.ResourceString{Value: "source"},
+				DestinationRoot: common.ResourceString{Value: "https://account.blob.core.windows.net/container"},
+			}
+			planFile := JobPartPlanFileName(fmt.Sprintf(
+				JobPartPlanFileNameFormat,
+				order.JobID.String(),
+				order.PartNum,
+				DataSchemaVersion,
+			))
+			planFile.Create(order)
+
+			var existingPlanMMF *JobPartPlanMMF
+			if test.existingPlan {
+				existingPlanMMF = planFile.Map()
+			}
+
+			jm := &jobMgr{
+				ctx:         context.Background(),
+				jobPartMgrs: newJobPartToJobPartMgr(),
+				initMu:      &sync.Mutex{},
+			}
+			jpm := jm.AddJobPart(&AddJobPartArgs{
+				PartNum:         order.PartNum,
+				PlanFile:        planFile,
+				ExistingPlanMMF: existingPlanMMF,
+				SourceSAS:       test.sourceSAS,
+				DestinationSAS:  test.destinationSAS,
+			})
+			t.Cleanup(jpm.Close)
+
+			actualSourceSAS, actualDestinationSAS := jpm.SAS()
+			assert.Equal(t, test.expectedSourceSAS, actualSourceSAS)
+			assert.Equal(t, test.expectedDestSAS, actualDestinationSAS)
+
+			jptm := &jobPartTransferMgr{jobPartMgr: jpm}
+			actualSourceSAS, actualDestinationSAS = jptm.SAS()
+			assert.Equal(t, test.expectedSourceSAS, actualSourceSAS)
+			assert.Equal(t, test.expectedDestSAS, actualDestinationSAS)
+		})
 	}
 }
