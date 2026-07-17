@@ -149,6 +149,11 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 			}
 		},
 		ErrorChannel: enumeratorOptions.ErrorChannel,
+		// Only buffer-and-sort a directory level (needed for sorted merge-join input) when the
+		// streaming merge-join actually runs for this pair; otherwise keep the bounded-memory
+		// streaming behavior for the indexMap sync path. Mirrors useStreamingMergeJoin(), inlined
+		// here because this file is compiled in all builds while that helper is smslidingwindow-only.
+		UseStreamingMergeJoin: cca.useStreamingMergeJoin && syncPairSupportsStreamingMergeJoin(cca.fromTo),
 	}
 	srcTraverserTemplate := ResourceTraverserTemplate{
 		location: cca.fromTo.From(),
@@ -487,6 +492,25 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 				enumeratorOptions,
 			)
 		}
+	}
+}
+
+// syncPairSupportsStreamingMergeJoin reports whether the streaming merge-join is supported for the
+// given source/destination pair (S3->Blob or Azure->Azure). This eligibility check lives in an
+// always-compiled file so it can be shared by both the smslidingwindow-only merge-join code and the
+// traverser gating that must compile in every build.
+func syncPairSupportsStreamingMergeJoin(fromTo common.FromTo) bool {
+	isAzure := func(loc common.Location) bool {
+		return loc == common.ELocation.Blob() || loc == common.ELocation.BlobFS()
+	}
+	from, to := fromTo.From(), fromTo.To()
+	switch {
+	case from == common.ELocation.S3() && to == common.ELocation.Blob():
+		return true // S3 -> Blob
+	case isAzure(from) && isAzure(to):
+		return true // Azure -> Azure (Blob/BlobFS)
+	default:
+		return false
 	}
 }
 

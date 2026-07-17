@@ -419,6 +419,12 @@ type InitResourceTraverserOptions struct {
 	// IsSyncDestination indicates this traverser is enumerating the destination side of a sync job.
 	// Used to return specific not-found errors that the sync orchestrator handles gracefully.
 	IsSyncDestination bool
+
+	// UseStreamingMergeJoin indicates the sync job uses the streaming merge-join path, which
+	// requires each directory level to be emitted in lexicographic order. Only when this is set
+	// does the S3 traverser buffer-and-sort a directory level; otherwise it streams objects
+	// directly (bounded memory) as the indexMap path expects.
+	UseStreamingMergeJoin bool
 }
 
 // XDM: These templates are used to create directory level non-recursive traversers

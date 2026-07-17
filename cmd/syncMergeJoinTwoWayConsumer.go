@@ -400,7 +400,7 @@ type mergeJoinTraversalError struct {
 }
 
 func (e *mergeJoinTraversalError) Error() string { return e.err.Error() }
-func (e *mergeJoinTraversalError) Unwrap() error  { return e.err }
+func (e *mergeJoinTraversalError) Unwrap() error { return e.err }
 
 // mergeJoinDefaultParallelTraversers is the default directory-crawl parallelism used ONLY for
 // streaming merge-join jobs. It is intentionally separate from (and lower than) the indexMap
@@ -440,18 +440,7 @@ func useStreamingMergeJoin(cca *cookedSyncCmdArgs) bool {
 	if !cca.useStreamingMergeJoin {
 		return false
 	}
-	isAzure := func(loc common.Location) bool {
-		return loc == common.ELocation.Blob() || loc == common.ELocation.BlobFS()
-	}
-	from, to := cca.fromTo.From(), cca.fromTo.To()
-	switch {
-	case from == common.ELocation.S3() && to == common.ELocation.Blob():
-		return true // S3 -> Blob
-	case isAzure(from) && isAzure(to):
-		return true // Azure -> Azure (Blob/BlobFS)
-	default:
-		return false
-	}
+	return syncPairSupportsStreamingMergeJoin(cca.fromTo)
 }
 
 // isSelfReferentialDirSentinel returns true when a BlobFS (HNS) traverser emits
