@@ -529,6 +529,10 @@ type AddJobPartArgs struct {
 	PlanFile        JobPartPlanFileName
 	ExistingPlanMMF *JobPartPlanMMF
 
+	// SAS values are runtime-only and must never be persisted in the plan file.
+	SourceSAS      string
+	DestinationSAS string
+
 	// this is required in S2S transfers authenticating to src
 	// via oAuth
 	SourceTokenCred *string
@@ -550,6 +554,8 @@ func (jm *jobMgr) AddJobPart(args *AddJobPartArgs) IJobPartMgr {
 	jpm := &jobPartMgr{
 		jobMgr:            jm,
 		filename:          args.PlanFile,
+		sourceSAS:         args.SourceSAS,
+		destinationSAS:    args.DestinationSAS,
 		srcServiceClient:  args.SrcClient,
 		dstServiceClient:  args.DstClient,
 		pacer:             jm.pacer,
