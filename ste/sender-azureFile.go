@@ -178,6 +178,20 @@ func (u *azureFileSenderBase) RemoteFileExists() (bool, time.Time, error) {
 	return remoteObjectExists(filePropertiesResponseAdapter{props}, err)
 }
 
+// senderIsSyncJob tells us whether the current transfer is `sync`.
+// Sync reconciles NFS hardlink groups in its comparator and deletes members that must move, so the
+// anchor/data-carrier must be overwritten in place.
+// But, copy has no comparator and
+// relies on delete-before-create to break stale destination groups.
+func senderIsSyncJob(jptm IJobPartTransferMgr) bool {
+	m, ok := jptm.(*jobPartTransferMgr)
+	if !ok {
+		return false
+	}
+	cmd := strings.TrimSpace(m.jobPartMgr.Plan().CommandString())
+	return cmd == "sync" || strings.HasPrefix(cmd, "sync ")
+}
+
 func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationModified bool) {
 	jptm := u.jptm
 	info := jptm.Info()
@@ -192,7 +206,22 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 
 	// If the destination is a regular NFS file with LinkCount > 1 (i.e. part of a hardlink group), delete it before Create
 	// so we don't preserve the existing inode/hardlink relationships when overwriting this path.
-	if u.jptm.FromTo().IsNFS() {
+
+	// We delete/ break the hardlink group in these cases:
+	//   - copy: there is no comparator, so re-uploading the anchor/data-carrier
+	//     is the only way to detach it from a stale destination group and rebuild
+	//     the source's grouping
+	//   - a genuine hardlink→file conversion (source is a regular file): the path
+	//     must leave the group to match the source.
+	//
+	// Do NOT break it for a sync whose source is still a hardlink: the sync
+	// comparator already restructures groups (deleting members that move), so the
+	// anchor/data-carrier only needs an in-place content refresh. Deleting it here
+	// would replace its inode and orphan the non-anchor siblings the comparator
+	// intentionally left in place.
+
+	breakDestHardlinkGroup := info.EntityType != common.EEntityType.Hardlink() || !senderIsSyncJob(u.jptm)
+	if u.jptm.FromTo().IsNFS() && breakDestHardlinkGroup {
 		if props, err := u.getFileClient().GetProperties(u.ctx, nil); err == nil {
 			isNFSFileRegular := props.NFSFileType != nil && *props.NFSFileType == file.NFSFileTypeRegular
 			linkCount := common.IffNotNil(props.LinkCount, int64(0))

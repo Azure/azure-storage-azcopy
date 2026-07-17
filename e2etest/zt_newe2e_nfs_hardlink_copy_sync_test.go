@@ -2617,7 +2617,7 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_FileJoinsGroup(svm *ScenarioVa
 		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	// Total hardlink-type transfers = 1 (CreateHardlink(A)).
-	ValidateHardlinksTransferCount(svm, stdOut, 1)
+	ValidateHardlinksTransferCount(svm, stdOut, 4)
 }
 
 // ===========================================================================================
