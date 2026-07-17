@@ -1420,23 +1420,23 @@ extends:
                     [ ${{ parameters.publish_artifacts }} == 'True' ] && [ ${{ parameters.test_pmc_connection }} == 'False' ]
                     publish=$?
                     
-                    azcopyAmdDebFile=$(ls azcopy-* | grep -vE 'fips|al' | grep '\.x86_64\.deb')
+                    azcopyAmdDebFile=$(ls azcopy-* | grep -vE 'fips|-al' | grep '\.x86_64\.deb')
                     echo "Azcopy AMD DEB File: $azcopyAmdDebFile"
                     
-                    azcopyAmdRpmFile=$(ls azcopy-* | grep -vE 'fips|al' | grep '\.x86_64\.rpm')
+                    azcopyAmdRpmFile=$(ls azcopy-* | grep -vE 'fips|-al' | grep '\.x86_64\.rpm')
                     echo "Azcopy AMD RPM File: $azcopyAmdRpmFile"
                     
-                    azcopyArmDebFile=$(ls azcopy-* | grep -vE 'fips|al' | grep '\.arm64\.deb')
+                    azcopyArmDebFile=$(ls azcopy-* | grep -vE 'fips|-al' | grep '\.arm64\.deb')
                     echo "Azcopy ARM DEB File: $azcopyArmDebFile"
 
-                    azcopyArmRpmFile=$(ls azcopy-* | grep -vE 'fips|al' | grep '\.arm64\.rpm')
+                    azcopyArmRpmFile=$(ls azcopy-* | grep -vE 'fips|-al' | grep '\.arm64\.rpm')
                     echo "Azcopy ARM RPM File: $azcopyArmRpmFile"
                     
-                    azureLinuxAmdRpmFile=$(ls azcopy-* | grep 'al\.x86_64\.rpm')
+                    azureLinuxAmdRpmFile=$(ls azcopy-* | grep -- '-al\.x86_64\.rpm')
                     echo "Azcopy Azure Linux AMD RPM File: $azureLinuxAmdRpmFile"
                     
-                    azureLinuxAarchRpmFile=$(ls azcopy-* | grep 'al\.arm64\.rpm')
-                    echo "Azcopy Azure Linux ARM RPM File: $azureLinuxAarchRpmFile"
+                    azureLinuxArmRpmFile=$(ls azcopy-* | grep -- '-al\.arm64\.rpm')
+                    echo "Azcopy Azure Linux ARM RPM File: $azureLinuxArmRpmFile"
                     
                     azureLinuxFipsAmdRpmFile=$(ls azcopy-fips-* | grep '\.x86_64\.rpm')
                     echo "Azcopy Azure Linux FIPS AMD RPM File: $azureLinuxFipsAmdRpmFile"
@@ -1462,8 +1462,8 @@ extends:
                       azureLinuxAmdRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azureLinuxAmdRpmFile)
                       echo "Azcopy Azure Linux AMD RPM ID: $azureLinuxAmdRpm"
                     
-                      azureLinuxAarchRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azureLinuxAarchRpmFile)
-                      echo "Azcopy Azure Linux ARM RPM ID: $azureLinuxAarchRpm"
+                      azureLinuxArmRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azureLinuxArmRpmFile)
+                      echo "Azcopy Azure Linux ARM RPM ID: $azureLinuxArmRpm"
 
                       azureLinuxFipsAmdRpm=$(pmc --auth-type wif --base-url "https://pmc-ingest.trafficmanager.net/api/v4" --id-only package upload $azureLinuxFipsAmdRpmFile)
                       echo "Azcopy Azure Linux FIPS AMD RPM ID: $azureLinuxFipsAmdRpm"
@@ -1496,7 +1496,9 @@ extends:
 
                     while IFS=, read -r distro archetype repoName releaseName; do
                       if [[ $archetype == *"Arm"* ]]; then
-                        echo "Skipping for ARM type on $distro"
+                        echo "Skipping for ARM type on ${distro}, to avoid publishing all artifacts to the same repo multiple times."
+                      elif [[ $archetype == *"Fips"* ]]; then
+                        echo "Skipping for FIPS type on ${distro}, to avoid publishing all artifacts to the same repo multiple times."
                       else
                         echo "Repo Name: $repoName"
                         if (( publish == 0 )); then
