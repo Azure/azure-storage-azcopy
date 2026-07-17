@@ -215,20 +215,14 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 	// This is because * is both a valid URL path character and a valid portion of an object key in S3.
 	searchPrefix := t.s3URLParts.ObjectKey
 
-	// The streaming merge-join (sync orchestrator) needs each directory level emitted in
-	// lexicographic order. minio's ListObjects yields a page's objects (Contents) before its
-	// sub-dirs (CommonPrefixes), so the raw stream is files-then-dirs per page — not globally
-	// sorted. Collect the level's dirs and files into two runs (each stays sorted: S3 returns
-	// pages in sorted order and each category within a page is sorted) and two-pointer merge
-	// them at the end. Merge key matches buildChildPath: folder = "<name>/", file = "<name>".
-	// Gated to the orchestrator path; the recursive path emits directly.
-	// NOTE: this buffers one directory level. A future memory optimization is a per-page merge
-	// via the minio Core ListObjectsV2 API (mirrors the blob traverser's per-page merge).
-	type s3Entry struct {
-		obj StoredObject
-		key string
-	}
-	var dirEntries, fileEntries []s3Entry
+	// The traverser emits objects in raw S3 listing order (files and sub-dirs as ListObjects
+	// returns them) via processOne — it does NO per-level buffering. Any ordering the streaming
+	// merge-join needs is done in its own producer (traverserToTypedChannels: a folders-only heap
+	// plus a file order-guard), so a single prefix with millions of objects is streamed, not
+	// accumulated in memory. This is safe because S3 Contents are lexicographically sorted across
+	// pages (satisfying the producer's file order-guard) and folders (CommonPrefixes) may arrive in
+	// any order and are reordered by the heap. The non-streaming orchestrator path indexes into a
+	// map, so it is order-independent too.
 	processOne := func(so StoredObject) error {
 		e := processIfPassedFilters(filters, so, processor)
 		_, e = getProcessingError(e)
@@ -242,17 +236,6 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			})
 		}
 		return e
-	}
-	emitS3 := func(so StoredObject) error {
-		if !t.includeDirectoryOrPrefix {
-			return processOne(so)
-		}
-		if so.entityType == common.EEntityType.Folder() {
-			dirEntries = append(dirEntries, s3Entry{obj: so, key: strings.TrimSuffix(so.relativePath, common.AZCOPY_PATH_SEPARATOR_STRING) + common.AZCOPY_PATH_SEPARATOR_STRING})
-		} else {
-			fileEntries = append(fileEntries, s3Entry{obj: so, key: so.relativePath})
-		}
-		return nil
 	}
 
 	// It's a bucket or virtual directory.
@@ -376,27 +359,8 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 				t.s3URLParts.BucketName)
 		}
 
-		if err = emitS3(storedObject); err != nil {
+		if err = processOne(storedObject); err != nil {
 			return
-		}
-	}
-
-	// Flush the buffered level in globally sorted order by merging the two sorted runs
-	// (sub-dirs and files). No-op for the recursive path, which emitted directly above.
-	if t.includeDirectoryOrPrefix {
-		di, fi := 0, 0
-		for di < len(dirEntries) || fi < len(fileEntries) {
-			if fi >= len(fileEntries) || (di < len(dirEntries) && dirEntries[di].key < fileEntries[fi].key) {
-				if err = processOne(dirEntries[di].obj); err != nil {
-					return
-				}
-				di++
-			} else {
-				if err = processOne(fileEntries[fi].obj); err != nil {
-					return
-				}
-				fi++
-			}
 		}
 	}
 	return
