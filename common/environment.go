@@ -493,3 +493,28 @@ func (EnvironmentVariable) DisableBlobTransferResume() EnvironmentVariable {
 		Description:  "An incomplete transfer to blob endpoint will be resumed from start if set to true",
 	}
 }
+
+// DedupeObserve gates a read-only prototype diagnostic. When set to "true", block-blob to
+// block-blob S2S transfers log how the source blob's committed block boundaries line up with
+// AzCopy's uniform chunk grid. It never changes transfer behavior. Intentionally not listed in
+// VisibleEnvironmentVariables because it is an internal prototype switch, not a supported feature.
+func (EnvironmentVariable) DedupeObserve() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:         "AZCOPY_DEDUPE_OBSERVE",
+		DefaultValue: "false",
+		Description:  "Prototype diagnostic: when true, logs how source block-blob committed block boundaries align with AzCopy's uniform chunk grid (read-only, no transfer behavior change).",
+	}
+}
+
+func (EnvironmentVariable) DedupeAct() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:         "AZCOPY_DEDUPE_ACT",
+		DefaultValue: "",
+		Description: "Prototype (block-blob -> block-blob S2S only): act on block-level dedupe. " +
+			"\"shadow\" chunks on the source's committed block boundaries and logs which blocks WOULD be served " +
+			"from an already-migrated destination block (no behavior change to the bytes written). " +
+			"\"enforce\" additionally stages those blocks from the destination (Put Block From URL over the recorded " +
+			"target sub-range, guarded by an If-Match ETag, with automatic fallback to the source on any failure). " +
+			"Any other value disables it. Requires the service GetHash feature so GetBlockList returns per-block crc64/sha256.",
+	}
+}
