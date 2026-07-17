@@ -54,6 +54,11 @@ type s3Traverser struct {
 	// in a non-recursive traversal process. If true, prefixes will be enqueued as well even if location
 	// is not folder aware.
 	includeDirectoryOrPrefix bool
+
+	// useStreamingMergeJoin, when true, makes the traverser buffer a directory level and emit it
+	// in globally sorted order (required by the streaming merge-join). When false, objects are
+	// streamed directly as enumerated, keeping per-directory memory bounded for the indexMap path.
+	useStreamingMergeJoin bool
 }
 
 // ErrorFileInfo holds information about files and folders that failed enumeration.
@@ -221,9 +226,15 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 	// sorted. Collect the level's dirs and files into two runs (each stays sorted: S3 returns
 	// pages in sorted order and each category within a page is sorted) and two-pointer merge
 	// them at the end. Merge key matches buildChildPath: folder = "<name>/", file = "<name>".
-	// Gated to the orchestrator path; the recursive path emits directly.
-	// NOTE: this buffers one directory level. A future memory optimization is a per-page merge
-	// via the minio Core ListObjectsV2 API (mirrors the blob traverser's per-page merge).
+	//
+	// This buffer-and-sort is ONLY used when the streaming merge-join is active. It buffers an
+	// entire directory level in memory, which for very large directories (e.g. 500K children)
+	// roughly doubles transient per-directory memory and defers draining — enough to OOM/stall
+	// the indexMap path under a tight container memory limit. So when the merge-join is off, we
+	// stream objects directly as enumerated (the original, bounded-memory behavior).
+	// NOTE: even for the merge-join, a future memory optimization is a per-page merge via the
+	// minio Core ListObjectsV2 API (mirrors the blob traverser's per-page merge).
+	bufferAndSort := t.includeDirectoryOrPrefix && t.useStreamingMergeJoin
 	type s3Entry struct {
 		obj StoredObject
 		key string
@@ -244,7 +255,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 		return e
 	}
 	emitS3 := func(so StoredObject) error {
-		if !t.includeDirectoryOrPrefix {
+		if !bufferAndSort {
 			return processOne(so)
 		}
 		if so.entityType == common.EEntityType.Folder() {
@@ -382,8 +393,8 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 	}
 
 	// Flush the buffered level in globally sorted order by merging the two sorted runs
-	// (sub-dirs and files). No-op for the recursive path, which emitted directly above.
-	if t.includeDirectoryOrPrefix {
+	// (sub-dirs and files). No-op when not buffering (streaming path emitted directly above).
+	if bufferAndSort {
 		di, fi := 0, 0
 		for di < len(dirEntries) || fi < len(fileEntries) {
 			if fi >= len(fileEntries) || (di < len(dirEntries) && dirEntries[di].key < fileEntries[fi].key) {
@@ -408,7 +419,8 @@ func newS3Traverser(rawURL *url.URL, ctx context.Context, opts InitResourceTrave
 		ctx:                         ctx,
 		recursive:                   opts.Recursive,
 		getProperties:               opts.GetPropertiesInFrontend,
-		incrementEnumerationCounter: opts.IncrementEnumeration}
+		incrementEnumerationCounter: opts.IncrementEnumeration,
+		useStreamingMergeJoin:       opts.UseStreamingMergeJoin}
 
 	if buildmode.IsMover {
 		// If we are using this in context of Mover flow, set getProperties to false.
