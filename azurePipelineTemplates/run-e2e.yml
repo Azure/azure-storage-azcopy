@@ -48,7 +48,7 @@ jobs:
       - bash: |
           npm install -g azurite
           mkdir azurite
-          azurite --silent --location azurite --debug azurite\debug.log &
+          azurite --silent --location azurite --skipApiVersionCheck --debug azurite\debug.log &
         displayName: 'Install and Run Azurite'
       # Running E2E Tests on AMD64
       - task: AzureCLI@2
