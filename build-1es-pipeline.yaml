@@ -451,7 +451,6 @@ extends:
 
               - script: |
                   mkdir -p $(signed)
-                  mkdir -p $(signed)/mariner
 
                   chmod 755 $(amd64)/*
                   rm -rf $(amd64)/*.md
@@ -480,6 +479,8 @@ extends:
                   mv $(fips-arm64)/* $(signed)
 
                   # Mariner
+                  mkdir -p $(signed)/mariner
+
                   chmod 755 $(mariner)/*
                   rm -rf $(mariner)/*.md
                   mv $(mariner)/* $(signed)/mariner
@@ -774,7 +775,7 @@ extends:
               inputs:
                 - input: pipelineArtifact
                   artifactName: azcopy-linux-signed
-                  targetPath: $(System.DefaultWorkingDirectory)/signed
+                  targetPath: '$(System.DefaultWorkingDirectory)/signed'
                   item_pattern: 'mariner/azcopy-*x86_64.rpm'
                   displayName: 'Download Linux Signed'
             variables:
@@ -1026,6 +1027,8 @@ extends:
 
               - script: |
                   mkdir -p $(release)
+                  # The Mariner artifacts are copies of some of the other Linux artifacts that have been signed with a different key.
+                  # There's no need to include the Mariner artifacts in the release folder.
                   cp $(input)/azcopy-linux-signed/azcopy* $(release)
                   cp $(input)/azcopy-windows-signed/azcopy* $(release)
                   cp $(input)/azcopy-mac-signed/azcopy* $(release)
@@ -1288,7 +1291,9 @@ extends:
                       $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/*.tar.gz
                       $(Build.ArtifactStagingDirectory)/azcopy-windows-signed/*.zip
                       $(Build.ArtifactStagingDirectory)/azcopy-mac-signed/*.zip
-                      $(Build.ArtifactStagingDirectory)/azcopy-linux-signed/mariner/*
+                      # The Mariner artifacts are copies of some of the other Linux artifacts that have been signed with a different key.
+                      # There's no need to upload the Mariner artifacts to GitHub
+                      # (despite what earlier versions of this file suggest, they weren't being uploaded before).
                     assetUploadMode: replace
         # ReleaseToGithub ends here
 
@@ -1465,20 +1470,7 @@ extends:
                       echo "Azcopy FIPS ARM RPM ID: $azcopyFipsArmRpm"
                     fi
 
-                    is_preview="false"
-                    echo "##vso[task.setvariable variable=is_preview]$is_preview"
-                    if [[ $marinerAmdRpmFile == *"preview"* ]]; then
-                      is_preview="true"
-                      echo "##vso[task.setvariable variable=is_preview]$is_preview"
-                    fi
-
                     while IFS=, read -r distro archetype repoName releaseName; do
-                      # If the package is preview, publish to mariner preview package
-                      if [[ $distro == *"Mariner-"* ]]; then
-                        if [ $is_preview = "true" ]; then
-                          repoName=$(echo $repoName | sed 's/prod/preview/')
-                        fi
-                      fi
                       echo "Repo Name: $repoName"
                       if (( publish == 0 )); then
                         echo "Uploading packages for $distro"
@@ -1504,11 +1496,6 @@ extends:
                       if [[ $archetype == *"Arm"* ]]; then
                         echo "Skipping for ARM type on $distro"
                       else
-                        if [[ $distro == *"Mariner-"* ]]; then
-                          if [ "$(is_preview)" = "true" ]; then
-                            repoName=$(echo $repoName | sed 's/prod/preview/')
-                          fi
-                        fi
                         echo "Repo Name: $repoName"
                         if (( publish == 0 )); then
                           echo "Publishing $repoName"
