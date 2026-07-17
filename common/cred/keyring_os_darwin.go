@@ -17,8 +17,10 @@ const (
 )
 
 func GetOSKeyring(opts GetOSKeyringOptions) (Keyring, error) {
+	loginCacheName := enum.EEnvironmentVariable.LoginCacheName().Get()
+
 	return &darwinCredCache{
-		serviceName:      *ternary.DefaultValue(opts.RootKey, darwinServiceName),
+		serviceName:      *ternary.DefaultValue(opts.RootKey, darwinServiceName) + loginCacheName,
 		lock:             sync.RWMutex{},
 		kcSecClass:       keychain.SecClassGenericPassword,
 		kcSynchronizable: keychain.SynchronizableNo,

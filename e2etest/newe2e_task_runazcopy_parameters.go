@@ -468,14 +468,24 @@ type LoginFlags struct {
 	// SPN
 	ApplicationID *string `flag:"application-id"`
 	CertPath      *string `flag:"certificate-path"`
+
+	// Identity
+	Nickname *string `flag:"nickname"`
 }
 
 type LoginStatusFlags struct {
 	GlobalFlags
 
-	Tenant   *bool `flag:"tenant"`
-	Endpoint *bool `flag:"endpoint"`
-	Method   *bool `flag:"method"`
+	Tenant   *bool   `flag:"tenant"`
+	Endpoint *bool   `flag:"endpoint"`
+	Method   *bool   `flag:"method"`
+	Nickname *string `flag:"nickname"`
+}
+
+type LogoutFlags struct {
+	GlobalFlags
+
+	Nickname *string `flag:"nickname"`
 }
 
 type WindowsAttribute uint32

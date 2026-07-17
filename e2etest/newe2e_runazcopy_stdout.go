@@ -2,9 +2,10 @@ package e2etest
 
 import (
 	"encoding/json"
+	"strings"
+
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"strings"
 )
 
 var _ AzCopyStdout = &AzCopyParsedStdout{}
@@ -245,14 +246,14 @@ func (a *AzCopyParsedJobsListStdout) Write(p []byte) (n int, err error) {
 type AzCopyParsedLoginStatusStdout struct {
 	AzCopyParsedStdout
 	listenChan chan<- common.JsonOutputTemplate
-	status     cmd.LoginStatusOutput
+	status     cmd.LoginStatus
 }
 
 func (a *AzCopyParsedLoginStatusStdout) Write(p []byte) (n int, err error) {
 	if a.listenChan == nil {
 		a.listenChan = a.OnParsedLine.SubscribeFunc(func(line common.JsonOutputTemplate) {
 			if line.MessageType == common.EOutputMessageType.LoginStatusInfo().String() {
-				out := &cmd.LoginStatusOutput{}
+				out := &cmd.LoginStatus{}
 				err = json.Unmarshal([]byte(line.MessageContent), out)
 				if err != nil {
 					return
