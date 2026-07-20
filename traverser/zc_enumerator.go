@@ -99,6 +99,9 @@ type StoredObject struct {
 	LeaseDuration      lease.DurationType
 	TargetHardlinkFile string // used only for NFS transfers to indicate the target hardlink file path
 	Inode              string // used only for nfs transfers to identify hardlinked files (files with the same inode are hardlinked together)
+	// HardlinkedSymlink indicates that this is a hard link whose underlying inode is a symbolic link.
+	// Such entries are transferred as hard links but counted as symlinks (to match the kernel).
+	HardlinkedSymlink bool
 }
 
 func (s *StoredObject) IsMoreRecentThan(storedObject2 StoredObject, preferSMBTime bool) bool {
@@ -214,6 +217,7 @@ func (s *StoredObject) ToNewCopyTransfer(steWillAutoDecompress bool,
 		BlobTags:           s.BlobTags,
 		BlobSnapshotID:     s.BlobSnapshotID,
 		TargetHardlinkFile: s.TargetHardlinkFile,
+		HardlinkedSymlink:  s.HardlinkedSymlink,
 	}
 
 	if preserveBlobTier {
@@ -275,6 +279,8 @@ type filePropsProvider interface {
 type NFSMetadataContext struct {
 	TargetHardlinkFile string
 	Inode              string
+	// HardlinkedSymlink is true when the hard link's underlying inode is a symbolic link.
+	HardlinkedSymlink bool
 }
 
 // a constructor is used so that in case the StoredObject has to change, the callers would get a compilation error
@@ -309,6 +315,7 @@ func NewStoredObject(morpher objectMorpher, name string,
 	if nfsOptions != nil {
 		obj.TargetHardlinkFile = nfsOptions.TargetHardlinkFile
 		obj.Inode = nfsOptions.Inode
+		obj.HardlinkedSymlink = nfsOptions.HardlinkedSymlink
 	}
 
 	// Folders don't have size, and root ones shouldn't have names in the StoredObject. Ensure those rules are consistently followed

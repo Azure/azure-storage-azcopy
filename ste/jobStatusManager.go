@@ -149,13 +149,19 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 			msg.Src = common.URLStringExtension(msg.Src).RedactSecretQueryParamForLogging()
 			msg.Dst = common.URLStringExtension(msg.Dst).RedactSecretQueryParamForLogging()
 
+			// A hard link whose underlying inode is a symlink is counted as a symlink (to match the
+			// kernel), not as a hard link.
+			isTrueHardlink := msg.IsHardlink && !msg.IsHardlinkedSymlink
 			switch msg.TransferStatus {
 			case common.ETransferStatus.Success():
 				if msg.IsFolderProperties {
 					js.FoldersCompleted++
 				}
-				if msg.IsHardlink {
+				if isTrueHardlink {
 					js.HardlinksCompleted++
+				}
+				if msg.IsSymlink || msg.IsHardlinkedSymlink {
+					js.SymlinksCompleted++
 				}
 				js.TransfersCompleted++
 				js.TotalBytesTransferred += msg.TransferSize
@@ -165,7 +171,7 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 				if msg.IsFolderProperties {
 					js.FoldersFailed++
 				}
-				if msg.IsHardlink {
+				if isTrueHardlink {
 					js.HardlinksFailed++
 				}
 				js.TransfersFailed++
@@ -175,7 +181,7 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 				if msg.IsFolderProperties {
 					js.FoldersSkipped++
 				}
-				if msg.IsHardlink {
+				if isTrueHardlink {
 					js.HardlinksSkipped++
 				}
 				js.TransfersSkipped++

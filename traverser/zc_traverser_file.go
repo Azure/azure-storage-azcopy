@@ -266,6 +266,9 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			}, err
 		}
 		var targetHardlinkFile string
+		// hardlinkedSymlink marks a subsequent hard link whose underlying inode is a symlink; it is
+		// transferred as a hard link but counted as a symlink (to match the kernel).
+		hardlinkedSymlink := false
 		// NFS handling
 		// Check if the file is a symlink and should be skipped in case of NFS
 		// We don't want to skip the file if we are not using NFS
@@ -310,6 +313,9 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 				if isNFSSymlink && targetHardlinkFile == "" {
 					f.entityType = common.EEntityType.Symlink()
 				}
+
+				// A subsequent hard link to a symlink stays a Hardlink entity, but is counted as a symlink.
+				hardlinkedSymlink = isNFSSymlink && f.entityType == common.EEntityType.Hardlink()
 			}
 		} else if f.entityType == common.EEntityType.File() && t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter(f.entityType, t.symlinkHandling, t.hardlinkHandling)
@@ -351,6 +357,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			&NFSMetadataContext{
 				TargetHardlinkFile: targetHardlinkFile,
 				Inode:              nfsInode,
+				HardlinkedSymlink:  hardlinkedSymlink,
 			},
 		)
 
