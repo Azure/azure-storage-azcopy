@@ -215,6 +215,8 @@ func TestDedupeJobStateCounters(t *testing.T) {
 	st.addSourceStaged(30)
 	st.addSourceStaged(70)
 	st.addFallback()
+	st.addFileStarted()
+	st.addFileCommitted()
 
 	a.EqualValues(2, st.referencedBlocks)
 	a.EqualValues(150, st.referencedBytes) // source-read bytes avoided under enforce
@@ -223,6 +225,8 @@ func TestDedupeJobStateCounters(t *testing.T) {
 	a.EqualValues(2, st.sourceStagedBlocks)
 	a.EqualValues(100, st.sourceStagedBytes)
 	a.EqualValues(1, st.fallbackBlocks)
+	a.EqualValues(1, st.filesStarted)
+	a.EqualValues(1, st.filesCommitted)
 }
 
 func TestDedupeJobSummaryMessageEnforce(t *testing.T) {

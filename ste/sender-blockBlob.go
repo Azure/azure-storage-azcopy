@@ -354,6 +354,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 		// blocks into the job's committed table so that later identical blocks can be served from it.
 		// This only populates an in-memory lookup table and does not touch the bytes just written.
 		if s.dedupeMode != dedupeActOff && s.dedupePlan != nil {
+			recorded := 0
 			var etag azcore.ETag
 			if resp.ETag != nil {
 				etag = *resp.ETag
@@ -363,7 +364,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 					"dedupe-act: committed destination response had no ETag; this blob will not be used as a dedupe target")
 			} else {
 				_, destinationSAS := jptm.SAS()
-				recorded := recordCommittedBlocksWithObserver(jptm.Info().JobID, s.destBlockBlobClient.URL(), destinationSAS, etag, s.dedupePlan, func(event dedupeTableRecordEvent) {
+				recorded = recordCommittedBlocksWithObserver(jptm.Info().JobID, s.destBlockBlobClient.URL(), destinationSAS, etag, s.dedupePlan, func(event dedupeTableRecordEvent) {
 					jptm.LogAtLevelForCurrentTransfer(common.LogDebug, fmt.Sprintf(
 						"dedupe-table(committed): record=%d inserted=%t entries=%d buckets=%d bucketEntries=%d refCount=%d "+
 							"crc64=%016x sha256=%x target=%s offset=%d size=%d etag=%q",
@@ -375,6 +376,14 @@ func (s *blockBlobSenderBase) Epilogue() {
 					"dedupe-act(%s): recorded %d committed block(s) for %q into the job dedupe table",
 					s.dedupeMode, recorded, jptm.Info().DstFilePath))
 			}
+			st := dedupeStateForJob(jptm.Info().JobID)
+			st.addFileCommitted()
+			emitDedupeProgress(jptm, dedupeProgressMessage(
+				"file_committed",
+				s.dedupeMode,
+				jptm.Info(),
+				fmt.Sprintf("fileBytes=%d committedIndexBlocks=%d", s.dedupePlan.TotalSize, recorded),
+				st.progressSnapshot()))
 			logDedupeActSummary(jptm, s.dedupeMode)
 		}
 

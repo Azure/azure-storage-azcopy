@@ -22,9 +22,13 @@ package ste
 
 import (
 	"fmt"
+	"io"
 	"net/url"
+	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 
@@ -62,6 +66,8 @@ type dedupeJobState struct {
 	sourceStagedBlocks   int64 // blocks staged from the source (real source reads)
 	sourceStagedBytes    int64 // bytes staged from the source
 	fallbackBlocks       int64 // enforce: hits whose target reference failed and fell back to source
+	filesStarted         int64 // files armed for source-grid dedupe
+	filesCommitted       int64 // files whose destination block list was committed
 
 	actMode int32 // active dedupeActMode for this job
 }
@@ -89,10 +95,156 @@ func (s *dedupeJobState) addFallback() {
 	atomic.AddInt64(&s.fallbackBlocks, 1)
 }
 
+func (s *dedupeJobState) addFileStarted() {
+	atomic.AddInt64(&s.filesStarted, 1)
+}
+
+func (s *dedupeJobState) addFileCommitted() {
+	atomic.AddInt64(&s.filesCommitted, 1)
+}
+
+type dedupeProgressSnapshot struct {
+	referencedBlocks     int64
+	referencedBytes      int64
+	wouldReferenceBlocks int64
+	wouldReferenceBytes  int64
+	sourceStagedBlocks   int64
+	sourceStagedBytes    int64
+	fallbackBlocks       int64
+	filesStarted         int64
+	filesCommitted       int64
+}
+
+func (s *dedupeJobState) progressSnapshot() dedupeProgressSnapshot {
+	return dedupeProgressSnapshot{
+		referencedBlocks:     atomic.LoadInt64(&s.referencedBlocks),
+		referencedBytes:      atomic.LoadInt64(&s.referencedBytes),
+		wouldReferenceBlocks: atomic.LoadInt64(&s.wouldReferenceBlocks),
+		wouldReferenceBytes:  atomic.LoadInt64(&s.wouldReferenceBytes),
+		sourceStagedBlocks:   atomic.LoadInt64(&s.sourceStagedBlocks),
+		sourceStagedBytes:    atomic.LoadInt64(&s.sourceStagedBytes),
+		fallbackBlocks:       atomic.LoadInt64(&s.fallbackBlocks),
+		filesStarted:         atomic.LoadInt64(&s.filesStarted),
+		filesCommitted:       atomic.LoadInt64(&s.filesCommitted),
+	}
+}
+
+func (s dedupeProgressSnapshot) fields(mode dedupeActMode) string {
+	targetBlocks := s.referencedBlocks
+	targetBytes := s.referencedBytes
+	transferredBlocks := s.referencedBlocks + s.sourceStagedBlocks
+	transferredBytes := s.referencedBytes + s.sourceStagedBytes
+	if mode == dedupeActShadow {
+		targetBlocks = s.wouldReferenceBlocks
+		targetBytes = s.wouldReferenceBytes
+		transferredBlocks = s.sourceStagedBlocks
+		transferredBytes = s.sourceStagedBytes
+	}
+
+	return fmt.Sprintf(
+		"filesStarted=%d filesCommitted=%d targetURIBlocks=%d targetURIBytes=%d "+
+			"sourceURIBlocks=%d sourceURIBytes=%d fallbackBlocks=%d transferredBlocks=%d "+
+			"transferredBytes=%d wanSavingsPercent=%.1f",
+		s.filesStarted, s.filesCommitted, targetBlocks, targetBytes,
+		s.sourceStagedBlocks, s.sourceStagedBytes, s.fallbackBlocks, transferredBlocks,
+		transferredBytes, dedupePercent(targetBytes, transferredBytes))
+}
+
+const dedupeProgressPrefix = "DEDUPE_PROGRESS"
+const dedupeProgressQueueCapacity = 4096
+const dedupeProgressFinalWriteTimeout = 5 * time.Second
+
+type dedupeProgressEntry struct {
+	message string
+	done    chan error
+}
+
 var (
-	dedupeJobsMu sync.Mutex
-	dedupeJobs   = make(map[common.JobID]*dedupeJobState)
+	dedupeJobsMu              sync.Mutex
+	dedupeJobs                          = make(map[common.JobID]*dedupeJobState)
+	dedupeProgressOutput      io.Writer = os.Stdout
+	dedupeProgressErrorOutput io.Writer = os.Stderr
+	dedupeProgressSanitizer             = common.NewAzCopyLogSanitizer()
+	dedupeProgressQueue                 = make(chan dedupeProgressEntry, dedupeProgressQueueCapacity)
+	dedupeProgressDropped     uint64
 )
+
+func init() {
+	go drainDedupeProgress()
+}
+
+func writeDedupeProgressTo(output io.Writer, message string) error {
+	_, err := fmt.Fprintln(output, dedupeProgressSanitizer.SanitizeLogMessage(message))
+	return err
+}
+
+func tryEnqueueDedupeProgress(queue chan<- dedupeProgressEntry, entry dedupeProgressEntry) bool {
+	select {
+	case queue <- entry:
+		return true
+	default:
+		return false
+	}
+}
+
+func enqueueDedupeProgress(message string) {
+	if !tryEnqueueDedupeProgress(dedupeProgressQueue, dedupeProgressEntry{message: message}) {
+		atomic.AddUint64(&dedupeProgressDropped, 1)
+	}
+}
+
+func drainDedupeProgress() {
+	for entry := range dedupeProgressQueue {
+		if dropped := atomic.SwapUint64(&dedupeProgressDropped, 0); dropped > 0 {
+			droppedMessage := fmt.Sprintf("%s event=output_dropped count=%d", dedupeProgressPrefix, dropped)
+			if err := writeDedupeProgressTo(dedupeProgressOutput, droppedMessage); err != nil {
+				_, _ = fmt.Fprintf(dedupeProgressErrorOutput,
+					"%s event=output_error reason=%q\n", dedupeProgressPrefix, err.Error())
+			}
+		}
+
+		err := writeDedupeProgressTo(dedupeProgressOutput, entry.message)
+		if err != nil {
+			_, _ = fmt.Fprintf(dedupeProgressErrorOutput,
+				"%s event=output_error reason=%q\n", dedupeProgressPrefix, err.Error())
+		}
+		if entry.done != nil {
+			entry.done <- err
+		}
+	}
+}
+
+func writeFinalDedupeProgress(message string) error {
+	done := make(chan error, 1)
+	entry := dedupeProgressEntry{message: message, done: done}
+	timer := time.NewTimer(dedupeProgressFinalWriteTimeout)
+	defer timer.Stop()
+
+	select {
+	case dedupeProgressQueue <- entry:
+	case <-timer.C:
+		return fmt.Errorf("timed out queueing final dedupe progress")
+	}
+
+	select {
+	case err := <-done:
+		return err
+	case <-timer.C:
+		return fmt.Errorf("timed out writing final dedupe progress")
+	}
+}
+
+func emitDedupeProgress(jptm IJobPartTransferMgr, message string) {
+	jptm.LogAtLevelForCurrentTransfer(common.LogDebug, message)
+	enqueueDedupeProgress(message)
+}
+
+func dedupeProgressMessage(event string, mode dedupeActMode, info *TransferInfo, details string, snapshot dedupeProgressSnapshot) string {
+	return fmt.Sprintf(
+		"%s event=%s mode=%s jobId=%s file=%q destination=%q %s %s",
+		dedupeProgressPrefix, event, mode, info.JobID.String(), info.DstFilePath,
+		sanitizedDestForDedupe(info.Destination), details, snapshot.fields(mode))
+}
 
 // dedupeStateForJob returns the dedupe state for a job, creating it on first use. Callers are
 // limited to the observe and act paths, so the default transfer path allocates no dedupe state.
@@ -273,7 +425,21 @@ func logDedupeJobSummary(jobID common.JobID, log func(common.LogLevel, string)) 
 }
 
 func finalizeDedupeJob(jobID common.JobID, log func(common.LogLevel, string)) {
-	logDedupeJobSummary(jobID, log)
+	st, ok := dedupeStateForJobIfExists(jobID)
+	if !ok {
+		return
+	}
+	mode := dedupeActMode(atomic.LoadInt32(&st.actMode))
+	if mode != dedupeActOff {
+		log(common.LogInfo, dedupeJobSummaryMessage(mode, st))
+		message := fmt.Sprintf(
+			"%s event=job_complete mode=%s jobId=%s %s",
+			dedupeProgressPrefix, mode, jobID.String(), st.progressSnapshot().fields(mode))
+		if err := writeFinalDedupeProgress(message); err != nil {
+			log(common.LogError,
+				dedupeProgressPrefix+" event=output_error reason="+fmt.Sprintf("%q", err.Error()))
+		}
+	}
 	clearDedupeStateForJob(jobID)
 }
 
@@ -369,9 +535,14 @@ func measureAndRecordWithObserver(table *common.DedupeHashTable, jobID common.Jo
 func sanitizedDestForDedupe(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
+		if index := strings.IndexAny(raw, "?#"); index >= 0 {
+			return raw[:index]
+		}
 		return raw
 	}
 	u.RawQuery = ""
+	u.ForceQuery = false
+	u.Fragment = ""
 	return u.String()
 }
 
@@ -379,6 +550,9 @@ func sanitizedDestForDedupe(raw string) string {
 func dedupePercent(hits, total int64) float64 {
 	if total == 0 {
 		return 0
+	}
+	if hits >= total {
+		return 100
 	}
 	return 100 * float64(hits) / float64(total)
 }
