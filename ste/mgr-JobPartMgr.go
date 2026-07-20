@@ -109,8 +109,12 @@ func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptio
 	// [includeResponsePolicy, newAPIVersionPolicy (ignored), NewTelemetryPolicy, perCall, NewRetryPolicy, perRetry, NewLogPolicy, httpHeaderPolicy, bodyDownloadPolicy]
 	perCallPolicies := []policy.Policy{azruntime.NewRequestIDPolicy(), NewVersionPolicy(), newFileUploadRangeFromURLFixPolicy()}
 	// TODO : Default logging policy is not equivalent to old one. tracing HTTP request
+	// discard the OK, we just want to nil these out if they are not scopedauthenticators
+	targetAuth, _ := targetCred.(cred.ScopedAuthenticator)
+	srcAuth, _ := srcCred.(cred.ScopedAuthenticator)
+
 	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), newLogPolicy(log), newStatsPolicy(),
-		NewTokenReauthPolicy(targetCred.(cred.ScopedAuthenticator), NewTokenReauthPolicyOptions{srcCred.(cred.ScopedAuthenticator)}), // these will resolve to nil
+		NewTokenReauthPolicy(targetAuth, NewTokenReauthPolicyOptions{srcAuth}), // these will resolve to nil
 		NewSourceAuthPolicy(srcCred)}
 
 	retry.ShouldRetry = GetShouldRetry(&log)

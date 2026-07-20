@@ -80,7 +80,7 @@ func (t *token) UnmarshalJSON(buf []byte) error {
 	// Create a pointer to a zero value of our intended type, then unmarshal to it.
 	tokenImpl, err := unmarshalTokenImpl(rawToken.AuthDetails, rawToken.LoginType)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to unmarshal token auth details: %w", err)
 	}
 
 	// Deref the pointer, then typecast to TokenImpl for compatibility

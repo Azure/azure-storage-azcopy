@@ -65,7 +65,7 @@ func (s *RemoveSuite) Scenario_EmptySASErrorCodes(svm *ScenarioVariationManager)
 		AzCopyCommand{
 			Verb: AzCopyVerbRemove,
 			Targets: []ResourceManager{
-				AzCopyTarget{srcObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
+				&azcopyTargetImpl{srcObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
 			},
 			ShouldFail: true,
 		})

@@ -117,8 +117,8 @@ func (*DryrunSuite) Scenario_ExtraProps(a *ScenarioVariationManager) {
 	stdout, _ := RunAzCopy(a, AzCopyCommand{
 		Verb: ResolveVariation(a, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}),
 		Targets: []ResourceManager{
-			AzCopyTarget{ResourceManager: srcContainer, AuthType: EExplicitCredentialType.OAuth()},
-			AzCopyTarget{ResourceManager: dstContainer, AuthType: EExplicitCredentialType.OAuth()},
+			&azcopyTargetImpl{ResourceManager: srcContainer, authType: EExplicitCredentialType.OAuth()},
+			&azcopyTargetImpl{ResourceManager: dstContainer, authType: EExplicitCredentialType.OAuth()},
 		},
 		Flags: CopySyncCommonFlags{
 			Recursive:             pointerTo(true),

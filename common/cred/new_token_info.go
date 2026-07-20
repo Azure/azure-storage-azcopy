@@ -17,6 +17,7 @@ var tokenTypeImplMapping = map[enum.AutoLoginType]reflect.Type{
 	enum.EAutoLoginType.Device():      reflect.TypeFor[*tokenInfoUserLogin](),
 	enum.EAutoLoginType.Interactive(): reflect.TypeFor[*tokenInfoUserLogin](),
 	enum.EAutoLoginType.PsCred():      reflect.TypeFor[tokenInfoPSCred](),
+	enum.EAutoLoginType.NoRefresh():   reflect.TypeFor[*tokenInfoNoRefresh](),
 	enum.EAutoLoginType.TokenStore():  reflect.TypeFor[*tokenInfoTokenStore](),
 }
 
@@ -45,6 +46,10 @@ func newTokenImpl(loginType enum.AutoLoginType) tokenImpl {
 
 func unmarshalTokenImpl(buf []byte, loginType enum.AutoLoginType) (tokenImpl, error) {
 	outType := tokenTypeImplMapping[loginType]
+
+	if outType == nil {
+		panic(loginType.String() + fmt.Sprintf(" %d", loginType))
+	}
 
 	var val, ref reflect.Value
 	if outType.Kind() == reflect.Pointer {
