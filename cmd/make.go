@@ -88,12 +88,12 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 	}
 
 	credentialInfo, err := GetTargetCredInfo(resourceStringParts, cookedArgs.resourceLocation, GetTargetCredInfoOptions{
-		ctx:                ctx,
-		canBePublic:        false,
-		sharedKeyAllowed:   true,
-		preferredTokenName: DestCredentialName,
-		cpkOptions:         common.CpkOptions{},
-		tokenManager:       GetCredentialManager(),
+		Context:            ctx,
+		CanBePublic:        false,
+		SharedKeyAllowed:   true,
+		PreferredTokenName: DestCredentialName,
+		CpkOptions:         common.CpkOptions{},
+		TokenManager:       GetCredentialManager(),
 	})
 	if err != nil {
 		return err

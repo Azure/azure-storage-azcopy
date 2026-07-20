@@ -243,12 +243,12 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 	}
 
 	credentialInfo, err = GetTargetCredInfo(source, cooked.location, GetTargetCredInfoOptions{
-		ctx:                ctx,
-		canBePublic:        true,
-		sharedKeyAllowed:   true,
-		preferredTokenName: TargetCredentialName,
-		cpkOptions:         common.CpkOptions{},
-		tokenManager:       nil,
+		Context:            ctx,
+		CanBePublic:        true,
+		SharedKeyAllowed:   true,
+		PreferredTokenName: TargetCredentialName,
+		CpkOptions:         common.CpkOptions{},
+		TokenManager:       nil,
 	})
 	if err != nil {
 		return err
