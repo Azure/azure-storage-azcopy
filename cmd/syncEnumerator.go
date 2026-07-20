@@ -78,7 +78,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		enumeratorOptions.SyncOrchOptions.fromTo = cca.fromTo
 	}
 
-	srcCredInfo, err := getTargetCredInfo(cca.source, cca.fromTo.From(), getTargetCredInfoOptions{
+	srcCredInfo, err := GetTargetCredInfo(cca.source, cca.fromTo.From(), getTargetCredInfoOptions{
 		ctx:                ctx,
 		canBePublic:        true,
 		sharedKeyAllowed:   false,
@@ -154,7 +154,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 	}
 
 	// Because we can't trust cca.credinfo, given that it's for the overall job, not the individual traversers, we get cred info again here.
-	dstCredInfo, err := getTargetCredInfo(cca.destination, cca.fromTo.To(), getTargetCredInfoOptions{
+	dstCredInfo, err := GetTargetCredInfo(cca.destination, cca.fromTo.To(), getTargetCredInfoOptions{
 		ctx:                ctx,
 		canBePublic:        false,
 		sharedKeyAllowed:   true,

@@ -843,7 +843,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 
 	// The isPublic flag is useful in S2S transfers but doesn't much matter for download. Fortunately, no S2S happens here.
 	// This means that if there's auth, there's auth. We're happy and can move on.
-	credInfo, err := getTargetCredInfo(blobResource, common.ELocation.Blob(), getTargetCredInfoOptions{
+	credInfo, err := GetTargetCredInfo(blobResource, common.ELocation.Blob(), getTargetCredInfoOptions{
 		ctx:                ctx,
 		canBePublic:        true,
 		sharedKeyAllowed:   false,
@@ -928,7 +928,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	}
 
 	// get auth info for destination blob
-	credInfo, err := getTargetCredInfo(blobResource, common.ELocation.Blob(), getTargetCredInfoOptions{
+	credInfo, err := GetTargetCredInfo(blobResource, common.ELocation.Blob(), getTargetCredInfoOptions{
 		ctx:                ctx,
 		canBePublic:        false,
 		sharedKeyAllowed:   true,
@@ -1014,7 +1014,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	credManager := GetCredentialManager()
 
-	cca.credentialInfo, err = getTargetCredInfo(cca.Destination, cca.FromTo.To(), getTargetCredInfoOptions{
+	cca.credentialInfo, err = GetTargetCredInfo(cca.Destination, cca.FromTo.To(), getTargetCredInfoOptions{
 		ctx:                ctx,
 		canBePublic:        false, // dest can't be public
 		sharedKeyAllowed:   true,  // dest could be shared key
@@ -1026,7 +1026,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		return err
 	}
 
-	srcCredInfo, err := getTargetCredInfo(cca.Source, cca.FromTo.From(), getTargetCredInfoOptions{
+	srcCredInfo, err := GetTargetCredInfo(cca.Source, cca.FromTo.From(), getTargetCredInfoOptions{
 		ctx:                ctx,
 		canBePublic:        true,  // source can be public
 		sharedKeyAllowed:   false, // but it can't be shared key

@@ -101,7 +101,7 @@ type credInfoOptions struct {
 	s3CredentialInfo cred.S3CredentialInfo
 }
 
-func credInfo(credType enum.CredentialType, opts ...credInfoOptions) cred.CredentialInfo {
+func NewCredInfoRaw(credType enum.CredentialType, opts ...credInfoOptions) cred.CredentialInfo {
 	info := cred.CredentialInfo{CredentialType: credType}
 	if len(opts) > 0 {
 		info.TokenCredential = cred.NewScopedToken(opts[0].tokenCredential, credType) // wrap our credential as a scoped token, so we have the appropriate scopes, and reauth powers ltaer
@@ -110,10 +110,10 @@ func credInfo(credType enum.CredentialType, opts ...credInfoOptions) cred.Creden
 	return info
 }
 
-func getTargetCredInfo(resourceString common.ResourceString, location common.Location, opts getTargetCredInfoOptions) (cred.CredentialInfo, error) {
+func GetTargetCredInfo(resourceString common.ResourceString, location common.Location, opts getTargetCredInfoOptions) (cred.CredentialInfo, error) {
 	if forced := GetCredTypeFromEnvVar(); forced != enum.ECredentialType.Unknown() &&
 		location != common.ELocation.S3() && location != common.ELocation.GCP() {
-		return credInfo(forced), nil
+		return NewCredInfoRaw(forced), nil
 	}
 
 	if opts.ctx == nil {
@@ -155,7 +155,7 @@ func getBlobBasedCredInfo(resourceString common.ResourceString, location common.
 
 	// Managed disk requires SAS bare minimum. No SAS, no managed disk.
 	if isMdAccount && resourceString.SAS == "" {
-		return credInfo(enum.ECredentialType.Unknown()), nil
+		return NewCredInfoRaw(enum.ECredentialType.Unknown()), nil
 	}
 
 	// Handle all managed disk cases, to become DRY.
@@ -166,28 +166,28 @@ func getBlobBasedCredInfo(resourceString common.ResourceString, location common.
 		if _, err := opts.tokenManager.GetCredentials(opts.preferredTokenName); err != nil {
 			return cred.CredentialInfo{}, common.NewAzError(common.EAzError.LoginCredMissing(), "No SAS token or OAuth token is present and the resource is not public")
 		}
-		return credInfo(enum.ECredentialType.MDOAuthToken()), nil
+		return NewCredInfoRaw(enum.ECredentialType.MDOAuthToken()), nil
 	} else if isMdAccount {
 		//
-		return credInfo(enum.ECredentialType.Anonymous()), nil
+		return NewCredInfoRaw(enum.ECredentialType.Anonymous()), nil
 	}
 
 	// Managed disk, if it has a SAS, isn't always *just* SAS. it could need OAuth too.
 	if resourceString.SAS != "" {
-		return credInfo(enum.ECredentialType.Anonymous()), nil
+		return NewCredInfoRaw(enum.ECredentialType.Anonymous()), nil
 	}
 
 	// Test public access, if it's an option...
 	if opts.canBePublic {
 		if isPublic(opts.ctx, uri.String(), opts.cpkOptions) {
-			return credInfo(enum.ECredentialType.Anonymous()), nil
+			return NewCredInfoRaw(enum.ECredentialType.Anonymous()), nil
 		}
 	}
 
 	// If we have a token manager, see if we can fetch the token. If we can, we know what we're using!
 	if opts.tokenManager != nil {
 		if tc, err := opts.tokenManager.GetCredentials(opts.preferredTokenName); err == nil {
-			return credInfo(enum.ECredentialType.OAuthToken(), credInfoOptions{tokenCredential: tc}), nil
+			return NewCredInfoRaw(enum.ECredentialType.OAuthToken(), credInfoOptions{tokenCredential: tc}), nil
 		}
 	}
 
@@ -197,27 +197,27 @@ func getBlobBasedCredInfo(resourceString common.ResourceString, location common.
 		key := enum.EEnvironmentVariable.AccountKey().Get()
 		if name != "" && key != "" {
 			warnIfSharedKeyAuthForDatalake()
-			return credInfo(enum.ECredentialType.SharedKey()), nil
+			return NewCredInfoRaw(enum.ECredentialType.SharedKey()), nil
 		}
 	}
 
-	return credInfo(enum.ECredentialType.Unknown()), nil
+	return NewCredInfoRaw(enum.ECredentialType.Unknown()), nil
 }
 
 func getFileCredInfo(resourceString common.ResourceString, opts getTargetCredInfoOptions) (cred.CredentialInfo, error) {
 	// Short-circuit for SAS
 	if resourceString.SAS != "" {
-		return credInfo(enum.ECredentialType.Anonymous()), nil
+		return NewCredInfoRaw(enum.ECredentialType.Anonymous()), nil
 	}
 
 	// Try to fetch OAuth if we can.
 	if opts.tokenManager != nil {
 		if _, err := opts.tokenManager.GetCredentials(opts.preferredTokenName); err == nil {
-			return credInfo(enum.ECredentialType.OAuthToken()), nil
+			return NewCredInfoRaw(enum.ECredentialType.OAuthToken()), nil
 		}
 	}
 
-	return credInfo(enum.ECredentialType.Unknown()), nil
+	return NewCredInfoRaw(enum.ECredentialType.Unknown()), nil
 }
 
 func getS3CredInfo() (cred.CredentialInfo, error) {
@@ -225,11 +225,11 @@ func getS3CredInfo() (cred.CredentialInfo, error) {
 		accessKeyID := enum.EEnvironmentVariable.AWSAccessKeyID().Get()
 		secretAccessKey := enum.EEnvironmentVariable.AWSSecretAccessKey().Get()
 		if accessKeyID == "" || secretAccessKey == "" {
-			return credInfo(enum.ECredentialType.S3PublicBucket()), nil
+			return NewCredInfoRaw(enum.ECredentialType.S3PublicBucket()), nil
 		}
 	}
 
-	return credInfo(enum.ECredentialType.S3AccessKey()), nil
+	return NewCredInfoRaw(enum.ECredentialType.S3AccessKey()), nil
 }
 
 func getGCPCredInfo() (cred.CredentialInfo, error) {
@@ -237,11 +237,11 @@ func getGCPCredInfo() (cred.CredentialInfo, error) {
 	if googleAppCredentials == "" {
 		return cred.CredentialInfo{}, errors.New("GOOGLE_APPLICATION_CREDENTIALS environment variable must be set before using GCP transfer feature")
 	}
-	return credInfo(enum.ECredentialType.GoogleAppCredentials()), nil
+	return NewCredInfoRaw(enum.ECredentialType.GoogleAppCredentials()), nil
 }
 
 func getLocalCredInfo() (cred.CredentialInfo, error) {
-	return credInfo(enum.ECredentialType.Anonymous()), nil
+	return NewCredInfoRaw(enum.ECredentialType.Anonymous()), nil
 }
 
 var sharedKeyDeprecation sync.Once
