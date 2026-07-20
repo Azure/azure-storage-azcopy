@@ -21,8 +21,11 @@
 package ste
 
 import (
+	"bytes"
 	"crypto/sha256"
+	"fmt"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
@@ -47,6 +50,73 @@ func hashedBlock(content string, offset, size int64) PlannedBlock {
 		SHA256:       sum,
 		HasHashes:    true,
 	}
+}
+
+func TestDedupeProgressSnapshotEnforce(t *testing.T) {
+	a := assert.New(t)
+	st := &dedupeJobState{}
+	st.addFileStarted()
+	st.addFileStarted()
+	st.addFileCommitted()
+	st.addReferenced(100)
+	st.addReferenced(50)
+	st.addSourceStaged(100)
+	st.addFallback()
+
+	a.Equal(
+		"filesStarted=2 filesCommitted=1 targetURIBlocks=2 targetURIBytes=150 "+
+			"sourceURIBlocks=1 sourceURIBytes=100 fallbackBlocks=1 transferredBlocks=3 "+
+			"transferredBytes=250 wanSavingsPercent=60.0",
+		st.progressSnapshot().fields(dedupeActEnforce))
+}
+
+func TestDedupeProgressMessageSanitizesSASAndIsExtractable(t *testing.T) {
+	a := assert.New(t)
+	jobID := common.NewJobID()
+	info := &TransferInfo{
+		JobID:       jobID,
+		DstFilePath: "folder/file.bin",
+		Destination: "https://acct.blob.core.windows.net/c/file.bin?sv=2026&sig=CURRENT_SECRET",
+	}
+	targetURI := sanitizedDestForDedupe(
+		"https://acct.blob.core.windows.net/c/previous.bin?sv=2026&sig=TARGET_SECRET")
+	message := dedupeProgressMessage(
+		"target_reuse",
+		dedupeActEnforce,
+		info,
+		"blockIndex=3 sourceOffset=4096 blockBytes=1024 targetURI="+fmt.Sprintf("%q", targetURI)+
+			" targetOffset=8192 targetLength=1024",
+		dedupeProgressSnapshot{
+			referencedBlocks:   1,
+			referencedBytes:    1024,
+			sourceStagedBlocks: 1,
+			sourceStagedBytes:  1024,
+			filesStarted:       2,
+			filesCommitted:     1,
+		})
+
+	a.True(strings.HasPrefix(message, dedupeProgressPrefix+" "))
+	a.Contains(message, "event=target_reuse")
+	a.Contains(message, "targetURI=\"https://acct.blob.core.windows.net/c/previous.bin\"")
+	a.Contains(message, "wanSavingsPercent=50.0")
+	a.NotContains(message, "CURRENT_SECRET")
+	a.NotContains(message, "TARGET_SECRET")
+	a.NotContains(message, "sig=")
+
+	var output bytes.Buffer
+	a.NoError(writeDedupeProgressTo(&output, message))
+	a.Equal(message+"\n", output.String())
+
+	output.Reset()
+	a.NoError(writeDedupeProgressTo(
+		&output,
+		dedupeProgressPrefix+" event=test sig=SHOULD_NOT_LEAK"))
+	a.NotContains(output.String(), "SHOULD_NOT_LEAK")
+	a.Contains(output.String(), "sig=-REDACTED-")
+
+	queue := make(chan dedupeProgressEntry, 1)
+	a.True(tryEnqueueDedupeProgress(queue, dedupeProgressEntry{message: "first"}))
+	a.False(tryEnqueueDedupeProgress(queue, dedupeProgressEntry{message: "second"}))
 }
 
 func TestBlockHasHashes(t *testing.T) {
@@ -194,6 +264,9 @@ func TestSanitizedDestForDedupe_StripsSAS(t *testing.T) {
 	// No query string is left unchanged.
 	plain := "https://acct.blob.core.windows.net/c/b.bin"
 	a.Equal(plain, sanitizedDestForDedupe(plain))
+
+	// Even malformed URLs must not leak their query or fragment to progress output.
+	a.Equal("://malformed", sanitizedDestForDedupe("://malformed?sig=SECRET#fragment"))
 }
 
 func TestDedupePercent(t *testing.T) {
@@ -203,6 +276,7 @@ func TestDedupePercent(t *testing.T) {
 	a.EqualValues(0, dedupePercent(0, 10))
 	a.EqualValues(50, dedupePercent(5, 10))
 	a.EqualValues(100, dedupePercent(10, 10))
+	a.EqualValues(100, dedupePercent(15, 10))
 }
 
 func TestDedupeStateForJob_IsolatesAndClears(t *testing.T) {
