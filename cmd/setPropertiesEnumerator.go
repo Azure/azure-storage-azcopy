@@ -38,7 +38,7 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	srcCredInfo, err := GetTargetCredInfo(cca.Source, cca.FromTo.From(), getTargetCredInfoOptions{
+	srcCredInfo, err := GetTargetCredInfo(cca.Source, cca.FromTo.From(), GetTargetCredInfoOptions{
 		ctx:                ctx,
 		canBePublic:        true,
 		sharedKeyAllowed:   false,

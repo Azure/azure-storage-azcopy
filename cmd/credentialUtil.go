@@ -84,7 +84,7 @@ var GetCredentialManager = func() func() cred.Manager {
 	}
 }()
 
-type getTargetCredInfoOptions struct {
+type GetTargetCredInfoOptions struct {
 	ctx context.Context
 
 	canBePublic      bool
@@ -110,7 +110,7 @@ func NewCredInfoRaw(credType enum.CredentialType, opts ...credInfoOptions) cred.
 	return info
 }
 
-func GetTargetCredInfo(resourceString common.ResourceString, location common.Location, opts getTargetCredInfoOptions) (cred.CredentialInfo, error) {
+func GetTargetCredInfo(resourceString common.ResourceString, location common.Location, opts GetTargetCredInfoOptions) (cred.CredentialInfo, error) {
 	if forced := GetCredTypeFromEnvVar(); forced != enum.ECredentialType.Unknown() &&
 		location != common.ELocation.S3() && location != common.ELocation.GCP() {
 		return NewCredInfoRaw(forced), nil
@@ -138,15 +138,15 @@ func GetTargetCredInfo(resourceString common.ResourceString, location common.Loc
 	return cred.CredentialInfo{}, errors.New("unknown location: " + location.String())
 }
 
-func getBlobCredInfo(resourceString common.ResourceString, opts getTargetCredInfoOptions) (cred.CredentialInfo, error) {
+func getBlobCredInfo(resourceString common.ResourceString, opts GetTargetCredInfoOptions) (cred.CredentialInfo, error) {
 	return getBlobBasedCredInfo(resourceString, common.ELocation.Blob(), opts)
 }
 
-func getBlobFSCredInfo(resourceString common.ResourceString, opts getTargetCredInfoOptions) (cred.CredentialInfo, error) {
+func getBlobFSCredInfo(resourceString common.ResourceString, opts GetTargetCredInfoOptions) (cred.CredentialInfo, error) {
 	return getBlobBasedCredInfo(resourceString, common.ELocation.BlobFS(), opts)
 }
 
-func getBlobBasedCredInfo(resourceString common.ResourceString, location common.Location, opts getTargetCredInfoOptions) (cred.CredentialInfo, error) {
+func getBlobBasedCredInfo(resourceString common.ResourceString, location common.Location, opts GetTargetCredInfoOptions) (cred.CredentialInfo, error) {
 	uri, _ := resourceString.FullURL()
 	// normal accounts can't be prefixed like this (at least under normal blob endpoints!)
 	// and it isn't allowed for storage accounts to have this naming scheme typically, anywho.
@@ -204,7 +204,7 @@ func getBlobBasedCredInfo(resourceString common.ResourceString, location common.
 	return NewCredInfoRaw(enum.ECredentialType.Unknown()), nil
 }
 
-func getFileCredInfo(resourceString common.ResourceString, opts getTargetCredInfoOptions) (cred.CredentialInfo, error) {
+func getFileCredInfo(resourceString common.ResourceString, opts GetTargetCredInfoOptions) (cred.CredentialInfo, error) {
 	// Short-circuit for SAS
 	if resourceString.SAS != "" {
 		return NewCredInfoRaw(enum.ECredentialType.Anonymous()), nil
