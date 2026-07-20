@@ -4,6 +4,7 @@
 package ste
 
 import (
+	"errors"
 	"fmt"
 	"os/user"
 	"strconv"
@@ -57,7 +58,7 @@ func (f localFileSourceInfoProvider) GetUNIXProperties() (common.UnixStatAdapter
 		err = unix.Stat(f.transferInfo.Source, &stat)
 	}
 	if err != nil {
-		return nil, err 	 	
+		return nil, err
 	}
 
 	return StatTAdapter(stat), nil
@@ -206,8 +207,8 @@ func (f localFileSourceInfoProvider) GetSDDL() (string, error) {
 	// This is the Windows equivalent of ConvertSecurityDescriptorToStringSecurityDescriptorW().
 	sdStr, err := sddl.SecurityDescriptorToString(sd)
 	if err != nil {
-		// Panic, as it's unexpected and we would want to know.
-		panic(fmt.Errorf("Cannot parse binary Security Descriptor returned by QuerySecurityObject(%s, 0x%x): %v", f.jptm.Info().Source, securityInfoFlags, err))
+		// No longer panic here. A malformed SD would prevent the entire job from running.
+		return "", fmt.Errorf("cannot parse binary Security Descriptor returned by QuerySecurityObject(%s, 0x%x): %w", f.jptm.Info().Source, securityInfoFlags, err)
 	}
 
 	fSDDL, err := sddl.ParseSDDL(sdStr)
@@ -216,7 +217,7 @@ func (f localFileSourceInfoProvider) GetSDDL() (string, error) {
 	}
 
 	if strings.TrimSpace(fSDDL.String()) != strings.TrimSpace(sdStr) {
-		panic("SDDL sanity check failed (parsed string output != original string)")
+		return "", errors.New("SDDL sanity check failed (parsed string output != original string)")
 	}
 
 	return fSDDL.PortableString(), nil
@@ -280,7 +281,9 @@ func (h HandleNFSPermissions) GetGroup() *string {
 
 func (h HandleNFSPermissions) GetFileMode() *string {
 	fileMode := h.FileMode() &^ unix.S_IFMT // Remove file type bits
-	return to.Ptr(fmt.Sprintf("%#o", fileMode))
+	// 4 digits because service max is 12-bits:
+	// https://learn.microsoft.com/en-us/rest/api/storageservices/create-file#nfs-only-request-headers
+	return to.Ptr(fmt.Sprintf("%04o", fileMode))
 }
 
 var (
@@ -312,7 +315,9 @@ func (f localFileSourceInfoProvider) GetNFSDefaultPerms() (fileMode, owner, grou
 	// Get the default file mode
 	currFileMode := defaultStats.FileMode() &^ unix.S_IFMT
 	defaultMode := int(currFileMode) &^ getUmask()
-	fileMode = to.Ptr(fmt.Sprintf("%#o", defaultMode))
+	// 4 digits because service max is 12-bits:
+	// https://learn.microsoft.com/en-us/rest/api/storageservices/create-file#nfs-only-request-headers
+	fileMode = to.Ptr(fmt.Sprintf("%04o", defaultMode))
 
 	currentUser, err := user.Current()
 	owner = to.Ptr(currentUser.Uid)

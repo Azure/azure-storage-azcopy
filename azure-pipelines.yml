@@ -1,6 +1,6 @@
 variables:
-  AZCOPY_GOLANG_VERSION: '1.25.8'
-  AZCOPY_GOLANG_VERSION_COVERAGE: '1.25.8'
+  AZCOPY_GOLANG_VERSION: '1.25.11'
+  AZCOPY_GOLANG_VERSION_COVERAGE: '1.25.11'
 
 trigger:
   branches:
@@ -75,16 +75,6 @@ jobs:
         condition: eq(variables.type, 'windows')
         env:
           GOARCH: 386
-          GOOS: windows
-          CGO_ENABLED: 0
-
-      - script: |
-          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_v7_arm.exe"
-        displayName: 'Generate Windows ARM'
-        condition: eq(variables.type, 'windows')
-        env:
-          GOARCH: arm
-          GOARM: 7
           GOOS: windows
           CGO_ENABLED: 0
 
