@@ -376,12 +376,12 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx con
 	}
 
 	if dstCredInfo, err = GetTargetCredInfo(cca.Destination, cca.FromTo.To(), GetTargetCredInfoOptions{
-		ctx:                ctx,
-		canBePublic:        false,
-		sharedKeyAllowed:   true,
-		preferredTokenName: DestCredentialName,
-		cpkOptions:         common.CpkOptions{},
-		tokenManager:       GetCredentialManager(),
+		Context:            ctx,
+		CanBePublic:        false,
+		SharedKeyAllowed:   true,
+		PreferredTokenName: DestCredentialName,
+		CpkOptions:         common.CpkOptions{},
+		TokenManager:       GetCredentialManager(),
 	}); err != nil {
 		return false
 	}
@@ -495,12 +495,12 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 	ctx, cancel := context.WithTimeout(parentCtx, time.Minute*3)
 	defer cancel()
 	dstCredInfo, err = GetTargetCredInfo(cca.Destination, cca.FromTo.To(), GetTargetCredInfoOptions{
-		ctx:                ctx,
-		canBePublic:        false,
-		sharedKeyAllowed:   true,
-		preferredTokenName: DestCredentialName,
-		cpkOptions:         cca.CpkOptions,
-		tokenManager:       GetCredentialManager(),
+		Context:            ctx,
+		CanBePublic:        false,
+		SharedKeyAllowed:   true,
+		PreferredTokenName: DestCredentialName,
+		CpkOptions:         cca.CpkOptions,
+		TokenManager:       GetCredentialManager(),
 	})
 	if err != nil {
 		return err

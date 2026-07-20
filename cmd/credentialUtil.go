@@ -85,27 +85,27 @@ var GetCredentialManager = func() func() cred.Manager {
 }()
 
 type GetTargetCredInfoOptions struct {
-	ctx context.Context
+	Context context.Context
 
-	canBePublic      bool
-	sharedKeyAllowed bool
+	CanBePublic      bool
+	SharedKeyAllowed bool
 
-	preferredTokenName string
+	PreferredTokenName string
 
-	cpkOptions   common.CpkOptions
-	tokenManager cred.Manager
+	CpkOptions   common.CpkOptions
+	TokenManager cred.Manager
 }
 
 type credInfoOptions struct {
-	tokenCredential  azcore.TokenCredential
-	s3CredentialInfo cred.S3CredentialInfo
+	TokenCredential  azcore.TokenCredential
+	S3CredentialInfo cred.S3CredentialInfo
 }
 
 func NewCredInfoRaw(credType enum.CredentialType, opts ...credInfoOptions) cred.CredentialInfo {
 	info := cred.CredentialInfo{CredentialType: credType}
 	if len(opts) > 0 {
-		info.TokenCredential = cred.NewScopedToken(opts[0].tokenCredential, credType) // wrap our credential as a scoped token, so we have the appropriate scopes, and reauth powers ltaer
-		info.S3CredentialInfo = opts[0].s3CredentialInfo
+		info.TokenCredential = cred.NewScopedToken(opts[0].TokenCredential, credType) // wrap our credential as a scoped token, so we have the appropriate scopes, and reauth powers ltaer
+		info.S3CredentialInfo = opts[0].S3CredentialInfo
 	}
 	return info
 }
@@ -116,8 +116,8 @@ func GetTargetCredInfo(resourceString common.ResourceString, location common.Loc
 		return NewCredInfoRaw(forced), nil
 	}
 
-	if opts.ctx == nil {
-		opts.ctx = context.TODO()
+	if opts.Context == nil {
+		opts.Context = context.TODO()
 	}
 
 	switch location {
@@ -159,11 +159,11 @@ func getBlobBasedCredInfo(resourceString common.ResourceString, location common.
 	}
 
 	// Handle all managed disk cases, to become DRY.
-	if isMdAccount && mdAccountNeedsOAuth(opts.ctx, uri.String(), opts.cpkOptions) {
-		if opts.tokenManager == nil {
+	if isMdAccount && mdAccountNeedsOAuth(opts.Context, uri.String(), opts.CpkOptions) {
+		if opts.TokenManager == nil {
 			return cred.CredentialInfo{}, common.NewAzError(common.EAzError.LoginCredMissing(), "No SAS token or OAuth token is present and the resource is not public")
 		}
-		if _, err := opts.tokenManager.GetCredentials(opts.preferredTokenName); err != nil {
+		if _, err := opts.TokenManager.GetCredentials(opts.PreferredTokenName); err != nil {
 			return cred.CredentialInfo{}, common.NewAzError(common.EAzError.LoginCredMissing(), "No SAS token or OAuth token is present and the resource is not public")
 		}
 		return NewCredInfoRaw(enum.ECredentialType.MDOAuthToken()), nil
@@ -178,21 +178,21 @@ func getBlobBasedCredInfo(resourceString common.ResourceString, location common.
 	}
 
 	// Test public access, if it's an option...
-	if opts.canBePublic {
-		if isPublic(opts.ctx, uri.String(), opts.cpkOptions) {
+	if opts.CanBePublic {
+		if isPublic(opts.Context, uri.String(), opts.CpkOptions) {
 			return NewCredInfoRaw(enum.ECredentialType.Anonymous()), nil
 		}
 	}
 
 	// If we have a token manager, see if we can fetch the token. If we can, we know what we're using!
-	if opts.tokenManager != nil {
-		if tc, err := opts.tokenManager.GetCredentials(opts.preferredTokenName); err == nil {
-			return NewCredInfoRaw(enum.ECredentialType.OAuthToken(), credInfoOptions{tokenCredential: tc}), nil
+	if opts.TokenManager != nil {
+		if tc, err := opts.TokenManager.GetCredentials(opts.PreferredTokenName); err == nil {
+			return NewCredInfoRaw(enum.ECredentialType.OAuthToken(), credInfoOptions{TokenCredential: tc}), nil
 		}
 	}
 
 	// BlobFS currently supports Shared key. Remove this piece of code once we deprecate that.
-	if opts.sharedKeyAllowed && location == common.ELocation.BlobFS() {
+	if opts.SharedKeyAllowed && location == common.ELocation.BlobFS() {
 		name := enum.EEnvironmentVariable.AccountName().Get()
 		key := enum.EEnvironmentVariable.AccountKey().Get()
 		if name != "" && key != "" {
@@ -211,8 +211,8 @@ func getFileCredInfo(resourceString common.ResourceString, opts GetTargetCredInf
 	}
 
 	// Try to fetch OAuth if we can.
-	if opts.tokenManager != nil {
-		if _, err := opts.tokenManager.GetCredentials(opts.preferredTokenName); err == nil {
+	if opts.TokenManager != nil {
+		if _, err := opts.TokenManager.GetCredentials(opts.PreferredTokenName); err == nil {
 			return NewCredInfoRaw(enum.ECredentialType.OAuthToken()), nil
 		}
 	}

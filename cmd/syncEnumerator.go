@@ -79,12 +79,12 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 	}
 
 	srcCredInfo, err := GetTargetCredInfo(cca.source, cca.fromTo.From(), GetTargetCredInfoOptions{
-		ctx:                ctx,
-		canBePublic:        true,
-		sharedKeyAllowed:   false,
-		preferredTokenName: SourceCredentialName,
-		cpkOptions:         cca.cpkOptions,
-		tokenManager:       GetCredentialManager(),
+		Context:            ctx,
+		CanBePublic:        true,
+		SharedKeyAllowed:   false,
+		PreferredTokenName: SourceCredentialName,
+		CpkOptions:         cca.cpkOptions,
+		TokenManager:       GetCredentialManager(),
 	})
 	if err != nil {
 		return nil, err
@@ -155,12 +155,12 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 
 	// Because we can't trust cca.credinfo, given that it's for the overall job, not the individual traversers, we get cred info again here.
 	dstCredInfo, err := GetTargetCredInfo(cca.destination, cca.fromTo.To(), GetTargetCredInfoOptions{
-		ctx:                ctx,
-		canBePublic:        false,
-		sharedKeyAllowed:   true,
-		preferredTokenName: DestCredentialName,
-		cpkOptions:         common.CpkOptions{}, // unnecessary for destination
-		tokenManager:       GetCredentialManager(),
+		Context:            ctx,
+		CanBePublic:        false,
+		SharedKeyAllowed:   true,
+		PreferredTokenName: DestCredentialName,
+		CpkOptions:         common.CpkOptions{}, // unnecessary for destination
+		TokenManager:       GetCredentialManager(),
 	})
 
 	if err != nil {

@@ -271,21 +271,21 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 	credManager := GetCredentialManager()
 
 	srcCredInfo, err := GetTargetCredInfo(source, fromTo.From(), GetTargetCredInfoOptions{
-		ctx:                ctx,
-		canBePublic:        true,  // source can be public
-		sharedKeyAllowed:   false, // but not shared key
-		preferredTokenName: SourceCredentialName,
-		cpkOptions:         common.CpkOptions{},
-		tokenManager:       credManager,
+		Context:            ctx,
+		CanBePublic:        true,  // source can be public
+		SharedKeyAllowed:   false, // but not shared key
+		PreferredTokenName: SourceCredentialName,
+		CpkOptions:         common.CpkOptions{},
+		TokenManager:       credManager,
 	})
 
 	dstCredInfo, err := GetTargetCredInfo(destination, fromTo.To(), GetTargetCredInfoOptions{
-		ctx:                ctx,
-		canBePublic:        true,  // source can be public
-		sharedKeyAllowed:   false, // but not shared key
-		preferredTokenName: SourceCredentialName,
-		cpkOptions:         common.CpkOptions{},
-		tokenManager:       credManager,
+		Context:            ctx,
+		CanBePublic:        true,  // source can be public
+		SharedKeyAllowed:   false, // but not shared key
+		PreferredTokenName: SourceCredentialName,
+		CpkOptions:         common.CpkOptions{},
+		TokenManager:       credManager,
 	})
 
 	jobID, err := common.ParseJobID(rca.jobID)

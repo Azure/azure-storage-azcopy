@@ -844,12 +844,12 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	// The isPublic flag is useful in S2S transfers but doesn't much matter for download. Fortunately, no S2S happens here.
 	// This means that if there's auth, there's auth. We're happy and can move on.
 	credInfo, err := GetTargetCredInfo(blobResource, common.ELocation.Blob(), GetTargetCredInfoOptions{
-		ctx:                ctx,
-		canBePublic:        true,
-		sharedKeyAllowed:   false,
-		preferredTokenName: SourceCredentialName,
-		cpkOptions:         cca.CpkOptions,
-		tokenManager:       GetCredentialManager(),
+		Context:            ctx,
+		CanBePublic:        true,
+		SharedKeyAllowed:   false,
+		PreferredTokenName: SourceCredentialName,
+		CpkOptions:         cca.CpkOptions,
+		TokenManager:       GetCredentialManager(),
 	})
 
 	if err != nil {
@@ -929,12 +929,12 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 
 	// get auth info for destination blob
 	credInfo, err := GetTargetCredInfo(blobResource, common.ELocation.Blob(), GetTargetCredInfoOptions{
-		ctx:                ctx,
-		canBePublic:        false,
-		sharedKeyAllowed:   true,
-		preferredTokenName: DestCredentialName,
-		cpkOptions:         cca.CpkOptions,
-		tokenManager:       GetCredentialManager(),
+		Context:            ctx,
+		CanBePublic:        false,
+		SharedKeyAllowed:   true,
+		PreferredTokenName: DestCredentialName,
+		CpkOptions:         cca.CpkOptions,
+		TokenManager:       GetCredentialManager(),
 	})
 
 	if err != nil {
@@ -1015,24 +1015,24 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	credManager := GetCredentialManager()
 
 	cca.credentialInfo, err = GetTargetCredInfo(cca.Destination, cca.FromTo.To(), GetTargetCredInfoOptions{
-		ctx:                ctx,
-		canBePublic:        false, // dest can't be public
-		sharedKeyAllowed:   true,  // dest could be shared key
-		preferredTokenName: DestCredentialName,
-		cpkOptions:         common.CpkOptions{}, // not necessary, since dest can't be public.
-		tokenManager:       credManager,
+		Context:            ctx,
+		CanBePublic:        false, // dest can't be public
+		SharedKeyAllowed:   true,  // dest could be shared key
+		PreferredTokenName: DestCredentialName,
+		CpkOptions:         common.CpkOptions{}, // not necessary, since dest can't be public.
+		TokenManager:       credManager,
 	})
 	if err != nil {
 		return err
 	}
 
 	srcCredInfo, err := GetTargetCredInfo(cca.Source, cca.FromTo.From(), GetTargetCredInfoOptions{
-		ctx:                ctx,
-		canBePublic:        true,  // source can be public
-		sharedKeyAllowed:   false, // but it can't be shared key
-		preferredTokenName: SourceCredentialName,
-		cpkOptions:         cca.CpkOptions,
-		tokenManager:       credManager,
+		Context:            ctx,
+		CanBePublic:        true,  // source can be public
+		SharedKeyAllowed:   false, // but it can't be shared key
+		PreferredTokenName: SourceCredentialName,
+		CpkOptions:         cca.CpkOptions,
+		TokenManager:       credManager,
 	})
 	if err != nil {
 		return err
