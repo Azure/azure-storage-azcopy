@@ -25,6 +25,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -59,15 +60,16 @@ type dedupeJobState struct {
 
 	// Phase 2 "act" counters (also cumulative + atomic). Together they quantify how many source
 	// reads dedupe actually avoided (enforce) or would avoid (shadow).
-	referencedBlocks     int64 // enforce: blocks staged from the destination instead of the source
-	referencedBytes      int64 // enforce: source-read bytes avoided
-	wouldReferenceBlocks int64 // shadow: blocks that would be referenced under enforce
-	wouldReferenceBytes  int64 // shadow: source-read bytes that would be avoided under enforce
-	sourceStagedBlocks   int64 // blocks staged from the source (real source reads)
-	sourceStagedBytes    int64 // bytes staged from the source
-	fallbackBlocks       int64 // enforce: hits whose target reference failed and fell back to source
-	filesStarted         int64 // files armed for source-grid dedupe
-	filesCommitted       int64 // files whose destination block list was committed
+	referencedBlocks      int64 // enforce: blocks staged from the destination instead of the source
+	referencedBytes       int64 // enforce: source-read bytes avoided
+	wouldReferenceBlocks  int64 // shadow: blocks that would be referenced under enforce
+	wouldReferenceBytes   int64 // shadow: source-read bytes that would be avoided under enforce
+	sourceStagedBlocks    int64 // blocks staged from the source (real source reads)
+	sourceStagedBytes     int64 // bytes staged from the source
+	fallbackBlocks        int64 // enforce: hits whose target reference failed and fell back to source
+	filesStarted          int64 // files armed for source-grid dedupe
+	filesCommitted        int64 // files whose destination block list was committed
+	progressEventsDropped uint64
 
 	actMode int32 // active dedupeActMode for this job
 }
@@ -153,20 +155,86 @@ func (s dedupeProgressSnapshot) fields(mode dedupeActMode) string {
 const dedupeProgressPrefix = "DEDUPE_PROGRESS"
 const dedupeProgressQueueCapacity = 4096
 const dedupeProgressFinalWriteTimeout = 5 * time.Second
+const dedupeLogDirectoryName = "dedupe-logs"
+const dedupeLogMaxSize = 500 * 1024 * 1024
 
 type dedupeProgressEntry struct {
-	message string
-	done    chan error
+	jobID           common.JobID
+	message         string
+	closeAfterWrite bool
+	done            chan error
+}
+
+type dedupeProgressFileSink struct {
+	rootFolder func() string
+	writers    map[common.JobID]io.WriteCloser
+}
+
+func newDedupeProgressFileSink(rootFolder func() string) *dedupeProgressFileSink {
+	return &dedupeProgressFileSink{
+		rootFolder: rootFolder,
+		writers:    make(map[common.JobID]io.WriteCloser),
+	}
+}
+
+func (s *dedupeProgressFileSink) logPath(jobID common.JobID) (string, error) {
+	if s == nil || s.rootFolder == nil {
+		return "", fmt.Errorf("dedupe log root is not configured")
+	}
+	root := s.rootFolder()
+	if root == "" {
+		return "", fmt.Errorf("AzCopy log folder is not configured")
+	}
+	return filepath.Join(root, dedupeLogDirectoryName, jobID.String()+".log"), nil
+}
+
+func (s *dedupeProgressFileSink) writer(jobID common.JobID) (io.WriteCloser, error) {
+	if writer, ok := s.writers[jobID]; ok {
+		return writer, nil
+	}
+
+	logPath, err := s.logPath(jobID)
+	if err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(filepath.Dir(logPath), os.ModeDir|os.ModePerm); err != nil {
+		return nil, fmt.Errorf("create dedupe log directory: %w", err)
+	}
+
+	writer, err := common.NewRotatingWriter(logPath, dedupeLogMaxSize)
+	if err != nil {
+		return nil, fmt.Errorf("open dedupe log: %w", err)
+	}
+	s.writers[jobID] = writer
+	return writer, nil
+}
+
+func (s *dedupeProgressFileSink) write(jobID common.JobID, message string) error {
+	writer, err := s.writer(jobID)
+	if err != nil {
+		return err
+	}
+	return writeDedupeProgressTo(writer, message)
+}
+
+func (s *dedupeProgressFileSink) close(jobID common.JobID) error {
+	writer, ok := s.writers[jobID]
+	if !ok {
+		return nil
+	}
+	delete(s.writers, jobID)
+	return writer.Close()
 }
 
 var (
 	dedupeJobsMu              sync.Mutex
 	dedupeJobs                          = make(map[common.JobID]*dedupeJobState)
-	dedupeProgressOutput      io.Writer = os.Stdout
 	dedupeProgressErrorOutput io.Writer = os.Stderr
 	dedupeProgressSanitizer             = common.NewAzCopyLogSanitizer()
 	dedupeProgressQueue                 = make(chan dedupeProgressEntry, dedupeProgressQueueCapacity)
-	dedupeProgressDropped     uint64
+	dedupeProgressSink                  = newDedupeProgressFileSink(func() string {
+		return common.AzcopyLogFolder
+	})
 )
 
 func init() {
@@ -187,26 +255,43 @@ func tryEnqueueDedupeProgress(queue chan<- dedupeProgressEntry, entry dedupeProg
 	}
 }
 
-func enqueueDedupeProgress(message string) {
-	if !tryEnqueueDedupeProgress(dedupeProgressQueue, dedupeProgressEntry{message: message}) {
-		atomic.AddUint64(&dedupeProgressDropped, 1)
+func enqueueDedupeProgress(jobID common.JobID, message string) {
+	entry := dedupeProgressEntry{jobID: jobID, message: message}
+	if !tryEnqueueDedupeProgress(dedupeProgressQueue, entry) {
+		atomic.AddUint64(&dedupeStateForJob(jobID).progressEventsDropped, 1)
 	}
 }
 
 func drainDedupeProgress() {
 	for entry := range dedupeProgressQueue {
-		if dropped := atomic.SwapUint64(&dedupeProgressDropped, 0); dropped > 0 {
-			droppedMessage := fmt.Sprintf("%s event=output_dropped count=%d", dedupeProgressPrefix, dropped)
-			if err := writeDedupeProgressTo(dedupeProgressOutput, droppedMessage); err != nil {
-				_, _ = fmt.Fprintf(dedupeProgressErrorOutput,
-					"%s event=output_error reason=%q\n", dedupeProgressPrefix, err.Error())
+		if st, ok := dedupeStateForJobIfExists(entry.jobID); ok {
+			if dropped := atomic.SwapUint64(&st.progressEventsDropped, 0); dropped > 0 {
+				droppedMessage := fmt.Sprintf(
+					"%s event=output_dropped jobId=%s count=%d",
+					dedupeProgressPrefix, entry.jobID.String(), dropped)
+				if err := dedupeProgressSink.write(entry.jobID, droppedMessage); err != nil {
+					_, _ = fmt.Fprintf(dedupeProgressErrorOutput,
+						"%s event=output_error jobId=%s reason=%q\n",
+						dedupeProgressPrefix, entry.jobID.String(), err.Error())
+				}
 			}
 		}
 
-		err := writeDedupeProgressTo(dedupeProgressOutput, entry.message)
+		err := dedupeProgressSink.write(entry.jobID, entry.message)
 		if err != nil {
 			_, _ = fmt.Fprintf(dedupeProgressErrorOutput,
-				"%s event=output_error reason=%q\n", dedupeProgressPrefix, err.Error())
+				"%s event=output_error jobId=%s reason=%q\n",
+				dedupeProgressPrefix, entry.jobID.String(), err.Error())
+		}
+		if entry.closeAfterWrite {
+			if closeErr := dedupeProgressSink.close(entry.jobID); closeErr != nil {
+				_, _ = fmt.Fprintf(dedupeProgressErrorOutput,
+					"%s event=output_error jobId=%s reason=%q\n",
+					dedupeProgressPrefix, entry.jobID.String(), closeErr.Error())
+				if err == nil {
+					err = closeErr
+				}
+			}
 		}
 		if entry.done != nil {
 			entry.done <- err
@@ -214,9 +299,14 @@ func drainDedupeProgress() {
 	}
 }
 
-func writeFinalDedupeProgress(message string) error {
+func writeFinalDedupeProgress(jobID common.JobID, message string) error {
 	done := make(chan error, 1)
-	entry := dedupeProgressEntry{message: message, done: done}
+	entry := dedupeProgressEntry{
+		jobID:           jobID,
+		message:         message,
+		closeAfterWrite: true,
+		done:            done,
+	}
 	timer := time.NewTimer(dedupeProgressFinalWriteTimeout)
 	defer timer.Stop()
 
@@ -236,7 +326,7 @@ func writeFinalDedupeProgress(message string) error {
 
 func emitDedupeProgress(jptm IJobPartTransferMgr, message string) {
 	jptm.LogAtLevelForCurrentTransfer(common.LogDebug, message)
-	enqueueDedupeProgress(message)
+	enqueueDedupeProgress(jptm.Info().JobID, message)
 }
 
 func dedupeProgressMessage(event string, mode dedupeActMode, info *TransferInfo, details string, snapshot dedupeProgressSnapshot) string {
@@ -435,7 +525,7 @@ func finalizeDedupeJob(jobID common.JobID, log func(common.LogLevel, string)) {
 		message := fmt.Sprintf(
 			"%s event=job_complete mode=%s jobId=%s %s",
 			dedupeProgressPrefix, mode, jobID.String(), st.progressSnapshot().fields(mode))
-		if err := writeFinalDedupeProgress(message); err != nil {
+		if err := writeFinalDedupeProgress(jobID, message); err != nil {
 			log(common.LogError,
 				dedupeProgressPrefix+" event=output_error reason="+fmt.Sprintf("%q", err.Error()))
 		}

@@ -21,10 +21,11 @@
 package ste
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"fmt"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -103,20 +104,27 @@ func TestDedupeProgressMessageSanitizesSASAndIsExtractable(t *testing.T) {
 	a.NotContains(message, "TARGET_SECRET")
 	a.NotContains(message, "sig=")
 
-	var output bytes.Buffer
-	a.NoError(writeDedupeProgressTo(&output, message))
-	a.Equal(message+"\n", output.String())
+	root := t.TempDir()
+	sink := newDedupeProgressFileSink(func() string { return root })
+	a.NoError(sink.write(jobID, message))
 
-	output.Reset()
-	a.NoError(writeDedupeProgressTo(
-		&output,
-		dedupeProgressPrefix+" event=test sig=SHOULD_NOT_LEAK"))
-	a.NotContains(output.String(), "SHOULD_NOT_LEAK")
-	a.Contains(output.String(), "sig=-REDACTED-")
+	logPath, err := sink.logPath(jobID)
+	a.NoError(err)
+	a.Equal(filepath.Join(root, dedupeLogDirectoryName, jobID.String()+".log"), logPath)
+	logBytes, err := os.ReadFile(logPath)
+	a.NoError(err)
+	a.Equal(message+"\n", string(logBytes))
+
+	a.NoError(sink.write(jobID, dedupeProgressPrefix+" event=test sig=SHOULD_NOT_LEAK"))
+	logBytes, err = os.ReadFile(logPath)
+	a.NoError(err)
+	a.NotContains(string(logBytes), "SHOULD_NOT_LEAK")
+	a.Contains(string(logBytes), "sig=-REDACTED-")
+	a.NoError(sink.close(jobID))
 
 	queue := make(chan dedupeProgressEntry, 1)
-	a.True(tryEnqueueDedupeProgress(queue, dedupeProgressEntry{message: "first"}))
-	a.False(tryEnqueueDedupeProgress(queue, dedupeProgressEntry{message: "second"}))
+	a.True(tryEnqueueDedupeProgress(queue, dedupeProgressEntry{jobID: jobID, message: "first"}))
+	a.False(tryEnqueueDedupeProgress(queue, dedupeProgressEntry{jobID: jobID, message: "second"}))
 }
 
 func TestBlockHasHashes(t *testing.T) {
