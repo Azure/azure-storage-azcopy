@@ -23,6 +23,7 @@ import (
 )
 
 var AzcopyJobPlanFolder string
+var AzcopyLogFolder string
 var AzcopyCurrentJobLogger ILoggerResetable
 
 // isIPEndpointStyle checks if URL's host is IP, in this case the storage account endpoint will be composed as:

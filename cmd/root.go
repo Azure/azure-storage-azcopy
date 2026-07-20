@@ -370,6 +370,7 @@ func initializeFolders(logPathFolder, jobPlanFolder, appPathFolder string) (azco
 	if err := os.MkdirAll(azcopyJobPlanFolder, os.ModeDir|os.ModePerm); err != nil && !os.IsExist(err) {
 		log.Fatalf("Problem making .azcopy directory. Try setting AZCOPY_JOB_PLAN_LOCATION env variable. %v", err)
 	}
+	common.AzcopyLogFolder = azcopyLogPathFolder
 	return
 }
 

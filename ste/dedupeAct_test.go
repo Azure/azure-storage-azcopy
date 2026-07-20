@@ -23,6 +23,9 @@ package ste
 import (
 	"encoding/binary"
 	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
@@ -257,18 +260,30 @@ func TestDedupeJobSummaryMessageShadow(t *testing.T) {
 
 func TestFinalizeDedupeJobLogsAndClearsState(t *testing.T) {
 	a := assert.New(t)
+	originalLogFolder := common.AzcopyLogFolder
+	common.AzcopyLogFolder = t.TempDir()
+	t.Cleanup(func() {
+		common.AzcopyLogFolder = originalLogFolder
+	})
+
 	jobID := common.NewJobID()
 	st := dedupeStateForJob(jobID)
 	st.addReferenced(100)
 	setDedupeActModeForJob(jobID, dedupeActEnforce)
 
-	var message string
+	var messages []string
 	finalizeDedupeJob(jobID, func(level common.LogLevel, value string) {
 		a.Equal(common.LogInfo, level)
-		message = value
+		messages = append(messages, value)
 	})
 
-	a.Contains(message, "dedupe-job-summary(enforce)")
+	a.Contains(strings.Join(messages, "\n"), "dedupe-job-summary(enforce)")
+	logPath := filepath.Join(common.AzcopyLogFolder, dedupeLogDirectoryName, jobID.String()+".log")
+	logBytes, err := os.ReadFile(logPath)
+	a.NoError(err)
+	a.Contains(string(logBytes), "event=job_complete")
+	a.Contains(string(logBytes), "jobId="+jobID.String())
+
 	_, exists := dedupeStateForJobIfExists(jobID)
 	a.False(exists)
 }
