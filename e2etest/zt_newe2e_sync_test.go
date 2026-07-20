@@ -513,10 +513,10 @@ func (s *SyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationMan
 		Verb: AzCopyVerbSync,
 		Targets: []ResourceManager{
 			srcTarget,
-			AzCopyTarget{
+			&azcopyTargetImpl{
 				ResourceManager: dstTarget,
-				AuthType:        EExplicitCredentialType.SASToken(),
-				Opts: CreateAzCopyTargetOptions{
+				authType:        EExplicitCredentialType.SASToken(),
+				opts: CreateAzCopyTargetOptions{
 					SASTokenOptions: GenericAccountSignatureValues{
 						Permissions: (&blobsas.AccountPermissions{
 							Read:   true,

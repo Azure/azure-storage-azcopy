@@ -1,7 +1,6 @@
 package e2etest
 
 import (
-	"flag"
 	"fmt"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
@@ -79,7 +78,7 @@ func (*TokenPersistenceSuite) Scenario_InheritCred_Persist(a *ScenarioVariationM
 }
 
 func (*TokenPersistenceSuite) Scenario_MultiLogin_Persist(a *ScenarioVariationManager) {
-	if runDeviceCodeTest == nil || !*runDeviceCodeTest {
+	if runInteractiveTest == nil || !*runInteractiveTest {
 		a.Skip("device code disabled")
 	}
 
@@ -207,10 +206,8 @@ func (*TokenPersistenceSuite) Scenario_MultiLogin_Persist(a *ScenarioVariationMa
 	}
 }
 
-var runDeviceCodeTest = flag.Bool("device-code", false, "Whether or not to run device code tests. These must be run manually due to interactive nature.")
-
 func (*TokenPersistenceSuite) Scenario_DeviceCode_Persist(a *ScenarioVariationManager) {
-	if runDeviceCodeTest == nil || !*runDeviceCodeTest {
+	if runInteractiveTest == nil || !*runInteractiveTest {
 		a.Skip("device code disabled")
 	}
 

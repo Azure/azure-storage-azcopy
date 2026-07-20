@@ -137,3 +137,7 @@ func (a *AzCoreAccessToken) FreshToken() (string, error) {
 func (a *AzCoreAccessToken) CurrentToken() string {
 	return a.tok.Token
 }
+
+func (a *AzCoreAccessToken) ExpiresAt() time.Time {
+	return a.tok.ExpiresOn
+}

@@ -27,11 +27,13 @@ func (eAutoLoginType) AzCLI() AutoLoginType       { return AutoLoginType(3) }
 func (eAutoLoginType) PsCred() AutoLoginType      { return AutoLoginType(4) }
 func (eAutoLoginType) Workload() AutoLoginType    { return AutoLoginType(5) }
 func (eAutoLoginType) Interactive() AutoLoginType { return AutoLoginType(6) }
+func (eAutoLoginType) NoRefresh() AutoLoginType   { return AutoLoginType(254) } // NoRefresh indicates the credential should not be refreshed; used for pre-obtained tokens injected via environment keyring.
 func (eAutoLoginType) TokenStore() AutoLoginType  { return AutoLoginType(255) } // Storage Explorer internal integration only. Do not add this to ValidAutoLoginTypes.
 
 var ValidAutoLoginTypes = func() []string {
 	nonPublic := data_structures.NewSet(
 		EAutoLoginType.TokenStore(),
+		EAutoLoginType.NoRefresh(),
 	)
 	helpTexts := map[AutoLoginType]string{
 		EAutoLoginType.Device():      "Device code authentication (browser-based login)",

@@ -71,20 +71,46 @@ runAllSuites:
 		}
 
 		t.Run(sName, func(t *testing.T) {
+			// Register teardown before setup so it fires even if setup is skipped.
+			if teardownIdx != -1 {
+				t.Cleanup(func() {
+					defer func() {
+						NewFrameworkAsserter(t).AssertNow("Scenario teardown panicked (recovered; you probably need to manually clean up resources)", NoError{stackTrace: true}, recover())
+					}()
+
+					sVal.Method(teardownIdx).Call([]reflect.Value{reflect.ValueOf(&FrameworkAsserter{t: t, SuiteName: sName, ScenarioName: "Teardown"})})
+				})
+			}
+
+			// Run SetupSuite before Parallel — calling t.Run on a parallel t deadlocks.
+			if setupIdx != -1 {
+				setupSVM := &ScenarioVariationManager{t: t}
+
+				t.Cleanup(func() { // earmark a cleanup so that we can properly log a skip or failure
+					if setupSVM.t != nil {
+						switch {
+						case setupSVM.t.Skipped():
+							t.Skip("suite setup skipped")
+						case setupSVM.t.Failed():
+							t.Fail()
+						}
+					}
+				})
+
+				func() { // run inside a closure to catch the panic appropriately
+					defer func() {
+						NewFrameworkAsserter(t).AssertNow("Scenario setup panicked (recovered)", NoError{stackTrace: true}, recover())
+					}()
+
+					sVal.Method(setupIdx).Call([]reflect.Value{reflect.ValueOf(setupSVM)})
+				}()
+			}
+
 			if !early { // Early runners must run now.
 				t.Parallel() // todo: env var
 			}
 
-			if setupIdx != -1 {
-				// todo: call setup with suite manager
-				defer func() {
-					NewFrameworkAsserter(t).AssertNow("Scenario setup panicked (recovered)", NoError{stackTrace: true}, recover())
-				}()
-
-				sVal.Method(setupIdx).Call([]reflect.Value{reflect.ValueOf(&ScenarioVariationManager{t: t})})
-			}
-
-			if !t.Failed() {
+			if !t.Failed() && !t.Skipped() {
 				for scenarioName, scenarioIdx := range testIdxs {
 					scenarioName := scenarioName // create intermediate values.
 					scenarioIdx := scenarioIdx   // This bug is technically fixed in newer versions of Go, but the fix must be manually applied.
@@ -107,16 +133,6 @@ runAllSuites:
 				}
 			} else {
 				(&FrameworkAsserter{t: t, SuiteName: sName}).Log("Skipping tests, failed suite setup...")
-			}
-
-			if teardownIdx != -1 {
-				t.Cleanup(func() {
-					defer func() {
-						NewFrameworkAsserter(t).AssertNow("Scenario teardown panicked (recovered; you probably need to manually clean up resources)", NoError{stackTrace: true}, recover())
-					}()
-
-					sVal.Method(teardownIdx).Call([]reflect.Value{reflect.ValueOf(&FrameworkAsserter{t: t, SuiteName: sName, ScenarioName: "Teardown"})})
-				})
 			}
 		})
 	}

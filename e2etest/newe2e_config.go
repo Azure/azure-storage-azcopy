@@ -4,14 +4,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	tableservice "github.com/Azure/azure-sdk-for-go/sdk/data/aztables"
-	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
-	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"os"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
+
+	tableservice "github.com/Azure/azure-sdk-for-go/sdk/data/aztables"
+	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 )
 
 var GlobalConfig NewE2EConfig
@@ -94,6 +95,21 @@ type NewE2EConfig struct {
 			} `env:",required"`
 		} `env:",required,minimum_required=1"`
 	} `env:",required,mutually_exclusive"`
+
+	// This is jank-- later, better testing will need to be figured out but for now it is sufficient for a local testing run.
+	// By having manually specified tenant IDs
+	StaticMultitenantAcctInfo struct {
+		TenantA struct {
+			Name        string `env:"MULTITENANT_NAME_A"`
+			TenantID    string `env:"MULTITENANT_ID_A"`
+			AccountName string `env:"MULTITENANT_ACCOUNT_A"`
+		}
+		TenantB struct {
+			Name        string `env:"MULTITENANT_NAME_B"`
+			TenantID    string `env:"MULTITENANT_ID_B"`
+			AccountName string `env:"MULTITENANT_ACCOUNT_B"`
+		}
+	}
 
 	// Not required in any way-- Used in CI to record results regularly. SubscriptionLoginInfo should be used, or a static account key present here.
 	TelemetryConfig struct {

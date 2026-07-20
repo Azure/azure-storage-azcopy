@@ -337,8 +337,8 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFileUploadDownload_EmptySAS(svm
 		AzCopyCommand{
 			Verb: azCopyVerb,
 			Targets: []ResourceManager{
-				AzCopyTarget{srcObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
-				AzCopyTarget{dstObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
+				azcopyTargetImpl{srcObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
+				azcopyTargetImpl{dstObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
@@ -369,8 +369,8 @@ func (s *BasicFunctionalitySuite) Scenario_Sync_EmptySASErrorCodes(svm *Scenario
 		AzCopyCommand{
 			Verb: AzCopyVerbSync,
 			Targets: []ResourceManager{
-				AzCopyTarget{srcObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
-				AzCopyTarget{dstObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
+				&azcopyTargetImpl{srcObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
+				&azcopyTargetImpl{dstObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
@@ -400,8 +400,8 @@ func (s *BasicFunctionalitySuite) Scenario_Copy_EmptySASErrorCodes(svm *Scenario
 		AzCopyCommand{
 			Verb: AzCopyVerbCopy,
 			Targets: []ResourceManager{
-				AzCopyTarget{srcObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
-				AzCopyTarget{dstObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
+				&azcopyTargetImpl{srcObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
+				&azcopyTargetImpl{dstObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
@@ -504,7 +504,7 @@ func (s *BasicFunctionalitySuite) Scenario_TagsPermission(svm *ScenarioVariation
 			Verb: AzCopyVerbCopy,
 			Targets: []ResourceManager{
 				srcObj,
-				AzCopyTarget{dstCt, EExplicitCredentialType.SASToken(), CreateAzCopyTargetOptions{
+				&azcopyTargetImpl{dstCt, EExplicitCredentialType.SASToken(), CreateAzCopyTargetOptions{
 					SASTokenOptions: GenericServiceSignatureValues{
 						ContainerName: dstCt.ContainerName(),
 						Permissions: PtrOf(blobsas.ContainerPermissions{

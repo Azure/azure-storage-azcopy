@@ -2,17 +2,18 @@ package cred
 
 import (
 	"encoding/json"
+	"fmt"
 	"sync"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
-// keyringEnvConf is a mapping of nicknames to tokens
-type keyringEnvConf map[string]token
+// KeyringEnvConf is a mapping of nicknames to tokens
+type KeyringEnvConf map[string]token
 
 var globalEnvKeyring = &keyringEnvVar{
 	initOnce: &sync.Once{},
-	stash:    make(keyringEnvConf),
+	stash:    make(KeyringEnvConf),
 }
 
 // keyringEnvVar reads it's keyring from the environment, stashes it, then deletes the env var.
@@ -20,15 +21,17 @@ var globalEnvKeyring = &keyringEnvVar{
 type keyringEnvVar struct {
 	initOnce *sync.Once
 	error    error
-	stash    keyringEnvConf
+	stash    KeyringEnvConf
 }
 
-func GetEnvironmentKeyring() (Keyring, error) {
+func GetEnvironmentKeyring() (keyring Keyring, err error) {
 	globalEnvKeyring.initOnce.Do(func() {
 		rawEnv, ok := enum.EEnvironmentVariable.KeyringConfig().Lookup()
 		if ok {
 			globalEnvKeyring.error = json.Unmarshal([]byte(rawEnv), &globalEnvKeyring.stash)
 			if globalEnvKeyring.error != nil {
+				globalEnvKeyring.error = fmt.Errorf("%w `%v` %v", globalEnvKeyring.error, rawEnv, ok)
+
 				return
 			}
 		}
@@ -39,7 +42,7 @@ func GetEnvironmentKeyring() (Keyring, error) {
 			err := json.Unmarshal([]byte(classicEnv), &classicToken)
 
 			if err != nil && globalEnvKeyring.error == nil {
-				globalEnvKeyring.error = err
+				// ignore the fallback
 			} else if err == nil {
 				newToken := classicToken.Upgrade()
 				globalEnvKeyring.stash[newToken.Nickname] = newToken

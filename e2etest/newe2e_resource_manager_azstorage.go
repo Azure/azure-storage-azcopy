@@ -3,6 +3,7 @@ package e2etest
 import (
 	"fmt"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
@@ -36,7 +37,8 @@ type AzureAccountResourceManager struct {
 	InternalAccountKey  string
 	InternalAccountType AccountType
 
-	ArmClient *ARMStorageAccount
+	TokenCredential azcore.TokenCredential
+	ArmClient       *ARMStorageAccount
 }
 
 func (acct *AzureAccountResourceManager) ApplySAS(URI string, loc common.Location, optList ...GetURIOptions) string {
@@ -45,7 +47,7 @@ func (acct *AzureAccountResourceManager) ApplySAS(URI string, loc common.Locatio
 	}
 	opts := FirstOrZero(optList)
 
-	if !opts.AzureOpts.WithSAS {
+	if !opts.AzureOpts.WithSAS || acct.InternalAccountKey == "" {
 		return URI
 	}
 
@@ -147,9 +149,15 @@ func (acct *AzureAccountResourceManager) GetService(a Asserter, location common.
 
 	switch location {
 	case common.ELocation.Blob():
-		sharedKey, err := blobservice.NewSharedKeyCredential(acct.InternalAccountName, acct.InternalAccountKey)
-		a.NoError("Create shared key", err)
-		client, err := blobservice.NewClientWithSharedKeyCredential(uri, sharedKey, nil)
+		var client *blobservice.Client
+		var err error
+		if acct.TokenCredential != nil {
+			client, err = blobservice.NewClient(uri, acct.TokenCredential, nil)
+		} else {
+			sharedKey, skErr := blobservice.NewSharedKeyCredential(acct.InternalAccountName, acct.InternalAccountKey)
+			a.NoError("Create shared key", skErr)
+			client, err = blobservice.NewClientWithSharedKeyCredential(uri, sharedKey, nil)
+		}
 		a.NoError("Create Blob client", err)
 
 		return &BlobServiceResourceManager{
@@ -157,9 +165,15 @@ func (acct *AzureAccountResourceManager) GetService(a Asserter, location common.
 			InternalClient:  client,
 		}
 	case common.ELocation.File():
-		sharedKey, err := fileservice.NewSharedKeyCredential(acct.InternalAccountName, acct.InternalAccountKey)
-		a.NoError("Create shared key", err)
-		client, err := fileservice.NewClientWithSharedKeyCredential(uri, sharedKey, &fileservice.ClientOptions{AllowTrailingDot: to.Ptr(true)})
+		var client *fileservice.Client
+		var err error
+		if acct.TokenCredential != nil {
+			client, err = fileservice.NewClient(uri, acct.TokenCredential, &fileservice.ClientOptions{AllowTrailingDot: to.Ptr(true)})
+		} else {
+			sharedKey, skErr := fileservice.NewSharedKeyCredential(acct.InternalAccountName, acct.InternalAccountKey)
+			a.NoError("Create shared key", skErr)
+			client, err = fileservice.NewClientWithSharedKeyCredential(uri, sharedKey, &fileservice.ClientOptions{AllowTrailingDot: to.Ptr(true)})
+		}
 		a.NoError("Create File client", err)
 
 		return &FileServiceResourceManager{
@@ -167,8 +181,15 @@ func (acct *AzureAccountResourceManager) GetService(a Asserter, location common.
 			InternalClient:  client,
 		}
 	case common.ELocation.BlobFS():
-		sharedKey, err := blobfscommon.NewSharedKeyCredential(acct.InternalAccountName, acct.InternalAccountKey)
-		client, err := blobfsservice.NewClientWithSharedKeyCredential(uri, sharedKey, nil)
+		var client *blobfsservice.Client
+		var err error
+		if acct.TokenCredential != nil {
+			client, err = blobfsservice.NewClient(uri, acct.TokenCredential, nil)
+		} else {
+			sharedKey, skErr := blobfscommon.NewSharedKeyCredential(acct.InternalAccountName, acct.InternalAccountKey)
+			a.NoError("Create shared key", skErr)
+			client, err = blobfsservice.NewClientWithSharedKeyCredential(uri, sharedKey, nil)
+		}
 		a.NoError("Create BlobFS client", err)
 
 		return &BlobFSServiceResourceManager{

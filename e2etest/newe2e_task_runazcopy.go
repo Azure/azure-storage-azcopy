@@ -3,6 +3,7 @@ package e2etest
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -11,7 +12,10 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 )
@@ -82,14 +86,25 @@ const ( // initially supporting a limited set of verbs
 	AzCopyVerbJobsClean   AzCopyVerb = "jobs clean"
 )
 
-type AzCopyTarget struct {
+type AzCopyTarget interface {
 	ResourceManager
-	AuthType ExplicitCredentialTypes // Expects *one* credential type that the Resource supports. Assumes SAS (or GCP/S3) if not present.
-	Opts     CreateAzCopyTargetOptions
+	AuthType() ExplicitCredentialTypes
+	TargetOptions() CreateAzCopyTargetOptions
+}
+
+type azcopyTargetImpl struct {
+	ResourceManager
+	authType ExplicitCredentialTypes // Expects *one* credential type that the Resource supports. Assumes SAS (or GCP/S3) if not present.
+	opts     CreateAzCopyTargetOptions
 
 	// todo: SAS permissions
 	// todo: specific OAuth types (e.g. MSI, etc.)
 }
+
+func (t *azcopyTargetImpl) AuthType() ExplicitCredentialTypes        { return t.authType }
+func (t *azcopyTargetImpl) TargetOptions() CreateAzCopyTargetOptions { return t.opts }
+
+var _ AzCopyTarget = &azcopyTargetImpl{}
 
 type CreateAzCopyTargetOptions struct {
 	// SASTokenOptions expects a GenericSignatureValues, which can contain account signatures, or a service signature.
@@ -112,7 +127,7 @@ func CreateAzCopyTarget(rm ResourceManager, authType ExplicitCredentialTypes, a 
 		a.AssertNow("Expected no auth types", Equal{}, authType, EExplicitCredentialType.None())
 	}
 
-	return AzCopyTarget{rm, authType, FirstOrZero(opts)}
+	return &azcopyTargetImpl{ResourceManager: rm, authType: authType, opts: FirstOrZero(opts)}
 }
 
 type AzCopyCommand struct {
@@ -147,6 +162,9 @@ type AzCopyEnvironment struct {
 
 	LoginCacheName *string `env:"AZCOPY_LOGIN_CACHE_NAME"`
 
+	// KeyringConfig is used to inject pre-obtained tokens into the child process's environment keyring.
+	KeyringConfig map[string]KeyringEntry `env:"AZCOPY_KEYRING,serializer:SerializeKeyringConfig"`
+
 	// SyncOrchestratorTestMode is used to control the sync orchestrator test mode.
 	// Refer to common.SyncOrchTestMode for more details.
 	SyncOrchestratorTestMode *string `env:"SYNC_ORCHESTRATOR_TEST_MODE,defaultfunc:DefaultSyncOrchestratorTestMode"`
@@ -162,6 +180,43 @@ type AzCopyEnvironment struct {
 	ParentContext *AzCopyEnvironmentContext
 	EnvironmentId *uint
 	RunCount      *uint
+}
+
+type KeyringEntry struct {
+	// Currently, there is no support for anything other than NoRefresh, as this was meant to get the tests done quickly.
+	TenantID string
+	Token    azcore.TokenCredential
+}
+
+func (env *AzCopyEnvironment) SerializeKeyringConfig(t any, a ScenarioAsserter, ctx context.Context) string {
+	input := GetTypeOrAssert[map[string]KeyringEntry](a, t)
+	out := make(map[string]any)
+
+	for nick, v := range input {
+		st, ok := v.Token.(cred.ScopedToken)
+		if !ok {
+			// if no ScopedCredential is used, strongly assume that it is a standard oauth token, and fetch.
+			st = cred.NewScopedToken(v.Token, enum.ECredentialType.OAuthToken())
+		}
+		at, err := st.GetToken(ctx, policy.TokenRequestOptions{})
+		a.NoError(fmt.Sprintf("token %s must be capable of fetching", nick), err)
+
+		out[nick] = map[string]any{
+			"tenant_id":                 v.TenantID,
+			"nickname":                  nick,
+			"active_directory_endpoint": "https://login.microsoftonline.com",
+			"token_refresh_source":      enum.EAutoLoginType.NoRefresh(),
+			"AuthDetails": map[string]any{
+				"access_token": at.Token,
+				"expires_on":   at.ExpiresOn.Unix(),
+			},
+		}
+	}
+
+	buf, err := json.Marshal(out)
+	a.NoError("failed to marshal tokens", err)
+
+	return string(buf)
 }
 
 func (env *AzCopyEnvironment) InheritEnvVar(name string) {
@@ -232,15 +287,16 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 	intendedAuthType := EExplicitCredentialType.SASToken()
 	var opts GetURIOptions
 	if tgt, ok := target.(AzCopyTarget); ok {
-		count := tgt.AuthType.Count()
+		count := tgt.AuthType().Count()
 		a.AssertNow("target auth type must be single", Equal{}, count <= 1, true)
 		if count == 1 {
-			intendedAuthType = tgt.AuthType
+			intendedAuthType = tgt.AuthType()
 		}
 
-		opts.AzureOpts.SASValues = tgt.Opts.SASTokenOptions
-		opts.RemoteOpts.Scheme = tgt.Opts.Scheme
-		opts.Wildcard = tgt.Opts.Wildcard
+		tgtOpts := tgt.TargetOptions()
+		opts.AzureOpts.SASValues = tgtOpts.SASTokenOptions
+		opts.RemoteOpts.Scheme = tgtOpts.Scheme
+		opts.Wildcard = tgtOpts.Wildcard
 	} else if target.Location() == common.ELocation.S3() {
 		intendedAuthType = EExplicitCredentialType.S3()
 	} else if target.Location() == common.ELocation.GCP() {
