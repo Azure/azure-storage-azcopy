@@ -172,6 +172,7 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 	if err != nil {
 		return SyncResult{}, err
 	}
+	defer s.Close()
 
 	mgr := NewJobLifecycleManager(syncHandler)
 

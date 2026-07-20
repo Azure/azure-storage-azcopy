@@ -133,6 +133,7 @@ func newListTraverser(resource common.ResourceString, resourceLocation common.Lo
 			PreserveBlobTags:        options.PreserveBlobTags,
 			FromTo:                  options.FromTo,
 			HardlinkHandling:        options.HardlinkHandling,
+			InodeStore:              options.InodeStore,
 			BasePath:                source.Value,
 		})
 		if err != nil {

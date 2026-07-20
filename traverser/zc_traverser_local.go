@@ -1043,8 +1043,10 @@ func logNFSLinkWarning(fileName,
 	} else if hardlinkHandling == common.EHardlinkHandlingType.Skip() {
 		message = fmt.Sprintf("File '%s' with inode '%s' at the source is a hard link, and will be skipped", fileName, inodeNo)
 	}
+	if message != "" {
+		common.AzcopyCurrentJobLogger.Log(common.LogWarning, message)
+	}
 
-	common.AzcopyCurrentJobLogger.Log(common.LogWarning, message)
 }
 
 // resolveHardlinkedSymlinkEntity adjusts the entity type for a hardlinked symlink.
