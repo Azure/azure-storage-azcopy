@@ -173,6 +173,15 @@ func computeAnyToRemoteHardlinkTarget(info *TransferInfo, jptm IJobPartTransferM
 		return ""
 	}
 	destPrefix := strings.TrimSuffix(destURLParts.DirectoryOrFilePath, fileRelPath)
+	// Verify that TrimSuffix was not a no-op (i.e. the destination path actually ends with the
+	// relative file path). If fileRelPath is empty the source is the traversal root itself and
+	// the whole destination directory path is the prefix, so the check is skipped.
+	if fileRelPath != "" && destPrefix == destURLParts.DirectoryOrFilePath {
+		jptm.FailActiveSend("computing hardlink destination prefix",
+			fmt.Errorf("destination path %q does not end with expected relative path %q",
+				destURLParts.DirectoryOrFilePath, fileRelPath))
+		return ""
+	}
 	targetHardlinkFullPath := "/" + path.Join(destPrefix, info.TargetHardlinkFilePath)
 	return targetHardlinkFullPath
 }

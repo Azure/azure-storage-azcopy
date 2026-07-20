@@ -24,7 +24,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"runtime"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -172,6 +171,7 @@ func (c *Client) Sync(ctx context.Context, src, dest string, opts SyncOptions) (
 	if err != nil {
 		return SyncResult{}, err
 	}
+	defer s.Close()
 
 	mgr := NewJobLifecycleManager(syncHandler)
 
@@ -264,12 +264,5 @@ func newSyncer(ctx context.Context, jobID common.JobID, src, dst string, opts Sy
 		return nil, fmt.Errorf("failed to initialize inode store: %w", err)
 	}
 	progressTracker := newSyncProgressTracker(jobID, opts.Handler)
-	sync := &syncer{opts: cookedOpts, srp: syncRemote, spt: progressTracker, inodeStore: store}
-
-	// Ensure that resources are eventually released even if the caller forgets to close the syncer.
-	runtime.SetFinalizer(sync, func(s *syncer) {
-		_ = s.Close()
-	})
-
-	return sync, nil
+	return &syncer{opts: cookedOpts, srp: syncRemote, spt: progressTracker, inodeStore: store}, nil
 }

@@ -130,9 +130,9 @@ func TestComputeAnyToRemoteHardlinkTarget(t *testing.T) {
 			source:                 "/local/srcdir/subdir/link.txt",
 			destination:            "https://account.file.core.windows.net/share/WRONG/link.txt",
 			targetHardlinkFilePath: "subdir/anchor.txt",
-			// TrimSuffix("WRONG/link.txt", "subdir/link.txt") => "WRONG/link.txt" (no-op)
-			// result: "/" + path.Join("WRONG/link.txt", "subdir/anchor.txt")
-			wantPath: "/WRONG/link.txt/subdir/anchor.txt",
+			// fileRelPath = "subdir/link.txt", but destURLParts.DirectoryOrFilePath = "WRONG/link.txt"
+			// does not end with "subdir/link.txt" → FailActiveSend should be called.
+			wantFail: true,
 		},
 
 		// ───────────── source equals source root (empty relPath) ─────────────

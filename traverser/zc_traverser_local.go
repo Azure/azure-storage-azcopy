@@ -1044,7 +1044,9 @@ func logNFSLinkWarning(fileName,
 		message = fmt.Sprintf("File '%s' with inode '%s' at the source is a hard link, and will be skipped", fileName, inodeNo)
 	}
 
-	common.AzcopyCurrentJobLogger.Log(common.LogWarning, message)
+	if message != "" {
+		common.AzcopyCurrentJobLogger.Log(common.LogWarning, message)
+	}
 }
 
 // resolveHardlinkedSymlinkEntity adjusts the entity type for a hardlinked symlink.
