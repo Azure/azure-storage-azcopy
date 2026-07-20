@@ -278,7 +278,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 
 	credManager := GetCredentialManager()
 
-	srcCredInfo, err := GetTargetCredInfo(source, fromTo.From(), getTargetCredInfoOptions{
+	srcCredInfo, err := GetTargetCredInfo(source, fromTo.From(), GetTargetCredInfoOptions{
 		ctx:                ctx,
 		canBePublic:        true,  // source can be public
 		sharedKeyAllowed:   false, // but not shared key
@@ -287,7 +287,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		tokenManager:       credManager,
 	})
 
-	dstCredInfo, err := GetTargetCredInfo(destination, fromTo.To(), getTargetCredInfoOptions{
+	dstCredInfo, err := GetTargetCredInfo(destination, fromTo.To(), GetTargetCredInfoOptions{
 		ctx:                ctx,
 		canBePublic:        true,  // source can be public
 		sharedKeyAllowed:   false, // but not shared key

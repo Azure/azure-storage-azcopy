@@ -87,7 +87,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 		return fmt.Errorf("failed to resolve target: %w", err)
 	}
 
-	credentialInfo, err := GetTargetCredInfo(resourceStringParts, cookedArgs.resourceLocation, getTargetCredInfoOptions{
+	credentialInfo, err := GetTargetCredInfo(resourceStringParts, cookedArgs.resourceLocation, GetTargetCredInfoOptions{
 		ctx:                ctx,
 		canBePublic:        false,
 		sharedKeyAllowed:   true,

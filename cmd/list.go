@@ -242,7 +242,7 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 		return err
 	}
 
-	credentialInfo, err = GetTargetCredInfo(source, cooked.location, getTargetCredInfoOptions{
+	credentialInfo, err = GetTargetCredInfo(source, cooked.location, GetTargetCredInfoOptions{
 		ctx:                ctx,
 		canBePublic:        true,
 		sharedKeyAllowed:   true,
