@@ -1,0 +1,31 @@
+# Auto-detect text files and normalize to LF in the repo
+* text=auto
+
+# Shell scripts must have LF line endings
+*.sh text eol=lf
+
+# Always normalize source code files
+*.go text
+*.ts text
+*.js text
+*.cjs text
+*.cts text
+*.mjs text
+*.py text
+*.json text
+*.yml text
+*.yaml text
+*.md text
+*.xml text
+*.txt text
+*.css text
+*.html text
+*.csv text
+*.iml text
+*.sum text
+*.mod text
+
+# Binary files
+*.exe binary
+*.node binary
+*.png binary
