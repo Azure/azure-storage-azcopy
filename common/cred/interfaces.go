@@ -19,7 +19,7 @@ type Manager interface {
 
 	// DoLogin uses the login token options to perform a login,
 	// and saves the token, if SaveCredential is set.
-	DoLogin(opts NewTokenOptions, ctx context.Context) (azcore.TokenCredential, error)
+	DoLogin(opts LoginNewTokenOptions, ctx context.Context) (azcore.TokenCredential, error)
 
 	// DeleteCredentials deletes the token matching the nickname across every writable Keyring.
 	// Read-only Keyrings are skipped. Returns true if any token was deleted.
@@ -61,12 +61,16 @@ type RWKeyring interface {
 	SaveToken(info Token) error
 }
 
+// NewTokenOptions creates a Token from explicit per-type configuration.
+type NewTokenOptions interface {
+	NewToken() Token
+}
+
 // tokenImpl provides a TokenCredential provider, backwards compat
 type tokenImpl interface {
 	tokenImpl()
 	getTokenCredential(header TokenHeader, ctx context.Context) (azcore.TokenCredential, error)
 	fromCompat(compat compatTokenInfo) tokenImpl
-	fromLoginTokenOptions(opts NewTokenOptions) tokenImpl
 }
 
 type Token interface {

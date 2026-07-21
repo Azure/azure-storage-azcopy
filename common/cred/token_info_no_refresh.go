@@ -16,10 +16,6 @@ type tokenInfoNoRefresh struct {
 
 func (t *tokenInfoNoRefresh) tokenImpl() {}
 
-func (t *tokenInfoNoRefresh) fromLoginTokenOptions(opts NewTokenOptions) tokenImpl {
-	return &tokenInfoNoRefresh{}
-}
-
 func (t *tokenInfoNoRefresh) getTokenCredential(header TokenHeader, ctx context.Context) (azcore.TokenCredential, error) {
 	return t, nil
 }

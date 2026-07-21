@@ -110,13 +110,6 @@ func (t *token) TokenCredential(ctx context.Context) (azcore.TokenCredential, er
 
 func (t tokenInfoSPN) tokenImpl() {}
 
-func (t tokenInfoSPN) fromLoginTokenOptions(opts NewTokenOptions) tokenImpl {
-	t.ApplicationID = opts.ApplicationID
-	t.Cert = opts.CertificateData
-	t.Secret = opts.ClientSecret
-	return t
-}
-
 func (t tokenInfoSPN) getTokenCredential(header TokenHeader, ctx context.Context) (azcore.TokenCredential, error) {
 	if t.Cert != "" {
 		return t.getTokenCert(header)
@@ -190,13 +183,6 @@ func (t tokenInfoSPN) fromCompat(compat compatTokenInfo) tokenImpl {
 
 func (t tokenInfoManagedIdentity) tokenImpl() {}
 
-func (t tokenInfoManagedIdentity) fromLoginTokenOptions(opts NewTokenOptions) tokenImpl {
-	t.ClientID = opts.IdentityClientID
-	t.ObjectID = opts.IdentityObjectID
-	t.MSIResID = opts.IdentityResourceID
-	return t
-}
-
 func (t tokenInfoManagedIdentity) getTokenCredential(header TokenHeader, ctx context.Context) (azcore.TokenCredential, error) {
 	var id azidentity.ManagedIDKind
 	if t.ClientID != "" {
@@ -228,8 +214,6 @@ func (t tokenInfoManagedIdentity) fromCompat(compat compatTokenInfo) tokenImpl {
 
 func (t tokenInfoCLI) tokenImpl() {}
 
-func (t tokenInfoCLI) fromLoginTokenOptions(opts NewTokenOptions) tokenImpl { return t }
-
 func (t tokenInfoCLI) getTokenCredential(header TokenHeader, ctx context.Context) (azcore.TokenCredential, error) {
 	return azidentity.NewAzureCLICredential(&azidentity.AzureCLICredentialOptions{TenantID: header.Tenant})
 }
@@ -242,8 +226,6 @@ func (t tokenInfoCLI) fromCompat(compat compatTokenInfo) tokenImpl {
 
 func (t tokenInfoPSCred) tokenImpl() {}
 
-func (t tokenInfoPSCred) fromLoginTokenOptions(opts NewTokenOptions) tokenImpl { return t }
-
 func (t tokenInfoPSCred) getTokenCredential(header TokenHeader, ctx context.Context) (azcore.TokenCredential, error) {
 	return token_providers.NewPowershellContextCredential(&token_providers.PowershellContextCredentialOptions{TenantID: header.Tenant})
 }
@@ -255,20 +237,6 @@ func (t tokenInfoPSCred) fromCompat(compat compatTokenInfo) tokenImpl {
 // ========== User login impl ==========
 
 func (t *tokenInfoUserLogin) tokenImpl() {}
-
-func (t *tokenInfoUserLogin) fromLoginTokenOptions(opts NewTokenOptions) tokenImpl {
-	t.ApplicationID = opts.ApplicationID
-	switch opts.LoginType {
-	case enum.EAutoLoginType.Interactive():
-		t.InteractionType = enum.EInteractiveLoginType.Browser()
-	default:
-		t.InteractionType = enum.EInteractiveLoginType.Device()
-	}
-
-	t.AuthRecord = &azidentity.AuthenticationRecord{}
-
-	return t
-}
 
 func (t *tokenInfoUserLogin) getTokenCredential(header TokenHeader, ctx context.Context) (azcore.TokenCredential, error) {
 	var tc AuthenticateToken
@@ -353,8 +321,6 @@ func (t *tokenInfoUserLogin) fromCompat(compat compatTokenInfo) tokenImpl {
 
 func (t tokenInfoWorkload) tokenImpl() {}
 
-func (t tokenInfoWorkload) fromLoginTokenOptions(opts NewTokenOptions) tokenImpl { return t }
-
 func (t tokenInfoWorkload) getTokenCredential(header TokenHeader, ctx context.Context) (azcore.TokenCredential, error) {
 	return azidentity.NewWorkloadIdentityCredential(&azidentity.WorkloadIdentityCredentialOptions{
 		ClientOptions: azcore.ClientOptions{
@@ -373,8 +339,6 @@ func (t tokenInfoWorkload) fromCompat(compat compatTokenInfo) tokenImpl {
 const tokenStoreMinimumValidDuration = time.Minute * 5
 
 func (t *tokenInfoTokenStore) tokenImpl() {}
-
-func (t tokenInfoTokenStore) fromLoginTokenOptions(opts NewTokenOptions) tokenImpl { return &t }
 
 func (t *tokenInfoTokenStore) getTokenCredential(header TokenHeader, ctx context.Context) (azcore.TokenCredential, error) {
 	t.nickname = header.Nickname
