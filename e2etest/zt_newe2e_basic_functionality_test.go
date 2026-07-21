@@ -18,6 +18,7 @@ import (
 )
 
 func init() {
+	//suiteManager.RegisterEarlyRunSuite(&BasicFunctionalitySuite{})
 	suiteManager.RegisterSuite(&BasicFunctionalitySuite{})
 }
 
@@ -622,6 +623,8 @@ func (*BasicFunctionalitySuite) Scenario_CheckVersion(svm *ScenarioVariationMana
 	if strings.Contains(common.AzcopyVersion, "preview") {
 		svm.Skip("Check version does not print output for preview versions.")
 	}
+
+	svm.Log("AL: Invoking AzCopy")
 	// The flag usage is `azcopy --check-version` without sub-commands.
 	// So, no need to pass azcopy verb
 	stdout, _ := RunAzCopy(svm, AzCopyCommand{
@@ -643,7 +646,9 @@ func (*BasicFunctionalitySuite) Scenario_CheckVersion(svm *ScenarioVariationMana
 	if !svm.Dryrun() {
 		foundVersionInOutput := func() bool { // Check if either of the version output is in the string
 			matched := false
-			for _, line := range stdout.RawStdout() { // If there's another warning or info message
+			svm.Log("AL: stdout has %d lines", len(stdout.RawStdout()))
+			for i, line := range stdout.RawStdout() { // If there's another warning or info message
+				svm.Log("AL: Reading line %d of stdout", i)
 				for _, regex := range versionCheckOpts {
 					if regex.MatchString(line) {
 						matched = true
@@ -654,9 +659,10 @@ func (*BasicFunctionalitySuite) Scenario_CheckVersion(svm *ScenarioVariationMana
 			return matched
 		}
 		versionAssertion := assert.New(svm.t)
-		versionAssertion.True(foundVersionInOutput())
+		versionAssertion.True(foundVersionInOutput(), "Expected to find version info in stdout, but did not. stdout: %v", stdout.RawStdout())
 	}
 
+	svm.Log("AL: Validating Message Output")
 	ValidateMessageOutput(svm, stdout, "version", true) // loose check
 }
 
