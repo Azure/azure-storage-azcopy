@@ -3305,7 +3305,8 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkSync_HardlinkToSymlink(svm *Scenari
 	}, ValidateResourceOptions{fromTo: fromTo,
 		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
-	ValidateHardlinksTransferCount(svm, stdOut, 1)
+	ValidateHardlinksTransferCount(svm, stdOut, 0)
+	ValidateSymlinksTransferCount(svm, stdOut, 2)
 }
 
 // Scenario 20: Copy — hardlink pointing to a symlink.
