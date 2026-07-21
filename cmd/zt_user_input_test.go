@@ -21,6 +21,8 @@
 package cmd
 
 import (
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -28,7 +30,9 @@ import (
 func TestCPKEncryptionInputTest(t *testing.T) {
 	a := assert.New(t)
 	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
+	jobsAdmin.ExecuteNewCopyJobPartOrder = func(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
+		return mockedRPC.intercept(order)
+	}
 	mockedRPC.init()
 
 	dirPath := "this/is/a/dummy/path"

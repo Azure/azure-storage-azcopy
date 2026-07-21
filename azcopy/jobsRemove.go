@@ -1,4 +1,4 @@
-// Copyright © 2017 Microsoft <wastore@microsoft.com>
+// Copyright © 2025 Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,46 +18,33 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package azcopy
 
 import (
+	"errors"
+	"fmt"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/stretchr/testify/assert"
-	"testing"
-	"time"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 )
 
-func TestSortJobs(t *testing.T) {
-	a := assert.New(t)
-	// setup
-	job2 := common.JobIDDetails{
-		JobId:         common.NewJobID(),
-		StartTime:     time.Now().UnixNano(),
-		CommandString: "dummy2",
+type RemoveJobOptions struct {
+	JobID common.JobID
+}
+
+type RemoveJobResult struct {
+	Count int // Number of files cleaned
+}
+
+// RemoveJob removes a job with the specified JobID.
+func (c Client) RemoveJob(opts RemoveJobOptions) (result RemoveJobResult, err error) {
+	result = RemoveJobResult{}
+	if opts.JobID.IsEmpty() {
+		return result, errors.New("remove job requires the JobID")
 	}
-
-	// sleep for a bit so that the time stamp is different
-	time.Sleep(time.Millisecond)
-	job1 := common.JobIDDetails{
-		JobId:         common.NewJobID(),
-		StartTime:     time.Now().UnixNano(),
-		CommandString: "dummy1",
+	result.Count, err = jobsAdmin.RemoveSingleJobFiles(opts.JobID)
+	if err != nil {
+		return result, fmt.Errorf("failed to remove log and job plan files for job %s due to error: %w", opts.JobID, err)
 	}
-
-	// sleep for a bit so that the time stamp is different
-	time.Sleep(time.Millisecond)
-	job0 := common.JobIDDetails{
-		JobId:         common.NewJobID(),
-		StartTime:     time.Now().UnixNano(),
-		CommandString: "dummy0",
-	}
-	jobsList := []common.JobIDDetails{job2, job1, job0}
-
-	// act
-	sortJobs(jobsList)
-
-	// verify
-	a.Equal(job0, jobsList[0])
-	a.Equal(job1, jobsList[1])
-	a.Equal(job2, jobsList[2])
+	return result, nil
 }

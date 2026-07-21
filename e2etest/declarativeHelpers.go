@@ -443,6 +443,8 @@ func (tft TestFromTo) getValues(op Operation) []common.FromTo {
 			if !tft.suppressAutoFileToFile {
 				if from == common.ELocation.File() && to == common.ELocation.Blob() {
 					to = common.ELocation.File()
+				} else if from == common.ELocation.FileNFS() && to == common.ELocation.Blob() {
+					to = common.ELocation.FileNFS()
 				}
 			}
 

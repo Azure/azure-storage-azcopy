@@ -235,7 +235,6 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		DstFileData: JobPartPlanDstFile{
 			TrailingDot: order.FileAttributes.TrailingDot,
 		},
-		IsNFSCopy: order.IsNFSCopy,
 	}
 
 	// Copy any strings into their respective fields

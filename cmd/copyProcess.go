@@ -3,15 +3,16 @@ package cmd
 import (
 	"bufio"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"os"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
-	cooked.jobID = azcopyCurrentJobID
+	cooked.jobID = Client.CurrentJobID
 	// set up the front end scanning logger
-	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, LogLevel, azcopyLogPathFolder, "-scanning")
+	azcopyScanningLogger = common.NewJobLogger(Client.CurrentJobID, LogLevel, common.LogPathFolder, "-scanning")
 	azcopyScanningLogger.OpenLog()
 	glcm.RegisterCloseFunc(func() {
 		azcopyScanningLogger.CloseLog()
@@ -19,7 +20,7 @@ func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 
 	// if no logging, set this empty so that we don't display the log location
 	if LogLevel == common.LogNone {
-		azcopyLogPathFolder = ""
+		common.LogPathFolder = ""
 	}
 
 	cooked.putBlobSize, err = blockSizeInBytes(cooked.PutBlobSizeMB)
@@ -164,9 +165,8 @@ func (cooked *CookedCopyCmdArgs) processArgs() (err error) {
 		}
 	}
 
-	SetNFSFlag(cooked.isNFSCopy)
 	if cooked.preserveInfo && !cooked.preservePermissions.IsTruthy() {
-		if cooked.isNFSCopy {
+		if common.IsNFSCopy() {
 			glcm.Info(PreserveNFSPermissionsDisabledMsg)
 		} else {
 			glcm.Info(PreservePermissionsDisabledMsg)
