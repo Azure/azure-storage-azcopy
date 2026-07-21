@@ -3393,8 +3393,10 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_HardlinkToSymlink(svm *Scenari
 		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	if hardlinkType == common.PreserveHardlinkHandlingType {
-		ValidateHardlinksTransferCount(svm, stdOut, 1)
-		ValidateSymlinksTransferCount(svm, stdOut, 1)
+		// A hard link to a symlink is transferred as a hard link but counted as a symlink
+		// (matching the kernel's find -type l): 2 symlink names, 0 true hard links.
+		ValidateHardlinksTransferCount(svm, stdOut, 0)
+		ValidateSymlinksTransferCount(svm, stdOut, 2)
 	} else if hardlinkType == common.SkipHardlinkHandlingType {
 		ValidateHardlinksSkippedCount(svm, stdOut, 0)
 		ValidateSymlinksTransferCount(svm, stdOut, 2)
@@ -3413,11 +3415,12 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_HardlinkToSymlink(svm *Scenari
 //	hlink1_to_sym.txt        (hardlink → sym_to_target.txt)
 //	hlink2_to_sym.txt        (hardlink → sym_to_target.txt)
 //
-// Expected:
-//   - target.txt as regular file
-//   - sym_to_target.txt as symlink (anchor)
-//   - hlink1_to_sym.txt and hlink2_to_sym.txt as hardlinks
-//   - ValidateHardlinksTransferCount == 3 (anchor symlink + 2 hardlinks)
+// Expected (hardlinks=preserve):
+//   - target.txt transferred as regular file
+//   - sym_to_target.txt, hlink1_to_sym.txt, hlink2_to_sym.txt all live on one symlink inode;
+//     the anchor is transferred as a symlink and the other two as hard links.
+//   - For reporting, all three names are counted as symlinks to match the kernel (find -type l):
+//     SymlinksTransferCount == 3, HardlinksTransferCount == 0.
 func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_MultipleHardlinksToSymlink(svm *ScenarioVariationManager) {
 
 	fromTo := NamedResolveVariation(svm, map[string]common.FromTo{
@@ -3520,8 +3523,10 @@ func (s *FilesNFSTestSuite) Scenario_HardlinkCopy_MultipleHardlinksToSymlink(svm
 		hardlinkHandling: common.PreserveHardlinkHandlingType})
 
 	if hardlinkType == common.PreserveHardlinkHandlingType {
-		ValidateHardlinksTransferCount(svm, stdOut, 2)
-		ValidateSymlinksTransferCount(svm, stdOut, 1)
+		// The 2 hard links to the symlink are transferred as hard links but counted as symlinks
+		// (matching the kernel's find -type l): 3 symlink names, 0 true hard links.
+		ValidateHardlinksTransferCount(svm, stdOut, 0)
+		ValidateSymlinksTransferCount(svm, stdOut, 3)
 	} else if hardlinkType == common.SkipHardlinkHandlingType {
 		ValidateHardlinksSkippedCount(svm, stdOut, 0)
 		ValidateSymlinksTransferCount(svm, stdOut, 3)
