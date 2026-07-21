@@ -42,10 +42,6 @@ var persistentCache = func() azidentity.Cache {
 
 // ===== Root token impl =====
 
-func (t *token) GetTokenCredential() (azcore.TokenCredential, error) {
-	return t.tokenImpl.getTokenCredential(t.TokenHeader)
-}
-
 func (t token) MarshalJSON() ([]byte, error) {
 	type TokenImpl tokenImpl
 	type rawStruct struct {
@@ -89,18 +85,39 @@ func (t *token) UnmarshalJSON(buf []byte) error {
 	return nil
 }
 
+func (t token) tokenStruct() {
+}
+
+func (t token) Header() TokenHeader {
+	return t.TokenHeader
+}
+
+func (t *token) TokenCredential(ctx context.Context) (azcore.TokenCredential, error) {
+	if t.cachedToken != nil {
+		return t.cachedToken, nil
+	}
+
+	tc, err := t.getTokenCredential(t.Header(), ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	t.cachedToken = tc
+	return tc, nil
+}
+
 // ========== SPN impl ==========
 
 func (t tokenInfoSPN) tokenImpl() {}
 
-func (t tokenInfoSPN) fromLoginTokenOptions(opts LoginTokenOptions) tokenImpl {
+func (t tokenInfoSPN) fromLoginTokenOptions(opts NewTokenOptions) tokenImpl {
 	t.ApplicationID = opts.ApplicationID
 	t.Cert = opts.CertificateData
 	t.Secret = opts.ClientSecret
 	return t
 }
 
-func (t tokenInfoSPN) getTokenCredential(header TokenHeader) (azcore.TokenCredential, error) {
+func (t tokenInfoSPN) getTokenCredential(header TokenHeader, ctx context.Context) (azcore.TokenCredential, error) {
 	if t.Cert != "" {
 		return t.getTokenCert(header)
 	}
@@ -173,14 +190,14 @@ func (t tokenInfoSPN) fromCompat(compat compatTokenInfo) tokenImpl {
 
 func (t tokenInfoManagedIdentity) tokenImpl() {}
 
-func (t tokenInfoManagedIdentity) fromLoginTokenOptions(opts LoginTokenOptions) tokenImpl {
+func (t tokenInfoManagedIdentity) fromLoginTokenOptions(opts NewTokenOptions) tokenImpl {
 	t.ClientID = opts.IdentityClientID
 	t.ObjectID = opts.IdentityObjectID
 	t.MSIResID = opts.IdentityResourceID
 	return t
 }
 
-func (t tokenInfoManagedIdentity) getTokenCredential(header TokenHeader) (azcore.TokenCredential, error) {
+func (t tokenInfoManagedIdentity) getTokenCredential(header TokenHeader, ctx context.Context) (azcore.TokenCredential, error) {
 	var id azidentity.ManagedIDKind
 	if t.ClientID != "" {
 		id = azidentity.ClientID(t.ClientID)
@@ -211,9 +228,9 @@ func (t tokenInfoManagedIdentity) fromCompat(compat compatTokenInfo) tokenImpl {
 
 func (t tokenInfoCLI) tokenImpl() {}
 
-func (t tokenInfoCLI) fromLoginTokenOptions(opts LoginTokenOptions) tokenImpl { return t }
+func (t tokenInfoCLI) fromLoginTokenOptions(opts NewTokenOptions) tokenImpl { return t }
 
-func (t tokenInfoCLI) getTokenCredential(header TokenHeader) (azcore.TokenCredential, error) {
+func (t tokenInfoCLI) getTokenCredential(header TokenHeader, ctx context.Context) (azcore.TokenCredential, error) {
 	return azidentity.NewAzureCLICredential(&azidentity.AzureCLICredentialOptions{TenantID: header.Tenant})
 }
 
@@ -225,9 +242,9 @@ func (t tokenInfoCLI) fromCompat(compat compatTokenInfo) tokenImpl {
 
 func (t tokenInfoPSCred) tokenImpl() {}
 
-func (t tokenInfoPSCred) fromLoginTokenOptions(opts LoginTokenOptions) tokenImpl { return t }
+func (t tokenInfoPSCred) fromLoginTokenOptions(opts NewTokenOptions) tokenImpl { return t }
 
-func (t tokenInfoPSCred) getTokenCredential(header TokenHeader) (azcore.TokenCredential, error) {
+func (t tokenInfoPSCred) getTokenCredential(header TokenHeader, ctx context.Context) (azcore.TokenCredential, error) {
 	return token_providers.NewPowershellContextCredential(&token_providers.PowershellContextCredentialOptions{TenantID: header.Tenant})
 }
 
@@ -239,7 +256,7 @@ func (t tokenInfoPSCred) fromCompat(compat compatTokenInfo) tokenImpl {
 
 func (t *tokenInfoUserLogin) tokenImpl() {}
 
-func (t *tokenInfoUserLogin) fromLoginTokenOptions(opts LoginTokenOptions) tokenImpl {
+func (t *tokenInfoUserLogin) fromLoginTokenOptions(opts NewTokenOptions) tokenImpl {
 	t.ApplicationID = opts.ApplicationID
 	switch opts.LoginType {
 	case enum.EAutoLoginType.Interactive():
@@ -253,20 +270,28 @@ func (t *tokenInfoUserLogin) fromLoginTokenOptions(opts LoginTokenOptions) token
 	return t
 }
 
-func (t *tokenInfoUserLogin) getTokenCredential(header TokenHeader) (tc azcore.TokenCredential, err error) {
+func (t *tokenInfoUserLogin) getTokenCredential(header TokenHeader, ctx context.Context) (azcore.TokenCredential, error) {
+	var tc AuthenticateToken
+	var err error
 	var authorityHost *url.URL
 	authorityHost, err = url.Parse(header.ActiveDirectoryEndpoint)
 	if err != nil {
 		return nil, err
 	}
 
+	// This should only be nil or empty, provided we've never authenticated before, or failed the last time.
+	// If this was persisted to storage, it should have a good record intact, so this is irrelevant.
 	if t.AuthRecord == nil {
 		t.AuthRecord = &azidentity.AuthenticationRecord{}
 	}
 
+	// We need to update the authentication record, post-authenticate, in two places-- *technically* 3 if we're considering the variety of options.
+	// We grab a pointer to the AuthenticationRecord of our opts to apply that change.
+	var optRecord *azidentity.AuthenticationRecord
+
 	switch t.InteractionType {
 	case enum.EInteractiveLoginType.Device():
-		return azidentity.NewDeviceCodeCredential(&azidentity.DeviceCodeCredentialOptions{
+		opts := &azidentity.DeviceCodeCredentialOptions{
 			TenantID:                       header.Tenant,
 			ClientID:                       t.ApplicationID,
 			DisableAutomaticAuthentication: true,
@@ -276,9 +301,12 @@ func (t *tokenInfoUserLogin) getTokenCredential(header TokenHeader) (tc azcore.T
 				Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: authorityHost.String()},
 				Transport: newAzcopyHTTPClient(),
 			},
-		})
+		}
+		optRecord = &opts.AuthenticationRecord
+
+		tc, err = azidentity.NewDeviceCodeCredential(opts)
 	case enum.EInteractiveLoginType.Browser():
-		return azidentity.NewInteractiveBrowserCredential(&azidentity.InteractiveBrowserCredentialOptions{
+		opts := &azidentity.InteractiveBrowserCredentialOptions{
 			TenantID:             header.Tenant,
 			ClientID:             t.ApplicationID,
 			AuthenticationRecord: *t.AuthRecord,
@@ -287,10 +315,30 @@ func (t *tokenInfoUserLogin) getTokenCredential(header TokenHeader) (tc azcore.T
 				Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: authorityHost.String()},
 				Transport: newAzcopyHTTPClient(),
 			},
-		})
+		}
+		optRecord = &opts.AuthenticationRecord
+
+		tc, err = azidentity.NewInteractiveBrowserCredential(opts)
 	default:
-		return nil, fmt.Errorf("unknown interactive login type: %s", t.InteractionType)
+		tc, err = nil, fmt.Errorf("unknown interactive login type: %s", t.InteractionType)
 	}
+
+	// Since this should, at this point, only be empty if we've never authenticated before, we'll self-resolve before returning, like the other credentials.
+	if tc != nil && *optRecord == (azidentity.AuthenticationRecord{}) {
+		// If there's no auth record, we just need to authenticate to create the record.
+		*t.AuthRecord, err = tc.Authenticate(ctx, &policy.TokenRequestOptions{
+			Scopes: DefaultAuthenticateScopes,
+		})
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to authenticate: %w", err)
+		}
+
+		// Persist the change to our option, but do not reset the token so that we don't have to re-fetch it from credential storage.
+		*optRecord = *t.AuthRecord
+	}
+
+	return tc, err
 }
 
 func (t *tokenInfoUserLogin) fromCompat(compat compatTokenInfo) tokenImpl {
@@ -305,9 +353,9 @@ func (t *tokenInfoUserLogin) fromCompat(compat compatTokenInfo) tokenImpl {
 
 func (t tokenInfoWorkload) tokenImpl() {}
 
-func (t tokenInfoWorkload) fromLoginTokenOptions(opts LoginTokenOptions) tokenImpl { return t }
+func (t tokenInfoWorkload) fromLoginTokenOptions(opts NewTokenOptions) tokenImpl { return t }
 
-func (t tokenInfoWorkload) getTokenCredential(header TokenHeader) (azcore.TokenCredential, error) {
+func (t tokenInfoWorkload) getTokenCredential(header TokenHeader, ctx context.Context) (azcore.TokenCredential, error) {
 	return azidentity.NewWorkloadIdentityCredential(&azidentity.WorkloadIdentityCredentialOptions{
 		ClientOptions: azcore.ClientOptions{
 			Transport: newAzcopyHTTPClient(),
@@ -326,9 +374,9 @@ const tokenStoreMinimumValidDuration = time.Minute * 5
 
 func (t *tokenInfoTokenStore) tokenImpl() {}
 
-func (t tokenInfoTokenStore) fromLoginTokenOptions(opts LoginTokenOptions) tokenImpl { return &t }
+func (t tokenInfoTokenStore) fromLoginTokenOptions(opts NewTokenOptions) tokenImpl { return &t }
 
-func (t *tokenInfoTokenStore) getTokenCredential(header TokenHeader) (azcore.TokenCredential, error) {
+func (t *tokenInfoTokenStore) getTokenCredential(header TokenHeader, ctx context.Context) (azcore.TokenCredential, error) {
 	t.nickname = header.Nickname
 	return t, nil
 }
@@ -364,7 +412,7 @@ func (t *tokenInfoTokenStore) GetToken(ctx context.Context, options policy.Token
 		return azcore.AccessToken{}, errors.New("token expired, no fresh token found in parent keyring")
 	}
 
-	ts, ok := fresh.tokenImpl.(*tokenInfoTokenStore)
+	ts, ok := fresh.(*token).tokenImpl.(*tokenInfoTokenStore)
 	if !ok {
 		return azcore.AccessToken{}, errors.New("token expired, no fresh token found in parent keyring")
 	}

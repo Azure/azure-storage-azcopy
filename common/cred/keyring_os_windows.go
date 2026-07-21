@@ -25,8 +25,8 @@ const (
 
 func GetOSKeyring(opts GetOSKeyringOptions) (Keyring, error) {
 	dpapiFolder, dpapiFilename := filepath.Split(*ternary.DefaultValue(opts.DPAPIFilePath, filepath.Join(enum.EEnvironmentVariable.AppDir().Get(), defaultTokenFileName)))
-	if cacheName, ok := enum.EEnvironmentVariable.LoginCacheName().Lookup(); ok {
-		dpapiFolder = filepath.Join(dpapiFolder, cacheName)
+	if opts.OSKeyringCacheName != nil {
+		dpapiFolder = filepath.Join(dpapiFolder, *opts.OSKeyringCacheName)
 	}
 
 	out := &windowsCredCache{
@@ -129,7 +129,7 @@ func (c *windowsCredCache) writeTokens() error {
 	return err
 }
 
-func (c *windowsCredCache) GetToken(nickname string) (token, bool) {
+func (c *windowsCredCache) GetToken(nickname string) (Token, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 
@@ -142,7 +142,7 @@ func (c *windowsCredCache) GetToken(nickname string) (token, bool) {
 		token, ok = c.keyringData[DefaultNickname]
 	}
 
-	return token, ok
+	return &token, ok
 }
 
 func (c *windowsCredCache) DeleteToken(nickname string) bool {
@@ -160,18 +160,20 @@ func (c *windowsCredCache) DeleteToken(nickname string) bool {
 	delete(c.keyringData, nickname)
 	err := c.writeTokens()
 	if err != nil {
-		c.loadTokens()
+		// if this fails too, it's probably not any worse than failing to write.
+		_ = c.loadTokens()
 		return false
 	}
 
 	return true
 }
 
-func (c *windowsCredCache) SaveToken(info token) error {
+func (c *windowsCredCache) SaveToken(tok Token) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+	info := tok.(*token)
 
-	c.keyringData[info.Nickname] = info
+	c.keyringData[info.Nickname] = *info
 	err := c.writeTokens()
 	if err != nil {
 		delete(c.keyringData, info.Nickname)

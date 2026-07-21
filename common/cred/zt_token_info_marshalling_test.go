@@ -99,7 +99,7 @@ func TestTokenStoreCredential(t *testing.T) {
 		},
 	}
 
-	cred, err := original.tokenImpl.getTokenCredential(original.TokenHeader)
+	cred, err := original.tokenImpl.getTokenCredential(original.TokenHeader, context.Background())
 	a.NoError(err)
 	a.NotNil(cred)
 
@@ -119,8 +119,8 @@ func TestTokenStoreRefetchExpired(t *testing.T) {
 	nickname := "tokenstore"
 
 	// Parent keyring has a fresh version of the same token.
-	parent := NewMemKeyring(map[string]token{
-		nickname: {
+	parent := NewMemKeyring(map[string]Token{
+		nickname: &token{
 			TokenHeader: TokenHeader{
 				Tenant:                  "tenant",
 				Nickname:                nickname,
@@ -144,7 +144,7 @@ func TestTokenStoreRefetchExpired(t *testing.T) {
 		ExpiresOn: expiredExpiry,
 	}
 
-	cred, err := original.getTokenCredential(TokenHeader{Nickname: nickname})
+	cred, err := original.getTokenCredential(TokenHeader{Nickname: nickname}, nil)
 	a.NoError(err)
 
 	at, err := cred.GetToken(context.TODO(), policy.TokenRequestOptions{})

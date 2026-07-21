@@ -34,8 +34,3 @@ type AuthenticateToken interface {
 	azcore.TokenCredential
 	Authenticate(ctx context.Context, opts *policy.TokenRequestOptions) (azidentity.AuthenticationRecord, error)
 }
-
-// DefaultAuthenticateScopes is the default set of OAuth scopes used when
-// manager must call Authenticate on a device code token that lacks an auth record.
-// Callers that need different scopes should override this before calling GetCredentials.
-var DefaultAuthenticateScopes = []string{"https://storage.azure.com/.default"}

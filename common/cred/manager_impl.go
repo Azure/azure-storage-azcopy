@@ -23,17 +23,11 @@ package cred
 import (
 	"context"
 	"errors"
-	"sync"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
 type managerImpl struct {
-	newLoginLock *sync.RWMutex
-	newLogins    *memKeyring
-
 	rings []Keyring
 }
 
@@ -59,9 +53,7 @@ func (m *managerImpl) ListCredentials() ([]TokenHeader, error) {
 // I.e. [ GetIntegrationKeyring(), GetEnvironmentKeyring(), GetOSKeyring() ] would only ever write to the OS keyring, but would pull from "external" keyrings first.
 func NewManager(keyrings ...Keyring) Manager {
 	return &managerImpl{
-		newLoginLock: &sync.RWMutex{},
-		newLogins:    &memKeyring{identities: make(map[string]token)},
-		rings:        keyrings,
+		rings: keyrings,
 	}
 }
 
@@ -78,7 +70,7 @@ func (m *managerImpl) ProbeToken(nickname string) (TokenHeader, bool) {
 			continue
 		}
 
-		return token.TokenHeader, true
+		return token.Header(), true
 	}
 
 	return TokenHeader{}, false
@@ -86,28 +78,31 @@ func (m *managerImpl) ProbeToken(nickname string) (TokenHeader, bool) {
 
 // GetCredentials returns the credential matching the nickname, in the order
 // returned by registered keyrings.
-func (m *managerImpl) GetCredentials(nickname string) (azcore.TokenCredential, error) {
+func (m *managerImpl) GetCredentials(nickname string, ctx context.Context) (azcore.TokenCredential, error) {
 	if nickname == "" {
 		nickname = DefaultNickname
 	}
 
 	for _, v := range m.rings {
-		token, ok := v.GetToken(nickname)
+		result, ok := v.GetToken(nickname)
 		if !ok {
 			continue
 		}
 
+		rawResult := result.(*token)
+
 		// For TokenStore tokens, hand the originating keyring as the
 		// parent so GetToken can re-fetch a fresh access token when the
 		// cached one expires.
-		if ts, ok := token.tokenImpl.(*tokenInfoTokenStore); ok {
+		if ts, ok := rawResult.tokenImpl.(*tokenInfoTokenStore); ok {
 			ts.parent = v
 		}
 
-		cred, err := m.resolveCredential(&token)
+		cred, err := rawResult.tokenImpl.getTokenCredential(rawResult.TokenHeader, ctx)
 		if err != nil {
-			continue
+			return nil, err
 		}
+		rawResult.cachedToken = cred
 
 		return cred, nil
 	}
@@ -115,79 +110,18 @@ func (m *managerImpl) GetCredentials(nickname string) (azcore.TokenCredential, e
 	return nil, errors.New("no credential found for nickname")
 }
 
-// resolveCredential turns a token into a working azcore.TokenCredential.
-func (m *managerImpl) resolveCredential(token *token) (azcore.TokenCredential, error) {
-	// Device code with no auth record: authenticate on demand.
-	if userLogin, ok := token.tokenImpl.(*tokenInfoUserLogin); ok {
-		if userLogin.InteractionType == enum.EInteractiveLoginType.Device() && userLogin.AuthRecord == nil {
-			cred, err := token.tokenImpl.getTokenCredential(token.TokenHeader)
-			if err != nil {
-				return nil, err
-			}
+func (m *managerImpl) DoLogin(opts NewTokenOptions, ctx context.Context) (azcore.TokenCredential, error) {
+	result := NewToken(opts).(*token)
 
-			authToken, ok := cred.(AuthenticateToken)
-			if !ok {
-				return nil, errors.New("device code credential does not support Authenticate")
-			}
-
-			record, err := authToken.Authenticate(context.TODO(), &policy.TokenRequestOptions{
-				EnableCAE: true,
-				Scopes:    DefaultAuthenticateScopes,
-			})
-			if err != nil {
-				return nil, err
-			}
-
-			userLogin.AuthRecord = &record
-			token.tokenImpl = userLogin
-
-			token.cachedToken = cred
-			return cred, nil
-		}
-	}
-
-	cred, err := token.tokenImpl.getTokenCredential(token.TokenHeader)
-	if err != nil {
-		return nil, err
-	}
-	token.cachedToken = cred
-	return cred, nil
-}
-
-func (m *managerImpl) DoLogin(opts LoginTokenOptions, ctx context.Context) (azcore.TokenCredential, error) {
-	token := newLoginToken(opts)
-
-	cred, err := token.tokenImpl.getTokenCredential(token.TokenHeader)
+	cred, err := result.tokenImpl.getTokenCredential(result.Header(), ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	if userLogin, ok := token.tokenImpl.(*tokenInfoUserLogin); ok {
-		authToken, ok := cred.(AuthenticateToken)
-		if !ok {
-			return nil, errors.New("user login credential does not support Authenticate")
-		}
-
-		record, err := authToken.Authenticate(ctx, &policy.TokenRequestOptions{
-			EnableCAE: true,
-			Scopes:    DefaultAuthenticateScopes,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		userLogin.AuthRecord = &record
-		token.tokenImpl = userLogin
-
-		if token.Tenant == DefaultTenantID {
-			token.Tenant = userLogin.AuthRecord.TenantID
-		}
-	}
-
-	token.cachedToken = cred
+	result.cachedToken = cred
 
 	if opts.SaveCredential {
-		if err := m.saveToken(token); err != nil {
+		if err := m.saveToken(result); err != nil {
 			return nil, err
 		}
 	}
@@ -196,7 +130,7 @@ func (m *managerImpl) DoLogin(opts LoginTokenOptions, ctx context.Context) (azco
 }
 
 // saveToken searches through Keyrings for a RWKeyring, and places in the first available one. There shouldn't be multiple specified.
-func (m *managerImpl) saveToken(info token) error {
+func (m *managerImpl) saveToken(info Token) error {
 	for _, v := range m.rings {
 		rwKeyring, ok := v.(RWKeyring)
 		if !ok {

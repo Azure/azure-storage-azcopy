@@ -248,7 +248,7 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 		SharedKeyAllowed:   true,
 		PreferredTokenName: TargetCredentialName,
 		CpkOptions:         common.CpkOptions{},
-		TokenManager:       nil,
+		TokenManager:       GetCredentialManager(),
 	})
 	if err != nil {
 		return err

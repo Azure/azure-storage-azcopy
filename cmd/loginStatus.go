@@ -92,7 +92,7 @@ func (options LoginStatusOptions) process() LoginStatus {
 			AuthMethod:  c.LoginType.String(),
 		}
 
-		if targetCred, err := manager.GetCredentials(c.Nickname); err != nil {
+		if targetCred, err := manager.GetCredentials(c.Nickname, nil); err != nil {
 			result.Error = err
 		} else {
 			_, err = cred.NewScopedToken(targetCred, enum.ECredentialType.OAuthToken()).GetToken(context.Background(), policy.TokenRequestOptions{})

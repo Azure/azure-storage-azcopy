@@ -1,11 +1,11 @@
 package cred
 
 type memKeyring struct {
-	identities map[string]token
+	identities map[string]Token
 }
 
-func NewMemKeyring(identities map[string]token) Keyring {
-	var out = make(map[string]token)
+func NewMemKeyring(identities map[string]Token) Keyring {
+	var out = make(map[string]Token)
 	for k, v := range identities {
 		out[k] = v
 	}
@@ -15,7 +15,7 @@ func NewMemKeyring(identities map[string]token) Keyring {
 	}
 }
 
-func (m *memKeyring) GetToken(nickname string) (token, bool) {
+func (m *memKeyring) GetToken(nickname string) (Token, bool) {
 	if nickname == "" {
 		nickname = DefaultNickname
 	}
@@ -31,7 +31,7 @@ func (m *memKeyring) GetToken(nickname string) (token, bool) {
 func (m *memKeyring) ListTokens() ([]TokenHeader, error) {
 	var out []TokenHeader
 	for _, v := range m.identities {
-		out = append(out, v.TokenHeader)
+		out = append(out, v.Header())
 	}
 
 	return out, nil

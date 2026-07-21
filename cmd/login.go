@@ -189,7 +189,7 @@ func (args rawLoginArgs) toOptions() (LoginOptions, error) {
 }
 
 func (options LoginOptions) process() error {
-	opts := cred.LoginTokenOptions{
+	opts := cred.NewTokenOptions{
 		TenantID:           options.TenantID,
 		AADEndpoint:        options.AADEndpoint,
 		LoginType:          options.LoginType,

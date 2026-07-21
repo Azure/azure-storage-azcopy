@@ -53,7 +53,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 		Context:            ctx,
 		CanBePublic:        true,
 		SharedKeyAllowed:   false,
-		PreferredTokenName: SourceCredentialName,
+		PreferredTokenName: TargetCredentialName,
 		CpkOptions:         cca.CpkOptions,
 		TokenManager:       GetCredentialManager(),
 	})
@@ -120,7 +120,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 		cca.trailingDot = common.ETrailingDotOption.Disable()
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, cca.credentialInfo.TokenCredential)
+	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, srcCredInfo.TokenCredential)
 	var fileClientOptions any
 	if cca.FromTo.From().IsFile() {
 		fileClientOptions = &common.FileClientOptions{AllowTrailingDot: cca.trailingDot.IsEnabled()}
@@ -128,8 +128,8 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	targetServiceClient, err := common.GetServiceClientForLocation(
 		cca.FromTo.From(),
 		cca.Source,
-		cca.credentialInfo.CredentialType,
-		cca.credentialInfo.TokenCredential,
+		srcCredInfo.CredentialType,
+		srcCredInfo.TokenCredential,
 		&options,
 		fileClientOptions,
 	)
@@ -172,9 +172,22 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	sourceURL, _ := cca.Source.String()
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, cca.credentialInfo.TokenCredential)
 
-	targetServiceClient, err := common.GetServiceClientForLocation(cca.FromTo.From(), cca.Source, cca.credentialInfo.CredentialType, cca.credentialInfo.TokenCredential, &options, nil)
+	srcCredInfo, err := GetTargetCredInfo(cca.Source, cca.FromTo.From(), GetTargetCredInfoOptions{
+		Context:            ctx,
+		CanBePublic:        true,
+		SharedKeyAllowed:   false,
+		PreferredTokenName: TargetCredentialName,
+		CpkOptions:         cca.CpkOptions,
+		TokenManager:       GetCredentialManager(),
+	})
+	if err != nil {
+		return err
+	}
+
+	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, srcCredInfo.TokenCredential)
+
+	targetServiceClient, err := common.GetServiceClientForLocation(cca.FromTo.From(), cca.Source, srcCredInfo.CredentialType, srcCredInfo.TokenCredential, &options, nil)
 	if err != nil {
 		return err
 	}

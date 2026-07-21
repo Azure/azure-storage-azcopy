@@ -86,6 +86,8 @@ const ( // initially supporting a limited set of verbs
 	AzCopyVerbJobsClean   AzCopyVerb = "jobs clean"
 	AzCopyVerbJobsRemove  AzCopyVerb = "jobs remove"
 	AzCopyVerbJobsShow    AzCopyVerb = "jobs show"
+	AzCopyVerbSetProperties AzCopyVerb = "set-properties"
+	AzCopyVerbMake         AzCopyVerb = "make"
 )
 
 type AzCopyTarget interface {
@@ -456,7 +458,11 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 				commandSpec.Flags = JobsListFlags{}
 			case AzCopyVerbJobsShow:
 				commandSpec.Flags = JobsShowFlags{}
-			default:
+		case AzCopyVerbSetProperties:
+			commandSpec.Flags = SetPropertiesFlags{}
+		case AzCopyVerbMake:
+			commandSpec.Flags = MakeFlags{}
+		default:
 				commandSpec.Flags = GlobalFlags{}
 			}
 		}
@@ -517,7 +523,7 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 			out = &AzCopyRawStdout{}
 
 		// Copy/sync/remove share the same output format
-		case commandSpec.Verb == AzCopyVerbCopy || commandSpec.Verb == AzCopyVerbSync || commandSpec.Verb == AzCopyVerbRemove:
+		case commandSpec.Verb == AzCopyVerbCopy || commandSpec.Verb == AzCopyVerbSync || commandSpec.Verb == AzCopyVerbRemove || commandSpec.Verb == AzCopyVerbSetProperties:
 			out = &AzCopyParsedCopySyncRemoveStdout{
 				JobPlanFolder: *commandSpec.Environment.JobPlanLocation,
 				LogFolder:     *commandSpec.Environment.LogLocation,

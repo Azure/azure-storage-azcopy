@@ -429,6 +429,7 @@ type RemoveFlags struct {
 	GlobalFlags
 	CommonFilterFlags
 
+	Cred            *string                       `flag:"cred"`
 	Recursive       *bool                         `flag:"recursive"`
 	ForceIfReadOnly *bool                         `flag:"force-if-read-only"`
 	ListOfFiles     []string                      `flag:"list-of-files"`
@@ -441,6 +442,26 @@ type RemoveFlags struct {
 	CPKByValue      *bool                         `flag:"cpk-by-value"`
 }
 
+type SetPropertiesFlags struct {
+	GlobalFlags
+
+	Cred         *string                      `flag:"cred"`
+	Recursive    *bool                        `flag:"recursive"`
+	FromTo       *common.FromTo               `flag:"from-to"`
+	Metadata     *string                      `flag:"metadata"`
+	BlobTags     *string                      `flag:"blob-tags"`
+	BlockBlobTier *common.BlockBlobTier      `flag:"block-blob-tier"`
+	DryRun       *bool                        `flag:"dry-run"`
+	TrailingDot  *common.TrailingDotOption    `flag:"trailing-dot"`
+}
+
+type MakeFlags struct {
+	GlobalFlags
+
+	Cred     *string  `flag:"cred"`
+	QuotaGB  *uint32  `flag:"quota-gb"`
+}
+
 func (r RemoveFlags) SerializeListingFile(in any, scenarioAsserter ScenarioAsserter, ctx context.Context) {
 	CopyFlags{}.SerializeListingFile(in, scenarioAsserter, ctx)
 }
@@ -448,6 +469,7 @@ func (r RemoveFlags) SerializeListingFile(in any, scenarioAsserter ScenarioAsser
 type ListFlags struct {
 	GlobalFlags
 
+	Cred            *string                   `flag:"cred"`
 	MachineReadable *bool                     `flag:"machine-readable"`
 	RunningTally    *bool                     `flag:"running-tally"`
 	MegaUnits       *bool                     `flag:"mega-units"`
