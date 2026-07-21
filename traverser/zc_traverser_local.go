@@ -833,6 +833,10 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 							}
 
 							entityType = resolveHardlinkedSymlinkEntity(IsSymbolicLink(fileInfo), targetHardlinkFile, entityType)
+							// A subsequent hard link (targetHardlinkFile != "") whose underlying inode is a
+							// symlink is still transferred as a hard link, but must be counted as a symlink
+							// so the job summary matches the kernel (find -type l).
+							nfsCtx.HardlinkedSymlink = IsSymbolicLink(fileInfo) && entityType == common.EEntityType.Hardlink()
 						}
 					}
 				}
@@ -942,6 +946,8 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor ObjectPr
 							}
 
 							entityType = resolveHardlinkedSymlinkEntity(IsSymbolicLink(fileInfo), targetHardlinkFile, entityType)
+							// A subsequent hard link to a symlink is transferred as a hard link but counted as a symlink.
+							NfsHardlinkManager.HardlinkedSymlink = IsSymbolicLink(fileInfo) && entityType == common.EEntityType.Hardlink()
 						}
 					} else if !IsRegularFile(fileInfo) && !isPreservedSymlink {
 						entityType = common.EEntityType.Other()

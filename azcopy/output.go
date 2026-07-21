@@ -100,7 +100,7 @@ Final Job Status: %v%s%s
 		result.FolderPropertyTransfers,
 		result.SymlinkTransfers,
 		result.TotalTransfers,
-		result.TransfersCompleted-result.FoldersCompleted-result.HardlinksCompleted,
+		result.TransfersCompleted-result.FoldersCompleted-result.HardlinksCompleted-result.SymlinksCompleted,
 		result.FoldersCompleted,
 		result.TransfersFailed-result.FoldersFailed-result.HardlinksFailed,
 		result.FoldersFailed,

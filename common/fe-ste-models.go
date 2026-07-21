@@ -1196,6 +1196,10 @@ type CopyTransfer struct {
 
 	BlobSnapshotID     string
 	TargetHardlinkFile string // used only for NFS transfers to indicate the target hardlink file path
+	// HardlinkedSymlink indicates that this entry is a hard link whose underlying inode is a symbolic link.
+	// The transfer is still performed as a hard link (EntityType == Hardlink), but for reporting/counting
+	// purposes it is treated as a symlink so that the totals match the kernel (find -type l).
+	HardlinkedSymlink bool
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

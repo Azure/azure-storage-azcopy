@@ -154,6 +154,19 @@ func (s *CopyTransferProcessor) scheduleTransfer(srcRelativePath, dstRelativePat
 	return nil
 }
 
+// countHardlinkBatch splits a batch of buffered hardlink transfers into the number of true
+// hard links and the number of hard-linked symlinks (which are counted as symlinks).
+func countHardlinkBatch(list []common.CopyTransfer) (hardlinkCount, symlinkCount uint32) {
+	for i := range list {
+		if list[i].HardlinkedSymlink {
+			symlinkCount++
+		} else {
+			hardlinkCount++
+		}
+	}
+	return hardlinkCount, symlinkCount
+}
+
 func (s *CopyTransferProcessor) readyForDispatch() bool {
 	return len(s.dispatcher.PendingTransfers.List) == s.numOfTransfersPerPart
 }
@@ -201,7 +214,13 @@ func (s *CopyTransferProcessor) appendTransfer(copyTransfer common.CopyTransfer)
 		copyTransfer.TargetHardlinkFile != "" {
 
 		s.dispatcher.PendingHardlinksTransfers.List = append(s.dispatcher.PendingHardlinksTransfers.List, copyTransfer)
-		s.dispatcher.PendingHardlinksTransfers.HardlinksTransferCount++
+		// A hard link whose underlying inode is a symlink is transferred as a hard link, but counted
+		// as a symlink so the summary matches the kernel (find -type l).
+		if copyTransfer.HardlinkedSymlink {
+			s.dispatcher.PendingHardlinksTransfers.SymlinkTransferCount++
+		} else {
+			s.dispatcher.PendingHardlinksTransfers.HardlinksTransferCount++
+		}
 
 	} else {
 
@@ -253,13 +272,19 @@ func (s *CopyTransferProcessor) DispatchFinalPart() (copyJobInitiated bool, err 
 		// Dispatch all buffered hardlink transfers in batches, with the very
 		// last batch (or last mixed batch if no hardlinks) being the final part.
 		for len(s.dispatcher.PendingHardlinksTransfers.List) > s.numOfTransfersPerPart {
+			batchList := make([]common.CopyTransfer, s.numOfTransfersPerPart)
+			copy(batchList, s.dispatcher.PendingHardlinksTransfers.List[:s.numOfTransfersPerPart])
+			// Count hardlinked-symlinks as symlinks and true hard links as hard links, rather than
+			// assuming every buffered entry is a hard link.
+			hardlinkCount, symlinkCount := countHardlinkBatch(batchList)
 			batch := common.Transfers{
-				List:                   make([]common.CopyTransfer, s.numOfTransfersPerPart),
-				HardlinksTransferCount: uint32(s.numOfTransfersPerPart),
+				List:                   batchList,
+				HardlinksTransferCount: hardlinkCount,
+				SymlinkTransferCount:   symlinkCount,
 			}
-			copy(batch.List, s.dispatcher.PendingHardlinksTransfers.List[:s.numOfTransfersPerPart])
 			s.dispatcher.PendingHardlinksTransfers.List = s.dispatcher.PendingHardlinksTransfers.List[s.numOfTransfersPerPart:]
-			s.dispatcher.PendingHardlinksTransfers.HardlinksTransferCount -= uint32(s.numOfTransfersPerPart)
+			s.dispatcher.PendingHardlinksTransfers.HardlinksTransferCount -= hardlinkCount
+			s.dispatcher.PendingHardlinksTransfers.SymlinkTransferCount -= symlinkCount
 
 			s.CopyJobTemplate.Transfers = batch
 			s.CopyJobTemplate.JobPartType = common.EJobPartType.Hardlink()
