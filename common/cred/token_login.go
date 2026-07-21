@@ -48,7 +48,7 @@ type LoginNewTokenOptions struct {
 func (opts LoginNewTokenOptions) NewToken() Token {
 	switch opts.LoginType {
 	case enum.EAutoLoginType.SPN():
-		return SPNTokenOptions{
+		return NewSPNTokenOptions{
 			TenantID:        opts.TenantID,
 			AADEndpoint:     opts.AADEndpoint,
 			LoginType:       opts.LoginType,
@@ -57,7 +57,7 @@ func (opts LoginNewTokenOptions) NewToken() Token {
 			ClientSecret:    opts.ClientSecret,
 		}.NewToken()
 	case enum.EAutoLoginType.MSI():
-		return MSITokenOptions{
+		return NewMSITokenOptions{
 			TenantID:           opts.TenantID,
 			AADEndpoint:        opts.AADEndpoint,
 			LoginType:          opts.LoginType,
@@ -66,7 +66,7 @@ func (opts LoginNewTokenOptions) NewToken() Token {
 			IdentityResourceID: opts.IdentityResourceID,
 		}.NewToken()
 	case enum.EAutoLoginType.Device():
-		return UserLoginTokenOptions{
+		return NewUserLoginTokenOptions{
 			TenantID:        opts.TenantID,
 			AADEndpoint:     opts.AADEndpoint,
 			LoginType:       opts.LoginType,
@@ -74,7 +74,7 @@ func (opts LoginNewTokenOptions) NewToken() Token {
 			InteractionType: enum.EInteractiveLoginType.Device(),
 		}.NewToken()
 	case enum.EAutoLoginType.Interactive():
-		return UserLoginTokenOptions{
+		return NewUserLoginTokenOptions{
 			TenantID:        opts.TenantID,
 			AADEndpoint:     opts.AADEndpoint,
 			LoginType:       opts.LoginType,
@@ -82,19 +82,19 @@ func (opts LoginNewTokenOptions) NewToken() Token {
 			InteractionType: enum.EInteractiveLoginType.Browser(),
 		}.NewToken()
 	case enum.EAutoLoginType.AzCLI():
-		return AzureCLITokenOptions{
+		return NewAzureCLITokenOptions{
 			TenantID:    opts.TenantID,
 			AADEndpoint: opts.AADEndpoint,
 			LoginType:   opts.LoginType,
 		}.NewToken()
 	case enum.EAutoLoginType.PsCred():
-		return PSCredTokenOptions{
+		return NewPSCredTokenOptions{
 			TenantID:    opts.TenantID,
 			AADEndpoint: opts.AADEndpoint,
 			LoginType:   opts.LoginType,
 		}.NewToken()
 	case enum.EAutoLoginType.Workload():
-		return WorkloadTokenOptions{
+		return NewWorkloadTokenOptions{
 			TenantID:    opts.TenantID,
 			AADEndpoint: opts.AADEndpoint,
 			LoginType:   opts.LoginType,
