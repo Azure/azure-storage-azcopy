@@ -37,6 +37,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common/buildmode"
 	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
+	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -72,7 +73,13 @@ var GetCredentialManager = func() func() cred.Manager {
 			} else {
 				keyrings = append(keyrings, env)
 			}
-			if osKeyring, err := cred.GetOSKeyring(cred.GetOSKeyringOptions{}); err != nil {
+
+			cacheName, ok := enum.EEnvironmentVariable.LoginCacheName().Lookup()
+
+			if osKeyring, err := cred.GetOSKeyring(cred.GetOSKeyringOptions{
+				// for DPAPI file path and RootKey, rely upon default values.
+				OSKeyringCacheName: ternary.Iff(ok, &cacheName, nil),
+			}); err != nil {
 				glcm.Warn(fmt.Sprintf("could not get OS keyring: %s", err))
 			} else {
 				keyrings = append(keyrings, osKeyring)
@@ -163,7 +170,7 @@ func getBlobBasedCredInfo(resourceString common.ResourceString, location common.
 		if opts.TokenManager == nil {
 			return cred.CredentialInfo{}, common.NewAzError(common.EAzError.LoginCredMissing(), "No SAS token or OAuth token is present and the resource is not public")
 		}
-		if _, err := opts.TokenManager.GetCredentials(opts.PreferredTokenName); err != nil {
+		if _, err := opts.TokenManager.GetCredentials(opts.PreferredTokenName, nil); err != nil {
 			return cred.CredentialInfo{}, common.NewAzError(common.EAzError.LoginCredMissing(), "No SAS token or OAuth token is present and the resource is not public")
 		}
 		return NewCredInfoRaw(enum.ECredentialType.MDOAuthToken()), nil
@@ -186,7 +193,7 @@ func getBlobBasedCredInfo(resourceString common.ResourceString, location common.
 
 	// If we have a token manager, see if we can fetch the token. If we can, we know what we're using!
 	if opts.TokenManager != nil {
-		if tc, err := opts.TokenManager.GetCredentials(opts.PreferredTokenName); err == nil {
+		if tc, err := opts.TokenManager.GetCredentials(opts.PreferredTokenName, nil); err == nil {
 			return NewCredInfoRaw(enum.ECredentialType.OAuthToken(), credInfoOptions{TokenCredential: tc}), nil
 		}
 	}
@@ -212,8 +219,10 @@ func getFileCredInfo(resourceString common.ResourceString, opts GetTargetCredInf
 
 	// Try to fetch OAuth if we can.
 	if opts.TokenManager != nil {
-		if _, err := opts.TokenManager.GetCredentials(opts.PreferredTokenName); err == nil {
-			return NewCredInfoRaw(enum.ECredentialType.OAuthToken()), nil
+		if tokenCred, err := opts.TokenManager.GetCredentials(opts.PreferredTokenName, nil); err == nil {
+			return NewCredInfoRaw(enum.ECredentialType.OAuthToken(), credInfoOptions{
+				TokenCredential: tokenCred,
+			}), nil
 		}
 	}
 

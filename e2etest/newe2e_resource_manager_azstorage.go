@@ -168,11 +168,11 @@ func (acct *AzureAccountResourceManager) GetService(a Asserter, location common.
 		var client *fileservice.Client
 		var err error
 		if acct.TokenCredential != nil {
-			client, err = fileservice.NewClient(uri, acct.TokenCredential, &fileservice.ClientOptions{AllowTrailingDot: to.Ptr(true)})
+			client, err = fileservice.NewClient(uri, acct.TokenCredential, &fileservice.ClientOptions{AllowTrailingDot: to.Ptr(true), FileRequestIntent: to.Ptr(fileservice.ShareTokenIntentBackup)})
 		} else {
 			sharedKey, skErr := fileservice.NewSharedKeyCredential(acct.InternalAccountName, acct.InternalAccountKey)
 			a.NoError("Create shared key", skErr)
-			client, err = fileservice.NewClientWithSharedKeyCredential(uri, sharedKey, &fileservice.ClientOptions{AllowTrailingDot: to.Ptr(true)})
+			client, err = fileservice.NewClientWithSharedKeyCredential(uri, sharedKey, &fileservice.ClientOptions{AllowTrailingDot: to.Ptr(true), FileRequestIntent: to.Ptr(fileservice.ShareTokenIntentBackup)})
 		}
 		a.NoError("Create File client", err)
 

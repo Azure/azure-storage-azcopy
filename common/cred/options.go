@@ -1,9 +1,10 @@
 package cred
 
 type GetOSKeyringOptions struct {
-	DPAPIFilePath *string
+	OSKeyringCacheName *string
 
-	RootKey *string
+	DPAPIFilePath *string
+	RootKey       *string
 }
 
 const DefaultNickname = "*"

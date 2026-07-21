@@ -9,7 +9,6 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/wastore/keyctl"
 )
@@ -19,7 +18,7 @@ const (
 )
 
 func GetOSKeyring(opts GetOSKeyringOptions) (Keyring, error) {
-	loginCacheName := enum.EEnvironmentVariable.LoginCacheName().Get()
+	loginCacheName := ternary.DerefOrZero(opts.OSKeyringCacheName)
 
 	return &linuxCredCache{
 		rootKeyName:      *ternary.DefaultValue(opts.RootKey, DefaultRootKeyName) + loginCacheName,

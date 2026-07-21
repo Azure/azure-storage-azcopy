@@ -61,7 +61,7 @@ func GetEnvironmentKeyring() (keyring Keyring, err error) {
 	return globalEnvKeyring, nil
 }
 
-func (e *keyringEnvVar) GetToken(nickname string) (token, bool) {
+func (e *keyringEnvVar) GetToken(nickname string) (Token, bool) {
 	if nickname == "" {
 		nickname = DefaultNickname
 	}
@@ -71,7 +71,7 @@ func (e *keyringEnvVar) GetToken(nickname string) (token, bool) {
 		token, ok = e.stash[DefaultNickname]
 	}
 
-	return token, ok
+	return &token, ok
 }
 
 func (e *keyringEnvVar) ListTokens() ([]TokenHeader, error) {

@@ -167,6 +167,9 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, enumeratorOpti
 		return nil, err
 	}
 
+	glcm.Info(fmt.Sprintf("Authorizing source with %s", srcCredInfo.CredentialType.String()))
+	glcm.Info(fmt.Sprintf("Authorizing destination with %s", dstCredInfo.CredentialType.String()))
+
 	// TODO: enable symlink support in a future release after evaluating the implications
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work

@@ -38,24 +38,24 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	srcCredInfo, err := GetTargetCredInfo(cca.Source, cca.FromTo.From(), GetTargetCredInfoOptions{
+	targetCredInfo, err := GetTargetCredInfo(cca.Source, cca.FromTo.From(), GetTargetCredInfoOptions{
 		Context:            ctx,
 		CanBePublic:        true,
 		SharedKeyAllowed:   false,
-		PreferredTokenName: SourceCredentialName,
+		PreferredTokenName: TargetCredentialName,
 		CpkOptions:         cca.CpkOptions,
 		TokenManager:       GetCredentialManager(),
 	})
 	if err != nil {
 		return nil, err
 	}
-	if cca.FromTo == common.EFromTo.FileNone() && (srcCredInfo.CredentialType == enum.ECredentialType.Anonymous() && cca.Source.SAS == "") {
+	if cca.FromTo == common.EFromTo.FileNone() && (targetCredInfo.CredentialType == enum.ECredentialType.Anonymous() && cca.Source.SAS == "") {
 		return nil, errors.New("a SAS token (or S3 access key) is required as a part of the input for set-properties on File Storage")
 	}
 
 	// Include-path is handled by ListOfFilesChannel.
 	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), ctx, InitResourceTraverserOptions{
-		Credential: &srcCredInfo,
+		Credential: &targetCredInfo,
 
 		ListOfFiles:      cca.ListOfFilesChannel,
 		ListOfVersionIDs: cca.ListOfVersionIDsChannel,
@@ -98,7 +98,7 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 		jobsAdmin.JobsAdmin.LogToJobLog(message, common.LogInfo)
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, cca.credentialInfo.TokenCredential)
+	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, targetCredInfo.TokenCredential)
 	var fileClientOptions any
 	if cca.FromTo.From() == common.ELocation.File() {
 		fileClientOptions = &common.FileClientOptions{AllowTrailingDot: cca.trailingDot.IsEnabled()}
@@ -107,8 +107,8 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 	targetServiceClient, err := common.GetServiceClientForLocation(
 		cca.FromTo.From(),
 		cca.Source,
-		cca.credentialInfo.CredentialType,
-		cca.credentialInfo.TokenCredential,
+		targetCredInfo.CredentialType,
+		targetCredInfo.TokenCredential,
 		&options,
 		fileClientOptions,
 	)

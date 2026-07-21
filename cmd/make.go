@@ -91,7 +91,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 		Context:            ctx,
 		CanBePublic:        false,
 		SharedKeyAllowed:   true,
-		PreferredTokenName: DestCredentialName,
+		PreferredTokenName: TargetCredentialName,
 		CpkOptions:         common.CpkOptions{},
 		TokenManager:       GetCredentialManager(),
 	})
@@ -220,4 +220,5 @@ func init() {
 	makeCmd.PersistentFlags().Uint32Var(&rawArgs.quota, "quota-gb", 0, "Specifies the maximum size of the share in gigabytes (GiB), "+
 		"\n 0 means you accept the file service's default quota.")
 	rootCmd.AddCommand(makeCmd)
+	AddTargetCredFlags(makeCmd)
 }

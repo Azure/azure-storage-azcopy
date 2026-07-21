@@ -30,7 +30,7 @@ const (
 	DefaultActiveDirectoryEndpoint = "https://login.microsoftonline.com"
 )
 
-type LoginTokenOptions struct {
+type NewTokenOptions struct {
 	TenantID    string
 	AADEndpoint string
 	LoginType   enum.AutoLoginType
@@ -48,7 +48,7 @@ type LoginTokenOptions struct {
 	SaveCredential bool
 }
 
-func newLoginToken(opts LoginTokenOptions) token {
+func NewToken(opts NewTokenOptions) Token {
 	header := TokenHeader{
 		Tenant:                  ternary.Iff(opts.TenantID != "", opts.TenantID, DefaultTenantID),
 		Nickname:                ternary.Iff(opts.Nickname != "", opts.Nickname, DefaultNickname),
@@ -59,7 +59,7 @@ func newLoginToken(opts LoginTokenOptions) token {
 	impl := newTokenImpl(opts.LoginType)
 	impl = impl.fromLoginTokenOptions(opts)
 
-	return token{
+	return &token{
 		TokenHeader: header,
 		tokenImpl:   impl,
 	}

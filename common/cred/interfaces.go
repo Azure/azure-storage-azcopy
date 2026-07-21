@@ -15,11 +15,11 @@ type Manager interface {
 	// GetCredentials returns the credential matching the nickname, or nil if not found.
 	// For device code tokens that lack an auth record, manager calls Authenticate to acquire one.
 	// If nickname is empty or "*", the default token is returned.
-	GetCredentials(nickname string) (azcore.TokenCredential, error)
+	GetCredentials(nickname string, ctx context.Context) (azcore.TokenCredential, error)
 
 	// DoLogin uses the login token options to perform a login,
 	// and saves the token, if SaveCredential is set.
-	DoLogin(opts LoginTokenOptions, ctx context.Context) (azcore.TokenCredential, error)
+	DoLogin(opts NewTokenOptions, ctx context.Context) (azcore.TokenCredential, error)
 
 	// DeleteCredentials deletes the token matching the nickname across every writable Keyring.
 	// Read-only Keyrings are skipped. Returns true if any token was deleted.
@@ -44,7 +44,7 @@ type Keyring interface {
 type ReadOnlyKeyring interface {
 	// GetToken returns the token matching the nickname, and whether it was found.
 	// If nickname is empty or "*", the default token is returned.
-	GetToken(nickname string) (token, bool)
+	GetToken(nickname string) (Token, bool)
 }
 
 type EnumerableKeyring interface {
@@ -58,13 +58,20 @@ type RWKeyring interface {
 	DeleteToken(nickname string) bool
 
 	// SaveToken will use the tenant ID as the nickname if the nickname is an empty string.
-	SaveToken(info token) error
+	SaveToken(info Token) error
 }
 
 // tokenImpl provides a TokenCredential provider, backwards compat
 type tokenImpl interface {
 	tokenImpl()
-	getTokenCredential(header TokenHeader) (azcore.TokenCredential, error)
+	getTokenCredential(header TokenHeader, ctx context.Context) (azcore.TokenCredential, error)
 	fromCompat(compat compatTokenInfo) tokenImpl
-	fromLoginTokenOptions(opts LoginTokenOptions) tokenImpl
+	fromLoginTokenOptions(opts NewTokenOptions) tokenImpl
+}
+
+type Token interface {
+	tokenStruct()
+
+	Header() TokenHeader
+	TokenCredential(ctx context.Context) (azcore.TokenCredential, error)
 }

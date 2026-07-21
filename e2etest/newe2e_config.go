@@ -100,14 +100,16 @@ type NewE2EConfig struct {
 	// By having manually specified tenant IDs
 	StaticMultitenantAcctInfo struct {
 		TenantA struct {
-			Name        string `env:"MULTITENANT_NAME_A"`
-			TenantID    string `env:"MULTITENANT_ID_A"`
-			AccountName string `env:"MULTITENANT_ACCOUNT_A"`
+			Name           string `env:"MULTITENANT_NAME_A"`
+			TenantID       string `env:"MULTITENANT_ID_A"`
+			AccountName    string `env:"MULTITENANT_ACCOUNT_A"`
+			HNSAccountName string `env:"MULTITENANT_HNS_ACCOUNT_A"`
 		}
 		TenantB struct {
-			Name        string `env:"MULTITENANT_NAME_B"`
-			TenantID    string `env:"MULTITENANT_ID_B"`
-			AccountName string `env:"MULTITENANT_ACCOUNT_B"`
+			Name           string `env:"MULTITENANT_NAME_B"`
+			TenantID       string `env:"MULTITENANT_ID_B"`
+			AccountName    string `env:"MULTITENANT_ACCOUNT_B"`
+			HNSAccountName string `env:"MULTITENANT_HNS_ACCOUNT_B"`
 		}
 	}
 

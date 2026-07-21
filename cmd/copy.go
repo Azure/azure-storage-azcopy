@@ -1014,28 +1014,34 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	credManager := GetCredentialManager()
 
-	cca.credentialInfo, err = GetTargetCredInfo(cca.Destination, cca.FromTo.To(), GetTargetCredInfoOptions{
-		Context:            ctx,
-		CanBePublic:        false, // dest can't be public
-		SharedKeyAllowed:   true,  // dest could be shared key
-		PreferredTokenName: DestCredentialName,
-		CpkOptions:         common.CpkOptions{}, // not necessary, since dest can't be public.
-		TokenManager:       credManager,
-	})
-	if err != nil {
-		return err
-	}
+	var srcCredInfo cred.CredentialInfo
+	if cca.FromTo.IsUpload() || cca.FromTo.IsDownload() || cca.FromTo.IsS2S() {
+		cca.credentialInfo, err = GetTargetCredInfo(cca.Destination, cca.FromTo.To(), GetTargetCredInfoOptions{
+			Context:            ctx,
+			CanBePublic:        false, // dest can't be public
+			SharedKeyAllowed:   true,  // dest could be shared key
+			PreferredTokenName: DestCredentialName,
+			CpkOptions:         common.CpkOptions{}, // not necessary, since dest can't be public.
+			TokenManager:       credManager,
+		})
+		if err != nil {
+			return err
+		}
 
-	srcCredInfo, err := GetTargetCredInfo(cca.Source, cca.FromTo.From(), GetTargetCredInfoOptions{
-		Context:            ctx,
-		CanBePublic:        true,  // source can be public
-		SharedKeyAllowed:   false, // but it can't be shared key
-		PreferredTokenName: SourceCredentialName,
-		CpkOptions:         cca.CpkOptions,
-		TokenManager:       credManager,
-	})
-	if err != nil {
-		return err
+		srcCredInfo, err = GetTargetCredInfo(cca.Source, cca.FromTo.From(), GetTargetCredInfoOptions{
+			Context:            ctx,
+			CanBePublic:        true,  // source can be public
+			SharedKeyAllowed:   false, // but it can't be shared key
+			PreferredTokenName: SourceCredentialName,
+			CpkOptions:         cca.CpkOptions,
+			TokenManager:       credManager,
+		})
+		if err != nil {
+			return err
+		}
+
+		glcm.Info(fmt.Sprintf("Authorizing source with %s", srcCredInfo.CredentialType.String()))
+		glcm.Info(fmt.Sprintf("Authorizing destination with %s", cca.credentialInfo.CredentialType.String()))
 	}
 
 	// initialize the fields that are constant across all job part orders,
@@ -1086,43 +1092,46 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 	}
 
-	jobPartOrder.SrcServiceClient, err = common.GetServiceClientForLocation(
-		cca.FromTo.From(),
-		cca.Source,
-		srcCredInfo.CredentialType,
-		srcCredInfo.TokenCredential,
-		&options,
-		azureFileSpecificOptions,
-	)
-	if err != nil {
-		return err
-	}
-
-	if cca.FromTo.To() == common.ELocation.File() {
-		azureFileSpecificOptions = &common.FileClientOptions{
-			AllowTrailingDot:       cca.trailingDot.IsEnabled(),
-			AllowSourceTrailingDot: cca.trailingDot.IsEnabled() && cca.FromTo.From() == common.ELocation.File(),
+	// only need to worry about filling out the template for copy (should it even be here?)
+	if cca.FromTo.IsUpload() || cca.FromTo.IsDownload() || cca.FromTo.IsS2S() {
+		jobPartOrder.SrcServiceClient, err = common.GetServiceClientForLocation(
+			cca.FromTo.From(),
+			cca.Source,
+			srcCredInfo.CredentialType,
+			srcCredInfo.TokenCredential,
+			&options,
+			azureFileSpecificOptions,
+		)
+		if err != nil {
+			return err
 		}
-	}
 
-	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCredInfo.TokenCredential, cca.credentialInfo.TokenCredential)
-	jobPartOrder.DstServiceClient, err = common.GetServiceClientForLocation(
-		cca.FromTo.To(),
-		cca.Destination,
-		cca.credentialInfo.CredentialType,
-		cca.credentialInfo.TokenCredential,
-		&options,
-		azureFileSpecificOptions,
-	)
-	if err != nil {
-		return err
-	}
+		if cca.FromTo.To() == common.ELocation.File() {
+			azureFileSpecificOptions = &common.FileClientOptions{
+				AllowTrailingDot:       cca.trailingDot.IsEnabled(),
+				AllowSourceTrailingDot: cca.trailingDot.IsEnabled() && cca.FromTo.From() == common.ELocation.File(),
+			}
+		}
 
-	jobPartOrder.DestinationRoot = cca.Destination
-	jobPartOrder.SourceRoot = cca.Source
-	jobPartOrder.SourceRoot.Value, err = GetResourceRoot(cca.Source.Value, cca.FromTo.From())
-	if err != nil {
-		return err
+		options = createClientOptions(common.AzcopyCurrentJobLogger, srcCredInfo.TokenCredential, cca.credentialInfo.TokenCredential)
+		jobPartOrder.DstServiceClient, err = common.GetServiceClientForLocation(
+			cca.FromTo.To(),
+			cca.Destination,
+			cca.credentialInfo.CredentialType,
+			cca.credentialInfo.TokenCredential,
+			&options,
+			azureFileSpecificOptions,
+		)
+		if err != nil {
+			return err
+		}
+
+		jobPartOrder.DestinationRoot = cca.Destination
+		jobPartOrder.SourceRoot = cca.Source
+		jobPartOrder.SourceRoot.Value, err = GetResourceRoot(cca.Source.Value, cca.FromTo.From())
+		if err != nil {
+			return err
+		}
 	}
 
 	// Stripping the trailing /* for local occurs much later than stripping the trailing /* for remote resources.
