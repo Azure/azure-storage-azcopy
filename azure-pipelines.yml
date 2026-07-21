@@ -44,6 +44,11 @@ jobs:
           sudo apt-get install -y libsecret-1-dev libglib2.0-dev
         displayName: 'Install dependencies'
         condition: eq(variables['type'], 'linux')
+
+      - script: |
+          go run "common/manifest/main.go"
+        displayName: 'Create resource.syso files'
+        condition: eq(variables.type, 'windows')
         
       - script: |
           GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
