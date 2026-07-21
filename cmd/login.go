@@ -189,7 +189,7 @@ func (args rawLoginArgs) toOptions() (LoginOptions, error) {
 }
 
 func (options LoginOptions) process() error {
-	opts := cred.NewTokenOptions{
+	opts := cred.LoginNewTokenOptions{
 		TenantID:           options.TenantID,
 		AADEndpoint:        options.AADEndpoint,
 		LoginType:          options.LoginType,
@@ -198,8 +198,7 @@ func (options LoginOptions) process() error {
 		IdentityResourceID: options.IdentityResourceID,
 		ApplicationID:      options.ApplicationID,
 		CertificateData:    options.CertificatePath,
-		ClientSecret:       ternary.Iff(options.ClientSecret != "", options.ClientSecret, options.CertificatePassword),
-		Nickname:           options.CredentialName,
+		ClientSecret:   ternary.Iff(options.ClientSecret != "", options.ClientSecret, options.CertificatePassword),
 
 		SaveCredential: true,
 	}

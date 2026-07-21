@@ -110,8 +110,8 @@ func (m *managerImpl) GetCredentials(nickname string, ctx context.Context) (azco
 	return nil, errors.New("no credential found for nickname")
 }
 
-func (m *managerImpl) DoLogin(opts NewTokenOptions, ctx context.Context) (azcore.TokenCredential, error) {
-	result := NewToken(opts).(*token)
+func (m *managerImpl) DoLogin(opts LoginNewTokenOptions, ctx context.Context) (azcore.TokenCredential, error) {
+	result := opts.NewToken().(*token)
 
 	cred, err := result.tokenImpl.getTokenCredential(result.Header(), ctx)
 	if err != nil {

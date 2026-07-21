@@ -22,7 +22,6 @@ package cred
 
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
-	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 )
 
 const (
@@ -30,7 +29,7 @@ const (
 	DefaultActiveDirectoryEndpoint = "https://login.microsoftonline.com"
 )
 
-type NewTokenOptions struct {
+type LoginNewTokenOptions struct {
 	TenantID    string
 	AADEndpoint string
 	LoginType   enum.AutoLoginType
@@ -43,24 +42,72 @@ type NewTokenOptions struct {
 	CertificateData string
 	ClientSecret    string
 
-	Nickname string
-
 	SaveCredential bool
 }
 
-func NewToken(opts NewTokenOptions) Token {
-	header := TokenHeader{
-		Tenant:                  ternary.Iff(opts.TenantID != "", opts.TenantID, DefaultTenantID),
-		Nickname:                ternary.Iff(opts.Nickname != "", opts.Nickname, DefaultNickname),
-		ActiveDirectoryEndpoint: ternary.Iff(opts.AADEndpoint != "", opts.AADEndpoint, DefaultActiveDirectoryEndpoint),
-		LoginType:               opts.LoginType,
-	}
-
-	impl := newTokenImpl(opts.LoginType)
-	impl = impl.fromLoginTokenOptions(opts)
-
-	return &token{
-		TokenHeader: header,
-		tokenImpl:   impl,
+func (opts LoginNewTokenOptions) NewToken() Token {
+	switch opts.LoginType {
+	case enum.EAutoLoginType.SPN():
+		return SPNTokenOptions{
+			TenantID:        opts.TenantID,
+			AADEndpoint:     opts.AADEndpoint,
+			LoginType:       opts.LoginType,
+			ApplicationID:   opts.ApplicationID,
+			CertificateData: opts.CertificateData,
+			ClientSecret:    opts.ClientSecret,
+		}.NewToken()
+	case enum.EAutoLoginType.MSI():
+		return MSITokenOptions{
+			TenantID:           opts.TenantID,
+			AADEndpoint:        opts.AADEndpoint,
+			LoginType:          opts.LoginType,
+			IdentityClientID:   opts.IdentityClientID,
+			IdentityObjectID:   opts.IdentityObjectID,
+			IdentityResourceID: opts.IdentityResourceID,
+		}.NewToken()
+	case enum.EAutoLoginType.Device():
+		return UserLoginTokenOptions{
+			TenantID:        opts.TenantID,
+			AADEndpoint:     opts.AADEndpoint,
+			LoginType:       opts.LoginType,
+			ApplicationID:   opts.ApplicationID,
+			InteractionType: enum.EInteractiveLoginType.Device(),
+		}.NewToken()
+	case enum.EAutoLoginType.Interactive():
+		return UserLoginTokenOptions{
+			TenantID:        opts.TenantID,
+			AADEndpoint:     opts.AADEndpoint,
+			LoginType:       opts.LoginType,
+			ApplicationID:   opts.ApplicationID,
+			InteractionType: enum.EInteractiveLoginType.Browser(),
+		}.NewToken()
+	case enum.EAutoLoginType.AzCLI():
+		return AzureCLITokenOptions{
+			TenantID:    opts.TenantID,
+			AADEndpoint: opts.AADEndpoint,
+			LoginType:   opts.LoginType,
+		}.NewToken()
+	case enum.EAutoLoginType.PsCred():
+		return PSCredTokenOptions{
+			TenantID:    opts.TenantID,
+			AADEndpoint: opts.AADEndpoint,
+			LoginType:   opts.LoginType,
+		}.NewToken()
+	case enum.EAutoLoginType.Workload():
+		return WorkloadTokenOptions{
+			TenantID:    opts.TenantID,
+			AADEndpoint: opts.AADEndpoint,
+			LoginType:   opts.LoginType,
+		}.NewToken()
+	default:
+		// TokenStore and NoRefresh: construct empty token with header, fall back to reflection-based creation
+		return &token{
+			TokenHeader: TokenHeader{
+				Tenant:                  opts.TenantID,
+				ActiveDirectoryEndpoint: opts.AADEndpoint,
+				LoginType:               opts.LoginType,
+			},
+			tokenImpl: newTokenImpl(opts.LoginType),
+		}
 	}
 }
