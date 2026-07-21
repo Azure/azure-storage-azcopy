@@ -20,7 +20,7 @@ func tokenImplFromToken(t *testing.T, tok Token) tokenImpl {
 func TestSPNTokenOptions(t *testing.T) {
 	a := assert.New(t)
 
-	tok := SPNTokenOptions{
+	tok := NewSPNTokenOptions{
 		TenantID:        "my-tenant",
 		AADEndpoint:     "https://login.microsoftonline.us",
 		LoginType:       enum.EAutoLoginType.SPN(),
@@ -45,7 +45,7 @@ func TestSPNTokenOptions(t *testing.T) {
 func TestSPNTokenOptions_Defaults(t *testing.T) {
 	a := assert.New(t)
 
-	tok := SPNTokenOptions{
+	tok := NewSPNTokenOptions{
 		LoginType: enum.EAutoLoginType.SPN(),
 	}.NewToken()
 
@@ -58,7 +58,7 @@ func TestSPNTokenOptions_Defaults(t *testing.T) {
 func TestMSITokenOptions(t *testing.T) {
 	a := assert.New(t)
 
-	tok := MSITokenOptions{
+	tok := NewMSITokenOptions{
 		TenantID:           "my-tenant",
 		LoginType:          enum.EAutoLoginType.MSI(),
 		IdentityClientID:   "client-id",
@@ -76,7 +76,7 @@ func TestMSITokenOptions(t *testing.T) {
 func TestMSITokenOptions_Empty(t *testing.T) {
 	a := assert.New(t)
 
-	tok := MSITokenOptions{
+	tok := NewMSITokenOptions{
 		LoginType: enum.EAutoLoginType.MSI(),
 	}.NewToken()
 
@@ -90,7 +90,7 @@ func TestMSITokenOptions_Empty(t *testing.T) {
 func TestUserLoginTokenOptions_Device(t *testing.T) {
 	a := assert.New(t)
 
-	tok := UserLoginTokenOptions{
+	tok := NewUserLoginTokenOptions{
 		LoginType:       enum.EAutoLoginType.Device(),
 		ApplicationID:   "app-id",
 		InteractionType: enum.EInteractiveLoginType.Device(),
@@ -107,7 +107,7 @@ func TestUserLoginTokenOptions_Device(t *testing.T) {
 func TestUserLoginTokenOptions_Browser(t *testing.T) {
 	a := assert.New(t)
 
-	tok := UserLoginTokenOptions{
+	tok := NewUserLoginTokenOptions{
 		LoginType:       enum.EAutoLoginType.Interactive(),
 		ApplicationID:   "app-id",
 		InteractionType: enum.EInteractiveLoginType.Browser(),
@@ -123,7 +123,7 @@ func TestUserLoginTokenOptions_Browser(t *testing.T) {
 func TestAzureCLITokenOptions(t *testing.T) {
 	a := assert.New(t)
 
-	tok := AzureCLITokenOptions{
+	tok := NewAzureCLITokenOptions{
 		LoginType: enum.EAutoLoginType.AzCLI(),
 	}.NewToken()
 
@@ -134,7 +134,7 @@ func TestAzureCLITokenOptions(t *testing.T) {
 func TestPSCredTokenOptions(t *testing.T) {
 	a := assert.New(t)
 
-	tok := PSCredTokenOptions{
+	tok := NewPSCredTokenOptions{
 		LoginType: enum.EAutoLoginType.PsCred(),
 	}.NewToken()
 
@@ -145,7 +145,7 @@ func TestPSCredTokenOptions(t *testing.T) {
 func TestWorkloadTokenOptions(t *testing.T) {
 	a := assert.New(t)
 
-	tok := WorkloadTokenOptions{
+	tok := NewWorkloadTokenOptions{
 		LoginType: enum.EAutoLoginType.Workload(),
 	}.NewToken()
 
@@ -158,25 +158,25 @@ func TestNewTokenOptionsInterface(t *testing.T) {
 
 	var f NewTokenOptions
 
-	f = SPNTokenOptions{LoginType: enum.EAutoLoginType.SPN()}
+	f = NewSPNTokenOptions{LoginType: enum.EAutoLoginType.SPN()}
 	a.NotNil(f)
 	tok := f.NewToken()
 	_, ok := tok.(*token)
 	a.True(ok, "must return a *token")
 
-	f = MSITokenOptions{LoginType: enum.EAutoLoginType.MSI()}
+	f = NewMSITokenOptions{LoginType: enum.EAutoLoginType.MSI()}
 	a.NotNil(f)
 
-	f = UserLoginTokenOptions{LoginType: enum.EAutoLoginType.Device(), InteractionType: enum.EInteractiveLoginType.Device()}
+	f = NewUserLoginTokenOptions{LoginType: enum.EAutoLoginType.Device(), InteractionType: enum.EInteractiveLoginType.Device()}
 	a.NotNil(f)
 
-	f = AzureCLITokenOptions{LoginType: enum.EAutoLoginType.AzCLI()}
+	f = NewAzureCLITokenOptions{LoginType: enum.EAutoLoginType.AzCLI()}
 	a.NotNil(f)
 
-	f = PSCredTokenOptions{LoginType: enum.EAutoLoginType.PsCred()}
+	f = NewPSCredTokenOptions{LoginType: enum.EAutoLoginType.PsCred()}
 	a.NotNil(f)
 
-	f = WorkloadTokenOptions{LoginType: enum.EAutoLoginType.Workload()}
+	f = NewWorkloadTokenOptions{LoginType: enum.EAutoLoginType.Workload()}
 	a.NotNil(f)
 
 	// LoginNewTokenOptions also implements the interface
@@ -188,13 +188,13 @@ func TestLoginNewTokenOptionsDispatch_SPN(t *testing.T) {
 	a := assert.New(t)
 
 	opts := LoginNewTokenOptions{
-		LoginType:        enum.EAutoLoginType.SPN(),
-		ApplicationID:    "app-id",
-		CertificateData:  "cert-data",
-		ClientSecret:     "client-secret",
-		TenantID:         "my-tenant",
-		AADEndpoint:      "https://login.microsoftonline.us",
-		SaveCredential:   true,
+		LoginType:       enum.EAutoLoginType.SPN(),
+		ApplicationID:   "app-id",
+		CertificateData: "cert-data",
+		ClientSecret:    "client-secret",
+		TenantID:        "my-tenant",
+		AADEndpoint:     "https://login.microsoftonline.us",
+		SaveCredential:  true,
 	}
 
 	tok := opts.NewToken()

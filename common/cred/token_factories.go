@@ -6,7 +6,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 )
 
-type SPNTokenOptions struct {
+type NewSPNTokenOptions struct {
 	TenantID    string
 	AADEndpoint string
 	LoginType   enum.AutoLoginType
@@ -16,7 +16,7 @@ type SPNTokenOptions struct {
 	ClientSecret    string
 }
 
-func (o SPNTokenOptions) NewToken() Token {
+func (o NewSPNTokenOptions) NewToken() Token {
 	return &token{
 		TokenHeader: TokenHeader{
 			Tenant:                  ternary.Iff(o.TenantID != "", o.TenantID, DefaultTenantID),
@@ -31,7 +31,7 @@ func (o SPNTokenOptions) NewToken() Token {
 	}
 }
 
-type MSITokenOptions struct {
+type NewMSITokenOptions struct {
 	TenantID    string
 	AADEndpoint string
 	LoginType   enum.AutoLoginType
@@ -41,7 +41,7 @@ type MSITokenOptions struct {
 	IdentityResourceID string
 }
 
-func (o MSITokenOptions) NewToken() Token {
+func (o NewMSITokenOptions) NewToken() Token {
 	return &token{
 		TokenHeader: TokenHeader{
 			Tenant:                  ternary.Iff(o.TenantID != "", o.TenantID, DefaultTenantID),
@@ -56,7 +56,7 @@ func (o MSITokenOptions) NewToken() Token {
 	}
 }
 
-type UserLoginTokenOptions struct {
+type NewUserLoginTokenOptions struct {
 	TenantID    string
 	AADEndpoint string
 	LoginType   enum.AutoLoginType
@@ -65,7 +65,7 @@ type UserLoginTokenOptions struct {
 	InteractionType enum.InteractiveLoginType
 }
 
-func (o UserLoginTokenOptions) NewToken() Token {
+func (o NewUserLoginTokenOptions) NewToken() Token {
 	return &token{
 		TokenHeader: TokenHeader{
 			Tenant:                  ternary.Iff(o.TenantID != "", o.TenantID, DefaultTenantID),
@@ -80,13 +80,13 @@ func (o UserLoginTokenOptions) NewToken() Token {
 	}
 }
 
-type AzureCLITokenOptions struct {
+type NewAzureCLITokenOptions struct {
 	TenantID    string
 	AADEndpoint string
 	LoginType   enum.AutoLoginType
 }
 
-func (o AzureCLITokenOptions) NewToken() Token {
+func (o NewAzureCLITokenOptions) NewToken() Token {
 	return &token{
 		TokenHeader: TokenHeader{
 			Tenant:                  ternary.Iff(o.TenantID != "", o.TenantID, DefaultTenantID),
@@ -97,13 +97,13 @@ func (o AzureCLITokenOptions) NewToken() Token {
 	}
 }
 
-type PSCredTokenOptions struct {
+type NewPSCredTokenOptions struct {
 	TenantID    string
 	AADEndpoint string
 	LoginType   enum.AutoLoginType
 }
 
-func (o PSCredTokenOptions) NewToken() Token {
+func (o NewPSCredTokenOptions) NewToken() Token {
 	return &token{
 		TokenHeader: TokenHeader{
 			Tenant:                  ternary.Iff(o.TenantID != "", o.TenantID, DefaultTenantID),
@@ -114,13 +114,13 @@ func (o PSCredTokenOptions) NewToken() Token {
 	}
 }
 
-type WorkloadTokenOptions struct {
+type NewWorkloadTokenOptions struct {
 	TenantID    string
 	AADEndpoint string
 	LoginType   enum.AutoLoginType
 }
 
-func (o WorkloadTokenOptions) NewToken() Token {
+func (o NewWorkloadTokenOptions) NewToken() Token {
 	return &token{
 		TokenHeader: TokenHeader{
 			Tenant:                  ternary.Iff(o.TenantID != "", o.TenantID, DefaultTenantID),
