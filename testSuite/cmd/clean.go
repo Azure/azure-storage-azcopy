@@ -567,7 +567,7 @@ func cleanS3Account(resourceURL string) {
 				Recursive: true,
 			}) {
 				if object.Err != nil {
-					fmt.Printf("error listing the objects from bucket %q, %v\n", bucket.Name, err)
+					fmt.Printf("error listing the objects from bucket %q, %v\n", bucket.Name, object.Err)
 					return
 				}
 				objectsCh <- object

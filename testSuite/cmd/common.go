@@ -39,7 +39,7 @@ func createS3ClientWithMinio(o createS3ResOptions) *minio.Client {
 	}
 
 	s3Client, err := minio.New("s3.amazonaws.com", &minio.Options{
-		Creds:  credentials.NewStatic(accessKeyID, secretAccessKey, "", credentials.SignatureAnonymous),
+		Creds:  credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
 		Secure: true,
 		Region: o.Location,
 	})

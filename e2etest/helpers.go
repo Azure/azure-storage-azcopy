@@ -320,7 +320,7 @@ func createS3ClientWithMinio(c asserter, o createS3ResOptions) (*minio.Client, e
 		return minio.New("s3.amazonaws.com", &minio.Options{Creds: cred, Secure: true, Region: o.Location})
 	}
 
-	cred := credentials.NewStatic(accessKeyID, secretAccessKey, "", credentials.SignatureAnonymous)
+	cred := credentials.NewStaticV4(accessKeyID, secretAccessKey, "")
 	s3Client, err := minio.New("s3.amazonaws.com", &minio.Options{Creds: cred, Secure: true, Region: o.Location})
 	if err != nil {
 		return nil, err

@@ -162,7 +162,7 @@ func createS3ClientWithMinio() (*minio.Client, error) {
 		return nil, fmt.Errorf("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY should be set before creating the S3 client")
 	}
 
-	cred := credentials.NewStatic(accessKeyID, secretAccessKey, "", credentials.SignatureAnonymous)
+	cred := credentials.NewStaticV4(accessKeyID, secretAccessKey, "")
 	s3Client, err := minio.New("s3.amazonaws.com", &minio.Options{
 		Creds:  cred,
 		Secure: true,
