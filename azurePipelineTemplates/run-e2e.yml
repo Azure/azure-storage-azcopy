@@ -175,8 +175,8 @@ jobs:
         displayName: 'Publish logs'
         condition: succeededOrFailed()
         inputs:
-          pathToPublish: '$(System.DefaultWorkingDirectory)/logs'
-          artifactName: logs
+          PathToPublish: '$(System.DefaultWorkingDirectory)/logs'
+          ArtifactName: logs
 
       - task: PublishTestResults@2
         condition: succeededOrFailed()
