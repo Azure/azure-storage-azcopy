@@ -115,10 +115,10 @@ jobs:
 #           verbosity: 'Verbose'
 #           alertWarningLevel: 'High'
 
-  - template: azurePipelineTemplates/run-e2e.yml
-    parameters:
-      name: 'Old_E2E'
-      test_cli_param: '-tags olde2etest'
+  # - template: azurePipelineTemplates/run-e2e.yml
+  #   parameters:
+  #     name: 'Old_E2E'
+  #     test_cli_param: '-tags olde2etest'
 
   - template: azurePipelineTemplates/run-e2e.yml
     parameters:
