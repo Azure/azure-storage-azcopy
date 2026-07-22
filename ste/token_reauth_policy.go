@@ -122,10 +122,11 @@ func (d *tokenReauthPolicy) checkDestAuthFailure(err error, resp *http.Response,
 	case resp != nil && resp.StatusCode == http.StatusUnauthorized:
 		errors.As(runtime.NewResponseError(resp), &respErr)
 
-		needsReauth = err == nil && bloberror.HasCode(respErr, bloberror.CannotVerifyCopySource)
-
+		needsReauth = err == nil &&
+			bloberror.HasCode(respErr, bloberror.InvalidAuthenticationInfo) &&
+			len(respErr.RawResponse.Header.Values("WWW-Authenticate")) != 0
 		if needsReauth {
-			*debugCtx = context.WithValue(*debugCtx, destReauthDebugCause, tokenReauthDebugCauseInvalidAuthenticationInfo)
+			*debugCtx = context.WithValue(*debugCtx, srcReauthDebugCause, tokenReauthDebugCauseInvalidAuthenticationInfo)
 		}
 	}
 
@@ -152,11 +153,10 @@ func (d *tokenReauthPolicy) checkSourceAuthFailure(err error, resp *http.Respons
 	case resp != nil && resp.StatusCode == http.StatusUnauthorized:
 		errors.As(runtime.NewResponseError(resp), &respErr)
 
-		needsReauth = err == nil &&
-			bloberror.HasCode(respErr, bloberror.InvalidAuthenticationInfo) &&
-			len(respErr.RawResponse.Header.Values("WWW-Authenticate")) != 0
+		needsReauth = err == nil && bloberror.HasCode(respErr, bloberror.CannotVerifyCopySource)
+
 		if needsReauth {
-			*debugCtx = context.WithValue(*debugCtx, srcReauthDebugCause, tokenReauthDebugCauseInvalidAuthenticationInfo)
+			*debugCtx = context.WithValue(*debugCtx, destReauthDebugCause, tokenReauthDebugCauseInvalidAuthenticationInfo)
 		}
 	}
 

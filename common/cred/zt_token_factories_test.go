@@ -23,7 +23,6 @@ func TestSPNTokenOptions(t *testing.T) {
 	tok := NewSPNTokenOptions{
 		TenantID:        "my-tenant",
 		AADEndpoint:     "https://login.microsoftonline.us",
-		LoginType:       enum.EAutoLoginType.SPN(),
 		ApplicationID:   "app-id",
 		CertificateData: "cert-data",
 		ClientSecret:    "client-secret",
@@ -45,9 +44,7 @@ func TestSPNTokenOptions(t *testing.T) {
 func TestSPNTokenOptions_Defaults(t *testing.T) {
 	a := assert.New(t)
 
-	tok := NewSPNTokenOptions{
-		LoginType: enum.EAutoLoginType.SPN(),
-	}.NewToken()
+	tok := NewSPNTokenOptions{}.NewToken()
 
 	h := tok.Header()
 	a.Equal(DefaultTenantID, h.Tenant, "should use default tenant")
@@ -60,7 +57,6 @@ func TestMSITokenOptions(t *testing.T) {
 
 	tok := NewMSITokenOptions{
 		TenantID:           "my-tenant",
-		LoginType:          enum.EAutoLoginType.MSI(),
 		IdentityClientID:   "client-id",
 		IdentityObjectID:   "object-id",
 		IdentityResourceID: "resource-id",
@@ -76,9 +72,7 @@ func TestMSITokenOptions(t *testing.T) {
 func TestMSITokenOptions_Empty(t *testing.T) {
 	a := assert.New(t)
 
-	tok := NewMSITokenOptions{
-		LoginType: enum.EAutoLoginType.MSI(),
-	}.NewToken()
+	tok := NewMSITokenOptions{}.NewToken()
 
 	msi, ok := tokenImplFromToken(t, tok).(tokenInfoManagedIdentity)
 	a.True(ok)
@@ -91,7 +85,6 @@ func TestUserLoginTokenOptions_Device(t *testing.T) {
 	a := assert.New(t)
 
 	tok := NewUserLoginTokenOptions{
-		LoginType:       enum.EAutoLoginType.Device(),
 		ApplicationID:   "app-id",
 		InteractionType: enum.EInteractiveLoginType.Device(),
 	}.NewToken()
@@ -108,7 +101,6 @@ func TestUserLoginTokenOptions_Browser(t *testing.T) {
 	a := assert.New(t)
 
 	tok := NewUserLoginTokenOptions{
-		LoginType:       enum.EAutoLoginType.Interactive(),
 		ApplicationID:   "app-id",
 		InteractionType: enum.EInteractiveLoginType.Browser(),
 	}.NewToken()
@@ -123,9 +115,7 @@ func TestUserLoginTokenOptions_Browser(t *testing.T) {
 func TestAzureCLITokenOptions(t *testing.T) {
 	a := assert.New(t)
 
-	tok := NewAzureCLITokenOptions{
-		LoginType: enum.EAutoLoginType.AzCLI(),
-	}.NewToken()
+	tok := NewAzureCLITokenOptions{}.NewToken()
 
 	_, ok := tokenImplFromToken(t, tok).(tokenInfoCLI)
 	a.True(ok, "expected tokenInfoCLI")
@@ -134,9 +124,7 @@ func TestAzureCLITokenOptions(t *testing.T) {
 func TestPSCredTokenOptions(t *testing.T) {
 	a := assert.New(t)
 
-	tok := NewPSCredTokenOptions{
-		LoginType: enum.EAutoLoginType.PsCred(),
-	}.NewToken()
+	tok := NewPSCredTokenOptions{}.NewToken()
 
 	_, ok := tokenImplFromToken(t, tok).(tokenInfoPSCred)
 	a.True(ok, "expected tokenInfoPSCred")
@@ -145,9 +133,7 @@ func TestPSCredTokenOptions(t *testing.T) {
 func TestWorkloadTokenOptions(t *testing.T) {
 	a := assert.New(t)
 
-	tok := NewWorkloadTokenOptions{
-		LoginType: enum.EAutoLoginType.Workload(),
-	}.NewToken()
+	tok := NewWorkloadTokenOptions{}.NewToken()
 
 	_, ok := tokenImplFromToken(t, tok).(tokenInfoWorkload)
 	a.True(ok, "expected tokenInfoWorkload")
@@ -158,29 +144,29 @@ func TestNewTokenOptionsInterface(t *testing.T) {
 
 	var f NewTokenOptions
 
-	f = NewSPNTokenOptions{LoginType: enum.EAutoLoginType.SPN()}
+	f = NewSPNTokenOptions{}
 	a.NotNil(f)
 	tok := f.NewToken()
 	_, ok := tok.(*token)
 	a.True(ok, "must return a *token")
 
-	f = NewMSITokenOptions{LoginType: enum.EAutoLoginType.MSI()}
+	f = NewMSITokenOptions{}
 	a.NotNil(f)
 
-	f = NewUserLoginTokenOptions{LoginType: enum.EAutoLoginType.Device(), InteractionType: enum.EInteractiveLoginType.Device()}
+	f = NewUserLoginTokenOptions{InteractionType: enum.EInteractiveLoginType.Device()}
 	a.NotNil(f)
 
-	f = NewAzureCLITokenOptions{LoginType: enum.EAutoLoginType.AzCLI()}
+	f = NewAzureCLITokenOptions{}
 	a.NotNil(f)
 
-	f = NewPSCredTokenOptions{LoginType: enum.EAutoLoginType.PsCred()}
+	f = NewPSCredTokenOptions{}
 	a.NotNil(f)
 
-	f = NewWorkloadTokenOptions{LoginType: enum.EAutoLoginType.Workload()}
+	f = NewWorkloadTokenOptions{}
 	a.NotNil(f)
 
 	// LoginNewTokenOptions also implements the interface
-	f = LoginNewTokenOptions{LoginType: enum.EAutoLoginType.SPN()}
+	f = LoginNewTokenOptions{loginType: enum.EAutoLoginType.SPN()}
 	a.NotNil(f)
 }
 
@@ -188,7 +174,7 @@ func TestLoginNewTokenOptionsDispatch_SPN(t *testing.T) {
 	a := assert.New(t)
 
 	opts := LoginNewTokenOptions{
-		LoginType:       enum.EAutoLoginType.SPN(),
+		loginType:       enum.EAutoLoginType.SPN(),
 		ApplicationID:   "app-id",
 		CertificateData: "cert-data",
 		ClientSecret:    "client-secret",
@@ -215,7 +201,7 @@ func TestLoginNewTokenOptionsDispatch_MSI(t *testing.T) {
 	a := assert.New(t)
 
 	opts := LoginNewTokenOptions{
-		LoginType:          enum.EAutoLoginType.MSI(),
+		loginType:          enum.EAutoLoginType.MSI(),
 		IdentityClientID:   "client-id",
 		IdentityObjectID:   "object-id",
 		IdentityResourceID: "resource-id",
@@ -233,7 +219,7 @@ func TestLoginNewTokenOptionsDispatch_Device(t *testing.T) {
 	a := assert.New(t)
 
 	opts := LoginNewTokenOptions{
-		LoginType:     enum.EAutoLoginType.Device(),
+		loginType:     enum.EAutoLoginType.Device(),
 		ApplicationID: "app-id",
 	}
 
@@ -249,7 +235,7 @@ func TestLoginNewTokenOptionsDispatch_Interactive(t *testing.T) {
 	a := assert.New(t)
 
 	opts := LoginNewTokenOptions{
-		LoginType:     enum.EAutoLoginType.Interactive(),
+		loginType:     enum.EAutoLoginType.Interactive(),
 		ApplicationID: "app-id",
 	}
 
@@ -265,7 +251,7 @@ func TestLoginNewTokenOptionsDispatch_AzCLI(t *testing.T) {
 	a := assert.New(t)
 
 	opts := LoginNewTokenOptions{
-		LoginType: enum.EAutoLoginType.AzCLI(),
+		loginType: enum.EAutoLoginType.AzCLI(),
 	}
 
 	tok := opts.NewToken()
@@ -277,7 +263,7 @@ func TestLoginNewTokenOptionsDispatch_PsCred(t *testing.T) {
 	a := assert.New(t)
 
 	opts := LoginNewTokenOptions{
-		LoginType: enum.EAutoLoginType.PsCred(),
+		loginType: enum.EAutoLoginType.PsCred(),
 	}
 
 	tok := opts.NewToken()
@@ -289,7 +275,7 @@ func TestLoginNewTokenOptionsDispatch_Workload(t *testing.T) {
 	a := assert.New(t)
 
 	opts := LoginNewTokenOptions{
-		LoginType: enum.EAutoLoginType.Workload(),
+		loginType: enum.EAutoLoginType.Workload(),
 	}
 
 	tok := opts.NewToken()
@@ -301,7 +287,7 @@ func TestLoginNewTokenOptionsDispatch_TokenStore(t *testing.T) {
 	a := assert.New(t)
 
 	opts := LoginNewTokenOptions{
-		LoginType: enum.EAutoLoginType.TokenStore(),
+		loginType: enum.EAutoLoginType.TokenStore(),
 	}
 
 	tok := opts.NewToken()
@@ -313,7 +299,7 @@ func TestLoginNewTokenOptionsDispatch_NoRefresh(t *testing.T) {
 	a := assert.New(t)
 
 	opts := LoginNewTokenOptions{
-		LoginType: enum.EAutoLoginType.NoRefresh(),
+		loginType: enum.EAutoLoginType.NoRefresh(),
 	}
 
 	tok := opts.NewToken()
@@ -325,7 +311,7 @@ func TestLoginNewTokenOptions_Defaults(t *testing.T) {
 	a := assert.New(t)
 
 	opts := LoginNewTokenOptions{
-		LoginType: enum.EAutoLoginType.SPN(),
+		loginType: enum.EAutoLoginType.SPN(),
 	}
 
 	tok := opts.NewToken()
@@ -340,7 +326,7 @@ func TestLoginNewTokenOptionsDispatch_SPN_EmptyFields(t *testing.T) {
 	a := assert.New(t)
 
 	opts := LoginNewTokenOptions{
-		LoginType: enum.EAutoLoginType.SPN(),
+		loginType: enum.EAutoLoginType.SPN(),
 	}
 
 	tok := opts.NewToken()
@@ -355,7 +341,7 @@ func TestLoginNewTokenOptionsDispatch_MSI_OnlyClientID(t *testing.T) {
 	a := assert.New(t)
 
 	opts := LoginNewTokenOptions{
-		LoginType:        enum.EAutoLoginType.MSI(),
+		loginType:        enum.EAutoLoginType.MSI(),
 		IdentityClientID: "only-client-id",
 	}
 

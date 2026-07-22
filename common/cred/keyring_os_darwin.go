@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/keybase/go-keychain"
 )
@@ -70,7 +71,7 @@ func (c *darwinCredCache) ListTokens() ([]TokenHeader, error) {
 	return out, nil
 }
 
-func (c *darwinCredCache) GetToken(nickname string) (token, bool) {
+func (c *darwinCredCache) GetToken(nickname string) (Token, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 
@@ -88,26 +89,26 @@ func (c *darwinCredCache) GetToken(nickname string) (token, bool) {
 	results, err := keychain.QueryItem(query)
 	if err != nil {
 		err = handleGenericKeyChainSecError(err)
-		return token{}, false
+		return nil, false
 	}
 
 	if len(results) == 0 {
 		if nickname != DefaultNickname {
 			return c.getToken(DefaultNickname)
 		}
-		return token{}, false
+		return nil, false
 	}
 
 	var out token
 	err = json.Unmarshal(results[0].Data, &out)
 	if err != nil {
-		return token{}, false
+		return nil, false
 	}
 
-	return out, true
+	return &out, true
 }
 
-func (c *darwinCredCache) getToken(nickname string) (token, bool) {
+func (c *darwinCredCache) getToken(nickname string) (Token, bool) {
 	query := keychain.NewItem()
 	query.SetSecClass(c.kcSecClass)
 	query.SetService(c.serviceName)
@@ -117,16 +118,16 @@ func (c *darwinCredCache) getToken(nickname string) (token, bool) {
 
 	results, err := keychain.QueryItem(query)
 	if err != nil || len(results) == 0 {
-		return token{}, false
+		return nil, false
 	}
 
 	var out token
 	err = json.Unmarshal(results[0].Data, &out)
 	if err != nil {
-		return token{}, false
+		return nil, false
 	}
 
-	return out, true
+	return &out, true
 }
 
 func (c *darwinCredCache) DeleteToken(nickname string) bool {

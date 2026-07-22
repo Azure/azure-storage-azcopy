@@ -32,7 +32,7 @@ const (
 type LoginNewTokenOptions struct {
 	TenantID    string
 	AADEndpoint string
-	LoginType   enum.AutoLoginType
+	loginType   enum.AutoLoginType
 
 	IdentityClientID   string
 	IdentityObjectID   string
@@ -45,13 +45,18 @@ type LoginNewTokenOptions struct {
 	SaveCredential bool
 }
 
+func NewLoginNewTokenOptions(loginType enum.AutoLoginType) LoginNewTokenOptions {
+	return LoginNewTokenOptions{loginType: loginType}
+}
+
+func (opts LoginNewTokenOptions) LoginType() enum.AutoLoginType { return opts.loginType }
+
 func (opts LoginNewTokenOptions) NewToken() Token {
-	switch opts.LoginType {
+	switch opts.loginType {
 	case enum.EAutoLoginType.SPN():
 		return NewSPNTokenOptions{
 			TenantID:        opts.TenantID,
 			AADEndpoint:     opts.AADEndpoint,
-			LoginType:       opts.LoginType,
 			ApplicationID:   opts.ApplicationID,
 			CertificateData: opts.CertificateData,
 			ClientSecret:    opts.ClientSecret,
@@ -60,7 +65,6 @@ func (opts LoginNewTokenOptions) NewToken() Token {
 		return NewMSITokenOptions{
 			TenantID:           opts.TenantID,
 			AADEndpoint:        opts.AADEndpoint,
-			LoginType:          opts.LoginType,
 			IdentityClientID:   opts.IdentityClientID,
 			IdentityObjectID:   opts.IdentityObjectID,
 			IdentityResourceID: opts.IdentityResourceID,
@@ -69,7 +73,6 @@ func (opts LoginNewTokenOptions) NewToken() Token {
 		return NewUserLoginTokenOptions{
 			TenantID:        opts.TenantID,
 			AADEndpoint:     opts.AADEndpoint,
-			LoginType:       opts.LoginType,
 			ApplicationID:   opts.ApplicationID,
 			InteractionType: enum.EInteractiveLoginType.Device(),
 		}.NewToken()
@@ -77,7 +80,6 @@ func (opts LoginNewTokenOptions) NewToken() Token {
 		return NewUserLoginTokenOptions{
 			TenantID:        opts.TenantID,
 			AADEndpoint:     opts.AADEndpoint,
-			LoginType:       opts.LoginType,
 			ApplicationID:   opts.ApplicationID,
 			InteractionType: enum.EInteractiveLoginType.Browser(),
 		}.NewToken()
@@ -85,19 +87,16 @@ func (opts LoginNewTokenOptions) NewToken() Token {
 		return NewAzureCLITokenOptions{
 			TenantID:    opts.TenantID,
 			AADEndpoint: opts.AADEndpoint,
-			LoginType:   opts.LoginType,
 		}.NewToken()
 	case enum.EAutoLoginType.PsCred():
 		return NewPSCredTokenOptions{
 			TenantID:    opts.TenantID,
 			AADEndpoint: opts.AADEndpoint,
-			LoginType:   opts.LoginType,
 		}.NewToken()
 	case enum.EAutoLoginType.Workload():
 		return NewWorkloadTokenOptions{
 			TenantID:    opts.TenantID,
 			AADEndpoint: opts.AADEndpoint,
-			LoginType:   opts.LoginType,
 		}.NewToken()
 	default:
 		// TokenStore and NoRefresh: construct empty token with header, fall back to reflection-based creation
@@ -105,9 +104,9 @@ func (opts LoginNewTokenOptions) NewToken() Token {
 			TokenHeader: TokenHeader{
 				Tenant:                  opts.TenantID,
 				ActiveDirectoryEndpoint: opts.AADEndpoint,
-				LoginType:               opts.LoginType,
+				LoginType:               opts.loginType,
 			},
-			tokenImpl: newTokenImpl(opts.LoginType),
+			tokenImpl: newTokenImpl(opts.loginType),
 		}
 	}
 }

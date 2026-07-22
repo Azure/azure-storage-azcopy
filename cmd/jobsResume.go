@@ -291,7 +291,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		Context:            ctx,
 		CanBePublic:        true,  // source can be public
 		SharedKeyAllowed:   false, // but not shared key
-		PreferredTokenName: SourceCredentialName,
+		PreferredTokenName: DestCredentialName,
 		CpkOptions:         common.CpkOptions{},
 		TokenManager:       credManager,
 	})

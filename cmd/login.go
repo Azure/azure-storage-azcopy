@@ -189,19 +189,16 @@ func (args rawLoginArgs) toOptions() (LoginOptions, error) {
 }
 
 func (options LoginOptions) process() error {
-	opts := cred.LoginNewTokenOptions{
-		TenantID:           options.TenantID,
-		AADEndpoint:        options.AADEndpoint,
-		LoginType:          options.LoginType,
-		IdentityClientID:   options.IdentityClientID,
-		IdentityObjectID:   options.IdentityObjectID,
-		IdentityResourceID: options.IdentityResourceID,
-		ApplicationID:      options.ApplicationID,
-		CertificateData:    options.CertificatePath,
-		ClientSecret:   ternary.Iff(options.ClientSecret != "", options.ClientSecret, options.CertificatePassword),
-
-		SaveCredential: true,
-	}
+	opts := cred.NewLoginNewTokenOptions(options.LoginType)
+	opts.TenantID = options.TenantID
+	opts.AADEndpoint = options.AADEndpoint
+	opts.IdentityClientID = options.IdentityClientID
+	opts.IdentityObjectID = options.IdentityObjectID
+	opts.IdentityResourceID = options.IdentityResourceID
+	opts.ApplicationID = options.ApplicationID
+	opts.CertificateData = options.CertificatePath
+	opts.ClientSecret = ternary.Iff(options.ClientSecret != "", options.ClientSecret, options.CertificatePassword)
+	opts.SaveCredential = true
 
 	_, err := GetCredentialManager().DoLogin(opts, context.Background())
 	if err != nil {
