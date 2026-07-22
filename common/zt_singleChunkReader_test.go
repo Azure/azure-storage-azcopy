@@ -146,6 +146,84 @@ func TestSingleChunkReader_ConcurrentCloseDuringReadStillFails(t *testing.T) {
 	a.Contains(err.Error(), "closed while reading")
 }
 
+// TestSingleChunkReader_ClosedBeforeAndConcurrentCloseDuringRetryDoesNotLeak covers the case
+// the earlier "wasClosedBefore" diff-based fix got wrong: a reader that was already Close()-d in
+// a prior attempt AND is Close()-d again concurrently with the retry's ReadAt. The concurrent
+// close must still abort THIS read; otherwise the rented buffer is stashed into cr.buffer after
+// the Close() that would have freed it has already finished, leaking the cacheLimiter budget
+// (which can eventually deadlock AzCopy).
+func TestSingleChunkReader_ClosedBeforeAndConcurrentCloseDuringRetryDoesNotLeak(t *testing.T) {
+	a := assert.New(t)
+
+	const chunkLen int64 = 4 * 1024
+	fileData := make([]byte, chunkLen)
+	for i := range fileData {
+		fileData[i] = byte(i)
+	}
+
+	release := make(chan struct{})
+	var callCount int
+	sourceFactory := func() (CloseableReaderAt, error) {
+		callCount++
+		if callCount == 1 {
+			// First attempt: a normal reader that satisfies the initial full read.
+			return testCloseableReaderAt{bytes.NewReader(fileData)}, nil
+		}
+		// Retry attempt: block inside ReadAt so we can Close() concurrently.
+		return &blockingReaderAt{data: make([]byte, chunkLen), release: release}, nil
+	}
+
+	cacheLim := NewCacheLimiter(chunkLen * 4)
+	cr := NewSingleChunkReader(
+		context.Background(),
+		sourceFactory,
+		NewChunkID("test", 0, chunkLen),
+		chunkLen,
+		nil,
+		testNoopLogger{},
+		NewMultiSizeSlicePool(chunkLen),
+		cacheLim,
+	)
+
+	// First read fully - succeeds and frees the buffer at EOF.
+	first := make([]byte, chunkLen)
+	n, err := io.ReadFull(cr, first)
+	a.NoError(err)
+	a.Equal(int(chunkLen), n)
+
+	// Close once (e.g. the transport reacting to a server-side connection close). This establishes
+	// the "was closed before" condition that the old fix failed to combine with a second,
+	// concurrent close during the retry read.
+	a.NoError(cr.Close())
+
+	// azcore retry: rewind and re-drive the body.
+	_, err = cr.Seek(0, io.SeekStart)
+	a.NoError(err)
+
+	// Retry read in a goroutine; it will block inside ReadAt.
+	readErr := make(chan error, 1)
+	go func() {
+		_, e := io.ReadFull(cr, make([]byte, chunkLen))
+		readErr <- e
+	}()
+
+	// Wait until the retry read is blocked inside ReadAt, then Close() concurrently.
+	<-release
+	a.NoError(cr.Close())
+	release <- struct{}{} // unblock ReadAt
+
+	// The concurrent close must abort THIS read even though the reader had also been closed
+	// before this attempt.
+	err = <-readErr
+	a.Error(err)
+	a.Contains(err.Error(), "closed while reading")
+
+	// And crucially, the buffer rented for the aborted read must have been returned to the pool -
+	// otherwise the cacheLimiter budget leaks. Probing with the relaxed limit: if the full limit
+	// can still be added, the accounting is back to zero.
+	a.True(cacheLim.TryAdd(cacheLim.Limit(), true), "cacheLimiter budget leaked: a rented buffer was not returned after the aborted read")
+}
+
 // blockingReaderAt signals when ReadAt is entered and blocks until told to proceed.
 type blockingReaderAt struct {
 	data    []byte
