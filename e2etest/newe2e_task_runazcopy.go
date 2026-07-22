@@ -129,6 +129,12 @@ type AzCopyCommand struct {
 	Stdout AzCopyStdout
 
 	ShouldFail bool
+
+	// AfterStart, if non-nil, is called after the azcopy process has been
+	// started but before Wait.  The callback receives the process's stdin
+	// pipe, which can be used to write commands (e.g. "cancel\n" when
+	// --cancel-from-stdin is enabled).
+	AfterStart func(stdin io.WriteCloser)
 }
 
 type AzCopyEnvironment struct {
@@ -182,7 +188,11 @@ var RunAzCopyDefaultInheritEnvironment = map[string]bool{
 }
 
 func (env *AzCopyEnvironment) DefaultInheritEnvironment(a ScenarioAsserter, ctx context.Context) map[string]bool {
-	env.InheritEnvironment = RunAzCopyDefaultInheritEnvironment
+	m := make(map[string]bool, len(RunAzCopyDefaultInheritEnvironment))
+	for k, v := range RunAzCopyDefaultInheritEnvironment {
+		m[k] = v
+	}
+	env.InheritEnvironment = m
 
 	return env.InheritEnvironment
 }
@@ -375,6 +385,8 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 				commandSpec.Flags = RemoveFlags{}
 			case AzCopyVerbJobsClean:
 				commandSpec.Flags = JobsCleanFlags{}
+			case AzCopyVerbJobsResume:
+				commandSpec.Flags = JobsResumeFlags{}
 			case AzCopyVerbJobsRemove:
 				commandSpec.Flags = JobsRemoveFlags{}
 			case AzCopyVerbJobsList:
@@ -510,6 +522,10 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 
 	if isLaunchedByDebugger {
 		beginAzCopyDebugging(in)
+	}
+
+	if commandSpec.AfterStart != nil {
+		commandSpec.AfterStart(in)
 	}
 
 	err = command.Wait()

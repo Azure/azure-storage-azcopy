@@ -9,46 +9,92 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 )
 
-// addTransfer accepts a new transfer, if the threshold is reached, dispatch a job part order.
-func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer, cca *CookedCopyCmdArgs) error {
-	// Source and destination paths are and should be relative paths.
+type CopyJobPartDispatcher struct {
+	PendingTransfers          common.Transfers
+	PendingHardlinksTransfers common.Transfers
+}
 
-	// dispatch the transfers once the number reaches NumOfFilesPerDispatchJobPart
-	// we do this so that in the case of large transfer, the transfer engine can get started
-	// while the frontend is still gathering more transfers
-	if len(e.Transfers.List) == azcopy.NumOfFilesPerDispatchJobPart {
-		shuffleTransfers(e.Transfers.List)
-		resp := jobsAdmin.ExecuteNewCopyJobPartOrder(*e)
+func (d *CopyJobPartDispatcher) readyForDispatch() bool {
+	return len(d.PendingTransfers.List) == azcopy.NumOfFilesPerDispatchJobPart
+}
 
-		if !resp.JobStarted {
-			return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNum, resp.ErrorMsg)
-		}
-		// if the current part order sent to engine is 0, then start fetching the Job Progress summary.
-		if e.PartNum == 0 {
-			cca.waitUntilJobCompletion(false)
-		}
-		e.Transfers = common.Transfers{}
-		e.PartNum++
-	}
+func (d *CopyJobPartDispatcher) appendTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer) error {
+	if e.JobProcessingMode == common.EJobProcessingMode.NFS() &&
+		transfer.EntityType == common.EEntityType.Hardlink() &&
+		transfer.TargetHardlinkFile != "" {
 
-	// only append the transfer after we've checked and dispatched a part
-	// so that there is at least one transfer for the final part
-	{
-		// Should this block be a function?
-		e.Transfers.List = append(e.Transfers.List, transfer)
-		e.Transfers.TotalSizeInBytes += uint64(transfer.SourceSize)
+		d.PendingHardlinksTransfers.List = append(d.PendingHardlinksTransfers.List, transfer)
+		d.PendingHardlinksTransfers.HardlinksTransferCount++
+
+	} else {
+		d.PendingTransfers.List = append(d.PendingTransfers.List, transfer)
+		d.PendingTransfers.TotalSizeInBytes += uint64(transfer.SourceSize)
 		switch transfer.EntityType {
 		case common.EEntityType.File():
-			e.Transfers.FileTransferCount++
+			d.PendingTransfers.FileTransferCount++
 		case common.EEntityType.Folder():
-			e.Transfers.FolderTransferCount++
+			d.PendingTransfers.FolderTransferCount++
 		case common.EEntityType.Symlink():
-			e.Transfers.SymlinkTransferCount++
+			d.PendingTransfers.SymlinkTransferCount++
 		case common.EEntityType.Hardlink():
-			e.Transfers.HardlinksConvertedCount++
+			if e.HardlinkHandlingType == common.EHardlinkHandlingType.Preserve() {
+				d.PendingTransfers.HardlinksTransferCount++
+			} else if e.HardlinkHandlingType == common.EHardlinkHandlingType.Follow() {
+				d.PendingTransfers.HardlinksConvertedCount++
+			}
+
 		}
 	}
 
+	return nil
+}
+
+// addTransfer accepts a new transfer, if the threshold is reached, dispatch a job part order.
+func (d *CopyJobPartDispatcher) addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer, cca *CookedCopyCmdArgs) error {
+	// Source and destination paths are and should be relative paths.
+
+	// Only dispatch mixed (file/folder/symlink) parts during enumeration.
+	// Hardlink transfers are buffered and dispatched after all mixed parts
+	// in dispatchFinalPart, so that hardlink targets are guaranteed to exist.
+	if d.readyForDispatch() {
+		if len(d.PendingTransfers.List) == azcopy.NumOfFilesPerDispatchJobPart {
+			e.Transfers = d.PendingTransfers.Clone()
+			e.JobPartType = common.EJobPartType.Mixed()
+			err := d.dispatchPart(e, cca)
+			if err != nil {
+				return fmt.Errorf("error adding transfer %w", err)
+			}
+			d.PendingTransfers = common.Transfers{}
+		}
+	}
+	// only append the transfer after we've checked and dispatched a part
+	// so that there is at least one transfer for the final part
+	err := d.appendTransfer(e, transfer)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// dispatch the transfers once the number reaches NumOfFilesPerDispatchJobPart
+// we do this so that in the case of large transfer, the transfer engine can get started
+// while the frontend is still gathering more transfers
+func (d *CopyJobPartDispatcher) dispatchPart(e *common.CopyJobPartOrderRequest, cca *CookedCopyCmdArgs) error {
+	shuffleTransfers(e.Transfers.List)
+	resp := jobsAdmin.ExecuteNewCopyJobPartOrder(*e)
+
+	if !resp.JobStarted {
+		return fmt.Errorf(
+			"copy job part order with JobId %s, part number %d, transfer type %s, and transfer count %d failed because %s",
+			e.JobID, e.PartNum, e.JobPartType, len(e.Transfers.List), resp.ErrorMsg)
+	}
+	// if the current part order sent to engine is 0, then start fetching the Job Progress summary.
+	if e.PartNum == 0 {
+		cca.waitUntilJobCompletion(false)
+	}
+	e.Transfers = common.Transfers{}
+	e.PartNum++
 	return nil
 }
 
@@ -61,7 +107,59 @@ func shuffleTransfers(transfers []common.CopyTransfer) {
 
 // we need to send a last part with isFinalPart set to true, along with whatever transfers that still haven't been sent
 // dispatchFinalPart sends a last part with isFinalPart set to true, along with whatever transfers that still haven't been sent.
-func dispatchFinalPart(e *common.CopyJobPartOrderRequest, cca *CookedCopyCmdArgs) error {
+func (d *CopyJobPartDispatcher) dispatchFinalPart(e *common.CopyJobPartOrderRequest, cca *CookedCopyCmdArgs) error {
+
+	if e.JobProcessingMode == common.EJobProcessingMode.NFS() {
+		// Flush any remaining mixed transfers first (as non-final parts).
+		if len(d.PendingTransfers.List) > 0 {
+			if len(d.PendingHardlinksTransfers.List) > 0 {
+				// More parts will follow (hardlinks), so dispatch mixed as non-final.
+				e.Transfers = d.PendingTransfers.Clone()
+				e.JobPartType = common.EJobPartType.Mixed()
+				err := d.dispatchPart(e, cca)
+				if err != nil {
+					return fmt.Errorf("error dispatching mixed parts %w", err)
+				}
+				d.PendingTransfers = common.Transfers{}
+			} else {
+				// No hardlinks pending; mixed will be the final part (handled below).
+			}
+		}
+
+		// Dispatch all buffered hardlink transfers in batches, with the very
+		// last batch (or last mixed batch if no hardlinks) being the final part.
+		for len(d.PendingHardlinksTransfers.List) > azcopy.NumOfFilesPerDispatchJobPart {
+			batch := common.Transfers{
+				List:                   make([]common.CopyTransfer, azcopy.NumOfFilesPerDispatchJobPart),
+				HardlinksTransferCount: uint32(azcopy.NumOfFilesPerDispatchJobPart),
+			}
+			copy(batch.List, d.PendingHardlinksTransfers.List[:azcopy.NumOfFilesPerDispatchJobPart])
+			d.PendingHardlinksTransfers.List = d.PendingHardlinksTransfers.List[azcopy.NumOfFilesPerDispatchJobPart:]
+			d.PendingHardlinksTransfers.HardlinksTransferCount -= uint32(azcopy.NumOfFilesPerDispatchJobPart)
+
+			e.Transfers = batch
+			e.JobPartType = common.EJobPartType.Hardlink()
+			err := d.dispatchPart(e, cca)
+			if err != nil {
+				return fmt.Errorf("error dispatching buffered hardlink part: %w", err)
+			}
+		}
+
+		// Whatever remains is the final part.
+		if len(d.PendingHardlinksTransfers.List) > 0 {
+			e.Transfers = d.PendingHardlinksTransfers.Clone()
+			e.JobPartType = common.EJobPartType.Hardlink()
+		} else if len(d.PendingTransfers.List) > 0 {
+			e.Transfers = d.PendingTransfers.Clone()
+			e.JobPartType = common.EJobPartType.Mixed()
+		}
+	} else {
+		if len(d.PendingTransfers.List) > 0 {
+			e.Transfers = d.PendingTransfers.Clone()
+			e.JobPartType = common.EJobPartType.Mixed()
+		}
+	}
+
 	shuffleTransfers(e.Transfers.List)
 	e.IsFinalPart = true
 	resp := jobsAdmin.ExecuteNewCopyJobPartOrder(*e)
@@ -82,7 +180,10 @@ func dispatchFinalPart(e *common.CopyJobPartOrderRequest, cca *CookedCopyCmdArgs
 			return azcopy.NothingScheduledError
 		}
 
-		return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNum, resp.ErrorMsg)
+		return fmt.Errorf(
+			"copy job part order with JobId %s, part number %d, transfer type %s, and transfer count %d failed because %s",
+			e.JobID, e.PartNum, e.JobPartType, len(e.Transfers.List), resp.ErrorMsg)
+
 	}
 
 	common.LogToJobLogWithPrefix(azcopy.FinalPartCreatedMessage, common.LogInfo)

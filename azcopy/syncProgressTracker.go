@@ -160,11 +160,15 @@ func (spt *syncProgressTracker) incSourceEnumeration(entityType common.EntityTyp
 		switch symlinkOption {
 		case common.ESymlinkHandlingType.Skip():
 			atomic.AddUint32(&spt.atomicSkippedSymlinkCount, 1)
+		case common.ESymlinkHandlingType.Preserve():
+			atomic.AddUint64(&spt.atomicSourceFilesScanned, 1)
 		}
 	} else if entityType == common.EEntityType.Hardlink() {
 		switch hardlinkHandling {
 		case common.SkipHardlinkHandlingType:
 			atomic.AddUint32(&spt.atomicSkippedHardlinkCount, 1)
+		case common.EHardlinkHandlingType.Preserve():
+			atomic.AddUint64(&spt.atomicSourceFilesScanned, 1)
 		}
 	}
 }
@@ -177,9 +181,17 @@ func (spt *syncProgressTracker) getDestinationFilesScanned() uint64 {
 	return atomic.LoadUint64(&spt.atomicDestinationFilesScanned)
 }
 
-func (spt *syncProgressTracker) incDestEnumeration(entityType common.EntityType, _ common.SymlinkHandlingType, _ common.HardlinkHandlingType) {
+func (spt *syncProgressTracker) incDestEnumeration(entityType common.EntityType, symlinkOption common.SymlinkHandlingType, hardlinkHandling common.HardlinkHandlingType) {
 	if entityType == common.EEntityType.File() {
 		atomic.AddUint64(&spt.atomicDestinationFilesScanned, 1)
+	} else if entityType == common.EEntityType.Symlink() {
+		if symlinkOption == common.ESymlinkHandlingType.Preserve() {
+			atomic.AddUint64(&spt.atomicDestinationFilesScanned, 1)
+		}
+	} else if entityType == common.EEntityType.Hardlink() {
+		if hardlinkHandling == common.EHardlinkHandlingType.Preserve() {
+			atomic.AddUint64(&spt.atomicDestinationFilesScanned, 1)
+		}
 	}
 }
 
