@@ -96,7 +96,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *traverser.CopyEnum
 		StripTopDir:             cca.StripTopDir,
 
 		ExcludeContainers: cca.excludeContainer,
-		HardlinkHandling:  common.EHardlinkHandlingType.Follow(),
+		HardlinkHandling:  cca.hardlinks,
 	})
 
 	// report failure to create traverser
@@ -220,6 +220,7 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 				traverser.NoContentProps,
 				nil,
 				"",
+				&traverser.NFSMetadataContext{},
 			))
 
 			if err != nil {
@@ -249,6 +250,7 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 					traverser.NoContentProps,
 					nil,
 					"",
+					&traverser.NFSMetadataContext{},
 				))
 
 				if err != nil {

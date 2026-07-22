@@ -269,14 +269,25 @@ func (s *FileShareResourceManager) ListObjects(a Asserter, targetDir string, rec
 	queue := []string{targetDir}
 	out := make(map[string]ObjectProperties)
 
+	fileShareType := s.GetProperties(a)
+	var include directory.ListFilesInclude
+	var includeExtendedInfo *bool
+	if fileShareType.FileContainerProperties.EnabledProtocols != nil &&
+		*fileShareType.FileContainerProperties.EnabledProtocols == "NFS" {
+		// not needed for NFS
+	} else {
+		include = directory.ListFilesInclude{Timestamps: true, Attributes: true, PermissionKey: true}
+		includeExtendedInfo = pointerTo(true)
+	}
+
 	for len(queue) > 0 {
 		parent := queue[0] // pop from queue
 		queue = queue[1:]
 
 		dirClient := s.InternalClient.NewDirectoryClient(parent)
 		pager := dirClient.NewListFilesAndDirectoriesPager(&directory.ListFilesAndDirectoriesOptions{
-			Include:             directory.ListFilesInclude{Timestamps: true, Attributes: true, PermissionKey: true},
-			IncludeExtendedInfo: pointerTo(true),
+			Include:             include,
+			IncludeExtendedInfo: includeExtendedInfo,
 		})
 
 		for pager.More() {
@@ -332,7 +343,7 @@ func (s *FileShareResourceManager) ListObjects(a Asserter, targetDir string, rec
 				}
 
 				out[fullPath] = ObjectProperties{
-					EntityType: common.EEntityType.Folder(),
+					EntityType: common.EEntityType.File(),
 					HTTPHeaders: contentHeaders{
 						cacheControl:       resp.CacheControl,
 						contentDisposition: resp.ContentDisposition,
@@ -926,7 +937,9 @@ func (f *FileObjectResourceManager) ReadLink(a Asserter) string {
 
 		resp, err := f.getFileClient().GetSymbolicLink(ctx, nil)
 		a.NoError("Read symlink", err)
-
+		if err != nil || resp.LinkText == nil {
+			return ""
+		}
 		return *resp.LinkText
 	}
 	a.Error("Symlinks are unsupported on Files.")

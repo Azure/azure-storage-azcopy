@@ -390,19 +390,19 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		}
 		// ===== TEST KNOB
 		jpm.jobMgr.ScheduleTransfer(jpm.priority, jptm)
-
-		// This sets the atomic variable atomicAllTransfersScheduled to 1
-		// atomicAllTransfersScheduled variables is used in case of resume job
-		// Since iterating the JobParts and scheduling transfer is independent
-		// a variable is required which defines whether last part is resumed or not
-		if plan.IsFinalPart {
-			jpm.jobMgr.ConfirmAllTransfersScheduled()
-		}
 	}
 
+	// This sets the atomic variable atomicAllTransfersScheduled to 1.
+	// It must be outside the transfer loop so that it is called even when
+	// every transfer in the final part was already Success (resume scenario).
+	// atomicAllTransfersScheduled is used in case of resume job:
+	// since iterating the JobParts and scheduling transfers is independent,
+	// a variable is required which defines whether the last part is resumed or not.
 	if plan.IsFinalPart {
+		jpm.jobMgr.ConfirmAllTransfersScheduled()
 		jpm.Log(common.LogInfo, "Final job part has been scheduled")
 	}
+
 }
 
 func (jpm *jobPartMgr) ScheduleChunks(chunkFunc chunkFunc) {

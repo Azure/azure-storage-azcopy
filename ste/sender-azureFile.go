@@ -178,6 +178,20 @@ func (u *azureFileSenderBase) RemoteFileExists() (bool, time.Time, error) {
 	return remoteObjectExists(filePropertiesResponseAdapter{props}, err)
 }
 
+// senderIsSyncJob tells us whether the current transfer is `sync`.
+// Sync reconciles NFS hardlink groups in its comparator and deletes members that must move, so the
+// anchor/data-carrier must be overwritten in place.
+// But, copy has no comparator and
+// relies on delete-before-create to break stale destination groups.
+func senderIsSyncJob(jptm IJobPartTransferMgr) bool {
+	m, ok := jptm.(*jobPartTransferMgr)
+	if !ok {
+		return false
+	}
+	cmd := strings.TrimSpace(m.jobPartMgr.Plan().CommandString())
+	return cmd == "sync" || strings.HasPrefix(cmd, "sync ")
+}
+
 func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationModified bool) {
 	jptm := u.jptm
 	info := jptm.Info()
@@ -188,6 +202,42 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		// sometimes, specifically when reading local files, we have more info
 		// about the file type at this time than what we had before
 		u.headersToApply.ContentType = state.GetInferredContentType(u.jptm)
+	}
+
+	// If the destination is a regular NFS file with LinkCount > 1 (i.e. part of a hardlink group), delete it before Create
+	// so we don't preserve the existing inode/hardlink relationships when overwriting this path.
+
+	// We delete/ break the hardlink group in these cases:
+	//   - copy: there is no comparator, so re-uploading the anchor/data-carrier
+	//     is the only way to detach it from a stale destination group and rebuild
+	//     the source's grouping
+	//   - a genuine hardlink→file conversion (source is a regular file): the path
+	//     must leave the group to match the source.
+	//
+	// Do NOT break it for a sync whose source is still a hardlink: the sync
+	// comparator already restructures groups (deleting members that move), so the
+	// anchor/data-carrier only needs an in-place content refresh. Deleting it here
+	// would replace its inode and orphan the non-anchor siblings the comparator
+	// intentionally left in place.
+
+	breakDestHardlinkGroup := info.EntityType != common.EEntityType.Hardlink() || !senderIsSyncJob(u.jptm)
+	if u.jptm.FromTo().IsNFS() && breakDestHardlinkGroup {
+		if props, err := u.getFileClient().GetProperties(u.ctx, nil); err == nil {
+			isNFSFileRegular := props.NFSFileType != nil && *props.NFSFileType == file.NFSFileTypeRegular
+			linkCount := common.IffNotNil(props.LinkCount, int64(0))
+			if isNFSFileRegular && linkCount > 1 {
+				jptm.Log(common.LogInfo, fmt.Sprintf(
+					"Destination %s is part of a hardlink group (linkCount=%d). Deleting before creation so the hardlink group is broken to match the source.",
+					u.getFileClient().URL(), linkCount))
+				if _, delErr := u.getFileClient().Delete(u.ctx, nil); delErr != nil {
+					// We don't fail outright on Delete errors here.
+					// Any errors would be surfaced and handled in Create
+					jptm.Log(common.LogWarning, fmt.Sprintf(
+						"Deleting destination %s to break hardlink group before creation failed: %v",
+						u.getFileClient().URL(), delErr))
+				}
+			}
+		}
 	}
 	createOptions := &file.CreateOptions{
 		HTTPHeaders: &u.headersToApply,
@@ -526,5 +576,68 @@ func (u *azureFileSenderBase) SendSymlink(linkData string) error {
 	}
 
 	u.jptm.Log(common.LogDebug, fmt.Sprintf("Created symlink with data: %s", linkData))
+	return nil
+}
+
+// CreateHardlink creates a hard link on Azure Files NFS with the given link data.
+func (u *azureFileSenderBase) CreateHardlink(targetHardlinkFilePath string) error {
+	jptm := u.jptm
+	info := jptm.Info()
+
+	if !jptm.FromTo().IsNFS() {
+		return nil
+	}
+
+	createHardlinkOptions := &file.CreateHardLinkOptions{}
+
+	stage, err := u.addNFSPropertiesToHeaders(info)
+	if err != nil {
+		jptm.FailActiveSend(stage, err)
+		return err
+	}
+
+	stage, err = u.addNFSPermissionsToHeaders(info, u.getFileClient().URL())
+	if err != nil {
+		jptm.FailActiveSend(stage, err)
+		return err
+	}
+
+	err = DoWithCreateHardlinkOnAzureFilesNFS(u.ctx,
+		func() error {
+			_, err := u.getFileClient().CreateHardLink(u.ctx, targetHardlinkFilePath, createHardlinkOptions)
+			return err
+		},
+		u.getFileClient(),
+		u.shareClient,
+		u.pacer,
+		u.jptm)
+
+	// if still failing, give up
+	if err != nil {
+		jptm.FailActiveUpload("Creating hardlink", err)
+		return fmt.Errorf("failed to create hardlink: %w", err)
+	}
+
+	u.jptm.Log(common.LogDebug, fmt.Sprintf("Created hardlink with data: %s", targetHardlinkFilePath))
+	return nil
+}
+
+// DeleteDestInOverwrite deletes the destination resource in FileNFS transfer with symlink where overwrite=True.
+// This was added because the overwrite retry logic was gated on status codes from the service that were not
+// always hit
+func (u *azureFileSenderBase) DeleteDestInOverwrite() error {
+	if !u.jptm.FromTo().IsNFS() {
+		return nil
+	}
+
+	destClient := u.getFileClient()
+	if _, delErr := destClient.Delete(u.ctx, nil); delErr != nil {
+		// First, check if there is anything to delete
+		var respErr *azcore.ResponseError
+		if errors.As(delErr, &respErr) && respErr.StatusCode == http.StatusNotFound {
+			return nil
+		}
+		return fmt.Errorf("failed to delete file for overwrite: %w", delErr)
+	}
 	return nil
 }

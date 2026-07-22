@@ -103,7 +103,10 @@ func (l LocalObjectResourceManager) GetNFSProperties(a Asserter) ste.TypedNFSPro
 }
 
 func (l LocalObjectResourceManager) getSymlinkHandlingForEntityType() common.SymlinkHandlingType {
-	return common.Iff(l.EntityType() == common.EEntityType.Symlink(), common.ESymlinkHandlingType.Preserve(), common.ESymlinkHandlingType.Follow())
+	// Use Preserve (Lstat) for both Symlink and Hardlink entity types.
+	// A hardlink to a symlink IS a symlink at the filesystem level, so Follow
+	// would chase the target chain and fail on relative/dangling targets.
+	return common.Iff(l.EntityType() == common.EEntityType.Symlink() || l.EntityType() == common.EEntityType.Hardlink(), common.ESymlinkHandlingType.Preserve(), common.ESymlinkHandlingType.Follow())
 }
 
 func (l LocalObjectResourceManager) GetNFSPermissions(a Asserter) ste.TypedNFSPermissionsHolder {
@@ -112,7 +115,7 @@ func (l LocalObjectResourceManager) GetNFSPermissions(a Asserter) ste.TypedNFSPe
 		var stat unix.Statx_t
 
 		statxFlags := unix.AT_STATX_SYNC_AS_STAT
-		if l.EntityType() == common.EEntityType.Symlink() {
+		if l.EntityType() == common.EEntityType.Symlink() || l.EntityType() == common.EEntityType.Hardlink() {
 			statxFlags |= unix.AT_SYMLINK_NOFOLLOW
 		}
 		// dirfd is a null pointer, because we should only ever be passing relative paths here, and directories will be passed via transferInfo.Source.
