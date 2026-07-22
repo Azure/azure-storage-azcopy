@@ -72,7 +72,7 @@ func TestBasic_CopyUploadLargeBlob(t *testing.T) {
 		recursive: true,
 	}, &hooks{
 		beforeTestRun: func(h hookHelper) {
-			h.SkipTest()
+			h.SkipTest("Consumes too much time and memory to run in pipeline.")
 		},
 	}, testFiles{
 		defaultSize: "1G",
@@ -187,10 +187,10 @@ func TestBasic_CopyDownloadLargeBlob(t *testing.T) {
 		recursive: true,
 	}, &hooks{
 		beforeTestRun: func(h hookHelper) {
-			h.SkipTest()
+			h.SkipTest("Consumes too much time and memory to run in pipeline.")
 		},
 	}, testFiles{
-		defaultSize: "1K",
+		defaultSize: "1G",
 		shouldTransfer: []interface{}{
 			folder(""),
 			f("file1.txt"),
@@ -226,7 +226,7 @@ func TestBasic_CopyS2SLargeBlob(t *testing.T) {
 		recursive: true,
 	}, &hooks{
 		beforeTestRun: func(h hookHelper) {
-			h.SkipTest()
+			h.SkipTest("Consumes too much time and memory to run in pipeline.")
 		},
 	}, testFiles{
 		defaultSize: "1G",
@@ -334,7 +334,7 @@ func TestBasic_CopyRemoveLargeFile(t *testing.T) {
 		relativeSourcePath: "file2.txt",
 	}, &hooks{
 		beforeTestRun: func(h hookHelper) {
-			h.SkipTest()
+			h.SkipTest("Consumes too much time and memory to run in pipeline.")
 		},
 	}, testFiles{
 		defaultSize: "1G",
