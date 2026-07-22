@@ -561,7 +561,7 @@ type hookHelper interface {
 	CreateSourceSnapshot()
 
 	// SkipTest skips the test
-	SkipTest()
+	SkipTest(reason string)
 
 	// Assert gives access to the asserter
 	GetAsserter() asserter

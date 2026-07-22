@@ -171,7 +171,7 @@ func TestProperties_SMBTimes(t *testing.T) {
 		&hooks{
 			beforeTestRun: func(h hookHelper) {
 				if runtime.GOOS != "windows" {
-					h.SkipTest()
+					h.SkipTest("Only applies to Windows.")
 				}
 			},
 		},
