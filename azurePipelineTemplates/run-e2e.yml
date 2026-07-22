@@ -10,19 +10,27 @@ jobs:
     # Creating strategies for GOOS: Windows Server 2019 /macOS X Mojave 10.15/Ubuntu 20.04
     strategy:
       matrix:
-        Ubuntu-20:
-          imageName: 'ubuntu-latest'
-          build_name: 'azcopy_linux_amd64'
-          display_name: "Linux"
-        Windows:
-          imageName: 'windows-latest'
-          build_name: 'azcopy_windows_amd64.exe'
-          display_name: "Windows"
-          type: 'windows'
+        # Ubuntu-20:
+        #   imageName: 'ubuntu-latest'
+        #   build_name: 'azcopy_linux_amd64'
+        #   display_name: "Linux"
+        # Windows:
+        #   imageName: 'windows-latest'
+        #   build_name: 'azcopy_windows_amd64.exe'
+        #   display_name: "Windows"
+        #   type: 'windows'
         MacOS:
           imageName: 'macos-latest'
           build_name: 'azcopy_darwin_amd64'
           display_name: "MacOS"
+        MacOS2:
+          imageName: 'macos-latest'
+          build_name: 'azcopy_darwin_amd64'
+          display_name: "MacOS2"
+        MacOS3:
+          imageName: 'macos-latest'
+          build_name: 'azcopy_darwin_amd64'
+          display_name: "MacOS3"
     pool:
       vmImage: $(imageName)
     steps:
