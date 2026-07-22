@@ -19,7 +19,7 @@ func prepareAutoLogins() map[string]Token {
 	autoToken := LoginNewTokenOptions{
 		TenantID:           enum.EEnvironmentVariable.TenantID().Get(),
 		AADEndpoint:        enum.EEnvironmentVariable.AADEndpoint().Get(),
-		LoginType:          loginType,
+		loginType:          loginType,
 		IdentityClientID:   enum.EEnvironmentVariable.ManagedIdentityClientID().Get(),
 		IdentityObjectID:   enum.EEnvironmentVariable.ManagedIdentityObjectID().Get(),
 		IdentityResourceID: enum.EEnvironmentVariable.ManagedIdentityResourceString().Get(),

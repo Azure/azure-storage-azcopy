@@ -20,19 +20,27 @@ type iEnumValue interface {
 
 var initMap = data_structures.NewSyncMap[reflect.Type, bool]()
 
+type EnumImpl[Val iEnumValue, Self iEnumSelf] struct {
+	enumBackend[Val, Self]
+}
+
+type EnumImplRawString[Self iEnumSelf] struct {
+	enumBackend[string, Self]
+}
+
 // EnumImpl should be embedded in it's parent struct, with the value the functions enumerate as Val, and the parent struct as Self.
 // All exported functions with no inputs and a Val output will be registered as values of the enumeration.
 // Values prefixed Alias_ will parse, but when stringified, will return their canonical value.
-type EnumImpl[Val iEnumValue, Self iEnumSelf] struct {
+type enumBackend[Val comparable, Self iEnumSelf] struct {
 	nameDict  map[string]Val
 	valueDict map[Val]string
 }
 
-func (e EnumImpl[Val, Self]) enumImpl() {
+func (e enumBackend[Val, Self]) enumImpl() {
 	panic("used for interface fulfillment; no function")
 }
 
-func (e *EnumImpl[Val, Self]) init() {
+func (e *enumBackend[Val, Self]) init() {
 	enumType := reflect.TypeFor[Self]()
 	// A "once" in map form
 	_, loaded := initMap.LoadOrStore(enumType, true)
@@ -92,7 +100,7 @@ func (e *EnumImpl[Val, Self]) init() {
 	}
 }
 
-func (e *EnumImpl[Val, Self]) String(val Val) string {
+func (e *enumBackend[Val, Self]) String(val Val) string {
 	e.init()
 
 	out, ok := e.valueDict[val]
@@ -103,14 +111,14 @@ func (e *EnumImpl[Val, Self]) String(val Val) string {
 	return out
 }
 
-func (e *EnumImpl[Val, Self]) Parse(str string) (val Val, ok bool) {
+func (e *enumBackend[Val, Self]) Parse(str string) (val Val, ok bool) {
 	e.init()
 
 	val, ok = e.nameDict[strings.ToLower(str)]
 	return
 }
 
-func (e *EnumImpl[Val, Self]) Values() iter.Seq[Val] {
+func (e *enumBackend[Val, Self]) Values() iter.Seq[Val] {
 	e.init()
 
 	return func(yield func(Val) bool) {

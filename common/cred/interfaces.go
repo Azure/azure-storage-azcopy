@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 )
 
 // Manager pulls from multiple registered Keyring(s) and hands out
@@ -64,6 +65,7 @@ type RWKeyring interface {
 // NewTokenOptions creates a Token from explicit per-type configuration.
 type NewTokenOptions interface {
 	NewToken() Token
+	LoginType() enum.AutoLoginType
 }
 
 // tokenImpl provides a TokenCredential provider, backwards compat

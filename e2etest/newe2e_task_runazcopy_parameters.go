@@ -206,8 +206,7 @@ type GlobalFlags struct {
 	LogLevel    *common.LogLevel        `flag:"log-level,default:DEBUG"`
 	OutputLevel *common.OutputVerbosity `flag:"output-level,default:DEFAULT"`
 
-	// TODO: reconsider/reengineer this flag; WI#26475473
-	// DebugSkipFiles []string `flag:"debug-skip-files"`
+	DebugSkipFiles []string `flag:"debug-skip-files,serializer:SerializeDebugSkipFiles"`
 
 	// TODO: handle prompting and input; WI#26475441
 	//CancelFromStdin *bool `flag:"cancel-from-stdin"`
@@ -221,6 +220,10 @@ type GlobalFlags struct {
 
 func (GlobalFlags) DefaultAwaitContinue(a ScenarioAsserter, ctx context.Context) string {
 	return ternary.Iff(isLaunchedByDebugger, "true", "false")
+}
+
+func (GlobalFlags) SerializeDebugSkipFiles(list any, a ScenarioAsserter, ctx context.Context) string {
+	return strings.Join(GetTypeOrAssert[[]string](a, list), ";")
 }
 
 func (GlobalFlags) DefaultMemoryProfile(a ScenarioAsserter, ctx context.Context) string {
@@ -445,21 +448,21 @@ type RemoveFlags struct {
 type SetPropertiesFlags struct {
 	GlobalFlags
 
-	Cred         *string                      `flag:"cred"`
-	Recursive    *bool                        `flag:"recursive"`
-	FromTo       *common.FromTo               `flag:"from-to"`
-	Metadata     *string                      `flag:"metadata"`
-	BlobTags     *string                      `flag:"blob-tags"`
-	BlockBlobTier *common.BlockBlobTier      `flag:"block-blob-tier"`
-	DryRun       *bool                        `flag:"dry-run"`
-	TrailingDot  *common.TrailingDotOption    `flag:"trailing-dot"`
+	Cred          *string                   `flag:"cred"`
+	Recursive     *bool                     `flag:"recursive"`
+	FromTo        *common.FromTo            `flag:"from-to"`
+	Metadata      *string                   `flag:"metadata"`
+	BlobTags      *string                   `flag:"blob-tags"`
+	BlockBlobTier *common.BlockBlobTier     `flag:"block-blob-tier"`
+	DryRun        *bool                     `flag:"dry-run"`
+	TrailingDot   *common.TrailingDotOption `flag:"trailing-dot"`
 }
 
 type MakeFlags struct {
 	GlobalFlags
 
-	Cred     *string  `flag:"cred"`
-	QuotaGB  *uint32  `flag:"quota-gb"`
+	Cred    *string `flag:"cred"`
+	QuotaGB *uint32 `flag:"quota-gb"`
 }
 
 func (r RemoveFlags) SerializeListingFile(in any, scenarioAsserter ScenarioAsserter, ctx context.Context) {
@@ -510,6 +513,17 @@ type LogoutFlags struct {
 	GlobalFlags
 
 	Nickname *string `flag:"nickname"`
+}
+
+type ResumeFlags struct {
+	GlobalFlags
+
+	Include        *string `flag:"include"`
+	Exclude        *string `flag:"exclude"`
+	SourceSAS      *string `flag:"source-sas"`
+	DestinationSAS *string `flag:"destination-sas"`
+	SourceCred     *string `flag:"src-cred"`
+	DestCred       *string `flag:"dst-cred"`
 }
 
 type WindowsAttribute uint32

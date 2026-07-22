@@ -73,7 +73,7 @@ func (c *linuxCredCache) init() {
 	})
 }
 
-func (c *linuxCredCache) GetToken(nickname string) (token, bool) {
+func (c *linuxCredCache) GetToken(nickname string) (Token, bool) {
 	c.init()
 	c.lock.RLock()
 	defer c.lock.RUnlock()
@@ -87,7 +87,7 @@ func (c *linuxCredCache) GetToken(nickname string) (token, bool) {
 		if nickname != DefaultNickname {
 			return c.getToken(DefaultNickname)
 		}
-		return token{}, false
+		return nil, false
 	}
 
 	if entry.Key == nil {
@@ -97,7 +97,7 @@ func (c *linuxCredCache) GetToken(nickname string) (token, bool) {
 			if nickname != DefaultNickname {
 				return c.getToken(DefaultNickname)
 			}
-			return token{}, false
+			return nil, false
 		}
 	}
 
@@ -106,7 +106,7 @@ func (c *linuxCredCache) GetToken(nickname string) (token, bool) {
 		if nickname != DefaultNickname {
 			return c.getToken(DefaultNickname)
 		}
-		return token{}, false
+		return nil, false
 	}
 
 	var out token
@@ -115,30 +115,30 @@ func (c *linuxCredCache) GetToken(nickname string) (token, bool) {
 		if nickname != DefaultNickname {
 			return c.getToken(DefaultNickname)
 		}
-		return token{}, false
+		return nil, false
 	}
 
-	return out, true
+	return &out, true
 }
 
-func (c *linuxCredCache) getToken(nickname string) (token, bool) {
+func (c *linuxCredCache) getToken(nickname string) (Token, bool) {
 	key, err := c.sessionKeyring.Search(nickname)
 	if err != nil {
-		return token{}, false
+		return nil, false
 	}
 
 	buf, err := key.Get()
 	if err != nil {
-		return token{}, false
+		return nil, false
 	}
 
 	var out token
 	err = json.Unmarshal(buf, &out)
 	if err != nil {
-		return token{}, false
+		return nil, false
 	}
 
-	return out, true
+	return &out, true
 }
 
 func (c *linuxCredCache) DeleteToken(nickname string) bool {

@@ -37,7 +37,7 @@ type gnomeKeyring struct {
 	schema *libsecret.Schema
 }
 
-func (g gnomeKeyring) GetToken(nickname string) (token, bool) {
+func (g gnomeKeyring) GetToken(nickname string) (Token, bool) {
 	if nickname == "" {
 		nickname = DefaultNickname
 	}
@@ -52,7 +52,7 @@ func (g gnomeKeyring) GetToken(nickname string) (token, bool) {
 		if nickname != DefaultNickname {
 			return g.getToken(DefaultNickname)
 		}
-		return token{}, false
+		return nil, false
 	}
 
 	v := results[0]
@@ -61,7 +61,7 @@ func (g gnomeKeyring) GetToken(nickname string) (token, bool) {
 		if nickname != DefaultNickname {
 			return g.getToken(DefaultNickname)
 		}
-		return token{}, false
+		return nil, false
 	}
 
 	buf, n, err := val.Get()
@@ -69,7 +69,7 @@ func (g gnomeKeyring) GetToken(nickname string) (token, bool) {
 		if nickname != DefaultNickname {
 			return g.getToken(DefaultNickname)
 		}
-		return token{}, false
+		return nil, false
 	}
 
 	var out token
@@ -78,13 +78,13 @@ func (g gnomeKeyring) GetToken(nickname string) (token, bool) {
 		if nickname != DefaultNickname {
 			return g.getToken(DefaultNickname)
 		}
-		return token{}, false
+		return nil, false
 	}
 
-	return out, true
+	return &out, true
 }
 
-func (g gnomeKeyring) getToken(nickname string) (token, bool) {
+func (g gnomeKeyring) getToken(nickname string) (Token, bool) {
 	attributes := map[string]string{
 		"pid":      strconv.Itoa(os.Getpid()),
 		"nickname": nickname,
@@ -92,27 +92,27 @@ func (g gnomeKeyring) getToken(nickname string) (token, bool) {
 
 	results, err := libsecret.SearchPasswords(g.schema, attributes, libsecret.SearchFlagsAll)
 	if err != nil || len(results) == 0 {
-		return token{}, false
+		return nil, false
 	}
 
 	v := results[0]
 	val, err := v.RetrieveSecret()
 	if err != nil {
-		return token{}, false
+		return nil, false
 	}
 
 	buf, n, err := val.Get()
 	if err != nil {
-		return token{}, false
+		return nil, false
 	}
 
 	var out token
 	err = json.Unmarshal(buf[:n], &out)
 	if err != nil {
-		return token{}, false
+		return nil, false
 	}
 
-	return out, true
+	return &out, true
 }
 
 func (g gnomeKeyring) keyringImpl() {}

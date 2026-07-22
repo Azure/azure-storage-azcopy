@@ -9,19 +9,20 @@ import (
 type NewSPNTokenOptions struct {
 	TenantID    string
 	AADEndpoint string
-	LoginType   enum.AutoLoginType
 
 	ApplicationID   string
 	CertificateData string
 	ClientSecret    string
 }
 
+func (o NewSPNTokenOptions) LoginType() enum.AutoLoginType { return enum.EAutoLoginType.SPN() }
+
 func (o NewSPNTokenOptions) NewToken() Token {
 	return &token{
 		TokenHeader: TokenHeader{
 			Tenant:                  ternary.Iff(o.TenantID != "", o.TenantID, DefaultTenantID),
 			ActiveDirectoryEndpoint: ternary.Iff(o.AADEndpoint != "", o.AADEndpoint, DefaultActiveDirectoryEndpoint),
-			LoginType:               o.LoginType,
+			LoginType:               o.LoginType(),
 		},
 		tokenImpl: tokenInfoSPN{
 			ApplicationID: o.ApplicationID,
@@ -34,19 +35,20 @@ func (o NewSPNTokenOptions) NewToken() Token {
 type NewMSITokenOptions struct {
 	TenantID    string
 	AADEndpoint string
-	LoginType   enum.AutoLoginType
 
 	IdentityClientID   string
 	IdentityObjectID   string
 	IdentityResourceID string
 }
 
+func (o NewMSITokenOptions) LoginType() enum.AutoLoginType { return enum.EAutoLoginType.MSI() }
+
 func (o NewMSITokenOptions) NewToken() Token {
 	return &token{
 		TokenHeader: TokenHeader{
 			Tenant:                  ternary.Iff(o.TenantID != "", o.TenantID, DefaultTenantID),
 			ActiveDirectoryEndpoint: ternary.Iff(o.AADEndpoint != "", o.AADEndpoint, DefaultActiveDirectoryEndpoint),
-			LoginType:               o.LoginType,
+			LoginType:               o.LoginType(),
 		},
 		tokenImpl: tokenInfoManagedIdentity{
 			ClientID: o.IdentityClientID,
@@ -59,10 +61,16 @@ func (o NewMSITokenOptions) NewToken() Token {
 type NewUserLoginTokenOptions struct {
 	TenantID    string
 	AADEndpoint string
-	LoginType   enum.AutoLoginType
 
 	ApplicationID   string
 	InteractionType enum.InteractiveLoginType
+}
+
+func (o NewUserLoginTokenOptions) LoginType() enum.AutoLoginType {
+	if o.InteractionType == enum.EInteractiveLoginType.Device() {
+		return enum.EAutoLoginType.Device()
+	}
+	return enum.EAutoLoginType.Interactive()
 }
 
 func (o NewUserLoginTokenOptions) NewToken() Token {
@@ -70,7 +78,7 @@ func (o NewUserLoginTokenOptions) NewToken() Token {
 		TokenHeader: TokenHeader{
 			Tenant:                  ternary.Iff(o.TenantID != "", o.TenantID, DefaultTenantID),
 			ActiveDirectoryEndpoint: ternary.Iff(o.AADEndpoint != "", o.AADEndpoint, DefaultActiveDirectoryEndpoint),
-			LoginType:               o.LoginType,
+			LoginType:               o.LoginType(),
 		},
 		tokenImpl: &tokenInfoUserLogin{
 			ApplicationID:   o.ApplicationID,
@@ -83,15 +91,16 @@ func (o NewUserLoginTokenOptions) NewToken() Token {
 type NewAzureCLITokenOptions struct {
 	TenantID    string
 	AADEndpoint string
-	LoginType   enum.AutoLoginType
 }
+
+func (o NewAzureCLITokenOptions) LoginType() enum.AutoLoginType { return enum.EAutoLoginType.AzCLI() }
 
 func (o NewAzureCLITokenOptions) NewToken() Token {
 	return &token{
 		TokenHeader: TokenHeader{
 			Tenant:                  ternary.Iff(o.TenantID != "", o.TenantID, DefaultTenantID),
 			ActiveDirectoryEndpoint: ternary.Iff(o.AADEndpoint != "", o.AADEndpoint, DefaultActiveDirectoryEndpoint),
-			LoginType:               o.LoginType,
+			LoginType:               o.LoginType(),
 		},
 		tokenImpl: tokenInfoCLI{},
 	}
@@ -100,15 +109,16 @@ func (o NewAzureCLITokenOptions) NewToken() Token {
 type NewPSCredTokenOptions struct {
 	TenantID    string
 	AADEndpoint string
-	LoginType   enum.AutoLoginType
 }
+
+func (o NewPSCredTokenOptions) LoginType() enum.AutoLoginType { return enum.EAutoLoginType.PsCred() }
 
 func (o NewPSCredTokenOptions) NewToken() Token {
 	return &token{
 		TokenHeader: TokenHeader{
 			Tenant:                  ternary.Iff(o.TenantID != "", o.TenantID, DefaultTenantID),
 			ActiveDirectoryEndpoint: ternary.Iff(o.AADEndpoint != "", o.AADEndpoint, DefaultActiveDirectoryEndpoint),
-			LoginType:               o.LoginType,
+			LoginType:               o.LoginType(),
 		},
 		tokenImpl: tokenInfoPSCred{},
 	}
@@ -117,15 +127,16 @@ func (o NewPSCredTokenOptions) NewToken() Token {
 type NewWorkloadTokenOptions struct {
 	TenantID    string
 	AADEndpoint string
-	LoginType   enum.AutoLoginType
 }
+
+func (o NewWorkloadTokenOptions) LoginType() enum.AutoLoginType { return enum.EAutoLoginType.Workload() }
 
 func (o NewWorkloadTokenOptions) NewToken() Token {
 	return &token{
 		TokenHeader: TokenHeader{
 			Tenant:                  ternary.Iff(o.TenantID != "", o.TenantID, DefaultTenantID),
 			ActiveDirectoryEndpoint: ternary.Iff(o.AADEndpoint != "", o.AADEndpoint, DefaultActiveDirectoryEndpoint),
-			LoginType:               o.LoginType,
+			LoginType:               o.LoginType(),
 		},
 		tokenImpl: tokenInfoWorkload{},
 	}

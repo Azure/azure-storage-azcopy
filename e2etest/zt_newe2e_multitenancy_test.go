@@ -396,6 +396,495 @@ func (s *MultitenancySuite) Scenario_NamedCredentialMake(a *ScenarioVariationMan
 	a.Assert("container should exist after make", Equal{}, containerHandle.Exists(), true)
 }
 
+func (s *MultitenancySuite) Scenario_NamedCredentialTokenUpload(a *ScenarioVariationManager) {
+	if runInteractiveTest == nil || !*runInteractiveTest {
+		a.Skip("interactive tests not requested")
+		return
+	}
+
+	cfg := GlobalConfig.StaticMultitenantAcctInfo
+	env := s.azcopyEnvironment
+
+	location := common.ELocation.Blob()
+
+	fetchTc := func(t cred.Token) azcore.TokenCredential {
+		tc, err := t.TokenCredential(ctx)
+		a.NoError("failed to retrieve tokencredential", err, true)
+		return tc
+	}
+
+	name, acctType := resolveMultitenantAccount(a, location, cfg.TenantA.AccountName, cfg.TenantA.HNSAccountName)
+	acct := &AzureAccountResourceManager{
+		InternalAccountName: name,
+		InternalAccountType: acctType,
+		TokenCredential:     fetchTc(s.credA),
+	}
+	svc := acct.GetService(a, location)
+	dstContainer := CreateResource[ContainerResourceManager](a, svc, ResourceDefinitionContainer{})
+
+	// Create a local directory with a file to upload
+	localDir := NewLocalContainer(a)
+	body := NewStringObjectContentContainer("upload-content")
+	CreateResource[ContainerResourceManager](a, localDir, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"uploaded.txt": ResourceDefinitionObject{Body: body},
+		},
+	})
+
+	if a.Dryrun() {
+		return
+	}
+
+	RunAzCopy(a, AzCopyCommand{
+		Verb:    AzCopyVerbCopy,
+		Targets: []ResourceManager{localDir, CreateAzCopyTarget(dstContainer, EExplicitCredentialType.OAuth(), a)},
+		Flags: CopyFlags{
+			AsSubdir: pointerTo(false),
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive: pointerTo(true),
+				DstCred:   pointerTo(MultitenancyNicknameA),
+			},
+		},
+		Environment: &env,
+	})
+
+	ValidateResource(a, dstContainer, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"uploaded.txt": ResourceDefinitionObject{Body: body},
+		},
+	}, true)
+}
+
+func (s *MultitenancySuite) Scenario_NamedCredentialTokenDownload(a *ScenarioVariationManager) {
+	if runInteractiveTest == nil || !*runInteractiveTest {
+		a.Skip("interactive tests not requested")
+		return
+	}
+
+	cfg := GlobalConfig.StaticMultitenantAcctInfo
+	env := s.azcopyEnvironment
+
+	location := common.ELocation.Blob()
+
+	fetchTc := func(t cred.Token) azcore.TokenCredential {
+		tc, err := t.TokenCredential(ctx)
+		a.NoError("failed to retrieve tokencredential", err, true)
+		return tc
+	}
+
+	name, acctType := resolveMultitenantAccount(a, location, cfg.TenantA.AccountName, cfg.TenantA.HNSAccountName)
+	acct := &AzureAccountResourceManager{
+		InternalAccountName: name,
+		InternalAccountType: acctType,
+		TokenCredential:     fetchTc(s.credA),
+	}
+	svc := acct.GetService(a, location)
+
+	body := NewStringObjectContentContainer("download-content")
+	srcContainer := CreateResource[ContainerResourceManager](a, svc, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"downloaded.txt": ResourceDefinitionObject{Body: body},
+		},
+	})
+
+	localDir := NewLocalContainer(a)
+
+	if a.Dryrun() {
+		return
+	}
+
+	RunAzCopy(a, AzCopyCommand{
+		Verb:    AzCopyVerbCopy,
+		Targets: []ResourceManager{CreateAzCopyTarget(srcContainer, EExplicitCredentialType.OAuth(), a), localDir},
+		Flags: CopyFlags{
+			AsSubdir: pointerTo(false),
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive: pointerTo(true),
+				SrcCred:   pointerTo(MultitenancyNicknameA),
+			},
+		},
+		Environment: &env,
+	})
+
+	ValidateResource(a, localDir, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"downloaded.txt": ResourceDefinitionObject{Body: body},
+		},
+	}, true)
+}
+
+// runInitialWithDebugSkip runs a command with debug-skip-files to simulate job interruption,
+// then resumes the job and returns the combined stdout from both runs.
+func (s *MultitenancySuite) runInitialWithDebugSkip(a *ScenarioVariationManager, cmd AzCopyCommand, skipFiles []string) AzCopyStdout {
+	env := cmd.Environment
+	if env == nil {
+		env = &s.azcopyEnvironment
+	}
+
+	var srcCredName, dstCredName *string
+
+	if cmd.Flags == nil {
+		cmd.Flags = CopySyncCommonFlags{}
+	}
+	if cf, ok := cmd.Flags.(CopySyncCommonFlags); ok {
+		cf.DebugSkipFiles = skipFiles
+		cmd.Flags = cf
+		srcCredName = cf.SrcCred
+		dstCredName = cf.DstCred
+	}
+	if cf, ok := cmd.Flags.(CopyFlags); ok {
+		cf.CopySyncCommonFlags.DebugSkipFiles = skipFiles
+		cmd.Flags = cf
+		srcCredName = cf.SrcCred
+		dstCredName = cf.DstCred
+	}
+	if sf, ok := cmd.Flags.(SyncFlags); ok {
+		sf.CopySyncCommonFlags.DebugSkipFiles = skipFiles
+		cmd.Flags = sf
+		srcCredName = sf.SrcCred
+		dstCredName = sf.DstCred
+	}
+
+	cmd.Environment = env
+
+	stdout, _ := RunAzCopy(a, cmd)
+
+	parsed, ok := stdout.(*AzCopyParsedCopySyncRemoveStdout)
+	a.AssertNow("stdout must be AzCopyParsedCopySyncRemoveStdout", Equal{}, ok, true)
+
+	// Resume the job using the job ID from the init message
+	if !a.Dryrun() {
+		a.Log("%s", *env.LogLocation)
+
+		RunAzCopy(a, AzCopyCommand{
+			Verb:           AzCopyVerbJobsResume,
+			PositionalArgs: []string{parsed.InitMsg.JobID},
+			Flags: ResumeFlags{
+				SourceCred: srcCredName,
+				DestCred:   dstCredName,
+			},
+			Environment: env,
+		})
+	}
+
+	return stdout
+}
+
+func (s *MultitenancySuite) Scenario_NamedCredentialTokenUploadResume(a *ScenarioVariationManager) {
+	if runInteractiveTest == nil || !*runInteractiveTest {
+		a.Skip("interactive tests not requested")
+		return
+	}
+
+	cfg := GlobalConfig.StaticMultitenantAcctInfo
+	env := s.azcopyEnvironment
+
+	location := common.ELocation.Blob()
+
+	fetchTc := func(t cred.Token) azcore.TokenCredential {
+		tc, err := t.TokenCredential(ctx)
+		a.NoError("failed to retrieve tokencredential", err, true)
+		return tc
+	}
+
+	name, acctType := resolveMultitenantAccount(a, location, cfg.TenantA.AccountName, cfg.TenantA.HNSAccountName)
+	acct := &AzureAccountResourceManager{
+		InternalAccountName: name,
+		InternalAccountType: acctType,
+		TokenCredential:     fetchTc(s.credA),
+	}
+	svc := acct.GetService(a, location)
+	dstContainer := CreateResource[ContainerResourceManager](a, svc, ResourceDefinitionContainer{})
+
+	body1 := NewStringObjectContentContainer("content1")
+	body2 := NewStringObjectContentContainer("content2")
+	localDir := NewLocalContainer(a)
+	CreateResource[ContainerResourceManager](a, localDir, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"file1.txt": ResourceDefinitionObject{Body: body1},
+			"file2.txt": ResourceDefinitionObject{Body: body2},
+		},
+	})
+
+	if a.Dryrun() {
+		return
+	}
+
+	s.runInitialWithDebugSkip(a, AzCopyCommand{
+		Verb:    AzCopyVerbCopy,
+		Targets: []ResourceManager{localDir, CreateAzCopyTarget(dstContainer, EExplicitCredentialType.OAuth(), a)},
+		Flags: CopyFlags{
+			AsSubdir: pointerTo(false),
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive: pointerTo(true),
+				DstCred:   pointerTo(MultitenancyNicknameA),
+			},
+		},
+		Environment: &env,
+	}, []string{"/file2.txt"})
+
+	ValidateResource(a, dstContainer, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"file1.txt": ResourceDefinitionObject{Body: body1},
+			"file2.txt": ResourceDefinitionObject{Body: body2},
+		},
+	}, true)
+}
+
+func (s *MultitenancySuite) Scenario_NamedCredentialTokenDownloadResume(a *ScenarioVariationManager) {
+	if runInteractiveTest == nil || !*runInteractiveTest {
+		a.Skip("interactive tests not requested")
+		return
+	}
+
+	cfg := GlobalConfig.StaticMultitenantAcctInfo
+	env := s.azcopyEnvironment
+
+	location := common.ELocation.Blob()
+
+	fetchTc := func(t cred.Token) azcore.TokenCredential {
+		tc, err := t.TokenCredential(ctx)
+		a.NoError("failed to retrieve tokencredential", err, true)
+		return tc
+	}
+
+	name, acctType := resolveMultitenantAccount(a, location, cfg.TenantA.AccountName, cfg.TenantA.HNSAccountName)
+	acct := &AzureAccountResourceManager{
+		InternalAccountName: name,
+		InternalAccountType: acctType,
+		TokenCredential:     fetchTc(s.credA),
+	}
+	svc := acct.GetService(a, location)
+
+	body1 := NewStringObjectContentContainer("content1")
+	body2 := NewStringObjectContentContainer("content2")
+	srcContainer := CreateResource[ContainerResourceManager](a, svc, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"file1.txt": ResourceDefinitionObject{Body: body1},
+			"file2.txt": ResourceDefinitionObject{Body: body2},
+		},
+	})
+
+	localDir := NewLocalContainer(a)
+
+	if a.Dryrun() {
+		return
+	}
+
+	s.runInitialWithDebugSkip(a, AzCopyCommand{
+		Verb:    AzCopyVerbCopy,
+		Targets: []ResourceManager{CreateAzCopyTarget(srcContainer, EExplicitCredentialType.OAuth(), a), localDir},
+		Flags: CopyFlags{
+			AsSubdir: pointerTo(false),
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive: pointerTo(true),
+				SrcCred:   pointerTo(MultitenancyNicknameA),
+			},
+		},
+		Environment: &env,
+	}, []string{"/file2.txt"})
+
+	ValidateResource(a, localDir, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"file1.txt": ResourceDefinitionObject{Body: body1},
+			"file2.txt": ResourceDefinitionObject{Body: body2},
+		},
+	}, true)
+}
+
+func (s *MultitenancySuite) Scenario_NamedCredentialTokenS2SResume(a *ScenarioVariationManager) {
+	if runInteractiveTest == nil || !*runInteractiveTest {
+		a.Skip("interactive tests not requested")
+		return
+	}
+
+	cfg := GlobalConfig.StaticMultitenantAcctInfo
+	env := s.azcopyEnvironment
+
+	location := common.ELocation.Blob()
+
+	var fetchTc = func(t cred.Token) azcore.TokenCredential {
+		tc, err := t.TokenCredential(ctx)
+		a.NoError("failed to retrieve tokencredential for "+t.Header().Nickname, err, true)
+		return tc
+	}
+
+	nameA, typeA := resolveMultitenantAccount(a, location, cfg.TenantA.AccountName, cfg.TenantA.HNSAccountName)
+	acctA := &AzureAccountResourceManager{
+		InternalAccountName: nameA,
+		InternalAccountType: typeA,
+		TokenCredential:     fetchTc(s.credA),
+	}
+	nameB, typeB := resolveMultitenantAccount(a, location, cfg.TenantB.AccountName, cfg.TenantB.HNSAccountName)
+	acctB := &AzureAccountResourceManager{
+		InternalAccountName: nameB,
+		InternalAccountType: typeB,
+		TokenCredential:     fetchTc(s.credB),
+	}
+
+	body1 := NewStringObjectContentContainer("s2s-content1")
+	body2 := NewStringObjectContentContainer("s2s-content2")
+	ccA := CreateResource[ContainerResourceManager](a, acctA.GetService(a, location), ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"obj1.txt": ResourceDefinitionObject{Body: body1},
+			"obj2.txt": ResourceDefinitionObject{Body: body2},
+		},
+	})
+	ccB := CreateResource[ContainerResourceManager](a, acctB.GetService(a, location), ResourceDefinitionContainer{})
+
+	if a.Dryrun() {
+		return
+	}
+
+	s.runInitialWithDebugSkip(a, AzCopyCommand{
+		Verb:    AzCopyVerbCopy,
+		Targets: []ResourceManager{CreateAzCopyTarget(ccA, EExplicitCredentialType.OAuth(), a), CreateAzCopyTarget(ccB, EExplicitCredentialType.OAuth(), a)},
+		Flags: CopyFlags{
+			AsSubdir: pointerTo(false),
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive: pointerTo(true),
+				SrcCred:   pointerTo(MultitenancyNicknameA),
+				DstCred:   pointerTo(MultitenancyNicknameB),
+			},
+		},
+		Environment: &env,
+	}, []string{"/obj2.txt"})
+
+	ValidateResource(a, ccB, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"obj1.txt": ResourceDefinitionObject{Body: body1},
+			"obj2.txt": ResourceDefinitionObject{Body: body2},
+		},
+	}, true)
+}
+
+func (s *MultitenancySuite) Scenario_NamedCredentialTokenRemoveResume(a *ScenarioVariationManager) {
+	if runInteractiveTest == nil || !*runInteractiveTest {
+		a.Skip("interactive tests not requested")
+		return
+	}
+
+	cfg := GlobalConfig.StaticMultitenantAcctInfo
+	env := s.azcopyEnvironment
+
+	location := common.ELocation.Blob()
+
+	fetchTc := func(t cred.Token) azcore.TokenCredential {
+		tc, err := t.TokenCredential(ctx)
+		a.NoError("failed to retrieve tokencredential", err, true)
+		return tc
+	}
+
+	name, acctType := resolveMultitenantAccount(a, location, cfg.TenantA.AccountName, cfg.TenantA.HNSAccountName)
+	acct := &AzureAccountResourceManager{
+		InternalAccountName: name,
+		InternalAccountType: acctType,
+		TokenCredential:     fetchTc(s.credA),
+	}
+	svc := acct.GetService(a, location)
+
+	body1 := NewStringObjectContentContainer("remove-me-1")
+	body2 := NewStringObjectContentContainer("remove-me-2")
+	container := CreateResource[ContainerResourceManager](a, svc, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"keep.txt":     ResourceDefinitionObject{Body: body1},
+			"toremove.txt": ResourceDefinitionObject{Body: body2},
+		},
+	})
+
+	if a.Dryrun() {
+		return
+	}
+
+	objToRemove := container.GetObject(a, "toremove.txt", common.EEntityType.File())
+	s.runInitialWithDebugSkip(a, AzCopyCommand{
+		Verb:    AzCopyVerbRemove,
+		Targets: []ResourceManager{CreateAzCopyTarget(objToRemove, EExplicitCredentialType.OAuth(), a)},
+		Flags: RemoveFlags{
+			Recursive: pointerTo(true),
+			Cred:      pointerTo(MultitenancyNicknameA),
+		},
+		Environment: &env,
+	}, []string{"/toremove.txt"})
+
+	ValidateResource(a, container, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"keep.txt":     ResourceDefinitionObject{Body: body1},
+			"toremove.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(false)},
+		},
+	}, false)
+}
+
+func (s *MultitenancySuite) Scenario_NamedCredentialTokenSetPropertiesResume(a *ScenarioVariationManager) {
+	if runInteractiveTest == nil || !*runInteractiveTest {
+		a.Skip("interactive tests not requested")
+		return
+	}
+
+	cfg := GlobalConfig.StaticMultitenantAcctInfo
+	env := s.azcopyEnvironment
+
+	location := common.ELocation.Blob()
+
+	fetchTc := func(t cred.Token) azcore.TokenCredential {
+		tc, err := t.TokenCredential(ctx)
+		a.NoError("failed to retrieve tokencredential", err, true)
+		return tc
+	}
+
+	name, acctType := resolveMultitenantAccount(a, location, cfg.TenantA.AccountName, cfg.TenantA.HNSAccountName)
+	acct := &AzureAccountResourceManager{
+		InternalAccountName: name,
+		InternalAccountType: acctType,
+		TokenCredential:     fetchTc(s.credA),
+	}
+	svc := acct.GetService(a, location)
+
+	body1 := NewStringObjectContentContainer("props1")
+	body2 := NewStringObjectContentContainer("props2")
+	container := CreateResource[ContainerResourceManager](a, svc, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"setprops1.txt": ResourceDefinitionObject{Body: body1},
+			"setprops2.txt": ResourceDefinitionObject{Body: body2},
+		},
+	})
+
+	if a.Dryrun() {
+		return
+	}
+
+	s.runInitialWithDebugSkip(a, AzCopyCommand{
+		Verb:    AzCopyVerbSetProperties,
+		Targets: []ResourceManager{CreateAzCopyTarget(container, EExplicitCredentialType.OAuth(), a)},
+		Flags: SetPropertiesFlags{
+			Cred:      pointerTo(MultitenancyNicknameA),
+			Metadata:  pointerTo("mykey=myvalue"),
+			Recursive: pointerTo(true),
+		},
+		Environment: &env,
+	}, []string{"/setprops2.txt"})
+
+	ValidateResource(a, container, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"setprops1.txt": ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					Metadata: common.Metadata{
+						"mykey": pointerTo("myvalue"),
+					},
+				},
+			},
+			"setprops2.txt": ResourceDefinitionObject{
+				Body: body2,
+				ObjectProperties: ObjectProperties{
+					Metadata: common.Metadata{
+						"mykey": pointerTo("myvalue"),
+					},
+				},
+			},
+		},
+	}, false)
+}
+
 func resolveMultitenantAccount(a Asserter, location common.Location, name, hnsName string) (string, AccountType) {
 	if location == common.ELocation.BlobFS() {
 		if hnsName != "" {
