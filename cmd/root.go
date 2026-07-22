@@ -197,6 +197,7 @@ var rootCmd = &cobra.Command{
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Version checking is done explicitly when the user sets flag
+		os.Stdout.WriteString("AL: checking version")
 		if checkAzCopyUpdates && !isPipeDownload {
 			select {
 			// Either wait till this routine completes or timeout and do not print if it exceeds 8s
@@ -205,6 +206,7 @@ var rootCmd = &cobra.Command{
 				// noop
 			case <-time.After(time.Second * 8):
 				// don't wait too long
+				os.Stdout.WriteString("AL: aborted after 8 seconds")
 			}
 		}
 		// Print out help command on just `azcopy`
