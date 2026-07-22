@@ -365,6 +365,15 @@ func (eEnvironmentVariable) DisableBlobTransferResume() EnvironmentVariable {
 	}
 }
 
+func (eEnvironmentVariable) DisableReauth() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:            "AZCOPY_DISABLE_REAUTH",
+		DefaultValue:    "false",
+		Description:     "Disables automatic reauthentication prompt when a token expires. Set to true to prevent hangs in non-interactive contexts.",
+		DeveloperOption: true,
+	}
+}
+
 // KeyringConfig is only used for internal integration.
 func (eEnvironmentVariable) KeyringConfig() EnvironmentVariable {
 	return EnvironmentVariable{

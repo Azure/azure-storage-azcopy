@@ -15,6 +15,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/cred"
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 )
 
@@ -73,6 +74,12 @@ var (
 )
 
 func (d *tokenReauthPolicy) Do(req *policy.Request) (*http.Response, error) {
+	if enum.EEnvironmentVariable.DisableReauth().Get() == "true" {
+		ctx := req.Raw().Context()
+		clone := req.Clone(ctx)
+		return clone.Next()
+	}
+
 	for {
 		ctx := req.Raw().Context()
 		debugCtx := context.WithValue(ctx, tokenReauthDebugExecuted, true)

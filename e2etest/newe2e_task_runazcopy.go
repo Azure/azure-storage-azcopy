@@ -167,6 +167,10 @@ type AzCopyEnvironment struct {
 	// KeyringConfig is used to inject pre-obtained tokens into the child process's environment keyring.
 	KeyringConfig map[string]KeyringEntry `env:"AZCOPY_KEYRING,serializer:SerializeKeyringConfig"`
 
+	// DisableReauth disables the automatic reauthentication prompt when a token expires.
+	// This is enabled by default in the test framework to prevent hangs.
+	DisableReauth *string `env:"AZCOPY_DISABLE_REAUTH,defaultfunc:DefaultDisableReauth"`
+
 	// SyncOrchestratorTestMode is used to control the sync orchestrator test mode.
 	// Refer to common.SyncOrchTestMode for more details.
 	SyncOrchestratorTestMode *string `env:"SYNC_ORCHESTRATOR_TEST_MODE,defaultfunc:DefaultSyncOrchestratorTestMode"`
@@ -283,6 +287,14 @@ func (env *AzCopyEnvironment) DefaultSyncOrchestratorTestMode(a ScenarioAsserter
 	}
 
 	return *env.SyncOrchestratorTestMode
+}
+
+func (env *AzCopyEnvironment) DefaultDisableReauth(a ScenarioAsserter, ctx context.Context) string {
+	if env.DisableReauth == nil {
+		env.DisableReauth = pointerTo("true")
+	}
+
+	return *env.DisableReauth
 }
 
 func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) string {
