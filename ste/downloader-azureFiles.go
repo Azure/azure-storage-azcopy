@@ -182,7 +182,7 @@ func (bd *azureFilesDownloader) preservePermissions(info *TransferInfo) (string,
 		if spdl, ok := interface{}(bd).(nfsPermissionsAwareDownloader); ok {
 			// We don't need to worry about the sip not being a INFSPropertyBearingSourceInfoProvider as Azure Files always is.
 			err := spdl.PutNFSPermissions(bd.sip.(INFSPropertyBearingSourceInfoProvider), bd.txInfo)
-			if err == errorNoNFSPermissionsFound {
+			if errors.Is(err, errorNoNFSPermissionsFound) {
 				bd.jptm.LogAtLevelForCurrentTransfer(common.LogDebug, "No NFS permissions were downloaded because none were found at the source")
 			} else if err != nil {
 				return "Setting destination file nfs permissions", err
