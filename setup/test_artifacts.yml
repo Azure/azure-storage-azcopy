@@ -8,7 +8,7 @@ parameters:
 
 steps:
 
-  - task: DownloadBuildArtifacts@0
+  - task: DownloadBuildArtifacts@1
     displayName: 'Download Build Artifacts'
     inputs:
       artifactName: ${{ parameters.artifact_name }}
