@@ -1,3 +1,6 @@
+//go:build se_integration
+// +build se_integration
+
 package cred
 
 import "C"
