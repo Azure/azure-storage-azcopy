@@ -178,6 +178,9 @@ Number of File Transfers Failed: %v
 Number of Folder Transfers Failed: %v
 Number of File Transfers Skipped: %v
 Number of Folder Transfers Skipped: %v
+Number of Hardlinks Completed: %v
+Number of Hardlinks Failed: %v
+Number of Hardlinks Skipped: %v
 Total Number of Bytes Transferred: %v
 Final Job Status: %v
 `,
@@ -187,12 +190,15 @@ Final Job Status: %v
 				result.FolderPropertyTransfers,
 				result.SymlinkTransfers,
 				result.TotalTransfers,
-				result.TransfersCompleted-result.FoldersCompleted,
+				result.TransfersCompleted-result.FoldersCompleted-result.HardlinksCompleted,
 				result.FoldersCompleted,
-				result.TransfersFailed-result.FoldersFailed,
+				result.TransfersFailed-result.FoldersFailed-result.HardlinksFailed,
 				result.FoldersFailed,
-				result.TransfersSkipped-result.FoldersSkipped,
+				result.TransfersSkipped-result.FoldersSkipped-result.HardlinksSkipped,
 				result.FoldersSkipped,
+				result.HardlinksCompleted,
+				result.HardlinksFailed,
+				result.HardlinksSkipped,
 				result.TotalBytesTransferred,
 				result.JobStatus)
 		}

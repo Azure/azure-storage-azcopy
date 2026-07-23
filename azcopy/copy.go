@@ -177,12 +177,12 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (
 		common.LogPathFolder = ""
 	}
 
-	var t *transferExecutor
 	ctx = context.WithValue(ctx, ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	t, err := newCopyTransferExecutor(ctx, jobID, src, dest, opts, c.GetUserOAuthTokenManagerInstance())
 	if err != nil {
 		return CopyResult{}, err
 	}
+	defer t.Close()
 
 	// handle from/to pipe
 	if t.opts.fromTo.IsRedirection() {
@@ -254,9 +254,20 @@ func (c *Client) Copy(ctx context.Context, src, dest string, opts CopyOptions) (
 }
 
 type transferExecutor struct {
-	opts *CookedTransferOptions
-	trp  *remoteProvider
-	tpt  *transferProgressTracker
+	opts       *CookedTransferOptions
+	trp        *remoteProvider
+	tpt        *transferProgressTracker
+	inodeStore *common.InodeStore
+}
+
+// Close releases resources held by the transferExecutor, including the inode store.
+func (t *transferExecutor) Close() error {
+	if t == nil || t.inodeStore == nil {
+		return nil
+	}
+	err := t.inodeStore.Close()
+	t.inodeStore = nil
+	return err
 }
 
 func newCopyTransferExecutor(ctx context.Context, jobID common.JobID, src, dst string, opts CopyOptions, uotm *common.UserOAuthTokenManager) (t *transferExecutor, err error) {
@@ -271,7 +282,12 @@ func newCopyTransferExecutor(ctx context.Context, jobID common.JobID, src, dst s
 		return nil, err
 	}
 
+	store, err := common.NewInodeStore(jobID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize inode store: %w", err)
+	}
+
 	progressTracker := newTransferProgressTracker(jobID, opts.Handler, cookedOpts.fromTo)
 
-	return &transferExecutor{opts: cookedOpts, trp: copyRemote, tpt: progressTracker}, nil
+	return &transferExecutor{opts: cookedOpts, trp: copyRemote, tpt: progressTracker, inodeStore: store}, nil
 }

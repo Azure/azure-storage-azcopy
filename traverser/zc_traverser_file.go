@@ -55,6 +55,7 @@ type fileTraverser struct {
 	destination                 *common.Location
 	hardlinkHandling            common.HardlinkHandlingType
 	symlinkHandling             common.SymlinkHandlingType
+	inodeStore                  *common.InodeStore
 }
 
 func createShareClientFromServiceClient(fileURLParts file.URLParts, client *service.Client) (*share.Client, error) {
@@ -201,6 +202,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 				NoBlobProps,
 				fileProperties.Metadata,
 				targetURLParts.ShareName,
+				nil,
 			)
 			// NFS handling for different file types
 			// If the source provided is of NFS type we will check for NFSFileType value and process accordingly
@@ -217,8 +219,10 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 
 					return nil
 				}
-				//set entity tile to hardlink
-				if *fileProperties.LinkCount > int64(1) {
+				// Classify by NFS file type; a hardlinked symlink stays Symlink.
+				if *fileProperties.NFSFileType == file.NFSFileTypeSymlink {
+					storedObject.EntityType = common.EEntityType.Symlink()
+				} else if *fileProperties.LinkCount > int64(1) {
 					storedObject.EntityType = common.EEntityType.Hardlink()
 				}
 			} else if t.incrementEnumerationCounter != nil {
@@ -261,7 +265,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 				RelativePath: relativePath,
 			}, err
 		}
-
+		var targetHardlinkFile string
 		// NFS handling
 		// Check if the file is a symlink and should be skipped in case of NFS
 		// We don't want to skip the file if we are not using NFS
@@ -276,13 +280,36 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 				symlinkHandling:  t.symlinkHandling}, t.incrementEnumerationCounter); err == nil && skip {
 				return nil, nil
 			}
-			//set entity tile to symlink
-			if fullProperties.NFSFileType() == string(file.NFSFileTypeSymlink) {
+			//set entity type to symlink
+			isNFSSymlink := fullProperties.NFSFileType() == string(file.NFSFileTypeSymlink)
+			if isNFSSymlink {
 				f.entityType = common.EEntityType.Symlink()
 			}
-			//set entity tile to hardlink
-			if fullProperties.LinkCount() > int64(1) {
+
+			//set entity type to hardlink
+			// When the file is a preserved symlink, skip hardlink handling unless
+			// hardlinks are also being preserved (the preserve path has its own
+			// anchor/subsequent logic below).
+			isPreservedSymlink := isNFSSymlink && t.symlinkHandling.Preserve()
+			if fullProperties.LinkCount() > int64(1) && !(isPreservedSymlink && t.hardlinkHandling != common.EHardlinkHandlingType.Preserve()) {
 				f.entityType = common.EEntityType.Hardlink()
+				if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() {
+					if t.inodeStore == nil {
+						return nil, fmt.Errorf("inode store is not initialized; cannot preserve hardlinks")
+					}
+
+					targetHardlinkFile, _, err = t.inodeStore.GetOrAdd(fullProperties.FileID(), relativePath)
+					if err != nil {
+						return nil, err
+					}
+				}
+
+				// A hardlinked symlink: the anchor (first-seen entry) must be
+				// transferred as a symlink so its target is created correctly
+				// on the destination; only subsequent links become Hardlink.
+				if isNFSSymlink && targetHardlinkFile == "" {
+					f.entityType = common.EEntityType.Symlink()
+				}
 			}
 		} else if f.entityType == common.EEntityType.File() && t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter(f.entityType, t.symlinkHandling, t.hardlinkHandling)
@@ -301,6 +328,15 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			size = fullProperties.ContentLength()
 			metadata = fullProperties.Metadata()
 		}
+		// Populate Inode only when --hardlinks=preserve. The sync comparator
+		// defers objects with Inode != "" into pending-hardlink processing which
+		// calls InodeStore.GetAnchor; that store is only populated (via GetOrAdd)
+		// during preserve-mode traversal. Setting Inode in follow/skip modes
+		// would cause "anchor for inode … not found" errors.
+		nfsInode := ""
+		if t.hardlinkHandling == common.EHardlinkHandlingType.Preserve() && fullProperties.LinkCount() > int64(1) {
+			nfsInode = fullProperties.FileID()
+		}
 		obj := NewStoredObject(
 			preprocessor,
 			getObjectNameOnly(f.name),
@@ -312,6 +348,10 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor ObjectPro
 			NoBlobProps,
 			metadata,
 			targetURLParts.ShareName,
+			&NFSMetadataContext{
+				TargetHardlinkFile: targetHardlinkFile,
+				Inode:              nfsInode,
+			},
 		)
 
 		obj.smbLastModifiedTime = smbLMT
@@ -481,6 +521,7 @@ func NewFileTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		destination:                 opts.DestResourceType,
 		hardlinkHandling:            opts.HardlinkHandling,
 		symlinkHandling:             opts.SymlinkHandling,
+		inodeStore:                  opts.InodeStore,
 	}
 	return
 }
