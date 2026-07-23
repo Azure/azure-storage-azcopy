@@ -4,6 +4,7 @@ steps:
       GO111MODULE: 'on'
     inputs:
       version: $(AZCOPY_GOLANG_VERSION)
+    displayName: 'Install Go'
 
   - script: |
       CGO_ENABLED=1 go build -o "$(System.DefaultWorkingDirectory)/azcopy_darwin_amd64"
