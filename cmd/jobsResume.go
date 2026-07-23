@@ -28,6 +28,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Azure/azure-storage-azcopy/v10/common/enum"
 	"github.com/Azure/azure-storage-azcopy/v10/common/ternary"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
@@ -257,7 +258,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 	fromTo common.FromTo,
 	source common.ResourceString,
 	destination common.ResourceString,
-) (*common.ServiceClient, *common.ServiceClient, error) {
+) (*common.ServiceClient, *common.ServiceClient, enum.CredentialType, error) {
 	if len(rca.SourceSAS) > 0 && rca.SourceSAS[0] != '?' {
 		rca.SourceSAS = "?" + rca.SourceSAS
 	}
@@ -291,7 +292,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 	jobID, err := common.ParseJobID(rca.jobID)
 	if err != nil {
 		// Error for invalid JobId format
-		return nil, nil, fmt.Errorf("error parsing the jobId %s. Failed with error %w", rca.jobID, err)
+		return nil, nil, enum.ECredentialType.Unknown(), fmt.Errorf("error parsing the jobId %s. Failed with error %w", rca.jobID, err)
 	}
 
 	// But we don't want to supply a reauth token if we're not using OAuth. That could cause problems if say, a SAS is invalid.
@@ -314,7 +315,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 	}
 	srcServiceClient, err := common.GetServiceClientForLocation(fromTo.From(), source, srcCredInfo.CredentialType, srcCredInfo.TokenCredential, &srcOptions, fileSrcClientOptions)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, enum.ECredentialType.Unknown(), err
 	}
 
 	dstOptions := createClientOptions(common.AzcopyCurrentJobLogger, srcCredInfo.TokenCredential, dstCredInfo.TokenCredential)
@@ -327,9 +328,9 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 	}
 	dstServiceClient, err := common.GetServiceClientForLocation(fromTo.To(), destination, dstCredInfo.CredentialType, dstCredInfo.TokenCredential, &dstOptions, fileClientOptions)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, enum.ECredentialType.Unknown(), err
 	}
-	return srcServiceClient, dstServiceClient, nil
+	return srcServiceClient, dstServiceClient, ternary.Iff(fromTo.IsS2S() && srcCredInfo.TokenCredential != nil, enum.ECredentialType.OAuthToken(), enum.ECredentialType.Anonymous()), nil
 }
 
 // processes the resume command,
@@ -412,7 +413,7 @@ func (rca resumeCmdArgs) process() error {
 	dstResourceString.SAS = rca.DestinationSAS
 
 	// Fetch service clients and do some primitive credential validation
-	srcServiceClient, dstServiceClient, err := rca.getSourceAndDestinationServiceClients(
+	srcServiceClient, dstServiceClient, srcCredentialType, err := rca.getSourceAndDestinationServiceClients(
 		ctx, jobDetails.FromTo,
 		srcResourceString,
 		dstResourceString,
@@ -425,13 +426,14 @@ func (rca resumeCmdArgs) process() error {
 	var resumeJobResponse common.CancelPauseResumeResponse
 	Rpc(common.ERpcCmd.ResumeJob(),
 		&common.ResumeJobRequest{
-			JobID:            jobID,
-			SourceSAS:        rca.SourceSAS,
-			DestinationSAS:   rca.DestinationSAS,
-			SrcServiceClient: srcServiceClient,
-			DstServiceClient: dstServiceClient,
-			IncludeTransfer:  includeTransfer,
-			ExcludeTransfer:  excludeTransfer,
+			JobID:                   jobID,
+			SourceSAS:               rca.SourceSAS,
+			DestinationSAS:          rca.DestinationSAS,
+			SrcServiceClient:        srcServiceClient,
+			DstServiceClient:        dstServiceClient,
+			IncludeTransfer:         includeTransfer,
+			ExcludeTransfer:         excludeTransfer,
+			S2SSourceCredentialType: srcCredentialType,
 		},
 		&resumeJobResponse)
 

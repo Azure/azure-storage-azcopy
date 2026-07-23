@@ -590,6 +590,15 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 
 	err = command.Wait()
 
+	if err != nil && !commandSpec.ShouldFail {
+		fmt.Fprintf(os.Stderr, "azcopy stderr: %s\n", stderr.String())
+		if ps, ok := out.(*AzCopyParsedCopySyncRemoveStdout); ok {
+			for _, msg := range ps.Messages {
+				fmt.Fprintf(os.Stderr, "azcopy msg: %s\n", msg.MessageContent)
+			}
+		}
+	}
+
 	a.Assert("wait for finalize", ternary.Iff[Assertion](commandSpec.ShouldFail, Not{IsNil{}}, IsNil{}), err)
 	a.Assert("expected exit code",
 		ternary.Iff[Assertion](commandSpec.ShouldFail, Not{Equal{}}, Equal{}),
