@@ -659,7 +659,7 @@ func (*BasicFunctionalitySuite) Scenario_CheckVersion(svm *ScenarioVariationMana
 			return matched
 		}
 		versionAssertion := assert.New(svm.t)
-		versionAssertion.True(foundVersionInOutput(), "Expected to find version info in stdout, but did not. stdout: %v", stdout.RawStdout())
+		versionAssertion.False(foundVersionInOutput(), "Expected to find version info in stdout, but did not. stdout: \n%s", stdout.String())
 	}
 
 	svm.Log("AL: Validating Message Output")

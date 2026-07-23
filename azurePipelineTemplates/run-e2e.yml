@@ -23,14 +23,14 @@ jobs:
           imageName: 'macos-latest'
           build_name: 'azcopy_darwin_amd64'
           display_name: "MacOS"
-        MacOS2:
-          imageName: 'macos-latest'
-          build_name: 'azcopy_darwin_amd64'
-          display_name: "MacOS2"
-        MacOS3:
-          imageName: 'macos-latest'
-          build_name: 'azcopy_darwin_amd64'
-          display_name: "MacOS3"
+        # MacOS2:
+        #   imageName: 'macos-latest'
+        #   build_name: 'azcopy_darwin_amd64'
+        #   display_name: "MacOS2"
+        # MacOS3:
+        #   imageName: 'macos-latest'
+        #   build_name: 'azcopy_darwin_amd64'
+        #   display_name: "MacOS3"
     pool:
       vmImage: $(imageName)
     steps:
